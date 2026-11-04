@@ -397,6 +397,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 result,
                 applied_tick,
             }) => {
+                village::construction::strategic::acknowledge(&mut client, sequence, result);
                 village::production::here::acknowledge(&mut client, sequence, result);
                 let observed = client.village.tick;
                 client.village.pending_training.acknowledge(

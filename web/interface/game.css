@@ -1,3 +1,5 @@
+@import url('/navigation/building.css');
+@import url('/navigation/reveal.css');
 :root { color-scheme: dark; --ink:#eee4ca; --muted:#b7b49e; --gold:#b39a63; --edge:#696756; --panel:#202620; --bottom:208px; }
 #strategic-cockpit { position:fixed; left:12px; top:104px; width:310px; max-height:calc(100vh - 330px); overflow:auto; z-index:4; padding:26px 14px 12px; color:#261d13; background:#d6c494; border:2px solid #9d8150; box-shadow:0 3px 12px #0009; font-size:12px; }
 #strategic-cockpit header { display:flex; flex-direction:column; border-bottom:1px solid #665438; margin-bottom:8px; }
@@ -272,6 +274,7 @@ html[data-interface-art=original] #top-bar .counter, html[data-interface-art=ori
 html[data-interface-art=original] #vassal-status { color:#4b3218; font-weight:600; }
 #minimap-zoom { position:absolute; right:0; top:0; padding:0 4px; font:10px monospace; z-index:1; }
 #minimap.expanded #minimap-zoom { right:85px; top:6px; }
+#scene[data-strategic-covered=true] { opacity:0; }
 #strategic-scene { position:fixed; inset:0; width:100%; height:100%; pointer-events:none; }
 html[data-lod=map] #unit-health-bars,html[data-lod=map] #carried-loads,
 html[data-lod=markers] #unit-health-bars,html[data-lod=markers] #carried-loads,
@@ -320,3 +323,5 @@ html[data-lod="map"] #general-panel, html[data-lod="markers"] #general-panel { l
 #selection-content:has(#vassal-controls:not([hidden])) > :not(#vassal-controls) { grid-column:1; }
 #selection-content #vassal-controls { grid-column:2; grid-row:1 / span 12; margin-top:0; }
 #vassal-controls button { font-size:11px; padding:4px 6px; }
+
+html:has(#scene[data-order-mode=build]) #strategic-tokens button { pointer-events:none; }

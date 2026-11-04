@@ -2,6 +2,8 @@
 use super::{Client, orders::send, owner};
 use crate::{building_ui, playground::game::map};
 use aoe_core::{EntityId, ScreenPoint, TileCoord};
+pub(crate) mod strategic;
+
 use aoe_protocol::{BuildingKind, ConstructionState, GameplayClientMessage as Message, UnitKind};
 
 #[inline(never)]
@@ -43,11 +45,18 @@ pub(super) fn enabled(client: &Client, kind: BuildingKind, count: u32) -> bool {
     let mut cost = building_ui::stock(building_ui::rules(kind).cost);
     cost.wood = cost.wood.saturating_mul(count);
     cost.stone = cost.stone.saturating_mul(count);
-    client.selected.units.iter().any(|id| {
+    (if crate::playground::game::strategic::active(client) {
         client
             .units
-            .get(id)
-            .is_some_and(|u| u.player == owner(client) && u.kind == UnitKind::Villager)
+            .values()
+            .any(|u| strategic::eligible(u, owner(client)))
+    } else {
+        client.selected.units.iter().any(|id| {
+            client
+                .units
+                .get(id)
+                .is_some_and(|u| u.player == owner(client) && u.kind == UnitKind::Villager)
+        })
     }) && building_ui::build_enabled(kind, p.stockpile, completed(client), p.age)
         && building_ui::affordable(p.stockpile, cost)
 }
@@ -58,6 +67,7 @@ pub(super) fn arm(client: &mut Client, kind: BuildingKind) {
         return;
     }
     client.village.garrison_cursor = false;
+    client.village.far_placement = crate::playground::game::strategic::active(client);
     client.village.placement = Some(kind);
     client.village.repeat_placement = false;
     client.village.wall_start = None;
@@ -70,6 +80,7 @@ pub(super) fn arm(client: &mut Client, kind: BuildingKind) {
 #[inline(never)]
 pub(in super::super) fn cancel(client: &mut Client) {
     client.village.garrison_cursor = false;
+    client.village.far_placement = false;
     client.village.placement = None;
     client.village.repeat_placement = false;
     client.village.wall_start = None;
@@ -201,8 +212,22 @@ pub(in super::super) fn place(client: &mut Client, point: ScreenPoint, release: 
     if !span_valid(client, kind, &tiles) {
         return;
     }
+    let far = crate::playground::game::strategic::active(client);
+    if far
+        && !client
+            .village
+            .build_admission
+            .ready(crate::playground::game::now())
+    {
+        strategic::wait();
+        return;
+    }
     let sequence = client.next_sequence;
-    let builder_ids = builders(client);
+    let builder_ids = if far {
+        strategic::choose(client.units.values(), owner(client), at)
+    } else {
+        builders(client)
+    };
     let message = if kind == BuildingKind::Bridge {
         Message::BuildBridgeOrder {
             sequence,
@@ -230,6 +255,10 @@ pub(in super::super) fn place(client: &mut Client, point: ScreenPoint, release: 
         }
     };
     send(client, message);
+    if far && client.last_error.is_none() {
+        client.village.build_admission.pending = Some(sequence);
+        strategic::submitting();
+    }
     if shift {
         client.village.repeat_placement = true;
         client.village.wall_start = None;

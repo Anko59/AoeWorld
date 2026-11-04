@@ -44,7 +44,10 @@ records, 1,024 historical contacts and the existing 2,048 deposit markers. Nearb
 labels use a bounded screen-grid placement search and retain lines to their true
 locations. These bounds are not a qualification of a crowded 1,000-player RTS.
 The strategic scene retains one terrain raster and fog plane; zooming does not
-request detailed terrain for the whole map.
+request detailed terrain for the whole map. While it covers the detailed scene,
+the retained renderer canvas is transparent but remains the input surface. The
+strategic cover is removed only after a complete near frame is presented,
+including when terrain or art delays that replacement.
 
 Resource discovery retains exact resource IDs in a 2,048-entry browser cache.
 Accepted authoritative resource updates retire depleted IDs incrementally;
@@ -106,6 +109,33 @@ with fog enabled, only connected viewers receive their own player report.
 `make perf-census-instructions` counts the serial report kernel over 20 calls
 with 100,000 units, 1,000 economy players and zero, one or 1,000 viewers. Setup,
 the initial census, simulation advancement and transport are outside the count.
+
+## Building from the cockpit
+
+At far zoom, choose a building in the kingdom panel, press Build here and
+choose its site. The ordinary footprint, exploration, terrain, age, resource
+and prerequisite checks apply, including wall and bridge spans. Only chunks
+under the proposed site load at far zoom. Red footprints explain a blocked or
+unavailable site; green is a local preview, not server acceptance.
+
+Each grouped order sends up to four nearest suitable villagers. Free idle
+workers take priority, then other free workers; managed workers can answer
+when no free workers are available. Workers already building, fighting or
+hunting are excluded. Ties use entity ID. No selection or zoom change is needed.
+Feedback says Submitting until the ordinary server acknowledgement arrives.
+One build can be pending at a time. The client tracks outgoing commands against
+the human burst of 20 and refill of 10 per second; the server retains authority.
+Esc, right-click, focus loss and returning to near zoom cancel placement.
+
+## First far view
+
+The first far zoom in each match opens a short parchment introduction to armies
+and kingdoms, Units here and building, and jump keys. Next advances immediately;
+Skip tour, Esc, clicking into the game or returning to near zoom dismisses it.
+It highlights the relevant cockpit controls in three brief steps and respects
+reduced-motion preferences. The game and all commands remain live throughout.
+A session-stored digest of the match resume identity prevents replays on reload
+or reconnect; a new match can present again. It adds no invented kingdom counts.
 
 ## Local verification
 

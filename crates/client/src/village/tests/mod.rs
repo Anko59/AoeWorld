@@ -1,5 +1,6 @@
 mod buildings;
 mod cancellation;
+mod far_build;
 mod finders;
 mod general;
 mod navy;

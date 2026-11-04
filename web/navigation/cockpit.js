@@ -1,4 +1,5 @@
 import { icon, entityIcon, trainingKinds, panelArt } from '/interface/ui-art.js';
+import { initFarBuilding } from '/navigation/building.js';
 import { initProduction } from '/navigation/production.js';
 
 // One retained panel; values are reports, never estimates from stock changes.
@@ -14,6 +15,7 @@ export function initCockpit() {
     <div class="cockpit-army" aria-label="Army by type"></div>`;
   document.body.append(panel);
   const production = initProduction();
+  const building = initFarBuilding(panel);
   let signature = '';
   const number = value => Number.isFinite(value) ? value.toLocaleString('en-US') : '?';
   function text(selector, value) {
@@ -46,5 +48,5 @@ export function initCockpit() {
         + rows.map(([kind, count]) => `<span>${entityIcon(trainingKinds[kind])}${trainingKinds[kind]}: ${number(count)}</span>`).join('');
     }
   }
-  return { update, production, show(value) { panel.hidden = !value; production.show(value); }, reset() { signature = ''; production.reset(); update(); } };
+  return { update, production, building, show(value) { panel.hidden = !value; production.show(value); building.show(value); }, reset() { signature = ''; production.reset(); building.reset(); update(); } };
 }

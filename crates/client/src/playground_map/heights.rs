@@ -257,6 +257,13 @@ pub(super) fn request_candidates(client: &mut Client, budget: usize) -> Vec<(i32
     if chunk_retry_pending(client) {
         return Vec::new();
     }
+    if super::super::strategic::active(client) {
+        return super::super::village::construction::strategic::chunks(client)
+            .into_iter()
+            .filter(|c| !client.terrain_chunks.contains_key(c))
+            .take(budget)
+            .collect();
+    }
     cached_candidates(client);
     let Some((_, _, _, candidates)) = &client.terrain_bounds.candidates else {
         return Vec::new();
