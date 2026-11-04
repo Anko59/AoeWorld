@@ -294,7 +294,28 @@ fn eventually_tries_reachable(kind: ResourceKind, bad_count: usize, layout: Layo
     activate(&mut a);
     activate(&mut b);
     let mut selected_good = false;
+    let mut ended = false;
     for tick in 0..10_000 {
+        // Productive Food is retained through discovery. End the fixture's
+        // crop after its last load is delivered, so cached alternatives are
+        // exercised by an available worker under the same deadline/budgets.
+        if !ended
+            && tick >= 2_000
+            && a.world.unit(a.worker).unwrap().carried.is_none()
+            && b.world.unit(b.worker).unwrap().carried.is_none()
+        {
+            for s in [&mut a, &mut b] {
+                s.world
+                    .economy
+                    .buildings
+                    .get_mut(&s.farm)
+                    .unwrap()
+                    .food_remaining = Some(0);
+                s.world.remove_building(s.farm);
+                s.world.issue_stop(PlayerId(0), s.worker).unwrap();
+            }
+            ended = true;
+        }
         a.world.advance();
         b.world.advance();
         assert_eq!(
@@ -308,7 +329,7 @@ fn eventually_tries_reachable(kind: ResourceKind, bad_count: usize, layout: Layo
             let work = s.world.steward_work();
             // A ten-tile query intersects at most a 5x5 grid of 8x8 blocks.
             assert!(work.resource_blocks <= work.resource_searches * 25);
-            if s.world.gathering_kind(s.worker) != Some(kind) {
+            if !ended && s.world.gathering_kind(s.worker) != Some(kind) {
                 if s.world.gathering_kind(s.worker) == Some(ResourceKind::Food) {
                     assert_eq!(s.world.gather_tile(s.worker), Some(s.farm_tile));
                 } else {
@@ -324,7 +345,7 @@ fn eventually_tries_reachable(kind: ResourceKind, bad_count: usize, layout: Layo
                         "refused ore admission must retain Food work or its reseed"
                     );
                 }
-            } else {
+            } else if s.world.gathering_kind(s.worker) == Some(kind) {
                 assert_eq!(s.world.gather_target(s.worker), Some(s.reachable.id));
                 selected_good = true;
             }

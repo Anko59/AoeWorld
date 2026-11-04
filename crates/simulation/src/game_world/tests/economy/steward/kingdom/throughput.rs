@@ -137,22 +137,16 @@ fn forty_idle_workers_get_real_wood_orders_within_two_game_seconds_and_replay() 
 }
 
 #[test]
-fn forty_unloaded_managed_farmers_retask_within_two_seconds_without_taking_manual_workers() {
+fn forty_productive_managed_farmers_keep_their_jobs_without_taking_manual_workers() {
     let (mut w, steward, workers, _) = throughput_realm(41);
     reserves(&mut w, 1_000, 30_000, 30_000, 30_000);
     let town_center = w.steward_town_center(steward).unwrap();
     let anchor = w.building(town_center).unwrap().footprint.min;
-    assign_farms(&mut w, &workers, TileCoord::new(anchor.x + 7, anchor.y + 7));
-    advance(&mut w, 20);
+    make_farmers(&mut w, &workers, TileCoord::new(anchor.x + 7, anchor.y + 7));
     assert!(
         workers
             .iter()
             .all(|id| w.steward_controller(*id) == Some(steward))
-    );
-    assert!(
-        workers
-            .iter()
-            .all(|id| w.unit(*id).unwrap().carried.is_none())
     );
     let manual = workers[40];
     let destination = distant_manual_destination(&w, w.unit(manual).unwrap().position);
@@ -174,11 +168,9 @@ fn forty_unloaded_managed_farmers_retask_within_two_seconds_without_taking_manua
         );
     }
     assert_eq!(
-        assigned(&w, steward, &workers[..40], ResourceKind::Wood),
+        assigned(&w, steward, &workers[..40], ResourceKind::Food),
         40,
-        "all forty eligible managed workers must respond in <=2 game seconds; passes {:?}; {}",
-        passes,
-        missing_work(&w, steward, &workers[..40])
+        "all forty productive farmers must keep working during the shortage; passes {passes:?}"
     );
     assert!(w.unit(manual).unwrap().moving || w.unit(manual).unwrap().planning);
 }

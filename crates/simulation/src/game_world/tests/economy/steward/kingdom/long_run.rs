@@ -6,6 +6,7 @@ mod river;
 struct Samples {
     moves: u64,
     switches: u64,
+    job_changes: u64,
     working: u64,
     idle: u64,
     delivered: [u64; 4],
@@ -31,6 +32,7 @@ fn ten_minute_early_economy_keeps_workers_productive() {
     let ticks = hz * 60 * 10;
     let mut samples = Samples::default();
     let mut previous = vec![(false, None, None); workers.len()];
+    let mut previous_jobs = vec![(None, None, None); workers.len()];
     for tick in 0..ticks {
         // Small periodic purchases keep early stocks scarce. Income below is
         // read at every tick from actual deposit buckets, never stock growth.
@@ -60,6 +62,14 @@ fn ten_minute_early_economy_keeps_workers_productive() {
             let moving = u.moving || u.planning;
             let dest = w.movement_order(id).map(|o| o.destination);
             let kind = w.gathering_kind(id);
+            let tile = w.gather_tile(id);
+            let builder = w.economy.builders.get(&id).map(|task| task.building);
+            let (old_kind, old_tile, old_builder) = previous_jobs[index];
+            samples.job_changes +=
+                u64::from(old_kind.is_some() && kind.is_some() && old_kind != kind)
+                    + u64::from(old_kind.is_some() && kind == old_kind && tile != old_tile)
+                    + u64::from(builder.is_some() && builder != old_builder);
+            previous_jobs[index] = (kind, tile, builder);
             let (was_moving, old_dest, old_kind) = previous[index];
             samples.moves += u64::from(moving && (!was_moving || dest != old_dest));
             samples.switches += u64::from(kind.is_some() && old_kind.is_some() && kind != old_kind);
@@ -79,10 +89,11 @@ fn ten_minute_early_economy_keeps_workers_productive() {
     let final_idle = workers.iter().filter(|id| idle(&w, **id)).count();
     let worker_ticks = u64::from(ticks) * workers.len() as u64;
     let report = format!(
-        "ticks={ticks} workers={} moves/min={:.2} resource-switches/min={:.2} gathering-share={:.4} mean-idle={:.2} final-idle={final_idle} resources/min={:?}\n{samples:?}\n",
+        "ticks={ticks} workers={} moves/min={:.2} resource-switches/min={:.2} job-changes={} gathering-share={:.4} mean-idle={:.2} final-idle={final_idle} resources/min={:?}\n{samples:?}\n",
         workers.len(),
         samples.moves as f64 / 10.0,
         samples.switches as f64 / 10.0,
+        samples.job_changes,
         samples.working as f64 / worker_ticks as f64,
         samples.idle as f64 / f64::from(ticks),
         samples.delivered.map(|n| n as f64 / 10.0),

@@ -1,4 +1,5 @@
 mod adoption;
+mod construction;
 mod farming;
 mod kingdom;
 mod manager;

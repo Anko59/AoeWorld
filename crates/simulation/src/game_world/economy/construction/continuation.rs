@@ -121,7 +121,9 @@ impl GameWorld {
                 }
                 self.finish_farm_builder(builder, player, building);
             } else if !self.next_queued_build(builder)
-                && (kind == BuildingKind::Farm || !self.continue_foundation(builder, player))
+                && (kind == BuildingKind::Farm
+                    || self.steward_has_held_job(builder)
+                    || !self.continue_foundation(builder, player))
             {
                 self.after_building(builder, player, building, kind, footprint);
             }
@@ -268,6 +270,11 @@ impl GameWorld {
         kind: BuildingKind,
         footprint: TileRect,
     ) {
+        // The admitted Steward pass restores borrowed workers under its order
+        // budget, before choosing a new profession or helping another site.
+        if self.steward_has_held_job(builder) {
+            return;
+        }
         let radius = super::super::VILLAGE_RULES.replacement_radius_tiles;
         let wanted: &[ResourceKind] = match kind {
             BuildingKind::LumberCamp => &[ResourceKind::Wood],

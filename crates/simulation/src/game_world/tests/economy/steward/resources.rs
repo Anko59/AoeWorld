@@ -94,6 +94,13 @@ fn known_wood_is_assigned_a_lumber_camp_is_built_and_loads_are_deposited() {
             .next()
             .is_some()
     );
+    assert_eq!(
+        w.player_buildings_of(PlayerId(0), BuildingKind::LumberCamp)
+            .filter(|b| !b.is_complete())
+            .count(),
+        1,
+        "four nearby workers should finish their first camp together"
+    );
     advance(&mut w, 2_000);
     assert!(
         w.player_buildings_of(PlayerId(0), BuildingKind::LumberCamp)
@@ -103,7 +110,11 @@ fn known_wood_is_assigned_a_lumber_camp_is_built_and_loads_are_deposited() {
         && w.gathering_kind(u.id) == Some(ResourceKind::Wood)));
     assert!(
         w.player_economy(PlayerId(0)).unwrap().stockpile.wood > 900,
-        "normal gathering deposited wood after paying for the camp"
+        "normal gathering deposited wood after paying for the camp: {:?}, {:?}",
+        w.player_economy(PlayerId(0)),
+        w.buildings()
+            .map(|b| (b.kind, b.is_complete()))
+            .collect::<Vec<_>>()
     );
 }
 

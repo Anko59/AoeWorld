@@ -28,6 +28,19 @@ impl Economy {
             h.update(&destination.0.to_le_bytes());
         }
         for home in self.steward_homes.values() {
+            h.update(&(home.held_jobs.len() as u64).to_le_bytes());
+            for (worker, job) in &home.held_jobs {
+                use super::super::gathering::WorkTarget;
+                h.update(&worker.0.to_le_bytes());
+                h.update(&[job.kind as u8]);
+                let (kind, id) = match job.target {
+                    WorkTarget::Node(id) => (0, id),
+                    WorkTarget::Farm(id) => (1, u64::from(id.0)),
+                    WorkTarget::Animal(id) => (2, u64::from(id.0)),
+                };
+                h.update(&[kind]);
+                h.update(&id.to_le_bytes());
+            }
             home.resources.update_hash(h);
             home.navy.update_hash(h);
             h.update(&(home.scan_chunk as u64).to_le_bytes());

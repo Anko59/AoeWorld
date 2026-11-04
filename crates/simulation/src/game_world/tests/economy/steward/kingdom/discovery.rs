@@ -174,7 +174,19 @@ fn discovers_and_deposits(kind: ResourceKind) {
     let (mut a, a_worker, a_steward, _) = distant_ore(kind, true);
     let (mut b, b_worker, b_steward, _) = distant_ore(kind, true);
     let mut mining = false;
+    let mut next_release = 2_000;
     for tick in 0..10_000 {
+        // Discovery prepares an idle job; it must not poach productive fallback
+        // work. An explicit owner Stop supplies that opportunity without
+        // changing the deposit deadline or the per-pass search limits.
+        if tick >= next_release
+            && a.unit(a_worker).unwrap().carried.is_none()
+            && b.unit(b_worker).unwrap().carried.is_none()
+        {
+            a.issue_stop(PlayerId(0), a_worker).unwrap();
+            b.issue_stop(PlayerId(0), b_worker).unwrap();
+            next_release += 2_000;
+        }
         a.advance();
         b.advance();
         assert_eq!(
@@ -197,9 +209,11 @@ fn discovers_and_deposits(kind: ResourceKind) {
         }
     }
     panic!(
-        "visible in-domain {kind:?} beyond ten tiles must produce actual deposits; stocks {}/{}",
+        "visible in-domain {kind:?} beyond ten tiles must produce actual deposits; stocks {}/{}, next_release {next_release}, worker {:?}, target {:?}",
         resource_stock(&a, kind),
-        resource_stock(&b, kind)
+        resource_stock(&b, kind),
+        a.unit(a_worker),
+        a.gather_tile(a_worker)
     );
 }
 
@@ -223,7 +237,17 @@ fn far_ore_without_a_camp_gets_a_camp_beside_it(kind: ResourceKind) {
         0
     );
     let (mut camp_beside_ore, mut mining) = (false, false);
-    for _ in 0..10_000 {
+    let mut next_release = 2_000;
+    for tick in 0..10_000 {
+        // Each owner Stop supplies an idle opportunity; automatic discovery
+        // preserves productive fallback jobs between those opportunities.
+        if tick >= next_release
+            && w.unit(worker).unwrap().carried.is_none()
+            && w.gathering_kind(worker) != Some(kind)
+        {
+            w.issue_stop(PlayerId(0), worker).unwrap();
+            next_release += 2_000;
+        }
         w.advance();
         bounded(w.steward_work());
         camp_beside_ore |= w

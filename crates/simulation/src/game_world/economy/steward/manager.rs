@@ -111,11 +111,10 @@ impl GameWorld {
             self.steward_navy(&mut snapshot, &mut budget, &mut work, changed);
             let wait = self.steward_train(&mut snapshot, &mut budget, &mut work);
             self.steward_house_for_busy(&mut snapshot, &mut budget, &mut work, changed);
-            self.steward_rebalance(&mut snapshot, &mut budget, &mut work, changed);
             self.steward_reseeds(&snapshot, &mut budget, &mut work);
+            let unemployed = self.steward_idle(id, &mut snapshot, &mut budget, &mut work, changed);
             self.steward_refresh_farms(&mut snapshot, &mut budget, &mut work, changed);
             self.steward_refresh_wood(&mut snapshot, &mut budget, &mut work);
-            let unemployed = self.steward_idle(id, &mut snapshot, &mut budget, &mut work, changed);
             while discover && budget.searches < STEWARD_RULES.resource_searches_per_domain {
                 if !self.steward_discover(&mut snapshot, &mut budget, &mut work) {
                     break;
@@ -363,7 +362,7 @@ impl GameWorld {
                 home.worker_after = Some(worker);
             }
             s.avoid = self.economy.steward_homes[&id].stalls.get(&worker).copied();
-            let job = self.steward_job(worker, None, s, budget, work);
+            let job = self.steward_job(worker, s, budget, work);
             s.avoid = None;
             if let Some(kind) = job {
                 self.claim_steward_worker(id, worker, kind);

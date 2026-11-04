@@ -2,22 +2,92 @@ use super::{StewardWork, rules::Budget, snapshot::Snapshot};
 use crate::{BuildingKind, GameWorld};
 use aoe_core::{EntityId, TileCoord};
 use aoe_map::ResourceKind;
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
+
+// Farms need one occupant; small houses and mills use a team of three.
+// Camps keep a four-worker team so the first useful drop-off opens promptly.
+fn builder_limit(kind: BuildingKind) -> usize {
+    match kind {
+        BuildingKind::Farm => 1,
+        BuildingKind::House | BuildingKind::Mill => 3,
+        _ => 4,
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(super) struct HeldJob {
+    pub kind: ResourceKind,
+    pub target: super::super::gathering::WorkTarget,
+}
 
 impl GameWorld {
+    /// Ordinary automatic construction borrows a worker, never its profession.
+    pub(crate) fn steward_hold_job(&mut self, worker: EntityId) {
+        if !self.economy.stewards.automatic {
+            return;
+        }
+        let Some(steward) = self.steward_controller(worker) else {
+            return;
+        };
+        let Some(task) = self.economy.gatherers.get(&worker) else {
+            return;
+        };
+        use super::super::gathering::WorkTarget;
+        let job = HeldJob {
+            kind: task.kind,
+            target: task
+                .animal
+                .map(WorkTarget::Animal)
+                .or_else(|| task.farm.map(WorkTarget::Farm))
+                .unwrap_or(WorkTarget::Node(task.node)),
+        };
+        if let Some(home) = self.economy.steward_homes.get_mut(&steward) {
+            home.held_jobs.insert(worker, job);
+        }
+    }
+
+    pub(crate) fn steward_has_held_job(&self, worker: EntityId) -> bool {
+        self.steward_controller(worker).is_some_and(|steward| {
+            self.economy.steward_homes[&steward]
+                .held_jobs
+                .contains_key(&worker)
+        })
+    }
+
     pub(super) fn steward_job(
         &mut self,
         worker: EntityId,
-        current: Option<ResourceKind>,
         s: &mut Snapshot,
         budget: &mut Budget,
         work: &mut StewardWork,
     ) -> Option<ResourceKind> {
+        if let Some(job) = self.economy.steward_homes[&s.steward]
+            .held_jobs
+            .get(&worker)
+            .copied()
+        {
+            use super::super::gathering::WorkTarget;
+            if !budget.order(work) {
+                return None;
+            }
+            let accepted = match job.target {
+                WorkTarget::Farm(farm) => self.issue_farm(s.player, worker, farm).is_ok(),
+                WorkTarget::Node(node) => self.issue_gather(s.player, worker, node).is_ok(),
+                WorkTarget::Animal(animal) => self.begin_carcass_gather(worker, animal).is_ok(),
+            };
+            self.economy
+                .steward_homes
+                .get_mut(&s.steward)?
+                .held_jobs
+                .remove(&worker);
+            if accepted {
+                return Some(job.kind);
+            }
+        }
         let unit = self.unit(worker)?;
         let priority = self.steward_priority(s.player, s.home.settings.weights)?;
         let kinds = priority.kinds();
-        if current.is_none()
-            && kinds[0] == ResourceKind::Food
+        if kinds[0] == ResourceKind::Food
             && unit
                 .carried
                 .is_none_or(|load| load.kind == ResourceKind::Food)
@@ -27,35 +97,31 @@ impl GameWorld {
         {
             return Some(ResourceKind::Food);
         }
-        if current.is_none() {
-            // General construction and housing may use idle helpers. A Farm
-            // foundation is considered only when Food wins resource selection.
-            let p = self.player_economy(s.player)?;
-            if s.complete
-                && p.population_used as usize + s.global_queued + 2 >= p.population_cap as usize
-                && !s
-                    .buildings
-                    .iter()
-                    .any(|b| b.kind == BuildingKind::House && !b.is_complete())
-                && self.steward_build_near(
-                    worker,
-                    BuildingKind::House,
-                    unit.position.tile_floor(),
-                    s,
-                    budget,
-                    work,
-                )
-            {
-                return Some(ResourceKind::Wood);
-            }
-            if let Some(kind) = self.steward_help_foundation(worker, None, s, budget, work) {
-                return Some(kind);
-            }
+        // General construction and housing may use idle helpers. A Farm
+        // foundation is considered only when Food wins resource selection.
+        let p = self.player_economy(s.player)?;
+        if s.complete
+            && p.population_used as usize + s.global_queued + 2 >= p.population_cap as usize
+            && !s
+                .buildings
+                .iter()
+                .any(|b| b.kind == BuildingKind::House && !b.is_complete())
+            && self.steward_build_near(
+                worker,
+                BuildingKind::House,
+                unit.position.tile_floor(),
+                s,
+                budget,
+                work,
+            )
+        {
+            return Some(ResourceKind::Wood);
+        }
+        if let Some(kind) = self.steward_help_foundation(worker, None, s, budget, work) {
+            return Some(kind);
         }
         for kind in kinds {
             if unit.carried.is_some_and(|c| c.kind != kind)
-                || current
-                    .is_some_and(|old| !priority.improves_in_pass(kind, old, budget.reassigned))
                 || s.avoid.is_some_and(|a| a.avoid_kind == Some(kind))
             {
                 continue;
@@ -116,18 +182,27 @@ impl GameWorld {
         work: &mut StewardWork,
     ) -> Option<ResourceKind> {
         let from = self.unit(worker)?.position.tile_floor();
-        let attended: BTreeSet<_> = s
-            .units
+        // Read live tasks: earlier assignments in this pass already occupy a
+        // place, even though the unit census predates those orders. A partial
+        // census must also count managed builders seen in an earlier slice.
+        let mut attended = BTreeMap::<EntityId, usize>::new();
+        let unseen = self.economy.steward_homes[&s.steward]
+            .workers
             .iter()
-            .filter_map(|u| self.economy.builders.get(&u.id).map(|t| t.building))
-            .collect();
+            .copied()
+            .filter(|id| s.units.binary_search_by_key(id, |u| u.id).is_err());
+        for worker in s.units.iter().map(|u| u.id).chain(unseen) {
+            if let Some(task) = self.economy.builders.get(&worker) {
+                *attended.entry(task.building).or_default() += 1;
+            }
+        }
         let mut unfinished: Vec<_> = s
             .buildings
             .iter()
             .filter(|b| {
                 !b.is_complete()
                     && only.map_or(b.kind != BuildingKind::Farm, |kind| b.kind == kind)
-                    && (b.kind != BuildingKind::Farm || !attended.contains(&b.id))
+                    && attended.get(&b.id).copied().unwrap_or(0) < builder_limit(b.kind)
                     && matches!(
                         b.kind,
                         BuildingKind::House
@@ -149,7 +224,35 @@ impl GameWorld {
         unfinished.sort_unstable_by_key(|b| (b.0, b.1));
         unfinished.truncate(8);
         unfinished.sort_by_key(|b| (self.steward_crosses_water(from, b.3), b.0, b.1));
-        for (_, building, kind, _) in unfinished {
+        for (distance, building, kind, _) in unfinished {
+            // Prefer the nearest unloaded idle helpers over census-ID order.
+            if self.unit(worker)?.carried.is_some() {
+                continue;
+            }
+            let footprint = self.building(building)?.footprint;
+            let used = attended.get(&building).copied().unwrap_or(0);
+            let limit = builder_limit(kind);
+            let nearer = s
+                .units
+                .iter()
+                .filter(|u| {
+                    self.steward_worker_idle(u.id, s.steward)
+                        && self.unit(u.id).is_some_and(|live| {
+                            live.carried.is_none()
+                                && (
+                                    super::super::dropoff::ring_distance(
+                                        footprint,
+                                        live.position.tile_floor(),
+                                    ),
+                                    live.id,
+                                ) < (distance, worker)
+                        })
+                })
+                .take(limit - used)
+                .count();
+            if nearer >= limit - used {
+                continue;
+            }
             if budget.order(work) && self.issue_construct(s.player, &[worker], building).is_ok() {
                 return Some(match kind {
                     BuildingKind::Mill | BuildingKind::Farm => ResourceKind::Food,

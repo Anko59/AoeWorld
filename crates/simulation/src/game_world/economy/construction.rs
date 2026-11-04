@@ -235,6 +235,12 @@ impl GameWorld {
     ) -> bool {
         let mut any = false;
         for &builder in builders {
+            if self.economy.stewards.automatic
+                && self.steward_controller(builder).is_some()
+                && self.unit(builder).is_some_and(|u| u.carried.is_some())
+            {
+                continue;
+            }
             let building = target(builder);
             let Some(footprint) = self.building(building).map(|b| b.footprint) else {
                 continue;
@@ -244,6 +250,7 @@ impl GameWorld {
             if self.approach_building(builder, footprint, 0).is_ok() {
                 self.cancel_attack(builder);
                 any = true;
+                self.steward_hold_job(builder);
                 self.stop_gathering(builder);
                 self.economy.builders.insert(
                     builder,

@@ -1,6 +1,7 @@
 //! Kingdom shortages, observed deposit income and bounded distant discovery.
 use super::*;
 use std::collections::BTreeSet;
+mod continuity;
 mod discovery;
 mod income;
 mod long_run;
@@ -263,7 +264,15 @@ fn far_mining_camp(kind: ResourceKind) {
         },
     );
     let mut targeted = false;
-    for _ in 0..4_000 {
+    let mut released = false;
+    for tick in 0..4_000 {
+        // A productive fallback is no longer interrupted by a new discovery.
+        // Supply one ordinary idle opportunity, preserving the deposit floor,
+        // unaffordable-camp condition, and original deadline.
+        if !released && tick >= 1_000 && w.unit(worker).unwrap().carried.is_none() {
+            w.issue_stop(PlayerId(0), worker).unwrap();
+            released = true;
+        }
         w.advance();
         targeted |= w.steward_controller(worker) == Some(steward)
             && w.gathering_kind(worker) == Some(kind)
