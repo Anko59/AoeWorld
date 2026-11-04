@@ -40,6 +40,11 @@ test("WebGL2 bounds unfinished frames before uploading and resumes on completion
   await page.mouse.move(600, 300);
   await page.keyboard.down("ArrowRight");
   try {
+    // The first uploads follow the first presented frames, which a loaded
+    // runner can delay past any fixed frame count.
+    await expect
+      .poll(() => page.evaluate(() => Reflect.get(window, "frame-uploads")))
+      .toBe(2);
     await page.evaluate(async () => {
       for (let frame = 0; frame < 12; frame++) {
         await new Promise(requestAnimationFrame);
