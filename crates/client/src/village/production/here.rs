@@ -64,28 +64,6 @@ pub(super) fn plan(
         .map(|b| b.training_queue.len())
         .sum();
     population = population.saturating_add(queued as u32);
-    let ready = |b: &&GameplayBuildingState| {
-        b.hp > 0
-            && b.training_queue.len() + pending.count(b.id) < aoe_protocol::MAX_TRAINING_QUEUE
-            && (request.kind != UnitKind::Vassal || (!occupied(b) && pending.count(b.id) == 0))
-            && matches!(
-                availability::training(b, Some(player), owner, request.kind),
-                Availability::Ready
-            )
-    };
-    let Some(nearest) = buildings
-        .iter()
-        .filter(ready)
-        .map(|b| distance(b, request.position))
-        .min()
-    else {
-        return Vec::new();
-    };
-    // Balance locally: producers no farther than 16 tiles beyond the nearest.
-    let radius = nearest
-        .isqrt()
-        .saturating_add(16 * FIXED_SUBUNITS_PER_TILE as u64);
-    let max_distance = radius.saturating_mul(radius);
     let mut rally_count = 0;
     let mut result = Vec::new();
     for _ in 0..request.count.min(10) {
@@ -103,7 +81,6 @@ pub(super) fn plan(
             .iter()
             .filter(|b| {
                 b.hp > 0
-                    && distance(b, request.position) <= max_distance
                     && queued(b) < aoe_protocol::MAX_TRAINING_QUEUE
                     && (request.kind != UnitKind::Vassal
                         || (!occupied(b) && pending.count(b.id) == 0 && !result.contains(&b.id)))
@@ -112,7 +89,7 @@ pub(super) fn plan(
                         Availability::Ready
                     )
             })
-            .min_by_key(|b| (queued(b), distance(b, request.position), b.id));
+            .min_by_key(|b| (distance(b, request.position), queued(b), b.id));
         let Some(building) = next else {
             break;
         };

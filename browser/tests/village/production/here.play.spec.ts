@@ -67,14 +67,14 @@ test("Units here charges real resources, trains a soldier and persists its rally
   expect(Math.abs(ry - 134.5)).toBeLessThan(1);
 });
 
-test("Units here shares ordinary training and rally orders across eligible nearest queues", async ({
+test("Units here shares ordinary training and rally orders across equally near eligible queues", async ({
   page,
 }) => {
   test.setTimeout(90_000);
   const { commands, update } = await productionFixture(page, [
-    { id: 1, kind: 6, x: 8184, y: 8186, queue: [2, 2] },
+    { id: 1, kind: 6, x: 8191, y: 8186, queue: [2, 2] },
     { id: 2, kind: 6, x: 8191, y: 8186 },
-    { id: 3, kind: 6, x: 8197, y: 8186, queue: [2] },
+    { id: 3, kind: 6, x: 8191, y: 8186, queue: [2] },
     { id: 4, kind: 6, x: 8184, y: 8192, player: 1 },
     { id: 5, kind: 6, x: 8184, y: 8198, complete: false },
   ]);
@@ -158,4 +158,25 @@ test("Units here sends no training when the server rejects its rally", async ({
     "Accepted 0 of 3 Militia.",
   );
   expect(commands.filter((c) => c[0] === 5)).toHaveLength(0);
+});
+
+test("Units here prioritizes the closest occupied queue over a farther idle producer", async ({
+  page,
+}) => {
+  const { commands, update } = await productionFixture(page, [
+    { id: 1, kind: 6, x: 8191, y: 8186, queue: [2] },
+    { id: 2, kind: 6, x: 8300, y: 8300 },
+  ]);
+  update(playerState(0, 0, 4, 100));
+  await page.evaluate(() => {
+    location.hash = "x=8192.5&y=8192.5&zoom=.04";
+  });
+  await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
+  await page.getByLabel("Unit type").selectOption("2");
+  await page.getByLabel("Unit count").fill("1");
+  await page.getByRole("button", { name: "Units here", exact: true }).click();
+  await page.mouse.click(635, 345);
+  await expect(page.locator("#units-here-status")).toContainText("Accepted 1");
+  expect(commands.filter((c) => c[0] === 5).map((c) => c[2])).toEqual([1]);
+  expect(commands.filter((c) => c[0] === 20).map((c) => c[2])).toEqual([1]);
 });

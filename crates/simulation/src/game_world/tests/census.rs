@@ -7,13 +7,14 @@ fn census_reuses_a_100k_idle_report_across_ticks_and_movement() {
         WorldConfig::new(4096, 4096, Seed(7)).unwrap(),
         100_000,
         0,
-        100,
+        1000,
     )
     .unwrap();
     for unit in &mut w.units {
         unit.state.stance = aoe_core::CombatStance::NoAttack;
     }
     let first = w.unit_census();
+    assert_eq!(first.len(), 1000);
     assert_eq!(first.values().flat_map(|r| r.iter()).sum::<u32>(), 100_000);
     for _ in 0..4 {
         w.advance();

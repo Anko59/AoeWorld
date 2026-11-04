@@ -91,13 +91,21 @@ training to that producer. Each batch includes at most 20 commands, matching
 the human admission burst; large or unaffordable requests can be partial.
 
 Eligible producers must be owned, alive, complete and able to train the type
-at the reported age/research/resources. The split first limits producers to a neighborhood extending 16 tiles beyond
-the closest ready producer. Within that neighborhood it chooses shortest queue,
-then squared distance to the destination, then building ID.
+at the reported age/research/resources. The split chooses the nearest ready
+producer by squared distance to the destination, balancing queues among equally
+near producers and breaking remaining ties by building ID. It uses farther
+producers only when nearer queues have no space.
 It includes pending training, reserves resources and population, and bounds
 the burst including one rally per chosen producer. Every chosen producer's
 rally is changed to the clicked ground. Existing queued units share that
 producer rally. Missing economic reports disable the action.
+
+The authoritative census is initialized on demand and then maintained by unit
+births, deaths, upgrades and garrison transfers. Reports reuse it across ticks;
+with fog enabled, only connected viewers receive their own player report.
+`make perf-census-instructions` counts the serial report kernel over 20 calls
+with 100,000 units, 1,000 economy players and zero, one or 1,000 viewers. Setup,
+the initial census, simulation advancement and transport are outside the count.
 
 ## Local verification
 

@@ -188,10 +188,9 @@ pub(super) fn players(world: &GameWorld) -> BTreeMap<PlayerId, GameplayPlayerSta
 pub(super) fn player(world: &GameWorld, viewer: PlayerId) -> Option<GameplayPlayerState> {
     let state = world.player_economy(viewer)?;
     let census = world.unit_census();
+    let row = census.get(&viewer);
     let counts = std::array::from_fn(|index| {
-        census
-            .get(&viewer)
-            .map_or(0, |row| row[native_kind(UnitKind::ALL[index]) as usize])
+        row.map_or(0, |row| row[native_kind(UnitKind::ALL[index]) as usize])
     });
     Some(player_state(
         &state,

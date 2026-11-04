@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+bench-fixtures = []
+
 [dependencies]
 aoe-core.workspace = true
 aoe-map.workspace = true
@@ -28,4 +31,10 @@ tempfile = "3"
 nix = { version = "0.31", features = ["signal", "process", "fs"] }
 
 [dev-dependencies]
+gungraun = { version = "=0.19.4", features = ["client_requests"] }
 tokio-tungstenite = "0.29"
+
+[[bench]]
+name = "census_instructions"
+harness = false
+required-features = ["bench-fixtures"]

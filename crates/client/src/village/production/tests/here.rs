@@ -28,10 +28,8 @@ fn request(count: usize) -> HereRequest {
 }
 
 #[wasm_bindgen_test]
-fn units_here_split_balances_queue_then_distance_and_is_independent_of_input_order() {
+fn units_here_balances_equally_near_queues_and_is_independent_of_input_order() {
     let mut buildings = vec![barracks(1, 2), barracks(2, 0), barracks(3, 1)];
-    buildings[1].footprint = TileRect::from_xywh(16, 10, 3, 3);
-    buildings[2].footprint = TileRect::from_xywh(22, 10, 3, 3);
     let expected = vec![
         EntityId(2),
         EntityId(2),
@@ -140,11 +138,11 @@ fn units_here_split_bounds_a_burst_including_one_rally_per_producer() {
 }
 
 #[wasm_bindgen_test]
-fn units_here_prefers_the_nearest_ready_neighborhood_over_an_empty_distant_queue() {
+fn units_here_prioritizes_distance_even_inside_the_old_neighborhood() {
     let mut near = barracks(1, 1);
     near.footprint = TileRect::from_xywh(10, 10, 3, 3);
     let mut far = barracks(2, 0);
-    far.footprint = TileRect::from_xywh(1000, 1000, 3, 3);
+    far.footprint = TileRect::from_xywh(16, 10, 3, 3);
     assert_eq!(
         plan(
             &[far, near],
@@ -171,4 +169,23 @@ fn units_here_respects_the_human_twenty_command_burst_including_rallies() {
     );
     let unique: std::collections::BTreeSet<_> = orders.iter().copied().collect();
     assert!(orders.len() + unique.len() <= 20);
+}
+
+#[wasm_bindgen_test]
+fn units_here_uses_the_next_nearest_only_after_nearer_queues_fill() {
+    let mut near = barracks(1, 14);
+    near.footprint = TileRect::from_xywh(10, 10, 3, 3);
+    let mut far = barracks(2, 0);
+    far.footprint = TileRect::from_xywh(16, 10, 3, 3);
+    assert_eq!(
+        plan(
+            &[far, near],
+            Some(&player()),
+            PlayerId(0),
+            request(3),
+            &PendingTraining::default(),
+            |_| false
+        ),
+        vec![EntityId(1), EntityId(2), EntityId(2)]
+    );
 }

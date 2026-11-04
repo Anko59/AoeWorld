@@ -242,6 +242,7 @@ dependencies = [
  "aoe-simulation",
  "axum",
  "futures-util",
+ "gungraun",
  "memmap2",
  "nix",
  "rayon",

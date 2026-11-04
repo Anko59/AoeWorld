@@ -251,3 +251,7 @@ pub(super) mod subscription;
 #[path = "fanout/tests.rs"]
 #[cfg(test)]
 mod tests;
+
+#[cfg(any(test, feature = "bench-fixtures"))]
+#[path = "fanout/benchmark.rs"]
+mod benchmark;
