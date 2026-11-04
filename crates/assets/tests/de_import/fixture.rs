@@ -68,6 +68,14 @@ pub(super) fn actors(install: &Path) {
         r[33..37].copy_from_slice(&1_f32.to_le_bytes());
         records.extend(r);
     }
+    // Resource portraits are read from the DAT icon index, so the importer needs these units.
+    for id in [59_i16, 349, 66, 102, 53] {
+        let mut r = units::record(id, &[-1; 8], -1);
+        r[0] = 10;
+        r[29..33].copy_from_slice(&1_f32.to_le_bytes());
+        r[33..37].copy_from_slice(&1_f32.to_le_bytes());
+        records.extend(r);
+    }
     for id in 0..200 {
         records.extend([1, 0, 0, 0, 0, 0, 0, 0]);
         for text in ["Ground", "g_fm1"] {
@@ -106,7 +114,58 @@ pub(super) fn actors(install: &Path) {
         fs::create_dir_all(&path).unwrap();
         fs::write(path.join(file), super::dds()).unwrap();
     }
+    native_interface(install);
     let mut encoder = flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::fast());
     encoder.write_all(&records).unwrap();
     fs::write(dat.join("empires2_x2_p1.dat"), encoder.finish().unwrap()).unwrap();
+}
+
+/// Minimal native interface sources: every icon, command, resource, panel and menu file the
+/// importer requires, so a missing source still rejects the install.
+fn native_interface(install: &Path) {
+    let ingame = install.join("widgetui/textures/ingame");
+    let png = {
+        let mut bytes = Vec::new();
+        let mut encoder = png::Encoder::new(&mut bytes, 2, 2);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder
+            .write_header()
+            .unwrap()
+            .write_image_data(&[255; 16])
+            .unwrap();
+        bytes
+    };
+    let write = |path: std::path::PathBuf, bytes: &[u8]| {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, bytes).unwrap();
+    };
+    write(ingame.join("buildings/0_test.dds"), &super::dds());
+    for index in [0, 1, 2, 3, 28, 30, 31, 32, 41, 4, 35, 43, 62, 63, 84, 74] {
+        write(ingame.join(format!("actions/{index:03}_.png")), &png);
+    }
+    for name in [
+        "resource_food",
+        "resource_wood",
+        "resource_stone",
+        "resource_gold",
+        "pop",
+    ] {
+        write(ingame.join(format!("icons/{name}.png")), &png);
+    }
+    for name in [
+        "command-panel_extended",
+        "single-selection-panel",
+        "map-panel",
+        "topbar",
+    ] {
+        write(ingame.join(format!("panels/WEST/{name}.png")), &png);
+    }
+    for name in ["blank_icon", "frame_regular"] {
+        write(ingame.join(format!("panels/{name}.png")), &png);
+    }
+    write(
+        install.join("widgetui/textures/backgrounds/mainmenu_bg.dds"),
+        &super::dds(),
+    );
 }

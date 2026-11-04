@@ -342,10 +342,11 @@ async fn every_authoritative_resource_task_has_work_and_carry_art() {
             "partial load must keep working: {kind:?}"
         );
         client.units.get_mut(&id).unwrap().task = UnitTask::Idle;
-        assert_eq!(
-            units(&client, &scene)[0].kind,
-            aoe_rendering::SceneUnitKind::Villager
-        );
+        // A stopped loaded worker keeps carry art; delivering the load restores Villager.
+        let villager = aoe_rendering::SceneUnitKind::Villager;
+        assert_ne!(units(&client, &scene)[0].kind, villager, "{kind:?}");
+        client.units.get_mut(&id).unwrap().carried = None;
+        assert_eq!(units(&client, &scene)[0].kind, villager);
     }
 }
 

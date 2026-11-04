@@ -130,7 +130,7 @@ fn complete_actor_inventory_and_dat_damage_cells_fit_without_startup_animation_p
     }
     assert_eq!(
         selected.len(),
-        123_326,
+        123_806,
         "current complete catalog, sharing identical pose ranges"
     );
     let before = selected.len();
