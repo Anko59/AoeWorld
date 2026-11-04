@@ -1,37 +1,59 @@
 use super::*;
 use std::collections::BTreeMap;
 
-#[test]
-fn moderate_shortage_moves_one_productive_worker_per_domain_pass() {
-    let (mut w, steward, workers, _) = wood_realm(20);
-    reserves(&mut w, 1_000, 30_000, 30_000, 30_000);
-    let town_center = w.steward_town_center(steward).unwrap();
-    let anchor = w.building(town_center).unwrap().footprint.min;
-    assign_farms(&mut w, &workers, TileCoord::new(anchor.x + 7, anchor.y + 7));
-    advance(&mut w, 20);
-    assert!(
-        assigned(&w, steward, &workers, ResourceKind::Food) >= 18,
-        "ordinary Mill repair may retain one builder"
-    );
-    assert!(
-        workers
+// These crops have clear ordinary delivery routes. A watchdog-abandoned job
+// is a different boundary from productive work interrupted by a stock change.
+fn productive_farmers() -> (GameWorld, EntityId, Vec<EntityId>, ResourceNode) {
+    let (mut w, _) = GameWorld::steward_stability_demo(aoe_core::Seed(7)).unwrap();
+    // Use normal game speed for all deadlines in these regressions.
+    w.config.tick_hz = 20;
+    let steward = w.units().find(|u| u.kind == UnitKind::Steward).unwrap().id;
+    let tc = w
+        .buildings()
+        .find(|b| b.kind == BuildingKind::TownCenter)
+        .unwrap()
+        .id;
+    let workers: Vec<_> = w
+        .units()
+        .filter(|u| u.kind == UnitKind::Villager)
+        .map(|u| u.id)
+        .collect();
+    let from = w.building(tc).unwrap().footprint.min;
+    let node = w
+        .nearest_resource(from, ResourceKind::Wood, 100, None)
+        .unwrap();
+    w.issue_garrison(PlayerId(0), steward, tc).unwrap();
+    for _ in 0..800 {
+        w.advance();
+        if workers
             .iter()
-            .all(|id| w.unit(*id).unwrap().carried.is_none())
-    );
+            .all(|id| w.steward_controller(*id) == Some(steward))
+        {
+            break;
+        }
+    }
+    assert_eq!(assigned(&w, steward, &workers, ResourceKind::Food), 20);
+    (w, steward, workers, node)
+}
+
+#[test]
+fn moderate_shortage_preserves_farmers_and_assigns_new_idle_workers() {
+    let (mut w, steward, workers, node) = productive_farmers();
     // Food/45 = 40 and Wood/30 = 33.3: a real moderate imbalance,
     // but no emergency that should interrupt the entire workforce at once.
     reserves(&mut w, 1_800, 1_000, 30_000, 30_000);
-    advance(&mut w, 20);
+    let idle = workers_near(&mut w, node.tile, 2);
+    advance(&mut w, 40);
     assert_eq!(
         assigned(&w, steward, &workers, ResourceKind::Wood),
-        1,
-        "one moderate adjustment lets new deliveries inform the next pass"
+        0,
+        "productive farmers keep their jobs under a moderate shortage"
     );
-    advance(&mut w, 20);
+    assert!(assigned(&w, steward, &workers, ResourceKind::Food) >= 18);
     assert_eq!(
-        assigned(&w, steward, &workers, ResourceKind::Wood),
+        assigned(&w, steward, &idle, ResourceKind::Wood),
         2,
-        "rotation still makes progress on the shortage"
+        "new idle workers still respond within two game seconds"
     );
 }
 
@@ -60,16 +82,9 @@ fn at_food_dropoff(w: &GameWorld, id: EntityId) -> bool {
 }
 
 #[test]
-fn established_farmers_respond_to_changed_kingdom_needs_without_losing_loads_or_manual_orders() {
-    let (mut w, steward, workers, _) = wood_realm(20);
-    reserves(&mut w, 30_000, 30_000, 30_000, 30_000);
-    let town_center = w.steward_town_center(steward).unwrap();
-    let anchor = w.building(town_center).unwrap().footprint.min;
-    let food = make_farmers(
-        &mut w,
-        &workers,
-        TileCoord::new(anchor.x + 10, anchor.y + 10),
-    );
+fn established_farmers_keep_plots_and_deliver_loads_when_kingdom_needs_change() {
+    let (mut w, steward, workers, _) = productive_farmers();
+    let food = observed_deposits(&mut w, 1_000, ResourceKind::Food);
     assert!(
         food >= 200,
         "established farming must actually deposit food"
@@ -90,8 +105,12 @@ fn established_farmers_respond_to_changed_kingdom_needs_without_losing_loads_or_
         w.advance();
     }
     let (loaded_worker, load) = loaded.expect("normal farming must carry food");
+    assert_eq!(w.steward_controller(loaded_worker), Some(steward));
     reserves(&mut w, 30_000, 1_000, 30_000, 30_000);
-    let mut switched_loaded_worker = false;
+    let targets: BTreeMap<_, _> = eligible
+        .iter()
+        .map(|id| (*id, w.gather_tile(*id)))
+        .collect();
     let mut own_deposit = 0_u32;
     for _ in 0..800 {
         let before = carried_food(&w);
@@ -118,11 +137,23 @@ fn established_farmers_respond_to_changed_kingdom_needs_without_losing_loads_or_
             );
             own_deposit += u32::from(own);
         }
-        if w.gathering_kind(loaded_worker) == Some(ResourceKind::Wood) {
-            switched_loaded_worker = true;
-            assert!(own_deposit >= u32::from(load));
-            assert!(
-                w.player_economy(PlayerId(0)).unwrap().stockpile.food >= 30_000 + u32::from(load)
+        for worker in eligible {
+            if let Some(job) = w.economy.builders.get(worker) {
+                assert!(matches!(
+                    w.building(job.building).unwrap().kind,
+                    BuildingKind::Mill | BuildingKind::House | BuildingKind::Dock
+                ));
+                assert!(w.steward_has_held_job(*worker));
+                continue;
+            }
+            if w.gathering_kind(*worker).is_none() {
+                continue;
+            }
+            assert_eq!(w.gathering_kind(*worker), Some(ResourceKind::Food));
+            assert_eq!(
+                w.gather_tile(*worker),
+                targets[worker],
+                "productive plots are retained"
             );
         }
         assert_eq!(w.steward_controller(manual), None);
@@ -131,24 +162,19 @@ fn established_farmers_respond_to_changed_kingdom_needs_without_losing_loads_or_
             Some(destination)
         );
     }
-    let wood = assigned(&w, steward, eligible, ResourceKind::Wood);
-    assert!(
-        wood >= 18,
-        "established farmers did not respond: {wood}/19 on wood; {:?}",
+    assert_eq!(
         eligible
             .iter()
-            .filter(|id| w.gathering_kind(**id) != Some(ResourceKind::Wood))
-            .map(|id| (
-                *id,
-                w.unit(*id).unwrap().task,
-                w.unit(*id).unwrap().carried,
-                w.gathering_kind(*id),
-                w.steward_controller(*id)
-            ))
-            .collect::<Vec<_>>()
+            .filter(|id| {
+                (w.gathering_kind(**id) == Some(ResourceKind::Food)
+                    && w.gather_tile(**id) == targets[id])
+                    || (w.economy.builders.contains_key(id) && w.steward_has_held_job(**id))
+            })
+            .count(),
+        19
     );
     assert!(
-        switched_loaded_worker,
-        "a loaded farmer must deposit, then respond too"
+        own_deposit >= u32::from(load),
+        "the loaded farmer still delivers its own Food"
     );
 }

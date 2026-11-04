@@ -39,6 +39,7 @@ pub(crate) struct Home {
     pub(super) farm_after: Option<usize>,
     pub(super) repair_after: Option<EntityId>,
     pub(super) repair_sites: BTreeMap<EntityId, usize>,
+    held_jobs: BTreeMap<EntityId, jobs::HeldJob>,
     resources: search::Search,
     navy: navy::Fleet,
     pub(crate) stalls: BTreeMap<EntityId, watchdog::Stall>,
@@ -117,6 +118,7 @@ impl GameWorld {
                 farm_after: None,
                 repair_after: None,
                 repair_sites: BTreeMap::new(),
+                held_jobs: BTreeMap::new(),
                 resources: search::Search::default(),
                 navy: navy::Fleet::default(),
                 stalls: BTreeMap::new(),
@@ -269,6 +271,7 @@ impl GameWorld {
                 .get_mut(&id)
                 .map(|h| {
                     h.stalls.clear();
+                    h.held_jobs.clear();
                     h.repair_after = None;
                     h.repair_sites.clear();
                     let refused = h.resources.clear_workers();
@@ -362,6 +365,7 @@ impl GameWorld {
             }
             if let Some(home) = self.economy.steward_homes.get_mut(&steward) {
                 home.workers.remove(&id);
+                home.held_jobs.remove(&id);
                 home.navy.ships.remove(&id);
                 home.resources.forget_worker(id);
             }

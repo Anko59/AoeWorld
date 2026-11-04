@@ -151,11 +151,20 @@ impl GameWorld {
         let from = unit.position.tile_floor();
         // A completed farm's builder may still be retrying its work spot.
         // Preserve that farmer's claim as well as ordinary gather reservations.
-        let attended: BTreeSet<_> = s
+        let mut attended: BTreeSet<_> = s
             .units
             .iter()
             .filter_map(|u| self.economy.builders.get(&u.id).map(|t| t.building))
             .collect();
+        attended.extend(
+            self.economy.steward_homes[&s.steward]
+                .held_jobs
+                .values()
+                .filter_map(|job| match job.target {
+                    super::super::gathering::WorkTarget::Farm(farm) => Some(farm),
+                    _ => None,
+                }),
+        );
         let mut farms: Vec<_> = s
             .buildings
             .iter()

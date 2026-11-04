@@ -335,3 +335,107 @@ No replay pin is regenerated. Local raw trials and commands are retained in
 ignored `.cache/churn/`; real-art recordings belong in `.cache/showcase/`.
 These are synthetic prepared river geography and bounded economy observations,
 not source-backed France, the owner's 99-AI game, or hardware qualification.
+
+## Productive-job continuity (2026-11-04)
+
+Comparison base: `6525255562e330a930dae0a339a564f640c03e79` (small crews).
+Kingdom reserve changes now choose available workers; they do not interrupt
+productive gathering. An exhausted tree uses ordinary local replacement before
+its woodline ends. Ordinary Farm reseeding remains enabled. A worker borrowed
+for automatic support construction retains its original target, then resumes
+through the admitted Steward order budget. Completed camps do not overwrite
+that saved target with their own default resource search. Loaded managed
+workers cannot be borrowed. Held Farm reservations prevent another helper from
+claiming the absent farmer's plot; owner overrides, release and death clear them.
+The bounded held-job map participates in the canonical hash.
+
+### Trials, including rejected drafts
+
+Each cell is **job changes / delivered resources per minute / mean idle** over
+10 minutes. Columns reuse the twenty-worker flat workload and the prepared
+river workloads above. Idle means worker-ticks divided by 12,000, not an idle
+percentage. The startup fixture begins with four unfinished Mills.
+
+| Variant | Flat 20 | River 40 | River 80 | River startup 80 |
+|---|---|---|---|---|
+| Base | 265 / 204.5 / .0413 | 421 / 391 / .0690 | 736 / 730 / .1383 | 789 / 667.5 / .1750 |
+| Every depleted node hands off; rejected | 52 / 226 / .0774 | 75 / 616 / .1301 | 148 / 1250 / .2470 | 208 / 1144 / .2654 |
+| Whole woodline, early Farm retirement; rejected | 91 / 218.5 / .0548 | 143 / 654.5 / .0657 | 279 / 1305.5 / .1290 | 299 / 1202 / .1677 |
+| Ordinary reseeds, local construction capture; rejected | 91 / 218.5 / .0548 | 143 / 654.5 / .0657 | 279 / 1305.5 / .1290 | 299 / 1202 / .1677 |
+| Shared construction capture, before completion guard; rejected | 81 / 235.5 / .0593 | 143 / 654.5 / .0657 | 279 / 1305.5 / .1290 | 299 / 1202 / .1677 |
+| Shared capture and budgeted original-job resumption; accepted | 81 / 235.5 / .0593 | 140 / 655.5 / .0643 | 278 / 1306.5 / .1295 | 294 / 1215 / .1793 |
+
+The first draft exceeded the unchanged startup idle ceiling: 3,185 worker-ticks
+against 2,508. Retiring spent Farms before admitting an alternative also lost
+useful prepaid reseeds when ore was refused. Both changes were removed. The
+next draft captured Mill/camp construction but missed Dock construction. Moving
+capture to ordinary automatic construction covered that path. Its completion
+path still needed a guard against taking the building's default resource job
+or continuing to another foundation instead of restoring the original target.
+The final draft adds that guard. The held-Farm lookup was subsequently changed
+to a precomputed reservation set. Its focused rerun preserved the complete
+observations, including every replay hash, byte for byte.
+
+Accepted job changes fall 69.4%, 66.7%, 62.2% and 62.7% respectively. Total
+income rises 15.2%, 67.6%, 79.0% and 82.0%. Startup mean idle rises slightly
+against the small-crew base, but remains below the existing .209 ceiling; every
+minute sample and final idle count is zero in all river workloads. Flat mean
+idle rises from .0413 to .0593, with final idle still zero. No gate or baseline
+was reduced.
+
+### Resource mix and limits
+
+Keeping jobs changes the resource mix. These are actual deliveries per minute,
+listed as Food / Wood / Gold / Stone; stockpile growth is not used as income.
+
+| Workload | Before | After |
+|---|---|---|
+| Flat 20 | 96.5 / 108 / 0 / 0 | 119.5 / 116 / 0 / 0 |
+| River 40 | 149 / 242 / 0 / 0 | 39.5 / 616 / 0 / 0 |
+| River 80 | 251 / 479 / 0 / 0 | 75.5 / 1231 / 0 / 0 |
+| River startup 80 | 233.5 / 434 / 0 / 0 | 283 / 906 / 16 / 10 |
+
+The mature river workload becomes heavily Wood-oriented. Higher total income
+does not establish a balanced kingdom economy when workers are fixed and
+training is disabled. Training, purchases, combat and the owner's 99-AI game
+remain separate qualification. This change preserves paid Farm tiling,
+reseeding and camp repair; it does not claim to resolve same-player poaching,
+all inaccessible resources, growing remote idle groups, or exhausted/far Docks.
+
+Tests now reflect the owner's continuity rule. The old discovery cases expected
+productive fallback farmers to be automatically retasked onto ore. Explicit
+owner Stops or a finished fixture crop now supply idle opportunities, retaining
+the original deposit floors, 10,000/4,000-tick deadlines, refused-order load
+preservation, finder budgets and replay comparisons. New checks retain real
+productive jobs through moderate and urgent stock changes, preserve delivered
+loads, continue a local woodline, switch after its exhaustion, restore borrowed
+workers, and honor a manual move during construction. The original twenty-worker
+blocked-route fixture is retained for long-run measurement; clear delivery
+routes isolate productive continuity in the stock-change regressions.
+
+Local evidence is ignored under `.cache/churn-continuity/`. All river assertions
+still compare complete one- and four-worker observations before numeric gates:
+`river_steward_one_and_four_worker_replay_matches`,
+`four_domain_river_one_and_four_worker_replay_matches`, and
+`four_domain_mill_startup_one_and_four_worker_replay_matches`.
+`late_game_full_population_replays_at_the_profile_checkpoint` also passes its
+existing pin; no replay pin was regenerated. `make perf-late-game-instructions`
+was refused with Make exit 2 / recipe exit 75: the `game/roads` checkout held the
+long-job lock. No instruction result for this change is claimed.
+
+Real-art before/after capture uses `make showcase`, the ordinary kingdom demo
+and matching Scout cameras. Raw voiced captures are
+`.cache/showcase/continuity-before.webm` and `continuity-after.webm`.
+Delivery excerpts are `steward-continuity-before.webm` and
+`steward-continuity-after.webm` in that directory. Initial loading is excluded
+from excerpts. First, middle and last frames are inspected for both raw and excerpt
+captures; footage is local evidence, not a CI gate.
+
+Final local validation: `make hooks-install`, `make hooks-check`,
+`make fmt-check`, `make lint`, and `make structure-check` pass. The final
+`make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation` run with
+`AOE_NATIVE_TEST_FILTER='test(steward::)|test(gathering::)|test(construction::)|test(late_game_full_population_replays_at_the_profile_checkpoint)'`
+covers 203 gathering/construction/Steward tests and the unchanged-pin checkpoint
+named above. The final guarded lookup preserves the recorded observations. No full suite, published CI result or hardware qualification is
+claimed. Both delivered excerpts are 12 seconds, showing the settled Scout
+view: the before HUD has one Food worker; the after HUD has eighteen.

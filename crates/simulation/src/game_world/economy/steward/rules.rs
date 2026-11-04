@@ -44,8 +44,6 @@ pub(super) struct Budget {
     pub orders: usize,
     pub searches: usize,
     pub sites: usize,
-    /// After one productive change, only fourfold shortages may move more.
-    pub reassigned: bool,
     jobs: usize,
     node_credits: usize,
 }

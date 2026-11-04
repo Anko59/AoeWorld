@@ -5,7 +5,7 @@ use aoe_map::ResourceKind;
 use std::collections::BTreeSet;
 
 #[test]
-fn stability_showcase_preserves_working_farms_until_the_owner_activates_management() {
+fn stability_showcase_preserves_working_farms_after_the_owner_activates_management() {
     let (mut w, _) = GameWorld::steward_stability_demo(Seed(7)).unwrap();
     let king = w.units().find(|u| u.kind == UnitKind::Steward).unwrap().id;
     let town_center = w
@@ -57,28 +57,22 @@ fn stability_showcase_preserves_working_farms_until_the_owner_activates_manageme
             .iter()
             .all(|id| w.steward_controller(*id) == Some(king))
     );
-    let wood = |w: &GameWorld| {
-        workers
-            .iter()
-            .filter(|id| w.gathering_kind(**id) == Some(ResourceKind::Wood))
-            .count()
-    };
-    let mut previous = wood(&w);
-    assert!(previous <= 1);
-    // These farmers already hold real Food loads: observe their deliveries,
-    // then the paced adjustments, rather than clearing loads for the film.
+    let plots: Vec<_> = workers.iter().map(|id| (*id, w.gather_tile(*id))).collect();
+    let food = w.player_economy(PlayerId(0)).unwrap().stockpile.food;
     for _ in 0..200 {
         w.advance();
-        let next = wood(&w);
-        assert!(
-            next <= previous + 1,
-            "one moderate productive change per pass"
-        );
-        previous = next;
+        for (worker, plot) in &plots {
+            assert_eq!(w.gathering_kind(*worker), Some(ResourceKind::Food));
+            assert_eq!(
+                w.gather_tile(*worker),
+                *plot,
+                "management preserves productive plots"
+            );
+        }
     }
     assert!(
-        previous > 0 && previous < 20,
-        "the film exposes gradual real job changes"
+        w.player_economy(PlayerId(0)).unwrap().stockpile.food > food,
+        "the retained farmers still deliver real Food"
     );
 }
 

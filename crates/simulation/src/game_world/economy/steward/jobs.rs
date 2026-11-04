@@ -14,20 +14,80 @@ fn builder_limit(kind: BuildingKind) -> usize {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(super) struct HeldJob {
+    pub kind: ResourceKind,
+    pub target: super::super::gathering::WorkTarget,
+}
+
 impl GameWorld {
+    /// Ordinary automatic construction borrows a worker, never its profession.
+    pub(crate) fn steward_hold_job(&mut self, worker: EntityId) {
+        if !self.economy.stewards.automatic {
+            return;
+        }
+        let Some(steward) = self.steward_controller(worker) else {
+            return;
+        };
+        let Some(task) = self.economy.gatherers.get(&worker) else {
+            return;
+        };
+        use super::super::gathering::WorkTarget;
+        let job = HeldJob {
+            kind: task.kind,
+            target: task
+                .animal
+                .map(WorkTarget::Animal)
+                .or_else(|| task.farm.map(WorkTarget::Farm))
+                .unwrap_or(WorkTarget::Node(task.node)),
+        };
+        if let Some(home) = self.economy.steward_homes.get_mut(&steward) {
+            home.held_jobs.insert(worker, job);
+        }
+    }
+
+    pub(crate) fn steward_has_held_job(&self, worker: EntityId) -> bool {
+        self.steward_controller(worker).is_some_and(|steward| {
+            self.economy.steward_homes[&steward]
+                .held_jobs
+                .contains_key(&worker)
+        })
+    }
+
     pub(super) fn steward_job(
         &mut self,
         worker: EntityId,
-        current: Option<ResourceKind>,
         s: &mut Snapshot,
         budget: &mut Budget,
         work: &mut StewardWork,
     ) -> Option<ResourceKind> {
+        if let Some(job) = self.economy.steward_homes[&s.steward]
+            .held_jobs
+            .get(&worker)
+            .copied()
+        {
+            use super::super::gathering::WorkTarget;
+            if !budget.order(work) {
+                return None;
+            }
+            let accepted = match job.target {
+                WorkTarget::Farm(farm) => self.issue_farm(s.player, worker, farm).is_ok(),
+                WorkTarget::Node(node) => self.issue_gather(s.player, worker, node).is_ok(),
+                WorkTarget::Animal(animal) => self.begin_carcass_gather(worker, animal).is_ok(),
+            };
+            self.economy
+                .steward_homes
+                .get_mut(&s.steward)?
+                .held_jobs
+                .remove(&worker);
+            if accepted {
+                return Some(job.kind);
+            }
+        }
         let unit = self.unit(worker)?;
         let priority = self.steward_priority(s.player, s.home.settings.weights)?;
         let kinds = priority.kinds();
-        if current.is_none()
-            && kinds[0] == ResourceKind::Food
+        if kinds[0] == ResourceKind::Food
             && unit
                 .carried
                 .is_none_or(|load| load.kind == ResourceKind::Food)
@@ -37,35 +97,31 @@ impl GameWorld {
         {
             return Some(ResourceKind::Food);
         }
-        if current.is_none() {
-            // General construction and housing may use idle helpers. A Farm
-            // foundation is considered only when Food wins resource selection.
-            let p = self.player_economy(s.player)?;
-            if s.complete
-                && p.population_used as usize + s.global_queued + 2 >= p.population_cap as usize
-                && !s
-                    .buildings
-                    .iter()
-                    .any(|b| b.kind == BuildingKind::House && !b.is_complete())
-                && self.steward_build_near(
-                    worker,
-                    BuildingKind::House,
-                    unit.position.tile_floor(),
-                    s,
-                    budget,
-                    work,
-                )
-            {
-                return Some(ResourceKind::Wood);
-            }
-            if let Some(kind) = self.steward_help_foundation(worker, None, s, budget, work) {
-                return Some(kind);
-            }
+        // General construction and housing may use idle helpers. A Farm
+        // foundation is considered only when Food wins resource selection.
+        let p = self.player_economy(s.player)?;
+        if s.complete
+            && p.population_used as usize + s.global_queued + 2 >= p.population_cap as usize
+            && !s
+                .buildings
+                .iter()
+                .any(|b| b.kind == BuildingKind::House && !b.is_complete())
+            && self.steward_build_near(
+                worker,
+                BuildingKind::House,
+                unit.position.tile_floor(),
+                s,
+                budget,
+                work,
+            )
+        {
+            return Some(ResourceKind::Wood);
+        }
+        if let Some(kind) = self.steward_help_foundation(worker, None, s, budget, work) {
+            return Some(kind);
         }
         for kind in kinds {
             if unit.carried.is_some_and(|c| c.kind != kind)
-                || current
-                    .is_some_and(|old| !priority.improves_in_pass(kind, old, budget.reassigned))
                 || s.avoid.is_some_and(|a| a.avoid_kind == Some(kind))
             {
                 continue;
