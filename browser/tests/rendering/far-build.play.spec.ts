@@ -118,7 +118,7 @@ test("HUD refresh preserves the Build here icon during a held pointer", async ({
     (window as unknown as RefreshWindow).buildRefresh = () =>
       build.ready(state);
     (window as unknown as RefreshWindow).buildClicks = 0;
-    const button = panel.querySelector("button");
+    const button = panel.querySelector("button:not(:disabled)");
     if (!button) throw new Error("Build button missing");
     button.addEventListener(
       "click",
@@ -127,7 +127,7 @@ test("HUD refresh preserves the Build here icon during a held pointer", async ({
     (window as unknown as RefreshWindow).buildIcon = button.firstElementChild;
   });
   const icon = page
-    .locator("#build-refresh-test button > :first-child")
+    .locator("#build-refresh-test button:not(:disabled) > :first-child")
     .first();
   await icon.hover();
   await page.mouse.down();
@@ -138,7 +138,8 @@ test("HUD refresh preserves the Build here icon during a held pointer", async ({
     await page.evaluate(
       () =>
         (window as unknown as RefreshWindow).buildIcon ===
-        document.querySelector("#build-refresh-test button")?.firstElementChild,
+        document.querySelector("#build-refresh-test button:not(:disabled)")
+          ?.firstElementChild,
     ),
   ).toBe(true);
   await page.mouse.up();
