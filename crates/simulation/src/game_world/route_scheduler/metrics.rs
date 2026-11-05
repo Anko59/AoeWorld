@@ -184,9 +184,17 @@ impl Drop for PlanningMeasurement<'_> {
 }
 
 /// Shared by parallel movement readers and their polylines. Never hashed or
-/// consulted by movement decisions. Relaxed addition is independent of order.
+/// consulted by movement decisions. Each worker adds to its own cache line:
+/// a single shared counter took about 300,000 contended writes a tick and made
+/// the parallel proposals take turns on it. Addition is independent of order.
 #[derive(Debug, Default)]
 pub(crate) struct GroupWork {
+    shards: [GroupWorkShard; 16],
+}
+
+#[derive(Debug, Default)]
+#[repr(align(64))]
+struct GroupWorkShard {
     members: std::sync::atomic::AtomicU64,
     path: std::sync::atomic::AtomicU64,
     path_writes: std::sync::atomic::AtomicU64,
@@ -194,27 +202,37 @@ pub(crate) struct GroupWork {
 }
 
 impl GroupWork {
+    fn shard(&self) -> &GroupWorkShard {
+        &self.shards[crate::game_world::parallel::worker_slot() % self.shards.len()]
+    }
     pub(crate) fn members(&self, count: u64) {
-        self.members
+        self.shard()
+            .members
             .fetch_add(count, std::sync::atomic::Ordering::Relaxed);
     }
     pub(crate) fn path(&self, count: u64) {
-        self.path
+        self.shard()
+            .path
             .fetch_add(count, std::sync::atomic::Ordering::Relaxed);
     }
     pub(crate) fn path_write(&self) {
-        self.path_writes
+        self.shard()
+            .path_writes
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
     pub(crate) fn collision(&self, count: u64) {
-        self.collision
+        self.shard()
+            .collision
             .fetch_add(count, std::sync::atomic::Ordering::Relaxed);
     }
     pub(crate) fn snapshot(&self, metrics: &mut RouteMetrics) {
         use std::sync::atomic::Ordering::Relaxed;
-        metrics.group_member_work = self.members.load(Relaxed);
-        metrics.group_path_work = self.path.load(Relaxed);
-        metrics.group_path_writes = self.path_writes.load(Relaxed);
-        metrics.group_collision_work = self.collision.load(Relaxed);
+        let total = |field: fn(&GroupWorkShard) -> &std::sync::atomic::AtomicU64| {
+            self.shards.iter().map(|s| field(s).load(Relaxed)).sum()
+        };
+        metrics.group_member_work = total(|s| &s.members);
+        metrics.group_path_work = total(|s| &s.path);
+        metrics.group_path_writes = total(|s| &s.path_writes);
+        metrics.group_collision_work = total(|s| &s.collision);
     }
 }

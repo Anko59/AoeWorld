@@ -189,14 +189,17 @@ impl CollisionIndex {
             WorldPosition::new(at.x.saturating_sub(reach), at.y.saturating_sub(reach)).tile_floor();
         let max =
             WorldPosition::new(at.x.saturating_add(reach), at.y.saturating_add(reach)).tile_floor();
+        // One counter write per query: this runs for every mover on every worker.
+        let mut probes = 0;
         for y in min.y..=max.y {
             for x in min.x..=max.x {
-                work.collision(1);
+                probes += 1;
                 let tile = TileCoord::new(x, y);
                 let Some(cell) = self.cells[usize::from(naval)].get(&key(tile)) else {
                     continue;
                 };
                 if cell.len() > CELL_LIMIT && overflow(tile) {
+                    work.collision(probes);
                     return true;
                 }
                 let len = cell.len();
@@ -206,8 +209,9 @@ impl CollisionIndex {
                     (salt % len as u64) as usize
                 };
                 for _ in 0..len.min(CELL_LIMIT) {
-                    work.collision(1);
+                    probes += 1;
                     if test(cell[at]) {
+                        work.collision(probes);
                         return true;
                     }
                     at += 1;
@@ -217,6 +221,7 @@ impl CollisionIndex {
                 }
             }
         }
+        work.collision(probes);
         false
     }
 }
