@@ -203,6 +203,7 @@ impl GameWorld {
                 !b.is_complete()
                     && only.map_or(b.kind != BuildingKind::Farm, |kind| b.kind == kind)
                     && attended.get(&b.id).copied().unwrap_or(0) < builder_limit(b.kind)
+                    && s.home.connects(from, b.footprint)
                     && matches!(
                         b.kind,
                         BuildingKind::House

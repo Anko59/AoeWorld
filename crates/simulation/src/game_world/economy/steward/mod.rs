@@ -41,6 +41,7 @@ pub(crate) struct Home {
     pub(super) repair_sites: BTreeMap<EntityId, usize>,
     held_jobs: BTreeMap<EntityId, jobs::HeldJob>,
     resources: search::Search,
+    regions: Option<std::sync::Arc<territory::Regions>>,
     navy: navy::Fleet,
     pub(crate) stalls: BTreeMap<EntityId, watchdog::Stall>,
     pub(super) status: StewardStatus,
@@ -97,6 +98,8 @@ pub(crate) struct Manager {
     /// one admitted domain pass, including ordinary resource replacements.
     pub(super) ordering: Option<EntityId>,
     pub(super) work: StewardWork,
+    /// Bumped when a bridge appears or collapses; invalidates region labels.
+    pub(super) bridge_epoch: u32,
 }
 impl GameWorld {
     pub(crate) fn register_steward(&mut self, id: EntityId) {
@@ -120,6 +123,7 @@ impl GameWorld {
                 repair_sites: BTreeMap::new(),
                 held_jobs: BTreeMap::new(),
                 resources: search::Search::default(),
+                regions: None,
                 navy: navy::Fleet::default(),
                 stalls: BTreeMap::new(),
                 status: StewardStatus::default(),
@@ -280,6 +284,7 @@ impl GameWorld {
                         ..StewardStatus::default()
                     };
                     h.resources = search::Search::default();
+                    h.regions = None;
                     let ships = std::mem::take(&mut h.navy.ships);
                     h.workers.extend(ships);
                     h.navy = navy::Fleet::default();
@@ -427,7 +432,15 @@ impl GameWorld {
         self.steward_controller(worker)
             .or(self.economy.stewards.ordering)
             .and_then(|v| self.economy.steward_homes.get(&v))
-            .is_none_or(|h| h.owns(at) && self.unit(worker).is_some_and(|u| u.player == h.player))
+            .is_none_or(|h| {
+                h.owns(at)
+                    && self.unit(worker).is_some_and(|u| {
+                        u.player == h.player
+                            // Ships sail; only walkers need a land route.
+                            && (u.kind != UnitKind::Villager
+                                || h.connects_tile(u.position.tile_floor(), at.tile_floor()))
+                    })
+            })
     }
     /// Latest explanation of what this Steward's domain is doing.
     pub fn steward_status(&self, id: EntityId) -> Option<StewardStatus> {

@@ -42,7 +42,20 @@ impl GameWorld {
             home.stalls
                 .retain(|id, st| alive.contains(id) && now.saturating_sub(st.since) < limit * 16);
         }
-        for worker in workers {
+        // Villagers nobody manages are watched too. A "Moving" villager that
+        // never moves is not idle to anyone else, so without this it would sit
+        // frozen in the territory forever instead of being re-tasked.
+        let strays: Vec<_> = s
+            .units
+            .iter()
+            .filter(|u| {
+                u.task == UnitTask::Moving
+                    && !self.economy.garrison_orders.contains_key(&u.id)
+                    && !workers.contains(&u.id)
+            })
+            .map(|u| u.id)
+            .collect();
+        for worker in workers.into_iter().chain(strays) {
             let Some(unit) = self.unit(worker) else {
                 continue;
             };

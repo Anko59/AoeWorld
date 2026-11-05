@@ -26,6 +26,7 @@ impl GameWorld {
         id: EntityId,
         work: &mut StewardWork,
     ) -> Option<Snapshot> {
+        self.steward_ensure_regions(id);
         let home = self.economy.steward_homes.get(&id)?.clone();
         let player = self.building(home.town_center?)?.player;
         let center = home.center.tile_floor();

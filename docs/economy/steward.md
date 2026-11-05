@@ -64,10 +64,18 @@ food is short, or housing is full. The Steward builds Houses before population
 plus queued training fills the player's space, including when its workers are
 already busy.
 
+**Containment.** A Steward only gives a villager a job (resource, Farm, foundation,
+new building site, replacement target) when a walk exists that stays inside its
+own territory. Static ground (water, cliffs, bridges) of the territory is labelled
+into components once per territory or bridge change; each check is a few array
+reads, never a route search. A villager with no reachable work stays Idle.
+Ships are not restricted.
+
 **Stalls.** Every pass the Steward checks its managed workers. One whose task is
 Moving but whose position has not changed for 8 seconds is stopped and
 re-tasked, avoiding the node it was heading to (after a second consecutive
-stall, avoiding that resource kind). The client treats a villager reported as
+stall, avoiding that resource kind). Unmanaged villagers of the territory that
+are Moving without progress get the same Stop, so they become idle and are adopted. The client treats a villager reported as
 Moving that is neither moving nor planning as idle for the idle-villager count.
 
 The HUD line for a selected Town Center reads "n/100 villagers managed · r in

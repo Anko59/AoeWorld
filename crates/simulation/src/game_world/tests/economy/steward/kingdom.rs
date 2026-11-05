@@ -1,7 +1,9 @@
 //! Kingdom shortages, observed deposit income and bounded distant discovery.
 use super::*;
 use std::collections::BTreeSet;
+mod containment;
 mod continuity;
+mod coverage;
 mod discovery;
 mod income;
 mod long_run;

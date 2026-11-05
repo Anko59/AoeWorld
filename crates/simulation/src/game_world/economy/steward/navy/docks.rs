@@ -99,6 +99,7 @@ impl GameWorld {
             );
             let rect = TileRect::from_xywh(tile.x, tile.y, 3, 3);
             if !s.home.covers(rect, 1)
+                || !self.steward_site_walkable(worker, rect, s)
                 || self.validate_explored_footprint(s.player, rect).is_err()
                 || self
                     .validate_building_placement(BuildingKind::Dock, tile)

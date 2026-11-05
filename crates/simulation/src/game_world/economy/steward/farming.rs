@@ -180,6 +180,7 @@ impl GameWorld {
                         == 0
                     && s.avoid
                         .is_none_or(|a| !a.avoid_tile.is_some_and(|t| b.footprint.contains(t)))
+                    && s.home.connects(from, b.footprint)
             })
             .map(|b| {
                 (
@@ -367,6 +368,7 @@ impl GameWorld {
             || self.validate_explored_footprint(s.player, rect).is_err()
             || self.validate_building_placement(kind, tile).is_err()
             || !self.query(rect).0.is_empty()
+            || !self.steward_site_walkable(worker, rect, s)
             || !budget.order(work)
         {
             return false;

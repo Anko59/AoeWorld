@@ -142,6 +142,7 @@ impl GameWorld {
                 || self.validate_building_placement(kind, tile).is_err()
                 // The AI never builds on top of its own people.
                 || !self.query(rect).0.is_empty()
+                || !self.steward_site_walkable(worker, rect, s)
             {
                 continue;
             }
@@ -157,6 +158,17 @@ impl GameWorld {
             }
         }
         false
+    }
+
+    /// The builder can walk to the site without leaving the territory.
+    pub(super) fn steward_site_walkable(
+        &self,
+        worker: EntityId,
+        rect: TileRect,
+        s: &Snapshot,
+    ) -> bool {
+        self.unit(worker)
+            .is_none_or(|u| s.home.connects(u.position.tile_floor(), rect))
     }
 
     fn steward_site_cursor(&mut self, s: &mut Snapshot, cursor: SiteCursor, next: usize) {

@@ -160,9 +160,21 @@ impl GameWorld {
                 .is_some_and(|amount| amount > 0)
     }
 
+    /// The worker can walk to `tile` without leaving this Steward's territory.
+    pub(super) fn steward_can_walk_to(
+        &self,
+        worker: EntityId,
+        tile: aoe_core::TileCoord,
+        s: &Snapshot,
+    ) -> bool {
+        self.unit(worker)
+            .is_none_or(|u| s.home.connects_tile(u.position.tile_floor(), tile))
+    }
+
     fn steward_node_eligible(&self, node: ResourceNode, worker: EntityId, s: &Snapshot) -> bool {
         self.steward_node_known(node, s)
             && s.avoid.is_none_or(|a| a.avoid_tile != Some(node.tile))
+            && self.steward_can_walk_to(worker, node.tile, s)
             && self.node_has_work_slot(node.id, worker)
     }
 
