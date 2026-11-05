@@ -20,5 +20,4 @@ html:is([data-lod=map],[data-lod=markers]) #performance-overlay { top:150px; lef
 /* A transformed strip would make its fixed drawer move during first reveal. */
 html[data-cockpit-reveal=cockpit] #strategic-cockpit { animation-name:cockpit-strip-arrives; }
 @keyframes cockpit-strip-arrives { from { opacity:0; } to { opacity:1; } }
-html:is([data-lod=map],[data-lod=markers]):has(#cockpit-details:not([hidden])) #general-panel { left:440px; }
 html:is([data-lod=map],[data-lod=markers]):has(#selection:not([data-count="0"])) #strategic-map-key { left:auto; right:242px; translate:none; bottom:calc(var(--bottom) + 12px); }
