@@ -119,7 +119,10 @@ pub(super) fn start(settings: Settings) -> Probe {
     let stop = Arc::new(AtomicBool::new(false));
     let flag = stop.clone();
     let handle = std::thread::spawn(move || {
-        let runtime = match tokio::runtime::Builder::new_current_thread()
+        // The SDK's reader runs on the workers: the probe's blocking admin
+        // calls must not stall the world model (that made stale stamps).
+        let runtime = match tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
             .enable_all()
             .build()
         {

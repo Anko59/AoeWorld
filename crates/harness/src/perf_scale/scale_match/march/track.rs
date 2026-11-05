@@ -28,6 +28,8 @@ pub(super) struct Member {
     pub arrived: Option<Stamp>,
     /// First time the member stood still or did something else short of the goal.
     pub dropped: Option<(Stamp, String, f64)>,
+    /// Seen moving or waiting for its route since the order.
+    engaged: bool,
     pub gone: Option<Stamp>,
     pub travelled: f64,
     pub stall_ticks: u64,
@@ -62,6 +64,7 @@ impl Member {
             first_motion: None,
             arrived: None,
             dropped: None,
+            engaged: false,
             gone: None,
             travelled: 0.0,
             stall_ticks: 0,
@@ -107,12 +110,13 @@ impl Member {
         if self.arrived.is_none() && self.distance <= tolerance {
             self.arrived = Some(now);
         }
+        self.engaged |= moving || task == UnitTask::Moving;
         let still = !moving && task != UnitTask::Moving;
         let other = task != UnitTask::Moving && task != UnitTask::Idle;
         if self.arrived.is_none()
             && self.dropped.is_none()
             && (still || other)
-            && now.tick > order.tick + 40
+            && (self.engaged || now.tick > order.tick + 200)
         {
             self.dropped = Some((now, format!("{task:?}"), self.distance));
         }
