@@ -15,6 +15,8 @@ mod construction;
 mod farming;
 mod fishing;
 pub(crate) mod fixture;
+#[path = "economy/navigation/gate_routes.rs"]
+mod gate_routes;
 mod gathering;
 mod general;
 mod market;
