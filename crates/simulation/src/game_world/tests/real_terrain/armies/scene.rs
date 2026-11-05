@@ -69,7 +69,6 @@ fn tile(x: i32, y: i32) -> WorldPosition {
 
 /// Goal 270 tiles east of the start, past the obstacle at x = 150.
 pub(super) const GOAL: (i32, i32) = (300, 100);
-pub(super) const OBSTACLE_END: i32 = 170;
 pub(super) const BANK_GOAL: (i32, i32) = (132, 300);
 
 pub(super) struct Scene {

@@ -1,10 +1,13 @@
-use super::scene::{Cell, OBSTACLE_END, Scene, Shape};
+use super::scene::{Cell, Scene};
 use super::*;
 use crate::game_world::TickPhase;
 use std::fmt::Write as _;
 use std::time::Instant;
 
-const ARRIVED_TILES: i64 = 65;
+/// A body this close to its assigned slot has arrived there. This is also the
+/// documented exception for a slot another body took: a member that stops
+/// beside it arrived, as a single unit does beside an occupied goal.
+const SLOT_TILES: i64 = 2;
 /// Sixty seconds at 20 Hz with no tile of progress is "permanently stuck".
 pub(super) const STUCK_TICKS: u32 = 1_200;
 /// Nobody has gained a tile for this long: the march is over.
@@ -101,6 +104,8 @@ pub(super) fn run_scene(cell: Cell, mut scene: Scene, refused: bool, wall_second
         vec![0_u32; count],
     );
     let mut arrived_at: Vec<Option<u32>> = vec![None; count];
+    // The slot each soldier was last assigned: a settled group may be gone.
+    let mut slots: Vec<Option<WorldPosition>> = vec![None; count];
     for (i, id) in scene.soldiers.iter().enumerate() {
         let p = w.unit(*id).unwrap().position;
         tiles[i] = p.tile_floor();
@@ -155,14 +160,16 @@ pub(super) fn run_scene(cell: Cell, mut scene: Scene, refused: bool, wall_second
                 anchors[i] = u.position;
                 moved_at[i] = tick;
             }
-            let near = {
-                let (gx, gy) = (
-                    i64::from(u.position.x) - i64::from(goal.x),
-                    i64::from(u.position.y) - i64::from(goal.y),
+            if let Some(slot) = w.formation_destination_slot(*id) {
+                slots[i] = Some(slot);
+            }
+            let near = slots[i].is_some_and(|slot| {
+                let (sx, sy) = (
+                    i64::from(u.position.x) - i64::from(slot.x),
+                    i64::from(u.position.y) - i64::from(slot.y),
                 );
-                gx * gx + gy * gy <= (ARRIVED_TILES * 1024).pow(2)
-                    && (cell.shape == Shape::Bank || t.x > OBSTACLE_END)
-            };
+                sx * sx + sy * sy <= (SLOT_TILES * 1024).pow(2)
+            });
             let done = near && !u.moving && !u.planning;
             if done && arrived_at[i].is_none() {
                 arrived_at[i] = Some(tick);
@@ -283,7 +290,7 @@ fn diagnose(
                 if w.formation(*id).is_some() {
                     w.group_density_probe(*id)
                         .chars()
-                        .take(320)
+                        .take(1100)
                         .collect::<String>()
                 } else {
                     String::new()

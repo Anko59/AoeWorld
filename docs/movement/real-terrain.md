@@ -50,6 +50,8 @@ Reassignment happens on a squeeze transition, not on every unit step. Blend
 back to destination offsets after the rear clears the obstacle. Arrival is
 per member at its assigned reachable slot; anchor arrival is not group arrival.
 A timed-out or idle member short of its slot never counts as an arrival.
+The army table measures this: a soldier counts only within two tiles of the
+slot it was last assigned (the occupied-slot exception), not anywhere near the goal.
 
 ## Local traffic and recovery
 
