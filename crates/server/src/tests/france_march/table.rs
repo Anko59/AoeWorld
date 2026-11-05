@@ -117,3 +117,24 @@ mod owner {
         cell(OWNER, Army::Mixed, true);
     }
 }
+
+/// A real march over two decks ends in the same world with one and with four
+/// workers: its recovery decisions depend on no thread count.
+#[test]
+fn replay_agrees_between_one_and_four_workers() {
+    if label().is_none() {
+        return;
+    }
+    let pair = Pair {
+        name: "replay",
+        ..TWO
+    };
+    let run = |workers| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(workers)
+            .build()
+            .unwrap()
+            .install(|| march(pair, Army::Mixed, true, setup(pair)))
+    };
+    assert_eq!(run(1), run(4));
+}

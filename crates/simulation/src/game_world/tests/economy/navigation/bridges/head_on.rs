@@ -155,12 +155,12 @@ fn two_players_meeting_on_a_one_tile_bridge() {
         "group-baseline bridge-head-on: first_cross={first_cross:?} all_across={all_across:?} last_position_change={last_move}"
     );
     // The design suspected a deadlock; there is none. Three units each side
-    // PR 7 graded squeezing preserves the rebased bridge timing: 181/251/380.
+    // PR 7 graded squeezing preserves the rebased bridge timing: 175/231/377.
     // PR 8 keeps this passing and makes the pass faster than 3 s (60 ticks)
     // from the first meeting.
     assert_eq!((west_across, east_across, on_deck, moving), (3, 3, 0, 0));
     assert_eq!(
         (first_cross, all_across, last_move),
-        (Some(181), Some(251), 380)
+        (Some(175), Some(231), 377)
     );
 }

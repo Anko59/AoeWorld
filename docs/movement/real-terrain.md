@@ -111,8 +111,21 @@ Measured on `tests/real_terrain/armies`, carved river, forest and pass shapes;
    route every 256 ticks, at most 8 times. A member beside a slot that a stationary
    body took has arrived there.
 
+7. Around a deck, the step past an occupied waypoint must be an edge of the route's
+   tile graph; a body with no straight step to its next waypoint walks to a nearby
+   tile centre first; and a member stalled within two tiles of its slot has arrived.
+
 Not done: the anchor still runs ahead of a queue, so the shape re-forms at the
 destination rather than after each chokepoint.
+
+## France scoreboard
+
+`crates/server/src/tests/france_march` loads the real France package headless and
+judges each march against the exact walking distance (`aoe_map::walking_field`).
+Write a label to `.cache/armies/france/enabled`, then run `make test-native-focused
+AOE_NATIVE_TEST_PACKAGE=aoe-server AOE_NATIVE_TEST_FILTER='test(france_march::table::)'`;
+rows land in `.cache/armies/france/<label>.tsv` and `.diag`. A local measurement,
+absent from CI since the package never enters Git.
 
 ## Measurements and implementation sequence
 

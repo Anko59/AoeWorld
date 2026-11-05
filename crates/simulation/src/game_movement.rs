@@ -155,19 +155,12 @@ impl GameWorld {
                 if !terrain_ok || !self.building_step_clear(previous_tile, tile) {
                     // A body beside a route's lane (a diagonal deck's edge) has
                     // no straight step to the next tile centre, and the search
-                    // would answer with the same one for ever. Its own tile's
-                    // centre is on the route's graph: go there first.
-                    let centre = WorldPosition::from_tile_center(previous_tile);
-                    if let Ok(centre) = centre
-                        && centre != current_position
+                    // would answer with the same one for ever. A nearby tile
+                    // centre is on the route's graph: go there first. Refused
+                    // from the centre too, the route itself is stale: replan.
+                    if let Some(centre) = self.route_graph_centre(index, current_position)
+                        && order.origin != centre
                         && order.waypoint != centre
-                        && self
-                            .unit_position_step_clear(
-                                self.units[index].state.kind,
-                                current_position,
-                                centre,
-                            )
-                            .unwrap_or(false)
                     {
                         self.units[index].route.push_front(order.waypoint);
                         self.units[index].state.moving = true;

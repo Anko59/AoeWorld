@@ -4,8 +4,8 @@ use super::*;
 use crate::game_world::movement_step::settling::GIVE_UP_AFTER_TICKS;
 
 const DETACH_AFTER: u16 = 120;
-/// A stationary member this close to a slot another body took has arrived beside it,
-/// as a single unit does beside an occupied goal. A detour cannot do better.
+/// A stalled member this close to its slot has arrived beside it, as a single unit
+/// does beside an occupied goal. A detour cannot do better.
 const BESIDE_SLOT: i64 = 2 * 1024;
 const ACCEPT_BESIDE_AFTER: u16 = 120;
 /// A member that gave up far from its slot asks for a new route this often,
@@ -24,14 +24,16 @@ impl GameWorld {
             .and_then(|leader| self.formations.get(&leader));
         let member = group.and_then(|g| g.member_index(id).map(|at| &g.members[at]));
         format!(
-            "at {:?} since {} of {} planner {} order {:?} route {} obstruction {:?} member {:?}",
+            "active {} at {:?} since {} of {} planner {} order {:?} route {} obstruction {:?} member {:?}",
+            self.active_movers.binary_search(&id).is_ok(),
             unit.state.position,
             unit.planning_since,
             self.tick.0,
             unit.planner.is_some(),
             unit.order.map(|o| (o.waypoint, o.destination)),
             unit.route.len(),
-            unit.obstruction.map(|o| (o.blocked, o.pass_until)),
+            unit.obstruction
+                .map(|o| (o.blocked, o.pass_until, o.last_tick, o.search_tick)),
             member.map(|m| (
                 m.goal,
                 m.target,
@@ -109,11 +111,9 @@ impl GameWorld {
             ) > BESIDE_SLOT.pow(2)
     }
 
-    /// A stationary body of another group stands on this member's slot.
-    fn beside_taken_slot(&self, member: &Member) -> bool {
+    fn beside_slot(&self, member: &Member) -> bool {
         let index = self.lookup[&member.id];
         path::squared(self.units[index].state.position, member.goal) <= BESIDE_SLOT.pow(2)
-            && self.position_occupied(index, member.goal, true)
     }
 
     fn accept_arrivals_beside_slots(&mut self) {
@@ -123,7 +123,7 @@ impl GameWorld {
                 if !member.arrived
                     && !member.detached
                     && member.stalled >= ACCEPT_BESIDE_AFTER
-                    && self.beside_taken_slot(member)
+                    && self.beside_slot(member)
                 {
                     accepted.push((self.units[self.lookup[&member.id]].formation, at));
                 }
@@ -160,8 +160,10 @@ impl GameWorld {
                 if member.blocked >= DETACH_AFTER {
                     return true;
                 }
+                // Beside its slot a detour cannot do better, and a crowd would
+                // send it round for ever: it stalls on to its arrival there.
                 if member.stalled >= 60 {
-                    return !self.beside_taken_slot(member);
+                    return !self.beside_slot(member);
                 }
                 {
                     let index = self.lookup[&member.id];
