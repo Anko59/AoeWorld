@@ -252,8 +252,7 @@ impl GameWorld {
                 // on the corridor it may detach again along a new route.
                 let wedged = self.units[index]
                     .obstruction
-                    .is_some_and(|o| o.blocked >= 2 * GIVE_UP_AFTER_TICKS);
-                let spent = wedged && member.retries >= MAX_RETRIES;
+                    .is_some_and(|o| o.blocked >= GIVE_UP_AFTER_TICKS);
                 let near = self.units[index].order.is_some_and(|order| {
                     navigating && path::squared(unit.position, order.destination) <= 512_i64.pow(2)
                 }) || (!navigating
@@ -261,11 +260,11 @@ impl GameWorld {
                     && self.clear_edge(index, unit.position, member.goal, false));
                 let ended = self.units[index].order.is_none() && !unit.planning;
                 if unit.position == member.goal || near || ended || timed_out || wedged {
-                    ready.push((member.id, timed_out || (spent && !navigating), wedged));
+                    ready.push((member.id, timed_out || (wedged && !navigating)));
                 }
             }
         }
-        for (id, timed_out, wedged) in ready {
+        for (id, timed_out) in ready {
             let index = self.lookup[&id];
             self.clear_planner(index);
             self.units[index].order = None;
@@ -288,7 +287,6 @@ impl GameWorld {
             let member = &mut group.members[at];
             member.detached = false;
             member.blocked = 0;
-            member.retries = member.retries.saturating_add(u8::from(wedged));
             member.stalled = if timed_out { GIVE_UP_AFTER_TICKS } else { 0 };
             member.arrived = self.units[index].state.position == member.goal;
             self.units[index].state.moving = !member.arrived && !timed_out;
