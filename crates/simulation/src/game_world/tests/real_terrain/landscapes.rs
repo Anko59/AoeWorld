@@ -57,7 +57,8 @@ fn run(case: &str, count: usize, limit: u32) {
         "long" => {
             result.assert_arrival_and_work(count);
             assert!(result.max_tick_route_work <= 16_384, "{result:?}");
-            assert_eq!((result.max_stuck_ticks, result.oscillations), (32, 26));
+            // 57: one arrived soldier steps aside and waits 56 ticks for the march to pass.
+            assert_eq!((result.max_stuck_ticks, result.oscillations), (57, 26));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
                 (35529, 378134, 104359285)

@@ -160,7 +160,7 @@ impl GameWorld {
     }
 
     /// Where the member's slot lies once the group has reached its destination.
-    pub(crate) fn formation_destination_slot(&self, id: EntityId) -> Option<WorldPosition> {
+    pub fn formation_destination_slot(&self, id: EntityId) -> Option<WorldPosition> {
         let leader = self.units[*self.lookup.get(&id)?].formation?;
         let group = self.formations.get(&leader)?;
         Some(group.members[group.member_index(id)?].goal)

@@ -29,6 +29,10 @@ mod refinement;
 pub(crate) mod settling;
 pub(crate) mod slots;
 pub(crate) use settling::Obstruction;
+mod yielding;
+pub(crate) use yielding::Yields;
+#[cfg(test)]
+pub(crate) use yielding::yield_candidate;
 
 /// A proposed tick of one mover.
 #[derive(Debug)]

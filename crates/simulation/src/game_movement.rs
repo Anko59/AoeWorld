@@ -342,6 +342,7 @@ impl GameWorld {
         still_moving.sort_unstable();
         self.active_movers = still_moving;
         self.advance_formations(&mut changed, &mut scratch);
+        self.advance_yields(&mut changed);
         {
             let _span = probe.as_ref().and_then(|p| p.movement_span("vision_flush"));
             self.flush_vision_batch();

@@ -9,6 +9,8 @@ use std::time::Instant;
 /// A soldier stopped this near (straight and walking) has arrived.
 const ARRIVED_TILES: i64 = 40;
 const ARRIVED_WALK: u32 = 64 * 1024;
+/// The honest measure: stopped within this many tiles of its assigned slot.
+const SLOT_TILES: i64 = 2;
 const STUCK_TICKS: u32 = 1_200;
 /// No member got any walking distance closer for this long: the march is over.
 const STOP_TICKS: u32 = 2_400;
@@ -175,6 +177,7 @@ pub(super) fn march(pair: Pair, army: Army, general: bool, mut setup: Setup) -> 
     let mut tile_at = vec![TileCoord::new(-1, -1); n];
     let mut moved_at = vec![0_u32; n];
     let mut arrived_at: Vec<Option<u32>> = vec![None; n];
+    let mut slots: Vec<Option<aoe_core::WorldPosition>> = vec![None; n];
     let (mut progress_at, mut ticks) = (0_u32, 0_u32);
     let (mut max_step_us, mut costs) = (0_u64, Vec::with_capacity(limit as usize));
     let metrics = world.route_scheduler_stats().metrics;
@@ -191,6 +194,9 @@ pub(super) fn march(pair: Pair, army: Army, general: bool, mut setup: Setup) -> 
         let mut pending = 0;
         for (i, &id) in bodies.iter().enumerate() {
             let Some(u) = world.unit(id) else { continue };
+            if let Some(slot) = world.formation_destination_slot(id) {
+                slots[i] = Some(slot);
+            }
             let t = u.position.tile_floor();
             if t != tile_at[i] {
                 tile_at[i] = t;
@@ -239,6 +245,21 @@ pub(super) fn march(pair: Pair, army: Army, general: bool, mut setup: Setup) -> 
             0
         }
     };
+    let at_slot = bodies
+        .iter()
+        .zip(&slots)
+        .filter(|&(&id, slot)| {
+            world.unit(id).is_some_and(|u| {
+                slot.is_some_and(|slot| {
+                    let (x, y) = (
+                        i64::from(u.position.x - slot.x),
+                        i64::from(u.position.y - slot.y),
+                    );
+                    !u.moving && !u.planning && x * x + y * y <= (SLOT_TILES * 1024).pow(2)
+                })
+            })
+        })
+        .count();
     let (mut idle, mut stuck) = (0, 0);
     for (i, &id) in bodies.iter().enumerate() {
         let Some(u) = world.unit(id) else { continue };
@@ -266,7 +287,7 @@ pub(super) fn march(pair: Pair, army: Army, general: bool, mut setup: Setup) -> 
         if general { "general" } else { "plain" }
     );
     let line = format!(
-        "{label}\t{}\t{:.0}\t{}/{n}\t{idle}\t{stuck}\t{}\t{}\t{last}\t{ideal}\t{ratio:.2}\t{ticks}\t{}\t{}\t{}\t{}\t{}",
+        "{label}\t{}\t{:.0}\t{}/{n}\t{idle}\t{stuck}\t{}\t{}\t{last}\t{ideal}\t{ratio:.2}\t{ticks}\t{}\t{}\t{}\t{}\t{}\tslot {at_slot}/{n}",
         truth / 1024,
         (f64::from(pair.goal.0 - pair.start.0).powi(2)
             + f64::from(pair.goal.1 - pair.start.1).powi(2))

@@ -148,6 +148,7 @@ pub struct GameWorld {
     pub(crate) chunks: BTreeMap<ChunkCoord, Vec<EntityId>>,
     pub(crate) active_movers: Vec<EntityId>,
     pub(crate) movement_scratch: movement_step::Scratch,
+    pub(crate) yields: movement_step::Yields,
     pub(crate) collisions: movement_step::CollisionIndex,
     /// Derived clearance valid only while one sequential mover owns the turn.
     pub(crate) work_approach_clearance: Option<(EntityId, WorldPosition, bool)>,
@@ -204,6 +205,7 @@ impl GameWorld {
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
             movement_scratch: Default::default(),
+            yields: Default::default(),
             work_approach_clearance: None,
             melee_traffic_clearance: None,
             collisions: Default::default(),
