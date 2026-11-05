@@ -38,7 +38,11 @@ async function far(
       // @ts-expect-error Served browser module.
       const { initStrategic } = await import("/navigation/strategic.js");
       const s = initStrategic(
-        { disabled: true, canvas: document.createElement("canvas"), revision: 0 },
+        {
+          disabled: true,
+          canvas: document.createElement("canvas"),
+          revision: 0,
+        },
         { records: () => flat, revision: () => 1 },
       );
       s.settlements(rows);
@@ -64,7 +68,10 @@ test("an enemy force on top of my town centre stays a marked enemy group", async
   );
   const found = await picks();
   const hostile = found.filter((p) => p.hostile);
-  expect(hostile.map((p) => p.count), JSON.stringify(found)).toEqual([3]);
+  expect(
+    hostile.map((p) => p.count),
+    JSON.stringify(found),
+  ).toEqual([3]);
 });
 
 test("a friendly and an enemy group in one 44 px cell both stay drawn", async ({
@@ -75,7 +82,10 @@ test("a friendly and an enemy group in one 44 px cell both stay drawn", async ({
     ...group(304, 204, 2, ENEMY),
   ]);
   const found = await picks();
-  expect(found.filter((p) => p.hostile), JSON.stringify(found)).toHaveLength(1);
+  expect(
+    found.filter((p) => p.hostile),
+    JSON.stringify(found),
+  ).toHaveLength(1);
   expect(found.filter((p) => !p.hostile)).toHaveLength(1);
 });
 
@@ -92,7 +102,10 @@ test("unit group occupancy follows CSS pixels when the canvas backing differs", 
     [10, bx - 1, by - 1, bx + 1, by + 1, 0, MINE, 1],
   );
   const found = await picks();
-  expect(found.map((p) => p.count), JSON.stringify(found)).toEqual([1]);
+  expect(
+    found.map((p) => p.count),
+    JSON.stringify(found),
+  ).toEqual([1]);
   await expect(page.locator("#strategic-scene")).toHaveAttribute(
     "data-settlements",
     "1",

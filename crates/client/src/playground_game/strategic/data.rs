@@ -264,7 +264,7 @@ pub(in super::super) fn update(client: &Client) {
         player.map_or(&[], |p| p.unit_counts.as_slice()),
         &sites,
         &land,
-        &village::building_panel::commerce(client),
+        &village::commerce::commerce(client),
     );
     strategic_alert(last_alert[0], last_alert[1], last_alert[2]);
 }

@@ -117,7 +117,7 @@ fn target(client: &Client, kind: UnitKind) -> Option<&GameplayBuildingState> {
 }
 
 /// A Town Center admits at most one Steward, queued or garrisoned.
-fn has_steward(castle: &GameplayBuildingState) -> bool {
+pub(in super::super) fn has_steward(castle: &GameplayBuildingState) -> bool {
     castle
         .training_queue
         .iter()

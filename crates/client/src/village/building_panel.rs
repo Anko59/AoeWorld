@@ -169,56 +169,6 @@ fn far_commerce_order(client: &mut Client, action: u32, code: usize, target: u32
     send(client, message);
 }
 
-/// Far-view commerce report: Market id (-1 none), wood/food/stone prices, then
-/// per technology its availability code and the building that would research
-/// it (-1 none). One candidate per building kind keeps this bounded by the
-/// technology table, not by how many buildings a kingdom owns.
-#[inline(never)]
-pub(in super::super) fn commerce(client: &Client) -> Vec<f64> {
-    let owner = owner(client);
-    let player = client.village.players.iter().find(|p| p.player == owner);
-    let completed = construction::completed(client);
-    let mut market = None;
-    let mut busy = 0_u64;
-    let mut candidate: [Option<&aoe_protocol::GameplayBuildingState>; 32] = [None; 32];
-    for b in &client.village.buildings {
-        if b.player != owner || b.hp == 0 {
-            continue;
-        }
-        if let Some(r) = &b.research {
-            busy |= 1_u64 << (r.tech as u8);
-        }
-        if b.construction != ConstructionState::Complete {
-            continue;
-        }
-        if b.kind == aoe_protocol::BuildingKind::Market && market.is_none() {
-            market = Some(b.id);
-        }
-        let slot = &mut candidate[(b.kind as usize) & 31];
-        if (*slot).is_none_or(|c| c.research.is_some() && b.research.is_none()) {
-            *slot = Some(b);
-        }
-    }
-    let prices = player.map_or(aoe_protocol::MarketPrices::default(), |p| p.market_prices);
-    let mut v = vec![
-        market.map_or(-1.0, |id| f64::from(id.0)),
-        f64::from(prices.wood),
-        f64::from(prices.food),
-        f64::from(prices.stone),
-    ];
-    for r in building_ui::content::rules().techs.iter() {
-        let duplicate = busy & (1_u64 << r.tech) != 0;
-        match candidate[(r.building as usize) & 31] {
-            Some(b) => {
-                v.push(availability::research(b, player, owner, completed, duplicate, r).number());
-                v.push(f64::from(b.id.0));
-            }
-            None => v.extend([availability::Availability::Unavailable.number(), -1.0]),
-        }
-    }
-    v
-}
-
 pub(super) const KINDS: [aoe_protocol::BuildingKind; 24] = aoe_protocol::BuildingKind::ALL;
 
 #[inline(never)]

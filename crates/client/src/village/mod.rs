@@ -5,6 +5,7 @@ use aoe_protocol::{GameplayBuildingState, GameplayPlayerState, UnitKind};
 
 pub(super) mod automation;
 pub(super) mod building_panel;
+pub(super) mod commerce;
 pub(super) mod construction;
 pub(super) mod garrison;
 pub(super) mod hud;

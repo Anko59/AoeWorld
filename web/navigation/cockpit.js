@@ -151,7 +151,10 @@ export function initCockpit(changed = () => {}) {
   }
   select('build', false);
   return { update, production, building,
-    commerce(report) { research.update(report); trade.update(report, latest); },
+    commerce(report) {
+      research.update(report); trade.update(report, latest);
+      if (report.length > trainingKinds.length) production.units(Array.from(report).slice(-trainingKinds.length));
+    },
     mount() {
       const dock = document.createElement('div');
       dock.id = 'far-dock'; dock.hidden = true;

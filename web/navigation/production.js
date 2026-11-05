@@ -3,8 +3,9 @@ import { iconGrid } from '/navigation/cockpit/grid.js';
 
 // "Units here": choose a unit from an icon grid and a batch size, then click
 // ground. Rust picks the nearest eligible producers from all owned buildings, so
-// nothing here depends on the building selection; it reports how many it could place.
-const naval = new Set(['FishingShip', 'Galley', 'FireShip', 'DemolitionShip', 'TransportShip', 'WarGalley']);
+// nothing here depends on the building selection. Every trainable unit is listed;
+// Rust's selection-independent report (units()) says which one is ready and why not.
+const reasons = ['', '', 'Feudal Age', '', '', 'Busy', 'Food', 'Wood', 'Gold', 'Stone', 'Queue full', '', 'Needs building', '', 'Castle Age', 'Unique', 'Imperial Age'];
 export function initProduction() {
   const form = document.createElement('section');
   form.id = 'units-here';
@@ -15,7 +16,7 @@ export function initProduction() {
     <button type="button" class="far-act" aria-pressed="false">Units here</button>
     <p id="units-here-status" class="far-status" role="status">Choose a unit and count, then set a destination.</p>`;
   let chosen = 2;
-  const grid = iconGrid('Unit type', trainingKinds.flatMap((kind, id) => naval.has(kind) || kind === 'Steward' || kind === 'Vassal' ? [] : [{ id, label: name(kind), art: entityIcon(kind) }]), id => {
+  const grid = iconGrid('Unit type', trainingKinds.map((kind, id) => ({ id, label: name(kind), art: entityIcon(kind) })), id => {
     chosen = id; mark();
   });
   form.querySelector('.far-slot').append(grid.grid);
@@ -29,8 +30,8 @@ export function initProduction() {
     form.querySelector('.far-counts').append(chip);
     return chip;
   });
-  let armed = false, visible = false, busy = false, available = false, lastCount = 0, lastKind = '';
-  const enabled = () => { button.disabled = busy || !available; };
+  let armed = false, visible = false, busy = false, available = false, lastCount = 0, lastKind = '', codes = [];
+  const enabled = () => { button.disabled = busy || !available || (codes.length > 0 && codes[chosen] !== 1 && !armed); };
   function mark() {
     trainingKinds.forEach((kind, id) => grid.get(id) && grid.set(id, { selected: id === chosen }));
     chips.forEach(chip => chip.setAttribute('aria-pressed', String(chip.textContent === count.value)));
@@ -71,6 +72,12 @@ export function initProduction() {
     form,
     show(value) { visible = value; if (!value) cancel(); },
     ready(value) { available = value; if (!value) { cancel(); busy = false; } enabled(); },
+    units(values) {
+      codes = Array.from(values);
+      trainingKinds.forEach((kind, id) => grid.get(id) && grid.set(id, { enabled: codes[id] === 1 || codes.length === 0,
+        note: codes[id] === 1 ? '' : reasons[codes[id]] ?? '' }));
+      enabled();
+    },
     take() { if (!visible || !armed) return null; cancel(); return request; },
     result(total) {
       busy = total > 0; enabled();
