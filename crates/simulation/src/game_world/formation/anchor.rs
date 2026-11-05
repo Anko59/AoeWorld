@@ -116,8 +116,11 @@ impl GameWorld {
                     .unwrap_or_else(|| self.next_map_segment(index, order));
                 match next {
                     SegmentAdvance::Planning => {
+                        // Polled every tick: only the first starts the wait.
+                        if !self.units[index].state.planning {
+                            self.units[index].planning_since = self.tick.0;
+                        }
                         self.units[index].state.planning = true;
-                        self.units[index].planning_since = self.tick.0;
                         break;
                     }
                     SegmentAdvance::Stopped(error) => {

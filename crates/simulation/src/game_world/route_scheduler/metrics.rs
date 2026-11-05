@@ -59,8 +59,10 @@ pub struct RouteMetrics {
     pub found: [u64; WORK_BUCKETS],
     /// Searches that ended without a route, by the work they spent.
     pub failed: [u64; WORK_BUCKETS],
-    /// Searches ended by the stuck-search bound.
+    /// Near routes ended by the work bound (`MAX_NEAR_ROUTE_WORK`).
     pub stuck: u64,
+    /// Orders ended by the bound on their wait for an answer.
+    pub expired: u64,
     pub yielded: u64,
     /// Near routes given up on for the closest reachable tile.
     pub approached: u64,
@@ -112,7 +114,7 @@ impl fmt::Display for RouteMetrics {
         write!(
             f,
             "orders={} starts={} group_members={} group_path={} group_path_writes={} group_collision={} at_issue={} cache_hits={} fast={} deferred={:?} no_slot={} \
-             work issue={} fair={} ahead={} refusals={} found={:?} failed={:?} stuck={} yielded={} approached={} \
+             work issue={} fair={} ahead={} refusals={} found={:?} failed={:?} stuck={} expired={} yielded={} approached={} \
              samples={:?}",
             self.orders,
             self.searches_started,
@@ -132,6 +134,7 @@ impl fmt::Display for RouteMetrics {
             self.found,
             self.failed,
             self.stuck,
+            self.expired,
             self.yielded,
             self.approached,
             self.samples,
