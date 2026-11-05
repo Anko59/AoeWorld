@@ -35,6 +35,15 @@ impl GameWorld {
                 self.forget_general(id);
                 self.set_sergeant(id, false);
                 self.economy.generals.manual.insert(id, self.tick.0);
+            } else if self
+                .unit(id)
+                .is_some_and(|u| u.hp > 0 && role(u.kind).is_some())
+                && self.vassal_controller(id).is_none()
+            {
+                // Never in an army: it is detached all the same, so a General
+                // created or arriving later cannot census it. One small entry
+                // per living ordered soldier, cleared on death.
+                self.economy.generals.manual.insert(id, self.tick.0);
             }
         }
         for general in generals {

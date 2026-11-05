@@ -188,6 +188,10 @@ impl GameWorld {
     pub(crate) fn is_general_follower(&self, unit: EntityId, general: EntityId) -> bool {
         self.economy.generals.controlled.get(&unit) == Some(&general)
     }
+    /// Soldiers currently detached from every army by a player order.
+    pub fn general_detached_count(&self) -> usize {
+        self.economy.generals.manual.len()
+    }
     pub fn general_castle(&self, id: EntityId) -> Option<EntityId> {
         self.economy.generals.armies.get(&id)?.castle
     }

@@ -16,6 +16,7 @@ fn commanded_units(
             entity_id,
             enabled: true,
         } => Some((vec![*entity_id], None)),
+        PendingAction::GeneralMoveAlone { entity_id, .. } => Some((vec![*entity_id], None)),
         PendingAction::Load { unit_ids, .. } | PendingAction::Hunt { unit_ids, .. } => {
             Some((unit_ids.clone(), None))
         }

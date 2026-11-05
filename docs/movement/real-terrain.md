@@ -73,12 +73,16 @@ in `general_player_order` (`economy/general/orders.rs`):
 1. Per player, a soldier is in an army or detached.
 2. Any player order that names a soldier (move, attack, stop, garrison, load,
    hunt, formation, enabling auto-scout) detaches it and restarts its clock,
-   whether or not any army exists. A formation order that also names the
+   whether or not any army exists or it ever belonged to one (villagers are
+   not soldiers and are never recorded; the set is bounded by living soldiers
+   and cleared on death: 5,600 entries when every soldier of the 100-seat
+   late-game workload is ordered). A formation order that also names the
    soldier's General detaches the soldier too: it follows the order it was
    given, and only the unnamed rest of the army follows his march.
 3. Detachment survives garrison (a sheltered soldier has no map record but
    keeps its entry).
-4. Only a player's order that names his own General (move, stop, anything)
+4. Only a player's order that names his own General (move, stop, move-alone,
+   anything)
    readmits detached soldiers, and only those that are idle (not moving,
    planning, attacking or auto-scouting), within 24 tiles and at least 300
    ticks past their last order. Automatic marches (vassal defence recall) never
