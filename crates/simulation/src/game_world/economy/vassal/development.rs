@@ -28,8 +28,9 @@ impl GameWorld {
             return;
         };
         let status = &mut d.status;
-        status.completed = (sites.len() - deficits.len()) as u16;
-        status.total = sites.len() as u16;
+        // A road to a distant Town Center has no fixed length.
+        status.completed = u16::try_from(sites.len() - deficits.len()).unwrap_or(u16::MAX);
+        status.total = u16::try_from(sites.len()).unwrap_or(u16::MAX);
         status.developed = developed;
         status.next = deficits.first().map(|(_, (k, _))| *k);
         status.wait = if developed {

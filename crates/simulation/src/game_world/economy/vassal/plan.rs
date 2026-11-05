@@ -101,15 +101,7 @@ pub(super) fn sites(
             add(wall, x, y);
         }
     }
-    // The report of a plan travels over the wire, which bounds its size
-    // (`aoe_protocol` `VassalReport::total`); a long road to a distant Town
-    // Center is cut to the room left rather than breaking that bound.
-    let room = super::MAX_PLAN_SITES.saturating_sub(sites.len());
-    sites.extend(
-        super::roads::sites(w, center, player)
-            .into_iter()
-            .take(room),
-    );
+    sites.extend(super::roads::sites(w, center, player));
     sites
 }
 
@@ -118,7 +110,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_long_road_never_grows_the_plan_past_the_reportable_bound() {
+    fn a_long_road_stays_whole_in_the_plan() {
         let config = aoe_core::WorldConfig::new(256, 256, aoe_core::Seed(7)).unwrap();
         let mut w = GameWorld::new(config).unwrap();
         w.set_fog_disabled(true);
@@ -132,15 +124,10 @@ mod tests {
         )
         .unwrap();
         let center = TileCoord::new(98, 98);
-        let road = super::super::roads::sites(&w, center, PlayerId(0)).len();
-        // The walls, gates, towers and barracks take about 77 sites.
-        assert!(road > 52, "the scenario needs a long road, got {road}");
+        let road = super::super::roads::sites(&w, center, PlayerId(0));
+        assert!(road.len() > 52, "the scenario needs a long road");
         let sites = sites(&w, center, PlayerId(0), Age::Imperial, &BTreeMap::new());
-        assert!(
-            sites.len() <= super::super::MAX_PLAN_SITES,
-            "{}",
-            sites.len()
-        );
-        assert!(sites.iter().any(|(kind, _)| *kind == BuildingKind::Road));
+        assert!(road.iter().all(|site| sites.contains(site)));
+        assert!(sites.len() > 128, "{}", sites.len());
     }
 }

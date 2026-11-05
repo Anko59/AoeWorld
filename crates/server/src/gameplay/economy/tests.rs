@@ -70,11 +70,3 @@ fn a_body_at_zero_hp_is_always_dying_on_the_wire() {
     assert_eq!(state.task, UnitTask::Dying);
     assert!(!state.moving && state.attack_target.is_none());
 }
-
-#[test]
-fn the_simulation_plans_no_more_vassal_sites_than_the_wire_reports() {
-    assert_eq!(
-        aoe_simulation::MAX_PLAN_SITES,
-        usize::from(aoe_protocol::MAX_VASSAL_SITES)
-    );
-}

@@ -14,9 +14,6 @@ pub struct GarrisonUnitState {
     pub vassal: Option<VassalReport>,
 }
 
-/// Most development sites a Vassal report may count.
-pub const MAX_VASSAL_SITES: u16 = 128;
-
 /// Owner-only finite fortification progress and defence alert.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct VassalReport {
@@ -125,7 +122,6 @@ fn vassal_valid(u: &GarrisonUnitState) -> bool {
             && r.villagers <= 20
             && r.military <= 20
             && r.wait <= 6
-            && r.total <= MAX_VASSAL_SITES
             && r.completed <= r.total
             && (!r.developed || r.completed == r.total)
     })
