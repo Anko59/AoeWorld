@@ -34,6 +34,9 @@ const CONNECT_LIMIT: Duration = Duration::from_secs(10 * 60);
 /// The match is over when nobody has held the human seat this long.
 const ABANDONED_AFTER: Duration = Duration::from_secs(5 * 60);
 
+/// What `GET /skirmish` reports when the AI hosts exit while the match runs.
+const LOST_HOSTS_MESSAGE: &str = "the AI opponents stopped unexpectedly and no longer play";
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Phase {
@@ -438,16 +441,26 @@ async fn watch(state: &AppState, id: u64) {
                 let replaced = world.is_some_and(|world| world != gameplay.world_id());
                 let abandoned = absent_since.is_some_and(|since| since.elapsed() > ABANDONED_AFTER);
                 if replaced || abandoned || finished {
-                    tracing::info!(
-                        replaced,
-                        abandoned,
-                        finished,
-                        "skirmish over; stopping its AI"
-                    );
+                    let lost = finished && !replaced && !abandoned;
+                    if lost {
+                        tracing::error!(
+                            "skirmish AI hosts exited during the match; its AIs are gone"
+                        );
+                    } else {
+                        tracing::info!(
+                            replaced,
+                            abandoned,
+                            finished,
+                            "skirmish over; stopping its AI"
+                        );
+                    }
                     let fleet = {
                         let mut inner = skirmish.lock();
                         if inner.status.id == id && inner.status.phase == Phase::Ready {
                             inner.status.phase = Phase::Stopped;
+                            if lost {
+                                inner.status.error = Some(LOST_HOSTS_MESSAGE.to_owned());
+                            }
                         }
                         inner.fleet.take()
                     };

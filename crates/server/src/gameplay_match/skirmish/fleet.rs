@@ -9,8 +9,6 @@ use std::{
 /// Slots one host process plays; 99 opponents take 8 processes, the split
 /// `make scale-match` measured (docs/scale/match.md).
 pub(super) const BOTS_PER_HOST: usize = 13;
-/// Upper bound on a host's life, so a lost server never leaves one behind.
-const HOST_MAX_SECONDS: u32 = 6 * 60 * 60;
 
 /// How the server starts a host: `AOE_AI_COMMAND` and its own address.
 #[derive(Clone, Debug)]
@@ -35,8 +33,9 @@ impl Launch {
                 &self.url,
                 "--tokens-file",
                 "-",
-                "--max-seconds",
-                &HOST_MAX_SECONDS.to_string(),
+                // No wall-clock limit: hosts live as long as the match, and
+                // stop on their own when this server dies.
+                "--exit-with-parent",
             ]
             .map(str::to_owned),
         );

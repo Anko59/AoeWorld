@@ -92,6 +92,13 @@ fn a_host_reads_its_slots_from_stdin_and_ninety_nine_bots_take_eight() {
             .windows(2)
             .any(|pair| pair == ["--url", "http://127.0.0.1:8080"])
     );
+    // Hosts live as long as the match: no wall-clock limit, only the parent's death.
+    assert!(!arguments.iter().any(|argument| argument == "--max-seconds"));
+    assert!(
+        arguments
+            .iter()
+            .any(|argument| argument == "--exit-with-parent")
+    );
     assert_eq!(MAX_OPPONENTS, 99);
     assert_eq!(MAX_OPPONENTS.div_ceil(fleet::BOTS_PER_HOST), 8);
 }

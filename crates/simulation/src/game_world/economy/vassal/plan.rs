@@ -104,3 +104,30 @@ pub(super) fn sites(
     sites.extend(super::roads::sites(w, center, player));
     sites
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_long_road_stays_whole_in_the_plan() {
+        let config = aoe_core::WorldConfig::new(256, 256, aoe_core::Seed(7)).unwrap();
+        let mut w = GameWorld::new(config).unwrap();
+        w.set_fog_disabled(true);
+        w.place_town_center(PlayerId(0), TileCoord::new(64, 64))
+            .unwrap();
+        w.insert_building(
+            PlayerId(0),
+            BuildingKind::Castle,
+            TileRect::from_xywh(96, 96, 4, 4),
+            true,
+        )
+        .unwrap();
+        let center = TileCoord::new(98, 98);
+        let road = super::super::roads::sites(&w, center, PlayerId(0));
+        assert!(road.len() > 52, "the scenario needs a long road");
+        let sites = sites(&w, center, PlayerId(0), Age::Imperial, &BTreeMap::new());
+        assert!(road.iter().all(|site| sites.contains(site)));
+        assert!(sites.len() > 128, "{}", sites.len());
+    }
+}

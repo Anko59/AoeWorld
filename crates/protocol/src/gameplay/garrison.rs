@@ -122,7 +122,6 @@ fn vassal_valid(u: &GarrisonUnitState) -> bool {
             && r.villagers <= 20
             && r.military <= 20
             && r.wait <= 6
-            && r.total <= 128
             && r.completed <= r.total
             && (!r.developed || r.completed == r.total)
     })
