@@ -252,7 +252,13 @@ impl GameWorld {
                 // on the corridor it may detach again along a new route.
                 let wedged = self.units[index]
                     .obstruction
-                    .is_some_and(|o| o.blocked >= GIVE_UP_AFTER_TICKS);
+                    .is_some_and(|o| o.blocked >= GIVE_UP_AFTER_TICKS)
+                    // A search from a deck's diagonal edge rarely answers. The
+                    // deck has one way on: stop asking and take the corridor.
+                    || (unit.planning
+                        && self.tick.0.saturating_sub(self.units[index].planning_since)
+                            >= u64::from(GIVE_UP_AFTER_TICKS)
+                        && self.near_deck(unit.position));
                 let near = self.units[index].order.is_some_and(|order| {
                     navigating && path::squared(unit.position, order.destination) <= 512_i64.pow(2)
                 }) || (!navigating

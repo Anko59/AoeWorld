@@ -91,6 +91,27 @@ in `general_player_order` (`economy/general/orders.rs`):
    General never takes it.
 6. The detached set and its clocks are in the state hash.
 
+## Group or individual: the current rule
+
+Measured on `tests/real_terrain/armies`, carved river, forest and pass shapes;
+`.cache/armies/enabled` names a run of its on-demand table.
+
+1. A group paths as one: the anchor owns one route and members follow its corridor,
+   packing into files where clearance requires.
+2. A member blocked for 120 ticks, or stalled for 60 after the anchor arrived,
+   breaks off: it searches its own route to a corridor point 8 tiles ahead, or to
+   its slot. Group membership and slot survive.
+3. On a deck, or after 64 blocked ticks on one-lane ground, a blocked member of any
+   group passes friendly bodies: chokepoints are crossed in sequence without a knot.
+4. A detour ends when it reaches its goal, when its body is blocked for 240 ticks,
+   or when a search from a deck edge has not answered in 240 ticks.
+5. After the anchor arrived, a member that stopped far from its slot asks for a new
+   route every 256 ticks, at most 8 times. A member beside a slot that a stationary
+   body took has arrived there.
+
+Not done: the anchor still runs ahead of a queue, so the shape re-forms at the
+destination rather than after each chokepoint.
+
 ## Measurements and implementation sequence
 
 Add tests before changing production behaviour. Fixtures must exercise mixed
