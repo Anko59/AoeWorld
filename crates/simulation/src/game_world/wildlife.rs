@@ -60,6 +60,8 @@ struct StoredAnimal {
 struct HuntJob {
     animal: EntityId,
     repath_tick: u64,
+    /// Earliest tick a hunter queued at a full carcass searches again.
+    queue_retry_tick: u64,
     stage: HuntStage,
 }
 

@@ -192,3 +192,63 @@ fn continuation_replays_with_identical_jobs_positions_and_hashes() {
         assert_eq!(a.hunting_target(worker), Some(next));
     }
 }
+
+#[test]
+fn hunters_queued_at_a_full_carcass_search_once_a_second() {
+    let mut w = world();
+    w.set_fog_disabled(true);
+    w.place_town_center(PlayerId(0), TileCoord::new(95, 95))
+        .unwrap();
+    let workers = (0..12)
+        .map(|n| {
+            w.spawn_villager(PlayerId(0), at(100 + n % 4, 102 + n / 4))
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+    let deer = w.spawn_animal(AnimalKind::Deer, at(101, 100)).unwrap();
+    w.advance();
+    w.issue_hunt(PlayerId(0), &workers, deer).unwrap();
+    assert!(w.strike_animal(deer, workers[0], 100));
+    run(&mut w, 60);
+    let queued = workers
+        .iter()
+        .filter(|id| w.hunting_target(**id).is_some() && w.gathering_kind(**id).is_none())
+        .count() as u32;
+    assert!(queued > 0, "a deer has four work slots");
+    let mut searched = 0;
+    for _ in 0..40 {
+        w.advance();
+        searched += w.wildlife_stats().food_search_cells;
+    }
+    assert!(searched > 0, "the queue keeps looking for food");
+    // Two seconds at sixteen cells a search; a retry every tick costs 20 times this.
+    assert!(searched <= queued * 3 * 16, "{searched} cells for {queued}");
+}
+
+#[test]
+fn shepherd_whose_sheep_dies_while_leading_starts_gathering_immediately() {
+    let mut w = world();
+    w.set_fog_disabled(true);
+    w.place_town_center(PlayerId(0), TileCoord::new(60, 95))
+        .unwrap();
+    let shepherd = w.spawn_villager(PlayerId(0), at(100, 100)).unwrap();
+    let sheep = owned_sheep(&mut w, 104, 100);
+    let killer = w.spawn_villager(PlayerId(0), at(106, 100)).unwrap();
+    w.issue_hunt(PlayerId(0), &[shepherd], sheep).unwrap();
+    let mut ticks = 0;
+    while w.animal(sheep).unwrap().position.x >= 104_000 {
+        w.advance();
+        ticks += 1;
+        assert!(ticks < 600, "the sheep is never led");
+    }
+    run(&mut w, 10);
+    assert_eq!(w.hunting_target(shepherd), Some(sheep));
+    assert_eq!(w.gathering_kind(shepherd), None, "still leading");
+    assert!(w.strike_animal(sheep, killer, 100));
+    run(&mut w, 30);
+    assert_eq!(
+        w.gathering_kind(shepherd),
+        Some(aoe_map::ResourceKind::Food),
+        "the lead deadline must not delay gathering"
+    );
+}
