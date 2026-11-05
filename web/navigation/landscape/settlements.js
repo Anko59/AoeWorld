@@ -60,6 +60,7 @@ export function initSettlements() {
       // its screen rectangle, and anything that would overlap folds into it as a count.
       placed = []; hits = [];
       const live = new Set();
+      let sprites = 0;
       for (const row of ranked) {
         if (placed.length >= 192) break;
         const [id,x0,y0,x1,y1,kind,colour,owned] = row;
@@ -87,7 +88,7 @@ export function initSettlements() {
         context.beginPath(); context.ellipse(x, y, base, base * .5, 0, 0, Math.PI * 2);
         context.globalAlpha = owned ? .62 : .38; context.fillStyle = tint; context.fill(); context.globalAlpha = 1;
         context.lineWidth = owned ? 2 / scale : 1 / scale; context.strokeStyle = owned ? '#fff8d6' : '#2b2116'; context.stroke();
-        if (sprite) context.drawImage(sprite.canvas, left, top, w, h);
+        if (sprite) { context.drawImage(sprite.canvas, left, top, w, h); sprites++; }
         else { const icon = symbolFor(kind); if (icon) context.drawImage(icon, x - w / 2, y - w * .75, w, w); }
         // Accessible labels are retained for every drawn place (at most 192).
         let node = nodes.get(id);
@@ -101,7 +102,7 @@ export function initSettlements() {
         hits.push({ x: left + w / 2, y: top + h / 2, w, h, world: placed[index].world });
       }
       for (const [id,node] of nodes) if (!live.has(id)) { node.remove(); nodes.delete(id); }
-      return { fields, borders: ownership ? borders : 0, icons: placed.length };
+      return { fields, borders: ownership ? borders : 0, icons: placed.length, sprites };
     },
     place(index) { return placed[index]; },
     // Counts for garrisons and the work around each place, drawn once units are binned.

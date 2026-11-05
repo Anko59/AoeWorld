@@ -122,6 +122,7 @@ export function initStrategic(fog, actors) {
     canvas.dataset.territory = 'server holdings clipped to explored tiles';
     canvas.dataset.fields = String(holdings.fields);
     canvas.dataset.settlements = String(holdings.icons);
+    canvas.dataset.sprites = String(holdings.sprites);
     canvas.dataset.borders = String(holdings.borders);
     // Retained GPU canvases can composite independently. Cover their whole
     // surface until the detailed renderer presents a complete replacement.
