@@ -153,6 +153,40 @@ impl GameWorld {
                     }
                 };
                 if !terrain_ok || !self.building_step_clear(previous_tile, tile) {
+                    // A body beside a route's lane (a diagonal deck's edge) has
+                    // no straight step to the next tile centre, and the search
+                    // would answer with the same one for ever. Its own tile's
+                    // centre is on the route's graph: go there first.
+                    let centre = WorldPosition::from_tile_center(previous_tile);
+                    if let Ok(centre) = centre
+                        && centre != current_position
+                        && order.waypoint != centre
+                        && self
+                            .unit_position_step_clear(
+                                self.units[index].state.kind,
+                                current_position,
+                                centre,
+                            )
+                            .unwrap_or(false)
+                    {
+                        self.units[index].route.push_front(order.waypoint);
+                        self.units[index].state.moving = true;
+                        self.units[index].state.planning = false;
+                        self.units[index].order = Some(MovementOrder {
+                            origin: current_position,
+                            waypoint: centre,
+                            segment_length: segment_length(
+                                i64::from(centre.x - current_position.x),
+                                i64::from(centre.y - current_position.y),
+                            ),
+                            travelled: 0,
+                            speed_carry: 0,
+                            ..order
+                        });
+                        still_moving.push(id);
+                        finished = true;
+                        break;
+                    }
                     // Collision can change after a segment was refined. Keep
                     // the order and replan from the last valid fixed position.
                     self.clear_planner(index);

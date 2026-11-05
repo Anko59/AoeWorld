@@ -11,6 +11,8 @@ mod angles;
 mod bridge_queue_tests;
 #[path = "bridges/head_on.rs"]
 mod head_on;
+#[path = "bridges/off_lane.rs"]
+mod off_lane;
 
 fn setup_axis(horizontal: bool) -> (GameWorld, EntityId) {
     setup_world(river_width(horizontal, 30..34), horizontal)
