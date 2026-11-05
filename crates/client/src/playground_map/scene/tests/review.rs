@@ -354,12 +354,11 @@ async fn every_authoritative_resource_task_has_work_and_carry_art() {
 #[wasm_bindgen_test]
 async fn remembered_building_art_uses_last_seen_age_instead_of_live_owner_age() {
     use aoe_core::{TileCoord, TileRect};
-    use aoe_protocol::{
-        BuildingKind, ConstructionState, GameplayBuildingState, GameplayPlayerState,
-    };
+    use aoe_protocol::GameplayPlayerState as PlayerReport;
+    use aoe_protocol::{BuildingKind, ConstructionState, GameplayBuildingState};
     let scene = contact_scene();
     let mut client = client(&scene).await;
-    client.village.players.push(GameplayPlayerState {
+    client.village.players.push(PlayerReport {
         player: PlayerId(2),
         stockpile: Default::default(),
         population_used: 0,

@@ -2,6 +2,29 @@ use super::*;
 use aoe_core::{EntityId, WorldPosition};
 use aoe_protocol::UnitTask;
 
+fn drain_without_holdings(
+    rx: &mut mpsc::Receiver<GameplayServerMessage>,
+) -> Vec<GameplayServerMessage> {
+    super::drain(rx)
+        .into_iter()
+        .filter(|m| !matches!(m, GameplayServerMessage::Holdings { .. }))
+        .collect()
+}
+async fn next_without_holdings(
+    rx: &mut mpsc::Receiver<GameplayServerMessage>,
+) -> GameplayServerMessage {
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            let m = rx.recv().await.unwrap();
+            if !matches!(m, GameplayServerMessage::Holdings { .. }) {
+                return m;
+            }
+        }
+    })
+    .await
+    .unwrap()
+}
+
 async fn controller() -> (
     GameplayService,
     u64,
@@ -24,7 +47,7 @@ async fn controller() -> (
             TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384)),
         )
         .await;
-    drain(&mut rx);
+    drain_without_holdings(&mut rx);
     (service, id, rx, primary_unit_id)
 }
 
@@ -55,7 +78,7 @@ async fn panning_keeps_owned_villagers_authoritative_for_selection_and_worker_co
         WorldPosition::from_tile_center(TileCoord::new(start.x - 1, start.y)).unwrap();
     service.queue_move(id, 1, villager.id, destination).await;
     service.tick().await;
-    assert!(drain(&mut rx).iter().any(|message| matches!(
+    assert!(drain_without_holdings(&mut rx).iter().any(|message| matches!(
         message, GameplayServerMessage::Tick { changed_units, removals, .. }
         if removals.is_empty() && changed_units.iter().any(|unit| unit.id == villager.id && unit.task == UnitTask::Moving)
     )));
@@ -71,7 +94,7 @@ async fn move_gather_and_train_share_sequence_and_a_second_page_has_its_own() {
     service
         .queue_train(id, 1, EntityId(1), UnitKind::Villager)
         .await;
-    let rejected = drain(&mut rx);
+    let rejected = drain_without_holdings(&mut rx);
     assert_eq!(
         rejected
             .iter()
@@ -92,9 +115,9 @@ async fn move_gather_and_train_share_sequence_and_a_second_page_has_its_own() {
         .queue_train(second, 3, EntityId(1), UnitKind::Villager)
         .await;
     // Sequences are per page: the second page's orders are not rejected.
-    assert!(drain(&mut observer).is_empty());
+    assert!(drain_without_holdings(&mut observer).is_empty());
     service.tick().await;
-    assert!(drain(&mut rx).iter().any(|message| matches!(message, GameplayServerMessage::Tick { changed_units, .. } if changed_units.iter().any(|unit| unit.id == scout && unit.task == UnitTask::Moving))));
+    assert!(drain_without_holdings(&mut rx).iter().any(|message| matches!(message, GameplayServerMessage::Tick { changed_units, .. } if changed_units.iter().any(|unit| unit.id == scout && unit.task == UnitTask::Moving))));
 }
 
 #[tokio::test]
@@ -111,8 +134,8 @@ async fn economy_updates_reach_both_pages_and_resync_is_complete() {
         .queue_train(id, 1, buildings[0].id, UnitKind::Villager)
         .await;
     service.tick().await;
-    let first = drain(&mut controller);
-    let second = drain(&mut observer);
+    let first = drain_without_holdings(&mut controller);
+    let second = drain_without_holdings(&mut observer);
     for messages in [first, second] {
         assert!(messages.iter().any(|message| matches!(message, GameplayServerMessage::Tick { revision:1, changed_players, changed_buildings, .. } if changed_players[0].stockpile.food == 150 && changed_buildings[0].training_queue[0].progress_ticks == 1)));
     }
@@ -122,17 +145,21 @@ async fn economy_updates_reach_both_pages_and_resync_is_complete() {
     service.tick().await;
     // The producer accepts another prepaid unit. Resync must
     // include both paid entries, rather than the former population rejection.
-    assert!(drain(&mut controller).iter().any(|message| matches!(
-        message,
-        GameplayServerMessage::CommandAck {
-            sequence: 2,
-            result: CommandResult::Accepted,
-            ..
-        }
-    )));
-    drain(&mut observer);
+    assert!(
+        drain_without_holdings(&mut controller)
+            .iter()
+            .any(|message| matches!(
+                message,
+                GameplayServerMessage::CommandAck {
+                    sequence: 2,
+                    result: CommandResult::Accepted,
+                    ..
+                }
+            ))
+    );
+    drain_without_holdings(&mut observer);
     service.resync(other, 2).await;
-    assert!(drain(&mut observer).iter().any(|message| matches!(message, GameplayServerMessage::Snapshot { revision:2, units, players, buildings, .. } if units.len() == 4 && players[0].stockpile.food == 100 && buildings[0].training_queue.len() == 2 && buildings[0].training_queue[0].progress_ticks == 2 && buildings[0].training_queue[1].progress_ticks == 0)));
+    assert!(drain_without_holdings(&mut observer).iter().any(|message| matches!(message, GameplayServerMessage::Snapshot { revision:2, units, players, buildings, .. } if units.len() == 4 && players[0].stockpile.food == 100 && buildings[0].training_queue.len() == 2 && buildings[0].training_queue[0].progress_ticks == 2 && buildings[0].training_queue[1].progress_ticks == 0)));
 }
 
 /// Drains `rx` between ticks until a delta carries the changed economy, so a
@@ -144,7 +171,7 @@ async fn catches_up_on_economy(
     for _ in 0..60 {
         service.tick().await;
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        let seen = drain(rx).iter().any(|message| {
+        let seen = drain_without_holdings(rx).iter().any(|message| {
             matches!(message, GameplayServerMessage::Tick { changed_players, .. } if changed_players.iter().any(|p| p.stockpile.food == 150))
         });
         if seen {
@@ -182,7 +209,7 @@ async fn full_subscription_frames_do_not_lose_an_economy_delta() {
     let (id, _) = service.register(None, tx).await;
     let region = TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384));
     service.subscribe(id, 1, region).await;
-    let initial = drain(&mut rx);
+    let initial = drain_without_holdings(&mut rx);
     let GameplayServerMessage::Snapshot { buildings, .. } = &initial[0] else {
         panic!("snapshot");
     };
@@ -190,13 +217,21 @@ async fn full_subscription_frames_do_not_lose_an_economy_delta() {
         initial[1],
         GameplayServerMessage::WildlifeState { revision: 1, .. }
     ));
+    assert!(matches!(
+        tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+            .await
+            .unwrap()
+            .unwrap(),
+        GameplayServerMessage::Holdings { revision: 1, .. }
+    ));
+    tokio::task::yield_now().await;
     service.subscribe(id, 2, region).await;
     service
         .queue_train(id, 1, buildings[0].id, UnitKind::Villager)
         .await;
     service.tick().await;
     // The four frames of the second view filled the queue; the delta did not fit.
-    let queued = drain(&mut rx);
+    let queued = drain_without_holdings(&mut rx);
     assert_eq!(queued.len(), 4);
     assert!(matches!(
         queued[0],
@@ -224,7 +259,7 @@ async fn first_views_arrive_in_order_even_when_they_must_wait_for_room() {
     service.subscribe(id, 1, region).await;
     let mut got = Vec::new();
     for _ in 0..200 {
-        got.extend(drain(&mut rx));
+        got.extend(drain_without_holdings(&mut rx));
         if got.len() >= 4 {
             break;
         }
@@ -258,10 +293,7 @@ async fn stalled_camera_subscriptions_keep_only_the_in_flight_and_latest_views()
     }
     let mut revisions = Vec::new();
     for _ in 0..8 {
-        let message = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
-            .await
-            .unwrap()
-            .unwrap();
+        let message = next_without_holdings(&mut rx).await;
         let revision = match message {
             GameplayServerMessage::Snapshot { revision, .. }
             | GameplayServerMessage::WildlifeState { revision, .. }
@@ -300,4 +332,38 @@ async fn a_disconnected_session_cancels_its_waiting_subscription_worker() {
             .is_none(),
         "the old subscription worker must release its queued messages and sender"
     );
+}
+
+#[tokio::test]
+async fn every_boundary_frame_follows_its_snapshot_even_with_a_stalled_reader() {
+    let service = GameplayService::new(Seed(1));
+    let (tx, mut rx) = mpsc::channel(1);
+    let (id, _) = service.register(None, tx).await;
+    for revision in 1..=10 {
+        service
+            .subscribe(id, revision, TileRect::from_xywh(8000, 8000, 64, 64))
+            .await;
+    }
+    let mut snapshots = std::collections::BTreeSet::new();
+    let mut boundaries = Vec::new();
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        while boundaries.len() < 2 {
+            match rx.recv().await.unwrap() {
+                GameplayServerMessage::Snapshot { revision, .. } => {
+                    snapshots.insert(revision);
+                }
+                GameplayServerMessage::Holdings { revision, .. } => {
+                    assert!(
+                        snapshots.contains(&revision),
+                        "boundary arrived before its first snapshot"
+                    );
+                    boundaries.push(revision);
+                }
+                _ => {}
+            }
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(boundaries, [1, 10]);
 }

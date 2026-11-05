@@ -14,9 +14,7 @@ pub(super) use kinds::{native_building, native_kind, native_tech};
 use kinds::{wire_building, wire_kind, wire_tech};
 use std::collections::BTreeMap;
 
-/// Economy units stay authoritative while offscreen, for selection and worker
-/// counts. Their population is bounded by the village rules; population-only
-/// workloads continue using the spatial query and the primary scout.
+/// Owned economy units remain selectable offscreen; population workloads use spatial queries.
 pub(super) fn query_units(
     world: &GameWorld,
     region: TileRect,
@@ -54,9 +52,7 @@ fn wire_resource(kind: aoe_map::ResourceKind) -> ResourceKind {
         aoe_map::ResourceKind::Stone => ResourceKind::Stone,
     }
 }
-/// Home Castle, managers and General status. The wire carries them for living
-/// units only: a Dying body keeps its simulation records until it is removed,
-/// and one such unit used to make every Snapshot and Tick fail validation.
+/// Command reports belong only to living units; reports on Dying bodies invalidate the wire.
 pub(super) fn command_state(world: &GameWorld, unit: &GameUnit, state: &mut GameplayUnitState) {
     if unit.hp == 0 {
         return;
