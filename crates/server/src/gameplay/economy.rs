@@ -1,3 +1,5 @@
+#[path = "economy/holdings.rs"]
+pub(super) mod holdings;
 use super::GameplayService;
 #[path = "economy/kinds.rs"]
 mod kinds;
@@ -12,9 +14,7 @@ pub(super) use kinds::{native_building, native_kind, native_tech};
 use kinds::{wire_building, wire_kind, wire_tech};
 use std::collections::BTreeMap;
 
-/// Economy units stay authoritative while offscreen, for selection and worker
-/// counts. Their population is bounded by the village rules; population-only
-/// workloads continue using the spatial query and the primary scout.
+/// Owned economy units remain selectable offscreen; population workloads use spatial queries.
 pub(super) fn query_units(
     world: &GameWorld,
     region: TileRect,
@@ -52,9 +52,7 @@ fn wire_resource(kind: aoe_map::ResourceKind) -> ResourceKind {
         aoe_map::ResourceKind::Stone => ResourceKind::Stone,
     }
 }
-/// Home Castle, managers and General status. The wire carries them for living
-/// units only: a Dying body keeps its simulation records until it is removed,
-/// and one such unit used to make every Snapshot and Tick fail validation.
+/// Command reports belong only to living units; reports on Dying bodies invalidate the wire.
 pub(super) fn command_state(world: &GameWorld, unit: &GameUnit, state: &mut GameplayUnitState) {
     if unit.hp == 0 {
         return;
@@ -200,10 +198,12 @@ pub(super) fn players(world: &GameWorld) -> BTreeMap<PlayerId, GameplayPlayerSta
                     *out = counts[native_kind(kind) as usize];
                 }
             }
-            (
-                state.player,
-                player_state(&state, world.recent_deliveries(state.player), unit_counts),
-            )
+            (state.player, {
+                let mut p =
+                    player_state(&state, world.recent_deliveries(state.player), unit_counts);
+                (p.held_tiles, p.held_share_ppm) = world.held_land(state.player);
+                p
+            })
         })
         .collect()
 }
@@ -214,11 +214,9 @@ pub(super) fn player(world: &GameWorld, viewer: PlayerId) -> Option<GameplayPlay
     let counts = std::array::from_fn(|index| {
         row.map_or(0, |row| row[native_kind(UnitKind::ALL[index]) as usize])
     });
-    Some(player_state(
-        &state,
-        world.recent_deliveries(viewer),
-        counts,
-    ))
+    let mut report = player_state(&state, world.recent_deliveries(viewer), counts);
+    (report.held_tiles, report.held_share_ppm) = world.held_land(viewer);
+    Some(report)
 }
 
 fn player_state(
@@ -246,6 +244,8 @@ fn player_state(
         market_prices: wire_market_prices(state.market_prices),
         recent_deliveries,
         unit_counts,
+        held_tiles: 0,
+        held_share_ppm: 0,
     }
 }
 pub(super) fn building_in_camera(

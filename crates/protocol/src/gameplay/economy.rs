@@ -110,7 +110,7 @@ pub struct Stockpile {
     pub gold: u32,
     pub stone: u32,
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct GameplayPlayerState {
     pub player: PlayerId,
     pub stockpile: Stockpile,
@@ -130,6 +130,9 @@ pub struct GameplayPlayerState {
     /// Authoritative living units by current UnitKind, including cargo/shelters.
     #[serde(with = "census")]
     pub unit_counts: [u32; UnitKind::ALL.len()],
+    /// Exact owned map tiles and millionths of total map area.
+    pub held_tiles: u64,
+    pub held_share_ppm: u32,
 }
 /// The most recent damage taken. A client plays a hit reaction when `tick`
 /// is newer than the one it last saw, and a swing for `attacker`.
@@ -189,3 +192,13 @@ impl GameplayBuildingState {
             .map_or_else(|| self.footprint.contains(tile), |span| span.contains(tile))
     }
 }
+
+/// A half-open run of owned tiles on one map row; never crosses unexplored tiles.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct HoldingSpan {
+    pub player: PlayerId,
+    pub y: i32,
+    pub x0: i32,
+    pub x1: i32,
+}
+pub const MAX_HOLDING_SPANS: usize = 8192;

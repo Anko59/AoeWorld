@@ -45,6 +45,7 @@ pub(super) struct ViewerState {
     pub players: BTreeMap<PlayerId, GameplayPlayerState>,
     pub buildings: Buildings,
     pub vision: u64,
+    pub land: Option<Arc<aoe_simulation::LandControl>>,
 }
 
 pub(super) struct SessionBuild {
@@ -86,7 +87,7 @@ fn viewer_states(
     let mut everything = None;
     let mut viewers = BTreeMap::new();
     for (viewer, rebuild) in rebuild {
-        let players = if disabled {
+        let mut players = if disabled {
             all_players
                 .get_or_insert_with(|| economy::players(world))
                 .clone()
@@ -96,6 +97,9 @@ fn viewer_states(
                 .into_iter()
                 .collect()
         };
+        if disabled && let Some(own) = economy::player(world, viewer) {
+            players.insert(viewer, own);
+        }
         let buildings = if disabled {
             // With fog disabled all targets are revealed as well. Keep one
             // shared map even when a hundred seats have set their rally points.
@@ -121,6 +125,8 @@ fn viewer_states(
             viewer,
             ViewerState {
                 players,
+                land: (world.tick().0.is_multiple_of(20) || rebuild)
+                    .then(|| world.land_control(viewer)),
                 buildings,
                 vision: world.player_vision_revision(viewer),
             },

@@ -33,6 +33,7 @@ fn classify(message: &GameplayServerMessage, expected_code: u16) -> Result<bool,
             projectiles,
             ..
         } if projectiles.is_empty() => Ok(false),
+        GameplayServerMessage::Holdings { revision: 1, .. } => Ok(false),
         GameplayServerMessage::Tick {
             revision: 1,
             changed_units,
@@ -76,6 +77,18 @@ fn subscription_response_classification_accepts_only_expected_error_or_stationar
     };
     for code in [409, 400] {
         assert_eq!(classify(&tick, code), Ok(false));
+        assert_eq!(
+            classify(
+                &GameplayServerMessage::Holdings {
+                    revision: 1,
+                    tick: Tick(1),
+                    shapes: vec![],
+                    complete: true
+                },
+                code
+            ),
+            Ok(false)
+        );
         let error = GameplayServerMessage::Error {
             code,
             message: "subscription rejected".into(),
@@ -117,6 +130,12 @@ fn subscription_response_classification_rejects_changed_revision_or_nonstationar
         stance: Default::default(),
     };
     let messages = [
+        GameplayServerMessage::Holdings {
+            revision: 2,
+            tick: Tick(1),
+            shapes: vec![],
+            complete: true,
+        },
         GameplayServerMessage::Tick {
             revision: 2,
             tick: Tick(1),
@@ -157,7 +176,7 @@ fn subscription_response_classification_rejects_changed_revision_or_nonstationar
     for message in messages {
         let error = classify(&message, 400).expect_err("unexpected tick must not be drained");
         assert!(error.contains("expected subscription Error 400"));
-        assert!(error.contains("received Tick"));
+        assert!(error.contains(&format!("received {message:?}")));
     }
 }
 

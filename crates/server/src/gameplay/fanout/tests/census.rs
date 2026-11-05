@@ -14,10 +14,19 @@ fn census_scans_once_for_a_thousand_players_and_only_builds_connected_reports() 
         for (id, state) in states {
             assert_eq!(state.players.len(), 1);
             let own = &state.players[&id];
+            assert!(own.held_tiles > 0);
+            assert!(own.held_share_ppm > 0);
+            for span in state.land.iter().flat_map(|l| &l.shapes) {
+                assert!((span.x0..span.x1).all(|x| {
+                    world.visibility(id, aoe_core::TileCoord::new(x, span.y))
+                        != aoe_simulation::TileVisibility::Unexplored
+                }));
+            }
             assert_eq!(own.unit_counts.iter().sum::<u32>(), 100);
             assert_eq!(own.unit_counts[aoe_protocol::UnitKind::Scout as usize], 100);
         }
         assert_eq!(world.unit_census_rebuilds(), 1);
+        assert_eq!(world.land_control_rebuilds(), 1);
     }
     let position = world.units().next().unwrap().position;
     world

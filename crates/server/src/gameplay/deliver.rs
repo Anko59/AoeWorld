@@ -180,7 +180,7 @@ fn deliver_tick(
         .players
         .iter()
         .filter(|(id, state)| session.resident_players.get(*id) != Some(*state))
-        .map(|(_, state)| *state)
+        .map(|(_, state)| state.clone())
         .collect::<Vec<_>>();
     let mut changed_buildings = Vec::new();
     let mut building_removals = Vec::new();
@@ -327,6 +327,25 @@ pub(super) fn deliver(
         }
         if failed.contains(&id) || !current {
             continue;
+        }
+        if let Some(land) = built
+            .viewers
+            .get(&build.viewer)
+            .and_then(|v| v.land.as_ref())
+            && session
+                .resident_land
+                .as_ref()
+                .is_none_or(|old| !std::sync::Arc::ptr_eq(old, land) && old.shapes != land.shapes)
+        {
+            if !send(
+                session,
+                super::economy::holdings::message(land, build.revision, built.tick),
+                &mut failed,
+                id,
+            ) {
+                continue;
+            }
+            session.resident_land = Some(land.clone());
         }
         if session.resident_move_queues != build.move_queues {
             let message = GameplayServerMessage::MoveQueues {

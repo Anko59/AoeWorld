@@ -161,6 +161,8 @@ fn combat_state_round_trips_for_units_and_buildings() {
             researched: 0,
             recent_deliveries: [0; 4],
             unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
+            held_tiles: 0,
+            held_share_ppm: 0,
             market_prices: aoe_protocol::MarketPrices::default(),
         }],
         buildings: vec![center(1)],

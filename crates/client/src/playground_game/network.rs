@@ -168,6 +168,17 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 capture::world_received(&mut client, map_changed);
                 subscribe(&mut client);
             }
+            Ok(GameplayServerMessage::Holdings {
+                revision,
+                tick,
+                shapes,
+                complete,
+            }) => {
+                if revision == client.revision && tick.0 >= client.village.tick {
+                    client.village.holdings = shapes;
+                    client.village.holdings_complete = complete;
+                }
+            }
             Ok(GameplayServerMessage::MoveQueues {
                 revision,
                 tick,

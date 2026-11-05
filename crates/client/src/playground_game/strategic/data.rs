@@ -6,7 +6,7 @@ use aoe_protocol::{BuildingKind, GameplayBuildingState, GameplayUnitState, UnitK
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen(
-    inline_js = "export function strategic_update(a, e, b, c, w, o, s, counts, sites) { const v = window.aoeNavigation?.strategic; v?.receive(a, e, b, c, w, o); v?.cockpit?.(s, counts); v?.settlements?.(sites); } export function strategic_alert(t, x, y) { window.aoeNavigation?.views?.alert(t, x, y); }"
+    inline_js = "export function strategic_update(a, e, b, c, w, o, s, counts, sites, land) { const v = window.aoeNavigation?.strategic; v?.receive(a, e, b, c, w, o); v?.cockpit?.(s, counts); v?.settlements?.(sites); v?.holdings?.(land); } export function strategic_alert(t, x, y) { window.aoeNavigation?.views?.alert(t, x, y); }"
 )]
 extern "C" {
     fn strategic_alert(tick: f64, x: f64, y: f64);
@@ -20,6 +20,7 @@ extern "C" {
         summary: &[f64],
         counts: &[u32],
         sites: &[f64],
+        land: &[f64],
     );
 }
 
@@ -114,7 +115,7 @@ pub(in super::super) fn update(client: &Client) {
     let mut contacts = Vec::new();
     let mut workers = Vec::new();
     let mut last_alert = [f64::NAN; 3];
-    let mut summary = vec![f64::NAN; 11];
+    let mut summary = vec![f64::NAN; 13];
     let player = client.village.players.iter().find(|p| p.player == owner);
     if let Some(p) = player {
         let s = p.stockpile;
@@ -129,7 +130,9 @@ pub(in super::super) fn update(client: &Client) {
             p.recent_deliveries[0] as f64,
             p.recent_deliveries[2] as f64,
             p.recent_deliveries[3] as f64,
-            0.0,
+            p.held_tiles as f64,
+            f64::from(p.held_share_ppm),
+            f64::from(u8::from(client.village.holdings_complete)),
         ]);
     }
     for u in client.units.values() {
@@ -184,10 +187,6 @@ pub(in super::super) fn update(client: &Client) {
     for b in &client.village.buildings {
         if b.player == owner && b.hp > 0 {
             report_hit(b.last_hit, village::building_center(b), &mut last_alert);
-            if b.kind != BuildingKind::Bridge {
-                summary[10] += f64::from(b.footprint.max.x - b.footprint.min.x)
-                    * f64::from(b.footprint.max.y - b.footprint.min.y);
-            }
         }
         if matches!(b.kind, BuildingKind::Bridge | BuildingKind::Road) && bridges.len() < 2048 * 5 {
             bridges.extend([
@@ -238,6 +237,21 @@ pub(in super::super) fn update(client: &Client) {
             orders.extend([f64::from(q.entity_id.0), p[0], p[1]]);
         }
     }
+    let land: Vec<f64> = client
+        .village
+        .holdings
+        .iter()
+        .flat_map(|s| {
+            let [r, g, b] =
+                aoe_rendering::player_colour(s.player, owner, client.team_colour).map(u32::from);
+            [
+                f64::from(s.x0),
+                f64::from(s.y),
+                f64::from(s.x1),
+                f64::from(r << 16 | g << 8 | b),
+            ]
+        })
+        .collect();
     strategic_update(
         &armies,
         &economy,
@@ -248,6 +262,7 @@ pub(in super::super) fn update(client: &Client) {
         &summary,
         player.map_or(&[], |p| p.unit_counts.as_slice()),
         &sites,
+        &land,
     );
     strategic_alert(last_alert[0], last_alert[1], last_alert[2]);
 }

@@ -246,6 +246,10 @@ async fn pending_subscription_holds_all_revision_updates_until_snapshot() {
     for _ in 0..4 {
         receiver.recv().await.unwrap();
     }
+    assert!(matches!(
+        receiver.recv().await.unwrap(),
+        M::Holdings { revision: 1, .. }
+    ));
     tokio::task::yield_now().await;
     assert!(
         !service.sessions.lock().await[&id]
@@ -267,7 +271,12 @@ async fn pending_subscription_holds_all_revision_updates_until_snapshot() {
         world
             .spawn_animal(aoe_simulation::AnimalKind::Wolf, at(22, 20))
             .unwrap();
-        world.advance();
+        world
+            .place_town_center(PlayerId(0), TileCoord::new(40, 40))
+            .unwrap();
+        for _ in 0..20 {
+            world.advance();
+        }
     }
     let mut sessions = service.sessions.lock().await;
     let session = &sessions[&id];
@@ -277,6 +286,7 @@ async fn pending_subscription_holds_all_revision_updates_until_snapshot() {
     let before_units = session.resident.clone();
     let before_animals = session.resident_animals.clone();
     let before_projectiles = session.resident_projectiles.clone();
+    let before_land = session.resident_land.clone();
     let views = [View {
         session_id: id,
         subscription: session.subscription.unwrap(),
@@ -301,6 +311,14 @@ async fn pending_subscription_holds_all_revision_updates_until_snapshot() {
         impact: Tick(built.tick.0 + 5),
         kind: ProjectileKind::Arrow,
     }];
+    assert!(
+        !built.viewers[&PlayerId(0)]
+            .land
+            .as_ref()
+            .unwrap()
+            .shapes
+            .is_empty()
+    );
     let fresh = &built.sessions[0];
     let (expected_fog, expected_vision) = fresh.fog.clone().unwrap();
     assert_ne!(before_fog.as_ref().unwrap().tiles, expected_fog.tiles);
@@ -317,11 +335,12 @@ async fn pending_subscription_holds_all_revision_updates_until_snapshot() {
     assert_eq!(session.resident, before_units);
     assert_eq!(session.resident_animals, before_animals);
     assert_eq!(session.resident_projectiles, before_projectiles);
+    assert_eq!(session.resident_land, before_land);
     assert!(session.rebuild_buildings);
     drop(sessions);
 
     // With no further world changes, replaying the skipped view must repair
-    // every baseline after the four initial frames have arrived in order.
+    // every baseline after the five initial frames have arrived in order.
     tokio::task::yield_now().await;
     assert!(matches!(
         receiver.try_recv().unwrap(),
@@ -330,6 +349,10 @@ async fn pending_subscription_holds_all_revision_updates_until_snapshot() {
     for _ in 0..3 {
         receiver.try_recv().unwrap();
     }
+    assert!(matches!(
+        receiver.try_recv().unwrap(),
+        M::Holdings { revision: 2, .. }
+    ));
     assert!(receiver.is_empty());
     let mut sessions = service.sessions.lock().await;
     assert!(
@@ -340,7 +363,7 @@ async fn pending_subscription_holds_all_revision_updates_until_snapshot() {
             .pending()
     );
     assert!(deliver(&mut sessions, &built, BTreeMap::new()).is_empty());
-    let mut delivered = [false; 4];
+    let mut delivered = [false; 5];
     while let Ok(message) = receiver.try_recv() {
         match message {
             M::FogState(fog) => {
@@ -364,10 +387,18 @@ async fn pending_subscription_holds_all_revision_updates_until_snapshot() {
                 assert_eq!(projectiles, fresh.projectiles);
                 delivered[3] = true;
             }
+            M::Holdings {
+                revision: 2,
+                shapes,
+                ..
+            } => {
+                assert!(!shapes.is_empty());
+                delivered[4] = true;
+            }
             message => panic!("unexpected retry message: {message:?}"),
         }
     }
-    assert_eq!(delivered, [true; 4]);
+    assert_eq!(delivered, [true; 5]);
     let session = &sessions[&id];
     assert_eq!(session.resident_fog, Some(expected_fog));
     assert_eq!(session.vision_revision, Some(expected_vision));
@@ -450,3 +481,6 @@ fn session_views_reuse_the_same_bounded_worker_pool_across_ticks() {
 
 #[path = "tests/census.rs"]
 mod census;
+
+#[path = "tests/holdings.rs"]
+mod holdings;

@@ -71,18 +71,53 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
 /// The cockpit's unit census extends player state; message counts are unchanged.
 /// Steward extends the census by one entry, so the digests move, not the counts.
 /// Sergeant identity adds one byte per unit; all six session message counts are unchanged.
+// Holdings adds 2/4/3/3/9/2 frames; filtering it restores all six pre-boundary counts.
 const PINNED: [(usize, u64); SEATS + 1] = [
-    (407, 12302094832780914053),
-    (187, 18102123851847806713),
-    (60, 8832132356731911670),
-    (176, 7840207906882801570),
-    (420, 15399661995292538263),
-    (407, 1260977910633523928),
+    (409, 16881762939065787622),
+    (191, 6076329610167181038),
+    (63, 2859331523750769443),
+    (179, 15129836462772536355),
+    (429, 12339432222954924825),
+    (409, 7665489075394365115),
 ];
 
 #[tokio::test(flavor = "multi_thread")]
 async fn per_session_messages_match_the_pinned_stream() {
     let logs = run(400, &mut |_, _, _| {}).await;
+    let without_boundaries = logs
+        .iter()
+        .map(|log| SessionLog {
+            viewer: log.viewer,
+            messages: log
+                .messages
+                .iter()
+                .filter(|m| !matches!(m, GameplayServerMessage::Holdings { .. }))
+                .cloned()
+                .collect(),
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        digests(&without_boundaries)
+            .iter()
+            .map(|d| d.0)
+            .collect::<Vec<_>>(),
+        [407, 187, 60, 176, 420, 407],
+        "only Holdings frames may add messages to the pinned scenario"
+    );
+    for log in &logs {
+        let mut snapshots = std::collections::BTreeSet::new();
+        for m in &log.messages {
+            match m {
+                GameplayServerMessage::Snapshot { revision, .. } => {
+                    snapshots.insert(*revision);
+                }
+                GameplayServerMessage::Holdings { revision, .. } => {
+                    assert!(snapshots.contains(revision), "boundary before snapshot")
+                }
+                _ => {}
+            }
+        }
+    }
     let actual = digests(&logs);
     println!("PINNED: {actual:?}");
     println!(

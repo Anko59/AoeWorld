@@ -90,6 +90,7 @@ pub(super) struct Session {
     resident_buildings: BTreeMap<EntityId, aoe_protocol::GameplayBuildingState>,
     resident_animals: Vec<aoe_protocol::AnimalState>,
     resident_projectiles: Vec<aoe_protocol::ProjectileState>,
+    resident_land: Option<Arc<aoe_simulation::LandControl>>,
     resident_move_queues: Vec<aoe_protocol::MoveQueue>,
     vision_revision: Option<u64>,
     /// The fog view the client holds; an unchanged rebuild is not resent.
@@ -417,7 +418,7 @@ impl GameplayService {
             revision,
             tick: world.tick(),
             units: units.clone(),
-            players: players.values().copied().collect(),
+            players: players.values().cloned().collect(),
             buildings: buildings.values().cloned().collect(),
         };
         let animals = wildlife::animals(&world, region, player);
@@ -447,7 +448,10 @@ impl GameplayService {
         session.resident_move_queues =
             fanout::move_queues(&world, player, units.iter().map(|u| u.id));
         session.vision_revision = Some(vision_revision);
-        let mut initial = vec![snapshot, wildlife, fog, projectile_message];
+        let land = world.land_control(player);
+        let holding_message = economy::holdings::message(&land, revision, world.tick());
+        session.resident_land = Some(land);
+        let mut initial = vec![snapshot, wildlife, fog, projectile_message, holding_message];
         if !session.resident_move_queues.is_empty() {
             initial.push(GameplayServerMessage::MoveQueues {
                 revision,
@@ -492,8 +496,4 @@ impl GameplayService {
             .await;
         }
     }
-}
-
-fn total_pending(sessions: &BTreeMap<u64, Session>) -> usize {
-    sessions.values().map(|session| session.pending.len()).sum()
 }

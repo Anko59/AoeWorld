@@ -15,7 +15,7 @@ The developer timing overlay uses F8 here and retains F3 at sprite zoom.
 
 | Key | Layer | Available data |
 | --- | --- | --- |
-| F1 | Ownership | Coloured building plots and active Town Center work domains |
+| F1 | Ownership | Server holdings on explored land, building plots and work domains |
 | F2 | Armies | Army tokens and unit clusters |
 | F3 | Economy | Steward cards and their Town Center domains |
 | F4 | Threats | Historical enemy sightings, labelled with age, for two minutes |
@@ -81,7 +81,7 @@ focus. Only the visible tile request is clipped to the map bounds.
 ## Kingdom cockpit
 
 The far view has an original-art kingdom panel with held resources,
-population used/cap, recent credited deliveries, building footprint area and
+population used/cap, recent credited deliveries, held tile area and map share, and
 living owned military/support units by type, including embarked/garrisoned units and
 commanders. Villagers, Fishing Ships and Vassals are excluded from the army.
 The General token counts its soldiers; the kingdom total also counts the
@@ -89,14 +89,30 @@ General himself. A missing economic report is shown as `?`.
 
 Collection numbers are actual deposits in the simulation's twelve live
 five-second buckets (55–60 seconds), without extrapolation. Spending, trade,
-refunds and stock edits do not count as collection. Building area sums living
-owned building footprints, including foundations and excluding water bridges;
-it does not claim territorial borders or Town Center-domain ownership.
-The cockpit explicitly reports held territory as unavailable. The existing
-Steward domains assign work to the nearest active Town Center within a player;
-other players do not contest those domains. The authorized stream has no
-cross-player land claims, contested boundary state or authoritative held-area
-report from which to count political territory.
+refunds and stock edits do not count as collection.
+
+Land held is a deterministic union of integer tile discs around completed,
+living buildings: Town Center 12 tiles, Castle 16, Watch Tower 8, Outpost 6,
+Farm 2, walls/gates 1, other buildings 4; bridges claim nothing. Active Steward
+and Vassal domains add their existing 100- and 24-tile radii. Discs clip to map
+bounds. Overlapping claims go to the nearest source centre; equal distances tie
+by player ID, so each tile has one owner. The denominator is the whole map
+rectangle, including water tiles within claims. This report does not change work
+allocation, pathing or combat rules.
+
+The simulation rebuilds sparse row runs at most once per simulation second,
+without scanning units or the whole map; unchanged source lists reuse the
+ownership raster. Each player receives their own exact area and millionths of
+map area. Boundary runs use last-seen enemy buildings and the viewer's own
+current buildings/domains, then intersect that viewer's explored tiles. Hidden
+enemy construction, destruction and private administrators never update this
+remembered view. Enemy administrator domains are private and are not inferred.
+New exploration and lost claims appear by the next report second. At most 8,192
+coalesced runs travel in a separate Holdings frame, on change at the one-second
+cadence or at subscribe/resync. Stockpile deltas carry only area scalars. A
+capped report samples whole rows across the map and a cockpit note identifies
+incomplete detail; area totals remain exact. Fog-mode changes reclip
+immediately.
 
 Resources, population and the authoritative army total stay in a compact strip.
 Kingdom controls opens one scrollable drawer for building, production, map

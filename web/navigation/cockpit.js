@@ -13,9 +13,9 @@ export function initCockpit(changed = () => {}) {
     <span class="cockpit-population">Population <b data-population>?</b></span><b data-army-total>Army ?</b>
     <section id="cockpit-details" aria-label="Kingdom controls">
     <header><b>Kingdom cockpit</b><span>Held · collected / minute</span></header>
-    <div class="cockpit-census"><span>Building area <b data-land>?</b></span></div>
-    <p class="cockpit-note">Collections: last minute in 5s buckets (55–60s). Building footprints only.</p>
-    <p class="cockpit-note">Territory held: unavailable. Town Center work areas do not establish land ownership.</p>
+    <div class="cockpit-census"><span>Land held <b data-land>?</b></span></div>
+    <p class="cockpit-note">Collections: last minute in 5s buckets (55–60s).</p>
+    <p class="cockpit-note">Buildings and active Steward / Vassal domains. Borders shown only on explored land.</p><p class="cockpit-note" data-land-coverage></p>
     <div class="cockpit-army" aria-label="Army by type"></div></section>`;
   document.body.append(panel);
   const production = initProduction();
@@ -75,7 +75,10 @@ export function initCockpit(changed = () => {}) {
       text(`[data-income="${name}"]`, `${number(values[6 + index])} / min`);
     });
     text('[data-population]', `${number(values[4])} / ${number(values[5])}`);
-    text('[data-land]', `${number(values[10])} tiles`);
+    const share = !Number.isFinite(values[11]) ? '?' : values[11] === 0 && values[10] > 0
+      ? '<0.0001' : (values[11] / 10000).toFixed(values[11] > 0 && values[11] < 100 ? 4 : 2);
+    text('[data-land]', `${number(values[10])} tiles · ${share}% of map`);
+    text('[data-land-coverage]', values[12] === 0 ? "Boundary detail limited; area total is complete." : "");
     const counts = new Map();
     for (let kind = 0; kind < Math.min(census.length, trainingKinds.length); kind++) {
       const count = census[kind];

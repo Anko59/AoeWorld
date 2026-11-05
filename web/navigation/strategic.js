@@ -6,6 +6,7 @@ import { initReveal } from '/navigation/reveal.js';
 import { initCockpit } from '/navigation/cockpit.js';
 import { paintTerrain } from '/navigation/landscape/terrain.js';
 import { initSettlements } from '/navigation/landscape/settlements.js';
+import { initHoldings } from '/navigation/landscape/holdings.js';
 import { initMapKey } from '/navigation/landscape/key.js';
 
 // A backend-independent, cached strategic plane. The detailed renderer keeps
@@ -29,7 +30,7 @@ export function initStrategic(fog, actors) {
   let modelRevision = 0, modelSignature = '', lastState = null;
   const tokens = initTokens(), contacts = initContacts();
   const cockpit = initCockpit(() => { modelRevision++; previous = ''; if (lastState) frame(lastState); }), reveal = initReveal();
-  const settlements = initSettlements();
+  const settlements = initSettlements(), holdingsLayer = initHoldings();
   const mapKey = initMapKey();
   const layers = initLayers(() => {
     modelRevision++;
@@ -97,6 +98,7 @@ export function initStrategic(fog, actors) {
     context.setTransform(1, 0, 0, 1, 0, 0);
     const scale = scene.clientWidth / width;
     mapKey.update(zoom, scale);
+    canvas.dataset.holdingRuns = String(holdingsLayer.draw(context, plane, zoom, layers.enabled.ownership));
     const holdings = settlements.draw(context, project, layers.enabled.ownership, width, height, scale, plane, zoom);
     if (!fog.disabled) {
       plane();
@@ -137,7 +139,7 @@ export function initStrategic(fog, actors) {
     canvas.dataset.resources = String(resources.length);
     canvas.dataset.clusters = String(picks.length);
     canvas.dataset.terrainDraws = terrain ? '1' : '0';
-    canvas.dataset.territory = 'building footprints and active Town Center work domains';
+    canvas.dataset.territory = 'server holdings clipped to explored tiles';
     canvas.dataset.fields = String(holdings.fields);
     canvas.dataset.settlements = String(holdings.icons);
     canvas.dataset.borders = String(holdings.borders);
@@ -208,10 +210,11 @@ export function initStrategic(fog, actors) {
       }
       update(armies, economy, b, c);
     },
+    holdings(values) { if (holdingsLayer.update(values)) { modelRevision++; previous = ''; } },
     settlements(values) { if (settlements.update(values)) { modelRevision++; previous = ''; } },
     reset() {
       cockpit.reset(); reveal.reset();
-      settlements.reset();
+      settlements.reset(); holdingsLayer.reset();
       tokens.update([], [], []); contacts.reset(); resources = [];
       knownResources.clear(); retiredResources.clear(); resourceSnapshot = false;
       modelSignature = ''; modelRevision++; previous = '';

@@ -4,6 +4,7 @@ pub use gameplay::HUMAN_COMMAND_BURST;
 pub use gameplay::MoveQueue;
 pub use gameplay::{AnimalKind, AnimalState, AnimalTask, MAX_ANIMALS};
 pub use gameplay::{CombatStance, FogState, Formation};
+pub use gameplay::{HoldingSpan, MAX_HOLDING_SPANS};
 pub use gameplay::{MAX_PROJECTILES, ProjectileKind, ProjectileState};
 
 use aoe_core::{EntityId, PlayerId, Position, Region, Tick};

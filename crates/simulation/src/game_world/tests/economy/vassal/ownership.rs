@@ -366,3 +366,15 @@ fn vassal_ownership_replay_agrees_with_one_and_four_workers() {
         "Vassal manual control, recall and return must agree with one and four workers"
     );
 }
+
+#[test]
+fn active_vassal_expands_the_castle_claim_to_its_domain_radius() {
+    let (mut w, _, _) = setup();
+    w.set_fog_disabled(true);
+    let held = w.land_control(PlayerId(0));
+    assert!(
+        held.shapes
+            .iter()
+            .any(|s| s.y == 92 && s.x0 <= 69 && s.x1 > 69)
+    );
+}

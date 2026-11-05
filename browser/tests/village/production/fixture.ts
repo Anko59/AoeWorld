@@ -64,6 +64,8 @@ export function playerState(
     0,
     0, // Actual deliveries in the current player schema.
     ...Array<number>(35).fill(0), // Current authoritative census.
+    0, // Held tiles.
+    0, // Held map share, in millionths.
   ];
 }
 

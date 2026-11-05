@@ -238,6 +238,7 @@ impl GameplayService {
                 resident_animals: Vec::new(),
                 resident_projectiles: Vec::new(),
                 resident_move_queues: Vec::new(),
+                resident_land: None,
                 vision_revision: None,
                 resource_vision_revision: None,
                 resident_resources: Vec::new(),
@@ -257,4 +258,8 @@ impl GameplayService {
         };
         Ok((session_id, welcome))
     }
+}
+
+pub(super) fn total_pending(sessions: &BTreeMap<u64, Session>) -> usize {
+    sessions.values().map(|session| session.pending.len()).sum()
 }

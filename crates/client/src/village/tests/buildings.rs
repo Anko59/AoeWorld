@@ -75,6 +75,8 @@ fn rich_player(researched: u64) -> aoe_protocol::GameplayPlayerState {
         population_cap: 100,
         recent_deliveries: [0; 4],
         unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
+        held_tiles: 0,
+        held_share_ppm: 0,
         market_prices: Default::default(),
     }
 }

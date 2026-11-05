@@ -223,3 +223,18 @@ fn phase_series_retains_raw_samples_and_explicit_percentiles() {
     assert_eq!(value["p50_ns"], 5);
     assert_eq!(value["p95_ns"], 10);
 }
+
+#[tokio::test]
+async fn gameplay_network_counts_two_ticks_with_separate_boundary_frames() {
+    let result = gameplay_network(Scenario {
+        players: 2,
+        entities: 8,
+        hotspot_entities: 0,
+        ..SMOKE
+    })
+    .await
+    .unwrap();
+    assert_eq!(result.snapshots, 2);
+    assert_eq!(result.deltas, 4);
+    assert!(result.bytes > 0);
+}

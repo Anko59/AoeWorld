@@ -136,6 +136,17 @@ fn whole<S: Sink>(sink: &mut S, message: &'static str, rule: &'static str, class
 /// Walks every wire invariant a server message can break, reporting each to `sink`.
 fn walk<S: Sink>(message: &ServerMessage, sink: &mut S) {
     match message {
+        ServerMessage::Holdings {
+            revision, shapes, ..
+        } => {
+            if *revision == 0
+                || shapes.len() > MAX_HOLDING_SPANS
+                || shapes.iter().any(|s| s.x0 < 0 || s.y < 0 || s.x1 <= s.x0)
+            {
+                whole(sink, "Holdings", "holdings_in_range", Class::Economy);
+            }
+        }
+
         ServerMessage::MoveQueues {
             revision, queues, ..
         } => {

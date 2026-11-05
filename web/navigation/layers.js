@@ -12,7 +12,7 @@ export function initLayers(changed) {
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = `${names[i]} F${i + 1}`;
-    button.title = key === 'ownership' ? 'Building plots and active Town Center work domains; political territory unavailable'
+    button.title = key === 'ownership' ? 'Held boundaries on explored land, building plots and active Town Center work domains'
       : key === 'roads' ? 'Known roads and bridges'
       : key === 'threats' ? 'Last seen enemies, up to two minutes old; never live positions under fog'
       : `Toggle ${names[i].toLowerCase()}`;

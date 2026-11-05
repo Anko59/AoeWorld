@@ -1,6 +1,7 @@
+use super::slots::total_pending;
 use super::{
     GameplayService, MAX_ACK_HISTORY, MAX_PENDING_COMMANDS_GLOBAL,
-    MAX_PENDING_COMMANDS_PER_CONNECTION, PendingAction, PendingCommand, total_pending,
+    MAX_PENDING_COMMANDS_PER_CONNECTION, PendingAction, PendingCommand,
 };
 use aoe_core::{EntityId, WorldPosition};
 use aoe_protocol::{CommandResult, GameplayServerMessage};
