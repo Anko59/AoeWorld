@@ -8,7 +8,11 @@ impl UnitKind {
         if self.is_naval() {
             256
         } else {
-            self.collision_radius()
+            // Routes treat a one-tile gap as open for every land unit. A body
+            // of a full tile would then wedge at each one, so the widest siege
+            // fits terrain as a ram does; bodies still separate at full radius.
+            let radius = self.collision_radius();
+            if radius > 461 { 461 } else { radius }
         }
     }
     /// Equal collision axes in the complete classic DAT table, rounded up to

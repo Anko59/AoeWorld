@@ -7,6 +7,8 @@ use std::time::Instant;
 const ARRIVED_TILES: i64 = 65;
 /// Sixty seconds at 20 Hz with no tile of progress is "permanently stuck".
 pub(super) const STUCK_TICKS: u32 = 1_200;
+/// Nobody has gained a tile for this long: the march is over.
+const STOP_TICKS: u32 = 4_800;
 
 #[derive(Debug, Default)]
 pub(super) struct Row {
@@ -138,7 +140,6 @@ pub(super) fn run_scene(cell: Cell, mut scene: Scene, refused: bool, wall_second
         costs.push(start.elapsed().as_micros() as u64);
         row.orders += w.general_work().orders as u64;
         let mut pending = 0;
-        let mut progressing = false;
         for (i, id) in scene.soldiers.iter().enumerate() {
             let Some(u) = w.unit(*id) else { continue };
             let t = u.position.tile_floor();
@@ -168,14 +169,14 @@ pub(super) fn run_scene(cell: Cell, mut scene: Scene, refused: bool, wall_second
             } else if !done {
                 arrived_at[i] = None;
                 pending += 1;
-                progressing |= tick - moved_at[i] < STUCK_TICKS;
             }
         }
         row.ticks = tick;
         if pending == 0 {
             break;
         }
-        if !progressing && tick % 20 == 0 {
+        // Recovery may retry for several minutes before it gives up.
+        if tick - moved_at.iter().copied().max().unwrap_or(0) >= STOP_TICKS {
             break;
         }
         if tick % 256 == 0 && started.elapsed().as_secs() >= wall_seconds {
@@ -260,14 +261,21 @@ fn diagnose(
             ticks - moved_at[i] >= STUCK_TICKS,
         );
         *bins.entry(key).or_default() += 1;
-        if samples.len() < 1600 {
+        if samples.len() < 4000 {
             let _ = writeln!(
                 samples,
-                "  {:?} {:?} tile=({},{}) still={} slot={:?} anchor={:?} error={:?} {}",
+                "  {:?} {:?} at=({},{}) order={:?} route={:?} obstruction={:?} still={} slot={:?} anchor={:?} error={:?} {}",
                 u.id,
                 u.task,
-                t.x,
-                t.y,
+                u.position.x,
+                u.position.y,
+                w.units[w.lookup[id]].order,
+                w.units[w.lookup[id]]
+                    .route
+                    .iter()
+                    .take(4)
+                    .collect::<Vec<_>>(),
+                w.units[w.lookup[id]].obstruction,
                 ticks - moved_at[i],
                 w.formation_destination_slot(*id).map(|p| p.tile_floor()),
                 w.formation_anchor(*id).map(|p| p.tile_floor()),
@@ -275,7 +283,7 @@ fn diagnose(
                 if w.formation(*id).is_some() {
                     w.group_density_probe(*id)
                         .chars()
-                        .take(160)
+                        .take(320)
                         .collect::<String>()
                 } else {
                     String::new()

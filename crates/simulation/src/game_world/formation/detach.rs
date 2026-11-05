@@ -22,18 +22,19 @@ impl GameWorld {
         }
     }
 
-    /// The group a member marches with in single file, when it does: its
-    /// files squeeze past each other at the friendly hard distance, so a knot
-    /// at the mouth of a one-lane passage cannot lock the whole column.
+    /// The group a blocked member keeps moving with on a deck or in a one-lane
+    /// passage: friendly bodies pass there at the friendly hard distance, so a
+    /// knot of them at the mouth or on the lane cannot lock it. This holds for
+    /// any member still on its way: the anchor may be long gone, the lane's
+    /// rear detached, and the knot made of several groups of the same army.
     pub(crate) fn single_file_group(&self, index: usize) -> Option<EntityId> {
         let unit = &self.units[index];
         let leader = unit.formation?;
         let group = self.formations.get(&leader)?;
-        (group.packing_files == 1
-            && group.members.len() > 1
+        (group.members.len() > 1
             && group
                 .member_index(unit.state.id)
-                .is_some_and(|at| !group.members[at].detached && !group.members[at].arrived))
+                .is_some_and(|at| !group.members[at].arrived))
         .then_some(leader)
     }
 

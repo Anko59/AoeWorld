@@ -87,6 +87,10 @@ cells! {
     forest_mixed_400_g: Forest General 400 true;
     pass_mixed_100_g: Pass General 100 true;
     pass_mixed_400_g: Pass General 400 true;
+    pass_mangonel_20: Pass Mangonel 20 false;
+    pass_mangonel_20_g: Pass Mangonel 20 true;
+    river_mangonel_20: River Mangonel 20 false;
+    forest_mangonel_20: Forest Mangonel 20 false;
     bank_cavalry_100: Bank Paladin 100 false;
     bank_cavalry_100_g: Bank Paladin 100 true;
     bank_mixed_100_g: Bank General 100 true;
