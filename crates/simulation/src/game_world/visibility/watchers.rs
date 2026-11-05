@@ -5,7 +5,7 @@
 use super::{PlayerVision, TileVisibility, Vision};
 use crate::GameWorld;
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The players currently seeing a live building. The owner is always one of
 /// them, so owned destruction is known immediately.
@@ -29,7 +29,7 @@ pub(super) enum Watch {
 
 /// Read-only building lookups used while the players are processed.
 pub(super) struct WatchIndex<'a> {
-    pub(super) building_at_tile: &'a HashMap<TileCoord, EntityId>,
+    pub(super) building_at_tile: &'a super::TileBuildings,
     pub(super) watched: &'a BTreeMap<EntityId, Watched>,
 }
 
