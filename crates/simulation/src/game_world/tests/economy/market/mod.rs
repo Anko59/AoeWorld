@@ -214,3 +214,60 @@ fn only_trading_moves_prices() {
     assert_eq!(prices(&world).stone, 103);
     assert_eq!((before.stone, before.food, before.wood), (100, 100, 100));
 }
+
+#[test]
+fn a_bulk_sale_is_exactly_the_same_lots_one_after_another() {
+    let (mut single, _, _) = village();
+    let (mut bulk, _, _) = village();
+    let a = market(&mut single, 100);
+    let b = market(&mut bulk, 100);
+    set_stock(&mut single, 90_000, 0, 0, 0);
+    set_stock(&mut bulk, 90_000, 0, 0, 0);
+    for _ in 0..900 {
+        single
+            .issue_market_sell(PlayerId(0), a, ResourceKind::Food)
+            .unwrap();
+    }
+    assert_eq!(
+        bulk.issue_market_trade(PlayerId(0), b, ResourceKind::Food, false, 900),
+        Ok(900)
+    );
+    assert_eq!(stock(&single), stock(&bulk));
+    assert_eq!(prices(&single), prices(&bulk));
+    // 900 lots walk the price to its 20-gold floor, so most lots pay 14.
+    assert_eq!(prices(&bulk).food, MARKET_RULES.min_price);
+}
+
+#[test]
+fn a_bulk_order_stops_where_the_stockpile_ends_and_keeps_what_it_did() {
+    let (mut world, _, _) = village();
+    let id = market(&mut world, 100);
+    set_stock(&mut world, 0, 250, 0, 0);
+    // Only two whole lots exist: the order sells those and reports two.
+    assert_eq!(
+        world.issue_market_trade(PlayerId(0), id, ResourceKind::Wood, false, 20_000),
+        Ok(2)
+    );
+    assert_eq!(stock(&world).1, 50);
+    assert_eq!(prices(&world).wood, 94);
+    // No whole lot left: nothing changes and the order is refused.
+    assert_eq!(
+        world.issue_market_trade(PlayerId(0), id, ResourceKind::Wood, false, 5),
+        Err(EconomyError::InsufficientResources)
+    );
+}
+
+#[test]
+fn a_bulk_purchase_spends_gold_lot_by_lot_at_rising_prices() {
+    let (mut world, _, _) = village();
+    let id = market(&mut world, 100);
+    set_stock(&mut world, 0, 0, 266, 0);
+    // 130 + 133 = 263 gold buys two lots; a third at 136 does not fit.
+    assert_eq!(
+        world.issue_market_trade(PlayerId(0), id, ResourceKind::Stone, true, 10),
+        Ok(2)
+    );
+    let (_, _, gold, stone) = stock(&world);
+    assert_eq!((gold, stone), (3, 200));
+    assert_eq!(prices(&world).stone, 106);
+}

@@ -240,22 +240,20 @@ pub(in crate::gameplay) fn apply(
         PendingAction::CancelResearch { building_id } => {
             world.issue_cancel_research(player, building_id)
         }
-        PendingAction::MarketBuy {
+        PendingAction::MarketTrade {
             building_id,
             resource,
-        } => world.issue_market_buy(
-            player,
-            building_id,
-            crate::gameplay::economy::native_trade(resource),
-        ),
-        PendingAction::MarketSell {
-            building_id,
-            resource,
-        } => world.issue_market_sell(
-            player,
-            building_id,
-            crate::gameplay::economy::native_trade(resource),
-        ),
+            buy,
+            lots,
+        } => world
+            .issue_market_trade(
+                player,
+                building_id,
+                crate::gameplay::economy::native_trade(resource),
+                buy,
+                lots,
+            )
+            .map(|_| ()),
     };
     use aoe_simulation::{EconomyError as E, GameWorldError as W};
     if result.is_ok()

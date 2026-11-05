@@ -176,6 +176,57 @@ impl GameWorld {
         state.market_prices.set(kind, MARKET_RULES.lower(price));
         Ok(())
     }
+    /// Up to `lots` consecutive 100-unit trades. This is exactly what pressing
+    /// the single-trade button `lots` times would do: every lot is priced at
+    /// the price the previous lot left (so a large order walks the price down
+    /// or up by `price_step` per lot until the clamp), and the order stops at
+    /// the first lot the stockpile cannot pay for. It returns how many lots
+    /// executed; none executed returns the reason the first lot failed.
+    pub fn issue_market_trade(
+        &mut self,
+        player: PlayerId,
+        market: EntityId,
+        kind: ResourceKind,
+        buy: bool,
+        lots: u32,
+    ) -> Result<u32, EconomyError> {
+        let market_kind = self.market_kind(player, market)?;
+        if market_kind != BuildingKind::Market {
+            return Err(EconomyError::NoMarket);
+        }
+        let Some(state) = self.economy.players.get_mut(&player) else {
+            return Err(EconomyError::NotOwner);
+        };
+        let mut price = state
+            .market_prices
+            .price(kind)
+            .ok_or(EconomyError::InvalidResource)?;
+        let mut done = 0;
+        while done < lots {
+            if buy {
+                let cost = MARKET_RULES.buy_cost(price);
+                if state.stockpile.gold < cost {
+                    break;
+                }
+                state.stockpile.gold -= cost;
+                state.stockpile.market_add(kind, MARKET_RULES.trade_amount);
+                price = MARKET_RULES.raise(price);
+            } else {
+                if !state.stockpile.market_take(kind, MARKET_RULES.trade_amount) {
+                    break;
+                }
+                let proceeds = MARKET_RULES.sell_proceeds(price);
+                state.stockpile.gold = state.stockpile.gold.saturating_add(proceeds);
+                price = MARKET_RULES.lower(price);
+            }
+            done += 1;
+        }
+        if done == 0 {
+            return Err(EconomyError::InsufficientResources);
+        }
+        state.market_prices.set(kind, price);
+        Ok(done)
+    }
     /// The completed building a trade names; ownership and completion first.
     fn market_kind(&self, player: PlayerId, id: EntityId) -> Result<BuildingKind, EconomyError> {
         let building = self

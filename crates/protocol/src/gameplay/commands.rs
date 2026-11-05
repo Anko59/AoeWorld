@@ -223,6 +223,17 @@ pub enum ClientMessage {
         vassal_id: EntityId,
         enabled: bool,
     },
+    /// Buy or sell up to `lots` consecutive lots of 100 units at a completed,
+    /// owned Market. It is exactly `lots` single trades in a row: each lot is
+    /// priced at the price the previous lot left, and the order stops (keeping
+    /// what it did) at the first lot the stockpile cannot pay for.
+    MarketTradeOrder {
+        sequence: u64,
+        building_id: EntityId,
+        resource: TradeResource,
+        buy: bool,
+        lots: u32,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -240,6 +251,11 @@ fn bounded_members<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<EntityId>, D::
 }
 
 pub(super) fn validate(message: &ClientMessage) -> Result<(), Error> {
+    if let ClientMessage::MarketTradeOrder { lots, .. } = message
+        && !(1..=MARKET_MAX_LOTS).contains(lots)
+    {
+        return Err(Error::InvalidEconomyState);
+    }
     if let ClientMessage::DeleteOrder { entity_ids, .. } = message
         && (entity_ids.is_empty()
             || entity_ids.len() > aoe_core::MAX_FORMATION_MEMBERS

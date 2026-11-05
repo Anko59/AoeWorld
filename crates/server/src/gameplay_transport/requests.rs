@@ -319,6 +319,17 @@ pub(super) async fn read_requests(
                     .queue_market_sell(session_id, sequence, building_id, resource)
                     .await
             }
+            Ok(GameplayClientMessage::MarketTradeOrder {
+                sequence,
+                building_id,
+                resource,
+                buy,
+                lots,
+            }) => {
+                service
+                    .queue_market_trade(session_id, sequence, building_id, resource, buy, lots)
+                    .await
+            }
             Ok(GameplayClientMessage::LoadOrder {
                 sequence,
                 unit_ids,

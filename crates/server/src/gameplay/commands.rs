@@ -435,11 +435,8 @@ impl GameplayService {
         building_id: EntityId,
         resource: aoe_protocol::TradeResource,
     ) {
-        let action = PendingAction::MarketBuy {
-            building_id,
-            resource,
-        };
-        self.queue_command(session_id, sequence, action).await;
+        self.queue_market_trade(session_id, sequence, building_id, resource, true, 1)
+            .await;
     }
     pub async fn queue_market_sell(
         &self,
@@ -448,9 +445,23 @@ impl GameplayService {
         building_id: EntityId,
         resource: aoe_protocol::TradeResource,
     ) {
-        let action = PendingAction::MarketSell {
+        self.queue_market_trade(session_id, sequence, building_id, resource, false, 1)
+            .await;
+    }
+    pub async fn queue_market_trade(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        building_id: EntityId,
+        resource: aoe_protocol::TradeResource,
+        buy: bool,
+        lots: u32,
+    ) {
+        let action = PendingAction::MarketTrade {
             building_id,
             resource,
+            buy,
+            lots,
         };
         self.queue_command(session_id, sequence, action).await;
     }
