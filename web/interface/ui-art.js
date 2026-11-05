@@ -1,5 +1,6 @@
 import { castleUnits } from '/interface/castle.js';
 import { imperialUnits } from '/interface/imperial.js';
+import { frame, FRAME_SPECS } from '/interface/panel-frame.js';
 // The pack contains original pixels; this module contains only semantic IDs.
 const entities = { Scout:448, Villager:83, TownCenter:109, House:70, LumberCamp:562,
   MiningCamp:584, Mill:68, Farm:50, Barracks:12, PalisadeWall:72, Outpost:598,
@@ -16,26 +17,42 @@ const validArt = art => art && /^(?:buildings\/)?[\w-]+\.(png|svg)$/.test(art.pa
   && art.width>0 && art.height>0 && art.page_width<=2048 && art.page_height<=2048
   && art.x+art.width<=art.page_width && art.y+art.height<=art.page_height;
 const original = art => `<svg class="icon original-icon" aria-hidden="true" viewBox="0 0 ${art.width} ${art.height}"><image href="/asset-pack/${art.page}" x="${-art.x}" y="${-art.y}" width="${art.page_width}" height="${art.page_height}"/></svg>`;
-export function icon(group, id, symbol='villager', alt=-1) {
-  const art = catalog?.[group]?.[id] ?? catalog?.[group]?.[alt];
-  return `<span class="art-icon" data-ui-group="${group}" data-ui-id="${id}" data-ui-alt="${alt}">${validArt(art)?original(art):fallback(symbol)}</span>`;
+// Imported unit portraits leave their player-colour regions transparent, so the
+// owner's colour behind the icon (--tint) fills exactly those regions. The scene
+// renderer (aoe_rendering::player_colour) resolves each unit's colour, including
+// the chosen-colour swap, and sends it packed as 0xRRGGBB; this only formats it.
+const tintPattern = /^(?:#[0-9a-f]{3,8}|rgb\(\d{1,3}, ?\d{1,3}, ?\d{1,3}\))$/i;
+export function playerTint(player, owned, packed) {
+  if (player < 0) return '';
+  if (owned || player === undefined) {
+    const own = document.documentElement.style.getPropertyValue('--player-colour').trim();
+    if (tintPattern.test(own)) return own;
+  }
+  if (Number.isInteger(packed) && packed > 0) return `rgb(${packed>>16&255},${packed>>8&255},${packed&255})`;
+  return '';
 }
-export function entityIcon(kind) {
+export function icon(group, id, symbol='villager', alt=-1, tint='') {
+  const art = catalog?.[group]?.[id] ?? catalog?.[group]?.[alt];
+  const style = tintPattern.test(tint) ? ` style="--tint:${tint}"` : '';
+  return `<span class="art-icon" data-ui-group="${group}" data-ui-id="${id}" data-ui-alt="${alt}"${style}>${validArt(art)?original(art):fallback(symbol)}</span>`;
+}
+export function entityIcon(kind, tint) {
   if (kind==='Bridge') return icon('commands','build','towncenter');
   const symbol = ['Scout','Knight','LightCavalry','General','Cavalier','Paladin','Hussar'].includes(kind)?'scout':['Villager','Vassal','Steward'].includes(kind)?'villager':['FishingShip','Galley','FireShip','DemolitionShip','TransportShip','WarGalley'].includes(kind)?'ship':
     ['Militia','ManAtArms','Archer','Skirmisher','Spearman',...castleUnits,...imperialUnits].includes(kind)?'soldier':
     ['Sheep','Deer','Boar','Wolf'].includes(kind)?'animal':'towncenter';
-  return icon('units', entities[kind] ?? -1, symbol);
+  return icon('units', entities[kind] ?? -1, symbol, -1, trainingKinds.includes(kind) ? (tint ?? playerTint()) : '');
 }
 // Officers use imported hero portraits only; absent art is never substituted.
 export function squadIcon(kind) {
   const id = [432,200,198,170][kind], art = catalog?.units?.[id];
   return `<span class="art-icon" data-ui-group="units" data-ui-id="${id}" data-native-only="true">${validArt(art)?original(art):''}</span>`;
 }
-export function setEntityIcon(node, kind) {
-  if (node.dataset.entityIcon===kind) return;
-  node.dataset.entityIcon=kind;
-  node.innerHTML=entityIcon(kind);
+export function setEntityIcon(node, kind, tint) {
+  const key = `${kind}|${tint ?? ''}`;
+  if (node.dataset.entityIcon===key) return;
+  node.dataset.entityIcon=key;
+  node.innerHTML=entityIcon(kind, tint);
 }
 function hydrate() {
   for (const node of document.querySelectorAll('.art-icon')) {
@@ -115,14 +132,22 @@ export function initArt() {
       document.documentElement.style.setProperty(`--cursor-${role}`,`url('${canvas.toDataURL()}') 0 0`);
     }
     const style=document.documentElement.dataset.interfaceStyle ?? 'western';
-    const roles=[['commands','commands'],['selection','selection'],['minimap','minimap'],['top-bar','top']];
-    for (const [id,role] of roles) {
-      const art=catalog.panels?.[`${style}-${role}`];
-      if (!validArt(art)) continue;
-      const crop=background(art), node=document.getElementById(id);
+    const topArt=catalog.panels?.[`${style}-top`];
+    if (validArt(topArt)) {
+      const crop=background(topArt), node=document.getElementById('top-bar');
       node.style.backgroundImage=crop.image; node.style.backgroundSize=crop.size;
       node.style.backgroundPosition=crop.position;
     }
+    // The three bottom panels are drawn at their native size; the frame
+    // module cuts each to its opaque bounds so no art is smaller than its box.
+    const frames=await Promise.all(Object.entries(FRAME_SPECS).map(([role,spec]) => {
+      const art=catalog.panels?.[`${style}-${role}`];
+      return validArt(art)?frame(document.querySelector(spec.selector),art,spec).catch(()=>null):null;
+    }));
+    const native=frames.every(Boolean);
+    document.getElementById('bottom-panel').dataset.frame=native?'native':'none';
+    // The native minimap frame is a 2:1 rhombus, the isometric projection itself.
+    if (native && !document.getElementById('minimap').classList.contains('expanded')) document.getElementById('minimap-map').setAttribute('preserveAspectRatio','none');
     const portrait=catalog.panels?.portrait;
     if (validArt(portrait)) {
       const crop=background(portrait), node=document.getElementById('selection-portrait');
@@ -134,6 +159,6 @@ export function initArt() {
       style.setProperty('--ui-button-image',crop.image); style.setProperty('--ui-button-size',crop.size);
       style.setProperty('--ui-button-position',crop.position);
     }
-    document.documentElement.dataset.interfaceArt=roles.every(([,role])=>validArt(catalog.panels?.[`${style}-${role}`]))?'original':'icons';
+    document.documentElement.dataset.interfaceArt=native&&validArt(topArt)?'original':'icons';
   }).catch(()=>{ /* A missing local pack retains the complete SVG interface. */ });
 }

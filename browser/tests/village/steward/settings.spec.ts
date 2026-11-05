@@ -22,7 +22,11 @@ async function panel(page: Page) {
   });
   const source = await readFile("../web/interface/steward/panel.js", "utf8");
   await page.addScriptTag({
-    content: source.replace("export function", "function") + "\ninitSteward();",
+    // The panel is a module; this page has no origin to import its slider fill from.
+    content:
+      source
+        .replace(/^import .*$/m, "const fillRange = () => {};")
+        .replace("export function", "function") + "\ninitSteward();",
   });
   await page.evaluate(() => {
     const api = window.aoeSteward;

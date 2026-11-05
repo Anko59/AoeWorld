@@ -16,6 +16,12 @@ fn flag(value: bool) -> f64 {
     f64::from(u8::from(value))
 }
 
+/// The colour the scene renders this player with, packed as 0xRRGGBB.
+fn rendered_colour(client: &Client, player: aoe_core::PlayerId, owner: aoe_core::PlayerId) -> f64 {
+    let [r, g, b] = aoe_rendering::player_colour(player, owner, client.team_colour).map(u32::from);
+    f64::from(r << 16 | g << 8 | b)
+}
+
 fn screen(client: &Client, position: [f64; 2]) -> [f64; 2] {
     let p = map::screen_position(client, position);
     [
@@ -177,6 +183,7 @@ pub(in super::super) fn update(client: &Client) {
             f64::from(stats.range),
             f64::from(unit.player.0),
             flag(unit.player == owner),
+            rendered_colour(client, unit.player, owner),
         ]);
     }
     for building in &client.village.buildings {
@@ -209,6 +216,7 @@ pub(in super::super) fn update(client: &Client) {
             0.0,
             f64::from(building.player.0),
             flag(building.player == owner),
+            rendered_colour(client, building.player, owner),
         ]);
     }
     for animal in &client.village.animals {
@@ -250,6 +258,9 @@ pub(in super::super) fn update(client: &Client) {
             0.0,
             animal.owner.map_or(-1.0, |p| f64::from(p.0)),
             flag(animal.owner == Some(owner) && animal.hp > 0),
+            animal
+                .owner
+                .map_or(0.0, |p| rendered_colour(client, p, owner)),
         ]);
     }
     if let Some(building) = client

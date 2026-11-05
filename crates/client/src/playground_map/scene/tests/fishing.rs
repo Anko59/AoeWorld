@@ -41,7 +41,7 @@ async fn seeding_and_animal_tasks_have_distinct_numeric_hud_tags() {
         .map(|v| v.as_f64().unwrap())
         .collect();
     let tasks: Vec<_> = values[17..]
-        .chunks_exact(18)
+        .chunks_exact(19)
         .take(3)
         .map(|record| (record[0] as u32, record[5] as u8))
         .collect();

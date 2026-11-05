@@ -162,7 +162,7 @@ dialog>button { width:100%; display:block; margin:9px 0; padding:10px; }
 #building-panel { font-size:12px; }
 #building-panel progress { width:100%; height:8px; }
 
-#construction-labels { position:fixed; inset:54px 0 208px; pointer-events:none; overflow:hidden; z-index:2; }
+#construction-labels { position:fixed; inset:54px 0 var(--bottom); pointer-events:none; overflow:hidden; z-index:2; }
 #construction-labels span { position:fixed; transform:translate(-50%,-100%); width:70px; color:#fff0c1; text-shadow:0 1px 3px #000; text-align:center; font-size:11px; }
 #construction-labels progress { display:block; width:70px; height:6px; accent-color:#d5b569; }
 
@@ -196,12 +196,7 @@ dialog>button { width:100%; display:block; margin:9px 0; padding:10px; }
 #research-progress { width:65px; }
 
 /* Native AoK compartments, cropped from the imported 1024×768 HUD frame. */
-html[data-interface-art=original] #bottom-panel { padding:0; gap:0; border:0; background:#39392e; grid-template-columns:300px minmax(300px,1fr) 310px; box-shadow:none; }
-html[data-interface-art=original] #bottom-panel::before { display:none; }
-html[data-interface-art=original] #commands { padding:19px 18px 12px; border:0; }
-html[data-interface-art=original] #combat-stance-label { top:15px; right:18px; }
 html[data-interface-art=original] #commands h2 { height:13px; margin:0 0 7px; letter-spacing:.06em; color:#eee0af; text-shadow:0 1px 2px #000; }
-html[data-interface-art=original] #command-grid { width:236px; margin:auto; grid-template-columns:repeat(5,44px); grid-template-rows:repeat(3,42px); gap:3px 4px; }
 html[data-interface-art=original] #command-grid button, html[data-interface-art=original] #command-grid .empty-command { background-image:var(--ui-button-image); background-size:var(--ui-button-size); background-position:var(--ui-button-position); border:1px solid #161711; border-radius:0; box-shadow:inset 1px 1px #d7d2b080,inset -1px -1px #000a; padding:2px; }
 html[data-interface-art=original] #command-grid button { display:flex; align-items:center; justify-content:center; }
 html[data-interface-art=original] #command-grid button:disabled { opacity:.48; }
@@ -213,7 +208,6 @@ html[data-interface-art=original] #command-grid .train-icon>.art-icon { width:10
 html[data-interface-art=original] #command-grid .command-label, html[data-interface-art=original] #command-grid button>small, html[data-interface-art=original] #command-grid button>.training-unit, html[data-interface-art=original] #command-grid button>.cost, html[data-interface-art=original] #command-grid button>span:not([class]) { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
 html[data-interface-art=original] #command-grid kbd { z-index:1; right:3px; top:0; font-size:9px; color:#fff2b1; text-shadow:1px 1px #000,-1px -1px #000; }
 html[data-interface-art=original] #command-hint { white-space:normal; line-height:1.15; margin:6px 2px 0; font-size:9px; text-shadow:0 1px #000; }
-html[data-interface-art=original] #selection { padding:20px 22px 10px; color:#302418; }
 html[data-interface-art=original] #selection-heading { gap:12px; align-items:flex-start; }
 html[data-interface-art=original] #selection-portrait { width:58px; height:58px; border:0; background-color:#15150f; box-shadow:none; }
 html[data-interface-art=original] #selection-portrait>.art-icon { width:46px; height:46px; }
@@ -234,22 +228,10 @@ html[data-interface-art=original] .queue-heading { font-size:10px; margin-bottom
 html[data-interface-art=original] #building-panel { font-size:10px; gap:3px 8px; margin-top:3px; }
 html[data-interface-art=original] #building-panel button, html[data-interface-art=original] #cancel-training { font-size:9px; padding:1px 5px; }
 html[data-interface-art=original] #research-icon .art-icon { width:24px; height:24px; }
-html[data-interface-art=original] #minimap { border:0; padding:19px 18px 9px; }
-html[data-interface-art=original] #minimap-map { height:143px; }
-html[data-interface-art=original] #minimap-title { position:absolute; left:22px; top:10px; font-size:8px; }
-html[data-interface-art=original] #map-navigation { gap:3px; margin-top:8px; }
 html[data-interface-art=original] #selection-empty { padding:0; color:#685532; }
 html[data-interface-art=original] #selection-empty h2 { color:#4c3a24; }
 html[data-interface-art=original] .crest { display:none; }
 html[data-interface-art=original] #top-bar { border-bottom:2px solid #8b8062; }
-@media(max-width:1000px) {
-  html[data-interface-art=original] #bottom-panel { grid-template-columns:270px minmax(240px,1fr) 230px; }
-  html[data-interface-art=original] #commands { padding-left:12px; padding-right:12px; }
-  html[data-interface-art=original] #selection { padding-left:15px; padding-right:15px; }
-  html[data-interface-art=original] #selection-portrait { width:48px; height:48px; }
-  html[data-interface-art=original] #selection-portrait>.art-icon { width:38px; height:38px; }
-  html[data-interface-art=original] #selection h1 { font-size:15px; }
-}
 
 html[data-interface-art=original] #command-grid.building-menu-open .empty-command { display:block; }
 html[data-interface-art=original] #command-grid .trade-side { position:absolute; right:3px; bottom:0; width:auto; height:auto; clip-path:none; color:#fff0a0; font-size:15px; text-shadow:1px 1px #000; }
@@ -304,7 +286,7 @@ html[data-lod="map"] #steward-domain, html[data-lod="markers"] #steward-domain {
 #general-squads li>span:last-child { flex:1; }
 #general-squads b { float:right; font-variant-numeric:tabular-nums; }
 #general-squads small { display:block; color:#c5c5ad; }
-#general-panel { position:fixed; left:336px; bottom:calc(var(--bottom) + 8px); width:260px; padding:6px 8px 8px; z-index:4; color:var(--ink); font-size:11px; background:linear-gradient(135deg,#454b3b,#242a22); border:1px solid #807658; box-shadow:inset 0 0 0 2px #1117,0 2px 8px #0008; }
+#general-panel { padding:6px 8px 8px; color:var(--ink); font-size:11px; background:linear-gradient(135deg,#454b3b,#242a22); border:1px solid #807658; box-shadow:inset 0 0 0 2px #1117,0 2px 8px #0008; }
 #general-modes { display:flex; gap:4px; margin-bottom:6px; }
 #general-modes button { flex:1; padding:3px 0; color:var(--ink); background:#242a22; border:1px solid #807658; }
 #general-modes button[aria-selected=true] { background:#5c6544; border-color:#d9bd7d; color:#f5e1a5; }
@@ -326,14 +308,13 @@ html[data-lod="map"] #steward-domain, html[data-lod="markers"] #steward-domain {
 #steward-controls label { display:flex; align-items:center; gap:6px; }
 #steward-controls input[type=range] { flex:1; min-width:60px; width:90px; }
 #steward-controls output { width:24px; text-align:right; }
-#selection-content:has(#steward-controls:not([hidden])) { display:grid; grid-template-columns:minmax(0,1fr) minmax(150px,230px); column-gap:12px; align-items:start; }
-#selection-content:has(#steward-controls:not([hidden])) > :not(#steward-controls) { grid-column:1; }
-#selection-content #steward-controls { grid-column:2; grid-row:1 / span 12; margin-top:0; }
+#selection-content:has(:is(#steward-controls,#general-panel,#vassal-panel):not([hidden])) { display:grid; grid-template-columns:minmax(0,1fr) minmax(150px,230px); column-gap:12px; align-items:start; }
+#selection-content:has(:is(#steward-controls,#general-panel,#vassal-panel):not([hidden])) > :not(#steward-controls,#general-panel,#vassal-panel) { grid-column:1; }
+#selection-content :is(#steward-controls,#general-panel,#vassal-panel) { grid-column:2; grid-row:1 / span 12; margin-top:0; }
 #steward-controls button { font-size:11px; padding:4px 6px; }
 
 html:has(#scene[data-order-mode=build]) #strategic-tokens button { pointer-events:none; }
-/* A selected Castle's defensive domain stays above the fixed command dock. */
-#vassal-panel { position:fixed; left:336px; bottom:calc(var(--bottom) + 8px); width:420px; max-width:calc(100vw - 360px); padding:8px 10px; z-index:4; color:var(--ink); font-size:11px; line-height:1.4; background:linear-gradient(135deg,#454b3b,#242a22); border:1px solid #807658; box-shadow:inset 0 0 0 2px #1117,0 2px 8px #0008; }
+/* A selected Castle's defensive domain is part of the selection panel. */
+#vassal-panel { padding:6px 10px; color:var(--ink); font-size:11px; line-height:1.4; background:linear-gradient(135deg,#454b3b,#242a22); border:1px solid #807658; box-shadow:inset 0 0 0 2px #1117,0 2px 8px #0008; }
 #vassal-status { margin:0 0 6px; }
 #vassal-panel[data-alert="true"] { border-color:#ed8566; }
-html[data-lod="map"] #vassal-panel, html[data-lod="markers"] #vassal-panel { left:12px; }
