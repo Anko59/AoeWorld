@@ -34,7 +34,10 @@ impl GameWorld {
             let work_before = planner.work();
             let kind = self.units[index].state.kind;
             let certified_before = planner.certified_destination();
+            let probe = self.planning_probe.clone();
+            let span = probe.as_ref().and_then(|p| p.movement_span("plan_ahead"));
             self.plan_world_route_ahead(&mut planner, share, &|| false, kind);
+            drop(span);
             if certified_before.is_none() && planner.certified_destination().is_some() {
                 self.route_metrics
                     .sample("certified-nearest", kind, &planner);

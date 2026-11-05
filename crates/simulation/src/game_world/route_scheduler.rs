@@ -21,7 +21,7 @@ pub use accounting::RouteSchedulerStats;
 #[cfg(test)]
 pub(crate) use deadline::NEAR_ROUTE_ANSWER_TICKS;
 pub(crate) use metrics::{GroupWork, PlanningMeasurement};
-pub use metrics::{PlanningProbe, RouteMetrics};
+pub use metrics::{PLANNING_SPANS, PlanningProbe, RouteMetrics};
 
 /// Retained search frontiers one player may hold at once.
 pub(crate) const MAX_ROUTE_SEARCHES_PER_PLAYER: usize = 2;
@@ -117,6 +117,8 @@ impl GameWorld {
     /// moves this tick: a route found here is walked in the same tick.
     /// Returns the budget left over.
     pub(crate) fn serve_route_searches(&mut self, budget: u32, changed: &mut Vec<EntityId>) -> u32 {
+        let probe = self.planning_probe.clone();
+        let _span = probe.as_ref().and_then(|p| p.movement_span("plan_serve"));
         // Allocate between players before prioritizing a player's near work:
         // sustained near demand must never consume another player's far share.
         let mut waiting = BTreeMap::<PlayerId, Vec<EntityId>>::new();
@@ -294,7 +296,10 @@ impl GameWorld {
             self.units[index].fast_route_tried = full;
             (result, 0)
         } else {
+            let probe = self.planning_probe.clone();
+            let span = probe.as_ref().and_then(|p| p.movement_span("plan_fair"));
             let result = self.poll_world_route_planner(&mut planner, allowance, &|| false, kind);
+            drop(span);
             let spent = planner.work().saturating_sub(work_before);
             if work_before == 0 && spent > 0 {
                 self.route_metrics.searches_started += 1;

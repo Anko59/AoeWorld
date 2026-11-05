@@ -130,6 +130,9 @@ impl RoutePlanner {
         budget: u32,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<(), Terminal> {
+        let _span = terrain
+            .route_generator()
+            .and_then(|generator| generator.measure_navigation(crate::NavigationPhase::Search));
         let memo = super::memo::MemoTerrain::new(terrain);
         self.search_leg_with(&memo, overlay, budget, cancelled)
     }

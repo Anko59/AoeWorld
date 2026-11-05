@@ -59,7 +59,10 @@ impl GameWorld {
             return (RoutePlannerPoll::Pending, false);
         }
         let before = planner.work();
+        let probe = self.planning_probe.clone();
+        let span = probe.as_ref().and_then(|p| p.movement_span("plan_fast"));
         let result = self.poll_world_route_planner(planner, allowance, &|| false, kind);
+        drop(span);
         let spent = planner.work().saturating_sub(before);
         if before == 0 && spent > 0 {
             self.route_metrics.searches_started += 1;

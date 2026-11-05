@@ -18,6 +18,7 @@ fn smoke_options(out: PathBuf) -> Options {
         idle_world: false,
         skip_attacks: false,
         profile_movement: true,
+        profile_planning: false,
         out,
     }
 }

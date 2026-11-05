@@ -6,7 +6,7 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 
-const NAMES: [&str; 30] = [
+const NAMES: [&str; 35] = [
     "sessions",
     "world_lock",
     "orders",
@@ -37,11 +37,22 @@ const NAMES: [&str; 30] = [
     "route_cache",
     "terrain_point",
     "prefetch",
+    "search",
+    "plan_serve",
+    "plan_fast",
+    "plan_fair",
+    "plan_ahead",
 ];
 type Counters = Arc<[AtomicU64; NAMES.len()]>;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(super) struct Phases(Counters);
+
+impl Default for Phases {
+    fn default() -> Self {
+        Self(Arc::new(std::array::from_fn(|_| AtomicU64::new(0))))
+    }
+}
 
 impl Phases {
     pub(super) fn record(&self, name: &'static str, elapsed: Duration) {
@@ -63,8 +74,13 @@ impl Phases {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub(super) struct Micros([u64; NAMES.len()]);
+impl Default for Micros {
+    fn default() -> Self {
+        Self([0; NAMES.len()])
+    }
+}
 impl Micros {
     pub(super) fn values(&self) -> impl Iterator<Item = (&'static str, u64)> + '_ {
         NAMES.iter().copied().zip(self.0)

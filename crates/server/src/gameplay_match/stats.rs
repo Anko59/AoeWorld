@@ -59,6 +59,11 @@ impl aoe_map::NavigationProbe for TickProbe {
 }
 
 impl aoe_simulation::PlanningProbe for TickProbe {
+    fn movement_span(&self, name: &'static str) -> Option<Box<dyn aoe_map::NavigationSpan>> {
+        aoe_simulation::PLANNING_SPANS
+            .contains(&name)
+            .then(|| Box::new(self.phases.span(name)) as Box<dyn aoe_map::NavigationSpan>)
+    }
     fn cache_span(&self) -> Option<Box<dyn aoe_map::NavigationSpan>> {
         Some(Box::new(self.phases.span("route_cache")))
     }

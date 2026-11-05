@@ -155,6 +155,11 @@ pub trait PlanningProbe: std::fmt::Debug + Send + Sync {
     }
 }
 
+/// Names of the route-planning spans given to `PlanningProbe::movement_span`:
+/// the whole fair pass (with its bookkeeping), the fast attempts, the fair
+/// searches, and planning ahead. Each is inclusive of the planner's own phases.
+pub const PLANNING_SPANS: [&str; 4] = ["plan_serve", "plan_fast", "plan_fair", "plan_ahead"];
+
 pub(crate) struct PlanningMeasurement<'a>(pub(crate) &'a dyn PlanningProbe);
 impl Drop for PlanningMeasurement<'_> {
     fn drop(&mut self) {

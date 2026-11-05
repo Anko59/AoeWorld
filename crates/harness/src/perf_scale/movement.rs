@@ -7,7 +7,22 @@ use std::sync::{
 };
 use std::time::Instant;
 
-const NAMES: [&str; 7] = [
+const COUNT: usize = 7 + PLANNING.len();
+const PLANNING: [&str; 12] = [
+    "plan_serve",
+    "plan_fast",
+    "plan_fair",
+    "plan_ahead",
+    "search",
+    "hierarchy",
+    "components",
+    "pocket",
+    "portals",
+    "portal_costs",
+    "terrain",
+    "terrain_point",
+];
+const DETAIL: [&str; 7] = [
     "avoidance_query",
     "local_refinement",
     "sidestep",
@@ -16,15 +31,21 @@ const NAMES: [&str; 7] = [
     "group_propose",
     "group_apply",
 ];
+fn name_at(name: &str) -> Option<usize> {
+    DETAIL
+        .iter()
+        .chain(&PLANNING)
+        .position(|&candidate| candidate == name)
+}
 #[derive(Debug, Default)]
 pub(super) struct MovementProbe {
     coarse: bool,
-    nanos: Arc<[AtomicU64; 7]>,
-    calls: Arc<[AtomicU64; 7]>,
+    nanos: Arc<[AtomicU64; COUNT]>,
+    calls: Arc<[AtomicU64; COUNT]>,
 }
 struct Span {
-    nanos: Arc<[AtomicU64; 7]>,
-    calls: Arc<[AtomicU64; 7]>,
+    nanos: Arc<[AtomicU64; COUNT]>,
+    calls: Arc<[AtomicU64; COUNT]>,
     at: usize,
     start: Instant,
 }
@@ -39,19 +60,28 @@ impl PlanningProbe for MovementProbe {
     fn begin(&self) {}
     fn end(&self) {}
     fn movement_span(&self, name: &'static str) -> Option<Box<dyn aoe_map::NavigationSpan>> {
-        let at = NAMES.iter().position(|&n| n == name)?;
-        if (at >= 4) != self.coarse {
+        let at = name_at(name)?;
+        if at < 7 && (at >= 4) != self.coarse {
             return None;
         }
-        Some(Box::new(Span {
+        Some(self.span(at))
+    }
+}
+impl aoe_map::NavigationProbe for MovementProbe {
+    fn begin(&self, phase: aoe_map::NavigationPhase) -> Box<dyn aoe_map::NavigationSpan> {
+        // Every phase has a counter or shares the last; never panics on a new one.
+        self.span(name_at(phase.name()).unwrap_or(COUNT - 1))
+    }
+}
+impl MovementProbe {
+    fn span(&self, at: usize) -> Box<Span> {
+        Box::new(Span {
             nanos: self.nanos.clone(),
             calls: self.calls.clone(),
             at,
             start: Instant::now(),
-        }))
+        })
     }
-}
-impl MovementProbe {
     pub(super) fn coarse() -> Self {
         Self {
             coarse: true,
@@ -59,10 +89,11 @@ impl MovementProbe {
         }
     }
     pub(super) fn drain(&self) -> Value {
-        NAMES
+        DETAIL
             .iter()
+            .chain(&PLANNING)
             .enumerate()
-            .filter(|(at, _)| (*at >= 4) == self.coarse)
+            .filter(|(at, _)| *at >= 7 || (*at >= 4) == self.coarse)
             .map(|(at, &name)| {
                 (
                     name.to_owned(),
