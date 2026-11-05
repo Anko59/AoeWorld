@@ -38,6 +38,26 @@ impl GameWorld {
     }
 }
 
+impl GameWorld {
+    /// Footprints of the domain's planned fortification (every site but roads).
+    #[cfg(test)]
+    pub(crate) fn vassal_fortification(&mut self, id: EntityId) -> Vec<(BuildingKind, TileRect)> {
+        self.vassal_plan(id)
+            .into_iter()
+            .filter(|(kind, _, _)| *kind != BuildingKind::Road)
+            .map(|(kind, t, vertical)| {
+                let r = kind.rules();
+                let (w, h) = if vertical {
+                    (r.depth, r.side)
+                } else {
+                    (r.side, r.depth)
+                };
+                (kind, TileRect::from_xywh(t.x, t.y, w, h))
+            })
+            .collect()
+    }
+}
+
 fn footprint(kind: BuildingKind, t: TileCoord) -> TileRect {
     TileRect::from_xywh(t.x, t.y, kind.rules().side, kind.rules().depth)
 }

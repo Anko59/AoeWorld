@@ -81,8 +81,18 @@ fn vassal_caps_reserve_pause_and_completed_land_stops_spending() {
             .map(|b| (b.kind, b.footprint, b.work_done, b.work_total))
             .collect::<Vec<_>>(),
         w.units()
-            .filter(|u| u.kind == UnitKind::Villager)
-            .map(|u| (u.id, u.position.tile_floor(), u.task))
+            .filter(|u| {
+                let t = u.position.tile_floor();
+                (85..=88).contains(&t.x) && (96..=99).contains(&t.y)
+            })
+            .map(|u| (
+                u.id,
+                u.kind,
+                u.position,
+                u.task,
+                u.moving,
+                w.vassal_controller(u.id)
+            ))
             .collect::<Vec<_>>()
     );
     assert_eq!(w.vassal_status(v).unwrap().villagers, 0);
@@ -226,12 +236,18 @@ fn vassal_demo_finishes_before_attack_and_general_response() {
         .unwrap();
     let mut developed = false;
     let mut response = false;
-    for _ in 0..6_000 {
+    for t in 0..6_000 {
         w.advance();
         if let Some(s) = w.vassal_status(v) {
+            if s.developed && !developed {
+                eprintln!("demo developed at tick {t}");
+            }
             developed |= s.developed;
             if s.alert {
-                assert!(developed, "attack must follow completed fortification");
+                assert!(
+                    developed,
+                    "attack must follow completed fortification: tick {t} {s:?}"
+                );
             }
             response |= s.responding > 0;
         }
@@ -429,9 +445,11 @@ fn vassal_moves_past_a_paid_foundation_that_becomes_unreachable() {
         .find(|b| !b.is_complete())
         .unwrap()
         .id;
-    for y in 85..=87 {
-        for x in 85..=87 {
-            if x != 86 || y != 86 {
+    // Wall the tower foundation in, wherever the plan put it.
+    let f = w.building(foundation).unwrap().footprint.min;
+    for y in f.y - 1..=f.y + 1 {
+        for x in f.x - 1..=f.x + 1 {
+            if x != f.x || y != f.y {
                 w.insert_building(
                     PlayerId(0),
                     BuildingKind::PalisadeWall,

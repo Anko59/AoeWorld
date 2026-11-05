@@ -35,6 +35,38 @@ impl GameWorld {
         idle.drain(..idle.len().min(n)).collect()
     }
 
+    /// Idle domain soldiers crowding a foundation's edge kept its builders
+    /// from reaching it (a tower by the castle stalled at zero work behind
+    /// twenty militia): they walk to the muster point beside the castle.
+    fn clear_vassal_soldiers(&mut self, id: EntityId, footprint: TileRect) {
+        let Some(d) = self.economy.vassals.domains.get(&id) else {
+            return;
+        };
+        let muster = TileCoord::new(d.center.x, d.center.y + 4);
+        let near = TileRect::new(
+            TileCoord::new(footprint.min.x - 2, footprint.min.y - 2),
+            TileCoord::new(footprint.max.x + 2, footprint.max.y + 2),
+        );
+        let crowd: Vec<_> = d
+            .soldiers
+            .iter()
+            .copied()
+            .filter(|s| {
+                self.unit(*s).is_some_and(|u| {
+                    u.task == UnitTask::Idle && !u.moving && near.contains(u.position.tile_floor())
+                })
+            })
+            .collect();
+        if near.contains(muster) {
+            return;
+        }
+        for s in crowd {
+            if let Ok(to) = WorldPosition::from_tile_center(muster) {
+                let _ = self.issue_move(s, to);
+            }
+        }
+    }
+
     pub(super) fn vassal_develop(&mut self, id: EntityId) {
         if let Some(d) = self.economy.vassals.domains.get_mut(&id) {
             d.refused.retain(|_, until| *until > self.tick.0);
@@ -105,8 +137,12 @@ impl GameWorld {
                 continue;
             };
             staffed += 1;
-            let (building, done, target) =
-                (building.id, building.work_done, building.footprint.min);
+            let (building, done, target, footprint) = (
+                building.id,
+                building.work_done,
+                building.footprint.min,
+                building.footprint,
+            );
             if first {
                 first = false;
                 let tick = self.tick.0;
@@ -141,6 +177,7 @@ impl GameWorld {
                     domain.progress = Some((building, done, tick));
                 }
             }
+            self.clear_vassal_soldiers(id, footprint);
             let crew = self.nearest_idle(&mut idle, target, 3);
             if !crew.is_empty() {
                 let _ = self.issue_construct(player, &crew, building);
