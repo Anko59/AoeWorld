@@ -56,7 +56,7 @@ export function initGeneralPanel() {
       training = isTraining === 1;
       panel.dataset.state = states[state] ?? 'idle';
       for (const s of ['marching', 'fighting']) byId(`general-${s}`).setAttribute('aria-current', String(states[state] === s));
-      byId('general-army').textContent = `${army} soldiers · ${states[state] ?? 'idle'}`;
+      byId('general-army').textContent = `${army} soldiers`;
       const signature = `${id}:${values.slice(15).join(',')}`;
       if (signature !== roster) {
         roster = signature;

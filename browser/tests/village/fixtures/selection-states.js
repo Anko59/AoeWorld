@@ -80,6 +80,18 @@ H.measure = () => {
       if (r.bottom > b.bottom + 0.5 || r.right > b.right + 0.5 || r.top < b.top - 0.5 || r.left < b.left - 0.5) { out.clip.push(`${el.id ? '#'+el.id : el.tagName+'.'+el.className} clipped by #${a.id||a.className} (${Math.round(r.bottom-b.bottom)}px down, ${Math.round(r.right-b.right)}px right)`); break; }
     }
   }
+  // Text must stay inside the parchment (the content box), and never be cut off by ellipsis or overflow.
+  const box = $('#selection-content').getBoundingClientRect();
+  const walker = document.createTreeWalker($('#selection-content'), NodeFilter.SHOW_TEXT);
+  for (let n; (n = walker.nextNode());) {
+    if (!n.textContent.trim() || !n.parentElement || !vis(n.parentElement)) continue;
+    const range = document.createRange(); range.selectNodeContents(n);
+    for (const r of range.getClientRects()) if (r.width > 0 && (r.right > box.right + 0.5 || r.left < box.left - 0.5 || r.bottom > box.bottom + 3 || r.top < box.top - 3)) { out.clip.push(`text "${n.textContent.trim().slice(0, 30)}" leaves the parchment (${Math.round(r.right - box.right)}px right, ${Math.round(r.bottom - box.bottom)}px down)`); break; }
+  }
+  for (const el of $('#selection-content').querySelectorAll('*')) {
+    if (!vis(el) || getComputedStyle(el).overflow === 'visible' || el.id === 'selected-icons') continue;
+    if (el.scrollWidth > el.clientWidth + 2 && el.children.length === 0) out.clip.push(`#${el.id || el.className} text truncated (${el.scrollWidth} > ${el.clientWidth})`);
+  }
   out.clip = [...new Set(out.clip)].slice(0, 8);
   const ic = $('#selected-icons'); out.icons = ic && vis(ic) ? { layout: ic.dataset.layout, token: ic.style.getPropertyValue('--token'), tokens: ic.children.length, w: ic.clientWidth, h: ic.clientHeight, minTok: Math.min(...[...ic.children].map(c=>c.getBoundingClientRect().width)), rows: new Set([...ic.children].map(c=>Math.round(c.getBoundingClientRect().top))).size, first: (r => `${Math.round(r.width)}x${Math.round(r.height)}`)(ic.children[0]?.getBoundingClientRect() ?? {width:0,height:0}), html: ic.children[0]?.outerHTML.slice(0, 260) } : null;
   out.viewport = `${innerWidth}x${innerHeight}`; out.content = (() => { const r=$('#selection-content').getBoundingClientRect(); return `${Math.round(r.width)}x${Math.round(r.height)}`; })();

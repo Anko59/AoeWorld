@@ -22,7 +22,7 @@
 #bottom-panel[data-frame=native] #command-grid button>.art-icon,#bottom-panel[data-frame=native] #command-grid .train-icon { width:32px; height:32px; }
 #bottom-panel[data-frame=native] #command-hint { margin:3px 0 0; font-size:9px; line-height:12px; height:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-#bottom-panel[data-frame=native] #selection { margin-left:-5.5px; flex:1 1 0; min-width:var(--frame-min-width,0); height:var(--frame-height); padding:25px 50px 14px 22px; overflow:hidden; }
+#bottom-panel[data-frame=native] #selection { margin-left:-5.5px; flex:1 1 0; min-width:var(--frame-min-width,0); height:var(--frame-height); padding:25px 64px 14px 22px; overflow:hidden; }
 #bottom-panel[data-frame=native] #selection-content,#bottom-panel[data-frame=native] #selection-empty { max-height:100%; }
 /* The selection never scrolls: every state below is laid out to fit, and the spec fails on any overflow. */
 #bottom-panel[data-frame=native] #selection-content { height:100%; position:relative; overflow:hidden; }
@@ -51,7 +51,7 @@
 #bottom-panel[data-frame=native] #selection { color:#302418; }
 #bottom-panel[data-frame=native] #selection-content { display:block; }
 #bottom-panel[data-frame=native] #selection-content:has(:is(#steward-controls,#general-panel,#vassal-panel):not([hidden])) { display:grid; grid-template-columns:minmax(0,1fr) minmax(150px,230px); }
-#bottom-panel[data-frame=native] #selection-content:has(#general-panel:not([hidden])) { grid-template-columns:minmax(150px,230px) minmax(250px,520px); }
+#bottom-panel[data-frame=native] #selection-content:has(#general-panel:not([hidden])) { grid-template-columns:minmax(150px,max-content) minmax(250px,560px); }
 #bottom-panel[data-frame=native] #selection-content>:is(#general-panel,#vassal-panel,#steward-controls) { align-self:stretch; min-width:0; min-height:0; overflow:hidden; }
 #bottom-panel[data-frame=native] #selection-content:has(:is(#steward-controls,#general-panel,#vassal-panel):not([hidden]))>#steward-status { grid-column:1; grid-row:2; white-space:normal; overflow:hidden; text-overflow:clip; line-height:12px; margin:3px 0 0; }
 #bottom-panel[data-frame=native] :is(#general-panel,#vassal-panel) { background:none; border:0; box-shadow:none; padding:0 8px 0 2px; color:#302418; font-size:11px; }
@@ -67,9 +67,10 @@
 #bottom-panel[data-frame=native] #general-modes button { flex:none; padding:6px 2px; }
 #bottom-panel[data-frame=native] :is(#general-captain-view,#general-trainer-view):not([hidden]) { grid-column:2; min-width:0; }
 #bottom-panel[data-frame=native] #general-captain-view:not([hidden]) { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; column-gap:8px; }
-#bottom-panel[data-frame=native] #general-submodes { margin:0; }
-#bottom-panel[data-frame=native] #general-army { margin:0; font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-#bottom-panel[data-frame=native] #general-squads { grid-column:1 / -1; margin:3px 0 0; max-height:none; overflow:visible; display:grid; grid-auto-flow:column; grid-template-rows:repeat(5,24px); grid-auto-columns:minmax(0,1fr); column-gap:6px; }
+#bottom-panel[data-frame=native] #general-submodes { margin:0; gap:6px; }
+#bottom-panel[data-frame=native] .submode { padding:2px 8px; white-space:nowrap; flex:none; }
+#bottom-panel[data-frame=native] #general-army { margin:0; font-size:10px; line-height:11px; }
+#bottom-panel[data-frame=native] #general-squads { grid-column:1 / -1; margin:3px 0 0; max-height:none; overflow:visible; display:grid; grid-auto-flow:column; grid-template-rows:repeat(5,24px); grid-auto-columns:minmax(0,1fr); column-gap:3px; }
 #bottom-panel[data-frame=native] #general-squads li { height:24px; min-height:0; padding:0; box-sizing:border-box; gap:3px; line-height:11px; font-size:10px; }
 #bottom-panel[data-frame=native] #general-squads li>span:last-child { min-width:0; white-space:nowrap; }
 #bottom-panel[data-frame=native] #general-squads b { float:none; margin-left:3px; }
@@ -99,10 +100,10 @@
 
 /* Multi-selection: the heading keeps a left column and the icons fill the rest of the panel, sized by selection-grid.js. */
 #bottom-panel[data-frame=native] #selected-icons:empty { display:none; }
-#bottom-panel[data-frame=native] #selection[data-count]:not([data-count="1"]) #selected-icons { position:absolute; left:180px; right:0; top:0; bottom:0; margin:0; max-height:none; overflow:hidden; display:flex; flex-wrap:wrap; align-content:flex-start; gap:3px; }
-#bottom-panel[data-frame=native] #selection[data-count]:not([data-count="1"]) #selection-content>:not(#selected-icons) { max-width:168px; }
+#bottom-panel[data-frame=native] #selection[data-count]:not([data-count="1"]) #selected-icons { position:absolute; left:164px; right:0; top:0; bottom:0; margin:0; max-height:none; overflow:hidden; display:flex; flex-wrap:wrap; align-content:flex-start; gap:3px; }
+#bottom-panel[data-frame=native] #selection[data-count]:not([data-count="1"]) #selection-content>:not(#selected-icons) { max-width:152px; }
 #bottom-panel[data-frame=native] #selected-icons .unit-token { position:relative; overflow:hidden; flex:none; width:var(--token,36px); height:var(--token,36px); box-sizing:border-box; }
-#selected-icons .token-count { position:absolute; right:1px; bottom:0; font:700 11px/1 sans-serif; color:#fff; text-shadow:0 0 2px #000,0 0 2px #000,1px 1px #000; pointer-events:none; }
+#selected-icons .token-count { position:absolute; right:2px; bottom:1px; font:700 clamp(11px,calc(var(--token,36px) * .3),20px)/1 sans-serif; color:#fff; text-shadow:0 0 2px #000,0 0 2px #000,1px 1px #000; pointer-events:none; }
 
 /* A selected building: portrait and garrison on the left, status and production on the right.
    Garrison and queue tokens are sized by autoFit() to the room each has. */

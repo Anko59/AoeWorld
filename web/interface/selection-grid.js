@@ -3,7 +3,7 @@
 // from its tokens; this picks the largest square token that fits every icon.
 // When even the smallest comfortable token cannot hold one icon per unit,
 // identical units share one icon with a count (click selects that whole type).
-const GAP = 3, BIGGEST = 40, SMALLEST = 28, TINIEST = 12;
+const GAP = 3, BIGGEST = 72, SMALLEST = 28, TINIEST = 12;
 // Largest size in [low, high] where `count` squares fit in width x height, else 0.
 export function tokenSize(width, height, count, high = BIGGEST, low = SMALLEST, gap = GAP) {
   // One pixel of slack: layout widths are rounded, and a row that fits exactly would wrap.
