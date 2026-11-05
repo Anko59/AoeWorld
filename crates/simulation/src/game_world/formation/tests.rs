@@ -289,3 +289,36 @@ fn road_formation_certificate_covers_the_faster_physical_step() {
     assert!(motion.budget > speed.div_ceil(denominator) as i32);
     assert!(w.formation_step_bound() >= motion.budget + 2);
 }
+
+/// A queued destination is a new leg: a member that spent its recovery
+/// attempts on the previous one gets its full allowance again.
+#[test]
+fn a_queued_destination_gives_every_member_its_own_recovery_attempts() {
+    let mut w = GameWorld::new(WorldConfig::new(256, 256, aoe_core::Seed(1)).unwrap()).unwrap();
+    let at = WorldPosition::new(100 * 1024, 100 * 1024);
+    let leader = w.spawn_kind(PlayerId(0), UnitKind::Militia, at).unwrap();
+    let follower = w
+        .spawn_kind(
+            PlayerId(0),
+            UnitKind::Militia,
+            WorldPosition::new(at.x - 1024, at.y),
+        )
+        .unwrap();
+    w.issue_formation_move(
+        PlayerId(0),
+        &[leader, follower],
+        Formation::Line,
+        WorldPosition::new(150 * 1024, at.y),
+        false,
+        false,
+    )
+    .unwrap();
+    let mut group = w.formations.remove(&leader).unwrap();
+    group.members[1].retries = detach::MAX_RETRIES;
+    group
+        .queue
+        .push_back((WorldPosition::new(150 * 1024, 140 * 1024), false));
+    w.next_formation_order(leader, &mut group);
+    assert_eq!(group.members[1].retries, 0, "the new leg starts fresh");
+    w.formations.insert(leader, group);
+}

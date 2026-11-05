@@ -60,6 +60,12 @@ impl Economy {
             for squad in &a.squads {
                 h.update(&[squad.arm as u8]);
                 h.update(&(squad.members.len() as u64).to_le_bytes());
+                if let Some((to, tick)) = squad.refused {
+                    h.update(&[1]);
+                    h.update(&to.x.to_le_bytes());
+                    h.update(&to.y.to_le_bytes());
+                    h.update(&tick.to_le_bytes());
+                }
                 for member in &squad.members {
                     h.update(&member.0.to_le_bytes());
                 }

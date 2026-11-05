@@ -9,7 +9,14 @@ const CAPACITY: [usize; 4] = [20, 15, 10, 5];
 pub(crate) struct Squad {
     pub arm: usize,
     pub members: Vec<EntityId>,
+    /// The destination this squad was refused and when. A refusal is not
+    /// completion, but it is retried only after `REFUSED_RETRY_TICKS`.
+    pub refused: Option<(WorldPosition, u64)>,
 }
+
+/// Ticks before a squad refused a march is ordered again: ground may have
+/// opened, yet a General must not reissue a refusal at every decision.
+const REFUSED_RETRY_TICKS: u64 = 256;
 
 pub(super) fn arm(kind: UnitKind) -> Option<usize> {
     role(kind).map(|role| if role == 4 { 2 } else { role })
@@ -62,6 +69,7 @@ impl Army {
             self.squads.push(Squad {
                 arm,
                 members: vec![id],
+                refused: None,
             });
             Some((None, id))
         }
@@ -344,7 +352,7 @@ impl GameWorld {
         }
         let mut numbers = [0; 4];
         let mut plans = Vec::new();
-        for squad in &self.economy.generals.armies[&g].squads {
+        for (at, squad) in self.economy.generals.armies[&g].squads.iter().enumerate() {
             let number = numbers[squad.arm];
             numbers[squad.arm] += 1;
             let ids: Vec<_> = squad
@@ -373,19 +381,29 @@ impl GameWorld {
                 heading,
                 offset(squad.arm, number, &counts, scout),
             );
-            plans.push((if scout { 0 } else { squad.arm + 1 }, ids, goal));
+            plans.push((if scout { 0 } else { squad.arm + 1 }, ids, goal, Some(at)));
         }
         // Leading cavalry gets the destination's first look. The ordinary
         // observer/fog system reports sightings through the shared survey.
-        plans.sort_by_key(|(priority, ids, _)| (*priority, ids[0]));
-        plans.push((5, vec![g], Some(to)));
+        plans.sort_by_key(|(priority, ids, ..)| (*priority, ids[0]));
+        plans.push((5, vec![g], Some(to), None));
         let marching = self.economy.generals.armies[&g].state != GeneralState::Idle;
         let mut complete = true;
-        for (_, ids, goal) in plans {
+        let now = self.tick.0;
+        for (_, ids, goal, squad) in plans {
             let Some(goal) = goal else {
                 complete = false;
                 continue;
             };
+            let refused = squad
+                .and_then(|at| self.economy.generals.armies[&g].squads[at].refused)
+                .is_some_and(|(refused_to, tick)| {
+                    refused_to == to && now.saturating_sub(tick) < REFUSED_RETRY_TICKS
+                });
+            if refused {
+                complete = false;
+                continue;
+            }
             if !self.formation_matches(&ids, goal) {
                 work.orders += 1;
                 let order = self.issue_formation_move(
@@ -396,14 +414,23 @@ impl GameWorld {
                     false,
                     false,
                 );
-                if let Err(error) = order {
-                    // Only a spent search budget is worth another try. Any
-                    // other refusal repeats itself: never reissue it each
-                    // decision while the soldiers stand and wait.
-                    complete &= !matches!(
-                        error,
-                        crate::EconomyError::Movement(crate::GameWorldError::PathBudgetExceeded)
-                    );
+                if order.is_err() {
+                    // A refusal is not completion: ground may open later, so
+                    // the march stays unrouted. The squad is asked again only
+                    // after an interval, never at every decision while its
+                    // soldiers stand and wait.
+                    complete = false;
+                    if let Some(at) = squad
+                        && !matches!(
+                            order,
+                            Err(crate::EconomyError::Movement(
+                                crate::GameWorldError::PathBudgetExceeded
+                            ))
+                        )
+                        && let Some(army) = self.economy.generals.armies.get_mut(&g)
+                    {
+                        army.squads[at].refused = Some((to, now));
+                    }
                     continue;
                 }
             }
