@@ -81,6 +81,7 @@ impl GameWorld {
                 HuntJob {
                     animal,
                     repath_tick: self.tick.0,
+                    queue_retry_tick: 0,
                     stage: if a.kind == AnimalKind::Sheep {
                         HuntStage::Approach
                     } else {
@@ -138,12 +139,12 @@ impl GameWorld {
             // A carcass with every work slot taken stays full for a long time.
             // Hunters queueing at one retried on every tick: with 150 villagers
             // a seat, about 1,800 searches a tick and 400 ms ticks by minute 4.
-            if self.tick.0 < job.repath_tick {
+            if self.tick.0 < job.queue_retry_tick {
                 return true;
             }
             let waiting = self.begin_carcass_gather(id, job.animal).is_err();
             if waiting {
-                job.repath_tick = self.tick.0.saturating_add(u64::from(self.config.tick_hz));
+                job.queue_retry_tick = self.tick.0.saturating_add(u64::from(self.config.tick_hz));
             }
             return waiting;
         }

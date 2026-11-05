@@ -224,3 +224,31 @@ fn hunters_queued_at_a_full_carcass_search_once_a_second() {
     // Two seconds at sixteen cells a search; a retry every tick costs 20 times this.
     assert!(searched <= queued * 3 * 16, "{searched} cells for {queued}");
 }
+
+#[test]
+fn shepherd_whose_sheep_dies_while_leading_starts_gathering_immediately() {
+    let mut w = world();
+    w.set_fog_disabled(true);
+    w.place_town_center(PlayerId(0), TileCoord::new(60, 95))
+        .unwrap();
+    let shepherd = w.spawn_villager(PlayerId(0), at(100, 100)).unwrap();
+    let sheep = owned_sheep(&mut w, 104, 100);
+    let killer = w.spawn_villager(PlayerId(0), at(106, 100)).unwrap();
+    w.issue_hunt(PlayerId(0), &[shepherd], sheep).unwrap();
+    let mut ticks = 0;
+    while w.animal(sheep).unwrap().position.x >= 104_000 {
+        w.advance();
+        ticks += 1;
+        assert!(ticks < 600, "the sheep is never led");
+    }
+    run(&mut w, 10);
+    assert_eq!(w.hunting_target(shepherd), Some(sheep));
+    assert_eq!(w.gathering_kind(shepherd), None, "still leading");
+    assert!(w.strike_animal(sheep, killer, 100));
+    run(&mut w, 30);
+    assert_eq!(
+        w.gathering_kind(shepherd),
+        Some(aoe_map::ResourceKind::Food),
+        "the lead deadline must not delay gathering"
+    );
+}
