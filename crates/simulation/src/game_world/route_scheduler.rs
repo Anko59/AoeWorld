@@ -18,10 +18,10 @@ mod issue;
 mod metrics;
 mod order;
 pub use accounting::RouteSchedulerStats;
-#[cfg(test)]
-pub(crate) use deadline::NEAR_ROUTE_ANSWER_TICKS;
 pub(crate) use metrics::{GroupWork, PlanningMeasurement};
 pub use metrics::{PLANNING_SPANS, PlanningProbe, RouteMetrics};
+#[cfg(test)]
+pub(crate) use {deadline::NEAR_ROUTE_ANSWER_TICKS, issue::NO_SLOT_ROUTE_WORK};
 
 /// Retained search frontiers one player may hold at once.
 pub(crate) const MAX_ROUTE_SEARCHES_PER_PLAYER: usize = 2;

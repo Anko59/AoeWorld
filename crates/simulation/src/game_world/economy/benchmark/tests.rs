@@ -106,7 +106,7 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
         // Bounded detours around stationary work bodies and route searches
         // that share work only among units able to spend it change this replay;
         // the complete 1/4-worker comparison above still holds.
-        "d6051794c3a421779f5f02269cd7cd9efc5c0ada80278b74924d48c5b1b2d080"
+        "7e96c2db187fced93dd637f726fd24f79d5c8fe8079e825e8013f7ff61de33f5"
     );
 }
 

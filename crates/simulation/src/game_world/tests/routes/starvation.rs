@@ -204,3 +204,18 @@ fn a_group_sent_into_sealed_ground_is_answered_in_bounded_time() {
         assert!(oldest <= NEAR_ANSWER_TICKS, "waited {oldest}");
     }
 }
+
+/// A fast attempt with no slot to keep its frontier spends half as much.
+#[test]
+fn an_attempt_with_no_slot_for_its_frontier_is_cut_short() {
+    let mut world = sealed_near_world();
+    let player = PlayerId(3);
+    hopeless_orders(&mut world, player);
+    world.advance();
+    let before = world.route_metrics.issue_work;
+    detour_orders(&mut world, player, 1);
+    assert_eq!(
+        world.route_metrics.issue_work - before,
+        u64::from(crate::game_world::route_scheduler::NO_SLOT_ROUTE_WORK)
+    );
+}
