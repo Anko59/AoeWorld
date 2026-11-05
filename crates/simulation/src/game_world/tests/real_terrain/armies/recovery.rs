@@ -2,7 +2,7 @@
 //! ground, it asks for a new route within a bounded time, and it never waits
 //! for ever beside a slot another army took.
 use super::march::run_cell;
-use super::scene::{Cell, Shape};
+use super::scene::{Cell, Scene, Shape};
 use super::*;
 
 fn march(shape: Shape, kind: UnitKind, count: usize, general: bool) -> super::march::Row {
@@ -36,4 +36,39 @@ fn rams_file_through_a_one_tile_pass_without_a_knot() {
 fn mangonels_fit_any_gap_their_route_takes() {
     let row = march(Shape::Pass, UnitKind::Mangonel, 20, false);
     assert_eq!(row.arrived, 20, "{}\n{}", row.tsv(), row.diagnosis);
+}
+
+/// Recovery decides per member and per tick: its retries, passes and arrivals
+/// beside taken slots must agree across worker counts, for an army with
+/// Generals, cavalry and siege over the one bridge.
+#[test]
+fn recovery_at_a_bridge_agrees_between_one_and_four_workers() {
+    let cell = Cell {
+        shape: Shape::River,
+        kind: UnitKind::General,
+        count: 100,
+        general: true,
+    };
+    let (mut a, mut b) = (Scene::new(cell), Scene::new(cell));
+    let one = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build()
+        .unwrap();
+    let four = rayon::ThreadPoolBuilder::new()
+        .num_threads(4)
+        .build()
+        .unwrap();
+    for tick in 0..6_000 {
+        one.install(|| a.fixture.world.advance());
+        four.install(|| b.fixture.world.advance());
+        if tick == 40 {
+            a.order().unwrap();
+            b.order().unwrap();
+        }
+        assert_eq!(
+            a.fixture.world.canonical_hash(),
+            b.fixture.world.canonical_hash(),
+            "tick {tick}"
+        );
+    }
 }
