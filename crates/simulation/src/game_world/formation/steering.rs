@@ -88,10 +88,9 @@ impl GameWorld {
                 group.progress = group.path.end();
             }
             if self.units[self.lookup[&leader]].order.is_none() {
-                group.settled = group
-                    .members
-                    .iter()
-                    .all(|m| !self.units[self.lookup[&m.id]].state.moving);
+                group.settled = group.members.iter().all(|m| {
+                    !self.units[self.lookup[&m.id]].state.moving && !self.retry_pending(m)
+                });
                 self.next_formation_order(leader, &mut group);
             }
             self.formations.insert(leader, group);
