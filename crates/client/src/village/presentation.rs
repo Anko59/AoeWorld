@@ -25,9 +25,14 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
             && (u.player == owner || client.fog.state(position.map(|p| p.floor() as i32)) == 2)
         {
             values[6] += 1.0;
+            // Kind 2 marks workers, so the far map can tell them from soldiers.
+            let worker = matches!(
+                u.kind,
+                UnitKind::Villager | UnitKind::Vassal | UnitKind::Steward | UnitKind::FishingShip
+            );
             actor_marker(
                 &mut values,
-                0.0,
+                if worker { 2.0 } else { 0.0 },
                 position,
                 u.player,
                 owner,

@@ -125,6 +125,100 @@ pub(super) fn update(client: &Client) {
     buildings_update(&v);
 }
 
+/// Far-view research and bulk trade name their building instead of using the
+/// selection. Ownership and completion are checked here and again by the server.
+#[inline(never)]
+fn far_commerce_order(client: &mut Client, action: u32, code: usize, target: u32, lots: u32) {
+    let building_id = aoe_core::EntityId(target);
+    let usable = |kind: Option<aoe_protocol::BuildingKind>| {
+        client.village.buildings.iter().any(|b| {
+            b.id == building_id
+                && b.player == owner(client)
+                && b.construction == ConstructionState::Complete
+                && kind.is_none_or(|kind| b.kind == kind)
+        })
+    };
+    let sequence = client.next_sequence;
+    let message = if action == 12 {
+        let Some(&tech) = Tech::ALL.get(code) else {
+            return;
+        };
+        if !usable(None) {
+            return;
+        }
+        Message::ResearchOrder {
+            sequence,
+            building_id,
+            tech,
+        }
+    } else {
+        if code >= 6
+            || !(1..=aoe_protocol::MARKET_MAX_LOTS).contains(&lots)
+            || !usable(Some(aoe_protocol::BuildingKind::Market))
+        {
+            return;
+        }
+        Message::MarketTradeOrder {
+            sequence,
+            building_id,
+            resource: aoe_protocol::TradeResource::ALL[code % 3],
+            buy: code < 3,
+            lots,
+        }
+    };
+    send(client, message);
+}
+
+/// Far-view commerce report: Market id (-1 none), wood/food/stone prices, then
+/// per technology its availability code and the building that would research
+/// it (-1 none). One candidate per building kind keeps this bounded by the
+/// technology table, not by how many buildings a kingdom owns.
+#[inline(never)]
+pub(in super::super) fn commerce(client: &Client) -> Vec<f64> {
+    let owner = owner(client);
+    let player = client.village.players.iter().find(|p| p.player == owner);
+    let completed = construction::completed(client);
+    let mut market = None;
+    let mut busy = 0_u64;
+    let mut candidate: [Option<&aoe_protocol::GameplayBuildingState>; 32] = [None; 32];
+    for b in &client.village.buildings {
+        if b.player != owner || b.hp == 0 {
+            continue;
+        }
+        if let Some(r) = &b.research {
+            busy |= 1_u64 << (r.tech as u8);
+        }
+        if b.construction != ConstructionState::Complete {
+            continue;
+        }
+        if b.kind == aoe_protocol::BuildingKind::Market && market.is_none() {
+            market = Some(b.id);
+        }
+        let slot = &mut candidate[(b.kind as usize) & 31];
+        if (*slot).is_none_or(|c| c.research.is_some() && b.research.is_none()) {
+            *slot = Some(b);
+        }
+    }
+    let prices = player.map_or(aoe_protocol::MarketPrices::default(), |p| p.market_prices);
+    let mut v = vec![
+        market.map_or(-1.0, |id| f64::from(id.0)),
+        f64::from(prices.wood),
+        f64::from(prices.food),
+        f64::from(prices.stone),
+    ];
+    for r in building_ui::content::rules().techs.iter() {
+        let duplicate = busy & (1_u64 << r.tech) != 0;
+        match candidate[(r.building as usize) & 31] {
+            Some(b) => {
+                v.push(availability::research(b, player, owner, completed, duplicate, r).number());
+                v.push(f64::from(b.id.0));
+            }
+            None => v.extend([availability::Availability::Unavailable.number(), -1.0]),
+        }
+    }
+    v
+}
+
 pub(super) const KINDS: [aoe_protocol::BuildingKind; 24] = aoe_protocol::BuildingKind::ALL;
 
 #[inline(never)]
@@ -222,137 +316,144 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     super::steward::install(shared.clone())?;
     // The DOM owns button identities; one bounded callback dispatches ordinary
     // orders. Keep the research/build/unit tables out of a second string list.
-    let callback = Closure::<dyn FnMut(u32, u32)>::new(move |action, code| {
-        let mut client = shared.borrow_mut();
-        if action == 11 {
-            construction::cancel(&mut client);
-            return;
-        }
-        if action == 5 {
-            super::orders::formation(&mut client, code);
-            return;
-        }
-        if action == 7 {
-            super::orders::stance(&mut client, code);
-            return;
-        }
-        if action == 6 {
-            client.village.garrison_cursor = false;
-            client.village.unload_cursor = false;
-            client.village.attack_move = true;
-            client.village.move_cursor = true;
-            let _ = client
-                .canvas
-                .set_attribute("data-order-mode", "attack-move");
-            return;
-        }
-        if action == 9 || action == 10 {
-            super::steward::general_command(&mut client, action, code);
-            return;
-        }
-        if action == 8 {
-            client.village.garrison_cursor = false;
-            client.village.unload_cursor = false;
-            client.village.attack_move = false;
-            client.village.general_only = true;
-            client.village.move_cursor = true;
-            let _ = client
-                .canvas
-                .set_attribute("data-order-mode", "general-move");
-            return;
-        }
-        if action == 4 {
-            super::navy::arm_unload(&mut client);
-            return;
-        }
-        if action == 3 {
-            match code {
-                0 => super::orders::train(&mut client, false),
-                1 => super::orders::stop(&mut client),
-                2 => {
-                    client.village.garrison_cursor = false;
-                    client.village.unload_cursor = false;
-                    client.village.attack_move = false;
-                    client.village.move_cursor = true;
-                    let _ = client.canvas.set_attribute("data-order-mode", "move");
+    let callback =
+        Closure::<dyn FnMut(u32, u32, u32, u32)>::new(move |action, code, target, lots| {
+            let mut client = shared.borrow_mut();
+            if action == 11 {
+                construction::cancel(&mut client);
+                return;
+            }
+            if action == 5 {
+                super::orders::formation(&mut client, code);
+                return;
+            }
+            if action == 7 {
+                super::orders::stance(&mut client, code);
+                return;
+            }
+            if action == 6 {
+                client.village.garrison_cursor = false;
+                client.village.unload_cursor = false;
+                client.village.attack_move = true;
+                client.village.move_cursor = true;
+                let _ = client
+                    .canvas
+                    .set_attribute("data-order-mode", "attack-move");
+                return;
+            }
+            if action == 9 || action == 10 {
+                super::steward::general_command(&mut client, action, code);
+                return;
+            }
+            if action == 8 {
+                client.village.garrison_cursor = false;
+                client.village.unload_cursor = false;
+                client.village.attack_move = false;
+                client.village.general_only = true;
+                client.village.move_cursor = true;
+                let _ = client
+                    .canvas
+                    .set_attribute("data-order-mode", "general-move");
+                return;
+            }
+            if action == 4 {
+                super::navy::arm_unload(&mut client);
+                return;
+            }
+            if action == 3 {
+                match code {
+                    0 => super::orders::train(&mut client, false),
+                    1 => super::orders::stop(&mut client),
+                    2 => {
+                        client.village.garrison_cursor = false;
+                        client.village.unload_cursor = false;
+                        client.village.attack_move = false;
+                        client.village.move_cursor = true;
+                        let _ = client.canvas.set_attribute("data-order-mode", "move");
+                    }
+                    3 => super::orders::train(&mut client, true),
+                    4 => super::orders::delete(&mut client),
+                    _ => (),
                 }
-                3 => super::orders::train(&mut client, true),
-                4 => super::orders::delete(&mut client),
-                _ => (),
+                return;
             }
-            return;
-        }
-        let code = code as usize;
-        let build_count = KINDS.len();
-        let research_end = build_count + Tech::ALL.len();
-        if action == 0 && code == research_end + 4 {
-            super::automation::toggle(&mut client);
-            return;
-        }
-        if action == 0 && code < build_count {
-            construction::arm(&mut client, KINDS[(code + 1) % KINDS.len()]);
-            return;
-        }
-        if action == 1 {
-            if let Some(&kind) = aoe_protocol::UnitKind::ALL.get(code) {
-                super::orders::train_kind(&mut client, kind);
+            if action == 12 || action == 13 {
+                far_commerce_order(&mut client, action, code as usize, target, lots);
+                return;
             }
-            return;
-        }
-        let Some(building_id) = super::production::selected(&client).map(|b| b.id) else {
-            return;
-        };
-        if !client
-            .village
-            .buildings
-            .iter()
-            .any(|b| b.id == building_id && b.player == owner(&client))
-        {
-            return;
-        }
-        let sequence = client.next_sequence;
-        let message = if action == 0 {
-            match code {
-                i if i < research_end => Message::ResearchOrder {
-                    sequence,
-                    building_id,
-                    tech: Tech::ALL[i - build_count],
-                },
-                i if i == research_end => Message::CancelConstructionOrder {
-                    sequence,
-                    building_id,
-                },
-                i if i == research_end + 1 => Message::CancelResearch {
-                    sequence,
-                    building_id,
-                },
-                i if i == research_end + 2 || i == research_end + 3 => Message::FarmReseedOrder {
-                    sequence,
-                    building_id,
-                    add: i == research_end + 2,
-                },
-                _ => return,
+            let code = code as usize;
+            let build_count = KINDS.len();
+            let research_end = build_count + Tech::ALL.len();
+            if action == 0 && code == research_end + 4 {
+                super::automation::toggle(&mut client);
+                return;
             }
-        } else if action == 2 && code < 6 {
-            let resource = aoe_protocol::TradeResource::ALL[code % 3];
-            if code < 3 {
-                Message::MarketBuy {
-                    sequence,
-                    building_id,
-                    resource,
+            if action == 0 && code < build_count {
+                construction::arm(&mut client, KINDS[(code + 1) % KINDS.len()]);
+                return;
+            }
+            if action == 1 {
+                if let Some(&kind) = aoe_protocol::UnitKind::ALL.get(code) {
+                    super::orders::train_kind(&mut client, kind);
+                }
+                return;
+            }
+            let Some(building_id) = super::production::selected(&client).map(|b| b.id) else {
+                return;
+            };
+            if !client
+                .village
+                .buildings
+                .iter()
+                .any(|b| b.id == building_id && b.player == owner(&client))
+            {
+                return;
+            }
+            let sequence = client.next_sequence;
+            let message = if action == 0 {
+                match code {
+                    i if i < research_end => Message::ResearchOrder {
+                        sequence,
+                        building_id,
+                        tech: Tech::ALL[i - build_count],
+                    },
+                    i if i == research_end => Message::CancelConstructionOrder {
+                        sequence,
+                        building_id,
+                    },
+                    i if i == research_end + 1 => Message::CancelResearch {
+                        sequence,
+                        building_id,
+                    },
+                    i if i == research_end + 2 || i == research_end + 3 => {
+                        Message::FarmReseedOrder {
+                            sequence,
+                            building_id,
+                            add: i == research_end + 2,
+                        }
+                    }
+                    _ => return,
+                }
+            } else if action == 2 && code < 6 {
+                let resource = aoe_protocol::TradeResource::ALL[code % 3];
+                if code < 3 {
+                    Message::MarketBuy {
+                        sequence,
+                        building_id,
+                        resource,
+                    }
+                } else {
+                    Message::MarketSell {
+                        sequence,
+                        building_id,
+                        resource,
+                    }
                 }
             } else {
-                Message::MarketSell {
-                    sequence,
-                    building_id,
-                    resource,
-                }
-            }
-        } else {
-            return;
-        };
-        send(&mut client, message);
-    });
+                return;
+            };
+            send(&mut client, message);
+        });
     buildings_bind(callback.as_ref().unchecked_ref())?;
     callback.forget();
     Ok(())
