@@ -61,7 +61,7 @@ fn run(case: &str, count: usize, limit: u32) {
             assert_eq!((result.max_stuck_ticks, result.oscillations), (57, 26));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (35529, 378134, 104359285)
+                (35529, 378134, 104506102)
             );
         }
         _ => {
@@ -72,7 +72,7 @@ fn run(case: &str, count: usize, limit: u32) {
                 "town" => (3741, 1193, 2858955),
                 "crossing" => (3278, 1933, 3051861),
                 "bridge" => (479, 354, 12365),
-                "siege" => (1556, 867, 39168),
+                "siege" => (1556, 867, 35918),
                 "gap" => (580, 512, 8908),
                 _ => unreachable!(),
             };

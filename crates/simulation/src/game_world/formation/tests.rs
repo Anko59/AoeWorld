@@ -356,7 +356,11 @@ fn a_group_does_not_settle_around_a_member_whose_detour_just_ended() {
     let slot = w.formation_destination_slot(follower).unwrap();
     // A detour towards a corridor point, whose end is not the member's slot.
     let index = w.lookup[&follower];
-    w.units[index].state.position = WorldPosition::new(slot.x - 6 * 1024, slot.y);
+    let moved = WorldPosition::new(slot.x - 6 * 1024, slot.y);
+    let old = w.units[index].state.position;
+    w.collisions
+        .relocate(follower, old.tile_floor(), moved, false);
+    w.units[index].state.position = moved;
     let group = w.formations.get_mut(&leader).unwrap();
     group.settled = false;
     group.members[1].arrived = false;
