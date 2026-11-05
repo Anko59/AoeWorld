@@ -208,13 +208,16 @@ async fn gameplay_client(
         return Err("gameplay projectile snapshot missing".into());
     }
     result.bytes += size as u64;
-    for _ in 0..2 {
+    while result.deltas < 2 {
         let (message, size) = receive_gameplay(&mut socket).await?;
+        result.bytes += size as u64;
+        if matches!(message, GameplayServerMessage::Holdings { revision: 1, .. }) {
+            continue;
+        }
         if !matches!(message, GameplayServerMessage::Tick { .. }) {
             return Err("gameplay tick missing".into());
         }
         result.deltas += 1;
-        result.bytes += size as u64;
     }
     Ok(result)
 }
