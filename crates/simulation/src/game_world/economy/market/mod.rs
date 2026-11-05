@@ -5,7 +5,9 @@
 //! neither prices nor the Guilds fee), so the constants are DE's documented
 //! engine rules: prices start at 100 gold per 100 units, buying costs the
 //! price plus a 30% commission, selling pays the price minus 30%, every trade
-//! moves the price 3 gold, and prices stay within [20, 9999].
+//! moves the price 3 gold, and prices stay within [20, 9999]. Between trades
+//! every price drifts back toward the starting price by one gold each
+//! `recovery_ticks`, so a market worn down by a large order keeps working.
 use super::{BuildingKind, EconomyError};
 use crate::GameWorld;
 use aoe_core::{EntityId, MARKET_MAX_PRICE, MARKET_MIN_PRICE, PlayerId};
@@ -24,6 +26,8 @@ pub struct MarketRules {
     pub commission_permyriad: u16,
     /// Gold the price moves on every trade.
     pub price_step: u16,
+    /// Ticks between recovery steps (two seconds at the default 20 Hz).
+    pub recovery_ticks: u64,
 }
 pub const MARKET_RULES: MarketRules = MarketRules {
     trade_amount: 100,
@@ -32,6 +36,7 @@ pub const MARKET_RULES: MarketRules = MarketRules {
     max_price: MARKET_MAX_PRICE,
     commission_permyriad: 3000,
     price_step: 3,
+    recovery_ticks: 40,
 };
 impl MarketRules {
     /// Buying 100 units costs the price plus the commission.
@@ -47,6 +52,14 @@ impl MarketRules {
     }
     pub fn lower(&self, price: u16) -> u16 {
         price.saturating_sub(self.price_step).max(self.min_price)
+    }
+    /// One recovery step toward the starting price, never past it.
+    pub fn recover(&self, price: u16) -> u16 {
+        match price.cmp(&self.base_price) {
+            std::cmp::Ordering::Less => price + 1,
+            std::cmp::Ordering::Equal => price,
+            std::cmp::Ordering::Greater => price - 1,
+        }
     }
 }
 
@@ -114,6 +127,20 @@ impl super::Stockpile {
 }
 
 impl GameWorld {
+    /// Called once per tick: prices step toward the base price every
+    /// `recovery_ticks`, independently per player and commodity.
+    pub(crate) fn recover_market_prices(&mut self) {
+        if !self.tick.0.is_multiple_of(MARKET_RULES.recovery_ticks) {
+            return;
+        }
+        for state in self.economy.players.values_mut() {
+            let p = &mut state.market_prices;
+            p.wood = MARKET_RULES.recover(p.wood);
+            p.food = MARKET_RULES.recover(p.food);
+            p.stone = MARKET_RULES.recover(p.stone);
+        }
+    }
+
     /// Buy 100 units of `kind` for gold at the player's current price plus
     /// commission; then that price rises by the step, within the clamp.
     pub fn issue_market_buy(

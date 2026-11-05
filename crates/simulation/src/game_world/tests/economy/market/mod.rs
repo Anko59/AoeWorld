@@ -271,3 +271,37 @@ fn a_bulk_purchase_spends_gold_lot_by_lot_at_rising_prices() {
     assert_eq!((gold, stone), (3, 200));
     assert_eq!(prices(&world).stone, 106);
 }
+
+#[test]
+fn a_bulk_sale_that_hits_the_floor_recovers_toward_the_base_price() {
+    let (mut world, _, _) = village();
+    let id = market(&mut world, 100);
+    set_stock(&mut world, 0, 0, 0, 0);
+    world
+        .economy
+        .players
+        .get_mut(&PlayerId(0))
+        .unwrap()
+        .stockpile
+        .food = 100_000;
+    let lots = world
+        .issue_market_trade(PlayerId(0), id, ResourceKind::Food, false, 1000)
+        .unwrap();
+    assert_eq!(lots, 1000);
+    assert_eq!(prices(&world).food, aoe_core::MARKET_MIN_PRICE);
+    // Gold sits far below 1000 lots at the starting price: the floor pays 14 per lot.
+    assert!(stock(&world).2 < 1000 * 14 + 2000);
+    for _ in 0..(MARKET_RULES.recovery_ticks * 10) {
+        world.advance();
+    }
+    assert_eq!(prices(&world).food, aoe_core::MARKET_MIN_PRICE + 10);
+    assert_eq!(
+        prices(&world).wood,
+        100,
+        "a price already at base does not move"
+    );
+    for _ in 0..(MARKET_RULES.recovery_ticks * 200) {
+        world.advance();
+    }
+    assert_eq!(prices(&world).food, MARKET_RULES.base_price);
+}

@@ -45,6 +45,7 @@ impl GameWorld {
         }
         self.economy.stewards.automatic = true;
         let changed = self.advance_phases(sink, probe);
+        self.recover_market_prices();
         self.economy.stewards.automatic = false;
         // Every test tick checks that the route scheduler's counters equal
         // a recount: a drifted counter can block a player's routes for good.

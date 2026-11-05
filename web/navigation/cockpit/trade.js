@@ -3,7 +3,7 @@ import { icon } from '/interface/ui-art.js';
 // Market rules mirror aoe-simulation's MARKET_RULES (a preview only; the server
 // executes the order lot by lot and is the authority): lots of 100 units, buy at
 // price +30%, sell at price -30%, every lot moves the price by 3 inside [20, 9999].
-export const RULES = { lot: 100, buy: 13000, sell: 7000, step: 3, min: 20, max: 9999, maxLots: 20000 };
+export const RULES = { lot: 100, buy: 13000, sell: 7000, step: 3, min: 20, max: 9999, maxLots: 20000, base: 100, recoverySeconds: 2 };
 const resources = ['wood', 'food', 'stone'];
 const asNumber = value => Number.isFinite(value) ? value : 0;
 export function quote(side, price, lots, stock, gold) {
@@ -20,6 +20,15 @@ export function quote(side, price, lots, stock, gold) {
     done++;
   }
   return { lots: done, gold: total, end: p };
+}
+// Honest about the floor: past it every lot pays the limit, which for a big sale is far below the starting price.
+function floorNote(q, side, price) {
+  if (q.end !== RULES.min && q.end !== RULES.max) return '';
+  const limit = q.end, perLot = side === 'sell' ? Math.floor(limit * RULES.sell / 10000) : Math.floor(limit * RULES.buy / 10000);
+  const steps = Math.ceil(Math.abs(limit - price) / RULES.step), atLimit = Math.max(0, q.lots - steps);
+  const start = side === 'sell' ? Math.floor(RULES.base * RULES.sell / 10000) : Math.floor(RULES.base * RULES.buy / 10000);
+  return ` · the price reaches its limit (${limit}) after ${steps.toLocaleString('en-US')} lots; the other ${atLimit.toLocaleString('en-US')} pay ${perLot} gold each instead of ${start}`
+    + ` · it recovers 1 gold every ${RULES.recoverySeconds} s once you stop`;
 }
 const fmt = value => Math.round(value).toLocaleString('en-US');
 export function initTrade(host) {
@@ -83,7 +92,7 @@ export function initTrade(host) {
     box.textContent = q.lots === 0 ? (state.side === 'buy' ? 'Not enough gold for one lot.' : `Not enough ${name}: one lot is 100.`)
       : `${q.lots.toLocaleString('en-US')} lots of 100 · average ${(q.gold / q.lots).toFixed(1)} gold per lot · price ${state.prices[index()]} → ${q.end}`
         + (q.lots < lots ? ` · limited by ${state.side === 'buy' ? 'gold' : name}` : '')
-        + (q.end === RULES.min || q.end === RULES.max ? ' · price hits its limit; later lots pay the limit' : '');
+        + floorNote(q, state.side, state.prices[index()]);
   }
   input.addEventListener('input', () => {
     const digits = input.value.replace(/[^\d]/g, '');

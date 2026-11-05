@@ -5,8 +5,8 @@ import { buildingSprite, loadSprites } from '/navigation/landscape/sprites.js';
 import { drawChips } from '/navigation/landscape/chips.js';
 
 // Minimum on-screen width (CSS px) per building kind; true size takes over when zoomed in.
-const MIN = { 0: 70, 16: 80, 17: 56, 18: 56, 19: 56, 1: 30, 2: 34, 3: 34, 4: 40, 8: 28, 14: 30 };
-const RANK = { 16: 9, 0: 8, 17: 6, 18: 5, 19: 5, 6: 4, 13: 4, 10: 4, 11: 4, 9: 4, 12: 3, 8: 3, 14: 3, 4: 2, 2: 2, 3: 2, 1: 1 };
+const MIN = { 0: 84, 16: 88, 17: 56, 18: 56, 19: 56, 1: 30, 2: 34, 3: 34, 4: 40, 8: 28, 14: 30 };
+const RANK = { 0: 9, 16: 8, 17: 6, 18: 5, 19: 5, 6: 4, 13: 4, 10: 4, 11: 4, 9: 4, 12: 3, 8: 3, 14: 3, 4: 2, 2: 2, 3: 2, 1: 1 };
 
 // Cache authorized plot geometry at HUD cadence; the camera draws one path
 // per colour, not thousands of individual footprints on every animation frame.
