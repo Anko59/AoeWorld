@@ -158,8 +158,9 @@ impl GameWorld {
                     // would answer with the same one for ever. A nearby tile
                     // centre is on the route's graph: go there first. Refused
                     // from the centre too, the route itself is stale: replan.
+                    // The centre may be where this order began: the body still goes back
+                    // to it, as an idle gatherer must not replan on every refused step.
                     if let Some(centre) = self.route_graph_centre(index, current_position)
-                        && order.origin != centre
                         && order.waypoint != centre
                     {
                         self.units[index].route.push_front(order.waypoint);
