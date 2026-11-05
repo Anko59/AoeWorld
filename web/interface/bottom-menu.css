@@ -1,0 +1,78 @@
+/* Native DE bottom menu. Frames are drawn by panel-frame.js at 0.5 css px per
+   art pixel: commands 276.5x189.5, minimap 413.5x201.5, selection stretching
+   between them. Every inset below is measured from that art. */
+:root:has(#bottom-panel[data-frame=native]) { --bottom:202px; }
+#bottom-panel[data-frame=native] { height:202px; display:flex; align-items:flex-end; gap:0; padding:0; background:none; border:0; box-shadow:none; pointer-events:none; }
+#bottom-panel[data-frame=native]::before { display:none; }
+#bottom-panel[data-frame=native]>section { pointer-events:auto; position:relative; isolation:isolate; box-sizing:border-box; flex:none; }
+.frame-art { position:absolute; display:block; pointer-events:none; z-index:-1; background-repeat:no-repeat; }
+/* Narrow windows scale the whole menu; wide ones stretch only the selection. */
+@media(max-width:1200px) { :root:has(#bottom-panel[data-frame=native]) { --bottom:162px; } #bottom-panel[data-frame=native] { zoom:.8; } }
+@media(max-width:960px) { :root:has(#bottom-panel[data-frame=native]) { --bottom:132px; } #bottom-panel[data-frame=native] { zoom:.65; } }
+@media(max-width:780px) { :root:has(#bottom-panel[data-frame=native]) { --bottom:102px; } #bottom-panel[data-frame=native] { zoom:.5; } }
+
+#bottom-panel[data-frame=native] #commands { width:var(--frame-width); height:var(--frame-height); padding:24px 22px 14px; border:0; }
+#bottom-panel[data-frame=native] #commands h2 { height:12px; margin:0 0 3px; font-size:9px; line-height:12px; overflow:hidden; }
+#bottom-panel[data-frame=native] #combat-stance-label { top:22px; right:22px; }
+#bottom-panel[data-frame=native] #combat-stance { max-width:100px; font-size:10px; padding:0; }
+#bottom-panel[data-frame=native] #command-grid { width:auto; margin:0; grid-template-columns:repeat(5,1fr); grid-template-rows:repeat(3,38px); gap:3px 4px; }
+#bottom-panel[data-frame=native] #command-grid button>.art-icon,#bottom-panel[data-frame=native] #command-grid .train-icon { width:32px; height:32px; }
+#bottom-panel[data-frame=native] #command-hint { margin:3px 0 0; font-size:9px; line-height:12px; height:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+#bottom-panel[data-frame=native] #selection { flex:1 1 0; min-width:var(--frame-min-width,0); height:var(--frame-height); padding:23px 50px 15px 15px; overflow:hidden; }
+#bottom-panel[data-frame=native] #selection-content,#bottom-panel[data-frame=native] #selection-empty { max-height:100%; }
+#bottom-panel[data-frame=native] #selection-portrait { width:64px; height:64px; }
+#bottom-panel[data-frame=native] #selection-portrait>.art-icon { width:52px; height:52px; }
+#bottom-panel[data-frame=native] #selection-empty { padding:0; }
+
+/* The minimap art is a 2:1 rhombus flanked by four button sockets. */
+#bottom-panel[data-frame=native] #minimap { width:var(--frame-width); height:var(--frame-height); padding:0; border:0; }
+#bottom-panel[data-frame=native] #minimap-title { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+#bottom-panel[data-frame=native] #minimap:not(.expanded) #minimap-map { position:absolute; left:53.5px; top:8.5px; width:339.5px; height:184px; clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%); filter:none; }
+#bottom-panel[data-frame=native] #minimap:not(.expanded) #map-navigation { display:contents; }
+#bottom-panel[data-frame=native] #minimap:not(.expanded) #map-navigation button { position:absolute; width:34px; height:34px; padding:0; border:0; border-radius:50%; background:none; box-shadow:none; color:#e9cf8f; font-size:19px; line-height:34px; text-shadow:0 1px 2px #000; }
+#bottom-panel[data-frame=native] #minimap:not(.expanded) #map-navigation button:hover { background:#d9bd7d33; box-shadow:0 0 0 1px #d9bd7d; }
+#bottom-panel[data-frame=native] #minimap:not(.expanded) #map-navigation .icon,#bottom-panel[data-frame=native] #minimap:not(.expanded) #map-navigation .art-icon { width:24px; height:24px; }
+#bottom-panel[data-frame=native] #minimap:not(.expanded) #town-center { left:59px; top:41.5px; }
+#bottom-panel[data-frame=native] #minimap:not(.expanded) #recenter { left:59px; top:135.5px; }
+#bottom-panel[data-frame=native] #minimap:not(.expanded) #overview-toggle { left:354px; top:41.5px; font-size:10px; }
+#bottom-panel[data-frame=native] #minimap:not(.expanded) #grid { left:354px; top:135.5px; }
+#bottom-panel[data-frame=native] #minimap:not(.expanded) #carry-indicators,#bottom-panel[data-frame=native] #minimap:not(.expanded) #fullscreen,#bottom-panel[data-frame=native] #minimap:not(.expanded) #minimap-zoom { z-index:2; height:16px; line-height:16px; padding:0 3px; border-radius:3px; font-size:9px; background:#0009; border:1px solid #d9bd7d88; width:auto; }
+#bottom-panel[data-frame=native] #minimap:not(.expanded) #carry-indicators { left:78px; top:93px; }
+#bottom-panel[data-frame=native] #minimap:not(.expanded) #fullscreen { left:362px; top:93px; }
+#bottom-panel[data-frame=native] #minimap:not(.expanded) #minimap-zoom { left:50%; top:22px; right:auto; transform:translateX(-50%); position:absolute; }
+
+/* Text on parchment. */
+#bottom-panel[data-frame=native] #selection { color:#302418; }
+#bottom-panel[data-frame=native] #selection-content { display:block; }
+#bottom-panel[data-frame=native] #selection-content:has(:is(#steward-controls,#general-panel,#vassal-panel):not([hidden])) { display:grid; grid-template-columns:minmax(0,1fr) minmax(150px,230px); }
+#bottom-panel[data-frame=native] #selection-content:has(#general-panel:not([hidden])) { grid-template-columns:minmax(120px,1fr) minmax(250px,340px); }
+#bottom-panel[data-frame=native] #selection-content>:is(#general-panel,#vassal-panel,#steward-controls) { align-self:stretch; min-width:0; min-height:0; overflow:hidden auto; }
+#bottom-panel[data-frame=native] :is(#general-panel,#vassal-panel) { background:none; border:0; box-shadow:none; padding:0 2px; color:#302418; font-size:11px; }
+#bottom-panel[data-frame=native] #vassal-panel[data-alert=true] { color:#7a2415; }
+#bottom-panel[data-frame=native] #general-army { color:#5b3a14; font-weight:600; margin:2px 0; }
+#bottom-panel[data-frame=native] #general-train-note { color:#5d4a2c; }
+#bottom-panel[data-frame=native] #general-squads li { border-top-color:#5d4a2c55; min-height:24px; padding:1px 0; }
+#bottom-panel[data-frame=native] #general-squads small { color:#675126; display:inline; margin-left:6px; }
+#bottom-panel[data-frame=native] #general-squads .art-icon,#bottom-panel[data-frame=native] #general-squads .icon { width:22px; height:22px; }
+#bottom-panel[data-frame=native] #general-squads { max-height:74px; margin:2px 0 0; display:grid; grid-template-columns:1fr 1fr; column-gap:10px; }
+#bottom-panel[data-frame=native] #general-trainer-view:not([hidden]) { display:grid; grid-template-columns:minmax(0,1fr) 84px; gap:0 10px; align-items:start; }
+#bottom-panel[data-frame=native] #general-trainer-view>#general-sliders { grid-row:1 / span 2; }
+#bottom-panel[data-frame=native] #general-trainer-view>#general-train-note { font-size:9px; line-height:1.2; margin:0; }
+#bottom-panel[data-frame=native] #general-train { margin:0 0 4px; }
+#bottom-panel[data-frame=native] .submode { border-color:#6a5632; color:#6a5632; }
+#bottom-panel[data-frame=native] .submode[aria-current=true] { color:#2b1d0c; border-color:#2b1d0c; background:#e0b96655; }
+
+/* Brass buttons and range sliders in keeping with the carved frame. */
+#bottom-panel[data-frame=native] :is(#general-modes button,#general-train,#steward-controls button,#vassal-panel button,#cancel-training,#building-panel button) { color:#f1deb0; background:linear-gradient(#7a6742,#3d3322); border:1px solid #1e160a; border-radius:2px; box-shadow:inset 0 1px #d9c48a80,inset 0 -1px #0006; text-shadow:0 1px 1px #000; padding:2px 6px; font-size:10px; }
+#bottom-panel[data-frame=native] :is(#general-modes button,#general-train,#steward-controls button,#vassal-panel button):hover { background:linear-gradient(#8f7a4c,#4b3f28); }
+#bottom-panel[data-frame=native] :is(#general-modes button[aria-selected=true],#general-train[aria-pressed=true]) { background:linear-gradient(#4a2d1a,#7d4a2a); border-color:#e6c36d; color:#ffe9a8; }
+#bottom-panel[data-frame=native] #general-modes { margin-bottom:4px; }
+#selection input[type=range] { --fill:50%; -webkit-appearance:none; appearance:none; height:16px; margin:0; background:none; cursor:pointer; min-width:0; }
+#selection input[type=range]::-webkit-slider-runnable-track { height:7px; border:1px solid #1e160a; border-radius:4px; background:linear-gradient(90deg,#c58f2f 0 var(--fill),#2c2216 var(--fill) 100%); box-shadow:inset 0 1px 2px #000a,0 1px #fff5; }
+#selection input[type=range]::-moz-range-track { height:7px; border:1px solid #1e160a; border-radius:4px; background:linear-gradient(90deg,#c58f2f 0 var(--fill),#2c2216 var(--fill) 100%); box-shadow:inset 0 1px 2px #000a,0 1px #fff5; }
+#selection input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; margin-top:-5px; border-radius:50%; border:2px solid #1e160a; background:radial-gradient(circle at 35% 30%,#f6e4a6,#b8872c 55%,#6b4a14); box-shadow:0 1px 2px #000a; }
+#selection input[type=range]::-moz-range-thumb { width:10px; height:10px; border-radius:50%; border:2px solid #1e160a; background:radial-gradient(circle at 35% 30%,#f6e4a6,#b8872c 55%,#6b4a14); box-shadow:0 1px 2px #000a; }
+#selection input[type=range]:focus-visible { outline:1px solid #f6e4a6; outline-offset:2px; }
+#bottom-panel[data-frame=native] .general-slider { grid-template-columns:50px 1fr 30px; gap:5px; margin-bottom:1px; }
+#bottom-panel[data-frame=native] .general-slider output,#bottom-panel[data-frame=native] #steward-controls output { color:#4b2f0e; font-weight:600; }

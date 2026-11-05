@@ -66,8 +66,9 @@ export function initMinimapView(svg, panel, jump) {
   });
   svg.addEventListener('pointermove', event => {
     if (dragging?.id !== event.pointerId) return;
-    const dx = (event.clientX - dragging.x) / side / zoom;
-    const dy = (event.clientY - dragging.y) / side / zoom;
+    const bounds = svg.getBoundingClientRect(), stretched = svg.getAttribute('preserveAspectRatio') === 'none';
+    const dx = (event.clientX - dragging.x) / (stretched ? bounds.width : side) / zoom;
+    const dy = (event.clientY - dragging.y) / (stretched ? bounds.height : side) / zoom;
     if (Math.hypot(event.clientX - dragging.x, event.clientY - dragging.y) <= 4 && !dragging.moved) return;
     dragging.moved = true; follow = false;
     center = [dragging.center[0] - (dx + dy) * world[0], dragging.center[1] - (dy - dx) * world[1]]
@@ -76,7 +77,7 @@ export function initMinimapView(svg, panel, jump) {
   });
   svg.addEventListener('pointerup', event => {
     if (dragging?.id !== event.pointerId) return;
-    if (!dragging.moved) jump(minimapWorldPoint(svg.getBoundingClientRect(), event.clientX, event.clientY, world, state()));
+    if (!dragging.moved) jump(minimapWorldPoint(svg.getBoundingClientRect(), event.clientX, event.clientY, world, state(), svg.getAttribute('preserveAspectRatio') === 'none'));
     dragging = null;
     svg.releasePointerCapture(event.pointerId);
   });

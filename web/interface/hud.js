@@ -1,7 +1,7 @@
 import { castleUnits, castleUnitNames, castleKinds } from '/interface/castle.js';
 import { imperialUnits, imperialUnitNames } from '/interface/imperial.js';
 import { initBuildings, buildingKinds, buildingNames } from '/interface/buildings.js';
-import { initArt, icon as packIcon, entityIcon, setEntityIcon } from '/interface/ui-art.js';
+import { initArt, icon as packIcon, entityIcon, setEntityIcon, playerTint } from '/interface/ui-art.js';
 import { initVassal } from '/interface/steward/vassal.js';
 import { initSteward } from '/interface/steward/panel.js';
 import { initGeneralPanel } from '/interface/general-panel.js';
@@ -98,8 +98,8 @@ export function initInterface() {
       text('selection-load',['Sheep','Deer','Boar','Wolf'].includes(first.kind)?`${first.amount} food remaining`:count===1 && first.amount?`Carrying ${first.amount}/${first.capacity} ${first.resource}`:building?first.kind==='Castle'?'Supports 20 population':castleKinds.includes(first.kind)?'':'Resource drop-off · supports 5 population':'');
       const signature=selected.map(unit=>`${unit.id}:${unit.kind}`).join(',');
       if (signature!==previousSelection) {
-        setEntityIcon(byId('selection-portrait'),first.kind);
-        byId('selected-icons').innerHTML=count>1?selected.map(unit=>`<span class="unit-token" data-unit-id="${unit.id}" title="${unit.name}">${entityIcon(unit.kind)}</span>`).join(''):'';
+        setEntityIcon(byId('selection-portrait'),first.kind,playerTint(first.player,first.owned));
+        byId('selected-icons').innerHTML=count>1?selected.map(unit=>`<span class="unit-token" data-unit-id="${unit.id}" title="${unit.name}">${entityIcon(unit.kind,playerTint(unit.player,unit.owned))}</span>`).join(''):'';
         previousSelection=signature;
       }
     } else previousSelection='';
@@ -110,11 +110,12 @@ export function initInterface() {
     const health=state.actors.filter(a=>a.selected && a.hp>0 && !buildingKinds.includes(a.kind)).map(a=>`<span class="unit-hp-bar" style="left:${a.x-18}px;top:${a.head}px"><span style="width:${100*a.hp/a.maxHp}%"></span></span>`).join('');
     if (health!==previousHealth) { byId('unit-health-bars').innerHTML=health; previousHealth=health; }
     // Own idle workers carry a marker so they can be found on the map.
-    const idle=state.actors.filter(a=>a.owned && a.hp>0 && a.task==='Idle' && (a.kind==='Villager' || a.kind==='FishingShip') && a.x>0 && a.y>54 && a.y<innerHeight-208).map(a=>`<span class="idle-marker" style="left:${a.x-6}px;top:${a.head-16}px">z</span>`).join('');
+    const bottom=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bottom'))||208;
+    const idle=state.actors.filter(a=>a.owned && a.hp>0 && a.task==='Idle' && (a.kind==='Villager' || a.kind==='FishingShip') && a.x>0 && a.y>54 && a.y<innerHeight-bottom).map(a=>`<span class="idle-marker" style="left:${a.x-6}px;top:${a.head-16}px">z</span>`).join('');
     if (idle!==previousIdle) { byId('idle-markers').innerHTML=idle; previousIdle=idle; }
-    const flags=state.actors.filter(actor=>actor.hp>0 && actor.garrison>0 && actor.x>0 && actor.y>54 && actor.y<innerHeight-208).map(actor=>`<span class="garrison-flag" data-building-id="${actor.id}" title="${actor.garrison} garrisoned" style="left:${actor.x}px;top:${actor.y-48}px">${actor.garrison}</span>`).join('');
+    const flags=state.actors.filter(actor=>actor.hp>0 && actor.garrison>0 && actor.x>0 && actor.y>54 && actor.y<innerHeight-bottom).map(actor=>`<span class="garrison-flag" data-building-id="${actor.id}" title="${actor.garrison} garrisoned" style="left:${actor.x}px;top:${actor.y-48}px">${actor.garrison}</span>`).join('');
     if (flags!==previousFlags) { byId('garrison-flags').innerHTML=flags; previousFlags=flags; }
-    const loads=state.actors.filter(actor=>actor.hp>0 && actor.load && actor.x>0 && actor.y>54 && actor.y<innerHeight-208);
+    const loads=state.actors.filter(actor=>actor.hp>0 && actor.load && actor.x>0 && actor.y>54 && actor.y<innerHeight-bottom);
     const signature=JSON.stringify(loads);
     if (signature!==previousLoads) {
       byId('carried-loads').innerHTML=loads.map(actor=>`<span class="load-badge" style="left:${actor.x+12}px;top:${actor.y-36}px">${icon(actor.load[0])}${actor.load[1]}</span>`).join('');previousLoads=signature;

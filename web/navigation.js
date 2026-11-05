@@ -79,6 +79,7 @@ export function initNavigation() {
   function overview(value) {
     expanded = value;
     panel.classList.toggle('expanded', value);
+    svg.setAttribute('preserveAspectRatio', !value && document.getElementById('bottom-panel').dataset.frame === 'native' ? 'none' : 'xMidYMid meet');
     toggle.setAttribute('aria-expanded', String(value));
     toggle.setAttribute('aria-label', value ? 'Close whole map' : 'Show whole map');
     panel.dataset.rasterSamples = String(samples);

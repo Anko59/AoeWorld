@@ -1,3 +1,4 @@
+import { fillRange } from '/interface/panel-frame.js';
 // Geometry and ownership arrive from Rust, using the normal camera projection.
 // values = [count, (active, selected, points, x0, y0, ...) * count]. Territories
 // of overlapping castles are split at equal distance; each cell's outline stops
@@ -25,7 +26,7 @@ export function initSteward() {
     const row=document.createElement('label');row.textContent=name;
     const input=document.createElement('input');input.type='range';input.min='0';input.max='100';input.step='1';
     input.id=`steward-setting-${i}`;input.setAttribute('aria-label',name);
-    const value=document.createElement('output');input.addEventListener('input',()=>{value.textContent=input.value;});
+    const value=document.createElement('output');input.addEventListener('input',()=>{value.textContent=input.value;fillRange(input);});fillRange(input);
     row.append(input,value);controls.append(row);sliders.push({input,value});
   }
   const toggle=document.createElement('input');toggle.type='checkbox';toggle.id='steward-training';
@@ -40,7 +41,7 @@ export function initSteward() {
     // dragged to zero. Never submit a mix that would poison later changes.
     if(sliders.slice(0,4).every(s=>Number(s.input.value)===0)){
       confirmedWeights.forEach((weight,i)=>{
-        sliders[i].input.value=String(weight);sliders[i].value.textContent=String(weight);
+        sliders[i].input.value=String(weight);fillRange(sliders[i].input);sliders[i].value.textContent=String(weight);
       });
       return;
     }
@@ -54,7 +55,7 @@ export function initSteward() {
       settingsSignature=signature;
       if(settings.length===7){
         confirmedWeights=Array.from(settings.slice(1,5));
-        for(let i=0;i<5;i++){sliders[i].input.value=String(settings[i+1]);sliders[i].value.textContent=String(settings[i+1]);}
+        for(let i=0;i<5;i++){sliders[i].input.value=String(settings[i+1]);fillRange(sliders[i].input);sliders[i].value.textContent=String(settings[i+1]);}
         toggle.checked=settings[6]===1;
       }
     }

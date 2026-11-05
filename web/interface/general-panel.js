@@ -22,13 +22,13 @@ export function initGeneralPanel() {
       <p id="general-army"></p><ul id="general-squads" aria-label="Squads"></ul></div>
     <div id="general-trainer-view"><div id="general-sliders"></div>
       <button type="button" id="general-train"></button><p id="general-train-note"></p></div>`;
-  document.body.append(panel);
+  document.getElementById('selection-content').append(panel);
   const byId = id => panel.querySelector(`#${id}`);
   const sliders = roles.map((name, role) => {
     const row = document.createElement('label'); row.className = 'general-slider';
     row.innerHTML = `<span class="role">${name}</span><input type="range" min="0" max="100" step="5" aria-label="${name} share"><output></output>`;
     const input = row.querySelector('input');
-    input.addEventListener('input', () => { row.querySelector('output').textContent = `${input.value}%`; send(10, role * 128 + Number(input.value)); });
+    input.addEventListener('input', () => { input.style.setProperty('--fill', `${input.value}%`); row.querySelector('output').textContent = `${input.value}%`; send(10, role * 128 + Number(input.value)); });
     byId('general-sliders').append(row);
     return { input, out: row.querySelector('output') };
   });
@@ -74,6 +74,7 @@ export function initGeneralPanel() {
         // Never fight the hand that is dragging a slider.
         if (changed || document.activeElement !== s.input) s.input.value = String(values[5 + role]);
         s.out.textContent = `${s.input.value}%`;
+        s.input.style.setProperty('--fill', `${s.input.value}%`);
       });
       const button = byId('general-train');
       button.textContent = training ? 'Stop training' : 'Train';

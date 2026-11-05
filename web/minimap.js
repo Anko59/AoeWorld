@@ -57,12 +57,15 @@ export function minimapProject(point, world, view = { zoom: 1, center: world.map
   return [128 + 128 * view.zoom * (dx - dy), 128 + 128 * view.zoom * (dx + dy)];
 }
 
+// A stretched map fills its whole rectangle (the native menu's 2:1 rhombus);
+// otherwise the square map is letterboxed inside it.
 export function minimapWorldPoint(rect, clientX, clientY, world,
-  view = { zoom: 1, center: world.map(v => v / 2) }) {
+  view = { zoom: 1, center: world.map(v => v / 2) }, stretch = false) {
   const side = Math.min(rect.width, rect.height);
   if (!(side > 0)) return null;
-  const x = ((clientX - rect.left - (rect.width - side) / 2) / side - 0.5) / view.zoom;
-  const y = ((clientY - rect.top - (rect.height - side) / 2) / side - 0.5) / view.zoom;
+  const [w, h] = stretch ? [rect.width, rect.height] : [side, side];
+  const x = ((clientX - rect.left - (rect.width - w) / 2) / w - 0.5) / view.zoom;
+  const y = ((clientY - rect.top - (rect.height - h) / 2) / h - 0.5) / view.zoom;
   return [Math.max(0, Math.min(world[0] - 1, view.center[0] + (x + y) * world[0])),
     Math.max(0, Math.min(world[1] - 1, view.center[1] + (y - x) * world[1]))];
 }
