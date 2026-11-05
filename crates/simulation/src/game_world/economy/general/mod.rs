@@ -73,6 +73,10 @@ pub(crate) struct Manager {
     pub controlled: BTreeMap<EntityId, EntityId>,
     // Only an empty building queue can be reserved. Its front is the recruit.
     pub recruits: BTreeMap<EntityId, (EntityId, UnitKind)>,
+    /// Soldiers the player took out of an army by ordering them directly, with
+    /// the tick of that order. No census adopts them; only a fresh order of
+    /// their own player's General readmits them (see `general_player_order`).
+    pub manual: BTreeMap<EntityId, u64>,
     pub cursor: Option<EntityId>,
     pub work: GeneralWork,
     pub appearance_changes: BTreeSet<EntityId>,
@@ -184,6 +188,10 @@ impl GameWorld {
     pub(crate) fn is_general_follower(&self, unit: EntityId, general: EntityId) -> bool {
         self.economy.generals.controlled.get(&unit) == Some(&general)
     }
+    /// Soldiers currently detached from every army by a player order.
+    pub fn general_detached_count(&self) -> usize {
+        self.economy.generals.manual.len()
+    }
     pub fn general_castle(&self, id: EntityId) -> Option<EntityId> {
         self.economy.generals.armies.get(&id)?.castle
     }
@@ -191,6 +199,7 @@ impl GameWorld {
         self.economy.generals.work
     }
     pub(crate) fn forget_general(&mut self, id: EntityId) {
+        self.economy.generals.manual.remove(&id);
         self.restore_general_stances(id);
         if let Some(g) = self.general_controller(id) {
             self.restore_general_stance(g, id);

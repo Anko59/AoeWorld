@@ -65,6 +65,32 @@ same-player squeeze is a last resort, not static-terrain ghosting. No new
 randomness, wall clock, unbounded neighbour scan or per-member global search
 in the normal marching loop.
 
+## A player's order beats a General
+
+A General's army never overrides the player. The whole rule, implemented once
+in `general_player_order` (`economy/general/orders.rs`):
+
+1. Per player, a soldier is in an army or detached.
+2. Any player order that names a soldier (move, attack, stop, garrison, load,
+   hunt, formation, enabling auto-scout) detaches it and restarts its clock,
+   whether or not any army exists or it ever belonged to one (villagers are
+   not soldiers and are never recorded; the set is bounded by living soldiers
+   and cleared on death: 5,600 entries when every soldier of the 100-seat
+   late-game workload is ordered). A formation order that also names the
+   soldier's General detaches the soldier too: it follows the order it was
+   given, and only the unnamed rest of the army follows his march.
+3. Detachment survives garrison (a sheltered soldier has no map record but
+   keeps its entry).
+4. Only a player's order that names his own General (move, stop, move-alone,
+   anything)
+   readmits detached soldiers, and only those that are idle (not moving,
+   planning, attacking or auto-scouting), within 24 tiles and at least 300
+   ticks past their last order. Automatic marches (vassal defence recall) never
+   readmit.
+5. A soldier under a live player order is never touched; another player's
+   General never takes it.
+6. The detached set and its clocks are in the state hash.
+
 ## Measurements and implementation sequence
 
 Add tests before changing production behaviour. Fixtures must exercise mixed

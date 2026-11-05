@@ -14,9 +14,15 @@ const AI_PENDING_COMMANDS: usize = 256;
 
 #[path = "commands/apply.rs"]
 mod apply;
+#[path = "commands/tests/auto_scout.rs"]
+#[cfg(test)]
+mod auto_scout_tests;
 #[path = "commands/tests/delete.rs"]
 #[cfg(test)]
 mod delete_tests;
+#[path = "commands/tests/detach.rs"]
+#[cfg(test)]
+mod detach_tests;
 #[path = "commands/formations.rs"]
 mod formations;
 #[path = "commands/garrison.rs"]

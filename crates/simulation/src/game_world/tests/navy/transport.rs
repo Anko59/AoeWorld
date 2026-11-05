@@ -428,3 +428,24 @@ fn roaming_steward_can_board_and_leave_transport_without_activating_a_domain() {
     assert_eq!(world.steward_town_center(king), None);
     assert_eq!(world.steward_settings(king), Some(settings));
 }
+
+#[test]
+fn an_embarked_detached_soldier_stays_detached_aboard() {
+    let (mut world, transport, passenger, land, _) = fixture();
+    let general = world
+        .spawn_kind(PlayerId(0), UnitKind::General, at(land))
+        .unwrap();
+    advance(&mut world, 20);
+    assert_eq!(world.general_controller(passenger), Some(general));
+    world.general_player_order(PlayerId(0), &[passenger], None);
+    world
+        .issue_load(PlayerId(0), &[passenger], transport)
+        .unwrap();
+    assert!(world.embarked(passenger));
+    advance(&mut world, 400);
+    world.general_player_order(PlayerId(0), &[general], None);
+    assert!(
+        world.economy.generals.manual.contains_key(&passenger),
+        "aboard a transport the soldier keeps its protection"
+    );
+}

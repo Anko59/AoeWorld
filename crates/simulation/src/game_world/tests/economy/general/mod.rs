@@ -2,6 +2,7 @@ use super::*;
 use crate::{Age, GeneralState, Stockpile};
 
 mod appearance;
+mod detached;
 mod fighting;
 mod movement;
 mod orders;

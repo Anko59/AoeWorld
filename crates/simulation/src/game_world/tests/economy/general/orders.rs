@@ -9,6 +9,11 @@ fn muster(w: &mut GameWorld) -> (Vec<EntityId>, EntityId) {
     (ids, g)
 }
 
+fn player_move(w: &mut GameWorld, g: EntityId, to: WorldPosition) {
+    w.issue_move(g, to).unwrap();
+    w.general_player_order(PlayerId(0), &[g], Some(to));
+}
+
 fn walked(w: &GameWorld, id: EntityId, from: WorldPosition) -> i64 {
     let p = w.unit(id).unwrap().position;
     i64::from(p.x - from.x)
@@ -141,4 +146,142 @@ fn general_walks_through_his_own_army_that_fills_a_corridor() {
     let p = w.unit(g).unwrap().position;
     assert!(p.x > 130 * 1024, "General crossed his army: {p:?}");
     assert!(wall.iter().all(|&id| w.unit(id).unwrap().hp > 0));
+}
+
+/// The owner could not rescue a stuck group: its General kept taking it back.
+#[test]
+fn a_general_never_overwrites_a_players_order_on_his_soldiers() {
+    let (mut w, _) = setup();
+    let (ids, g) = muster(&mut w);
+    advance(&mut w, 20);
+    assert_eq!(w.general_controller(ids[0]), Some(g));
+    w.issue_move(g, at(170, 104)).unwrap();
+    advance(&mut w, 40);
+    let rescued = &ids[..4];
+    let refuge = at(102, 140);
+    w.issue_formation_move(
+        PlayerId(0),
+        rescued,
+        aoe_core::Formation::Line,
+        refuge,
+        false,
+        false,
+    )
+    .unwrap();
+    w.general_player_order(PlayerId(0), rescued, Some(refuge));
+    assert_eq!(w.general_controller(ids[0]), None);
+    advance(&mut w, 800);
+    for &id in rescued {
+        let unit = w.unit(id).unwrap();
+        assert!(
+            unit.position.y > 130 * 1024,
+            "{id:?} went where the player sent it: {:?}",
+            unit.position
+        );
+        assert_eq!(w.general_controller(id), None);
+    }
+    assert!(w.general_status(g).unwrap().army_size < 12);
+    assert!(
+        w.unit(ids[5]).unwrap().position.x > 110 * 1024,
+        "the rest march on"
+    );
+}
+
+#[test]
+fn a_general_takes_no_soldier_passing_under_a_players_order() {
+    let (mut w, _) = setup();
+    let g = soldier(&mut w, UnitKind::General, 102, 104);
+    let passing = soldier(&mut w, UnitKind::Militia, 80, 104);
+    w.issue_move(passing, at(125, 104)).unwrap();
+    for _ in 0..1000 {
+        advance(&mut w, 1);
+        assert_eq!(w.general_controller(passing), None);
+        if !w.unit(passing).unwrap().moving {
+            break;
+        }
+    }
+    assert_eq!(w.general_status(g).unwrap().army_size, 0);
+}
+
+#[test]
+fn ordering_the_general_readmits_the_soldiers_who_finished_nearby() {
+    let (mut w, _) = setup();
+    let (ids, g) = muster(&mut w);
+    advance(&mut w, 20);
+    w.general_player_order(PlayerId(0), &ids[..1], None);
+    advance(&mut w, 40);
+    assert_eq!(
+        w.general_controller(ids[0]),
+        None,
+        "no census takes it back"
+    );
+    player_move(&mut w, g, at(150, 104));
+    advance(&mut w, 40);
+    assert_eq!(
+        w.general_controller(ids[0]),
+        None,
+        "a soldier stopped moments ago stays out: the player meant it"
+    );
+    advance(&mut w, 300);
+    player_move(&mut w, g, at(120, 104));
+    advance(&mut w, 40);
+    assert_eq!(
+        w.general_controller(ids[0]),
+        Some(g),
+        "idle long enough, a fresh General order takes it back"
+    );
+}
+
+#[test]
+fn a_soldier_under_a_live_order_is_never_readmitted() {
+    let (mut w, _) = setup();
+    let (ids, g) = muster(&mut w);
+    advance(&mut w, 20);
+    w.general_player_order(PlayerId(0), &ids[..1], None);
+    w.issue_move(ids[0], at(101, 104)).unwrap();
+    advance(&mut w, 400);
+    w.issue_move(ids[0], at(101, 140)).unwrap();
+    player_move(&mut w, g, at(150, 104));
+    advance(&mut w, 20);
+    assert_eq!(w.general_controller(ids[0]), None);
+    assert!(w.unit(ids[0]).unwrap().moving);
+}
+
+#[test]
+fn another_players_general_never_releases_a_detached_soldier() {
+    let (mut w, _) = setup();
+    let (ids, _) = muster(&mut w);
+    advance(&mut w, 20);
+    w.general_player_order(PlayerId(0), &ids[..1], None);
+    advance(&mut w, 400);
+    let rival = w
+        .spawn_kind(PlayerId(1), UnitKind::General, at(103, 104))
+        .unwrap();
+    w.issue_move(rival, at(150, 104)).unwrap();
+    w.general_player_order(PlayerId(1), &[rival], Some(at(150, 104)));
+    assert!(
+        w.economy.generals.manual.contains_key(&ids[0]),
+        "player 1's order leaves player 0's detached soldier alone"
+    );
+}
+
+#[test]
+fn detached_soldiers_replay_alike_on_one_and_four_workers() {
+    let run = |workers: usize| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(workers)
+            .build()
+            .unwrap()
+            .install(|| {
+                let (mut w, _) = setup();
+                let (ids, g) = muster(&mut w);
+                advance(&mut w, 20);
+                w.general_player_order(PlayerId(0), &ids[..3], None);
+                advance(&mut w, 350);
+                player_move(&mut w, g, at(150, 104));
+                advance(&mut w, 200);
+                w.canonical_hash()
+            })
+    };
+    assert_eq!(run(1), run(4));
 }

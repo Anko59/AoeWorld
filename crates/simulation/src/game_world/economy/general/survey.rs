@@ -63,9 +63,20 @@ impl GameWorld {
         };
         let complete = start == (0, 0) && chunk == count;
         units.sort_unstable_by_key(|v| v.id);
-        for v in units.iter().copied().filter(|v| {
-            v.player == u.player && distance(u.position, v.position) <= (24 * 1024_i64).pow(2)
-        }) {
+        // Soldiers carrying out their own orders are not his to take.
+        let manual = &self.economy.generals.manual;
+        let free: Vec<_> = units
+            .iter()
+            .copied()
+            .filter(|v| {
+                v.player == u.player
+                    && distance(u.position, v.position) <= (24 * 1024_i64).pow(2)
+                    && !manual.contains_key(&v.id)
+                    && (self.economy.generals.controlled.contains_key(&v.id)
+                        || (!v.moving && !v.planning && v.attack_target.is_none()))
+            })
+            .collect();
+        for v in free {
             self.claim_general_unit(id, v);
         }
         // The army sees what its General sees (12 tiles) and what any soldier
