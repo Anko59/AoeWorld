@@ -64,10 +64,18 @@ food is short, or housing is full. The Steward builds Houses before population
 plus queued training fills the player's space, including when its workers are
 already busy.
 
+**Containment.** A Steward only gives a villager a job (resource, Farm, foundation,
+new building site, replacement target) when a walk exists that stays inside its
+own territory. Static ground (water, cliffs, bridges) of the territory is labelled
+into components once per territory or bridge change; each check is a few array
+reads, never a route search. A villager with no reachable work stays Idle.
+Ships are not restricted.
+
 **Stalls.** Every pass the Steward checks its managed workers. One whose task is
 Moving but whose position has not changed for 8 seconds is stopped and
 re-tasked, avoiding the node it was heading to (after a second consecutive
-stall, avoiding that resource kind). The client treats a villager reported as
+stall, avoiding that resource kind). Unmanaged villagers of the territory that
+are Moving without progress get the same Stop, so they become idle and are adopted. The client treats a villager reported as
 Moving that is neither moving nor planning as idle for the idle-villager count.
 
 The HUD line for a selected Town Center reads "n/100 villagers managed · r in
@@ -100,9 +108,13 @@ Idle workers and unloaded managed gatherers respond to those kingdom needs.
 Carried loads finish their ordinary delivery first, and a refused replacement
 keeps the current productive job. Training retains its normal admission before
 productive reassignment; optional maintenance follows.
-Each domain pass adjusts at most one productive job for a moderate imbalance.
-Further changes require the new weighted projected reserve to be below one
-quarter of the current resource's reserve. Idle dispatch keeps its ordinary
+A busy worker keeps its job through ordinary stock changes. Only a dry Food
+stock (under a tenth of another kind's weighted reserve) re-tasks busy
+non-farming gatherers, at most a quarter of the domain (at least one) working
+Farms or building them, one change per 12 seconds. Such a retask places a Farm
+before taking another wild forage node, since foraging is finite and does not
+count toward that quota. Shore fish are for boats,
+so walking villagers never count them as Food supply. Idle dispatch keeps its ordinary
 budget, and severe shortages can still redirect the available workforce.
 Known resources within ten tiles are preferred. A local miss can also probe a
 completed matching drop-off, rotating its building ID between queries. A
@@ -234,7 +246,8 @@ coastal domain with known fish builds an ordinary Dock when the territory has
 none, reuses an existing foundation, and replaces a lost builder. Placement
 shares the 32-site allowance. The training switch covers villagers and fishing
 ships; a completed Dock trains ships only with Food priority, available Wood,
-an empty queue. Inland domains without fish buy no Dock.
+an empty queue. Inland domains without fish buy no Dock. A Dock trains no further ship while
+any existing ship has no fishing job or is labelled Moving without moving.
 
 `POST /maps/reset?scenario=steward-fishing` prepares a synthetic flat coast,
 a Steward entering a Town Center, eight villagers and one fishing ship already on

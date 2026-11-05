@@ -41,6 +41,16 @@ impl Priority {
         kinds
     }
 
+    /// `next` is so much scarcer than `current` (under a tenth of its
+    /// weighted reserve) that a busy worker should change over to it.
+    pub(super) fn severe(&self, next: ResourceKind, current: ResourceKind) -> bool {
+        let (next, current) = (next as usize, current as usize);
+        next != current
+            && self.weights[next] > 0
+            && u128::from(self.reserves[next]) * u128::from(self.weights[current]) * 10
+                < u128::from(self.reserves[current]) * u128::from(self.weights[next])
+    }
+
     /// Discovery can prepare a meaningfully more needed kind before jobs end.
     pub(super) fn improves(&self, next: ResourceKind, current: ResourceKind) -> bool {
         let (next, current) = (next as usize, current as usize);

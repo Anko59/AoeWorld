@@ -139,6 +139,14 @@ impl GameWorld {
                     return Some(kind);
                 }
             }
+            // Wild forage is finite and never counted as farming supply, so a
+            // dry-Food retask places a Farm before taking another forage node.
+            if kind == ResourceKind::Food
+                && s.farm_first
+                && self.steward_food(worker, s, budget, work)
+            {
+                return Some(kind);
+            }
             if let Some(node) = self.steward_resource(worker, kind, s, budget, work) {
                 let close = s.buildings.iter().any(|b| {
                     b.is_complete()
@@ -173,6 +181,101 @@ impl GameWorld {
         None
     }
 
+    /// Continuity keeps busy workers on their jobs, so a resource that has run
+    /// dry would otherwise never get workers or Farms while nobody is idle.
+    /// When the wanted kind is under a tenth of a worker's current kind, one
+    /// unloaded gatherer is re-tasked (at most a tenth of the domain, at least
+    /// one, on the wanted kind or building its Farms and Mills) per cooldown.
+    pub(super) fn steward_rebalance(
+        &mut self,
+        s: &mut Snapshot,
+        budget: &mut Budget,
+        work: &mut StewardWork,
+        changed: &mut Vec<EntityId>,
+    ) {
+        const QUOTA_DIVISOR: usize = 4;
+        const FOUND_COOLDOWN_SECONDS: u64 = 12;
+        const MISSED_COOLDOWN_SECONDS: u64 = 30;
+        let now = self.tick.0;
+        if now < s.home.rebalance_after || !s.complete || !budget.support_available() {
+            return;
+        }
+        let Some(priority) = self.steward_priority(s.player, s.home.settings.weights) else {
+            return;
+        };
+        let wanted = priority.kinds()[0];
+        // Only a dry Food stock justifies interrupting busy workers: Farms
+        // are the one supply the kingdom can always build more of.
+        if wanted != ResourceKind::Food {
+            return;
+        }
+        let managed = self.economy.steward_homes[&s.steward].workers.len();
+        let on_wanted = s
+            .units
+            .iter()
+            .filter(|u| {
+                self.steward_controller(u.id) == Some(s.steward)
+                    && ((self.gathering_kind(u.id) == Some(wanted)
+                        // Foraging does not feed a kingdom: only Farms count.
+                        && (wanted != ResourceKind::Food
+                            || u.task == crate::UnitTask::Farming))
+                        // Farm and Mill crews are Food workers in the making.
+                        || (wanted == ResourceKind::Food
+                            && self.economy.builders.get(&u.id).is_some_and(|task| {
+                                self.building(task.building).is_some_and(|b| {
+                                    matches!(b.kind, BuildingKind::Farm | BuildingKind::Mill)
+                                })
+                            })))
+            })
+            .count();
+        if on_wanted >= (managed / QUOTA_DIVISOR).max(1) {
+            return;
+        }
+        let split = s
+            .home
+            .rebalance_cursor
+            .map_or(0, |id| s.units.partition_point(|u| u.id <= id));
+        let candidate = s.units[split..]
+            .iter()
+            .chain(&s.units[..split])
+            .filter(|u| {
+                self.steward_controller(u.id) == Some(s.steward)
+                    && u.carried.is_none()
+                    && !self.steward_has_held_job(u.id)
+                    && !self.economy.builders.contains_key(&u.id)
+                    && self.economy.gatherers.get(&u.id).is_some_and(|task| {
+                        task.animal.is_none()
+                            && task.farm.is_none()
+                            && priority.severe(wanted, task.kind)
+                    })
+            })
+            .map(|u| u.id)
+            .next();
+        let Some(worker) = candidate else {
+            return;
+        };
+        s.home.rebalance_cursor = Some(worker);
+        let previous = self.gathering_kind(worker);
+        s.avoid = None;
+        s.farm_first = true;
+        let job = self.steward_job(worker, s, budget, work);
+        s.farm_first = false;
+        let cooldown = if job.is_some() && job != previous {
+            FOUND_COOLDOWN_SECONDS
+        } else {
+            MISSED_COOLDOWN_SECONDS
+        };
+        s.home.rebalance_after = now + cooldown * u64::from(self.config.tick_hz);
+        if let Some(home) = self.economy.steward_homes.get_mut(&s.steward) {
+            home.rebalance_after = s.home.rebalance_after;
+            home.rebalance_cursor = s.home.rebalance_cursor;
+        }
+        if let Some(kind) = job {
+            self.claim_steward_worker(s.steward, worker, kind);
+            changed.push(worker);
+        }
+    }
+
     fn steward_help_foundation(
         &mut self,
         worker: EntityId,
@@ -203,6 +306,7 @@ impl GameWorld {
                 !b.is_complete()
                     && only.map_or(b.kind != BuildingKind::Farm, |kind| b.kind == kind)
                     && attended.get(&b.id).copied().unwrap_or(0) < builder_limit(b.kind)
+                    && s.home.connects(from, b.footprint)
                     && matches!(
                         b.kind,
                         BuildingKind::House

@@ -152,7 +152,9 @@ impl GameWorld {
     }
 
     fn steward_node_known(&self, n: ResourceNode, s: &Snapshot) -> bool {
-        n.object != ObjectKind::DeepFish
+        // Fish belong to boats and Docks; a walking fisher earns a fraction of
+        // a Farmer and would stand in for Farms while Food runs dry.
+        !matches!(n.object, ObjectKind::DeepFish | ObjectKind::ShoreFish)
             && WorldPosition::from_tile_center(n.tile).is_ok_and(|at| s.home.owns(at))
             && self.visibility(s.player, n.tile) != TileVisibility::Unexplored
             && self
@@ -160,9 +162,21 @@ impl GameWorld {
                 .is_some_and(|amount| amount > 0)
     }
 
+    /// The worker can walk to `tile` without leaving this Steward's territory.
+    pub(super) fn steward_can_walk_to(
+        &self,
+        worker: EntityId,
+        tile: aoe_core::TileCoord,
+        s: &Snapshot,
+    ) -> bool {
+        self.unit(worker)
+            .is_none_or(|u| s.home.connects_tile(u.position.tile_floor(), tile))
+    }
+
     fn steward_node_eligible(&self, node: ResourceNode, worker: EntityId, s: &Snapshot) -> bool {
         self.steward_node_known(node, s)
             && s.avoid.is_none_or(|a| a.avoid_tile != Some(node.tile))
+            && self.steward_can_walk_to(worker, node.tile, s)
             && self.node_has_work_slot(node.id, worker)
     }
 

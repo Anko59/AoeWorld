@@ -1,7 +1,7 @@
 use super::*;
 use crate::{Age, StewardSettings};
 
-fn domain(w: &mut GameWorld, shore: TileCoord) -> (EntityId, EntityId) {
+pub(super) fn domain(w: &mut GameWorld, shore: TileCoord) -> (EntityId, EntityId) {
     w.place_town_center(PlayerId(0), TileCoord::new(10, 10))
         .unwrap();
     w.set_fog_disabled(true);
@@ -58,7 +58,7 @@ fn domain(w: &mut GameWorld, shore: TileCoord) -> (EntityId, EntityId) {
     (town_center, king)
 }
 
-fn bounded(w: &GameWorld) {
+pub(super) fn bounded(w: &GameWorld) {
     let a = w.steward_work();
     assert!(a.orders <= 64 && a.resource_searches <= 8 && a.site_checks <= 32);
     assert!(a.unit_visits <= 1_024 && a.building_visits <= 2_048);
@@ -169,7 +169,7 @@ fn inland_steward_never_builds_a_dock() {
     assert!(!w.units().any(|u| u.kind == UnitKind::FishingShip));
 }
 
-fn fish_near(w: &GameWorld, town_center: EntityId) -> ResourceNode {
+pub(super) fn fish_near(w: &GameWorld, town_center: EntityId) -> ResourceNode {
     let home = w.building(town_center).unwrap().footprint.min;
     let crate::Terrain::Map { generator, .. } = w.terrain() else {
         panic!()
@@ -189,7 +189,7 @@ fn fish_near(w: &GameWorld, town_center: EntityId) -> ResourceNode {
         .expect("coastal domain has known deep fish")
 }
 
-fn boat_near(w: &mut GameWorld, node: ResourceNode, player: PlayerId) -> EntityId {
+pub(super) fn boat_near(w: &mut GameWorld, node: ResourceNode, player: PlayerId) -> EntityId {
     for (dx, dy) in [(1, 0), (0, 1), (-1, 0), (0, -1)] {
         if let Ok(id) = w.spawn_kind(
             player,

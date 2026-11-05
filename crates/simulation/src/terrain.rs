@@ -185,6 +185,38 @@ impl Terrain {
         }
     }
 
+    /// One orthogonal or diagonal step over the static ground alone: water,
+    /// cliffs and bridges count, resources and buildings do not. Used for
+    /// cheap, change-resistant connectivity labels; never for movement.
+    pub fn ground_step_open(&self, from: TileCoord, to: TileCoord) -> bool {
+        let Self::Map { generator, overlay } = self else {
+            return true;
+        };
+        if let Some(clear) = overlay.bridge_edge(from, to) {
+            return clear;
+        }
+        let open = |tile| {
+            generator
+                .walk_at_with_cancel(tile, &|| false)
+                .ok()
+                .flatten()
+                .is_some_and(|cell| cell.passable || overlay.bridge_connections(tile).is_some())
+        };
+        let edge = |from, to| {
+            matches!(
+                generator.edge_between_with_cancel(from, to, &|| false),
+                Ok(EdgePassability::Passable)
+            )
+        };
+        // Off a bridge a diagonal needs both corner steps, as in `crossable`.
+        open(to)
+            && edge(from, to)
+            && (from.x == to.x
+                || from.y == to.y
+                || (edge(from, TileCoord::new(to.x, from.y))
+                    && edge(from, TileCoord::new(from.x, to.y))))
+    }
+
     pub fn route(&self, origin: TileCoord, destination: TileCoord) -> Option<Vec<TileCoord>> {
         self.route_outcome(origin, destination)
             .map(|outcome| match outcome {

@@ -4,6 +4,14 @@ use super::*;
 use std::collections::{BTreeMap, VecDeque};
 
 fn fixture(domains: usize, unfinished_mills: bool) -> (GameWorld, Vec<EntityId>) {
+    fixture_sized(domains, unfinished_mills, 20)
+}
+
+fn fixture_sized(
+    domains: usize,
+    unfinished_mills: bool,
+    per_domain: usize,
+) -> (GameWorld, Vec<EntityId>) {
     let mut w = crate::game_world::terrain_fixtures::build("river").world;
     let old: Vec<_> = w.units().map(|u| u.id).collect();
     for id in old {
@@ -72,7 +80,11 @@ fn fixture(domains: usize, unfinished_mills: bool) -> (GameWorld, Vec<EntityId>)
             )
             .unwrap();
         w.issue_garrison(PlayerId(0), king, town_center).unwrap();
-        workers.extend(workers_near(&mut w, TileCoord::new(x, base_y + 22), 20));
+        workers.extend(workers_near(
+            &mut w,
+            TileCoord::new(x, base_y + 22),
+            per_domain,
+        ));
     }
     let wolves: Vec<_> = w
         .animals()
@@ -374,4 +386,93 @@ fn ten_minute_four_river_stewards_finish_mills_without_helper_swarms() {
     assert!(one.idle_minutes.iter().all(|&n| n <= 4), "{report}");
     assert!(one.unreachable_minutes.iter().all(|&n| n == 0), "{report}");
     assert!(one.poaching_minutes.iter().all(|&n| n == 0), "{report}");
+}
+
+/// One river domain whose natural Food is gone; per minute: (Farms, Food
+/// workers, food, wood, farming workers) after `drain(minute)` Food is spent.
+fn dry_run(per_domain: usize, drain: impl Fn(u64) -> u32) -> Vec<(usize, usize, u32, u32, usize)> {
+    let (mut w, workers) = fixture_sized(1, false, per_domain);
+    let mut natural = Vec::new();
+    if let Terrain::Map { generator, .. } = &w.terrain {
+        for cy in 0..16 {
+            for cx in 0..16 {
+                if let Ok(chunk) = generator.chunk(cx, cy) {
+                    natural.extend(
+                        chunk
+                            .resources
+                            .into_iter()
+                            .filter(|n| n.kind == ResourceKind::Food),
+                    );
+                }
+            }
+        }
+    }
+    for node in natural {
+        let _ = w.deplete_resource(node.id, node.initial_amount);
+    }
+    let hz = w.config().tick_hz;
+    let mut out = Vec::new();
+    for tick in 1..=hz * 600 {
+        if tick > 1 && tick % (hz * 60) == 1 {
+            let stock = &mut w.economy.players.get_mut(&PlayerId(0)).unwrap().stockpile;
+            stock.food = stock
+                .food
+                .saturating_sub(drain(u64::from(tick / (hz * 60))));
+            stock.wood = stock.wood.saturating_sub(200);
+        }
+        w.advance();
+        if tick % (hz * 60) == 0 {
+            let farms = w
+                .buildings()
+                .filter(|b| b.kind == BuildingKind::Farm)
+                .count();
+            let food = workers
+                .iter()
+                .filter(|id| w.gathering_kind(**id) == Some(ResourceKind::Food))
+                .count();
+            let farmers = workers
+                .iter()
+                .filter(|id| {
+                    w.unit(**id)
+                        .is_some_and(|u| u.task == crate::UnitTask::Farming)
+                        || w.economy.builders.get(*id).is_some_and(|t| {
+                            w.building(t.building)
+                                .is_some_and(|b| b.kind == BuildingKind::Farm)
+                        })
+                })
+                .count();
+            let s = w.player_economy(PlayerId(0)).unwrap().stockpile;
+            out.push((farms, food, s.food, s.wood, farmers));
+        }
+    }
+    out
+}
+
+/// Wild forage is finite and does not count as farming supply. Measured before
+/// the fix: 13 Food workers at minute 7 all on the village's leftover forage
+/// nodes (23 to 121 food each), Farm count stuck at 1, Food 140. Stated bound
+/// now: by minute 7 at least three workers farm or build Farms, no fewer Farms
+/// exist than those workers, and Food is back above 100.
+#[test]
+fn a_dry_river_domain_gets_farms_and_food_within_seven_minutes() {
+    let run = dry_run(20, |_| 300);
+    eprintln!("(Farms, Food workers, food, wood, farmers) per minute: {run:?}");
+    let (farms, _, food, _, farmers) = run[6];
+    assert!(
+        farmers >= 3 && farms >= farmers,
+        "Farms must exist for the farming workers by minute 7: {run:?}"
+    );
+    assert!(food >= 100, "Food still dry at minute 7: {run:?}");
+}
+
+/// Existing Farms saturate and demand then doubles: Stewards keep adding Farms
+/// instead of stopping at the first cluster.
+#[test]
+fn stewards_keep_adding_farms_when_food_demand_rises() {
+    let run = dry_run(40, |minute| if minute < 6 { 300 } else { 700 });
+    eprintln!("(Farms, Food workers, food, wood, farmers) per minute: {run:?}");
+    assert!(
+        run[9].0 > run[5].0 && run[9].0 >= run[9].4,
+        "Farms must grow after demand rises: {run:?}"
+    );
 }

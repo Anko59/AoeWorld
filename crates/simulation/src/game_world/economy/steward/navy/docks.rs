@@ -30,7 +30,7 @@ impl GameWorld {
                         .is_some_and(|task| task.building == dock.id)
                 });
                 if !attended
-                    && let Some(worker) = self.steward_dock_builder(s)
+                    && let Some(worker) = self.steward_dock_builder(s, Some(dock.footprint))
                     && budget.order(work)
                     && self.issue_construct(s.player, &[worker], dock.id).is_ok()
                 {
@@ -53,6 +53,8 @@ impl GameWorld {
                     .steward_priority(s.player, s.home.settings.weights)
                     .is_some_and(|p| p.kinds()[0] == ResourceKind::Food)
                 && s.boats.len() + queued < STEWARD_RULES.max_villagers
+                // Boats that cannot fish are no food supply: never add more.
+                && !s.boats.iter().any(|b| self.steward_boat_unproductive(b.id))
                 && dock.training_queue.is_empty()
                 && dock.research.is_none()
                 && player.stockpile.wood >= 75
@@ -62,7 +64,7 @@ impl GameWorld {
             }
             return;
         }
-        let Some(worker) = self.steward_dock_builder(s) else {
+        let Some(worker) = self.steward_dock_builder(s, None) else {
             return;
         };
         if self
@@ -99,6 +101,7 @@ impl GameWorld {
             );
             let rect = TileRect::from_xywh(tile.x, tile.y, 3, 3);
             if !s.home.covers(rect, 1)
+                || !self.steward_site_walkable(worker, rect, s)
                 || self.validate_explored_footprint(s.player, rect).is_err()
                 || self
                     .validate_building_placement(BuildingKind::Dock, tile)
@@ -120,13 +123,26 @@ impl GameWorld {
         }
     }
 
-    fn steward_dock_builder(&self, s: &Snapshot) -> Option<EntityId> {
+    /// A boat with no fishing job, or one labelled Moving that does not move.
+    fn steward_boat_unproductive(&self, id: EntityId) -> bool {
+        self.unit(id).is_some_and(|u| {
+            u.hp > 0
+                && !self.economy.garrison_orders.contains_key(&id)
+                && (!self.economy.gatherers.contains_key(&id)
+                    || (u.task == crate::UnitTask::Moving && !u.moving && !u.planning))
+        })
+    }
+
+    /// A free villager; for an existing foundation it must also be able to walk
+    /// to it without leaving the territory.
+    fn steward_dock_builder(&self, s: &Snapshot, site: Option<TileRect>) -> Option<EntityId> {
         s.units
             .iter()
             .filter_map(|u| self.unit(u.id))
             .find(|u| {
                 !self.economy.stewards.manual.contains(&u.id)
                     && !self.economy.builders.contains_key(&u.id)
+                    && site.is_none_or(|rect| s.home.connects(u.position.tile_floor(), rect))
                     && (self.steward_worker_idle(u.id, s.steward)
                         || (self.steward_controller(u.id) == Some(s.steward)
                             && u.carried.is_none()))

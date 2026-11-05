@@ -38,9 +38,13 @@ pub(crate) struct Home {
     pub(super) site_after: usize,
     pub(super) farm_after: Option<usize>,
     pub(super) repair_after: Option<EntityId>,
+    /// First tick at which another shortage rebalance may be tried.
+    pub(super) rebalance_after: u64,
+    pub(super) rebalance_cursor: Option<EntityId>,
     pub(super) repair_sites: BTreeMap<EntityId, usize>,
     held_jobs: BTreeMap<EntityId, jobs::HeldJob>,
     resources: search::Search,
+    regions: Option<std::sync::Arc<territory::Regions>>,
     navy: navy::Fleet,
     pub(crate) stalls: BTreeMap<EntityId, watchdog::Stall>,
     pub(super) status: StewardStatus,
@@ -97,6 +101,8 @@ pub(crate) struct Manager {
     /// one admitted domain pass, including ordinary resource replacements.
     pub(super) ordering: Option<EntityId>,
     pub(super) work: StewardWork,
+    /// Bumped when a bridge appears or collapses; invalidates region labels.
+    pub(super) bridge_epoch: u32,
 }
 impl GameWorld {
     pub(crate) fn register_steward(&mut self, id: EntityId) {
@@ -117,9 +123,12 @@ impl GameWorld {
                 site_after: 0,
                 farm_after: None,
                 repair_after: None,
+                rebalance_after: 0,
+                rebalance_cursor: None,
                 repair_sites: BTreeMap::new(),
                 held_jobs: BTreeMap::new(),
                 resources: search::Search::default(),
+                regions: None,
                 navy: navy::Fleet::default(),
                 stalls: BTreeMap::new(),
                 status: StewardStatus::default(),
@@ -273,6 +282,8 @@ impl GameWorld {
                     h.stalls.clear();
                     h.held_jobs.clear();
                     h.repair_after = None;
+                    h.rebalance_after = 0;
+                    h.rebalance_cursor = None;
                     h.repair_sites.clear();
                     let refused = h.resources.clear_workers();
                     h.status = StewardStatus {
@@ -280,6 +291,7 @@ impl GameWorld {
                         ..StewardStatus::default()
                     };
                     h.resources = search::Search::default();
+                    h.regions = None;
                     let ships = std::mem::take(&mut h.navy.ships);
                     h.workers.extend(ships);
                     h.navy = navy::Fleet::default();
@@ -427,7 +439,15 @@ impl GameWorld {
         self.steward_controller(worker)
             .or(self.economy.stewards.ordering)
             .and_then(|v| self.economy.steward_homes.get(&v))
-            .is_none_or(|h| h.owns(at) && self.unit(worker).is_some_and(|u| u.player == h.player))
+            .is_none_or(|h| {
+                h.owns(at)
+                    && self.unit(worker).is_some_and(|u| {
+                        u.player == h.player
+                            // Ships sail; only walkers need a land route.
+                            && (u.kind != UnitKind::Villager
+                                || h.connects_tile(u.position.tile_floor(), at.tile_floor()))
+                    })
+            })
     }
     /// Latest explanation of what this Steward's domain is doing.
     pub fn steward_status(&self, id: EntityId) -> Option<StewardStatus> {
