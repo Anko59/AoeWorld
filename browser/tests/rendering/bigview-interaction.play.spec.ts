@@ -15,7 +15,8 @@ test("map clusters zoom into their location and selected units keep right-click 
   if (info.project.name === "canvas") await forceCanvas(page);
   else if (info.project.name !== "webgpu") await forceWebGl(page);
   await gameAssets(page);
-  const orders = await ownersFixture(page);
+  // Villagers stand away from the town centre; units at a place fold into its plaque.
+  const orders = await ownersFixture(page, 12);
   await page.goto("/?play=1#x=8192.5&y=8192.5&zoom=1");
   await expect(page.locator("#connection")).toHaveText("connected");
   await expect(page.locator("#playground")).toHaveAttribute(
