@@ -75,7 +75,7 @@ pub(crate) struct Manager {
     pub recruits: BTreeMap<EntityId, (EntityId, UnitKind)>,
     /// Soldiers the player took out of an army by ordering them directly, with
     /// the tick of that order. No census adopts them; only a fresh order of
-    /// their own player's General readmits them (see `readmit_manual_soldiers`).
+    /// their own player's General readmits them (see `general_player_order`).
     pub manual: BTreeMap<EntityId, u64>,
     pub cursor: Option<EntityId>,
     pub work: GeneralWork,
@@ -248,7 +248,6 @@ impl GameWorld {
             a.layout = None;
             a.solo = false;
         }
-        self.readmit_manual_soldiers(id);
     }
     pub(super) fn claim_general_unit(&mut self, g: EntityId, u: GameUnit) {
         if self.vassal_controller(u.id).is_some()

@@ -7,48 +7,50 @@ use crate::EconomyError;
 const MANUAL_IDLE_TICKS: u64 = 300;
 
 impl GameWorld {
-    /// A player's accepted order on `ids`. A General never overwrites it: each
-    /// soldier ordered without his General leaves the army and stays out of it
-    /// until its own player's General is next ordered nearby and the soldier
-    /// has been idle for `MANUAL_IDLE_TICKS` since its last order. An order that includes
-    /// the General himself is an army order, and `destination` is his march.
+    /// The rule (docs/movement/real-terrain.md, "A player's order beats a
+    /// General"). Per player a soldier is in an army or detached. Every player
+    /// order that names a soldier detaches it and restarts its clock, with or
+    /// without armies, and also when its own General is named in the same
+    /// order: the soldier follows the order it was given, not his march. An
+    /// order that names a General then readmits detached soldiers (see
+    /// `readmit_manual_soldiers`), and `destination` is his march.
     pub fn general_player_order(
         &mut self,
         player: PlayerId,
         ids: &[EntityId],
         destination: Option<WorldPosition>,
     ) {
-        if self.economy.generals.armies.is_empty() {
-            return;
-        }
         let mut sorted = ids.to_vec();
         sorted.sort_unstable();
+        let mut generals = Vec::new();
         for &id in &sorted {
             if self.unit(id).is_none_or(|u| u.player != player) {
                 continue;
             }
             if self.economy.generals.armies.contains_key(&id) {
-                if let Some(destination) = destination {
-                    self.general_march(id, destination);
-                }
-            } else if let Some(general) = self.general_controller(id) {
-                if sorted.binary_search(&general).is_err() {
-                    self.forget_general(id);
-                    self.set_sergeant(id, false);
-                    self.economy.generals.manual.insert(id, self.tick.0);
-                }
+                generals.push(id);
             } else if let Some(ordered) = self.economy.generals.manual.get_mut(&id) {
-                // A new order restarts the idle clock of a detached soldier.
                 *ordered = self.tick.0;
+            } else if self.general_controller(id).is_some() {
+                self.forget_general(id);
+                self.set_sergeant(id, false);
+                self.economy.generals.manual.insert(id, self.tick.0);
             }
+        }
+        for general in generals {
+            if let Some(destination) = destination {
+                self.general_march(general, destination);
+            }
+            self.readmit_manual_soldiers(general);
         }
     }
 
-    /// The player ordered this General. Only soldiers of the General's own
-    /// player, within his sphere, under no live order, and idle for at least
-    /// `MANUAL_IDLE_TICKS` since the player's last order may answer his next
-    /// census again. Everyone else stays detached.
-    pub(super) fn readmit_manual_soldiers(&mut self, general: EntityId) {
+    /// A detached soldier of the General's own player returns to the census
+    /// only when it is idle (not moving, planning, attacking or auto-scouting),
+    /// within 24 tiles and `MANUAL_IDLE_TICKS` past its last order. A garrisoned
+    /// soldier has no map record and stays detached. Only a player's order to
+    /// the General calls this, never an automatic march.
+    fn readmit_manual_soldiers(&mut self, general: EntityId) {
         let Some((centre, player)) = self.unit(general).map(|u| (u.position, u.player)) else {
             return;
         };
@@ -56,17 +58,26 @@ impl GameWorld {
         let manual = std::mem::take(&mut self.economy.generals.manual);
         self.economy.generals.manual = manual
             .into_iter()
-            .filter(|&(id, ordered)| {
-                self.unit(id).is_some_and(|u| {
+            .filter(|&(id, ordered)| match self.unit(id) {
+                Some(u) => {
                     u.player != player
                         || u.moving
                         || u.planning
                         || u.attack_target.is_some()
+                        || u.auto_scout
                         || now.saturating_sub(ordered) < MANUAL_IDLE_TICKS
                         || distance(centre, u.position) > (24 * 1024_i64).pow(2)
-                })
+                }
+                None => self.is_garrisoned(id),
             })
             .collect();
+    }
+
+    fn is_garrisoned(&self, id: EntityId) -> bool {
+        self.economy
+            .buildings
+            .values()
+            .any(|b| b.garrison.binary_search_by_key(&id, |g| g.unit.id).is_ok())
     }
 
     /// Move the General by himself. The army keeps its place and is not led,

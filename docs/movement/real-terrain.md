@@ -67,17 +67,25 @@ in the normal marching loop.
 
 ## A player's order beats a General
 
-A General's army never overrides the player.
+A General's army never overrides the player. The whole rule, implemented once
+in `general_player_order` (`economy/general/orders.rs`):
 
-1. A soldier the player orders directly (move, attack, stop, garrison, load,
-   hunt, formation, auto-scout) leaves its General's army. A General never
-   touches a soldier under a live order.
-2. Readmission needs all of: the General belongs to the soldier's own player,
-   the player orders him afresh, the soldier is within 24 tiles and idle, and
-   300 ticks have passed since the player's last order of that soldier. A later
-   order restarts the clock, and a soldier stopped on purpose stays out until
-   then.
-3. The set of detached soldiers and its clocks are in the state hash.
+1. Per player, a soldier is in an army or detached.
+2. Any player order that names a soldier (move, attack, stop, garrison, load,
+   hunt, formation, enabling auto-scout) detaches it and restarts its clock,
+   whether or not any army exists. A formation order that also names the
+   soldier's General detaches the soldier too: it follows the order it was
+   given, and only the unnamed rest of the army follows his march.
+3. Detachment survives garrison (a sheltered soldier has no map record but
+   keeps its entry).
+4. Only a player's order that names his own General (move, stop, anything)
+   readmits detached soldiers, and only those that are idle (not moving,
+   planning, attacking or auto-scouting), within 24 tiles and at least 300
+   ticks past their last order. Automatic marches (vassal defence recall) never
+   readmit.
+5. A soldier under a live player order is never touched; another player's
+   General never takes it.
+6. The detached set and its clocks are in the state hash.
 
 ## Measurements and implementation sequence
 
