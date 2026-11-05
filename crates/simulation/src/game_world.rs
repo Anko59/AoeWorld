@@ -47,9 +47,13 @@ pub use economy::{
 };
 pub use facing::Facing;
 pub(crate) use facing::facing_for;
+pub use formation::GroupProbe;
 pub use research::*;
 pub use resources::PreparedResourceDepletion;
-pub use route_scheduler::{PLANNING_SPANS, PlanningProbe, RouteSchedulerStats};
+pub use route_scheduler::{
+    PLANNING_SPANS, PlanningProbe, ROUTE_CATEGORIES, ROUTE_DISTANCES, ROUTE_FAILURES,
+    RouteAttribution, RouteCaller, RouteClass, RouteSchedulerStats,
+};
 pub use visibility::TileVisibility;
 pub use wildlife::*;
 
@@ -133,6 +137,8 @@ pub(crate) struct StoredUnit {
     /// The last order this unit could not complete as unreachable: from where,
     /// to where, and on which tick (see `route_scheduler::order`).
     pub(crate) unreachable_memo: Option<(TileCoord, TileCoord, u64)>,
+    /// Diagnostics only: the call site that ordered the current route.
+    pub(crate) route_caller: Option<&'static std::panic::Location<'static>>,
 }
 #[derive(Debug)]
 pub struct GameWorld {

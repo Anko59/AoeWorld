@@ -51,6 +51,7 @@ impl GameWorld {
                 continue;
             };
             self.route_metrics.expired += 1;
+            self.attribute_expiry(index, id);
             // Only a unit that searched has learned anything about this
             // target; one that never got a slot may ask again at once.
             let searched = self.units[index].planner.is_some();
@@ -83,7 +84,35 @@ impl GameWorld {
         self.route_metrics.stuck += 1;
         self.route_metrics.sample("stuck", kind, &sample);
         self.route_metrics.failed(work);
+        let (from, to) = (sample.origin(), sample.destination());
+        let caller = self.units[index].route_caller;
+        self.route_metrics
+            .attribution
+            .failed(kind, from, to, work, 3, caller);
         self.end_waiting_route(index, id, true, changed);
+    }
+
+    /// Diagnostics: who the wait bound ended (a formation's carrier ends
+    /// its whole group).
+    fn attribute_expiry(&mut self, index: usize, id: EntityId) {
+        let unit = &self.units[index];
+        let (kind, held) = (unit.state.kind, unit.planner.is_some());
+        let ends = unit
+            .order
+            .map(|order| (order.waypoint.tile_floor(), order.target_tile));
+        let members = (unit.formation == Some(id)).then(|| self.group_size(id).unwrap_or(1));
+        let attribution = &mut self.route_metrics.attribution;
+        if let Some((from, to)) = ends {
+            attribution.expired(kind, from, to);
+        }
+        attribution.expired_without_planner += u64::from(!held);
+        match members {
+            Some(count) => {
+                attribution.group_orders_expired += 1;
+                attribution.group_members_expired += count as u64;
+            }
+            None => attribution.single_expired += 1,
+        }
     }
 
     /// Gives up on a waiting unit's route: not proven unreachable, but out of

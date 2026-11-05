@@ -26,6 +26,7 @@ pub(crate) type OrderRoute = (
 );
 
 impl GameWorld {
+    #[track_caller]
     pub(crate) fn issue_task_move(
         &mut self,
         id: EntityId,
@@ -137,12 +138,16 @@ impl GameWorld {
             })
     }
 
+    #[track_caller]
     pub(crate) fn order_route(
         &mut self,
         index: usize,
         origin: WorldPosition,
         destination: WorldPosition,
     ) -> Result<OrderRoute, GameWorldError> {
+        let caller = Some(std::panic::Location::caller());
+        self.route_metrics.caller = caller;
+        self.units[index].route_caller = caller;
         let (kind, player) = (self.units[index].state.kind, self.units[index].state.player);
         let target_tile = destination.tile_floor();
         Ok(

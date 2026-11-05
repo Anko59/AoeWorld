@@ -10,6 +10,7 @@
 mod browser;
 mod hosts;
 mod http;
+mod march;
 mod procs;
 mod report;
 mod run;
@@ -94,6 +95,19 @@ pub struct Options {
     pub bot_image: String,
     #[arg(long, default_value = "aoeworld/browser-tools:1.64.0")]
     pub browser_image: String,
+    /// Slot 0 is played by a scripted human that marches seeded mixed groups
+    /// far across the map and follows every member (`march` in the report).
+    #[arg(long)]
+    pub march_probe: bool,
+    /// Wall minutes after the bots connect before the march orders.
+    #[arg(long, default_value_t = 6.0)]
+    pub march_minute: f64,
+    /// Tiles each soldier is first sent from where it stands (scattering).
+    #[arg(long, default_value_t = 40)]
+    pub march_scatter: i32,
+    /// Seat the AI slots but start no bot: the same world without AI demand.
+    #[arg(long, requires = "march_probe")]
+    pub march_no_ai: bool,
 }
 
 pub fn run(options: Options) -> Result<(), BoxError> {

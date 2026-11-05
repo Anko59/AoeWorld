@@ -13,6 +13,7 @@ mod packing;
 mod path;
 mod resume;
 mod selection;
+pub use selection::GroupProbe;
 mod slots;
 mod steering;
 pub(crate) use path::step as group_step;

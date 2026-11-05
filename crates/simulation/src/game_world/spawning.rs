@@ -124,6 +124,7 @@ impl GameWorld {
             planning_since: 0,
             fast_route_tried: false,
             unreachable_memo: None,
+            route_caller: None,
         });
         let state = self.units[self.units.len() - 1].state;
         self.track_unit_cell(&state);

@@ -2,6 +2,7 @@
 use super::*;
 
 impl GameWorld {
+    #[track_caller]
     pub fn issue_move(
         &mut self,
         id: EntityId,

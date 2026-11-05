@@ -101,3 +101,61 @@ impl GameWorld {
         self.issue_formation_move(player, &ids, form, at, false, false)
     }
 }
+
+/// Diagnostics for the real-match probe: where a formation order of the
+/// given units starts, its members' nominal speeds and the farthest slot.
+#[derive(Clone, Debug)]
+pub struct GroupProbe {
+    pub origin: WorldPosition,
+    /// Kinds of the members with their speed (subunits per tick, as a ratio).
+    pub speeds: Vec<(UnitKind, (u64, u64))>,
+    /// The slowest member's kind and speed: the group's nominal pace.
+    pub slowest: (UnitKind, (u64, u64)),
+    /// Farthest slot from the formation centre at its destination (subunits).
+    pub extent: i64,
+}
+
+impl GameWorld {
+    pub(crate) fn group_size(&self, leader: EntityId) -> Option<usize> {
+        self.formations
+            .get(&leader)
+            .map(|group| group.members.len())
+    }
+
+    /// Read-only: what `issue_formation_move` would start from. Never
+    /// changes state or counters.
+    pub fn probe_group(
+        &self,
+        player: PlayerId,
+        ids: &[EntityId],
+        form: Formation,
+    ) -> Result<GroupProbe, EconomyError> {
+        let (ids, centroid) = self.formation_members(player, ids)?;
+        let origin = self.formation_origin(&ids, centroid)?;
+        let mut speeds = Vec::<(UnitKind, (u64, u64))>::new();
+        for id in &ids {
+            let kind = self.units[self.lookup[id]].state.kind;
+            if !speeds.iter().any(|(k, _)| *k == kind) {
+                speeds.push((kind, self.movement_speed(kind, player)));
+            }
+        }
+        let slowest = *speeds
+            .iter()
+            .min_by(|a, b| {
+                (u128::from(a.1.0) * u128::from(b.1.1))
+                    .cmp(&(u128::from(b.1.0) * u128::from(a.1.1)))
+            })
+            .ok_or(EconomyError::UnknownEntity)?;
+        let extent = layout::slots(form, ids.len())
+            .iter()
+            .map(|p| (i64::from(p.x).pow(2) + i64::from(p.y).pow(2)).isqrt())
+            .max()
+            .unwrap_or(0);
+        Ok(GroupProbe {
+            origin,
+            speeds,
+            slowest,
+            extent,
+        })
+    }
+}

@@ -12,12 +12,17 @@ use aoe_map::{MovementOutcome, RoutePlanner, RoutePlannerPoll};
 use std::collections::{BTreeMap, VecDeque};
 
 mod accounting;
+mod attribution;
 mod deadline;
+mod diagnostic;
 mod fast;
 mod issue;
 mod metrics;
 mod order;
 pub use accounting::RouteSchedulerStats;
+pub use attribution::{
+    ROUTE_CATEGORIES, ROUTE_DISTANCES, ROUTE_FAILURES, RouteAttribution, RouteCaller, RouteClass,
+};
 pub(crate) use metrics::{GroupWork, PlanningMeasurement};
 pub use metrics::{PLANNING_SPANS, PlanningProbe, RouteMetrics};
 #[cfg(test)]
@@ -305,11 +310,18 @@ impl GameWorld {
                 self.route_metrics.searches_started += 1;
             }
             self.route_metrics.fair_work += u64::from(spent);
+            let (from, to) = (planner.origin(), planner.destination());
+            self.route_metrics
+                .attribution
+                .work(kind, from, to, 1, spent);
             (result, spent)
         };
+        let reason = attribution::failure_reason(&result);
+        let (from, to) = (planner.origin(), planner.destination());
         let error = match result {
             RoutePlannerPoll::Path(path) => {
                 self.route_metrics.found(planner.work());
+                self.route_metrics.attribution.found(kind, from, to);
                 if planner.certified_destination().is_some() {
                     self.route_metrics
                         .sample("certified-nearest", kind, &planner);
@@ -362,6 +374,13 @@ impl GameWorld {
             self.cache_route(&planner, kind, &MovementOutcome::Unreachable);
         }
         self.route_metrics.failed(planner.work());
+        let caller = self.units[index].route_caller;
+        self.route_metrics
+            .attribution
+            .failed(kind, from, to, planner.work(), reason, caller);
+        if self.units[index].formation == Some(id) {
+            self.route_metrics.attribution.group_orders_failed += 1;
+        }
         self.stop_route(index, error);
         if let Ok(at) = self.active_movers.binary_search(&id) {
             self.active_movers.remove(at);

@@ -17,6 +17,7 @@ aoe-core.workspace = true
 aoe-rendering = { path = "../rendering" }
 aoe-map.workspace = true
 aoe-scenario.workspace = true
+aoe-sdk = { path = "../sdk" }
 aoe-simulation.workspace = true
 aoe-protocol.workspace = true
 aoe-server = { path = "../server" }

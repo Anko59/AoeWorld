@@ -3,6 +3,7 @@ use crate::game_path::segment_length;
 
 impl GameWorld {
     /// One route, one scheduler slot and one bounded waypoint FIFO per army.
+    #[track_caller]
     pub fn issue_formation_move(
         &mut self,
         player: PlayerId,
@@ -46,6 +47,7 @@ impl GameWorld {
         let origin = self.formation_origin(&ids, centroid)?;
         let index = self.lookup[&leader];
         let previous = self.take_planner(index);
+        self.route_metrics.attribution.group_orders += 1;
         let planned = self.order_route(index, origin, destination);
         let (waypoint, route, planner, planning, fast_tried) = match planned {
             Ok(plan) => plan,

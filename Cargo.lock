@@ -141,6 +141,7 @@ dependencies = [
  "aoe-protocol",
  "aoe-rendering",
  "aoe-scenario",
+ "aoe-sdk",
  "aoe-server",
  "aoe-simulation",
  "axum",
