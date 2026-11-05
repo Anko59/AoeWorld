@@ -254,13 +254,12 @@ enum PendingAction {
     CancelResearch {
         building_id: EntityId,
     },
-    MarketBuy {
+    /// Single trades are one lot; bulk orders carry up to `MARKET_MAX_LOTS`.
+    MarketTrade {
         building_id: EntityId,
         resource: aoe_protocol::TradeResource,
-    },
-    MarketSell {
-        building_id: EntityId,
-        resource: aoe_protocol::TradeResource,
+        buy: bool,
+        lots: u32,
     },
 }
 

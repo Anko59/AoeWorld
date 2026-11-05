@@ -11,6 +11,32 @@ const entities = { Scout:448, Villager:83, TownCenter:109, House:70, LumberCamp:
 export const techIds = [22,8,101,202,14,55,278,213,222,67,74,81,199,211,102,207,197,100,98,254,249,280,68,76,82,200,212,13,203,182,50,93,321,34,103,217,264,429,237,209,265,428,96,255,257,75,77,80,201,219,12,221,279];
 export const trainingKinds = ['Villager','Scout','Militia','FishingShip','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley','Vassal','General',...imperialUnits,'Steward'];
 let catalog = null;
+const pageImages = new Map(), sprites = new Map();
+let artDone; export const artReady = new Promise(resolve => { artDone = resolve; });
+// Cached, down-scaled crops of the original icon art for canvas drawing.
+export function iconSprite(group, id, size = 64) {
+  const key = `${group}:${id}:${size}`;
+  if (sprites.has(key)) return sprites.get(key);
+  const art = catalog?.[group]?.[id], image = art && pageImages.get(art.page);
+  if (!validArt(art) || !image) return null;
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = size;
+  const context = canvas.getContext('2d'); if (!context) return null;
+  context.imageSmoothingQuality = 'high';
+  context.drawImage(image, art.x, art.y, art.width, art.height, 0, 0, size, size);
+  sprites.set(key, canvas); return canvas;
+}
+export const kindSprite = (kind, size = 64) => iconSprite('units', entities[kind], size);
+// A data URL for a sub-rectangle of a panel; panels cover their container by
+// nine-slicing this, never by stretching a fixed rectangle into a gap.
+export function panelCrop(role, region) {
+  const art = catalog?.panels?.[role], image = art && pageImages.get(art.page);
+  if (!validArt(art) || !image) return '';
+  const [x, y, width, height] = region ?? [0, 0, art.width, art.height];
+  const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+  const context = canvas.getContext('2d'); if (!context) return '';
+  context.drawImage(image, art.x + x, art.y + y, width, height, 0, 0, width, height);
+  return canvas.toDataURL();
+}
 const fallback = name => `<svg class="icon fallback-icon" aria-hidden="true"><use href="/interface/icons.svg#${name}"></use></svg>`;
 const validArt = art => art && /^(?:buildings\/)?[\w-]+\.(png|svg)$/.test(art.page)
   && ['x','y','width','height','page_width','page_height'].every(key => Number.isInteger(art[key]) && art[key]>=0)
@@ -101,10 +127,11 @@ export function initArt() {
     const arts=Object.values(data).flatMap(group => Object.values(group));
     if (!arts.length || !arts.every(validArt)) return;
     await Promise.all([...new Set(arts.map(art=>art.page))].map(page=>new Promise((resolve,reject)=>{
-      const image=new Image(); image.onload=resolve; image.onerror=reject; image.src=`/asset-pack/${page}`;
+      const image=new Image(); image.onload=()=>{pageImages.set(page,image);resolve();}; image.onerror=reject; image.src=`/asset-pack/${page}`;
     })));
     catalog=data;
     hydrate();
+    artDone();
     const menu=catalog.panels?.['menu-background'];
     if (validArt(menu)) {
       const image=new Image();image.src=`/asset-pack/${menu.page}`;await image.decode();

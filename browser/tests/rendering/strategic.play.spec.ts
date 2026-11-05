@@ -78,7 +78,8 @@ test("strategic tokens retain identity, layers and fog-safe reports", async ({
     const buttons = [...document.querySelectorAll(".army-token")].map(
       (e) => e.textContent,
     );
-    const card = document.querySelector(".steward-card")?.textContent;
+    const cardNode = document.querySelector<HTMLElement>(".steward-card");
+    const card = `${cardNode?.textContent} ${cardNode?.title}`;
     const bounds = [
       ...document.querySelectorAll(".army-token,.steward-card"),
     ].map((e) => {
@@ -307,7 +308,7 @@ test("kingdom landscape keeps source relief, settlements and farms bounded and c
       '#strategic-settlements [data-owned="true"]',
     ).length;
     const halo = Array.from(
-      canvas.getContext("2d")?.getImageData(662, 355, 1, 1).data ?? [],
+      canvas.getContext("2d")?.getImageData(675, 360, 1, 1).data ?? [],
     );
     const many = Array.from({ length: 3000 }, (_, id) => {
       const x = (id % 50) * 150,
@@ -389,7 +390,8 @@ test("kingdom landscape keeps source relief, settlements and farms bounded and c
   expect(result.river[2]).toBeGreaterThan(result.river[0] ?? -1);
   expect(result.cached).toBe(true);
   expect(result.retained).toBe(true);
-  expect(result.count).toBe(2);
+  // The Castle's footprint overlaps the owned Town Center on screen, so it folds into one symbol.
+  expect(result.count).toBe(1);
   expect(result.owned).toBe(1);
   expect(result.halo.slice(0, 3).every((n) => n > 180)).toBe(true);
   expect(result.fields).toBe("1");

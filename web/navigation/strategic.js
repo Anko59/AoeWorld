@@ -8,6 +8,9 @@ import { paintTerrain } from '/navigation/landscape/terrain.js';
 import { initSettlements } from '/navigation/landscape/settlements.js';
 import { initHoldings } from '/navigation/landscape/holdings.js';
 import { initMapKey } from '/navigation/landscape/key.js';
+import { drawUnits } from '/navigation/landscape/units.js';
+import { createSpace } from '/navigation/landscape/space.js';
+import { onSprites } from '/navigation/landscape/sprites.js';
 
 // A backend-independent, cached strategic plane. The detailed renderer keeps
 // its GPU/context alive, but emits no terrain, resources or sprites at these LODs.
@@ -29,9 +32,10 @@ export function initStrategic(fog, actors) {
   let resourceSnapshot = false;
   let modelRevision = 0, modelSignature = '', lastState = null;
   const tokens = initTokens(), contacts = initContacts();
-  const cockpit = initCockpit(() => { modelRevision++; previous = ''; if (lastState) frame(lastState); }), reveal = initReveal();
+  const cockpit = initCockpit(() => { tokens.invalidate(); modelRevision++; previous = ''; if (lastState) frame(lastState); }), reveal = initReveal();
   const settlements = initSettlements(), holdingsLayer = initHoldings();
-  const mapKey = initMapKey();
+  const mapKey = initMapKey(), space = createSpace();
+  onSprites(() => { modelRevision++; previous = ''; if (lastState) frame(lastState); });
   const layers = initLayers(() => {
     modelRevision++;
     if (lastState) frame(lastState);
@@ -81,50 +85,26 @@ export function initStrategic(fog, actors) {
     if (terrain) context.drawImage(terrain, 0, 0, worldWidth, worldHeight);
     const project = ([x, y]) => [width / 2 + (x - cx - y + cy) * 64 * zoom,
       height / 2 + (x - cx + y - cy) * 32 * zoom];
-    // At most about 4096 marker bins or 768 counted clusters, including on
-    // large/retina canvases. The input is the bounded gameplay actor stream.
-    const cell = level === 2 ? Math.max(28, Math.ceil(Math.sqrt(width * height / 768)))
-      : Math.max(4, Math.ceil(Math.sqrt(width * height / 4096)));
-    pickRadius = Math.max(8, cell / 2);
+    pickRadius = 22;
     let records = actors.records();
-    if (!layers.enabled.armies) {
-      const buildings = [];
-      for (let at = 0; at + 4 < records.length; at += 5) {
-        if (records[at] === 1) buildings.push(...records.slice(at, at + 5));
-      }
-      records = buildings;
-    }
-    picks = aggregatePixels(records, project, width, height, cell);
+    if (!layers.enabled.armies) records = [];
     context.setTransform(1, 0, 0, 1, 0, 0);
     const scale = scene.clientWidth / width;
     mapKey.update(zoom, scale);
     canvas.dataset.holdingRuns = String(holdingsLayer.draw(context, plane, zoom, layers.enabled.ownership));
-    const holdings = settlements.draw(context, project, layers.enabled.ownership, width, height, scale, plane, zoom);
+    // One screen-space grid arbitrates every symbol: HUD, places, army tokens, then unit groups.
+    space.clear(); tokens.hud(space, width, height);
+    const holdings = settlements.draw(context, project, layers.enabled.ownership, width, height, scale, plane, zoom, space);
     if (!fog.disabled) {
       plane();
       context.imageSmoothingEnabled = false;
       context.drawImage(fog.canvas, 0, 0, worldWidth, worldHeight);
     }
     context.setTransform(1, 0, 0, 1, 0, 0);
-    context.font = `${Math.max(11, width / scene.clientWidth * 11)}px monospace`;
-    context.textAlign = 'center';
-    context.textBaseline = 'bottom';
-    for (const pixel of picks) {
-      context.fillStyle = actorColour(pixel.colour);
-      const radius = pixel.buildings && !holdings.icons ? 4 : 2;
-      if (pixel.units || !holdings.icons) {
-        context.beginPath(); context.arc(pixel.x, pixel.y, radius, 0, Math.PI * 2);
-        context.strokeStyle = '#172525'; context.lineWidth = 2; context.stroke(); context.fill();
-      }
-      if (level === 2 && pixel.units > 1) {
-        context.strokeStyle = '#101910';
-        context.lineWidth = 3;
-        context.strokeText(String(pixel.units), pixel.x, pixel.y - 5);
-        context.fillText(String(pixel.units), pixel.x, pixel.y - 5);
-      }
-    }
     canvas.dataset.threats = String(layers.enabled.threats ? contacts.draw(context, project) : 0);
-    tokens.draw(context, project, layers.enabled, scale, width, height);
+    tokens.draw(context, project, layers.enabled, scale, width, height, space);
+    picks = drawUnits(context, records, project, width, height, scale, space, settlements.place, tokens.mine());
+    settlements.chips(context, scale);
     // Deposits remain legible after sprite drawing stops and above clusters.
     // Rust sends only explored, non-forest resources; forests live in terrain.
     const colours = ['#e85b8a', '#3c8f4a', '#f2cf50', '#c4c8d0', '#75c8f0', '#75c8f0'];
@@ -142,12 +122,13 @@ export function initStrategic(fog, actors) {
     canvas.dataset.territory = 'server holdings clipped to explored tiles';
     canvas.dataset.fields = String(holdings.fields);
     canvas.dataset.settlements = String(holdings.icons);
+    canvas.dataset.sprites = String(holdings.sprites);
     canvas.dataset.borders = String(holdings.borders);
     // Retained GPU canvases can composite independently. Cover their whole
     // surface until the detailed renderer presents a complete replacement.
     scene.dataset.strategicCovered = 'true';
     canvas.dataset.redraws = String(++redraws);
-    canvas.dataset.picks = JSON.stringify(picks.map(p => ({ x: p.x * scale, y: p.y * scale, count: p.count })));
+    canvas.dataset.picks = JSON.stringify(picks.map(p => ({ x: p.x * scale, y: p.y * scale, count: p.count, hostile: p.hostile })));
     canvas.dataset.frameMs = (performance.now() - started).toFixed(3);
     return true;
   }
@@ -181,7 +162,7 @@ export function initStrategic(fog, actors) {
       if (next === modelSignature) return;
       modelSignature = next; tokens.update(a, e, b); modelRevision++;
   }
-  return { frame, pick, present, navigation: reveal.navigation, cameraLink: reveal.link, interrupt: reveal.interrupt, cinematic: reveal.active, entity: tokens.entity, update, cockpit: cockpit.update, production: cockpit.production, building: cockpit.building,
+  return { frame, pick, present, navigation: reveal.navigation, cameraLink: reveal.link, interrupt: reveal.interrupt, cinematic: reveal.active, entity: tokens.entity, update, cockpit: cockpit.update, production: cockpit.production, building: cockpit.building, commerce: cockpit.commerce,
     // All arrays are the bounded, authorized HUD stream. Aggregate jobs once
     // at HUD cadence, rather than retaining Rust map implementations in WASM.
     receive(a, castles, b, c, workers, orders) {

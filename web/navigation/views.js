@@ -1,20 +1,18 @@
+import { icon, entityIcon } from '/interface/ui-art.js';
 // Camera bookmarks live for this world. Gameplay targets come only from the
 // authorized army reports and actual damage events, never inferred threats.
 export function initViews(jump) {
-  const style = document.createElement('link');
-  style.rel = 'stylesheet'; style.href = '/navigation/views.css'; document.head.append(style);
   const nav = document.createElement('nav');
   nav.id = 'strategic-views'; nav.hidden = true;
   nav.setAttribute('aria-label', 'Jump to view');
-  nav.innerHTML = `<b>Jump to view</b><div class="view-targets">
-    <button type="button" data-home>Main base H</button>
-    <button type="button" data-alert disabled>Last alert Space</button>
-    <button type="button" data-army disabled>Largest army End</button></div>
-    <div class="view-slots">${[1, 2, 3, 4].map(n => `<span><button type="button" data-view="${n - 1}" disabled title="Recall · Shift+F${n}">View ${n}</button><button type="button" data-save="${n - 1}" title="Save position and zoom · Ctrl+F${n}">Save</button></span>`).join('')}</div>
-    <small>Ctrl+F1–F4 save · Shift+F1–F4 recall</small>`;
+  nav.innerHTML = `<button type="button" class="dock-btn" data-home aria-label="Main base H" title="Main base (H)">${entityIcon('TownCenter')}<kbd>H</kbd></button>
+    <button type="button" class="dock-btn" data-alert disabled aria-label="Last alert Space" title="Last alert (Space)">${icon('commands', 'attack', 'soldier')}<kbd>␣</kbd></button>
+    <button type="button" class="dock-btn" data-army disabled aria-label="Largest army End" title="Largest army (End)">${entityIcon('General')}<kbd>End</kbd></button>
+    ${[1, 2, 3, 4].map(n => `<button type="button" class="dock-btn dock-slot" data-view="${n - 1}" aria-label="View ${n}" title="Empty · click to save this view (Ctrl+F${n}); recall with Shift+F${n}">${n}<kbd>F${n}</kbd></button>`).join('')}`;
   document.body.append(nav);
   const slots = [null, null, null, null];
   const recall = [...nav.querySelectorAll('[data-view]')];
+  const saved = index => Boolean(slots[index]);
   const alertButton = nav.querySelector('[data-alert]');
   const armyButton = nav.querySelector('[data-army]');
   armyButton.title = 'Largest reported own General army';
@@ -26,8 +24,8 @@ export function initViews(jump) {
   }
   function save(index) {
     if (!camera) return;
-    slots[index] = [...camera]; recall[index].disabled = false;
-    recall[index].title = `Recall (${camera[0].toFixed(1)}, ${camera[1].toFixed(1)}) at ${(camera[2] * 100).toPrecision(3)}% · Shift+F${index + 1}`;
+    slots[index] = [...camera]; recall[index].dataset.saved = 'true';
+    recall[index].title = `Recall · click (shift/ctrl+click re-saves) (${camera[0].toFixed(1)}, ${camera[1].toFixed(1)}) at ${(camera[2] * 100).toPrecision(3)}% · Shift+F${index + 1}`;
   }
   nav.querySelector('[data-home]').addEventListener('click', () => {
     document.getElementById('town-center')?.click();
@@ -35,8 +33,7 @@ export function initViews(jump) {
   });
   alertButton.addEventListener('click', () => focus(alert));
   armyButton.addEventListener('click', () => focus(army));
-  recall.forEach((node, index) => node.addEventListener('click', () => focus(slots[index])));
-  nav.querySelectorAll('[data-save]').forEach((node, index) => node.addEventListener('click', () => save(index)));
+  recall.forEach((node, index) => node.addEventListener('click', event => { if (!saved(index) || event.ctrlKey || event.shiftKey) save(index); else focus(slots[index]); }));
   document.addEventListener('keydown', event => {
     if (!camera || event.defaultPrevented || event.repeat || event.altKey || event.metaKey
       || document.querySelector('dialog[open]')
@@ -73,7 +70,7 @@ export function initViews(jump) {
       alertButton.title = 'Last observed damage to your units or buildings';
     },
     reset() {
-      slots.fill(null); recall.forEach(node => { node.disabled = true; });
+      slots.fill(null); recall.forEach((node, i) => { delete node.dataset.saved; node.title = `Empty · click to save this view (Ctrl+F${i + 1}); recall with Shift+F${i + 1}`; });
       camera = army = alert = null; alertTick = -1;
       armyButton.disabled = alertButton.disabled = true;
     },

@@ -100,7 +100,7 @@ test("view targets use the largest own army and newest real alert; editable keys
   await page.keyboard.press("Control+F2");
   await expect(
     page.getByRole("button", { name: "View 2", exact: true }),
-  ).toBeDisabled();
+  ).not.toHaveAttribute("data-saved", "true");
   await page.evaluate(() =>
     (
       window as unknown as { viewsTest: { views: { reset(): void } } }

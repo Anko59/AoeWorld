@@ -3,6 +3,7 @@ import { test } from "../../../server.js";
 import { playerState, productionFixture } from "./fixture.js";
 import { gameAssets } from "../../game-assets.js";
 import { forceWebGl } from "../../rendering/backends.js";
+import { openTab } from "../../rendering/fixtures/cockpit-tabs.js";
 
 test("Units here charges real resources, trains a soldier and persists its rally on the real server", async ({
   page,
@@ -21,7 +22,9 @@ test("Units here charges real resources, trains a soldier and persists its rally
     { timeout: 30_000 },
   );
   await expect(page.locator("#connection")).toHaveText("connected");
-  await page.getByLabel("Unit type").selectOption("2");
+  await openTab(page, "train");
+  await page.locator('[aria-label="Unit type"] [data-id="2"]').click();
+  await openTab(page, "train");
   await page.getByLabel("Unit count").fill("3");
   await page.getByRole("button", { name: "Units here", exact: true }).click();
   await page.mouse.click(635, 374);
@@ -84,7 +87,9 @@ test("Units here shares ordinary training and rally orders across equally near e
     location.hash = "x=8192.5&y=8192.5&zoom=.04";
   });
   await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
-  await page.getByLabel("Unit type").selectOption("2");
+  await openTab(page, "train");
+  await page.locator('[aria-label="Unit type"] [data-id="2"]').click();
+  await openTab(page, "train");
   await page.getByLabel("Unit count").fill("5");
   await page.getByRole("button", { name: "Units here", exact: true }).click();
   const before = commands.length;
@@ -122,10 +127,12 @@ test("Units here bounds human batches and displays accepted rather than planned 
     location.hash = "x=8192.5&y=8192.5&zoom=.04";
   });
   await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
+  await openTab(page, "train");
   await page.getByLabel("Unit count").fill("50");
   await page.getByRole("button", { name: "Units here", exact: true }).click();
   await expect(page.locator("#units-here-status")).toContainText("1 to 10");
   expect(commands.filter((c) => c[0] === 5 || c[0] === 20)).toHaveLength(0);
+  await openTab(page, "train");
   await page.getByLabel("Unit count").fill("3");
   await page.getByRole("button", { name: "Units here", exact: true }).click();
   await page.mouse.click(635, 345);
@@ -151,6 +158,7 @@ test("Units here sends no training when the server rejects its rally", async ({
     location.hash = "x=8192.5&y=8192.5&zoom=.04";
   });
   await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
+  await openTab(page, "train");
   await page.getByLabel("Unit count").fill("3");
   await page.getByRole("button", { name: "Units here", exact: true }).click();
   await page.mouse.click(635, 345);
@@ -172,7 +180,9 @@ test("Units here prioritizes the closest occupied queue over a farther idle prod
     location.hash = "x=8192.5&y=8192.5&zoom=.04";
   });
   await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
-  await page.getByLabel("Unit type").selectOption("2");
+  await openTab(page, "train");
+  await page.locator('[aria-label="Unit type"] [data-id="2"]').click();
+  await openTab(page, "train");
   await page.getByLabel("Unit count").fill("1");
   await page.getByRole("button", { name: "Units here", exact: true }).click();
   await page.mouse.click(635, 345);

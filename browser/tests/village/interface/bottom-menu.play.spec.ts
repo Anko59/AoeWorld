@@ -267,6 +267,35 @@ for (const [width, height] of [
   });
 }
 
+test("the minimap map keeps filling the diamond rectangle at far zoom", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await nativeMenu(page);
+  const close = await box(page, "#minimap-map");
+  await page.evaluate(() => {
+    location.hash = "x=8192.5&y=8192.5&zoom=.04";
+  });
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-lod",
+    /^(map|markers)$/,
+  );
+  const minimap = await box(page, "#minimap");
+  const map = await box(page, "#minimap-map");
+  const view = await box(page, "#minimap-view");
+  const expected = { x: 53.5, y: 8.5, width: 339.5, height: 184 };
+  expect(Math.abs(map.x - (minimap.x + expected.x))).toBeLessThan(1.2);
+  expect(Math.abs(map.y - (minimap.y + expected.y))).toBeLessThan(1.2);
+  expect(Math.abs(map.width - expected.width)).toBeLessThan(1.2);
+  expect(Math.abs(map.height - expected.height)).toBeLessThan(1.2);
+  // The far-zoom view layer covers the whole map rectangle, not a patch of it.
+  for (const key of ["x", "y", "width", "height"] as const)
+    expect(Math.abs(view[key] - map[key])).toBeLessThan(1.2);
+  for (const key of ["width", "height"] as const)
+    expect(Math.abs(map[key] - close[key])).toBeLessThan(1.2);
+});
+
 test("the whole-map overlay expands over the native menu and closes back to the diamond", async ({
   page,
 }) => {

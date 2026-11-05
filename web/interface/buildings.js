@@ -107,6 +107,8 @@ export function initBuildings() {
   build.addEventListener('click',()=>{open=open==='economy'?false:'economy';menu();});
   military.addEventListener('click',()=>{open=open==='military'?false:'military';menu();});
   window.aoeBuildings={
+    // Names, building kinds and icon ids in Tech order, for the far-view research grid.
+    techs:research.map((label,i)=>({index:i,label,site:sites[i],art:techIds[i]})),
     bind(callback) {
       window.aoeBuildings.command=callback;
       [...buttons,...techs,byId('cancel-construction'),byId('cancel-research'),...reseedButtons,autoScout].forEach((button,i)=>button.addEventListener('click',()=>callback(0,i)));

@@ -6,7 +6,7 @@ use aoe_protocol::{BuildingKind, GameplayBuildingState, GameplayUnitState, UnitK
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen(
-    inline_js = "export function strategic_update(a, e, b, c, w, o, s, counts, sites, land) { const v = window.aoeNavigation?.strategic; v?.receive(a, e, b, c, w, o); v?.cockpit?.(s, counts); v?.settlements?.(sites); v?.holdings?.(land); } export function strategic_alert(t, x, y) { window.aoeNavigation?.views?.alert(t, x, y); }"
+    inline_js = "export function strategic_update(a, e, b, c, w, o, s, counts, sites, land, commerce) { const v = window.aoeNavigation?.strategic; v?.receive(a, e, b, c, w, o); v?.cockpit?.(s, counts); v?.settlements?.(sites); v?.holdings?.(land); v?.commerce?.(commerce); } export function strategic_alert(t, x, y) { window.aoeNavigation?.views?.alert(t, x, y); }"
 )]
 extern "C" {
     fn strategic_alert(tick: f64, x: f64, y: f64);
@@ -21,6 +21,7 @@ extern "C" {
         counts: &[u32],
         sites: &[f64],
         land: &[f64],
+        commerce: &[f64],
     );
 }
 
@@ -263,6 +264,7 @@ pub(in super::super) fn update(client: &Client) {
         player.map_or(&[], |p| p.unit_counts.as_slice()),
         &sites,
         &land,
+        &village::commerce::commerce(client),
     );
     strategic_alert(last_alert[0], last_alert[1], last_alert[2]);
 }

@@ -134,3 +134,27 @@ fn the_no_market_rejection_has_a_golden_wire_and_round_trips() {
     assert_eq!(bytes, [3, 3, 28, 4]);
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), ack);
 }
+
+fn trade(lots: u32) -> GameplayClientMessage {
+    GameplayClientMessage::MarketTradeOrder {
+        sequence: 9,
+        building_id: EntityId(1),
+        resource: TradeResource::Food,
+        buy: false,
+        lots,
+    }
+}
+
+#[test]
+fn bulk_trades_have_a_golden_wire_and_a_lot_bound() {
+    let message = trade(3_000);
+    let bytes = encode_gameplay_client(&message).unwrap();
+    // Appended variant: variant index, sequence, building, resource, buy, lots (varint).
+    assert_eq!(bytes, vec![GOLDEN_VARIANT, 9, 1, 1, 0, 184, 23]);
+    assert_eq!(decode_gameplay_client(&bytes).unwrap(), message);
+    assert!(encode_gameplay_client(&trade(aoe_protocol::MARKET_MAX_LOTS)).is_ok());
+    for lots in [0, aoe_protocol::MARKET_MAX_LOTS + 1] {
+        assert!(encode_gameplay_client(&trade(lots)).is_err());
+    }
+}
+const GOLDEN_VARIANT: u8 = 36;

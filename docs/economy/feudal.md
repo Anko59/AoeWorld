@@ -197,7 +197,8 @@ atlas. Re-run `make assets-import-de` to add the art to an existing overlay.
 ## Local demo
 
 `POST /maps/reset?scenario=feudal-economy` is an explicit development setup:
-Dark Age, 10,000 of each resource, a completed Mill, Lumber Camp and Barracks.
+Dark Age, 10,000 of each resource except 120,000 food (so a bulk Market sale can be
+exercised), a completed Mill, Lumber Camp and Barracks.
 The game's one-Hz clock runs under the server's ordinary 20-Hz ticker (20×).
 Advance, build and research through the ordinary UI. `/maps/reset` restores the
 normal game; an unknown scenario returns 400 without replacing it.

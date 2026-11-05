@@ -29,7 +29,10 @@ function uint(value: number): number[] {
   return bytes;
 }
 
-export async function ownersFixture(page: Page) {
+// `awayFromPlace` piles the villagers (ids 3 and up) that many tiles east of
+// the spawn, clear of the town centre, and gives them the scout's owner, so
+// far view shows one counted group (a group is per owner).
+export async function ownersFixture(page: Page, awayFromPlace = 0) {
   const orders: number[] = [];
   await page.routeWebSocket("**/game/ws", (socket) => {
     socket.onMessage((message) => {
@@ -60,9 +63,13 @@ export async function ownersFixture(page: Page) {
       }
       const units = positions.flatMap(([x = 0, y = 0], id) => [
         id,
-        id === 9 ? 99 : id,
-        ...uint(x * 2048),
-        ...uint(y * 2048),
+        awayFromPlace && id >= 3 ? 0 : id === 9 ? 99 : id,
+        ...uint(
+          (awayFromPlace && id >= 3
+            ? 8192.5 + awayFromPlace + (id - 3) * 0.2
+            : x) * 2048,
+        ),
+        ...uint((awayFromPlace && id >= 3 ? 8192.5 : y) * 2048),
         0,
         0,
         0,

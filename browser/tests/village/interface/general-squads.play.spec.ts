@@ -1,5 +1,6 @@
 import { expect } from "@playwright/test";
 import { test } from "../../../server.js";
+import { openTab } from "../../rendering/fixtures/cockpit-tabs.js";
 
 test("General roster and trainer state follow the selected commander", async ({
   page,
@@ -125,8 +126,9 @@ test("General controls and the kingdom cockpit remain usable together at far zoo
     await page.keyboard.press("Home");
     await page.locator("#general-train").click();
     await page.locator("#general-captain").click();
-    await page.getByLabel("Building type").selectOption("1");
-    await page.getByRole("button", { name: "Build here", exact: true }).click();
+    await openTab(page, "build");
+    await page.locator('[aria-label="Building type"] [data-id="1"]').click();
+    await openTab(page, "train");
     await page.getByRole("button", { name: "Units here", exact: true }).click();
     await page.keyboard.press("Escape");
     await expect(page.locator("#strategic-cockpit")).toBeVisible();

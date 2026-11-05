@@ -43,6 +43,8 @@ impl TradeResource {
     }
 }
 pub use aoe_core::{MARKET_MAX_PRICE, MARKET_MIN_PRICE};
+/// Most 100-unit lots one bulk trade may carry (2,000,000 units).
+pub const MARKET_MAX_LOTS: u32 = 20_000;
 /// A player's Market commodity prices, in gold per 100 units.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct MarketPrices {
