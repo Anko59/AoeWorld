@@ -111,4 +111,3 @@ export const box = async (page: Page, selector: string) => {
   if (!rect) throw new Error(`${selector} has no box`);
   return rect;
 };
-

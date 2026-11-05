@@ -29,6 +29,11 @@ const token = (unit, html, count) => count
 function layout(container, state) {
   const width = container.clientWidth, height = container.clientHeight;
   if (!state.units.length) { container.replaceChildren(); state.mode = ''; return; }
+  // Only the native frame gives the container a size of its own; elsewhere it grows with its icons.
+  if (!container.closest('#bottom-panel[data-frame=native]')) {
+    if (state.mode !== 'plain') { state.mode = 'plain'; container.removeAttribute('data-layout'); container.innerHTML = state.units.map(unit => token(unit, state.icon(unit.kind, unit.tint))).join(''); }
+    return;
+  }
   if (width <= 0 || height <= 0) return;
   let size = tokenSize(width, height, state.units.length), mode = 'units';
   if (!size) {

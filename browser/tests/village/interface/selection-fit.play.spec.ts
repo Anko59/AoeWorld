@@ -55,13 +55,15 @@ for (const [width, height] of [
           ).__h[f as string]?.(...(a as unknown[])),
         [fn, args] as const,
       );
-      const m = await page.evaluate(
-        () =>
-          (
-            window as unknown as { __h: { measure: () => Measure } }
-          ).__h.measure(),
+      const m = await page.evaluate(() =>
+        (
+          window as unknown as { __h: { measure: () => Measure } }
+        ).__h.measure(),
       );
-      expect(m.scroll, `${name}: scrolls ${m.scroll.join(" | ")} ${JSON.stringify(m.icons)}`).toEqual([]);
+      expect(
+        m.scroll,
+        `${name}: scrolls ${m.scroll.join(" | ")} ${JSON.stringify(m.icons)}`,
+      ).toEqual([]);
       expect(m.clip, `${name}: clips ${m.clip.join(" | ")}`).toEqual([]);
       if (m.icons) {
         // Every icon stays a usable click target, even when identical units are grouped.
