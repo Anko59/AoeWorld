@@ -2,8 +2,10 @@ import { expect, type Page } from "@playwright/test";
 import { PNG } from "pngjs";
 import { test } from "../../../server.js";
 import { fiveVillagerFixture } from "../fixtures/village.js";
-import { centerVillage } from "../fixtures/resources.js";
+import { centerVillage, freshHud } from "../fixtures/resources.js";
 import { gameAssets } from "../../game-assets.js";
+import { activateSyntheticMap } from "../../synthetic-map.js";
+import { ownersFixture } from "../../rendering/fixtures/owners.js";
 
 // Native DE panel crops are larger than the frame they hold. These synthetic
 // pages keep the real geometry (crop size and opaque bounds) with solid colours,
@@ -37,7 +39,7 @@ const frameSize = (role: Role) => ({
   height: panels[role].bounds[3] * S,
 });
 
-async function nativeMenu(page: Page) {
+async function nativeMenu(page: Page, foreign = false) {
   await gameAssets(page, true);
   await page.route("**/asset-pack/**", (route) => {
     const url = route.request().url();
@@ -77,11 +79,14 @@ async function nativeMenu(page: Page) {
     }
     return route.fallback();
   });
-  await fiveVillagerFixture(page);
-  await page.goto("/?play=1");
+  // The foreign fixture holds one villager per player id; player 0 is local.
+  if (foreign) await ownersFixture(page);
+  else await fiveVillagerFixture(page);
+  await page.goto("/?play=1#x=8192.5&y=8192.5&zoom=1");
   await expect(page.locator("#connection")).toHaveText("connected");
   await expect(page.locator("#bottom-panel")).toHaveAttribute("data-frame", "native");
   await expect(page.locator("html")).toHaveAttribute("data-interface-art", "original");
+  if (foreign) return activateSyntheticMap(page, () => false);
   await centerVillage(page, true);
   await expect(page.locator("#selection-name")).toHaveText(/\S/);
 }
@@ -185,6 +190,70 @@ for (const [width, height] of [
     await page.screenshot({ path: `../.cache/bottom/synthetic-${width}x${height}.png` });
   });
 }
+
+test("the whole-map overlay expands over the native menu and closes back to the diamond", async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await nativeMenu(page);
+  const small = await box(page, "#minimap");
+  const diamond = await box(page, "#minimap-map");
+  for (const [index, open] of [() => page.keyboard.press("m"), () => page.locator("#overview-toggle").click()].entries()) {
+    await open();
+    await expect(page.locator("#minimap")).toHaveClass(/expanded/);
+    await expect(page.locator("#minimap")).toHaveCSS("position", "fixed");
+    // game.css: inset 72px 25px 22px of the window.
+    const big = await box(page, "#minimap");
+    if (Math.abs(big.x - 25) + Math.abs(big.y - 72) + Math.abs(big.width - 1230) + Math.abs(big.height - 626) >= 3) throw new Error(`big ${JSON.stringify(big)}`);
+    const map = await box(page, "#minimap-map");
+    expect(map.width).toBeGreaterThan(big.width * 0.8);
+    expect(map.height).toBeGreaterThan(big.height * 0.7);
+    await expect(page.locator("#minimap-close")).toBeVisible();
+    await expect(page.locator("#minimap>.frame-art:visible")).toHaveCount(0);
+    // Click-to-camera still maps the overlay: opposite sides of its centre
+    // give symmetric world points around the centre click.
+    const svg = await box(page, "#minimap-map");
+    const camera = () =>
+      page.locator("#minimap").evaluate((el) => [Number(el.dataset.cameraX), Number(el.dataset.cameraY)]);
+    const jump = async (dx: number) => {
+      const before = await camera();
+      await page.mouse.click(svg.x + svg.width / 2 + dx, svg.y + svg.height / 2);
+      await expect.poll(camera).not.toEqual(before);
+      return camera();
+    };
+    if (index === 0) {
+      const side = Math.min(svg.width, svg.height) / 4;
+      const [left, right] = [await jump(-side), await jump(side)];
+      expect(right[0]! - left[0]!).toBeGreaterThan(100);
+      // The map is isometric: a horizontal step moves x and y in opposite directions.
+      expect(left[1]! - right[1]!).toBeCloseTo(right[0]! - left[0]!, -1);
+      expect(Math.abs(left[0]! + right[0]! - (left[1]! + right[1]!))).toBeLessThan(2);
+    }
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#minimap")).not.toHaveClass(/expanded/);
+    const closed = await box(page, "#minimap");
+    if (Math.abs(closed.x - small.x) + Math.abs(closed.width - small.width) + Math.abs(closed.height - small.height) >= 1.5) throw new Error(`closed ${JSON.stringify([closed, small])}`);
+    const again = await box(page, "#minimap-map");
+    if (Math.abs(again.width - diamond.width) + Math.abs(again.height - diamond.height) >= 1.5) throw new Error(`diamond ${JSON.stringify([again, diamond])}`);
+    await expect(page.locator("#minimap>.frame-art:visible")).not.toHaveCount(0);
+    await expect(page.locator("#minimap-close")).toBeHidden();
+  }
+});
+
+test("an enemy portrait uses the colour its sprites are rendered with", async ({ page }) => {
+  test.setTimeout(90_000);
+  // Player 0 chooses red: the renderer swaps red and blue, so player 1 is blue.
+  await page.addInitScript(() => sessionStorage.setItem("aoeworld.player-colour", "red"));
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await nativeMenu(page, true);
+  await freshHud(page);
+  const actor = (await page.locator("#scene").evaluate((el) =>
+    (JSON.parse(el.getAttribute("data-actors") ?? "[]") as { id: number; x: number; y: number }[]).find((a) => a.id === 1),
+  ));
+  if (!actor) throw new Error("No foreign villager");
+  await page.mouse.click(actor.x, actor.y - 10);
+  await expect(page.locator("#selection-owner")).toHaveText("Player 2");
+  await expect(page.locator("#selection-portrait .art-icon")).toHaveAttribute("style", /--tint:rgb\(65,145,245\)/);
+});
 
 // Evidence with the owner's local pack: skipped on public CI where it is absent.
 for (const [width, height] of [

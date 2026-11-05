@@ -18,17 +18,18 @@ const validArt = art => art && /^(?:buildings\/)?[\w-]+\.(png|svg)$/.test(art.pa
   && art.x+art.width<=art.page_width && art.y+art.height<=art.page_height;
 const original = art => `<svg class="icon original-icon" aria-hidden="true" viewBox="0 0 ${art.width} ${art.height}"><image href="/asset-pack/${art.page}" x="${-art.x}" y="${-art.y}" width="${art.page_width}" height="${art.page_height}"/></svg>`;
 // Imported unit portraits leave their player-colour regions transparent, so the
-// owner's colour behind the icon (--tint) fills exactly those regions. Colours
-// match crates/rendering/src/player.rs.
-const playerColours = [[65,145,245],[245,65,65],[50,190,65],[245,220,40],[40,220,220],[175,65,220],[160,160,160],[245,145,40]];
+// owner's colour behind the icon (--tint) fills exactly those regions. The scene
+// renderer (aoe_rendering::player_colour) resolves each unit's colour, including
+// the chosen-colour swap, and sends it packed as 0xRRGGBB; this only formats it.
 const tintPattern = /^(?:#[0-9a-f]{3,8}|rgb\(\d{1,3}, ?\d{1,3}, ?\d{1,3}\))$/i;
-export function playerTint(player, owned) {
+export function playerTint(player, owned, packed) {
   if (player < 0) return '';
   if (owned || player === undefined) {
     const own = document.documentElement.style.getPropertyValue('--player-colour').trim();
     if (tintPattern.test(own)) return own;
   }
-  return `rgb(${playerColours[(player ?? 0) % 8].join(',')})`;
+  if (Number.isInteger(packed) && packed > 0) return `rgb(${packed>>16&255},${packed>>8&255},${packed&255})`;
+  return '';
 }
 export function icon(group, id, symbol='villager', alt=-1, tint='') {
   const art = catalog?.[group]?.[id] ?? catalog?.[group]?.[alt];

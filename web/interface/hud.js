@@ -98,8 +98,8 @@ export function initInterface() {
       text('selection-load',['Sheep','Deer','Boar','Wolf'].includes(first.kind)?`${first.amount} food remaining`:count===1 && first.amount?`Carrying ${first.amount}/${first.capacity} ${first.resource}`:building?first.kind==='Castle'?'Supports 20 population':castleKinds.includes(first.kind)?'':'Resource drop-off · supports 5 population':'');
       const signature=selected.map(unit=>`${unit.id}:${unit.kind}`).join(',');
       if (signature!==previousSelection) {
-        setEntityIcon(byId('selection-portrait'),first.kind,playerTint(first.player,first.owned));
-        byId('selected-icons').innerHTML=count>1?selected.map(unit=>`<span class="unit-token" data-unit-id="${unit.id}" title="${unit.name}">${entityIcon(unit.kind,playerTint(unit.player,unit.owned))}</span>`).join(''):'';
+        setEntityIcon(byId('selection-portrait'),first.kind,playerTint(first.player,first.owned,first.colour));
+        byId('selected-icons').innerHTML=count>1?selected.map(unit=>`<span class="unit-token" data-unit-id="${unit.id}" title="${unit.name}">${entityIcon(unit.kind,playerTint(unit.player,unit.owned,unit.colour))}</span>`).join(''):'';
         previousSelection=signature;
       }
     } else previousSelection='';
@@ -129,10 +129,10 @@ export function initInterface() {
     state.idleVillagers=values[15];
     state.idleMilitary=values[16];
     let at=17;
-    for (let index=0;index<values[12];index++,at+=18) {
-      const [id,kind,x,y,selected,task,resource,amount,hp,maxHp,attack,melee,pierce,head,capacity,range,player,owned]=values.subarray(at,at+18);
+    for (let index=0;index<values[12];index++,at+=19) {
+      const [id,kind,x,y,selected,task,resource,amount,hp,maxHp,attack,melee,pierce,head,capacity,range,player,owned,colour]=values.subarray(at,at+19);
       state.actors.push({id,player,owned:!!owned,kind:kinds[kind],x,y,selected:!!selected,hp,maxHp,head,task:tasks[task],load:kind===1 && amount?[resources[resource],amount]:null,garrison:owned&&buildingKinds.includes(kinds[kind])?capacity:0});
-      if (selected) state.selected.push({id,player,owned:!!owned,kind:kinds[kind],name:names[kind],task:tasks[task],resource:resources[resource],amount,hp,maxHp,attack,melee,pierce,capacity,range});
+      if (selected) state.selected.push({id,player,owned:!!owned,colour,kind:kinds[kind],name:names[kind],task:tasks[task],resource:resources[resource],amount,hp,maxHp,attack,melee,pierce,capacity,range});
     }
     for (let index=0;index<values[13];index++,at+=3) state.queue.push([values[at],values[at+1],values[at+2]]);
     for (let index=0;index<values[14];index++,at+=4) state.resources.push({kind:values[at],x:values[at+1],y:values[at+2],distance:values[at+3]});

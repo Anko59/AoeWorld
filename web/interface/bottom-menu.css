@@ -4,7 +4,10 @@
 :root:has(#bottom-panel[data-frame=native]) { --bottom:202px; }
 #bottom-panel[data-frame=native] { height:202px; display:flex; align-items:flex-end; gap:0; padding:0; background:none; border:0; box-shadow:none; pointer-events:none; }
 #bottom-panel[data-frame=native]::before { display:none; }
-#bottom-panel[data-frame=native]>section { pointer-events:auto; position:relative; isolation:isolate; box-sizing:border-box; flex:none; }
+#bottom-panel[data-frame=native]>section { pointer-events:auto; box-sizing:border-box; flex:none; }
+/* The expanded whole-map overlay keeps game.css's fixed positioning and size. */
+#bottom-panel[data-frame=native]>section:not(.expanded) { position:relative; isolation:isolate; }
+#bottom-panel[data-frame=native] #minimap.expanded>.frame-art { display:none; }
 .frame-art { position:absolute; display:block; pointer-events:none; z-index:-1; background-repeat:no-repeat; }
 /* Narrow windows scale the whole menu; wide ones stretch only the selection. */
 @media(max-width:1200px) { :root:has(#bottom-panel[data-frame=native]) { --bottom:162px; } #bottom-panel[data-frame=native] { zoom:.8; } }
@@ -27,8 +30,8 @@
 #bottom-panel[data-frame=native] #selection-empty { padding:0; }
 
 /* The minimap art is a 2:1 rhombus flanked by four button sockets. */
-#bottom-panel[data-frame=native] #minimap { margin-left:-31px; width:var(--frame-width); height:var(--frame-height); padding:0; border:0; }
-#bottom-panel[data-frame=native] #minimap-title { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+#bottom-panel[data-frame=native] #minimap:not(.expanded) { margin-left:-31px; width:var(--frame-width); height:var(--frame-height); padding:0; border:0; }
+#bottom-panel[data-frame=native] #minimap:not(.expanded) #minimap-title { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
 #bottom-panel[data-frame=native] #minimap:not(.expanded) #minimap-map { position:absolute; left:53.5px; top:8.5px; width:339.5px; height:184px; clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%); filter:none; }
 #bottom-panel[data-frame=native] #minimap:not(.expanded) #map-navigation { display:contents; }
 #bottom-panel[data-frame=native] #minimap:not(.expanded) #map-navigation button { position:absolute; width:34px; height:34px; padding:0; border:0; border-radius:50%; background:none; box-shadow:none; color:#e9cf8f; font-size:19px; line-height:34px; text-shadow:0 1px 2px #000; }
