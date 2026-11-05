@@ -187,6 +187,85 @@ fn a_managed_worker_that_never_moves_is_retasked_and_counts_as_idle() {
     assert_eq!(w.steward_controller(id), Some(steward), "still managed");
 }
 
+/// Drives only the Steward passes for longer than the stall limit.
+fn stall_passes(w: &mut GameWorld) {
+    let period = crate::STEWARD_RULES.period_ticks;
+    let passes = 2 * crate::STEWARD_STALL_SECONDS * u64::from(w.config().tick_hz) / period;
+    w.tick.0 = w.tick.0 / period * period;
+    for _ in 0..passes {
+        w.tick.0 += period;
+        w.advance_stewards(&mut Vec::new());
+    }
+}
+
+/// Stops the watchdog has issued for this villager.
+fn strikes(w: &GameWorld, steward: EntityId, id: EntityId) -> u8 {
+    w.economy.steward_homes[&steward]
+        .stalls
+        .get(&id)
+        .map_or(0, |s| s.strikes)
+}
+
+fn freeze(w: &mut GameWorld, id: EntityId, planning: bool, order: bool) {
+    let index = w.lookup[&id];
+    w.units[index].state.task = UnitTask::Moving;
+    w.units[index].state.moving = false;
+    w.units[index].state.planning = planning;
+    if !order {
+        w.units[index].order = None;
+    }
+}
+
+#[test]
+fn a_stationary_villager_under_a_player_order_is_not_stopped_but_a_frozen_stray_is() {
+    // (managed first, then overridden by the player), planning, with an order.
+    for (managed, planning, order) in [
+        (true, true, false),
+        (true, false, true),
+        (false, false, true),
+    ] {
+        let (mut w, _, steward) = super::manager::active();
+        pass(&mut w);
+        let id = w
+            .units()
+            .find(|u| u.kind == UnitKind::Villager && w.steward_controller(u.id) == Some(steward))
+            .unwrap()
+            .id;
+        let far = WorldPosition::from_tile_center(TileCoord::new(150, 100)).unwrap();
+        w.economy.gatherers.remove(&id);
+        if !managed {
+            w.forget_steward_worker(id);
+        }
+        w.issue_move(id, far).unwrap();
+        freeze(&mut w, id, planning, order);
+        stall_passes(&mut w);
+        assert_eq!(
+            strikes(&w, steward, id),
+            0,
+            "player order stopped (managed={managed} planning={planning} order={order})"
+        );
+    }
+    let (mut w, _, steward) = super::manager::active();
+    pass(&mut w);
+    let id = w
+        .units()
+        .find(|u| u.kind == UnitKind::Villager && w.steward_controller(u.id) == Some(steward))
+        .unwrap()
+        .id;
+    w.economy.gatherers.remove(&id);
+    w.forget_steward_worker(id);
+    freeze(&mut w, id, false, false);
+    stall_passes(&mut w);
+    assert!(
+        strikes(&w, steward, id) >= 1,
+        "frozen stray recovered {:?} {:?} {:?}",
+        w.unit(id)
+            .map(|u| (u.task, u.moving, u.planning, u.position)),
+        w.economy.steward_homes[&steward].stalls.get(&id),
+        w.steward_controller(id)
+    );
+}
+
 #[test]
 fn territory_showcase_keeps_forty_farmers_alive_before_activation() {
     let (mut w, _) = GameWorld::steward_territory_demo(aoe_core::Seed(7)).unwrap();

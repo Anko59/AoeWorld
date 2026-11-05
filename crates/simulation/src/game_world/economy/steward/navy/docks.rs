@@ -30,7 +30,7 @@ impl GameWorld {
                         .is_some_and(|task| task.building == dock.id)
                 });
                 if !attended
-                    && let Some(worker) = self.steward_dock_builder(s)
+                    && let Some(worker) = self.steward_dock_builder(s, Some(dock.footprint))
                     && budget.order(work)
                     && self.issue_construct(s.player, &[worker], dock.id).is_ok()
                 {
@@ -64,7 +64,7 @@ impl GameWorld {
             }
             return;
         }
-        let Some(worker) = self.steward_dock_builder(s) else {
+        let Some(worker) = self.steward_dock_builder(s, None) else {
             return;
         };
         if self
@@ -133,13 +133,16 @@ impl GameWorld {
         })
     }
 
-    fn steward_dock_builder(&self, s: &Snapshot) -> Option<EntityId> {
+    /// A free villager; for an existing foundation it must also be able to walk
+    /// to it without leaving the territory.
+    fn steward_dock_builder(&self, s: &Snapshot, site: Option<TileRect>) -> Option<EntityId> {
         s.units
             .iter()
             .filter_map(|u| self.unit(u.id))
             .find(|u| {
                 !self.economy.stewards.manual.contains(&u.id)
                     && !self.economy.builders.contains_key(&u.id)
+                    && site.is_none_or(|rect| s.home.connects(u.position.tile_floor(), rect))
                     && (self.steward_worker_idle(u.id, s.steward)
                         || (self.steward_controller(u.id) == Some(s.steward)
                             && u.carried.is_none()))

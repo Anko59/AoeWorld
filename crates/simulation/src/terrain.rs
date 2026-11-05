@@ -202,11 +202,19 @@ impl Terrain {
                 .flatten()
                 .is_some_and(|cell| cell.passable || overlay.bridge_connections(tile).is_some())
         };
-        open(to)
-            && matches!(
+        let edge = |from, to| {
+            matches!(
                 generator.edge_between_with_cancel(from, to, &|| false),
                 Ok(EdgePassability::Passable)
             )
+        };
+        // Off a bridge a diagonal needs both corner steps, as in `crossable`.
+        open(to)
+            && edge(from, to)
+            && (from.x == to.x
+                || from.y == to.y
+                || (edge(from, TileCoord::new(to.x, from.y))
+                    && edge(from, TileCoord::new(from.x, to.y))))
     }
 
     pub fn route(&self, origin: TileCoord, destination: TileCoord) -> Option<Vec<TileCoord>> {

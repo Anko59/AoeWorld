@@ -163,7 +163,16 @@ impl GameWorld {
                 labels[index(start)] = next;
                 let mut queue = VecDeque::from([start]);
                 while let Some(from) = queue.pop_front() {
-                    for (dx, dy) in [(0, -1), (-1, 0), (1, 0), (0, 1)] {
+                    for (dx, dy) in [
+                        (0, -1),
+                        (-1, 0),
+                        (1, 0),
+                        (0, 1),
+                        (-1, -1),
+                        (1, -1),
+                        (-1, 1),
+                        (1, 1),
+                    ] {
                         let to = TileCoord::new(from.x + dx, from.y + dy);
                         if to.x < min.x
                             || to.y < min.y
@@ -198,5 +207,43 @@ impl GameWorld {
             .ok()
             .flatten()
             .is_some_and(|cell| cell.passable || overlay.bridge_connections(tile).is_some())
+    }
+}
+
+#[cfg(test)]
+impl GameWorld {
+    /// Test hook: label every tile within `margin` of `rect` as its own
+    /// component, or restore ordinary labelling when `rect` is `None`.
+    pub(crate) fn steward_cut_territory(&mut self, id: EntityId, rect: Option<TileRect>) {
+        self.steward_ensure_regions(id);
+        let Some(home) = self.economy.steward_homes.get_mut(&id) else {
+            return;
+        };
+        let Some(rect) = rect else {
+            home.regions = None;
+            return;
+        };
+        let Some(old) = home.regions.as_ref() else {
+            return;
+        };
+        let mut labels = old.labels.clone();
+        for y in 0..old.side {
+            for x in 0..old.side {
+                let (tx, ty) = (old.min.x + x, old.min.y + y);
+                let near = tx >= rect.min.x - 6
+                    && tx <= rect.max.x + 6
+                    && ty >= rect.min.y - 6
+                    && ty <= rect.max.y + 6;
+                if near && labels[(y * old.side + x) as usize] != 0 {
+                    labels[(y * old.side + x) as usize] = u16::MAX;
+                }
+            }
+        }
+        home.regions = Some(Arc::new(Regions {
+            epoch: old.epoch,
+            min: old.min,
+            side: old.side,
+            labels,
+        }));
     }
 }

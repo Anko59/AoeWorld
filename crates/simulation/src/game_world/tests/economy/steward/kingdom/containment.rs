@@ -8,6 +8,13 @@ const TC: TileCoord = TileCoord::new(45, 200);
 /// 100-tile circle of a Town Center at (45, 200). All natural resources are
 /// removed so the scene holds exactly what the test places.
 fn river_realm(villagers: usize) -> (GameWorld, EntityId, Vec<EntityId>) {
+    river_realm_with(villagers, None)
+}
+
+fn river_realm_with(
+    villagers: usize,
+    bridge: Option<aoe_core::BridgeSpan>,
+) -> (GameWorld, EntityId, Vec<EntityId>) {
     let mut w = crate::game_world::terrain_fixtures::build("river").world;
     let old: Vec<_> = w.units().map(|u| u.id).collect();
     for id in old {
@@ -59,6 +66,12 @@ fn river_realm(villagers: usize) -> (GameWorld, EntityId, Vec<EntityId>) {
         }
     }
     w.resource_collision_changed();
+    if let Some(span) = bridge
+        && let Terrain::Map { overlay, .. } = &mut w.terrain
+    {
+        overlay.add_bridge(span).unwrap();
+        w.collision_opened(span.footprint());
+    }
     let king = w
         .spawn_kind(
             PlayerId(0),
@@ -102,4 +115,24 @@ fn a_steward_never_sends_a_villager_to_a_bank_its_territory_cannot_walk_to() {
         );
         assert!(u.position.tile_floor().x < 85, "{id:?} crossed the river");
     }
+}
+
+#[test]
+fn a_diagonal_bridge_inside_the_territory_joins_both_banks() {
+    let span = aoe_core::BridgeSpan::new(TileCoord::new(83, 198), TileCoord::new(92, 204)).unwrap();
+    assert!(
+        span.tiles()
+            .windows(2)
+            .any(|p| p[0].x != p[1].x && p[0].y != p[1].y),
+        "the deck must have diagonal steps"
+    );
+    let (mut w, _, workers) = river_realm_with(6, Some(span));
+    let mut across = 0;
+    for _ in 0..20 * 90 {
+        w.advance();
+        for &id in &workers {
+            across += usize::from(w.gather_tile(id).is_some_and(|t| t.x > 92));
+        }
+    }
+    assert!(across > 0, "no villager was given the job over the bridge");
 }

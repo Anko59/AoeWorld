@@ -50,6 +50,11 @@ impl GameWorld {
             .iter()
             .filter(|u| {
                 u.task == UnitTask::Moving
+                    // A player's order (kept as manual control, a route being
+                    // planned, or a live movement order) is theirs to steer.
+                    && !self.economy.stewards.manual.contains(&u.id)
+                    && !u.planning
+                    && self.movement_order(u.id).is_none()
                     && !self.economy.garrison_orders.contains_key(&u.id)
                     && !workers.contains(&u.id)
             })
