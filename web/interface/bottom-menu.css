@@ -21,6 +21,7 @@
 
 #bottom-panel[data-frame=native] #selection { margin-left:-5.5px; flex:1 1 0; min-width:var(--frame-min-width,0); height:var(--frame-height); padding:25px 50px 14px 22px; overflow:hidden; }
 #bottom-panel[data-frame=native] #selection-content,#bottom-panel[data-frame=native] #selection-empty { max-height:100%; }
+#bottom-panel[data-frame=native] #selection-content { overflow:hidden auto; scrollbar-width:thin; scrollbar-color:#6a5632 transparent; }
 #bottom-panel[data-frame=native] #selection-portrait { width:64px; height:64px; }
 #bottom-panel[data-frame=native] #selection-portrait>.art-icon { width:52px; height:52px; }
 #bottom-panel[data-frame=native] #selection-empty { padding:0; }
@@ -38,8 +39,8 @@
 #bottom-panel[data-frame=native] #minimap:not(.expanded) button#overview-toggle { left:354px; top:41.5px; font-size:10px; }
 #bottom-panel[data-frame=native] #minimap:not(.expanded) #grid { left:354px; top:135.5px; }
 #bottom-panel[data-frame=native] #minimap:not(.expanded) button#carry-indicators,#bottom-panel[data-frame=native] #minimap:not(.expanded) button#fullscreen,#bottom-panel[data-frame=native] #minimap:not(.expanded) button#minimap-zoom { z-index:2; height:16px; line-height:16px; padding:0 3px; border-radius:3px; font-size:9px; background:#0009; border:1px solid #d9bd7d88; width:auto; }
-#bottom-panel[data-frame=native] #minimap:not(.expanded) button#carry-indicators { left:78px; top:93px; }
-#bottom-panel[data-frame=native] #minimap:not(.expanded) button#fullscreen { left:362px; top:93px; }
+#bottom-panel[data-frame=native] #minimap:not(.expanded) button#carry-indicators { left:108px; top:93px; }
+#bottom-panel[data-frame=native] #minimap:not(.expanded) button#fullscreen { left:330px; top:93px; }
 #bottom-panel[data-frame=native] #minimap:not(.expanded) button#minimap-zoom { left:50%; top:22px; right:auto; transform:translateX(-50%); position:absolute; }
 
 /* Text on parchment. */
@@ -47,6 +48,8 @@
 #bottom-panel[data-frame=native] #selection-content { display:block; }
 #bottom-panel[data-frame=native] #selection-content:has(:is(#steward-controls,#general-panel,#vassal-panel):not([hidden])) { display:grid; grid-template-columns:minmax(0,1fr) minmax(150px,230px); }
 #bottom-panel[data-frame=native] #selection-content:has(#general-panel:not([hidden])) { grid-template-columns:minmax(120px,1fr) minmax(250px,340px); }
+/* The one-line status spans both columns under the panel, so it is never clipped. */
+#bottom-panel[data-frame=native] #selection-content:has(:is(#steward-controls,#general-panel,#vassal-panel):not([hidden]))>#steward-status { grid-column:1 / -1; grid-row:13; font-size:10px; line-height:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #bottom-panel[data-frame=native] #selection-content>:is(#general-panel,#vassal-panel,#steward-controls) { align-self:stretch; min-width:0; min-height:0; overflow:hidden auto; }
 #bottom-panel[data-frame=native] :is(#general-panel,#vassal-panel) { background:none; border:0; box-shadow:none; padding:0 2px; color:#302418; font-size:11px; }
 #bottom-panel[data-frame=native] #vassal-panel[data-alert=true] { color:#7a2415; }
