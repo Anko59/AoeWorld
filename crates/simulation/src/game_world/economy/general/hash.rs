@@ -12,8 +12,9 @@ impl Economy {
         if !m.manual.is_empty() {
             h.update(b"general-manual");
             h.update(&(m.manual.len() as u64).to_le_bytes());
-            for id in &m.manual {
+            for (id, ordered) in &m.manual {
                 h.update(&id.0.to_le_bytes());
+                h.update(&ordered.to_le_bytes());
             }
         }
         if m.armies.is_empty() && m.recruits.is_empty() {

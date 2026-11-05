@@ -12,6 +12,10 @@ fn commanded_units(
             queued,
             ..
         } => Some((unit_ids.clone(), destination.filter(|_| !queued))),
+        PendingAction::AutoScout {
+            entity_id,
+            enabled: true,
+        } => Some((vec![*entity_id], None)),
         PendingAction::Load { unit_ids, .. } | PendingAction::Hunt { unit_ids, .. } => {
             Some((unit_ids.clone(), None))
         }

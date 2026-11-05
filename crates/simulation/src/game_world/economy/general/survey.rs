@@ -71,7 +71,7 @@ impl GameWorld {
             .filter(|v| {
                 v.player == u.player
                     && distance(u.position, v.position) <= (24 * 1024_i64).pow(2)
-                    && !manual.contains(&v.id)
+                    && !manual.contains_key(&v.id)
                     && (self.economy.generals.controlled.contains_key(&v.id)
                         || (!v.moving && !v.planning && v.attack_target.is_none()))
             })

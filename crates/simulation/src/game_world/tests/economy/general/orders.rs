@@ -212,5 +212,70 @@ fn ordering_the_general_readmits_the_soldiers_who_finished_nearby() {
     );
     w.issue_move(g, at(150, 104)).unwrap();
     advance(&mut w, 40);
-    assert_eq!(w.general_controller(ids[0]), Some(g));
+    assert_eq!(
+        w.general_controller(ids[0]),
+        None,
+        "a soldier stopped moments ago stays out: the player meant it"
+    );
+    advance(&mut w, 300);
+    w.issue_move(g, at(120, 104)).unwrap();
+    advance(&mut w, 40);
+    assert_eq!(
+        w.general_controller(ids[0]),
+        Some(g),
+        "idle long enough, a fresh General order takes it back"
+    );
+}
+
+#[test]
+fn a_soldier_under_a_live_order_is_never_readmitted() {
+    let (mut w, _) = setup();
+    let (ids, g) = muster(&mut w);
+    advance(&mut w, 20);
+    w.general_player_order(PlayerId(0), &ids[..1], None);
+    w.issue_move(ids[0], at(101, 104)).unwrap();
+    advance(&mut w, 400);
+    w.issue_move(ids[0], at(101, 140)).unwrap();
+    w.issue_move(g, at(150, 104)).unwrap();
+    advance(&mut w, 20);
+    assert_eq!(w.general_controller(ids[0]), None);
+    assert!(w.unit(ids[0]).unwrap().moving);
+}
+
+#[test]
+fn another_players_general_never_releases_a_detached_soldier() {
+    let (mut w, _) = setup();
+    let (ids, _) = muster(&mut w);
+    advance(&mut w, 20);
+    w.general_player_order(PlayerId(0), &ids[..1], None);
+    advance(&mut w, 400);
+    let rival = w
+        .spawn_kind(PlayerId(1), UnitKind::General, at(103, 104))
+        .unwrap();
+    w.issue_move(rival, at(150, 104)).unwrap();
+    assert!(
+        w.economy.generals.manual.contains_key(&ids[0]),
+        "player 1's order leaves player 0's detached soldier alone"
+    );
+}
+
+#[test]
+fn detached_soldiers_replay_alike_on_one_and_four_workers() {
+    let run = |workers: usize| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(workers)
+            .build()
+            .unwrap()
+            .install(|| {
+                let (mut w, _) = setup();
+                let (ids, g) = muster(&mut w);
+                advance(&mut w, 20);
+                w.general_player_order(PlayerId(0), &ids[..3], None);
+                advance(&mut w, 350);
+                w.issue_move(g, at(150, 104)).unwrap();
+                advance(&mut w, 200);
+                w.canonical_hash()
+            })
+    };
+    assert_eq!(run(1), run(4));
 }

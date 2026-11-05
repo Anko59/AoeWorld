@@ -73,9 +73,10 @@ pub(crate) struct Manager {
     pub controlled: BTreeMap<EntityId, EntityId>,
     // Only an empty building queue can be reserved. Its front is the recruit.
     pub recruits: BTreeMap<EntityId, (EntityId, UnitKind)>,
-    /// Soldiers the player took out of an army by ordering them directly. No
-    /// census adopts them until the player next orders a General nearby.
-    pub manual: BTreeSet<EntityId>,
+    /// Soldiers the player took out of an army by ordering them directly, with
+    /// the tick of that order. No census adopts them; only a fresh order of
+    /// their own player's General readmits them (see `readmit_manual_soldiers`).
+    pub manual: BTreeMap<EntityId, u64>,
     pub cursor: Option<EntityId>,
     pub work: GeneralWork,
     pub appearance_changes: BTreeSet<EntityId>,
