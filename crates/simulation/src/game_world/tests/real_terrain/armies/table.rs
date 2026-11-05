@@ -17,7 +17,7 @@ fn cell(shape: Shape, kind: UnitKind, count: usize, general: bool) {
             count,
             general,
         },
-        240,
+        900,
     );
     let mut file = std::fs::OpenOptions::new()
         .create(true)

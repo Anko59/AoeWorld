@@ -181,7 +181,7 @@ impl GameWorld {
         }
     }
 
-    fn detach_member(&mut self, id: EntityId) {
+    pub(super) fn detach_member(&mut self, id: EntityId) {
         let index = self.lookup[&id];
         let Some(leader) = self.units[index].formation else {
             return;

@@ -218,6 +218,12 @@ pub(super) fn run_scene(cell: Cell, mut scene: Scene, refused: bool, wall_second
         }
     }
     row.diagnosis = diagnose(w, &scene.soldiers, &arrived_at, &moved_at, row.ticks, goal);
+    let routes = w.route_scheduler_stats().metrics;
+    let _ = writeln!(
+        row.diagnosis,
+        "  routes expired={} stuck={}",
+        routes.expired, routes.stuck
+    );
     costs.sort_unstable();
     let ticks = u64::from(row.ticks).max(1);
     row.tick_us = costs.iter().sum::<u64>() / ticks;
