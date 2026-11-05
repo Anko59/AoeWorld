@@ -15,12 +15,13 @@ pub use gameplay::{
     MAX_MESSAGE as GAMEPLAY_MAX_MESSAGE, MAX_PENDING_COMMANDS_GLOBAL,
     MAX_PENDING_COMMANDS_PER_CONNECTION, MAX_RESOURCE_CACHE, MAX_RESOURCE_CHANGES,
     MAX_RETAINED_BUILDINGS, MAX_SUBSCRIBED_UNITS, MAX_SUBSCRIPTION_TILES, MAX_TRAINING_QUEUE,
-    MapMetadata, MarketPrices, RallyPoint, RallyTarget, ResearchState, ResourceAmount,
-    ResourceKind, ResourceState, ResumeToken, ServerMessage as GameplayServerMessage, SquadKind,
-    SquadStatus, StewardReport, StewardWait, Stockpile, Tech, TradeResource, TrainingState,
-    UnitKind, UnitState as GameplayUnitState, UnitTask, VERSION as GAMEPLAY_VERSION, VassalReport,
-    decode_client as decode_gameplay_client, decode_server as decode_gameplay_server,
-    encode_client as encode_gameplay_client, encode_server as encode_gameplay_server,
+    MAX_VASSAL_SITES, MapMetadata, MarketPrices, RallyPoint, RallyTarget, ResearchState,
+    ResourceAmount, ResourceKind, ResourceState, ResumeToken,
+    ServerMessage as GameplayServerMessage, SquadKind, SquadStatus, StewardReport, StewardWait,
+    Stockpile, Tech, TradeResource, TrainingState, UnitKind, UnitState as GameplayUnitState,
+    UnitTask, VERSION as GAMEPLAY_VERSION, VassalReport, decode_client as decode_gameplay_client,
+    decode_server as decode_gameplay_server, encode_client as encode_gameplay_client,
+    encode_server as encode_gameplay_server,
 };
 #[cfg(feature = "server-repair")]
 pub use gameplay::{

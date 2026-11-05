@@ -52,7 +52,7 @@ pub use steward::{
 };
 mod vassal;
 mod wall;
-pub use vassal::{VASSAL_LIMIT, VASSAL_RADIUS, VassalStatus, VassalWait};
+pub use vassal::{MAX_PLAN_SITES, VASSAL_LIMIT, VASSAL_RADIUS, VassalStatus, VassalWait};
 
 pub use buildings::{BUILDING_RULES, BuildingRules, MAX_WALL_SEGMENTS, trainable_units};
 pub use market::{MARKET_RULES, MarketPrices};

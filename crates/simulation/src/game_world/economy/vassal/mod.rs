@@ -12,6 +12,9 @@ mod roads;
 mod threat;
 
 pub const VASSAL_LIMIT: usize = 20;
+/// Most development sites one domain plans: the wire's `VassalReport::total`
+/// bound (`aoe_protocol`), so a report is always valid.
+pub const MAX_PLAN_SITES: usize = 128;
 pub const VASSAL_RADIUS: i32 = 24;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum VassalWait {
