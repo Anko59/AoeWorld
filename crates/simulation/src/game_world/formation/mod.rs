@@ -82,6 +82,8 @@ pub(crate) struct Member {
     /// slot nor reduced its distance by half a tile. At `GIVE_UP_AFTER_TICKS` it stops where it stands, so
     /// one boxed-in unit cannot keep the whole group unsettled.
     stalled: u16,
+    /// New routes asked for after giving up; see `detach::MAX_RETRIES`.
+    retries: u8,
     remaining: i64,
 }
 

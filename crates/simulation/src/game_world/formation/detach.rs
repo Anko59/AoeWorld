@@ -4,6 +4,14 @@ use super::*;
 use crate::game_world::movement_step::settling::GIVE_UP_AFTER_TICKS;
 
 const DETACH_AFTER: u16 = 120;
+/// A stationary member this close to a slot another body took has arrived beside it,
+/// as a single unit does beside an occupied goal. A detour cannot do better.
+const BESIDE_SLOT: i64 = 2 * 1024;
+const ACCEPT_BESIDE_AFTER: u16 = 120;
+/// A member that gave up far from its slot asks for a new route this often,
+/// at most `MAX_RETRIES` times: a jam clears, sealed ground does not.
+const RETRY_EVERY: u64 = 256;
+pub(super) const MAX_RETRIES: u8 = 8;
 
 impl GameWorld {
     pub(super) fn reset_group_detours(&mut self, group: &mut Group) {
@@ -59,7 +67,51 @@ impl GameWorld {
             .unwrap_or(false)
     }
 
+    /// True when a member stopped short and may still try again.
+    pub(super) fn retry_pending(&self, member: &Member) -> bool {
+        member.stalled >= GIVE_UP_AFTER_TICKS
+            && !member.arrived
+            && member.retries < MAX_RETRIES
+            && path::squared(
+                self.units[self.lookup[&member.id]].state.position,
+                member.goal,
+            ) > BESIDE_SLOT.pow(2)
+    }
+
+    /// A stationary body of another group stands on this member's slot.
+    fn beside_taken_slot(&self, member: &Member) -> bool {
+        let index = self.lookup[&member.id];
+        path::squared(self.units[index].state.position, member.goal) <= BESIDE_SLOT.pow(2)
+            && self.position_occupied(index, member.goal, true)
+    }
+
+    fn accept_arrivals_beside_slots(&mut self) {
+        let mut accepted = Vec::new();
+        for group in self.formations.values().filter(|group| !group.settled) {
+            for (at, member) in group.members.iter().enumerate() {
+                if !member.arrived
+                    && !member.detached
+                    && member.stalled >= ACCEPT_BESIDE_AFTER
+                    && self.beside_taken_slot(member)
+                {
+                    accepted.push((self.units[self.lookup[&member.id]].formation, at));
+                }
+            }
+        }
+        for (leader, at) in accepted {
+            let Some(group) = leader.and_then(|leader| self.formations.get_mut(&leader)) else {
+                continue;
+            };
+            let id = group.members[at].id;
+            group.members[at].arrived = true;
+            let index = self.lookup[&id];
+            self.units[index].obstruction = None;
+        }
+    }
+
     pub(super) fn detach_blocked_members(&mut self) {
+        self.accept_arrivals_beside_slots();
+        let tick = self.tick.0;
         let ids = self
             .formations
             .values()
@@ -67,15 +119,26 @@ impl GameWorld {
             .flat_map(|group| group.members.iter())
             .inspect(|_| self.group_work.members(1))
             .filter(|member| {
-                !member.detached
-                    && !member.arrived
-                    && (member.blocked >= DETACH_AFTER || member.stalled >= 60 || {
-                        let index = self.lookup[&member.id];
-                        let unit = &self.units[index];
-                        unit.state.position == unit.state.previous_position
-                            && unit.obstruction.is_some_and(|o| o.blocked >= 32)
-                            && self.stationary_external_traffic(index)
-                    })
+                if member.detached || member.arrived {
+                    return false;
+                }
+                if member.stalled >= GIVE_UP_AFTER_TICKS {
+                    return self.retry_pending(member)
+                        && (tick + u64::from(member.id.0)).is_multiple_of(RETRY_EVERY);
+                }
+                if member.blocked >= DETACH_AFTER {
+                    return true;
+                }
+                if member.stalled >= 60 {
+                    return !self.beside_taken_slot(member);
+                }
+                {
+                    let index = self.lookup[&member.id];
+                    let unit = &self.units[index];
+                    unit.state.position == unit.state.previous_position
+                        && unit.obstruction.is_some_and(|o| o.blocked >= 32)
+                        && self.stationary_external_traffic(index)
+                }
             })
             .map(|member| member.id)
             .take(4)
@@ -113,7 +176,11 @@ impl GameWorld {
             .find(|member| member.id != id && !member.detached)
             .map(|member| member.id);
         if let Some(group) = self.formations.get_mut(&leader) {
-            group.members[at].blocked = 0;
+            let member = &mut group.members[at];
+            member.blocked = 0;
+            if member.stalled >= GIVE_UP_AFTER_TICKS {
+                member.retries = member.retries.saturating_add(1);
+            }
         }
         if id == leader {
             let Some(replacement) = replacement else {
@@ -181,18 +248,24 @@ impl GameWorld {
                 // successful completion of an intermediate checkpoint must
                 // rejoin the corridor even after the carrier has arrived.
                 let timed_out = !navigating && self.units[index].last_movement_error.is_some();
+                // A detached body wedged in traffic ends its detour too: back
+                // on the corridor it may detach again along a new route.
+                let wedged = self.units[index]
+                    .obstruction
+                    .is_some_and(|o| o.blocked >= 2 * GIVE_UP_AFTER_TICKS);
+                let spent = wedged && member.retries >= MAX_RETRIES;
                 let near = self.units[index].order.is_some_and(|order| {
                     navigating && path::squared(unit.position, order.destination) <= 512_i64.pow(2)
                 }) || (!navigating
                     && path::squared(unit.position, member.goal) <= 512_i64.pow(2)
                     && self.clear_edge(index, unit.position, member.goal, false));
                 let ended = self.units[index].order.is_none() && !unit.planning;
-                if unit.position == member.goal || near || ended || timed_out {
-                    ready.push((member.id, timed_out));
+                if unit.position == member.goal || near || ended || timed_out || wedged {
+                    ready.push((member.id, timed_out || (spent && !navigating), wedged));
                 }
             }
         }
-        for (id, timed_out) in ready {
+        for (id, timed_out, wedged) in ready {
             let index = self.lookup[&id];
             self.clear_planner(index);
             self.units[index].order = None;
@@ -215,6 +288,7 @@ impl GameWorld {
             let member = &mut group.members[at];
             member.detached = false;
             member.blocked = 0;
+            member.retries = member.retries.saturating_add(u8::from(wedged));
             member.stalled = if timed_out { GIVE_UP_AFTER_TICKS } else { 0 };
             member.arrived = self.units[index].state.position == member.goal;
             self.units[index].state.moving = !member.arrived && !timed_out;

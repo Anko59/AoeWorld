@@ -17,6 +17,14 @@ fn march(shape: Shape, kind: UnitKind, count: usize, general: bool) -> super::ma
     )
 }
 
+/// Two Generals sent to one point give their squads the same slots.
+#[test]
+fn two_armies_sharing_a_destination_both_finish_arriving() {
+    let row = march(Shape::Forest, UnitKind::Champion, 400, true);
+    assert_eq!(row.stuck, 0, "{}\n{}", row.tsv(), row.diagnosis);
+    assert_eq!(row.arrived, 400, "{}\n{}", row.tsv(), row.diagnosis);
+}
+
 #[test]
 fn rams_file_through_a_one_tile_pass_without_a_knot() {
     let row = march(Shape::Pass, UnitKind::SiegeRam, 100, false);

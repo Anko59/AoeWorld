@@ -75,6 +75,7 @@ impl GameWorld {
                 hash.update(&(member.cursor as u64).to_le_bytes());
                 hash.update(&member.progress.to_le_bytes());
                 hash.update(&member.stalled.to_le_bytes());
+                hash.update(&[member.retries]);
                 hash.update(&member.remaining.to_le_bytes());
                 hash.update(&member.blocked.to_le_bytes());
                 hash.update(&member.detour_progress.to_le_bytes());
