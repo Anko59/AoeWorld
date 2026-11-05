@@ -1,0 +1,109 @@
+/* Far-view cockpit chrome: iron-framed parchment drawers and stone docks, cut from
+   the pack's interface frames by art.js. Fallback colours apply without a pack. */
+:root { --far-ink:#2d2012; --far-gold:#f0d58a; --far-line:#7a6238; --far-tile:#2a241b; }
+#strategic-cockpit { position:fixed; left:8px; top:62px; z-index:4; display:flex; align-items:flex-start; gap:4px; pointer-events:none; font:12px Georgia,serif; color:var(--far-ink); }
+#strategic-cockpit[hidden] { display:none; }
+#strategic-cockpit > * { pointer-events:auto; }
+.far-frame { background:#d6c494; border:3px solid #7a6238; box-shadow:0 4px 14px #000a; box-sizing:border-box; }
+html[data-far-art=original] .far-frame { border:18px solid transparent; border-image:var(--far-parchment) 34 fill / 18px stretch; background:none; }
+.far-stone { background:#2a2a24; color:#eadcb4; border:3px solid #6b5a38; box-shadow:0 4px 14px #000a; box-sizing:border-box; }
+html[data-far-art=original] .far-stone { border:14px solid transparent; border-image:var(--far-stone) 34 fill / 14px stretch; background:none; }
+.far-rail { display:flex; flex-direction:column; gap:3px; padding:2px; }
+html[data-far-art=original] .far-rail { padding:0; }
+.far-tab { position:relative; width:52px; height:56px; padding:3px 0 2px; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:1px; color:#eadcb4; background:#1d1a14; border:1px solid #5b4b2c; font:10px Georgia,serif; cursor:pointer; }
+html[data-far-art=original] .far-tab { border:8px solid transparent; border-image:var(--far-key) 16 fill / 8px stretch; background:none; width:56px; height:60px; padding:0; }
+.far-tab .icon { width:30px; height:30px; display:block; }
+.far-tab .art-icon { display:block; line-height:0; }
+.far-tab[aria-selected=true] { filter:brightness(1.35) saturate(1.15); outline:2px solid #f0d58a; outline-offset:-2px; }
+.far-tab:hover { filter:brightness(1.25); }
+.far-tab kbd, .far-key { font:700 9px/12px system-ui,sans-serif; background:#0008; color:#f0d58a; border:1px solid #f0d58a66; border-radius:3px; padding:0 3px; }
+.far-drawer { width:356px; max-height:calc(100vh - var(--bottom,200px) - 84px); display:flex; flex-direction:column; min-height:0; }
+.far-drawer[hidden] { display:none; }
+.far-drawer > header { display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #6d5733; margin-bottom:6px; padding-bottom:3px; }
+.far-drawer > header b { font:small-caps bold 19px Georgia,serif; }
+.far-drawer > header button { background:none; border:1px solid #6d5733; color:var(--far-ink); width:24px; height:24px; cursor:pointer; font:14px/1 Georgia,serif; border-radius:3px; }
+.far-body { overflow:auto; min-height:0; padding-right:2px; }
+.far-body[hidden] { display:none; }
+.far-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px; }
+.far-cell { position:relative; display:flex; flex-direction:column; align-items:center; gap:1px; padding:3px 1px 2px; min-height:62px; background:#241f17; color:#f2e6c0; border:1px solid #6a5732; border-radius:3px; cursor:pointer; font:9.5px/11px Georgia,serif; }
+.far-cell .icon { width:34px; height:34px; display:block; }
+.far-cell .art-icon { display:block; line-height:0; }
+.far-cell-name { display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; }
+.far-cell-note { display:block; color:#d9c78f; font-size:9px; line-height:10px; min-height:10px; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.far-cell:hover:not(:disabled) { border-color:#f0d58a; background:#38301f; }
+.far-cell:disabled { opacity:.42; cursor:default; filter:grayscale(.6); }
+.far-cell[aria-pressed=true] { outline:2px solid #f0d58a; background:#4a3b1d; }
+.far-cell[hidden] { display:none; }
+.far-status { margin:7px 0 0; font-size:11px; line-height:14px; min-height:14px; }
+.far-status[data-invalid=true] { color:#951c12; font-weight:600; }
+.far-group { font:small-caps bold 13px Georgia,serif; margin:8px 0 3px; border-bottom:1px solid #6d5733; }
+.far-group:first-child { margin-top:0; }
+.far-row { display:flex; align-items:center; gap:6px; margin:6px 0; flex-wrap:wrap; }
+.far-chip { padding:2px 7px; background:#2a241b; color:#f2e6c0; border:1px solid #6a5732; border-radius:10px; font:11px Georgia,serif; cursor:pointer; }
+.far-chip[aria-pressed=true] { background:#6d5320; border-color:#f0d58a; }
+.far-chip:disabled { opacity:.4; }
+.far-act { padding:6px 10px; background:#3b4a2a; color:#fdf1c8; border:1px solid #1f2814; border-radius:4px; font:bold 12px Georgia,serif; cursor:pointer; }
+.far-act:disabled { opacity:.45; cursor:default; }
+.far-act[aria-pressed=true] { background:#72531f; outline:2px solid #49351a; }
+.far-input { width:104px; padding:3px 5px; background:#f1dfb7; color:var(--far-ink); border:1px solid #786139; font:13px Georgia,serif; text-align:right; }
+.far-quote { background:#00000014; border:1px solid #6d573355; padding:5px 7px; font-size:11px; line-height:15px; min-height:30px; }
+.far-chart { width:100%; height:96px; display:block; margin:2px 0 8px; background:#00000012; border:1px solid #6d573355; }
+.far-legend { display:flex; flex-wrap:wrap; gap:3px 9px; font-size:10.5px; margin-bottom:2px; }
+.far-legend i { display:inline-block; width:9px; height:9px; margin-right:3px; vertical-align:-1px; border-radius:2px; }
+.far-hint { font-size:10.5px; line-height:13px; opacity:.85; margin:4px 0; }
+.far-seg { display:inline-flex; }
+.far-seg button { padding:4px 12px; background:#2a241b; color:#f2e6c0; border:1px solid #6a5732; font:bold 11px Georgia,serif; cursor:pointer; }
+.far-seg button:first-child { border-radius:4px 0 0 4px; } .far-seg button:last-child { border-radius:0 4px 4px 0; }
+.far-seg button[aria-pressed=true] { background:#6d5320; border-color:#f0d58a; }
+/* Right dock: layer toggles and view jumps as keycap icon buttons. */
+#far-dock { position:fixed; right:8px; top:62px; z-index:4; display:flex; flex-direction:column; gap:4px; align-items:flex-end; pointer-events:none; }
+#far-dock > * { pointer-events:auto; }
+#far-dock .dock-row { display:flex; gap:3px; padding:2px; }
+.dock-btn { position:relative; width:42px; height:44px; padding:2px 0; display:flex; flex-direction:column; align-items:center; background:#1d1a14; color:#eadcb4; border:1px solid #5b4b2c; border-radius:3px; cursor:pointer; font:9px Georgia,serif; }
+html[data-far-art=original] .dock-btn { border:6px solid transparent; border-image:var(--far-key) 16 fill / 6px stretch; background:none; width:46px; height:48px; padding:0; }
+.dock-btn .icon { width:26px; height:26px; display:block; }
+.dock-btn .art-icon { display:block; line-height:0; }
+.dock-btn kbd { position:absolute; right:-2px; bottom:-2px; font:700 8px/10px system-ui,sans-serif; background:#000b; color:#f0d58a; border:1px solid #f0d58a66; border-radius:3px; padding:0 2px; }
+.dock-btn[aria-pressed=false] { opacity:.5; filter:grayscale(.7); }
+.dock-btn:disabled { opacity:.35; cursor:default; }
+.dock-btn:hover:not(:disabled) { filter:brightness(1.3); }
+.dock-slot { font:bold 14px Georgia,serif; justify-content:center; }
+.dock-slot[data-saved=true] { color:#f0d58a; outline:1px solid #f0d58a99; }
+#strategic-views, #strategic-layers { position:static; width:auto; max-width:none; padding:0; background:none; border:0; box-shadow:none; display:flex; flex-wrap:nowrap; gap:3px; }
+#strategic-views[hidden], #strategic-layers[hidden] { display:none; }
+html:is([data-lod=map],[data-lod=markers]) #strategic-label { top:66px; left:50%; right:auto; translate:-50% 0; }
+#far-footprint { position:fixed; inset:0; width:100%; height:100%; pointer-events:none; z-index:2; overflow:visible; }
+#far-footprint polygon { fill:#58ec7966; stroke:#a9ffad; stroke-width:2; vector-effect:non-scaling-stroke; }
+#far-footprint[data-valid=false] polygon { fill:#e8353566; stroke:#ff6b5e; }
+/* Map tokens: compact plaques that keep land readable. */
+#strategic-tokens button { position:absolute; transform:translate(-50%,-50%); box-sizing:border-box; pointer-events:auto; cursor:pointer; box-shadow:0 2px 6px #000b; }
+.army-token { width:84px; height:38px; padding:2px 4px 3px; border:2px solid var(--player-colour,#67a9ff); border-radius:4px 4px 16px 16px; background:linear-gradient(#2a2418,#171209); color:#fff1c8; text-align:center; }
+.army-token[data-owned="false"] { border-color:#f08476; background:linear-gradient(#3b211f,#1d0f0e); }
+.army-token b { display:block; font:700 14px/15px Georgia,serif; }
+.army-token small { display:none; }
+.army-mix { display:flex; height:4px; margin-top:2px; background:#0c1518; }
+.army-mix i { display:block; height:100%; }
+.steward-card { position:relative; display:flex; align-items:center; gap:4px; width:118px; height:34px; padding:2px 4px; border:2px solid #b69a58; border-radius:4px; background:linear-gradient(#2b261a,#17130c); color:#f5e8be; font:11px/12px Georgia,serif; text-align:left; }
+.steward-card[data-state=waiting] { border-color:#e09a3c; }
+.steward-card[data-state=inactive] { border-style:dashed; opacity:.8; }
+.steward-card .sc-art { flex:none; line-height:0; } .steward-card .sc-art .icon { width:26px; height:26px; }
+.steward-card .sc-body { flex:none; } .steward-card .sc-body b { display:block; font:700 14px/14px Georgia,serif; } .steward-card small { display:block; font-size:9px; line-height:10px; opacity:.85; }
+.steward-card .sc-jobs { flex:1; display:flex; height:5px; position:absolute; left:4px; right:4px; bottom:2px; background:#0008; }
+.steward-card .sc-jobs i { display:block; height:100%; }
+#strategic-tokens[data-density=high] .steward-card { width:40px; padding:2px; justify-content:center; }
+#strategic-tokens[data-density=high] .steward-card .sc-body { display:none; }
+#strategic-tokens button[aria-pressed="true"] { outline:2px solid #fff2ad; outline-offset:3px; }
+/* Icon sizes: the shared .art-icon box is 28px; these panels size their own. */
+#strategic-cockpit .art-icon, #far-dock .art-icon, #strategic-tokens .art-icon { display:block; flex:none; }
+.far-cell > .art-icon { width:38px; height:38px; margin:0 auto; }
+.far-tab > .art-icon { width:34px; height:34px; }
+.dock-btn > .art-icon { width:30px; height:30px; }
+.sc-art > .art-icon { width:26px; height:26px; }
+.far-legend .art-icon { width:20px; height:20px; display:inline-block; vertical-align:middle; }
+:is(#strategic-cockpit,#far-dock,#strategic-tokens) .original-icon image { image-rendering:auto; }
+.far-body { padding-bottom:6px; }
+.far-cell { min-height:66px; }
+/* Software compositors repaint everything above a canvas that changes every
+   frame; own layers and no per-icon blur keep the panels out of that path. */
+#strategic-cockpit, #far-dock { will-change:transform; contain:layout paint; }
+:is(#strategic-cockpit,#far-dock,#strategic-tokens) .icon { filter:none; }

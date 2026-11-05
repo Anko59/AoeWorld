@@ -3,6 +3,7 @@ import { expect } from "@playwright/test";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 import { forceWebGl } from "./backends.js";
+import { openTab } from "./fixtures/cockpit-tabs.js";
 
 test("real server cockpit counts own soldiers and follows authoritative stock and population", async ({
   page,
@@ -38,14 +39,6 @@ test("real server cockpit counts own soldiers and follows authoritative stock an
   await expect(panel).toContainText("Militia: 4");
   await expect(panel).toContainText("Archer: 4");
   await expect(panel).toContainText("Knight: 2");
-  await expect(panel.locator('[data-stock="food"]')).toHaveText(
-    Number(await page.locator("#stockpile-food").innerText()).toLocaleString(
-      "en-US",
-    ),
-  );
-  await expect(panel.locator("[data-population]")).toHaveText(
-    (await page.locator("#population").innerText()).replace("/", " / "),
-  );
   await page.evaluate(() => {
     location.hash = "x=110&y=128&zoom=.5";
   });
@@ -86,9 +79,6 @@ test("cockpit reports real deliveries and owned army types, and clears on reset"
   });
   const panel = page.locator("#strategic-cockpit");
   await expect(panel).toBeVisible();
-  await expect(panel).toContainText("240");
-  await expect(panel).toContainText("17");
-  await expect(panel).toContainText("12 / 20");
   await expect(panel).toContainText("32 tiles");
   await expect(panel).toContainText("Land held");
   await expect(panel).toContainText("12.50% of map");
@@ -120,7 +110,7 @@ test("local cockpit capture and evidence stay outside the shipped repository", a
   );
 });
 
-test("cockpit collapse keeps a summary, commands and match preference without panel overlap", async ({
+test("cockpit tabs open one drawer, remember the choice and leave the bottom panel clear", async ({
   page,
   request,
 }) => {
@@ -131,30 +121,28 @@ test("cockpit collapse keeps a summary, commands and match preference without pa
   await gameAssets(page);
   await page.goto("/?play=1#x=110&y=128&zoom=.04");
   await expect(page.locator("#connection")).toHaveText("connected");
-  const toggle = page.getByRole("button", {
-    name: "Kingdom controls",
-    exact: true,
-  });
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  await expect(page.locator("[data-army-total]")).toHaveText("Army 14");
-  await expect(page.locator('[data-stock="food"]')).toBeVisible();
-  await expect(page.locator("[data-population]")).toBeVisible();
+  const collapse = page.locator("[data-collapse]");
   await expect(page.locator("#cockpit-details")).toBeHidden();
+  await openTab(page, "stats");
+  await expect(collapse).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator(".cockpit-army")).toContainText("Militia");
+  await collapse.click();
+  await expect(page.locator("#cockpit-details")).toBeHidden();
+  await openTab(page, "build");
   await page.reload();
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  await toggle.click();
-  for (const selector of [
-    "#strategic-layers",
-    "#strategic-views",
-    "#units-here",
-    "#far-building",
-  ]) {
+  await expect(page.locator("#cockpit-details")).toBeVisible();
+  await expect(page.locator('[data-tab="build"]')).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  for (const selector of ["#strategic-layers", "#strategic-views"]) {
+    await expect(page.locator(`#far-dock ${selector}`)).toBeAttached();
+  }
+  for (const selector of ["#units-here", "#far-building"]) {
     await expect(page.locator(`#cockpit-details ${selector}`)).toBeAttached();
   }
   const boxes = await page
-    .locator("#cockpit-details, #bottom-panel, #strategic-cockpit")
+    .locator("#cockpit-details, #bottom-panel, #far-dock")
     .evaluateAll((nodes) =>
       nodes.map((n) => {
         const r = n.getBoundingClientRect();
@@ -192,14 +180,11 @@ test("cockpit remembers its collapsed choice without crypto.subtle", async ({
   });
   await page.goto("/?play=1#x=110&y=128&zoom=.04");
   await expect(page.locator("#connection")).toHaveText("connected");
-  const toggle = page.getByRole("button", {
-    name: "Kingdom controls",
-    exact: true,
-  });
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  const toggle = page.locator("[data-collapse]");
+  await openTab(page, "build");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
   await page.reload();
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
   expect(
     await page.evaluate(
       () => (window as Window & { rejections?: number }).rejections,
@@ -235,6 +220,7 @@ test("General and Steward labels leave the open controls clear", async ({
     "data-cockpit-reveal",
     /./,
   );
+  await openTab(page, "build");
   for (const selector of [".army-token", ".steward-card", "#general-panel"]) {
     await expect(page.locator(selector)).toBeVisible();
     const clear = await page.locator(selector).evaluate((node) => {

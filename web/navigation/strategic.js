@@ -8,6 +8,7 @@ import { paintTerrain } from '/navigation/landscape/terrain.js';
 import { initSettlements } from '/navigation/landscape/settlements.js';
 import { initHoldings } from '/navigation/landscape/holdings.js';
 import { initMapKey } from '/navigation/landscape/key.js';
+import { drawShield, drawVillagers, drawCount } from '/navigation/landscape/units.js';
 
 // A backend-independent, cached strategic plane. The detailed renderer keeps
 // its GPU/context alive, but emits no terrain, resources or sprites at these LODs.
@@ -29,7 +30,7 @@ export function initStrategic(fog, actors) {
   let resourceSnapshot = false;
   let modelRevision = 0, modelSignature = '', lastState = null;
   const tokens = initTokens(), contacts = initContacts();
-  const cockpit = initCockpit(() => { modelRevision++; previous = ''; if (lastState) frame(lastState); }), reveal = initReveal();
+  const cockpit = initCockpit(() => { tokens.invalidate(); modelRevision++; previous = ''; if (lastState) frame(lastState); }), reveal = initReveal();
   const settlements = initSettlements(), holdingsLayer = initHoldings();
   const mapKey = initMapKey();
   const layers = initLayers(() => {
@@ -106,21 +107,19 @@ export function initStrategic(fog, actors) {
       context.drawImage(fog.canvas, 0, 0, worldWidth, worldHeight);
     }
     context.setTransform(1, 0, 0, 1, 0, 0);
-    context.font = `${Math.max(11, width / scene.clientWidth * 11)}px monospace`;
-    context.textAlign = 'center';
-    context.textBaseline = 'bottom';
     for (const pixel of picks) {
-      context.fillStyle = actorColour(pixel.colour);
-      const radius = pixel.buildings && !holdings.icons ? 4 : 2;
-      if (pixel.units || !holdings.icons) {
-        context.beginPath(); context.arc(pixel.x, pixel.y, radius, 0, Math.PI * 2);
-        context.strokeStyle = '#172525'; context.lineWidth = 2; context.stroke(); context.fill();
-      }
-      if (level === 2 && pixel.units > 1) {
-        context.strokeStyle = '#101910';
-        context.lineWidth = 3;
-        context.strokeText(String(pixel.units), pixel.x, pixel.y - 5);
-        context.fillText(String(pixel.units), pixel.x, pixel.y - 5);
+      if (!pixel.units && holdings.icons) continue;
+      const colour = actorColour(pixel.colour), soldiers = pixel.units - pixel.workers;
+      const size = (level === 2 ? 24 : 18) / scale;
+      if (!pixel.units) {
+        context.beginPath(); context.arc(pixel.x, pixel.y, 4, 0, Math.PI * 2);
+        context.fillStyle = colour; context.strokeStyle = '#172525'; context.lineWidth = 2; context.stroke(); context.fill();
+      } else if (soldiers > 0) {
+        drawShield(context, pixel.x, pixel.y, size, colour);
+        if (soldiers > 1) drawCount(context, pixel.x, pixel.y + size * .72, String(soldiers), size / 1.6);
+      } else {
+        drawVillagers(context, pixel.x, pixel.y, size * .8, colour);
+        if (pixel.workers > 1) drawCount(context, pixel.x + size * .55, pixel.y + size * .45, String(pixel.workers), size / 1.8);
       }
     }
     canvas.dataset.threats = String(layers.enabled.threats ? contacts.draw(context, project) : 0);
@@ -181,7 +180,7 @@ export function initStrategic(fog, actors) {
       if (next === modelSignature) return;
       modelSignature = next; tokens.update(a, e, b); modelRevision++;
   }
-  return { frame, pick, present, navigation: reveal.navigation, cameraLink: reveal.link, interrupt: reveal.interrupt, cinematic: reveal.active, entity: tokens.entity, update, cockpit: cockpit.update, production: cockpit.production, building: cockpit.building,
+  return { frame, pick, present, navigation: reveal.navigation, cameraLink: reveal.link, interrupt: reveal.interrupt, cinematic: reveal.active, entity: tokens.entity, update, cockpit: cockpit.update, production: cockpit.production, building: cockpit.building, commerce: cockpit.commerce,
     // All arrays are the bounded, authorized HUD stream. Aggregate jobs once
     // at HUD cadence, rather than retaining Rust map implementations in WASM.
     receive(a, castles, b, c, workers, orders) {

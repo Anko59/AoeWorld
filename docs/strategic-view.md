@@ -114,17 +114,44 @@ capped report samples whole rows across the map and a cockpit note identifies
 incomplete detail; area totals remain exact. Fog-mode changes reclip
 immediately.
 
-Resources, population and the authoritative army total stay in a compact strip.
-Kingdom controls opens one scrollable drawer for building, production, map
-layers and saved views. It ends above the selection HUD. Collapsing preserves
-keyboard layer shortcuts and all commands remain in the drawer. A session-stored
-choice is keyed by a digest of the match resume identity, so reloading the same
-match retains it without copying the private token into another storage entry.
+The cockpit is an icon rail (Build, Train, Research, Trade, Stats) that opens
+one iron-framed drawer; collapsing leaves only the rail, and keyboard layer
+shortcuts keep working. Choices are icon grids cut from the pack's own interface
+art (no drop-downs). The numbers already in the top bar are not repeated: the
+Stats tab shows history charts (stockpile with each line scaled to its own
+peak, collected per minute, army by type, population against its cap). History
+is one fixed ring of 240 samples taken every 5 seconds from the cockpit report,
+about 20 minutes. Panel frames are nine-sliced from the pack's frames, so the
+art always covers its container. A session-stored choice (tab and collapse) is
+keyed by a digest of the match resume identity, so reloading the same match
+retains it without copying the private token into another storage entry.
+
+Research lists every technology that has a building able to teach it and is not
+yet researched; Rust reports one availability code and one candidate building per
+technology (bounded by the technology table, not the building count) and the
+order names that building. Layer toggles and view jumps sit in a right dock as
+icon buttons with key caps. Map symbols use the real interface icons: settlements
+are medallions of the building's icon ringed in the owner's colour, soldiers are
+shields with crossed swords and workers are round Villager portraits (actor
+record kind 2). Steward plaques are one icon with a count and job bar (icons
+only above 12 Town Centers); the General panel can fold.
+
+## Market from the far view
+
+Trade lists wood, food and stone with their current prices. Quantities are typed
+or taken from chips (1k, 10k, 100k, quarter, half, all of the stock or of the
+gold that can be spent). A bulk order is exactly the same lots as pressing the
+single trade button repeatedly: lots of 100 units, each lot priced at the price
+the previous lot left (buying costs price +30 %, selling pays price -30 %, every
+lot moves the price 3 gold, clamped to 20..9999), stopping at the first lot the
+stockpile cannot pay for. One order carries up to 20,000 lots (2,000,000 units).
+A large sale therefore walks the price down to its floor: the panel quotes lots,
+average gold per lot and the final price before sending, using the same rules.
 
 ## Saved views and jumps
 
 At far zoom, Ctrl+F1–F4 save the camera position and zoom for this world;
-Shift+F1–F4 recall them. The on-screen Save/View buttons do the same.
+Shift+F1–F4 recall them. On-screen slot buttons recall a saved view (an empty slot saves).
 Plain F1–F6 still control layers. H uses the existing main-base command.
 End jumps to the largest reported owned General army (soldier count, then
 lowest General ID). Space jumps to the newest observed damage to an owned

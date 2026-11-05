@@ -1,3 +1,28 @@
+import { kindSprite } from '/interface/ui-art.js';
+import { buildingKinds } from '/interface/buildings.js';
+
+// Real interface art, clipped into a bronze-rimmed medallion. Baked once per
+// building kind; a missing pack keeps the drawn ink below.
+const medallions = new Map();
+function medallion(kind) {
+  const name = buildingKinds[kind];
+  if (medallions.has(kind)) return medallions.get(kind);
+  const art = name && kindSprite(name, 96);
+  if (!art) return null;
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 96;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+  context.save(); context.beginPath(); context.arc(48, 48, 43, 0, Math.PI * 2); context.clip();
+  context.drawImage(art, 0, 0, 96, 96);
+  const shade = context.createRadialGradient(48, 40, 24, 48, 48, 46);
+  shade.addColorStop(0, '#0000'); shade.addColorStop(1, '#0007');
+  context.fillStyle = shade; context.fillRect(0, 0, 96, 96); context.restore();
+  context.lineWidth = 6; context.strokeStyle = '#2b2116'; context.beginPath(); context.arc(48, 48, 44, 0, Math.PI * 2); context.stroke();
+  context.lineWidth = 2.5; context.strokeStyle = '#d9c386'; context.beginPath(); context.arc(48, 48, 41.5, 0, Math.PI * 2); context.stroke();
+  medallions.set(kind, canvas);
+  return canvas;
+}
+export const isMedallion = kind => !!medallion(kind);
 // Architectural map ink, baked once into six tiny surfaces. These are code
 // shapes, not copies of the original-art atlases or hundreds of SVG images.
 export function settlementSymbols() {
@@ -18,6 +43,6 @@ export function settlementSymbols() {
     for (const [colour,d] of shapes) { const path = new Path2D(d); context.fillStyle = colour; context.fill(path); context.stroke(path); }
     result.set(name,canvas);
   }
-  return kind => result.get(kind === 16 ? 'castle' : [8,14].includes(kind) ? 'tower' : kind === 4 ? 'mill'
+  return kind => medallion(kind) ?? result.get(kind === 16 ? 'castle' : [8,14].includes(kind) ? 'tower' : kind === 4 ? 'mill'
     : kind === 9 ? 'harbour' : kind === 6 ? 'barracks' : 'village');
 }

@@ -68,14 +68,27 @@ export function initSettlements() {
           node.textContent = buildingNames[kind];
           node.setAttribute('aria-label', `${owned ? 'Your ' : ''}${buildingNames[kind]}`);
         }
-        const icon = symbol(kind), size = (kind === 0 || kind === 16 ? 34 : 26)/scale;
-        if (owned) {
-          context.beginPath(); context.arc(x,y-size*.15,size*.65,0,Math.PI*2);
-          context.fillStyle = actorColour(colour); context.globalAlpha = .25; context.fill(); context.globalAlpha = 1;
-          context.strokeStyle = '#fff8d6'; context.lineWidth = 2/scale; context.stroke();
+        const icon = symbol(kind), big = kind === 0 || kind === 16, size = (big ? 46 : 32) / scale, cy = y - size * .2;
+        const art = icon && icon.width === 96, tint = actorColour(colour);
+        context.fillStyle = '#0006'; context.beginPath(); context.ellipse(x, cy + size * .5, size * .46, size * .14, 0, 0, Math.PI * 2); context.fill();
+        if (art) {
+          // Owner colour is a banner ring around the medallion; owned holdings add a pale outer ring.
+          context.beginPath(); context.arc(x, cy, size * .56, 0, Math.PI * 2);
+          context.lineWidth = (big ? 5 : 4) / scale; context.strokeStyle = tint; context.stroke();
+          if (owned) {
+            context.beginPath(); context.arc(x, cy, size * .64, 0, Math.PI * 2);
+            context.lineWidth = 2 / scale; context.strokeStyle = '#fff8d6'; context.stroke();
+          }
+          context.drawImage(icon, x - size * .5, cy - size * .5, size, size);
+        } else {
+          if (owned) {
+            context.beginPath(); context.arc(x, y - size * .15, size * .65, 0, Math.PI * 2);
+            context.fillStyle = tint; context.globalAlpha = .25; context.fill(); context.globalAlpha = 1;
+            context.strokeStyle = '#fff8d6'; context.lineWidth = 2 / scale; context.stroke();
+          }
+          if (icon) context.drawImage(icon, x - size / 2, y - size * .75, size, size);
+          context.fillStyle = tint; context.fillRect(x - size / 2, y + size * .25 - 2 / scale, size, 3 / scale);
         }
-        if (icon) context.drawImage(icon,x-size/2,y-size*.75,size,size);
-        context.fillStyle = actorColour(colour); context.fillRect(x-size/2,y+size*.25-2/scale,size,3/scale);
         hits.push({x,y,size,world:[(x0+x1)/2,(y0+y1)/2]});
       }
       for (const [id,node] of nodes) if (!live.has(id)) { node.remove(); nodes.delete(id); }

@@ -107,6 +107,8 @@ export function initBuildings() {
   build.addEventListener('click',()=>{open=open==='economy'?false:'economy';menu();});
   military.addEventListener('click',()=>{open=open==='military'?false:'military';menu();});
   window.aoeBuildings={
+    // Names, building kinds and icon ids in Tech order, for the far-view research grid.
+    techs:research.map((label,i)=>({index:i,label,site:sites[i],art:techIds[i]})),
     bind(callback) {
       window.aoeBuildings.command=callback;
       [...buttons,...techs,byId('cancel-construction'),byId('cancel-research'),...reseedButtons,autoScout].forEach((button,i)=>button.addEventListener('click',()=>callback(0,i)));
@@ -134,6 +136,7 @@ export function initBuildings() {
     update(v) {
       state=Array.from(v);menu();
       window.aoeNavigation?.strategic?.building?.ready(v.slice(buildStart, buildStart + commands.length));
+      window.aoeNavigation?.strategic?.production?.units(v.slice(foundationCount+1+(v[foundationCount]??0)*3, foundationCount+1+(v[foundationCount]??0)*3+trainingKinds.length));
       byId('age').textContent=['I  Dark Age','II  Feudal Age','III  Castle Age','IV  Imperial Age'][v[0]]??'I  Dark Age';
       const kind=v[1],selected=kind>=0,owned=byId('selection').dataset.owned==='true';
       const availability=foundationCount+1+(v[foundationCount]??0)*3;

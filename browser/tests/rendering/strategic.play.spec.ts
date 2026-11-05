@@ -78,7 +78,8 @@ test("strategic tokens retain identity, layers and fog-safe reports", async ({
     const buttons = [...document.querySelectorAll(".army-token")].map(
       (e) => e.textContent,
     );
-    const card = document.querySelector(".steward-card")?.textContent;
+    const cardNode = document.querySelector<HTMLElement>(".steward-card");
+    const card = `${cardNode?.textContent} ${cardNode?.title}`;
     const bounds = [
       ...document.querySelectorAll(".army-token,.steward-card"),
     ].map((e) => {

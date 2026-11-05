@@ -3,6 +3,7 @@ import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 import { forceWebGl } from "./backends.js";
 import { fiveVillagerFixture } from "../village/fixtures/village.js";
+import { openTab } from "./fixtures/cockpit-tabs.js";
 
 test("far construction previews the footprint and reports only server acknowledgements", async ({
   page,
@@ -18,8 +19,8 @@ test("far construction previews the footprint and reports only server acknowledg
   });
   await page.goto("/?play=1#x=8192&y=8192&zoom=.04");
   await expect(page.locator("#connection")).toHaveText("connected");
-  await page.getByLabel("Building type").selectOption("1");
-  await page.getByRole("button", { name: "Build here", exact: true }).click();
+  await openTab(page, "build");
+  await page.locator('[aria-label="Building type"] [data-id="1"]').click();
   // A strategic label must not intercept the site while placement is armed.
   await page.evaluate(() => {
     const button = document.createElement("button");
@@ -43,7 +44,8 @@ test("far construction previews the footprint and reports only server acknowledg
   await expect(page.locator("#far-building")).toContainText("Too many orders");
   await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
   // Choosing a site over the Town Center refuses locally, with a red reason.
-  await page.getByRole("button", { name: "Build here", exact: true }).click();
+  await openTab(page, "build");
+  await page.locator(\'[aria-label="Building type"] [data-id="1"]\').click();
   await page.mouse.move(1000, 360);
   await expect(page.locator("#far-building")).toContainText(
     "No available villagers within 64 tiles",
@@ -77,8 +79,8 @@ test("far construction spends real stock through the ordinary validated build or
   await gameAssets(page);
   await page.goto("/?play=1#x=128&y=128&zoom=.04");
   await expect(page.locator("#connection")).toHaveText("connected");
-  await page.getByLabel("Building type").selectOption("1");
-  await page.getByRole("button", { name: "Build here", exact: true }).click();
+  await openTab(page, "build");
+  await page.locator('[aria-label="Building type"] [data-id="1"]').click();
   await page.mouse.move(650, 380);
   await expect(page.locator("#far-footprint")).toHaveAttribute(
     "data-valid",
@@ -156,7 +158,8 @@ test("disconnect clears an unacknowledged far build without requiring Welcome or
   });
   await page.goto("/?play=1#x=8192&y=8192&zoom=.04");
   await expect(page.locator("#connection")).toHaveText("connected");
-  await page.getByRole("button", { name: "Build here", exact: true }).click();
+  await openTab(page, "build");
+  await page.locator(\'[aria-label="Building type"] [data-id="1"]\').click();
   await page.mouse.click(700, 340);
   await expect(page.locator("#far-building")).toContainText("Submitting");
   await page.routeWebSocket("**/game/ws", (socket) =>

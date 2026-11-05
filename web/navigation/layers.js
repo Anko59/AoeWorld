@@ -1,3 +1,4 @@
+import { icon, entityIcon } from '/interface/ui-art.js';
 // These keys are reserved only while the strategic scene is on screen.
 export function initLayers(changed) {
   const control = document.createElement('nav');
@@ -6,16 +7,21 @@ export function initLayers(changed) {
   control.hidden = true;
   document.body.append(control);
   const names = ['Ownership', 'Armies', 'Economy', 'Threats', 'Resources', 'Roads & bridges'];
+  const art = [() => entityIcon('Castle'), () => icon('commands', 'military', 'soldier'), () => entityIcon('Villager'),
+    () => icon('commands', 'attack', 'soldier'), () => icon('resources', 'gold', 'gold'), () => entityIcon('Bridge')];
   const keys = ['ownership', 'armies', 'economy', 'threats', 'resources', 'roads'];
   const enabled = Object.fromEntries(keys.map(key => [key, true]));
   const buttons = keys.map((key, i) => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.textContent = `${names[i]} F${i + 1}`;
-    button.title = key === 'ownership' ? 'Held boundaries on explored land, building plots and active Town Center work domains'
+    button.className = 'dock-btn';
+    button.dataset.layer = key;
+    button.innerHTML = `${art[i]()}<kbd>F${i + 1}</kbd>`;
+    button.setAttribute('aria-label', `${names[i]} F${i + 1}`);
+    button.title = `${names[i]} (F${i + 1}) · ` + (key === 'ownership' ? 'Held boundaries on explored land, building plots and active Town Center work domains'
       : key === 'roads' ? 'Known roads and bridges'
       : key === 'threats' ? 'Last seen enemies, up to two minutes old; never live positions under fog'
-      : `Toggle ${names[i].toLowerCase()}`;
+      : `Toggle ${names[i].toLowerCase()}`);
     button.setAttribute('aria-pressed', 'true');
     button.addEventListener('click', () => toggle(i));
     control.append(button);

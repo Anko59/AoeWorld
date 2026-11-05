@@ -86,11 +86,12 @@ export function aggregatePixels(actors, project, width, height, cell = 1) {
     let pixel = pixels.get(key);
     if (!pixel) {
       pixel = { key, x: (x + .5) * cell, y: (y + .5) * cell, count: 0,
-        units: 0, buildings: 0, world: [0, 0], owners: new Map() };
+        units: 0, workers: 0, buildings: 0, world: [0, 0], owners: new Map() };
       pixels.set(key, pixel);
     }
     pixel.count++;
     pixel[kind === 1 ? 'buildings' : 'units']++;
+    if (kind === 2) pixel.workers++;
     pixel.world[0] += wx; pixel.world[1] += wy;
     const vote = pixel.owners.get(owner) ?? { count: 0, colour };
     vote.count++;
@@ -110,6 +111,12 @@ export function aggregateActors(actors, world, view, side) {
     size: Math.max(.65, Math.min(5, (pixel.buildings ? 4 : 2) * side * view.zoom / Math.max(...world))) }));
 }
 
+const colours = new Map();
 export function actorColour(colour) {
-  return `rgb(${[(colour >> 16) & 255, (colour >> 8) & 255, colour & 255].join(',')})`;
+  let text = colours.get(colour);
+  if (text === undefined) {
+    text = `rgb(${[(colour >> 16) & 255, (colour >> 8) & 255, colour & 255].join(',')})`;
+    if (colours.size < 256) colours.set(colour, text);
+  }
+  return text;
 }

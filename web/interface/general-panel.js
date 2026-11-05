@@ -15,7 +15,8 @@ export function initGeneralPanel() {
   panel.id = 'general-panel'; panel.hidden = true;
   panel.innerHTML = `<div id="general-modes" role="tablist">
       <button type="button" id="general-captain" role="tab" data-mode="captain">Captain</button>
-      <button type="button" id="general-trainer" role="tab" data-mode="trainer">Trainer</button></div>
+      <button type="button" id="general-trainer" role="tab" data-mode="trainer">Trainer</button>
+      <button type="button" id="general-collapse" aria-label="Collapse General panel" aria-expanded="false" title="Collapse / expand">▸</button></div>
     <div id="general-captain-view"><div id="general-submodes">
       <span id="general-marching" class="submode">Marching</span>
       <span id="general-fighting" class="submode">Fighting</span></div>
@@ -41,6 +42,12 @@ export function initGeneralPanel() {
       byId(`general-${m}-view`).hidden = m !== mode;
     }
   };
+  const collapse = byId('general-collapse');
+  // At far zoom the panel starts folded so it never covers land; the choice is the player's.
+  collapse.addEventListener('click', () => {
+    const open = panel.dataset.open !== 'true'; panel.dataset.open = String(open);
+    collapse.setAttribute('aria-expanded', String(open)); collapse.textContent = open ? '▾' : '▸';
+  });
   byId('general-captain').addEventListener('click', () => setMode('captain'));
   byId('general-trainer').addEventListener('click', () => setMode('trainer'));
   byId('general-train').addEventListener('click', () => send(9, training ? 0 : 1));

@@ -1,27 +1,7 @@
-@import url('/navigation/building.css');
+@import url('/navigation/cockpit/panel.css');
 @import url('/navigation/reveal.css');
 @import url('/navigation/landscape/map.css');
 :root { color-scheme: dark; --ink:#eee4ca; --muted:#b7b49e; --gold:#b39a63; --edge:#696756; --panel:#202620; --bottom:208px; }
-#strategic-cockpit { position:fixed; left:12px; top:104px; width:310px; max-height:calc(100vh - 330px); overflow:auto; z-index:4; padding:26px 14px 12px; color:#261d13; background:#d6c494; border:2px solid #9d8150; box-shadow:0 3px 12px #0009; font-size:12px; }
-#strategic-cockpit header { display:flex; flex-direction:column; border-bottom:1px solid #665438; margin-bottom:8px; }
-#strategic-cockpit header b { font:small-caps bold 20px Georgia,serif; }
-.cockpit-resources { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-.cockpit-resources>div { display:flex; align-items:center; gap:6px; }
-.cockpit-resources b { display:block; font-size:19px; line-height:22px; }
-.cockpit-resources small { display:block; }
-.cockpit-census { display:flex; justify-content:space-between; margin-top:10px; gap:8px; }
-.cockpit-census b { display:block; }
-.cockpit-note { font-size:10px; line-height:13px; margin:6px 0; }
-.cockpit-army { display:flex; flex-wrap:wrap; gap:4px 10px; border-top:1px solid #665438; padding-top:6px; }
-.cockpit-army>b { width:100%; }
-.cockpit-army>span { display:flex; align-items:center; gap:4px; }
-.cockpit-army .icon { width:22px; height:22px; }
-#units-here { position:fixed; right:12px; top:320px; z-index:4; width:320px; max-height:calc(100vh - 536px); overflow:auto; padding:26px 12px 10px; color:#261d13; background:#d6c494; border:2px solid #9d8150; box-shadow:0 3px 12px #0008; font-size:12px; display:grid; grid-template-columns:1fr 65px; gap:6px; }
-#units-here label { display:flex; flex-direction:column; gap:2px; }
-#units-here select,#units-here input { min-width:0; width:100%; background:#f1dfb7; color:#261d13; border:1px solid #786139; padding:3px; }
-#units-here button { grid-column:1 / -1; background:#504b34; color:#fff0c9; padding:5px; }
-#units-here button[aria-pressed=true] { outline:2px solid #49351a; background:#72531f; }
-#units-here-status { grid-column:1 / -1; font-size:10px; line-height:13px; margin:0; }
 html.units-here-armed #scene { cursor:crosshair; }
 * { box-sizing:border-box; }
 html,body,#playground { width:100%; height:100%; margin:0; overflow:hidden; }
@@ -264,19 +244,9 @@ html[data-lod=markers] #unit-health-bars,html[data-lod=markers] #carried-loads,
 html[data-lod=map] #idle-markers,html[data-lod=markers] #idle-markers,
 html[data-lod=map] #garrison-flags,html[data-lod=markers] #garrison-flags { display:none; }
 #strategic-label { position:fixed; top:64px; right:12px; pointer-events:none; padding:5px 9px; background:#142019ee; color:#e9efdb; font:12px monospace; z-index:1; }
-#strategic-layers { position:fixed; top:98px; right:12px; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:4px; max-width:540px; z-index:3; }
 #strategic-layers[hidden], #strategic-tokens[hidden], #strategic-tokens button[hidden] { display:none; }
-#strategic-layers button { padding:5px 8px; background:#182b24ee; border:1px solid #7e8b66; color:#f4ecd3; font:11px sans-serif; cursor:pointer; }
-#strategic-layers button[aria-pressed="false"] { opacity:.6; text-decoration:line-through; }
 #strategic-tokens { position:fixed; inset:0; pointer-events:none; z-index:2; }
 #strategic-tokens button { position:absolute; transform:translate(-50%,-50%); box-sizing:border-box; pointer-events:auto; cursor:pointer; box-shadow:0 2px 5px #000b; }
-.army-token { width:116px; height:48px; padding:3px 5px; border:2px solid var(--player-colour,#67a9ff); border-radius:5px; background:#122b3bf5; color:#f6f3da; text-align:center; }
-.army-token[data-owned="false"] { border-color:#f08476; background:#3b211ff5; }
-.army-token b { display:block; font:700 16px sans-serif; }
-.army-token small { display:block; white-space:nowrap; font:9px sans-serif; }
-.army-mix { display:flex; height:5px; margin-top:3px; background:#0c1518; }
-.army-mix i { display:block; height:100%; }
-.steward-card { width:218px; min-height:62px; padding:5px 8px; border:1px solid #eac24d; border-radius:4px; background:#292c18f5; color:#f3e9bb; font:11px/17px sans-serif; text-align:left; white-space:pre-line; }
 #strategic-tokens button[aria-pressed="true"] { outline:2px solid #fff2ad; outline-offset:3px; }
 html[data-lod="map"] #steward-domain, html[data-lod="markers"] #steward-domain { visibility:hidden; }
 #general-squads { list-style:none; padding:0; margin:6px 0 0; max-height:320px; overflow:auto; }

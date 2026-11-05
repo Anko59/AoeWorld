@@ -1,9 +1,12 @@
+import { entityIcon } from '/interface/ui-art.js';
 const states = ['idle', 'marching', 'fighting', 'retreating'];
 const stances = ['Aggressive', 'Defensive', 'Stand ground', 'No attack'];
 const roles = ['Infantry', 'Archers', 'Cavalry', 'Siege', 'Scouts'];
 const waits = ['Training villagers', 'Census busy', 'At capacity', 'No Town Center', 'Food shortage', 'Housing shortage'];
 const teamColours = { blue:'#4191f5', red:'#f54141', green:'#32be41', yellow:'#f5dc28', cyan:'#28dcdc', purple:'#af41dc', grey:'#a0a0a0', orange:'#f59128' };
 
+// Grid cells are packed into one integer; no string is built per probe.
+const cellKey = (x, y) => (x + 512) * 4096 + (y + 512);
 // Retained nodes, bounded independently of world size. Coordinates and hit
 // boxes share the exact plane used for ordinary ground orders.
 export function initTokens() {
@@ -12,6 +15,7 @@ export function initTokens() {
   document.body.append(layer);
   const nodes = new Map();
   let armies = [], economy = [], bridges = [], hits = [], domainSignature = '';
+  let hudRects = null, hudRectsAt = 0, hudRectsFor = '';
   const domains = new Map();
   function button(key, className) {
     let node = nodes.get(key);
@@ -48,10 +52,11 @@ export function initTokens() {
     const sx = x * scale, sy = y * scale;
     node.hidden = !visible;
     if (!visible) return;
-    node.style.left = `${sx}px`; node.style.top = `${sy}px`;
+    if (node.dataset.at !== `${sx},${sy}`) { node.dataset.at = `${sx},${sy}`; node.style.left = `${sx}px`; node.style.top = `${sy}px`; }
     hits.push({ id, x, y, width: width / scale, height: height / scale });
   }
   return {
+    invalidate() { hudRects = null; },
     show(value) {
       if (layer.hidden === !value) return;
       layer.hidden = !value; if (!value) hits = [];
@@ -92,31 +97,41 @@ export function initTokens() {
       const occupied = new Set(), positions = new Map();
       // Reserve actual HUD rectangles before placing world labels. The drawer
       // and floating Captain controls can change without moving the camera.
-      for (const panel of document.querySelectorAll('#strategic-cockpit,#cockpit-details,#general-panel,#bottom-panel,#strategic-map-key,#strategic-label,#performance-overlay')) {
-        const r = panel.getBoundingClientRect();
+      // Reading rectangles forces layout, so reuse them for 250 ms (HUD cadence).
+      const stamp = performance.now();
+      if (!hudRects || stamp - hudRectsAt > 250 || hudRectsFor !== `${width}x${height}`) {
+        hudRects = [...document.querySelectorAll('#strategic-cockpit,#cockpit-details,#far-dock,#general-panel,#bottom-panel,#strategic-map-key,#strategic-label,#performance-overlay')]
+          .map(panel => panel.getBoundingClientRect());
+        hudRectsAt = stamp; hudRectsFor = `${width}x${height}`;
+      }
+      for (const r of hudRects) {
         if (!r.width || !r.height) continue;
         for (let x = Math.floor((r.left - 4) / 32); x <= Math.floor((r.right + 4) / 32); x++) {
-          for (let y = Math.floor((r.top - 4) / 24); y <= Math.floor((r.bottom + 4) / 24); y++) occupied.add(`${x},${y}`);
+          for (let y = Math.floor((r.top - 4) / 24); y <= Math.floor((r.bottom + 4) / 24); y++) occupied.add(cellKey(x, y));
         }
       }
       let grouped = 0;
       // A small screen grid keeps nearby armies and cards individually usable.
       // Selected armies get their anchor first; displaced labels keep a leader
       // line to the actual world position. This never scans gameplay units.
+      // Crowded kingdoms shrink Steward plaques to icons so they never hide land.
+      const dense = economy.length > 12;
+      const density = dense ? 'high' : 'normal';
+      if (layer.dataset.density !== density) layer.dataset.density = density;
       const labels = [
-        ...armies.filter(() => options.armies).map(r => ({ key: `a${r[0]}`, world: r.slice(1, 3), selected: r[4], owned: r[3], w: 116, h: 48 })),
-        ...economy.filter(() => options.economy).map(r => ({ key: `e${r[0]}`, world: r.slice(2, 4), selected: r[4], owned: 1, w: 218, h: 68 })),
+        ...armies.filter(() => options.armies).map(r => ({ key: `a${r[0]}`, world: r.slice(1, 3), selected: r[4], owned: r[3], w: 84, h: 38 })),
+        ...economy.filter(() => options.economy).map(r => ({ key: `e${r[0]}`, world: r.slice(2, 4), selected: r[4], owned: 1, w: dense ? 40 : 118, h: dense ? 38 : 34 })),
       ].sort((a, b) => b.selected - a.selected || b.owned - a.owned);
       for (const label of labels) {
         const [ax, ay] = project(label.world).map(v => v * scale);
         if (!inView(ax / scale, ay / scale)) continue;
         for (let attempt = 0; attempt < 65; attempt++) {
           const ring = Math.ceil(attempt / 8), angle = (attempt - 1) % 8 * Math.PI / 4;
-          const x = Math.max(label.w / 2 + 8, Math.min(width * scale - label.w / 2 - 8, ax + (attempt ? Math.cos(angle) * ring * 124 : 0)));
-          const y = Math.max(158 + label.h / 2, Math.min(height * scale - 190 - label.h / 2, ay + (attempt ? Math.sin(angle) * ring * 76 : 0)));
+          const x = Math.max(label.w / 2 + 8, Math.min(width * scale - label.w / 2 - 8, ax + (attempt ? Math.cos(angle) * ring * 92 : 0)));
+          const y = Math.max(120 + label.h / 2, Math.min(height * scale - 190 - label.h / 2, ay + (attempt ? Math.sin(angle) * ring * 56 : 0)));
           const cells = [];
           for (let gx = Math.floor((x - label.w / 2 - 3) / 32); gx <= Math.floor((x + label.w / 2 + 3) / 32); gx++) {
-            for (let gy = Math.floor((y - label.h / 2 - 3) / 24); gy <= Math.floor((y + label.h / 2 + 3) / 24); gy++) cells.push(`${gx},${gy}`);
+            for (let gy = Math.floor((y - label.h / 2 - 3) / 24); gy <= Math.floor((y + label.h / 2 + 3) / 24); gy++) cells.push(cellKey(gx, gy));
           }
           if (cells.some(key => occupied.has(key))) continue;
           cells.forEach(key => occupied.add(key)); positions.set(label.key, [x / scale, y / scale]);
@@ -128,7 +143,7 @@ export function initTokens() {
         }
         if (!positions.has(label.key)) grouped++;
       }
-      layer.dataset.grouped = String(grouped);
+      if (layer.dataset.grouped !== String(grouped)) layer.dataset.grouped = String(grouped);
       if (options.roads) {
         context.strokeStyle = '#f8dfac'; context.lineWidth = 4;
         for (const [x0, y0, x1, y1, kind] of bridges) {
@@ -161,13 +176,20 @@ export function initTokens() {
           context.setLineDash(wait === -1 ? [5, 5] : []); context.stroke(); context.setLineDash([]);
         }
         const label = waits[wait] ?? (wait === -1 ? 'Inactive · garrison in Town Center' : 'Evaluating');
-        const text = `Steward #${steward} · ${managed < 0 ? '?' : managed} managed / ${residents < 0 ? '?' : residents} residents\nObserved jobs: F${f} W${w} G${g} S${s} · ${idle} idle\n${label}`;
-        if (node.textContent !== text) node.textContent = text;
-        node.title = 'Select Town Center and open its Steward controls';
+        const total = f + w + g + s + idle || 1;
+        const signature = [managed, residents, f, w, g, s, idle, wait].join(',');
+        if (node.dataset.signature !== signature) {
+          node.dataset.signature = signature;
+          const part = (n, colour) => `<i style="flex:${n};background:${colour}"></i>`;
+          node.innerHTML = `<span class="sc-art">${entityIcon('Steward')}</span><span class="sc-body"><b>${managed < 0 ? '?' : managed}</b><small>${idle} idle</small></span>`
+            + `<span class="sc-jobs">${part(f, '#d65c6a')}${part(w, '#c28a4b')}${part(g, '#f0c63e')}${part(s, '#aeb4c0')}${part(idle, '#555')}</span>`;
+          node.dataset.state = wait === -1 ? 'inactive' : wait >= 0 && wait !== 0 ? 'waiting' : 'working';
+          node.title = `Steward #${steward} · ${managed < 0 ? '?' : managed} managed / ${residents < 0 ? '?' : residents} residents\nObserved jobs: food ${f} · wood ${w} · gold ${g} · stone ${s} · ${idle} idle\n${label}\nClick to select the Town Center and open Steward controls`;
+        }
         node.dataset.castle = String(id); node.dataset.steward = String(steward);
         node.setAttribute('aria-pressed', String(!!selected));
         const position = positions.get(`e${id}`) ?? [x, y];
-        place(node, ...position, visible, 218, 68, -id - 1, scale);
+        place(node, ...position, visible, dense ? 40 : 118, dense ? 38 : 34, -id - 1, scale);
       }
       for (const r of armies) {
         const [id, wx, wy, owned, selected, size, state, stance, tx, ty, ...counts] = r;
@@ -178,8 +200,9 @@ export function initTokens() {
         if (node.dataset.signature !== signature) {
           const total = counts.reduce((a, b) => a + b, 0);
           node.replaceChildren();
-          const title = document.createElement('b'); title.textContent = `⚑ ${size < 0 ? '?' : size}`;
-          const mode = document.createElement('small'); mode.textContent = owned ? `${order} · ${stances[stance] ?? 'unknown stance'}` : order;
+          const glyph = { marching: '➜', fighting: '⚔', retreating: '↩' }[order] ?? '';
+          const title = document.createElement('b'); title.textContent = `${size < 0 ? '?' : size}${glyph ? ' ' + glyph : ''}`;
+          const mode = document.createElement('small'); mode.textContent = owned ? (stances[stance] ?? '') : 'enemy';
           const bar = document.createElement('span'); bar.className = 'army-mix';
           counts.forEach((count, i) => {
             const part = document.createElement('i');
@@ -206,7 +229,7 @@ export function initTokens() {
           }
         }
         const position = positions.get(`a${id}`) ?? [x, y];
-        place(node, ...position, visible, 116, 48, id, scale);
+        place(node, ...position, visible, 84, 38, id, scale);
       }
     },
   };
