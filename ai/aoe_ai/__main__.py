@@ -48,7 +48,11 @@ def _host(args: argparse.Namespace) -> int:
         if args.report:
             _write_report(args.report, reports, started)
 
-    reports = host.run(max_seconds=args.max_seconds, progress=progress, progress_every=10.0)
+    parent = os.getppid()
+    # A server-spawned host lives as long as the match; it stops only when its
+    # server dies (the parent changes), never on a wall-clock limit.
+    stop = (lambda _reports: os.getppid() != parent) if args.exit_with_parent else None
+    reports = host.run(max_seconds=args.max_seconds, progress=progress, progress_every=10.0, stop=stop)
     progress(reports)
     return 1 if any(r.errors for r in reports) else 0
 
@@ -83,7 +87,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     hosting.add_argument("--url", default="http://127.0.0.1:8080")
     hosting.add_argument("--tokens-file", required=True, help="a JSON list of slot tokens ('-': stdin)")
-    hosting.add_argument("--max-seconds", type=float, required=True, help="wall-clock time limit")
+    hosting.add_argument("--max-seconds", type=float, default=None, help="wall-clock time limit (default: none)")
+    hosting.add_argument(
+        "--exit-with-parent", action="store_true", help="stop when the launching process exits"
+    )
     hosting.add_argument("--report", help="JSON file rewritten every few seconds")
 
     args = parser.parse_args(argv)
