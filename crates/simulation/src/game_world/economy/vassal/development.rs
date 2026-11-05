@@ -118,6 +118,9 @@ impl GameWorld {
                     site == building && work == done && tick.saturating_sub(since) >= stall
                 }) {
                     domain.refused.insert(*tile, tick + 600);
+                    domain.planned = domain
+                        .planned
+                        .min(tick.saturating_sub(plan::REPLAN_TICKS - plan::REFUSED_REPLAN_TICKS));
                     domain.progress = None;
                     for worker in &workers {
                         if self
@@ -247,6 +250,11 @@ impl GameWorld {
                         wait = VassalWait::Age;
                     } else if let Some(d) = self.economy.vassals.domains.get_mut(&id) {
                         d.refused.insert(tile, self.tick.0 + 600);
+                        d.planned = d.planned.min(
+                            self.tick
+                                .0
+                                .saturating_sub(plan::REPLAN_TICKS - plan::REFUSED_REPLAN_TICKS),
+                        );
                     }
                 }
             }

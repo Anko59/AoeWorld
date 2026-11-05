@@ -10,6 +10,8 @@ use crate::Age;
 pub(super) type Site = (BuildingKind, TileCoord, bool);
 /// One minute at 20 Hz: newly explored ground and new camps join the plan.
 pub(super) const REPLAN_TICKS: u64 = 1_200;
+/// A refused site is re-planned around within ten seconds.
+pub(super) const REFUSED_REPLAN_TICKS: u64 = 200;
 /// Work points (camps, mills, Town Centers) that each get a tower.
 const WORK_TOWERS: usize = 8;
 
@@ -36,6 +38,10 @@ impl GameWorld {
     }
 }
 
+fn footprint(kind: BuildingKind, t: TileCoord) -> TileRect {
+    TileRect::from_xywh(t.x, t.y, kind.rules().side, kind.rules().depth)
+}
+
 fn center_of(r: TileRect) -> TileCoord {
     TileCoord::new((r.min.x + r.max.x) / 2, (r.min.y + r.max.y) / 2)
 }
@@ -48,6 +54,7 @@ fn within(center: TileCoord, r: TileRect, reach: i32) -> bool {
 /// First placeable tile on rings of growing radius around `at`, or `None`.
 fn spot(
     w: &GameWorld,
+    player: PlayerId,
     kind: BuildingKind,
     at: TileCoord,
     reach: i32,
@@ -58,7 +65,12 @@ fn spot(
             .flat_map(|dy| (-r..=r).map(move |dx| (dx, dy)))
             .filter(|(dx, dy)| dx.abs() == r || dy.abs() == r)
             .map(|(dx, dy)| TileCoord::new(at.x + dx, at.y + dy))
-            .find(|t| !refused.contains_key(t) && w.validate_building_placement(kind, *t).is_ok())
+            .find(|t| {
+                !refused.contains_key(t)
+                    && w.validate_building_placement(kind, *t).is_ok()
+                    && w.validate_explored_footprint(player, footprint(kind, *t))
+                        .is_ok()
+            })
     })
 }
 
@@ -93,13 +105,24 @@ pub(super) fn sites(
     let mut sites = Vec::new();
     let reach = super::ring::RING - 2;
     let add = |sites: &mut Vec<Site>, kind: BuildingKind, at: TileCoord, near: i32| {
+        // Production anywhere in the inner domain is reused, not duplicated.
+        let reuse = if kind == BuildingKind::WatchTower {
+            near
+        } else {
+            reach / 2
+        };
+        let home = if kind == BuildingKind::WatchTower {
+            at
+        } else {
+            center
+        };
         if let Some(b) = w
             .player_buildings_of(player, kind)
-            .filter(|b| b.hp > 0 && within(at, b.footprint, near))
+            .filter(|b| b.hp > 0 && within(home, b.footprint, reuse))
             .min_by_key(|b| b.id)
         {
             sites.push((kind, b.footprint.min, false));
-        } else if let Some(tile) = spot(w, kind, at, near, refused) {
+        } else if let Some(tile) = spot(w, player, kind, at, near, refused) {
             sites.push((kind, tile, false));
         }
     };
@@ -122,7 +145,7 @@ pub(super) fn sites(
             let at = TileCoord::new(c.x + r.width() / 2 + 2, c.y + r.height() / 2 + 2);
             add(&mut sites, BuildingKind::WatchTower, at, 3);
         }
-        for (x, y) in [(-6, -6), (5, 5)] {
+        for (x, y) in [(5, -6), (-6, 5)] {
             add(
                 &mut sites,
                 BuildingKind::WatchTower,

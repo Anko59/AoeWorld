@@ -73,7 +73,8 @@ fn vassal_preserves_idle_general_army_inside_its_territory() {
         assert_eq!(w.vassal_controller(id), None);
     }
     assert_eq!(w.general_status(general).unwrap().army_size, 12);
-    assert_eq!(w.vassal_status(v).unwrap().military, 0);
+    // The 100-tile domain reaches the village: only its idle scout may serve.
+    assert!(w.vassal_status(v).unwrap().military <= 1);
 }
 
 #[test]

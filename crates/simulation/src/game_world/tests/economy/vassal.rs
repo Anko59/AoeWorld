@@ -36,6 +36,9 @@ fn setup() -> (GameWorld, EntityId, EntityId) {
         )
         .unwrap();
     w.issue_garrison(PlayerId(0), v, castle).unwrap();
+    // These tests measure the domain's building and defence; wolves on the
+    // far wall line would kill the builders (the Vassal ignores animals).
+    w.remove_animals(crate::AnimalKind::Wolf);
     advance(&mut w, 2);
     (w, v, castle)
 }
@@ -43,6 +46,8 @@ fn setup() -> (GameWorld, EntityId, EntityId) {
 #[test]
 fn vassal_caps_reserve_pause_and_completed_land_stops_spending() {
     let (mut w, v, _) = setup();
+    // Explored ground carries the wall ring; under fog it is not planned.
+    w.set_fog_disabled(true);
     for i in 0..25 {
         let pos = WorldPosition::from_tile_center(TileCoord::new(84 + i % 5, 96 + i / 5)).unwrap();
         w.spawn_villager(PlayerId(0), pos).unwrap();
@@ -59,7 +64,9 @@ fn vassal_caps_reserve_pause_and_completed_land_stops_spending() {
     w.issue_vassal_development(PlayerId(0), v, true).unwrap();
     advance(&mut w, 20);
     assert_eq!(w.vassal_status(v).unwrap().villagers, 20);
-    for _ in 0..20_000 {
+    // Measured: 20 builders finish the ~570-site domain in about 45,000
+    // ticks (8 builders: 104,000); 60,000 bounds it with walking margin.
+    for _ in 0..60_000 {
         w.advance();
         if w.vassal_status(v).unwrap().developed {
             break;
@@ -277,7 +284,7 @@ fn vassal_reuses_existing_buildings_and_skips_obstructed_tower_sites() {
     w.insert_building(
         PlayerId(0),
         BuildingKind::WatchTower,
-        TileRect::from_xywh(96, 84, 2, 2),
+        TileRect::from_xywh(96, 85, 2, 2),
         true,
     )
     .unwrap();
@@ -307,7 +314,8 @@ fn vassal_reuses_existing_buildings_and_skips_obstructed_tower_sites() {
     assert_eq!(
         w.player_buildings_of(PlayerId(0), BuildingKind::WatchTower)
             .count(),
-        2
+        3,
+        "the existing tower serves the castle; one more there, one by the Town Center"
     );
     assert_eq!(
         w.player_buildings_of(PlayerId(0), BuildingKind::Barracks)

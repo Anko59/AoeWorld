@@ -258,6 +258,14 @@ impl GameWorld {
                 if !worker && super::general::role(u.kind).is_none() {
                     continue;
                 }
+                // A Steward's villagers and the town's own (the starting
+                // villagers by a Town Center) stay with the town.
+                if worker
+                    && (self.steward_controller(u.id).is_some()
+                        || self.by_own_town_center(player, u.position))
+                {
+                    continue;
+                }
                 let d = &self.economy.vassals.domains[&id];
                 if worker
                     && (!d.development || d.status.developed || d.workers.len() >= VASSAL_LIMIT)
@@ -293,6 +301,20 @@ impl GameWorld {
                 g.vassal = Some(status);
             }
         }
+    }
+}
+/// Tiles around a Town Center whose idle villagers belong to the town.
+const TOWN_TILES: i32 = 12;
+impl GameWorld {
+    fn by_own_town_center(&self, player: PlayerId, at: WorldPosition) -> bool {
+        self.player_buildings_of(player, BuildingKind::TownCenter)
+            .any(|b| {
+                let c = TileCoord::new(
+                    (b.footprint.min.x + b.footprint.max.x) / 2,
+                    (b.footprint.min.y + b.footprint.max.y) / 2,
+                );
+                within(c, at, TOWN_TILES)
+            })
     }
 }
 fn inside(center: TileCoord, at: WorldPosition) -> bool {
