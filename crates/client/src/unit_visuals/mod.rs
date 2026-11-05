@@ -366,6 +366,27 @@ pub(crate) fn packed_frame(
     }
 }
 
+/// Tiles per second at which a walk animation plays at its native rate.
+/// Cavalry and ships move faster than foot soldiers (see `aoe_map` speeds and
+/// the fishing ship's 1.26 tiles per second); other units use the villager's.
+fn native_walk_speed(kind: UnitKind) -> f64 {
+    if kind.is_cavalry() {
+        f64::from(aoe_map::CAVALRY_METERS_PER_SECOND) / f64::from(aoe_map::GAME_TILE_METERS)
+    } else if kind.is_naval() {
+        1.26
+    } else {
+        0.8
+    }
+}
+
+/// The walk animation clock, in milliseconds, of a unit that has moved
+/// `travelled` tiles: the animation advances by distance, not by wall time,
+/// so a unit that is blocked, slowed or on a low tick rate plays only as much
+/// stride as it covers, and one on a road or upgraded plays proportionally more.
+pub(crate) fn walk_clock(kind: UnitKind, travelled: f64) -> f64 {
+    travelled.max(0.0) * 1000.0 / native_walk_speed(kind)
+}
+
 /// The animation clock, in milliseconds, of a `kind` of unit drawn in
 /// `pose`, given the launch tick of its newest shot and the live tick on the
 /// frame at `hz`. Shooters play their attack so that the release frame falls

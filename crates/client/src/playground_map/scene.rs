@@ -268,7 +268,7 @@ pub(in super::super) fn units(
                     == 2
         })
         .map(|unit| {
-            let position = client.presentation.position(*unit);
+            let (position, travelled) = client.presentation.pose(*unit);
             let animal = unit
                 .hunt_target
                 .and_then(|id| client.village.animals.iter().find(|a| a.id == id));
@@ -283,7 +283,7 @@ pub(in super::super) fn units(
                 )
             };
             let kind = aoe_rendering::SceneUnitKind::actor(pose as u8);
-            let facing = actors::animation_frame(client, unit, pose);
+            let facing = actors::animation_frame(client, unit, pose, travelled);
             aoe_rendering::SceneUnit {
                 kind,
                 id: unit.id,

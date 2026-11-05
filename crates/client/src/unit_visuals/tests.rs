@@ -1,4 +1,5 @@
-use super::shot_clock;
+use super::{shot_clock, walk_clock};
+use aoe_protocol::UnitKind;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 // An archer's attack: ten 70 ms frames released at frame 5, reloading
@@ -81,4 +82,18 @@ fn steward_uses_the_imported_native_de_king_for_every_pose() {
         assert_eq!(source.rows(), 16);
         assert!(source.selected_frames() > 16);
     }
+}
+
+#[wasm_bindgen_test]
+fn walk_animation_follows_distance_moved_not_time_or_tick_rate() {
+    // A villager covers 0.8 tiles in the second its animation lasts at native speed.
+    assert!((walk_clock(UnitKind::Villager, 0.8) - 1000.0).abs() < 1e-9);
+    // Half the distance is half the stride; none is none, whatever the time.
+    assert!((walk_clock(UnitKind::Villager, 0.4) - 500.0).abs() < 1e-9);
+    assert_eq!(walk_clock(UnitKind::Villager, 0.0), 0.0);
+    // The same distance gives the same clock at any tick rate (pure in distance),
+    // and a horseman strides further per cycle than a foot soldier.
+    assert!(walk_clock(UnitKind::Knight, 1.0) < walk_clock(UnitKind::Villager, 1.0));
+    // Moving backwards (a corrected position) never rewinds below zero.
+    assert_eq!(walk_clock(UnitKind::Villager, -1.0), 0.0);
 }

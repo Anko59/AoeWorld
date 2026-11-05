@@ -5,11 +5,19 @@ pub(super) fn animation_frame(
     client: &Client,
     unit: &aoe_protocol::GameplayUnitState,
     pose: crate::unit_visuals::Pose,
+    travelled: f64,
 ) -> u16 {
+    // A walking unit's frame follows the distance it has really covered.
+    let walking = unit.moving && unit.hp > 0 && unit.death_tick.is_none();
+    let clock = if walking {
+        crate::unit_visuals::walk_clock(unit.kind, travelled)
+    } else {
+        super::projectiles::pose_clock(client, unit, pose)
+    };
     let mut frame = crate::unit_visuals::packed_frame(
         pose,
         unit.facing,
-        super::projectiles::pose_clock(client, unit, pose),
+        clock,
         unit.death_tick,
         client
             .presentation

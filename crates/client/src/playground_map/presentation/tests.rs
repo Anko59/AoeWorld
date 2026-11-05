@@ -141,6 +141,7 @@ fn bounded_deque_matches_eight_sample_chronology_without_ninth_slot_growth() {
         let sample = Sample {
             tick,
             position: WorldPosition::new(tick as i32, 0),
+            travel: 0.0,
         };
         push_sample(&mut window, sample);
         assert!(window.capacity() <= 8);
@@ -161,6 +162,7 @@ fn bounded_deque_matches_eight_sample_chronology_without_ninth_slot_growth() {
         Sample {
             tick: 39,
             position: WorldPosition::new(99, 0),
+            travel: 0.0,
         },
     );
     assert_eq!(window.len(), 8);
@@ -280,4 +282,40 @@ fn native_heading_matches_native_pose_rows_and_keeps_intermediate_directions() {
         end.hp = 0;
         assert_eq!(p.native_heading(end), None);
     }
+}
+
+#[wasm_bindgen_test]
+fn travel_counts_distance_actually_moved_and_ignores_stalls_and_jumps() {
+    let mut p = Presentation::default();
+    p.reset(20);
+    let tile = aoe_core::FIXED_SUBUNITS_PER_TILE;
+    let mut old = state(0, true);
+    p.remember(None, &old, 10);
+    // Half a tile in one tick, then a "moving" unit that is blocked for 3 ticks.
+    for (tick, x) in [
+        (11, tile / 2),
+        (12, tile / 2),
+        (13, tile / 2),
+        (14, tile / 2),
+    ] {
+        let next = state(x, true);
+        p.remember(Some(&old), &next, tick);
+        old = next;
+    }
+    let history = &p.history[&old.id];
+    assert!((history.back().unwrap().travel - 0.5).abs() < 1e-6);
+    // A discontinuity adds nothing and does not reset the odometer.
+    let jump = state(40 * tile, true);
+    p.remember(Some(&old), &jump, 30);
+    assert!((p.history[&old.id].back().unwrap().travel - 0.5).abs() < 1e-6);
+    // Interpolated travel is proportional to the drawn fraction of the step.
+    p.reset(20);
+    let start = state(0, true);
+    p.remember(None, &start, 10);
+    p.remember(Some(&start), &state(tile / 2, true), 11);
+    p.advance(0.0, false);
+    p.receive(11, 0.0);
+    p.tick = 10.5;
+    let (_, travelled) = p.pose(start);
+    assert!((travelled - 0.25).abs() < 1e-6, "{travelled}");
 }
