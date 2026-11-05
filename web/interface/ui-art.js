@@ -95,7 +95,12 @@ export function initArt() {
       const context=canvas.getContext('2d');
       if(context){
         context.drawImage(image,menu.x,menu.y,menu.width,menu.height,0,0,menu.width,menu.height);
-        document.documentElement.style.setProperty('--ui-menu-image',`url('${canvas.toDataURL()}')`);
+        // Native menu crops exceed Chromium's CSS custom-property text limit.
+        // The document owns this bounded blob URL for its lifetime.
+        await new Promise(resolve=>canvas.toBlob(blob=>{
+          if(blob) document.documentElement.style.setProperty('--ui-menu-image',`url('${URL.createObjectURL(blob)}')`);
+          resolve(blob);
+        }));
       }
     }
     // Crop original cursor pixels only in browser memory; no derived assets
