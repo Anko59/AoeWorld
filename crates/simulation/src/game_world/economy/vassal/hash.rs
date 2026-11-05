@@ -33,6 +33,14 @@ impl Economy {
                 h.update(&work.to_le_bytes());
                 h.update(&since.to_le_bytes());
             }
+            h.update(&d.planned.to_le_bytes());
+            h.update(&[d.plan_age as u8]);
+            h.update(&(d.plan.len() as u64).to_le_bytes());
+            for (kind, tile, vertical) in &d.plan {
+                h.update(&[*kind as u8, u8::from(*vertical)]);
+                h.update(&tile.x.to_le_bytes());
+                h.update(&tile.y.to_le_bytes());
+            }
             h.update(&(d.refused.len() as u64).to_le_bytes());
             for (tile, until) in &d.refused {
                 h.update(&tile.x.to_le_bytes());

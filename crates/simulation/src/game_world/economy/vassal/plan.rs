@@ -1,5 +1,87 @@
+//! The domain plan, cached on the domain and rebuilt only every
+//! `REPLAN_TICKS`, on an age change or when it is empty: towers by the
+//! villagers' work points, production behind the castle away from the enemy,
+//! the domain wall ring (see `ring`) and the road to the Town Center.
 use super::*;
 use crate::Age;
+
+/// A planned building: kind, top-left tile and, for a gate, whether its
+/// four tiles run along y.
+pub(super) type Site = (BuildingKind, TileCoord, bool);
+/// One minute at 20 Hz: newly explored ground and new camps join the plan.
+pub(super) const REPLAN_TICKS: u64 = 1_200;
+/// Work points (camps, mills, Town Centers) that each get a tower.
+const WORK_TOWERS: usize = 8;
+
+impl GameWorld {
+    /// The cached plan of domain `id`, rebuilt when stale.
+    pub(super) fn vassal_plan(&mut self, id: EntityId) -> Vec<Site> {
+        let Some(d) = self.economy.vassals.domains.get(&id) else {
+            return Vec::new();
+        };
+        let age = self.player_economy(d.player).map_or(Age::Dark, |p| p.age);
+        if !d.plan.is_empty()
+            && d.plan_age == age
+            && self.tick.0.saturating_sub(d.planned) < REPLAN_TICKS
+        {
+            return d.plan.clone();
+        }
+        let plan = sites(self, d.center, d.player, age, &d.refused);
+        if let Some(d) = self.economy.vassals.domains.get_mut(&id) {
+            d.plan.clone_from(&plan);
+            d.plan_age = age;
+            d.planned = self.tick.0;
+        }
+        plan
+    }
+}
+
+fn center_of(r: TileRect) -> TileCoord {
+    TileCoord::new((r.min.x + r.max.x) / 2, (r.min.y + r.max.y) / 2)
+}
+
+fn within(center: TileCoord, r: TileRect, reach: i32) -> bool {
+    let c = center_of(r);
+    (c.x - center.x).abs() <= reach && (c.y - center.y).abs() <= reach
+}
+
+/// First placeable tile on rings of growing radius around `at`, or `None`.
+fn spot(
+    w: &GameWorld,
+    kind: BuildingKind,
+    at: TileCoord,
+    reach: i32,
+    refused: &BTreeMap<TileCoord, u64>,
+) -> Option<TileCoord> {
+    (0..=reach).find_map(|r| {
+        (-r..=r)
+            .flat_map(|dy| (-r..=r).map(move |dx| (dx, dy)))
+            .filter(|(dx, dy)| dx.abs() == r || dy.abs() == r)
+            .map(|(dx, dy)| TileCoord::new(at.x + dx, at.y + dy))
+            .find(|t| !refused.contains_key(t) && w.validate_building_placement(kind, *t).is_ok())
+    })
+}
+
+/// Unit step from the castle toward the nearest enemy Town Center, or toward
+/// the map centre when no enemy is known. Production stands on the far side.
+fn threat_side(w: &GameWorld, center: TileCoord, player: PlayerId) -> (i32, i32) {
+    let enemy = w
+        .buildings()
+        .filter(|b| b.player != player && b.kind == BuildingKind::TownCenter && b.hp > 0)
+        .map(|b| center_of(b.footprint))
+        .min_by_key(|c| {
+            (
+                super::super::placement::distance_squared(*c, center),
+                c.y,
+                c.x,
+            )
+        })
+        .unwrap_or(TileCoord::new(
+            w.config.width_tiles / 2,
+            w.config.height_tiles / 2,
+        ));
+    ((enemy.x - center.x).signum(), (enemy.y - center.y).signum())
+}
 
 pub(super) fn sites(
     w: &GameWorld,
@@ -7,127 +89,68 @@ pub(super) fn sites(
     player: PlayerId,
     age: Age,
     refused: &BTreeMap<TileCoord, u64>,
-) -> Vec<(BuildingKind, TileCoord)> {
+) -> Vec<Site> {
     let mut sites = Vec::new();
-    let mut add_buildings = |kind: BuildingKind, count, offsets: &[(i32, i32)]| {
-        let mut selected: Vec<_> = w
+    let reach = super::ring::RING - 2;
+    let add = |sites: &mut Vec<Site>, kind: BuildingKind, at: TileCoord, near: i32| {
+        if let Some(b) = w
             .player_buildings_of(player, kind)
-            .filter(|b| {
-                b.hp > 0
-                    && b.footprint.min.x >= center.x - 8
-                    && b.footprint.max.x <= center.x + 9
-                    && b.footprint.min.y >= center.y - 8
-                    && b.footprint.max.y <= center.y + 9
-            })
-            .take(count)
-            .map(|b| b.footprint.min)
-            .collect();
-        for &(x, y) in offsets {
-            if selected.len() == count {
-                break;
-            }
-            let tile = TileCoord::new(center.x + x, center.y + y);
-            if !selected.contains(&tile)
-                && !refused.contains_key(&tile)
-                && w.validate_building_placement(kind, tile).is_ok()
-            {
-                selected.push(tile);
-            }
+            .filter(|b| b.hp > 0 && within(at, b.footprint, near))
+            .min_by_key(|b| b.id)
+        {
+            sites.push((kind, b.footprint.min, false));
+        } else if let Some(tile) = spot(w, kind, at, near, refused) {
+            sites.push((kind, tile, false));
         }
-        // Keep an explicit deficit when every alternative is blocked. It must
-        // not count as developed or silently forget the missing fortification.
-        for &(x, y) in offsets {
-            if selected.len() == count {
-                break;
-            }
-            let tile = TileCoord::new(center.x + x, center.y + y);
-            if !selected.contains(&tile) {
-                selected.push(tile);
-            }
-        }
-        sites.extend(selected.into_iter().map(|tile| (kind, tile)));
     };
     if age >= Age::Feudal {
-        add_buildings(
-            BuildingKind::WatchTower,
-            2,
-            &[
-                (-6, -6),
-                (5, 5),
-                (-6, 5),
-                (5, -6),
-                (-6, 0),
-                (0, -6),
-                (0, 5),
-                (5, 0),
-            ],
-        );
+        // Towers guard the villagers where they work.
+        let mut points: Vec<_> = [
+            BuildingKind::TownCenter,
+            BuildingKind::Mill,
+            BuildingKind::LumberCamp,
+            BuildingKind::MiningCamp,
+        ]
+        .into_iter()
+        .flat_map(|k| w.player_buildings_of(player, k))
+        .filter(|b| b.hp > 0 && within(center, b.footprint, reach))
+        .map(|b| (b.id, b.footprint))
+        .collect();
+        points.sort_by_key(|(id, _)| *id);
+        for (_, r) in points.into_iter().take(WORK_TOWERS) {
+            let c = center_of(r);
+            let at = TileCoord::new(c.x + r.width() / 2 + 2, c.y + r.height() / 2 + 2);
+            add(&mut sites, BuildingKind::WatchTower, at, 3);
+        }
+        for (x, y) in [(-6, -6), (5, 5)] {
+            add(
+                &mut sites,
+                BuildingKind::WatchTower,
+                TileCoord::new(center.x + x, center.y + y),
+                2,
+            );
+        }
     }
-    add_buildings(
-        BuildingKind::Barracks,
-        1,
-        &[(4, -4), (-5, 3), (-5, -4), (3, 3)],
+    // Production behind the castle, away from the threat side.
+    let (tx, ty) = threat_side(w, center, player);
+    let behind = TileCoord::new(center.x - tx * 10, center.y - ty * 10);
+    add(&mut sites, BuildingKind::Barracks, behind, 6);
+    if age >= Age::Feudal {
+        for (kind, side) in [(BuildingKind::ArcheryRange, 1), (BuildingKind::Stable, -1)] {
+            let at = TileCoord::new(behind.x + side * ty * 6, behind.y - side * tx * 6);
+            let at = if (tx, ty) == (0, 0) {
+                TileCoord::new(behind.x + side * 6, behind.y)
+            } else {
+                at
+            };
+            add(&mut sites, kind, at, 6);
+        }
+    }
+    sites.extend(super::ring::sites(w, center, player, age));
+    sites.extend(
+        super::roads::sites(w, center, player)
+            .into_iter()
+            .map(|(k, t)| (k, t, false)),
     );
-    let (wall, gate) = if age >= Age::Castle {
-        (BuildingKind::StoneWall, BuildingKind::StoneGate)
-    } else {
-        (BuildingKind::PalisadeWall, BuildingKind::PalisadeGate)
-    };
-    let mut add = |kind: BuildingKind, x, y| {
-        let tile = TileCoord::new(center.x + x, center.y + y);
-        let kind = w
-            .building_at(tile)
-            .and_then(|id| w.building(id))
-            .filter(|b| {
-                b.player == player
-                    && ((kind.is_wall() && b.kind.is_wall())
-                        || (kind.is_gate() && b.kind.is_gate()))
-            })
-            .map_or(kind, |b| b.kind);
-        sites.push((kind, tile));
-    };
-    for y in [-10, 10] {
-        add(gate, -2, y);
-    }
-    for y in [-10, 10] {
-        for x in -10..=10 {
-            if !(-2..2).contains(&x) {
-                add(wall, x, y);
-            }
-        }
-    }
-    for y in -9..10 {
-        for x in [-10, 10] {
-            add(wall, x, y);
-        }
-    }
-    sites.extend(super::roads::sites(w, center, player));
     sites
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_long_road_stays_whole_in_the_plan() {
-        let config = aoe_core::WorldConfig::new(256, 256, aoe_core::Seed(7)).unwrap();
-        let mut w = GameWorld::new(config).unwrap();
-        w.set_fog_disabled(true);
-        w.place_town_center(PlayerId(0), TileCoord::new(64, 64))
-            .unwrap();
-        w.insert_building(
-            PlayerId(0),
-            BuildingKind::Castle,
-            TileRect::from_xywh(96, 96, 4, 4),
-            true,
-        )
-        .unwrap();
-        let center = TileCoord::new(98, 98);
-        let road = super::super::roads::sites(&w, center, PlayerId(0));
-        assert!(road.len() > 52, "the scenario needs a long road");
-        let sites = sites(&w, center, PlayerId(0), Age::Imperial, &BTreeMap::new());
-        assert!(road.iter().all(|site| sites.contains(site)));
-        assert!(sites.len() > 128, "{}", sites.len());
-    }
 }

@@ -86,3 +86,37 @@ impl GameWorld {
         }
     }
 }
+
+impl GameWorld {
+    /// Build a gate whose four tiles run along `y` when `vertical` (in a wall
+    /// line of constant x), else along `x`, like [`GameWorld::issue_build`].
+    pub fn issue_build_gate(
+        &mut self,
+        player: aoe_core::PlayerId,
+        builders: &[aoe_core::EntityId],
+        kind: crate::BuildingKind,
+        origin: TileCoord,
+        vertical: bool,
+        queued: bool,
+    ) -> Result<aoe_core::EntityId, crate::EconomyError> {
+        if !kind.is_gate() || !vertical {
+            return self.issue_build(player, builders, kind, origin, queued);
+        }
+        let builders = self.validate_builders(player, builders)?;
+        self.validate_build_queue(&builders, 1, queued)?;
+        let cost = self.check_buildable(player, kind, 1)?;
+        let r = kind.rules();
+        let footprint = TileRect::from_xywh(origin.x, origin.y, r.depth, r.side);
+        self.validate_explored_footprint(player, footprint)?;
+        self.validate_footprint_ground(footprint)?;
+        let id = self.insert_building(player, kind, footprint, false)?;
+        self.charge(player, cost);
+        self.step_builders_aside(&builders, id);
+        if !self.assign_build_orders(&builders, &[id], queued) {
+            let _ = self.issue_cancel_construction(player, id);
+            return Err(crate::GameWorldError::Unreachable.into());
+        }
+        self.remember_visible_buildings();
+        Ok(id)
+    }
+}

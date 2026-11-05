@@ -1,6 +1,8 @@
 use super::*;
 use crate::{Age, Stockpile};
 
+#[path = "vassal/domain.rs"]
+mod domain;
 #[path = "vassal/ownership.rs"]
 mod ownership;
 #[path = "vassal/roads.rs"]

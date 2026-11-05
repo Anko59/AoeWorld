@@ -7,12 +7,14 @@ mod demo;
 mod development;
 mod hash;
 mod plan;
+mod ring;
 mod road_demo;
 mod roads;
 mod threat;
 
 pub const VASSAL_LIMIT: usize = 20;
-pub const VASSAL_RADIUS: i32 = 24;
+/// The domain a Vassal develops, fortifies and defends: a Steward's circle.
+pub const VASSAL_RADIUS: i32 = super::steward::STEWARD_RULES.radius_tiles;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum VassalWait {
     #[default]
@@ -49,6 +51,10 @@ pub(crate) struct Domain {
     refused: BTreeMap<TileCoord, u64>,
     progress: Option<(EntityId, u64, u64)>,
     status: VassalStatus,
+    /// Cached plan (see `plan::REPLAN_TICKS`), its age and the tick it was made.
+    plan: Vec<plan::Site>,
+    plan_age: crate::Age,
+    planned: u64,
 }
 #[derive(Clone, Copy, Debug)]
 struct Recall {
@@ -93,6 +99,9 @@ impl GameWorld {
                 cursor: 0,
                 refused: BTreeMap::new(),
                 progress: None,
+                plan: Vec::new(),
+                plan_age: crate::Age::Dark,
+                planned: 0,
                 status: VassalStatus {
                     development: true,
                     ..Default::default()
@@ -213,7 +222,7 @@ impl GameWorld {
                     self.unit(unit).is_none_or(|u| {
                         u.hp == 0
                             || (u.kind == UnitKind::Villager
-                                && !inside(center, u.position)
+                                && !within(center, u.position, VASSAL_RADIUS + 8)
                                 && d.status.next != Some(BuildingKind::Road))
                             || self.embarked(unit)
                     })
@@ -287,8 +296,12 @@ impl GameWorld {
     }
 }
 fn inside(center: TileCoord, at: WorldPosition) -> bool {
+    within(center, at, VASSAL_RADIUS)
+}
+/// Builders of the wall ring's corners stand just outside the radius.
+fn within(center: TileCoord, at: WorldPosition, radius: i32) -> bool {
     super::general::distance(WorldPosition::new(center.x * 1024, center.y * 1024), at)
-        <= (i64::from(VASSAL_RADIUS) * 1024).pow(2)
+        <= (i64::from(radius) * 1024).pow(2)
 }
 
 impl GameWorld {
