@@ -136,7 +136,6 @@ export function initBuildings() {
     update(v) {
       state=Array.from(v);menu();
       window.aoeNavigation?.strategic?.building?.ready(v.slice(buildStart, buildStart + commands.length));
-      window.aoeNavigation?.strategic?.production?.units(v.slice(foundationCount+1+(v[foundationCount]??0)*3, foundationCount+1+(v[foundationCount]??0)*3+trainingKinds.length));
       byId('age').textContent=['I  Dark Age','II  Feudal Age','III  Castle Age','IV  Imperial Age'][v[0]]??'I  Dark Age';
       const kind=v[1],selected=kind>=0,owned=byId('selection').dataset.owned==='true';
       const availability=foundationCount+1+(v[foundationCount]??0)*3;

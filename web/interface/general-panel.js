@@ -44,12 +44,14 @@ export function initGeneralPanel() {
   };
   const collapse = byId('general-collapse');
   // At far zoom the panel starts folded so it never covers land; the choice is the player's.
-  collapse.addEventListener('click', () => {
-    const open = panel.dataset.open !== 'true'; panel.dataset.open = String(open);
+  const fold = open => {
+    panel.dataset.open = String(open);
     collapse.setAttribute('aria-expanded', String(open)); collapse.textContent = open ? '▾' : '▸';
-  });
-  byId('general-captain').addEventListener('click', () => setMode('captain'));
-  byId('general-trainer').addEventListener('click', () => setMode('trainer'));
+  };
+  collapse.addEventListener('click', () => fold(panel.dataset.open !== 'true'));
+  // Choosing Captain or Trainer is a request to see that mode's controls, so it unfolds the panel.
+  byId('general-captain').addEventListener('click', () => { fold(true); setMode('captain'); });
+  byId('general-trainer').addEventListener('click', () => { fold(true); setMode('trainer'); });
   byId('general-train').addEventListener('click', () => send(9, training ? 0 : 1));
   window.aoeGeneral = {
     update(values) {

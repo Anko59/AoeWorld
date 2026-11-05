@@ -2,8 +2,8 @@ import { trainingKinds, entityIcon } from '/interface/ui-art.js';
 import { iconGrid } from '/navigation/cockpit/grid.js';
 
 // "Units here": choose a unit from an icon grid and a batch size, then click
-// ground. Availability per unit is Rust's own report (units()).
-const reasons = ['', '', 'Feudal Age', '', '', 'Busy', 'Food', 'Wood', 'Gold', 'Stone', 'Queue full', '', 'Needs building', '', 'Castle Age', 'Unique', 'Imperial Age'];
+// ground. Rust picks the nearest eligible producers from all owned buildings, so
+// nothing here depends on the building selection; it reports how many it could place.
 const naval = new Set(['FishingShip', 'Galley', 'FireShip', 'DemolitionShip', 'TransportShip', 'WarGalley']);
 export function initProduction() {
   const form = document.createElement('section');
@@ -29,8 +29,8 @@ export function initProduction() {
     form.querySelector('.far-counts').append(chip);
     return chip;
   });
-  let armed = false, visible = false, busy = false, available = false, lastCount = 0, lastKind = '', codes = [];
-  const enabled = () => { button.disabled = busy || !available || (codes.length > 0 && codes[chosen] !== 1 && !armed); };
+  let armed = false, visible = false, busy = false, available = false, lastCount = 0, lastKind = '';
+  const enabled = () => { button.disabled = busy || !available; };
   function mark() {
     trainingKinds.forEach((kind, id) => grid.get(id) && grid.set(id, { selected: id === chosen }));
     chips.forEach(chip => chip.setAttribute('aria-pressed', String(chip.textContent === count.value)));
@@ -71,12 +71,6 @@ export function initProduction() {
     form,
     show(value) { visible = value; if (!value) cancel(); },
     ready(value) { available = value; if (!value) { cancel(); busy = false; } enabled(); },
-    units(values) {
-      codes = Array.from(values);
-      trainingKinds.forEach((kind, id) => grid.get(id) && grid.set(id, { enabled: codes[id] === 1 || codes.length === 0,
-        note: codes[id] === 1 ? '' : reasons[codes[id]] ?? '' }));
-      enabled();
-    },
     take() { if (!visible || !armed) return null; cancel(); return request; },
     result(total) {
       busy = total > 0; enabled();
