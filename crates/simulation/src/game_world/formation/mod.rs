@@ -82,6 +82,8 @@ pub(crate) struct Member {
     /// slot nor reduced its distance by half a tile. At `GIVE_UP_AFTER_TICKS` it stops where it stands, so
     /// one boxed-in unit cannot keep the whole group unsettled.
     stalled: u16,
+    /// New routes asked for after giving up; see `detach::MAX_RETRIES`.
+    retries: u8,
     remaining: i64,
 }
 
@@ -158,7 +160,7 @@ impl GameWorld {
     }
 
     /// Where the member's slot lies once the group has reached its destination.
-    pub(crate) fn formation_destination_slot(&self, id: EntityId) -> Option<WorldPosition> {
+    pub fn formation_destination_slot(&self, id: EntityId) -> Option<WorldPosition> {
         let leader = self.units[*self.lookup.get(&id)?].formation?;
         let group = self.formations.get(&leader)?;
         Some(group.members[group.member_index(id)?].goal)

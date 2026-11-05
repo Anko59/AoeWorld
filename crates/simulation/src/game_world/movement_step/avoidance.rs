@@ -84,6 +84,7 @@ impl GameWorld {
         if order.waypoint != order.destination
             && dx * dx + dy * dy <= 1536 * 1536
             && self.local_position_occupied(index, order.waypoint)
+            && self.skip_keeps_deck_route(index, order.waypoint)
         {
             // Refine past an occupied intermediate tile, retaining the static
             // route's next waypoint and certified planner continuation.
@@ -100,6 +101,62 @@ impl GameWorld {
         let (dx, dy) = delta(position, unit.position);
         self.units[index].state.facing = super::facing_for(dx, dy, unit.facing);
         (position, false)
+    }
+
+    /// Around a deck the waypoints are its only way on: the step past an occupied
+    /// one must be an edge of the route's tile graph. Skipping a deck's mouth from
+    /// beside it leaves a straight step off the deck's side, refused for ever.
+    fn skip_keeps_deck_route(&self, index: usize, waypoint: WorldPosition) -> bool {
+        let unit = self.units[index].state;
+        let Some(&next) = self.units[index].route.front() else {
+            return true;
+        };
+        let on_deck = [unit.position, waypoint, next].map(|at| self.near_deck(at));
+        // Off the deck altogether, or along it: the straight step stays on the way.
+        if on_deck == [false; 3] || on_deck == [true; 3] {
+            return true;
+        }
+        let (from, to) = (unit.position.tile_floor(), next.tile_floor());
+        from.x.abs_diff(to.x).max(from.y.abs_diff(to.y)) <= 1
+            && self.unit_step_clear(unit.kind, from, to).unwrap_or(false)
+    }
+
+    /// The nearest walkable tile centre, in its own tile or the eight around it
+    /// (a body pressed over a water corner beside a deck has none of its own),
+    /// with a clear step from `from`. Runs only on a refused step.
+    pub(crate) fn route_graph_centre(
+        &self,
+        index: usize,
+        from: WorldPosition,
+    ) -> Option<WorldPosition> {
+        let kind = self.units[index].state.kind;
+        let here = from.tile_floor();
+        let mut best = None;
+        for y in -1..=1 {
+            for x in -1..=1 {
+                let tile = aoe_core::TileCoord::new(here.x + x, here.y + y);
+                let Ok(centre) = WorldPosition::from_tile_center(tile) else {
+                    continue;
+                };
+                let (dx, dy) = (
+                    i64::from(centre.x) - i64::from(from.x),
+                    i64::from(centre.y) - i64::from(from.y),
+                );
+                let key = (dx * dx + dy * dy, tile.y, tile.x);
+                if centre != from
+                    && best.is_none_or(|(other, _)| key < other)
+                    && self
+                        .unit_tile_passable(kind, tile, &|| false)
+                        .unwrap_or(false)
+                    && self
+                        .unit_position_step_clear(kind, from, centre)
+                        .unwrap_or(false)
+                {
+                    best = Some((key, centre));
+                }
+            }
+        }
+        best.map(|(_, centre)| centre)
     }
 
     pub(crate) fn local_position_occupied(&self, index: usize, at: WorldPosition) -> bool {

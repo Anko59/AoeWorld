@@ -153,6 +153,34 @@ impl GameWorld {
                     }
                 };
                 if !terrain_ok || !self.building_step_clear(previous_tile, tile) {
+                    // A body beside a route's lane (a diagonal deck's edge) has
+                    // no straight step to the next tile centre, and the search
+                    // would answer with the same one for ever. A nearby tile
+                    // centre is on the route's graph: go there first. Refused
+                    // from the centre too, the route itself is stale: replan.
+                    // The centre may be where this order began: the body still goes back
+                    // to it, as an idle gatherer must not replan on every refused step.
+                    if let Some(centre) = self.route_graph_centre(index, current_position)
+                        && order.waypoint != centre
+                    {
+                        self.units[index].route.push_front(order.waypoint);
+                        self.units[index].state.moving = true;
+                        self.units[index].state.planning = false;
+                        self.units[index].order = Some(MovementOrder {
+                            origin: current_position,
+                            waypoint: centre,
+                            segment_length: segment_length(
+                                i64::from(centre.x - current_position.x),
+                                i64::from(centre.y - current_position.y),
+                            ),
+                            travelled: 0,
+                            speed_carry: 0,
+                            ..order
+                        });
+                        still_moving.push(id);
+                        finished = true;
+                        break;
+                    }
                     // Collision can change after a segment was refined. Keep
                     // the order and replan from the last valid fixed position.
                     self.clear_planner(index);
@@ -315,6 +343,7 @@ impl GameWorld {
         still_moving.sort_unstable();
         self.active_movers = still_moving;
         self.advance_formations(&mut changed, &mut scratch);
+        self.advance_yields(&mut changed);
         {
             let _span = probe.as_ref().and_then(|p| p.movement_span("vision_flush"));
             self.flush_vision_batch();

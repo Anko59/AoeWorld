@@ -50,6 +50,8 @@ Reassignment happens on a squeeze transition, not on every unit step. Blend
 back to destination offsets after the rear clears the obstacle. Arrival is
 per member at its assigned reachable slot; anchor arrival is not group arrival.
 A timed-out or idle member short of its slot never counts as an arrival.
+The army table measures this: a soldier counts only within two tiles of the
+slot it was last assigned (the occupied-slot exception), not anywhere near the goal.
 
 ## Local traffic and recovery
 
@@ -90,6 +92,47 @@ in `general_player_order` (`economy/general/orders.rs`):
 5. A soldier under a live player order is never touched; another player's
    General never takes it.
 6. The detached set and its clocks are in the state hash.
+
+## Group or individual: the current rule
+
+Measured on `tests/real_terrain/armies`, carved river, forest and pass shapes;
+`.cache/armies/enabled` names a run of its on-demand table.
+
+1. A group paths as one: the anchor owns one route and members follow its corridor,
+   packing into files where clearance requires.
+2. A member blocked for 120 ticks, or stalled for 60 after the anchor arrived,
+   breaks off: it searches its own route to a corridor point 8 tiles ahead, or to
+   its slot. Group membership and slot survive.
+3. On a deck, or after 64 blocked ticks on one-lane ground, a blocked member of any
+   group passes friendly bodies: chokepoints are crossed in sequence without a knot.
+4. A detour ends when it reaches its goal, when its body is blocked for 240 ticks,
+   or when a search from a deck edge has not answered in 240 ticks.
+5. After the anchor arrived, a member that stopped far from its slot asks for a new
+   route every 256 ticks, at most 8 times. A member beside a slot that a stationary
+   body took has arrived there.
+6. Around a deck, the step past an occupied waypoint must be an edge of the route's
+   tile graph; a body with no straight step to its next waypoint walks to a nearby
+   tile centre first; and a member stalled within two tiles of its slot has arrived.
+7. A member blocked for 120 ticks asks the friends in its way to step aside: up to
+   two idle, order-less bodies in contact ahead of it walk clear of its line to the
+   nearest open spot, stand for 56 ticks and return only if they hold a slot, once
+   per 400 ticks (`movement_step/yielding.rs`). Fights, work and live orders are
+   never disturbed, and a settled group stays settled.
+8. A group settles only when every member arrived or gave up and none is on a detour.
+
+Not done: the anchor still runs ahead of a queue, so the shape re-forms at the
+destination rather than after each chokepoint.
+
+## France scoreboard
+
+`crates/server/src/tests/france_march` loads the real France package headless and
+judges each march against the exact walking distance (`aoe_map::walking_field`).
+Write a label to `.cache/armies/france/enabled`, then run `make test-native-focused
+AOE_NATIVE_TEST_PACKAGE=aoe-server AOE_NATIVE_TEST_FILTER='test(france_march::table::)'`;
+rows land in `.cache/armies/france/<label>.tsv` and `.diag`. A local measurement,
+absent from CI since the package never enters Git. Its arrival column is loose
+(stopped within 40 tiles of the goal); the row's last field, `slot n/m`, is the
+honest count, stopped within two tiles of the assigned slot.
 
 ## Measurements and implementation sequence
 
@@ -277,3 +320,30 @@ The straightened corridor uses the group's largest body, and a slot cut off
 from the destination by water is pulled back to the last directly reachable
 point. Results are in the commit messages; real-map runs on the Paris and
 France packages are local measurements, not CI tests.
+
+## Army table under the slot measure
+
+All 52 carved cells, arrival within two tiles of the assigned slot, on 40faeeaeb:
+11,215/11,480 soldiers, 48 cells complete. Without yields or the settling rule:
+11,177 and 44. The four short cells:
+
+| Cell | Arrived | Idle short | Stuck |
+|---|---|---|---|
+| Pass, 400 rams with Generals | 299/400 | 98 | 2 |
+| Forest, 400 rams with Generals | 297/400 | 101 | 2 |
+| River, 400 rams with Generals | 340/400 | 60 | 0 |
+| River, 100 mixed, no General | 99/100 | 1 | 0 |
+
+Most idle rams are not blocked. A squad's route search waited past its deadline
+(`routes expired` 74 to 91 in those cells), which dissolved the squad where it stood
+with `PathBudgetExceeded`: 93, 93 and 46 soldiers with no group, in table order.
+Why the General does not get them moving again was not investigated.
+
+France, 68 cells, by the slot count: 6,773/6,844 with 55 complete; 6,752 and 53
+without yields or the settling rule. Leftovers there still cycle: stalled under 75
+ticks with no retry spent, detached and rejoined.
+
+The two-tile arrival rule (rule 6) is still needed. Removed, France falls to 6,628
+and 45, and two armies sharing a forest destination leave 54 stuck. That run had yields and
+the settling rule. A rule limited to a slot a stationary body took was not
+re-measured. Yielding does not solve a crowd in full body contact: it has no open spot.

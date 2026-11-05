@@ -35,8 +35,8 @@ size. Inspection on 2026-10-26 confirms these equal-axis radii:
 | Villager professions, infantry, archers, Monk | 0.2 | 205 |
 | Scout Cavalry, Knight, Light Cavalry | 0.25 | 256 |
 | King (Vassal) | 0.3 | 308 |
-| Battering Ram | 0.45 | 461 |
-| Fishing Ship, Galley variants, other ships, Mangonel | 0.5 | 512 |
+| Battering Ram, and here Mangonel and Onager (DAT 0.5) so a body fits a one-tile gap | 0.45 | 461 |
+| Fishing Ship, Galley variants, other ships | 0.5 | 512 |
 
 The table is `/home/anko/Work/projects/AoeWorld-tonight/local-assets/dat-table/table.json`;
 its source data and derived assets remain outside Git and images. These are

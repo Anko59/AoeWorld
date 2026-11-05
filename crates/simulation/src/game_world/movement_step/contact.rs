@@ -13,6 +13,9 @@ impl UnitKind {
     }
     /// Equal collision axes in the complete classic DAT table, rounded up to
     /// fixed subunits. See docs/movement/aoe2-model.md for source and confidence.
+    /// Routes treat a one-tile gap as open for every land unit, so the widest
+    /// siege is a ram's 461 rather than the DAT's full tile: a body and its
+    /// terrain clearance stay one number and it cannot overlap a wall.
     pub const fn collision_radius(self) -> i32 {
         const RADIUS: [i16; 256] = {
             let mut table = [205; 256];
@@ -34,8 +37,8 @@ impl UnitKind {
             table[UnitKind::DemolitionShip as usize] = 512;
             table[UnitKind::TransportShip as usize] = 512;
             table[UnitKind::WarGalley as usize] = 512;
-            table[UnitKind::Mangonel as usize] = 512;
-            table[UnitKind::Onager as usize] = 512;
+            table[UnitKind::Mangonel as usize] = 461;
+            table[UnitKind::Onager as usize] = 461;
             table
         };
         // One load: this runs for every body tested in a collision scan.

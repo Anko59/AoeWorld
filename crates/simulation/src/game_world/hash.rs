@@ -188,6 +188,7 @@ impl GameWorld {
             }
         }
         self.hash_formations(&mut hash);
+        self.yields.update_hash(&mut hash);
         let sergeants: Vec<_> = self
             .units
             .iter()

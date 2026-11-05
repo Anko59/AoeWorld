@@ -4,8 +4,49 @@ use super::*;
 use crate::game_world::movement_step::settling::GIVE_UP_AFTER_TICKS;
 
 const DETACH_AFTER: u16 = 120;
+/// A stalled member this close to its slot has arrived beside it, as a single unit
+/// does beside an occupied goal. A detour cannot do better.
+const BESIDE_SLOT: i64 = 2 * 1024;
+const ACCEPT_BESIDE_AFTER: u16 = 120;
+/// A member that gave up far from its slot asks for a new route this often,
+/// at most `MAX_RETRIES` times: a jam clears, sealed ground does not.
+const RETRY_EVERY: u64 = 256;
+pub(super) const MAX_RETRIES: u8 = 8;
 
 impl GameWorld {
+    /// Route and member state of a unit, for local march diagnosis.
+    pub fn formation_member_status(&self, id: EntityId) -> String {
+        let Some(unit) = self.lookup.get(&id).map(|&index| &self.units[index]) else {
+            return String::new();
+        };
+        let group = unit
+            .formation
+            .and_then(|leader| self.formations.get(&leader));
+        let member = group.and_then(|g| g.member_index(id).map(|at| &g.members[at]));
+        format!(
+            "active {} at {:?} since {} of {} planner {} order {:?} route {} obstruction {:?} member {:?}",
+            self.active_movers.binary_search(&id).is_ok(),
+            unit.state.position,
+            unit.planning_since,
+            self.tick.0,
+            unit.planner.is_some(),
+            unit.order.map(|o| (o.waypoint, o.destination)),
+            unit.route.len(),
+            unit.obstruction
+                .map(|o| (o.blocked, o.pass_until, o.last_tick, o.search_tick)),
+            member.map(|m| (
+                m.goal,
+                m.target,
+                m.arrived,
+                m.detached,
+                m.blocked,
+                m.stalled,
+                m.retries,
+                m.following_corridor
+            )),
+        )
+    }
+
     pub(super) fn reset_group_detours(&mut self, group: &mut Group) {
         for member in group.members.iter_mut().filter(|member| member.detached) {
             let index = self.lookup[&member.id];
@@ -22,18 +63,19 @@ impl GameWorld {
         }
     }
 
-    /// The group a member marches with in single file, when it does: its
-    /// files squeeze past each other at the friendly hard distance, so a knot
-    /// at the mouth of a one-lane passage cannot lock the whole column.
+    /// The group a blocked member keeps moving with on a deck or in a one-lane
+    /// passage: friendly bodies pass there at the friendly hard distance, so a
+    /// knot of them at the mouth or on the lane cannot lock it. This holds for
+    /// any member still on its way: the anchor may be long gone, the lane's
+    /// rear detached, and the knot made of several groups of the same army.
     pub(crate) fn single_file_group(&self, index: usize) -> Option<EntityId> {
         let unit = &self.units[index];
         let leader = unit.formation?;
         let group = self.formations.get(&leader)?;
-        (group.packing_files == 1
-            && group.members.len() > 1
+        (group.members.len() > 1
             && group
                 .member_index(unit.state.id)
-                .is_some_and(|at| !group.members[at].detached && !group.members[at].arrived))
+                .is_some_and(|at| !group.members[at].arrived))
         .then_some(leader)
     }
 
@@ -58,7 +100,49 @@ impl GameWorld {
             .unwrap_or(false)
     }
 
+    /// True when a member stopped short and may still try again.
+    pub(super) fn retry_pending(&self, member: &Member) -> bool {
+        member.stalled >= GIVE_UP_AFTER_TICKS
+            && !member.arrived
+            && member.retries < MAX_RETRIES
+            && path::squared(
+                self.units[self.lookup[&member.id]].state.position,
+                member.goal,
+            ) > BESIDE_SLOT.pow(2)
+    }
+
+    fn beside_slot(&self, member: &Member) -> bool {
+        let index = self.lookup[&member.id];
+        path::squared(self.units[index].state.position, member.goal) <= BESIDE_SLOT.pow(2)
+    }
+
+    fn accept_arrivals_beside_slots(&mut self) {
+        let mut accepted = Vec::new();
+        for group in self.formations.values().filter(|group| !group.settled) {
+            for (at, member) in group.members.iter().enumerate() {
+                if !member.arrived
+                    && !member.detached
+                    && member.stalled >= ACCEPT_BESIDE_AFTER
+                    && self.beside_slot(member)
+                {
+                    accepted.push((self.units[self.lookup[&member.id]].formation, at));
+                }
+            }
+        }
+        for (leader, at) in accepted {
+            let Some(group) = leader.and_then(|leader| self.formations.get_mut(&leader)) else {
+                continue;
+            };
+            let id = group.members[at].id;
+            group.members[at].arrived = true;
+            let index = self.lookup[&id];
+            self.units[index].obstruction = None;
+        }
+    }
+
     pub(super) fn detach_blocked_members(&mut self) {
+        self.accept_arrivals_beside_slots();
+        let tick = self.tick.0;
         let ids = self
             .formations
             .values()
@@ -66,15 +150,28 @@ impl GameWorld {
             .flat_map(|group| group.members.iter())
             .inspect(|_| self.group_work.members(1))
             .filter(|member| {
-                !member.detached
-                    && !member.arrived
-                    && (member.blocked >= DETACH_AFTER || member.stalled >= 60 || {
-                        let index = self.lookup[&member.id];
-                        let unit = &self.units[index];
-                        unit.state.position == unit.state.previous_position
-                            && unit.obstruction.is_some_and(|o| o.blocked >= 32)
-                            && self.stationary_external_traffic(index)
-                    })
+                if member.detached || member.arrived {
+                    return false;
+                }
+                if member.stalled >= GIVE_UP_AFTER_TICKS {
+                    return self.retry_pending(member)
+                        && (tick + u64::from(member.id.0)).is_multiple_of(RETRY_EVERY);
+                }
+                if member.blocked >= DETACH_AFTER {
+                    return true;
+                }
+                // Beside its slot a detour cannot do better, and a crowd would
+                // send it round for ever: it stalls on to its arrival there.
+                if member.stalled >= 60 {
+                    return !self.beside_slot(member);
+                }
+                {
+                    let index = self.lookup[&member.id];
+                    let unit = &self.units[index];
+                    unit.state.position == unit.state.previous_position
+                        && unit.obstruction.is_some_and(|o| o.blocked >= 32)
+                        && self.stationary_external_traffic(index)
+                }
             })
             .map(|member| member.id)
             .take(4)
@@ -84,7 +181,7 @@ impl GameWorld {
         }
     }
 
-    fn detach_member(&mut self, id: EntityId) {
+    pub(super) fn detach_member(&mut self, id: EntityId) {
         let index = self.lookup[&id];
         let Some(leader) = self.units[index].formation else {
             return;
@@ -112,7 +209,11 @@ impl GameWorld {
             .find(|member| member.id != id && !member.detached)
             .map(|member| member.id);
         if let Some(group) = self.formations.get_mut(&leader) {
-            group.members[at].blocked = 0;
+            let member = &mut group.members[at];
+            member.blocked = 0;
+            if member.stalled >= GIVE_UP_AFTER_TICKS {
+                member.retries = member.retries.saturating_add(1);
+            }
         }
         if id == leader {
             let Some(replacement) = replacement else {
@@ -180,14 +281,25 @@ impl GameWorld {
                 // successful completion of an intermediate checkpoint must
                 // rejoin the corridor even after the carrier has arrived.
                 let timed_out = !navigating && self.units[index].last_movement_error.is_some();
+                // A detached body wedged in traffic ends its detour too: back
+                // on the corridor it may detach again along a new route.
+                let wedged = self.units[index]
+                    .obstruction
+                    .is_some_and(|o| o.blocked >= GIVE_UP_AFTER_TICKS)
+                    // A search from a deck's diagonal edge rarely answers. The
+                    // deck has one way on: stop asking and take the corridor.
+                    || (unit.planning
+                        && self.tick.0.saturating_sub(self.units[index].planning_since)
+                            >= u64::from(GIVE_UP_AFTER_TICKS)
+                        && self.near_deck(unit.position));
                 let near = self.units[index].order.is_some_and(|order| {
                     navigating && path::squared(unit.position, order.destination) <= 512_i64.pow(2)
                 }) || (!navigating
                     && path::squared(unit.position, member.goal) <= 512_i64.pow(2)
                     && self.clear_edge(index, unit.position, member.goal, false));
                 let ended = self.units[index].order.is_none() && !unit.planning;
-                if unit.position == member.goal || near || ended || timed_out {
-                    ready.push((member.id, timed_out));
+                if unit.position == member.goal || near || ended || timed_out || wedged {
+                    ready.push((member.id, timed_out || (wedged && !navigating)));
                 }
             }
         }

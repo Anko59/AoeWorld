@@ -88,10 +88,14 @@ impl GameWorld {
                 group.progress = group.path.end();
             }
             if self.units[self.lookup[&leader]].order.is_none() {
-                group.settled = group
-                    .members
-                    .iter()
-                    .all(|m| !self.units[self.lookup[&m.id]].state.moving);
+                // A member on a detour or still short of its give-up is not done:
+                // settling would stop the rejoin and retries that finish it.
+                group.settled = group.members.iter().all(|m| {
+                    !self.units[self.lookup[&m.id]].state.moving
+                        && !m.detached
+                        && (m.arrived || m.stalled >= GIVE_UP_AFTER_TICKS)
+                        && !self.retry_pending(m)
+                });
                 self.next_formation_order(leader, &mut group);
             }
             self.formations.insert(leader, group);

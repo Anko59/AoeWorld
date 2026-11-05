@@ -227,3 +227,42 @@ fn fight_rotation_is_part_of_the_canonical_state() {
     w.economy.generals.armies.get_mut(&g).unwrap().fight_after = 0;
     assert_eq!(before, w.canonical_hash());
 }
+
+/// A squad sealed in by blocked ground is refused its march. A refusal is not
+/// completion: when the ground opens the General orders the squad again, yet
+/// while it stays sealed the refused order is not reissued at every decision.
+#[test]
+fn a_squad_refused_while_sealed_in_marches_once_the_ground_opens() {
+    let (mut w, _) = setup();
+    let ids: Vec<_> = (0..3)
+        .map(|n| soldier(&mut w, UnitKind::Militia, 100 + n, 100))
+        .collect();
+    let ring: Vec<_> = (97..=105)
+        .flat_map(|x| (97..=103).map(move |y| TileCoord::new(x, y)))
+        .filter(|t| t.x == 97 || t.x == 105 || t.y == 97 || t.y == 103)
+        .collect();
+    w.economy.blocked_tiles.extend(ring.iter().copied());
+    let g = soldier(&mut w, UnitKind::General, 110, 110);
+    w.issue_move(g, at(130, 112)).unwrap();
+    let mut orders = 0;
+    for _ in 0..100 {
+        decide(&mut w);
+        orders += w.general_work().orders;
+    }
+    assert!(ids.iter().all(|&id| w.formation(id).is_none()), "sealed in");
+    assert!(
+        orders < 10,
+        "a refusal is retried on a bounded interval, not at every decision: {orders}"
+    );
+    for tile in &ring {
+        w.economy.blocked_tiles.remove(tile);
+    }
+    w.collision_opened(TileRect::from_xywh(96, 96, 11, 9));
+    for _ in 0..60 {
+        decide(&mut w);
+    }
+    assert!(
+        ids.iter().all(|&id| w.formation(id).is_some()),
+        "the General orders the squad once its ground opens"
+    );
+}

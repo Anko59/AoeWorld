@@ -281,6 +281,8 @@ impl GameWorld {
             member.offset = offset;
             member.goal = goal;
             member.stalled = 0;
+            // A new destination is a new leg with its own recovery attempts.
+            member.retries = 0;
             member.remaining = i64::MAX;
             member.blocked = 0;
             let position = self.units[self.lookup[&member.id]].state.position;

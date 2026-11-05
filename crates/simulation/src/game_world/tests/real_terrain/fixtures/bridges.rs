@@ -38,12 +38,14 @@ pub(super) fn rivers(name: &str) -> Option<Vec<RiverSegment>> {
             line((280, -2), (330, 652), 6),
             line((450, -2), (450, 652), 6),
         ],
+        // One long river; its only crossing lies 50 tiles off the straight line.
+        "army-river" => vec![line((150, -2), (150, 652), 6)],
         _ => return None,
     })
 }
 
 pub(super) fn side_meters(name: &str) -> Option<u64> {
-    name.starts_with("long-bridges").then_some(1300)
+    (name.starts_with("long-bridges") || name.starts_with("army-")).then_some(1300)
 }
 
 fn water(f: &Fixture, tile: TileCoord) -> Option<bool> {
@@ -145,6 +147,11 @@ impl Fixture {
             }
             "forest-bridge" | "forest-bridge-40" | "forest-bridge-opposed" => self.forest_bridge(),
             "long-bridges" | "long-bridges-40" => self.long_bridges(),
+            "army-river" => {
+                let span = self.bridge_across((150, 150), (1, 1));
+                self.wooded_mouths(span);
+                return true;
+            }
             _ => return false,
         }
         match name {

@@ -122,6 +122,7 @@ impl GameWorld {
                 detached: false,
                 following_corridor: false,
                 stalled: 0,
+                retries: 0,
                 remaining: i64::MAX,
             })
             .collect();

@@ -139,6 +139,18 @@ impl Fixture {
     }
 }
 
+fn forest_wall(f: &mut Fixture, gap: i32) {
+    let side = f.world.config.height_tiles;
+    let (top, bottom) = (150 - gap / 2, 150 - gap / 2 + gap);
+    trees(&mut f.world, TileRect::from_xywh(148, 0, 2, top - 40));
+    trees(&mut f.world, TileRect::from_xywh(135, top - 40, 15, 40));
+    trees(&mut f.world, TileRect::from_xywh(135, bottom, 15, 40));
+    trees(
+        &mut f.world,
+        TileRect::from_xywh(148, bottom + 40, 2, side - bottom - 40),
+    );
+}
+
 /// No warm-up or commands are hidden inside fixture construction.
 pub fn build(name: &str) -> Fixture {
     let mut f = base(name);
@@ -150,7 +162,7 @@ pub fn build(name: &str) -> Fixture {
                 Command::General(id, _) => Some(*id),
                 _ => None,
             })
-            .unwrap_or(f.ids[0]);
+            .unwrap_or_else(|| f.ids.first().copied().unwrap_or(EntityId(0)));
         return f;
     }
     match name {
@@ -200,6 +212,10 @@ pub fn build(name: &str) -> Fixture {
             f.ids.push(general);
             f.commands.push(Command::General(general, at(1045, 100)));
         }
+        // Wall-to-wall forest at x = 135..150 near the only way through, thin
+        // beyond it: `gap` open tiles at y = 150.
+        "army-forest" => forest_wall(&mut f, 5),
+        "army-pass" => forest_wall(&mut f, 1),
         "bridge" => {
             f.bridge(TileCoord::new(83, 65), TileCoord::new(92, 71));
             f.move_unit(UnitKind::Villager, at(80, 63), at(95, 73));
@@ -240,6 +256,6 @@ pub fn build(name: &str) -> Fixture {
             Command::General(id, _) => Some(*id),
             _ => None,
         })
-        .unwrap_or(f.ids[0]);
+        .unwrap_or_else(|| f.ids.first().copied().unwrap_or(EntityId(0)));
     f
 }

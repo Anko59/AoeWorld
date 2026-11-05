@@ -9,7 +9,14 @@ const CAPACITY: [usize; 4] = [20, 15, 10, 5];
 pub(crate) struct Squad {
     pub arm: usize,
     pub members: Vec<EntityId>,
+    /// The destination this squad was refused and when. A refusal is not
+    /// completion, but it is retried only after `REFUSED_RETRY_TICKS`.
+    pub refused: Option<(WorldPosition, u64)>,
 }
+
+/// Ticks before a squad refused a march is ordered again: ground may have
+/// opened, yet a General must not reissue a refusal at every decision.
+const REFUSED_RETRY_TICKS: u64 = 256;
 
 pub(super) fn arm(kind: UnitKind) -> Option<usize> {
     role(kind).map(|role| if role == 4 { 2 } else { role })
@@ -62,6 +69,7 @@ impl Army {
             self.squads.push(Squad {
                 arm,
                 members: vec![id],
+                refused: None,
             });
             Some((None, id))
         }
@@ -142,14 +150,15 @@ impl GameWorld {
         let length = (i64::from(heading.x).pow(2) + i64::from(heading.y).pow(2))
             .isqrt()
             .max(1);
-        let desired = self.config.snap_ground_position(WorldPosition::new(
+        let desired = WorldPosition::new(
             to.x + ((i64::from(heading.x) * i64::from(offset.y)
                 - i64::from(heading.y) * i64::from(offset.x))
                 / length) as i32,
             to.y + ((i64::from(heading.y) * i64::from(offset.y)
                 + i64::from(heading.x) * i64::from(offset.x))
                 / length) as i32,
-        ));
+        );
+        let desired = self.squad_ground_towards(kind, to, desired);
         // A bounded shared centre search, once per squad order. Ordinary
         // formation assignment separately validates each physical final slot.
         std::iter::once(desired)
@@ -163,7 +172,47 @@ impl GameWorld {
                     })
                 })
             }))
-            .find(|&point| self.body_position_clear(kind, point))
+            .find(|&point| self.squad_ground(kind, point))
+    }
+
+    /// A squad's goal stands on ground an ordinary formation order accepts.
+    fn squad_ground(&self, kind: UnitKind, point: WorldPosition) -> bool {
+        self.config.valid_ground_position(point)
+            && self.body_position_clear(kind, point)
+            && !self.economy.blocked_tiles.contains(&point.tile_floor())
+            && [kind, UnitKind::Militia].into_iter().all(|kind| {
+                self.unit_tile_passable(kind, point.tile_floor(), &|| false)
+                    .unwrap_or(false)
+            })
+    }
+
+    /// Walks from the General's goal toward a squad's place in the army and
+    /// stops at the first water, tree or wall. A flank twenty tiles wide of a
+    /// goal on a river bank stays on that bank instead of aiming at the water
+    /// or at a far shore reached only by a long way round.
+    fn squad_ground_towards(
+        &self,
+        kind: UnitKind,
+        from: WorldPosition,
+        to: WorldPosition,
+    ) -> WorldPosition {
+        let (dx, dy) = (
+            i64::from(to.x) - i64::from(from.x),
+            i64::from(to.y) - i64::from(from.y),
+        );
+        let steps = (dx.abs().max(dy.abs()) / 1024).clamp(1, 64);
+        let mut last = from;
+        for step in 1..=steps {
+            let next = WorldPosition::new(
+                from.x + (dx * step / steps) as i32,
+                from.y + (dy * step / steps) as i32,
+            );
+            if !self.squad_ground(kind, next) {
+                break;
+            }
+            last = next;
+        }
+        self.config.snap_ground_position(last)
     }
 
     /// Fight rejection can precede the first march decision. Establish the
@@ -303,7 +352,7 @@ impl GameWorld {
         }
         let mut numbers = [0; 4];
         let mut plans = Vec::new();
-        for squad in &self.economy.generals.armies[&g].squads {
+        for (at, squad) in self.economy.generals.armies[&g].squads.iter().enumerate() {
             let number = numbers[squad.arm];
             numbers[squad.arm] += 1;
             let ids: Vec<_> = squad
@@ -332,33 +381,56 @@ impl GameWorld {
                 heading,
                 offset(squad.arm, number, &counts, scout),
             );
-            plans.push((if scout { 0 } else { squad.arm + 1 }, ids, goal));
+            plans.push((if scout { 0 } else { squad.arm + 1 }, ids, goal, Some(at)));
         }
         // Leading cavalry gets the destination's first look. The ordinary
         // observer/fog system reports sightings through the shared survey.
-        plans.sort_by_key(|(priority, ids, _)| (*priority, ids[0]));
-        plans.push((5, vec![g], Some(to)));
+        plans.sort_by_key(|(priority, ids, ..)| (*priority, ids[0]));
+        plans.push((5, vec![g], Some(to), None));
         let marching = self.economy.generals.armies[&g].state != GeneralState::Idle;
         let mut complete = true;
-        for (_, ids, goal) in plans {
+        let now = self.tick.0;
+        for (_, ids, goal, squad) in plans {
             let Some(goal) = goal else {
                 complete = false;
                 continue;
             };
+            let refused = squad
+                .and_then(|at| self.economy.generals.armies[&g].squads[at].refused)
+                .is_some_and(|(refused_to, tick)| {
+                    refused_to == to && now.saturating_sub(tick) < REFUSED_RETRY_TICKS
+                });
+            if refused {
+                complete = false;
+                continue;
+            }
             if !self.formation_matches(&ids, goal) {
                 work.orders += 1;
-                if self
-                    .issue_formation_move(
-                        general.player,
-                        &ids,
-                        aoe_core::Formation::Line,
-                        goal,
-                        false,
-                        false,
-                    )
-                    .is_err()
-                {
+                let order = self.issue_formation_move(
+                    general.player,
+                    &ids,
+                    aoe_core::Formation::Line,
+                    goal,
+                    false,
+                    false,
+                );
+                if order.is_err() {
+                    // A refusal is not completion: ground may open later, so
+                    // the march stays unrouted. The squad is asked again only
+                    // after an interval, never at every decision while its
+                    // soldiers stand and wait.
                     complete = false;
+                    if let Some(at) = squad
+                        && !matches!(
+                            order,
+                            Err(crate::EconomyError::Movement(
+                                crate::GameWorldError::PathBudgetExceeded
+                            ))
+                        )
+                        && let Some(army) = self.economy.generals.armies.get_mut(&g)
+                    {
+                        army.squads[at].refused = Some((to, now));
+                    }
                     continue;
                 }
             }

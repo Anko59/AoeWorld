@@ -114,6 +114,8 @@ impl GameWorld {
             if obstruction.blocked >= PASS_AFTER_TICKS {
                 obstruction.pass_until = self.tick.0 + PASS_TICKS;
             }
+            let blocked = obstruction.blocked;
+            self.note_blocked_for_yield(index, blocked);
         }
     }
 

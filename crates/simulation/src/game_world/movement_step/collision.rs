@@ -210,16 +210,14 @@ impl GameWorld {
         // other, so a head-on meeting can never lock the lane for anyone.
         let mut narrow = None;
         let file = self.single_file_group(index).filter(|_| {
-            self.units[index]
-                .obstruction
-                .is_some_and(|o| o.blocked >= 16)
-                && self.near_deck(from)
+            let waited = self.units[index].obstruction.map_or(0, |o| o.blocked);
+            (waited >= 16 && self.near_deck(from))
+                || (waited >= 64 && self.static_clearance(unit.kind, from.tile_floor()) <= 1)
         });
         // Inside a one-lane passage a single file's own members pass through
         // each other: a knot of friendly bodies at the mouth cannot lock it.
         // Both passes are last resorts for a body that has stayed blocked.
         let blocked = self.units[index].obstruction.map_or(0, |o| o.blocked);
-        let ghost = file.is_some();
         // Every query can reject centres outside the swept box expanded by
         // the largest observed hull; overfull-cell policy remains independent.
         let window = {
@@ -250,14 +248,10 @@ impl GameWorld {
                 if general_alone && self.is_general_follower(other.id, unit.id) {
                     return false;
                 }
-                let r = if file.is_some()
-                    && self.units[self.collisions.unit_index(id)].formation == file
-                {
-                    if ghost {
-                        return false;
-                    }
-                    hard_distance(unit, other)
-                } else if !soft && !work_squeeze && !unit.kind.is_naval() {
+                if file.is_some() && other.player == unit.player {
+                    return false;
+                }
+                let r = if !soft && !work_squeeze && !unit.kind.is_naval() {
                     i64::from(own_radius + other.kind.collision_radius())
                 } else {
                     self.movement_contact_distance(unit, other, soft, narrow_water, work_squeeze)
