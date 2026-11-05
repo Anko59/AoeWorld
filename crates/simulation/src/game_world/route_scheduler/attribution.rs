@@ -96,8 +96,14 @@ pub struct RouteAttribution {
     pub group_orders_failed: u64,
     /// Formation orders found / failed / waiting at issue.
     pub group_orders: u64,
-    /// Ticks waited by expired orders that never got a search slot.
+    /// Expired orders that never got a search slot.
     pub expired_without_planner: u64,
+    /// Formation carriers whose far wait was renewed instead of ending the group.
+    pub group_wait_renewals: u64,
+    /// Work spent from the reserved far formation pool.
+    pub group_pool_work: u64,
+    /// Member detours that found no slot and rejoined their group instead.
+    pub detours_declined: u64,
     /// The latest 1 to 4 Ki failures: caller, kind, ends, reason, work.
     pub samples: std::collections::VecDeque<String>,
 }

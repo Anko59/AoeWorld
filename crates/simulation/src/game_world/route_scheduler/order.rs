@@ -148,6 +148,7 @@ impl GameWorld {
         let caller = Some(std::panic::Location::caller());
         self.route_metrics.caller = caller;
         self.units[index].route_caller = caller;
+        self.units[index].route_renewals = 0;
         let (kind, player) = (self.units[index].state.kind, self.units[index].state.player);
         let target_tile = destination.tile_floor();
         Ok(

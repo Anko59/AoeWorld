@@ -139,6 +139,8 @@ pub(crate) struct StoredUnit {
     pub(crate) unreachable_memo: Option<(TileCoord, TileCoord, u64)>,
     /// Diagnostics only: the call site that ordered the current route.
     pub(crate) route_caller: Option<&'static std::panic::Location<'static>>,
+    /// Times this order's far group wait was renewed (`deadline`).
+    pub(crate) route_renewals: u8,
 }
 #[derive(Debug)]
 pub struct GameWorld {

@@ -152,7 +152,8 @@ impl GameWorld {
         }
         self.expire_route_waits(&expired, changed);
         self.route_queued.clear();
-        self.serve_waiting(waiting, budget, changed)
+        let reserved = self.serve_far_groups(&waiting, budget, changed);
+        self.serve_waiting(waiting, budget - reserved, changed)
     }
 
     /// Shares `budget` between the players of `waiting` in a rotating order,

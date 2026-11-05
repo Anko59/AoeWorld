@@ -89,6 +89,9 @@ pub(crate) fn attribution_json(a: &RouteAttribution) -> Value {
         "single_expired": a.single_expired,
         "group_orders_failed": a.group_orders_failed,
         "expired_without_planner": a.expired_without_planner,
+        "group_wait_renewals": a.group_wait_renewals,
+        "group_pool_work": a.group_pool_work,
+        "detours_declined": a.detours_declined,
         "samples_1_4ki": a.samples,
     })
 }
@@ -161,6 +164,7 @@ async fn route_probe(
     let mut planner = RoutePlanner::new(origin, to, MAX_ROUTE_PLANNER_WORK);
     let mut tiles = vec![origin];
     let (mut legs, started) = (0_u32, Instant::now());
+    let mut leg_starts = Vec::new();
     let outcome = loop {
         let poll = {
             let world = service.world.read().await;
@@ -169,6 +173,7 @@ async fn route_probe(
         match poll {
             RoutePlannerPoll::Path(path) => {
                 legs += 1;
+                leg_starts.push((path.tiles.first().copied(), tiles.last().copied()));
                 for tile in path.tiles {
                     if tiles.last() != Some(&tile) {
                         tiles.push(tile);
@@ -187,6 +192,20 @@ async fn route_probe(
         tokio::task::yield_now().await;
     };
     let certified = planner.certified_destination();
+    // Route sanity: a leg must start where the previous one ended, and a
+    // shortest route never visits a tile twice.
+    let disjoint_legs = leg_starts
+        .iter()
+        .filter(|(first, last)| first != last)
+        .count();
+    let mut seen = std::collections::HashSet::new();
+    let revisits = tiles.iter().filter(|t| !seen.insert(**t)).count();
+    let max_step = tiles
+        .windows(2)
+        .map(|p| (p[1].x - p[0].x).abs().max((p[1].y - p[0].y).abs()))
+        .max()
+        .unwrap_or(0);
+    let sampled: Vec<[i32; 2]> = tiles.iter().step_by(25).map(|t| [t.x, t.y]).collect();
     let length = length_tiles(&tiles);
     let per_tick = |(s, d): (u64, u64)| s as f64 / d.max(1) as f64 / 1024.0;
     let reachable = outcome == "path" && certified.is_none() && tiles.last() == Some(&to);
@@ -199,6 +218,10 @@ async fn route_probe(
         "certified": certified.map(|t| [t.x, t.y]),
         "end": tiles.last().map(|t| [t.x, t.y]),
         "legs": legs,
+        "disjoint_legs": disjoint_legs,
+        "revisits": revisits,
+        "max_step": max_step,
+        "sampled_route": sampled,
         "route_points": tiles.len(),
         "length_tiles": length,
         "straight_tiles": f64::from(to.x - origin.x).hypot(f64::from(to.y - origin.y)),

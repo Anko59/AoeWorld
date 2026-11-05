@@ -20,6 +20,13 @@ pub(crate) const MAX_NEAR_ROUTE_WORK: u32 = 3 * aoe_map::ROUTE_LEG_COMMIT_WORK;
 pub(crate) const NEAR_ROUTE_ANSWER_TICKS: u64 = 1_200;
 /// Ticks a far order may wait for its next leg: three minutes at 20 Hz.
 pub(crate) const FAR_ROUTE_ANSWER_TICKS: u64 = 3_600;
+/// Times a formation's far wait is renewed before the group is ended. In a
+/// 99-AI match every far group order of the probe was ended whole at 3,600
+/// ticks while its route was still being searched or queued for a slot; a
+/// group is many units and the owner's order, so it waits longer. The bound
+/// stays: an order into sealed ground (the reason for the deadline) is still
+/// answered, by the planner's own proof or after `1 + MAX` waits.
+pub(crate) const MAX_GROUP_ROUTE_RENEWALS: u8 = 4;
 
 impl GameWorld {
     /// True when the waiting unit's route uses its player's far slots.
@@ -50,6 +57,15 @@ impl GameWorld {
             let Some(&index) = self.lookup.get(&id) else {
                 continue;
             };
+            let far = self.waits_for_far_route(index);
+            let unit = &mut self.units[index];
+            if far && unit.formation == Some(id) && unit.route_renewals < MAX_GROUP_ROUTE_RENEWALS {
+                // The carrier keeps its order and any search it holds.
+                unit.route_renewals += 1;
+                unit.planning_since = self.tick.0;
+                self.route_metrics.attribution.group_wait_renewals += 1;
+                continue;
+            }
             self.route_metrics.expired += 1;
             self.attribute_expiry(index, id);
             // Only a unit that searched has learned anything about this
