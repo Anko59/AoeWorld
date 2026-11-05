@@ -5,8 +5,6 @@ const roles = ['Infantry', 'Archers', 'Cavalry', 'Siege', 'Scouts'];
 const waits = ['Training villagers', 'Census busy', 'At capacity', 'No Town Center', 'Food shortage', 'Housing shortage'];
 const teamColours = { blue:'#4191f5', red:'#f54141', green:'#32be41', yellow:'#f5dc28', cyan:'#28dcdc', purple:'#af41dc', grey:'#a0a0a0', orange:'#f59128' };
 
-// Grid cells are packed into one integer; no string is built per probe.
-const cellKey = (x, y) => (x + 512) * 4096 + (y + 512);
 // Retained nodes, bounded independently of world size. Coordinates and hit
 // boxes share the exact plane used for ordinary ground orders.
 export function initTokens() {
@@ -90,26 +88,22 @@ export function initTokens() {
       return [...hits].reverse().find(h => Math.abs(x - h.x) <= h.width / 2
         && Math.abs(y - h.y) <= h.height / 2)?.id ?? NaN;
     },
-    draw(context, project, options, scale, width, height) {
-      hits = [];
-      const holdingColour = teamColours[document.getElementById('playground')?.dataset.playerColour] ?? teamColours.blue;
-      const inView = (x, y) => x >= -100 && y >= -60 && x <= width + 100 && y <= height + 60;
-      const occupied = new Set(), positions = new Map();
-      // Reserve actual HUD rectangles before placing world labels. The drawer
-      // and floating Captain controls can change without moving the camera.
-      // Reading rectangles forces layout, so reuse them for 250 ms (HUD cadence).
+    // HUD rectangles are reserved first; reading them forces layout, so they are cached for 250 ms (HUD cadence).
+    hud(space, width, height) {
       const stamp = performance.now();
       if (!hudRects || stamp - hudRectsAt > 250 || hudRectsFor !== `${width}x${height}`) {
         hudRects = [...document.querySelectorAll('#strategic-cockpit,#cockpit-details,#far-dock,#general-panel,#bottom-panel,#strategic-map-key,#strategic-label,#performance-overlay')]
           .map(panel => panel.getBoundingClientRect());
         hudRectsAt = stamp; hudRectsFor = `${width}x${height}`;
       }
-      for (const r of hudRects) {
-        if (!r.width || !r.height) continue;
-        for (let x = Math.floor((r.left - 4) / 32); x <= Math.floor((r.right + 4) / 32); x++) {
-          for (let y = Math.floor((r.top - 4) / 24); y <= Math.floor((r.bottom + 4) / 24); y++) occupied.add(cellKey(x, y));
-        }
-      }
+      for (const r of hudRects) if (r.width && r.height) space.take(r.left - 4, r.top - 4, r.right + 4, r.bottom + 4, -1);
+    },
+    mine() { const c = teamColours[document.getElementById('playground')?.dataset.playerColour] ?? teamColours.blue; return parseInt(c.slice(1), 16); },
+    draw(context, project, options, scale, width, height, space) {
+      hits = [];
+      const holdingColour = teamColours[document.getElementById('playground')?.dataset.playerColour] ?? teamColours.blue;
+      const inView = (x, y) => x >= -100 && y >= -60 && x <= width + 100 && y <= height + 60;
+      const positions = new Map();
       let grouped = 0;
       // A small screen grid keeps nearby armies and cards individually usable.
       // Selected armies get their anchor first; displaced labels keep a leader
@@ -120,7 +114,7 @@ export function initTokens() {
       if (layer.dataset.density !== density) layer.dataset.density = density;
       const labels = [
         ...armies.filter(() => options.armies).map(r => ({ key: `a${r[0]}`, world: r.slice(1, 3), selected: r[4], owned: r[3], w: 84, h: 38 })),
-        ...economy.filter(() => options.economy).map(r => ({ key: `e${r[0]}`, world: r.slice(2, 4), selected: r[4], owned: 1, w: dense ? 40 : 118, h: dense ? 38 : 34 })),
+        ...economy.filter(() => options.economy && !dense).map(r => ({ key: `e${r[0]}`, world: r.slice(2, 4), selected: r[4], owned: 1, w: 118, h: 34 })),
       ].sort((a, b) => b.selected - a.selected || b.owned - a.owned);
       for (const label of labels) {
         const [ax, ay] = project(label.world).map(v => v * scale);
@@ -129,12 +123,9 @@ export function initTokens() {
           const ring = Math.ceil(attempt / 8), angle = (attempt - 1) % 8 * Math.PI / 4;
           const x = Math.max(label.w / 2 + 8, Math.min(width * scale - label.w / 2 - 8, ax + (attempt ? Math.cos(angle) * ring * 92 : 0)));
           const y = Math.max(120 + label.h / 2, Math.min(height * scale - 190 - label.h / 2, ay + (attempt ? Math.sin(angle) * ring * 56 : 0)));
-          const cells = [];
-          for (let gx = Math.floor((x - label.w / 2 - 3) / 32); gx <= Math.floor((x + label.w / 2 + 3) / 32); gx++) {
-            for (let gy = Math.floor((y - label.h / 2 - 3) / 24); gy <= Math.floor((y + label.h / 2 + 3) / 24); gy++) cells.push(cellKey(gx, gy));
-          }
-          if (cells.some(key => occupied.has(key))) continue;
-          cells.forEach(key => occupied.add(key)); positions.set(label.key, [x / scale, y / scale]);
+          const box = [x - label.w / 2 - 3, y - label.h / 2 - 3, x + label.w / 2 + 3, y + label.h / 2 + 3];
+          if (!space.free(...box)) continue;
+          space.take(...box, -3); positions.set(label.key, [x / scale, y / scale]);
           if (Math.hypot(x - ax, y - ay) > 4) {
             context.strokeStyle = '#f4e9bb99'; context.lineWidth = 1;
             context.beginPath(); context.moveTo(ax / scale, ay / scale); context.lineTo(x / scale, y / scale); context.stroke();
@@ -142,6 +133,12 @@ export function initTokens() {
           break;
         }
         if (!positions.has(label.key)) grouped++;
+      }
+      if (dense && options.economy) for (const r of economy) {
+        // One flag per town, tied to its Town Center sprite instead of floating free.
+        const [ax, ay] = project(r.slice(2, 4)).map(v => v * scale);
+        positions.set(`e${r[0]}`, [(ax + 38) / scale, (ay - 40) / scale]);
+        space.take(ax + 20, ay - 56, ax + 56, ay - 24, -3);
       }
       if (layer.dataset.grouped !== String(grouped)) layer.dataset.grouped = String(grouped);
       if (options.roads) {
