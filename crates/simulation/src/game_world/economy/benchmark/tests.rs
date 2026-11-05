@@ -105,8 +105,9 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
         checkpoint,
         // Bounded detours around stationary work bodies and route searches
         // that share work only among units able to spend it change this replay;
-        // the complete 1/4-worker comparison above still holds.
-        "7e96c2db187fced93dd637f726fd24f79d5c8fe8079e825e8013f7ff61de33f5"
+        // the complete 1/4-worker comparison above still holds. A detached soldier is
+        // readmitted only after an idle delay, which changes it once more.
+        "363cddcdfa84d89c097f8ee93c4d640651ddcf742d9511ef33b99123fc0c9ffa"
     );
 }
 

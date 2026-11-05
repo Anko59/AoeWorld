@@ -2,10 +2,15 @@
 use super::*;
 use crate::EconomyError;
 
+/// Ticks a detached soldier must be past its player's last order before a
+/// General's fresh order can take it back.
+const MANUAL_IDLE_TICKS: u64 = 300;
+
 impl GameWorld {
     /// A player's accepted order on `ids`. A General never overwrites it: each
     /// soldier ordered without his General leaves the army and stays out of it
-    /// until the player next orders a General nearby. An order that includes
+    /// until its own player's General is next ordered nearby and the soldier
+    /// has been idle for `MANUAL_IDLE_TICKS` since its last order. An order that includes
     /// the General himself is an army order, and `destination` is his march.
     pub fn general_player_order(
         &mut self,
@@ -26,30 +31,38 @@ impl GameWorld {
                 if let Some(destination) = destination {
                     self.general_march(id, destination);
                 }
-            } else if let Some(general) = self.general_controller(id)
-                && sorted.binary_search(&general).is_err()
-            {
-                self.forget_general(id);
-                self.set_sergeant(id, false);
-                self.economy.generals.manual.insert(id);
+            } else if let Some(general) = self.general_controller(id) {
+                if sorted.binary_search(&general).is_err() {
+                    self.forget_general(id);
+                    self.set_sergeant(id, false);
+                    self.economy.generals.manual.insert(id, self.tick.0);
+                }
+            } else if let Some(ordered) = self.economy.generals.manual.get_mut(&id) {
+                // A new order restarts the idle clock of a detached soldier.
+                *ordered = self.tick.0;
             }
         }
     }
 
-    /// The player ordered this General: soldiers around him that finished what
-    /// they were told may answer his next census again.
+    /// The player ordered this General. Only soldiers of the General's own
+    /// player, within his sphere, under no live order, and idle for at least
+    /// `MANUAL_IDLE_TICKS` since the player's last order may answer his next
+    /// census again. Everyone else stays detached.
     pub(super) fn readmit_manual_soldiers(&mut self, general: EntityId) {
-        let Some(centre) = self.unit(general).map(|u| u.position) else {
+        let Some((centre, player)) = self.unit(general).map(|u| (u.position, u.player)) else {
             return;
         };
+        let now = self.tick.0;
         let manual = std::mem::take(&mut self.economy.generals.manual);
         self.economy.generals.manual = manual
             .into_iter()
-            .filter(|&id| {
+            .filter(|&(id, ordered)| {
                 self.unit(id).is_some_and(|u| {
-                    u.moving
+                    u.player != player
+                        || u.moving
                         || u.planning
                         || u.attack_target.is_some()
+                        || now.saturating_sub(ordered) < MANUAL_IDLE_TICKS
                         || distance(centre, u.position) > (24 * 1024_i64).pow(2)
                 })
             })

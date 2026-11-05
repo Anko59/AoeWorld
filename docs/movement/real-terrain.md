@@ -82,8 +82,13 @@ Measured on `tests/real_terrain/armies`, carved river, forest and pass shapes;
 5. After the anchor arrived, a member that stopped far from its slot asks for a new
    route every 256 ticks, at most 8 times. A member beside a slot that a stationary
    body took has arrived there.
-6. A soldier the player orders directly leaves its General's army, and only
-   ordering a General nearby readmits it.
+6. A soldier the player orders directly (move, attack, stop, garrison, load,
+   hunt, formation, auto-scout) leaves its General's army. A General never
+   touches a soldier under a live order. Readmission needs all of: the General
+   belongs to the soldier's own player, the player orders him afresh, the soldier
+   is within 24 tiles and idle, and 300 ticks have passed since the player's last
+   order of that soldier. A later order restarts the clock, and a soldier stopped
+   on purpose stays out until then. The set and its clocks are in the state hash.
 
 Not done: the anchor still runs ahead of a queue, so the shape re-forms at the
 destination rather than after each chokepoint.
