@@ -22,7 +22,7 @@ export function initGeneralPanel() {
       <p id="general-army"></p><ul id="general-squads" aria-label="Squads"></ul></div>
     <div id="general-trainer-view"><div id="general-sliders"></div>
       <button type="button" id="general-train"></button><p id="general-train-note"></p></div>`;
-  document.getElementById('selection-content').append(panel);
+  (document.getElementById('selection-content') ?? document.body).append(panel);
   const byId = id => panel.querySelector(`#${id}`);
   const sliders = roles.map((name, role) => {
     const row = document.createElement('label'); row.className = 'general-slider';

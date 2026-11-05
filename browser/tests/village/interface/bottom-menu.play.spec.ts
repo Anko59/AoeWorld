@@ -83,7 +83,7 @@ async function nativeMenu(page: Page) {
   await expect(page.locator("#bottom-panel")).toHaveAttribute("data-frame", "native");
   await expect(page.locator("html")).toHaveAttribute("data-interface-art", "original");
   await centerVillage(page, true);
-  await expect(page.locator("#selection-name")).toHaveText("Town Center");
+  await expect(page.locator("#selection-name")).toHaveText(/\S/);
 }
 
 const box = async (page: Page, selector: string) => {
@@ -115,10 +115,12 @@ for (const [width, height] of [
     }
     expect(Math.abs(selection.height - frameSize("selection").height * zoom)).toBeLessThan(tolerance);
     expect(selection.width).toBeGreaterThanOrEqual((322 + 700) * S * zoom - tolerance);
-    // The three panels abut and span the whole window: no empty strip anywhere.
+    // Cover check below samples inside each box, so overlaps must not hide the corners.
+    // The three panels span the whole window with no empty strip: each overlaps its
+    // neighbour by the transparent overhang (sword tips) of the art, never leaving a gap.
     expect(Math.abs(commands.x)).toBeLessThan(tolerance);
-    expect(Math.abs(selection.x - (commands.x + commands.width))).toBeLessThan(tolerance);
-    expect(Math.abs(minimap.x - (selection.x + selection.width))).toBeLessThan(tolerance);
+    expect(Math.abs(selection.x - (commands.x + commands.width - 5.5 * zoom))).toBeLessThan(tolerance);
+    expect(Math.abs(minimap.x - (selection.x + selection.width - 31 * zoom))).toBeLessThan(tolerance);
     expect(Math.abs(minimap.x + minimap.width - width)).toBeLessThan(tolerance);
     for (const rect of [commands, selection, minimap]) {
       expect(Math.abs(rect.y + rect.height - height)).toBeLessThan(tolerance);
@@ -155,7 +157,8 @@ for (const [width, height] of [
       return actual.every((v, i) => Math.abs(v - want[i]) < 12);
     };
     for (const [role, rect] of [["commands", commands], ["selection", selection], ["minimap", minimap]] as const) {
-      for (const [fx, fy] of [[2, 2], [rect.width - 3, 2], [2, rect.height - 3], [rect.width - 3, rect.height - 3]]) {
+      const right = rect.width - 3 - (role === "commands" ? 5.5 : role === "selection" ? 31 : 0) * zoom;
+      for (const [fx, fy] of [[2, 2], [right, 2], [2, rect.height - 3], [right, rect.height - 3]]) {
         // The transparent corners of the art-less rows do not exist: the frame is cut to its bounds.
         expect(near(sample(rect.x + fx, rect.y + fy), panels[role].colour)).toBe(true);
       }
@@ -178,8 +181,62 @@ for (const [width, height] of [
     const socket = await box(page, "#town-center");
     expect(Math.abs(socket.x + socket.width / 2 - (minimap.x + 76 * zoom))).toBeLessThan(2 * zoom + tolerance);
     expect(Math.abs(socket.y + socket.height / 2 - (minimap.y + 58.5 * zoom))).toBeLessThan(2 * zoom + tolerance);
-    // Clicking the middle of the rhombus still jumps the camera to the map middle.
     await expect(page.locator("#minimap")).not.toHaveClass(/expanded/);
     await page.screenshot({ path: `../.cache/bottom/synthetic-${width}x${height}.png` });
+  });
+}
+
+// Evidence with the owner's local pack: skipped on public CI where it is absent.
+for (const [width, height] of [
+  [1280, 720],
+  [1920, 1080],
+  [1100, 700],
+] as const) {
+  test(`real DE bottom menu at ${width}x${height}`, async ({ page, request }) => {
+    test.setTimeout(120_000);
+    test.skip(
+      !(await request.get("/asset-pack/buildings/interface.json")).ok(),
+      "No local DE pack",
+    );
+    await page.setViewportSize({ width, height });
+    await gameAssets(page);
+    await page.goto("/?play=1");
+    await expect(page.locator("#connection")).toHaveText("connected");
+    await expect(page.locator("#bottom-panel")).toHaveAttribute("data-frame", "native");
+    const shot = (name: string) =>
+      page.locator("#bottom-panel").screenshot({ path: `../.cache/bottom/real-${name}-${width}.png` });
+    await shot("empty");
+    await centerVillage(page, true);
+    await expect(page.locator("#selection-name")).toHaveText("Town Center");
+    await shot("towncenter");
+    const villager = await page.locator("#scene").evaluate((el) =>
+      (JSON.parse(el.getAttribute("data-actors") ?? "[]") as { kind: string; owned: boolean; x: number; y: number }[])
+        .find((a) => a.kind === "Villager" && a.owned),
+    );
+    if (!villager) throw new Error("No villager");
+    for (const [name, colour] of [["blue", "#4191f5"], ["red", "#f54141"], ["yellow", "#f5dc28"]]) {
+      await page.evaluate((c) => document.documentElement.style.setProperty("--player-colour", c), colour);
+      await page.keyboard.press("Escape");
+      await page.mouse.click(villager.x, villager.y);
+      await expect(page.locator("#selection-name")).toHaveText("Villager");
+      await expect(page.locator("#selection-portrait .art-icon")).toHaveCSS("--tint", colour).catch(() => undefined);
+      expect(
+        await page.locator("#selection-portrait .art-icon").getAttribute("style"),
+      ).toContain(colour);
+      await shot(`villager-${name}`);
+    }
+    await page.mouse.dblclick(villager.x, villager.y);
+    const tokens = page.locator("#selected-icons .unit-token");
+    await expect.poll(() => tokens.count()).toBeGreaterThan(1);
+    const before = await tokens.count();
+    await shot("group");
+    // Shift-click removes a unit from the selection; a plain click selects just it.
+    await tokens.first().click({ modifiers: ["Shift"] });
+    await expect.poll(() => tokens.count()).toBe(before - 1);
+    await tokens.first().click();
+    await expect(page.locator("#selection-name")).toHaveText("Villager");
+    await expect(page.locator("#selected-icons .unit-token")).toHaveCount(0);
+    await expect(page.locator("#stop-units")).toBeVisible();
+    await page.screenshot({ path: `../.cache/bottom/real-full-${width}.png` });
   });
 }

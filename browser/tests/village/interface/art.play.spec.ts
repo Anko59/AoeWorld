@@ -74,6 +74,15 @@ for (const available of [false, true]) {
       page_height: 36,
     };
     const deArt = { ...art, page: "ui-de.svg" };
+    // Native menu panels are large crops; the frame module cuts them to their bounds.
+    const dePanel = (role: string, width: number, height: number) => ({
+      ...art,
+      page: `ui-de-${role}.svg`,
+      width,
+      height,
+      page_width: width,
+      page_height: height,
+    });
     await page.route("**/asset-pack/**", (route) => {
       if (route.request().url().endsWith("interface.json") && !available) {
         return route.fulfill({ status: 404, body: "No local UI catalog" });
@@ -87,9 +96,9 @@ for (const available of [false, true]) {
               commands: { stop: deArt, build: deArt },
               resources: { wood: deArt },
               panels: {
-                "western-commands": deArt,
-                "western-selection": deArt,
-                "western-minimap": deArt,
+                "western-commands": dePanel("commands", 660, 413),
+                "western-selection": dePanel("selection", 1368, 413),
+                "western-minimap": dePanel("minimap", 860, 413),
                 "western-top": deArt,
                 portrait: deArt,
                 button: deArt,
@@ -134,6 +143,14 @@ for (const available of [false, true]) {
           body: '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36"><rect width="36" height="36" fill="#d43"/></svg>',
         });
       }
+      const panelPage = /ui-de-(commands|selection|minimap)\.svg$/.exec(route.request().url());
+      if (panelPage) {
+        const [w, h] = { commands: [660, 413], selection: [1368, 413], minimap: [860, 413] }[panelPage[1] as "commands"];
+        return route.fulfill({
+          contentType: "image/svg+xml",
+          body: `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect x="0" y="34" width="${w - 100}" height="${h - 34}" fill="#d43"/></svg>`,
+        });
+      }
       if (route.request().url().endsWith("ui-de-menu.svg")) {
         return route.fulfill({
           contentType: "image/svg+xml",
@@ -172,16 +189,18 @@ for (const available of [false, true]) {
       await expect(
         page.locator('#top-bar [data-ui-id="wood"] .original-icon image'),
       ).toHaveAttribute("href", "/asset-pack/buildings/ui-de.svg");
-      for (const selector of [
-        "#commands",
-        "#selection",
-        "#minimap",
-        "#top-bar",
-        "#selection-portrait",
-      ]) {
+      for (const selector of ["#top-bar", "#selection-portrait"]) {
         await expect(page.locator(selector)).toHaveCSS(
           "background-image",
           /\/asset-pack\/buildings\/ui-de\.svg/,
+        );
+      }
+      for (const role of ["commands", "selection", "minimap"]) {
+        await expect(
+          page.locator(`#${role}>.frame-art`).first(),
+        ).toHaveCSS(
+          "background-image",
+          new RegExp(`/asset-pack/buildings/ui-de-${role}\\.svg|blob:`),
         );
       }
       await expect(page.locator("html")).toHaveCSS(
