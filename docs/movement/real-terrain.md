@@ -300,3 +300,14 @@ The straightened corridor uses the group's largest body, and a slot cut off
 from the destination by water is pulled back to the last directly reachable
 point. Results are in the commit messages; real-map runs on the Paris and
 France packages are local measurements, not CI tests.
+
+## Army table under the slot measure
+
+Measured with arrival within two tiles of the assigned slot (12 cells re-run):
+bank 100 Paladins, Champions and mixed with a General 100/100; river 400
+Champions, pass 400 Paladins and forest 400 mixed with Generals 400/400; pass
+400 rams without a General 399/400; pass 400 rams with Generals 286/400 (114
+idle short); river 100 rams 73/100; river 400 rams 65/400; river 100 mixed
+95/100. Two armies sharing a forest destination reach 399/400: one member is
+wedged among idle friendly bodies and never steps, so that test fails and
+is the open defect. Other cells have not been re-run under this measure.
