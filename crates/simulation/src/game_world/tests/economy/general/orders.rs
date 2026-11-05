@@ -142,3 +142,75 @@ fn general_walks_through_his_own_army_that_fills_a_corridor() {
     assert!(p.x > 130 * 1024, "General crossed his army: {p:?}");
     assert!(wall.iter().all(|&id| w.unit(id).unwrap().hp > 0));
 }
+
+/// The owner could not rescue a stuck group: its General kept taking it back.
+#[test]
+fn a_general_never_overwrites_a_players_order_on_his_soldiers() {
+    let (mut w, _) = setup();
+    let (ids, g) = muster(&mut w);
+    advance(&mut w, 20);
+    assert_eq!(w.general_controller(ids[0]), Some(g));
+    w.issue_move(g, at(170, 104)).unwrap();
+    advance(&mut w, 40);
+    let rescued = &ids[..4];
+    let refuge = at(102, 140);
+    w.issue_formation_move(
+        PlayerId(0),
+        rescued,
+        aoe_core::Formation::Line,
+        refuge,
+        false,
+        false,
+    )
+    .unwrap();
+    w.general_player_order(PlayerId(0), rescued, Some(refuge));
+    assert_eq!(w.general_controller(ids[0]), None);
+    advance(&mut w, 800);
+    for &id in rescued {
+        let unit = w.unit(id).unwrap();
+        assert!(
+            unit.position.y > 130 * 1024,
+            "{id:?} went where the player sent it: {:?}",
+            unit.position
+        );
+        assert_eq!(w.general_controller(id), None);
+    }
+    assert!(w.general_status(g).unwrap().army_size < 12);
+    assert!(
+        w.unit(ids[5]).unwrap().position.x > 110 * 1024,
+        "the rest march on"
+    );
+}
+
+#[test]
+fn a_general_takes_no_soldier_passing_under_a_players_order() {
+    let (mut w, _) = setup();
+    let g = soldier(&mut w, UnitKind::General, 102, 104);
+    let passing = soldier(&mut w, UnitKind::Militia, 80, 104);
+    w.issue_move(passing, at(125, 104)).unwrap();
+    for _ in 0..1000 {
+        advance(&mut w, 1);
+        assert_eq!(w.general_controller(passing), None);
+        if !w.unit(passing).unwrap().moving {
+            break;
+        }
+    }
+    assert_eq!(w.general_status(g).unwrap().army_size, 0);
+}
+
+#[test]
+fn ordering_the_general_readmits_the_soldiers_who_finished_nearby() {
+    let (mut w, _) = setup();
+    let (ids, g) = muster(&mut w);
+    advance(&mut w, 20);
+    w.general_player_order(PlayerId(0), &ids[..1], None);
+    advance(&mut w, 40);
+    assert_eq!(
+        w.general_controller(ids[0]),
+        None,
+        "no census takes it back"
+    );
+    w.issue_move(g, at(150, 104)).unwrap();
+    advance(&mut w, 40);
+    assert_eq!(w.general_controller(ids[0]), Some(g));
+}

@@ -1,9 +1,34 @@
 use super::*;
+
+/// The units a player's order takes over, and the march it gives a General
+/// among them. Generals must never overwrite these orders.
+fn commanded_units(
+    action: &PendingAction,
+) -> Option<(Vec<EntityId>, Option<aoe_core::WorldPosition>)> {
+    match action {
+        PendingAction::Formation {
+            unit_ids,
+            destination,
+            queued,
+            ..
+        } => Some((unit_ids.clone(), destination.filter(|_| !queued))),
+        PendingAction::Load { unit_ids, .. } | PendingAction::Hunt { unit_ids, .. } => {
+            Some((unit_ids.clone(), None))
+        }
+        PendingAction::Move { entity_id, .. }
+        | PendingAction::Attack { entity_id, .. }
+        | PendingAction::Stop { entity_id }
+        | PendingAction::Garrison { entity_id, .. } => Some((vec![*entity_id], None)),
+        _ => None,
+    }
+}
+
 pub(in crate::gameplay) fn apply(
     world: &mut aoe_simulation::GameWorld,
     player: aoe_core::PlayerId,
     action: PendingAction,
 ) -> CommandResult {
+    let commanded = commanded_units(&action);
     let result = match action {
         PendingAction::VassalDevelopment { vassal_id, enabled } => {
             world.issue_vassal_development(player, vassal_id, enabled)
@@ -228,6 +253,11 @@ pub(in crate::gameplay) fn apply(
         ),
     };
     use aoe_simulation::{EconomyError as E, GameWorldError as W};
+    if result.is_ok()
+        && let Some((ids, destination)) = commanded
+    {
+        world.general_player_order(player, &ids, destination);
+    }
     match result {
         Ok(()) => CommandResult::Accepted,
         Err(E::UnknownEntity | E::Movement(W::UnknownEntity)) => {

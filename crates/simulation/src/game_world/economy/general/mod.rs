@@ -73,6 +73,9 @@ pub(crate) struct Manager {
     pub controlled: BTreeMap<EntityId, EntityId>,
     // Only an empty building queue can be reserved. Its front is the recruit.
     pub recruits: BTreeMap<EntityId, (EntityId, UnitKind)>,
+    /// Soldiers the player took out of an army by ordering them directly. No
+    /// census adopts them until the player next orders a General nearby.
+    pub manual: BTreeSet<EntityId>,
     pub cursor: Option<EntityId>,
     pub work: GeneralWork,
     pub appearance_changes: BTreeSet<EntityId>,
@@ -191,6 +194,7 @@ impl GameWorld {
         self.economy.generals.work
     }
     pub(crate) fn forget_general(&mut self, id: EntityId) {
+        self.economy.generals.manual.remove(&id);
         self.restore_general_stances(id);
         if let Some(g) = self.general_controller(id) {
             self.restore_general_stance(g, id);
@@ -243,6 +247,7 @@ impl GameWorld {
             a.layout = None;
             a.solo = false;
         }
+        self.readmit_manual_soldiers(id);
     }
     pub(super) fn claim_general_unit(&mut self, g: EntityId, u: GameUnit) {
         if self.vassal_controller(u.id).is_some()
