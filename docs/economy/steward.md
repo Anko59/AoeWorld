@@ -110,8 +110,10 @@ keeps the current productive job. Training retains its normal admission before
 productive reassignment; optional maintenance follows.
 A busy worker keeps its job through ordinary stock changes. Only a dry Food
 stock (under a tenth of another kind's weighted reserve) re-tasks busy
-non-farming gatherers, at most a tenth of the domain (at least one) working
-Farms or building them, one change per 12 seconds. Shore fish are for boats,
+non-farming gatherers, at most a quarter of the domain (at least one) working
+Farms or building them, one change per 12 seconds. Such a retask places a Farm
+before taking another wild forage node, since foraging is finite and does not
+count toward that quota. Shore fish are for boats,
 so walking villagers never count them as Food supply. Idle dispatch keeps its ordinary
 budget, and severe shortages can still redirect the available workforce.
 Known resources within ten tiles are preferred. A local miss can also probe a

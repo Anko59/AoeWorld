@@ -15,6 +15,8 @@ pub(super) struct Snapshot {
     pub global_queued: usize,
     /// The stalled node/kind the worker now being tasked must not choose again.
     pub avoid: Option<super::watchdog::Stall>,
+    /// A dry-Food retask wants a Farm, not another wild forager.
+    pub farm_first: bool,
     /// Only reused within this authoritative pass; accepted jobs retain state.
     pub offers: [Vec<aoe_map::ResourceNode>; 4],
 }
@@ -132,6 +134,7 @@ impl GameWorld {
             queued,
             global_queued,
             avoid: None,
+            farm_first: false,
             offers: Default::default(),
         })
     }

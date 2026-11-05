@@ -139,6 +139,14 @@ impl GameWorld {
                     return Some(kind);
                 }
             }
+            // Wild forage is finite and never counted as farming supply, so a
+            // dry-Food retask places a Farm before taking another forage node.
+            if kind == ResourceKind::Food
+                && s.farm_first
+                && self.steward_food(worker, s, budget, work)
+            {
+                return Some(kind);
+            }
             if let Some(node) = self.steward_resource(worker, kind, s, budget, work) {
                 let close = s.buildings.iter().any(|b| {
                     b.is_complete()
@@ -185,7 +193,7 @@ impl GameWorld {
         work: &mut StewardWork,
         changed: &mut Vec<EntityId>,
     ) {
-        const QUOTA_DIVISOR: usize = 10;
+        const QUOTA_DIVISOR: usize = 4;
         const FOUND_COOLDOWN_SECONDS: u64 = 12;
         const MISSED_COOLDOWN_SECONDS: u64 = 30;
         let now = self.tick.0;
@@ -249,7 +257,9 @@ impl GameWorld {
         s.home.rebalance_cursor = Some(worker);
         let previous = self.gathering_kind(worker);
         s.avoid = None;
+        s.farm_first = true;
         let job = self.steward_job(worker, s, budget, work);
+        s.farm_first = false;
         let cooldown = if job.is_some() && job != previous {
             FOUND_COOLDOWN_SECONDS
         } else {
