@@ -10,10 +10,10 @@ use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Default)]
 struct Probe {
-    phases: Arc<Mutex<[(u64, u128); 8]>>,
+    phases: Arc<Mutex<[(u64, u128); 9]>>,
     planning: Mutex<(Option<Instant>, u128)>,
 }
-struct Span(Arc<Mutex<[(u64, u128); 8]>>, usize, Instant);
+struct Span(Arc<Mutex<[(u64, u128); 9]>>, usize, Instant);
 impl NavigationSpan for Span {}
 impl Drop for Span {
     fn drop(&mut self) {
@@ -75,7 +75,7 @@ fn measure(installed: bool) -> [u8; 32] {
     }
     world.set_planning_probe(probe.clone());
     let (mut advance, mut movement, mut planning) = (Vec::new(), Vec::new(), Vec::new());
-    let mut tick_phases = [(0u64, 0u128); 8];
+    let mut tick_phases = [(0u64, 0u128); 9];
     for tick in 0..160 {
         // Keep geographically dispersed cold routes in flight, with identical
         // work/order counts in both modes. Order admission is outside advance.
@@ -131,6 +131,7 @@ fn measure(installed: bool) -> [u8; 32] {
         "components",
         "hierarchy",
         "pocket",
+        "search",
     ];
     let advance_navigation: serde_json::Map<String, serde_json::Value> = names
         .iter()

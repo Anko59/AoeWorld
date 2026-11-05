@@ -103,9 +103,10 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // Bounded detours around stationary work bodies change this replay;
+        // Bounded detours around stationary work bodies and route searches
+        // that share work only among units able to spend it change this replay;
         // the complete 1/4-worker comparison above still holds.
-        "94ae9d1304961bbd55c43e8cc63faa2ca2a87ff85723be392c1f3f8db7a8bd0c"
+        "7e96c2db187fced93dd637f726fd24f79d5c8fe8079e825e8013f7ff61de33f5"
     );
 }
 

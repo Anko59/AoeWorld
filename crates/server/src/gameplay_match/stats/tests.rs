@@ -150,6 +150,6 @@ fn direct_benchmark_reads_the_real_server_phases_once_per_tick() {
     let first = probe.take_phase_micros();
     assert_eq!(first["movement"], 31);
     assert_eq!(first["session_views"], 7);
-    assert_eq!(first.len(), 30);
+    assert_eq!(first.len(), 35);
     assert!(probe.take_phase_micros().values().all(|value| *value == 0));
 }

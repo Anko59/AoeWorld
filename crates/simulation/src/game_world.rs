@@ -49,7 +49,7 @@ pub use facing::Facing;
 pub(crate) use facing::facing_for;
 pub use research::*;
 pub use resources::PreparedResourceDepletion;
-pub use route_scheduler::{PlanningProbe, RouteSchedulerStats};
+pub use route_scheduler::{PLANNING_SPANS, PlanningProbe, RouteSchedulerStats};
 pub use visibility::TileVisibility;
 pub use wildlife::*;
 

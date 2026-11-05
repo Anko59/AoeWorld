@@ -1,5 +1,8 @@
 use super::*;
 use crate::GameUnit;
+/// Tiles a threat must move from where a General was sent to redirect him.
+const THREAT_MOVED_TILES: i64 = 8;
+
 impl GameWorld {
     pub(super) fn vassal_defend(
         &mut self,
@@ -76,6 +79,7 @@ impl GameWorld {
                 self.general_march(g, enemy.1);
                 self.economy.vassals.recalls.insert(g, saved);
             }
+            self.follow_vassal_threat(id, enemy.1);
         } else {
             self.finish_vassal_recall(id);
         }
@@ -88,6 +92,35 @@ impl GameWorld {
             .count() as u16;
         if let Some(d) = self.economy.vassals.domains.get_mut(&id) {
             d.status.responding = responding;
+        }
+    }
+    /// A recalled General marches to where the threat was seen. Raiders that
+    /// walked on from there left him standing out of sight of them forever,
+    /// so the recall never ended: send him on when the threat has moved.
+    fn follow_vassal_threat(&mut self, id: EntityId, threat: WorldPosition) {
+        let moved: Vec<_> = self
+            .economy
+            .vassals
+            .recalls
+            .iter()
+            .filter(|(g, recall)| {
+                recall.vassal == id
+                    && super::super::general::distance(recall.called, threat)
+                        > (THREAT_MOVED_TILES * 1024).pow(2)
+                    && self
+                        .economy
+                        .generals
+                        .armies
+                        .get(g)
+                        .is_some_and(|a| a.destination == Some(recall.called) && !a.solo)
+            })
+            .map(|(&g, _)| g)
+            .collect();
+        for g in moved {
+            self.general_march(g, threat);
+            if let Some(recall) = self.economy.vassals.recalls.get_mut(&g) {
+                recall.called = threat;
+            }
         }
     }
     pub(super) fn finish_vassal_recall(&mut self, id: EntityId) {

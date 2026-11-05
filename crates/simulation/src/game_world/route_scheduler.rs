@@ -3,7 +3,7 @@
 //! player order, and inside a player between its waiting units. Search memory
 //! (retained frontiers) is bounded per player, so one player's flood of
 //! orders, or one search that cannot finish, delays only that player's own
-//! orders and never another player's.
+//! orders and never another player's, and only for a bounded time (`deadline`).
 use super::GameWorld;
 use crate::game_movement::{MAX_ACTIVE_ROUTE_PLANNERS, MAX_ACTIVE_ROUTE_SEARCHES};
 use crate::{GameWorldError, MAX_ROUTE_WORK_PER_ORDER};
@@ -12,13 +12,16 @@ use aoe_map::{MovementOutcome, RoutePlanner, RoutePlannerPoll};
 use std::collections::{BTreeMap, VecDeque};
 
 mod accounting;
+mod deadline;
 mod fast;
 mod issue;
 mod metrics;
 mod order;
 pub use accounting::RouteSchedulerStats;
 pub(crate) use metrics::{GroupWork, PlanningMeasurement};
-pub use metrics::{PlanningProbe, RouteMetrics};
+pub use metrics::{PLANNING_SPANS, PlanningProbe, RouteMetrics};
+#[cfg(test)]
+pub(crate) use {deadline::NEAR_ROUTE_ANSWER_TICKS, issue::NO_SLOT_ROUTE_WORK};
 
 /// Retained search frontiers one player may hold at once.
 pub(crate) const MAX_ROUTE_SEARCHES_PER_PLAYER: usize = 2;
@@ -114,9 +117,12 @@ impl GameWorld {
     /// moves this tick: a route found here is walked in the same tick.
     /// Returns the budget left over.
     pub(crate) fn serve_route_searches(&mut self, budget: u32, changed: &mut Vec<EntityId>) -> u32 {
+        let probe = self.planning_probe.clone();
+        let _span = probe.as_ref().and_then(|p| p.movement_span("plan_serve"));
         // Allocate between players before prioritizing a player's near work:
         // sustained near demand must never consume another player's far share.
         let mut waiting = BTreeMap::<PlayerId, Vec<EntityId>>::new();
+        let mut expired = Vec::new();
         for &id in &self.active_movers {
             let Some(&index) = self.lookup.get(&id) else {
                 continue;
@@ -132,9 +138,14 @@ impl GameWorld {
                     .as_ref()
                     .is_none_or(|planner| !planner.has_route_continuation())
             {
-                waiting.entry(unit.state.player).or_default().push(id);
+                if self.route_wait_expired(index) {
+                    expired.push(id);
+                } else {
+                    waiting.entry(unit.state.player).or_default().push(id);
+                }
             }
         }
+        self.expire_route_waits(&expired, changed);
         self.route_queued.clear();
         self.serve_waiting(waiting, budget, changed)
     }
@@ -186,37 +197,42 @@ impl GameWorld {
             let remaining_players = (players.len() - turn) as u32;
             let mut share = (budget / remaining_players).max(u32::from(budget > 0));
             budget -= share;
-            let (far, near): (Vec<_>, Vec<_>) = ids.iter().copied().partition(|id| {
-                let unit = &self.units[self.lookup[id]];
-                unit.planner.as_ref().map_or_else(
-                    || {
-                        unit.order.is_some_and(|order| {
-                            far_route(order.waypoint.tile_floor(), order.target_tile)
-                        })
-                    },
-                    far_planner,
-                )
-            });
+            let (far, near): (Vec<_>, Vec<_>) = ids
+                .iter()
+                .copied()
+                .partition(|id| self.waits_for_far_route(self.lookup[id]));
             // Reserve inside this player's fair share. A global near/far
             // split would let another player's near flood shrink this share.
             let reserve = if far.is_empty() { 0 } else { share / 4 };
-            share = self.serve_route_class(*player, &near, share - reserve, changed);
-            share = self.serve_route_class(*player, &far, share + reserve, changed);
+            share = self.serve_route_class(*player, &near, false, share - reserve, changed);
+            share = self.serve_route_class(*player, &far, true, share + reserve, changed);
             budget += share;
         }
         budget
     }
 
+    /// Shares a class's work between the units that can spend it: those that
+    /// hold a planner (first in `ids`) and as many as the free slots admit.
+    /// Dividing by every waiting unit left two holders 1 or 2 work a tick
+    /// behind 847 units that could not spend theirs.
     fn serve_route_class(
         &mut self,
         player: PlayerId,
         ids: &[EntityId],
+        far: bool,
         mut share: u32,
         changed: &mut Vec<EntityId>,
     ) -> u32 {
+        let holders = ids
+            .iter()
+            .filter(|id| self.units[self.lookup[*id]].planner.is_some())
+            .count();
+        let slots = self.route_slots.get(&player).copied().unwrap_or_default();
+        let free = MAX_ROUTE_SEARCHES_PER_PLAYER.saturating_sub(slots.class_searches(far));
+        let takers = holders + free.min(ids.len() - holders);
         for (position, &id) in ids.iter().enumerate() {
             // Even an empty fair share permits a unit's one fast attempt.
-            let remaining = (ids.len() - position) as u32;
+            let remaining = takers.saturating_sub(position).max(1) as u32;
             let allowance = if share == 0 {
                 0
             } else {
@@ -224,6 +240,9 @@ impl GameWorld {
             };
             let spent = self.search_waiting_route(player, id, allowance, changed);
             share -= spent.min(share);
+            if ids.len() > takers {
+                self.end_exhausted_near_route(id, far, changed);
+            }
         }
         share
     }
@@ -250,10 +269,7 @@ impl GameWorld {
         let held = self.units[index].planner.as_ref();
         let holds_planner = usize::from(held.is_some());
         let holds_search = held.is_some_and(RoutePlanner::requires_search_slot);
-        let far = held.map_or_else(
-            || far_route(order.waypoint.tile_floor(), order.target_tile),
-            far_planner,
-        );
+        let far = self.waits_for_far_route(index);
         // A retained zero/partial-work planner still owes its full fast
         // attempt after an exhausted issue-time budget; retention is no proof
         // that the attempt ran. This matters with resumable reverse proofs.
@@ -280,7 +296,10 @@ impl GameWorld {
             self.units[index].fast_route_tried = full;
             (result, 0)
         } else {
+            let probe = self.planning_probe.clone();
+            let span = probe.as_ref().and_then(|p| p.movement_span("plan_fair"));
             let result = self.poll_world_route_planner(&mut planner, allowance, &|| false, kind);
+            drop(span);
             let spent = planner.work().saturating_sub(work_before);
             if work_before == 0 && spent > 0 {
                 self.route_metrics.searches_started += 1;

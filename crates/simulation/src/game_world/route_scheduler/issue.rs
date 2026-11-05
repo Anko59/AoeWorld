@@ -13,6 +13,9 @@ use crate::{GameWorld, MAX_ROUTE_WORK_PER_ORDER, UnitKind};
 use aoe_core::{PlayerId, TileCoord};
 use aoe_map::{MovementOutcome, RoutePlanner, RoutePlannerPoll};
 
+/// Work of a fast attempt whose frontier no slot could keep.
+pub(crate) const NO_SLOT_ROUTE_WORK: u32 = FAST_ROUTE_WORK / 2;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum MapRoutePlan {
     Outcome(MovementOutcome),
@@ -54,12 +57,28 @@ impl GameWorld {
         kind: UnitKind,
         player: PlayerId,
     ) -> (RoutePlannerPoll, bool) {
-        let allowance = self.fast_route_allowance(player);
+        let far = super::far_planner(planner);
+        // An attempt that fails with no slot to keep its frontier is thrown
+        // away. In the frozen match that was 3.9 attempts of 8,192 work a tick,
+        // 70% of all route work; yet orders settle with under 4,096 or need
+        // far more (found by work: 1.3 million, 4,676 and 111,508 for under
+        // 1,024, up to 4,096 and above; 99% of the failures under 4,096 too).
+        let attempt = if self.route_capacity_exhausted(player, 0, 0, far)
+            || self.route_queued.contains(&(player, far))
+        {
+            NO_SLOT_ROUTE_WORK
+        } else {
+            FAST_ROUTE_WORK
+        };
+        let allowance = self.fast_route_allowance(player).min(attempt);
         if allowance == 0 {
             return (RoutePlannerPoll::Pending, false);
         }
         let before = planner.work();
+        let probe = self.planning_probe.clone();
+        let span = probe.as_ref().and_then(|p| p.movement_span("plan_fast"));
         let result = self.poll_world_route_planner(planner, allowance, &|| false, kind);
+        drop(span);
         let spent = planner.work().saturating_sub(before);
         if before == 0 && spent > 0 {
             self.route_metrics.searches_started += 1;
@@ -70,7 +89,7 @@ impl GameWorld {
         }
         self.charge_fast_route(player, spent);
         self.route_metrics.issue_work += u64::from(spent);
-        (result, allowance == FAST_ROUTE_WORK)
+        (result, allowance == attempt)
     }
 
     fn charge_fast_route(&mut self, player: PlayerId, work: u32) {

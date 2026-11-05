@@ -59,8 +59,10 @@ pub struct RouteMetrics {
     pub found: [u64; WORK_BUCKETS],
     /// Searches that ended without a route, by the work they spent.
     pub failed: [u64; WORK_BUCKETS],
-    /// Searches ended by the stuck-search bound.
+    /// Near routes ended by the work bound (`MAX_NEAR_ROUTE_WORK`).
     pub stuck: u64,
+    /// Orders ended by the bound on their wait for an answer.
+    pub expired: u64,
     pub yielded: u64,
     /// Near routes given up on for the closest reachable tile.
     pub approached: u64,
@@ -112,7 +114,7 @@ impl fmt::Display for RouteMetrics {
         write!(
             f,
             "orders={} starts={} group_members={} group_path={} group_path_writes={} group_collision={} at_issue={} cache_hits={} fast={} deferred={:?} no_slot={} \
-             work issue={} fair={} ahead={} refusals={} found={:?} failed={:?} stuck={} yielded={} approached={} \
+             work issue={} fair={} ahead={} refusals={} found={:?} failed={:?} stuck={} expired={} yielded={} approached={} \
              samples={:?}",
             self.orders,
             self.searches_started,
@@ -132,6 +134,7 @@ impl fmt::Display for RouteMetrics {
             self.found,
             self.failed,
             self.stuck,
+            self.expired,
             self.yielded,
             self.approached,
             self.samples,
@@ -151,6 +154,11 @@ pub trait PlanningProbe: std::fmt::Debug + Send + Sync {
         None
     }
 }
+
+/// Names of the route-planning spans given to `PlanningProbe::movement_span`:
+/// the whole fair pass (with its bookkeeping), the fast attempts, the fair
+/// searches, and planning ahead. Each is inclusive of the planner's own phases.
+pub const PLANNING_SPANS: [&str; 4] = ["plan_serve", "plan_fast", "plan_fair", "plan_ahead"];
 
 pub(crate) struct PlanningMeasurement<'a>(pub(crate) &'a dyn PlanningProbe);
 impl Drop for PlanningMeasurement<'_> {

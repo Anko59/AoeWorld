@@ -74,6 +74,10 @@ pub struct Options {
     /// Inclusive movement subspans (adds clock/atomic overhead to each query).
     #[arg(long)]
     profile_movement: bool,
+    /// Inclusive route-planning, navigation and group stage spans, and the
+    /// route scheduler's final state in the report.
+    #[arg(long)]
+    profile_planning: bool,
     #[arg(long, default_value = "reports/scale/perf-scale.json")]
     out: PathBuf,
 }
@@ -297,9 +301,18 @@ pub fn run(options: Options) -> Result<(), BoxError> {
         json!({ "blake3": hex(&hash), "ms": round(hashed.elapsed().as_secs_f64() * 1e3) })
     };
     eprintln!("perf-scale: built, {initial_census}");
-    let movement_probe = std::sync::Arc::new(movement::MovementProbe::default());
-    if options.profile_movement {
+    let movement_probe = std::sync::Arc::new(if options.profile_planning {
+        movement::MovementProbe::coarse()
+    } else {
+        movement::MovementProbe::default()
+    });
+    if options.profile_movement || options.profile_planning {
         world.set_planning_probe(movement_probe.clone());
+    }
+    if options.profile_planning
+        && let aoe_simulation::Terrain::Map { generator, .. } = world.terrain()
+    {
+        generator.set_navigation_probe(movement_probe.clone());
     }
 
     let tick_hz = world.config().tick_hz;
@@ -319,6 +332,7 @@ pub fn run(options: Options) -> Result<(), BoxError> {
     );
     let census_after = census(&world, &players);
     let movement_fog_on = movement_probe.drain();
+    let scheduler_fog_on = format!("{:?}", world.route_scheduler_stats());
     eprintln!("perf-scale: fog-on done, {}", fog_on.with_orders.summary());
 
     world.set_fog_disabled(true);
@@ -381,7 +395,8 @@ pub fn run(options: Options) -> Result<(), BoxError> {
         "initial_hash": initial_hash,
         "simulation_fog_on": fog_on.json(),
         "simulation_fog_off": fog_off.json(),
-        "movement_profile": { "enabled": options.profile_movement,
+        "route_scheduler_fog_on": scheduler_fog_on,
+        "movement_profile": { "enabled": options.profile_movement || options.profile_planning,
             "fog_on": movement_fog_on, "fog_off": movement_fog_off },
         "server": server,
     });

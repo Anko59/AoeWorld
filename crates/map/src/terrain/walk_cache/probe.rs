@@ -36,6 +36,8 @@ pub enum NavigationPhase {
     Components,
     Hierarchy,
     Pocket,
+    /// One poll's leg search, inclusive of the phases above it starts.
+    Search,
 }
 
 impl NavigationPhase {
@@ -43,6 +45,7 @@ impl NavigationPhase {
         match self {
             Self::Terrain => "terrain",
             Self::TerrainPoint => "terrain_point",
+            Self::Search => "search",
             Self::WalkCache => "walk_cache",
             Self::Portals => "portals",
             Self::PortalCosts => "portal_costs",
