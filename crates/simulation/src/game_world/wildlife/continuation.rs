@@ -39,28 +39,25 @@ impl GameWorld {
                     } else {
                         matches!(a.kind, AnimalKind::Deer | AnimalKind::Boar)
                     };
+                    let gap = distance(origin, a.position);
+                    // The work-spot search is by far the dearest test, so it
+                    // runs last and only for an animal that would be chosen.
                     if *id == exclude
                         || a.food_remaining == 0
                         || !same_kind
+                        || gap > squared
+                        || nearest
+                            .as_ref()
+                            .is_some_and(|(d, id, _)| (gap, a.id) >= (*d, *id))
+                        || (a.owner != Some(player)
+                            && self.visibility(player, a.position.tile_floor())
+                                != TileVisibility::Visible)
                         || !self.animal_has_work_slot(a.id, a.kind, worker)
                         || !self.resource_has_work_spot(worker, a.position.tile_floor())
                     {
                         continue;
                     }
-                    if a.owner != Some(player)
-                        && self.visibility(player, a.position.tile_floor())
-                            != TileVisibility::Visible
-                    {
-                        continue;
-                    }
-                    let gap = distance(origin, a.position);
-                    if gap <= squared
-                        && nearest
-                            .as_ref()
-                            .is_none_or(|(d, id, _)| (gap, a.id) < (*d, *id))
-                    {
-                        nearest = Some((gap, a.id, a));
-                    }
+                    nearest = Some((gap, a.id, a));
                 }
             }
         }

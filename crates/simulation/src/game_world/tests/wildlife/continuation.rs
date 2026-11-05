@@ -192,3 +192,35 @@ fn continuation_replays_with_identical_jobs_positions_and_hashes() {
         assert_eq!(a.hunting_target(worker), Some(next));
     }
 }
+
+#[test]
+fn hunters_queued_at_a_full_carcass_search_once_a_second() {
+    let mut w = world();
+    w.set_fog_disabled(true);
+    w.place_town_center(PlayerId(0), TileCoord::new(95, 95))
+        .unwrap();
+    let workers = (0..12)
+        .map(|n| {
+            w.spawn_villager(PlayerId(0), at(100 + n % 4, 102 + n / 4))
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+    let deer = w.spawn_animal(AnimalKind::Deer, at(101, 100)).unwrap();
+    w.advance();
+    w.issue_hunt(PlayerId(0), &workers, deer).unwrap();
+    assert!(w.strike_animal(deer, workers[0], 100));
+    run(&mut w, 60);
+    let queued = workers
+        .iter()
+        .filter(|id| w.hunting_target(**id).is_some() && w.gathering_kind(**id).is_none())
+        .count() as u32;
+    assert!(queued > 0, "a deer has four work slots");
+    let mut searched = 0;
+    for _ in 0..40 {
+        w.advance();
+        searched += w.wildlife_stats().food_search_cells;
+    }
+    assert!(searched > 0, "the queue keeps looking for food");
+    // Two seconds at sixteen cells a search; a retry every tick costs 20 times this.
+    assert!(searched <= queued * 3 * 16, "{searched} cells for {queued}");
+}
