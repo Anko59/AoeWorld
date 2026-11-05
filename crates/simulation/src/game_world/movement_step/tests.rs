@@ -15,10 +15,10 @@ fn group_neighbor_radius_bound_grows_at_spawn_and_stays_conservative_after_remov
         .spawn_kind(PlayerId(0), crate::UnitKind::Mangonel, center(30, 20))
         .unwrap();
     tables.refresh(&world, true);
-    assert_eq!(tables.neighbor_radius, [512, 0]);
+    assert_eq!(tables.neighbor_radius, [461, 0]);
     world.remove_unit(large);
     tables.refresh(&world, true);
-    assert_eq!(tables.neighbor_radius, [512, 0]);
+    assert_eq!(tables.neighbor_radius, [461, 0]);
 }
 
 #[test]
