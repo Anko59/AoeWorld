@@ -81,10 +81,13 @@ fn an_active_auto_scout_is_never_readmitted() {
     w.issue_auto_scout(PlayerId(0), scout, true).unwrap();
     w.general_player_order(PlayerId(0), &[scout], None);
     advance(&mut w, 400);
-    // Searching or sleeping: stationary for the moment.
+    // Searching or sleeping: stationary for the moment. A scout in this
+    // village never pauses by itself, so the pause is forced; the order that
+    // follows is the real command path.
     let index = w.lookup[&scout];
     let state = &mut w.units[index].state;
     (state.moving, state.planning, state.attack_target) = (false, false, None);
+    assert!(w.unit(scout).unwrap().auto_scout);
     w.general_player_order(PlayerId(0), &[g], Some(at(150, 104)));
     assert!(clock(&w, scout).is_some());
     advance(&mut w, 20);
@@ -106,4 +109,21 @@ fn an_automatic_march_never_readmits() {
     );
     advance(&mut w, 20);
     assert_eq!(w.general_controller(ids[0]), None);
+}
+
+#[test]
+fn a_dead_detached_soldier_leaves_the_map() {
+    let (mut w, _) = setup();
+    let (ids, g) = muster(&mut w);
+    advance(&mut w, 20);
+    w.general_player_order(PlayerId(0), &ids[..2], None);
+    assert!(clock(&w, ids[0]).is_some());
+    let index = w.lookup[&ids[0]];
+    w.kill_unit(index);
+    assert_eq!(clock(&w, ids[0]), None, "killed: entry gone at once");
+    // An entry that outlived its soldier is swept at the next General order.
+    w.economy.generals.manual.insert(EntityId(9_999), 0);
+    w.general_player_order(PlayerId(0), &[g], None);
+    assert_eq!(clock(&w, EntityId(9_999)), None, "the stray entry is swept");
+    assert!(clock(&w, ids[1]).is_some(), "a live, recent one stays");
 }

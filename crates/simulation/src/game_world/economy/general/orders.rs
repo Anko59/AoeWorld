@@ -47,8 +47,8 @@ impl GameWorld {
 
     /// A detached soldier of the General's own player returns to the census
     /// only when it is idle (not moving, planning, attacking or auto-scouting),
-    /// within 24 tiles and `MANUAL_IDLE_TICKS` past its last order. A garrisoned
-    /// soldier has no map record and stays detached. Only a player's order to
+    /// within 24 tiles and `MANUAL_IDLE_TICKS` past its last order. A garrisoned or
+    /// embarked soldier has no map record and stays detached. Only a player's order to
     /// the General calls this, never an automatic march.
     fn readmit_manual_soldiers(&mut self, general: EntityId) {
         let Some((centre, player)) = self.unit(general).map(|u| (u.position, u.player)) else {
@@ -59,8 +59,12 @@ impl GameWorld {
         self.economy.generals.manual = manual
             .into_iter()
             .filter(|&(id, ordered)| match self.unit(id) {
+                // A dead soldier's entry goes with it (`kill_unit` already
+                // dropped it through `forget_general`; this catches the rest).
+                Some(u) if u.hp == 0 => false,
                 Some(u) => {
                     u.player != player
+                        || self.is_off_map(id)
                         || u.moving
                         || u.planning
                         || u.attack_target.is_some()
@@ -68,9 +72,16 @@ impl GameWorld {
                         || now.saturating_sub(ordered) < MANUAL_IDLE_TICKS
                         || distance(centre, u.position) > (24 * 1024_i64).pow(2)
                 }
-                None => self.is_garrisoned(id),
+                None => self.is_off_map(id),
             })
             .collect();
+    }
+
+    /// A living soldier with no map record: sheltered in a building, or
+    /// embarked (it keeps a stale position, so distance cannot be trusted).
+    /// Every such holder keeps its soldier detached.
+    fn is_off_map(&self, id: EntityId) -> bool {
+        self.embarked(id) || self.is_garrisoned(id)
     }
 
     fn is_garrisoned(&self, id: EntityId) -> bool {
