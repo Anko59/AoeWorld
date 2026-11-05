@@ -126,12 +126,20 @@ async fn wait_ready(client: &Client) -> Result<World, BoxError> {
     }
 }
 
+/// A human session refills 10 orders a second; faster orders are refused
+/// (`RejectedRateLimited`), which is what dropped most of the first runs'
+/// scatter orders.
+const HUMAN_ORDERS_PER_SECOND: f64 = 9.0;
+
 /// Every soldier walks to a random spot near where it stands, so the
 /// groups are later selected scattered, as an owner's army stands.
-fn scatter(client: &Client, world: &World, rng: &mut Rng, radius: i32) -> usize {
+async fn scatter(client: &Client, world: &World, rng: &mut Rng, radius: i32) -> (u64, u64) {
     let (width, height) = world.map_size();
     let mut sent = 0;
+    let first = client.orders_sent() + 1;
+    let pace = Duration::from_secs_f64(1.0 / HUMAN_ORDERS_PER_SECOND);
     for (id, _) in military(world) {
+        tokio::time::sleep(pace).await;
         let Some(unit) = world.unit(id) else { continue };
         let at = unit.tile();
         let to = TileCoord::new(
@@ -141,7 +149,7 @@ fn scatter(client: &Client, world: &World, rng: &mut Rng, radius: i32) -> usize 
         client.send(Order::Move { unit: id, to });
         sent += 1;
     }
-    sent
+    (first, first + sent)
 }
 
 fn form_groups(world: &World, rng: &mut Rng) -> Vec<Group> {
@@ -195,15 +203,26 @@ pub(super) async fn run(settings: Settings, stop: Arc<AtomicBool>) -> Result<Val
     let client = Client::connect(&settings.url, &settings.token, options).await?;
     let world = wait_ready(&client).await?;
     let mut rng = Rng(settings.seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1);
-    let scattered = scatter(&client, &world, &mut rng, settings.scatter);
+    let scattered = scatter(&client, &world, &mut rng, settings.scatter).await;
+    let mut verdicts = std::collections::BTreeMap::<String, u64>::new();
     let mut timeline = Vec::new();
     while start.elapsed() < settings.march_after && !stop.load(Ordering::Relaxed) {
+        if let Ok(Ok(decision)) =
+            tokio::time::timeout(Duration::from_millis(500), client.next_decision()).await
+        {
+            for event in decision.events {
+                if let Event::OrderResult { sequence, result } = event
+                    && (scattered.0..scattered.1).contains(&sequence)
+                {
+                    *verdicts.entry(format!("{result:?}")).or_default() += 1;
+                }
+            }
+        }
         if timeline.last().is_none_or(|s: &Value| {
             wall(start) - s["wall_s"].as_f64().unwrap_or(0.0) >= SCHEDULER_EVERY
         }) {
             timeline.push(scheduler(&settings.admin, start));
         }
-        tokio::time::sleep(Duration::from_millis(500)).await;
     }
     let world = client.world();
     let at_march = scheduler(&settings.admin, start);
@@ -271,7 +290,8 @@ pub(super) async fn run(settings: Settings, stop: Arc<AtomicBool>) -> Result<Val
     client.close().await;
     Ok(json!({
         "ai": settings.ai,
-        "scattered_orders": scattered,
+        "scattered_orders": scattered.1 - scattered.0,
+        "scatter_verdicts": verdicts,
         "march_after_s": settings.march_after.as_secs_f64(),
         "scheduler_at_march": at_march,
         "scheduler_at_end": at_end,
