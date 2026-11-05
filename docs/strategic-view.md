@@ -130,11 +130,18 @@ Research lists every technology that has a building able to teach it and is not
 yet researched; Rust reports one availability code and one candidate building per
 technology (bounded by the technology table, not the building count) and the
 order names that building. Layer toggles and view jumps sit in a right dock as
-icon buttons with key caps. Map symbols use the real interface icons: settlements
-are medallions of the building's icon ringed in the owner's colour, soldiers are
-shields with crossed swords and workers are round Villager portraits (actor
-record kind 2). Steward plaques are one icon with a count and job bar (icons
-only above 12 Town Centers); the General panel can fold.
+icon buttons with key caps. Places are the pack's own building sprites (`landscape/sprites.js`
+cuts one composite per kind from the atlas, tinted with the owner colour) on a modest owner-coloured
+base, at least a fixed on-screen width and true size once zoomed in. One strong symbol stands for
+a neighbourhood: a Town Center outranks a Castle, which outranks the rest, and anything that would
+overlap folds into a plaque of counts (buildings, villagers, soldiers) under it. A single
+screen grid (`landscape/space.js`) arbitrates the HUD, places, General/Steward tokens and unit
+groups, so no two symbols overlap. Soldiers away from any place are one shield per grid cell
+with the Militia portrait; workers are a round Villager portrait (actor record kind 2); enemy
+groups are drawn smaller and quieter. Draw cost follows cells on screen, not units. Steward
+plaques are one icon with a count and job bar, tied to their Town Center above 12 towns; the
+General panel can fold. The sprites use the classic (non-DE-overlay) frames, so a Town Center is
+always the Dark Age one.
 
 ## Market from the far view
 

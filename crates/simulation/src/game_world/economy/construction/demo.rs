@@ -316,7 +316,7 @@ impl GameWorld {
         let primary = world.initialize_village(PlayerId(0), TileCoord::new(128, 128))?;
         if let Some(player) = world.economy.players.get_mut(&PlayerId(0)) {
             player.stockpile = Stockpile {
-                food: 10_000,
+                food: 120_000,
                 wood: 10_000,
                 gold: 10_000,
                 stone: 10_000,

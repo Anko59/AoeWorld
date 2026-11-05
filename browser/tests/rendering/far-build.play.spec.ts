@@ -45,7 +45,7 @@ test("far construction previews the footprint and reports only server acknowledg
   await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
   // Choosing a site over the Town Center refuses locally, with a red reason.
   await openTab(page, "build");
-  await page.locator(\'[aria-label="Building type"] [data-id="1"]\').click();
+  await page.locator('[aria-label="Building type"] [data-id="1"]').click();
   await page.mouse.move(1000, 360);
   await expect(page.locator("#far-building")).toContainText(
     "No available villagers within 64 tiles",
@@ -126,7 +126,9 @@ test("HUD refresh preserves the Build here icon during a held pointer", async ({
     );
     (window as unknown as RefreshWindow).buildIcon = button.firstElementChild;
   });
-  const icon = page.locator("#build-refresh-test button > :first-child");
+  const icon = page
+    .locator("#build-refresh-test button > :first-child")
+    .first();
   await icon.hover();
   await page.mouse.down();
   await page.evaluate(() =>
@@ -159,7 +161,7 @@ test("disconnect clears an unacknowledged far build without requiring Welcome or
   await page.goto("/?play=1#x=8192&y=8192&zoom=.04");
   await expect(page.locator("#connection")).toHaveText("connected");
   await openTab(page, "build");
-  await page.locator(\'[aria-label="Building type"] [data-id="1"]\').click();
+  await page.locator('[aria-label="Building type"] [data-id="1"]').click();
   await page.mouse.click(700, 340);
   await expect(page.locator("#far-building")).toContainText("Submitting");
   await page.routeWebSocket("**/game/ws", (socket) =>

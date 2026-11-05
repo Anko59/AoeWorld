@@ -11,7 +11,7 @@ export function initProduction() {
   form.setAttribute('aria-label', 'Production destination');
   const name = kind => kind.replace(/([a-z])([A-Z])/g, '$1 $2');
   form.innerHTML = `<div class="far-group">Unit</div><div class="far-slot"></div>
-    <div class="far-row" role="group" aria-label="Unit count group"><label>Count <input aria-label="Unit count" class="far-input" style="width:56px" type="number" min="1" max="10" step="1" value="5"></label><span class="far-counts"></span></div>
+    <div class="far-row" role="group" aria-label="Batch size"><label>Count <input aria-label="Unit count" class="far-input" style="width:56px" type="number" min="1" max="10" step="1" value="5"></label><span class="far-counts"></span></div>
     <button type="button" class="far-act" aria-pressed="false">Units here</button>
     <p id="units-here-status" class="far-status" role="status">Choose a unit and count, then set a destination.</p>`;
   let chosen = 2;

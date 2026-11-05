@@ -61,13 +61,13 @@ export function initSettlements() {
       placed = []; hits = [];
       const live = new Set();
       for (const row of ranked) {
-        if (placed.length >= 600) break;
+        if (placed.length >= 192) break;
         const [id,x0,y0,x1,y1,kind,colour,owned] = row;
         const [x,y] = project([(x0+x1)/2,(y0+y1)/2]);
         const sprite = buildingSprite(kind, colour);
         const minimum = MIN[kind] ?? 46;
         const css = Math.max(minimum, sprite ? sprite.native * zoom : 0);
-        const w = css / scale, ratio = sprite ? sprite.height / sprite.width : 1;
+        const w = css / scale;
         const s = sprite ? w / sprite.width : 1;
         const left = sprite ? x - sprite.ox * s : x - w / 2, top = sprite ? y - sprite.oy * s : y - w * .75;
         const h = sprite ? sprite.height * s : w;
@@ -82,7 +82,6 @@ export function initSettlements() {
         space.take(...r, index);
         placed.push({ id, x, y, w, h, left, top, kind, colour, owned, buildings: 1, soldiers: 0, workers: 0, world: [(x0+x1)/2,(y0+y1)/2],
           fold() { this.buildings++; } });
-        live.add(id);
         const tint = actorColour(colour), base = w * .42;
         context.fillStyle = '#0006'; context.beginPath(); context.ellipse(x, y + w * .04, base * 1.05, base * .52, 0, 0, Math.PI * 2); context.fill();
         context.beginPath(); context.ellipse(x, y, base, base * .5, 0, 0, Math.PI * 2);
@@ -90,7 +89,7 @@ export function initSettlements() {
         context.lineWidth = owned ? 2 / scale : 1 / scale; context.strokeStyle = owned ? '#fff8d6' : '#2b2116'; context.stroke();
         if (sprite) context.drawImage(sprite.canvas, left, top, w, h);
         else { const icon = symbolFor(kind); if (icon) context.drawImage(icon, x - w / 2, y - w * .75, w, w); }
-        void ratio;
+        // Accessible labels are retained for every drawn place (at most 192).
         let node = nodes.get(id);
         if (!node) { node = document.createElement('span'); node.className = 'settlement-label'; nodes.set(id,node); layer.append(node); }
         const name = buildingKinds[kind], flag = String(!!owned);
@@ -98,6 +97,7 @@ export function initSettlements() {
           node.dataset.owned = flag; node.dataset.kind = name; node.textContent = buildingNames[kind];
           node.setAttribute('aria-label', `${owned ? 'Your ' : ''}${buildingNames[kind]}`);
         }
+        live.add(id);
         hits.push({ x: left + w / 2, y: top + h / 2, w, h, world: placed[index].world });
       }
       for (const [id,node] of nodes) if (!live.has(id)) { node.remove(); nodes.delete(id); }

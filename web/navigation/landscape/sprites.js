@@ -59,7 +59,7 @@ export function loadSprites() { if (state === 'idle') { state = 'queued'; (windo
 export function buildingSprite(kind, colour) {
   const base = baked.get(kind);
   if (!base) return null;
-  const key = `${kind}:${colour}`;
+  const key = kind * 16777216 + (colour & 0xffffff);
   let result = tinted.get(key);
   if (result) return result;
   const { art, mask } = base, canvas = document.createElement('canvas');

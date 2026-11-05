@@ -49,7 +49,7 @@ export function initCockpit(changed = () => {}) {
     <canvas class="far-chart" data-chart="pop" aria-label="Population and cap over time"></canvas>
     <div class="cockpit-army far-legend" aria-label="Army by type"></div>
     <p class="far-hint">History is sampled every 5 seconds from the same reports as the top bar; nothing is extrapolated. Land held <b data-land>?</b>. <span data-land-coverage></span></p>`;
-  let collapsed = true, active = 'build', identity = '', tokenSeen = null, generation = 0, chartRevision = -1, latest = [];
+  let collapsed = true, active = 'build', identity = '', touched = false, tokenSeen = null, generation = 0, chartRevision = -1, latest = [];
   const toggle = panel.querySelector('[data-collapse]');
   function select(id, open = true) {
     active = id;
@@ -71,11 +71,11 @@ export function initCockpit(changed = () => {}) {
     try { sessionStorage.setItem('aoeworld.cockpit-layout', JSON.stringify({ identity, collapsed, tab: active })); } catch { /* In-memory choice remains usable. */ }
   };
   panel.querySelectorAll('[data-tab]').forEach(tab => tab.addEventListener('click', () => {
-    generation++;
+    generation++; touched = !identity;
     select(tab.dataset.tab, collapsed || active !== tab.dataset.tab);
     persist(); changed();
   }));
-  toggle.addEventListener('click', () => { generation++; select(active, false); persist(); changed(); });
+  toggle.addEventListener('click', () => { generation++; touched = !identity; select(active, false); persist(); changed(); });
   function fnv(text) {
     let a = 0x811c9dc5, b = 0x01000193;
     for (let i = 0; i < text.length; i++) { a = Math.imul(a ^ text.charCodeAt(i), 0x01000193) >>> 0; b = Math.imul(b ^ a, 0x85ebca6b) >>> 0; }
@@ -97,7 +97,8 @@ export function initCockpit(changed = () => {}) {
     } catch { key = 'fnv:' + fnv(token); }
     if (token !== tokenSeen) return;
     identity = key;
-    if (current !== generation) { persist(); return; }
+    // A choice made before the session token existed is the user's latest and must win over an older save.
+    if (current !== generation || touched) { touched = false; persist(); return; }
     let saved;
     try { saved = JSON.parse(sessionStorage.getItem('aoeworld.cockpit-layout') ?? 'null'); } catch { /* Default layout. */ }
     if (saved?.identity === identity) {
