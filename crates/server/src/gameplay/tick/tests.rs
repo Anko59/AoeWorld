@@ -72,12 +72,13 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
 /// Steward extends the census by one entry, so the digests move, not the counts.
 /// Sergeant identity adds one byte per unit; all six session message counts are unchanged.
 // Holdings adds 2/4/3/3/9/2 frames; filtering it restores all six pre-boundary counts.
+// Armies work (e9b3fde5c: a body beside a deck lane returns to its tile centre first) moved only the fifth session.
 const PINNED: [(usize, u64); SEATS + 1] = [
     (409, 16881762939065787622),
     (191, 6076329610167181038),
     (63, 2859331523750769443),
     (179, 15129836462772536355),
-    (429, 12339432222954924825),
+    (429, 2335678981950151775),
     (409, 7665489075394365115),
 ];
 
