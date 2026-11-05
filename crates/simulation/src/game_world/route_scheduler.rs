@@ -26,7 +26,10 @@ pub use attribution::{
 pub(crate) use metrics::{GroupWork, PlanningMeasurement};
 pub use metrics::{PLANNING_SPANS, PlanningProbe, RouteMetrics};
 #[cfg(test)]
-pub(crate) use {deadline::NEAR_ROUTE_ANSWER_TICKS, issue::NO_SLOT_ROUTE_WORK};
+pub(crate) use {
+    deadline::{FAR_ROUTE_ANSWER_TICKS, MAX_GROUP_ROUTE_RENEWALS, NEAR_ROUTE_ANSWER_TICKS},
+    issue::NO_SLOT_ROUTE_WORK,
+};
 
 /// Retained search frontiers one player may hold at once.
 pub(crate) const MAX_ROUTE_SEARCHES_PER_PLAYER: usize = 2;
