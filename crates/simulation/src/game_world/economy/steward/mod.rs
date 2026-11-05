@@ -38,6 +38,9 @@ pub(crate) struct Home {
     pub(super) site_after: usize,
     pub(super) farm_after: Option<usize>,
     pub(super) repair_after: Option<EntityId>,
+    /// First tick at which another shortage rebalance may be tried.
+    pub(super) rebalance_after: u64,
+    pub(super) rebalance_cursor: Option<EntityId>,
     pub(super) repair_sites: BTreeMap<EntityId, usize>,
     held_jobs: BTreeMap<EntityId, jobs::HeldJob>,
     resources: search::Search,
@@ -120,6 +123,8 @@ impl GameWorld {
                 site_after: 0,
                 farm_after: None,
                 repair_after: None,
+                rebalance_after: 0,
+                rebalance_cursor: None,
                 repair_sites: BTreeMap::new(),
                 held_jobs: BTreeMap::new(),
                 resources: search::Search::default(),
@@ -277,6 +282,8 @@ impl GameWorld {
                     h.stalls.clear();
                     h.held_jobs.clear();
                     h.repair_after = None;
+                    h.rebalance_after = 0;
+                    h.rebalance_cursor = None;
                     h.repair_sites.clear();
                     let refused = h.resources.clear_workers();
                     h.status = StewardStatus {

@@ -4,6 +4,14 @@ use super::*;
 use std::collections::{BTreeMap, VecDeque};
 
 fn fixture(domains: usize, unfinished_mills: bool) -> (GameWorld, Vec<EntityId>) {
+    fixture_sized(domains, unfinished_mills, 20)
+}
+
+fn fixture_sized(
+    domains: usize,
+    unfinished_mills: bool,
+    per_domain: usize,
+) -> (GameWorld, Vec<EntityId>) {
     let mut w = crate::game_world::terrain_fixtures::build("river").world;
     let old: Vec<_> = w.units().map(|u| u.id).collect();
     for id in old {
@@ -72,7 +80,11 @@ fn fixture(domains: usize, unfinished_mills: bool) -> (GameWorld, Vec<EntityId>)
             )
             .unwrap();
         w.issue_garrison(PlayerId(0), king, town_center).unwrap();
-        workers.extend(workers_near(&mut w, TileCoord::new(x, base_y + 22), 20));
+        workers.extend(workers_near(
+            &mut w,
+            TileCoord::new(x, base_y + 22),
+            per_domain,
+        ));
     }
     let wolves: Vec<_> = w
         .animals()
@@ -374,4 +386,65 @@ fn ten_minute_four_river_stewards_finish_mills_without_helper_swarms() {
     assert!(one.idle_minutes.iter().all(|&n| n <= 4), "{report}");
     assert!(one.unreachable_minutes.iter().all(|&n| n == 0), "{report}");
     assert!(one.poaching_minutes.iter().all(|&n| n == 0), "{report}");
+}
+
+/// Continuity keeps busy woodcutters on their trees, so a river domain whose
+/// Food ran dry used to keep one or two farmers for the whole ten minutes.
+/// Stated bound: with the 300-Food-per-minute drain, three or more farmers
+/// and a Food stock of at least 100 by minute 7 (stock was ~50 for ten
+/// minutes before), (the Food workers forage and farm; Farm count stayed 1 in the fixture).
+#[test]
+fn a_dry_river_domain_gets_farms_and_food_within_seven_minutes() {
+    let (mut w, workers) = fixture_sized(1, false, 20);
+    // Only Farms may feed this kingdom: natural forage and fish are gone.
+    let mut natural = Vec::new();
+    if let Terrain::Map { generator, .. } = &w.terrain {
+        for cy in 0..16 {
+            for cx in 0..16 {
+                if let Ok(chunk) = generator.chunk(cx, cy) {
+                    natural.extend(
+                        chunk
+                            .resources
+                            .into_iter()
+                            .filter(|n| n.kind == ResourceKind::Food),
+                    );
+                }
+            }
+        }
+    }
+    for node in natural {
+        let _ = w.deplete_resource(node.id, node.initial_amount);
+    }
+    let hz = w.config().tick_hz;
+    let mut farms_over_time = Vec::new();
+    for tick in 1..=hz * 600 {
+        if tick > 1 && tick % (hz * 60) == 1 {
+            let stock = &mut w.economy.players.get_mut(&PlayerId(0)).unwrap().stockpile;
+            stock.food = stock.food.saturating_sub(300);
+            stock.wood = stock.wood.saturating_sub(200);
+        }
+        w.advance();
+        if tick % (hz * 60) == 0 {
+            let farms = w
+                .buildings()
+                .filter(|b| b.kind == BuildingKind::Farm)
+                .count();
+            let food = workers
+                .iter()
+                .filter(|id| w.gathering_kind(**id) == Some(ResourceKind::Food))
+                .count();
+            let s = w.player_economy(PlayerId(0)).unwrap().stockpile;
+            farms_over_time.push((farms, food, s.food, s.wood));
+        }
+    }
+    eprintln!("(Farm buildings, Food workers, food, wood) per minute: {farms_over_time:?}");
+    let (_, food_workers, food, _) = farms_over_time[6];
+    assert!(
+        food_workers >= 3,
+        "too few farmers at minute 7: {farms_over_time:?}"
+    );
+    assert!(
+        food >= 100,
+        "Food still dry at minute 7: {farms_over_time:?}"
+    );
 }

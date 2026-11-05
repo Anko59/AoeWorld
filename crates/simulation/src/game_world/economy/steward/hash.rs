@@ -59,6 +59,13 @@ impl Economy {
                 h.update(&farm.0.to_le_bytes());
                 h.update(&(*cursor as u64).to_le_bytes());
             }
+            h.update(&home.rebalance_after.to_le_bytes());
+            h.update(
+                &home
+                    .rebalance_cursor
+                    .map_or(u32::MAX, |id| id.0)
+                    .to_le_bytes(),
+            );
             h.update(&home.settings.weights);
             h.update(&[home.settings.cap, u8::from(home.settings.training)]);
             h.update(&home.worker_after.map_or(u32::MAX, |id| id.0).to_le_bytes());

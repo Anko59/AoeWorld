@@ -98,7 +98,8 @@ fn a_spent_tree_continues_its_productive_local_woodline() {
     );
     w.deplete_resource(old, w.resource_remaining(old).unwrap())
         .unwrap();
-    reserves(&mut w, 0, 30_000, 30_000, 30_000);
+    // Food is wanted but not dry (a dry Food stock now moves a busy worker).
+    reserves(&mut w, 6_000, 30_000, 30_000, 30_000);
     let mut replacement = None;
     for _ in 0..1_200 {
         w.advance();

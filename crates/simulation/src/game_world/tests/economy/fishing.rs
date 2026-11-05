@@ -1,6 +1,7 @@
 use super::*;
 use aoe_map::{ObjectKind, ordered_water_page_root};
 
+mod exhausted;
 mod facing;
 mod steward;
 

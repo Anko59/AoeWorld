@@ -53,6 +53,8 @@ impl GameWorld {
                     .steward_priority(s.player, s.home.settings.weights)
                     .is_some_and(|p| p.kinds()[0] == ResourceKind::Food)
                 && s.boats.len() + queued < STEWARD_RULES.max_villagers
+                // Boats that cannot fish are no food supply: never add more.
+                && !s.boats.iter().any(|b| self.steward_boat_unproductive(b.id))
                 && dock.training_queue.is_empty()
                 && dock.research.is_none()
                 && player.stockpile.wood >= 75
@@ -119,6 +121,16 @@ impl GameWorld {
                 break;
             }
         }
+    }
+
+    /// A boat with no fishing job, or one labelled Moving that does not move.
+    fn steward_boat_unproductive(&self, id: EntityId) -> bool {
+        self.unit(id).is_some_and(|u| {
+            u.hp > 0
+                && !self.economy.garrison_orders.contains_key(&id)
+                && (!self.economy.gatherers.contains_key(&id)
+                    || (u.task == crate::UnitTask::Moving && !u.moving && !u.planning))
+        })
     }
 
     fn steward_dock_builder(&self, s: &Snapshot) -> Option<EntityId> {

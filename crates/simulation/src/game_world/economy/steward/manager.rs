@@ -112,6 +112,7 @@ impl GameWorld {
             let wait = self.steward_train(&mut snapshot, &mut budget, &mut work);
             self.steward_house_for_busy(&mut snapshot, &mut budget, &mut work, changed);
             self.steward_reseeds(&snapshot, &mut budget, &mut work);
+            self.steward_rebalance(&mut snapshot, &mut budget, &mut work, changed);
             let unemployed = self.steward_idle(id, &mut snapshot, &mut budget, &mut work, changed);
             self.steward_refresh_farms(&mut snapshot, &mut budget, &mut work, changed);
             self.steward_refresh_wood(&mut snapshot, &mut budget, &mut work);
