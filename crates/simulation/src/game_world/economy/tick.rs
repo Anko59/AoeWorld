@@ -37,6 +37,12 @@ impl GameWorld {
         sink: &mut impl FnMut(&PreparedResourceDepletion<'_>) -> bool,
         probe: &mut impl FnMut(TickPhase),
     ) -> Vec<GameUnit> {
+        #[cfg(test)]
+        {
+            let units = &self.units;
+            self.collisions
+                .resync_bodies(|index| units[index].state.position);
+        }
         self.economy.stewards.automatic = true;
         let changed = self.advance_phases(sink, probe);
         self.economy.stewards.automatic = false;
@@ -46,6 +52,10 @@ impl GameWorld {
         if let Some(error) = self.route_accounting_error() {
             panic!("{error}");
         }
+        // Sweeps reject by the index's copy of each centre, not the unit's.
+        #[cfg(test)]
+        self.collisions
+            .assert_bodies(|index| self.units[index].state.position);
         changed
     }
 

@@ -7,7 +7,18 @@ use std::{
 };
 
 const CELL_LIMIT: usize = 32;
-type Cells = HashMap<u64, Vec<EntityId>, BuildHasherDefault<CellHasher>>;
+type Cells = HashMap<u64, Vec<CellBody>, BuildHasherDefault<CellHasher>>;
+
+/// A body's centre beside its id: most bodies of a queried cell are outside
+/// the query's box, and rejecting them must not touch the large unit records.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct CellBody {
+    id: EntityId,
+    at: WorldPosition,
+}
+
+/// Centres a query can answer for, inclusive: `(min x, max x, min y, max y)`.
+pub(crate) type BodyBox = (i32, i32, i32, i32);
 
 // Coordinates are internal integer keys. Mix the packed pair once instead of
 // running the general-purpose keyed byte hasher on every neighbour probe.
@@ -36,7 +47,7 @@ pub(crate) struct CollisionIndex {
     cells: [Cells; 2],
     slots: Vec<usize>,
     indices: Vec<usize>,
-    recycled: Vec<Vec<EntityId>>,
+    recycled: Vec<Vec<CellBody>>,
     overfull_cells: usize,
     maximum_radii: [i32; 2],
     land_counts: HashMap<u64, usize, BuildHasherDefault<CellHasher>>,
@@ -71,7 +82,14 @@ impl CollisionIndex {
             .map_or(u64::MAX, |&n| n as u64)
     }
 
-    pub(crate) fn insert(&mut self, id: EntityId, tile: TileCoord, naval: bool, index: usize) {
+    pub(crate) fn insert(
+        &mut self,
+        id: EntityId,
+        position: WorldPosition,
+        naval: bool,
+        index: usize,
+    ) {
+        let tile = position.tile_floor();
         let at = id.0 as usize;
         if self.slots.get(at).is_some_and(|&slot| slot != usize::MAX) {
             return;
@@ -86,7 +104,7 @@ impl CollisionIndex {
             .entry(key(tile))
             .or_insert_with(|| recycled.pop().unwrap_or_default());
         self.slots[at] = cell.len();
-        cell.push(id);
+        cell.push(CellBody { id, at: position });
         self.overfull_cells += usize::from(cell.len() == CELL_LIMIT + 1);
         if !naval {
             *self.land_counts.entry(coarse(tile)).or_default() += 1;
@@ -106,7 +124,7 @@ impl CollisionIndex {
         let Some(cell) = cells.get_mut(&key) else {
             return;
         };
-        if cell.get(slot) != Some(&id) {
+        if cell.get(slot).is_none_or(|body| body.id != id) {
             return;
         }
         if !naval {
@@ -122,7 +140,7 @@ impl CollisionIndex {
         cell.swap_remove(slot);
         self.slots[id.0 as usize] = usize::MAX;
         if let Some(displaced) = cell.get(slot) {
-            self.slots[displaced.0 as usize] = slot;
+            self.slots[displaced.id.0 as usize] = slot;
         }
         if cell.is_empty()
             && let Some(cell) = cells.remove(&key)
@@ -132,11 +150,60 @@ impl CollisionIndex {
         }
     }
 
-    pub(crate) fn relocate(&mut self, id: EntityId, from: TileCoord, to: TileCoord, naval: bool) {
+    /// Follows every step of a body, including those inside one tile.
+    pub(crate) fn relocate(
+        &mut self,
+        id: EntityId,
+        from: TileCoord,
+        position: WorldPosition,
+        naval: bool,
+    ) {
+        let to = position.tile_floor();
         if from != to {
             let index = self.unit_index(id);
             self.remove(id, from, naval);
-            self.insert(id, to, naval, index);
+            self.insert(id, position, naval, index);
+        } else if let Some(&slot) = self.slots.get(id.0 as usize)
+            && let Some(cell) = self.cells[usize::from(naval)].get_mut(&key(to))
+            && let Some(body) = cell.get_mut(slot).filter(|body| body.id == id)
+        {
+            body.at = position;
+        }
+    }
+
+    /// The indexed centre of a body, wherever its cell.
+    #[cfg(test)]
+    pub(crate) fn body_at(
+        &self,
+        id: EntityId,
+        tile: TileCoord,
+        naval: bool,
+    ) -> Option<WorldPosition> {
+        let slot = *self.slots.get(id.0 as usize)?;
+        let body = self.cells[usize::from(naval)].get(&key(tile))?.get(slot)?;
+        (body.id == id).then_some(body.at)
+    }
+
+    /// Takes the centres tests wrote straight into unit records between ticks.
+    #[cfg(test)]
+    pub(crate) fn resync_bodies(&mut self, centre: impl Fn(usize) -> WorldPosition) {
+        let indices = &self.indices;
+        for body in self.cells.iter_mut().flat_map(|c| c.values_mut()).flatten() {
+            body.at = centre(indices[body.id.0 as usize]);
+        }
+    }
+
+    /// A test tick must leave every indexed centre equal to its unit's. A test
+    /// that wrote a unit into another tile left it in its old cell: not checked.
+    #[cfg(test)]
+    pub(crate) fn assert_bodies(&self, centre: impl Fn(usize) -> WorldPosition) {
+        for (tile, cell) in self.cells.iter().flatten() {
+            for body in cell {
+                let at = centre(self.indices[body.id.0 as usize]);
+                if key(at.tile_floor()) == *tile {
+                    assert_eq!(body.at, at, "{:?}", body.id);
+                }
+            }
         }
     }
 
@@ -178,7 +245,23 @@ impl CollisionIndex {
     /// determines a decision: cells and each cell's cyclic window are canonical.
     pub(crate) fn blocked(
         &self,
+        query: (WorldPosition, i32),
+        naval: bool,
+        salt: u64,
+        work: &crate::game_world::route_scheduler::GroupWork,
+        test: impl FnMut(EntityId) -> bool,
+        overflow: impl FnMut(TileCoord) -> bool,
+    ) -> bool {
+        let everywhere = (i32::MIN, i32::MAX, i32::MIN, i32::MAX);
+        self.blocked_in(query, everywhere, naval, salt, work, test, overflow)
+    }
+
+    /// `blocked` for a query that rejects every centre outside `window`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn blocked_in(
+        &self,
         (at, reach): (WorldPosition, i32),
+        window: BodyBox,
         naval: bool,
         salt: u64,
         work: &crate::game_world::route_scheduler::GroupWork,
@@ -189,14 +272,17 @@ impl CollisionIndex {
             WorldPosition::new(at.x.saturating_sub(reach), at.y.saturating_sub(reach)).tile_floor();
         let max =
             WorldPosition::new(at.x.saturating_add(reach), at.y.saturating_add(reach)).tile_floor();
+        // One counter write per query: this runs for every mover on every worker.
+        let mut probes = 0;
         for y in min.y..=max.y {
             for x in min.x..=max.x {
-                work.collision(1);
+                probes += 1;
                 let tile = TileCoord::new(x, y);
                 let Some(cell) = self.cells[usize::from(naval)].get(&key(tile)) else {
                     continue;
                 };
                 if cell.len() > CELL_LIMIT && overflow(tile) {
+                    work.collision(probes);
                     return true;
                 }
                 let len = cell.len();
@@ -206,8 +292,15 @@ impl CollisionIndex {
                     (salt % len as u64) as usize
                 };
                 for _ in 0..len.min(CELL_LIMIT) {
-                    work.collision(1);
-                    if test(cell[at]) {
+                    probes += 1;
+                    let body = cell[at];
+                    if body.at.x >= window.0
+                        && body.at.x <= window.1
+                        && body.at.y >= window.2
+                        && body.at.y <= window.3
+                        && test(body.id)
+                    {
+                        work.collision(probes);
                         return true;
                     }
                     at += 1;
@@ -217,6 +310,7 @@ impl CollisionIndex {
                 }
             }
         }
+        work.collision(probes);
         false
     }
 }

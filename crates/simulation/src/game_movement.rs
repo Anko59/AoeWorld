@@ -67,7 +67,13 @@ impl GameWorld {
         // Pure proposals in parallel, then the shared writes in rotation
         // order; a proposal whose assumption fails runs the sequential path.
         self.begin_vision_batch();
-        self.propose_steps_into(&movers, start, &mut scratch);
+        {
+            let probe = self.planning_probe.clone();
+            let _span = probe.as_ref().and_then(|p| p.movement_span("propose"));
+            self.propose_steps_into(&movers, start, &mut scratch);
+        }
+        let probe = self.planning_probe.clone();
+        let apply_span = probe.as_ref().and_then(|p| p.movement_span("apply_loop"));
         for turn in 0..mover_count {
             self.work_approach_clearance = None;
             self.melee_traffic_clearance = None;
@@ -303,12 +309,16 @@ impl GameWorld {
             }
             self.observe_unit_progress(index);
         }
+        drop(apply_span);
         self.work_approach_clearance = None;
         self.melee_traffic_clearance = None;
         still_moving.sort_unstable();
         self.active_movers = still_moving;
         self.advance_formations(&mut changed, &mut scratch);
-        self.flush_vision_batch();
+        {
+            let _span = probe.as_ref().and_then(|p| p.movement_span("vision_flush"));
+            self.flush_vision_batch();
+        }
         self.engage_formations(&mut changed);
         self.plan_routes_ahead(&movers, start, lookahead_budget);
         scratch.movers = movers;

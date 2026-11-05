@@ -17,19 +17,27 @@ pub(crate) fn villager_speed_percent(researched: u64) -> u16 {
     villager_economy_modifiers(researched).1
 }
 
+/// Asked once per walking villager per tick, so only the few technologies with
+/// this effect are visited, in `TECH_RULES` order.
 fn villager_economy_modifiers(researched: u64) -> (u32, u16) {
-    TECH_RULES
+    static RULES: std::sync::OnceLock<Vec<(u64, u32, u16)>> = std::sync::OnceLock::new();
+    RULES
+        .get_or_init(|| {
+            TECH_RULES
+                .iter()
+                .filter_map(|r| match r.effect {
+                    TechEffect::VillagerEconomy {
+                        capacity_permyriad,
+                        speed_percent,
+                    } => Some((r.tech.bit(), capacity_permyriad, speed_percent)),
+                    _ => None,
+                })
+                .collect()
+        })
         .iter()
-        .filter(|r| researched & r.tech.bit() != 0)
-        .fold((10_000, 100), |total, r| match r.effect {
-            TechEffect::VillagerEconomy {
-                capacity_permyriad,
-                speed_percent,
-            } => (
-                total.0 * capacity_permyriad / 10_000,
-                total.1 * speed_percent / 100,
-            ),
-            _ => total,
+        .filter(|(bit, _, _)| researched & bit != 0)
+        .fold((10_000, 100), |total, (_, capacity, speed)| {
+            (total.0 * capacity / 10_000, total.1 * speed / 100)
         })
 }
 

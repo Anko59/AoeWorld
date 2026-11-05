@@ -147,7 +147,10 @@ fn a_stalled_lead_slaughters_the_sheep_where_the_shepherd_stands() {
         }
         if let Some(position) = pinned {
             let index = w.lookup[&worker];
+            let previous = w.units[index].state.position.tile_floor();
             w.units[index].state.position = position;
+            let state = w.units[index].state;
+            w.track_unit_step(worker, previous, &state);
         }
         if w.animal(sheep).is_some_and(|a| a.hp == 0) {
             slaughtered = Some(tick);

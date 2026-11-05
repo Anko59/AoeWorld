@@ -162,11 +162,16 @@ impl GameWorld {
             )
         });
         // Overflow keeps whole-tile bounds; otherwise use the half-step swept AABB.
+        let swept = maximum_radius + padding + ((dx.abs().max(dy.abs()) + 1) / 2) as i32;
         let reach = own_radius
-            + if bounds.is_some() && !self.collisions.has_overfull_cells() {
-                maximum_radius + padding + ((dx.abs().max(dy.abs()) + 1) / 2) as i32
-            } else {
+            + if self.collisions.has_overfull_cells() {
                 768 + padding
+            } else if bounds.is_some() {
+                swept
+            } else {
+                // Every body outside the swept box is rejected below, so cells
+                // beyond it hold no answer: skipping them changes no result.
+                swept.min(768 + padding)
             };
         // Melee may strike within reach while still approaching its preferred
         // point. Other traffic keeps full separation until its bounded squeeze.
@@ -217,17 +222,19 @@ impl GameWorld {
         let ghost = file.is_some();
         // Every query can reject centres outside the swept box expanded by
         // the largest observed hull; overfull-cell policy remains independent.
-        let (min_x, max_x, min_y, max_y) = {
+        let window = {
             let broad_radius = i64::from(own_radius + maximum_radius + padding);
+            let clamp = |value: i64| value.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32;
             (
-                i64::from(from.x.min(to.x)) - broad_radius,
-                i64::from(from.x.max(to.x)) + broad_radius,
-                i64::from(from.y.min(to.y)) - broad_radius,
-                i64::from(from.y.max(to.y)) + broad_radius,
+                clamp(i64::from(from.x.min(to.x)) - broad_radius),
+                clamp(i64::from(from.x.max(to.x)) + broad_radius),
+                clamp(i64::from(from.y.min(to.y)) - broad_radius),
+                clamp(i64::from(from.y.max(to.y)) + broad_radius),
             )
         };
-        !self.collisions.blocked(
+        !self.collisions.blocked_in(
             (midpoint, reach),
+            window,
             unit.kind.is_naval(),
             self.tick.0.wrapping_add(u64::from(unit.id.0)),
             &self.group_work,
@@ -236,14 +243,6 @@ impl GameWorld {
                     return false;
                 }
                 let other = &self.units[self.collisions.unit_index(id)].state;
-                if i64::from(other.position.x) < min_x
-                    || i64::from(other.position.x) > max_x
-                    || i64::from(other.position.y) < min_y
-                    || i64::from(other.position.y) > max_y
-                {
-                    return false;
-                }
-
                 if other.hp == 0 || (stationary && other.moving) {
                     return false;
                 }

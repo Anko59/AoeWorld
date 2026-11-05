@@ -22,7 +22,7 @@ fn recovery(enclose_after_acquisition: bool) {
     f.world.idle_spacing.remove(g, old.tile_floor());
     f.world
         .collisions
-        .relocate(g, old.tile_floor(), center(50, 41).tile_floor(), false);
+        .relocate(g, old.tile_floor(), center(50, 41), false);
     f.world.units[index].state.position = center(50, 41);
     f.world.units[index].state.previous_position = center(50, 41);
     f.world.idle_spacing.insert(g, center(50, 41).tile_floor());

@@ -230,7 +230,7 @@ impl GameWorld {
         self.collisions.observe_kind(unit.kind);
         self.collisions.insert(
             unit.id,
-            unit.position.tile_floor(),
+            unit.position,
             unit.kind.is_naval(),
             self.lookup[&unit.id],
         );
@@ -258,15 +258,12 @@ impl GameWorld {
         unit: &GameUnit,
     ) {
         let tile = unit.position.tile_floor();
-        // These indices store tile membership, not sub-tile positions. Every
-        // relocate is a no-op inside a tile; keep the exact wildlife mirror
-        // update below, which animals and spacing queries do observe.
-        if previous_tile != tile {
-            self.collisions
-                .relocate(id, previous_tile, tile, unit.kind.is_naval());
-            if self.idle_spacing.contains(id) {
-                self.idle_spacing.relocate(id, previous_tile, tile);
-            }
+        // The spacing index stores tile membership, not sub-tile positions. Keep
+        // the exact collision and wildlife mirrors, which queries do observe.
+        self.collisions
+            .relocate(id, previous_tile, unit.position, unit.kind.is_naval());
+        if previous_tile != tile && self.idle_spacing.contains(id) {
+            self.idle_spacing.relocate(id, previous_tile, tile);
         }
         let (old, new) = (cell_of(previous_tile), cell_of(tile));
         if old == new {

@@ -6,6 +6,30 @@ use super::{GameBuilding, GameUnit, GameWorld, UnitKind};
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+/// Multiply-rotate mix of the coordinate pair. Attack-target scans look up
+/// hundreds of tiles per call: the keyed default hasher was 2% of a late tick.
+#[derive(Default)]
+pub(super) struct TileHasher(u64);
+
+impl std::hash::Hasher for TileHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.write_i32(i32::from(*byte));
+        }
+    }
+    fn write_i32(&mut self, value: i32) {
+        self.0 =
+            (self.0.rotate_left(5) ^ u64::from(value as u32)).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+}
+
+/// Point lookups and edits only; never iterated, so its order decides nothing.
+pub(super) type TileBuildings =
+    HashMap<TileCoord, EntityId, std::hash::BuildHasherDefault<TileHasher>>;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TileVisibility {
     Unexplored,
@@ -27,7 +51,7 @@ pub(crate) struct Vision {
     players: BTreeMap<PlayerId, PlayerVision>,
     observers: observers::Observers,
     /// Building footprint tiles, for sight-gain and sight-loss events.
-    building_at_tile: HashMap<TileCoord, EntityId>,
+    building_at_tile: TileBuildings,
     building_watchers: BTreeMap<EntityId, Watched>,
     disabled: bool,
     revision: u64,

@@ -158,7 +158,23 @@ pub trait PlanningProbe: std::fmt::Debug + Send + Sync {
 /// Names of the route-planning spans given to `PlanningProbe::movement_span`:
 /// the whole fair pass (with its bookkeeping), the fast attempts, the fair
 /// searches, and planning ahead. Each is inclusive of the planner's own phases.
-pub const PLANNING_SPANS: [&str; 4] = ["plan_serve", "plan_fast", "plan_fair", "plan_ahead"];
+/// The rest split a real tick's movement: the parallel proposals, the groups,
+/// and the per-unit fallbacks and attack searches that run on the tick thread.
+pub const PLANNING_SPANS: [&str; 13] = [
+    "plan_serve",
+    "plan_fast",
+    "plan_fair",
+    "plan_ahead",
+    "propose",
+    "apply_loop",
+    "vision_flush",
+    "group_prepare",
+    "group_propose",
+    "group_apply",
+    "local_refinement",
+    "sidestep",
+    "attack_position_search",
+];
 
 pub(crate) struct PlanningMeasurement<'a>(pub(crate) &'a dyn PlanningProbe);
 impl Drop for PlanningMeasurement<'_> {
@@ -168,9 +184,17 @@ impl Drop for PlanningMeasurement<'_> {
 }
 
 /// Shared by parallel movement readers and their polylines. Never hashed or
-/// consulted by movement decisions. Relaxed addition is independent of order.
+/// consulted by movement decisions. Each worker adds to its own cache line:
+/// a single shared counter took about 300,000 contended writes a tick and made
+/// the parallel proposals take turns on it. Addition is independent of order.
 #[derive(Debug, Default)]
 pub(crate) struct GroupWork {
+    shards: [GroupWorkShard; 16],
+}
+
+#[derive(Debug, Default)]
+#[repr(align(64))]
+struct GroupWorkShard {
     members: std::sync::atomic::AtomicU64,
     path: std::sync::atomic::AtomicU64,
     path_writes: std::sync::atomic::AtomicU64,
@@ -178,27 +202,37 @@ pub(crate) struct GroupWork {
 }
 
 impl GroupWork {
+    fn shard(&self) -> &GroupWorkShard {
+        &self.shards[crate::game_world::parallel::worker_slot() % self.shards.len()]
+    }
     pub(crate) fn members(&self, count: u64) {
-        self.members
+        self.shard()
+            .members
             .fetch_add(count, std::sync::atomic::Ordering::Relaxed);
     }
     pub(crate) fn path(&self, count: u64) {
-        self.path
+        self.shard()
+            .path
             .fetch_add(count, std::sync::atomic::Ordering::Relaxed);
     }
     pub(crate) fn path_write(&self) {
-        self.path_writes
+        self.shard()
+            .path_writes
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
     pub(crate) fn collision(&self, count: u64) {
-        self.collision
+        self.shard()
+            .collision
             .fetch_add(count, std::sync::atomic::Ordering::Relaxed);
     }
     pub(crate) fn snapshot(&self, metrics: &mut RouteMetrics) {
         use std::sync::atomic::Ordering::Relaxed;
-        metrics.group_member_work = self.members.load(Relaxed);
-        metrics.group_path_work = self.path.load(Relaxed);
-        metrics.group_path_writes = self.path_writes.load(Relaxed);
-        metrics.group_collision_work = self.collision.load(Relaxed);
+        let total = |field: fn(&GroupWorkShard) -> &std::sync::atomic::AtomicU64| {
+            self.shards.iter().map(|s| field(s).load(Relaxed)).sum()
+        };
+        metrics.group_member_work = total(|s| &s.members);
+        metrics.group_path_work = total(|s| &s.path);
+        metrics.group_path_writes = total(|s| &s.path_writes);
+        metrics.group_collision_work = total(|s| &s.collision);
     }
 }

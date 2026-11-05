@@ -52,7 +52,9 @@ impl GameWorld {
                     && !task.failed_dropoffs.contains(tile)
                     && self.managed_target_allowed(id, position(*tile).unwrap_or(unit.position))
             });
-            tiles.sort_by_key(|tile| {
+            // Stable like `sort_by_key`, but a sweep of nearby bodies per tile
+            // runs once instead of once per comparison.
+            tiles.sort_by_cached_key(|tile| {
                 (
                     self.work_spot_busy(*tile, id),
                     distance_squared(from, *tile),
