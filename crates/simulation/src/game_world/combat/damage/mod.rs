@@ -67,7 +67,13 @@ impl GameWorld {
                     .filter(|a| a.hp > 0)
                     .map(|a| a.position.tile_floor())
             })?;
-        generator.tile_at(tile).map(|tile| tile.game_height_level)
+        // The prepared walk cell holds the same level at no terrain cost; a full
+        // tile composition per impact cost a battle hundreds of milliseconds.
+        generator
+            .walk_at_with_cancel(tile, &|| false)
+            .ok()
+            .flatten()
+            .map(|cell| cell.game_height_level)
     }
 
     fn apply_combat_damage(
