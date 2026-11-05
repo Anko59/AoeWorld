@@ -30,4 +30,15 @@ test("Units here lists every trainable unit and says what each one needs, with n
   await expect(cell("Archer").locator(".far-cell-note")).toHaveText(
     "Needs building",
   );
+  // Availability codes 4 and 11 of `building_ui/availability.rs`: a producer that
+  // is researching or unfinished must say so rather than show a blank note.
+  const notes = await page.evaluate(async () => {
+    const { reasons } = (await import(
+      "/navigation/production.js" as string
+    )) as {
+      reasons: string[];
+    };
+    return [reasons[4], reasons[11]];
+  });
+  expect(notes).toEqual(["Researching", "Under construction"]);
 });

@@ -5,7 +5,7 @@ import { iconGrid } from '/navigation/cockpit/grid.js';
 // ground. Rust picks the nearest eligible producers from all owned buildings, so
 // nothing here depends on the building selection. Every trainable unit is listed;
 // Rust's selection-independent report (units()) says which one is ready and why not.
-const reasons = ['', '', 'Feudal Age', '', '', 'Busy', 'Food', 'Wood', 'Gold', 'Stone', 'Queue full', '', 'Needs building', '', 'Castle Age', 'Unique', 'Imperial Age'];
+export const reasons = ['', '', 'Feudal Age', '', 'Researching', 'Busy', 'Food', 'Wood', 'Gold', 'Stone', 'Queue full', 'Under construction', 'Needs building', '', 'Castle Age', 'Unique', 'Imperial Age'];
 export function initProduction() {
   const form = document.createElement('section');
   form.id = 'units-here';
