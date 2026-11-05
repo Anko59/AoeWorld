@@ -285,10 +285,10 @@ fn a_stone_fort_lets_its_owner_through_the_gate_and_keeps_the_enemy_out() {
     let enemy = world.spawn_militia(PlayerId(1), outside).unwrap();
     world.issue_move(enemy, front).unwrap();
     advance(&mut world, 400);
-    assert!(
-        world.issue_move(enemy, inside).is_err(),
-        "no route leads the enemy through a closed gate"
-    );
+    // Route plans see every completed gate as open ground (owners must be
+    // routed to theirs); a closed gate stops the enemy by collision instead.
+    let _ = world.issue_move(enemy, inside);
+    advance(&mut world, 400);
     let enemy_at = world.unit(enemy).unwrap().position.tile_floor();
     assert!(enemy_at.y >= 108, "the enemy stayed outside: {enemy_at:?}");
 }

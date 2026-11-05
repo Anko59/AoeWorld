@@ -12,6 +12,7 @@ mod preparation;
 struct UniformNavigation<'a> {
     config: WorldConfig,
     blocked: &'a BTreeSet<TileCoord>,
+    world: &'a GameWorld,
 }
 
 impl UniformNavigation<'_> {
@@ -20,7 +21,7 @@ impl UniformNavigation<'_> {
             && tile.y >= 0
             && tile.x < self.config.width_tiles
             && tile.y < self.config.height_tiles
-            && !self.blocked.contains(&tile)
+            && (!self.blocked.contains(&tile) || self.world.routes_through_gate(tile))
     }
 }
 
@@ -126,6 +127,16 @@ impl GameWorld {
         Ok(())
     }
 
+    /// A completed gate is open ground to every route plan: its owner's units
+    /// open it on approach, and a closed gate stops anyone else by collision.
+    /// Routes cannot know the mover's player (the plan cache is shared), and
+    /// planning around closed gates left owners unable to reach their gates.
+    pub(crate) fn routes_through_gate(&self, tile: TileCoord) -> bool {
+        self.building_at_tile(tile)
+            .and_then(|id| self.building(id))
+            .is_some_and(|b| b.kind.is_gate() && b.is_complete())
+    }
+
     pub(crate) fn has_route_navigation(&self) -> bool {
         self.terrain.has_map_navigation() || !self.economy.blocked_tiles.is_empty()
     }
@@ -160,6 +171,7 @@ impl GameWorld {
                 &UniformNavigation {
                     config: self.config,
                     blocked: &self.economy.blocked_tiles,
+                    world: self,
                 },
                 &ResourceOverlay::default(),
                 budget,
@@ -199,6 +211,7 @@ impl GameWorld {
                 &UniformNavigation {
                     config: self.config,
                     blocked: &self.economy.blocked_tiles,
+                    world: self,
                 },
                 &ResourceOverlay::default(),
                 budget,

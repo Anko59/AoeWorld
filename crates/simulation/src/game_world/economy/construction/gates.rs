@@ -1,5 +1,7 @@
 //! A completed (palisade or stone) gate opens when an owned unit approaches, and cannot close
-//! through a living unit. Its one supported orientation is four by one tiles.
+//! through a living unit. It is four by one tiles along a wall line in either axis.
+//! Route plans treat a completed gate as open ground (see `routes_through_gate`);
+//! only movement collision (`blocked_tiles`) closes it.
 use crate::{GameWorld, Terrain};
 use aoe_core::{TileCoord, TileRect};
 
@@ -11,6 +13,12 @@ impl GameWorld {
             .map(|b| (b.id, b.player, b.footprint))
             .collect();
         for (id, owner, rect) in gates {
+            if let Terrain::Map { overlay, .. } = &mut self.terrain
+                && overlay.blocks_tile(rect.min)
+            {
+                overlay.remove_footprint(rect);
+                self.collision_opened(rect);
+            }
             let query = TileRect::new(
                 TileCoord::new((rect.min.x - 2).max(0), (rect.min.y - 2).max(0)),
                 TileCoord::new(
@@ -25,13 +33,6 @@ impl GameWorld {
                     .any(|u| u.hp > 0 && rect.contains(u.position.tile_floor()));
             if open == self.economy.open_gates.contains(&id) {
                 continue;
-            }
-            if let Terrain::Map { overlay, .. } = &mut self.terrain {
-                if open {
-                    overlay.remove_footprint(rect);
-                } else if overlay.add_footprint(rect).is_err() {
-                    continue;
-                }
             }
             for y in rect.min.y..rect.max.y {
                 for x in rect.min.x..rect.max.x {
