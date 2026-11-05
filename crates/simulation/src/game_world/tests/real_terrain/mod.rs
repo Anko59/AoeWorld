@@ -3,6 +3,7 @@ use super::far_orders::center;
 use super::group_baseline::forest;
 use super::*;
 
+mod armies;
 mod bridge_march;
 mod budget;
 mod crowded;
