@@ -365,3 +365,40 @@ fn the_stall_window_fits_the_history_of_a_unit_updating_every_tick() {
         assert_eq!(p.travel_over(old.id, window), Some(0.0), "tick {tick}");
     }
 }
+
+#[wasm_bindgen_test]
+fn a_unit_shoved_back_and_forth_makes_no_progress() {
+    let tile = aoe_core::FIXED_SUBUNITS_PER_TILE;
+    let mut p = Presentation::default();
+    p.reset(20);
+    let mut old = state(0, true);
+    p.remember(None, &old, 10);
+    // Each tick it moves a tenth of a tile, alternately east and west.
+    for tick in 11..=17 {
+        let next = state(if tick % 2 == 1 { tile / 10 } else { 0 }, true);
+        p.remember(Some(&old), &next, tick);
+        old = next;
+    }
+    p.tick = 16.0;
+    let window = crate::unit_visuals::stall_window_ticks(20.0);
+    let path = p.travel_over(old.id, window).unwrap();
+    assert!(path > 0.3, "it did cover ground: {path}");
+    let progress = p.progress_over(old.id, window).unwrap();
+    assert!(progress < 0.11, "{progress}");
+    // A straight walk makes all of its path in progress.
+    let mut q = Presentation::default();
+    q.reset(20);
+    let mut old = state(0, true);
+    q.remember(None, &old, 10);
+    for tick in 11..=17 {
+        let next = state(100 * (tick as i32 - 10), true);
+        q.remember(Some(&old), &next, tick);
+        old = next;
+    }
+    q.tick = 16.0;
+    let walked = q.progress_over(old.id, window).unwrap();
+    assert!(
+        (walked - 4.0 * 100.0 / f64::from(tile)).abs() < 1e-6,
+        "{walked}"
+    );
+}

@@ -210,6 +210,20 @@ impl Presentation {
         Some(travel_at(history, self.tick) - travel_at(history, self.tick - ticks))
     }
 
+    /// The tiles a unit has got ahead over the last `ticks` ticks: the straight
+    /// distance from where it was to where it is, so a unit shoved back and
+    /// forth by a jam covers path but makes no progress. `None` while its
+    /// history does not reach back that far.
+    pub(crate) fn progress_over(&self, id: EntityId, ticks: f64) -> Option<f64> {
+        let history = self.history.get(&id)?;
+        if (history.front()?.tick as f64) > self.tick - ticks {
+            return None;
+        }
+        let [x0, y0] = position_at(history, self.tick - ticks);
+        let [x1, y1] = position_at(history, self.tick);
+        Some((x1 - x0).hypot(y1 - y0))
+    }
+
     /// The drawn position and the tiles the unit has actually moved by then.
     #[inline(never)]
     pub(crate) fn pose(&self, state: GameplayUnitState) -> ([f64; 2], f64) {
@@ -262,6 +276,26 @@ fn travel_at(history: &VecDeque<Sample>, tick: f64) -> f64 {
         previous = Some(*next);
     }
     history.back().map_or(0.0, |last| f64::from(last.travel))
+}
+
+/// Where a unit was at `tick`, in tiles, interpolated between its samples and
+/// held at the first or last one outside them.
+fn position_at(history: &VecDeque<Sample>, tick: f64) -> [f64; 2] {
+    let mut previous = None::<Sample>;
+    for next in history {
+        if next.tick as f64 >= tick {
+            let Some(previous) = previous else {
+                return next.position.as_tiles();
+            };
+            let amount = (tick - previous.tick as f64) / (next.tick - previous.tick) as f64;
+            let (a, b) = (previous.position.as_tiles(), next.position.as_tiles());
+            return [a[0] + (b[0] - a[0]) * amount, a[1] + (b[1] - a[1]) * amount];
+        }
+        previous = Some(*next);
+    }
+    history
+        .back()
+        .map_or([0.0; 2], |last| last.position.as_tiles())
 }
 
 fn tiles_between(left: aoe_core::WorldPosition, right: aoe_core::WorldPosition) -> f32 {
