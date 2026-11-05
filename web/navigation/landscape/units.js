@@ -73,9 +73,11 @@ export function drawUnits(context, records, project, width, height, scale, space
     if (!(sx >= 0 && sy >= 0 && sx < width && sy < height)) continue;
     const px = sx * scale, py = sy * scale, owner = space.at(px, py);
     if (owner !== undefined) {
+      // Only the place owner's own units fold into its plaque. A visible enemy
+      // (or any other owner) stays its own marked group beside the place.
       const home = owner >= 0 ? place(owner) : null;
-      if (home) home[kind === 2 ? 'workers' : 'soldiers']++;
-      continue;
+      if (!home) continue;
+      if (home.colour === records[at + 4]) { home[kind === 2 ? 'workers' : 'soldiers']++; continue; }
     }
     const cell = (Math.floor(px / CELL) + 64) * 4096 + Math.floor(py / CELL) + 64, key = cell * 4096 + (records[at + 3] & 4095);
     let bin = bins.get(key);
@@ -84,18 +86,30 @@ export function drawUnits(context, records, project, width, height, scale, space
     bin.world[0] += records[at + 1]; bin.world[1] += records[at + 2];
   }
   const picks = [], u = 1 / scale;
-  for (const bin of [...bins.values()].sort((a, b) => b.soldiers - a.soldiers || a.cx - b.cx || a.cy - b.cy)) {
+  // Bin centres are CSS pixels, like the shared occupancy grid; drawing converts to canvas pixels.
+  // Hostile groups claim space first and never vanish: a group that finds its cell taken
+  // (by a place, HUD or another owner's group) steps to the nearest free neighbour, and
+  // a hostile group with no free neighbour is still drawn where it stands.
+  const steps = [[0, 0]];
+  for (const ring of [1, 2]) for (const dy of [0, -1, 1, -2, 2]) for (const dx of [0, -1, 1, -2, 2]) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) === ring) steps.push([dx * CELL, dy * CELL]);
+  }
+  const order = [...bins.values()].sort((a, b) => (b.colour !== mine) - (a.colour !== mine) || b.soldiers - a.soldiers || a.cx - b.cx || a.cy - b.cy);
+  for (const bin of order) {
     const friendly = bin.colour === mine, S = (friendly ? 22 : 17) * u, V = (friendly ? 18 : 14) * u;
-    const both = bin.soldiers > 0 && bin.workers > 0, half = (both ? 22 : 12) ;
-    if (!space.free(bin.cx * scale - half, bin.cy * scale - 12, bin.cx * scale + half, bin.cy * scale + 16)) continue;
-    space.take(bin.cx * scale - half, bin.cy * scale - 12, bin.cx * scale + half, bin.cy * scale + 16, -2);
+    const both = bin.soldiers > 0 && bin.workers > 0, half = (both ? 22 : 12);
+    const rect = ([dx, dy]) => [bin.cx + dx - half, bin.cy + dy - 12, bin.cx + dx + half, bin.cy + dy + 16];
+    let step = steps.find(s => space.free(...rect(s)));
+    if (!step) { if (friendly) continue; step = steps[0]; }
+    else space.take(...rect(step), -2);
+    bin.cx += step[0]; bin.cy += step[1];
     const colour = actorColour(bin.colour);
     context.globalAlpha = friendly ? 1 : .82;
     const X = bin.cx * u, Y = bin.cy * u, sx = X - (both ? 10 * u : 0), vx = X + (both ? 11 * u : 0);
     if (bin.soldiers) { drawShield(context, sx, Y, S, colour, !friendly); if (bin.soldiers > 1) drawCount(context, sx, Y + S * .78, String(bin.soldiers), S); }
     if (bin.workers) { drawVillagers(context, vx, Y + (both ? 2 * u : 0), V, colour, !friendly); if (bin.workers > 1) drawCount(context, vx, Y + V * .95, String(bin.workers), V * 1.1); }
     context.globalAlpha = 1;
-    picks.push({ x: X, y: Y, count: bin.n, units: bin.n, workers: bin.workers, world: [bin.world[0] / bin.n, bin.world[1] / bin.n] });
+    picks.push({ x: X, y: Y, count: bin.n, units: bin.n, workers: bin.workers, hostile: !friendly, world: [bin.world[0] / bin.n, bin.world[1] / bin.n] });
   }
   return picks;
 }

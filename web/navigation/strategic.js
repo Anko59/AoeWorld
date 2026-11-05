@@ -128,7 +128,7 @@ export function initStrategic(fog, actors) {
     // surface until the detailed renderer presents a complete replacement.
     scene.dataset.strategicCovered = 'true';
     canvas.dataset.redraws = String(++redraws);
-    canvas.dataset.picks = JSON.stringify(picks.map(p => ({ x: p.x * scale, y: p.y * scale, count: p.count })));
+    canvas.dataset.picks = JSON.stringify(picks.map(p => ({ x: p.x * scale, y: p.y * scale, count: p.count, hostile: p.hostile })));
     canvas.dataset.frameMs = (performance.now() - started).toFixed(3);
     return true;
   }
