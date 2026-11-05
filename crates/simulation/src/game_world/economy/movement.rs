@@ -172,7 +172,7 @@ impl GameWorld {
             })
     }
 
-    pub(crate) fn movement_speed(&self, kind: UnitKind, player: aoe_core::PlayerId) -> (u64, u64) {
+    pub fn movement_speed(&self, kind: UnitKind, player: aoe_core::PlayerId) -> (u64, u64) {
         self.movement_speed_with(kind, self.player_economy(player))
     }
 

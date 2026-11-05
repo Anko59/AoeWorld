@@ -14,6 +14,37 @@ const RETRY_EVERY: u64 = 256;
 pub(super) const MAX_RETRIES: u8 = 8;
 
 impl GameWorld {
+    /// Route and member state of a unit, for local march diagnosis.
+    pub fn formation_member_status(&self, id: EntityId) -> String {
+        let Some(unit) = self.lookup.get(&id).map(|&index| &self.units[index]) else {
+            return String::new();
+        };
+        let group = unit
+            .formation
+            .and_then(|leader| self.formations.get(&leader));
+        let member = group.and_then(|g| g.member_index(id).map(|at| &g.members[at]));
+        format!(
+            "at {:?} since {} of {} planner {} order {:?} route {} obstruction {:?} member {:?}",
+            unit.state.position,
+            unit.planning_since,
+            self.tick.0,
+            unit.planner.is_some(),
+            unit.order.map(|o| (o.waypoint, o.destination)),
+            unit.route.len(),
+            unit.obstruction.map(|o| (o.blocked, o.pass_until)),
+            member.map(|m| (
+                m.goal,
+                m.target,
+                m.arrived,
+                m.detached,
+                m.blocked,
+                m.stalled,
+                m.retries,
+                m.following_corridor
+            )),
+        )
+    }
+
     pub(super) fn reset_group_detours(&mut self, group: &mut Group) {
         for member in group.members.iter_mut().filter(|member| member.detached) {
             let index = self.lookup[&member.id];

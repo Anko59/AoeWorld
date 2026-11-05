@@ -3,8 +3,10 @@ use aoe_core::TileCoord;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
+mod field;
 mod hierarchy;
 mod planner;
+pub use field::{WalkingField, walking_field};
 pub(crate) use hierarchy::PortalCache;
 pub use hierarchy::{
     DEFAULT_HIERARCHY_EXPANSIONS, HierarchicalOutcome, hierarchical_route,
