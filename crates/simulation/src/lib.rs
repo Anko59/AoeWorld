@@ -34,7 +34,7 @@ pub use game_world::{
 pub use game_world::{
     Age, BUILDING_COMBAT, BUILDING_RULES, BUILDINGS_PER_PLAYER, BuildingAttack, BuildingCombat,
     BuildingKind, BuildingRules, CORPSE_SECONDS, CarriedResource, CombatStats, CombatTelemetry,
-    ConstructionState, DYING_SECONDS, DamageKind, EconomyError, FEUDAL_BUILDINGS, Facing,
+    ConstructionState, DYING_SECONDS, DamageKind, EconomyError, FEUDAL_BUILDINGS, FISHING_SHIP_SPEED_HUNDREDTHS, Facing,
     GameBuilding, GameUnit, GameWorld, GameWorldError, GarrisonedUnit, GeneralState, GeneralStatus,
     GeneralWork, HitRecord, MARKET_RULES, MAX_BUILD_GROUP, MAX_WALL_SEGMENTS, MarketPrices,
     MovementOrder, PLANNING_SPANS, PlanningProbe, PlayerEconomy, PreparedResourceDepletion,

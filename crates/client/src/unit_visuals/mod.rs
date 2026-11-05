@@ -366,17 +366,31 @@ pub(crate) fn packed_frame(
     }
 }
 
-/// Tiles per second at which a walk animation plays at its native rate.
-/// Cavalry and ships move faster than foot soldiers (see `aoe_map` speeds and
-/// the fishing ship's 1.26 tiles per second); other units use the villager's.
-fn native_walk_speed(kind: UnitKind) -> f64 {
-    if kind.is_cavalry() {
-        f64::from(aoe_map::CAVALRY_METERS_PER_SECOND) / f64::from(aoe_map::GAME_TILE_METERS)
-    } else if kind.is_naval() {
-        1.26
-    } else {
-        0.8
+/// Tiles per second at which a walk animation plays at its native rate: the
+/// speed the simulation moves that kind of unit before any research, age or
+/// road bonus (the villager's from `VILLAGE_RULES`, the Fishing Ship's own
+/// constant, every other unit's from the combat table).
+pub(crate) fn native_walk_speed(kind: UnitKind) -> f64 {
+    if kind == UnitKind::FishingShip {
+        return f64::from(aoe_simulation::FISHING_SHIP_SPEED_HUNDREDTHS) / 100.0;
     }
+    match crate::building_ui::content::rules().units[kind as usize]
+        .combat
+        .speed_hundredths
+    {
+        Some(hundredths) => f64::from(hundredths) / 100.0,
+        None => {
+            let rules = aoe_simulation::VILLAGE_RULES;
+            f64::from(rules.villager_speed_numerator) / f64::from(rules.villager_speed_denominator)
+        }
+    }
+}
+
+/// Whether a unit flagged as moving has in fact stood still: it covered under
+/// a fifth of its native stride over `seconds`. Such a unit is drawn at rest
+/// rather than frozen in mid-step.
+pub(crate) fn is_stalled(kind: UnitKind, travelled: f64, seconds: f64) -> bool {
+    travelled < native_walk_speed(kind) * seconds * 0.2
 }
 
 /// The walk animation clock, in milliseconds, of a unit that has moved

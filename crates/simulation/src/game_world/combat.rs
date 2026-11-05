@@ -37,8 +37,8 @@ pub use military::{apply_research_stats, researched_stats};
 pub use projectiles::{Projectile, ProjectileKind};
 pub(super) use table::age_armour;
 pub use table::{
-    BUILDING_COMBAT, BuildingAttack, BuildingCombat, DamageKind, UNIT_COMBAT, UnitCombat, UnitCost,
-    UnitTraining, building_combat, damage_dealt, unit_combat,
+    BUILDING_COMBAT, BuildingAttack, BuildingCombat, DamageKind, FISHING_SHIP_SPEED_HUNDREDTHS,
+    UNIT_COMBAT, UnitCombat, UnitCost, UnitTraining, building_combat, damage_dealt, unit_combat,
 };
 
 /// A melee attacker reaches targets within one tile (centre to edge).

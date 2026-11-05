@@ -269,10 +269,14 @@ pub(in super::super) fn units(
         })
         .map(|unit| {
             let (position, travelled) = client.presentation.pose(*unit);
+            let at_rest = unit.moving && actors::stalled(client, unit);
+            let mut shown = *unit;
+            shown.moving &= !at_rest;
+            let unit = &shown;
             let animal = unit
                 .hunt_target
                 .and_then(|id| client.village.animals.iter().find(|a| a.id == id));
-            let pose = if crate::unit_visuals::walks_as_villager(unit, animal) {
+            let pose = if !at_rest && crate::unit_visuals::walks_as_villager(unit, animal) {
                 crate::unit_visuals::Pose::VillagerWalk
             } else {
                 crate::unit_visuals::lifecycle_pose(

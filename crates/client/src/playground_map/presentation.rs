@@ -200,6 +200,16 @@ impl Presentation {
         self.pose(state).0
     }
 
+    /// The tiles a unit has moved over the last `ticks` ticks of presentation
+    /// time, or `None` while its history does not reach back that far.
+    pub(crate) fn travel_over(&self, id: EntityId, ticks: f64) -> Option<f64> {
+        let history = self.history.get(&id)?;
+        if (history.front()?.tick as f64) > self.tick - ticks {
+            return None;
+        }
+        Some(travel_at(history, self.tick) - travel_at(history, self.tick - ticks))
+    }
+
     /// The drawn position and the tiles the unit has actually moved by then.
     #[inline(never)]
     pub(crate) fn pose(&self, state: GameplayUnitState) -> ([f64; 2], f64) {
@@ -234,6 +244,24 @@ impl Presentation {
         let travel = history.back().map_or(0.0, |last| f64::from(last.travel));
         (state.position.as_tiles(), travel)
     }
+}
+
+/// The tiles a unit had moved at `tick`, interpolated between its samples and
+/// held at the first or last one outside them.
+fn travel_at(history: &VecDeque<Sample>, tick: f64) -> f64 {
+    let mut previous = None::<Sample>;
+    for next in history {
+        if next.tick as f64 >= tick {
+            let Some(previous) = previous else {
+                return f64::from(next.travel);
+            };
+            let amount = (tick - previous.tick as f64) / (next.tick - previous.tick) as f64;
+            return f64::from(previous.travel)
+                + (f64::from(next.travel) - f64::from(previous.travel)) * amount;
+        }
+        previous = Some(*next);
+    }
+    history.back().map_or(0.0, |last| f64::from(last.travel))
 }
 
 fn tiles_between(left: aoe_core::WorldPosition, right: aoe_core::WorldPosition) -> f32 {

@@ -1,6 +1,20 @@
 //! Actor timelines and native headings, shared by the rendered scene.
 use super::*;
 
+/// Whether `unit` has covered under a fifth of its native stride over the last
+/// few ticks (about 0.6 s, at most six samples of history).
+pub(super) fn stalled(client: &Client, unit: &aoe_protocol::GameplayUnitState) -> bool {
+    let hz = f64::from(client.config.tick_hz.max(1));
+    let ticks = (hz * 0.6).clamp(2.0, 6.0);
+    unit.hp > 0
+        && client
+            .presentation
+            .travel_over(unit.id, ticks)
+            .is_some_and(|travelled| {
+                crate::unit_visuals::is_stalled(unit.kind, travelled, ticks / hz)
+            })
+}
+
 pub(super) fn animation_frame(
     client: &Client,
     unit: &aoe_protocol::GameplayUnitState,

@@ -319,3 +319,29 @@ fn travel_counts_distance_actually_moved_and_ignores_stalls_and_jumps() {
     let (_, travelled) = p.pose(start);
     assert!((travelled - 0.25).abs() < 1e-6, "{travelled}");
 }
+
+#[wasm_bindgen_test]
+fn travel_over_a_window_tells_a_blocked_unit_from_a_walking_one() {
+    let tile = aoe_core::FIXED_SUBUNITS_PER_TILE;
+    let history = |step: i32| {
+        let mut p = Presentation::default();
+        p.reset(20);
+        let mut old = state(0, true);
+        p.remember(None, &old, 10);
+        for tick in 11..=16 {
+            let next = state(step * (tick as i32 - 10), true);
+            p.remember(Some(&old), &next, tick);
+            old = next;
+        }
+        p.tick = 16.0;
+        (p, old)
+    };
+    let (walking, unit) = history(100);
+    let moved = walking.travel_over(unit.id, 4.0).unwrap();
+    assert!((moved - 400.0 / f64::from(tile)).abs() < 1e-6, "{moved}");
+    let (blocked, unit) = history(0);
+    assert_eq!(blocked.travel_over(unit.id, 4.0), Some(0.0));
+    // Not enough history to say: a unit that has just appeared is not stalled.
+    assert_eq!(blocked.travel_over(unit.id, 12.0), None);
+    assert_eq!(blocked.travel_over(EntityId(99), 4.0), None);
+}

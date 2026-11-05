@@ -1,4 +1,4 @@
-use super::{shot_clock, walk_clock};
+use super::{is_stalled, native_walk_speed, shot_clock, walk_clock};
 use aoe_protocol::UnitKind;
 use wasm_bindgen_test::wasm_bindgen_test;
 
@@ -96,4 +96,31 @@ fn walk_animation_follows_distance_moved_not_time_or_tick_rate() {
     assert!(walk_clock(UnitKind::Knight, 1.0) < walk_clock(UnitKind::Villager, 1.0));
     // Moving backwards (a corrected position) never rewinds below zero.
     assert_eq!(walk_clock(UnitKind::Villager, -1.0), 0.0);
+}
+
+#[wasm_bindgen_test]
+fn native_walk_speeds_are_the_simulations_own() {
+    for (kind, tiles_per_second) in [
+        (UnitKind::Villager, 0.8),
+        (UnitKind::Scout, 1.2),
+        (UnitKind::FishingShip, 1.26),
+    ] {
+        assert!(
+            (native_walk_speed(kind) - tiles_per_second).abs() < 1e-9,
+            "{kind:?}"
+        );
+    }
+    // Every unit kind has a positive speed, so the animation clock is finite.
+    for kind in UnitKind::ALL {
+        assert!(native_walk_speed(kind) > 0.0, "{kind:?}");
+    }
+}
+
+#[wasm_bindgen_test]
+fn a_unit_under_a_fifth_of_its_stride_counts_as_standing_still() {
+    // Over 0.6 s a villager strides 0.48 tiles at its native speed.
+    assert!(is_stalled(UnitKind::Villager, 0.0, 0.6));
+    assert!(is_stalled(UnitKind::Villager, 0.09, 0.6));
+    assert!(!is_stalled(UnitKind::Villager, 0.1, 0.6));
+    assert!(!is_stalled(UnitKind::Villager, 0.48, 0.6));
 }
