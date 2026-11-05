@@ -5,5 +5,6 @@
 use super::*;
 
 mod march;
+mod mounted;
 mod scene;
 mod table;
