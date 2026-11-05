@@ -1,4 +1,5 @@
 import { icon, entityIcon, trainingKinds } from '/interface/ui-art.js';
+import { autoFit } from '/interface/selection-grid.js';
 
 export function initGarrison() {
   const grid=document.getElementById('command-grid');
@@ -11,6 +12,7 @@ export function initGarrison() {
   const panel=document.createElement('div');panel.id='garrison-panel';panel.hidden=true;
   panel.innerHTML='<b>Garrison: <span id="garrison-count"></span></b><div id="garrison-units"></div>';
   document.getElementById('selection-content').append(panel);
+  autoFit(document.getElementById('garrison-units'),{high:28,low:22});
   let previous='';
   window.aoeGarrison={update(values){
     const capacity=values[0], count=(values.length-2)/4;
