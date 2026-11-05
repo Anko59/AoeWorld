@@ -178,3 +178,29 @@ fn showcase_trains_claims_marches_and_defeats_the_enemy_group() {
         w.general_status(g)
     );
 }
+
+#[test]
+fn a_squad_whose_route_wait_expires_is_ordered_again_by_its_general() {
+    let (mut w, _) = setup();
+    let ids: Vec<_> = (0..3)
+        .map(|n| soldier(&mut w, UnitKind::Militia, 100, 100 + n))
+        .collect();
+    let g = soldier(&mut w, UnitKind::General, 103, 103);
+    w.issue_move(g, at(145, 103)).unwrap();
+    decide(&mut w);
+    let carrier = w.units[w.lookup[&ids[0]]].formation.expect("squad group");
+    assert!(ids.iter().all(|&id| w.formation(id).is_some()));
+    let index = w.lookup[&carrier];
+    w.end_waiting_route(index, carrier, false, &mut Vec::new());
+    for &id in &ids {
+        assert!(w.formation(id).is_none(), "no group steers {id:?}");
+        assert_eq!(w.unit(id).unwrap().task, crate::UnitTask::Idle);
+        assert!(w.movement_failure(id).is_some(), "failure is visible");
+    }
+    assert!(!w.formations.contains_key(&carrier));
+    decide(&mut w);
+    assert!(
+        ids.iter().all(|&id| w.formation(id).is_some()),
+        "the General re-issues the squad's march"
+    );
+}

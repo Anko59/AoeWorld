@@ -89,7 +89,7 @@ impl GameWorld {
     /// Gives up on a waiting unit's route: not proven unreachable, but out of
     /// its bound. With `remember` a re-sent order from the same tile is
     /// refused for a while rather than taking a slot again at the queue's back.
-    pub(super) fn end_waiting_route(
+    pub(crate) fn end_waiting_route(
         &mut self,
         index: usize,
         id: EntityId,
@@ -99,10 +99,52 @@ impl GameWorld {
         if remember && let Some(order) = self.units[index].order {
             self.remember_unreachable(index, order.target_tile);
         }
+        let group = self.end_group_of(index);
         self.stop_route(index, Some(GameWorldError::PathBudgetExceeded));
+        self.fail_group_members(&group);
         if let Ok(at) = self.active_movers.binary_search(&id) {
             self.active_movers.remove(at);
         }
         changed.push(id);
+    }
+
+    /// A formation's carrier owns the group's only route, so its failure is
+    /// the group's. Removes the group and returns the members besides the
+    /// carrier, which the caller stops once the carrier is stopped.
+    fn end_group_of(&mut self, index: usize) -> Vec<EntityId> {
+        let id = self.units[index].state.id;
+        // A detached member's own detour is its own: rejoin handles its end.
+        let Some(leader) = self.units[index].formation.filter(|&leader| leader == id) else {
+            return Vec::new();
+        };
+        let mut ids = self.dissolve_group(leader);
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+        for &member in &ids {
+            if let Some(&at) = self.lookup.get(&member) {
+                self.units[at].formation = None;
+            }
+        }
+        // A General's squad must not stay marked as routed: its next decision
+        // orders the march again (bounded by the unreachable memory).
+        for &member in &ids {
+            let general = self.general_controller(member).unwrap_or(member);
+            if let Some(army) = self.economy.generals.armies.get_mut(&general) {
+                army.routed = None;
+            }
+        }
+        ids.retain(|&member| member != id);
+        ids
+    }
+
+    fn fail_group_members(&mut self, members: &[EntityId]) {
+        for &member in members {
+            let Some(&at) = self.lookup.get(&member) else {
+                continue;
+            };
+            self.stop_member(at);
+            self.units[at].last_movement_error = Some(GameWorldError::PathBudgetExceeded);
+        }
     }
 }

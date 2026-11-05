@@ -219,3 +219,47 @@ fn an_attempt_with_no_slot_for_its_frontier_is_cut_short() {
         u64::from(crate::game_world::route_scheduler::NO_SLOT_ROUTE_WORK)
     );
 }
+
+/// When a group's route wait expires, the whole group's move fails: the
+/// members must not keep steering toward their slots without a carrier.
+#[test]
+fn an_expired_group_route_ends_the_move_of_every_member() {
+    let mut world = sealed_near_world();
+    let out = RADIUS + 1;
+    let units = (0..6)
+        .map(|n| {
+            world
+                .spawn_unit(PlayerId(3), tile_position(CX - 3 + n, CY - out - 2))
+                .expect("unit")
+        })
+        .collect::<Vec<_>>();
+    world
+        .issue_formation_move(
+            PlayerId(3),
+            &units,
+            aoe_core::Formation::Line,
+            tile_position(CX, CY),
+            false,
+            false,
+        )
+        .expect("accepted");
+    // The carrier searches the sealed ground; its wait runs out before any
+    // member is blocked long enough to detach with a route of its own.
+    for _ in 0..40 {
+        world.advance();
+    }
+    let carrier = *world.formations.keys().next().expect("group");
+    assert!(world.unit(carrier).expect("unit").planning, "carrier waits");
+    world.tick.0 += NEAR_ANSWER_TICKS;
+    for _ in 0..5 {
+        world.advance();
+    }
+    assert!(world.formations.is_empty(), "no group state steers them");
+    for id in units {
+        let unit = world.unit(id).expect("unit");
+        assert!(world.movement_order(id).is_none());
+        assert_eq!(unit.task, crate::UnitTask::Idle, "{id:?}");
+        assert!(!unit.moving && !unit.planning, "{id:?}");
+        assert!(world.units[world.lookup[&id]].formation.is_none());
+    }
+}

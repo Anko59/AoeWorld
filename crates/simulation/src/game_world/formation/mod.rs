@@ -241,8 +241,17 @@ impl GameWorld {
         }
     }
 
+    /// Deletes the group led by `leader` and returns its members' ids. Nothing
+    /// steers them afterwards; the caller stops each one.
+    pub(crate) fn dissolve_group(&mut self, leader: EntityId) -> Vec<EntityId> {
+        self.formations
+            .remove(&leader)
+            .map(|group| group.members.iter().map(|member| member.id).collect())
+            .unwrap_or_default()
+    }
+
     /// What every released member gets: no route, no queue, no task.
-    fn stop_member(&mut self, index: usize) {
+    pub(crate) fn stop_member(&mut self, index: usize) {
         let id = self.units[index].state.id;
         self.stop_movement(index);
         self.move_queues.remove(&id);
