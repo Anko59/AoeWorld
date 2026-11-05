@@ -208,7 +208,8 @@ impl GameWorld {
         }
         if kind == UnitKind::FishingShip {
             return (
-                126 * FIXED_SUBUNITS_PER_TILE as u64,
+                u64::from(super::super::combat::FISHING_SHIP_SPEED_HUNDREDTHS)
+                    * FIXED_SUBUNITS_PER_TILE as u64,
                 100 * u64::from(self.config.tick_hz),
             );
         }

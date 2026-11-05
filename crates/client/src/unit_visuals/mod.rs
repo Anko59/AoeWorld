@@ -1,11 +1,13 @@
 //! Pure choices from authoritative state; no client damage or lifetime timers.
 use crate::building_ui::content::sprites;
+mod rest;
 mod roster;
 pub(crate) use aoe_assets::catalog::units::Pose;
 use aoe_core::FIXED_SUBUNITS_PER_TILE;
 use aoe_protocol::{
     AnimalKind, AnimalState, AnimalTask, GameplayUnitState, ResourceKind, UnitKind, UnitTask,
 };
+pub(crate) use rest::{is_stalled, rest_pose, stall_window_ticks};
 use roster::military_poses;
 
 pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> Pose {
@@ -364,6 +366,34 @@ pub(crate) fn packed_frame(
     } else {
         u16::from(facing % 8) | (u16::from(phase) << 3)
     }
+}
+
+/// Tiles per second at which a walk animation plays at its native rate: the
+/// speed the simulation moves that kind of unit before any research, age or
+/// road bonus (the villager's from `VILLAGE_RULES`, the Fishing Ship's own
+/// constant, every other unit's from the combat table).
+pub(crate) fn native_walk_speed(kind: UnitKind) -> f64 {
+    if kind == UnitKind::FishingShip {
+        return f64::from(aoe_simulation::FISHING_SHIP_SPEED_HUNDREDTHS) / 100.0;
+    }
+    match crate::building_ui::content::rules().units[kind as usize]
+        .combat
+        .speed_hundredths
+    {
+        Some(hundredths) => f64::from(hundredths) / 100.0,
+        None => {
+            let rules = aoe_simulation::VILLAGE_RULES;
+            f64::from(rules.villager_speed_numerator) / f64::from(rules.villager_speed_denominator)
+        }
+    }
+}
+
+/// The walk animation clock, in milliseconds, of a unit that has moved
+/// `travelled` tiles: the animation advances by distance, not by wall time,
+/// so a unit that is blocked, slowed or on a low tick rate plays only as much
+/// stride as it covers, and one on a road or upgraded plays proportionally more.
+pub(crate) fn walk_clock(kind: UnitKind, travelled: f64) -> f64 {
+    travelled.max(0.0) * 1000.0 / native_walk_speed(kind)
 }
 
 /// The animation clock, in milliseconds, of a `kind` of unit drawn in

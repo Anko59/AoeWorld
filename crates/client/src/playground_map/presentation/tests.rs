@@ -141,6 +141,7 @@ fn bounded_deque_matches_eight_sample_chronology_without_ninth_slot_growth() {
         let sample = Sample {
             tick,
             position: WorldPosition::new(tick as i32, 0),
+            travel: 0.0,
         };
         push_sample(&mut window, sample);
         assert!(window.capacity() <= 8);
@@ -161,6 +162,7 @@ fn bounded_deque_matches_eight_sample_chronology_without_ninth_slot_growth() {
         Sample {
             tick: 39,
             position: WorldPosition::new(99, 0),
+            travel: 0.0,
         },
     );
     assert_eq!(window.len(), 8);
@@ -280,4 +282,123 @@ fn native_heading_matches_native_pose_rows_and_keeps_intermediate_directions() {
         end.hp = 0;
         assert_eq!(p.native_heading(end), None);
     }
+}
+
+#[wasm_bindgen_test]
+fn travel_counts_distance_actually_moved_and_ignores_stalls_and_jumps() {
+    let mut p = Presentation::default();
+    p.reset(20);
+    let tile = aoe_core::FIXED_SUBUNITS_PER_TILE;
+    let mut old = state(0, true);
+    p.remember(None, &old, 10);
+    // Half a tile in one tick, then a "moving" unit that is blocked for 3 ticks.
+    for (tick, x) in [
+        (11, tile / 2),
+        (12, tile / 2),
+        (13, tile / 2),
+        (14, tile / 2),
+    ] {
+        let next = state(x, true);
+        p.remember(Some(&old), &next, tick);
+        old = next;
+    }
+    let history = &p.history[&old.id];
+    assert!((history.back().unwrap().travel - 0.5).abs() < 1e-6);
+    // A discontinuity adds nothing and does not reset the odometer.
+    let jump = state(40 * tile, true);
+    p.remember(Some(&old), &jump, 30);
+    assert!((p.history[&old.id].back().unwrap().travel - 0.5).abs() < 1e-6);
+    // Interpolated travel is proportional to the drawn fraction of the step.
+    p.reset(20);
+    let start = state(0, true);
+    p.remember(None, &start, 10);
+    p.remember(Some(&start), &state(tile / 2, true), 11);
+    p.advance(0.0, false);
+    p.receive(11, 0.0);
+    p.tick = 10.5;
+    let (_, travelled) = p.pose(start);
+    assert!((travelled - 0.25).abs() < 1e-6, "{travelled}");
+}
+
+#[wasm_bindgen_test]
+fn travel_over_a_window_tells_a_blocked_unit_from_a_walking_one() {
+    let tile = aoe_core::FIXED_SUBUNITS_PER_TILE;
+    let history = |step: i32| {
+        let mut p = Presentation::default();
+        p.reset(20);
+        let mut old = state(0, true);
+        p.remember(None, &old, 10);
+        for tick in 11..=16 {
+            let next = state(step * (tick as i32 - 10), true);
+            p.remember(Some(&old), &next, tick);
+            old = next;
+        }
+        p.tick = 16.0;
+        (p, old)
+    };
+    let (walking, unit) = history(100);
+    let moved = walking.travel_over(unit.id, 4.0).unwrap();
+    assert!((moved - 400.0 / f64::from(tile)).abs() < 1e-6, "{moved}");
+    let (blocked, unit) = history(0);
+    assert_eq!(blocked.travel_over(unit.id, 4.0), Some(0.0));
+    // Not enough history to say: a unit that has just appeared is not stalled.
+    assert_eq!(blocked.travel_over(unit.id, 12.0), None);
+    assert_eq!(blocked.travel_over(EntityId(99), 4.0), None);
+}
+
+#[wasm_bindgen_test]
+fn the_stall_window_fits_the_history_of_a_unit_updating_every_tick() {
+    let mut p = Presentation::default();
+    p.reset(20);
+    let mut old = state(0, true);
+    p.remember(None, &old, 10);
+    // Eight samples are kept: ticks 10..=17 (and the ninth drops the first).
+    for tick in 11..=17 {
+        let next = state(0, true);
+        p.remember(Some(&old), &next, tick);
+        old = next;
+    }
+    // The presentation clock trails the newest tick by up to two.
+    let window = crate::unit_visuals::stall_window_ticks(20.0);
+    for tick in [15.0, 15.5, 16.0] {
+        p.tick = tick;
+        assert_eq!(p.travel_over(old.id, window), Some(0.0), "tick {tick}");
+    }
+}
+
+#[wasm_bindgen_test]
+fn a_unit_shoved_back_and_forth_makes_no_progress() {
+    let tile = aoe_core::FIXED_SUBUNITS_PER_TILE;
+    let mut p = Presentation::default();
+    p.reset(20);
+    let mut old = state(0, true);
+    p.remember(None, &old, 10);
+    // Each tick it moves a tenth of a tile, alternately east and west.
+    for tick in 11..=17 {
+        let next = state(if tick % 2 == 1 { tile / 10 } else { 0 }, true);
+        p.remember(Some(&old), &next, tick);
+        old = next;
+    }
+    p.tick = 16.0;
+    let window = crate::unit_visuals::stall_window_ticks(20.0);
+    let path = p.travel_over(old.id, window).unwrap();
+    assert!(path > 0.3, "it did cover ground: {path}");
+    let progress = p.progress_over(old.id, window).unwrap();
+    assert!(progress < 0.11, "{progress}");
+    // A straight walk makes all of its path in progress.
+    let mut q = Presentation::default();
+    q.reset(20);
+    let mut old = state(0, true);
+    q.remember(None, &old, 10);
+    for tick in 11..=17 {
+        let next = state(100 * (tick as i32 - 10), true);
+        q.remember(Some(&old), &next, tick);
+        old = next;
+    }
+    q.tick = 16.0;
+    let walked = q.progress_over(old.id, window).unwrap();
+    assert!(
+        (walked - 4.0 * 100.0 / f64::from(tile)).abs() < 1e-6,
+        "{walked}"
+    );
 }

@@ -51,6 +51,9 @@ pub struct UnitCombat {
 mod units;
 pub use units::UNIT_COMBAT;
 
+/// A Fishing Ship sails at 1.26 tiles per second; it has no `UNIT_COMBAT` speed.
+pub const FISHING_SHIP_SPEED_HUNDREDTHS: u32 = 126;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BuildingAttack {
     pub attack: u16,

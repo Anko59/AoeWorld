@@ -268,22 +268,11 @@ pub(in super::super) fn units(
                     == 2
         })
         .map(|unit| {
-            let position = client.presentation.position(*unit);
-            let animal = unit
-                .hunt_target
-                .and_then(|id| client.village.animals.iter().find(|a| a.id == id));
-            let pose = if crate::unit_visuals::walks_as_villager(unit, animal) {
-                crate::unit_visuals::Pose::VillagerWalk
-            } else {
-                crate::unit_visuals::lifecycle_pose(
-                    crate::unit_visuals::scene_pose(unit, animal, target_distance(client, unit)),
-                    unit.death_tick,
-                    client.village.tick,
-                    client.config.tick_hz,
-                )
-            };
+            let (position, travelled) = client.presentation.pose(*unit);
+            let (shown, pose) = actors::shown_pose(client, unit);
+            let unit = &shown;
             let kind = aoe_rendering::SceneUnitKind::actor(pose as u8);
-            let facing = actors::animation_frame(client, unit, pose);
+            let facing = actors::animation_frame(client, unit, pose, travelled);
             aoe_rendering::SceneUnit {
                 kind,
                 id: unit.id,

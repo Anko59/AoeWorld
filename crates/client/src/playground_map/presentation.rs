@@ -4,6 +4,9 @@ use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE};
 use aoe_protocol::GameplayUnitState;
 use std::collections::{HashMap, VecDeque};
 
+/// Minimum distance, in subunits, between the ends of a heading segment.
+const HEADING_BASELINE: i64 = FIXED_SUBUNITS_PER_TILE as i64 / 10;
+
 fn push_sample(history: &mut VecDeque<Sample>, sample: Sample) {
     // Drop first: pushing a ninth entry would grow the allocation to 16 slots.
     if history.len() == 8 {
@@ -30,7 +33,16 @@ impl Presentation {
         }
         let history = self.history.get(&unit.id)?;
         let end = history.back()?;
-        let start = history.iter().rev().find(|s| s.position != end.position)?;
+        // A baseline of a tenth of a tile steadies the heading against the
+        // one-tick jitter of collision sidesteps; a shorter history falls
+        // back to its oldest differing sample.
+        let far = |s: &&Sample| distance(s.position, end.position) >= HEADING_BASELINE;
+        let differs = |s: &&Sample| s.position != end.position;
+        let start = history
+            .iter()
+            .rev()
+            .find(far)
+            .or_else(|| history.iter().find(differs))?;
         let dx = f64::from(end.position.x) - f64::from(start.position.x);
         let dy = f64::from(end.position.y) - f64::from(start.position.y);
         // DE headings use the same unsquished axes as authoritative facings;
@@ -123,11 +135,14 @@ impl Presentation {
             distance(old.position, state.position) > i64::from(FIXED_SUBUNITS_PER_TILE)
         });
         let history = self.history.entry(state.id).or_default();
+        // The odometer survives a cleared history, but a jump adds nothing.
+        let mut travel = history.back().map_or(0.0, |last| last.travel);
+        let mut step = true;
         if let Some(last) = history.back() {
-            if tick < last.tick {
+            if tick < u64::from(last.tick) {
                 return;
             }
-            let gap = tick - last.tick;
+            let gap = tick - u64::from(last.tick);
             if idle_jump
                 || gap > 8
                 || distance(last.position, state.position)
@@ -135,32 +150,43 @@ impl Presentation {
             {
                 // Missing route corners or a discontinuity cannot be reconstructed.
                 history.clear();
+                step = false;
             }
         }
         if let Some(last) = history.back()
-            && last.tick == tick
+            && u64::from(last.tick) == tick
         {
             history.pop_back();
+            // Replace the sample: count from the one before it.
+            travel = history.back().map_or(0.0, |before| before.travel);
+        }
+        let before = travel;
+        if step && let Some(last) = history.back() {
+            travel += tiles_between(last.position, state.position);
         }
         if let Some(old) = idle
             && !idle_jump
             && let Some(anchor) = tick.checked_sub(1)
-            && history.back().is_none_or(|last| last.tick < anchor)
+            && history
+                .back()
+                .is_none_or(|last| u64::from(last.tick) < anchor)
         {
             // Heartbeats kept an idle unit stationary, even after a long gap.
             push_sample(
                 history,
                 Sample {
-                    tick: anchor,
+                    tick: anchor as u32,
                     position: old.position,
+                    travel: before,
                 },
             );
         }
         push_sample(
             history,
             Sample {
-                tick,
+                tick: tick as u32,
                 position: state.position,
+                travel,
             },
         );
     }
@@ -171,31 +197,111 @@ impl Presentation {
 
     #[inline(never)]
     pub(crate) fn position(&self, state: GameplayUnitState) -> [f64; 2] {
+        self.pose(state).0
+    }
+
+    /// The tiles a unit has moved over the last `ticks` ticks of presentation
+    /// time, or `None` while its history does not reach back that far.
+    pub(crate) fn travel_over(&self, id: EntityId, ticks: f64) -> Option<f64> {
+        let history = self.history.get(&id)?;
+        if (history.front()?.tick as f64) > self.tick - ticks {
+            return None;
+        }
+        Some(travel_at(history, self.tick) - travel_at(history, self.tick - ticks))
+    }
+
+    /// The tiles a unit has got ahead over the last `ticks` ticks: the straight
+    /// distance from where it was to where it is, so a unit shoved back and
+    /// forth by a jam covers path but makes no progress. `None` while its
+    /// history does not reach back that far.
+    pub(crate) fn progress_over(&self, id: EntityId, ticks: f64) -> Option<f64> {
+        let history = self.history.get(&id)?;
+        if (history.front()?.tick as f64) > self.tick - ticks {
+            return None;
+        }
+        let [x0, y0] = position_at(history, self.tick - ticks);
+        let [x1, y1] = position_at(history, self.tick);
+        Some((x1 - x0).hypot(y1 - y0))
+    }
+
+    /// The drawn position and the tiles the unit has actually moved by then.
+    #[inline(never)]
+    pub(crate) fn pose(&self, state: GameplayUnitState) -> ([f64; 2], f64) {
         let Some(history) = self.history.get(&state.id) else {
-            return state.position.as_tiles();
+            return (state.position.as_tiles(), 0.0);
         };
         let mut previous = None::<Sample>;
         for next in history {
             if next.tick as f64 >= self.tick {
                 let Some(previous) = previous else {
-                    return next.position.as_tiles();
+                    return (next.position.as_tiles(), f64::from(next.travel));
                 };
                 if next.tick as f64 == self.tick {
-                    return next.position.as_tiles();
+                    return (next.position.as_tiles(), f64::from(next.travel));
                 }
                 let amount =
                     (self.tick - previous.tick as f64) / (next.tick - previous.tick) as f64;
                 let start = previous.position.as_tiles();
                 let end = next.position.as_tiles();
-                return [
-                    start[0] + (end[0] - start[0]) * amount,
-                    start[1] + (end[1] - start[1]) * amount,
-                ];
+                let travel = f64::from(previous.travel)
+                    + (f64::from(next.travel) - f64::from(previous.travel)) * amount;
+                return (
+                    [
+                        start[0] + (end[0] - start[0]) * amount,
+                        start[1] + (end[1] - start[1]) * amount,
+                    ],
+                    travel,
+                );
             }
             previous = Some(*next);
         }
-        state.position.as_tiles()
+        let travel = history.back().map_or(0.0, |last| f64::from(last.travel));
+        (state.position.as_tiles(), travel)
     }
+}
+
+/// The tiles a unit had moved at `tick`, interpolated between its samples and
+/// held at the first or last one outside them.
+fn travel_at(history: &VecDeque<Sample>, tick: f64) -> f64 {
+    let mut previous = None::<Sample>;
+    for next in history {
+        if next.tick as f64 >= tick {
+            let Some(previous) = previous else {
+                return f64::from(next.travel);
+            };
+            let amount = (tick - previous.tick as f64) / (next.tick - previous.tick) as f64;
+            return f64::from(previous.travel)
+                + (f64::from(next.travel) - f64::from(previous.travel)) * amount;
+        }
+        previous = Some(*next);
+    }
+    history.back().map_or(0.0, |last| f64::from(last.travel))
+}
+
+/// Where a unit was at `tick`, in tiles, interpolated between its samples and
+/// held at the first or last one outside them.
+fn position_at(history: &VecDeque<Sample>, tick: f64) -> [f64; 2] {
+    let mut previous = None::<Sample>;
+    for next in history {
+        if next.tick as f64 >= tick {
+            let Some(previous) = previous else {
+                return next.position.as_tiles();
+            };
+            let amount = (tick - previous.tick as f64) / (next.tick - previous.tick) as f64;
+            let (a, b) = (previous.position.as_tiles(), next.position.as_tiles());
+            return [a[0] + (b[0] - a[0]) * amount, a[1] + (b[1] - a[1]) * amount];
+        }
+        previous = Some(*next);
+    }
+    history
+        .back()
+        .map_or([0.0; 2], |last| last.position.as_tiles())
+}
+
+fn tiles_between(left: aoe_core::WorldPosition, right: aoe_core::WorldPosition) -> f32 {
+    let dx = f64::from(right.x) - f64::from(left.x);
+    let dy = f64::from(right.y) - f64::from(left.y);
+    (dx.hypot(dy) / f64::from(FIXED_SUBUNITS_PER_TILE)) as f32
 }
 
 fn distance(left: aoe_core::WorldPosition, right: aoe_core::WorldPosition) -> i64 {
