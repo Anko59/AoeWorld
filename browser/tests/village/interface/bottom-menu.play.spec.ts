@@ -360,17 +360,15 @@ test("an enemy portrait uses the colour its sprites are rendered with", async ({
   await page.setViewportSize({ width: 1280, height: 900 });
   await nativeMenu(page, true);
   await freshHud(page);
-  const actor = await page
-    .locator("#scene")
-    .evaluate((el) =>
-      (
-        JSON.parse(el.getAttribute("data-actors") ?? "[]") as {
-          id: number;
-          x: number;
-          y: number;
-        }[]
-      ).find((a) => a.id === 1),
-    );
+  const actor = await page.locator("#scene").evaluate((el) =>
+    (
+      JSON.parse(el.getAttribute("data-actors") ?? "[]") as {
+        id: number;
+        x: number;
+        y: number;
+      }[]
+    ).find((a) => a.id === 1),
+  );
   if (!actor) throw new Error("No foreign villager");
   await page.mouse.click(actor.x, actor.y - 10);
   await expect(page.locator("#selection-owner")).toHaveText("Player 2");
@@ -411,18 +409,16 @@ for (const [width, height] of [
     await centerVillage(page, true);
     await expect(page.locator("#selection-name")).toHaveText("Town Center");
     await shot("towncenter");
-    const villager = await page
-      .locator("#scene")
-      .evaluate((el) =>
-        (
-          JSON.parse(el.getAttribute("data-actors") ?? "[]") as {
-            kind: string;
-            owned: boolean;
-            x: number;
-            y: number;
-          }[]
-        ).find((a) => a.kind === "Villager" && a.owned),
-      );
+    const villager = await page.locator("#scene").evaluate((el) =>
+      (
+        JSON.parse(el.getAttribute("data-actors") ?? "[]") as {
+          kind: string;
+          owned: boolean;
+          x: number;
+          y: number;
+        }[]
+      ).find((a) => a.kind === "Villager" && a.owned),
+    );
     if (!villager) throw new Error("No villager");
     for (const [name, colour] of [
       ["blue", "#4191f5"],
