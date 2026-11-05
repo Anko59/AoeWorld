@@ -124,3 +124,80 @@ fn a_unit_under_a_fifth_of_its_stride_counts_as_standing_still() {
     assert!(!is_stalled(UnitKind::Villager, 0.1, 0.6));
     assert!(!is_stalled(UnitKind::Villager, 0.48, 0.6));
 }
+
+use aoe_protocol::UnitTask;
+
+fn villager(task: UnitTask) -> aoe_protocol::GameplayUnitState {
+    aoe_protocol::GameplayUnitState {
+        id: aoe_core::EntityId(1),
+        player: aoe_core::PlayerId(0),
+        position: aoe_core::WorldPosition::new(0, 0),
+        moving: false,
+        planning: false,
+        facing: 0,
+        kind: aoe_protocol::UnitKind::Villager,
+        task,
+        carried: None,
+        gathering: None,
+        hp: 25,
+        max_hp: 25,
+        attack_target: None,
+        last_hit: None,
+        death_tick: None,
+        hunt_target: None,
+        death_hunt: None,
+        auto_scout: false,
+        sergeant: false,
+        cargo_count: 0,
+        home_castle: None,
+        managed_by: None,
+        commanded_by: None,
+        general: None,
+        stance: Default::default(),
+    }
+}
+
+#[wasm_bindgen_test]
+fn a_stalled_unit_draws_the_matching_rest_pose() {
+    use crate::unit_visuals::{Pose, rest_pose, unit_pose};
+    use aoe_protocol::{AnimalKind, AnimalState, AnimalTask};
+    let mut unit = villager(UnitTask::Moving);
+    unit.moving = true;
+    unit.hunt_target = Some(aoe_core::EntityId(9));
+    let mut animal = AnimalState {
+        id: aoe_core::EntityId(9),
+        kind: AnimalKind::Sheep,
+        owner: None,
+        hp: 7,
+        position: aoe_core::WorldPosition::new(0, 0),
+        task: AnimalTask::Idle,
+        food_remaining: 100,
+        target: None,
+        facing: 0,
+        moving: false,
+        death_tick: None,
+    };
+    assert_eq!(
+        rest_pose(unit_pose(&unit, Some(&animal))),
+        Pose::ShepherdStand
+    );
+    animal.kind = AnimalKind::Deer;
+    assert_eq!(
+        rest_pose(unit_pose(&unit, Some(&animal))),
+        Pose::HunterStand
+    );
+    unit.hunt_target = None;
+    unit.task = UnitTask::Attacking;
+    assert_eq!(rest_pose(unit_pose(&unit, None)), Pose::VillagerStand);
+    unit.kind = aoe_protocol::UnitKind::Militia;
+    assert_eq!(rest_pose(unit_pose(&unit, None)), Pose::MilitiaStand);
+    unit.kind = aoe_protocol::UnitKind::BatteringRam;
+    assert_eq!(rest_pose(unit_pose(&unit, None)), Pose::BatteringRamStand);
+    unit.kind = aoe_protocol::UnitKind::Villager;
+    unit.task = UnitTask::Returning;
+    unit.carried = Some(aoe_protocol::CarriedResource {
+        kind: aoe_protocol::ResourceKind::Wood,
+        amount: 5,
+    });
+    assert_eq!(rest_pose(unit_pose(&unit, None)), Pose::CarryWoodIdle);
+}

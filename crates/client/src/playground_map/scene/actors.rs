@@ -5,7 +5,7 @@ use super::*;
 /// few ticks (about 0.6 s, at most six samples of history).
 pub(super) fn stalled(client: &Client, unit: &aoe_protocol::GameplayUnitState) -> bool {
     let hz = f64::from(client.config.tick_hz.max(1));
-    let ticks = (hz * 0.6).clamp(2.0, 6.0);
+    let ticks = crate::unit_visuals::stall_window_ticks(hz);
     unit.hp > 0
         && client
             .presentation
@@ -13,6 +13,39 @@ pub(super) fn stalled(client: &Client, unit: &aoe_protocol::GameplayUnitState) -
             .is_some_and(|travelled| {
                 crate::unit_visuals::is_stalled(unit.kind, travelled, ticks / hz)
             })
+}
+
+/// The unit as drawn and its pose: a unit flagged as moving that has stood
+/// still shows the rest pose matching what it would otherwise walk as.
+pub(super) fn shown_pose(
+    client: &Client,
+    unit: &aoe_protocol::GameplayUnitState,
+) -> (aoe_protocol::GameplayUnitState, crate::unit_visuals::Pose) {
+    use crate::unit_visuals as visuals;
+    let animal = unit
+        .hunt_target
+        .and_then(|id| client.village.animals.iter().find(|a| a.id == id));
+    let pose = if visuals::walks_as_villager(unit, animal) {
+        visuals::Pose::VillagerWalk
+    } else {
+        visuals::lifecycle_pose(
+            visuals::scene_pose(unit, animal, super::target_distance(client, unit)),
+            unit.death_tick,
+            client.village.tick,
+            client.config.tick_hz,
+        )
+    };
+    let at_rest = unit.moving && stalled(client, unit);
+    let mut shown = *unit;
+    shown.moving &= !at_rest;
+    (
+        shown,
+        if at_rest {
+            visuals::rest_pose(pose)
+        } else {
+            pose
+        },
+    )
 }
 
 pub(super) fn animation_frame(

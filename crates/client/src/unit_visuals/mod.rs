@@ -1,11 +1,13 @@
 //! Pure choices from authoritative state; no client damage or lifetime timers.
 use crate::building_ui::content::sprites;
+mod rest;
 mod roster;
 pub(crate) use aoe_assets::catalog::units::Pose;
 use aoe_core::FIXED_SUBUNITS_PER_TILE;
 use aoe_protocol::{
     AnimalKind, AnimalState, AnimalTask, GameplayUnitState, ResourceKind, UnitKind, UnitTask,
 };
+pub(crate) use rest::{is_stalled, rest_pose, stall_window_ticks};
 use roster::military_poses;
 
 pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> Pose {
@@ -384,13 +386,6 @@ pub(crate) fn native_walk_speed(kind: UnitKind) -> f64 {
             f64::from(rules.villager_speed_numerator) / f64::from(rules.villager_speed_denominator)
         }
     }
-}
-
-/// Whether a unit flagged as moving has in fact stood still: it covered under
-/// a fifth of its native stride over `seconds`. Such a unit is drawn at rest
-/// rather than frozen in mid-step.
-pub(crate) fn is_stalled(kind: UnitKind, travelled: f64, seconds: f64) -> bool {
-    travelled < native_walk_speed(kind) * seconds * 0.2
 }
 
 /// The walk animation clock, in milliseconds, of a unit that has moved

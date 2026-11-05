@@ -345,3 +345,23 @@ fn travel_over_a_window_tells_a_blocked_unit_from_a_walking_one() {
     assert_eq!(blocked.travel_over(unit.id, 12.0), None);
     assert_eq!(blocked.travel_over(EntityId(99), 4.0), None);
 }
+
+#[wasm_bindgen_test]
+fn the_stall_window_fits_the_history_of_a_unit_updating_every_tick() {
+    let mut p = Presentation::default();
+    p.reset(20);
+    let mut old = state(0, true);
+    p.remember(None, &old, 10);
+    // Eight samples are kept: ticks 10..=17 (and the ninth drops the first).
+    for tick in 11..=17 {
+        let next = state(0, true);
+        p.remember(Some(&old), &next, tick);
+        old = next;
+    }
+    // The presentation clock trails the newest tick by up to two.
+    let window = crate::unit_visuals::stall_window_ticks(20.0);
+    for tick in [15.0, 15.5, 16.0] {
+        p.tick = tick;
+        assert_eq!(p.travel_over(old.id, window), Some(0.0), "tick {tick}");
+    }
+}
