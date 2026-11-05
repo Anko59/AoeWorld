@@ -142,14 +142,15 @@ impl GameWorld {
         let length = (i64::from(heading.x).pow(2) + i64::from(heading.y).pow(2))
             .isqrt()
             .max(1);
-        let desired = self.config.snap_ground_position(WorldPosition::new(
+        let desired = WorldPosition::new(
             to.x + ((i64::from(heading.x) * i64::from(offset.y)
                 - i64::from(heading.y) * i64::from(offset.x))
                 / length) as i32,
             to.y + ((i64::from(heading.y) * i64::from(offset.y)
                 + i64::from(heading.x) * i64::from(offset.x))
                 / length) as i32,
-        ));
+        );
+        let desired = self.squad_ground_towards(kind, to, desired);
         // A bounded shared centre search, once per squad order. Ordinary
         // formation assignment separately validates each physical final slot.
         std::iter::once(desired)
@@ -163,7 +164,47 @@ impl GameWorld {
                     })
                 })
             }))
-            .find(|&point| self.body_position_clear(kind, point))
+            .find(|&point| self.squad_ground(kind, point))
+    }
+
+    /// A squad's goal stands on ground an ordinary formation order accepts.
+    fn squad_ground(&self, kind: UnitKind, point: WorldPosition) -> bool {
+        self.config.valid_ground_position(point)
+            && self.body_position_clear(kind, point)
+            && !self.economy.blocked_tiles.contains(&point.tile_floor())
+            && [kind, UnitKind::Militia].into_iter().all(|kind| {
+                self.unit_tile_passable(kind, point.tile_floor(), &|| false)
+                    .unwrap_or(false)
+            })
+    }
+
+    /// Walks from the General's goal toward a squad's place in the army and
+    /// stops at the first water, tree or wall. A flank twenty tiles wide of a
+    /// goal on a river bank stays on that bank instead of aiming at the water
+    /// or at a far shore reached only by a long way round.
+    fn squad_ground_towards(
+        &self,
+        kind: UnitKind,
+        from: WorldPosition,
+        to: WorldPosition,
+    ) -> WorldPosition {
+        let (dx, dy) = (
+            i64::from(to.x) - i64::from(from.x),
+            i64::from(to.y) - i64::from(from.y),
+        );
+        let steps = (dx.abs().max(dy.abs()) / 1024).clamp(1, 64);
+        let mut last = from;
+        for step in 1..=steps {
+            let next = WorldPosition::new(
+                from.x + (dx * step / steps) as i32,
+                from.y + (dy * step / steps) as i32,
+            );
+            if !self.squad_ground(kind, next) {
+                break;
+            }
+            last = next;
+        }
+        self.config.snap_ground_position(last)
     }
 
     /// Fight rejection can precede the first march decision. Establish the
@@ -347,18 +388,22 @@ impl GameWorld {
             };
             if !self.formation_matches(&ids, goal) {
                 work.orders += 1;
-                if self
-                    .issue_formation_move(
-                        general.player,
-                        &ids,
-                        aoe_core::Formation::Line,
-                        goal,
-                        false,
-                        false,
-                    )
-                    .is_err()
-                {
-                    complete = false;
+                let order = self.issue_formation_move(
+                    general.player,
+                    &ids,
+                    aoe_core::Formation::Line,
+                    goal,
+                    false,
+                    false,
+                );
+                if let Err(error) = order {
+                    // Only a spent search budget is worth another try. Any
+                    // other refusal repeats itself: never reissue it each
+                    // decision while the soldiers stand and wait.
+                    complete &= !matches!(
+                        error,
+                        crate::EconomyError::Movement(crate::GameWorldError::PathBudgetExceeded)
+                    );
                     continue;
                 }
             }
