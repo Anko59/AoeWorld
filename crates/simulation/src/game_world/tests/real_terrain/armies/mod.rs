@@ -6,5 +6,6 @@ use super::*;
 
 mod march;
 mod mounted;
+mod recovery;
 mod scene;
 mod table;
