@@ -7,7 +7,9 @@ import { openTab } from "../rendering/fixtures/cockpit-tabs.js";
 
 type Actor = { kind: string; x: number; y: number };
 const actors = async (page: Page): Promise<Actor[]> =>
-  JSON.parse((await page.locator("#scene").getAttribute("data-actors")) ?? "[]");
+  JSON.parse(
+    (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
+  );
 const count = async (page: Page, id: string) =>
   Number(await page.locator(`#stockpile-${id}`).textContent());
 
@@ -55,14 +57,19 @@ test("sell 100,000 food from the far Trade tab and watch the price recover", asy
       if (placed) break;
       await page.mouse.move(x, y);
       await page.waitForTimeout(150);
-      if ((await page.locator("#scene").getAttribute("data-placement-valid")) === "true") {
+      if (
+        (await page.locator("#scene").getAttribute("data-placement-valid")) ===
+        "true"
+      ) {
         await page.mouse.click(x, y);
         placed = true;
       }
     }
   expect(placed).toBe(true);
   await expect
-    .poll(async () => (await actors(page)).some((a) => a.kind === "Market"), { timeout: 30_000 })
+    .poll(async () => (await actors(page)).some((a) => a.kind === "Market"), {
+      timeout: 30_000,
+    })
     .toBe(true);
   await expect
     .poll(
@@ -84,9 +91,13 @@ test("sell 100,000 food from the far Trade tab and watch the price recover", asy
   await page.evaluate(() => {
     location.hash = "zoom=.04";
   });
-  await expect(page.locator("#scene")).toHaveAttribute("data-lod", /markers|map/, {
-    timeout: 30_000,
-  });
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-lod",
+    /markers|map/,
+    {
+      timeout: 30_000,
+    },
+  );
   await openTab(page, "trade");
   await page.locator('[data-res="food"].far-cell').click();
   await page.locator('[data-side="sell"]').click();
@@ -98,17 +109,28 @@ test("sell 100,000 food from the far Trade tab and watch the price recover", asy
   await expect(quote).toContainText("pay 14 gold each instead of 70");
   const expected = proceeds(1000);
   await page.locator("[data-go]").click();
-  await expect(page.locator("#stockpile-food")).toHaveText(String(food - 100_000), {
-    timeout: 20_000,
-  });
-  await expect(page.locator("#stockpile-gold")).toHaveText(String(gold + expected));
-  await expect(page.locator('[data-res="food"].far-cell .far-cell-note')).toHaveText("20 g / 100");
+  await expect(page.locator("#stockpile-food")).toHaveText(
+    String(food - 100_000),
+    {
+      timeout: 20_000,
+    },
+  );
+  await expect(page.locator("#stockpile-gold")).toHaveText(
+    String(gold + expected),
+  );
+  await expect(
+    page.locator('[data-res="food"].far-cell .far-cell-note'),
+  ).toHaveText("20 g / 100");
   // The market keeps working: the price climbs back a gold at a time.
   await expect
     .poll(
       async () =>
         Number(
-          ((await page.locator('[data-res="food"].far-cell .far-cell-note').textContent()) ?? "").split(" ")[0],
+          (
+            (await page
+              .locator('[data-res="food"].far-cell .far-cell-note')
+              .textContent()) ?? ""
+          ).split(" ")[0],
         ),
       { timeout: 30_000 },
     )
