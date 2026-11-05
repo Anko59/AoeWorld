@@ -13,6 +13,8 @@ mod kingdom;
 mod recovery;
 #[path = "demo/river.rs"]
 mod river;
+#[path = "demo/walk.rs"]
+mod walk;
 
 impl GameWorld {
     /// Local economy recordings isolate management from inherited raiders.
