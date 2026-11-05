@@ -143,9 +143,17 @@ for (const available of [false, true]) {
           body: '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36"><rect width="36" height="36" fill="#d43"/></svg>',
         });
       }
-      const panelPage = /ui-de-(commands|selection|minimap)\.svg$/.exec(route.request().url());
+      const panelPage = /ui-de-(commands|selection|minimap)\.svg$/.exec(
+        route.request().url(),
+      );
       if (panelPage) {
-        const [w, h] = { commands: [660, 413], selection: [1368, 413], minimap: [860, 413] }[panelPage[1] as "commands"];
+        const [w, h] = (
+          {
+            commands: [660, 413],
+            selection: [1368, 413],
+            minimap: [860, 413],
+          } as const
+        )[panelPage[1] as "commands"];
         return route.fulfill({
           contentType: "image/svg+xml",
           body: `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect x="0" y="34" width="${w - 100}" height="${h - 34}" fill="#d43"/></svg>`,
@@ -196,9 +204,7 @@ for (const available of [false, true]) {
         );
       }
       for (const role of ["commands", "selection", "minimap"]) {
-        await expect(
-          page.locator(`#${role}>.frame-art`).first(),
-        ).toHaveCSS(
+        await expect(page.locator(`#${role}>.frame-art`).first()).toHaveCSS(
           "background-image",
           new RegExp(`/asset-pack/buildings/ui-de-${role}\\.svg|blob:`),
         );
