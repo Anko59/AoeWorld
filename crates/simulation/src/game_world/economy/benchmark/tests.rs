@@ -106,8 +106,9 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
         // Bounded detours around stationary work bodies and route searches
         // that share work only among units able to spend it change this replay;
         // the complete 1/4-worker comparison above still holds. The armies work (bounded replans,
-        // wide-body fit, one-lane passing) moves it once more.
-        "363cddcdfa84d89c097f8ee93c4d640651ddcf742d9511ef33b99123fc0c9ffa"
+        // wide-body fit, one-lane passing) moves it once more, and so do
+        // renewed far-group waits, the far reserve and the ship route cache.
+        "2e8979ab373cdfcdb2f5d8372699b0685b5e14b2e7ed164af5703a797927507d"
     );
 }
 
