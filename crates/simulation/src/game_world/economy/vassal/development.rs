@@ -21,8 +21,9 @@ fn crew_size(kind: BuildingKind) -> usize {
 }
 
 impl GameWorld {
-    /// A site is done when its building stands; a palisade stands for a stone
-    /// wall or gate of its class (the Age may have moved on since it was laid).
+    /// A site is done when its building stands. Stone satisfies a palisade
+    /// site, never the other way round: a palisade on a stone site is
+    /// replaced (see `upgradable`).
     fn vassal_site_done(&self, player: PlayerId, site: plan::Site) -> bool {
         self.building_at(site.tile)
             .and_then(|b| self.building(b))
@@ -30,9 +31,27 @@ impl GameWorld {
                 b.player == player
                     && b.is_complete()
                     && (b.kind == site.kind
-                        || b.kind.is_wall() && site.kind.is_wall()
-                        || b.kind.is_gate() && site.kind.is_gate())
+                        || b.kind == BuildingKind::StoneWall
+                            && site.kind == BuildingKind::PalisadeWall
+                        || b.kind == BuildingKind::StoneGate
+                            && site.kind == BuildingKind::PalisadeGate)
             })
+    }
+
+    /// A finished own palisade wall or gate standing where stone is planned.
+    fn upgradable(
+        &self,
+        player: PlayerId,
+        tile: TileCoord,
+        kind: BuildingKind,
+    ) -> Option<EntityId> {
+        let id = self.building_at(tile)?;
+        let b = self.building(id)?;
+        (b.player == player
+            && b.is_complete()
+            && (kind == BuildingKind::StoneWall && b.kind == BuildingKind::PalisadeWall
+                || kind == BuildingKind::StoneGate && b.kind == BuildingKind::PalisadeGate))
+            .then_some(id)
     }
 
     /// The worker nearest `to`, busy or not.
@@ -235,7 +254,8 @@ impl GameWorld {
             .iter()
             .copied()
             .filter(|(_, site)| {
-                self.building_at(site.tile).is_none()
+                (self.building_at(site.tile).is_none()
+                    || self.upgradable(player, site.tile, site.kind).is_some())
                     && !self.economy.vassals.domains[&id]
                         .refused
                         .contains_key(&site.tile)
@@ -283,7 +303,8 @@ impl GameWorld {
                         || (run.len() > 1
                             && (t.x - last.x, t.y - last.y)
                                 != (last.x - run[run.len() - 2].x, last.y - run[run.len() - 2].y))
-                        || self.building_at(*t).is_some()
+                        || (self.building_at(*t).is_some()
+                            && self.upgradable(player, *t, kind).is_none())
                         || self.economy.vassals.domains[&id].refused.contains_key(t)
                     {
                         break;
@@ -310,6 +331,13 @@ impl GameWorld {
             }) {
                 wait = VassalWait::Reserve;
                 break;
+            }
+            // Stone over palisade: the palisade run comes down as the stone
+            // run goes up, in one step.
+            for t in &run {
+                if let Some(old) = self.upgradable(player, *t, kind) {
+                    self.remove_building(old);
+                }
             }
             // With every builder busy, the nearest one queues the new run.
             let queued = idle.is_empty();

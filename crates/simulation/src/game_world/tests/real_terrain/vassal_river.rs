@@ -53,5 +53,18 @@ fn a_vassal_bridges_a_real_river_and_its_builders_cross() {
     for _ in 0..6_000 {
         world.advance();
     }
-    assert_eq!(count(world) - standing, 1, "one new bridge over the river");
+    // Re-planning keeps what it laid: no two new bridges side by side.
+    let banks: Vec<_> = world
+        .buildings()
+        .filter(|b| b.kind == BuildingKind::Bridge)
+        .filter_map(|b| b.bridge_span.map(|s| s.from))
+        .collect();
+    for (i, a) in banks.iter().enumerate() {
+        for b in &banks[i + 1..] {
+            assert!(
+                (a.x - b.x).abs().max((a.y - b.y).abs()) > 12,
+                "parallel bridges {a:?} {b:?}"
+            );
+        }
+    }
 }

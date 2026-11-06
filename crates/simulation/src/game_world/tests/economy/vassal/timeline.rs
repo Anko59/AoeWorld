@@ -61,7 +61,7 @@ pub(super) fn timeline(builders: usize, limit: u32) -> (Option<u32>, Option<u32>
 #[test]
 fn vassal_timeline_with_eight_builders() {
     let r = timeline(8, 60_000);
-    // Measured 8 builders: 20 wall tiles ~3,500, the threatened side ~10,000 and
-    // the whole domain 39,600 ticks (the branch before: not finished at 60,000).
-    assert!(r.2.is_some_and(|t| t <= 45_000), "{r:?}");
+    // Measured 8 builders: 20 wall tiles 3,500, the threatened side ~10,000 and
+    // the whole domain 52,800 ticks (39,600 before every gate was joined by road).
+    assert!(r.2.is_some_and(|t| t <= 60_000), "{r:?}");
 }

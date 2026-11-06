@@ -87,6 +87,7 @@ fn road_demo_uses_ordinary_movement_and_a_fortified_vassal() {
 #[test]
 fn vassal_road_purchases_wait_for_unfinished_fortifications() {
     let (mut w, _, _) = setup();
+    w.set_fog_disabled(true);
     w.spawn_villager(PlayerId(0), WorldPosition::new(88 * 1024, 96 * 1024))
         .unwrap();
     advance(&mut w, 80);

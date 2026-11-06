@@ -11,10 +11,13 @@ use super::*;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
+/// A gate node's outward direction; `None` for work points.
+type Out = Option<(i32, i32)>;
+
 /// Nodes (castle, work points, gates) joined into the network.
-const MAX_NODES: usize = 40;
+const MAX_NODES: usize = 64;
 /// Tiles one route search may settle, independent of world size.
-const EXPANSIONS: usize = 20_000;
+const EXPANSIONS: usize = 40_000;
 /// Longest bridge a route may use, in tiles between the banks.
 const MAX_BRIDGE: i32 = 14;
 /// Extra route cost per bridge tile: a bridge is a last resort over a long detour.
@@ -50,13 +53,14 @@ pub(super) fn sites(
     else {
         return Vec::new();
     };
-    let reach = super::ring::RING;
+    // Work points anywhere in the domain, not just inside the wall square.
+    let reach = VASSAL_RADIUS;
     let in_domain = |r: TileRect| {
         let c = center_of(r);
         (c.x - center.x).abs() <= reach && (c.y - center.y).abs() <= reach
     };
     // Nodes: work points that already stand, then the planned gates.
-    let mut nodes: Vec<TileRect> = [
+    let mut nodes: Vec<(TileRect, Out)> = [
         BuildingKind::TownCenter,
         BuildingKind::Mill,
         BuildingKind::LumberCamp,
@@ -68,35 +72,40 @@ pub(super) fn sites(
     .map(|b| (b.id, b.footprint))
     .collect::<BTreeMap<_, _>>()
     .into_values()
+    .map(|r| (r, None))
     .collect();
     let local = nodes.len();
     let mut stubs: Vec<(TileCoord, (i32, i32))> = Vec::new();
     for gate in planned.iter().filter(|s| s.kind.is_gate()) {
         let rect = footprint_of(gate);
         let c = center_of(rect);
-        // Only a side's middle gate is joined to the castle by road; the
-        // others still get their outside stub.
-        let middle = if gate.vertical {
-            (c.y - center.y).abs() <= 4
-        } else {
-            (c.x - center.x).abs() <= 4
-        };
-        if middle {
-            nodes.push(rect);
-        }
         // The wall's outward side is away from the castle along the gate's axis.
         let out = if gate.vertical {
             (if c.x < center.x { -1 } else { 1 }, 0)
         } else {
             (0, if c.y < center.y { -1 } else { 1 })
         };
+        nodes.push((rect, Some(out)));
         stubs.push((c, out));
     }
     nodes.truncate(MAX_NODES);
     // Footprints of every other planned building stay clear of roads.
     let avoid: BTreeSet<TileCoord> = planned
         .iter()
-        .filter(|s| !matches!(s.kind, BuildingKind::Road | BuildingKind::Bridge))
+        .filter(|s| {
+            !matches!(s.kind, BuildingKind::Road | BuildingKind::Bridge) && !s.kind.is_gate()
+        })
+        .flat_map(|s| {
+            let r = footprint_of(s);
+            (r.min.y..r.max.y)
+                .flat_map(move |y| (r.min.x..r.max.x).map(move |x| TileCoord::new(x, y)))
+        })
+        .collect();
+    // Routes pass through planned gates (the Vassal builds them), but never
+    // lay a road on one.
+    let gate_tiles: BTreeSet<TileCoord> = planned
+        .iter()
+        .filter(|s| s.kind.is_gate())
         .flat_map(|s| {
             let r = footprint_of(s);
             (r.min.y..r.max.y)
@@ -104,9 +113,11 @@ pub(super) fn sites(
         })
         .collect();
     let mut net = Network {
+        planned_spans: Vec::new(),
         w,
         player,
         avoid: &avoid,
+        gate_tiles: &gate_tiles,
         goals: perimeter(castle.footprint).into_iter().collect(),
         out: Vec::new(),
         roads: BTreeSet::new(),
@@ -122,10 +133,19 @@ pub(super) fn sites(
             .collect(),
     };
     let mut connected = vec![center_of(castle.footprint)];
-    let mut remaining: Vec<(TileRect, u8)> = nodes
+    // A node's edge: its whole perimeter, or for a gate the inner side only,
+    // so a gate joins the network from inside the wall.
+    let edge = |r: TileRect, out: Out| -> Vec<TileCoord> {
+        let c = center_of(r);
+        perimeter(r)
+            .into_iter()
+            .filter(|t| out.is_none_or(|o| (t.x - c.x) * o.0 + (t.y - c.y) * o.1 <= 0))
+            .collect()
+    };
+    let mut remaining: Vec<(TileRect, Out, u8)> = nodes
         .into_iter()
         .enumerate()
-        .map(|(i, r)| (r, if i < local { TIER_ROAD } else { TIER_GATE_ROAD }))
+        .map(|(i, (r, o))| (r, o, if i < local { TIER_ROAD } else { TIER_GATE_ROAD }))
         .collect();
     while !remaining.is_empty() {
         let nearest = |c: TileCoord| {
@@ -138,26 +158,41 @@ pub(super) fn sites(
         let (i, _) = remaining
             .iter()
             .enumerate()
-            .min_by_key(|(_, (r, tier))| {
+            .min_by_key(|(_, (r, _, tier))| {
                 let c = center_of(*r);
                 (*tier, nearest(c), c.y, c.x)
             })
             .unwrap_or((0, &remaining[0]));
-        let (node, tier) = remaining.swap_remove(i);
-        let starts: Vec<_> = perimeter(node)
-            .into_iter()
+        let (node, out, tier) = remaining.swap_remove(i);
+        let edge = edge(node, out);
+        let starts: Vec<_> = edge
+            .iter()
+            .copied()
             .filter(|t| !avoid.contains(t))
             .collect();
         if net.route(&starts, tier) {
             connected.push(center_of(node));
-            net.goals.extend(perimeter(node));
+            net.goals.extend(edge);
         }
     }
     // A road continues a few tiles outside each gate.
     for (c, (ox, oy)) in stubs {
-        for n in 2..2 + STUB {
+        for n in 1..1 + STUB {
             let tile = TileCoord::new(c.x + ox * n, c.y + oy * n);
             net.lay(tile, TIER_GATE_ROAD);
+        }
+    }
+    // Any own road still being built stays in the plan, route or not.
+    let unfinished: Vec<_> = w
+        .player_buildings_of(player, BuildingKind::Road)
+        .filter(|b| b.hp > 0 && !b.is_complete() && in_domain(b.footprint))
+        .map(|b| (b.id, b.footprint.min))
+        .collect::<BTreeMap<_, _>>()
+        .into_values()
+        .collect();
+    for tile in unfinished {
+        if net.roads.insert(tile) {
+            net.out.push(Site::new(BuildingKind::Road, tile, TIER_ROAD));
         }
     }
     net.out
@@ -167,6 +202,7 @@ struct Network<'a> {
     w: &'a GameWorld,
     player: PlayerId,
     avoid: &'a BTreeSet<TileCoord>,
+    gate_tiles: &'a BTreeSet<TileCoord>,
     /// Tiles a route may end at: the joined nodes' edges and every road so far.
     goals: BTreeSet<TileCoord>,
     out: Vec<Site>,
@@ -175,12 +211,15 @@ struct Network<'a> {
     /// Own bridges already laid (even as foundations), by bank: the route
     /// uses them as they are instead of planning a parallel span.
     fixed: BTreeMap<TileCoord, (TileCoord, u32)>,
+    /// Banks of spans this plan already lays.
+    planned_spans: Vec<TileCoord>,
 }
 
 impl Network<'_> {
     /// Free open ground a road tile may be laid on.
     fn free(&self, tile: TileCoord) -> bool {
         !self.avoid.contains(&tile)
+            && !self.gate_tiles.contains(&tile)
             && self.w.building_at(tile).is_none()
             && self.w.tile_passable(tile)
     }
@@ -200,7 +239,7 @@ impl Network<'_> {
     }
 
     fn walkable(&self, tile: TileCoord) -> bool {
-        self.free(tile) || self.existing(tile)
+        self.free(tile) || self.existing(tile) || self.gate_tiles.contains(&tile)
     }
 
     fn lay(&mut self, tile: TileCoord, tier: u8) {
@@ -209,14 +248,28 @@ impl Network<'_> {
             self.goals.insert(tile);
         } else if self.existing(tile) {
             self.goals.insert(tile);
+            // An unfinished road stays a deficit until it is complete.
+            let unfinished = self
+                .w
+                .building_at(tile)
+                .and_then(|id| self.w.building(id))
+                .is_some_and(|b| b.kind == BuildingKind::Road && !b.is_complete());
+            if unfinished && self.roads.insert(tile) {
+                self.out.push(Site::new(BuildingKind::Road, tile, tier));
+            }
         }
     }
 
     /// A bridge from bank `a` to bank `b`, checked once per pair.
     fn bridgeable(&mut self, a: TileCoord, b: TileCoord) -> bool {
         // A second span beside a laid one is never wanted: cross by that one.
-        let near = |t: TileCoord, o: TileCoord| (t.x - o.x).abs().max((t.y - o.y).abs()) <= 8;
-        if self.fixed.keys().any(|&f| near(f, a) || near(f, b)) {
+        let near = |t: TileCoord, o: TileCoord| (t.x - o.x).abs().max((t.y - o.y).abs()) <= 12;
+        if self
+            .fixed
+            .keys()
+            .chain(self.planned_spans.iter())
+            .any(|&f| near(f, a) || near(f, b))
+        {
             return false;
         }
         let w = self.w;
@@ -230,6 +283,16 @@ impl Network<'_> {
     /// A turn costs extra, so routes run in long straight lines that a crew
     /// lays as one order instead of a staircase of single tiles.
     fn route(&mut self, starts: &[TileCoord], tier: u8) -> bool {
+        // A* toward the nearest network tile keeps far routes cheap.
+        let aim = starts.first().and_then(|s| {
+            self.goals
+                .iter()
+                .min_by_key(|g| (distance_squared(**g, *s), g.y, g.x))
+                .copied()
+        });
+        let h = |t: TileCoord| -> u32 {
+            aim.map_or(0, |a| ((t.x - a.x).abs() + (t.y - a.y).abs()) as u32)
+        };
         const DIRS: [(i32, i32); 4] = [(0, -1), (-1, 0), (1, 0), (0, 1)];
         const TURN: u32 = 3;
         type State = (TileCoord, u8);
@@ -238,11 +301,11 @@ impl Network<'_> {
         let mut best: BTreeMap<State, (u32, Option<(State, bool)>)> = BTreeMap::new();
         for &t in starts.iter().filter(|t| self.walkable(**t)) {
             best.insert((t, 4), (0, None));
-            heap.push(Reverse((0_u32, t.y, t.x, 4_u8)));
+            heap.push(Reverse((h(t), 0_u32, t.y, t.x, 4_u8)));
         }
         let mut settled = 0;
         let mut found = None;
-        while let Some(Reverse((cost, y, x, heading))) = heap.pop() {
+        while let Some(Reverse((_, cost, y, x, heading))) = heap.pop() {
             let tile = TileCoord::new(x, y);
             let here = (tile, heading);
             if best.get(&here).is_none_or(|(c, _)| *c < cost) {
@@ -266,7 +329,7 @@ impl Network<'_> {
                 let total = cost + 1 + BRIDGE_TILE_COST * len.saturating_sub(2);
                 if best.get(&(other, d)).is_none_or(|(c, _)| total < *c) {
                     best.insert((other, d), (total, Some((here, true))));
-                    heap.push(Reverse((total, other.y, other.x, d)));
+                    heap.push(Reverse((total + h(other), total, other.y, other.x, d)));
                 }
             }
             for (d, (dx, dy)) in DIRS.into_iter().enumerate() {
@@ -308,7 +371,7 @@ impl Network<'_> {
                 let state = (to, d);
                 if best.get(&state).is_none_or(|(c, _)| total < *c) {
                     best.insert(state, (total, Some((here, bridge))));
-                    heap.push(Reverse((total, to.y, to.x, d)));
+                    heap.push(Reverse((total + h(to), total, to.y, to.x, d)));
                 }
             }
         }
@@ -341,6 +404,7 @@ impl Network<'_> {
                 ..Site::new(BuildingKind::Bridge, from, tier)
             });
             self.goals.extend([a, b]);
+            self.planned_spans.extend([a, b]);
         }
         true
     }

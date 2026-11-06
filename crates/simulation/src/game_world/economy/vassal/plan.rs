@@ -196,8 +196,14 @@ pub(super) fn sites(
             .min_by_key(|b| b.id)
         {
             sites.push(Site::new(kind, b.footprint.min, tier));
-        } else if let Some(tile) = spot(w, player, kind, at, near, refused) {
+        } else if let Some(tile) = spot(w, player, kind, at, near, refused)
+            .or_else(|| spot(w, player, kind, at, near * 3 + 3, refused))
+        {
             sites.push(Site::new(kind, tile, tier));
+        } else {
+            // Nothing placeable nearby: the deficit stays (the domain is
+            // blocked, not developed) until ground or a refusal clears.
+            sites.push(Site::new(kind, at, tier));
         }
     };
     if age >= Age::Feudal {
@@ -254,4 +260,44 @@ pub(super) fn sites(
     let roads = super::roads::sites(w, center, player, &sites);
     sites.extend(roads);
     sites
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_tower_with_no_placeable_spot_stays_a_deficit() {
+        let config = aoe_core::WorldConfig::new(256, 256, aoe_core::Seed(7)).unwrap();
+        let mut w = GameWorld::new(config).unwrap();
+        w.set_fog_disabled(true);
+        w.place_town_center(PlayerId(0), TileCoord::new(64, 64))
+            .unwrap();
+        w.insert_building(
+            PlayerId(0),
+            BuildingKind::Castle,
+            TileRect::from_xywh(90, 90, 4, 4),
+            true,
+        )
+        .unwrap();
+        // Every tile around the castle is refused: no tower can be placed.
+        let refused: BTreeMap<TileCoord, u64> = (60..130)
+            .flat_map(|y| (60..130).map(move |x| (TileCoord::new(x, y), u64::MAX)))
+            .collect();
+        let plan = sites(
+            &w,
+            TileCoord::new(92, 92),
+            PlayerId(0),
+            Age::Feudal,
+            &refused,
+            None,
+        );
+        assert_eq!(
+            plan.iter()
+                .filter(|s| s.kind == BuildingKind::WatchTower)
+                .count(),
+            3,
+            "both castle towers and the Town Center's stay planned as deficits"
+        );
+    }
 }

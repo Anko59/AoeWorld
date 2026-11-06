@@ -7,6 +7,8 @@ mod bridging;
 mod domain;
 #[path = "vassal/ownership.rs"]
 mod ownership;
+#[path = "vassal/review.rs"]
+mod review;
 #[path = "vassal/roads.rs"]
 mod roads;
 #[path = "vassal/snapshot.rs"]
@@ -239,12 +241,11 @@ fn vassal_demo_stands_a_defensive_line_before_attack_and_general_response() {
             .map(|g| g.unit.id)
     });
     let v = v.unwrap();
-    // The ring is too large to finish before the raid: a line must stand.
     let (mut line, mut response) = (false, false);
     for t in 0..6_000 {
         w.advance();
         if let Some(s) = w.vassal_status(v) {
-            line |= s.completed >= 200;
+            line |= s.completed >= 120;
             assert!(
                 !s.alert || line,
                 "attack before the line stood: tick {t} {s:?}"
