@@ -194,9 +194,8 @@ test("the minimap map keeps filling the diamond rectangle at far zoom", async ({
     .poll(() =>
       page.evaluate(
         () =>
-          document
-            .getElementById("minimap")
-            ?.getAnimations({ subtree: true }).length,
+          document.getElementById("minimap")?.getAnimations({ subtree: true })
+            .length,
       ),
     )
     .toBe(0);
