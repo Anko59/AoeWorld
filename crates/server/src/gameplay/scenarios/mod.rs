@@ -44,6 +44,30 @@ impl GameplayService {
         Ok(service)
     }
 
+    /// A Vassal castle and a Town Center on opposite banks of a real river.
+    pub(crate) async fn prepare_vassal_river_demo(&self) -> Result<Self, String> {
+        if self.map_content_hash.is_none() {
+            return Err("activate a source map first".to_owned());
+        }
+        let mut world = self.world.clone().write_owned().await;
+        let (vassal, span) = tokio::task::spawn_blocking(move || world.prepare_vassal_river_demo())
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| e.to_string())?;
+        tracing::info!(?vassal, ?span, "vassal river fixture prepared");
+        let mut service = self.clone();
+        service.sessions =
+            std::sync::Arc::new(tokio::sync::Mutex::new(std::collections::BTreeMap::new()));
+        service.slots = vec![super::Slot {
+            player: aoe_core::PlayerId(0),
+            primary_unit_id: vassal,
+            human: true,
+            token: self.slots[0].token,
+        }]
+        .into();
+        Ok(service)
+    }
+
     pub fn movement_lane_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
         let (world, primary) = GameWorld::movement_lane_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))

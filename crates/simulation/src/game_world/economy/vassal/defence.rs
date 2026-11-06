@@ -26,7 +26,27 @@ impl GameWorld {
             .map(|u| (u.id, u.position))
             .or_else(|| self.vassal_recent_attacker(id, units));
         let soldiers: Vec<_> = d.soldiers.iter().copied().collect();
+        if let Some((_, at)) = threat {
+            // The raiders' side is walled first: re-plan when it changes.
+            let tile = at.tile_floor();
+            if let Some(d) = self.economy.vassals.domains.get_mut(&id)
+                && d.hot.is_none_or(|h| {
+                    super::ring::side_of(d.center, h) != super::ring::side_of(d.center, tile)
+                })
+            {
+                d.plan.clear();
+                d.hot = Some(tile);
+            }
+        }
+        // Wolves killed builders (the Vassal ignored animals): soldiers kill
+        // the wolf, and a hunted builder walks to the castle's soldiers.
+        let wolves = self.vassal_wolves(id, &soldiers);
         for soldier in soldiers {
+            if let Some((wolf, _)) = wolves.first().filter(|_| threat.is_none()) {
+                let _ = self.issue_attack(player, soldier, *wolf);
+                changed.push(soldier);
+                continue;
+            }
             if let Some(enemy) = threat {
                 let _ = self.issue_attack(player, soldier, enemy.0);
             } else if self
@@ -93,6 +113,27 @@ impl GameWorld {
         if let Some(d) = self.economy.vassals.domains.get_mut(&id) {
             d.status.responding = responding;
         }
+    }
+    /// Wolves hunting this domain's builders or soldiers. With no soldier to
+    /// answer them, a hunted builder withdraws to the castle.
+    fn vassal_wolves(&mut self, id: EntityId, soldiers: &[EntityId]) -> Vec<(EntityId, EntityId)> {
+        let Some(d) = self.economy.vassals.domains.get(&id) else {
+            return Vec::new();
+        };
+        let (castle, center) = (d.castle, d.center);
+        let victims: BTreeSet<_> = d.workers.iter().chain(&d.soldiers).copied().collect();
+        let wolves = self.wolves_hunting(&victims);
+        if soldiers.is_empty() && !wolves.is_empty() {
+            let home = TileCoord::new(center.x, center.y + 4);
+            for (_, victim) in &wolves {
+                if self.building(castle).is_some()
+                    && let Ok(to) = WorldPosition::from_tile_center(home)
+                {
+                    let _ = self.issue_move(*victim, to);
+                }
+            }
+        }
+        wolves
     }
     /// A recalled General marches to where the threat was seen. Raiders that
     /// walked on from there left him standing out of sight of them forever,

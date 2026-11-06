@@ -18,7 +18,7 @@ pub(super) fn paint(terrain: &mut [SceneTerrain], buildings: &[GameplayBuildingS
                 tile.position[1].floor() as i32,
             ))
         {
-            tile.material = 2;
+            tile.material = 18;
             if let Some(appearance) = &mut tile.appearance {
                 appearance.canopy_strength = 0;
                 appearance.floor_strength = 0;

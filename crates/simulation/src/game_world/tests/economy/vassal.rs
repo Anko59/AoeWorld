@@ -1,12 +1,22 @@
 use super::*;
 use crate::{Age, Stockpile};
 
+#[path = "vassal/bridging.rs"]
+mod bridging;
+#[path = "vassal/domain.rs"]
+mod domain;
+#[path = "vassal/help.rs"]
+mod help;
 #[path = "vassal/ownership.rs"]
 mod ownership;
+#[path = "vassal/review.rs"]
+mod review;
 #[path = "vassal/roads.rs"]
 mod roads;
 #[path = "vassal/snapshot.rs"]
 mod snapshot;
+#[path = "vassal/timeline.rs"]
+mod timeline;
 
 fn setup() -> (GameWorld, EntityId, EntityId) {
     let (mut w, _, _) = village();
@@ -34,6 +44,9 @@ fn setup() -> (GameWorld, EntityId, EntityId) {
         )
         .unwrap();
     w.issue_garrison(PlayerId(0), v, castle).unwrap();
+    // These tests measure the domain's building and defence; wolves on the
+    // far wall line would kill the builders (the Vassal ignores animals).
+    w.remove_animals(crate::AnimalKind::Wolf);
     advance(&mut w, 2);
     (w, v, castle)
 }
@@ -41,6 +54,8 @@ fn setup() -> (GameWorld, EntityId, EntityId) {
 #[test]
 fn vassal_caps_reserve_pause_and_completed_land_stops_spending() {
     let (mut w, v, _) = setup();
+    // Explored ground carries the wall ring; under fog it is not planned.
+    w.set_fog_disabled(true);
     for i in 0..25 {
         let pos = WorldPosition::from_tile_center(TileCoord::new(84 + i % 5, 96 + i / 5)).unwrap();
         w.spawn_villager(PlayerId(0), pos).unwrap();
@@ -57,7 +72,9 @@ fn vassal_caps_reserve_pause_and_completed_land_stops_spending() {
     w.issue_vassal_development(PlayerId(0), v, true).unwrap();
     advance(&mut w, 20);
     assert_eq!(w.vassal_status(v).unwrap().villagers, 20);
-    for _ in 0..20_000 {
+    // Measured: 20 builders finish the ~570-site domain in about 45,000
+    // ticks (8 builders: 104,000); 60,000 bounds it with walking margin.
+    for _ in 0..60_000 {
         w.advance();
         if w.vassal_status(v).unwrap().developed {
             break;
@@ -72,8 +89,18 @@ fn vassal_caps_reserve_pause_and_completed_land_stops_spending() {
             .map(|b| (b.kind, b.footprint, b.work_done, b.work_total))
             .collect::<Vec<_>>(),
         w.units()
-            .filter(|u| u.kind == UnitKind::Villager)
-            .map(|u| (u.id, u.position.tile_floor(), u.task))
+            .filter(|u| {
+                let t = u.position.tile_floor();
+                (85..=88).contains(&t.x) && (96..=99).contains(&t.y)
+            })
+            .map(|u| (
+                u.id,
+                u.kind,
+                u.position,
+                u.task,
+                u.moving,
+                w.vassal_controller(u.id)
+            ))
             .collect::<Vec<_>>()
     );
     assert_eq!(w.vassal_status(v).unwrap().villagers, 0);
@@ -206,32 +233,32 @@ fn vassal_preserves_busy_general_members_and_explicit_owner_orders() {
 }
 
 #[test]
-fn vassal_demo_finishes_before_attack_and_general_response() {
+fn vassal_demo_stands_a_defensive_line_before_attack_and_general_response() {
     let (mut w, _) = GameWorld::vassal_defense_demo(Seed(7)).unwrap();
-    let v = w
-        .buildings()
-        .flat_map(|b| &b.garrison)
-        .find(|g| g.unit.kind == UnitKind::Vassal)
-        .map(|g| g.unit.id)
-        .or_else(|| w.units().find(|u| u.kind == UnitKind::Vassal).map(|u| u.id))
-        .unwrap();
-    let mut developed = false;
-    let mut response = false;
-    for _ in 0..6_000 {
+    let found = w.units().find(|u| u.kind == UnitKind::Vassal).map(|u| u.id);
+    let v = found.or_else(|| {
+        let mut garrisoned = w.buildings().flat_map(|b| &b.garrison);
+        garrisoned
+            .find(|g| g.unit.kind == UnitKind::Vassal)
+            .map(|g| g.unit.id)
+    });
+    let v = v.unwrap();
+    let (mut line, mut response) = (false, false);
+    for t in 0..6_000 {
         w.advance();
         if let Some(s) = w.vassal_status(v) {
-            developed |= s.developed;
-            if s.alert {
-                assert!(developed, "attack must follow completed fortification");
-            }
+            line |= s.completed >= 120;
+            assert!(
+                !s.alert || line,
+                "attack before the line stood: tick {t} {s:?}"
+            );
             response |= s.responding > 0;
         }
         if response {
             break;
         }
     }
-    assert!(developed, "showcase fortification must complete");
-    assert!(response, "showcase must exercise a real General response");
+    assert!(line && response, "line {line}, General response {response}");
 }
 
 #[test]
@@ -275,7 +302,7 @@ fn vassal_reuses_existing_buildings_and_skips_obstructed_tower_sites() {
     w.insert_building(
         PlayerId(0),
         BuildingKind::WatchTower,
-        TileRect::from_xywh(96, 84, 2, 2),
+        TileRect::from_xywh(96, 85, 2, 2),
         true,
     )
     .unwrap();
@@ -305,7 +332,8 @@ fn vassal_reuses_existing_buildings_and_skips_obstructed_tower_sites() {
     assert_eq!(
         w.player_buildings_of(PlayerId(0), BuildingKind::WatchTower)
             .count(),
-        2
+        3,
+        "the existing tower serves the castle; one more there, one by the Town Center"
     );
     assert_eq!(
         w.player_buildings_of(PlayerId(0), BuildingKind::Barracks)
@@ -419,9 +447,11 @@ fn vassal_moves_past_a_paid_foundation_that_becomes_unreachable() {
         .find(|b| !b.is_complete())
         .unwrap()
         .id;
-    for y in 85..=87 {
-        for x in 85..=87 {
-            if x != 86 || y != 86 {
+    // Wall the tower foundation in, wherever the plan put it.
+    let f = w.building(foundation).unwrap().footprint.min;
+    for y in f.y - 1..=f.y + 1 {
+        for x in f.x - 1..=f.x + 1 {
+            if x != f.x || y != f.y {
                 w.insert_building(
                     PlayerId(0),
                     BuildingKind::PalisadeWall,
@@ -443,32 +473,4 @@ fn vassal_moves_past_a_paid_foundation_that_becomes_unreachable() {
         !w.vassal_status(v).unwrap().developed,
         "unfinished fortification is never reported as complete"
     );
-}
-
-#[test]
-fn vassal_calls_for_help_when_an_enemy_tower_attacks_its_territory() {
-    let (mut w, v, _) = setup();
-    let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
-    let soldier = w
-        .spawn_kind(PlayerId(0), UnitKind::Militia, at(106, 92))
-        .unwrap();
-    w.issue_stance(PlayerId(0), &[soldier], aoe_core::CombatStance::StandGround)
-        .unwrap();
-    let general = w
-        .spawn_kind(PlayerId(0), UnitKind::General, at(190, 92))
-        .unwrap();
-    let tower = w
-        .insert_building(
-            PlayerId(1),
-            BuildingKind::WatchTower,
-            TileRect::from_xywh(110, 92, 1, 1),
-            true,
-        )
-        .unwrap();
-    w.issue_attack(PlayerId(1), tower, soldier).unwrap();
-    advance(&mut w, 40);
-    assert!(w.unit(soldier).unwrap().last_hit.is_some());
-    assert!(w.vassal_status(v).unwrap().alert);
-    assert_eq!(w.vassal_status(v).unwrap().responding, 1);
-    assert!(w.economy.generals.armies[&general].destination.is_some());
 }

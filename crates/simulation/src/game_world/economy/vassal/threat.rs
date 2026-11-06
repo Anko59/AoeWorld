@@ -1,7 +1,7 @@
 //! Attacks by structures and by units just outside the territory still raise
 //! an alert. Read only recent hit sources on the protected units and plan sites.
 use super::*;
-use crate::{Age, GameUnit};
+use crate::GameUnit;
 impl GameWorld {
     pub(super) fn vassal_recent_attacker(
         &self,
@@ -9,13 +9,9 @@ impl GameWorld {
         units: &[GameUnit],
     ) -> Option<(EntityId, WorldPosition)> {
         let d = &self.economy.vassals.domains[&id];
-        let age = self.player_economy(d.player).map_or(Age::Dark, |p| p.age);
-        let sites = super::plan::sites(self, d.center, d.player, age, &d.refused);
-        let structures = std::iter::once(d.castle).chain(
-            sites
-                .into_iter()
-                .filter_map(|(_, tile)| self.building_at(tile)),
-        );
+        // The cached plan: re-planning here would scan the whole domain.
+        let structures = std::iter::once(d.castle)
+            .chain(d.plan.iter().filter_map(|site| self.building_at(site.tile)));
         let hits = units
             .iter()
             .filter(|u| u.player == d.player && u.hp > 0 && inside(d.center, u.position))

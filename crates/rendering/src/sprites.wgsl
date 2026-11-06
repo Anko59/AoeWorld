@@ -401,7 +401,7 @@ fn world_colour(in: VertexOutput) -> vec4<f32> {
                 weight = (threshold - previous) * (1.0 - in.weights.z);
                 previous = threshold;
                 if weight <= 0.0 { continue; }
-                material = select(select(select(material, 15u, material == 5u), 16u, material == 6u), 17u, material == 11u);
+                material = select(select(select(select(material, 15u, material == 5u), 16u, material == 6u), 17u, material == 11u), 18u, material == 9u);
                 header = sheet(material);
             } else {
                 weight = in.weights.z;

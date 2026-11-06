@@ -7,12 +7,14 @@ mod demo;
 mod development;
 mod hash;
 mod plan;
+mod ring;
 mod road_demo;
 mod roads;
 mod threat;
 
 pub const VASSAL_LIMIT: usize = 20;
-pub const VASSAL_RADIUS: i32 = 24;
+/// The domain a Vassal develops, fortifies and defends: a Steward's circle.
+pub const VASSAL_RADIUS: i32 = super::steward::STEWARD_RULES.radius_tiles;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum VassalWait {
     #[default]
@@ -49,6 +51,12 @@ pub(crate) struct Domain {
     refused: BTreeMap<TileCoord, u64>,
     progress: Option<(EntityId, u64, u64)>,
     status: VassalStatus,
+    /// Cached plan (see `plan::REPLAN_TICKS`), its age and the tick it was made.
+    plan: Vec<plan::Site>,
+    plan_age: crate::Age,
+    planned: u64,
+    /// Where the latest raider was seen: the threatened side is walled first.
+    hot: Option<TileCoord>,
 }
 #[derive(Clone, Copy, Debug)]
 struct Recall {
@@ -93,6 +101,10 @@ impl GameWorld {
                 cursor: 0,
                 refused: BTreeMap::new(),
                 progress: None,
+                plan: Vec::new(),
+                plan_age: crate::Age::Dark,
+                planned: 0,
+                hot: None,
                 status: VassalStatus {
                     development: true,
                     ..Default::default()
@@ -213,7 +225,7 @@ impl GameWorld {
                     self.unit(unit).is_none_or(|u| {
                         u.hp == 0
                             || (u.kind == UnitKind::Villager
-                                && !inside(center, u.position)
+                                && !within(center, u.position, VASSAL_RADIUS + 8)
                                 && d.status.next != Some(BuildingKind::Road))
                             || self.embarked(unit)
                     })
@@ -247,6 +259,14 @@ impl GameWorld {
                 }
                 let worker = u.kind == UnitKind::Villager;
                 if !worker && super::general::role(u.kind).is_none() {
+                    continue;
+                }
+                // A Steward's villagers and the town's own (the starting
+                // villagers by a Town Center) stay with the town.
+                if worker
+                    && (self.steward_controller(u.id).is_some()
+                        || self.by_own_town_center(player, u.position))
+                {
                     continue;
                 }
                 let d = &self.economy.vassals.domains[&id];
@@ -286,9 +306,27 @@ impl GameWorld {
         }
     }
 }
+/// Tiles around a Town Center whose idle villagers belong to the town.
+const TOWN_TILES: i32 = 12;
+impl GameWorld {
+    fn by_own_town_center(&self, player: PlayerId, at: WorldPosition) -> bool {
+        self.player_buildings_of(player, BuildingKind::TownCenter)
+            .any(|b| {
+                let c = TileCoord::new(
+                    (b.footprint.min.x + b.footprint.max.x) / 2,
+                    (b.footprint.min.y + b.footprint.max.y) / 2,
+                );
+                within(c, at, TOWN_TILES)
+            })
+    }
+}
 fn inside(center: TileCoord, at: WorldPosition) -> bool {
+    within(center, at, VASSAL_RADIUS)
+}
+/// Builders of the wall ring's corners stand just outside the radius.
+fn within(center: TileCoord, at: WorldPosition, radius: i32) -> bool {
     super::general::distance(WorldPosition::new(center.x * 1024, center.y * 1024), at)
-        <= (i64::from(VASSAL_RADIUS) * 1024).pow(2)
+        <= (i64::from(radius) * 1024).pow(2)
 }
 
 impl GameWorld {

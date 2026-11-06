@@ -249,6 +249,7 @@ fn reviewed_catalog_is_complete_in_original_source_and_frame_order() {
             AssetRole::WaterDeep,
             AssetRole::Ice,
             AssetRole::Shallows,
+            AssetRole::Road,
         ]
     );
 }

@@ -27,6 +27,16 @@ pub(crate) async fn reset(
                 Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
             }
         }
+        Some("vassal-river") => {
+            let active = state.gameplay.read().await.clone();
+            match active.prepare_vassal_river_demo().await {
+                Ok(service) => service,
+                Err(reason) => {
+                    tracing::warn!(%reason, "vassal river setup failed");
+                    return StatusCode::BAD_REQUEST;
+                }
+            }
+        }
         Some("general-river") => {
             let active = state.gameplay.read().await.clone();
             match active.prepare_general_river_demo().await {

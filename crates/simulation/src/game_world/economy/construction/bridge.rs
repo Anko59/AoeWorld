@@ -59,6 +59,11 @@ impl GameWorld {
         Ok(id)
     }
 
+    /// Whether a bridge could be placed from bank `from` to bank `to` now.
+    pub(crate) fn bridge_site_valid(&self, from: TileCoord, to: TileCoord) -> bool {
+        BridgeSpan::new(from, to).is_some_and(|span| self.validate_bridge_placement(span).is_ok())
+    }
+
     pub fn bridge_footprint(from: TileCoord, to: TileCoord) -> Option<TileRect> {
         Some(BridgeSpan::new(from, to)?.footprint())
     }

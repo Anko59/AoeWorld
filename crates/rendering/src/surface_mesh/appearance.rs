@@ -276,7 +276,8 @@ pub(crate) fn procedural_tint(texel: [u8; 4], tint: u8) -> [u8; 4] {
 }
 
 /// Frames and topology: terrain groups 0–11, grass fallback 12,
-/// optional water/ice sheets 13–15, DAT foundation 16, and marsh shallows 17.
+/// optional water/ice sheets 13–15, DAT foundation 16, marsh shallows 17
+/// and the road ground 18.
 #[inline(never)]
 pub(crate) fn terrain_group(
     art: &GameArt,
@@ -304,17 +305,22 @@ fn terrain_group_all(
         11 => Some(1),
         8 => Some(2),
         12 => Some(3),
+        18 => Some(4),
         _ => None,
     }
     .filter(|slot: &usize| !art.water_depth[*slot].0.is_empty());
     if let Some(slot) = depth {
         let sheet = &art.water_depth[slot];
-        return Some((if slot == 3 { 17 } else { 13 + slot }, &sheet.0, sheet.1));
+        return Some((
+            if slot >= 3 { 14 + slot } else { 13 + slot },
+            &sheet.0,
+            sheet.1,
+        ));
     }
     let material = usize::from(match material {
         7 if !art.terrain[11].is_empty() => 11,
         4 if !art.terrain[4].is_empty() => 4,
-        4 | 7 | 9 => 2,
+        4 | 7 | 9 | 18 => 2,
         8 | 10..=12 => 5,
         6 if art.terrain[6].is_empty() => 2,
         // Ground variety (scene 13–16, groups 7–10) draws its base sheet when

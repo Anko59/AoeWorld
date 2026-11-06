@@ -44,8 +44,8 @@ pub fn scene_terrain_frames(
     }
     for candidate in initial.min(8)..=8 {
         level(art, candidate);
-        let groups: [_; 18] = std::array::from_fn(|m| terrain_group(art, m as u8));
-        let mut seen = [false; 18];
+        let groups: [_; 19] = std::array::from_fn(|m| terrain_group(art, m as u8));
+        let mut seen = [false; 19];
         let mut directory_cells = 0;
         for (group, frames, _) in groups.iter().flatten() {
             if !seen[*group] {

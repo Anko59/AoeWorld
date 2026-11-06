@@ -6,12 +6,16 @@ pub(crate) const FULL: u32 = 1 << 30;
 const EMPTY: u8 = 15;
 
 // Water-side 5/11 and forest-bed 6 never occur as land observations. Reuse
-// those nibbles for scene materials above 14, preserving empty 15.
+// those nibbles for scene materials above 14, preserving empty 15. Road
+// ground (18) takes mud's nibble 9: mud has no sheet of its own (it draws
+// dirt), so it is observed as dirt.
 fn code(material: u8) -> u8 {
     match material {
         15 => 5,
         16 => 6,
         17 => 11,
+        18 => 9,
+        9 => 2,
         other => other.min(EMPTY),
     }
 }
@@ -21,6 +25,7 @@ pub(crate) fn material(code: u8) -> u8 {
         5 => 15,
         6 => 16,
         11 => 17,
+        9 => 18,
         other => other,
     }
 }

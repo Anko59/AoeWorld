@@ -67,7 +67,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::Response;
 
-const ROLE_SLOTS: usize = AssetRole::RallyFlag as usize + 1;
+const ROLE_SLOTS: usize = AssetRole::Road as usize + 1;
 type RoleRanges = [Option<std::ops::Range<usize>>; ROLE_SLOTS];
 
 pub(crate) async fn fetch(path: &str) -> Result<Vec<u8>, JsValue> {
@@ -190,11 +190,12 @@ const TERRAIN_ROLES: [AssetRole; 12] = [
 ];
 
 /// Optional water sheets in renderer order: medium, deep, frozen, wadeable marsh.
-const WATER_DEPTH_ROLES: [AssetRole; 4] = [
+const WATER_DEPTH_ROLES: [AssetRole; 5] = [
     AssetRole::WaterMedium,
     AssetRole::WaterDeep,
     AssetRole::Ice,
     AssetRole::Shallows,
+    AssetRole::Road,
 ];
 
 fn renderer_topology(topology: TerrainFrameTopology) -> TerrainTopology {

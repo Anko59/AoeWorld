@@ -35,15 +35,21 @@ impl GameWorld {
             PlayerId(0),
             Age::Castle,
             &Default::default(),
+            None,
         );
-        for (kind, tile) in sites
+        for site in sites
             .into_iter()
-            .filter(|(kind, _)| *kind != BuildingKind::Road)
+            .filter(|s| !matches!(s.kind, BuildingKind::Road | BuildingKind::Bridge))
         {
+            let (kind, tile, vertical) = (site.kind, site.tile, site.vertical);
+            let (r, mut size) = (kind.rules(), (kind.rules().side, kind.rules().depth));
+            if vertical {
+                size = (r.depth, r.side);
+            }
             w.insert_building(
                 PlayerId(0),
                 kind,
-                TileRect::from_xywh(tile.x, tile.y, kind.rules().side, kind.rules().depth),
+                TileRect::from_xywh(tile.x, tile.y, size.0, size.1),
                 true,
             )?;
         }

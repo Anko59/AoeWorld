@@ -3,32 +3,9 @@ use super::*;
 #[test]
 fn vassal_roads_follow_fortifications_and_count_toward_development() {
     let (mut w, v, _) = setup();
-    let mut sites = vec![
-        (BuildingKind::WatchTower, 86, 86),
-        (BuildingKind::WatchTower, 97, 97),
-        (BuildingKind::Barracks, 96, 88),
-    ];
-    for y in [82, 102] {
-        sites.push((BuildingKind::StoneGate, 90, y));
-        for x in 82..=102 {
-            if !(90..94).contains(&x) {
-                sites.push((BuildingKind::StoneWall, x, y));
-            }
-        }
-    }
-    for y in 83..102 {
-        for x in [82, 102] {
-            sites.push((BuildingKind::StoneWall, x, y));
-        }
-    }
-    for (kind, x, y) in sites {
-        w.insert_building(
-            PlayerId(0),
-            kind,
-            TileRect::from_xywh(x, y, kind.rules().side, kind.rules().depth),
-            true,
-        )
-        .unwrap();
+    // The whole planned fortification stands; only the road is missing.
+    for (kind, rect) in w.vassal_fortification(v) {
+        w.insert_building(PlayerId(0), kind, rect, true).unwrap();
     }
     w.spawn_villager(PlayerId(0), WorldPosition::new(88 * 1024, 96 * 1024))
         .unwrap();
@@ -78,14 +55,6 @@ fn road_demo_uses_ordinary_movement_and_a_fortified_vassal() {
             .count(),
         29
     );
-    w.issue_vassal_development(PlayerId(0), v, true).unwrap();
-    advance(&mut w, 40);
-    assert!(
-        w.buildings()
-            .filter(|b| b.kind == BuildingKind::Road)
-            .count()
-            > 29
-    );
     let lanes: Vec<_> = w
         .units()
         .filter(|u| u.kind == UnitKind::Villager && [120, 123].contains(&u.position.tile_floor().y))
@@ -97,7 +66,16 @@ fn road_demo_uses_ordinary_movement_and_a_fortified_vassal() {
         w.issue_move(id, WorldPosition::new(100 * 1024 + 512, from.y))
             .unwrap();
     }
+    // The 100-tile domain covers the lanes: walkers are not idle, so the
+    // Vassal starts its road without taking them.
+    w.issue_vassal_development(PlayerId(0), v, true).unwrap();
     advance(&mut w, 20);
+    assert!(
+        w.buildings()
+            .filter(|b| b.kind == BuildingKind::Road)
+            .count()
+            > 29
+    );
     assert!(
         w.units()
             .filter(|u| u.moving && [120, 123].contains(&u.position.tile_floor().y))
@@ -109,6 +87,7 @@ fn road_demo_uses_ordinary_movement_and_a_fortified_vassal() {
 #[test]
 fn vassal_road_purchases_wait_for_unfinished_fortifications() {
     let (mut w, _, _) = setup();
+    w.set_fog_disabled(true);
     w.spawn_villager(PlayerId(0), WorldPosition::new(88 * 1024, 96 * 1024))
         .unwrap();
     advance(&mut w, 80);

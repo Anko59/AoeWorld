@@ -2,7 +2,7 @@ use super::*;
 use aoe_map::*;
 
 #[path = "bridge_fixture.rs"]
-mod river_fixture;
+pub(super) mod river_fixture;
 use river_fixture::{clear_nodes, river_lane, river_width};
 
 #[path = "bridges/angles.rs"]
