@@ -4,13 +4,16 @@ use crate::game_world::combat::tick::Goal;
 /// Ticks between an attack-move group's looks; groups are staggered by id.
 const ENGAGE_CADENCE: u64 = 4;
 /// Enemies one look collects; each member compares only against these.
-const ENGAGE_CANDIDATES: usize = 32;
+const ENGAGE_CANDIDATES: usize = 256;
 /// Spatial bucket entries one look may inspect, whatever the group's extent.
 const ENGAGE_INSPECTIONS: usize = 2_048;
 /// Building tiles one look may read; a wider window rotates by rows.
 const ENGAGE_BUILDING_TILES: i32 = 1_024;
 /// Members one look may send into a fight; the others look again next time.
-const ENGAGE_PER_LOOK: usize = 8;
+const ENGAGE_PER_LOOK: usize = 64;
+/// Members one look examines, rotating through the group, so the cost of a
+/// look does not grow with the army while every member is seen every few seconds.
+const ENGAGE_MEMBERS_PER_LOOK: usize = 128;
 /// Enemies in sight a member weighs per look, nearest first.
 const TARGETS_PER_MEMBER: usize = 3;
 
@@ -42,9 +45,10 @@ impl GameWorld {
             let Some((player, lookers, enemies)) = self.formation_look(leader) else {
                 continue;
             };
-            let start = (self.tick.0 / ENGAGE_CADENCE) as usize % lookers.len();
+            let start =
+                (self.tick.0 / ENGAGE_CADENCE) as usize * ENGAGE_MEMBERS_PER_LOOK % lookers.len();
             let mut engaged = 0;
-            for n in 0..lookers.len() {
+            for n in 0..lookers.len().min(ENGAGE_MEMBERS_PER_LOOK) {
                 if engaged == ENGAGE_PER_LOOK {
                     break;
                 }

@@ -3,6 +3,7 @@ use crate::{Age, GeneralState, Stockpile};
 
 mod appearance;
 mod detached;
+mod engage;
 mod fighting;
 mod movement;
 mod orders;
