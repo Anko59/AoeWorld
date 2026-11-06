@@ -80,3 +80,32 @@ fn provisional_progress_stays_inside_the_proof_collision_snapshot() {
         .unwrap();
     assert!(!search.records.contains_key(&to));
 }
+
+/// The planner searches through its per-poll memo. A tile free in the live
+/// overlay but blocked in the proof snapshot must stay out of the search:
+/// the memo must not answer the snapshot's question with the live answer.
+#[test]
+fn memoized_search_still_reads_the_proof_snapshot() {
+    let current = ResourceOverlay::default();
+    let mut snapshot = ResourceOverlay::default();
+    snapshot
+        .add_footprint(aoe_core::TileRect::from_xywh(1, 0, 1, 1))
+        .unwrap();
+    let from = TileCoord::new(0, 0);
+    let to = TileCoord::new(1, 0);
+    let memo = super::super::memo::MemoTerrain::new(&Cliff, &current);
+    let mut search = SearchState::new(from, to);
+    ExpansionContext::new(to, &memo, &current, &|| false)
+        .with_proof_overlay(Some(&snapshot))
+        .expand_neighbor(
+            &mut search,
+            ActiveExpansion {
+                tile: from,
+                cost: 0,
+                next_neighbor: 0,
+            },
+            (1, 0),
+        )
+        .unwrap();
+    assert!(!search.records.contains_key(&to));
+}

@@ -42,15 +42,21 @@ type Map<K, V> = HashMap<K, V, BuildHasherDefault<TileHasher>>;
 
 pub(super) struct MemoTerrain<'a> {
     inner: &'a dyn RouteTerrain,
+    /// Walkability is memoized for this overlay only. A search also asks
+    /// about its proof snapshot (`with_proof_overlay`); keyed by tile alone,
+    /// the memo answered the snapshot with the live overlay's answer, so a
+    /// tile blocked in the snapshot but free now entered the search.
+    overlay: &'a ResourceOverlay,
     walkable: RefCell<Map<TileCoord, bool>>,
     edges: RefCell<Map<(TileCoord, TileCoord), bool>>,
     costs: RefCell<Map<(TileCoord, u8), u32>>,
 }
 
 impl<'a> MemoTerrain<'a> {
-    pub(super) fn new(inner: &'a dyn RouteTerrain) -> Self {
+    pub(super) fn new(inner: &'a dyn RouteTerrain, overlay: &'a ResourceOverlay) -> Self {
         Self {
             inner,
+            overlay,
             walkable: RefCell::default(),
             edges: RefCell::default(),
             costs: RefCell::default(),
@@ -72,6 +78,9 @@ impl RouteTerrain for MemoTerrain<'_> {
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError> {
+        if !std::ptr::eq(overlay, self.overlay) {
+            return self.inner.route_walkable(overlay, tile, cancelled);
+        }
         if let Some(known) = self.walkable.borrow().get(&tile) {
             return Ok(*known);
         }
