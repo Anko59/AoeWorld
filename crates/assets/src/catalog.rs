@@ -99,6 +99,8 @@ pub enum AssetRole {
     VillagerCarryingStone,
     VillagerMiningStone,
     RallyFlag,
+    /// Dirt road ground (DE terrain 24); only bound from a DE terrain directory.
+    Road,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

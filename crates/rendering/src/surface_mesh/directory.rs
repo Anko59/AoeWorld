@@ -23,7 +23,7 @@ mod tests;
 pub(crate) const TILED: u8 = 6;
 const SIDE: usize = GAME_ATLAS_SIDE as usize;
 const ENTRIES: usize = 2 * SIDE;
-const MATERIALS: usize = 18;
+const MATERIALS: usize = 19;
 const FIRST_FRAME: usize = 1 + 2 * MATERIALS;
 pub(super) const MAX_CELLS: usize = (ENTRIES - FIRST_FRAME) / 2;
 
@@ -47,7 +47,7 @@ pub fn write_terrain_directory_page(art: &crate::GameArt, page: &mut [u8]) -> Re
 
 fn table(art: &crate::GameArt) -> Result<Vec<u8>, String> {
     let mut table = vec![0_u8; (FIRST_FRAME - 1) * 4];
-    let mut starts = [0_usize; 18];
+    let mut starts = [0_usize; 19];
     for material in 0..MATERIALS {
         let Some((group, frames, topology)) = terrain_group(art, material as u8) else {
             continue;

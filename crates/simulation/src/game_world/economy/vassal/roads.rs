@@ -111,6 +111,15 @@ pub(super) fn sites(
         out: Vec::new(),
         roads: BTreeSet::new(),
         bridge_ok: BTreeMap::new(),
+        fixed: w
+            .buildings()
+            .filter(|b| b.player == player && b.kind == BuildingKind::Bridge && b.hp > 0)
+            .filter_map(|b| b.bridge_span)
+            .flat_map(|span| {
+                let len = span.tiles().len() as u32;
+                [(span.from, (span.to, len)), (span.to, (span.from, len))]
+            })
+            .collect(),
     };
     let mut connected = vec![center_of(castle.footprint)];
     let mut remaining: Vec<(TileRect, u8)> = nodes
@@ -163,6 +172,9 @@ struct Network<'a> {
     out: Vec<Site>,
     roads: BTreeSet<TileCoord>,
     bridge_ok: BTreeMap<(TileCoord, TileCoord), bool>,
+    /// Own bridges already laid (even as foundations), by bank: the route
+    /// uses them as they are instead of planning a parallel span.
+    fixed: BTreeMap<TileCoord, (TileCoord, u32)>,
 }
 
 impl Network<'_> {
@@ -173,7 +185,8 @@ impl Network<'_> {
             && self.w.tile_passable(tile)
     }
 
-    /// An own finished road, gate or bridge tile: walkable, nothing to build.
+    /// An own road, finished gate or bridge (a foundation too: re-planning
+    /// must keep the span it already laid, not lay a parallel one).
     fn existing(&self, tile: TileCoord) -> bool {
         self.w
             .building_at(tile)
@@ -181,7 +194,8 @@ impl Network<'_> {
             .is_some_and(|b| {
                 b.player == self.player
                     && (b.kind == BuildingKind::Road
-                        || (b.kind.is_gate() || b.kind == BuildingKind::Bridge) && b.is_complete())
+                        || b.kind == BuildingKind::Bridge
+                        || b.kind.is_gate() && b.is_complete())
             })
     }
 
@@ -236,6 +250,19 @@ impl Network<'_> {
             settled += 1;
             if settled > EXPANSIONS {
                 break;
+            }
+            if let Some(&(other, len)) = self.fixed.get(&tile) {
+                let d = match ((other.x - tile.x).signum(), (other.y - tile.y).signum()) {
+                    (-1, _) => 1,
+                    (1, _) => 2,
+                    (_, 1) => 3,
+                    _ => 0,
+                };
+                let total = cost + 1 + BRIDGE_TILE_COST * len.saturating_sub(2);
+                if best.get(&(other, d)).is_none_or(|(c, _)| total < *c) {
+                    best.insert((other, d), (total, Some((here, true))));
+                    heap.push(Reverse((total, other.y, other.x, d)));
+                }
             }
             for (d, (dx, dy)) in DIRS.into_iter().enumerate() {
                 let d = d as u8;

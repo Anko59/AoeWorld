@@ -23,7 +23,7 @@ pub(super) fn prepare(mut manifest: Manifest, team: [u8; 3]) -> Result<Prepared,
     let mut selected = Vec::new();
     let mut domains = Vec::new();
     let mut terrain_topology = [None; 12];
-    let mut depth_topology = [None; 4];
+    let mut depth_topology = [None; 5];
     // Catalog roles are bounded, not a dynamic startup search tree. The browser
     // oracle covers every selected role.
     let mut ranges: RoleRanges = std::array::from_fn(|_| None);

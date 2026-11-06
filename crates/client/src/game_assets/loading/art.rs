@@ -10,7 +10,7 @@ pub(super) struct Input<'a> {
     pub rally_range: Option<Range<usize>>,
     pub native_farm: Option<(Range<usize>, TerrainTopology)>,
     pub terrain_topology: [Option<TerrainTopology>; 12],
-    pub depth_topology: [Option<TerrainTopology>; 4],
+    pub depth_topology: [Option<TerrainTopology>; 5],
     pub residents: usize,
 }
 #[inline(never)]

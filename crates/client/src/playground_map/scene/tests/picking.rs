@@ -462,7 +462,7 @@ async fn road_ground_paints_only_complete_tiles_and_remains_selectable() {
     assert_eq!(terrain[0].material, 0);
     road.construction = ConstructionState::Complete;
     roads::paint(&mut terrain, &[road.clone()]);
-    assert_eq!(terrain[0].material, 2);
+    assert_eq!(terrain[0].material, 18);
     client.village.buildings = vec![road];
     let point = super::super::screen_position(&client, [99.5, 99.5]);
     picking::click(&mut client, point, None);

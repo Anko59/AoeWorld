@@ -1,13 +1,16 @@
 //! Bind semantic ground roles to the current DAT terrain directory.
 use super::*;
-const IDS: [u16; 16] = [12, 100, 6, 14, 40, 1, 10, 11, 9, 0, 2, 124, 23, 22, 26, 4];
+/// DAT terrain per renderer slot; the last, 24 (g_rd1), is the dirt road.
+const IDS: [u16; 17] = [
+    12, 100, 6, 14, 40, 1, 10, 11, 9, 0, 2, 124, 23, 22, 26, 4, 24,
+];
 pub(super) fn selection(
     manifest: &Manifest,
     selected: &mut Vec<usize>,
     domains: &mut Vec<AtlasDomain>,
     ranges: &mut RoleRanges,
     topologies: &mut [Option<TerrainTopology>; 12],
-    depths: &mut [Option<TerrainTopology>; 4],
+    depths: &mut [Option<TerrainTopology>; 5],
 ) -> Result<Option<(std::ops::Range<usize>, TerrainTopology)>, JsValue> {
     if manifest.terrains.is_empty() {
         return Ok(None);

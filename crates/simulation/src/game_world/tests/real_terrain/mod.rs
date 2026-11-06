@@ -15,4 +15,5 @@ mod metrics;
 mod recovery_tests;
 mod terrain;
 mod unreachable_enemy;
+mod vassal_river;
 use metrics::{measure, reference_ticks};

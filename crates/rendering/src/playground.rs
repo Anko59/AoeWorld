@@ -83,9 +83,10 @@ pub struct GameArt {
     /// Authored sheet topology; never infer a repeating sheet from frame count.
     pub terrain_topology: [Option<TerrainTopology>; 12],
     /// Optional water depth sheets beside `terrain[5]`, the light shallow
-    /// sheet: medium water, deep water, frozen water (ice), and wadeable marsh.
+    /// sheet: medium water, deep water, frozen water (ice), wadeable marsh and,
+    /// last, the dirt road ground (scene material 18, not water at all).
     /// Empty depth sheets draw shallow water; absent ice uses water detail.
-    pub water_depth: [(Vec<GameFrame>, Option<TerrainTopology>); 4],
+    pub water_depth: [(Vec<GameFrame>, Option<TerrainTopology>); 5],
     /// Resource groups in map wire order: food, wood, gold, then stone.
     /// Empty groups deliberately mean that no reviewed real-pack art exists.
     pub resources: [Vec<GameFrame>; 4],
