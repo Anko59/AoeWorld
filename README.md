@@ -160,7 +160,6 @@ Then open <http://localhost:8080/>. A pack that lacks the Definitive Edition ove
 | `make status` / `make logs` | Inspect your running server |
 | `make down` | Stop this checkout's server |
 | `DEV_PORT=8082 make dev` | Use another host port |
-| `make map-generate` | Generate a large map from geodata |
 
 Details: [local development](docs/local-development.md), [assets](docs/assets.md), [geographic map workflow](docs/geodata/workflow.md).
 
@@ -184,7 +183,7 @@ Details: [local development](docs/local-development.md), [assets](docs/assets.md
 | `B` | Open the economic buildings menu |
 | `G` | Toggle the grid |
 | `Delete` | Delete the selected entities |
-| `Esc` | Cancel the current order |
+| `Esc` | Clear the selection |
 | `Space` | Jump to the latest alert |
 | `End` | Jump to your army |
 | `Ctrl` / `Shift` + `F1`–`F4` | Save / recall a camera bookmark |
@@ -267,7 +266,7 @@ Focused tests per crate, for example `make test-native-focused AOE_NATIVE_TEST_P
 </details>
 
 <details>
-<summary><b>🚧 Project status and roadmap</b></summary>
+<summary id="-project-status-and-roadmap"><b>🚧 Project status and roadmap</b></summary>
 
 <br>
 
