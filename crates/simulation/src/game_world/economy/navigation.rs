@@ -151,8 +151,8 @@ impl GameWorld {
         let _measurement = self.measure_planning();
         if kind.is_naval() {
             return planner.poll(
-                &super::fishing::navigation::NavalNavigation(self),
-                &ResourceOverlay::default(),
+                &super::fishing::navigation::NavalNavigation::new(self),
+                ResourceOverlay::empty(),
                 budget,
                 cancelled,
             );
@@ -173,7 +173,7 @@ impl GameWorld {
                     blocked: &self.economy.blocked_tiles,
                     world: self,
                 },
-                &ResourceOverlay::default(),
+                ResourceOverlay::empty(),
                 budget,
                 cancelled,
             ),
@@ -190,8 +190,8 @@ impl GameWorld {
         let _measurement = self.measure_planning();
         if kind.is_naval() {
             planner.plan_ahead(
-                &super::fishing::navigation::NavalNavigation(self),
-                &ResourceOverlay::default(),
+                &super::fishing::navigation::NavalNavigation::new(self),
+                ResourceOverlay::empty(),
                 budget,
                 cancelled,
             );
@@ -213,7 +213,7 @@ impl GameWorld {
                     blocked: &self.economy.blocked_tiles,
                     world: self,
                 },
-                &ResourceOverlay::default(),
+                ResourceOverlay::empty(),
                 budget,
                 cancelled,
             ),

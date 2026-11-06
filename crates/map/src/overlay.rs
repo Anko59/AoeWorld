@@ -59,6 +59,15 @@ pub enum ResourceOverlayError {
 }
 
 impl ResourceOverlay {
+    /// One shared empty overlay. `default()` allocates its collision table
+    /// (65 reference counts and three boxes); route searches over water and
+    /// static portals asked for one per probed edge or chunk.
+    pub fn empty() -> &'static Self {
+        static EMPTY: std::sync::LazyLock<ResourceOverlay> =
+            std::sync::LazyLock::new(ResourceOverlay::default);
+        &EMPTY
+    }
+
     /// Transient building collision, reconstructed by the simulation on start.
     /// It is separate from resource revisions and their persisted snapshots.
     pub fn add_footprint(&mut self, rect: TileRect) -> Result<(), ResourceOverlayError> {
