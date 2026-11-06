@@ -45,11 +45,7 @@ fn death_restores_every_soldiers_original_stance_after_march_or_retreat() {
         }
         assert_eq!(
             w.unit(members[0].0).unwrap().stance,
-            if fleeing {
-                CombatStance::NoAttack
-            } else {
-                CombatStance::Defensive
-            }
+            CombatStance::Defensive
         );
         w.kill_unit(w.lookup[&g]);
         restored(&w, &members);

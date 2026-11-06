@@ -33,12 +33,9 @@ impl GameWorld {
             .copied()
             .filter(|v| in_influence(u.position, v.position))
             .collect();
-        let friendly: u64 = army
-            .iter()
-            .copied()
-            .filter(|v| distance(u.position, v.position) <= (16 * 1024_i64).pow(2))
-            .map(strength)
-            .sum();
+        // The whole army counts, wherever its soldiers stand: a column strung
+        // out along the road is as strong as it is when it gathers.
+        let friendly: u64 = army.iter().copied().map(strength).sum();
         let enemy: u64 = survey.enemies.iter().copied().map(strength).sum::<u64>()
             + survey
                 .buildings
@@ -70,7 +67,7 @@ impl GameWorld {
         let hurt = u.hp * 3 < u.max_hp
             || army.iter().map(|v| u64::from(v.hp)).sum::<u64>() * 3
                 < army.iter().map(|v| u64::from(v.max_hp)).sum::<u64>();
-        let unsafe_fight = !survey.complete || enemy * 4 > friendly * 5 || (enemy > 0 && hurt);
+        let unsafe_fight = enemy * 4 > friendly * 5 || (enemy > 0 && hurt);
         if unsafe_fight {
             a.retreat_until = self
                 .tick

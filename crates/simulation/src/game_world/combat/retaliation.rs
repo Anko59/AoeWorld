@@ -4,17 +4,19 @@ use crate::{GameWorld, UnitKind, UnitTask};
 use aoe_core::{CombatStance, EntityId, TileCoord, WorldPosition};
 
 impl GameWorld {
-    pub(super) fn retaliate(
+    pub(crate) fn retaliate(
         &mut self,
         index: usize,
         attacker: EntityId,
         changed: &mut Vec<EntityId>,
     ) {
         let unit = self.units[index].state;
+        // A General's soldier hit on the march fights back instead of walking on.
+        let marching = self.general_follower(unit.id)
+            && (unit.moving || unit.planning || matches!(unit.task, UnitTask::Moving));
         if unit.hp == 0
-            || unit.moving
-            || unit.planning
-            || !matches!(unit.task, UnitTask::Idle | UnitTask::Carrying)
+            || ((unit.moving || unit.planning) && !marching)
+            || !(marching || matches!(unit.task, UnitTask::Idle | UnitTask::Carrying))
             || self.combat.attackers.contains_key(&unit.id)
             || self.economy.gatherers.contains_key(&unit.id)
             || self.economy.builders.contains_key(&unit.id)

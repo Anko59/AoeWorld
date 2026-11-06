@@ -181,6 +181,14 @@ impl GameWorld {
             .min_by_key(|&p| (distance(p, fallback), p.x, p.y))
             .unwrap_or(fallback)
     }
+    pub(crate) fn general_fighting(&self, g: EntityId) -> bool {
+        self.economy
+            .generals
+            .armies
+            .get(&g)
+            .is_some_and(|a| a.state == GeneralState::Fighting)
+    }
+
     pub fn general_controller(&self, id: EntityId) -> Option<EntityId> {
         self.economy.generals.controlled.get(&id).copied()
     }

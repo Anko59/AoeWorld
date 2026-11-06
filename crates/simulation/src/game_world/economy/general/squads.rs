@@ -437,7 +437,7 @@ impl GameWorld {
             if marching {
                 for &id in &ids {
                     let (stance, reason) = if retreat {
-                        (aoe_core::CombatStance::NoAttack, stances::Reason::Retreat)
+                        (aoe_core::CombatStance::Defensive, stances::Reason::Retreat)
                     } else {
                         (aoe_core::CombatStance::Defensive, stances::Reason::March)
                     };

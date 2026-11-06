@@ -106,6 +106,21 @@ impl GameWorld {
         Ok(())
     }
 
+    /// A free-standing fighter, or a General's soldier while its army fights
+    /// (not while it marches or falls back).
+    pub(super) fn free_to_pick_on(&self, id: EntityId) -> bool {
+        self.economy
+            .generals
+            .controlled
+            .get(&id)
+            .is_none_or(|g| self.general_fighting(*g))
+    }
+
+    /// Whether a General currently leads this soldier.
+    pub(crate) fn general_follower(&self, id: EntityId) -> bool {
+        self.economy.generals.controlled.contains_key(&id)
+    }
+
     pub(super) fn advance_acquisition(&mut self, changed: &mut Vec<EntityId>) {
         let cursor = self.combat.seeker_cursor;
         let ids: Vec<_> = self
@@ -131,19 +146,26 @@ impl GameWorld {
                 .get(&id)
                 .copied()
                 .filter(|a| a.origin.is_some() && self.building(a.target).is_some());
+            // A General's soldier on the march still fights what is in reach.
+            let marching = self.general_follower(id)
+                && (u.moving || u.planning || matches!(u.task, UnitTask::Moving));
             if u.hp == 0
-                || (u.moving && building_attack.is_none())
-                || (u.planning && building_attack.is_none())
+                || ((u.moving || u.planning) && building_attack.is_none() && !marching)
                 || u.auto_scout
                 || u.stance == CombatStance::NoAttack
-                || (!matches!(u.task, UnitTask::Idle) && building_attack.is_none())
+                || (!matches!(u.task, UnitTask::Idle) && building_attack.is_none() && !marching)
                 || self.embarked(id)
             {
                 continue;
             }
-            let Some(area) = self.acquisition_area(&u) else {
+            let Some(mut area) = self.acquisition_area(&u) else {
                 continue;
             };
+            if marching {
+                // Marching soldiers stop for an enemy in attack range only.
+                let range = super::super::navy::attack_range(&self.unit_state_stats(&u));
+                area.max = area.max.min(range);
+            }
             // A melee unit does not take on an enemy whose every spot is
             // taken: it would only stand and wait out of reach.
             if let Some(target) = self
@@ -160,6 +182,41 @@ impl GameWorld {
                 );
                 changed.push(id);
             }
+        }
+    }
+
+    /// A fighter whose target is gone looks for the next enemy at once, within
+    /// a reserved part of the scan budget, instead of waiting a turn among
+    /// every idle unit of the world for the rotating acquisition pass.
+    pub(super) fn next_target_after_kill(
+        &mut self,
+        id: EntityId,
+        origin: WorldPosition,
+        changed: &mut Vec<EntityId>,
+    ) {
+        if self.combat.stats.targeting_scanned >= super::targeting::MAX_TARGET_INSPECTIONS * 3 / 4
+            || !autonomous_kind(self.unit(id).map_or(UnitKind::Villager, |u| u.kind))
+        {
+            return;
+        }
+        let Some(u) = self.unit(id).filter(|u| {
+            u.hp > 0
+                && !u.auto_scout
+                && u.stance != CombatStance::NoAttack
+                && matches!(u.task, UnitTask::Idle)
+                && !self.embarked(u.id)
+        }) else {
+            return;
+        };
+        let Some(area) = self.acquisition_area(&u) else {
+            return;
+        };
+        if let Some(target) = self
+            .acquire_target(&area, false)
+            .filter(|&target| self.attack_spot_free(id, target))
+        {
+            self.begin_autonomous_attack(id, target, origin);
+            changed.push(id);
         }
     }
 

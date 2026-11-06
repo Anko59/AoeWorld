@@ -121,9 +121,7 @@ impl Probe {
             army,
             self.stuck_units(6, hz),
         );
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/engage");
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join(format!("{name}.txt")), &line).unwrap();
+        println!("{line}");
         line
     }
 }

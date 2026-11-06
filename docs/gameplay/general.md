@@ -77,9 +77,9 @@ spacing, clearance validation and per-member arrival; no member pathfinds
 unless detached by the shared obstruction handling.
 
 Every decision compares nearby visible enemy HP/attack/cooldown strength with
-its own army within sixteen tiles, so distant recruits do not inflate strength. Defensive Castles and towers add a fixed threat allowance.
-An enemy advantage above 25%, a severely depleted engaged army, a wounded
-General, or an incomplete crowded census triggers retreat toward the Castle
+its whole army (every assigned member, wherever it stands). Defensive Castles and towers add a fixed threat allowance.
+An enemy advantage above 25%, a severely depleted engaged army, or a wounded
+General triggers retreat toward the Castle
 that trained it (nearest completed Castle for scenario-spawned Generals).
 The Castle's outside rendezvous survives destruction. Retreat lasts at least
 five seconds; once safe, the army regroups and resumes its retained destination.
@@ -102,6 +102,7 @@ with a march order it resumes the march, without one it forms up around the
 General's position. Siege prefers visible buildings. Units below one-third HP
 withdraw toward home. A rotating 16-member micro window (wounded, siege, and a
 fight against buildings only) prevents a large army from monopolising orders.
+A marching or retreating soldier still fights back: one that is hit, or has an enemy within its attack range, engages it (stance Defensive during march and retreat, never NoAttack; only wounded withdrawal uses NoAttack).
 The General records each soldier's original stance before a march, retreat or
 wounded withdrawal overrides it. The original stance returns when that reason
 ends, including healing, arrival, fighting, regrouping without a destination,

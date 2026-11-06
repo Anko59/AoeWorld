@@ -7,7 +7,6 @@ const SURVEY_TILES: i32 = GENERAL_INFLUENCE_TILES as i32 + 8;
 pub(super) struct Survey {
     pub enemies: Vec<GameUnit>,
     pub buildings: Vec<EntityId>,
-    pub complete: bool,
 }
 impl GameWorld {
     pub(super) fn general_survey(
@@ -61,7 +60,6 @@ impl GameWorld {
         } else {
             (chunk, offset)
         };
-        let complete = start == (0, 0) && chunk == count;
         units.sort_unstable_by_key(|v| v.id);
         // Soldiers carrying out their own orders are not his to take.
         let manual = &self.economy.generals.manual;
@@ -129,7 +127,6 @@ impl GameWorld {
         Some(Survey {
             enemies,
             buildings: buildings.into_iter().collect(),
-            complete,
         })
     }
 }

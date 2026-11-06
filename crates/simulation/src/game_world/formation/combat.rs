@@ -13,10 +13,12 @@ const ENGAGE_BUCKET_WINDOW: usize = 128;
 /// Building tiles one look may read; a wider window rotates by rows.
 const ENGAGE_BUILDING_TILES: i32 = 1_024;
 /// Members one look may send into a fight; the others look again next time.
-const ENGAGE_PER_LOOK: usize = 64;
+const ENGAGE_PER_LOOK: usize = 16;
 /// Members one look examines, rotating through the group, so the cost of a
 /// look does not grow with the army while every member is seen every few seconds.
 const ENGAGE_MEMBERS_PER_LOOK: usize = 128;
+/// Melee members one enemy can hold at once.
+const MELEE_SPOTS: usize = 8;
 /// Enemies in sight a member weighs per look, nearest first.
 const TARGETS_PER_MEMBER: usize = 3;
 
@@ -51,6 +53,14 @@ impl GameWorld {
             let start =
                 (self.tick.0 / ENGAGE_CADENCE) as usize * ENGAGE_MEMBERS_PER_LOOK % lookers.len();
             let mut engaged = 0;
+            // Melee members already fighting each enemy: a man has eight
+            // spots around him, so more would only stand around him.
+            let mut fighting = std::collections::BTreeMap::<EntityId, usize>::new();
+            for &(id, ..) in &lookers {
+                if let Some(target) = self.unit(id).and_then(|u| u.attack_target) {
+                    *fighting.entry(target).or_default() += 1;
+                }
+            }
             for n in 0..lookers.len().min(ENGAGE_MEMBERS_PER_LOOK) {
                 if engaged == ENGAGE_PER_LOOK {
                     break;
@@ -70,10 +80,17 @@ impl GameWorld {
                     .into_iter()
                     .take(TARGETS_PER_MEMBER)
                     .map(|(_, enemy)| enemy)
-                    .find(|&enemy| self.attack_spot_free(id, enemy));
+                    .find(|&enemy| {
+                        let melee = self
+                            .unit(id)
+                            .is_some_and(|u| Self::uses_melee_position(u.kind));
+                        (!melee || fighting.get(&enemy).copied().unwrap_or(0) < MELEE_SPOTS)
+                            && self.attack_spot_free(id, enemy)
+                    });
                 if let Some(target) = target
                     && self.issue_attack(player, id, target).is_ok()
                 {
+                    *fighting.entry(target).or_default() += 1;
                     if let Some(attacker) = self.combat.attackers.get_mut(&id) {
                         attacker.resume = Some(slot);
                     }

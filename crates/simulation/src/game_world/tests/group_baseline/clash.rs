@@ -98,11 +98,13 @@ fn attack_move_kills_ten_enemies_then_resumes_to_the_slots() {
         ],
     );
     // PR 10 first-contact probes and bounded repeats change clearing to tick 1174.
-    // Proportional cohesion and 1.5x catch-up shift contact: tick 1175.
-    assert_eq!((cleared, foes_alive), (Some(1175), 0));
+    // Proportional cohesion and 1.5x catch-up shift contact; the wider engage
+    // look (256 enemies, 128 members) clears the ten foes at tick 1163.
+    assert_eq!((cleared, foes_alive), (Some(1163), 0));
     assert_eq!((survivors, own_idle, still_moving), (60, 60, 0));
-    // Keep all 60 arrivals; one more member strikes than the original 37.
-    assert_eq!((at_destination, strikers.len()), (60, 38));
+    // Keep all 60 arrivals; the engage look caps melee members per foe, so
+    // 36 strike (37 originally) while the ten foes fall sooner.
+    assert_eq!((at_destination, strikers.len()), (60, 36));
     assert!(
         within_1 * 100 >= survivors * 95,
         "{within_1} of {survivors}"
@@ -117,7 +119,9 @@ fn forty_against_forty_melee_strike_count() {
     // Proportional cohesion meets the enemy front sooner (tick 129) with 45
     // early strikers; all 80 still strike.
     assert_eq!(hits, (Some(129), 45, 80));
-    assert_eq!(alive, (0, 10));
+    // The wider engage look sends more of the east army in at once: it loses
+    // fewer men (13 survive) than when only 32 enemies were considered (10).
+    assert_eq!(alive, (0, 13));
 }
 
 #[test]
@@ -125,8 +129,8 @@ fn forty_against_forty_fronts_strike_within_five_seconds() {
     let (hits, _) = melee_clash(4);
     assert!(hits.1 >= 72, "{hits:?}: 90% must strike within 5 s");
     assert!(
-        hits.1 >= 79,
-        "{hits:?}: retain PR 10 deployed-front participation"
+        hits.1 >= 78,
+        "{hits:?}: retain PR 10 deployed-front participation (78 since the wider engage look)"
     );
     assert_eq!(hits.2, 80);
 }
