@@ -79,6 +79,7 @@ fn formations_measure_shared_army_route() {
 }
 
 mod direct;
+mod fallen;
 mod pressure;
 
 mod measurement;

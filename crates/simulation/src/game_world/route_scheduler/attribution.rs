@@ -94,6 +94,17 @@ pub struct RouteAttribution {
     pub single_expired: u64,
     /// Formation orders whose carrier's search failed after issue.
     pub group_orders_failed: u64,
+    /// Of those: re-planned from the anchor (a load-dependent failure), or
+    /// the carrier stopped and the group left to its members' recovery.
+    pub group_replans: u64,
+    /// Carrier search failures by `ROUTE_FAILURES`.
+    pub group_failures: [u64; 5],
+    pub group_carriers_stopped: u64,
+    /// Formation orders ended because their near search exceeded its work bound.
+    pub group_ends_exhausted: u64,
+    /// Formation orders refused at issue, and fallen members left out of one.
+    pub group_orders_rejected: u64,
+    pub group_members_left_out: u64,
     /// Formation orders found / failed / waiting at issue.
     pub group_orders: u64,
     /// Expired orders that never got a search slot.

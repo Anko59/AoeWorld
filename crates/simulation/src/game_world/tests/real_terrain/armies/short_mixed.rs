@@ -27,17 +27,25 @@ struct Outcome {
 }
 
 fn cross(spawn: &[(i32, i32)], goal: (i32, i32), ticks: u32, siege: bool) -> Outcome {
-    cross_failing(spawn, goal, ticks, siege, None)
+    cross_failing(
+        spawn,
+        goal,
+        ticks,
+        siege,
+        None,
+        crate::GameWorldError::PathBudgetExceeded,
+    )
 }
 
-/// As `cross`; at tick `fail` the carrier's route search fails, as one that
-/// exhausts its work under load does.
+/// As `cross`; at tick `fail` the carrier's route search fails with `error`,
+/// through the scheduler's own failure path.
 fn cross_failing(
     spawn: &[(i32, i32)],
     goal: (i32, i32),
     ticks: u32,
     siege: bool,
     fail: Option<u32>,
+    error: crate::GameWorldError,
 ) -> Outcome {
     let mut f = build("army-river");
     let ids = spawn
@@ -81,7 +89,7 @@ fn cross_failing(
             let carrier = f.world.units[f.world.lookup[&ids[0]]].formation.unwrap();
             let index = f.world.lookup[&carrier];
             f.world
-                .stop_route(index, Some(crate::GameWorldError::PathBudgetExceeded));
+                .group_route_failed(index, Some(error), 2, &mut Vec::new());
         }
         f.world.advance();
         for &id in &counted {
@@ -184,8 +192,31 @@ fn failed_carrier_route_keeps_members_off_the_straight_line() {
     let spawn = (0..16)
         .map(|i| (100 + (i % 4) * 2, 126 + (i / 4) * 2))
         .collect::<Vec<_>>();
-    let out = cross_failing(&spawn, (170, 126), 6_000, true, Some(200));
+    let budget = crate::GameWorldError::PathBudgetExceeded;
+    let out = cross_failing(&spawn, (170, 126), 6_000, true, Some(200), budget);
     record("failed-carrier", &out);
+    assert!(
+        out.blocked_unrouted <= 16 * 8,
+        "members pressed on the bank without a route: {out:?}"
+    );
+    assert_eq!(
+        out.across, 16,
+        "a load-dependent failure re-plans the group:\n{}",
+        out.report
+    );
+}
+
+/// A proven failure mid-march stops the carrier; its members keep the
+/// corridor they know instead of walking straight at their slots, and their
+/// own recovery takes over.
+#[test]
+fn unreachable_carrier_route_keeps_members_on_the_known_corridor() {
+    let spawn = (0..16)
+        .map(|i| (100 + (i % 4) * 2, 126 + (i / 4) * 2))
+        .collect::<Vec<_>>();
+    let unreachable = crate::GameWorldError::Unreachable;
+    let out = cross_failing(&spawn, (170, 126), 6_000, true, Some(200), unreachable);
+    record("unreachable-carrier", &out);
     assert!(
         out.blocked_unrouted <= 16 * 8,
         "members pressed on the bank without a route: {out:?}"

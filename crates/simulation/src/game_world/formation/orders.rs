@@ -13,7 +13,11 @@ impl GameWorld {
         queued: bool,
         attack_move: bool,
     ) -> Result<(), EconomyError> {
-        let (ids, centroid) = self.formation_members(player, ids)?;
+        let named = ids.len();
+        let (ids, centroid) = self.formation_members(player, ids).inspect_err(|_| {
+            self.route_metrics.attribution.group_orders_rejected += 1;
+        })?;
+        self.route_metrics.attribution.group_members_left_out += (named - ids.len()) as u64;
         if !self.config.valid_map_position(destination) {
             return Err(GameWorldError::InvalidPosition.into());
         }

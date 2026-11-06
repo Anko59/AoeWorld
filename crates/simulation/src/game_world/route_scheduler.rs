@@ -16,6 +16,7 @@ mod attribution;
 mod deadline;
 mod diagnostic;
 mod fast;
+mod group_end;
 mod issue;
 mod metrics;
 mod order;
@@ -391,7 +392,8 @@ impl GameWorld {
             .attribution
             .failed(kind, from, to, planner.work(), reason, caller);
         if self.units[index].formation == Some(id) {
-            self.route_metrics.attribution.group_orders_failed += 1;
+            self.group_route_failed(index, error, reason, changed);
+            return spent;
         }
         self.stop_route(index, error);
         if let Ok(at) = self.active_movers.binary_search(&id) {

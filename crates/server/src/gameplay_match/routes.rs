@@ -88,6 +88,19 @@ pub(crate) fn attribution_json(a: &RouteAttribution) -> Value {
         "group_members_expired": a.group_members_expired,
         "single_expired": a.single_expired,
         "group_orders_failed": a.group_orders_failed,
+        "group_ends": {
+            "wait_expired": a.group_orders_expired,
+            "near_exhausted": a.group_ends_exhausted,
+            "carrier_stopped": a.group_carriers_stopped,
+            "replanned": a.group_replans,
+            "rejected_at_issue": a.group_orders_rejected,
+            "members_left_out": a.group_members_left_out,
+            "carrier_failures": ROUTE_FAILURES
+                .iter()
+                .zip(a.group_failures)
+                .map(|(name, n)| ((*name).to_owned(), json!(n)))
+                .collect::<serde_json::Map<String, Value>>(),
+        },
         "expired_without_planner": a.expired_without_planner,
         "group_wait_renewals": a.group_wait_renewals,
         "group_pool_work": a.group_pool_work,

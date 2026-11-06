@@ -14,13 +14,16 @@ impl GameWorld {
         if ids.windows(2).any(|p| p[0] == p[1]) {
             return Err(EconomyError::OrderTooLarge);
         }
+        // A selection is sent as the player saw it; a member that fell before
+        // the order arrived is left out rather than refusing the whole army.
+        ids.retain(|&id| self.unit(id).is_some_and(|u| u.hp > 0));
+        if ids.is_empty() {
+            return Err(EconomyError::UnknownEntity);
+        }
         let mut x = 0_i64;
         let mut y = 0_i64;
         for &id in &ids {
-            let unit = self
-                .unit(id)
-                .filter(|u| u.hp > 0)
-                .ok_or(EconomyError::UnknownEntity)?;
+            let unit = self.unit(id).ok_or(EconomyError::UnknownEntity)?;
             if unit.player != player {
                 return Err(EconomyError::NotOwner);
             }

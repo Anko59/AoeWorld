@@ -105,6 +105,9 @@ impl GameWorld {
         self.route_metrics
             .attribution
             .failed(kind, from, to, work, 3, caller);
+        if self.units[index].formation == Some(id) {
+            self.route_metrics.attribution.group_ends_exhausted += 1;
+        }
         self.end_waiting_route(index, id, true, changed);
     }
 
