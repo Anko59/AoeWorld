@@ -7,6 +7,7 @@ import { initSteward } from '/interface/steward/panel.js';
 import { initGeneralPanel } from '/interface/general-panel.js';
 import { updateDetails } from '/interface/details.js';
 import { renderSelectionIcons, autoFit } from '/interface/selection-grid.js';
+import { initPause } from '/interface/pause.js';
 // Original interface artwork and DOM presentation. Authoritative values arrive
 // from Rust at most four times per second; no frame loop or gameplay rules here.
 const icon = name => packIcon('resources',name,name);
@@ -37,6 +38,7 @@ export function initInterface() {
   byId('resume-game').addEventListener('click', () => { menu.close(); scene().focus(); });
   byId('quit-game').addEventListener('click', () => { menu.close(); window.aoeStart.menu(); });
   byId('reconnect').addEventListener('click', () => menu.close());
+  initPause(menu);
   byId('reload-game').addEventListener('click', event => { event.preventDefault(); location.reload(); });
   let drag = null;
   const box = byId('drag-box');

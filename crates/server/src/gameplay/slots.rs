@@ -130,6 +130,7 @@ impl GameplayService {
             resource_journal: Arc::new(std::sync::Mutex::new(resources::Journal::default())),
             fanout_probe: Arc::default(),
             preparation: Default::default(),
+            paused: Arc::default(),
         }
     }
 

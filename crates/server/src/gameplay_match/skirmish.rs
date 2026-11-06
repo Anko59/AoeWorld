@@ -82,6 +82,8 @@ pub(crate) struct Status {
     error: Option<String>,
     /// AI host processes running for the current match.
     ai_hosts: usize,
+    /// The person paused the match clock.
+    paused: bool,
 }
 
 #[derive(Default)]
@@ -171,6 +173,7 @@ async fn status(state: &AppState) -> Status {
     let mut status = inner.status.clone();
     status.ai_available = skirmish.launch.is_some();
     status.max_opponents = MAX_OPPONENTS;
+    status.paused = gameplay.paused();
     status.ai_hosts = inner.fleet.as_mut().map_or(0, |fleet| fleet.hosts());
     match status.phase {
         Phase::PlacingVillages => {
@@ -192,7 +195,10 @@ async fn status(state: &AppState) -> Status {
 
 /// The token of a request made by the current controller, or by whoever
 /// started the skirmish (who is not connected to the new world yet).
-async fn authorize(state: &AppState, headers: &HeaderMap) -> Result<u64, (StatusCode, String)> {
+pub(super) async fn authorize(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<u64, (StatusCode, String)> {
     let refused = || {
         (
             StatusCode::FORBIDDEN,
