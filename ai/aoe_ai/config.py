@@ -33,6 +33,8 @@ class Config:
     town_center_queue: int = 2
     #: Build a house when fewer than this many population slots are free.
     house_margin: int = 4
+    #: Houses under construction at once (plus one per extra Town Center).
+    house_pending: int = 2
     #: Preferred share of villagers per resource before and after Feudal.
     dark_shares: dict[str, float] = field(
         default_factory=lambda: {"FOOD": 0.60, "WOOD": 0.32, "GOLD": 0.08, "STONE": 0.0}

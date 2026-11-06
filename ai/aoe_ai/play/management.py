@@ -14,6 +14,7 @@ costs 1,000 food and 1,000 gold, a General 800 and 800.
 from __future__ import annotations
 
 from typing import Any, Optional
+import math
 
 from aoeworld import BuildingKind, GeneralState, UnitKind, UnitTask, building_cost, unit_cost
 
@@ -54,14 +55,24 @@ class ManagementManager:
             return
         width, height = ctx.world.map_size
         d = max(1.0, dist(ctx.home, (width // 2, height // 2)))
-        ring = cfg.expand_distance * total
-        base = (ctx.home[0] + (width // 2 - ctx.home[0]) / d * ring, ctx.home[1] + (height // 2 - ctx.home[1]) / d * ring)
-        near = clamp_tile((round(base[0]), round(base[1])), ctx.world.map_size)
-        builders = self.builders(ctx, near, 4)
-        if builders and ctx.land_route(ctx.home, near) is not None and self.place(ctx, BuildingKind.TOWN_CENTER, near, builders, 14):
-            board.bump("expansions")
-        else:
-            board.cool("expand", ctx.tick, 20 * ctx.world.tick_hz)
+        toward = math.atan2(height // 2 - ctx.home[1], width // 2 - ctx.home[0])
+        ring = cfg.expand_distance * (1 + total // 6)
+        tried = 0
+        for turn in (0, 1, -1, 2, -2, 3):
+            angle = toward + turn * math.pi / 3 + (total % 6) * 0.2
+            near = clamp_tile((round(ctx.home[0] + math.cos(angle) * ring), round(ctx.home[1] + math.sin(angle) * ring)),
+                              ctx.world.map_size)
+            if near in board.bad_moves or ctx.land_route(ctx.home, near) is None:
+                continue
+            builders = self.builders(ctx, near, 4)
+            tried += 1
+            if builders and self.place(ctx, BuildingKind.TOWN_CENTER, near, builders, 10):
+                board.bump("expansions")
+                board.cool("expand", ctx.tick, 40 * ctx.world.tick_hz)
+                return
+            if tried >= 3:
+                break
+        board.cool("expand", ctx.tick, 20 * ctx.world.tick_hz)
 
     def castles(self, ctx: Context) -> None:
         cfg, board = ctx.config, ctx.board
@@ -91,10 +102,13 @@ class ManagementManager:
         if ctx.board.cooling("world-limit:build", ctx.tick) or not ctx.try_spend(building_cost(kind)):
             return False
         site = None
-        for extra in (0, 1, 2):
-            found = ctx.world.find_build_site(kind, near[0], near[1], radius, gap + extra)
-            if found is not None and (str(kind), *found) not in ctx.board.bad_sites:
-                site = found
+        for reach in (radius, 2 * radius):
+            for extra in (0, 1, 2):
+                found = ctx.world.find_build_site(kind, near[0], near[1], reach, gap + extra)
+                if found is not None and (str(kind), *found) not in ctx.board.bad_sites:
+                    site = found
+                    break
+            if site is not None:
                 break
         if site is None:
             cost = building_cost(kind)
