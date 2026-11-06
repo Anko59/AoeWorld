@@ -103,3 +103,21 @@ fn only_warships_and_transports_may_auto_scout_and_manual_orders_cancel_it() {
     w.issue_stop(PlayerId(0), galley).unwrap();
     assert!(!w.unit(galley).unwrap().auto_scout);
 }
+
+#[test]
+fn ship_auto_scout_replays_to_the_same_state() {
+    let run = || {
+        let mut w = coast();
+        let c = open_water(&w);
+        let id = ship(&mut w, UnitKind::Galley, c, 0);
+        w.issue_auto_scout(PlayerId(0), id, true).unwrap();
+        for _ in 0..1500 {
+            w.advance();
+        }
+        let at = w.unit(id).unwrap().position;
+        (w.canonical_hash(), at)
+    };
+    let (a, at) = run();
+    let (b, again) = run();
+    assert_eq!((a, at), (b, again));
+}
