@@ -11,6 +11,15 @@ impl super::UnitKind {
                 | Self::WarGalley
         )
     }
+    /// Units the player may put on automatic exploration: cavalry on land,
+    /// warships and transports on water.
+    pub fn can_auto_scout(self) -> bool {
+        self.is_cavalry()
+            || matches!(
+                self,
+                Self::Galley | Self::WarGalley | Self::FireShip | Self::TransportShip
+            )
+    }
     pub fn is_cavalry(self) -> bool {
         matches!(
             self,
@@ -24,7 +33,7 @@ impl super::UnitKind {
     }
 }
 pub(super) fn valid_auto_scout(unit: &super::UnitState) -> bool {
-    !unit.auto_scout || (unit.hp > 0 && unit.kind.is_cavalry())
+    !unit.auto_scout || (unit.hp > 0 && unit.kind.can_auto_scout())
 }
 
 pub(super) fn valid_reseeds(building: &GameplayBuildingState) -> bool {
