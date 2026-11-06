@@ -181,6 +181,7 @@ impl PreparedHydrology {
     }
 }
 
+#[derive(Clone)]
 struct Tile {
     latitude: i32,
     longitude: i32,
@@ -433,6 +434,7 @@ fn prepare_with_plan(
     } else {
         sampler.pages()?
     };
+    crate::preparation_progress::trace_mark("hydrology pages done");
     let river_topology = sampler.take_river_topology()?;
     let evidence_index = HydrologyEvidenceIndex {
         samples_per_axis,

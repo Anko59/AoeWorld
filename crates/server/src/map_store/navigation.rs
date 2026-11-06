@@ -76,6 +76,7 @@ pub(crate) fn prepare_package(
     package: &MapPackage,
     directory: Option<&Path>,
     cancelled: &dyn Fn() -> bool,
+    progress: &dyn Fn(u64, u64),
 ) -> Result<(), String> {
     let generator = if package.environment.samples_per_axis == 0 {
         package.generator()
@@ -87,7 +88,13 @@ pub(crate) fn prepare_package(
             .generator_with_page_provider(provider)
             .map_err(|e| e.to_string())?
     };
-    prepare(&generator, package.content_hash, directory, cancelled)
+    prepare_with_progress(
+        &generator,
+        package.content_hash,
+        directory,
+        cancelled,
+        progress,
+    )
 }
 
 fn load(
@@ -120,6 +127,16 @@ fn prepare(
     hash: [u8; 32],
     directory: Option<&Path>,
     cancelled: &dyn Fn() -> bool,
+) -> Result<(), String> {
+    prepare_with_progress(generator, hash, directory, cancelled, &|_, _| {})
+}
+
+fn prepare_with_progress(
+    generator: &MapChunkGenerator,
+    hash: [u8; 32],
+    directory: Option<&Path>,
+    cancelled: &dyn Fn() -> bool,
+    progress: &dyn Fn(u64, u64),
 ) -> Result<(), String> {
     if cancelled() {
         return Err("navigation preparation cancelled".to_owned());
@@ -169,7 +186,10 @@ fn prepare(
             &path,
             hash,
             MAX_FILE_BYTES,
-            cancelled,
+            stream::Hooks {
+                cancelled,
+                progress,
+            },
         )?;
     }
     // A temporary package still uses mapping, but must not pin its deleted

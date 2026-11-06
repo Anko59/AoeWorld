@@ -88,7 +88,59 @@ pub fn count(phase: Phase, detail: Option<&'static str>, completed: u64, total: 
         report(phase, detail, Some((completed, total, unit)));
     }
 }
+static TRACE_ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+static TRACE_START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+/// Anchors the trace clock at process start so the first phase line includes
+/// the time spent before it (request preflight and source verification).
+pub fn trace_start() {
+    TRACE_START.get_or_init(Instant::now);
+}
+/// Same line for a named step inside a phase.
+pub fn trace_mark(label: &str) {
+    if !*TRACE_ON.get_or_init(|| std::env::var_os("AOE_PREP_TRACE").is_some()) {
+        return;
+    }
+    trace_line(label);
+}
+/// With `AOE_PREP_TRACE` set, print one stderr line per phase change: wall and
+/// process CPU seconds since the first report. CPU/wall near 1 means one thread.
+fn trace(phase: Phase) {
+    static LAST: std::sync::Mutex<Option<Phase>> = std::sync::Mutex::new(None);
+    if !*TRACE_ON.get_or_init(|| std::env::var_os("AOE_PREP_TRACE").is_some()) {
+        return;
+    }
+    let Ok(mut last) = LAST.lock() else {
+        return;
+    };
+    if *last == Some(phase) {
+        return;
+    }
+    *last = Some(phase);
+    drop(last);
+    trace_line(&format!("{phase:?}"));
+}
+fn trace_line(label: &str) {
+    let start = TRACE_START.get_or_init(Instant::now);
+    let cpu = fs::read_to_string("/proc/self/stat")
+        .ok()
+        .and_then(|text| {
+            let fields = text
+                .rsplit_once(')')?
+                .1
+                .split_whitespace()
+                .collect::<Vec<_>>();
+            let ticks =
+                fields.get(11)?.parse::<f64>().ok()? + fields.get(12)?.parse::<f64>().ok()?;
+            Some(ticks / 100.0)
+        })
+        .unwrap_or(f64::NAN);
+    eprintln!(
+        "prep-trace {label} wall={:.1}s cpu={cpu:.1}s",
+        start.elapsed().as_secs_f64()
+    );
+}
 fn report(phase: Phase, detail: Option<&'static str>, count: Option<(u64, u64, Unit)>) {
+    trace(phase);
     let progress = Progress {
         version: 1,
         phase,
@@ -122,6 +174,10 @@ fn report(phase: Phase, detail: Option<&'static str>, count: Option<(u64, u64, U
         }
     });
 }
+/// Overview fields sampled so far, out of all pyramid pages.
+pub(crate) fn overview_pages(completed: u64, total: u64) {
+    count(Phase::SamplingOverview, None, completed, total, Unit::Pages);
+}
 pub(crate) fn pyramid_page_count(mut axis: u16) -> u64 {
     let mut total = 0;
     while axis > 0 {
@@ -134,6 +190,24 @@ pub(crate) fn pyramid_page_count(mut axis: u16) -> u64 {
     }
     total
 }
+/// Sends a finished overview field's page count to the reporting thread.
+pub(crate) fn landed<T>(
+    sent: &std::sync::mpsc::Sender<u64>,
+    result: Result<T, crate::GeodataError>,
+    pages: impl Fn(&T) -> usize,
+) -> Result<T, crate::GeodataError> {
+    let _ = sent.send(result.as_ref().map_or(0, |field| pages(field) as u64));
+    result
+}
+
+/// A sampling thread's result; a panic becomes a preparation error.
+pub(crate) fn joined<T>(
+    handle: std::thread::ScopedJoinHandle<'_, Result<T, crate::GeodataError>>,
+) -> Result<T, crate::GeodataError> {
+    let panicked = crate::GeodataError::Preparation("overview sampling thread panicked");
+    handle.join().unwrap_or(Err(panicked))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

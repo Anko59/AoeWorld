@@ -7,6 +7,7 @@ const MAX_REQUEST_BYTES: u64 = 64 * 1024;
 const MAX_RESPONSE_BYTES: usize = 512 * 1024;
 
 fn main() -> ExitCode {
+    aoe_geodata::preparation_progress::trace_start();
     let arguments = std::env::args_os().skip(1).collect::<Vec<OsString>>();
     let result = if arguments.is_empty() {
         run_worker()

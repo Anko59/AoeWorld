@@ -119,6 +119,12 @@ impl Drop for Writer {
     }
 }
 
+/// What the caller observes of a long build: cancellation and chunk counts.
+pub(super) struct Hooks<'a> {
+    pub(super) cancelled: &'a dyn Fn() -> bool,
+    pub(super) progress: &'a dyn Fn(u64, u64),
+}
+
 pub(super) fn build(
     generator: &MapChunkGenerator,
     side: usize,
@@ -126,8 +132,12 @@ pub(super) fn build(
     path: &Path,
     hash: [u8; 32],
     limit: u64,
-    cancelled: &dyn Fn() -> bool,
+    hooks: Hooks,
 ) -> Result<(), String> {
+    let Hooks {
+        cancelled,
+        progress,
+    } = hooks;
     let mut writer = Writer::new(path, hash, side, limit)?;
     let next = AtomicUsize::new(0);
     let stop = AtomicBool::new(false);
@@ -159,6 +169,7 @@ pub(super) fn build(
         drop(send);
         let mut error = None;
         let mut last_progress = Instant::now();
+        let mut last_report = Instant::now();
         loop {
             if cancelled() {
                 stop.store(true, Ordering::Release);
@@ -179,6 +190,10 @@ pub(super) fn build(
                 Err(mpsc::RecvTimeoutError::Timeout) => continue,
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             }
+            if last_report.elapsed() >= Duration::from_millis(250) {
+                progress(writer.complete as u64, (side * side) as u64);
+                last_report = Instant::now();
+            }
             if last_progress.elapsed() >= Duration::from_secs(10) {
                 tracing::info!(
                     complete = writer.complete,
@@ -192,6 +207,7 @@ pub(super) fn build(
         if let Some(error) = error {
             return Err(error);
         }
+        progress(writer.complete as u64, (side * side) as u64);
         writer.finish()
     })
 }

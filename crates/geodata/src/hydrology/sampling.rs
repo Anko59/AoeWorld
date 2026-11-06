@@ -323,15 +323,25 @@ pub(super) fn resample_ocean_coverage(
     Ok(target)
 }
 
+#[cfg(test)]
 pub(super) fn vector_features(
     dataset: &mut Dataset,
     bounds: (f64, f64, f64, f64),
     definition: &str,
     rivers: bool,
 ) -> Result<Vec<VectorFeature>, GeodataError> {
+    vector_features_with(dataset, bounds, &local_transform(definition)?, rivers)
+}
+
+/// As `vector_features`, with a transform the caller built once and reuses.
+pub(super) fn vector_features_with(
+    dataset: &mut Dataset,
+    bounds: (f64, f64, f64, f64),
+    transform: &CoordTransform,
+    rivers: bool,
+) -> Result<Vec<VectorFeature>, GeodataError> {
     let mut layer = dataset.layer(0)?;
     layer.set_spatial_filter_rect(bounds.0, bounds.1, bounds.2, bounds.3);
-    let transform = local_transform(definition)?;
     let mut features = Vec::new();
     let mut geometry_bytes = 0_usize;
     // gdal-rs queries the feature count while constructing this iterator.
@@ -348,7 +358,7 @@ pub(super) fn vector_features(
         let Some(geometry) = feature.geometry() else {
             continue;
         };
-        let transformed = geometry.transform(&transform)?;
+        let transformed = geometry.transform(transform)?;
         let source_bytes = transformed.wkb()?.len();
         let kind = if rivers {
             HydrologyKind::River
@@ -401,7 +411,7 @@ pub(super) fn vector_features(
     Ok(features)
 }
 
-fn local_transform(definition: &str) -> Result<CoordTransform, GeodataError> {
+pub(super) fn local_transform(definition: &str) -> Result<CoordTransform, GeodataError> {
     let mut source = SpatialRef::from_epsg(4326).map_err(|_| GeodataError::Projection)?;
     let mut target =
         SpatialRef::from_definition(definition).map_err(|_| GeodataError::Projection)?;

@@ -19,7 +19,8 @@ const phaseNames = {
   queued: 'Waiting to prepare your map', acquiring_sources: 'Gathering landscape sources',
   downloading_source: 'Downloading a landscape source', preparing_source: 'Preparing the landscape',
   preparing_detailed: 'Preparing regional elevation', building_pyramids: 'Building terrain detail',
-  verifying_package: 'Checking the prepared landscape', generating: 'Creating your landscape',
+  verifying_package: 'Checking the prepared landscape', building_navigation: 'Mapping where your units can walk',
+  generating: 'Creating your landscape',
 };
 // Match phases (GET /skirmish): each count is the server's own.
 const matchPhases = {

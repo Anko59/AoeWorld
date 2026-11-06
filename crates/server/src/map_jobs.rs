@@ -307,9 +307,14 @@ fn launch(state: AppState, id: u64) {
         if let Some(package) = presets::reusable(&state, request, &preparation).await {
             let directory = state.map_package_directory.clone();
             let result = tokio::task::spawn_blocking(move || {
-                map_store::navigation::prepare_package(&package, directory.as_deref(), &|| {
-                    cancelled.load(Ordering::Acquire)
-                })?;
+                // A stored package may still lack its navigation index.
+                progress::stage(&progress_state, progress::Phase::BuildingNavigation);
+                map_store::navigation::prepare_package(
+                    &package,
+                    directory.as_deref(),
+                    &|| cancelled.load(Ordering::Acquire),
+                    &|done, total| navigation_chunks(&progress_state, done, total),
+                )?;
                 Ok(package)
             })
             .await
@@ -361,15 +366,30 @@ fn launch(state: AppState, id: u64) {
             if cancelled.load(Ordering::SeqCst) {
                 return Err("map creation cancelled".to_owned());
             }
-            map_store::navigation::prepare_package(&package, directory.as_deref(), &|| {
-                cancelled.load(Ordering::Acquire)
-            })?;
+            // The static navigation index of a new map takes minutes: report it.
+            progress::stage(&progress_state, progress::Phase::BuildingNavigation);
+            map_store::navigation::prepare_package(
+                &package,
+                directory.as_deref(),
+                &|| cancelled.load(Ordering::Acquire),
+                &|done, total| navigation_chunks(&progress_state, done, total),
+            )?;
             Ok::<_, String>(package)
         })
         .await
         .unwrap_or_else(|_| Err("map creation task failed".to_owned()));
         finish(&state, id, result).await;
     });
+}
+
+fn navigation_chunks(state: &progress::State, done: u64, total: u64) {
+    progress::count(
+        state,
+        progress::Phase::BuildingNavigation,
+        done,
+        total,
+        progress::Unit::Chunks,
+    );
 }
 
 async fn set_stage(state: &AppState, id: u64, stage: JobStage) {

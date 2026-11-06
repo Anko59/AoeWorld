@@ -46,6 +46,10 @@ pub(super) fn file_hashes(path: &Path) -> Result<FileHashes, CacheError> {
     {
         return Ok(cached.hashes);
     }
+    if let Some(hashes) = stamped_hashes(path, &before) {
+        remember(path, before, hashes);
+        return Ok(hashes);
+    }
     let mut file = File::open(path)?;
     let mut sha256 = Sha256::new();
     let mut sha1 = Sha1::new();
@@ -68,7 +72,14 @@ pub(super) fn file_hashes(path: &Path) -> Result<FileHashes, CacheError> {
     if fingerprint(path)? != before {
         return Err(CacheError::Integrity("file changed while hashing"));
     }
-    let mut cache = cache
+    write_stamp(path, &before, &hashes);
+    remember(path, before, hashes);
+    Ok(hashes)
+}
+
+fn remember(path: &Path, fingerprint: Fingerprint, hashes: FileHashes) {
+    let mut cache = VERIFIED_HASHES
+        .get_or_init(|| Mutex::new(HashMap::new()))
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     if cache.len() >= 512
@@ -80,11 +91,81 @@ pub(super) fn file_hashes(path: &Path) -> Result<FileHashes, CacheError> {
     cache.insert(
         path.to_path_buf(),
         CachedHashes {
-            fingerprint: before,
+            fingerprint,
             hashes,
         },
     );
-    Ok(hashes)
+}
+
+// Hashing a multi-gigabyte cached object takes tens of seconds, and every map
+// job starts a fresh process. After one full hash, the digests are kept next to
+// the object, bound to its length, inode and modification and status-change
+// times: any write to the file changes mtime and ctime, so a stale stamp never
+// matches. Only files in a cache `objects` directory are stamped.
+fn stamp_path(path: &Path) -> Option<PathBuf> {
+    let objects = path.parent()?;
+    (objects.file_name()? == "objects").then(|| {
+        objects
+            .parent()
+            .unwrap_or(objects)
+            .join("verified")
+            .join(path.file_name().unwrap_or_default())
+    })
+}
+
+fn stamp_line(fingerprint: &Fingerprint) -> String {
+    format!(
+        "{} {} {}.{} {}.{}",
+        fingerprint.length,
+        fingerprint.inode,
+        fingerprint.modified_seconds,
+        fingerprint.modified_nanoseconds,
+        fingerprint.changed_seconds,
+        fingerprint.changed_nanoseconds,
+    )
+}
+
+fn stamped_hashes(path: &Path, fingerprint: &Fingerprint) -> Option<FileHashes> {
+    let text = fs::read_to_string(stamp_path(path)?).ok()?;
+    let mut lines = text.lines();
+    if lines.next()? != stamp_line(fingerprint) {
+        return None;
+    }
+    let mut digest = |bytes: &mut [u8]| -> Option<()> {
+        let hex = lines.next()?;
+        (hex.len() == bytes.len() * 2).then_some(())?;
+        for (index, byte) in bytes.iter_mut().enumerate() {
+            *byte = u8::from_str_radix(hex.get(index * 2..index * 2 + 2)?, 16).ok()?;
+        }
+        Some(())
+    };
+    let (mut sha256, mut sha1, mut md5) = ([0; 32], [0; 20], [0; 16]);
+    digest(&mut sha256)?;
+    digest(&mut sha1)?;
+    digest(&mut md5)?;
+    // The object's name is its SHA-256; a stamp for other content is refused.
+    (path.file_name()?.to_str()? == digest_hex(&sha256)).then_some((sha256, sha1, md5))
+}
+
+fn write_stamp(path: &Path, fingerprint: &Fingerprint, hashes: &FileHashes) {
+    let Some(stamp) = stamp_path(path) else {
+        return;
+    };
+    let text = format!(
+        "{}\n{}\n{}\n{}\n",
+        stamp_line(fingerprint),
+        digest_hex(&hashes.0),
+        digest_hex(&hashes.1),
+        digest_hex(&hashes.2)
+    );
+    // Best effort: a read-only cache just hashes again next time.
+    let temporary = stamp.with_extension(format!("{}.tmp", std::process::id()));
+    let _ = stamp
+        .parent()
+        .map_or(Ok(()), fs::create_dir_all)
+        .and_then(|()| fs::write(&temporary, text))
+        .and_then(|()| fs::rename(&temporary, &stamp));
+    let _ = fs::remove_file(&temporary);
 }
 
 fn fingerprint(path: &Path) -> Result<Fingerprint, CacheError> {
@@ -148,5 +229,37 @@ mod tests {
         fs::write(&path, b"def").expect("changed file");
         assert_ne!(initial, file_hashes(&path).expect("changed digests"));
         fs::remove_file(path).expect("remove file");
+    }
+
+    #[test]
+    fn stamped_digests_survive_a_new_process_and_die_with_the_content() {
+        let sequence = NEXT_FILE.fetch_add(1, Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!(
+            "aoe-geodata-stamp-{}-{sequence}",
+            std::process::id()
+        ));
+        fs::create_dir_all(root.join("objects")).expect("objects");
+        let temporary = root.join("objects/seed");
+        fs::write(&temporary, b"abc").expect("seed");
+        let name = digest_hex(&file_hashes(&temporary).expect("seed digests").0);
+        let path = root.join("objects").join(&name);
+        fs::rename(&temporary, &path).expect("name by digest");
+        let first = file_hashes(&path).expect("first digests");
+        assert!(root.join("verified").join(&name).is_file());
+        // A new process starts with an empty in-memory cache.
+        VERIFIED_HASHES
+            .get_or_init(|| Mutex::new(HashMap::new()))
+            .lock()
+            .expect("cache")
+            .clear();
+        let fingerprint = fingerprint(&path).expect("fingerprint");
+        assert_eq!(stamped_hashes(&path, &fingerprint), Some(first));
+        // Same length, new bytes: the status-change time moves, the stamp misses.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        fs::write(&path, b"abd").expect("rewrite");
+        let changed = self::fingerprint(&path).expect("changed fingerprint");
+        assert_eq!(stamped_hashes(&path, &changed), None);
+        assert_ne!(first, file_hashes(&path).expect("recomputed"));
+        fs::remove_dir_all(root).expect("cleanup");
     }
 }

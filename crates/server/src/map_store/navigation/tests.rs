@@ -107,7 +107,7 @@ fn creator_map_exceeding_the_index_budget_keeps_lazy_navigation() {
     };
     let package = MapPackage::new(1, request, Vec::new()).unwrap();
     assert_eq!(package.estimate.tiles_per_side, 240_000);
-    prepare_package(&package, Some(directory.path()), &|| false).unwrap();
+    prepare_package(&package, Some(directory.path()), &|| false, &|_, _| {}).unwrap();
     let generator = package.generator();
     prepare(
         &generator,
@@ -130,8 +130,42 @@ fn streamed_navigation_stops_at_its_storage_budget() {
     let generator = MapChunkGenerator::new([7; 32], 7, 33);
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("bounded.bin");
-    let error = stream::build(&generator, 2, 2, &path, [8; 32], 1, &|| false).unwrap_err();
+    let error = stream::build(
+        &generator,
+        2,
+        2,
+        &path,
+        [8; 32],
+        1,
+        stream::Hooks {
+            cancelled: &|| false,
+            progress: &|_, _| {},
+        },
+    )
+    .unwrap_err();
     assert!(error.contains("navigation storage budget"), "{error}");
     assert!(!path.exists());
     assert!(!generator.has_static_navigation());
+}
+
+#[test]
+fn streamed_navigation_reports_every_chunk_when_it_completes() {
+    let generator = MapChunkGenerator::new([7; 32], 7, 33);
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("counted.bin");
+    let last = std::sync::Mutex::new((0, 0));
+    stream::build(
+        &generator,
+        2,
+        2,
+        &path,
+        [8; 32],
+        MAX_FILE_BYTES,
+        stream::Hooks {
+            cancelled: &|| false,
+            progress: &|done, total| *last.lock().unwrap() = (done, total),
+        },
+    )
+    .unwrap();
+    assert_eq!(*last.lock().unwrap(), (4, 4));
 }

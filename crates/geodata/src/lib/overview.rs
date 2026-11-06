@@ -300,51 +300,6 @@ fn prepare_overview_fields_from_verified_sources(
         .sum();
     let mut completed_pages = 0;
     preparation_progress::stage(preparation_progress::Phase::SamplingOverview);
-    let mut prepared = if let Some(tiles) = &sources.elevation_tiles {
-        crate::copernicus::prepare_area_averaged_elevation(
-            &sources.elevation.path,
-            request,
-            axes.elevation,
-            tiles,
-        )?
-    } else if explicit {
-        elevation::prepare_landscape_elevation(&sources.elevation.path, request, axes.elevation)?
-    } else {
-        prepare_elevation(&sources.elevation.path, request, axes.elevation)?
-    };
-    completed_pages += prepared.pages.len() as u64;
-    preparation_progress::count(
-        preparation_progress::Phase::SamplingOverview,
-        None,
-        completed_pages,
-        total_pages,
-        preparation_progress::Unit::Pages,
-    );
-    let lake_coverage =
-        prepare_hyde_lake_coverage(&sources.hyde_supplementary.path, request, axes.water)?;
-    let water = prepare_ocean_coverage(&sources.water.path, request, axes.water, lake_coverage)?;
-    completed_pages += water.pages.len() as u64;
-    preparation_progress::count(
-        preparation_progress::Phase::SamplingOverview,
-        None,
-        completed_pages,
-        total_pages,
-        preparation_progress::Unit::Pages,
-    );
-    let vegetation = prepare_potential_biomes_with_corrections(
-        &sources.vegetation.path,
-        request,
-        axes.vegetation,
-        vegetation_corrections,
-    )?;
-    completed_pages += vegetation.pages.len() as u64;
-    preparation_progress::count(
-        preparation_progress::Phase::SamplingOverview,
-        None,
-        completed_pages,
-        total_pages,
-        preparation_progress::Unit::Pages,
-    );
     let historical_preprocessing = preprocessing_identity(
         format!(
             "{};corrections-sha256={}",
@@ -354,21 +309,82 @@ fn prepare_overview_fields_from_verified_sources(
         axes,
         explicit,
     );
-    let historical_land_use = prepare_hyde_area_600_with_corrections(
-        &sources.hyde_baseline.path,
-        &sources.hyde_supplementary.path,
-        request,
-        axes.historical,
-        historical_corrections,
-    )?;
-    completed_pages += historical_land_use.pages.len() as u64;
-    preparation_progress::count(
-        preparation_progress::Phase::SamplingOverview,
-        None,
-        completed_pages,
-        total_pages,
-        preparation_progress::Unit::Pages,
-    );
+    // The four fields read different rasters and share nothing, so they are
+    // sampled side by side; results are consumed in a fixed order (first error as
+    // before). Pages are reported as each lands, from this thread's reporter.
+    let (finished, landed) = std::sync::mpsc::channel::<u64>();
+    let sources = &sources;
+    let (elevation, water, vegetation, historical_land_use) = std::thread::scope(|scope| {
+        let sent = finished.clone();
+        let elevation = scope.spawn(move || {
+            let result = if let Some(tiles) = &sources.elevation_tiles {
+                crate::copernicus::prepare_area_averaged_elevation(
+                    &sources.elevation.path,
+                    request,
+                    axes.elevation,
+                    tiles,
+                )
+            } else if explicit {
+                elevation::prepare_landscape_elevation(
+                    &sources.elevation.path,
+                    request,
+                    axes.elevation,
+                )
+            } else {
+                prepare_elevation(&sources.elevation.path, request, axes.elevation)
+            };
+            preparation_progress::landed(&sent, result, |f| f.pages.len())
+        });
+        let sent = finished.clone();
+        let water =
+            scope.spawn(move || {
+                let result = prepare_hyde_lake_coverage(
+                    &sources.hyde_supplementary.path,
+                    request,
+                    axes.water,
+                )
+                .and_then(|lake_coverage| {
+                    prepare_ocean_coverage(&sources.water.path, request, axes.water, lake_coverage)
+                });
+                preparation_progress::landed(&sent, result, |f| f.pages.len())
+            });
+        let sent = finished.clone();
+        let vegetation = scope.spawn(move || {
+            let result = prepare_potential_biomes_with_corrections(
+                &sources.vegetation.path,
+                request,
+                axes.vegetation,
+                vegetation_corrections,
+            );
+            preparation_progress::landed(&sent, result, |f| f.pages.len())
+        });
+        let sent = finished;
+        let historical = scope.spawn(move || {
+            let result = prepare_hyde_area_600_with_corrections(
+                &sources.hyde_baseline.path,
+                &sources.hyde_supplementary.path,
+                request,
+                axes.historical,
+                historical_corrections,
+            );
+            preparation_progress::landed(&sent, result, |f| f.pages.len())
+        });
+        // Every sender is moved into a field, so this ends once all four landed.
+        for pages in landed {
+            completed_pages += pages;
+            preparation_progress::overview_pages(completed_pages, total_pages);
+        }
+        (
+            preparation_progress::joined(elevation),
+            preparation_progress::joined(water),
+            preparation_progress::joined(vegetation),
+            preparation_progress::joined(historical),
+        )
+    });
+    let mut prepared = elevation?;
+    let water = water?;
+    let vegetation = vegetation?;
+    let historical_land_use = historical_land_use?;
     verify_potential_biome_legend(&sources.vegetation_classes.path)?;
     prepared.environment.water = Some(water.field);
     prepared.environment.vegetation = Some(vegetation.field);

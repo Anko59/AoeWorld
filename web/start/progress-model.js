@@ -17,6 +17,7 @@ export const STAGES = [
   ['building_pyramids', 20000, 1, 0], // guess: not seen in this run
   ['publishing_package', 800, 0, 0], // measured 0.8 s
   ['verifying_package', 1500, 0, 0], // measured 1.4 s
+  ['building_navigation', 60000, 1, 0], // new map only; chunk counts replace this: 76 s at 120 km, 18 min 28 s at 480 km
   ['activating', 300, 0, 0],
   ['opening_map', 600, 1, 0], // measured 0.5 s
   ['placing_villages', 1000, 0, 1], // measured 1.0 s
@@ -70,7 +71,7 @@ export function createProgressModel({ now, storage, request }) {
   // The same request last time completed its map stages at once: a stored map.
   const cached = history.some(entry => entry.signature === request.signature && entry.cached);
   const weight = STAGES.map(([key]) => expectedMs(key, request) * calibration(history, key));
-  const skipped = STAGES.map(([key], at) => cached && at >= 1 && at <= index('verifying_package'));
+  const skipped = STAGES.map(([key], at) => cached && at >= 1 && at <= index('building_navigation'));
   const actual = STAGES.map(() => null);
   const started = now();
   let current = 0;
