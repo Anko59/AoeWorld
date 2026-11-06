@@ -151,9 +151,12 @@ pub(crate) fn building_rule(building: &GameplayBuildingState) -> Option<&'static
             .bridge_span
             .is_some_and(|span| span.valid() && span.footprint() == building.footprint)
     } else {
+        // A gate in a wall line of constant x (a vertical gate, laid by the
+        // Vassal's walls) is the same 4x1 footprint transposed.
+        let (w, h) = (building.footprint.width(), building.footprint.height());
+        let (side, depth) = (building.kind.side(), building.kind.depth());
         building.bridge_span.is_none()
-            && building.footprint.width() == building.kind.side()
-            && building.footprint.height() == building.kind.depth()
+            && ((w == side && h == depth) || (building.kind.is_gate() && w == depth && h == side))
     };
     if !footprint_ok {
         return Some("building.footprint_matches_kind");
