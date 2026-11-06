@@ -190,6 +190,24 @@ pub(crate) fn pyramid_page_count(mut axis: u16) -> u64 {
     }
     total
 }
+/// Sends a finished overview field's page count to the reporting thread.
+pub(crate) fn landed<T>(
+    sent: &std::sync::mpsc::Sender<u64>,
+    result: Result<T, crate::GeodataError>,
+    pages: impl Fn(&T) -> usize,
+) -> Result<T, crate::GeodataError> {
+    let _ = sent.send(result.as_ref().map_or(0, |field| pages(field) as u64));
+    result
+}
+
+/// A sampling thread's result; a panic becomes a preparation error.
+pub(crate) fn joined<T>(
+    handle: std::thread::ScopedJoinHandle<'_, Result<T, crate::GeodataError>>,
+) -> Result<T, crate::GeodataError> {
+    let panicked = crate::GeodataError::Preparation("overview sampling thread panicked");
+    handle.join().unwrap_or(Err(panicked))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
