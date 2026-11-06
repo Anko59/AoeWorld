@@ -7,6 +7,9 @@ const ENGAGE_CADENCE: u64 = 4;
 const ENGAGE_CANDIDATES: usize = 256;
 /// Spatial bucket entries one look may inspect, whatever the group's extent.
 const ENGAGE_INSPECTIONS: usize = 2_048;
+/// Entries of one spatial bucket a look inspects. Successive looks start one
+/// window further on, so adjacent windows cover the whole bucket in turn.
+const ENGAGE_BUCKET_WINDOW: usize = 128;
 /// Building tiles one look may read; a wider window rotates by rows.
 const ENGAGE_BUILDING_TILES: i32 = 1_024;
 /// Members one look may send into a fight; the others look again next time.
@@ -140,9 +143,9 @@ impl GameWorld {
                 let Some(ids) = self.chunks.get(&ChunkCoord { x, y }) else {
                     continue;
                 };
-                let start = ((look * ENGAGE_CANDIDATES as u64 + u64::from(leader.0))
+                let start = ((look * ENGAGE_BUCKET_WINDOW as u64 + u64::from(leader.0))
                     % ids.len() as u64) as usize;
-                for n in 0..ids.len().min(128).min(budget) {
+                for n in 0..ids.len().min(ENGAGE_BUCKET_WINDOW).min(budget) {
                     budget -= 1;
                     let id = ids[(start + n) % ids.len()];
                     let unit = self.units[self.lookup[&id]].state;

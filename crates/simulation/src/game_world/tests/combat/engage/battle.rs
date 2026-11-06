@@ -24,13 +24,7 @@ fn run(name: &str, defenders_march: bool) -> (Probe, Probe) {
         pa.sample(&w, &a);
         pb.sample(&w, &b);
     }
-    std::fs::write(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../.cache/engage")
-            .join(format!("{name}-time.txt")),
-        format!("advance total ms={}", spent.as_millis()),
-    )
-    .unwrap();
+    println!("{name}: advance total ms={}", spent.as_millis());
     let mut kinds = std::collections::BTreeMap::<String, usize>::new();
     for &id in &all {
         if let Some(u) = w.unit(id).filter(|u| u.hp > 0 && u.attack_target.is_none()) {
@@ -48,13 +42,7 @@ fn run(name: &str, defenders_march: bool) -> (Probe, Probe) {
             }
         }
     }
-    std::fs::write(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../.cache/engage")
-            .join(format!("{name}-final.txt")),
-        format!("{kinds:?}"),
-    )
-    .unwrap();
+    println!("{name}: idle in reach {kinds:?}");
     println!("{}", probe.report(name, 20, all.len()));
     pa.report(&format!("{name}-side-a"), 20, a.len());
     pb.report(&format!("{name}-side-b"), 20, b.len());
