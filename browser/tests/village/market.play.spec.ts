@@ -105,7 +105,7 @@ test("reach Feudal, build a Market, sell food and buy wood for gold", async ({
   );
   // Same recovery race: the raised wood price may already have stepped down.
   await expect(page.locator("#market-prices")).toContainText(
-    /wood 10[123] /,
+    /wood 10[23] /,
   );
 
   // Only a completed Market shows the panel.
