@@ -136,6 +136,7 @@ pub(crate) fn prepare_vectors_validated(
         HydrologySelection::Vectors(cancelled),
     )?;
     check_cancelled(cancelled)?;
+    crate::preparation_progress::trace_mark("hydrology evidence done");
     apply_water_model(&mut prepared, request, &elevation_context, corrections)?;
     check_cancelled(cancelled)?;
     Ok(prepared)

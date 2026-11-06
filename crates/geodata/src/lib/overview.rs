@@ -313,6 +313,7 @@ fn prepare_overview_fields_from_verified_sources(
         prepare_elevation(&sources.elevation.path, request, axes.elevation)?
     };
     completed_pages += prepared.pages.len() as u64;
+    preparation_progress::trace_mark("elevation done");
     preparation_progress::count(
         preparation_progress::Phase::SamplingOverview,
         None,
@@ -324,6 +325,7 @@ fn prepare_overview_fields_from_verified_sources(
         prepare_hyde_lake_coverage(&sources.hyde_supplementary.path, request, axes.water)?;
     let water = prepare_ocean_coverage(&sources.water.path, request, axes.water, lake_coverage)?;
     completed_pages += water.pages.len() as u64;
+    preparation_progress::trace_mark("ocean/lake coverage done");
     preparation_progress::count(
         preparation_progress::Phase::SamplingOverview,
         None,
@@ -338,6 +340,7 @@ fn prepare_overview_fields_from_verified_sources(
         vegetation_corrections,
     )?;
     completed_pages += vegetation.pages.len() as u64;
+    preparation_progress::trace_mark("vegetation done");
     preparation_progress::count(
         preparation_progress::Phase::SamplingOverview,
         None,
@@ -362,6 +365,7 @@ fn prepare_overview_fields_from_verified_sources(
         historical_corrections,
     )?;
     completed_pages += historical_land_use.pages.len() as u64;
+    preparation_progress::trace_mark("historical done");
     preparation_progress::count(
         preparation_progress::Phase::SamplingOverview,
         None,

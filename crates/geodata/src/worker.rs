@@ -94,12 +94,14 @@ fn execute_inner(
                 historical_corrections.as_ref(),
                 vegetation_corrections.as_ref(),
             )?;
+            crate::preparation_progress::trace_mark("overview fields done");
             let hydrology = plan.prepare(
                 cache_root,
                 &prepared.pages,
                 &prepared.water_pages,
                 cancelled,
             )?;
+            crate::preparation_progress::trace_mark("hydrology prepared");
             let generated = GeneratedMap::from_prepared(request, prepared)?;
             let generated = match hydrology {
                 Some(hydrology) => generated.with_overview_vector_hydrology(hydrology)?,

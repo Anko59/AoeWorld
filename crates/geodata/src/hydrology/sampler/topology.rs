@@ -23,27 +23,28 @@ pub(super) struct RiverCellProjection {
     pub(super) distance_from_start_centimeters: u32,
 }
 
-impl Sampler {
-    pub(super) fn record_reach(&mut self, reach: &RiverReachGeometry) -> Result<(), GeodataError> {
-        let (Some(first), Some(last), Some(length)) = (
-            reach.line_points.first().copied(),
-            reach.line_points.last().copied(),
-            polyline_length(&reach.line_points),
-        ) else {
-            return Ok(());
-        };
-        let (Some(start_x), Some(start_y), Some(end_x), Some(end_y), Some(length_centimeters)) = (
-            coordinate_to_centimeters(first.0),
-            coordinate_to_centimeters(first.1),
-            coordinate_to_centimeters(last.0),
-            coordinate_to_centimeters(last.1),
-            meters_to_centimeters(length),
-        ) else {
-            // The corridor is still useful, but this reach cannot safely take
-            // part in the bounded topology model.
-            return Ok(());
-        };
-        let metadata = RiverReachMetadata {
+/// The bounded topology record of one reach, or `None` when it cannot safely
+/// take part in the model (the corridor is still useful for evidence).
+pub(super) fn reach_metadata(reach: &RiverReachGeometry) -> Option<(u32, RiverReachMetadata)> {
+    let (Some(first), Some(last), Some(length)) = (
+        reach.line_points.first().copied(),
+        reach.line_points.last().copied(),
+        polyline_length(&reach.line_points),
+    ) else {
+        return None;
+    };
+    let (Some(start_x), Some(start_y), Some(end_x), Some(end_y), Some(length_centimeters)) = (
+        coordinate_to_centimeters(first.0),
+        coordinate_to_centimeters(first.1),
+        coordinate_to_centimeters(last.0),
+        coordinate_to_centimeters(last.1),
+        meters_to_centimeters(length),
+    ) else {
+        return None;
+    };
+    Some((
+        reach.id,
+        RiverReachMetadata {
             next_down_id: reach.next_down_id,
             distance_to_sink_centimeters: reach.distance_to_sink_centimeters,
             start_x_centimeters: start_x,
@@ -51,8 +52,18 @@ impl Sampler {
             end_x_centimeters: end_x,
             end_y_centimeters: end_y,
             length_centimeters,
-        };
-        if let Some(existing) = self.river_reaches.get(&reach.id) {
+        },
+    ))
+}
+
+impl Sampler {
+    /// Applied in page order so the metadata cap keeps its sequential meaning.
+    pub(super) fn record_reach(
+        &mut self,
+        id: u32,
+        metadata: RiverReachMetadata,
+    ) -> Result<(), GeodataError> {
+        if let Some(existing) = self.river_reaches.get(&id) {
             if *existing != metadata {
                 return Err(GeodataError::Preparation(
                     "HydroRIVERS topology disagrees for a repeated reach",
@@ -65,7 +76,7 @@ impl Sampler {
             // reaches beyond the bounded transient index.
             return Ok(());
         }
-        self.river_reaches.insert(reach.id, metadata);
+        self.river_reaches.insert(id, metadata);
         Ok(())
     }
 

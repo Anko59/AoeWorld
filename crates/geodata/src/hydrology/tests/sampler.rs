@@ -32,6 +32,7 @@ pub(super) fn offline_vector_pages(
         river_reaches: Default::default(),
         river_cells: vec![None; usize::from(axis).pow(2)],
         river_topology: None,
+        reopen: None,
     };
     let (water, modern) = sampler.pages().expect("offline vector sampling");
     assert_worldcover_decoy_survives(&directory);
@@ -250,6 +251,7 @@ fn sampler(directory: &TestDirectory, worldcover_epsg: u32) -> Sampler {
         river_reaches: Default::default(),
         river_cells: vec![None; length],
         river_topology: None,
+        reopen: None,
     }
 }
 
@@ -306,6 +308,7 @@ fn vector_only_pages_never_open_worldcover_and_keep_unobserved_cells() {
         river_reaches: Default::default(),
         river_cells: vec![None; length],
         river_topology: None,
+        reopen: None,
     };
     let (mut water, modern) = sampler.pages().expect("vector-only sampling");
     assert_worldcover_decoy_survives(&directory);
@@ -484,10 +487,8 @@ fn coarse_offcentre_rivers_rasterize_as_continuous_lines() {
         );
     }
 }
-
 #[path = "sampler/channel_rules.rs"]
 mod channel_rules;
-
 #[path = "sampler/cutoff.rs"]
 mod cutoff;
 #[path = "sampler/decoy.rs"]
@@ -495,6 +496,5 @@ mod decoy;
 #[path = "sampler/lake_raster.rs"]
 mod lake_raster;
 use decoy::{assert_worldcover_decoy_survives, write_worldcover_decoy};
-
 #[path = "sampler/width.rs"]
 mod width;

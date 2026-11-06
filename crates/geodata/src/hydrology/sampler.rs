@@ -1,26 +1,29 @@
+#[cfg(test)]
+use super::hydrology_sampling::vector_features;
 use super::{
     GeodataError, HydrologyPage, MapRequest, ModernLandCoverPage, OpenTile, PAGE,
     RiverTopologyGrid, Tile, WORLD_COVER_NODATA, WORLD_COVER_PERMANENT_WATER, WORLD_COVER_WETLAND,
     hydrology_sampling::{
-        open_vector_source, page_bounds, sample_worldcover_page, vector_features,
+        open_vector_source, page_bounds, sample_worldcover_page, vector_features_with,
     },
 };
 use aoe_map::{HydrologyEvidenceMethod, HydrologyKind};
-use gdal::{
-    Dataset,
-    spatial_ref::{AxisMappingStrategy, CoordTransform, SpatialRef},
-};
+use gdal::Dataset;
 use std::{collections::BTreeMap, path::Path};
 
 #[path = "sampler/channels.rs"]
 mod channels;
 #[path = "sampler/lakes.rs"]
 mod lakes;
+#[path = "sampler/schedule.rs"]
+mod schedule;
 #[path = "sampler/topology.rs"]
 mod topology;
 use lakes::rasterize_lakes;
+use schedule::{PageOutput, Projections, Reopen};
 use topology::{
     RiverCellProjection, RiverReachMetadata, meters_to_centimeters, nearest_river_reach,
+    reach_metadata,
 };
 
 #[cfg(test)]
@@ -46,6 +49,9 @@ pub(super) struct Sampler {
     river_reaches: BTreeMap<u32, RiverReachMetadata>,
     river_cells: Vec<Option<RiverCellProjection>>,
     river_topology: Option<RiverTopologyGrid>,
+    /// How extra worker threads open their own handles (GDAL datasets are not
+    /// shared across threads). `None` samples every page on this thread.
+    reopen: Option<Reopen>,
 }
 
 impl Sampler {
@@ -88,6 +94,11 @@ impl Sampler {
                 "resampled ocean coverage does not match the hydrology grid",
             ));
         }
+        let reopen = Reopen {
+            tiles: tiles.clone(),
+            lakes: lakes_path.to_path_buf(),
+            rivers: rivers_path.map(Path::to_path_buf),
+        };
         let tiles = tiles
             .into_iter()
             .map(|tile| {
@@ -112,6 +123,7 @@ impl Sampler {
             river_reaches: BTreeMap::new(),
             river_cells: vec![None; usize::from(axis).pow(2)],
             river_topology: None,
+            reopen: Some(reopen),
         })
     }
 
@@ -125,17 +137,27 @@ impl Sampler {
         &mut self,
         cancelled: &std::sync::atomic::AtomicBool,
     ) -> Result<(Vec<HydrologyPage>, Vec<ModernLandCoverPage>), GeodataError> {
-        let mut hydrology = Vec::new();
-        let mut land_cover = Vec::new();
+        let mut coordinates = Vec::new();
         for y in (0..self.axis).step_by(usize::from(PAGE)) {
             for x in (0..self.axis).step_by(usize::from(PAGE)) {
-                if cancelled.load(std::sync::atomic::Ordering::SeqCst) {
-                    return Err(crate::CacheError::Cancelled.into());
-                }
-                let (water, modern) = self.page(x, y)?;
-                hydrology.push(water);
-                land_cover.push(modern);
+                coordinates.push((x, y));
             }
+        }
+        let outputs = self.sample_pages(&coordinates, cancelled)?;
+        let mut hydrology = Vec::with_capacity(coordinates.len());
+        let mut land_cover = Vec::with_capacity(coordinates.len());
+        // Merge strictly in page order: the reach cap and the first error
+        // keep their sequential meaning whatever the thread count.
+        for output in outputs {
+            let output = output?;
+            for (id, metadata) in output.reaches {
+                self.record_reach(id, metadata)?;
+            }
+            for (index, projection) in output.cells {
+                self.river_cells[index] = Some(projection);
+            }
+            hydrology.push(output.hydrology);
+            land_cover.push(output.land_cover);
         }
         self.river_topology = self.resolve_river_topology()?;
         Ok((hydrology, land_cover))
@@ -151,7 +173,8 @@ impl Sampler {
         &mut self,
         x: u16,
         y: u16,
-    ) -> Result<(HydrologyPage, ModernLandCoverPage), GeodataError> {
+        projections: &Projections,
+    ) -> Result<PageOutput, GeodataError> {
         let width = (self.axis - x).min(PAGE) as u8;
         let height = (self.axis - y).min(PAGE) as u8;
         let side = self
@@ -160,17 +183,7 @@ impl Sampler {
             .map_err(|_| GeodataError::Preparation("invalid request estimate"))?
             .effective_side_meters as f64;
         let spacing = side / f64::from(self.axis);
-        let definition = crate::local_aeqd_definition(
-            self.request.center_latitude_e7,
-            self.request.center_longitude_e7,
-        );
-        let mut target =
-            SpatialRef::from_definition(&definition).map_err(|_| GeodataError::Projection)?;
-        let mut wgs84 = SpatialRef::from_epsg(4326).map_err(|_| GeodataError::Projection)?;
-        target.set_axis_mapping_strategy(AxisMappingStrategy::TraditionalGisOrder);
-        wgs84.set_axis_mapping_strategy(AxisMappingStrategy::TraditionalGisOrder);
-        let transform =
-            CoordTransform::new(&target, &wgs84).map_err(|_| GeodataError::Projection)?;
+        let transform = &projections.local_to_wgs84;
         let mut east = Vec::with_capacity(usize::from(width) * usize::from(height));
         let mut north = Vec::with_capacity(east.capacity());
         for row in 0..u16::from(height) {
@@ -210,7 +223,12 @@ impl Sampler {
             .transform_coords(&mut query_x, &mut query_y, &mut [])
             .map_err(|_| GeodataError::Coordinate)?;
         let page_bounds = page_bounds(&query_x, &query_y)?;
-        let lake_features = vector_features(&mut self.lakes, page_bounds, &definition, false)?;
+        let lake_features = vector_features_with(
+            &mut self.lakes,
+            page_bounds,
+            &projections.wgs84_to_local,
+            false,
+        )?;
         let tiles_per_side = self
             .request
             .estimate()
@@ -218,7 +236,8 @@ impl Sampler {
             .tiles_per_side;
         let river_floor = channels::minimum_discharge(side / tiles_per_side as f64);
         let river_features = if let Some(rivers) = &mut self.rivers {
-            let mut features = vector_features(rivers, page_bounds, &definition, true)?;
+            let mut features =
+                vector_features_with(rivers, page_bounds, &projections.wgs84_to_local, true)?;
             // Compression-scaled importance cutoff: small streams vanish on coarse maps.
             features.retain(|f| {
                 f.river_reach
@@ -229,11 +248,11 @@ impl Sampler {
         } else {
             Vec::new()
         };
-        for feature in &river_features {
-            if let Some(reach) = &feature.river_reach {
-                self.record_reach(reach)?;
-            }
-        }
+        let reaches = river_features
+            .iter()
+            .filter_map(|feature| feature.river_reach.as_ref().and_then(reach_metadata))
+            .collect::<Vec<_>>();
+        let mut cells = Vec::new();
         let lake_kinds = rasterize_lakes(
             lake_features,
             usize::from(width),
@@ -268,10 +287,13 @@ impl Sampler {
                 let offset = meters_to_centimeters(station).ok_or(GeodataError::Preparation(
                     "HydroRIVERS line distance is invalid",
                 ))?;
-                self.river_cells[global_index] = Some(RiverCellProjection {
-                    reach_id: reach.id,
-                    distance_from_start_centimeters: offset,
-                });
+                cells.push((
+                    global_index,
+                    RiverCellProjection {
+                        reach_id: reach.id,
+                        distance_from_start_centimeters: offset,
+                    },
+                ));
                 true
             } else {
                 false
@@ -280,8 +302,10 @@ impl Sampler {
             kinds.push(kind as u8);
             methods.push(method as u8);
         }
-        Ok((
-            HydrologyPage {
+        Ok(PageOutput {
+            reaches,
+            cells,
+            hydrology: HydrologyPage {
                 river_segments: channels::segments(
                     &river_features,
                     side,
@@ -302,7 +326,7 @@ impl Sampler {
                 method: methods,
                 water_model: None,
             },
-            ModernLandCoverPage {
+            land_cover: ModernLandCoverPage {
                 level: 0,
                 x: x / PAGE,
                 y: y / PAGE,
@@ -310,7 +334,7 @@ impl Sampler {
                 height,
                 worldcover_class: classes,
             },
-        ))
+        })
     }
 }
 
