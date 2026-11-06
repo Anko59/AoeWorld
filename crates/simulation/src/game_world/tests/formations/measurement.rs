@@ -51,11 +51,12 @@ fn formations_measure_warm_army_movement_and_route_searches() {
             samples[190]
         );
         assert!(ids.iter().any(|&id| w.unit(id).unwrap().moving));
-        // This individual workload starts 204 searches for 200 requests:
-        // scheduler restarts are counted as well as the first attempts.
+        // One search per request: scheduler restarts would be counted as
+        // well. Four were, while units past the player's 64th continuation
+        // could not keep their planners; now the player borrows them.
         // A shared route must perform exactly one search, including retries.
         assert_eq!(metrics.orders, if grouped { 1 } else { 200 });
-        assert_eq!(metrics.searches_started, if grouped { 1 } else { 204 });
+        assert_eq!(metrics.searches_started, if grouped { 1 } else { 200 });
         if let Some(from) = from {
             let to = w.formation_anchor(ids[0]).unwrap();
             assert!(

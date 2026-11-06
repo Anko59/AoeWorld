@@ -103,9 +103,13 @@ pub(super) fn match_body(options: &Options) -> Result<Value, BoxError> {
     let mut body = json!({
         "slots": slots,
     });
-    if options.start_villagers + options.start_militia > 0 {
+    if options.start_villagers + options.start_militia > 0 || options.march_probe {
         body["start_units"] =
             json!({ "villagers": options.start_villagers, "militia": options.start_militia });
+    }
+    if options.march_probe {
+        body["start_units"]["probe_army"] = super::march::probe_army();
+        body["seed"] = json!(options.seed);
     }
     match options.map {
         MapSource::Procedural => body["map"] = france_request(options.tiles, options.seed)?,
@@ -251,11 +255,27 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
         bots_prefix: format!("aoe-scale-bots-{}-", options.port),
         browser: browser::container_name(options),
     };
-    let mut hosts = start_hosts(options, &root, &work, &tokens)?;
+    let no_bots = options.march_no_ai;
+    let mut hosts = if no_bots {
+        Vec::new()
+    } else {
+        start_hosts(options, &root, &work, &tokens)?
+    };
     let host_names: Vec<String> = hosts.iter().map(|host| host.name.clone()).collect();
     // Every host reports once all its bots hold a session: that is the connect
     // time, and the measured window starts after it, without earlier ticks.
     let connect_seconds = wait_connected(&mut hosts)?;
+    let probe = options.march_probe.then(|| {
+        let human = info["slots"][0]["token"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let admin = super::march::Admin {
+            address: server.address.clone(),
+            token: ADMIN_TOKEN,
+        };
+        super::march::start(super::march::settings(options, admin, human))
+    });
     println!("scale-match: all bots connected {connect_seconds:.1} s after the hosts started");
     let _ = pull_ticks(&server, &mut cursor, &mut rows);
     rows.clear();
@@ -325,6 +345,7 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
     }
     let wall_seconds = run_started.elapsed().as_secs_f64();
     let _ = pull_ticks(&server, &mut cursor, &mut rows);
+    let march = probe.map(super::march::Probe::finish);
 
     // The bots stop by themselves at their own time limit; give them a moment.
     let grace = Instant::now();
@@ -405,7 +426,12 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
         "browser": browser,
         "per_minute": report::per_minute(&rows, wall_seconds),
         "timeline": report::timeline(&samples),
+        "planning_per_minute": report::planning(&rows, wall_seconds),
+        "march": march,
     });
+    if let Some(march) = out.get("march").filter(|m| !m.is_null()) {
+        super::march::print_table(&options.label, march);
+    }
     finish(options, &root, out)
 }
 

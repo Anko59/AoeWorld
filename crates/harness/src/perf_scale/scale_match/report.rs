@@ -17,6 +17,8 @@ pub(super) struct TickRow {
     pub units: u64,
     pub missed: bool,
     pub phases_us: [u64; 3],
+    /// Route planning inside `advance` (the planning probe), microseconds.
+    pub planning_us: u64,
 }
 
 impl TickRow {
@@ -35,6 +37,7 @@ impl TickRow {
                 value.get(8)?.get("combat")?.as_u64()?,
                 value.get(8)?.get("hierarchy")?.as_u64()?,
             ],
+            planning_us: field(7).unwrap_or(0),
         })
     }
 
@@ -332,4 +335,25 @@ pub(super) fn browser_line(browser: &Value) -> String {
     error.map_or(measured.clone(), |error| {
         format!("{measured} (then failed: {error})")
     })
+}
+
+/// Route planning's share of the tick and of `advance`, per wall minute.
+pub(super) fn planning(rows: &[TickRow], wall_seconds: f64) -> Value {
+    let per = (rows.len() as f64 / (wall_seconds / 60.0).max(1.0))
+        .ceil()
+        .max(1.0) as usize;
+    rows.chunks(per)
+        .map(|chunk| {
+            let total: u64 = chunk.iter().map(|r| r.total_us).sum();
+            let sim: u64 = chunk.iter().map(|r| r.sim_us).sum();
+            let planning: u64 = chunk.iter().map(|r| r.planning_us).sum();
+            json!({
+                "first_tick": chunk.first().map(|r| r.tick),
+                "ticks": chunk.len(),
+                "planning_ms_mean": round(planning as f64 / chunk.len() as f64 / 1000.0),
+                "share_of_tick": round(planning as f64 / total.max(1) as f64),
+                "share_of_advance": round(planning as f64 / sim.max(1) as f64),
+            })
+        })
+        .collect()
 }

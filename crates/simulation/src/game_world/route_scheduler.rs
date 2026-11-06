@@ -12,21 +12,35 @@ use aoe_map::{MovementOutcome, RoutePlanner, RoutePlannerPoll};
 use std::collections::{BTreeMap, VecDeque};
 
 mod accounting;
+mod attribution;
 mod deadline;
+mod diagnostic;
 mod fast;
 mod issue;
 mod metrics;
 mod order;
 pub use accounting::RouteSchedulerStats;
+pub use attribution::{
+    ROUTE_CATEGORIES, ROUTE_DISTANCES, ROUTE_FAILURES, RouteAttribution, RouteCaller, RouteClass,
+};
 pub(crate) use metrics::{GroupWork, PlanningMeasurement};
 pub use metrics::{PLANNING_SPANS, PlanningProbe, RouteMetrics};
 #[cfg(test)]
-pub(crate) use {deadline::NEAR_ROUTE_ANSWER_TICKS, issue::NO_SLOT_ROUTE_WORK};
+pub(crate) use {
+    deadline::{FAR_ROUTE_ANSWER_TICKS, MAX_GROUP_ROUTE_RENEWALS, NEAR_ROUTE_ANSWER_TICKS},
+    issue::NO_SLOT_ROUTE_WORK,
+};
 
 /// Retained search frontiers one player may hold at once.
 pub(crate) const MAX_ROUTE_SEARCHES_PER_PLAYER: usize = 2;
-/// Compact route continuations one player may hold at once.
+/// Compact route continuations one player is guaranteed to hold at once.
 pub(crate) const MAX_ROUTE_PLANNERS_PER_PLAYER: usize = 64;
+/// Beyond its share a player borrows continuations while the world holds
+/// fewer than this, half the memory bound; the rest stays for the players
+/// under their share. In the owner's late game (1,649 population) player 0
+/// held 97 to 154 continuations with no search at all, so none of its
+/// waiting orders could take a slot while the world held 1,000 of 4,096.
+pub(crate) const SHARED_ROUTE_PLANNERS: usize = MAX_ACTIVE_ROUTE_PLANNERS / 2;
 /// A route whose ends are farther apart than this (Chebyshev tiles) searches
 /// in its player's far slots. A scout riding across the map, or an army sent
 /// to sealed-off ground, searches for minutes; in a 99-AI match such searches
@@ -77,9 +91,11 @@ impl GameWorld {
         far: bool,
     ) -> bool {
         let slots = self.route_slots.get(&player).copied().unwrap_or_default();
-        slots.planners.saturating_sub(own_planner) >= MAX_ROUTE_PLANNERS_PER_PLAYER
+        let world = self.active_planner_count.saturating_sub(own_planner);
+        (slots.planners.saturating_sub(own_planner) >= MAX_ROUTE_PLANNERS_PER_PLAYER
+            && world >= SHARED_ROUTE_PLANNERS)
             || slots.class_searches(far).saturating_sub(own_search) >= MAX_ROUTE_SEARCHES_PER_PLAYER
-            || self.active_planner_count.saturating_sub(own_planner) >= MAX_ACTIVE_ROUTE_PLANNERS
+            || world >= MAX_ACTIVE_ROUTE_PLANNERS
             || self.active_route_searches.saturating_sub(own_search) >= MAX_ACTIVE_ROUTE_SEARCHES
     }
 
@@ -147,7 +163,8 @@ impl GameWorld {
         }
         self.expire_route_waits(&expired, changed);
         self.route_queued.clear();
-        self.serve_waiting(waiting, budget, changed)
+        let reserved = self.serve_far_groups(&waiting, budget, changed);
+        self.serve_waiting(waiting, budget - reserved, changed)
     }
 
     /// Shares `budget` between the players of `waiting` in a rotating order,
@@ -305,11 +322,18 @@ impl GameWorld {
                 self.route_metrics.searches_started += 1;
             }
             self.route_metrics.fair_work += u64::from(spent);
+            let (from, to) = (planner.origin(), planner.destination());
+            self.route_metrics
+                .attribution
+                .work(kind, from, to, 1, spent);
             (result, spent)
         };
+        let reason = attribution::failure_reason(&result);
+        let (from, to) = (planner.origin(), planner.destination());
         let error = match result {
             RoutePlannerPoll::Path(path) => {
                 self.route_metrics.found(planner.work());
+                self.route_metrics.attribution.found(kind, from, to);
                 if planner.certified_destination().is_some() {
                     self.route_metrics
                         .sample("certified-nearest", kind, &planner);
@@ -362,6 +386,13 @@ impl GameWorld {
             self.cache_route(&planner, kind, &MovementOutcome::Unreachable);
         }
         self.route_metrics.failed(planner.work());
+        let caller = self.units[index].route_caller;
+        self.route_metrics
+            .attribution
+            .failed(kind, from, to, planner.work(), reason, caller);
+        if self.units[index].formation == Some(id) {
+            self.route_metrics.attribution.group_orders_failed += 1;
+        }
         self.stop_route(index, error);
         if let Ok(at) = self.active_movers.binary_search(&id) {
             self.active_movers.remove(at);

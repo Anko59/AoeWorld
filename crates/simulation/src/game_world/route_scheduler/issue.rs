@@ -89,6 +89,10 @@ impl GameWorld {
         }
         self.charge_fast_route(player, spent);
         self.route_metrics.issue_work += u64::from(spent);
+        let (from, to) = (planner.origin(), planner.destination());
+        self.route_metrics
+            .attribution
+            .work(kind, from, to, 0, spent);
         (result, allowance == attempt)
     }
 
@@ -107,12 +111,13 @@ impl GameWorld {
         kind: UnitKind,
         outcome: &MovementOutcome,
     ) {
-        if !kind.is_naval() && planner.certified_destination().is_none() {
+        if planner.certified_destination().is_none() {
             let _span = self
                 .planning_probe
                 .as_ref()
                 .and_then(|probe| probe.cache_span());
             self.navigation_cache.insert(
+                kind.is_naval(),
                 planner.origin(),
                 planner.destination(),
                 planner.work(),
@@ -133,18 +138,34 @@ impl GameWorld {
             return None;
         }
         self.route_metrics.orders += 1;
+        let caller = self.route_metrics.caller;
+        self.route_metrics
+            .attribution
+            .order(kind, origin, destination, caller);
         let allowance = self.fast_route_allowance(player);
-        if !kind.is_naval()
-            && let Some((outcome, work)) = self.navigation_cache.get(origin, destination, allowance)
+        if let Some((outcome, work)) =
+            self.navigation_cache
+                .get(kind.is_naval(), origin, destination, allowance)
         {
             self.charge_fast_route(player, work);
             self.route_metrics.cache_hits += 1;
             self.route_metrics.solved_at_issue += 1;
+            if !matches!(outcome, MovementOutcome::Path(_)) {
+                self.route_metrics.attribution.cached_failure(caller);
+            }
             return Some(MapRoutePlan::Outcome(outcome));
         }
         let mut planner = RoutePlanner::new(origin, destination, MAX_ROUTE_WORK_PER_ORDER);
         let (result, full) = self.poll_fast_route(&mut planner, kind, player);
         let work = planner.work();
+        let reason = super::attribution::failure_reason(&result);
+        let fail = |world: &mut Self| {
+            world.route_metrics.failed(work);
+            world
+                .route_metrics
+                .attribution
+                .failed(kind, origin, destination, work, reason, caller);
+        };
         let settled = |world: &mut Self, outcome: MovementOutcome| {
             world.cache_route(&planner, kind, &outcome);
             Some(MapRoutePlan::Outcome(outcome))
@@ -166,6 +187,9 @@ impl GameWorld {
                 self.route_metrics.solved_at_issue += 1;
                 self.route_metrics.fast_path += 1;
                 self.route_metrics.found(work);
+                self.route_metrics
+                    .attribution
+                    .found(kind, origin, destination);
                 if planner.is_terminal() && planner.certified_destination().is_none() {
                     settled(self, MovementOutcome::Path(path))
                 } else {
@@ -173,15 +197,15 @@ impl GameWorld {
                 }
             }
             RoutePlannerPoll::Complete | RoutePlannerPoll::SearchLimit => {
-                self.route_metrics.failed(work);
+                fail(self);
                 Some(MapRoutePlan::SearchLimit)
             }
             RoutePlannerPoll::InvalidDestination => {
-                self.route_metrics.failed(work);
+                fail(self);
                 settled(self, MovementOutcome::InvalidDestination)
             }
             RoutePlannerPoll::Unreachable => {
-                self.route_metrics.failed(work);
+                fail(self);
                 settled(self, MovementOutcome::Unreachable)
             }
             RoutePlannerPoll::Environment(error) => Some(MapRoutePlan::Environment(error)),

@@ -194,6 +194,7 @@ fn log_route_scheduler(world: &aoe_simulation::GameWorld) {
         cache_entries = world.navigation_cache_usage().entries,
         units = world.units().count(),
         metrics = %stats.metrics,
+        attribution = %crate::gameplay_match::routes::attribution_json(&stats.metrics.attribution),
         "route scheduler"
     );
     if let Some(error) = world.route_accounting_error() {

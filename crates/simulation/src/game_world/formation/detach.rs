@@ -229,6 +229,9 @@ impl GameWorld {
             self.formations.insert(replacement, group);
         }
         let origin = self.units[index].state.position;
+        let player = self.units[index].state.player;
+        let fast_left = self.fast_route_allowance(player) > 0;
+        let capacity = self.route_capacity_exhausted(player, 0, 0, false);
         let previous = self.take_planner(index);
         let Ok((waypoint, route, planner, planning, fast_tried)) =
             self.order_route(index, origin, goal)
@@ -236,6 +239,25 @@ impl GameWorld {
             self.store_planner(index, previous);
             return;
         };
+        // A detour its fast attempt cannot settle and that gets no slot would
+        // queue behind its player's two near searches: with no AI at all,
+        // 8,288 such detours expired and stopped their members. It keeps
+        // following its group instead and may detach again later.
+        if planning && planner.is_none() {
+            self.store_planner(index, previous);
+            let attribution = &mut self.route_metrics.attribution;
+            attribution.detours_declined += 1;
+            attribution.detours_without_fast += u64::from(!fast_left);
+            attribution.detours_at_capacity += u64::from(capacity);
+            if let Some(group) = self
+                .formations
+                .get_mut(&self.units[index].formation.unwrap_or(leader))
+                && let Some(at) = group.member_index(id)
+            {
+                group.members[at].stalled = 0;
+            }
+            return;
+        }
         self.install_formation_route(
             index, origin, goal, waypoint, route, planner, planning, fast_tried,
         );

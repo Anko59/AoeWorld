@@ -20,6 +20,13 @@ pub(crate) const MAX_NEAR_ROUTE_WORK: u32 = 3 * aoe_map::ROUTE_LEG_COMMIT_WORK;
 pub(crate) const NEAR_ROUTE_ANSWER_TICKS: u64 = 1_200;
 /// Ticks a far order may wait for its next leg: three minutes at 20 Hz.
 pub(crate) const FAR_ROUTE_ANSWER_TICKS: u64 = 3_600;
+/// Times a formation's far wait is renewed before the group is ended. In a
+/// 99-AI match every far group order of the probe was ended whole at 3,600
+/// ticks while its route was still being searched or queued for a slot; a
+/// group is many units and the owner's order, so it waits longer. The bound
+/// stays: an order into sealed ground (the reason for the deadline) is still
+/// answered, by the planner's own proof or after `1 + MAX` waits.
+pub(crate) const MAX_GROUP_ROUTE_RENEWALS: u8 = 4;
 
 impl GameWorld {
     /// True when the waiting unit's route uses its player's far slots.
@@ -50,7 +57,17 @@ impl GameWorld {
             let Some(&index) = self.lookup.get(&id) else {
                 continue;
             };
+            let far = self.waits_for_far_route(index);
+            let unit = &mut self.units[index];
+            if far && unit.formation == Some(id) && unit.route_renewals < MAX_GROUP_ROUTE_RENEWALS {
+                // The carrier keeps its order and any search it holds.
+                unit.route_renewals += 1;
+                unit.planning_since = self.tick.0;
+                self.route_metrics.attribution.group_wait_renewals += 1;
+                continue;
+            }
             self.route_metrics.expired += 1;
+            self.attribute_expiry(index, id);
             // Only a unit that searched has learned anything about this
             // target; one that never got a slot may ask again at once.
             let searched = self.units[index].planner.is_some();
@@ -83,7 +100,35 @@ impl GameWorld {
         self.route_metrics.stuck += 1;
         self.route_metrics.sample("stuck", kind, &sample);
         self.route_metrics.failed(work);
+        let (from, to) = (sample.origin(), sample.destination());
+        let caller = self.units[index].route_caller;
+        self.route_metrics
+            .attribution
+            .failed(kind, from, to, work, 3, caller);
         self.end_waiting_route(index, id, true, changed);
+    }
+
+    /// Diagnostics: who the wait bound ended (a formation's carrier ends
+    /// its whole group).
+    fn attribute_expiry(&mut self, index: usize, id: EntityId) {
+        let unit = &self.units[index];
+        let (kind, held) = (unit.state.kind, unit.planner.is_some());
+        let ends = unit
+            .order
+            .map(|order| (order.waypoint.tile_floor(), order.target_tile));
+        let members = (unit.formation == Some(id)).then(|| self.group_size(id).unwrap_or(1));
+        let attribution = &mut self.route_metrics.attribution;
+        if let Some((from, to)) = ends {
+            attribution.expired(kind, from, to);
+        }
+        attribution.expired_without_planner += u64::from(!held);
+        match members {
+            Some(count) => {
+                attribution.group_orders_expired += 1;
+                attribution.group_members_expired += count as u64;
+            }
+            None => attribution.single_expired += 1,
+        }
     }
 
     /// Gives up on a waiting unit's route: not proven unreachable, but out of

@@ -68,6 +68,10 @@ pub struct RouteMetrics {
     pub approached: u64,
     /// The latest searches that ended stuck or needed 64 Ki work or more.
     pub samples: std::collections::VecDeque<String>,
+    /// Work and outcomes by category, distance and caller (`attribution`).
+    pub attribution: super::attribution::RouteAttribution,
+    /// The call site of the order being planned now.
+    pub(crate) caller: super::attribution::Caller,
 }
 
 impl RouteMetrics {

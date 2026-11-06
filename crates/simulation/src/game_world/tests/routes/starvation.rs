@@ -263,3 +263,58 @@ fn an_expired_group_route_ends_the_move_of_every_member() {
         assert!(world.units[world.lookup[&id]].formation.is_none());
     }
 }
+
+#[test]
+fn a_far_group_outlives_its_first_wait_and_ends_after_its_renewals() {
+    use crate::game_world::route_scheduler::{FAR_ROUTE_ANSWER_TICKS, MAX_GROUP_ROUTE_RENEWALS};
+    let mut world = sealed_near_world();
+    let units = (0..6)
+        .map(|n| {
+            world
+                .spawn_unit(PlayerId(3), tile_position(CX - 3 + n, CY - RADIUS - 100))
+                .expect("unit")
+        })
+        .collect::<Vec<_>>();
+    world
+        .issue_formation_move(
+            PlayerId(3),
+            &units,
+            aoe_core::Formation::Line,
+            tile_position(CX, CY),
+            false,
+            false,
+        )
+        .expect("accepted");
+    for _ in 0..40 {
+        world.advance();
+    }
+    // Each expired wait of a far carrier is renewed: the group keeps its
+    // order. The bound stays: the carrier's order ends in bounded time, by
+    // the next expiry after the renewals or by the planner's own limit.
+    let mut expiries = 0;
+    let carrier = *world.formations.keys().next().expect("group");
+    for _ in 0..4_000 {
+        if world.movement_order(carrier).is_none() {
+            break;
+        }
+        if world.unit(carrier).expect("unit").planning {
+            world.tick.0 += FAR_ROUTE_ANSWER_TICKS;
+            expiries += 1;
+            if expiries == 1 {
+                world.advance();
+                assert_eq!(world.formations.len(), 1, "the first expiry is renewed");
+            }
+        }
+        world.advance();
+    }
+    let renewals = world.route_metrics.attribution.group_wait_renewals;
+    assert!(
+        world.movement_order(carrier).is_none(),
+        "ends in bounded time"
+    );
+    assert!(
+        (1..=u64::from(MAX_GROUP_ROUTE_RENEWALS)).contains(&renewals),
+        "expiries {expiries} renewals {renewals}"
+    );
+    assert_eq!(units.len(), 6);
+}

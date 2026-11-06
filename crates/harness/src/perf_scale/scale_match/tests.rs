@@ -26,6 +26,7 @@ fn row(tick: u64, total_us: u64, sim_us: u64, units: u64, missed: bool) -> TickR
         units,
         missed,
         phases_us: [0; 3],
+        planning_us: 0,
     }
 }
 

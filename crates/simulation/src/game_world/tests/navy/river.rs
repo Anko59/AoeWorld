@@ -240,7 +240,50 @@ fn a_fishing_spot_blocked_briefly_resumes_when_it_clears_within_the_bound() {
     for tile in &wall {
         w.economy.blocked_tiles.remove(tile);
     }
+    // As a removed building or opened gate does: routes over it are stale.
+    let (first, last) = (wall[0], wall[wall.len() - 1]);
+    w.collision_opened(aoe_core::TileRect::new(
+        first,
+        TileCoord::new(last.x + 1, last.y + 1),
+    ));
     advance(&mut w, 20 * 40);
     assert_eq!(w.gather_target(id), Some(fish.id));
     assert!(w.unit(id).unwrap().carried.is_some());
+}
+
+/// A fleet cut off by a bridge retried every work point of its fish once a
+/// second, each a fresh search: two thirds of a 100-player late game's route
+/// work. Ship routes are now cached like land routes, so a retry from where
+/// the ship stands is answered without planning.
+#[test]
+fn a_ship_cut_off_from_its_fish_retries_from_the_cache() {
+    let (mut w, fish, river) = fish_river_fixture(3);
+    let at = TileCoord::new(fish.tile.x - 8, river + 1);
+    let id = ship(&mut w, UnitKind::FishingShip, at, 0);
+    // A closed reach between the ship and the fish; the fish's water is open.
+    w.economy
+        .blocked_tiles
+        .extend((river..river + 3).map(|y| TileCoord::new(fish.tile.x - 5, y)));
+    let before = w.route_metrics.orders;
+    let refused = w.approach_resource(id, fish.tile);
+    assert_eq!(
+        refused,
+        Err(crate::GameWorldError::Unreachable.into()),
+        "the fish's water is open but cut off"
+    );
+    let metrics = &w.route_metrics;
+    let (orders, hits, work) = (metrics.orders, metrics.cache_hits, metrics.issue_work);
+    let tried = orders - before;
+    assert!(tried > 1, "every work point was tried");
+    w.refill_route_budgets();
+    w.units[w.lookup[&id]].unreachable_memo = None;
+    assert!(w.approach_resource(id, fish.tile).is_err());
+    let metrics = &w.route_metrics;
+    assert_eq!(metrics.orders - orders, tried, "the same points again");
+    assert_eq!(
+        metrics.cache_hits - hits,
+        tried,
+        "all answered from the cache"
+    );
+    assert_eq!(metrics.issue_work, work, "with no planning");
 }

@@ -40,8 +40,45 @@ Options (`aoe-harness scale-match --help`): `--players --humans --tiles
 --start-villagers --start-militia --minutes --hosts --map
 procedural|package|flat --map-hash --package-directory --port --seed
 --asset-pack --browser --browser-minutes --browser-delay --out --summary
---no-summary --label`. The browser step needs `make build-wasm` (the server serves `web/`) and
+--no-summary --label --march-probe --march-minute --march-scatter --march-no-ai`. The browser step needs `make build-wasm` (the server serves `web/`) and
 an original-art pack (`AOE_ASSET_PACK=local-assets/packs/<hash>`).
+
+## March probe: group movement in the real match
+
+`--march-probe` plays slot 0 with a scripted human on the SDK client (the
+browser's wire protocol and its `FormationOrder`, formation Line, no Generals):
+
+1. Slot 0 alone gets `start_units.probe_army` (820 militia, 560 archers, 470
+   knights, 40 rams, 40 mangonels, every second tile of a ring 60 to 110 tiles
+   from its village), and each soldier is first sent up to `--march-scatter`
+   tiles (default 40) from where it stands.
+2. At `--march-minute` (wall minutes after the bots connect) it records the
+   route scheduler (`GET /admin/match/routes`: waiting units, oldest wait, fair
+   work, and the attribution below), draws groups from the shuffled army as it
+   stands (40, 150 and 400 to 200, 500 and 1,000 straight tiles, and 40 with
+   half siege to 200 and 500), and asks `POST /admin/match/route_probe` for a
+   destination in up to eight directions whose route is proven to the tile
+   (read-only, outside the game's budgets). A group with no proven direction is
+   kept and labelled `UNPROVEN`. Orders go out 5 s apart.
+3. It follows every member until the run ends: first motion (ticks and wall
+   seconds), the first time it stands still or does something else short of the
+   goal (`dropped`), speed against its kind's nominal, stall ticks (under 20% of
+   nominal), distance over time, and arrival within the slot radius (farthest
+   formation slot plus 3 tiles). Arrivals are counted at 1.3x, 2x and 3x of the
+   ideal time (route length at the slowest member's nominal speed, at 20 Hz) on
+   the tick clock and on the wall clock; a limit the run did not reach is `null`.
+
+`--march-no-ai` seats the same 99 AI slots with no bot: the same map, villages
+and orders without AI route demand. The report (`march`, and
+`planning_per_minute`: route planning's share of the tick) stays local, e.g.
+`--out .cache/probe/<label>.json`; a table is printed at the end.
+
+The scheduler log line and `/admin/match/routes` carry the attribution
+(diagnostics, never hashed): orders, fast/fair/look-ahead work, found, failed
+and expired by unit category (villager, soldier, siege, ship) and straight
+distance (64, 256, 1,024 tiles, beyond); failures by the call site that issued
+the order, with the reasons and categories of the 1 to 4 Ki failures; and
+formation orders ended by the wait bound apart from single units.
 
 ## The match rules behind it
 

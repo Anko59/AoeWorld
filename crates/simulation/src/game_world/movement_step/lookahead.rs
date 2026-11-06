@@ -44,6 +44,10 @@ impl GameWorld {
             }
             let spent = planner.work().saturating_sub(work_before);
             self.route_metrics.lookahead_work += u64::from(spent);
+            let (from, to) = (planner.origin(), planner.destination());
+            self.route_metrics
+                .attribution
+                .work(kind, from, to, 2, spent);
             budget -= spent.min(budget);
             self.store_planner(index, Some(planner));
         }

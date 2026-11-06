@@ -22,6 +22,8 @@ pub struct NavigationCacheUsage {
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct Key {
+    /// Ships and land units read different ground: water, and land.
+    naval: bool,
     origin: TileCoord,
     destination: TileCoord,
 }
@@ -78,6 +80,7 @@ impl NavigationCache {
 
     pub(crate) fn get(
         &mut self,
+        naval: bool,
         origin: TileCoord,
         destination: TileCoord,
         budget: u32,
@@ -85,12 +88,14 @@ impl NavigationCache {
         self.clock = self.clock.saturating_add(1);
         self.entries
             .get_mut(&Key {
+                naval,
                 origin,
                 destination,
             })
             .filter(|entry| entry.work <= budget)
             .map(|entry| {
                 let key = Key {
+                    naval,
                     origin,
                     destination,
                 };
@@ -103,6 +108,7 @@ impl NavigationCache {
 
     pub(crate) fn insert(
         &mut self,
+        naval: bool,
         origin: TileCoord,
         destination: TileCoord,
         work: u32,
@@ -113,6 +119,7 @@ impl NavigationCache {
             return;
         }
         let key = Key {
+            naval,
             origin,
             destination,
         };
