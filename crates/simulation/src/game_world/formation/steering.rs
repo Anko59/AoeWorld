@@ -338,6 +338,29 @@ impl GameWorld {
                     member.following_corridor = true;
                 }
             }
+            // A wide body at a deck end cannot cut the corridor's corner over
+            // water as a narrow one does. A blocked one aims at the first
+            // corridor point ahead whose first half-tile step is clear.
+            if !group.direct
+                && !member.arrived
+                && member.blocked >= 16
+                && self.near_deck(unit.position)
+                && !self.half_step_clear(unit.kind, unit.position, member.target)
+            {
+                for ahead in 1..=4_i64 {
+                    let mut at = member.cursor;
+                    let point = group
+                        .path
+                        .corridor_point(member.progress + ahead * 512, &mut at)
+                        .0;
+                    if self.half_step_clear(unit.kind, unit.position, point) {
+                        member.target = point;
+                        member.center = point;
+                        member.following_corridor = true;
+                        break;
+                    }
+                }
+            }
             if navigating
                 && !group.direct
                 && !member.arrived
@@ -379,6 +402,18 @@ impl GameWorld {
                 }
             }
         }
+    }
+
+    /// The first half tile of a straight step from `from` towards `to`.
+    fn half_step_clear(&self, kind: UnitKind, from: WorldPosition, to: WorldPosition) -> bool {
+        let length = path::distance(from, to).max(1);
+        let step = length.min(512);
+        let next = WorldPosition::new(
+            from.x + (i64::from(to.x - from.x) * step / length) as i32,
+            from.y + (i64::from(to.y - from.y) * step / length) as i32,
+        );
+        self.unit_position_step_clear(kind, from, next)
+            .unwrap_or(false)
     }
 
     /// Every member's earned distance is at most ceil(1.5 * pace), capped
