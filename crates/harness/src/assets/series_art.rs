@@ -103,12 +103,12 @@ fn decode(path: &Path) -> Result<(Vec<u8>, u32, u32), Failure> {
 fn convert(source: &Path, target: &Path) -> Result<(u32, u32), Failure> {
     let (rgb, width, height) = decode(source)?;
     let temporary = target.with_extension("jpg.partial");
-    let encoder = jpeg_encoder::Encoder::new_file(&temporary, QUALITY)?;
-    encoder.encode(
+    let file = std::io::BufWriter::new(fs::File::create(&temporary)?);
+    image::codecs::jpeg::JpegEncoder::new_with_quality(file, QUALITY).encode(
         &rgb,
-        u16::try_from(width)?,
-        u16::try_from(height)?,
-        jpeg_encoder::ColorType::Rgb,
+        width,
+        height,
+        image::ExtendedColorType::Rgb8,
     )?;
     fs::rename(temporary, target)?;
     Ok((width, height))
