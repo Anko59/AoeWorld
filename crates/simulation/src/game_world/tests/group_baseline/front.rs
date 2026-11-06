@@ -187,8 +187,9 @@ fn attack_move_front_engages_alone_while_the_rest_march_on() {
     assert_eq!(front.first_engage, Some(81));
     assert!(front.max_engage_distance <= 400, "{front:?}");
     // PR 10 legal contact engages 19 members by five seconds.
-    // Proportional cohesion: 18 by five seconds (19 under the 7/8 hold).
-    assert_eq!((front.at_2s, front.at_5s), ((10, 14, 14, 0), (18, 6, 6, 0)));
+    // Proportional cohesion: 18 by five seconds (19 under the 7/8 hold); 17
+    // since eight melee fighters per foe are counted over every attacker.
+    assert_eq!((front.at_2s, front.at_5s), ((10, 14, 14, 0), (17, 7, 7, 0)));
     // PR 10 approach strikes use the full one-tile reach without false poses.
     assert_eq!(
         (front.pose_out_of_reach_ticks, front.max_pose_distance),

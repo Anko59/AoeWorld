@@ -46,6 +46,17 @@ impl GameWorld {
             })
             .map(|(&id, _)| id)
             .collect::<Vec<_>>();
+        // Melee fighters already on each enemy, whoever released them: a man
+        // has eight spots around him, so more would only stand around him.
+        let mut fighting = std::collections::BTreeMap::<EntityId, usize>::new();
+        for &id in self.combat.attackers.keys().filter(|_| !leaders.is_empty()) {
+            if let Some(unit) = self.unit(id)
+                && Self::uses_melee_position(unit.kind)
+                && let Some(target) = unit.attack_target
+            {
+                *fighting.entry(target).or_default() += 1;
+            }
+        }
         for leader in leaders {
             let Some((player, lookers, enemies)) = self.formation_look(leader) else {
                 continue;
@@ -53,14 +64,6 @@ impl GameWorld {
             let start =
                 (self.tick.0 / ENGAGE_CADENCE) as usize * ENGAGE_MEMBERS_PER_LOOK % lookers.len();
             let mut engaged = 0;
-            // Melee members already fighting each enemy: a man has eight
-            // spots around him, so more would only stand around him.
-            let mut fighting = std::collections::BTreeMap::<EntityId, usize>::new();
-            for &(id, ..) in &lookers {
-                if let Some(target) = self.unit(id).and_then(|u| u.attack_target) {
-                    *fighting.entry(target).or_default() += 1;
-                }
-            }
             for n in 0..lookers.len().min(ENGAGE_MEMBERS_PER_LOOK) {
                 if engaged == ENGAGE_PER_LOOK {
                     break;
@@ -76,21 +79,23 @@ impl GameWorld {
                 seen.sort_unstable();
                 // Checked one by one: an earlier member may just have taken
                 // the last free spot around the same enemy.
+                let melee = self
+                    .unit(id)
+                    .is_some_and(|u| Self::uses_melee_position(u.kind));
                 let target = seen
                     .into_iter()
                     .take(TARGETS_PER_MEMBER)
                     .map(|(_, enemy)| enemy)
                     .find(|&enemy| {
-                        let melee = self
-                            .unit(id)
-                            .is_some_and(|u| Self::uses_melee_position(u.kind));
                         (!melee || fighting.get(&enemy).copied().unwrap_or(0) < MELEE_SPOTS)
                             && self.attack_spot_free(id, enemy)
                     });
                 if let Some(target) = target
                     && self.issue_attack(player, id, target).is_ok()
                 {
-                    *fighting.entry(target).or_default() += 1;
+                    if melee {
+                        *fighting.entry(target).or_default() += 1;
+                    }
                     if let Some(attacker) = self.combat.attackers.get_mut(&id) {
                         attacker.resume = Some(slot);
                     }
