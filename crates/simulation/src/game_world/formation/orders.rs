@@ -89,7 +89,10 @@ impl GameWorld {
         let facing = facing_for(i64::from(heading.x), i64::from(heading.y), Facing::South);
         let positions = ids
             .iter()
-            .map(|id| self.units[self.lookup[id]].state.position)
+            .map(|id| {
+                let unit = self.units[self.lookup[id]].state;
+                (unit.kind, unit.position)
+            })
             .collect::<Vec<_>>();
         let (diameter, step) = ids.iter().fold((0, 0), |(diameter, step), id| {
             let unit = self.units[self.lookup[id]].state;
@@ -138,7 +141,7 @@ impl GameWorld {
             speed: (0, 1),
             pace: (0, 1),
             settled: false,
-            direct: direct_order(origin, destination, &positions),
+            direct: self.direct_order(origin, destination, &positions),
             gap,
             narrow_gap: diameter + step + 16,
             slots_tight: false,
@@ -276,9 +279,12 @@ impl GameWorld {
                 let positions = group
                     .members
                     .iter()
-                    .map(|m| self.units[self.lookup[&m.id]].state.position)
+                    .map(|m| {
+                        let unit = self.units[self.lookup[&m.id]].state;
+                        (unit.kind, unit.position)
+                    })
                     .collect::<Vec<_>>();
-                group.direct = direct_order(group.anchor, destination, &positions);
+                group.direct = self.direct_order(group.anchor, destination, &positions);
                 group.path = path::Path::new(
                     std::iter::once(group.anchor)
                         .chain(std::iter::once(waypoint))
@@ -311,18 +317,55 @@ impl GameWorld {
     }
 }
 
-fn direct_order(
-    origin: WorldPosition,
-    destination: WorldPosition,
-    positions: &[WorldPosition],
-) -> bool {
-    let travel = path::distance(origin, destination);
-    let (mut min, mut max) = (origin, origin);
-    for p in positions {
-        min.x = min.x.min(p.x);
-        min.y = min.y.min(p.y);
-        max.x = max.x.max(p.x);
-        max.y = max.y.max(p.y);
+/// Members of a direct order steer straight at their slots with no route of
+/// their own, so it is only direct when every straight line is clear.
+const DIRECT_LINE_TILES: i32 = 64;
+
+impl GameWorld {
+    fn direct_order(
+        &self,
+        origin: WorldPosition,
+        destination: WorldPosition,
+        members: &[(UnitKind, WorldPosition)],
+    ) -> bool {
+        let travel = path::distance(origin, destination);
+        let (mut min, mut max) = (origin, origin);
+        for &(_, p) in members {
+            min.x = min.x.min(p.x);
+            min.y = min.y.min(p.y);
+            max.x = max.x.max(p.x);
+            max.y = max.y.max(p.y);
+        }
+        (travel < 20 * 1024 || path::distance(min, max) > travel)
+            && members
+                .iter()
+                .all(|&(kind, from)| self.straight_line_clear(kind, from, destination))
     }
-    travel < 20 * 1024 || path::distance(min, max) > travel
+
+    /// Static terrain, trees and buildings along the half-tile steps of a
+    /// straight walk; at most `DIRECT_LINE_TILES` long, longer is not clear.
+    fn straight_line_clear(&self, kind: UnitKind, from: WorldPosition, to: WorldPosition) -> bool {
+        let length = path::distance(from, to);
+        if length > i64::from(DIRECT_LINE_TILES * 1024) {
+            return false;
+        }
+        let parts = (length / 512).max(1);
+        let (dx, dy) = (i64::from(to.x - from.x), i64::from(to.y - from.y));
+        let mut previous = from;
+        for n in 1..=parts {
+            self.group_work.members(1);
+            let next = WorldPosition::new(
+                from.x + (dx * n / parts) as i32,
+                from.y + (dy * n / parts) as i32,
+            );
+            if !self
+                .unit_position_step_clear(kind, previous, next)
+                .unwrap_or(false)
+            {
+                return false;
+            }
+            previous = next;
+        }
+        true
+    }
 }

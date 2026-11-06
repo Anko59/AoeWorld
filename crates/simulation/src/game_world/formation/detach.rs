@@ -47,6 +47,17 @@ impl GameWorld {
         )
     }
 
+    /// Test probe: (group direct, carrier navigating, detached, blocked ticks).
+    #[cfg(test)]
+    pub(crate) fn formation_member_probe(&self, id: EntityId) -> Option<(bool, bool, bool, u16)> {
+        let unit = &self.units[*self.lookup.get(&id)?];
+        let leader = unit.formation?;
+        let group = self.formations.get(&leader)?;
+        let member = &group.members[group.member_index(id)?];
+        let navigating = self.units[self.lookup[&leader]].order.is_some();
+        Some((group.direct, navigating, member.detached, member.blocked))
+    }
+
     pub(super) fn reset_group_detours(&mut self, group: &mut Group) {
         for member in group.members.iter_mut().filter(|member| member.detached) {
             let index = self.lookup[&member.id];
@@ -281,9 +292,44 @@ impl GameWorld {
         };
         group.members[at].detached = true;
         group.members[at].following_corridor = true;
+        group.members[at].remaining = i64::MAX;
     }
 
     pub(crate) fn rejoin_detached_members(&mut self) {
+        // A detour body that gains no half tile along its own route while it
+        // has an order and no search pending is not always counted by traffic
+        // obstruction: one was seen rocking at a deck mouth for 5,000 ticks.
+        // Count those ticks in `blocked`, unused by a detached member, against
+        // its best distance in `remaining`; at the give-up it rejoins.
+        let mut still = Vec::new();
+        for (&leader, group) in self.formations.iter().filter(|(_, g)| !g.settled) {
+            for (at, member) in group.members.iter().enumerate() {
+                let index = self.lookup[&member.id];
+                if member.detached
+                    && !self.units[index].state.planning
+                    && let Some(order) = self.units[index].order
+                {
+                    // Route left: whole tiles still queued plus the leg.
+                    let left = self.units[index].route.len() as i64 * 1024
+                        + path::distance(self.units[index].state.position, order.waypoint);
+                    still.push((leader, at, left));
+                }
+            }
+        }
+        for (leader, at, left) in still {
+            if let Some(member) = self
+                .formations
+                .get_mut(&leader)
+                .map(|group| &mut group.members[at])
+            {
+                if left + 512 <= member.remaining {
+                    member.remaining = left;
+                    member.blocked = 0;
+                } else {
+                    member.blocked = member.blocked.saturating_add(1);
+                }
+            }
+        }
         let mut ready = Vec::new();
         for (&leader, group) in &self.formations {
             if group.settled {
@@ -308,6 +354,7 @@ impl GameWorld {
                 let wedged = self.units[index]
                     .obstruction
                     .is_some_and(|o| o.blocked >= GIVE_UP_AFTER_TICKS)
+                    || member.blocked >= GIVE_UP_AFTER_TICKS
                     // A search from a deck's diagonal edge rarely answers. The
                     // deck has one way on: stop asking and take the corridor.
                     || (unit.planning
@@ -348,6 +395,7 @@ impl GameWorld {
             let member = &mut group.members[at];
             member.detached = false;
             member.blocked = 0;
+            member.remaining = i64::MAX;
             member.stalled = if timed_out { GIVE_UP_AFTER_TICKS } else { 0 };
             member.arrived = self.units[index].state.position == member.goal;
             self.units[index].state.moving = !member.arrived && !timed_out;
