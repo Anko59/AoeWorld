@@ -240,7 +240,47 @@ fn a_fishing_spot_blocked_briefly_resumes_when_it_clears_within_the_bound() {
     for tile in &wall {
         w.economy.blocked_tiles.remove(tile);
     }
+    // As a removed building or opened gate does: routes over it are stale.
+    let (first, last) = (wall[0], wall[wall.len() - 1]);
+    w.collision_opened(aoe_core::TileRect::new(
+        first,
+        TileCoord::new(last.x + 1, last.y + 1),
+    ));
     advance(&mut w, 20 * 40);
     assert_eq!(w.gather_target(id), Some(fish.id));
     assert!(w.unit(id).unwrap().carried.is_some());
+}
+
+/// A fleet cut off by a bridge retried every work point of its fish once a
+/// second: two thirds of a 100-player late game's route work. One proof now
+/// answers the fish, and the same approach again is a cache hit.
+#[test]
+fn a_ship_cut_off_from_its_fish_proves_it_once_and_remembers_the_proof() {
+    let (mut w, fish, river) = fish_river_fixture(3);
+    let at = TileCoord::new(fish.tile.x - 8, river + 1);
+    let id = ship(&mut w, UnitKind::FishingShip, at, 0);
+    // A closed reach between the ship and the fish; the fish's water is open.
+    w.economy
+        .blocked_tiles
+        .extend((river..river + 3).map(|y| TileCoord::new(fish.tile.x - 5, y)));
+    let (orders, hits) = (w.route_metrics.orders, w.route_metrics.cache_hits);
+    let refused = w.approach_resource(id, fish.tile);
+    assert_eq!(
+        refused,
+        Err(crate::GameWorldError::Unreachable.into()),
+        "the fish's water is open but cut off"
+    );
+    assert_eq!(
+        w.route_metrics.orders - orders,
+        1,
+        "one search per approach"
+    );
+    w.units[w.lookup[&id]].unreachable_memo = None;
+    assert!(w.approach_resource(id, fish.tile).is_err());
+    assert_eq!(w.route_metrics.orders - orders, 2);
+    assert_eq!(
+        w.route_metrics.cache_hits - hits,
+        1,
+        "answered from the cache"
+    );
 }

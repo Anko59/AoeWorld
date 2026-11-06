@@ -111,12 +111,13 @@ impl GameWorld {
         kind: UnitKind,
         outcome: &MovementOutcome,
     ) {
-        if !kind.is_naval() && planner.certified_destination().is_none() {
+        if planner.certified_destination().is_none() {
             let _span = self
                 .planning_probe
                 .as_ref()
                 .and_then(|probe| probe.cache_span());
             self.navigation_cache.insert(
+                kind.is_naval(),
                 planner.origin(),
                 planner.destination(),
                 planner.work(),
@@ -142,8 +143,9 @@ impl GameWorld {
             .attribution
             .order(kind, origin, destination, caller);
         let allowance = self.fast_route_allowance(player);
-        if !kind.is_naval()
-            && let Some((outcome, work)) = self.navigation_cache.get(origin, destination, allowance)
+        if let Some((outcome, work)) =
+            self.navigation_cache
+                .get(kind.is_naval(), origin, destination, allowance)
         {
             self.charge_fast_route(player, work);
             self.route_metrics.cache_hits += 1;
