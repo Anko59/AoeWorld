@@ -178,6 +178,27 @@ test("the minimap map keeps filling the diamond rectangle at far zoom", async ({
     "data-lod",
     /^(map|markers)$/,
   );
+  // The first far view plays the cockpit reveal, which slides #minimap up 12px
+  // over 0.8s (reveal.css). It starts asynchronously after data-lod flips (the
+  // identity digest is awaited first), so wait for it to be recorded as shown
+  // and then finished; measuring mid-slide moved the map 2px off the frame.
+  await page.waitForFunction(
+    () => sessionStorage.getItem("aoeworld.cockpit-reveal") !== null,
+  );
+  await expect(page.locator("html")).not.toHaveAttribute(
+    "data-cockpit-reveal",
+    /.+/,
+    { timeout: 15_000 },
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document.getElementById("minimap")?.getAnimations({ subtree: true })
+            .length,
+      ),
+    )
+    .toBe(0);
   const minimap = await box(page, "#minimap");
   const map = await box(page, "#minimap-map");
   const view = await box(page, "#minimap-view");
