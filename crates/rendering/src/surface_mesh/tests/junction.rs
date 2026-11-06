@@ -23,13 +23,13 @@ pub(crate) fn variety_scene() -> Vec<ProjectedSurfaceTriangle> {
 }
 
 fn scene_with_bed(forest: bool, variety: bool) -> Vec<ProjectedSurfaceTriangle> {
-    let materials = [[8, 9, 9], [4, if forest { 0 } else { 7 }, 9], [4, 4, 8]].map(|row| {
+    let materials = [[8, 3, 3], [4, if forest { 0 } else { 7 }, 3], [4, 4, 8]].map(|row| {
         row.map(|material| {
             if variety {
                 match material {
                     8 => 16,
                     4 => 13,
-                    9 => 14,
+                    3 => 14,
                     7 => 15,
                     _ => material,
                 }
@@ -143,7 +143,7 @@ pub(crate) fn assert_edge(pair: &[ProjectedSurfaceTriangle; 2], pixels: [[u8; 4]
         let materials = if pair[0].material == 15 {
             [16, 13, 14, 15]
         } else {
-            [8, 4, 9, if forest { 0 } else { 7 }]
+            [8, 4, 3, if forest { 0 } else { 7 }]
         };
         let colors = materials.map(color);
         let bed = if forest { 64.0 / 255.0 } else { 0.0 };
@@ -180,8 +180,7 @@ pub(crate) fn diagonal_colour(face: &ProjectedSurfaceTriangle) -> [u8; 4] {
         materials.sort_unstable();
         assert_eq!(
             materials,
-            // Mud (9) is observed as dirt (2): nibble 9 now carries road ground.
-            [2, 4, 7, 8],
+            [3, 4, 7, 8],
             "four observations on the shared diagonal"
         );
         word
@@ -189,7 +188,7 @@ pub(crate) fn diagonal_colour(face: &ProjectedSurfaceTriangle) -> [u8; 4] {
     let noise = super::super::noise([0, 0], [0.5; 2]);
     let mut result = [0.0; 4];
     let (mut cumulative, mut previous) = (0.0, 0.0);
-    for material in [7, 9, 4, 8] {
+    for material in [7, 3, 4, 8] {
         let share = endpoints.map(|word| {
             let matching = (0..4)
                 .filter(|slot| ((word >> (slot * 4)) & 15) as u8 == material)
