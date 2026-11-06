@@ -5,6 +5,8 @@ use crate::{Age, Stockpile};
 mod ownership;
 #[path = "vassal/roads.rs"]
 mod roads;
+#[path = "vassal/snapshot.rs"]
+mod snapshot;
 
 fn setup() -> (GameWorld, EntityId, EntityId) {
     let (mut w, _, _) = village();
