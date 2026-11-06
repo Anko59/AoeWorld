@@ -78,7 +78,11 @@ The scheduler log line and `/admin/match/routes` carry the attribution
 and expired by unit category (villager, soldier, siege, ship) and straight
 distance (64, 256, 1,024 tiles, beyond); failures by the call site that issued
 the order, with the reasons and categories of the 1 to 4 Ki failures; and
-formation orders ended by the wait bound apart from single units.
+formation orders ended by the wait bound apart from single units. Its
+`group_ends` counts how formation orders end short of their destination
+(`wait_expired`, `near_exhausted`, `carrier_stopped` with `carrier_failures`
+by reason, `replanned`, `rejected_at_issue`, `members_left_out`); the probe
+table prints it.
 
 ## The match rules behind it
 
