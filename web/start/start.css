@@ -24,7 +24,8 @@ body[data-start-state="game"] #playground { visibility: visible; }
 #start-sequence .quiet-button { background: transparent; color: #dac5a1; border: 0; box-shadow: none; padding: 12px 0; font-size: 12px; }
 #start-sequence .quiet-button:hover { color: #ffe6b2; background: transparent; }
 .start-footer { position: absolute; bottom: 26px; left: 5vw; right: 5vw; display: flex; justify-content: space-between; font: 9px Cinzel, Georgia, serif; letter-spacing: .18em; color: #bdaa88; }
-#main-menu { background: linear-gradient(90deg, #100b08f5 0%, #17100ce8 24%, #15100c50 48%, #0000 75%), linear-gradient(0deg, #100b08c9, #0000 35%), var(--ui-menu-image, url('/art/royal-archive.webp')) center / cover; }
+#main-menu { background: linear-gradient(90deg, #100b08f5 0%, #17100ce8 24%, #15100c50 48%, #0000 75%), linear-gradient(0deg, #100b08c9, #0000 35%), var(--menu-art, var(--ui-menu-image, url('/art/royal-archive.webp'))) center / cover; }
+#main-menu.art-pending { background: #15100c; }
 .menu-rail { position: relative; display: flex; flex-direction: column; justify-content: center; width: 320px; min-height: calc(100% - 90px); margin: 0 0 40px 6vw; }
 .menu-rail .start-wordmark { width: 360px; max-width: 112%; margin: 0 0 16px -18px; }
 .menu-subtitle { text-align: center; margin: 0; }
@@ -96,21 +97,27 @@ body[data-start-state="game"] #playground { visibility: visible; }
 #setup-status { flex: 1; color: #c7b395; font: 12px/1.4 Georgia, serif; margin: 0; text-align: right; }
 #start-game { min-width: 195px; }
 #loading-screen { background: linear-gradient(0deg, #100b08ef, #100b0880 60%, #100b0870), var(--ui-menu-image, url('/art/homecoming.webp')) center / cover; display: flex; align-items: center; justify-content: center; }
-.loading-content { width: min(550px, 82vw); text-align: center; margin-top: -65px; }
+.loading-art { position: absolute; inset: 0; overflow: hidden; }
+.loading-art::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 45%, #100b08dd 0%, #100b0890 60%, #100b0840 100%), linear-gradient(0deg, #100b08ef, #0000 45%); }
+.loading-art-slide { position: absolute; inset: 0; background: center / cover no-repeat; opacity: 0; transition: opacity 1.6s ease-in-out; }
+.loading-art-slide.visible { opacity: 1; }
+.loading-art-slide.drifting { animation: art-drift 9s ease-out both; }
+@keyframes art-drift { from { transform: scale(1); } to { transform: scale(1.06); } }
+.loading-art-caption { position: absolute; z-index: 1; left: 5vw; bottom: 26px; font: 9px Cinzel, Georgia, serif; letter-spacing: .18em; color: #bdaa88; text-transform: uppercase; text-shadow: 0 1px 4px #000; }
+.loading-content { position: relative; z-index: 1; width: min(550px, 82vw); text-align: center; margin-top: -65px; }
 .loading-content .start-wordmark { width: 420px; max-width: 100%; margin: 0 auto 28px; }
 .loading-content .gold-rule { width: 300px; max-width: 100%; margin: 0 auto 36px; }
 .loading-content h1 { font-size: 24px !important; margin: 12px 0 15px !important; }
 #loading-location { color: #ddcaaa; font: italic 15px Georgia, serif; margin: 0 0 26px; }
 #loading-progress { width: 100%; height: 12px; border: 1px solid #bb9455; padding: 2px; background: #1b110df0; box-shadow: 0 0 0 3px #130c0a77; overflow: hidden; }
-#loading-progress > span { display: block; width: 0; height: 100%; background: linear-gradient(90deg, #93713d, #e4c382); transition: width .25s; }
-#loading-progress.indeterminate > span { width: 25%; animation: measuring 1.8s ease-in-out infinite alternate; }
-@keyframes measuring { from { transform: translateX(-100%); } to { transform: translateX(400%); } }
+#loading-progress > span { display: block; width: 0; height: 100%; background: linear-gradient(90deg, #93713d, #e4c382); }
+#loading-estimate { min-height: 22px; margin: 11px 0 0; color: #f0dcae; font: 13px Georgia, serif; font-variant-numeric: tabular-nums; text-shadow: 0 1px 4px #000; }
 #loading-phase { color: #e8d9bd; min-height: 38px; font: 14px/1.6 Georgia, serif; margin: 18px 0; }
 #loading-error { color: #ffe1b6; background: #20100ac9; border: 1px solid #9e6f48; padding: 16px; line-height: 1.6; overflow-wrap: anywhere; }
 .has-error .loading-tip { display: none; }
 .has-error .loading-content { margin-top: 0; }
 #loading-back, #loading-cancel { margin: 18px auto 0; }
-.loading-tip { position: absolute; left: 20%; right: 20%; bottom: 8vh; text-align: center; }
+.loading-tip { position: absolute; z-index: 1; left: 20%; right: 20%; bottom: 8vh; text-align: center; }
 .loading-tip .gold-rule { max-width: 280px; margin: 0 auto 20px; }
 .loading-tip p { font: italic 15px/1.6 Georgia, serif; color: #d8c5a6; }
 #start-sequence.entering-game { animation: uncover .65s ease-in both; pointer-events: none; }

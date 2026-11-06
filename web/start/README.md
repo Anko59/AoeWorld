@@ -8,8 +8,11 @@ The game renderer starts after the cinematic finishes or is skipped, so GPU
 recovery cannot replace the entry document during its playback.
 
 The opening preloads four muted, inline, non-looping clips. Each plays at normal
-speed; its final frame holds through the short crossfade. Posters remain beneath
-video until playback begins, and handle rejected playback or media errors.
+speed. A shot follows its clip's own length: the next shot begins its 0.7 s
+crossfade while the previous clip plays its last 0.7 s, so no final frame is
+held (`shotSchedule` in `cinematic.js`; clips default to 3 s until their
+metadata loads). Posters remain beneath video until playback begins, and handle
+rejected playback or media errors.
 The castle closes the sequence, with the logo revealed after its motion ends.
 
 Skirmish owns map creation using the current map request schema and retained
@@ -19,8 +22,19 @@ The Resume action adopts a retained accepted job into skirmish loading,
 including when the driver is already polling it after a reload. Unaccepted
 saved submissions, refused jobs and unknown retained IDs are dropped.
 Loading Cancel uses the cancellation API and returns to setup after confirmation.
-Progress is measured within the current job phase, never an invented aggregate.
-Unknown phase counts are indeterminate. After activation, loading waits for the
+Loading shows one monotonic bar from submission until the game opens
+(`progress-model.js`, drawn by `loading-bar.js`). Stages run in order (job
+phases, activation, match build, terrain wait); each has an expected duration
+scaled by map size (area) and opponents, and calibrated by the median ratio of
+this browser's last six runs (`aoeworld.load-history` in local storage). The bar
+is elapsed / (elapsed + estimated remaining), eased every frame and clamped so
+it never goes backwards and never stops; only the real finish reaches 100%. Server counts
+(pages, villages, chunks) refine the current stage and extrapolate between polls.
+The remaining-time estimate rescales the unfinished stages by this run's observed
+speed and blends toward each new estimate, so it converges. A stage the server
+skips (a stored map) leaves the bar's total. The server's text and counts stay in
+the status line; `aoeStart.loadingReport()` returns the last run's samples.
+After activation, loading waits for the
 activated map hash, zero pending and failed scene chunks, a new presented frame,
 and a connected game. The minimap may still be loading or using its schematic;
 its background request and retries continue during play. It centres the Town Center
@@ -39,6 +53,14 @@ the imported player masks, preserving unmasked artwork and shadows.
 Selecting a foreign actor shows its player number and hides commands. Hostile
 selections have red rings; units grant vision and accept orders only for their
 owner.
+
+**Local paintings.** `make assets-series-art` writes JPEG copies of the owner's
+24 generated series and `manifest.json` into ignored `local-assets/series-art/`
+(never Git); the server publishes them at `/series-art/` when that directory
+exists (`art.js`). The main menu shows a random "Kings with globes" painting on
+every visit. Each loading screen picks a random series and shows its paintings
+one after another, 5 s each with a crossfade and slow drift (`loading-art.js`),
+named in a small caption. Without the copies the bundled paintings remain.
 
 Artwork provenance is in `web/art/README.md`. The bundled Cinzel display font
 is from Google Fonts, under `FONT-LICENSE.txt`; screens need no external font

@@ -66,7 +66,7 @@ test("AI opponents: loading shows village and seat counts, then opens the game",
   await expect(page.locator("#loading-phase")).toContainText("2 / 4 villages");
   await expect(page.getByRole("progressbar")).toHaveAttribute(
     "aria-valuemax",
-    "4",
+    "100",
   );
   await expect(page.locator("#loading-phase")).toContainText(
     "1 / 3 AI players",

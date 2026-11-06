@@ -15,6 +15,7 @@
   release-rehearse-published
 .PHONY: \
   assets-import-de \
+  assets-series-art \
   assets-dat-table
 
 # Formats browser tooling with the pinned formatter.

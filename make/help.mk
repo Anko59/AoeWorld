@@ -58,6 +58,7 @@ help:
 	@echo '  make assets-verify   Verify all ignored local packs'
 	@echo '  make assets-dat-table  Decode empires2.dat into local-assets/dat-table (unit to sprite ids)'
 	@echo '  make assets-dat-table-de  Survey the licensed DE Feudal numeric rules'
+	@echo '  make assets-series-art  JPEG web copies of the generated paintings (ART_SERIES_DIR) for the menu and loading art'
 	@echo '  make browser-format  Format browser tooling with the pinned formatter'
 	@echo '  make browser-check   Typecheck, lint, and format-check browser tooling'
 	@echo '  make dev-server      Build and keep one dev server tracking origin/dev, with preset maps (-status, -stop; docs/dev-server.md)'

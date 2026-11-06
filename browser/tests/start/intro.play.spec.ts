@@ -47,10 +47,14 @@ test("poster mode preserves the four-shot order, closing reveal and duration", a
   }
   await expect(shots.nth(0)).toHaveClass(/active/);
   for (let index = 1; index < 4; index++) {
-    await page.clock.fastForward(4000);
+    // Each shot fades in during the last 0.7 s of the previous 3 s clip.
+    await page.clock.fastForward(2300);
     await expect(shots.nth(index)).toHaveClass(/active/);
   }
-  await page.clock.fastForward(3600);
+  // The castle clip ends at 9.9 s; the logo follows half a second later.
+  await page.clock.fastForward(3000);
+  await expect(page.locator("#entry-intro")).not.toHaveClass(/reveal/);
+  await page.clock.fastForward(600);
   await expect(page.locator("#entry-intro")).toBeVisible();
   await expect(page.locator("#entry-intro")).toHaveClass(/reveal/);
   await page.clock.fastForward(3000);

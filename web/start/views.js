@@ -64,8 +64,10 @@ export function views() {
       <footer class="start-footer"><span>CHART A REAL PLACE. BEGIN YOUR STORY.</span><span>AOEWORLD</span></footer>
     </section>
     <section id="loading-screen" class="entry-screen" aria-labelledby="loading-title" hidden>
+      <div id="loading-art" class="loading-art" aria-hidden="true" hidden><div class="loading-art-slide"></div><div class="loading-art-slide"></div><span class="loading-art-caption"></span></div>
       <div class="loading-content">${logo}${rule}<span class="eyebrow">YOUR WORLD IS TAKING SHAPE</span><h1 id="loading-title">Preparing your landscape</h1>
         <p id="loading-location"></p><div id="loading-progress" role="progressbar" aria-label="Map preparation progress"><span></span></div>
+        <p id="loading-estimate" aria-hidden="true"></p>
         <p id="loading-phase" role="status" aria-live="polite">Submitting your map request…</p>
         <button id="loading-cancel" class="gold-button" type="button" disabled>Cancel</button>
         <p id="loading-error" role="alert" hidden></p><button id="loading-back" class="gold-button" type="button" hidden>Back to setup</button>

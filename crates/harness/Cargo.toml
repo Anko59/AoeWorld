@@ -38,3 +38,4 @@ toml = "1.1"
 
 tempfile = "3.27"
 png = "0.17"
+jpeg-encoder = "0.6"

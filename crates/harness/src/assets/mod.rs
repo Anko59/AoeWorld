@@ -8,6 +8,8 @@ mod overlay;
 #[cfg(test)]
 mod overlay_tests;
 
+mod series_art;
+
 use clap::Subcommand;
 use std::path::{Path, PathBuf};
 
@@ -43,6 +45,12 @@ pub(crate) enum AssetCommand {
     /// Local complete-DE versus trial native-scale composition evidence.
     DeReference {
         install: PathBuf,
+        output: PathBuf,
+    },
+    /// JPEG web copies and a manifest of the generated paintings (local only).
+    SeriesArt {
+        source: PathBuf,
+        #[arg(default_value = "local-assets/series-art")]
         output: PathBuf,
     },
     /// Local native-scale proof of a pack building recipe (no public pixels).
@@ -85,6 +93,7 @@ pub(crate) fn run(command: AssetCommand) -> Result<(), Box<dyn std::error::Error
                 std::fs::write(format!("web/pkg/{name}.wgsl"), source)?;
             }
         }
+        AssetCommand::SeriesArt { source, output } => series_art::run(&source, &output)?,
         AssetCommand::DeReference { install, output } => {
             aoe_assets::de::reference(&install, &output)?;
         }
