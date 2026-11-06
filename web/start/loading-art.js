@@ -38,8 +38,10 @@ export function createLoadingArt(layer) {
     let at = 0;
     const advance = async () => {
       const image = queue[at++ % queue.length];
-      try { await preload(image.url); } catch { timer = setTimeout(advance, 250); return; }
+      let loaded = true;
+      try { await preload(image.url); } catch { loaded = false; }
       if (token !== run) return;
+      if (!loaded) { timer = setTimeout(advance, 250); return; }
       show(image, series, token);
       timer = setTimeout(advance, SHOW_MS);
       // Fetch the next painting while this one is on screen.
