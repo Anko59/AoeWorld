@@ -358,9 +358,12 @@ impl GameWorld {
                 from.x + (dx * n / parts) as i32,
                 from.y + (dy * n / parts) as i32,
             );
-            if !self
-                .unit_position_step_clear(kind, previous, next)
-                .unwrap_or(false)
+            // Terrain and trees come from the step check; buildings block tiles
+            // only in the economy, which that check does not read.
+            if self.economy.blocked_tiles.contains(&next.tile_floor())
+                || !self
+                    .unit_position_step_clear(kind, previous, next)
+                    .unwrap_or(false)
             {
                 return false;
             }

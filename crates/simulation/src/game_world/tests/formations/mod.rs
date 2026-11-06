@@ -78,6 +78,7 @@ fn formations_measure_shared_army_route() {
     assert_eq!(w.route_scheduler_stats().metrics.orders - before, 1);
 }
 
+mod direct;
 mod pressure;
 
 mod measurement;
