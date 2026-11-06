@@ -90,3 +90,47 @@ def test_a_town_center_busy_with_villagers_is_drained_so_the_steward_can_be_boug
     brain, client = play(FakeWorld(units, buildings, eco=eco), config)
     assert brain.board.stats.get("saving_for_management"), "the saving starts although the queue is busy"
     assert not client.named("train"), "no soldiers and no new villagers while it drains"
+
+
+def test_a_steward_in_production_still_counts_after_the_ten_second_cooldown():
+    units, buildings = castle_base()
+    config = replace(Config(), stewards=1, steward_min_villagers=20)
+    world = FakeWorld(units, buildings + [building(501, BuildingKind.TOWN_CENTER, tile=(90, 50))], eco=rich())
+    brain, client = play(world, config)
+    assert client.named("train").count((500, UnitKind.STEWARD)) + client.named("train").count((501, UnitKind.STEWARD)) == 1
+    from fakes import FakeClient, decision
+
+    for seconds in (15, 30, 50):  # past the 10 s cooldown, before the 60 s training ends
+        world.tick = 100 + seconds * 20
+        client = FakeClient()
+        brain.decide(client, decision(world))
+        assert not [a for a in client.named("train") if a[1] == UnitKind.STEWARD], seconds
+
+
+def test_a_general_who_lost_soldiers_after_a_full_army_gets_train_again():
+    units, buildings = castle_base()
+    general = unit(902, UnitKind.GENERAL, tile=(60, 60))
+    general.army_size, general.general_state = 100, GeneralState.IDLE
+    config = replace(Config(), generals=1)
+    world = FakeWorld(units + [general], buildings, eco=rich())
+    brain, client = play(world, config)
+    assert client.named("general_train")
+    from fakes import FakeClient, decision
+
+    general.army_size = 60
+    world.tick += 40 * 20
+    client = FakeClient()
+    brain.decide(client, decision(world))
+    assert (902, True) in client.named("general_train")
+
+
+def test_a_researching_first_town_center_does_not_stop_villagers_at_the_others():
+    from aoeworld import Tech
+
+    units, buildings = base(12)
+    buildings[0].researching = Tech.LOOM
+    buildings.append(building(501, BuildingKind.TOWN_CENTER, tile=(90, 50)))
+    world = FakeWorld(units, buildings, eco=economy(food=500, population=14, cap=50))
+    _, client = play(world)
+    assert (501, UnitKind.VILLAGER) in client.named("train")
+    assert (500, UnitKind.VILLAGER) not in client.named("train")

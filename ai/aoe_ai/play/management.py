@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Any, Optional
 import math
 
-from aoeworld import BuildingKind, GeneralState, UnitKind, UnitTask, building_cost, unit_cost
+from aoeworld import BuildingKind, GeneralState, UnitKind, UnitTask, building_cost, train_seconds, unit_cost
 
 from . import buildorder
 from ..context import Context
@@ -151,11 +151,7 @@ class ManagementManager:
             return
         # Stewards: one per Town Center, from enough villagers.
         if cfg.stewards and len(ctx.villagers) >= cfg.steward_min_villagers:
-            have = sum(1 for u in ctx.units if u.kind == UnitKind.STEWARD) + sum(
-                1 for b in ctx.buildings if b.kind == BuildingKind.TOWN_CENTER and garrisoned(b, UnitKind.STEWARD))
-            for b in ctx.buildings:
-                if b.kind == BuildingKind.TOWN_CENTER and b.complete and b.queue_length and board.cooling(f"train:{b.id}", ctx.tick):
-                    have += 1
+            have = self.fielded(ctx, UnitKind.STEWARD) + self.in_production(ctx, UnitKind.STEWARD)
             if have < min(cfg.stewards, ctx.count(BuildingKind.TOWN_CENTER, complete=True)):
                 self.train(ctx, BuildingKind.TOWN_CENTER, UnitKind.STEWARD,
                            lambda b: not garrisoned(b, UnitKind.STEWARD))
@@ -169,6 +165,21 @@ class ManagementManager:
             self.train(ctx, BuildingKind.CASTLE, UnitKind.VASSAL, lambda b: not garrisoned(b, UnitKind.VASSAL))
         elif cfg.generals and sum(1 for u in ctx.units if u.kind == UnitKind.GENERAL) + queued < cfg.generals:
             self.train(ctx, BuildingKind.CASTLE, UnitKind.GENERAL, lambda b: True)
+
+    def fielded(self, ctx: Context, kind: UnitKind) -> int:
+        """Units of `kind` that exist: in the field or sheltered in a building."""
+        return sum(1 for u in ctx.units if u.kind == kind) + sum(
+            1 for b in ctx.buildings for entry in b.garrison if entry[1] == kind and entry[0] not in {u.id for u in ctx.units})
+
+    def in_production(self, ctx: Context, kind: UnitKind) -> int:
+        """Units ordered and still training: counted until one more exists or the
+        training time (plus a margin for a refused order) has passed."""
+        now, board = ctx.tick, ctx.board
+        existing = self.fielded(ctx, kind)
+        window = (train_seconds(kind) + 20) * ctx.world.tick_hz
+        live = [(t, before) for t, before in board.producing.get(str(kind), []) if now - t < window and existing <= before]
+        board.producing[str(kind)] = live
+        return len(live)
 
     def train(self, ctx: Context, house: BuildingKind, kind: UnitKind, wants: Any) -> None:
         board = ctx.board
@@ -186,6 +197,7 @@ class ManagementManager:
                 ctx.order("train", b.id, kind)
                 ctx.queued += 1
                 board.cool(f"train:{b.id}", ctx.tick, 10 * ctx.world.tick_hz)
+                board.producing.setdefault(str(kind), []).append((ctx.tick, self.fielded(ctx, kind)))
                 board.bump(f"{str(kind).split('.')[-1].lower()}_trained")
                 return
             self.save(ctx, kind, cost)
@@ -223,6 +235,12 @@ class ManagementManager:
                 if cfg.general_train:
                     ctx.order("general_train", general.id, True)
                 ctx.order("general_mix", general.id, list(cfg.general_mix))
+            elif (cfg.general_train and general.army_size is not None and general.army_size < cfg.general_refill_below
+                  and not board.cooling(f"gtrain:{general.id}", ctx.tick)):
+                # A full army switches the Train button off for good: press it again after losses.
+                ctx.order("general_train", general.id, True)
+                board.cool(f"gtrain:{general.id}", ctx.tick, 30 * ctx.world.tick_hz)
+                board.bump("general_refills")
         # `army_size` only counts the commanded soldiers; the General seat comes first.
         board.stats["led_peak"] = max(board.stats.get("led_peak", 0), sum(u.army_size or 0 for u in ctx.units if u.kind == UnitKind.GENERAL))
 

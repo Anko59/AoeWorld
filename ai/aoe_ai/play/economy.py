@@ -130,7 +130,7 @@ class EconomyManager:
     # ----- production ------------------------------------------------------
     def train_villagers(self, ctx: Context) -> None:
         center = ctx.center
-        if center is None or ctx.hold_town_center or center.researching is not None:
+        if center is None or ctx.hold_town_center:
             return
         if ctx.tick - ctx.board.hold_villagers_tick <= 3 * ctx.world.tick_hz:
             return
@@ -147,8 +147,9 @@ class EconomyManager:
         if len(ctx.villagers) + queued_villagers >= ctx.config.max_villagers:
             return
         cost = unit_cost(UnitKind.VILLAGER)
-        centers = [center] + [c for c in ctx.buildings if c.kind == BuildingKind.TOWN_CENTER and c.complete and c.id != center.id
-                              and c.researching is None]
+        # A Town Center busy researching does not stop the others.
+        centers = [c for c in [center] + [c for c in ctx.buildings if c.kind == BuildingKind.TOWN_CENTER
+                                           and c.complete and c.id != center.id] if c.researching is None]
         for c in centers:
             queue = c.queue_length
             while (

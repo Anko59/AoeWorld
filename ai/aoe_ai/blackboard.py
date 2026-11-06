@@ -98,6 +98,8 @@ class Blackboard:
     #: Self-limiting saving for management units: key -> tick it began; last saving tick.
     save_since: dict[str, int] = field(default_factory=dict)
     saving_tick: int = -10**9
+    #: Management units ordered and still training: kind -> [(tick, units existing then)].
+    producing: dict[str, list] = field(default_factory=dict)
     hold_villagers_tick: int = -10**9
 
     def bump(self, name: str, amount: int = 1) -> None:

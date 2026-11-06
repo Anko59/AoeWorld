@@ -173,6 +173,8 @@ class Config:
     #: General unit-mix sliders: infantry, archers, heavy cavalry, siege, scouts.
     general_mix: tuple = (35, 30, 20, 10, 5)
     general_train: bool = True
+    #: Press Train again when a General leads fewer soldiers than this (capacity is 100).
+    general_refill_below: int = 95
     #: A General marches once he leads this many soldiers, and falls back
     #: to the Castle when he leads fewer than `general_retreat_army`.
     general_attack_army: int = 30
