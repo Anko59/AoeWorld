@@ -15,7 +15,24 @@ pub(super) fn load_page(
         .provider
         .as_ref()
         .ok_or(EnvironmentPageError::Invalid)?;
-    let page = provider.page(key, cancelled)?;
+    let held = generator
+        .derived
+        .pages
+        .lock()
+        .ok()
+        .and_then(|memo| memo.as_ref().and_then(|memo| memo.get(key)));
+    let page = match held {
+        Some(page) => page,
+        None => {
+            let page = provider.page(key, cancelled)?;
+            if let Ok(mut memo) = generator.derived.pages.lock()
+                && let Some(memo) = memo.as_mut()
+            {
+                memo.insert(key, Arc::clone(&page));
+            }
+            page
+        }
+    };
     if page.key() != key {
         return Err(EnvironmentPageError::Corrupt);
     }

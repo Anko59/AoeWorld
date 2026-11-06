@@ -17,7 +17,7 @@ export const STAGES = [
   ['building_pyramids', 20000, 1, 0], // guess: not seen in this run
   ['publishing_package', 800, 0, 0], // measured 0.8 s
   ['verifying_package', 1500, 0, 0], // measured 1.4 s
-  ['building_navigation', 60000, 1, 0], // new map only; chunk counts replace this: 76 s at 120 km, 18 min 28 s at 480 km
+  ['building_navigation', 80000, 1, 0], // new map only, scaled by area; measured 118 s at 480 km, 6 s at 120 km (was 18 min / 76 s)
   ['activating', 300, 0, 0],
   ['opening_map', 600, 1, 0], // measured 0.5 s
   ['placing_villages', 1000, 0, 1], // measured 1.0 s

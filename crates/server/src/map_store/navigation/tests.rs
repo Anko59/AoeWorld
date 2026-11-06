@@ -169,3 +169,64 @@ fn streamed_navigation_reports_every_chunk_when_it_completes() {
     .unwrap();
     assert_eq!(*last.lock().unwrap(), (4, 4));
 }
+
+/// Timing bench on a stored package, not a regression test:
+/// `AOE_NAV_BENCH_DIR=<package directory> AOE_NAV_BENCH_HASH=<hex> [AOE_NAV_WORKERS=n]
+/// cargo test --release -p aoe-server --lib bench_static_navigation -- --ignored --nocapture`.
+/// It also compares the built file byte for byte with the stored one.
+#[test]
+#[ignore = "needs a stored package"]
+fn bench_static_navigation_build() {
+    let directory = PathBuf::from(std::env::var("AOE_NAV_BENCH_DIR").unwrap());
+    let hash = std::env::var("AOE_NAV_BENCH_HASH").unwrap();
+    let workers = std::env::var("AOE_NAV_WORKERS").map_or(4, |value| value.parse().unwrap());
+    let package = crate::map_store::load(Some(&directory)).unwrap()[&hash].clone();
+    let provider = crate::map_store::PageResidency::open(&directory, &package, &|| false).unwrap();
+    let generator = package.generator_with_page_provider(provider).unwrap();
+    let side = chunk_side(&generator).unwrap();
+    let built = directory
+        .join("navigation")
+        .join(format!("bench-{}.bin", std::process::id()));
+    let started = Instant::now();
+    stream::build(
+        &generator,
+        side,
+        workers,
+        &built,
+        package.content_hash,
+        MAX_FILE_BYTES,
+        stream::Hooks {
+            cancelled: &|| false,
+            progress: &|_, _| {},
+        },
+    )
+    .unwrap();
+    println!(
+        "bench workers={workers} elapsed_ms={} {}",
+        started.elapsed().as_millis(),
+        stream::step_report()
+    );
+    let stored = navigation_path(&directory, package.content_hash);
+    if let Ok(stored) = fs::read(&stored) {
+        let rebuilt = fs::read(&built).unwrap();
+        // Chunks land in the file in arrival order, so offsets differ between
+        // any two builds; compare each chunk's checksum and bytes, not where
+        // it sits.
+        let chunk = |file: &[u8], at: usize| {
+            let record = &file[HEADER_BYTES + at * INDEX_RECORD_BYTES..][..INDEX_RECORD_BYTES];
+            let offset = u64::from_le_bytes(record[..8].try_into().unwrap()) as usize;
+            let length = u32::from_le_bytes(record[8..12].try_into().unwrap()) as usize;
+            (
+                record[12..].to_vec(),
+                file[offset..offset + length].to_vec(),
+            )
+        };
+        let same = (0..side * side).all(|at| chunk(&stored, at) == chunk(&rebuilt, at));
+        println!(
+            "bench chunks_identical_to_stored={same} stored_len={} built_len={}",
+            stored.len(),
+            rebuilt.len()
+        );
+    }
+    let _ = fs::remove_file(&built);
+}
