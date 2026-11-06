@@ -4,8 +4,11 @@
 //! groups as they stand and sends them `FormationOrder`s, as the browser
 //! does, to far destinations that a route probe proved reachable. Every
 //! member is followed until the run ends. See `docs/scale/match.md`.
+mod extent;
 mod orders;
 mod table;
+#[cfg(test)]
+mod tests;
 mod track;
 
 use super::{BoxError, Options, http};

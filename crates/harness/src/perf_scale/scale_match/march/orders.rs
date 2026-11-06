@@ -65,6 +65,8 @@ struct Group {
     sequence: u64,
     result: Option<String>,
     members: Vec<Member>,
+    /// Arrival radius around the goal, from the slots the simulation lays out.
+    tolerance: f64,
 }
 
 fn stamp(world: &World, start: Instant) -> Stamp {
@@ -88,11 +90,14 @@ fn centroid(world: &World, ids: &[EntityId]) -> (f64, f64) {
 
 /// Picks a destination `straight` tiles away whose route the server's probe
 /// proves; the last answer is kept (labelled) when no direction is reachable.
-fn destination(admin: &Admin, world: &World, group: &mut Group, turn: usize) {
+fn destination(admin: &Admin, world: &World, group: &mut Group, turn: usize, stop: &AtomicBool) {
     let (cx, cy) = centroid(world, &group.ids);
     let (width, height) = world.map_size();
     let units: Vec<u32> = group.ids.iter().map(|id| id.0).collect();
     for attempt in 0..DIRECTIONS {
+        if stop.load(Ordering::Relaxed) {
+            return;
+        }
         let angle = (turn as f64 * 2.399 + attempt as f64 * std::f64::consts::FRAC_PI_4)
             % std::f64::consts::TAU;
         let x = (cx + f64::from(group.straight) * angle.cos()).clamp(4.0, f64::from(width - 5));
@@ -131,24 +136,69 @@ async fn wait_ready(client: &Client) -> Result<World, BoxError> {
 /// scatter orders.
 const HUMAN_ORDERS_PER_SECOND: f64 = 9.0;
 
-/// Every soldier walks to a random spot near where it stands, so the
-/// groups are later selected scattered, as an owner's army stands.
-async fn scatter(client: &Client, world: &World, rng: &mut Rng, radius: i32) -> (u64, u64) {
-    let (width, height) = world.map_size();
+/// Runs `send` for each item at `pace`, stopping early once `stop` is set or
+/// `deadline` passes; returns how many were sent.
+pub(super) async fn paced<T>(
+    items: impl IntoIterator<Item = T>,
+    pace: Duration,
+    stop: &AtomicBool,
+    deadline: Instant,
+    mut send: impl FnMut(T) -> bool,
+) -> u64 {
     let mut sent = 0;
+    for item in items {
+        if stop.load(Ordering::Relaxed) || Instant::now() >= deadline {
+            break;
+        }
+        tokio::time::sleep(pace).await;
+        if send(item) {
+            sent += 1;
+        }
+    }
+    sent
+}
+
+/// Calls `f(index, item)` for each item until `stop` is set.
+pub(super) fn for_each_until_stop<T>(
+    items: &mut [T],
+    stop: &AtomicBool,
+    mut f: impl FnMut(usize, &mut T),
+) {
+    for (index, item) in items.iter_mut().enumerate() {
+        if stop.load(Ordering::Relaxed) {
+            break;
+        }
+        f(index, item);
+    }
+}
+
+/// Every soldier walks to a random spot near where it stands, so the
+/// groups are later selected scattered, as an owner's army stands. It ends at
+/// `deadline` (the march time) or when `stop` is set, whichever comes first.
+async fn scatter(
+    client: &Client,
+    world: &World,
+    rng: &mut Rng,
+    radius: i32,
+    stop: &AtomicBool,
+    deadline: Instant,
+) -> (u64, u64) {
+    let (width, height) = world.map_size();
     let first = client.orders_sent() + 1;
     let pace = Duration::from_secs_f64(1.0 / HUMAN_ORDERS_PER_SECOND);
-    for (id, _) in military(world) {
-        tokio::time::sleep(pace).await;
-        let Some(unit) = world.unit(id) else { continue };
+    let sent = paced(military(world), pace, stop, deadline, |(id, _)| {
+        let Some(unit) = world.unit(id) else {
+            return false;
+        };
         let at = unit.tile();
         let to = TileCoord::new(
             (at.x + rng.range(radius)).clamp(1, width - 2),
             (at.y + rng.range(radius)).clamp(1, height - 2),
         );
         client.send(Order::Move { unit: id, to });
-        sent += 1;
-    }
+        true
+    })
+    .await;
     (first, first + sent)
 }
 
@@ -180,6 +230,7 @@ fn form_groups(world: &World, rng: &mut Rng) -> Vec<Group> {
                 sequence: 0,
                 result: None,
                 members: Vec::new(),
+                tolerance: 3.0,
             }
         })
         .collect()
@@ -203,10 +254,11 @@ pub(super) async fn run(settings: Settings, stop: Arc<AtomicBool>) -> Result<Val
     let client = Client::connect(&settings.url, &settings.token, options).await?;
     let world = wait_ready(&client).await?;
     let mut rng = Rng(settings.seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1);
-    let scattered = scatter(&client, &world, &mut rng, settings.scatter).await;
+    let deadline = start + settings.march_after;
+    let scattered = scatter(&client, &world, &mut rng, settings.scatter, &stop, deadline).await;
     let mut verdicts = std::collections::BTreeMap::<String, u64>::new();
     let mut timeline = Vec::new();
-    while start.elapsed() < settings.march_after && !stop.load(Ordering::Relaxed) {
+    while Instant::now() < deadline && !stop.load(Ordering::Relaxed) {
         if let Ok(Ok(decision)) =
             tokio::time::timeout(Duration::from_millis(500), client.next_decision()).await
         {
@@ -227,9 +279,9 @@ pub(super) async fn run(settings: Settings, stop: Arc<AtomicBool>) -> Result<Val
     let world = client.world();
     let at_march = scheduler(&settings.admin, start);
     let mut groups = form_groups(&world, &mut rng);
-    for (turn, group) in groups.iter_mut().enumerate() {
-        destination(&settings.admin, &client.world(), group, turn);
-    }
+    for_each_until_stop(&mut groups, &stop, |turn, group| {
+        destination(&settings.admin, &client.world(), group, turn, &stop);
+    });
     let mut next_order = Instant::now();
     let mut issued = 0;
     while !stop.load(Ordering::Relaxed) {
@@ -260,6 +312,8 @@ pub(super) async fn run(settings: Settings, stop: Arc<AtomicBool>) -> Result<Val
                     Member::new(world, id, nominal)
                 })
                 .collect();
+            let kinds: Vec<UnitKind> = group.members.iter().map(|m| m.kind).collect();
+            group.tolerance = super::extent::arrival_tolerance(&group.probe, &kinds);
             group.sequence = client.send(Order::FormationMove {
                 units: group.ids.clone(),
                 formation: Formation::Line,
@@ -274,9 +328,8 @@ pub(super) async fn run(settings: Settings, stop: Arc<AtomicBool>) -> Result<Val
         for group in groups.iter_mut() {
             let Some(order) = group.issued else { continue };
             let goal = (f64::from(group.to.x) + 0.5, f64::from(group.to.y) + 0.5);
-            let tolerance = group.probe["extent_tiles"].as_f64().unwrap_or(0.0) + 3.0;
             for member in &mut group.members {
-                member.observe(&decision.world, now, order, goal, tolerance);
+                member.observe(&decision.world, now, order, goal, group.tolerance);
             }
         }
         if timeline.last().is_none_or(|s: &Value| {
