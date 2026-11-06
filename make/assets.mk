@@ -29,6 +29,11 @@ fishing-scenario:
 .PHONY: assets-dat-table-de
 assets-dat-table-de:
 	@$(subst $(TOOL_IMAGE),$(call BIND_MOUNT,$(DE_DIR),/de-install,1) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo run --locked -p aoe-harness -- assets dat-table --de /de-install/resources/_common/dat/empires2_x2_p1.dat
+.PHONY: assets-series-art
+# Compressed web copies of the generated paintings; sources stay outside Git, copies go to ignored local-assets/series-art/.
+ART_SERIES_DIR ?= $(HOME)/Work/archive/aoeworld-art/local-assets-art/series
+assets-series-art:
+	@$(subst $(TOOL_IMAGE),$(call BIND_MOUNT,$(ART_SERIES_DIR),/art-series,1) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo run --release --locked -p aoe-harness -- assets series-art /art-series
 .PHONY: assets-building-preview
 
 BUILDING_PREVIEW_OUT ?= .cache/tc-shots/tc-composite.png

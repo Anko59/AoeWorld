@@ -249,6 +249,9 @@ async fn gameplay_websocket(
         .on_upgrade(move |socket| gameplay_transport::handle_socket(gameplay, socket))
 }
 
+/// Ignored web copies of the generated paintings, relative to the server's root.
+const SERIES_ART_DIR: &str = "local-assets/series-art";
+
 pub fn app(state: AppState) -> Router {
     let asset_pack = state.asset_pack.clone();
     let router = Router::new()
@@ -264,6 +267,13 @@ pub fn app(state: AppState) -> Router {
         .with_state(state);
     let router = if let Some(pack) = asset_pack {
         router.nest_service("/asset-pack", ServeDir::new(pack))
+    } else {
+        router
+    };
+    // Optional local paintings (`make assets-series-art`) for the menu and
+    // loading art. Absent directory: the page falls back to bundled art.
+    let router = if std::path::Path::new(SERIES_ART_DIR).is_dir() {
+        router.nest_service("/series-art", ServeDir::new(SERIES_ART_DIR))
     } else {
         router
     };

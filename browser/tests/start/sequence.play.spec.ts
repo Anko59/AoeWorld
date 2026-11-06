@@ -158,14 +158,12 @@ test("a preset submits the creator request and loading waits for visible terrain
   await page.getByRole("button", { name: "Start Game", exact: true }).click();
   await expect(page.locator("#loading-screen")).toBeVisible();
   await expect(page.locator("#loading-phase")).toContainText("4 / 16 pages");
-  await expect(page.getByRole("progressbar")).toHaveAttribute(
-    "aria-valuenow",
-    "4",
-  );
+  // One monotonic 0-100 bar over the whole creation, never the phase's own count.
   await expect(page.getByRole("progressbar")).toHaveAttribute(
     "aria-valuemax",
-    "16",
+    "100",
   );
+  await expect(page.locator("#loading-estimate")).toContainText("remaining");
   expect(original).toMatchObject({
     schema_version: 1,
     center_latitude_e7: 466000000,
