@@ -80,7 +80,7 @@ class ArenaServer:
             AOE_MATCH_TOKEN=SECRET,
             AOE_TICK_HZ=str(TICK_HZ),
             AOE_ARENA="1",
-            AOE_MAP_PACKAGE_DIRECTORY=self.packages.name,
+            AOE_MAP_PACKAGE_DIRECTORY=os.environ.get("AOE_ARENA_PACKAGES") or self.packages.name,
         )
         self.process = subprocess.Popen(
             [str(self.binary)], cwd=self.root, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
@@ -133,12 +133,14 @@ def play(
     config: Optional[Config] = None,
     stop: Optional[Callable[[list[BotReport]], bool]] = None,
     before_step: Optional[Callable[[int, list[BotReport]], None]] = None,
+    brain_factory: Optional[Callable[[int], object]] = None,
+    map_hash: Optional[str] = None,
 ) -> dict:
     """One seeded match against a running arena server; the report is JSON-able."""
     config = config or Config()
     started = time.monotonic()
-    info = aoeworld.start_match(url, SECRET, ["ai"] * bots, tiles_per_side=size, seed=seed)
-    host = Host(url, [slot.token for slot in info.slots], config, orders_per_second=10**6)
+    info = aoeworld.start_match(url, SECRET, ["ai"] * bots, tiles_per_side=size, seed=seed, map_hash=map_hash)
+    host = Host(url, [slot.token for slot in info.slots], config, brain_factory=brain_factory, orders_per_second=10**6)
     period = max(1, round(TICK_HZ / config.decision_hz))
     final = int(minutes * 60 * TICK_HZ)
     stepper, fleet = Stepper(url), aoeworld.Fleet(host.clients)

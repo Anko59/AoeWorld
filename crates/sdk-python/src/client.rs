@@ -279,6 +279,18 @@ impl Client {
             target: aoe_sdk::RallyTarget::Ground(p),
         }))
     }
+    fn general_move(&self, unit: u32, x: i32, y: i32) -> PyResult<u64> {
+        let p = aoe_sdk::WorldPosition::from_tile_center(TileCoord::new(x, y))
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        Ok(self.order(Order::GeneralMove { unit: EntityId(unit), to: p }))
+    }
+    #[pyo3(signature = (unit, enabled=true))]
+    fn general_train(&self, unit: u32, enabled: bool) -> u64 {
+        self.order(Order::GeneralTrain { unit: EntityId(unit), enabled })
+    }
+    fn general_mix(&self, unit: u32, mix: [u8; 5]) -> u64 {
+        self.order(Order::GeneralMix { unit: EntityId(unit), mix })
+    }
     fn set_rally_resource(&self, building: u32, resource: u64) -> u64 {
         self.order(Order::SetRally {
             building: EntityId(building),

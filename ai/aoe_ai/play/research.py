@@ -32,6 +32,8 @@ class ResearchManager:
             # The Feudal army may keep growing, but villagers and optional
             # upgrades must not consume the age's food reserve meanwhile.
             ctx.hold_town_center = True
+            if ctx.config.castle_first:
+                ctx.saving_castle = True  # no soldiers until the age is bought
             return
         if stage == buildorder.ADVANCE:
             # Everything for the age is standing: stop spending on anything but

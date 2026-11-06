@@ -9,6 +9,9 @@ from dataclasses import dataclass, field
 class Config:
     """Tunables. The defaults play a standard boom into a Feudal army."""
 
+    #: Which draft this is (see `aoe_ai/drafts`); shown in tournament reports.
+    name: str = "baseline"
+
     # --- decision pacing ---------------------------------------------------
     decision_hz: float = 2.0
     #: Enable the bounded known-water crossing heuristic for army targets.
@@ -30,6 +33,8 @@ class Config:
     town_center_queue: int = 2
     #: Build a house when fewer than this many population slots are free.
     house_margin: int = 4
+    #: Houses under construction at once (plus one per extra Town Center).
+    house_pending: int = 2
     #: Preferred share of villagers per resource before and after Feudal.
     dark_shares: dict[str, float] = field(
         default_factory=lambda: {"FOOD": 0.60, "WOOD": 0.32, "GOLD": 0.08, "STONE": 0.0}
@@ -138,3 +143,40 @@ class Config:
     predator_defender_radius: int = 12
     predator_soldier_group: int = 2
     predator_worker_group: int = 4
+
+    #: Stop army spending while the Castle Age price is saved for.
+    castle_first: bool = False
+
+    # --- management units (docs/economy/steward.md, docs/gameplay/general.md) --
+    #: Castles to raise (650 stone each) once in Castle Age; Vassals and
+    #: Generals are trained there.
+    castles: int = 0
+    #: Stone share of the villagers while a wanted Castle is unpaid.
+    castle_stone_share: float = 0.15
+    #: Town Centers to raise (the first is the start's) and the villagers
+    #: from which the next is placed; each trains villagers.
+    town_centers: int = 1
+    expand_villagers: int = 36
+    expand_distance: int = 28
+    #: Stewards to field (one per Town Center), from this many villagers.
+    stewards: int = 0
+    steward_min_villagers: int = 30
+    #: Leave villagers a Steward manages to the Steward (no gather orders).
+    defer_to_steward: bool = False
+    #: Vassals to field (one per Castle) and Generals in total.
+    vassals: int = 0
+    generals: int = 0
+    #: Save the next management unit's price ahead of army spending.
+    save_for_management: bool = True
+    save_seconds: int = 240
+    save_pause_seconds: int = 180
+    #: General unit-mix sliders: infantry, archers, heavy cavalry, siege, scouts.
+    general_mix: tuple = (35, 30, 20, 10, 5)
+    general_train: bool = True
+    #: Press Train again when a General leads fewer soldiers than this (capacity is 100).
+    general_refill_below: int = 95
+    #: A General marches once he leads this many soldiers, and falls back
+    #: to the Castle when he leads fewer than `general_retreat_army`.
+    general_attack_army: int = 30
+    general_retreat_army: int = 10
+

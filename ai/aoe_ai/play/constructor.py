@@ -58,12 +58,17 @@ class Constructor:
             return False
         radius = radius or ctx.config.build_search_radius
         site = None
-        for extra in (0, 1, 2):
-            found = ctx.world.find_build_site(kind, near[0], near[1], radius, gap + extra)
-            if found is not None and (str(kind), *found) not in ctx.board.bad_sites:
-                site = found
+        # A cramped village (rivers, cliffs, forest) has no site close by: widen the search.
+        for reach in (radius, 2 * radius, 3 * radius):
+            for spacing in dict.fromkeys((gap, gap + 1, gap + 2, 0)):
+                found = ctx.world.find_build_site(kind, near[0], near[1], reach, spacing)
+                if found is not None and (str(kind), *found) not in ctx.board.bad_sites:
+                    site = found
+                    break
+            if site is not None:
                 break
         if site is None:
+            ctx.board.bump("no_site:" + str(kind).split(".")[-1])
             return False
         ctx.spend(cost)
         ctx.order("build", [b.id for b in builders], kind, site[0], site[1])
@@ -146,11 +151,12 @@ class Constructor:
             return
         eco = ctx.economy
         production = ctx.count(BuildingKind.BARRACKS) + ctx.count(BuildingKind.ARCHERY_RANGE)
-        margin = ctx.config.house_margin + 2 * production
+        centers = ctx.count(BuildingKind.TOWN_CENTER, complete=True)
+        margin = ctx.config.house_margin + 2 * production + 3 * max(0, centers - 1)
         incoming = 5 * self.pending(ctx, BuildingKind.HOUSE)
         if ctx.free_population() + incoming > margin:
             return
-        if self.pending(ctx, BuildingKind.HOUSE) >= 2:
+        if self.pending(ctx, BuildingKind.HOUSE) >= ctx.config.house_pending + (centers - 1):
             return
         builder = self.builder_near(ctx, ctx.home)
         if builder is not None and self.place(ctx, BuildingKind.HOUSE, ctx.home, [builder], gap=ctx.config.building_gap):
