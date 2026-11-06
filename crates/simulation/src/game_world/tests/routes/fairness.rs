@@ -276,3 +276,23 @@ fn a_players_far_search_keeps_a_quarter_share_while_its_near_queue_is_busy() {
     );
     assert!(world.route_metrics.fair_work <= u64::from(budget));
 }
+
+/// A big army's player holds more route continuations than its share (the
+/// owner held 97 to 154 with no search). While the world is far from its
+/// bound it borrows and its next order may search; a busy world refuses it.
+#[test]
+fn a_player_over_its_planner_share_borrows_while_the_world_has_room() {
+    use crate::game_world::route_scheduler::{RouteSlots, SHARED_ROUTE_PLANNERS};
+    let mut world = sealed_ring_world(512, 250, 250);
+    let busy = RouteSlots {
+        planners: MAX_ROUTE_PLANNERS_PER_PLAYER + 90,
+        searches: 0,
+        far_searches: 0,
+    };
+    world.route_slots.insert(PlayerId(0), busy);
+    world.active_planner_count = 1_000;
+    assert!(!world.route_capacity_exhausted(PlayerId(0), 0, 0, false));
+    world.active_planner_count = SHARED_ROUTE_PLANNERS;
+    assert!(world.route_capacity_exhausted(PlayerId(0), 0, 0, false));
+    assert!(!world.route_capacity_exhausted(PlayerId(1), 0, 0, false));
+}

@@ -92,6 +92,8 @@ pub(crate) fn attribution_json(a: &RouteAttribution) -> Value {
         "group_wait_renewals": a.group_wait_renewals,
         "group_pool_work": a.group_pool_work,
         "detours_declined": a.detours_declined,
+        "detours_without_fast": a.detours_without_fast,
+        "detours_at_capacity": a.detours_at_capacity,
         "samples_1_4ki": a.samples,
     })
 }

@@ -33,8 +33,14 @@ pub(crate) use {
 
 /// Retained search frontiers one player may hold at once.
 pub(crate) const MAX_ROUTE_SEARCHES_PER_PLAYER: usize = 2;
-/// Compact route continuations one player may hold at once.
+/// Compact route continuations one player is guaranteed to hold at once.
 pub(crate) const MAX_ROUTE_PLANNERS_PER_PLAYER: usize = 64;
+/// Beyond its share a player borrows continuations while the world holds
+/// fewer than this, half the memory bound; the rest stays for the players
+/// under their share. In the owner's late game (1,649 population) player 0
+/// held 97 to 154 continuations with no search at all, so none of its
+/// waiting orders could take a slot while the world held 1,000 of 4,096.
+pub(crate) const SHARED_ROUTE_PLANNERS: usize = MAX_ACTIVE_ROUTE_PLANNERS / 2;
 /// A route whose ends are farther apart than this (Chebyshev tiles) searches
 /// in its player's far slots. A scout riding across the map, or an army sent
 /// to sealed-off ground, searches for minutes; in a 99-AI match such searches
@@ -85,9 +91,11 @@ impl GameWorld {
         far: bool,
     ) -> bool {
         let slots = self.route_slots.get(&player).copied().unwrap_or_default();
-        slots.planners.saturating_sub(own_planner) >= MAX_ROUTE_PLANNERS_PER_PLAYER
+        let world = self.active_planner_count.saturating_sub(own_planner);
+        (slots.planners.saturating_sub(own_planner) >= MAX_ROUTE_PLANNERS_PER_PLAYER
+            && world >= SHARED_ROUTE_PLANNERS)
             || slots.class_searches(far).saturating_sub(own_search) >= MAX_ROUTE_SEARCHES_PER_PLAYER
-            || self.active_planner_count.saturating_sub(own_planner) >= MAX_ACTIVE_ROUTE_PLANNERS
+            || world >= MAX_ACTIVE_ROUTE_PLANNERS
             || self.active_route_searches.saturating_sub(own_search) >= MAX_ACTIVE_ROUTE_SEARCHES
     }
 
