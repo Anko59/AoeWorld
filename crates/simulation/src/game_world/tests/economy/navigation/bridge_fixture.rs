@@ -1,6 +1,9 @@
 use super::*;
 
-pub(super) fn river_width(horizontal: bool, span: std::ops::Range<usize>) -> GameWorld {
+pub(in crate::game_world::tests::economy) fn river_width(
+    horizontal: bool,
+    span: std::ops::Range<usize>,
+) -> GameWorld {
     river_coverage(horizontal, span, 100)
 }
 

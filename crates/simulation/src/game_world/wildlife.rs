@@ -396,6 +396,17 @@ impl GameWorld {
     pub fn animals(&self) -> impl Iterator<Item = &GameAnimal> {
         self.wildlife.animals.values().map(|a| &a.state)
     }
+    /// Living wolves now hunting a unit of `victims`, with their targets.
+    /// Walks only the engaged animals, never the whole population.
+    pub(crate) fn wolves_hunting(&self, victims: &BTreeSet<EntityId>) -> Vec<(EntityId, EntityId)> {
+        self.wildlife
+            .engaged
+            .iter()
+            .filter_map(|id| self.animal(*id))
+            .filter(|a| a.kind == AnimalKind::Wolf && a.hp > 0)
+            .filter_map(|a| a.target.filter(|t| victims.contains(t)).map(|t| (a.id, t)))
+            .collect()
+    }
     pub fn animal(&self, id: EntityId) -> Option<&GameAnimal> {
         self.wildlife.animals.get(&id).map(|a| &a.state)
     }

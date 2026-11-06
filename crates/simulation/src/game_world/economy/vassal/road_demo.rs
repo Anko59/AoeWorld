@@ -35,11 +35,13 @@ impl GameWorld {
             PlayerId(0),
             Age::Castle,
             &Default::default(),
+            None,
         );
-        for (kind, tile, vertical) in sites
+        for site in sites
             .into_iter()
-            .filter(|(kind, _, _)| *kind != BuildingKind::Road)
+            .filter(|s| !matches!(s.kind, BuildingKind::Road | BuildingKind::Bridge))
         {
+            let (kind, tile, vertical) = (site.kind, site.tile, site.vertical);
             let (r, mut size) = (kind.rules(), (kind.rules().side, kind.rules().depth));
             if vertical {
                 size = (r.depth, r.side);

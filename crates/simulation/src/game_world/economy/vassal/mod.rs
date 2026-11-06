@@ -55,6 +55,8 @@ pub(crate) struct Domain {
     plan: Vec<plan::Site>,
     plan_age: crate::Age,
     planned: u64,
+    /// Where the latest raider was seen: the threatened side is walled first.
+    hot: Option<TileCoord>,
 }
 #[derive(Clone, Copy, Debug)]
 struct Recall {
@@ -102,6 +104,7 @@ impl GameWorld {
                 plan: Vec::new(),
                 plan_age: crate::Age::Dark,
                 planned: 0,
+                hot: None,
                 status: VassalStatus {
                     development: true,
                     ..Default::default()

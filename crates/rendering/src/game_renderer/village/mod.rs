@@ -273,8 +273,18 @@ pub(super) fn building_select(
         sprite_building(art, unit, camera, animation, emit);
         return;
     }
+    // The DE pack has one gate orientation (NE): a gate laid along y is the
+    // same art mirrored (`facing` 1 on a finished gate), part by part.
+    let mirrored = unit.facing == 1
+        && matches!(
+            unit.kind,
+            SceneUnitKind::PalisadeGate
+                | SceneUnitKind::OpenPalisadeGate
+                | SceneUnitKind::StoneGate
+                | SceneUnitKind::OpenStoneGate
+        );
     // Import order is shadow layer, then isometric annex depth, preserving
-    // stand/delta order within each unit. No rotation or mirroring is applied.
+    // stand/delta order within each unit. Nothing rotates; only gates mirror.
     let overlay = damage
         .filter(|d| d.apply_mode != 2)
         .into_iter()
@@ -331,13 +341,20 @@ pub(super) fn building_select(
         );
         native.anchor[0] -= part.offset[0];
         native.anchor[1] -= part.offset[1];
-        let frame = world_frame(native);
-        if let Some(sprite) = scene_sprite(
+        let mut frame = world_frame(native);
+        if mirrored {
+            frame.anchor[0] = frame.size[0] - frame.anchor[0];
+        }
+        if let Some(mut sprite) = scene_sprite(
             frame,
             unit.position,
             f64::from(unit.elevation_meters),
             camera,
         ) {
+            if mirrored {
+                sprite.uv[0] += sprite.uv[2];
+                sprite.uv[2] = -sprite.uv[2];
+            }
             emit((
                 sprite.with_owner(unit.visual),
                 scaled(frame, camera.zoom as f32),

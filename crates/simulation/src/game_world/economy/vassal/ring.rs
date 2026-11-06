@@ -1,8 +1,10 @@
 //! The domain wall: a square ring at `RING` tiles around the castle, the
 //! area of the Steward's circle. Only open land approaches are walled: water,
 //! cliffs, forest and the map edge are already barriers. Each side carries a
-//! gate along its own axis, at its middle and near both ends.
-use super::plan::Site;
+//! gate along its own axis, at its middle and near both ends. The side facing
+//! the threat is built first (tier 1), the others by decreasing exposure; only
+//! the two most exposed sides are stone, the rest palisade (cheap and quick).
+use super::plan::{Site, TIER_ROAD};
 use super::*;
 use crate::TileVisibility;
 
@@ -28,17 +30,34 @@ fn open(w: &GameWorld, player: PlayerId, tile: TileCoord) -> bool {
     w.tile_passable(tile) && w.visibility(player, tile) != TileVisibility::Unexplored
 }
 
+/// Build tier of the wall side with this exposure rank (0 = most exposed).
+fn side_tier(rank: usize) -> u8 {
+    [1, TIER_ROAD + 2, TIER_ROAD + 4, TIER_ROAD + 5][rank.min(3)]
+}
+
+/// Which side (0 north, 1 south, 2 west, 3 east) a point from the castle
+/// lies toward.
+pub(super) fn side_of(center: TileCoord, at: TileCoord) -> usize {
+    let (dx, dy) = (at.x - center.x, at.y - center.y);
+    if dx.abs() > dy.abs() {
+        2 + usize::from(dx > 0)
+    } else {
+        usize::from(dy > 0)
+    }
+}
+
 pub(super) fn sites(
     w: &GameWorld,
     center: TileCoord,
     player: PlayerId,
     age: crate::Age,
+    toward: (i32, i32),
 ) -> Vec<Site> {
-    let (wall, gate) = if age >= crate::Age::Castle {
-        (BuildingKind::StoneWall, BuildingKind::StoneGate)
-    } else {
-        (BuildingKind::PalisadeWall, BuildingKind::PalisadeGate)
-    };
+    // Exposure of each side: how far its outward normal points at the threat.
+    let normals = [(0, -1), (0, 1), (-1, 0), (1, 0)];
+    let mut order: Vec<usize> = (0..4).collect();
+    order.sort_by_key(|&i| (-(normals[i].0 * toward.0 + normals[i].1 * toward.1), i));
+    let rank_of = |side: usize| order.iter().position(|&i| i == side).unwrap_or(3);
     let mut out = Vec::new();
     // Sides as (start, step, vertical): north, south run along x; west, east along y.
     let (min, max) = (
@@ -51,7 +70,14 @@ pub(super) fn sites(
         (TileCoord::new(min.x, min.y + 1), (0, 1), true, 2 * RING - 1),
         (TileCoord::new(max.x, min.y + 1), (0, 1), true, 2 * RING - 1),
     ];
-    for (start, (dx, dy), vertical, len) in sides {
+    for (side, (start, (dx, dy), vertical, len)) in sides.into_iter().enumerate() {
+        let rank = rank_of(side);
+        let tier = side_tier(rank);
+        let (wall, gate) = if age >= crate::Age::Castle && rank < 2 {
+            (BuildingKind::StoneWall, BuildingKind::StoneGate)
+        } else {
+            (BuildingKind::PalisadeWall, BuildingKind::PalisadeGate)
+        };
         let at = |i: i32| TileCoord::new(start.x + dx * i, start.y + dy * i);
         let line: Vec<bool> = (0..len).map(|i| open(w, player, at(i))).collect();
         if !line.iter().any(|o| *o) {
@@ -70,13 +96,56 @@ pub(super) fn sites(
         }
         gates.sort_unstable();
         for &g in &gates {
-            out.push((gate, at(g), vertical));
+            out.push(Site {
+                vertical,
+                ..Site::new(gate, at(g), tier)
+            });
         }
         for i in 0..len {
             if line[i as usize] && !gates.iter().any(|&g| (g..g + 4).contains(&i)) {
-                out.push((wall, at(i), false));
+                out.push(Site::new(wall, at(i), tier));
             }
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_wall_side_facing_the_threat_is_built_first_and_in_stone() {
+        let config = aoe_core::WorldConfig::new(256, 256, aoe_core::Seed(7)).unwrap();
+        let mut w = GameWorld::new(config).unwrap();
+        w.set_fog_disabled(true);
+        let center = TileCoord::new(92, 92);
+        // A raider to the east: its side is tier 1 stone, the far side is
+        // the last tier and palisade.
+        let toward = (108, 2);
+        let sites = sites(&w, center, PlayerId(0), crate::Age::Castle, toward);
+        let on_side = |s: &Site, x: i32| {
+            s.tile.x == x && s.tile.y > center.y - RING && s.tile.y < center.y + RING
+        };
+        let east = |s: &Site| on_side(s, center.x + RING);
+        assert!(sites.iter().filter(|s| east(s)).all(|s| s.tier == 1));
+        assert!(
+            sites
+                .iter()
+                .filter(|s| east(s))
+                .all(|s| matches!(s.kind, BuildingKind::StoneWall | BuildingKind::StoneGate))
+        );
+        let west: Vec<_> = sites
+            .iter()
+            .filter(|s| on_side(s, center.x - RING))
+            .collect();
+        assert!(!west.is_empty());
+        assert!(west.iter().all(|s| s.tier > 5));
+        assert!(west.iter().all(|s| matches!(
+            s.kind,
+            BuildingKind::PalisadeWall | BuildingKind::PalisadeGate
+        )));
+        assert_eq!(side_of(center, TileCoord::new(200, 95)), 3);
+        assert_eq!(side_of(center, TileCoord::new(95, 10)), 0);
+    }
 }

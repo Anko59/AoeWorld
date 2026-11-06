@@ -36,10 +36,17 @@ impl Economy {
             h.update(&d.planned.to_le_bytes());
             h.update(&[d.plan_age as u8]);
             h.update(&(d.plan.len() as u64).to_le_bytes());
-            for (kind, tile, vertical) in &d.plan {
-                h.update(&[*kind as u8, u8::from(*vertical)]);
-                h.update(&tile.x.to_le_bytes());
-                h.update(&tile.y.to_le_bytes());
+            for site in &d.plan {
+                h.update(&[site.kind as u8, u8::from(site.vertical), site.tier]);
+                for t in std::iter::once(site.tile).chain(site.end) {
+                    h.update(&t.x.to_le_bytes());
+                    h.update(&t.y.to_le_bytes());
+                }
+            }
+            h.update(&[u8::from(d.hot.is_some())]);
+            if let Some(t) = d.hot {
+                h.update(&t.x.to_le_bytes());
+                h.update(&t.y.to_le_bytes());
             }
             h.update(&(d.refused.len() as u64).to_le_bytes());
             for (tile, until) in &d.refused {

@@ -371,6 +371,9 @@ pub(in super::super) fn units(
                 crate::building_ui::wall_frame(building.footprint.min, |t| {
                     walls.contains(&(t.x, t.y, building.kind))
                 })
+            } else if building.kind.is_gate() {
+                // 1: the gate runs along y, so the renderer mirrors its one art.
+                u8::from(building.footprint.height() > building.footprint.width())
             } else {
                 0
             },

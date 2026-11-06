@@ -1,6 +1,8 @@
 use super::*;
 use crate::{Age, Stockpile};
 
+#[path = "vassal/bridging.rs"]
+mod bridging;
 #[path = "vassal/domain.rs"]
 mod domain;
 #[path = "vassal/ownership.rs"]
@@ -9,6 +11,8 @@ mod ownership;
 mod roads;
 #[path = "vassal/snapshot.rs"]
 mod snapshot;
+#[path = "vassal/timeline.rs"]
+mod timeline;
 
 fn setup() -> (GameWorld, EntityId, EntityId) {
     let (mut w, _, _) = village();
@@ -225,38 +229,33 @@ fn vassal_preserves_busy_general_members_and_explicit_owner_orders() {
 }
 
 #[test]
-fn vassal_demo_finishes_before_attack_and_general_response() {
+fn vassal_demo_stands_a_defensive_line_before_attack_and_general_response() {
     let (mut w, _) = GameWorld::vassal_defense_demo(Seed(7)).unwrap();
-    let v = w
-        .buildings()
-        .flat_map(|b| &b.garrison)
-        .find(|g| g.unit.kind == UnitKind::Vassal)
-        .map(|g| g.unit.id)
-        .or_else(|| w.units().find(|u| u.kind == UnitKind::Vassal).map(|u| u.id))
-        .unwrap();
-    let mut developed = false;
-    let mut response = false;
+    let found = w.units().find(|u| u.kind == UnitKind::Vassal).map(|u| u.id);
+    let v = found.or_else(|| {
+        let mut garrisoned = w.buildings().flat_map(|b| &b.garrison);
+        garrisoned
+            .find(|g| g.unit.kind == UnitKind::Vassal)
+            .map(|g| g.unit.id)
+    });
+    let v = v.unwrap();
+    // The ring is too large to finish before the raid: a line must stand.
+    let (mut line, mut response) = (false, false);
     for t in 0..6_000 {
         w.advance();
         if let Some(s) = w.vassal_status(v) {
-            if s.developed && !developed {
-                eprintln!("demo developed at tick {t}");
-            }
-            developed |= s.developed;
-            if s.alert {
-                assert!(
-                    developed,
-                    "attack must follow completed fortification: tick {t} {s:?}"
-                );
-            }
+            line |= s.completed >= 200;
+            assert!(
+                !s.alert || line,
+                "attack before the line stood: tick {t} {s:?}"
+            );
             response |= s.responding > 0;
         }
         if response {
             break;
         }
     }
-    assert!(developed, "showcase fortification must complete");
-    assert!(response, "showcase must exercise a real General response");
+    assert!(line && response, "line {line}, General response {response}");
 }
 
 #[test]

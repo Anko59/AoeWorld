@@ -10,11 +10,8 @@ impl GameWorld {
     ) -> Option<(EntityId, WorldPosition)> {
         let d = &self.economy.vassals.domains[&id];
         // The cached plan: re-planning here would scan the whole domain.
-        let structures = std::iter::once(d.castle).chain(
-            d.plan
-                .iter()
-                .filter_map(|(_, tile, _)| self.building_at(*tile)),
-        );
+        let structures = std::iter::once(d.castle)
+            .chain(d.plan.iter().filter_map(|site| self.building_at(site.tile)));
         let hits = units
             .iter()
             .filter(|u| u.player == d.player && u.hp > 0 && inside(d.center, u.position))
