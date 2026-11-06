@@ -294,9 +294,8 @@ fn resume_service(
     world.set_limits(MatchRules::default().limits(seats.len()));
     let report = world
         .restore_snapshot(&loaded.file.world, content_hash, cancelled)
-        .map_err(|error| match error {
-            aoe_simulation::SnapshotError::World(error) => MatchError::World(error),
-            _ => MatchError::World(GameWorldError::InvalidTerrain),
+        .map_err(|error| {
+            MatchError::Navigation(format!("the saved game cannot be restored: {error}"))
         })?;
     let starts: Vec<aoe_core::EntityId> = seats
         .iter()

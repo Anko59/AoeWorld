@@ -191,3 +191,63 @@ fn restore_refuses_a_world_that_is_not_empty_or_a_wrong_map() {
         Err(SnapshotError::Map(_))
     ));
 }
+
+/// Saves `saved`, decodes the bytes and restores them into `fresh` (a world
+/// built the same way, holding nothing yet).
+pub(crate) fn roundtrip(
+    saved: &GameWorld,
+    mut fresh: GameWorld,
+) -> (GameWorld, crate::RestoreReport) {
+    let snapshot = saved.snapshot([0; 32]).expect("snapshot");
+    let bytes = postcard::to_allocvec(&snapshot).unwrap();
+    let decoded: WorldSnapshot = postcard::from_bytes(&bytes).unwrap();
+    let report = fresh
+        .restore_snapshot(&decoded, [0; 32], &|| false)
+        .expect("the snapshot restores");
+    (fresh, report)
+}
+
+#[test]
+fn sheltered_units_and_garrison_orders_in_progress_survive_a_save() {
+    let (mut saved, start) = flat();
+    saved.initialize_village(PlayerId(0), start).unwrap();
+    let villagers: Vec<_> = saved
+        .units()
+        .filter(|u| u.kind == crate::UnitKind::Villager)
+        .map(|u| u.id)
+        .collect();
+    let center = saved.buildings().next().unwrap().id;
+    // One villager inside the Town Center, one still walking to it.
+    saved
+        .issue_garrison(PlayerId(0), villagers[0], center)
+        .unwrap();
+    for _ in 0..800 {
+        saved.advance();
+        if saved.building(center).unwrap().garrison.len() == 1 {
+            break;
+        }
+    }
+    assert_eq!(saved.building(center).unwrap().garrison.len(), 1);
+    saved
+        .issue_garrison(PlayerId(0), villagers[1], center)
+        .unwrap();
+    assert!(saved.economy.garrison_orders.contains_key(&villagers[1]));
+    let (restored, report) = roundtrip(&saved, flat().0);
+    assert_eq!(
+        (report.units_lost, report.buildings_lost),
+        (0, 0),
+        "{report:?}"
+    );
+    let building = restored.building(center).unwrap();
+    assert_eq!(
+        building.garrison.len(),
+        1,
+        "the sheltered unit stays inside"
+    );
+    assert_eq!(building.garrison[0].unit.id, villagers[0]);
+    assert_eq!(
+        restored.economy.garrison_orders.get(&villagers[1]),
+        Some(&center),
+        "the walk to shelter is ordered again"
+    );
+}

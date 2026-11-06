@@ -18,7 +18,8 @@ pub struct WorldSnapshot {
     pub fog_disabled: bool,
     pub hp_quarters: Vec<u8>,
     pub players: Vec<PlayerEconomy>,
-    pub resources: ResourceOverlaySnapshot,
+    /// Absent only for worlds without map terrain (test fixtures).
+    pub resources: Option<ResourceOverlaySnapshot>,
     pub buildings: Vec<BuildingRecord>,
     pub units: Vec<UnitRecord>,
     pub formations: Vec<FormationRecord>,
@@ -100,6 +101,10 @@ pub struct UnitRecord {
     pub move_to: Option<WorldPosition>,
     pub queue: Vec<WorldPosition>,
     pub hunt: Option<EntityId>,
+    /// The building this unit was walking to shelter in.
+    pub garrison_order: Option<EntityId>,
+    /// The transport this unit was aboard.
+    pub embarked_in: Option<EntityId>,
     pub management: Option<Management>,
 }
 
@@ -126,6 +131,8 @@ pub enum SnapshotError {
     NotEmpty,
     #[error("the snapshot does not fit this map: {0}")]
     Map(String),
+    #[error("{units} units and {buildings} buildings could not be placed")]
+    Unplaced { units: usize, buildings: usize },
     #[error(transparent)]
     World(#[from] GameWorldError),
 }

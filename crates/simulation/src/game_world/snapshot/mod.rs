@@ -14,8 +14,11 @@
 //! destroyed buildings, carcasses, and what a General was deciding.
 //! `RestoreReport` counts what a restore could not place.
 mod records;
-use super::{ConstructionState, GameWorld, GameWorldError};
-use aoe_core::EntityId;
+use super::{BuildingKind, ConstructionState, GameUnit, GameWorld, GameWorldError};
+use aoe_core::{EntityId, TileCoord, TileRect, WorldPosition};
+
+/// How far from its place a restored unit may be put when that tile is taken.
+const NEAREST_RADIUS: i32 = 12;
 pub use records::*;
 use std::collections::BTreeMap;
 
@@ -23,7 +26,7 @@ impl GameWorld {
     /// The resumable state of this game; `content_hash` binds the resource
     /// changes to the map package.
     pub fn snapshot(&self, content_hash: [u8; 32]) -> Option<WorldSnapshot> {
-        let resources = self.resource_snapshot(content_hash)?;
+        let resources = self.resource_snapshot(content_hash);
         let assignments: BTreeMap<EntityId, (u64, Option<EntityId>)> = self
             .economy
             .gatherers
@@ -56,6 +59,8 @@ impl GameWorld {
                     .get(&stored.state.id)
                     .map_or_else(Vec::new, |q| q.iter().copied().collect()),
                 hunt: self.hunting_target(stored.state.id),
+                garrison_order: self.economy.garrison_orders.get(&stored.state.id).copied(),
+                embarked_in: self.economy.embarked.get(&stored.state.id).copied(),
                 management: self.management_of(stored.state.id, stored.state.kind),
             })
             .collect();
@@ -70,6 +75,8 @@ impl GameWorld {
                     move_to: None,
                     queue: Vec::new(),
                     hunt: None,
+                    garrison_order: None,
+                    embarked_in: None,
                     management: self.management_of(held.unit.id, held.unit.kind),
                 });
             }
@@ -131,8 +138,10 @@ impl GameWorld {
         if !self.units.is_empty() || !self.economy.buildings.is_empty() {
             return Err(SnapshotError::NotEmpty);
         }
-        self.restore_resources(&snapshot.resources, content_hash, cancelled)
-            .map_err(|error| SnapshotError::Map(error.to_string()))?;
+        if let Some(resources) = &snapshot.resources {
+            self.restore_resources(resources, content_hash, cancelled)
+                .map_err(|error| SnapshotError::Map(error.to_string()))?;
+        }
         self.set_fog_disabled(snapshot.fog_disabled);
         for player in &snapshot.players {
             self.economy.players.insert(player.player, *player);
@@ -150,6 +159,11 @@ impl GameWorld {
             self.expect_id(record.unit.id);
             self.restore_unit(record, &mut report);
         }
+        for record in &snapshot.units {
+            if let Some(transport) = record.embarked_in {
+                self.restore_embarked(record.unit.id, transport);
+            }
+        }
         for record in &snapshot.animals {
             self.expect_id(record.id);
             if self.restore_animal(record) {
@@ -160,6 +174,12 @@ impl GameWorld {
         }
         self.next_entity_id = snapshot.next_entity_id;
         self.combat.hp_quarters.clone_from(&snapshot.hp_quarters);
+        if report.units_lost + report.buildings_lost > 0 {
+            return Err(SnapshotError::Unplaced {
+                units: report.units_lost,
+                buildings: report.buildings_lost,
+            });
+        }
         self.resume_jobs(snapshot, &mut report);
         for player in &snapshot.players {
             if let Some(slot) = self.economy.players.get_mut(&player.player) {
@@ -181,7 +201,7 @@ impl GameWorld {
             record.player,
             record.kind,
             record.footprint,
-            record.complete,
+            record.complete && record.kind != BuildingKind::Bridge,
             record.bridge_span,
         );
         let Ok(id) = placed else {
@@ -214,40 +234,23 @@ impl GameWorld {
         if record.research.is_some() {
             self.economy.active_research.insert(id);
         }
-        if record.gate_open {
-            self.economy.open_gates.insert(id);
+        if record.complete && record.kind.is_gate() {
+            self.restore_gate(id, record.gate_open);
+        }
+        if record.complete
+            && let Some(span) = record.bridge_span
+        {
+            if let Some(bridge) = self.economy.buildings.get_mut(&id) {
+                bridge.state = ConstructionState::Complete;
+            }
+            self.restore_bridge_deck(span);
         }
         report.buildings += 1;
     }
 
     fn restore_unit(&mut self, record: &UnitRecord, report: &mut RestoreReport) {
         let state = record.unit;
-        let spawned = self.spawn_kind(state.player, state.kind, state.position);
-        // A sheltered unit's saved place may lie inside its building: it
-        // appears beside it and is sheltered at once.
-        let spawned = match (spawned, record.garrison_in.and_then(|id| self.building(id))) {
-            (Err(_), Some(building)) => {
-                let rect = building.footprint;
-                let ring: Vec<aoe_core::TileCoord> = (rect.min.x - 1..=rect.max.x)
-                    .flat_map(|x| (rect.min.y - 1..=rect.max.y).map(move |y| (x, y)))
-                    .filter(|(x, y)| !rect.contains(aoe_core::TileCoord::new(*x, *y)))
-                    .map(|(x, y)| aoe_core::TileCoord::new(x, y))
-                    .collect();
-                let mut placed = Err(GameWorldError::InvalidPosition);
-                for tile in ring {
-                    let Ok(at) = aoe_core::WorldPosition::from_tile_center(tile) else {
-                        continue;
-                    };
-                    placed = self.spawn_kind(state.player, state.kind, at);
-                    if placed.is_ok() {
-                        break;
-                    }
-                    self.next_entity_id = u64::from(state.id.0);
-                }
-                placed
-            }
-            (result, _) => result,
-        };
+        let spawned = self.place_restored(&state, record.garrison_in);
         let Ok(id) = spawned else {
             report.units_lost += 1;
             return;
@@ -268,10 +271,60 @@ impl GameWorld {
         unit.auto_scout = state.auto_scout;
         unit.sergeant = state.sergeant;
         unit.last_hit = state.last_hit;
-        if let Some(building) = record.garrison_in {
-            self.shelter_restored(id, building);
+        if let Some(building) = record.garrison_in
+            && !self.shelter_restored(id, building)
+        {
+            report.units_lost += 1;
+            return;
         }
         report.units += 1;
+    }
+
+    /// Spawns a unit at its saved place, or at the nearest free tile (around
+    /// its shelter for a sheltered unit, whose saved place is meaningless).
+    fn place_restored(
+        &mut self,
+        state: &GameUnit,
+        shelter: Option<EntityId>,
+    ) -> Result<EntityId, GameWorldError> {
+        let around = match shelter.and_then(|id| self.building(id)) {
+            Some(building) => building.footprint,
+            None => {
+                if shelter.is_none() {
+                    let first = self.spawn_kind(state.player, state.kind, state.position);
+                    if first.is_ok() {
+                        return first;
+                    }
+                }
+                let tile = state.position.tile_floor();
+                TileRect::new(tile, TileCoord::new(tile.x + 1, tile.y + 1))
+            }
+        };
+        for radius in 0..=NEAREST_RADIUS {
+            let (min, max) = (
+                TileCoord::new(around.min.x - radius, around.min.y - radius),
+                TileCoord::new(around.max.x + radius, around.max.y + radius),
+            );
+            for x in min.x..max.x {
+                for y in min.y..max.y {
+                    let edge = x < around.min.x - radius + 1
+                        || x >= max.x - 1
+                        || y < around.min.y - radius + 1
+                        || y >= max.y - 1;
+                    let tile = TileCoord::new(x, y);
+                    if (!edge && radius > 0) || around.contains(tile) {
+                        continue;
+                    }
+                    let Ok(at) = WorldPosition::from_tile_center(tile) else {
+                        continue;
+                    };
+                    if let Ok(id) = self.spawn_kind(state.player, state.kind, at) {
+                        return Ok(id);
+                    }
+                }
+            }
+        }
+        Err(GameWorldError::InvalidPosition)
     }
 
     /// What a management unit was set to, if it is one.
@@ -381,10 +434,12 @@ impl GameWorld {
             if record.management.is_some() && self.restore_management(record) {
                 report.managers += 1;
             }
-            if record.garrison_in.is_some() {
+            if record.garrison_in.is_some() || record.embarked_in.is_some() {
                 continue;
             }
-            let result = if let Some((_, Some(farm))) = record.gather {
+            let result = if let Some(building) = record.garrison_order {
+                self.issue_garrison(player, id, building)
+            } else if let Some((_, Some(farm))) = record.gather {
                 self.issue_farm(player, id, farm)
             } else if let Some((node, None)) = record.gather {
                 self.issue_gather(player, id, node)

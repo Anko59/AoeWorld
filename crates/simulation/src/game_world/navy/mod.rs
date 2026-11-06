@@ -117,6 +117,22 @@ impl GameWorld {
         Ok(())
     }
 
+    /// A save puts a passenger back aboard `transport`.
+    pub(crate) fn restore_embarked(&mut self, id: EntityId, transport: EntityId) -> bool {
+        let Some(&index) = self.lookup.get(&id) else {
+            return false;
+        };
+        let at = self.units[index].state.position;
+        self.untrack_unit_at(id, at);
+        self.update_observer(id, None);
+        self.economy.embarked.insert(id, transport);
+        let cargo = self.economy.cargo.entry(transport).or_default();
+        if let Err(at) = cargo.binary_search(&id) {
+            cargo.insert(at, id);
+        }
+        true
+    }
+
     /// All passengers land on a validated adjacent dry tile. Soft spacing
     /// spreads the group on later ticks, just like other stacked units.
     pub fn issue_unload(

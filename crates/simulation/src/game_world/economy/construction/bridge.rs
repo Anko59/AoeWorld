@@ -105,6 +105,11 @@ impl GameWorld {
         Ok(())
     }
 
+    /// A save puts a completed bridge's deck back.
+    pub(crate) fn restore_bridge_deck(&mut self, span: BridgeSpan) -> bool {
+        self.complete_bridge(span)
+    }
+
     pub(super) fn complete_bridge(&mut self, span: BridgeSpan) -> bool {
         let Terrain::Map { overlay, .. } = &mut self.terrain else {
             return false;
