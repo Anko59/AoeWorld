@@ -448,6 +448,8 @@ fn terminal_search_limit_stops_a_segment_after_resumable_polling() {
 mod combat;
 #[path = "tests/movement/far_orders.rs"]
 mod far_orders;
+#[path = "tests/movement/pass_each_other.rs"]
+mod pass_each_other;
 #[path = "tests/movement/physical_movement.rs"]
 mod physical_movement;
 #[path = "tests/movement/queue.rs"]

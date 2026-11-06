@@ -316,7 +316,27 @@ impl GameWorld {
         let mut closed = [false; CELLS + 1 + EXITS];
         cost[source] = 0;
         let h = distance(unit.position, goal);
-        let mut frontier = BinaryHeap::from([Reverse((h, h, 0, source))]);
+        // Equal-cost detours either side of the heading must be broken the same
+        // way for everybody: keep to the remembered side (right of the heading
+        // by default). A fixed map direction would send two units walking in
+        // opposite directions to the same side of the lane, and they would meet
+        // there again.
+        let heading = (
+            i64::from(goal.x) - i64::from(unit.position.x),
+            i64::from(goal.y) - i64::from(unit.position.y),
+        );
+        let preferred = i64::from(self.units[index].obstruction.map_or(1, |o| o.side));
+        let lateral_rank = |to: WorldPosition| -> u8 {
+            let across = (-heading.1 * (i64::from(to.x) - i64::from(unit.position.x))
+                + heading.0 * (i64::from(to.y) - i64::from(unit.position.y)))
+                * preferred;
+            match across.signum() {
+                1 => 0,
+                0 => 1,
+                _ => 2,
+            }
+        };
+        let mut frontier = BinaryHeap::from([Reverse((h, h, 0, 0u8, source))]);
         // A body can occupy a legal fractional pocket with no free lattice
         // point. Its exact source is a reachable arrival too, after the caller
         // has established sustained obstruction. Work/attack jobs never use it.
@@ -332,7 +352,7 @@ impl GameWorld {
             let y = i64::from(unit.position.y) - i64::from(goal.y);
             (x * x + y * y, 0, start.y, start.x, source)
         });
-        while let Some(Reverse((_, _, g, at))) = frontier.pop() {
+        while let Some(Reverse((_, _, g, _, at))) = frontier.pop() {
             if closed[at] || g != cost[at] {
                 continue;
             }
@@ -383,7 +403,7 @@ impl GameWorld {
                 cost[n] = next_cost;
                 previous[n] = at;
                 let h = distance(to, goal);
-                frontier.push(Reverse((next_cost + h, h, next_cost, n)));
+                frontier.push(Reverse((next_cost + h, h, next_cost, lateral_rank(to), n)));
             }
             // A resumed builder can be between centers beside the TC annex.
             // Include its fine corner exits even when a long detour back to
@@ -402,7 +422,7 @@ impl GameWorld {
                         cost[at] = g;
                         previous[at] = source;
                         let h = distance(to, goal);
-                        frontier.push(Reverse((g + h, h, g, at)));
+                        frontier.push(Reverse((g + h, h, g, lateral_rank(to), at)));
                     }
                 }
             }
