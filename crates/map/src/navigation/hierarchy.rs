@@ -356,7 +356,7 @@ impl Ground<'_> {
             return atlas.chunk(self.generator, key, self.cancelled);
         }
         let stamp = self.overlay.navigation_key(key);
-        if stamp == ResourceOverlay::default().navigation_key(key)
+        if stamp == ResourceOverlay::empty().navigation_key(key)
             && let Some(graph) = self.generator.static_navigation_graph(key)
         {
             return Ok(graph);

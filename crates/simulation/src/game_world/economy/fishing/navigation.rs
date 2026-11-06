@@ -1,8 +1,42 @@
 use crate::{GameWorld, UnitKind};
 use aoe_core::TileCoord;
 use aoe_map::{EnvironmentPageError, ResourceOverlay, RouteTerrain};
+use std::cell::RefCell;
+use std::collections::HashMap;
 
-pub(crate) struct NavalNavigation<'a>(pub &'a GameWorld);
+/// Water a ship's route search reads during one poll. Each edge test reads
+/// up to four tiles (both ends and, for a diagonal, both corners) and every
+/// tile is shared by up to eight edges; ground does not change during a
+/// poll, so each tile's answer is read once and reused (`RouteTerrain`).
+pub(crate) struct NavalNavigation<'a> {
+    world: &'a GameWorld,
+    wet: RefCell<HashMap<TileCoord, bool>>,
+}
+
+impl<'a> NavalNavigation<'a> {
+    pub(crate) fn new(world: &'a GameWorld) -> Self {
+        Self {
+            world,
+            wet: RefCell::default(),
+        }
+    }
+
+    fn wet(
+        &self,
+        tile: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<bool, EnvironmentPageError> {
+        if let Some(&known) = self.wet.borrow().get(&tile) {
+            return Ok(known);
+        }
+        let wet = !self.world.economy.blocked_tiles.contains(&tile)
+            && self
+                .world
+                .unit_tile_passable(UnitKind::FishingShip, tile, cancelled)?;
+        self.wet.borrow_mut().insert(tile, wet);
+        Ok(wet)
+    }
+}
 
 impl RouteTerrain for NavalNavigation<'_> {
     fn route_walkable(
@@ -11,11 +45,7 @@ impl RouteTerrain for NavalNavigation<'_> {
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError> {
-        if self.0.economy.blocked_tiles.contains(&tile) {
-            return Ok(false);
-        }
-        self.0
-            .unit_tile_passable(UnitKind::FishingShip, tile, cancelled)
+        self.wet(tile, cancelled)
     }
     fn route_edge_clear(
         &self,
@@ -23,7 +53,7 @@ impl RouteTerrain for NavalNavigation<'_> {
         to: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError> {
-        let wet = |tile| self.route_walkable(&ResourceOverlay::default(), tile, cancelled);
+        let wet = |tile| self.wet(tile, cancelled);
         Ok(wet(from)?
             && wet(to)?
             && (from.x == to.x
