@@ -189,6 +189,8 @@ class EconomyManager:
         # Early on nothing but food and wood matter.
         if ctx.tick - ctx.board.saving_tick <= 3 * ctx.world.tick_hz:
             shares = {"FOOD": 0.45, "WOOD": 0.25, "GOLD": 0.30, "STONE": 0.0}
+        elif cfg.town_centers > 1 and ctx.castle:
+            shares = {"FOOD": 0.42, "WOOD": 0.40, "GOLD": 0.10, "STONE": 0.08}
         cfg_castles = cfg.castles and ctx.feudal and ctx.economy.stone < 700 and (
             ctx.count(BuildingKind.CASTLE) + sum(1 for p in ctx.board.plans if p.kind == BuildingKind.CASTLE) < cfg.castles)
         if cfg_castles or (cfg.town_centers > 1 and ctx.castle and ctx.economy.stone < 150):

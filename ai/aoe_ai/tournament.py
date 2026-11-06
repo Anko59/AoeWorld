@@ -235,3 +235,21 @@ def scoreboard(games: list[dict]) -> str:
                      f"{sum(r['orders_per_min'] for r, _ in rows) / n:.0f} | {sum(r['cpu_ms_per_decision'] for r, _ in rows) / n:.1f} | "
                      f"{max(r['cpu_ms_slowest'] for r, _ in rows):.0f} | {sum(adjusted(r) for r, _ in rows) / n:.0f} |")
     return "\n".join(lines)
+
+
+def curves(samples: Path, names: list[str], step: int = 10) -> str:
+    """Per-minute curves of a game's `.jsonl` as markdown: population and Town Centers
+    (and Steward/Vassal/General counts) of each draft every `step` minutes."""
+    rows = [json.loads(line) for line in samples.read_text().splitlines() if line]
+    head = "| minute | " + " | ".join(names) + " |"
+    lines = [head, "|---" * (len(names) + 1) + "|"]
+    for row in rows:
+        if row["minute"] % step:
+            continue
+        cells = []
+        for p in sorted(row["players"], key=lambda p: p["id"]):
+            u = p.get("units", {})
+            cells.append(f"{p['age'][0]} pop {p['population']} TC {p['buildings'].get('TownCenter', 0)} "
+                         f"S{u.get('Steward', 0)}V{u.get('Vassal', 0)}G{u.get('General', 0)}")
+        lines.append(f"| {row['minute']} | " + " | ".join(cells) + " |")
+    return "\n".join(lines)

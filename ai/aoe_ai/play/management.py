@@ -52,6 +52,10 @@ class ManagementManager:
             return
         cost = building_cost(BuildingKind.TOWN_CENTER)
         if not ctx.can_afford(cost):
+            # Castle Age is bought: keep the wood back for the Town Center, shares lean to wood.
+            have = (ctx.economy.food, ctx.economy.wood, ctx.economy.gold, ctx.economy.stone)
+            ctx.spent[1] += max(0, min(cost[1], have[1] - ctx.spent[1]))
+            board.bump("saving_for_town_center")
             return
         width, height = ctx.world.map_size
         d = max(1.0, dist(ctx.home, (width // 2, height // 2)))
