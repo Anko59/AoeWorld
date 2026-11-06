@@ -174,6 +174,10 @@ fn report(phase: Phase, detail: Option<&'static str>, count: Option<(u64, u64, U
         }
     });
 }
+/// Overview fields sampled so far, out of all pyramid pages.
+pub(crate) fn overview_pages(completed: u64, total: u64) {
+    count(Phase::SamplingOverview, None, completed, total, Unit::Pages);
+}
 pub(crate) fn pyramid_page_count(mut axis: u16) -> u64 {
     let mut total = 0;
     while axis > 0 {

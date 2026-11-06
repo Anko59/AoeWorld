@@ -279,6 +279,13 @@ fn prepare_overview_from_verified_sources(
     )
 }
 
+fn joined<T>(
+    handle: std::thread::ScopedJoinHandle<'_, Result<T, GeodataError>>,
+) -> Result<T, GeodataError> {
+    let panicked = GeodataError::Preparation("overview sampling thread panicked");
+    handle.join().unwrap_or(Err(panicked))
+}
+
 fn prepare_overview_fields_from_verified_sources(
     request: MapRequest,
     axes: OverviewFieldAxes,
@@ -300,54 +307,6 @@ fn prepare_overview_fields_from_verified_sources(
         .sum();
     let mut completed_pages = 0;
     preparation_progress::stage(preparation_progress::Phase::SamplingOverview);
-    let mut prepared = if let Some(tiles) = &sources.elevation_tiles {
-        crate::copernicus::prepare_area_averaged_elevation(
-            &sources.elevation.path,
-            request,
-            axes.elevation,
-            tiles,
-        )?
-    } else if explicit {
-        elevation::prepare_landscape_elevation(&sources.elevation.path, request, axes.elevation)?
-    } else {
-        prepare_elevation(&sources.elevation.path, request, axes.elevation)?
-    };
-    completed_pages += prepared.pages.len() as u64;
-    preparation_progress::trace_mark("elevation done");
-    preparation_progress::count(
-        preparation_progress::Phase::SamplingOverview,
-        None,
-        completed_pages,
-        total_pages,
-        preparation_progress::Unit::Pages,
-    );
-    let lake_coverage =
-        prepare_hyde_lake_coverage(&sources.hyde_supplementary.path, request, axes.water)?;
-    let water = prepare_ocean_coverage(&sources.water.path, request, axes.water, lake_coverage)?;
-    completed_pages += water.pages.len() as u64;
-    preparation_progress::trace_mark("ocean/lake coverage done");
-    preparation_progress::count(
-        preparation_progress::Phase::SamplingOverview,
-        None,
-        completed_pages,
-        total_pages,
-        preparation_progress::Unit::Pages,
-    );
-    let vegetation = prepare_potential_biomes_with_corrections(
-        &sources.vegetation.path,
-        request,
-        axes.vegetation,
-        vegetation_corrections,
-    )?;
-    completed_pages += vegetation.pages.len() as u64;
-    preparation_progress::trace_mark("vegetation done");
-    preparation_progress::count(
-        preparation_progress::Phase::SamplingOverview,
-        None,
-        completed_pages,
-        total_pages,
-        preparation_progress::Unit::Pages,
-    );
     let historical_preprocessing = preprocessing_identity(
         format!(
             "{};corrections-sha256={}",
@@ -357,22 +316,67 @@ fn prepare_overview_fields_from_verified_sources(
         axes,
         explicit,
     );
-    let historical_land_use = prepare_hyde_area_600_with_corrections(
-        &sources.hyde_baseline.path,
-        &sources.hyde_supplementary.path,
-        request,
-        axes.historical,
-        historical_corrections,
-    )?;
+    // The four fields read different rasters and share nothing, so they are
+    // sampled side by side. Results are consumed in the fixed order below, so
+    // the first error and the progress counts match the sequential run.
+    let (elevation, water, vegetation, historical_land_use) = std::thread::scope(|scope| {
+        let elevation = scope.spawn(|| {
+            if let Some(tiles) = &sources.elevation_tiles {
+                crate::copernicus::prepare_area_averaged_elevation(
+                    &sources.elevation.path,
+                    request,
+                    axes.elevation,
+                    tiles,
+                )
+            } else if explicit {
+                elevation::prepare_landscape_elevation(
+                    &sources.elevation.path,
+                    request,
+                    axes.elevation,
+                )
+            } else {
+                prepare_elevation(&sources.elevation.path, request, axes.elevation)
+            }
+        });
+        let water = scope.spawn(|| {
+            let lake_coverage =
+                prepare_hyde_lake_coverage(&sources.hyde_supplementary.path, request, axes.water)?;
+            prepare_ocean_coverage(&sources.water.path, request, axes.water, lake_coverage)
+        });
+        let vegetation = scope.spawn(|| {
+            prepare_potential_biomes_with_corrections(
+                &sources.vegetation.path,
+                request,
+                axes.vegetation,
+                vegetation_corrections,
+            )
+        });
+        let historical = prepare_hyde_area_600_with_corrections(
+            &sources.hyde_baseline.path,
+            &sources.hyde_supplementary.path,
+            request,
+            axes.historical,
+            historical_corrections,
+        );
+        (
+            joined(elevation),
+            joined(water),
+            joined(vegetation),
+            historical,
+        )
+    });
+    let mut prepared = elevation?;
+    completed_pages += prepared.pages.len() as u64;
+    preparation_progress::overview_pages(completed_pages, total_pages);
+    let water = water?;
+    completed_pages += water.pages.len() as u64;
+    preparation_progress::overview_pages(completed_pages, total_pages);
+    let vegetation = vegetation?;
+    completed_pages += vegetation.pages.len() as u64;
+    preparation_progress::overview_pages(completed_pages, total_pages);
+    let historical_land_use = historical_land_use?;
     completed_pages += historical_land_use.pages.len() as u64;
-    preparation_progress::trace_mark("historical done");
-    preparation_progress::count(
-        preparation_progress::Phase::SamplingOverview,
-        None,
-        completed_pages,
-        total_pages,
-        preparation_progress::Unit::Pages,
-    );
+    preparation_progress::overview_pages(completed_pages, total_pages);
     verify_potential_biome_legend(&sources.vegetation_classes.path)?;
     prepared.environment.water = Some(water.field);
     prepared.environment.vegetation = Some(vegetation.field);

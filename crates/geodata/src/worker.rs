@@ -94,7 +94,7 @@ fn execute_inner(
                 historical_corrections.as_ref(),
                 vegetation_corrections.as_ref(),
             )?;
-            crate::preparation_progress::trace_mark("overview fields done");
+            crate::preparation_progress::trace_mark("overview prepared");
             let hydrology = plan.prepare(
                 cache_root,
                 &prepared.pages,
