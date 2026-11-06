@@ -153,11 +153,17 @@ fn restored_game_matches_the_saved_one_and_plays_on() {
     assert_eq!(decoded, snapshot);
 
     let (mut restored, _) = flat();
+    restored.economy.limits.animals = 0;
+    assert!(
+        !snapshot.animals.is_empty(),
+        "the village has animals to keep"
+    );
     let report = restored
         .restore_snapshot(&decoded, [0; 32], &|| false)
         .unwrap();
     assert_eq!(report.buildings_lost, 0, "{report:?}");
     assert_eq!(report.units_lost, 0, "{report:?}");
+    assert_eq!(report.animals_lost, 0, "{report:?}");
     assert_eq!(view(&restored), view(&saved));
     assert_eq!(report.jobs_lost, 0, "{report:?}");
     assert!(report.jobs_resumed >= 2, "{report:?}");

@@ -27,7 +27,11 @@ impl GameWorld {
         &mut self,
         record: &crate::game_world::snapshot::AnimalRecord,
     ) -> bool {
-        let Ok(id) = self.spawn_animal(record.kind, record.position) else {
+        // The saved game held these animals already: its limit is not applied again.
+        let limit = std::mem::replace(&mut self.economy.limits.animals, usize::MAX);
+        let spawned = self.spawn_animal(record.kind, record.position);
+        self.economy.limits.animals = limit;
+        let Ok(id) = spawned else {
             return false;
         };
         if id != record.id {
