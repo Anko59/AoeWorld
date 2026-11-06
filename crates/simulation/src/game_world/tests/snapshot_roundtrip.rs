@@ -128,6 +128,20 @@ fn restored_game_matches_the_saved_one_and_plays_on() {
             false,
         )
         .unwrap();
+    // A queued attack-move behind a plain move keeps its own flag.
+    let beyond =
+        aoe_core::WorldPosition::from_tile_center(TileCoord::new(start.x + 60, start.y + 6))
+            .unwrap();
+    saved
+        .issue_formation_move(
+            PlayerId(0),
+            &soldiers,
+            aoe_core::Formation::default(),
+            beyond,
+            true,
+            true,
+        )
+        .unwrap();
     for _ in 0..600 {
         saved.advance();
     }
@@ -160,6 +174,25 @@ fn restored_game_matches_the_saved_one_and_plays_on() {
     assert_eq!(again.explored, snapshot.explored);
     assert_eq!(again.animals, snapshot.animals);
     assert_eq!(again.formations.len(), snapshot.formations.len());
+    let queues = |s: &WorldSnapshot| {
+        let mut q = s
+            .formations
+            .iter()
+            .map(|f| {
+                (
+                    f.attack_move,
+                    f.queue.iter().map(|w| w.1).collect::<Vec<_>>(),
+                )
+            })
+            .collect::<Vec<_>>();
+        q.sort();
+        q
+    };
+    assert_eq!(queues(&again), queues(&snapshot));
+    assert!(
+        queues(&snapshot).iter().any(|(_, q)| q.contains(&true)),
+        "the queued attack-move is in the save"
+    );
 
     // The restored game is live: workers gather again, training completes.
     let before = restored.player_economy(PlayerId(0)).unwrap().stockpile.wood;

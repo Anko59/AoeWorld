@@ -414,15 +414,10 @@ impl GameWorld {
                     group.attack_move,
                 )
                 .is_ok();
-            for (at, _) in &group.queue {
-                let _ = self.issue_formation_move(
-                    player,
-                    &members,
-                    group.form,
-                    *at,
-                    true,
-                    group.attack_move,
-                );
+            // Each queued waypoint keeps its own attack-move flag.
+            for &(at, attack_move) in &group.queue {
+                let _ =
+                    self.issue_formation_move(player, &members, group.form, at, true, attack_move);
             }
             if moved {
                 grouped.extend(members);
