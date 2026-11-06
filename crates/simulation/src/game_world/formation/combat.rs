@@ -17,7 +17,7 @@ const ENGAGE_PER_LOOK: usize = 16;
 /// Members one look examines, rotating through the group, so the cost of a
 /// look does not grow with the army while every member is seen every few seconds.
 const ENGAGE_MEMBERS_PER_LOOK: usize = 128;
-/// Melee members one enemy can hold at once.
+/// Melee members one enemy unit can hold at once.
 const MELEE_SPOTS: usize = 8;
 /// Enemies in sight a member weighs per look, nearest first.
 const TARGETS_PER_MEMBER: usize = 3;
@@ -87,7 +87,11 @@ impl GameWorld {
                     .take(TARGETS_PER_MEMBER)
                     .map(|(_, enemy)| enemy)
                     .find(|&enemy| {
-                        (!melee || fighting.get(&enemy).copied().unwrap_or(0) < MELEE_SPOTS)
+                        // Buildings have a wider perimeter; their spots are
+                        // checked by `attack_spot_free` alone.
+                        (!melee
+                            || self.unit(enemy).is_none()
+                            || fighting.get(&enemy).copied().unwrap_or(0) < MELEE_SPOTS)
                             && self.attack_spot_free(id, enemy)
                     });
                 if let Some(target) = target

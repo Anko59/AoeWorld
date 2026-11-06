@@ -134,6 +134,39 @@ fn formations_attack_move_engages_visible_buildings() {
     assert_eq!((fighters, left), (3, 3));
 }
 
+#[test]
+fn a_building_takes_more_melee_attackers_than_one_man() {
+    let mut w = wide_world();
+    w.set_fog_disabled(true);
+    let ids = army(&mut w, 40);
+    let building = w
+        .insert_building(
+            PlayerId(1),
+            BuildingKind::TownCenter,
+            TileRect::from_xywh(46, 38, 4, 4),
+            true,
+        )
+        .unwrap();
+    w.issue_formation_move(
+        PlayerId(0),
+        &ids,
+        Formation::Line,
+        center(80, 40),
+        false,
+        true,
+    )
+    .unwrap();
+    for _ in 0..120 {
+        w.advance();
+    }
+    // The eight-spot cap is for a man; a Town Center's perimeter holds more.
+    let fighters = ids
+        .iter()
+        .filter(|&&id| w.unit(id).unwrap().attack_target == Some(building))
+        .count();
+    assert!(fighters > 8, "{fighters} attack the Town Center");
+}
+
 /// Whether `id` stands within `tiles` tiles of `to`.
 fn near(w: &GameWorld, id: EntityId, to: WorldPosition, tiles: i32) -> bool {
     let p = w.unit(id).unwrap().position;
