@@ -8,91 +8,16 @@
 //! order paths, so every derived index is built by the code that owns it and
 //! entity identities (which AI processes hold) are preserved.
 //!
-//! Not kept, and restarted instead: in-flight route searches, formation and
-//! move-queue state, attack targets, hunting, fog exploration, animals, and
-//! Steward/General/Vassal management settings. `RestoreReport` counts what a
-//! restore could not place.
-use super::{
-    Age, BuildingKind, ConstructionState, GameUnit, GameWorld, GameWorldError, HitRecord,
-    PlayerEconomy, RallyPoint, ResearchEntry, TrainingEntry,
-};
-use aoe_core::{EntityId, PlayerId, TileRect};
-use aoe_map::ResourceOverlaySnapshot;
-use serde::{Deserialize, Serialize};
+//! Kept beyond that: Steward, General and Vassal settings, army groups and
+//! their waypoints, queued moves, hunts, animals and fog exploration. Not
+//! kept, and restarted instead: in-flight route searches, fog memory of
+//! destroyed buildings, carcasses, and what a General was deciding.
+//! `RestoreReport` counts what a restore could not place.
+mod records;
+use super::{ConstructionState, GameWorld, GameWorldError};
+use aoe_core::EntityId;
+pub use records::*;
 use std::collections::BTreeMap;
-
-pub const WORLD_SNAPSHOT_VERSION: u16 = 1;
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct WorldSnapshot {
-    pub version: u16,
-    pub tick: u64,
-    pub next_entity_id: u64,
-    pub fog_disabled: bool,
-    pub hp_quarters: Vec<u8>,
-    pub players: Vec<PlayerEconomy>,
-    pub resources: ResourceOverlaySnapshot,
-    pub buildings: Vec<BuildingRecord>,
-    pub units: Vec<UnitRecord>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct BuildingRecord {
-    pub id: EntityId,
-    pub player: PlayerId,
-    pub kind: BuildingKind,
-    pub footprint: TileRect,
-    pub age: Age,
-    pub complete: bool,
-    pub bridge_span: Option<aoe_core::BridgeSpan>,
-    pub training_queue: Vec<TrainingEntry>,
-    pub last_hit: Option<HitRecord>,
-    pub work_done: u64,
-    pub work_total: u64,
-    pub hp: u16,
-    pub max_hp: u16,
-    pub los: u8,
-    pub food_remaining: Option<u16>,
-    pub research: Option<ResearchEntry>,
-    pub gate_open: bool,
-    pub rally_point: Option<RallyPoint>,
-    pub farm_reseeds: u8,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct UnitRecord {
-    pub unit: GameUnit,
-    pub next_hit_tick: u64,
-    /// The resource node and farm this worker was working.
-    pub gather: Option<(u64, Option<EntityId>)>,
-    /// The foundation this villager was building.
-    pub build: Option<EntityId>,
-    /// The building this unit was sheltering in.
-    pub garrison_in: Option<EntityId>,
-}
-
-/// What `restore_snapshot` could not put back.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct RestoreReport {
-    pub buildings: usize,
-    pub units: usize,
-    pub buildings_lost: usize,
-    pub units_lost: usize,
-    pub jobs_resumed: usize,
-    pub jobs_lost: usize,
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum SnapshotError {
-    #[error("the snapshot is from an unsupported version")]
-    Version,
-    #[error("the world already holds units or buildings")]
-    NotEmpty,
-    #[error("the snapshot does not fit this map: {0}")]
-    Map(String),
-    #[error(transparent)]
-    World(#[from] GameWorldError),
-}
 
 impl GameWorld {
     /// The resumable state of this game; `content_hash` binds the resource
@@ -120,6 +45,18 @@ impl GameWorld {
                     .get(&stored.state.id)
                     .map(|task| task.building),
                 garrison_in: None,
+                move_to: stored
+                    .formation
+                    .is_none()
+                    .then_some(stored.order)
+                    .flatten()
+                    .map(|o| o.destination),
+                queue: self
+                    .move_queues
+                    .get(&stored.state.id)
+                    .map_or_else(Vec::new, |q| q.iter().copied().collect()),
+                hunt: self.hunting_target(stored.state.id),
+                management: self.management_of(stored.state.id, stored.state.kind),
             })
             .collect();
         for building in self.economy.buildings.values() {
@@ -130,6 +67,10 @@ impl GameWorld {
                     gather: None,
                     build: None,
                     garrison_in: Some(building.id),
+                    move_to: None,
+                    queue: Vec::new(),
+                    hunt: None,
+                    management: self.management_of(held.unit.id, held.unit.kind),
                 });
             }
         }
@@ -170,6 +111,9 @@ impl GameWorld {
             resources,
             buildings,
             units,
+            formations: self.formation_records(),
+            animals: self.animal_records(),
+            explored: self.explored_records(),
         })
     }
 
@@ -193,6 +137,8 @@ impl GameWorld {
         for player in &snapshot.players {
             self.economy.players.insert(player.player, *player);
         }
+        self.tick = aoe_core::Tick(snapshot.tick);
+        self.restore_explored(&snapshot.explored);
         let mut report = RestoreReport::default();
         // Identities are placed one at a time at their own number: buildings
         // first (a sheltered unit needs its building), then units.
@@ -204,6 +150,14 @@ impl GameWorld {
             self.expect_id(record.unit.id);
             self.restore_unit(record, &mut report);
         }
+        for record in &snapshot.animals {
+            self.expect_id(record.id);
+            if self.restore_animal(record) {
+                report.animals += 1;
+            } else {
+                report.animals_lost += 1;
+            }
+        }
         self.next_entity_id = snapshot.next_entity_id;
         self.combat.hp_quarters.clone_from(&snapshot.hp_quarters);
         self.resume_jobs(snapshot, &mut report);
@@ -212,7 +166,6 @@ impl GameWorld {
                 *slot = *player;
             }
         }
-        self.tick = aoe_core::Tick(snapshot.tick);
         self.remember_visible_buildings();
         Ok(report)
     }
@@ -271,7 +224,7 @@ impl GameWorld {
         let state = record.unit;
         let spawned = self.spawn_kind(state.player, state.kind, state.position);
         // A sheltered unit's saved place may lie inside its building: it
-        // reappears beside it and walks back in.
+        // appears beside it and is sheltered at once.
         let spawned = match (spawned, record.garrison_in.and_then(|id| self.building(id))) {
             (Err(_), Some(building)) => {
                 let rect = building.footprint;
@@ -315,22 +268,141 @@ impl GameWorld {
         unit.auto_scout = state.auto_scout;
         unit.sergeant = state.sergeant;
         unit.last_hit = state.last_hit;
+        if let Some(building) = record.garrison_in {
+            self.shelter_restored(id, building);
+        }
         report.units += 1;
     }
 
-    /// Orders workers back to what they were doing, through the ordinary
-    /// order paths; a refused order leaves the unit idle.
+    /// What a management unit was set to, if it is one.
+    fn management_of(&self, id: EntityId, kind: crate::UnitKind) -> Option<Management> {
+        match kind {
+            crate::UnitKind::Steward => self.steward_settings(id).map(Management::Steward),
+            crate::UnitKind::Vassal => self.vassal_status(id).map(|status| Management::Vassal {
+                development: status.development,
+            }),
+            crate::UnitKind::General => {
+                self.economy
+                    .generals
+                    .armies
+                    .get(&id)
+                    .map(|army| Management::General {
+                        training: army.training,
+                        mix: army.mix,
+                        solo: army.solo,
+                        destination: army.destination,
+                    })
+            }
+            _ => None,
+        }
+    }
+
+    /// Puts management settings back; the unit's own activation (sheltering in
+    /// its Town Center or Castle) has already happened.
+    fn restore_management(&mut self, record: &UnitRecord) -> bool {
+        let (id, player) = (record.unit.id, record.unit.player);
+        match record.management {
+            Some(Management::Steward(settings)) => {
+                self.issue_steward_settings(player, id, settings).is_ok()
+            }
+            Some(Management::Vassal { development }) => self
+                .issue_vassal_development(player, id, development)
+                .is_ok(),
+            Some(Management::General {
+                training,
+                mix,
+                solo,
+                destination,
+            }) => {
+                let Some(army) = self.economy.generals.armies.get_mut(&id) else {
+                    return false;
+                };
+                army.training = training;
+                army.mix = mix;
+                army.solo = solo;
+                if let Some(destination) = destination {
+                    army.destination = Some(destination);
+                    army.state = crate::GeneralState::Marching;
+                    army.routed = None;
+                }
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Orders units back to what they were doing, through the ordinary order
+    /// paths; a refused order leaves the unit idle.
     fn resume_jobs(&mut self, snapshot: &WorldSnapshot, report: &mut RestoreReport) {
+        let mut grouped = std::collections::BTreeSet::new();
+        for group in &snapshot.formations {
+            let members: Vec<EntityId> = group
+                .members
+                .iter()
+                .copied()
+                .filter(|id| {
+                    self.lookup.contains_key(id) && self.unit(*id).is_some_and(|u| u.hp > 0)
+                })
+                .collect();
+            let Some(player) = members
+                .first()
+                .and_then(|id| self.unit(*id))
+                .map(|u| u.player)
+            else {
+                continue;
+            };
+            let moved = self
+                .issue_formation_move(
+                    player,
+                    &members,
+                    group.form,
+                    group.destination,
+                    false,
+                    group.attack_move,
+                )
+                .is_ok();
+            for (at, _) in &group.queue {
+                let _ = self.issue_formation_move(
+                    player,
+                    &members,
+                    group.form,
+                    *at,
+                    true,
+                    group.attack_move,
+                );
+            }
+            if moved {
+                grouped.extend(members);
+                report.formations += 1;
+            }
+        }
         for record in &snapshot.units {
             let (id, player) = (record.unit.id, record.unit.player);
-            let result = if let Some(building) = record.garrison_in {
-                self.issue_garrison(player, id, building)
-            } else if let Some((_, Some(farm))) = record.gather {
+            if record.management.is_some() && self.restore_management(record) {
+                report.managers += 1;
+            }
+            if record.garrison_in.is_some() {
+                continue;
+            }
+            let result = if let Some((_, Some(farm))) = record.gather {
                 self.issue_farm(player, id, farm)
             } else if let Some((node, None)) = record.gather {
                 self.issue_gather(player, id, node)
             } else if let Some(building) = record.build {
                 self.issue_construct(player, &[id], building)
+            } else if let Some(animal) = record.hunt {
+                self.issue_hunt(player, &[id], animal)
+            } else if let Some(target) = record.unit.attack_target {
+                self.issue_attack(player, id, target)
+            } else if let Some(at) = record.move_to.filter(|_| !grouped.contains(&id)) {
+                let result = self
+                    .issue_move(id, at)
+                    .map(|_| ())
+                    .map_err(crate::EconomyError::Movement);
+                for waypoint in &record.queue {
+                    let _ = self.issue_queued_move(id, *waypoint);
+                }
+                result
             } else {
                 continue;
             };

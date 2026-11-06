@@ -1,5 +1,6 @@
 // Pause (docs: crates/server/src/gameplay_match/pause.rs). The server stops
-// stepping the match; this only asks, shows the state, and follows it.
+// stepping the match; this only asks, shows the state, and follows it. Keys:
+// P and Pause.
 const byId = id => document.getElementById(id);
 const POLL_MS = 3000;
 
@@ -35,6 +36,15 @@ export function initPause(menu) {
       if (response.ok) { const value = await response.json(); if (value.paused !== paused) show(Boolean(value.paused)); }
     } catch (error) { /* retry on the next poll */ }
   };
+  // P or Pause toggles in the game; F1-F6 are taken by the map layers and views.
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Pause' && event.key !== 'p') return;
+    if (event.repeat || event.ctrlKey || event.altKey || event.metaKey || event.defaultPrevented) return;
+    if (document.body.dataset.startState !== 'game' || document.querySelector('dialog[open]')) return;
+    if (event.target instanceof Element && event.target.closest('input,textarea,select,[contenteditable]')) return;
+    event.preventDefault();
+    set(!paused);
+  });
   follow();
   setInterval(follow, POLL_MS);
 }

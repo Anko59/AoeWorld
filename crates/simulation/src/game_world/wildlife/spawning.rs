@@ -3,6 +3,45 @@ use crate::{EconomyError, GameWorld};
 use aoe_core::{EntityId, TileCoord, WorldPosition};
 
 impl GameWorld {
+    /// Living animals as a save keeps them (carcasses are not kept).
+    pub(crate) fn animal_records(&self) -> Vec<crate::game_world::snapshot::AnimalRecord> {
+        self.wildlife
+            .animals
+            .values()
+            .filter(|a| a.state.hp > 0 && a.state.death_tick.is_none())
+            .map(|a| crate::game_world::snapshot::AnimalRecord {
+                id: a.state.id,
+                kind: a.state.kind,
+                owner: a.state.owner,
+                hp: a.state.hp,
+                position: a.state.position,
+                food_remaining: a.state.food_remaining,
+                facing: a.state.facing,
+                home: a.home,
+            })
+            .collect()
+    }
+
+    /// Puts a saved animal back at its own identity (the next allocation).
+    pub(crate) fn restore_animal(
+        &mut self,
+        record: &crate::game_world::snapshot::AnimalRecord,
+    ) -> bool {
+        let Ok(id) = self.spawn_animal(record.kind, record.position) else {
+            return false;
+        };
+        if id != record.id {
+            return false;
+        }
+        if let Some(animal) = self.wildlife.animals.get_mut(&id) {
+            animal.state.owner = record.owner;
+            animal.state.hp = record.hp;
+            animal.state.food_remaining = record.food_remaining;
+            animal.state.facing = record.facing;
+            animal.home = record.home;
+        }
+        true
+    }
     pub fn spawn_animal(
         &mut self,
         kind: AnimalKind,

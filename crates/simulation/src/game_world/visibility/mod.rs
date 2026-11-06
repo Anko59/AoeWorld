@@ -61,6 +61,8 @@ pub(crate) struct Vision {
 }
 
 mod batch;
+mod explored;
+pub(crate) use explored::ExploredChunks;
 mod change;
 mod land;
 mod observers;

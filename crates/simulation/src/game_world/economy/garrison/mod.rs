@@ -50,7 +50,7 @@ impl BuildingKind {
                         | UnitKind::Arbalester
                 ))
     }
-    fn heal_seconds(self) -> u64 {
+    pub(crate) fn heal_seconds(self) -> u64 {
         if self == Self::Castle { 5 } else { 10 }
     }
 }
@@ -285,5 +285,51 @@ impl GameWorld {
                 self.release_destroyed_garrison(id, footprint, occupants, changed);
             }
         }
+    }
+    /// A save puts a sheltered unit back inside `building`: the steps of an
+    /// arrival, without the walk.
+    pub(crate) fn shelter_restored(&mut self, id: EntityId, building: EntityId) -> bool {
+        let Some(kind) = self.building(building).map(|b| b.kind) else {
+            return false;
+        };
+        let Some(&index) = self.lookup.get(&id) else {
+            return false;
+        };
+        let heal_at = self.tick.0 + kind.heal_seconds() * u64::from(self.config.tick_hz);
+        let next_hit_tick = self.units[index].next_hit_tick;
+        let mut unit = self.units[index].state;
+        unit.position = aoe_core::WorldPosition::new(0, 0);
+        unit.previous_position = unit.position;
+        unit.facing = crate::Facing::South;
+        unit.task = if unit.carried.is_some() {
+            UnitTask::Carrying
+        } else {
+            UnitTask::Idle
+        };
+        self.remove_unit(id);
+        self.change_unit_census(unit.player, None, Some(unit.kind), 1);
+        let Some(shelter) = self.economy.buildings.get_mut(&building) else {
+            return false;
+        };
+        let at = shelter.garrison.partition_point(|g| g.unit.id < id);
+        shelter.garrison.insert(
+            at,
+            GarrisonedUnit {
+                unit,
+                next_hit_tick,
+                heal_at,
+                steward: None,
+                vassal: None,
+            },
+        );
+        if unit.kind == UnitKind::Vassal {
+            self.activate_vassal(id, building);
+        }
+        if unit.kind == UnitKind::Steward {
+            self.set_steward_town_center(id, Some(building));
+        }
+        self.economy.occupied_garrisons.insert(building);
+        self.combat.tower_ready.entry(building).or_insert(0);
+        true
     }
 }

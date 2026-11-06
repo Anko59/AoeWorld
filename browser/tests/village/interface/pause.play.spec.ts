@@ -33,3 +33,20 @@ test("pausing from the game menu stops the match clock until resumed", async ({
   await expect(page.locator("#game-paused")).toBeHidden();
   await expect(clock).not.toHaveText(held ?? "", { timeout: 10_000 });
 });
+
+test("the P key pauses and resumes the match", async ({ page }) => {
+  test.setTimeout(55_000);
+  await start(page);
+  await expect(page.locator("#game-clock")).not.toHaveText("00:00", {
+    timeout: 15_000,
+  });
+  await page.locator("#scene").focus();
+  await page.keyboard.press("p");
+  await expect(page.locator("#game-paused")).toBeVisible();
+  await page.keyboard.press("p");
+  await expect(page.locator("#game-paused")).toBeHidden();
+  await page.keyboard.press("Pause");
+  await expect(page.locator("body")).toHaveAttribute("data-paused", "true");
+  await page.keyboard.press("Pause");
+  await expect(page.locator("body")).toHaveAttribute("data-paused", "false");
+});

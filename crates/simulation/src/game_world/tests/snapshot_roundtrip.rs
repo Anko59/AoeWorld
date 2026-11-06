@@ -89,6 +89,45 @@ fn restored_game_matches_the_saved_one_and_plays_on() {
     saved
         .issue_train(PlayerId(0), center, crate::UnitKind::Villager)
         .unwrap();
+    // A Steward sheltered in the Town Center with the owner's settings.
+    let at = saved.unit(villagers[2]).unwrap().position;
+    let steward = saved
+        .spawn_kind(PlayerId(0), crate::UnitKind::Steward, at)
+        .unwrap();
+    saved.issue_garrison(PlayerId(0), steward, center).unwrap();
+    let settings = crate::StewardSettings {
+        weights: [1, 5, 2, 0],
+        cap: 7,
+        training: true,
+    };
+    saved
+        .issue_steward_settings(PlayerId(0), steward, settings)
+        .unwrap();
+    // Two soldiers on a march with a waypoint behind it.
+    let soldiers: Vec<_> = (0..2)
+        .map(|i| {
+            let tile = TileCoord::new(start.x + 6 + i, start.y + 6);
+            saved
+                .spawn_kind(
+                    PlayerId(0),
+                    crate::UnitKind::Militia,
+                    aoe_core::WorldPosition::from_tile_center(tile).unwrap(),
+                )
+                .unwrap()
+        })
+        .collect();
+    let far = aoe_core::WorldPosition::from_tile_center(TileCoord::new(start.x + 40, start.y + 6))
+        .unwrap();
+    saved
+        .issue_formation_move(
+            PlayerId(0),
+            &soldiers,
+            aoe_core::Formation::default(),
+            far,
+            false,
+            false,
+        )
+        .unwrap();
     for _ in 0..600 {
         saved.advance();
     }
@@ -109,6 +148,18 @@ fn restored_game_matches_the_saved_one_and_plays_on() {
     assert_eq!(report.jobs_lost, 0, "{report:?}");
     assert!(report.jobs_resumed >= 2, "{report:?}");
     assert_eq!(restored.next_entity_id, saved.next_entity_id);
+    assert_eq!(restored.steward_settings(steward), Some(settings));
+    assert!(
+        restored.steward_status(steward).is_some(),
+        "the Steward is back at work"
+    );
+    assert!(report.formations >= 1, "{report:?}");
+    assert!(report.managers >= 1, "{report:?}");
+    assert!(restored.units().any(|u| u.id == soldiers[0] && u.moving));
+    let again = restored.snapshot([0; 32]).unwrap();
+    assert_eq!(again.explored, snapshot.explored);
+    assert_eq!(again.animals, snapshot.animals);
+    assert_eq!(again.formations.len(), snapshot.formations.len());
 
     // The restored game is live: workers gather again, training completes.
     let before = restored.player_economy(PlayerId(0)).unwrap().stockpile.wood;
