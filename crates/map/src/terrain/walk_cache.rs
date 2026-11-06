@@ -11,7 +11,9 @@ use aoe_core::TileCoord;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+mod page_memo;
 mod probe;
+use page_memo::PageMemo;
 pub use probe::{NavigationPhase, NavigationProbe, NavigationSpan, NavigationTarget};
 
 const SIDE: usize = CHUNK_TILES as usize;
@@ -94,6 +96,9 @@ pub(super) struct DerivedCaches {
     pub(super) point: std::sync::Mutex<super::point_memo::PointMemo>,
     pub(super) walk: std::sync::Mutex<WalkCache>,
     pub(super) portals: std::sync::Mutex<crate::navigation::PortalCache>,
+    /// Only a navigation preparation worker keeps one: its own few recent
+    /// pages, so per-tile reads skip the shared provider's lock and LRU.
+    pub(super) pages: std::sync::Mutex<Option<PageMemo>>,
 }
 
 impl Default for DerivedCaches {
@@ -106,6 +111,7 @@ impl Default for DerivedCaches {
             point: Default::default(),
             walk: Default::default(),
             portals: Default::default(),
+            pages: Default::default(),
         }
     }
 }
@@ -187,6 +193,9 @@ impl MapChunkGenerator {
         let mut worker = self.clone();
         worker.derived = Default::default();
         worker.river_queries = Default::default();
+        if let Ok(mut pages) = worker.derived.pages.lock() {
+            *pages = Some(PageMemo::default());
+        }
         worker
     }
 

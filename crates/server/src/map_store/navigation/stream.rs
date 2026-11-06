@@ -4,11 +4,28 @@ use super::*;
 use std::{
     io::{BufWriter, Seek, SeekFrom, Write},
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
         mpsc,
     },
     time::Duration,
 };
+
+/// Nanoseconds per build step summed over workers, for `AOE_PREP_TRACE` runs:
+/// composing a chunk, encoding it, and reading a provider page.
+static STEP_NANOS: [AtomicU64; 3] = [const { AtomicU64::new(0) }; 3];
+pub(crate) const PAGE_STEP: usize = 2;
+pub(crate) fn lap(step: usize, since: Instant) {
+    STEP_NANOS[step].fetch_add(since.elapsed().as_nanos() as u64, Ordering::Relaxed);
+}
+pub(super) fn step_report() -> String {
+    let seconds = |step: usize| STEP_NANOS[step].load(Ordering::Relaxed) as f64 / 1e9;
+    format!(
+        "compose={:.1}s encode={:.1}s page_loads={:.1}s",
+        seconds(0),
+        seconds(1),
+        seconds(2)
+    )
+}
 
 pub(super) struct Writer {
     path: PathBuf,
@@ -152,13 +169,20 @@ pub(super) fn build(
                     if at >= side * side || stop.load(Ordering::Acquire) {
                         break;
                     }
+                    let composing = Instant::now();
                     let bytes = worker
                         .prepare_static_navigation_chunk(
                             (at % side) as i32,
                             (at / side) as i32,
                             &|| stop.load(Ordering::Acquire),
                         )
-                        .and_then(|chunk| chunk.encode())
+                        .and_then(|chunk| {
+                            lap(0, composing);
+                            let encoding = Instant::now();
+                            let bytes = chunk.encode();
+                            lap(1, encoding);
+                            bytes
+                        })
                         .map_err(|e| e.to_string());
                     if send.send((at, bytes)).is_err() {
                         break;
@@ -196,6 +220,7 @@ pub(super) fn build(
             }
             if last_progress.elapsed() >= Duration::from_secs(10) {
                 tracing::info!(
+                    trace = step_report(),
                     complete = writer.complete,
                     total = side * side,
                     file_bytes = writer.next,
@@ -208,6 +233,7 @@ pub(super) fn build(
             return Err(error);
         }
         progress(writer.complete as u64, (side * side) as u64);
+        tracing::info!(trace = step_report(), "static navigation build finished");
         writer.finish()
     })
 }

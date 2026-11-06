@@ -157,6 +157,7 @@ impl EnvironmentPageProvider for PageResidency {
             touch(&mut cache.order, key);
             return Ok(page);
         }
+        let loading = std::time::Instant::now();
         let entry = self
             .entries
             .get(&key)
@@ -177,6 +178,7 @@ impl EnvironmentPageProvider for PageResidency {
             return Err(EnvironmentPageError::Corrupt);
         }
         self.verified_page_loads.fetch_add(1, Ordering::Relaxed);
+        super::navigation::stream_lap(super::navigation::PAGE_STEP, loading);
         let page = Arc::new(page);
         let mut cache = self
             .cache

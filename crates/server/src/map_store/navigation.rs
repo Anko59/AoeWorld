@@ -24,6 +24,7 @@ mod shared;
 mod stream;
 use mapped::read;
 pub(crate) use shared::{Usage as SnapshotUsage, usage as snapshot_usage};
+pub(crate) use stream::{PAGE_STEP, lap as stream_lap};
 
 fn chunk_side(generator: &MapChunkGenerator) -> Option<usize> {
     let side = usize::try_from(generator.width_tiles())
@@ -175,10 +176,11 @@ fn prepare_with_progress(
         return Ok(());
     }
     if !path.exists() {
-        let workers = std::thread::available_parallelism()
-            .map_or(1, usize::from)
-            .min(side * side)
-            .min(4);
+        // Half the cores, 4 to 8 (measured on a 63x63-chunk map: 2 workers
+        // 13.4 s, 4: 8.5 s, 6: 6.1 s, 8: 5.5 s); live games share the machine.
+        let workers = (std::thread::available_parallelism().map_or(1, usize::from) / 2)
+            .clamp(4, 8)
+            .min(side * side);
         stream::build(
             generator,
             side,
