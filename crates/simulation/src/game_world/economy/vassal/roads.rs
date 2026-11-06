@@ -214,6 +214,11 @@ impl Network<'_> {
 
     /// A bridge from bank `a` to bank `b`, checked once per pair.
     fn bridgeable(&mut self, a: TileCoord, b: TileCoord) -> bool {
+        // A second span beside a laid one is never wanted: cross by that one.
+        let near = |t: TileCoord, o: TileCoord| (t.x - o.x).abs().max((t.y - o.y).abs()) <= 8;
+        if self.fixed.keys().any(|&f| near(f, a) || near(f, b)) {
+            return false;
+        }
         let w = self.w;
         *self
             .bridge_ok
