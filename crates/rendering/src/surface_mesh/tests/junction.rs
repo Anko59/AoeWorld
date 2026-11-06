@@ -180,7 +180,8 @@ pub(crate) fn diagonal_colour(face: &ProjectedSurfaceTriangle) -> [u8; 4] {
         materials.sort_unstable();
         assert_eq!(
             materials,
-            [4, 7, 8, 9],
+            // Mud (9) is observed as dirt (2): nibble 9 now carries road ground.
+            [2, 4, 7, 8],
             "four observations on the shared diagonal"
         );
         word

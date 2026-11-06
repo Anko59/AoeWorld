@@ -383,9 +383,11 @@ pub(in super::super) fn units(
                 as f32,
         };
         if building.kind.is_gate() {
+            // `facing` 1 mirrors a gate along y; the visibility probe reads
+            // art frames by facing, so it asks about the unmirrored gate.
             if !aoe_rendering::scene_building_visible(
                 &client.art,
-                unit,
+                aoe_rendering::SceneUnit { facing: 0, ..unit },
                 SceneCamera {
                     center: client.camera.center,
                     zoom: client.camera.zoom,
