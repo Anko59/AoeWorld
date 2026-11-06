@@ -36,6 +36,24 @@ def admin_perf(port: int) -> dict:
     return {k: v for k, v in document.items() if k not in ("gameplay_memory", "terrain_cache", "snapshot_store")}
 
 
+def tick_costs(port: int) -> dict:
+    """Server cost per tick from `/match/stats` (microseconds): whole tick and `advance`.
+    In the lockstep arena this is the work per tick, not a wall rate: p95 under
+    50,000 us means the tick would fit the 20 Hz budget on this machine."""
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=120)
+    connection.request("GET", "/match/stats?since=0", headers={"x-aoeworld-admin-token": arena.SECRET})
+    document = json.loads(connection.getresponse().read().decode())
+    records = document.get("records") or document.get("ticks") or (document if isinstance(document, list) else [])
+    total = sorted(r[1] for r in records)
+    sim = sorted(r[2] for r in records)
+    if not total:
+        return {}
+    pick = lambda xs, q: xs[min(len(xs) - 1, int(q * len(xs)))]
+    return {"ticks": len(total), "tick_p50_us": pick(total, 0.5), "tick_p95_us": pick(total, 0.95),
+            "tick_p99_us": pick(total, 0.99), "advance_p50_us": pick(sim, 0.5), "advance_p95_us": pick(sim, 0.95),
+            "orders_per_tick_mean": round(sum(r[4] for r in records) / len(records), 2), "units_last": records[-1][5]}
+
+
 class CostBrain(Brain):
     """A brain that counts its own CPU: thread time inside `decide` (the host runs
     every bot on one thread, so this is that bot's whole AI cost) and its orders."""
@@ -146,6 +164,7 @@ def play_game(binary: Path, root: Path, names: list[str], seed: int, size: int, 
                             before_step=before_step, brain_factory=lambda i: brains.setdefault(i, CostBrain(draft(names[i]), f"{names[i]}{i}")),
                             map_hash=map_hash)
         tracker.sample(admin_match(server.port), result["game_minutes"])
+        ticks = tick_costs(server.port)
         samples.close()
     rows = tracker.finish()
     minutes_played = max(result["game_minutes"], 0.01)
@@ -157,7 +176,7 @@ def play_game(binary: Path, root: Path, names: list[str], seed: int, size: int, 
     for row, bot in zip(rows, result["bots"]):
         row["bot_errors"] = bot["errors"]
         row["attacks_launched"] = bot["attacks_launched"]
-    return dict(perf=perf[-1] if perf else {}, seed=seed, size=size, map_hash=map_hash, game_minutes=result["game_minutes"],
+    return dict(ticks=ticks, perf=perf[-1] if perf else {}, seed=seed, size=size, map_hash=map_hash, game_minutes=result["game_minutes"],
                 wall_seconds=result["wall_seconds"], players=rows)
 
 

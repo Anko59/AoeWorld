@@ -17,6 +17,7 @@ from typing import Any, Optional
 
 from aoeworld import BuildingKind, GeneralState, UnitKind, UnitTask, building_cost, unit_cost
 
+from . import buildorder
 from ..context import Context
 from ..geometry import Tile, clamp_tile, dist
 
@@ -45,12 +46,11 @@ class ManagementManager:
         """A second (third...) Town Center on the way to the map centre."""
         cfg, board = ctx.config, ctx.board
         total = ctx.count(BuildingKind.TOWN_CENTER) + sum(1 for p in board.plans if p.kind == BuildingKind.TOWN_CENTER)
-        if (total >= cfg.town_centers or len(ctx.villagers) < cfg.expand_villagers or not ctx.feudal
+        if (total >= cfg.town_centers or len(ctx.villagers) < cfg.expand_villagers or not ctx.castle
                 or board.cooling("expand", ctx.tick)):
             return
         cost = building_cost(BuildingKind.TOWN_CENTER)
         if not ctx.can_afford(cost):
-            ctx.spend((0, cost[1], 0, cost[3]))  # keep the wood and stone for it
             return
         width, height = ctx.world.map_size
         d = max(1.0, dist(ctx.home, (width // 2, height // 2)))
@@ -166,13 +166,28 @@ class ManagementManager:
                 board.cool(f"train:{b.id}", ctx.tick, 10 * ctx.world.tick_hz)
                 board.bump(f"{str(kind).split('.')[-1].lower()}_trained")
                 return
-            if ctx.config.save_for_management:
-                # Hold back what is already in the stockpile for this price.
-                have = (ctx.economy.food, ctx.economy.wood, ctx.economy.gold, ctx.economy.stone)
-                for i in range(4):
-                    ctx.spent[i] += max(0, min(cost[i], have[i] - ctx.spent[i]))
-                board.bump("saving_for_management")
+            self.save(ctx, kind, cost)
             return
+
+    def save(self, ctx: Context, kind: UnitKind, cost: tuple) -> None:
+        """Save for `kind`: no soldiers, the gold and food shares up. Self-limiting:
+        after `save_seconds` the army spends again for `save_pause_seconds`."""
+        board, cfg = ctx.board, ctx.config
+        key = "save:" + str(kind)
+        if not cfg.save_for_management or board.cooling(key, ctx.tick) or buildorder.imperial_ready(ctx):
+            return  # the Imperial Age price comes first
+        hz = ctx.world.tick_hz
+        since = board.save_since.setdefault(key, ctx.tick)
+        if ctx.tick - since > cfg.save_seconds * hz:
+            del board.save_since[key]
+            board.cool(key, ctx.tick, cfg.save_pause_seconds * hz)
+            return
+        ctx.saving_castle = True
+        board.saving_tick = ctx.tick
+        have = (ctx.economy.food, ctx.economy.wood, ctx.economy.gold, ctx.economy.stone)
+        for i in range(4):
+            ctx.spent[i] += max(0, min(cost[i], have[i] - ctx.spent[i]))
+        board.bump("saving_for_management")
 
     # ----- Generals ----------------------------------------------------------
     def generals(self, ctx: Context) -> None:

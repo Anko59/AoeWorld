@@ -187,9 +187,11 @@ class EconomyManager:
         if buildorder.wants_imperial_food(ctx):
             shares = dict(cfg.imperial_shares)
         # Early on nothing but food and wood matter.
-        cfg_castles = cfg.castles and ctx.castle and ctx.economy.stone < 700 and (
+        if ctx.tick - ctx.board.saving_tick <= 3 * ctx.world.tick_hz:
+            shares = {"FOOD": 0.45, "WOOD": 0.25, "GOLD": 0.30, "STONE": 0.0}
+        cfg_castles = cfg.castles and ctx.feudal and ctx.economy.stone < 700 and (
             ctx.count(BuildingKind.CASTLE) + sum(1 for p in ctx.board.plans if p.kind == BuildingKind.CASTLE) < cfg.castles)
-        if cfg_castles or (cfg.town_centers > 1 and ctx.feudal and ctx.economy.stone < 150):
+        if cfg_castles or (cfg.town_centers > 1 and ctx.castle and ctx.economy.stone < 150):
             take = cfg.castle_stone_share
             shares["STONE"] = take
             shares["FOOD"] = max(0.2, shares["FOOD"] - take * 0.5)

@@ -23,16 +23,43 @@ subtracts cost above half the limits (600 orders/min, 25 ms/decision) and 300 pa
 The server's `/admin/perf` is empty in the arena (no tick clock), so tick rate per draft
 is not measured here.
 
-## Latest run (seed 2, flat 400 tiles, 6 bots, 29.9 game minutes, stopped by the 1000 s wall limit)
+## Round 2: release server, real map package, two games
 
-| draft | age | Feudal / Castle min | peak pop | villagers | army | kills / lost | orders/min | CPU ms/dec | adjusted |
-|---|---|---|---|---|---|---|---|---|---|
-| boom | Castle | 13 / 23 | 100 | 55 | 45 | 0 / 1 | 23 | 11.4 | 649 |
-| generals | Castle | 12 / 22 | 95 | 42 | 53 | 0 / 0 | 39 | 21.9 | 607 |
-| steward_scaler | Castle | 13 / 24 | 94 | 52 | 42 | 0 / 0 | 35 | 12.0 | 644 |
-| baseline | Castle | 12 / 21 | 90 | 33 | 58 | 1 / 6 | 53 | 52.6 | 175 |
-| balanced | Castle | 13 / 23 | 80 | 53 | 27 | 0 / 0 | 22 | 11.3 | 630 |
-| fast_castle | Castle | 13 / 22 | 62 | 40 | 22 | 0 / 2 | 25 | 11.0 | 610 |
+Map package `9b2864a2...` (938 tiles, 30 km of real terrain), 6 bots, drafts rotated over slots
+by seed. Seed 3 ran 36.2 game minutes (1094 s wall), seed 4 39.9 (994 s); both stopped by the wall
+limit, not by the game. The machine was loaded (load average 10 to 22), so CPU figures are noisy.
+Seed 3 ran before the "saving for management units" change, seed 4 after it.
 
-No draft reached Imperial and no Steward, Vassal or General was fielded within 30 game
-minutes (Castle Age arrives at minute 21 to 24); one seed only, so differences are within noise.
+| draft | games | wins | mean score | Imperial (games) | first Imperial min | mean peak pop | mean kills | mean losses | orders/min | CPU ms/decision | slowest decision ms | adjusted score |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| generals | 2 | 1 | 674 | 0 | - | 126 | 0.0 | 1.5 | 26 | 25.1 | 1953 | 473 |
+| steward_scaler | 2 | 0 | 646 | 0 | - | 96 | 0.0 | 0.5 | 25 | 12.8 | 1014 | 638 |
+| fast_castle | 2 | 0 | 632 | 0 | - | 82 | 0.0 | 0.5 | 48 | 27.8 | 884 | 420 |
+| baseline | 2 | 1 | 532 | 0 | - | 82 | 0.0 | 0.5 | 32 | 58.0 | 2909 | 200 |
+| balanced | 2 | 0 | 508 | 0 | - | 61 | 0.0 | 2.5 | 26 | 30.6 | 1527 | 286 |
+| boom | 2 | 0 | 505 | 0 | - | 56 | 0.0 | 1.0 | 18 | 9.9 | 851 | 505 |
+
+
+Per-game facts: Feudal at minute 12 to 14 in both games; Castle at minute 20 to 31 (seed 4: three of
+six starts, including `baseline`, never left Feudal in 40 minutes, so the start, not the draft, stalled them).
+Fielded in play: one General (`generals` draft, both seeds, minute about 28 to 33). No Steward and no Vassal was
+ever trained: food, not the code path, is short (1,000 food per Steward). No draft reached Imperial. The Castle target
+of minute 15 to 16 was not met: the best trace is Castle clicked at minute 19.7 (arrives about 22), because the start
+(5 villagers, 10 food) gives 20 villagers at minute 8.
+
+## Server tick cost, real time (release server, 6 bots of one draft, 330 s, 40 extra start villagers)
+
+| draft | ticks/s | tick p50 / p95 / p99 ms | missed ticks | orders |
+|---|---|---|---|---|
+| generals | 19.98 | 2.4 / 5.7 / 10.6 | 6 | 1,919 |
+| baseline | 19.97 | 2.7 / 7.0 / 11.2 | 10 | 1,823 |
+
+Both are early-game (Dark and Feudal Age); neither shows a draft effect on the server, and nothing here says anything
+about late-game armies. The arena (`tournament`) has no tick clock, so its tick records are only per-tick work.
+
+## Verdict
+
+The default stays `baseline`: two games on one map, with start-position stalls that hit baseline in one of them, do
+not establish that any draft beats it on strength and cost. On cost the drafts are cheaper (mean 10 to 31 ms per
+decision against baseline's 58 and similar orders per minute). `generals` was the strongest in raw score,
+`steward_scaler` the best adjusted for cost.

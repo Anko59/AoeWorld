@@ -142,6 +142,9 @@ class Config:
     predator_soldier_group: int = 2
     predator_worker_group: int = 4
 
+    #: Stop army spending while the Castle Age price is saved for.
+    castle_first: bool = False
+
     # --- management units (docs/economy/steward.md, docs/gameplay/general.md) --
     #: Castles to raise (650 stone each) once in Castle Age; Vassals and
     #: Generals are trained there.
@@ -163,6 +166,8 @@ class Config:
     generals: int = 0
     #: Save the next management unit's price ahead of army spending.
     save_for_management: bool = True
+    save_seconds: int = 240
+    save_pause_seconds: int = 180
     #: General unit-mix sliders: infantry, archers, heavy cavalry, siege, scouts.
     general_mix: tuple = (35, 30, 20, 10, 5)
     general_train: bool = True

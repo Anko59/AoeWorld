@@ -13,6 +13,17 @@ from typing import Callable
 from ..config import Config
 
 
+#: Feudal shares of the drafts: food first, little gold until the Castle is bought.
+FEUDAL_SHARES = {"FOOD": 0.45, "WOOD": 0.42, "GOLD": 0.13, "STONE": 0.0}
+
+
+def quick(config: Config) -> Config:
+    """The Castle-first timing every draft shares: Feudal click at 19 villagers,
+    Castle price saved from 30, soldiers wait for it."""
+    return replace(config, castle_villagers=min(config.castle_villagers, 28), feudal_villagers=19, castle_first=True, castle_army_min=0,
+                   feudal_shares=dict(FEUDAL_SHARES))
+
+
 def baseline() -> Config:
     """The long-standing default: a standard boom into a Feudal army."""
     return Config()
@@ -22,7 +33,7 @@ def boom() -> Config:
     """Boom into Imperial: villagers without pause, a second Town Center, one
     Steward and a Castle with a Vassal to hold the base; the army waits."""
     return replace(
-        Config(), name="boom", max_villagers=110, feudal_villagers=24, castle_villagers=36,
+        Config(), name="boom", max_villagers=110, feudal_villagers=24, castle_villagers=34,
         castle_army_min=8, imperial_villagers=60, imperial_army_min=12, army_min_villagers=30,
         attack_army_size=40, town_centers=2, expand_villagers=34, castles=1, vassals=1, stewards=1,
         steward_min_villagers=30, town_center_queue=3,
@@ -33,7 +44,7 @@ def fast_castle() -> Config:
     """Fast Castle with Vassals: early ages, two Castles each with a Vassal that
     raises towers, a barracks and walls while the economy keeps growing."""
     return replace(
-        Config(), name="fast_castle", max_villagers=80, feudal_villagers=20, castle_villagers=22,
+        Config(), name="fast_castle", max_villagers=80, feudal_villagers=20, castle_villagers=30,
         castle_army_min=4, imperial_villagers=40, imperial_army_min=10, castles=2, vassals=2,
         stewards=0, attack_army_size=24, castle_knight_weight=2.0,
     )
@@ -43,7 +54,7 @@ def generals() -> Config:
     """Military pressure with Generals: a Castle early, two Generals who buy a
     cavalry-heavy army themselves and march it against the nearest enemy."""
     return replace(
-        Config(), name="generals", max_villagers=70, castle_villagers=26, castle_army_min=8,
+        Config(), name="generals", max_villagers=70, castle_villagers=30, castle_army_min=8,
         imperial_villagers=40, imperial_army_min=24, castles=1, vassals=0, generals=2,
         general_attack_army=30, general_retreat_army=10, general_mix=(30, 25, 35, 10, 0),
         castle_knight_weight=3.0, attack_army_size=30, max_barracks=3,
@@ -73,8 +84,9 @@ def balanced() -> Config:
 
 
 DRAFTS: dict[str, Callable[[], Config]] = {
-    "baseline": baseline, "boom": boom, "fast_castle": fast_castle, "generals": generals,
-    "steward_scaler": steward_scaler, "balanced": balanced,
+    "baseline": baseline, "boom": lambda: quick(boom()), "fast_castle": lambda: quick(fast_castle()),
+    "generals": lambda: quick(generals()), "steward_scaler": lambda: quick(steward_scaler()),
+    "balanced": lambda: quick(balanced()),
 }
 
 

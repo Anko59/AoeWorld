@@ -80,7 +80,7 @@ class ArenaServer:
             AOE_MATCH_TOKEN=SECRET,
             AOE_TICK_HZ=str(TICK_HZ),
             AOE_ARENA="1",
-            AOE_MAP_PACKAGE_DIRECTORY=self.packages.name,
+            AOE_MAP_PACKAGE_DIRECTORY=os.environ.get("AOE_ARENA_PACKAGES") or self.packages.name,
         )
         self.process = subprocess.Popen(
             [str(self.binary)], cwd=self.root, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL

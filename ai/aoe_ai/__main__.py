@@ -88,6 +88,15 @@ def main(argv: list[str] | None = None) -> int:
     tour.add_argument("--label", default="run")
     tour.add_argument("--map-hash", default=None)
 
+    real = sub.add_parser("realtime", help="real-time run of one draft; prints the server's tick cost")
+    real.add_argument("--server-bin", required=True)
+    real.add_argument("--draft", default="baseline")
+    real.add_argument("--bots", type=int, default=6)
+    real.add_argument("--seconds", type=float, default=480.0)
+    real.add_argument("--map-hash", required=True)
+    real.add_argument("--packages", required=True, help="the map package directory")
+    real.add_argument("--villagers", type=int, default=0)
+
     join = sub.add_parser("join", help="play one existing slot")
     join.add_argument("--url", default="http://127.0.0.1:8080")
     join.add_argument("--token", required=True, help="the slot's 48-digit token")
@@ -107,6 +116,15 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    if args.command == "realtime":
+        from pathlib import Path
+
+        from .realtime import run
+
+        root = Path(__file__).resolve().parents[2]
+        print(json.dumps(run(Path(args.server_bin), root, args.draft, args.bots, args.seconds, args.map_hash,
+                             args.packages, args.villagers), indent=1))
+        return 0
     if args.command == "tournament":
         from pathlib import Path
 
