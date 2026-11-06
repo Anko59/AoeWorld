@@ -13,10 +13,23 @@ impl GameWorld {
         queued: bool,
         attack_move: bool,
     ) -> Result<(), EconomyError> {
+        // Every refusal counts: members, destination and the route's issue.
+        self.formation_move(player, ids, form, destination, queued, attack_move)
+            .inspect_err(|_| self.route_metrics.attribution.group_orders_rejected += 1)
+    }
+
+    #[track_caller]
+    fn formation_move(
+        &mut self,
+        player: PlayerId,
+        ids: &[EntityId],
+        form: Formation,
+        destination: WorldPosition,
+        queued: bool,
+        attack_move: bool,
+    ) -> Result<(), EconomyError> {
         let named = ids.len();
-        let (ids, centroid) = self.formation_members(player, ids).inspect_err(|_| {
-            self.route_metrics.attribution.group_orders_rejected += 1;
-        })?;
+        let (ids, centroid) = self.formation_members(player, ids)?;
         self.route_metrics.attribution.group_members_left_out += (named - ids.len()) as u64;
         if !self.config.valid_map_position(destination) {
             return Err(GameWorldError::InvalidPosition.into());
@@ -91,13 +104,6 @@ impl GameWorld {
             heading
         };
         let facing = facing_for(i64::from(heading.x), i64::from(heading.y), Facing::South);
-        let positions = ids
-            .iter()
-            .map(|id| {
-                let unit = self.units[self.lookup[id]].state;
-                (unit.kind, unit.position)
-            })
-            .collect::<Vec<_>>();
         let (diameter, step) = ids.iter().fold((0, 0), |(diameter, step), id| {
             let unit = self.units[self.lookup[id]].state;
             let (speed, denominator) = self.movement_speed(unit.kind, unit.player);
@@ -145,7 +151,7 @@ impl GameWorld {
             speed: (0, 1),
             pace: (0, 1),
             settled: false,
-            direct: self.direct_order(origin, destination, &positions),
+            direct: false,
             gap,
             narrow_gap: diameter + step + 16,
             slots_tight: false,
@@ -175,6 +181,7 @@ impl GameWorld {
         group.speed = self.group_speed(&group).0;
         group.pace = group.speed;
         self.assign_group_slots(&mut group);
+        group.direct = self.direct_order(origin, destination, &group);
         self.formations.insert(leader, group);
         self.install_formation_route(
             index,
@@ -280,15 +287,6 @@ impl GameWorld {
                     i64::from(group.heading.y),
                     group.facing,
                 );
-                let positions = group
-                    .members
-                    .iter()
-                    .map(|m| {
-                        let unit = self.units[self.lookup[&m.id]].state;
-                        (unit.kind, unit.position)
-                    })
-                    .collect::<Vec<_>>();
-                group.direct = self.direct_order(group.anchor, destination, &positions);
                 group.path = path::Path::new(
                     std::iter::once(group.anchor)
                         .chain(std::iter::once(waypoint))
@@ -304,6 +302,7 @@ impl GameWorld {
                 group.taut_end = None;
                 self.reset_group_detours(group);
                 self.assign_group_slots(group);
+                group.direct = self.direct_order(group.anchor, destination, group);
                 group.settled = false;
                 self.install_formation_route(
                     index,
@@ -322,28 +321,39 @@ impl GameWorld {
 }
 
 /// Members of a direct order steer straight at their slots with no route of
-/// their own, so it is only direct when every straight line is clear.
+/// their own, so it is only direct when every straight line is clear: each
+/// member's line to its assigned slot, and to the destination centre.
 const DIRECT_LINE_TILES: i32 = 64;
 
 impl GameWorld {
+    /// Called once the group's slots are assigned (`member.goal`).
     fn direct_order(
         &self,
         origin: WorldPosition,
         destination: WorldPosition,
-        members: &[(UnitKind, WorldPosition)],
+        group: &Group,
     ) -> bool {
+        let members = group
+            .members
+            .iter()
+            .map(|m| {
+                let unit = self.units[self.lookup[&m.id]].state;
+                (unit.kind, unit.position, m.goal)
+            })
+            .collect::<Vec<_>>();
         let travel = path::distance(origin, destination);
         let (mut min, mut max) = (origin, origin);
-        for &(_, p) in members {
+        for &(_, p, _) in &members {
             min.x = min.x.min(p.x);
             min.y = min.y.min(p.y);
             max.x = max.x.max(p.x);
             max.y = max.y.max(p.y);
         }
         (travel < 20 * 1024 || path::distance(min, max) > travel)
-            && members
-                .iter()
-                .all(|&(kind, from)| self.straight_line_clear(kind, from, destination))
+            && members.iter().all(|&(kind, from, slot)| {
+                self.straight_line_clear(kind, from, slot)
+                    && self.straight_line_clear(kind, from, destination)
+            })
     }
 
     /// Static terrain, trees and buildings along the half-tile steps of a

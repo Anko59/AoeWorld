@@ -46,6 +46,19 @@ fn an_army_order_naming_a_fallen_member_moves_the_living() {
     }
 }
 
+/// A refusal after the members are validated is counted too.
+#[test]
+fn an_army_order_to_a_blocked_destination_is_counted_as_rejected() {
+    let mut w = wide_world();
+    let ids = army(&mut w, 2);
+    let outside = WorldPosition::new(-4_096, -4_096);
+    assert!(
+        w.issue_formation_move(PlayerId(0), &ids, Formation::Line, outside, false, false)
+            .is_err()
+    );
+    assert_eq!(w.route_metrics.attribution.group_orders_rejected, 1);
+}
+
 #[test]
 fn an_army_order_of_only_fallen_members_is_refused() {
     let mut w = wide_world();
@@ -64,4 +77,5 @@ fn an_army_order_of_only_fallen_members_is_refused() {
         ),
         Err(EconomyError::UnknownEntity)
     );
+    assert_eq!(w.route_metrics.attribution.group_orders_rejected, 1);
 }
