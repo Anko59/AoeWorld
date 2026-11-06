@@ -371,9 +371,6 @@ pub(in super::super) fn units(
                 crate::building_ui::wall_frame(building.footprint.min, |t| {
                     walls.contains(&(t.x, t.y, building.kind))
                 })
-            } else if building.kind.is_gate() {
-                // 1: the gate runs along y, so the renderer mirrors its one art.
-                u8::from(building.footprint.height() > building.footprint.width())
             } else {
                 0
             },
@@ -383,11 +380,9 @@ pub(in super::super) fn units(
                 as f32,
         };
         if building.kind.is_gate() {
-            // `facing` 1 mirrors a gate along y; the visibility probe reads
-            // art frames by facing, so it asks about the unmirrored gate.
             if !aoe_rendering::scene_building_visible(
                 &client.art,
-                aoe_rendering::SceneUnit { facing: 0, ..unit },
+                unit,
                 SceneCamera {
                     center: client.camera.center,
                     zoom: client.camera.zoom,
