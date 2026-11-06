@@ -75,7 +75,7 @@ for (const viewport of [
     await expect(page.locator("#skirmish-estimate")).toContainText(
       "480 km of real landscape per side, compressed to 16 km in game",
     );
-    const panel = await page.locator(".walnut-panel").boundingBox();
+    const panel = await page.locator("#skirmish-form").boundingBox();
     if (!panel) throw new Error("setup panel is missing");
     expect(panel.y).toBeGreaterThanOrEqual(0);
     expect(panel.y + panel.height).toBeLessThanOrEqual(viewport.height);

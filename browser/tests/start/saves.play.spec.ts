@@ -38,10 +38,18 @@ test("a saved game is listed on the main menu and resumes where it was", async (
 
   await page.getByRole("button", { name: "Load Game" }).click();
   await expect(page.getByRole("heading", { name: "Load Game" })).toBeVisible();
+  const box = await page.locator(".saves-panel").boundingBox();
+  const size = page.viewportSize();
+  if (!box || !size) throw new Error("saves panel is missing");
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(size.height);
+  expect(box.x + box.width).toBeLessThanOrEqual(size.width);
   const row = page.locator("#saves-list li", { hasText: "E2E save" });
   await expect(row).toBeVisible();
   await row.getByRole("button", { name: "Resume E2E save" }).click();
-  await expect(page.locator("#start-sequence")).toBeHidden({ timeout: 120_000 });
+  await expect(page.locator("#start-sequence")).toBeHidden({
+    timeout: 120_000,
+  });
   await expect(page.locator("#connection")).toHaveText("connected");
   await expect(page.locator("#minimap")).toHaveAttribute("data-map-hash", hash);
   await expect(page.locator("#population")).toHaveText(population ?? "");
