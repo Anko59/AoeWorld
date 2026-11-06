@@ -134,6 +134,11 @@ impl GameplayService {
         }
     }
 
+    /// Content hash of the map this match plays on.
+    pub(crate) fn map_hash(&self) -> Option<[u8; 32]> {
+        self.map_content_hash
+    }
+
     /// The seats of this service with their tokens, for the match creator.
     pub async fn slot_infos(&self) -> Vec<SlotInfo> {
         self.slots

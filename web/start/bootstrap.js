@@ -4,6 +4,7 @@ import { initNavigation } from '/navigation.js';
 import { initStartSequence } from '/start/sequence.js';
 import { initMapJobs } from '/map-jobs.js';
 import { initSkirmish } from '/start/skirmish.js';
+import { initSaves } from '/start/saves.js';
 import { initDevTools } from '/dev/tools.js';
 initDevTools();
 initInterface();
@@ -24,6 +25,7 @@ const skirmish = initSkirmish({ readJson, tokenHeaders,
 const menu = sequence.menu;
 sequence.menu = () => { skirmish.stop(); menu(); };
 window.aoeStart = sequence;
+initSaves({ readJson, tokenHeaders, sequence, skirmish });
 // A reload during a running skirmish resumes it (web/start/README.md).
 skirmish.status().then(value => { sequence.aiAvailable(value.ai_available, value.max_opponents); sequence.resume(value); })
   .catch(() => { sequence.aiAvailable(false); sequence.resume(null); });

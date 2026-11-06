@@ -1,5 +1,5 @@
 //! AoE II DE base values. Rates and speed are hundredths per game second.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
 pub enum AnimalKind {
     Sheep,

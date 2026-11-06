@@ -60,6 +60,14 @@ pub(crate) struct Gatherers {
 }
 
 impl Gatherers {
+    /// Every working unit with its resource node and, for farmers, the farm.
+    pub(crate) fn assignments(&self) -> Vec<(EntityId, u64, Option<EntityId>)> {
+        self.tasks
+            .iter()
+            .map(|(id, task)| (*id, task.node, task.farm))
+            .collect()
+    }
+
     /// Sparse words bound memory by live jobs, even for ever-increasing ids.
     pub(crate) fn contains_key(&self, id: &EntityId) -> bool {
         self.members

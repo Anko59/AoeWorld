@@ -34,6 +34,7 @@ export function views() {
         ${logo}<p class="eyebrow menu-subtitle">A WORLD TO DISCOVER</p>${rule}
         <nav aria-label="Game modes">
           <button id="single-player" class="gold-button primary" type="button"><span aria-hidden="true">⚔</span> Single Player <span aria-hidden="true">›</span></button>
+          <button id="load-game" class="gold-button" type="button"><span aria-hidden="true">⚑</span> Load Game <span aria-hidden="true">›</span></button>
           ${['Multiplayer', 'Campaign', 'Settings'].map(name => `<button class="gold-button" type="button" disabled>${name}<small>Coming later</small></button>`).join('')}
         </nav>
         ${rule}<p class="menu-note">Choose your colours.<br>Chart your corner of the world.</p>
@@ -62,6 +63,12 @@ export function views() {
         <div class="setup-actions"><button id="setup-back" class="quiet-button" type="button">‹ Back to menu</button><p id="setup-status" role="status">Connecting to your world…</p><button id="start-game" class="gold-button primary" type="submit" disabled>Start Game <span aria-hidden="true">›</span></button></div>
       </form>
       <footer class="start-footer"><span>CHART A REAL PLACE. BEGIN YOUR STORY.</span><span>AOEWORLD</span></footer>
+    </section>
+    <section id="load-menu" class="entry-screen" aria-labelledby="load-title" hidden>
+      <header class="setup-heading">${logo}<span class="eyebrow">SINGLE PLAYER · SAVED GAMES</span><h1 id="load-title">Load Game</h1></header>
+      <div class="walnut-panel saves-panel"><p id="saves-status" role="status"></p><ul id="saves-list"></ul>
+        <div class="setup-actions"><button id="load-back" class="quiet-button" type="button">‹ Back to menu</button></div></div>
+      <footer class="start-footer"><span>RESUME WHERE YOU LEFT OFF.</span><span>AOEWORLD</span></footer>
     </section>
     <section id="loading-screen" class="entry-screen" aria-labelledby="loading-title" hidden>
       <div id="loading-art" class="loading-art" aria-hidden="true" hidden><div class="loading-art-slide"></div><div class="loading-art-slide"></div><span class="loading-art-caption"></span></div>

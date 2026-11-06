@@ -4,7 +4,18 @@
 use super::super::{BuildingKind, Stockpile};
 
 /// The player's age, used by building and technology requirements.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    Eq,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 #[repr(u8)]
 pub enum Age {
     #[default]
@@ -15,7 +26,7 @@ pub enum Age {
 }
 
 /// Canonical order; a technology's bit in `researched` is `1 << tech as u8`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
 pub enum Tech {
     Loom,

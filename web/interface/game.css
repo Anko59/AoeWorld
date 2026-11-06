@@ -291,3 +291,6 @@ html:has(#scene[data-order-mode=build]) #strategic-tokens button { pointer-event
 #game-paused { position:absolute; top:84px; left:50%; transform:translateX(-50%); z-index:20; display:flex; gap:14px; align-items:center; padding:10px 18px; color:var(--ink); border:2px ridge #b19a69; background:linear-gradient(135deg,#424735,#242c23); box-shadow:0 8px 40px #000a; }
 #game-paused[hidden] { display:none; }
 #game-paused strong { font:20px Georgia,serif; letter-spacing:.06em; }
+#save-form { margin:9px 0; display:grid; gap:7px; }
+#save-form input { padding:8px; color:var(--ink); background:#1a2019; border:1px solid #8c8558; font:inherit; }
+#save-status { font-size:11px; color:var(--muted); min-height:1.2em; margin:0; }

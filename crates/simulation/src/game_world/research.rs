@@ -21,7 +21,7 @@ pub(crate) use effects::{carry_capacity, villager_speed_percent};
 pub use table::{Age, FEUDAL_BUILDINGS, TECH_RULES, Tech, TechEffect, TechRequirement, TechRules};
 
 /// The technology a building is researching, in game ticks.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ResearchEntry {
     pub tech: Tech,
     pub progress_ticks: u64,

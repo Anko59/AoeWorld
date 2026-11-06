@@ -64,7 +64,7 @@ impl MarketRules {
 }
 
 /// The player's commodity prices, in gold per 100 units.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct MarketPrices {
     pub wood: u16,
     pub food: u16,

@@ -18,12 +18,12 @@ export function initSkirmish({ readJson, tokenHeaders, onStatus }) {
     body: body === undefined ? undefined : JSON.stringify(body),
   }));
   // Resolves to an activation once every AI player is in, null if cancelled.
-  async function run(hash, opponents) {
+  async function run(hash, opponents, save) {
     running = true;
     cancelled = false;
     starter = tokenHeaders();
     try {
-      const started = await post('/skirmish', { map_hash: hash, opponents });
+      const started = await post('/skirmish', save ? { save } : { map_hash: hash, opponents });
       for (let value = started; ; value = await status()) {
         if (value.id !== started.id) throw new Error('Another game was started on this server.');
         onStatus?.(value);

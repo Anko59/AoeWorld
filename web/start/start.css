@@ -157,3 +157,11 @@ body[data-start-state="game"] #playground { visibility: visible; }
 @media (prefers-reduced-motion: reduce) {
   #start-sequence *, #start-sequence *::before, #start-sequence *::after { animation: none !important; transition: none !important; }
 }
+.saves-panel { width: min(100%, 760px); }
+#saves-status { min-height: 1.4em; color: #dac5a1; }
+#saves-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; max-height: 52vh; overflow: auto; }
+#saves-list li { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 14px; padding: 11px 14px; border: 1px solid #7f5e39; background: #1c130dcc; }
+#saves-list li span { display: grid; gap: 3px; min-width: 0; }
+#saves-list li strong { font: 18px Georgia, serif; color: #f4e3c3; overflow-wrap: anywhere; }
+#saves-list li small { color: #bba684; }
+@media (max-width: 600px) { #saves-list li { grid-template-columns: 1fr; } }

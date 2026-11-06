@@ -62,7 +62,7 @@ pub use market::{MARKET_RULES, MarketPrices};
 /// Villagers one build order may assign to construction.
 pub const MAX_BUILD_GROUP: usize = 32;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
 pub enum UnitKind {
     Villager,
@@ -125,7 +125,9 @@ impl UnitKind {
         )
     }
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
 #[repr(u8)]
 pub enum BuildingKind {
     TownCenter,
@@ -153,13 +155,13 @@ pub enum BuildingKind {
     StoneGate,
     Road,
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
 pub enum ConstructionState {
     UnderConstruction,
     Complete,
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
 pub enum UnitTask {
     Idle,
@@ -179,13 +181,13 @@ pub enum UnitTask {
     /// Constructing a farm by sowing seed.
     Seeding,
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CarriedResource {
     pub kind: ResourceKind,
     pub amount: u16,
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Stockpile {
     pub food: u32,
     pub wood: u32,
@@ -203,7 +205,7 @@ impl Stockpile {
         *amount = amount.saturating_add(u32::from(load.amount));
     }
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PlayerEconomy {
     pub player: PlayerId,
     pub stockpile: Stockpile,
@@ -216,7 +218,7 @@ pub struct PlayerEconomy {
     /// The player's Market commodity prices, in gold per 100 units.
     pub market_prices: MarketPrices,
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TrainingEntry {
     pub kind: UnitKind,
     pub progress_ticks: u64,
