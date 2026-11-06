@@ -3,7 +3,9 @@ use std::sync::Arc;
 
 const PAGE_MEMO_PAGES: usize = 32;
 
-/// Immutable pages recently read through one generator's provider.
+/// The last `PAGE_MEMO_PAGES` immutable pages one generator loaded through its
+/// provider, replaced first in, first out: a navigation worker sweeps chunks in
+/// order, so the oldest load is the one it is done with.
 #[derive(Debug, Default)]
 pub(in crate::terrain) struct PageMemo {
     entries: Vec<(crate::EnvironmentPageKey, Arc<crate::EnvironmentPage>)>,

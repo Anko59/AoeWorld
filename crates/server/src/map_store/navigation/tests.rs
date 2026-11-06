@@ -209,7 +209,9 @@ fn bench_static_navigation_build() {
     let stored = navigation_path(&directory, package.content_hash);
     if let Ok(stored) = fs::read(&stored) {
         let rebuilt = fs::read(&built).unwrap();
-        // Chunks land in the file in arrival order, so compare chunk by chunk.
+        // Chunks land in the file in arrival order, so offsets differ between
+        // any two builds; compare each chunk's checksum and bytes, not where
+        // it sits.
         let chunk = |file: &[u8], at: usize| {
             let record = &file[HEADER_BYTES + at * INDEX_RECORD_BYTES..][..INDEX_RECORD_BYTES];
             let offset = u64::from_le_bytes(record[..8].try_into().unwrap()) as usize;
