@@ -13,6 +13,8 @@ mod bridge_queue_tests;
 mod head_on;
 #[path = "bridges/off_lane.rs"]
 mod off_lane;
+#[path = "bridges/snapshot.rs"]
+mod snapshot;
 
 fn setup_axis(horizontal: bool) -> (GameWorld, EntityId) {
     setup_world(river_width(horizontal, 30..34), horizontal)

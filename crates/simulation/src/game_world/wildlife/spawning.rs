@@ -3,6 +3,67 @@ use crate::{EconomyError, GameWorld};
 use aoe_core::{EntityId, TileCoord, WorldPosition};
 
 impl GameWorld {
+    /// Living animals as a save keeps them (carcasses are not kept).
+    pub(crate) fn animal_records(&self) -> Vec<crate::game_world::snapshot::AnimalRecord> {
+        self.wildlife
+            .animals
+            .values()
+            .filter(|a| a.state.hp > 0 && a.state.death_tick.is_none())
+            .map(|a| crate::game_world::snapshot::AnimalRecord {
+                id: a.state.id,
+                kind: a.state.kind,
+                owner: a.state.owner,
+                hp: a.state.hp,
+                position: a.state.position,
+                food_remaining: a.state.food_remaining,
+                facing: a.state.facing,
+                home: a.home,
+            })
+            .collect()
+    }
+
+    /// Puts a saved animal back at its own identity (the next allocation).
+    pub(crate) fn restore_animal(
+        &mut self,
+        record: &crate::game_world::snapshot::AnimalRecord,
+    ) -> bool {
+        // The saved game held these animals already: its limit is not applied again.
+        let limit = std::mem::replace(&mut self.economy.limits.animals, usize::MAX);
+        let mut spawned = self.spawn_animal(record.kind, record.position);
+        // A foundation laid over it since: the nearest open tile, ring by ring.
+        let home = record.position.tile_floor();
+        for radius in 1..=12_i32 {
+            if spawned.is_ok() {
+                break;
+            }
+            for dy in -radius..=radius {
+                for dx in -radius..=radius {
+                    if spawned.is_ok() || (dx.abs() != radius && dy.abs() != radius) {
+                        continue;
+                    }
+                    let tile = aoe_core::TileCoord::new(home.x + dx, home.y + dy);
+                    if let Ok(at) = WorldPosition::from_tile_center(tile) {
+                        spawned = self.spawn_animal(record.kind, at);
+                    }
+                }
+            }
+        }
+        self.economy.limits.animals = limit;
+        let Ok(id) = spawned else {
+            return false;
+        };
+        if id != record.id {
+            return false;
+        }
+        if let Some(animal) = self.wildlife.animals.get_mut(&id) {
+            animal.state.owner = record.owner;
+            animal.state.hp = record.hp;
+            animal.state.food_remaining = record.food_remaining;
+            animal.state.facing = record.facing;
+            animal.home = record.home;
+        }
+        true
+    }
     pub fn spawn_animal(
         &mut self,
         kind: AnimalKind,

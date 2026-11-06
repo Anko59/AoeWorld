@@ -51,7 +51,7 @@ pub const CORPSE_SECONDS: u32 = 30;
 pub const REPATH_SECONDS: u32 = 1;
 
 /// The most recent damage a unit or building took.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct HitRecord {
     pub attacker: EntityId,
     pub tick: Tick,

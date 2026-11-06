@@ -292,3 +292,46 @@ fn a_stone_fort_lets_its_owner_through_the_gate_and_keeps_the_enemy_out() {
     let enemy_at = world.unit(enemy).unwrap().position.tile_floor();
     assert!(enemy_at.y >= 108, "the enemy stayed outside: {enemy_at:?}");
 }
+
+#[test]
+fn an_open_gate_and_the_unit_standing_on_it_survive_a_save() {
+    let (mut world, _, _) = village();
+    set_stock(&mut world, 1000, 1000, 0, 1000);
+    let worker = villager_at(&mut world, 99, 100);
+    let id = world
+        .issue_build(
+            PlayerId(0),
+            &[worker],
+            BuildingKind::PalisadeGate,
+            TileCoord::new(100, 100),
+            false,
+        )
+        .unwrap();
+    finish(&mut world, id, 700);
+    world.advance();
+    let on_gate = WorldPosition::from_tile_center(TileCoord::new(101, 100)).unwrap();
+    world.issue_move(worker, on_gate).unwrap();
+    advance(&mut world, 200);
+    assert_eq!(
+        world.unit(worker).unwrap().position.tile_floor(),
+        TileCoord::new(101, 100)
+    );
+    assert!(world.building(id).unwrap().gate_open);
+    let (restored, report) =
+        super::super::snapshot_roundtrip::roundtrip(&world, super::super::world());
+    assert_eq!(
+        (report.units_lost, report.buildings_lost),
+        (0, 0),
+        "{report:?}"
+    );
+    assert!(restored.building(id).unwrap().gate_open);
+    assert!(
+        restored.tile_passable(TileCoord::new(101, 100)),
+        "the open gate is walkable"
+    );
+    assert_eq!(
+        restored.unit(worker).unwrap().position.tile_floor(),
+        TileCoord::new(101, 100),
+        "the unit on the gate is still there"
+    );
+}

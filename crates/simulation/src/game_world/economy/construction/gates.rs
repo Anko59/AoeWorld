@@ -6,6 +6,33 @@ use crate::{GameWorld, Terrain};
 use aoe_core::{TileCoord, TileRect};
 
 impl GameWorld {
+    /// A save puts a completed gate back: ground opens as it does on the first
+    /// tick, and an open gate also frees its collision tiles.
+    pub(crate) fn restore_gate(&mut self, id: aoe_core::EntityId, open: bool) {
+        let Some(rect) = self.building(id).map(|b| b.footprint) else {
+            return;
+        };
+        if let Terrain::Map { overlay, .. } = &mut self.terrain
+            && overlay.blocks_tile(rect.min)
+        {
+            overlay.remove_footprint(rect);
+            self.collision_opened(rect);
+        }
+        if !open {
+            return;
+        }
+        for y in rect.min.y..rect.max.y {
+            for x in rect.min.x..rect.max.x {
+                self.economy.blocked_tiles.remove(&TileCoord::new(x, y));
+            }
+        }
+        self.economy.open_gates.insert(id);
+        if let Some(gate) = self.economy.buildings.get_mut(&id) {
+            gate.gate_open = true;
+        }
+        self.collision_opened(rect);
+    }
+
     pub(super) fn advance_gates(&mut self) {
         let gates: Vec<_> = self
             .buildings()

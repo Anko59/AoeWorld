@@ -26,6 +26,9 @@ mod orders;
 mod parallel;
 mod research;
 mod resources;
+#[path = "game_world/snapshot/mod.rs"]
+mod snapshot;
+pub use snapshot::{RestoreReport, SnapshotError, WorldSnapshot};
 mod route_scheduler;
 pub(crate) use route_scheduler::far_route;
 mod spacing;
@@ -57,7 +60,7 @@ pub use route_scheduler::{
 pub use visibility::TileVisibility;
 pub use wildlife::*;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct GameUnit {
     pub id: EntityId,
     pub player: PlayerId,

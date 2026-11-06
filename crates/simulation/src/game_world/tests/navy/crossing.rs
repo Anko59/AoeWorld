@@ -238,3 +238,35 @@ pub(super) fn banks(world: &GameWorld) -> (TileCoord, TileCoord, TileCoord, Tile
         })
         .expect("river needs a clear crossing between two passable dry banks")
 }
+
+#[test]
+fn passengers_stay_aboard_their_ship_through_a_save() {
+    let mut world = river();
+    let (west, west_water, east_water, east) = banks(&world);
+    let transport = ship(&mut world, UnitKind::TransportShip, west_water, 0);
+    let army: Vec<_> = (0..3)
+        .map(|_| world.spawn_militia(PlayerId(0), at(west)).unwrap())
+        .collect();
+    world.issue_load(PlayerId(0), &army, transport).unwrap();
+    world.issue_move(transport, at(east_water)).unwrap();
+    for _ in 0..400 {
+        world.advance();
+        let unit = world.unit(transport).unwrap();
+        if !unit.moving && !unit.planning {
+            break;
+        }
+    }
+    assert_eq!(world.transport_cargo(transport), army.as_slice());
+    let (mut restored, report) =
+        crate::game_world::tests::snapshot_roundtrip::roundtrip(&world, river());
+    assert_eq!(
+        (report.units_lost, report.buildings_lost),
+        (0, 0),
+        "{report:?}"
+    );
+    assert_eq!(restored.transport_cargo(transport), army.as_slice());
+    restored.issue_unload(PlayerId(0), transport, east).unwrap();
+    for id in army {
+        assert_eq!(restored.unit(id).unwrap().position, at(east));
+    }
+}

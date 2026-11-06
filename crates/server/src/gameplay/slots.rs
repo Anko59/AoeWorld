@@ -130,7 +130,13 @@ impl GameplayService {
             resource_journal: Arc::new(std::sync::Mutex::new(resources::Journal::default())),
             fanout_probe: Arc::default(),
             preparation: Default::default(),
+            paused: Arc::default(),
         }
+    }
+
+    /// Content hash of the map this match plays on.
+    pub(crate) fn map_hash(&self) -> Option<[u8; 32]> {
+        self.map_content_hash
     }
 
     /// The seats of this service with their tokens, for the match creator.

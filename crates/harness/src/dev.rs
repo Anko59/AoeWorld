@@ -403,7 +403,9 @@ fn start_with<R: Runtime>(
         );
     }
     runtime.docker(&arguments.iter().map(String::as_str).collect::<Vec<_>>())?;
-    let deadline = Instant::now() + Duration::from_secs(10);
+    // A loaded machine needs more than 10 s to read the map packages and open
+    // the listener; the server was healthy a moment after the old deadline.
+    let deadline = Instant::now() + Duration::from_secs(90);
     while Instant::now() < deadline {
         if runtime.healthy(port) {
             println!("AoeWorld: {}", url(port));

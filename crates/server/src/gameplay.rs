@@ -58,6 +58,8 @@ pub struct GameplayService {
     resource_directory: Option<std::path::PathBuf>,
     fanout_probe: Arc<probe::FanoutProbe>,
     preparation: preparation::Preparation,
+    /// Set by the person's Pause: `run_ticks` stops stepping this match.
+    pub(super) paused: Arc<std::sync::atomic::AtomicBool>,
     /// What the last tick spent where; read by `run_ticks`.
     probe: Arc<crate::gameplay_match::TickProbe>,
 }

@@ -109,7 +109,7 @@ pub const DEFAULT_MIX: [u8; 4] = [45, 30, 15, 10];
 /// reserve comparison favours that resource (lowest reserve per weight first);
 /// a weight of zero makes it a last resort. The cap bounds managed villagers,
 /// and training stays off until the owner turns it on.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct StewardSettings {
     pub weights: [u8; 4],
     pub cap: u8,

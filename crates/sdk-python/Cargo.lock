@@ -66,6 +66,7 @@ dependencies = [
  "aoe-scenario",
  "blake3",
  "rayon",
+ "serde",
  "thiserror",
 ]
 

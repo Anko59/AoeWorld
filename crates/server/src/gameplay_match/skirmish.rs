@@ -5,8 +5,8 @@
 //! The AIs are separate processes on the same protocol and fog view as the
 //! person. They stop when the match is replaced, cancelled or quit, or when
 //! nobody has held the human seat for a while.
-use super::{MAX_MATCH_SLOTS, MatchRules};
-use crate::{AppState, GameplayService, maps};
+use super::MAX_MATCH_SLOTS;
+use crate::{AppState, maps};
 use aoe_map::EnvironmentPageProvider;
 use aoe_protocol::ResumeToken;
 use axum::{Json, extract::State, http::HeaderMap, http::StatusCode};
@@ -82,6 +82,8 @@ pub(crate) struct Status {
     error: Option<String>,
     /// AI host processes running for the current match.
     ai_hosts: usize,
+    /// The person paused the match clock.
+    paused: bool,
 }
 
 #[derive(Default)]
@@ -171,6 +173,7 @@ async fn status(state: &AppState) -> Status {
     let mut status = inner.status.clone();
     status.ai_available = skirmish.launch.is_some();
     status.max_opponents = MAX_OPPONENTS;
+    status.paused = gameplay.paused();
     status.ai_hosts = inner.fleet.as_mut().map_or(0, |fleet| fleet.hosts());
     match status.phase {
         Phase::PlacingVillages => {
@@ -192,7 +195,10 @@ async fn status(state: &AppState) -> Status {
 
 /// The token of a request made by the current controller, or by whoever
 /// started the skirmish (who is not connected to the new world yet).
-async fn authorize(state: &AppState, headers: &HeaderMap) -> Result<u64, (StatusCode, String)> {
+pub(super) async fn authorize(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<u64, (StatusCode, String)> {
     let refused = || {
         (
             StatusCode::FORBIDDEN,
@@ -216,8 +222,13 @@ async fn authorize(state: &AppState, headers: &HeaderMap) -> Result<u64, (Status
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct StartRequest {
+    #[serde(default)]
     map_hash: String,
+    #[serde(default)]
     opponents: usize,
+    /// Resume this saved game instead of placing new villages.
+    #[serde(default)]
+    save: Option<String>,
 }
 
 async fn get_status(State(state): State<AppState>) -> Json<Status> {
@@ -240,6 +251,13 @@ async fn start(
 ) -> Result<(StatusCode, Json<Status>), (StatusCode, String)> {
     let starter_world = authorize(&state, &headers).await?;
     let token = maps::controller_token(&headers);
+    let mut request = request;
+    let resume = super::saves::resolve(
+        &state,
+        &mut request.save,
+        &mut request.map_hash,
+        &mut request.opponents,
+    )?;
     if request.opponents > MAX_OPPONENTS {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -290,6 +308,7 @@ async fn start(
             id,
             package,
             request.opponents,
+            resume,
             &cancelled,
             &placed,
         )
@@ -313,6 +332,7 @@ async fn prepare(
     id: u64,
     package: aoe_map::MapPackage,
     opponents: usize,
+    resume: Option<Arc<super::saves::Loaded>>,
     cancelled: &Arc<AtomicBool>,
     placed: &Arc<AtomicUsize>,
 ) -> Result<(), String> {
@@ -329,21 +349,16 @@ async fn prepare(
     let started = Instant::now();
     let (cancel, count) = (cancelled.clone(), placed.clone());
     let directory = state.map_package_directory.clone();
-    let service = tokio::task::spawn_blocking(move || {
-        GameplayService::from_match_rules_stored(
-            package,
-            provider.map(|value| value as Arc<dyn EnvironmentPageProvider>),
-            &humans,
-            &MatchRules::default().with_seed(seed),
-            &count,
-            &|| cancel.load(Ordering::Acquire),
-            directory.as_deref(),
-        )
-    })
-    .await
-    .map_err(|_| "match task failed".to_owned())?
-    .map_err(|error| error.to_string())?
-    .0;
+    let service = super::saves::build(
+        package,
+        provider.map(|value| value as Arc<dyn EnvironmentPageProvider>),
+        resume,
+        humans,
+        (seed, count),
+        cancel,
+        directory,
+    )
+    .await?;
     tracing::info!(
         seats = opponents + 1,
         seconds = started.elapsed().as_secs_f64(),

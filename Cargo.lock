@@ -247,6 +247,7 @@ dependencies = [
  "gungraun",
  "memmap2",
  "nix",
+ "postcard",
  "rayon",
  "serde",
  "serde_json",
@@ -268,7 +269,9 @@ dependencies = [
  "aoe-scenario",
  "blake3",
  "gungraun",
+ "postcard",
  "rayon",
+ "serde",
  "thiserror",
 ]
 

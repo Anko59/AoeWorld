@@ -85,7 +85,7 @@ export function initStartSequence({ readJson, start, cancel }) {
     root.dataset.state = next;
     document.body.dataset.startState = next;
     el('playground').inert = next !== 'game';
-    for (const [id, name] of [['entry-intro', 'intro'], ['main-menu', 'menu'], ['skirmish-setup', 'setup'], ['loading-screen', 'loading']]) {
+    for (const [id, name] of [['entry-intro', 'intro'], ['main-menu', 'menu'], ['skirmish-setup', 'setup'], ['load-menu', 'load'], ['loading-screen', 'loading']]) {
       el(id).hidden = next !== name;
     }
     root.hidden = next === 'game';
@@ -384,6 +384,30 @@ export function initStartSequence({ readJson, start, cancel }) {
     resumeDecided,
     loadingReport: () => bar.report(),
     menu() { show('menu'); },
+    showLoad() { show('load'); },
+    // Resume a saved game through the loading screen; `run` starts it and
+    // resolves to an activation once every AI player is back.
+    async loadSaved(card, run) {
+      skirmishJob = jobRunning = true;
+      prepared = false;
+      waiting = null;
+      cinematic.stop();
+      clearInterval(tipTimer);
+      el('loading-error').hidden = el('loading-back').hidden = true;
+      el('loading-cancel').hidden = false;
+      el('loading-cancel').disabled = !canCancel;
+      el('loading-screen').classList.remove('has-error');
+      el('loading-progress').hidden = false;
+      el('loading-title').textContent = 'Resuming your saved game';
+      el('loading-location').textContent = `${card.name} · ${card.opponents} AI opponent${card.opponents === 1 ? '' : 's'}`;
+      progress(null, null, 'Reading your saved game…');
+      show('loading');
+      try {
+        const value = await run();
+        if (value === null) { returnToSetup(); show('menu'); return; }
+        this.activated(value);
+      } catch (failure) { error(failure.message); }
+    },
     opponents,
     aiAvailable(available, max) {
       const input = el('start-opponents');

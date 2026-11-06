@@ -1,5 +1,5 @@
 /// A production building's destination for newly trained units.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum RallyTarget {
     Ground(aoe_core::WorldPosition),
     Resource(u64),
@@ -8,7 +8,7 @@ pub enum RallyTarget {
 }
 
 /// Last accepted location remains available if the target disappears.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RallyPoint {
     pub target: RallyTarget,
     pub position: aoe_core::WorldPosition,

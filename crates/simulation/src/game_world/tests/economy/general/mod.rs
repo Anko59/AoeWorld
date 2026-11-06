@@ -7,6 +7,7 @@ mod engage;
 mod fighting;
 mod movement;
 mod orders;
+mod snapshot;
 mod sphere;
 mod squads;
 mod stances;

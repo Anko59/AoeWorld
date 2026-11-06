@@ -161,6 +161,9 @@ impl AppState {
                 world.advance();
             }
             let gameplay = self.gameplay.read().await.clone();
+            if gameplay.paused() {
+                continue;
+            }
             gameplay.tick().await;
             self.observe_tick(&gameplay, scheduled, started).await;
         }

@@ -72,3 +72,20 @@ impl GameWorld {
         }
     }
 }
+
+impl GameWorld {
+    /// Every army group as a save keeps it: posture, members, where it is
+    /// going and the waypoints behind that.
+    pub(crate) fn formation_records(&self) -> Vec<crate::game_world::snapshot::FormationRecord> {
+        self.formations
+            .values()
+            .map(|group| crate::game_world::snapshot::FormationRecord {
+                form: group.form,
+                members: group.members.iter().map(|member| member.id).collect(),
+                destination: group.destination,
+                queue: group.queue.iter().copied().collect(),
+                attack_move: group.attack_move,
+            })
+            .collect()
+    }
+}

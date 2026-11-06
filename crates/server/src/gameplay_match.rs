@@ -224,6 +224,8 @@ pub(crate) fn routes() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/match", post(start_match))
         .route("/match/stats", get(stats::match_stats))
+        .merge(pause::routes())
+        .merge(saves::routes())
         .merge(skirmish::routes())
         .merge(admin::routes())
         .merge(routes::routes())
@@ -362,8 +364,10 @@ async fn start_match(
 
 mod admin;
 mod flat;
+mod pause;
 pub(crate) mod routes;
 mod rules;
+mod saves;
 mod seats;
 mod skirmish;
 mod stats;

@@ -5,6 +5,7 @@ use std::{net::SocketAddr, time::Duration};
 mod admin;
 mod cache;
 mod france_march;
+mod pause;
 
 #[tokio::test]
 async fn records_tick_delayed_by_world_lock_contention() {
