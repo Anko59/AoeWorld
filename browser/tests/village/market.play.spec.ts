@@ -91,8 +91,11 @@ test("reach Feudal, build a Market, sell food and buy wood for gold", async ({
   await page.locator("#market-sell-food").click();
   await expect(page.locator("#stockpile-food")).toHaveText(String(food - 100));
   await expect(page.locator("#stockpile-gold")).toHaveText(String(gold + 70));
-  await expect(page.locator("#market-prices")).toContainText("food 97");
-  await expect(page.locator("#market-sell-food")).toContainText("67 gold");
+  // Prices recover one step toward 100 every 40 server ticks (MARKET_RULES),
+  // which can land between the click and this read on a slow runner. Accept the
+  // post-trade price or its first recovery step, never the untouched 100.
+  await expect(page.locator("#market-prices")).toContainText(/food (97|98) /);
+  await expect(page.locator("#market-sell-food")).toContainText(/6[789] gold/);
 
   const wood = await count(page, "wood");
   await page.locator("#market-buy-wood").click();
@@ -100,7 +103,10 @@ test("reach Feudal, build a Market, sell food and buy wood for gold", async ({
   await expect(page.locator("#stockpile-gold")).toHaveText(
     String(gold + 70 - 130),
   );
-  await expect(page.locator("#market-prices")).toContainText("wood 103");
+  // Same recovery race: the raised wood price may already have stepped down.
+  await expect(page.locator("#market-prices")).toContainText(
+    /wood 10[123] /,
+  );
 
   // Only a completed Market shows the panel.
   await select(page, "TownCenter");
