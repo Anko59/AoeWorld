@@ -252,10 +252,11 @@ fn a_fishing_spot_blocked_briefly_resumes_when_it_clears_within_the_bound() {
 }
 
 /// A fleet cut off by a bridge retried every work point of its fish once a
-/// second: two thirds of a 100-player late game's route work. One proof now
-/// answers the fish, and the same approach again is a cache hit.
+/// second, each a fresh search: two thirds of a 100-player late game's route
+/// work. Ship routes are now cached like land routes, so a retry from where
+/// the ship stands is answered without planning.
 #[test]
-fn a_ship_cut_off_from_its_fish_proves_it_once_and_remembers_the_proof() {
+fn a_ship_cut_off_from_its_fish_retries_from_the_cache() {
     let (mut w, fish, river) = fish_river_fixture(3);
     let at = TileCoord::new(fish.tile.x - 8, river + 1);
     let id = ship(&mut w, UnitKind::FishingShip, at, 0);
@@ -263,24 +264,26 @@ fn a_ship_cut_off_from_its_fish_proves_it_once_and_remembers_the_proof() {
     w.economy
         .blocked_tiles
         .extend((river..river + 3).map(|y| TileCoord::new(fish.tile.x - 5, y)));
-    let (orders, hits) = (w.route_metrics.orders, w.route_metrics.cache_hits);
+    let before = w.route_metrics.orders;
     let refused = w.approach_resource(id, fish.tile);
     assert_eq!(
         refused,
         Err(crate::GameWorldError::Unreachable.into()),
         "the fish's water is open but cut off"
     );
-    assert_eq!(
-        w.route_metrics.orders - orders,
-        1,
-        "one search per approach"
-    );
+    let metrics = &w.route_metrics;
+    let (orders, hits, work) = (metrics.orders, metrics.cache_hits, metrics.issue_work);
+    let tried = orders - before;
+    assert!(tried > 1, "every work point was tried");
+    w.refill_route_budgets();
     w.units[w.lookup[&id]].unreachable_memo = None;
     assert!(w.approach_resource(id, fish.tile).is_err());
-    assert_eq!(w.route_metrics.orders - orders, 2);
+    let metrics = &w.route_metrics;
+    assert_eq!(metrics.orders - orders, tried, "the same points again");
     assert_eq!(
-        w.route_metrics.cache_hits - hits,
-        1,
-        "answered from the cache"
+        metrics.cache_hits - hits,
+        tried,
+        "all answered from the cache"
     );
+    assert_eq!(metrics.issue_work, work, "with no planning");
 }

@@ -240,18 +240,10 @@ impl GameWorld {
                     Ok(_) => return Ok(()),
                     Err(error) => {
                         failure = error;
-                        // A ship's ground is static water (bridges, docks and
-                        // fish block it, units do not), and a fish's work
-                        // points share its water: one proof answers them all.
-                        // A fleet cut off by a bridge tried every point once a
-                        // second, two thirds of a late game's route work.
-                        let sealed = unit.kind.is_naval() && error == GameWorldError::Unreachable;
-                        if sealed
-                            || matches!(
-                                error,
-                                GameWorldError::PathBudgetExceeded | GameWorldError::Environment(_)
-                            )
-                        {
+                        if matches!(
+                            error,
+                            GameWorldError::PathBudgetExceeded | GameWorldError::Environment(_)
+                        ) {
                             return Err(error.into());
                         }
                     }
