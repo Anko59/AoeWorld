@@ -373,3 +373,16 @@ fn a_group_does_not_settle_around_a_member_whose_detour_just_ended() {
     assert_eq!(w.units[index].state.position, slot);
     assert!(!w.formations[&leader].members[1].detached);
 }
+
+impl GameWorld {
+    /// (files, form_start, progress, path end) of the group holding `id`.
+    pub(crate) fn group_files_probe(&self, id: EntityId) -> (usize, i64, i64, i64) {
+        let group = &self.formations[&self.units[self.lookup[&id]].formation.unwrap()];
+        (
+            group.packing_files,
+            group.form_start,
+            group.progress,
+            group.path.end(),
+        )
+    }
+}

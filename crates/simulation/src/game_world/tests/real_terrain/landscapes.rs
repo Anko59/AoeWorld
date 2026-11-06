@@ -51,25 +51,25 @@ fn run(case: &str, count: usize, limit: u32) {
             assert_eq!((result.max_stuck_ticks, result.oscillations), (8, 3));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (5522, 55349, 5338442)
+                (5522, 55349, 3108113)
             );
         }
         "long" => {
             result.assert_arrival_and_work(count);
             assert!(result.max_tick_route_work <= 16_384, "{result:?}");
             // 57: one arrived soldier steps aside and waits 56 ticks for the march to pass.
-            assert_eq!((result.max_stuck_ticks, result.oscillations), (57, 26));
+            assert_eq!((result.max_stuck_ticks, result.oscillations), (57, 18));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (35529, 378134, 104506102)
+                (36804, 378134, 102402561)
             );
         }
         _ => {
             result.assert_works(count);
             // Current-output pins also retain work for the complete report.
             let expected = match case {
-                "forest" => (3282, 1027, 2418731),
-                "town" => (3741, 1193, 2858955),
+                "forest" => (3288, 1027, 2198882),
+                "town" => (3740, 1193, 2510834),
                 "crossing" => (3278, 1933, 3051861),
                 "bridge" => (479, 354, 12365),
                 "siege" => (1556, 867, 33972),
