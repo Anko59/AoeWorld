@@ -36,33 +36,6 @@ pub(super) fn timeline(builders: usize, limit: u32) -> (Option<u32>, Option<u32>
         if gates >= 1 && first_gate.is_none() {
             first_gate = Some(t);
         }
-        if false {
-            let mut tally: std::collections::BTreeMap<String, usize> = Default::default();
-            for u in w.units().filter(|u| u.kind == UnitKind::Villager) {
-                *tally
-                    .entry(format!("{:?}/{}", u.task, u.moving))
-                    .or_default() += 1;
-            }
-            eprintln!("  t={t}: villagers {tally:?} walls {walls}");
-            let open = w.buildings().filter(|b| !b.is_complete()).count();
-            let lines: Vec<_> = w
-                .units()
-                .filter(|u| u.kind == UnitKind::Villager && w.vassal_controller(u.id) == Some(v))
-                .map(|u| {
-                    let job = w.economy.builders.get(&u.id).map(|j| j.building.0);
-                    format!(
-                        "{}:{:?}@{},{}{} j{:?}",
-                        u.id.0,
-                        u.task,
-                        u.position.tile_floor().x,
-                        u.position.tile_floor().y,
-                        if u.moving { "m" } else { "" },
-                        job
-                    )
-                })
-                .collect();
-            eprintln!("  open foundations {open}; {}", lines.join(" | "));
-        }
         if t % 5_000 == 0 {
             let s = w.vassal_status(v).unwrap();
             eprintln!(

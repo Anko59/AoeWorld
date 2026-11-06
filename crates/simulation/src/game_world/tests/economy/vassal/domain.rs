@@ -105,3 +105,34 @@ fn vassal_fortifies_a_steward_sized_domain_and_defends_its_edge() {
         w.unit(raider).map(|u| u.position)
     );
 }
+
+#[test]
+fn vassal_soldiers_kill_a_wolf_hunting_a_builder() {
+    let (mut w, v, _) = setup();
+    w.set_fog_disabled(true);
+    let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
+    let builder = w.spawn_villager(PlayerId(0), at(84, 100)).unwrap();
+    for i in 0..4 {
+        w.spawn_militia(PlayerId(0), at(88 + i, 98)).unwrap();
+    }
+    advance(&mut w, 40);
+    assert_eq!(w.vassal_controller(builder), Some(v));
+    let wolf = w.spawn_animal(crate::AnimalKind::Wolf, at(82, 99)).unwrap();
+    let mut killed = None;
+    for t in 0..1_200 {
+        w.advance();
+        if w.animal(wolf).is_none_or(|a| a.hp == 0) {
+            killed = Some(t);
+            break;
+        }
+    }
+    eprintln!(
+        "wolf killed after {killed:?} ticks; builder hp {:?}",
+        w.unit(builder).map(|u| u.hp)
+    );
+    assert!(killed.is_some(), "the soldiers must kill the wolf");
+    assert!(
+        w.unit(builder).is_some_and(|u| u.hp > 0),
+        "the builder lives"
+    );
+}
