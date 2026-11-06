@@ -2,6 +2,7 @@
 use super::*;
 use crate::{EconomyError, UnitKind, UnitTask};
 
+mod autoscout;
 mod combat;
 mod crossing;
 mod healing;

@@ -1,4 +1,4 @@
-//! Server-owned cavalry exploration through known, reachable land frontiers.
+//! Server-owned cavalry and ship exploration through known, reachable frontiers.
 use crate::{EconomyError, GameWorld, TileVisibility, UnitKind, UnitTask};
 use aoe_core::{EntityId, PlayerId, TileCoord, WorldPosition};
 use std::{
@@ -80,6 +80,15 @@ enum Poll {
 }
 
 impl UnitKind {
+    /// Units the player may put on automatic exploration: cavalry on land,
+    /// warships and transports on water.
+    pub fn can_auto_scout(self) -> bool {
+        self.is_cavalry()
+            || matches!(
+                self,
+                Self::Galley | Self::WarGalley | Self::FireShip | Self::TransportShip
+            )
+    }
     pub fn is_cavalry(self) -> bool {
         matches!(
             self,
@@ -108,7 +117,7 @@ impl GameWorld {
         if unit.player != player {
             return Err(EconomyError::NotOwner);
         }
-        if !unit.kind.is_cavalry() {
+        if !unit.kind.can_auto_scout() {
             return Err(EconomyError::WrongUnitKind);
         }
         if enabled == unit.auto_scout {
