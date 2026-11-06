@@ -71,3 +71,28 @@ fn a_vassal_bridges_a_real_river_and_its_builders_cross() {
         }
     }
 }
+
+/// With fog of war on (as in a played match) the Vassal still develops the
+/// domain: it builds what it can see and keeps exploring outward.
+#[test]
+fn a_vassal_builds_on_a_real_river_map_with_fog_on() {
+    let mut fixture = build("bridge");
+    let world = &mut fixture.world;
+    let (v, _) = world.prepare_vassal_river_demo().unwrap();
+    world.set_fog_disabled(false);
+    for _ in 0..20_000_u32 {
+        world.advance();
+    }
+    let count = |k: BuildingKind| world.buildings().filter(|b| b.kind == k).count();
+    eprintln!(
+        "fog on: walls {} roads {} {:?}",
+        count(BuildingKind::StoneWall) + count(BuildingKind::PalisadeWall),
+        count(BuildingKind::Road),
+        world.vassal_status(v)
+    );
+    assert!(
+        count(BuildingKind::Road) + count(BuildingKind::StoneWall) > 0,
+        "{:?}",
+        world.vassal_status(v)
+    );
+}
