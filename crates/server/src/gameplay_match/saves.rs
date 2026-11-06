@@ -1,6 +1,6 @@
 //! Saved games: the person saves a running match from the game menu and
-//! resumes it later from the main menu. A save is a file under `saves/` beside
-//! the map package directory (ignored by Git): the match's seats and a
+//! resumes it later from the main menu. A save is a file under `saves/` inside
+//! the map package directory (the dev server's one writable, Git-ignored mount): the match's seats and a
 //! `WorldSnapshot`, with a small JSON card next to it for listing. Resuming
 //! builds the same map, restores the snapshot into it, and starts the AI
 //! opponents again with the ordinary skirmish machinery.
@@ -58,8 +58,7 @@ pub(crate) struct SaveCard {
 type Error = (StatusCode, String);
 
 pub(crate) fn directory(state: &AppState) -> Option<PathBuf> {
-    let packages = state.map_package_directory.as_deref()?;
-    Some(packages.parent().unwrap_or(FsPath::new(".")).join("saves"))
+    Some(state.map_package_directory.as_deref()?.join("saves"))
 }
 
 fn slug(name: &str) -> String {

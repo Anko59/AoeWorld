@@ -6,6 +6,8 @@ const clock = seconds => `${Math.floor(seconds / 60)}:${String(seconds % 60).pad
 
 export function initSaves({ readJson, tokenHeaders, sequence, skirmish }) {
   const el = id => document.getElementById(id);
+  // Capture and play entries skip the menus (sequence.js) and have no list.
+  if (!el('load-game')) return;
   const list = el('saves-list');
   const status = el('saves-status');
 
