@@ -6,6 +6,7 @@ import { initVassal } from '/interface/steward/vassal.js';
 import { initSteward } from '/interface/steward/panel.js';
 import { initGeneralPanel } from '/interface/general-panel.js';
 import { updateDetails } from '/interface/details.js';
+import { renderSelectionIcons, autoFit } from '/interface/selection-grid.js';
 // Original interface artwork and DOM presentation. Authoritative values arrive
 // from Rust at most four times per second; no frame loop or gameplay rules here.
 const icon = name => packIcon('resources',name,name);
@@ -15,7 +16,7 @@ const show = (id,visible) => { byId(id).hidden = !visible; };
 const attribute = (node,name,value) => { if (node.getAttribute(name) !== value) node.setAttribute(name,value); };
 
 export function initInterface() {
-  initBuildings();
+  initBuildings();autoFit(byId('training-queue'),{high:30,low:22});
   initSteward();
   initVassal();
   initGeneralPanel();
@@ -99,7 +100,7 @@ export function initInterface() {
       const signature=selected.map(unit=>`${unit.id}:${unit.kind}`).join(',');
       if (signature!==previousSelection) {
         setEntityIcon(byId('selection-portrait'),first.kind,playerTint(first.player,first.owned,first.colour));
-        byId('selected-icons').innerHTML=count>1?selected.map(unit=>`<span class="unit-token" data-unit-id="${unit.id}" title="${unit.name}">${entityIcon(unit.kind,playerTint(unit.player,unit.owned,unit.colour))}</span>`).join(''):'';
+        renderSelectionIcons(byId('selected-icons'),count>1?selected.map(unit=>({id:unit.id,kind:unit.kind,name:unit.name,tint:playerTint(unit.player,unit.owned,unit.colour)})):[],entityIcon);
         previousSelection=signature;
       }
     } else previousSelection='';
