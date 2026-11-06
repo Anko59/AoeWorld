@@ -124,6 +124,8 @@ pub(in super::super) fn print_table(label: &str, march: &Value) {
         at["oldest_wait_ticks"],
         at["fair_work"]
     );
+    let ends = &march["scheduler_at_end"]["attribution"]["group_ends"];
+    println!("group endings by reason (whole match, AIs included): {ends}");
     println!(
         "| size | tiles | route | ideal s | result | moved p50/max s | dropped | 1.3x t/w | 2x t/w | 3x t/w | end | speed p50 | stall | final |"
     );

@@ -13,7 +13,24 @@ impl GameWorld {
         queued: bool,
         attack_move: bool,
     ) -> Result<(), EconomyError> {
+        // Every refusal counts: members, destination and the route's issue.
+        self.formation_move(player, ids, form, destination, queued, attack_move)
+            .inspect_err(|_| self.route_metrics.attribution.group_orders_rejected += 1)
+    }
+
+    #[track_caller]
+    fn formation_move(
+        &mut self,
+        player: PlayerId,
+        ids: &[EntityId],
+        form: Formation,
+        destination: WorldPosition,
+        queued: bool,
+        attack_move: bool,
+    ) -> Result<(), EconomyError> {
+        let named = ids.len();
         let (ids, centroid) = self.formation_members(player, ids)?;
+        self.route_metrics.attribution.group_members_left_out += (named - ids.len()) as u64;
         if !self.config.valid_map_position(destination) {
             return Err(GameWorldError::InvalidPosition.into());
         }
@@ -87,10 +104,6 @@ impl GameWorld {
             heading
         };
         let facing = facing_for(i64::from(heading.x), i64::from(heading.y), Facing::South);
-        let positions = ids
-            .iter()
-            .map(|id| self.units[self.lookup[id]].state.position)
-            .collect::<Vec<_>>();
         let (diameter, step) = ids.iter().fold((0, 0), |(diameter, step), id| {
             let unit = self.units[self.lookup[id]].state;
             let (speed, denominator) = self.movement_speed(unit.kind, unit.player);
@@ -138,7 +151,7 @@ impl GameWorld {
             speed: (0, 1),
             pace: (0, 1),
             settled: false,
-            direct: direct_order(origin, destination, &positions),
+            direct: false,
             gap,
             narrow_gap: diameter + step + 16,
             slots_tight: false,
@@ -168,6 +181,7 @@ impl GameWorld {
         group.speed = self.group_speed(&group).0;
         group.pace = group.speed;
         self.assign_group_slots(&mut group);
+        group.direct = self.direct_order(origin, destination, &group);
         self.formations.insert(leader, group);
         self.install_formation_route(
             index,
@@ -273,12 +287,6 @@ impl GameWorld {
                     i64::from(group.heading.y),
                     group.facing,
                 );
-                let positions = group
-                    .members
-                    .iter()
-                    .map(|m| self.units[self.lookup[&m.id]].state.position)
-                    .collect::<Vec<_>>();
-                group.direct = direct_order(group.anchor, destination, &positions);
                 group.path = path::Path::new(
                     std::iter::once(group.anchor)
                         .chain(std::iter::once(waypoint))
@@ -294,6 +302,7 @@ impl GameWorld {
                 group.taut_end = None;
                 self.reset_group_detours(group);
                 self.assign_group_slots(group);
+                group.direct = self.direct_order(group.anchor, destination, group);
                 group.settled = false;
                 self.install_formation_route(
                     index,
@@ -311,18 +320,69 @@ impl GameWorld {
     }
 }
 
-fn direct_order(
-    origin: WorldPosition,
-    destination: WorldPosition,
-    positions: &[WorldPosition],
-) -> bool {
-    let travel = path::distance(origin, destination);
-    let (mut min, mut max) = (origin, origin);
-    for p in positions {
-        min.x = min.x.min(p.x);
-        min.y = min.y.min(p.y);
-        max.x = max.x.max(p.x);
-        max.y = max.y.max(p.y);
+/// Members of a direct order steer straight at their slots with no route of
+/// their own, so it is only direct when every straight line is clear: each
+/// member's line to its assigned slot, and to the destination centre.
+const DIRECT_LINE_TILES: i32 = 64;
+
+impl GameWorld {
+    /// Called once the group's slots are assigned (`member.goal`).
+    fn direct_order(
+        &self,
+        origin: WorldPosition,
+        destination: WorldPosition,
+        group: &Group,
+    ) -> bool {
+        let members = group
+            .members
+            .iter()
+            .map(|m| {
+                let unit = self.units[self.lookup[&m.id]].state;
+                (unit.kind, unit.position, m.goal)
+            })
+            .collect::<Vec<_>>();
+        let travel = path::distance(origin, destination);
+        let (mut min, mut max) = (origin, origin);
+        for &(_, p, _) in &members {
+            min.x = min.x.min(p.x);
+            min.y = min.y.min(p.y);
+            max.x = max.x.max(p.x);
+            max.y = max.y.max(p.y);
+        }
+        (travel < 20 * 1024 || path::distance(min, max) > travel)
+            && members.iter().all(|&(kind, from, slot)| {
+                self.straight_line_clear(kind, from, slot)
+                    && self.straight_line_clear(kind, from, destination)
+            })
     }
-    travel < 20 * 1024 || path::distance(min, max) > travel
+
+    /// Static terrain, trees and buildings along the half-tile steps of a
+    /// straight walk; at most `DIRECT_LINE_TILES` long, longer is not clear.
+    fn straight_line_clear(&self, kind: UnitKind, from: WorldPosition, to: WorldPosition) -> bool {
+        let length = path::distance(from, to);
+        if length > i64::from(DIRECT_LINE_TILES * 1024) {
+            return false;
+        }
+        let parts = (length / 512).max(1);
+        let (dx, dy) = (i64::from(to.x - from.x), i64::from(to.y - from.y));
+        let mut previous = from;
+        for n in 1..=parts {
+            self.group_work.members(1);
+            let next = WorldPosition::new(
+                from.x + (dx * n / parts) as i32,
+                from.y + (dy * n / parts) as i32,
+            );
+            // Terrain and trees come from the step check; buildings block tiles
+            // only in the economy, which that check does not read.
+            if self.economy.blocked_tiles.contains(&next.tile_floor())
+                || !self
+                    .unit_position_step_clear(kind, previous, next)
+                    .unwrap_or(false)
+            {
+                return false;
+            }
+            previous = next;
+        }
+        true
+    }
 }

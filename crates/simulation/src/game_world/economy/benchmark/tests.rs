@@ -110,7 +110,9 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
         // renewed far-group waits, the far reserve and the ship route cache.
         // Equal-cost local detours now keep right of the heading instead of
         // always going north, which moves local routes in this crowded replay.
-        "064a74fee13b7983fdd55b5b5154206f7e0984b9c1f3a6244b9891767237150a"
+        // Direct orders that need clear lines, stalled detours that rejoin and
+        // army orders that leave fallen members out move it again.
+        "0065f99731d2c66614f0a07ccbb0035b32877aa6852b05adf6c2acc38ea0e9a7"
     );
 }
 

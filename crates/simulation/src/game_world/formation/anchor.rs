@@ -124,8 +124,13 @@ impl GameWorld {
                         break;
                     }
                     SegmentAdvance::Stopped(error) => {
-                        self.stop_route(index, error);
                         self.formations.insert(leader, group);
+                        if error.is_some() {
+                            let reason = route_failure_reason(error);
+                            self.group_route_failed(index, error, reason, &mut Vec::new());
+                        } else {
+                            self.stop_route(index, error);
+                        }
                         return true;
                     }
                     SegmentAdvance::Next(next) => {
@@ -286,5 +291,25 @@ impl GameWorld {
             );
         }
         group.path.point(group.progress, &mut group.path_cursor);
+    }
+}
+
+impl GameWorld {
+    /// The anchor of the group led by `leader` and its progress along the
+    /// group path (0 before the group has marched).
+    pub(crate) fn group_anchor(&self, leader: EntityId) -> Option<(WorldPosition, i64)> {
+        self.formations
+            .get(&leader)
+            .map(|group| (group.anchor, group.progress))
+    }
+}
+
+/// `ROUTE_FAILURES` index of a segment error.
+fn route_failure_reason(error: Option<GameWorldError>) -> usize {
+    match error {
+        Some(GameWorldError::Unreachable) => 0,
+        Some(GameWorldError::InvalidPosition) => 1,
+        Some(GameWorldError::PathBudgetExceeded) => 2,
+        _ => 4,
     }
 }
