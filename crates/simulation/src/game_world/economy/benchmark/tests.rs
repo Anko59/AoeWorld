@@ -108,7 +108,9 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
         // the complete 1/4-worker comparison above still holds. The armies work (bounded replans,
         // wide-body fit, one-lane passing) moves it once more, and so do
         // renewed far-group waits, the far reserve and the ship route cache.
-        "2e8979ab373cdfcdb2f5d8372699b0685b5e14b2e7ed164af5703a797927507d"
+        // Equal-cost local detours now keep right of the heading instead of
+        // always going north, which moves local routes in this crowded replay.
+        "064a74fee13b7983fdd55b5b5154206f7e0984b9c1f3a6244b9891767237150a"
     );
 }
 
