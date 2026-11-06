@@ -18,12 +18,14 @@ pub(crate) enum Phase {
     BuildingPyramids,
     PublishingPackage,
     VerifyingPackage,
+    BuildingNavigation,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Unit {
     Bytes,
     Pages,
+    Chunks,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -57,6 +59,18 @@ pub(crate) fn stage(state: &State, phase: Phase) {
             completed: None,
             total: None,
             unit: None,
+        });
+    }
+}
+pub(crate) fn count(state: &State, phase: Phase, completed: u64, total: u64, unit: Unit) {
+    if let Ok(mut value) = state.lock() {
+        *value = Some(Progress {
+            version: 1,
+            phase,
+            detail: None,
+            completed: Some(completed),
+            total: Some(total),
+            unit: Some(unit),
         });
     }
 }
@@ -154,5 +168,9 @@ mod tests {
         stage(&state, Phase::VerifyingPackage);
         assert_eq!(snapshot(&state).unwrap().phase, Phase::VerifyingPackage);
         assert_eq!(snapshot(&state).unwrap().completed, None);
+        count(&state, Phase::BuildingNavigation, 3, 9, Unit::Chunks);
+        let counted = snapshot(&state).unwrap();
+        assert_eq!(counted.phase, Phase::BuildingNavigation);
+        assert_eq!((counted.completed, counted.total), (Some(3), Some(9)));
     }
 }

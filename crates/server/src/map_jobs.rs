@@ -307,9 +307,12 @@ fn launch(state: AppState, id: u64) {
         if let Some(package) = presets::reusable(&state, request, &preparation).await {
             let directory = state.map_package_directory.clone();
             let result = tokio::task::spawn_blocking(move || {
-                map_store::navigation::prepare_package(&package, directory.as_deref(), &|| {
-                    cancelled.load(Ordering::Acquire)
-                })?;
+                map_store::navigation::prepare_package(
+                    &package,
+                    directory.as_deref(),
+                    &|| cancelled.load(Ordering::Acquire),
+                    &|_, _| {},
+                )?;
                 Ok(package)
             })
             .await
@@ -361,9 +364,22 @@ fn launch(state: AppState, id: u64) {
             if cancelled.load(Ordering::SeqCst) {
                 return Err("map creation cancelled".to_owned());
             }
-            map_store::navigation::prepare_package(&package, directory.as_deref(), &|| {
-                cancelled.load(Ordering::Acquire)
-            })?;
+            // The static navigation index of a new map takes minutes: report it.
+            progress::stage(&progress_state, progress::Phase::BuildingNavigation);
+            map_store::navigation::prepare_package(
+                &package,
+                directory.as_deref(),
+                &|| cancelled.load(Ordering::Acquire),
+                &|done, total| {
+                    progress::count(
+                        &progress_state,
+                        progress::Phase::BuildingNavigation,
+                        done,
+                        total,
+                        progress::Unit::Chunks,
+                    );
+                },
+            )?;
             Ok::<_, String>(package)
         })
         .await
