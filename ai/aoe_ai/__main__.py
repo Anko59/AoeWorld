@@ -11,6 +11,7 @@ import time
 from dataclasses import asdict
 
 from .config import Config
+from .drafts import draft
 from .host import BotReport, Host, start_and_run
 
 
@@ -40,7 +41,7 @@ def _host(args: argparse.Namespace) -> int:
         with open(args.tokens_file, encoding="utf-8") as handle:
             tokens = json.load(handle)
     started = time.monotonic()
-    host = Host(args.url, tokens, Config())
+    host = Host(args.url, tokens, draft(args.draft))
     print(f"{len(tokens)} bots connected in {time.monotonic() - started:.1f}s", flush=True)
     started = time.monotonic()
 
@@ -77,6 +78,16 @@ def main(argv: list[str] | None = None) -> int:
     arena.add_argument("--tiles", type=int, default=300, help="map width in tiles (flat terrain)")
     arena.add_argument("--seeds", default="1,2,3,4,5", help="comma-separated seeds, one match each")
 
+    tour = sub.add_parser("tournament", help="free-for-all of drafts on the arena, scored by the admin API")
+    tour.add_argument("--server-bin", required=True)
+    tour.add_argument("--drafts", default="baseline,boom,fast_castle,generals,steward_scaler,balanced")
+    tour.add_argument("--seeds", default="1")
+    tour.add_argument("--tiles", type=int, default=400)
+    tour.add_argument("--minutes", type=float, default=30.0, help="game minutes")
+    tour.add_argument("--wall-limit", type=float, default=1200.0, help="wall seconds per game")
+    tour.add_argument("--label", default="run")
+    tour.add_argument("--map-hash", default=None)
+
     join = sub.add_parser("join", help="play one existing slot")
     join.add_argument("--url", default="http://127.0.0.1:8080")
     join.add_argument("--token", required=True, help="the slot's 48-digit token")
@@ -91,10 +102,21 @@ def main(argv: list[str] | None = None) -> int:
     hosting.add_argument(
         "--exit-with-parent", action="store_true", help="stop when the launching process exits"
     )
+    hosting.add_argument("--draft", default=os.environ.get("AOE_AI_DRAFT", "baseline"), help="strategy draft (aoe_ai/drafts)")
     hosting.add_argument("--report", help="JSON file rewritten every few seconds")
 
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    if args.command == "tournament":
+        from pathlib import Path
+
+        from .tournament import run, scoreboard
+
+        root = Path(__file__).resolve().parents[2]
+        games = run(Path(args.server_bin), root, args.drafts.split(","), [int(x) for x in args.seeds.split(",")],
+                    args.tiles, args.minutes, args.wall_limit, args.label, args.map_hash)
+        print(scoreboard(games))
+        return 0
     if args.command == "arena":
         from pathlib import Path
 

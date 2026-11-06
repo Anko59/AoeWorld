@@ -141,20 +141,25 @@ class EconomyManager:
                 if getattr(center, "rally_resource", None) != target.id:
                     ctx.order("set_rally_resource", center.id, target.id)
                 break
-        queued_villagers = center.queue_length
+        queued_villagers = sum(c.queue_length for c in ctx.buildings if c.kind == BuildingKind.TOWN_CENTER)
         if len(ctx.villagers) + queued_villagers >= ctx.config.max_villagers:
             return
-        queue = center.queue_length
         cost = unit_cost(UnitKind.VILLAGER)
-        while (
-            queue < ctx.config.town_center_queue
-            and ctx.free_population() > 0
-            and ctx.try_spend(cost)
-        ):
-            ctx.order("train", center.id, UnitKind.VILLAGER)
-            ctx.queued += 1
-            queue += 1
-            ctx.board.bump("villagers_queued")
+        centers = [center] + [c for c in ctx.buildings if c.kind == BuildingKind.TOWN_CENTER and c.complete and c.id != center.id
+                              and c.researching is None]
+        for c in centers:
+            queue = c.queue_length
+            while (
+                queue < ctx.config.town_center_queue
+                and ctx.free_population() > 0
+                and len(ctx.villagers) + queued_villagers < ctx.config.max_villagers
+                and ctx.try_spend(cost)
+            ):
+                ctx.order("train", c.id, UnitKind.VILLAGER)
+                ctx.queued += 1
+                queue += 1
+                queued_villagers += 1
+                ctx.board.bump("villagers_queued")
 
     # ----- allocation ------------------------------------------------------
     def counts(self, ctx: Context) -> dict[str, int]:
@@ -182,6 +187,13 @@ class EconomyManager:
         if buildorder.wants_imperial_food(ctx):
             shares = dict(cfg.imperial_shares)
         # Early on nothing but food and wood matter.
+        cfg_castles = cfg.castles and ctx.castle and ctx.economy.stone < 700 and (
+            ctx.count(BuildingKind.CASTLE) + sum(1 for p in ctx.board.plans if p.kind == BuildingKind.CASTLE) < cfg.castles)
+        if cfg_castles or (cfg.town_centers > 1 and ctx.feudal and ctx.economy.stone < 150):
+            take = cfg.castle_stone_share
+            shares["STONE"] = take
+            shares["FOOD"] = max(0.2, shares["FOOD"] - take * 0.5)
+            shares["WOOD"] = max(0.15, shares["WOOD"] - take * 0.5)
         if len(ctx.villagers) < 10:
             shares.update(GOLD=0.0, STONE=0.0)
         return shares
@@ -190,7 +202,7 @@ class EconomyManager:
         idle = [
             v
             for v in ctx.villagers
-            if unemployed(v) and v.id not in ctx.busy and ctx.board.builders.get(v.id) is None
+            if (v.managed_by is None or not ctx.config.defer_to_steward) and unemployed(v) and v.id not in ctx.busy and ctx.board.builders.get(v.id) is None
         ]
         # A builder whose foundation finished (or vanished) is a worker again.
         for v in ctx.villagers:
@@ -243,7 +255,8 @@ class EconomyManager:
             return
         pause = ASSIGN_PAUSE_SECONDS * ctx.world.tick_hz
         for worker in ctx.villagers:
-            if (worker.gathering != KEYS[source] or worker.carrying is not None
+            if ((worker.managed_by is not None and ctx.config.defer_to_steward)
+                    or worker.gathering != KEYS[source] or worker.carrying is not None
                     or worker.task in (UnitTask.HUNTING, UnitTask.FARMING, UnitTask.BUILDING, UnitTask.SEEDING)
                     or worker.id in ctx.busy or worker.id in ctx.board.builders
                     or worker.id in ctx.board.farmers.values()

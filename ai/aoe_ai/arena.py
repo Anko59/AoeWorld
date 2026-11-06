@@ -133,12 +133,14 @@ def play(
     config: Optional[Config] = None,
     stop: Optional[Callable[[list[BotReport]], bool]] = None,
     before_step: Optional[Callable[[int, list[BotReport]], None]] = None,
+    brain_factory: Optional[Callable[[int], object]] = None,
+    map_hash: Optional[str] = None,
 ) -> dict:
     """One seeded match against a running arena server; the report is JSON-able."""
     config = config or Config()
     started = time.monotonic()
-    info = aoeworld.start_match(url, SECRET, ["ai"] * bots, tiles_per_side=size, seed=seed)
-    host = Host(url, [slot.token for slot in info.slots], config, orders_per_second=10**6)
+    info = aoeworld.start_match(url, SECRET, ["ai"] * bots, tiles_per_side=size, seed=seed, map_hash=map_hash)
+    host = Host(url, [slot.token for slot in info.slots], config, brain_factory=brain_factory, orders_per_second=10**6)
     period = max(1, round(TICK_HZ / config.decision_hz))
     final = int(minutes * 60 * TICK_HZ)
     stepper, fleet = Stepper(url), aoeworld.Fleet(host.clients)

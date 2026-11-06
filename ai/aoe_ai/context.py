@@ -51,7 +51,10 @@ class Context:
         self.units = decision.world.my_units()
         self.villagers = [u for u in self.units if u.kind == UnitKind.VILLAGER]
         self.scouts = [u for u in self.units if u.kind == UnitKind.SCOUT]
-        self.army = [u for u in self.units if u.kind in MILITARY]
+        military = [u for u in self.units if u.kind in MILITARY]
+        #: Soldiers a General leads take his orders, not ours.
+        self.led = [u for u in military if u.commanded_by is not None]
+        self.army = [u for u in military if u.commanded_by is None] if self.led else military
         self.buildings = decision.world.my_buildings()
         self.enemies = decision.world.visible_enemies()
         self.center = decision.world.town_center()

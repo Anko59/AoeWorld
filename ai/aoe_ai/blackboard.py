@@ -92,6 +92,9 @@ class Blackboard:
     enemy_hp: dict[int, int] = field(default_factory=dict)
     #: Counters for reports and tests.
     stats: dict[str, int] = field(default_factory=dict)
+    #: Management units: unit -> building it was sent to garrison in; Generals set up.
+    seated: dict[int, int] = field(default_factory=dict)
+    generals: set[int] = field(default_factory=set)
 
     def bump(self, name: str, amount: int = 1) -> None:
         self.stats[name] = self.stats.get(name, 0) + amount

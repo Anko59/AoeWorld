@@ -20,6 +20,7 @@ from .play.naval import NavalManager
 from .play.research import ResearchManager
 from .play.scouting import ScoutManager
 from .play.bridges import BridgeManager
+from .play.management import ManagementManager
 
 #: Refusals that mean "this target will never work for this unit".
 HOPELESS = (
@@ -49,6 +50,7 @@ class Brain:
         self.scouts = ScoutManager()
         self.combat = CombatManager()
         self.bridges = BridgeManager()
+        self.management = ManagementManager()
 
     def on_tick(self, client: Any, decision: Any) -> None:
         self.decide(client, decision)
@@ -60,7 +62,8 @@ class Brain:
         if ctx.castle:
             castle_units = sum(u.kind in (UnitKind.KNIGHT, UnitKind.LIGHT_CAVALRY, UnitKind.CROSSBOWMAN, UnitKind.ELITE_SKIRMISHER, UnitKind.PIKEMAN, UnitKind.LONG_SWORDSMAN, UnitKind.MANGONEL, UnitKind.BATTERING_RAM) for u in ctx.army)
             ctx.board.stats["castle_units_peak"] = max(ctx.board.stats.get("castle_units_peak", 0), castle_units)
-        ctx.board.stats["army_peak"] = max(ctx.board.stats.get("army_peak", 0), len(ctx.army))
+        ctx.board.stats["army_peak"] = max(ctx.board.stats.get("army_peak", 0), len(ctx.army) + len(ctx.led))
+        ctx.board.stats["pop_peak"] = max(ctx.board.stats.get("pop_peak", 0), ctx.economy.population if ctx.economy else 0)
         ctx.board.stats["villagers_peak"] = max(ctx.board.stats.get("villagers_peak", 0), len(ctx.villagers))
         if ctx.economy is None:
             return
@@ -69,11 +72,13 @@ class Brain:
         self.research.step(ctx)
         self.bridges.step(ctx)
         self.combat.step(ctx)
+        self.management.lead(ctx, self.combat)
         # Rally existing soldiers before idle workers consume the shared route
         # query budget. Queue spending follows the preparation priority below.
         self.military.rally(ctx)
         self.economy.produce(ctx)
         self.constructor.houses(ctx)
+        self.management.step(ctx)
         self.economy.wood_dropoff(ctx)
         if ((ctx.center is not None and ctx.center.researching == Tech.FEUDAL_AGE)
                 or (ctx.feudal and not ctx.castle
