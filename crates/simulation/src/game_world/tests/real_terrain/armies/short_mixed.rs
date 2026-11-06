@@ -27,6 +27,18 @@ struct Outcome {
 }
 
 fn cross(spawn: &[(i32, i32)], goal: (i32, i32), ticks: u32, siege: bool) -> Outcome {
+    cross_failing(spawn, goal, ticks, siege, None)
+}
+
+/// As `cross`; at tick `fail` the carrier's route search fails, as one that
+/// exhausts its work under load does.
+fn cross_failing(
+    spawn: &[(i32, i32)],
+    goal: (i32, i32),
+    ticks: u32,
+    siege: bool,
+    fail: Option<u32>,
+) -> Outcome {
     let mut f = build("army-river");
     let ids = spawn
         .iter()
@@ -65,6 +77,12 @@ fn cross(spawn: &[(i32, i32)], goal: (i32, i32), ticks: u32, siege: bool) -> Out
         at.tile_floor().x > 153 && path_squared(at, goal) <= i64::from(8 * 1024).pow(2)
     };
     for tick in 0..ticks {
+        if Some(tick) == fail {
+            let carrier = f.world.units[f.world.lookup[&ids[0]]].formation.unwrap();
+            let index = f.world.lookup[&carrier];
+            f.world
+                .stop_route(index, Some(crate::GameWorldError::PathBudgetExceeded));
+        }
         f.world.advance();
         for &id in &counted {
             if let Some((direct, navigating, detached, blocked)) =
@@ -153,6 +171,21 @@ fn spread_mixed_order_across_a_river_takes_the_bridge() {
     );
     assert!(
         out.blocked_unrouted <= 9 * 8,
+        "members pressed on the bank without a route: {out:?}"
+    );
+}
+
+/// The carrier's route fails 40 tiles before the bridge. Members must keep
+/// the known corridor rather than walk straight at their slots over water.
+#[test]
+fn failed_carrier_route_keeps_members_off_the_straight_line() {
+    let spawn = (0..16)
+        .map(|i| (100 + (i % 4) * 2, 126 + (i / 4) * 2))
+        .collect::<Vec<_>>();
+    let out = cross_failing(&spawn, (170, 126), 6_000, true, Some(200));
+    record("failed-carrier", &out);
+    assert!(
+        out.blocked_unrouted <= 16 * 8,
         "members pressed on the bank without a route: {out:?}"
     );
 }
