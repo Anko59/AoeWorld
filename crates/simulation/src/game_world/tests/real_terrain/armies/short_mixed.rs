@@ -150,27 +150,29 @@ fn short_mixed_order_across_a_river_takes_the_bridge() {
     );
 }
 
-/// Twelve units scattered over more ground than the trip is long. Its ram
-/// is not counted: a ram on group steering stalls at the far mouth of this
-/// diagonal deck, where the corridor's corner cuts over water (open issue).
+/// Twelve units scattered over more ground than the trip is long, rams
+/// included: the corridor's corner at the diagonal deck's far end cuts over
+/// water, which a ram's body cannot.
 #[test]
 fn spread_mixed_order_across_a_river_takes_the_bridge() {
     let spawn = (0..12)
         .map(|i| (110 + (i % 3) * 14, 70 + (i / 3) * 18))
         .collect::<Vec<_>>();
-    let out = cross(&spawn, (170, 110), 8_000, false);
+    let out = cross(&spawn, (170, 110), 8_000, true);
     record("spread", &out);
     assert!(
         !out.direct,
         "straight lines cross the river: not a direct order"
     );
     assert_eq!(
-        out.across, 9,
+        out.across, 12,
         "members short of the far bank:\n{}",
         out.report
     );
+    // Before clear-line direct orders: 22,153. A wide body still presses a
+    // few seconds at the deck exit before it takes the corridor point ahead.
     assert!(
-        out.blocked_unrouted <= 9 * 8,
+        out.blocked_unrouted <= 12 * 64,
         "members pressed on the bank without a route: {out:?}"
     );
 }
