@@ -20,8 +20,13 @@ const MAX_NODES: usize = 64;
 const EXPANSIONS: usize = 40_000;
 /// Longest bridge a route may use, in tiles between the banks.
 const MAX_BRIDGE: i32 = 14;
-/// Extra route cost per bridge tile: a bridge is a last resort over a long detour.
+/// Extra route cost per new bridge tile: a bridge is a last resort over a long detour.
 const BRIDGE_TILE_COST: u32 = 3;
+/// Bank tiles between two of the domain's bridges at the least.
+const BRIDGE_SPACING: i32 = 30;
+/// Route cost of laying any new bridge, so roads walk along the bank to a
+/// bridge the domain already has rather than span the river again nearby.
+const NEW_BRIDGE_COST: u32 = 60;
 /// Tiles beyond a gate that its road continues outside the wall.
 const STUB: i32 = 3;
 
@@ -262,8 +267,10 @@ impl Network<'_> {
 
     /// A bridge from bank `a` to bank `b`, checked once per pair.
     fn bridgeable(&mut self, a: TileCoord, b: TileCoord) -> bool {
-        // A second span beside a laid one is never wanted: cross by that one.
-        let near = |t: TileCoord, o: TileCoord| (t.x - o.x).abs().max((t.y - o.y).abs()) <= 12;
+        // A second span near a laid or planned one is never wanted: cross by
+        // that one and walk the bank.
+        let near =
+            |t: TileCoord, o: TileCoord| (t.x - o.x).abs().max((t.y - o.y).abs()) <= BRIDGE_SPACING;
         if self
             .fixed
             .keys()
@@ -326,7 +333,8 @@ impl Network<'_> {
                     (_, 1) => 3,
                     _ => 0,
                 };
-                let total = cost + 1 + BRIDGE_TILE_COST * len.saturating_sub(2);
+                // Crossing a bridge already laid costs only its walk.
+                let total = cost + len.max(1);
                 if best.get(&(other, d)).is_none_or(|(c, _)| total < *c) {
                     best.insert((other, d), (total, Some((here, true))));
                     heap.push(Reverse((total + h(other), total, other.y, other.x, d)));
@@ -360,7 +368,7 @@ impl Network<'_> {
                         });
                         match far {
                             Some((k, m)) if k > 0 && self.bridgeable(tile, m) => {
-                                (m, 1 + BRIDGE_TILE_COST * (k as u32 - 1), true)
+                                (m, NEW_BRIDGE_COST + BRIDGE_TILE_COST * (k as u32 - 1), true)
                             }
                             _ => continue,
                         }
@@ -405,6 +413,10 @@ impl Network<'_> {
             });
             self.goals.extend([a, b]);
             self.planned_spans.extend([a, b]);
+            // Later routes of this plan cross the planned span like a laid one.
+            let len = (a.x - b.x).abs().max((a.y - b.y).abs()) as u32 + 1;
+            self.fixed.insert(a, (b, len));
+            self.fixed.insert(b, (a, len));
         }
         true
     }

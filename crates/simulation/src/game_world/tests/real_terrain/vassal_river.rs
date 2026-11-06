@@ -59,10 +59,13 @@ fn a_vassal_bridges_a_real_river_and_its_builders_cross() {
         .filter(|b| b.kind == BuildingKind::Bridge)
         .filter_map(|b| b.bridge_span.map(|s| s.from))
         .collect();
+    // The river runs the whole height of the domain, so its roads may cross
+    // it more than once, but never with spans side by side.
+    assert!(banks.len() <= 4, "bridges after re-planning: {banks:?}");
     for (i, a) in banks.iter().enumerate() {
         for b in &banks[i + 1..] {
             assert!(
-                (a.x - b.x).abs().max((a.y - b.y).abs()) > 12,
+                (a.x - b.x).abs().max((a.y - b.y).abs()) > 30,
                 "parallel bridges {a:?} {b:?}"
             );
         }

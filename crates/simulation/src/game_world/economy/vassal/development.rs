@@ -333,9 +333,14 @@ impl GameWorld {
                 break;
             }
             // Stone over palisade: the palisade run comes down as the stone
-            // run goes up, in one step.
+            // run goes up, in one step. If the stone run is refused, the
+            // palisade goes back up so the line never opens.
+            let mut replaced = Vec::new();
             for t in &run {
-                if let Some(old) = self.upgradable(player, *t, kind) {
+                if let Some(old) = self.upgradable(player, *t, kind)
+                    && let Some(b) = self.building(old)
+                {
+                    replaced.push((b.kind, b.footprint));
                     self.remove_building(old);
                 }
             }
@@ -356,6 +361,11 @@ impl GameWorld {
                 self.issue_build_gate(player, &crew, kind, tile, vertical, queued)
                     .map(|_| ())
             };
+            if result.is_err() {
+                for &(old, footprint) in &replaced {
+                    let _ = self.insert_building(player, old, footprint, true);
+                }
+            }
             match result {
                 Ok(()) => {
                     wait = VassalWait::Building;
