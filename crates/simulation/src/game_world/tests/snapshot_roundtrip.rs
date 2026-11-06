@@ -290,3 +290,35 @@ fn sheltered_units_and_garrison_orders_in_progress_survive_a_save() {
         "the walk to shelter is ordered again"
     );
 }
+
+#[test]
+fn an_animal_under_a_later_foundation_is_put_beside_it_on_load() {
+    let (mut saved, start) = flat();
+    let tile = TileCoord::new(start.x + 20, start.y + 20);
+    let sheep = saved
+        .spawn_animal(
+            crate::AnimalKind::Sheep,
+            aoe_core::WorldPosition::from_tile_center(tile).unwrap(),
+        )
+        .unwrap();
+    // Placement checks terrain and buildings, not animals.
+    saved
+        .insert_building(
+            PlayerId(0),
+            crate::BuildingKind::House,
+            aoe_core::TileRect::from_xywh(tile.x, tile.y, 2, 2),
+            false,
+        )
+        .unwrap();
+    let (restored, report) = roundtrip(&saved, flat().0);
+    assert_eq!(report.animals_lost, 0, "{report:?}");
+    let back = restored
+        .animals()
+        .find(|a| a.id == sheep)
+        .expect("the sheep");
+    let at = back.position.tile_floor();
+    assert!(
+        (at.x - tile.x).abs().max((at.y - tile.y).abs()) <= 3,
+        "{at:?}"
+    );
+}

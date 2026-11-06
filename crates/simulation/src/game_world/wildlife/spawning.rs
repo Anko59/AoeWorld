@@ -29,7 +29,25 @@ impl GameWorld {
     ) -> bool {
         // The saved game held these animals already: its limit is not applied again.
         let limit = std::mem::replace(&mut self.economy.limits.animals, usize::MAX);
-        let spawned = self.spawn_animal(record.kind, record.position);
+        let mut spawned = self.spawn_animal(record.kind, record.position);
+        // A foundation laid over it since: the nearest open tile, ring by ring.
+        let home = record.position.tile_floor();
+        for radius in 1..=12_i32 {
+            if spawned.is_ok() {
+                break;
+            }
+            for dy in -radius..=radius {
+                for dx in -radius..=radius {
+                    if spawned.is_ok() || (dx.abs() != radius && dy.abs() != radius) {
+                        continue;
+                    }
+                    let tile = aoe_core::TileCoord::new(home.x + dx, home.y + dy);
+                    if let Ok(at) = WorldPosition::from_tile_center(tile) {
+                        spawned = self.spawn_animal(record.kind, at);
+                    }
+                }
+            }
+        }
         self.economy.limits.animals = limit;
         let Ok(id) = spawned else {
             return false;
