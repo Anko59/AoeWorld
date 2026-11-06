@@ -25,7 +25,7 @@
 
 ---
 
-{{VIDEO}}
+https://github.com/user-attachments/assets/8663f0b0-5f9e-4fa7-9d4b-392525323316
 
 <div align="center"><sub>🎬 Real gameplay: armies, bridges, fleets and cities on maps generated from real terrain.</sub></div>
 
@@ -35,23 +35,23 @@
 
 <table>
   <tr>
-    <td align="center"><img src="{{IMG_01}}" width="420"><br><sub><b>🌍 Real-world landscape</b><br>A scout explores terrain built from real elevation, rivers and vegetation</sub></td>
-    <td align="center"><img src="{{IMG_02}}" width="420"><br><sub><b>🌉 Bridge and fishing fleet</b><br>Roads, bridges and boats working a real river</sub></td>
+    <td align="center"><img src="https://github.com/user-attachments/assets/f4568cdd-a45c-4b08-a0e1-b3fdaf96b89e" width="420"><br><sub><b>🌍 Real-world landscape</b><br>A scout explores terrain built from real elevation, rivers and vegetation</sub></td>
+    <td align="center"><img src="https://github.com/user-attachments/assets/7279680e-6719-4c01-a8b1-b7987ddecc9b" width="420"><br><sub><b>🌉 Bridge and fishing fleet</b><br>Roads, bridges and boats working a real river</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="{{IMG_03}}" width="420"><br><sub><b>🏘️ Castle Age town</b><br>Farms, mills, walls and towers around the Town Center</sub></td>
-    <td align="center"><img src="{{IMG_04}}" width="420"><br><sub><b>🏙️ Imperial city</b><br>A grown city guarded by a castle</sub></td>
+    <td align="center"><img src="https://github.com/user-attachments/assets/2095dd62-3fe9-4b0d-ae55-344f7e71b4d2" width="420"><br><sub><b>🏘️ Castle Age town</b><br>Farms, mills, walls and towers around the Town Center</sub></td>
+    <td align="center"><img src="https://github.com/user-attachments/assets/7db97684-a030-4d72-ad4f-45a699597c47" width="420"><br><sub><b>🏙️ Imperial city</b><br>A grown city guarded by a castle</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="{{IMG_05}}" width="420"><br><sub><b>⚔️ Armies clash</b><br>Formations meet in the open field</sub></td>
-    <td align="center"><img src="{{IMG_06}}" width="420"><br><sub><b>🛡️ Army crosses a bridge</b><br>Long-range pathfinding on real terrain</sub></td>
+    <td align="center"><img src="https://github.com/user-attachments/assets/de04821e-8bf0-485c-b3bc-16516115310c" width="420"><br><sub><b>⚔️ Armies clash</b><br>Formations meet in the open field</sub></td>
+    <td align="center"><img src="https://github.com/user-attachments/assets/bd075beb-4041-43eb-812a-079f45b441ea" width="420"><br><sub><b>🛡️ Army crosses a bridge</b><br>Long-range pathfinding on real terrain</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="{{IMG_07}}" width="420"><br><sub><b>🗺️ Strategic far view</b><br>Icons, layers and charts when you zoom all the way out</sub></td>
-    <td align="center"><img src="{{IMG_08}}" width="420"><br><sub><b>💥 Late-game battle</b><br>Thousands of units in one fight</sub></td>
+    <td align="center"><img src="https://github.com/user-attachments/assets/d5b6a0fb-40fe-4c20-814a-1364264b2831" width="420"><br><sub><b>🗺️ Strategic far view</b><br>Icons, layers and charts when you zoom all the way out</sub></td>
+    <td align="center"><img src="https://github.com/user-attachments/assets/c7bc44eb-9483-4fb3-83b5-292a6c7b5658" width="420"><br><sub><b>💥 Late-game battle</b><br>Thousands of units in one fight</sub></td>
   </tr>
   <tr>
-    <td colspan="2" align="center"><img src="{{GIF}}" width="860"><br><sub><b>🔁 Armies clash, in motion</b></sub></td>
+    <td colspan="2" align="center"><img src="https://github.com/user-attachments/assets/dc331d3d-0d59-42d2-adce-2c80067416b8" width="860"><br><sub><b>🔁 Armies clash, in motion</b></sub></td>
   </tr>
 </table>
 
@@ -206,7 +206,7 @@ Hotkeys are ignored inside text fields and open dialogs. The client code in `web
 | Unit | Trained at | Role |
 | --- | --- | --- |
 | 🧑‍🌾 **Steward** | Town Center | Garrisoned in a Town Center, it runs the villagers in a 100-tile circle around it: resource weights, a cap and training controls. See [Steward economy](docs/economy/steward.md). |
-| 🛡️ **Vassal** | Castle | Garrisoned in a Castle, it takes over a territory: defends it, recruits idle soldiers, and develops it with towers, barracks, gated walls, roads and bridges. See [economy](docs/economy.md#defensive-vassal). |
+| 🛡️ **Vassal** | Castle | Garrisoned in a Castle, it takes over a Steward-sized domain (100 tiles): walls the sides enemies come from, sets gates, towers near work sites and production behind the castle, links it all with roads and bridges, and defends it. See [economy](docs/economy.md#defensive-vassal). |
 | ⚔️ **General** | Castle (Castle Age) | Leads an army of up to 100 soldiers with Captain and Trainer modes, five unit-mix sliders and a Train button that recruits from nearby production buildings. See [the General](docs/gameplay/general.md). |
 
 AIs get the same units through the [AI SDK](docs/ai-sdk.md), so a Python bot can delegate work exactly as a human does.
