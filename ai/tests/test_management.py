@@ -107,6 +107,33 @@ def test_a_steward_in_production_still_counts_after_the_ten_second_cooldown():
         assert not [a for a in client.named("train") if a[1] == UnitKind.STEWARD], seconds
 
 
+def test_one_finished_steward_clears_only_its_own_order():
+    from fakes import FakeClient, decision
+
+    units, buildings = castle_base()
+    extra = [building(501, BuildingKind.TOWN_CENTER, tile=(90, 50)), building(502, BuildingKind.TOWN_CENTER, tile=(50, 90))]
+    config = replace(Config(), stewards=2, steward_min_villagers=20)
+    world = FakeWorld(units, buildings + extra, eco=rich())
+    brain, client = play(world, config)
+
+    def stewards(c):
+        return [a for a in c.named("train") if a[1] == UnitKind.STEWARD]
+
+    ordered = len(stewards(client))
+    for seconds in (12, 24):
+        world.tick = 100 + seconds * 20
+        client = FakeClient()
+        brain.decide(client, decision(world))
+        ordered += len(stewards(client))
+    assert ordered == 2
+    world._units.append(unit(903, UnitKind.STEWARD, tile=(62, 62)))  # the first one is out
+    for seconds in (40, 55):
+        world.tick = 100 + seconds * 20
+        client = FakeClient()
+        brain.decide(client, decision(world))
+        assert not stewards(client), seconds
+
+
 def test_a_general_who_lost_soldiers_after_a_full_army_gets_train_again():
     units, buildings = castle_base()
     general = unit(902, UnitKind.GENERAL, tile=(60, 60))

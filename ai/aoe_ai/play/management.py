@@ -197,7 +197,10 @@ class ManagementManager:
                 ctx.order("train", b.id, kind)
                 ctx.queued += 1
                 board.cool(f"train:{b.id}", ctx.tick, 10 * ctx.world.tick_hz)
-                board.producing.setdefault(str(kind), []).append((ctx.tick, self.fielded(ctx, kind)))
+                # The count this order is waiting to exceed includes the
+                # orders still training, so one arrival clears only the oldest.
+                pending = self.fielded(ctx, kind) + self.in_production(ctx, kind)
+                board.producing.setdefault(str(kind), []).append((ctx.tick, pending))
                 board.bump(f"{str(kind).split('.')[-1].lower()}_trained")
                 return
             self.save(ctx, kind, cost)
