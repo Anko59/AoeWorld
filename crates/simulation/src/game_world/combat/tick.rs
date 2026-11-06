@@ -89,6 +89,15 @@ impl GameWorld {
         };
         let Some(goal) = goal else {
             self.end_attack(id, changed);
+            // An attack-move member's engage look and a General's orders
+            // decide what follows; only a free-standing fighter picks on.
+            if attacker.resume.is_none() && self.free_to_pick_on(id) {
+                self.next_target_after_kill(
+                    id,
+                    attacker.origin.unwrap_or(source.position),
+                    changed,
+                );
+            }
             return;
         };
         if !self.pursuit_allowed(id, goal, changed) {

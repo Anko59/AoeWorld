@@ -188,7 +188,7 @@ impl GameWorld {
                 })
     }
 
-    pub(super) fn uses_melee_position(kind: UnitKind) -> bool {
+    pub(crate) fn uses_melee_position(kind: UnitKind) -> bool {
         let stats = super::unit_combat(kind);
         stats.attack_kind == super::DamageKind::Melee && stats.range <= 1
     }

@@ -4,13 +4,21 @@ use crate::game_world::combat::tick::Goal;
 /// Ticks between an attack-move group's looks; groups are staggered by id.
 const ENGAGE_CADENCE: u64 = 4;
 /// Enemies one look collects; each member compares only against these.
-const ENGAGE_CANDIDATES: usize = 32;
+const ENGAGE_CANDIDATES: usize = 256;
 /// Spatial bucket entries one look may inspect, whatever the group's extent.
 const ENGAGE_INSPECTIONS: usize = 2_048;
+/// Entries of one spatial bucket a look inspects. Successive looks start one
+/// window further on, so adjacent windows cover the whole bucket in turn.
+const ENGAGE_BUCKET_WINDOW: usize = 128;
 /// Building tiles one look may read; a wider window rotates by rows.
 const ENGAGE_BUILDING_TILES: i32 = 1_024;
 /// Members one look may send into a fight; the others look again next time.
-const ENGAGE_PER_LOOK: usize = 8;
+const ENGAGE_PER_LOOK: usize = 16;
+/// Members one look examines, rotating through the group, so the cost of a
+/// look does not grow with the army while every member is seen every few seconds.
+const ENGAGE_MEMBERS_PER_LOOK: usize = 128;
+/// Melee members one enemy unit can hold at once.
+const MELEE_SPOTS: usize = 8;
 /// Enemies in sight a member weighs per look, nearest first.
 const TARGETS_PER_MEMBER: usize = 3;
 
@@ -38,13 +46,25 @@ impl GameWorld {
             })
             .map(|(&id, _)| id)
             .collect::<Vec<_>>();
+        // Melee fighters already on each enemy, whoever released them: a man
+        // has eight spots around him, so more would only stand around him.
+        let mut fighting = std::collections::BTreeMap::<EntityId, usize>::new();
+        for &id in self.combat.attackers.keys().filter(|_| !leaders.is_empty()) {
+            if let Some(unit) = self.unit(id)
+                && Self::uses_melee_position(unit.kind)
+                && let Some(target) = unit.attack_target
+            {
+                *fighting.entry(target).or_default() += 1;
+            }
+        }
         for leader in leaders {
             let Some((player, lookers, enemies)) = self.formation_look(leader) else {
                 continue;
             };
-            let start = (self.tick.0 / ENGAGE_CADENCE) as usize % lookers.len();
+            let start =
+                (self.tick.0 / ENGAGE_CADENCE) as usize * ENGAGE_MEMBERS_PER_LOOK % lookers.len();
             let mut engaged = 0;
-            for n in 0..lookers.len() {
+            for n in 0..lookers.len().min(ENGAGE_MEMBERS_PER_LOOK) {
                 if engaged == ENGAGE_PER_LOOK {
                     break;
                 }
@@ -59,14 +79,27 @@ impl GameWorld {
                 seen.sort_unstable();
                 // Checked one by one: an earlier member may just have taken
                 // the last free spot around the same enemy.
+                let melee = self
+                    .unit(id)
+                    .is_some_and(|u| Self::uses_melee_position(u.kind));
                 let target = seen
                     .into_iter()
                     .take(TARGETS_PER_MEMBER)
                     .map(|(_, enemy)| enemy)
-                    .find(|&enemy| self.attack_spot_free(id, enemy));
+                    .find(|&enemy| {
+                        // Buildings have a wider perimeter; their spots are
+                        // checked by `attack_spot_free` alone.
+                        (!melee
+                            || self.unit(enemy).is_none()
+                            || fighting.get(&enemy).copied().unwrap_or(0) < MELEE_SPOTS)
+                            && self.attack_spot_free(id, enemy)
+                    });
                 if let Some(target) = target
                     && self.issue_attack(player, id, target).is_ok()
                 {
+                    if melee {
+                        *fighting.entry(target).or_default() += 1;
+                    }
                     if let Some(attacker) = self.combat.attackers.get_mut(&id) {
                         attacker.resume = Some(slot);
                     }
@@ -136,9 +169,9 @@ impl GameWorld {
                 let Some(ids) = self.chunks.get(&ChunkCoord { x, y }) else {
                     continue;
                 };
-                let start = ((look * ENGAGE_CANDIDATES as u64 + u64::from(leader.0))
+                let start = ((look * ENGAGE_BUCKET_WINDOW as u64 + u64::from(leader.0))
                     % ids.len() as u64) as usize;
-                for n in 0..ids.len().min(128).min(budget) {
+                for n in 0..ids.len().min(ENGAGE_BUCKET_WINDOW).min(budget) {
                     budget -= 1;
                     let id = ids[(start + n) % ids.len()];
                     let unit = self.units[self.lookup[&id]].state;

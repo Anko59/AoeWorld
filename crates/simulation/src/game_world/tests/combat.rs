@@ -8,6 +8,7 @@ mod approach;
 mod benchmark;
 mod buildings;
 mod delete;
+pub(crate) mod engage;
 mod garrison;
 mod hidden_bonuses;
 mod hills_tests;

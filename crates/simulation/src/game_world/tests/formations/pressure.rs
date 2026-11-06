@@ -86,10 +86,11 @@ fn formations_attack_move_does_not_hide_an_enemy_behind_a_dense_own_army() {
         w.advance();
     }
     // Enemy discovery is not starved by the own units around it: within 16
-    // ticks 8 members found it and a free spot around it and left the group;
-    // the other 192 still march. (Before each
-    // member broke off for any enemy in a 13x13-tile window: 88 stood around
-    // the one enemy, most of them unable to reach it.)
+    // ticks the group's looks sent eight melee members to it, the spots around
+    // one man, counted over every attacker so a second look adds none; the
+    // other 192 still march. (Before each member broke off for
+    // any enemy in a 13x13-tile window: 88 stood around the one enemy, most of
+    // them unable to reach it.)
     let fighters = ids
         .iter()
         .filter(|&&id| w.unit(id).unwrap().attack_target == Some(enemy))
@@ -131,6 +132,39 @@ fn formations_attack_move_engages_visible_buildings() {
         .count();
     let left = ids.iter().filter(|&&id| w.formation(id).is_none()).count();
     assert_eq!((fighters, left), (3, 3));
+}
+
+#[test]
+fn a_building_takes_more_melee_attackers_than_one_man() {
+    let mut w = wide_world();
+    w.set_fog_disabled(true);
+    let ids = army(&mut w, 40);
+    let building = w
+        .insert_building(
+            PlayerId(1),
+            BuildingKind::TownCenter,
+            TileRect::from_xywh(46, 38, 4, 4),
+            true,
+        )
+        .unwrap();
+    w.issue_formation_move(
+        PlayerId(0),
+        &ids,
+        Formation::Line,
+        center(80, 40),
+        false,
+        true,
+    )
+    .unwrap();
+    for _ in 0..120 {
+        w.advance();
+    }
+    // The eight-spot cap is for a man; a Town Center's perimeter holds more.
+    let fighters = ids
+        .iter()
+        .filter(|&&id| w.unit(id).unwrap().attack_target == Some(building))
+        .count();
+    assert!(fighters > 8, "{fighters} attack the Town Center");
 }
 
 /// Whether `id` stands within `tiles` tiles of `to`.

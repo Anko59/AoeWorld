@@ -3,6 +3,7 @@ use crate::{Age, GeneralState, Stockpile};
 
 mod appearance;
 mod detached;
+mod engage;
 mod fighting;
 mod movement;
 mod orders;
@@ -361,7 +362,7 @@ fn crowded_general_admission_is_bounded_and_rotates_without_scanning_world_armie
 }
 
 #[test]
-fn distant_recruits_do_not_inflate_local_fight_strength() {
+fn the_whole_army_counts_towards_fight_strength_wherever_it_stands() {
     let (mut w, _) = setup();
     let riders: Vec<_> = (0..20)
         .map(|n| soldier(&mut w, UnitKind::Knight, 102 + n % 4, 100 + n / 4))
@@ -379,6 +380,14 @@ fn distant_recruits_do_not_inflate_local_fight_strength() {
         w.spawn_kind(PlayerId(1), UnitKind::Knight, at(110 + n % 3, 100 + n / 3))
             .unwrap();
     }
+    decide(&mut w);
+    assert_eq!(w.general_status(g).unwrap().state, GeneralState::Fighting);
+    // Forty more enemy knights outweigh the whole column by more than 25%.
+    for n in 0..40 {
+        w.spawn_kind(PlayerId(1), UnitKind::Knight, at(104 + n % 6, 104 + n / 6))
+            .unwrap();
+    }
+    decide(&mut w);
     decide(&mut w);
     assert_eq!(w.general_status(g).unwrap().state, GeneralState::Retreating);
 }
