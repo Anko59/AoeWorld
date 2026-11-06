@@ -173,8 +173,12 @@ class ManagementManager:
     def train(self, ctx: Context, house: BuildingKind, kind: UnitKind, wants: Any) -> None:
         board = ctx.board
         cost = unit_cost(kind)
+        busy = False
         for b in ctx.buildings:
-            if b.kind != house or not b.complete or b.queue_length or b.researching is not None or not wants(b):
+            if b.kind != house or not b.complete or not wants(b):
+                continue
+            if b.queue_length or b.researching is not None:
+                busy = True  # a Town Center queued with villagers: save so the queue drains
                 continue
             if board.cooling(f"train:{b.id}", ctx.tick) or ctx.free_population() <= 0:
                 continue
@@ -186,6 +190,8 @@ class ManagementManager:
                 return
             self.save(ctx, kind, cost)
             return
+        if busy:
+            self.save(ctx, kind, cost)
 
     def save(self, ctx: Context, kind: UnitKind, cost: tuple) -> None:
         """Save for `kind`: no soldiers, the gold and food shares up. Self-limiting:
@@ -202,6 +208,7 @@ class ManagementManager:
             return
         ctx.saving_castle = True
         board.saving_tick = ctx.tick
+        board.hold_villagers_tick = ctx.tick  # villagers eat the 1,000 food: pause them meanwhile
         have = (ctx.economy.food, ctx.economy.wood, ctx.economy.gold, ctx.economy.stone)
         for i in range(4):
             ctx.spent[i] += max(0, min(cost[i], have[i] - ctx.spent[i]))

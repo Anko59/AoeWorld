@@ -132,6 +132,8 @@ class EconomyManager:
         center = ctx.center
         if center is None or ctx.hold_town_center or center.researching is not None:
             return
+        if ctx.tick - ctx.board.hold_villagers_tick <= 3 * ctx.world.tick_hz:
+            return
         for kind in (ResourceKind.FOOD, ResourceKind.WOOD):
             candidates = heapq.nsmallest(48, ctx.resources(kind), key=lambda n: dist2(n.tile, ctx.home))
             target = next((n for n in candidates

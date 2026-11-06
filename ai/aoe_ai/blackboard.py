@@ -98,6 +98,7 @@ class Blackboard:
     #: Self-limiting saving for management units: key -> tick it began; last saving tick.
     save_since: dict[str, int] = field(default_factory=dict)
     saving_tick: int = -10**9
+    hold_villagers_tick: int = -10**9
 
     def bump(self, name: str, amount: int = 1) -> None:
         self.stats[name] = self.stats.get(name, 0) + amount

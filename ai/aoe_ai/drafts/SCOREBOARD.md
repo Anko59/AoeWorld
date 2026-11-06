@@ -57,6 +57,55 @@ of minute 15 to 16 was not met: the best trace is Castle clicked at minute 19.7 
 Both are early-game (Dark and Feudal Age); neither shows a draft effect on the server, and nothing here says anything
 about late-game armies. The arena (`tournament`) has no tick clock, so its tick records are only per-tick work.
 
+## Round 3: stalls, expansion and one long game
+
+**Stall diagnosis** (6 baseline bots, seed 4, sampled every few minutes: stockpile, tasks, buildings, refusal counters):
+the Feudal stalls were mostly *no building site*. `find_build_site` searched 18 tiles around the Town Center, so a
+cramped start (river, cliff, forest) never placed its Archery Range or Blacksmith (one start sat on 1,062 wood and
+892 food with only a Barracks) and so never met the two Castle requirements; another could not place Houses (99
+refusals) and sat at its population cap. Fix: the search widens to 2x and 3x the radius and finally to gap 0; the same
+run then had all three buildings by minute 20. Other causes seen and not fixed: gather orders refused as unreachable
+on fish-and-island starts (wood 21 beside 1,598 food), and the Castle gate (`castle_villagers` hold plus
+`castle_army_min`) that freezes villagers at 28 while a weak food income saves for 800.
+
+**Expansion** (Town Centers need Castle Age here: 275 wood, 100 stone): drafts place extra Town Centers from Castle Age,
+trying six directions around the village, keep the wood back for the next one and lean shares to wood; houses scale with
+Town Centers; every Town Center keeps a villager queue; caps 150 to 400 villagers.
+
+**Long game**: seed 5, package `9b2864a2`, all six drafts, release server, revision `66022121f`. Planned 120 game
+minutes; machine load (average up to 65) held it to 44.2 game minutes in 3,290 s of wall time. CPU columns are inflated
+by that load and not comparable with rounds 1 and 2.
+
+| draft | games | wins | mean score | Imperial (games) | first Imperial min | mean peak pop | mean kills | mean losses | orders/min | CPU ms/decision | slowest decision ms | adjusted score |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| fast_castle | 1 | 1 | 861 | 1 | 44.0 | 111 | 0.0 | 0.0 | 38 | 72.6 | 1315 | 320 |
+| steward_scaler | 1 | 0 | 809 | 0 | - | 259 | 0.0 | 0.0 | 46 | 198.0 | 6406 | -233 |
+| baseline | 1 | 0 | 776 | 0 | - | 189 | 31.0 | 22.0 | 75 | 148.5 | 1823 | -68 |
+| boom | 1 | 0 | 730 | 0 | - | 171 | 22.0 | 31.0 | 29 | 61.1 | 1532 | 236 |
+| generals | 1 | 0 | 627 | 0 | - | 79 | 0.0 | 2.0 | 33 | 43.6 | 534 | 203 |
+| balanced | 1 | 0 | 623 | 0 | - | 75 | 0.0 | 2.0 | 21 | 13.1 | 1169 | 621 |
+
+
+Population and Town Centers every 10 minutes (D/F/C/I = age; S/V/G = Stewards/Vassals/Generals):
+
+| minute | balanced | baseline | boom | fast_castle | generals | steward_scaler |
+|---|---|---|---|---|---|---|
+| 0 | D pop 4 TC 1 S0V0G0 | D pop 4 TC 1 S0V0G0 | D pop 4 TC 1 S0V0G0 | D pop 4 TC 1 S0V0G0 | D pop 4 TC 1 S0V0G0 | D pop 4 TC 1 S0V0G0 |
+| 10 | D pop 21 TC 1 S0V0G0 | D pop 23 TC 1 S0V0G0 | D pop 27 TC 1 S0V0G0 | D pop 21 TC 1 S0V0G0 | D pop 21 TC 1 S0V0G0 | D pop 23 TC 1 S0V0G0 |
+| 20 | F pop 30 TC 1 S0V0G0 | F pop 42 TC 1 S0V0G0 | C pop 35 TC 1 S0V0G0 | F pop 36 TC 1 S0V0G0 | F pop 32 TC 1 S0V0G0 | C pop 39 TC 2 S0V0G0 |
+| 30 | C pop 44 TC 1 S0V0G0 | C pop 101 TC 1 S0V0G0 | C pop 58 TC 6 S0V0G0 | C pop 72 TC 3 S0V0G0 | C pop 47 TC 2 S0V0G0 | C pop 79 TC 7 S0V0G0 |
+| 40 | C pop 66 TC 1 S0V0G0 | C pop 176 TC 1 S0V0G0 | C pop 149 TC 6 S0V0G0 | C pop 72 TC 3 S0V0G0 | C pop 79 TC 3 S0V0G0 | C pop 180 TC 10 S0V0G0 |
+
+
+For comparison, the owner's real game at minute 126 had 1,649 population and 25 Town Centers.
+
+First Imperial: `fast_castle` at minute 44.0 (Castle at 23). The best expander, `steward_scaler`, had 10 Town Centers and
+259 population at the end, against 189 for the single-Town-Center baseline, but at 198 ms per decision under load.
+No Steward, Vassal or General was fielded by anyone. `steward_scaler` hoarded 3,400 gold at minute 40 with food at 44:
+every Town Center always had a villager queue, and a Steward needs an empty one and 1,000 food. The fix (save and
+drain the queues and pause villagers for up to 240 s, then 180 s off) is committed after the long game and only
+partly checked in play (see the report).
+
 ## Verdict
 
 The default stays `baseline`: two games on one map, with start-position stalls that hit baseline in one of them, do

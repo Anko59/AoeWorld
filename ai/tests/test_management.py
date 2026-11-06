@@ -80,3 +80,13 @@ def test_saving_for_a_steward_stops_soldiers_but_gives_up_after_the_limit():
     client = FakeClient()
     brain.decide(client, decision(late))
     assert [a for a in client.named("train") if a[1] != UnitKind.VILLAGER], "the army spends again after the limit"
+
+
+def test_a_town_center_busy_with_villagers_is_drained_so_the_steward_can_be_bought():
+    units, buildings = castle_base(soldiers=3)
+    buildings[0].queue_length = 2
+    config = replace(Config(), stewards=1, steward_min_villagers=20)
+    eco = castle_economy(food=900, gold=1200, wood=900, population=50, cap=150)
+    brain, client = play(FakeWorld(units, buildings, eco=eco), config)
+    assert brain.board.stats.get("saving_for_management"), "the saving starts although the queue is busy"
+    assert not client.named("train"), "no soldiers and no new villagers while it drains"
