@@ -55,8 +55,9 @@ pub use formation::GroupProbe;
 pub use research::*;
 pub use resources::PreparedResourceDepletion;
 pub use route_scheduler::{
-    PLANNING_SPANS, PlanningProbe, ROUTE_CATEGORIES, ROUTE_DISTANCES, ROUTE_FAILURES,
-    RouteAttribution, RouteCaller, RouteClass, RouteSchedulerStats,
+    PLANNING_SPANS, PlanningProbe, ROUTE_CATEGORIES, ROUTE_DISTANCES, ROUTE_FAILURES, ROUTE_REACH,
+    ROUTE_REQUESTERS, RouteAttribution, RouteCaller, RouteClass, RouteQueueBreakdown,
+    RouteQueueCell, RouteSchedulerStats,
 };
 pub use visibility::TileVisibility;
 pub use wildlife::*;

@@ -41,6 +41,7 @@ fn human() -> LateGameSeat {
         wall_tiles: 220,
         bridges: 12,
         radius: 200,
+        stockpile: 20_000,
     }
 }
 
@@ -81,6 +82,9 @@ fn ai(seat: usize) -> LateGameSeat {
         wall_tiles: 0,
         bridges: 0,
         radius: 60,
+        // The owner's AIs held little (one had 168 food, 17,173 wood): a
+        // large stockpile let the bots train to 14,000 units in 12 minutes.
+        stockpile: 1_500,
     }
 }
 

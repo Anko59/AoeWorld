@@ -360,8 +360,8 @@ pub(super) fn planning(rows: &[TickRow], wall_seconds: f64) -> Value {
 
 /// The server's rolling phase p50/p95 (`GET /admin/perf`, ms), as the
 /// owner's live sampler recorded them, for comparison with a real match.
-pub(super) fn phase_minute(perf: Option<Value>, seconds: f64) -> Value {
-    const PHASES: [&str; 12] = [
+pub(super) fn phase_minute(perf: Option<Value>, routes: Option<Value>, seconds: f64) -> Value {
+    const PHASES: [&str; 17] = [
         "total",
         "advance",
         "planning",
@@ -374,6 +374,11 @@ pub(super) fn phase_minute(perf: Option<Value>, seconds: f64) -> Value {
         "combat",
         "group_apply",
         "apply_loop",
+        "sidestep",
+        "propose",
+        "group_prepare",
+        "group_propose",
+        "resources",
     ];
     let Some(perf) = perf else {
         return json!({"seconds": seconds, "error": "no /admin/perf"});
@@ -388,6 +393,23 @@ pub(super) fn phase_minute(perf: Option<Value>, seconds: f64) -> Value {
                 .map(|us| crate::perf_scale::stats::round(us / 1000.0))
         };
         row[name] = json!([ms("p50_us"), ms("p95_us")]);
+    }
+    if let Some(r) = routes {
+        // The scheduler's queue now, and its cumulative ends (expiries and
+        // declined detours) for deltas between samples.
+        let a = &r["attribution"];
+        row["routes"] = json!({
+            "waiting": r["waiting"], "waiting_without_planner": r["waiting_without_planner"],
+            "planners": r["planners"], "searches": r["searches"],
+            "oldest_wait_ticks": r["oldest_wait_ticks"],
+            "players_at_search_cap": r["players_at_search_cap"],
+            "most_waiting": r["most_waiting"], "most_waiting_player": r["most_waiting_player"],
+            "expired": r["expired"], "slot_refusals": r["slot_refusals"],
+            "single_expired": a["single_expired"], "group_orders_expired": a["group_orders_expired"],
+            "group_members_expired": a["group_members_expired"],
+            "detours_declined": a["detours_declined"], "detours_at_capacity": a["detours_at_capacity"],
+            "queue": r["queue"],
+        });
     }
     row
 }

@@ -22,6 +22,8 @@ pub struct LateGameSeat {
     pub bridges: u32,
     /// Tiles from the village searched for building sites and unit tiles.
     pub radius: i32,
+    /// Each resource the seat holds at the start.
+    pub stockpile: u32,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -78,11 +80,12 @@ impl GameWorld {
             self.complete_research(player, *tech, &mut Vec::new());
         }
         if let Some(state) = self.economy.players.get_mut(&player) {
+            let n = seat.stockpile;
             state.stockpile = Stockpile {
-                food: 20_000,
-                wood: 20_000,
-                gold: 20_000,
-                stone: 10_000,
+                food: n,
+                wood: n,
+                gold: n,
+                stone: n,
             };
         }
         // Bridges first: their banks must still be open ground.
@@ -322,6 +325,7 @@ mod tests {
             wall_tiles: 40,
             bridges: 1,
             radius: 70,
+            stockpile: 1_000,
         }
     }
 

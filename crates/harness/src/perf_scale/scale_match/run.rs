@@ -291,7 +291,8 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
     while run_started.elapsed() < wall {
         if run_started.elapsed().as_secs_f64() >= 60.0 * (phase_minutes.len() + 1) as f64 {
             let seconds = run_started.elapsed().as_secs_f64();
-            let row = report::phase_minute(server.get("/admin/perf").ok(), seconds);
+            let routes = server.get("/admin/match/routes").ok();
+            let row = report::phase_minute(server.get("/admin/perf").ok(), routes, seconds);
             println!("  phases (p50, p95 ms) {row}");
             phase_minutes.push(row);
         }

@@ -20,12 +20,14 @@ mod group_end;
 mod issue;
 mod metrics;
 mod order;
+mod queue;
 pub use accounting::RouteSchedulerStats;
 pub use attribution::{
     ROUTE_CATEGORIES, ROUTE_DISTANCES, ROUTE_FAILURES, RouteAttribution, RouteCaller, RouteClass,
 };
 pub(crate) use metrics::{GroupWork, PlanningMeasurement};
 pub use metrics::{PLANNING_SPANS, PlanningProbe, RouteMetrics};
+pub use queue::{ROUTE_REACH, ROUTE_REQUESTERS, RouteQueueBreakdown, RouteQueueCell};
 #[cfg(test)]
 pub(crate) use {
     deadline::{FAR_ROUTE_ANSWER_TICKS, MAX_GROUP_ROUTE_RENEWALS, NEAR_ROUTE_ANSWER_TICKS},

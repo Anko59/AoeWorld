@@ -113,8 +113,10 @@ Castles, 381 farms, 259 houses and the other buildings, 220 wall tiles on a
 ring with gaps, up to 12 finished bridges over river water within 200 tiles)
 and every AI seat a Castle Age start (every tenth Imperial, every sixth
 Feudal) with 27 villagers, a fishing ship, 48 soldiers, a galley, farms,
-mills, camps, houses and military buildings. Every seat gets a stockpile;
-the villagers start through the ordinary farm and gather orders. Placement
+mills, camps, houses and military buildings. Slot 0 holds 20,000 of each
+resource and an AI seat 1,500 (with 20,000 the bots trained to 14,000 units in
+12 minutes, past the owner's 9,200); the villagers start through the ordinary
+farm and gather orders. Placement
 walks fixed tile orders, so the same map, seed and seat give the same world.
 The bots play their seats from there (their armies march when they find a
 target). Slot 0 is played by a scripted human (`late` in the report): every
@@ -122,7 +124,17 @@ target). Slot 0 is played by a scripted human (`late` in the report): every
 300 to 700 tiles away, the direction turning each round.
 
 The report adds `phases_per_minute`: the server's rolling p50/p95 per phase
-(`GET /admin/perf`, ms), the same numbers the owner's sampler recorded.
+(`GET /admin/perf`, ms), the same numbers the owner's sampler recorded, and
+its `routes`: the route queue then (`GET /admin/match/routes`). That answer's
+`queue` splits every unit that waits for a route or still holds a planner by
+requester side (human or AI seat), by what asked (`gather_trip`,
+`single_move`, `group_carrier`, `member_detour`, `ship`, `attack_approach`)
+and by reach (near up to 64 tiles, far, or `unplanned`: no planner yet, so the
+destination is not known), with wait percentiles in ticks per kind and the
+five players with most waiting units; the cumulative ends (`expired`,
+`single_expired`, `group_orders_expired`, `group_members_expired`,
+`detours_declined`, `detours_at_capacity`, `slot_refusals`) give expiries and
+declines between samples.
 
 ## The match rules behind it
 
