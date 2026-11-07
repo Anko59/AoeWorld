@@ -136,6 +136,56 @@ five players with most waiting units; the cumulative ends (`expired`,
 `detours_declined`, `detours_at_capacity`, `slot_refusals`) give expiries and
 declines between samples.
 
+### Late-game runs (2026-11-07, revisions 947a3ccc and its queue commit)
+
+100 seats, package dc7e0d4b (France, 2,000 tiles), seed 1, 8 bot hosts, on the
+shared development machine (1-minute load 9 to 43 from other agents' builds,
+tests and probes), so absolute numbers move by up to 2x between runs. Phase
+values are the server's rolling p50 (ms), medianed over the run's minutes.
+
+| | owner (minute 33) | run 1 (AI stock 20,000) | run 3 | run 4 |
+|---|---|---|---|---|
+| units | 9,250 | 9,830 to 14,170 | 9,830 to 13,190 | 10,000 to 12,800 |
+| ticks/s | 10.1 | 10.4 | 13.2 | 16.2 |
+| tick p50 | 97 | 83 | 66 | 57 |
+| movement | 53.9 | 45 | 37 | 31 |
+| search | 9.4 | 9 | 8.5 | 7.6 |
+| planning | 56.5 | 9 | 8.5 | 7.6 |
+| plan_fast | 48.3 | 3 | 3 | 3 |
+| gathering | 21.3 | 5 | 4.8 | 4.0 |
+| apply_loop / group_apply | 4.5 / 5.3 | 11 / 10 | 9.2 / 10.0 | 7.9 / 7.5 |
+| sidestep | 2.1 | 6.1 (one sample) | 6.5 | 4.3 |
+
+Movement, search and the whole tick are within 1.5x of the owner's; planning
+(plan_fast, plan_serve) and gathering are not: here `search` is all of
+`planning`, while the owner's plan_fast spent about 39 ms outside `search`.
+The owner played an older build (play/all-2026-11-06 on dev 4953b6aec); dev
+has since changed route work (#716, #731, #732: ship searches 3.45x), so the
+planning gap may be code rather than load (not measured: the old build was not
+run on this load). Gathering stays low: the owner's 2-hour world had depleted
+nearby resources (`resources` 2.2 ms, `terrain_point` 2.8 against 0.7 and 0
+here); the seeding does not deplete.
+
+Route queue (`routes` per minute): run 1 at minute 7, 328 waiting, oldest
+2,388 ticks, 45 players at the search cap; runs 2 to 4 (AI stock 1,500) 22 to
+304 waiting, oldest 600 to 1,200 ticks, 10 to 43 players at the cap, rising
+with the minutes. The owner's: 655 to 688 waiting, oldest about 3,300, 40 to
+44 at the cap, player 0 most waiting (163). At the end of run 3 (10 min):
+303 of 304 waiting units were AI seats', 235 without a planner (waiting for
+a search slot, destination not yet known); by kind single moves 139 (wait
+p50 368 ticks, p99 1,119), gather trips 104 (p50 210, p99 1,093), group
+carriers 46 (p50 463), attack approaches 15, member detours and ships 0. Over
+the 10 minutes 221 waits expired (219 single units), 5,035 member detours
+were declined (4,973 at capacity) and 31,508 slot refusals. Slot 0's scripted
+army (four formation orders every 45 s) almost never waits, unlike the
+owner's player 0: its orders are few and grouped, so this load does not
+reproduce the owner's own queue share.
+
+Run 3 carried an experiment (the sidestep candidates' building and terrain
+reads ahead of the body sweep, a pure reordering) and run 4 is the same code
+without it: sidestep 6.5 against 4.3 ms, movement 37 against 31, on a machine
+whose load fell between the runs. No gain shows, so it was not kept.
+
 ## The match rules behind it
 
 `POST /match` accepts (see [the AI SDK](../ai-sdk.md)):
