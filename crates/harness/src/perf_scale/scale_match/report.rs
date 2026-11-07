@@ -152,7 +152,7 @@ pub(super) fn bot_totals(reports: &[Value]) -> Value {
         "bots": 0, "decisions": 0, "errors": 0, "closed": 0, "villagers": 0, "army": 0,
         "buildings": 0, "population": 0, "orders_accepted": 0, "orders_rejected": 0,
         "drops": 0, "rejoins": 0, "sessions_dropped": 0, "reconnect_seconds": 0.0,
-        "feudal": 0, "build_orders": 0, "buildings_completed": 0, "build_rejections": {},
+        "feudal": 0, "build_orders": 0, "buildings_completed": 0, "build_rejections": {}, "rejections": {},
     });
     let add = |total: &mut Value, key: &str, amount: u64| {
         total[key] = json!(total[key].as_u64().unwrap_or(0) + amount);
@@ -189,6 +189,12 @@ pub(super) fn bot_totals(reports: &[Value]) -> Value {
                 add(&mut total, key, amount);
             } else if let Some(reason) = key.strip_prefix("rejected:build:") {
                 let by = &mut total["build_rejections"][reason];
+                *by = json!(by.as_u64().unwrap_or(0) + amount);
+            }
+            // Every rejection by order and verdict, queue-full and rate
+            // limits included: the server's command admission shows here.
+            if let Some(reason) = key.strip_prefix("rejected:") {
+                let by = &mut total["rejections"][reason];
                 *by = json!(by.as_u64().unwrap_or(0) + amount);
             }
         }
