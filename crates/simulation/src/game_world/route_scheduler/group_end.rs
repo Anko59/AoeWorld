@@ -6,21 +6,27 @@
 //! fail so under 99 AIs): when the group has marched, it now asks again from
 //! where its anchor stands, as a blocked anchor step does, within the bound
 //! of the carrier's wait renewals and its original wait deadline.
+//! A destination proven unreachable (across a river with no bridge) no longer
+//! leaves each member pressing at its slot on the far side: the group's next
+//! leg goes to the reachable tile nearest the destination and it forms there.
 use super::deadline::MAX_GROUP_ROUTE_RENEWALS;
 use super::{GameWorld, attribution};
 use crate::GameWorldError;
 use crate::game_world::MovementOrder;
-use aoe_core::EntityId;
+use aoe_core::{EntityId, TileCoord};
 
 impl GameWorld {
     /// The search of group carrier `index` ended with `error` (reason index
     /// of `ROUTE_FAILURES`). Re-plans from the anchor when the failure is
     /// load-dependent; otherwise stops the carrier. Counted by reason.
+    /// `nearest` is the reachable tile nearest the destination that the
+    /// failed search proved, if any.
     pub(crate) fn group_route_failed(
         &mut self,
         index: usize,
         error: Option<GameWorldError>,
         reason: usize,
+        nearest: Option<TileCoord>,
         changed: &mut Vec<EntityId>,
     ) {
         let id = self.units[index].state.id;
@@ -65,8 +71,15 @@ impl GameWorld {
         // each member's own recovery (a detour to its slot, the General's
         // next order) takes over. Dissolving the group here stranded
         // General squads (recovery_recording_has_a_full_army...: 53 of 101).
+        let target = self.units[index].order.map(|order| order.target_tile);
         self.route_metrics.attribution.group_carriers_stopped += 1;
         self.stop_route(index, error);
+        if error == Some(GameWorldError::Unreachable)
+            && let Some(target) = target
+            && self.stop_group_short(id, target, nearest)
+        {
+            self.route_metrics.attribution.group_stopped_short += 1;
+        }
         if let Ok(at) = self.active_movers.binary_search(&id) {
             self.active_movers.remove(at);
         }

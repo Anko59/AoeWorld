@@ -89,7 +89,7 @@ fn cross_failing(
             let carrier = f.world.units[f.world.lookup[&ids[0]]].formation.unwrap();
             let index = f.world.lookup[&carrier];
             f.world
-                .group_route_failed(index, Some(error), 2, &mut Vec::new());
+                .group_route_failed(index, Some(error), 2, None, &mut Vec::new());
         }
         f.world.advance();
         for &id in &counted {

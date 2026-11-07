@@ -39,7 +39,8 @@ pub(super) fn rivers(name: &str) -> Option<Vec<RiverSegment>> {
             line((450, -2), (450, 652), 6),
         ],
         // One long river; its only crossing lies 50 tiles off the straight line.
-        "army-river" => vec![line((150, -2), (150, 652), 6)],
+        // The same river with no crossing at all.
+        "army-river" | "army-river-sealed" => vec![line((150, -2), (150, 652), 6)],
         _ => return None,
     })
 }
@@ -147,6 +148,7 @@ impl Fixture {
             }
             "forest-bridge" | "forest-bridge-40" | "forest-bridge-opposed" => self.forest_bridge(),
             "long-bridges" | "long-bridges-40" => self.long_bridges(),
+            "army-river-sealed" => return true,
             "army-river" => {
                 let span = self.bridge_across((150, 150), (1, 1));
                 self.wooded_mouths(span);

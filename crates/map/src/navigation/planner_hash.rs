@@ -37,6 +37,12 @@ impl RoutePlanner {
                 hash.update(&remaining.to_le_bytes())
             }
         };
+        // Only a terminal planner holds it; untagged so other hashes stay.
+        if let Some(tile) = self.nearest_reached {
+            hash.update(b"nearest-reached");
+            hash.update(&tile.x.to_le_bytes());
+            hash.update(&tile.y.to_le_bytes());
+        }
         hash.update(&[self.validation_step, u8::from(self.pocket_checked)]);
         hash.update(&[u8::from(self.guidance_checked)]);
         hash_usize(hash, self.guidance.len());

@@ -392,7 +392,8 @@ impl GameWorld {
             .attribution
             .failed(kind, from, to, planner.work(), reason, caller);
         if self.units[index].formation == Some(id) {
-            self.group_route_failed(index, error, reason, changed);
+            let nearest = planner.nearest_reachable();
+            self.group_route_failed(index, error, reason, nearest, changed);
             return spent;
         }
         self.stop_route(index, error);
