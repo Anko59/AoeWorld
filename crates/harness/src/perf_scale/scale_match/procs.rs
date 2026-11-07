@@ -20,6 +20,19 @@ pub(super) fn server_build_args(options: &Options) -> Vec<&'static str> {
 /// The server's sampling-profiler environment for `--profile`.
 pub(super) fn profile_env(options: &Options, command: &mut Command) -> Result<(), BoxError> {
     if let Some(directory) = &options.profile {
+        // The window counts from server start, before the measured minutes; a
+        // window ending after the run would exit "successfully" with no profile.
+        let window = options.profile_after + options.profile_seconds;
+        if window as f64 > options.minutes * 60.0 {
+            return Err(format!(
+                "--profile-after {} + --profile-seconds {} = {window} s ends after the {} s run; \
+                 shorten the window or raise --minutes",
+                options.profile_after,
+                options.profile_seconds,
+                options.minutes * 60.0
+            )
+            .into());
+        }
         fs::create_dir_all(directory)?;
         command
             .env("AOE_SAMPLING_PROFILE", fs::canonicalize(directory)?)

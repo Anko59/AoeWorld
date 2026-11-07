@@ -183,7 +183,14 @@ fn draw(
     );
     let chars = (width / 6.8) as usize;
     if chars >= 4 {
-        let label: String = escaped.chars().take(chars.saturating_sub(1)).collect();
+        // Truncate the raw name, then escape, so no entity is cut in half.
+        let label = name
+            .chars()
+            .take(chars.saturating_sub(1))
+            .collect::<String>()
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;");
         let _ = write!(
             svg,
             "<text x=\"{:.1}\" y=\"{:.1}\">{label}</text>",
