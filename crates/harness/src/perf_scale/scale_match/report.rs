@@ -373,55 +373,20 @@ pub(super) fn planning(rows: &[TickRow], wall_seconds: f64) -> Value {
 /// The server's rolling phase p50/p95 (`GET /admin/perf`, ms), as the
 /// owner's live sampler recorded them, for comparison with a real match.
 pub(super) fn phase_minute(perf: Option<Value>, routes: Option<Value>, seconds: f64) -> Value {
-    const PHASES: [&str; 34] = [
-        "total",
-        "advance",
-        "planning",
-        "plan_fast",
-        "plan_serve",
-        "plan_fair",
-        "movement",
-        "gathering",
-        "search",
-        "combat",
-        "group_apply",
-        "apply_loop",
-        "sidestep",
-        "propose",
-        "group_prepare",
-        "group_propose",
-        "resources",
-        "route_cache",
-        "sessions",
-        "world_lock",
-        "orders",
-        "spacing",
-        "wildlife",
-        "construction",
-        "research_training",
-        "steward_economy",
-        "building_memory",
-        "changed",
-        "resource_journal",
-        "viewers",
-        "frame",
-        "session_views",
-        "fanout_wait",
-        "delivery",
-    ];
     let Some(perf) = perf else {
         return json!({"seconds": seconds, "error": "no /admin/perf"});
     };
     let mut row = json!({"seconds": crate::perf_scale::stats::round(seconds),
         "tick_rate": perf["tick_rate"], "units": perf["gameplay_memory"]["units"]});
-    for name in PHASES {
-        let phase = &perf["phases"][name];
+    // Every phase the server reports, so a new phase is never left out.
+    let phases = perf["phases"].as_object().cloned().unwrap_or_default();
+    for (name, phase) in &phases {
         let ms = |key: &str| {
             phase[key]
                 .as_f64()
                 .map(|us| crate::perf_scale::stats::round(us / 1000.0))
         };
-        row[name] = json!([ms("p50_us"), ms("p95_us")]);
+        row[name.as_str()] = json!([ms("p50_us"), ms("p95_us")]);
     }
     if let Some(r) = routes {
         // The scheduler's queue now, and its cumulative ends (expiries and
