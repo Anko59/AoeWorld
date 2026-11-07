@@ -112,7 +112,8 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
         // always going north, which moves local routes in this crowded replay.
         // Direct orders that need clear lines, stalled detours that rejoin and
         // army orders that leave fallen members out move it again.
-        "0065f99731d2c66614f0a07ccbb0035b32877aa6852b05adf6c2acc38ea0e9a7"
+        // A packed block holding its files until the pass is behind it moves it again.
+        "aadc11b8d04e9b229ffdc03ba5dc6454582859755867ee6ed2b96cd4a8e4d8a2"
     );
 }
 

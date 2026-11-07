@@ -122,9 +122,7 @@ impl GameWorld {
                 );
             }
             clearance = clearance.min(value);
-            if delta > 0 {
-                ahead = ahead.min(value);
-            }
+            ahead = if delta > 0 { ahead.min(value) } else { ahead };
         }
         // A long file can still be on a bridge deck after the anchor's window
         // has left it. Sample the corridor back to the rearmost member too, so
@@ -160,10 +158,7 @@ impl GameWorld {
         let heading = block_heading(group);
         let files = if (clearance < 15
             && i32::from(clearance) * 512 < group.half_width
-            // Hysteresis: the clear-layout probe only compares two end points
-            // either side of the anchor. While a narrowing still lies ahead it
-            // must not release a packed block, or the line would reform in
-            // front of the pass and pack again on the next tick it fails.
+            // Hysteresis: a packed block stays packed while a narrowing lies ahead.
             && ((group.packing_files < group.members.len()
                 && i32::from(ahead) * 512 < group.half_width)
                 || !self.formation_layout_clear(group, heading)))
