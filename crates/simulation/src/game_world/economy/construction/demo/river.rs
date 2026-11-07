@@ -126,8 +126,17 @@ impl GameWorld {
 
     /// Stand a finished bridge on map water, for local real-map measurements.
     pub fn place_finished_bridge(&mut self, span: BridgeSpan) -> Result<(), EconomyError> {
+        self.place_bridge_for(PlayerId(0), span)
+    }
+
+    /// Stand a finished bridge of `player` on map water (scenario setup).
+    pub(super) fn place_bridge_for(
+        &mut self,
+        player: PlayerId,
+        span: BridgeSpan,
+    ) -> Result<(), EconomyError> {
         self.insert_building_shape(
-            PlayerId(0),
+            player,
             BuildingKind::Bridge,
             span.footprint(),
             true,
@@ -145,7 +154,7 @@ impl GameWorld {
         Ok(())
     }
 
-    fn demo_water(&self, tile: TileCoord) -> Option<bool> {
+    pub(super) fn demo_water(&self, tile: TileCoord) -> Option<bool> {
         let Terrain::Map { generator, overlay } = &self.terrain else {
             return None;
         };
