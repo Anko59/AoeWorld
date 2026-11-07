@@ -289,7 +289,9 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
     let mut failure = None;
     let mut phase_minutes = Vec::<Value>::new();
     while run_started.elapsed() < wall {
-        if run_started.elapsed().as_secs_f64() >= 60.0 * (phase_minutes.len() + 1) as f64 {
+        // Sampled 1 s before each whole minute (the loop sleeps 0.9 s), so a
+        // run ending on its wall clock still reports its last minute.
+        if run_started.elapsed().as_secs_f64() >= 60.0 * (phase_minutes.len() + 1) as f64 - 1.0 {
             let seconds = run_started.elapsed().as_secs_f64();
             let routes = server.get("/admin/match/routes").ok();
             let row = report::phase_minute(server.get("/admin/perf").ok(), routes, seconds);

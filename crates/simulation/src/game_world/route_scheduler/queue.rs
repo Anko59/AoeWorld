@@ -3,7 +3,7 @@
 //! classified by what asked for the route, how far it goes and how long it
 //! has waited. `GET /admin/match/routes` reports it as `queue`.
 use super::far_route;
-use crate::{GameWorld, UnitKind};
+use crate::GameWorld;
 use aoe_core::PlayerId;
 use std::collections::BTreeMap;
 
@@ -41,9 +41,9 @@ impl GameWorld {
         let id = unit.state.id;
         if unit.state.kind.is_naval() && !self.economy.gatherers.contains_key(&id) {
             4
-        } else if self.economy.gatherers.contains_key(&id)
-            || matches!(unit.state.kind, UnitKind::Villager)
-        {
+        } else if self.economy.gatherers.contains_key(&id) {
+            // Only a villager with a work assignment is on a gather trip; one
+            // ordered to move or attack is counted by that order below.
             0
         } else if unit.state.attack_target.is_some() {
             5
