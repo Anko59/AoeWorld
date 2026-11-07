@@ -156,6 +156,7 @@ fn start_server(options: &Options, root: &Path, work: &Path) -> Result<Server, B
         .env("AOE_BUILD_SHA", git(&["rev-parse", "HEAD"]))
         .stdout(Stdio::from(log.try_clone()?))
         .stderr(Stdio::from(log));
+    procs::profile_env(options, &mut command)?;
     if let Some(pack) = options
         .asset_pack
         .clone()
@@ -200,11 +201,7 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
     let revision = git(&["rev-parse", "HEAD"]);
     let dirty = !git(&["status", "--porcelain"]).is_empty();
     println!("scale-match: building the release server");
-    process::run(
-        "cargo",
-        &["build", "--release", "--locked", "-p", "aoe-server"],
-        BUILD_DEADLINE,
-    )?;
+    process::run("cargo", &procs::server_build_args(options), BUILD_DEADLINE)?;
     let mut server = start_server(options, &root, &work)?;
 
     println!(

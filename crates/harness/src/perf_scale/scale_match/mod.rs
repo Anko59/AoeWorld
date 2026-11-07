@@ -113,6 +113,16 @@ pub struct Options {
     /// villagers, armies) and march slot 0's army by script (`late` in the report).
     #[arg(long, conflicts_with = "march_probe")]
     pub late_game: bool,
+    /// Build the server with its sampling profiler and write a flame graph,
+    /// folded stacks and top-N table into this directory (keep it in `.cache/`).
+    #[arg(long)]
+    pub profile: Option<PathBuf>,
+    /// Seconds after the server starts before sampling (match creation included).
+    #[arg(long, default_value_t = 300, requires = "profile")]
+    pub profile_after: u64,
+    /// Seconds of sampling.
+    #[arg(long, default_value_t = 60, requires = "profile")]
+    pub profile_seconds: u64,
 }
 
 pub fn run(options: Options) -> Result<(), BoxError> {

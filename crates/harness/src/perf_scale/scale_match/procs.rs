@@ -1,6 +1,39 @@
 //! CPU and memory of the processes and containers the run starts.
-use super::BoxError;
+use super::{BoxError, Options};
 use std::{fs, process::Command};
+
+/// `cargo build` arguments for the release server; `--profile` adds the
+/// sampling profiler and line tables (symbols of inlined frames).
+pub(super) fn server_build_args(options: &Options) -> Vec<&'static str> {
+    let mut args = vec!["build", "--release", "--locked", "-p", "aoe-server"];
+    if options.profile.is_some() {
+        args.extend([
+            "--features",
+            "sampling-profiler",
+            "--config",
+            "profile.release.debug=\"line-tables-only\"",
+        ]);
+    }
+    args
+}
+
+/// The server's sampling-profiler environment for `--profile`.
+pub(super) fn profile_env(options: &Options, command: &mut Command) -> Result<(), BoxError> {
+    if let Some(directory) = &options.profile {
+        fs::create_dir_all(directory)?;
+        command
+            .env("AOE_SAMPLING_PROFILE", fs::canonicalize(directory)?)
+            .env(
+                "AOE_SAMPLING_PROFILE_AFTER",
+                options.profile_after.to_string(),
+            )
+            .env(
+                "AOE_SAMPLING_PROFILE_SECONDS",
+                options.profile_seconds.to_string(),
+            );
+    }
+    Ok(())
+}
 
 /// Clock ticks per second of `/proc/<pid>/stat` times (Linux fixes it at 100).
 const CLOCK_TICKS: f64 = 100.0;

@@ -361,7 +361,7 @@ pub(super) fn planning(rows: &[TickRow], wall_seconds: f64) -> Value {
 /// The server's rolling phase p50/p95 (`GET /admin/perf`, ms), as the
 /// owner's live sampler recorded them, for comparison with a real match.
 pub(super) fn phase_minute(perf: Option<Value>, routes: Option<Value>, seconds: f64) -> Value {
-    const PHASES: [&str; 17] = [
+    const PHASES: [&str; 25] = [
         "total",
         "advance",
         "planning",
@@ -379,6 +379,14 @@ pub(super) fn phase_minute(perf: Option<Value>, routes: Option<Value>, seconds: 
         "group_prepare",
         "group_propose",
         "resources",
+        "orders",
+        "spacing",
+        "wildlife",
+        "construction",
+        "building_memory",
+        "fanout_wait",
+        "delivery",
+        "session_views",
     ];
     let Some(perf) = perf else {
         return json!({"seconds": seconds, "error": "no /admin/perf"});

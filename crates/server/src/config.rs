@@ -13,6 +13,15 @@ pub struct Config {
     pub geodata_cache_directory: PathBuf,
 }
 
+/// The opt-in sampling profiler (`--features sampling-profiler`): where it
+/// writes, how long after start it begins and how many seconds it samples.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SamplingProfile {
+    pub directory: PathBuf,
+    pub after_seconds: u64,
+    pub seconds: u64,
+}
+
 impl Config {
     /// Local scenario/debug switch, applied by the authority at world creation.
     pub(crate) fn fog_disabled_from_env() -> bool {
@@ -44,6 +53,25 @@ impl Config {
     }
     pub const DEFAULT_MAP_PACKAGE_DIRECTORY: &'static str = "local-assets/map-packages";
     pub const DEFAULT_GEODATA_CACHE_DIRECTORY: &'static str = ".cache/geodata";
+
+    /// `AOE_SAMPLING_PROFILE=<dir>`, `AOE_SAMPLING_PROFILE_AFTER` (s, default
+    /// 300) and `AOE_SAMPLING_PROFILE_SECONDS` (default 60).
+    pub fn sampling_profile_from_env() -> Result<Option<SamplingProfile>, String> {
+        let Some(directory) = env::var_os("AOE_SAMPLING_PROFILE").filter(|v| !v.is_empty()) else {
+            return Ok(None);
+        };
+        let seconds = |name: &str, default: u64| match env::var(name) {
+            Ok(value) => value
+                .parse::<u64>()
+                .map_err(|_| format!("{name} must be whole seconds")),
+            Err(_) => Ok(default),
+        };
+        Ok(Some(SamplingProfile {
+            directory: PathBuf::from(directory),
+            after_seconds: seconds("AOE_SAMPLING_PROFILE_AFTER", 300)?,
+            seconds: seconds("AOE_SAMPLING_PROFILE_SECONDS", 60)?.max(1),
+        }))
+    }
 
     pub fn from_env() -> Result<Self, String> {
         let bind = env::var("AOE_BIND").unwrap_or_else(|_| "127.0.0.1:8080".to_owned());
