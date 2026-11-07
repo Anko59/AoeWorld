@@ -160,14 +160,22 @@ impl GameWorld {
         // no lookup per building) and clones a building only into a memory
         // it changes; the walk order (building id, then watcher) is the same.
         let mut buildings = self.economy.buildings.iter().peekable();
-        let players = &mut self.vision.players;
+        // Each player's memory by id, so a watcher costs no map search.
+        let mut players: Vec<Option<&mut _>> = Vec::new();
+        for (player, vision) in &mut self.vision.players {
+            let at = usize::from(player.0);
+            if players.len() <= at {
+                players.resize_with(at + 1, || None);
+            }
+            players[at] = Some(vision);
+        }
         for (id, seen) in &self.vision.building_watchers {
             while buildings.next_if(|(at, _)| *at < id).is_some() {}
             let Some((_, building)) = buildings.next_if(|(at, _)| *at == id) else {
                 continue;
             };
             for player in &seen.watchers {
-                if let Some(vision) = players.get_mut(player) {
+                if let Some(Some(vision)) = players.get_mut(usize::from(player.0)) {
                     // Only a differing snapshot is a change.
                     if vision.remembered.get(id) != Some(building) {
                         vision.changed.insert(*id);
