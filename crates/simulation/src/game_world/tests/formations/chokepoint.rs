@@ -257,3 +257,46 @@ fn every_member_makes_progress_through_the_two_tile_gap() {
         );
     }
 }
+
+#[test]
+fn block_packs_once_before_the_pass_and_reforms_only_after_it() {
+    let (mut w, ids) = forest_pass_army();
+    w.issue_formation_move(
+        PlayerId(0),
+        &ids,
+        Formation::Line,
+        center(95, 50),
+        false,
+        false,
+    )
+    .unwrap();
+    let mut last = ids.len();
+    let mut changes = Vec::new();
+    for _ in 0..3500 {
+        w.advance_movement();
+        w.refill_route_budgets();
+        let (files, _, progress, _) = w.group_files_probe(ids[0]);
+        if files != last {
+            changes.push((files, progress));
+            last = files;
+        }
+    }
+    // The forest spans x 64..70, 24 to 30 tiles along the route: exactly one
+    // narrowing, one reform and none in between, and the reform comes only
+    // once the pass is behind the anchor.
+    assert!(changes[0].0 < ids.len(), "never narrowed: {changes:?}");
+    assert_eq!(
+        changes.iter().filter(|c| c.0 < changes[0].0).count(),
+        0,
+        "narrowed twice: {changes:?}"
+    );
+    let reform = changes.iter().position(|c| c.0 > changes[0].0);
+    assert!(
+        reform.is_some_and(|at| changes[at].1 >= 30 * 1024),
+        "reformed in front of the pass: {changes:?}"
+    );
+    assert!(
+        changes.windows(2).skip(1).all(|pair| pair[0].0 < pair[1].0),
+        "shape flipped back after reforming began: {changes:?}"
+    );
+}

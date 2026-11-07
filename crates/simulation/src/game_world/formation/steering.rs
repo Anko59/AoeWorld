@@ -109,6 +109,7 @@ impl GameWorld {
         // Look ahead and behind the anchor before the front reaches a wall.
         // A capped value proves at least 7.5 tiles; it is not a wall at 7.5.
         let mut clearance = 15;
+        let mut ahead = 15;
         let look = i64::from(group.half_width) + 8 * 1024;
         for delta in [-look, -look / 2, 0, look / 2, look] {
             let progress = (group.progress + delta).clamp(0, group.path.end());
@@ -121,6 +122,7 @@ impl GameWorld {
                 );
             }
             clearance = clearance.min(value);
+            ahead = if delta > 0 { ahead.min(value) } else { ahead };
         }
         // A long file can still be on a bridge deck after the anchor's window
         // has left it. Sample the corridor back to the rearmost member too, so
@@ -156,7 +158,10 @@ impl GameWorld {
         let heading = block_heading(group);
         let files = if (clearance < 15
             && i32::from(clearance) * 512 < group.half_width
-            && !self.formation_layout_clear(group, heading))
+            // Hysteresis: a packed block stays packed while a narrowing lies ahead.
+            && ((group.packing_files < group.members.len()
+                && i32::from(ahead) * 512 < group.half_width)
+                || !self.formation_layout_clear(group, heading)))
             || (trailing < 15 && i32::from(trailing) * 512 < group.half_width)
         {
             // Clearance is measured at a tile centre; a staircase lane is
