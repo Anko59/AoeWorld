@@ -57,9 +57,15 @@ fn patch_units(
     viewer: PlayerId,
 ) {
     if diff.same_ids {
+        // Both lists are in id order (the diff walks the view in order):
+        // one forward cursor finds every changed unit, no search per unit.
+        let mut at = 0;
         for unit in &diff.changed {
-            if let Ok(at) = resident.binary_search_by_key(&unit.id, |u| u.id) {
-                resident[at] = *unit;
+            while at < resident.len() && resident[at].id < unit.id {
+                at += 1;
+            }
+            if let Some(slot) = resident.get_mut(at).filter(|u| u.id == unit.id) {
+                *slot = *unit;
             }
         }
     } else {
