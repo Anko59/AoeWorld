@@ -100,6 +100,9 @@ pub struct RouteAttribution {
     /// Carrier search failures by `ROUTE_FAILURES`.
     pub group_failures: [u64; 5],
     pub group_carriers_stopped: u64,
+    /// Of those: proven unreachable, the group's next leg goes to the
+    /// reachable tile nearest the destination instead.
+    pub group_stopped_short: u64,
     /// Formation orders ended because their near search exceeded its work bound.
     pub group_ends_exhausted: u64,
     /// Formation orders refused at issue, and fallen members left out of one.

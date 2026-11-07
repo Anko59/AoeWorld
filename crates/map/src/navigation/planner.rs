@@ -52,6 +52,9 @@ pub struct RoutePlanner {
     leg_work: u32,
     /// Closed tile nearest the destination in this leg, with its heuristic.
     leg_best: Option<(TileCoord, u64)>,
+    /// Set when the search closed every tile it could reach: the one nearest
+    /// the destination (the leg's start when none was nearer).
+    nearest_reached: Option<TileCoord>,
     /// The sealed-destination proof has run (see `pocket`).
     pocket_checked: bool,
     pocket: Option<pocket::Proof>,
@@ -119,6 +122,7 @@ impl RoutePlanner {
             leg_origin: origin,
             leg_work: 0,
             leg_best: None,
+            nearest_reached: None,
             pocket_checked: false,
             pocket: None,
             guidance_checked: false,
@@ -157,6 +161,13 @@ impl RoutePlanner {
     /// Nearest endpoint certified by the prepared live land components.
     pub fn certified_destination(&self) -> Option<TileCoord> {
         self.resolved_destination
+    }
+
+    /// After an `Unreachable` answer, the reachable tile nearest the
+    /// destination that this planner proved: the certified endpoint, or the
+    /// nearest tile of an exhausted flood. `None` when it proved neither.
+    pub fn nearest_reachable(&self) -> Option<TileCoord> {
+        self.resolved_destination.or(self.nearest_reached)
     }
 
     pub fn work(&self) -> u32 {

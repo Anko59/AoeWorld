@@ -94,6 +94,7 @@ pub(crate) fn attribution_json(a: &RouteAttribution) -> Value {
             "wait_expired": a.group_orders_expired,
             "near_exhausted": a.group_ends_exhausted,
             "carrier_stopped": a.group_carriers_stopped,
+            "stopped_short": a.group_stopped_short,
             "replanned": a.group_replans,
             "rejected_at_issue": a.group_orders_rejected,
             "members_left_out": a.group_members_left_out,
