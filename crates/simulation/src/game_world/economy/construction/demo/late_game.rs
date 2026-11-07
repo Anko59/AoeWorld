@@ -24,6 +24,8 @@ pub struct LateGameSeat {
     pub radius: i32,
     /// Each resource the seat holds at the start.
     pub stockpile: u32,
+    /// Tiles from the village whose land resources are already worked out.
+    pub depleted_radius: i32,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -33,6 +35,7 @@ pub struct LateGameSeeded {
     pub wall_tiles: u64,
     pub bridges: u64,
     pub gather_orders: u64,
+    pub depleted_nodes: u64,
 }
 
 /// Bounds the bridge search: river samples tried per seat.
@@ -88,6 +91,7 @@ impl GameWorld {
                 stone: n,
             };
         }
+        seeded.depleted_nodes = self.seed_depletion(center, seat.depleted_radius);
         // Bridges first: their banks must still be open ground.
         seeded.bridges = self.seed_bridges(player, center, seat.radius, seat.bridges)?;
         let mut farms = Vec::new();
@@ -192,7 +196,8 @@ impl GameWorld {
                 }
             }
         }
-        seeded.gather_orders += self.seed_work(player, &workers, &farms);
+        seeded.gather_orders +=
+            self.seed_work(player, &workers, &farms, center, seat.depleted_radius);
         Ok(seeded)
     }
 
@@ -202,6 +207,8 @@ impl GameWorld {
         player: PlayerId,
         workers: &[aoe_core::EntityId],
         farms: &[aoe_core::EntityId],
+        center: TileCoord,
+        depleted_radius: i32,
     ) -> u64 {
         const TURN: [ResourceKind; 6] = [
             ResourceKind::Wood,
@@ -216,12 +223,34 @@ impl GameWorld {
         for (worker, farm) in farmers.iter().zip(farms) {
             orders += u64::from(self.issue_farm(player, *worker, *farm).is_ok());
         }
+        // Past a worked-out disc each kind's workers take the nearest nodes
+        // beyond it in turn, two to a node.
+        let far: Vec<Vec<_>> = if depleted_radius > 0 {
+            [
+                ResourceKind::Food,
+                ResourceKind::Wood,
+                ResourceKind::Gold,
+                ResourceKind::Stone,
+            ]
+            .map(|kind| self.far_resources(center, depleted_radius, kind))
+            .into()
+        } else {
+            Vec::new()
+        };
+        let mut taken = [0usize; 4];
         for (n, worker) in rest.iter().enumerate() {
             let Some(at) = self.unit(*worker).map(|u| u.position.tile_floor()) else {
                 continue;
             };
             let kind = TURN[n % TURN.len()];
-            if let Some(node) = self.nearest_resource(at, kind, 48, None) {
+            let node = match far.get(kind as usize) {
+                Some(nodes) if !nodes.is_empty() => {
+                    taken[kind as usize] += 1;
+                    Some(nodes[(taken[kind as usize] / 2) % nodes.len()])
+                }
+                _ => self.nearest_resource(at, kind, 48, None),
+            };
+            if let Some(node) = node {
                 orders += u64::from(self.issue_gather(player, *worker, node.id).is_ok());
             }
         }
@@ -326,6 +355,7 @@ mod tests {
             bridges: 1,
             radius: 70,
             stockpile: 1_000,
+            depleted_radius: 20,
         }
     }
 

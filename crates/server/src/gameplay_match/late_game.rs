@@ -42,6 +42,8 @@ fn human() -> LateGameSeat {
         bridges: 12,
         radius: 200,
         stockpile: 20_000,
+        // Two hours had worked out the land around the main village.
+        depleted_radius: 90,
     }
 }
 
@@ -85,6 +87,7 @@ fn ai(seat: usize) -> LateGameSeat {
         // The owner's AIs held little (one had 168 food, 17,173 wood): a
         // large stockpile let the bots train to 14,000 units in 12 minutes.
         stockpile: 1_500,
+        depleted_radius: 30,
     }
 }
 
@@ -113,6 +116,7 @@ pub(super) fn seed(
                     wall_tiles = seeded.wall_tiles,
                     bridges = seeded.bridges,
                     gather_orders = seeded.gather_orders,
+                    depleted_nodes = seeded.depleted_nodes,
                     "late-game seat seeded"
                 );
             }
