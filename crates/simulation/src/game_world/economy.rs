@@ -8,6 +8,7 @@ mod buildings;
 mod construction;
 #[path = "economy/construction/demo.rs"]
 mod demo;
+pub use demo::{LateGameSeat, LateGameSeeded};
 mod dropoff;
 mod farm;
 #[path = "economy/fishing/mod.rs"]

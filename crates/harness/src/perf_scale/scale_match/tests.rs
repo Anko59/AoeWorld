@@ -54,6 +54,10 @@ fn the_match_body_names_slots_rules_and_a_france_map() {
     assert_eq!(flat["flat"]["tiles_per_side"], 500);
     assert!(flat.get("start_units").is_none());
     assert!(run::match_body(&options(&["--map", "package"])).is_err());
+    let late = run::match_body(&options(&["--late-game", "--seed", "9"])).unwrap();
+    assert_eq!(late["start_units"]["late_game"], true);
+    assert_eq!(late["start_units"]["probe_army"], json!({}));
+    assert_eq!(late["seed"], 9);
 }
 
 #[test]

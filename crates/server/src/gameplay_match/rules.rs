@@ -43,6 +43,10 @@ pub struct StartUnits {
     /// An army for slot 0 only (the real-match march probe).
     #[serde(default)]
     pub probe_army: ProbeArmy,
+    /// The owner's late game: ages, bases, walls, bridges, villagers at work
+    /// and armies for every seat (`late_game.rs`, `scale-match --late-game`).
+    #[serde(default)]
+    pub late_game: bool,
 }
 
 /// Soldiers of several kinds placed for slot 0 only, around its village, so
@@ -112,7 +116,12 @@ impl MatchRules {
         let start_units = start_units.unwrap_or_default();
         let total = u64::from(start_units.villagers)
             + u64::from(start_units.militia)
-            + start_units.probe_army.total();
+            + start_units.probe_army.total()
+            + if start_units.late_game {
+                super::late_game::units_per_seat()
+            } else {
+                0
+            };
         if total > MAX_START_UNITS {
             return Err(MatchError::StartUnits);
         }
@@ -163,8 +172,12 @@ pub(super) fn seed_units(
         villagers,
         militia,
         probe_army,
+        late_game,
     } = rules.start_units;
     let mut placed = seed_probe_army(world, scouts.first().copied(), probe_army);
+    if late_game {
+        placed += super::late_game::seed(world, scouts, cancelled);
+    }
     if villagers == 0 && militia == 0 {
         return Ok(placed);
     }

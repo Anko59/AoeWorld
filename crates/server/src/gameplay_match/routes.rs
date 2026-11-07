@@ -8,7 +8,8 @@ use crate::AppState;
 use aoe_core::{EntityId, Formation, PlayerId, TileCoord};
 use aoe_map::{MAX_ROUTE_PLANNER_WORK, RoutePlanner, RoutePlannerPoll};
 use aoe_simulation::{
-    ROUTE_CATEGORIES, ROUTE_DISTANCES, ROUTE_FAILURES, RouteAttribution, RouteSchedulerStats,
+    ROUTE_CATEGORIES, ROUTE_DISTANCES, ROUTE_FAILURES, ROUTE_REACH, ROUTE_REQUESTERS,
+    RouteAttribution, RouteQueueBreakdown, RouteSchedulerStats,
 };
 use axum::{
     Json, Router,
@@ -18,6 +19,7 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 /// Work per read-locked poll: the tick writer gets the lock between polls.
@@ -121,6 +123,8 @@ pub(crate) fn scheduler_json(stats: &RouteSchedulerStats, tick: u64) -> Value {
         "waiting_players": stats.waiting_players,
         "oldest_wait_ticks": stats.oldest_wait_ticks,
         "players_at_search_cap": stats.players_at_search_cap,
+        "most_waiting": stats.most_waiting,
+        "most_waiting_player": stats.most_waiting_player.map(|p| p.0),
         "orders": m.orders, "fast_work": m.issue_work, "fair_work": m.fair_work,
         "lookahead_work": m.lookahead_work, "found": m.found, "failed": m.failed,
         "expired": m.expired, "stuck": m.stuck, "slot_refusals": m.slot_refusals,
@@ -135,10 +139,71 @@ async fn scheduler(
     authorize(&state, &headers)?;
     let service = state.gameplay.read().await.clone();
     let world = service.world.read().await;
-    Ok(Json(scheduler_json(
-        &world.route_scheduler_stats(),
-        world.tick().0,
-    )))
+    let humans: Vec<PlayerId> = service
+        .slots
+        .iter()
+        .filter(|s| s.human)
+        .map(|s| s.player)
+        .collect();
+    let mut answer = scheduler_json(&world.route_scheduler_stats(), world.tick().0);
+    answer["queue"] = queue_json(&world.route_queue_breakdown(), &humans);
+    Ok(Json(answer))
+}
+
+/// The queue breakdown: by requester side (human or AI seat), by kind and
+/// reach, wait percentiles in ticks per kind, and the busiest players.
+pub(crate) fn queue_json(queue: &RouteQueueBreakdown, humans: &[PlayerId]) -> Value {
+    let pick = |waits: &[u64], percent: usize| {
+        waits
+            .get((waits.len() * percent).div_ceil(100).saturating_sub(1))
+            .copied()
+    };
+    let (mut cells, mut kinds, mut players) = (serde_json::Map::new(), Vec::new(), BTreeMap::new());
+    let mut sides = [[0usize; 2]; 2];
+    for (k, kind) in ROUTE_REQUESTERS.iter().enumerate() {
+        let mut waits = Vec::new();
+        let (mut active, mut reach) = (0, [0usize; 3]);
+        for ((player, requester, r), cell) in &queue.cells {
+            if *requester != k {
+                continue;
+            }
+            let side = usize::from(!humans.contains(player));
+            sides[side][0] += cell.waits.len();
+            sides[side][1] += cell.active;
+            *players.entry(player.0).or_insert(0usize) += cell.waits.len();
+            waits.extend_from_slice(&cell.waits);
+            active += cell.active;
+            reach[*r] += cell.waits.len();
+            let key = format!("{}/{kind}/{}", ["human", "ai"][side], ROUTE_REACH[*r]);
+            let entry = cells
+                .entry(key)
+                .or_insert(json!({"waiting": 0, "active": 0}));
+            entry["waiting"] =
+                json!(entry["waiting"].as_u64().unwrap_or(0) + cell.waits.len() as u64);
+            entry["active"] = json!(entry["active"].as_u64().unwrap_or(0) + cell.active as u64);
+        }
+        waits.sort_unstable();
+        kinds.push((
+            kind.to_string(),
+            json!({
+                "waiting": waits.len(), "active": active,
+                "near": reach[0], "far": reach[1], "unplanned": reach[2],
+                "wait_p50": pick(&waits, 50), "wait_p90": pick(&waits, 90),
+                "wait_p99": pick(&waits, 99), "wait_max": waits.last(),
+            }),
+        ));
+    }
+    let mut busiest: Vec<(u16, usize)> = players.into_iter().filter(|(_, n)| *n > 0).collect();
+    busiest.sort_by_key(|(player, n)| (std::cmp::Reverse(*n), *player));
+    busiest.truncate(5);
+    json!({
+        "tick": queue.tick,
+        "human": {"waiting": sides[0][0], "active": sides[0][1]},
+        "ai": {"waiting": sides[1][0], "active": sides[1][1]},
+        "by_kind": kinds.into_iter().collect::<serde_json::Map<String, Value>>(),
+        "by_side_kind_reach": cells,
+        "busiest_waiting_players": busiest,
+    })
 }
 
 #[derive(Deserialize)]

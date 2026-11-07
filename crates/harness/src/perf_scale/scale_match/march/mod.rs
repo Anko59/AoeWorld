@@ -39,8 +39,11 @@ pub(super) const PLAN: [(usize, i32, bool); 11] = [
     (40, 500, true),
 ];
 
-/// Slot 0's seeded army for `PLAN` (`start_units.probe_army`).
-pub(super) fn probe_army() -> Value {
+/// Slot 0's seeded army for `PLAN` (`start_units.probe_army`), when `on`.
+pub(super) fn probe_army(on: bool) -> Value {
+    if !on {
+        return json!({});
+    }
     json!({"militia": 820, "archers": 560, "knights": 470, "rams": 40, "mangonels": 40})
 }
 
