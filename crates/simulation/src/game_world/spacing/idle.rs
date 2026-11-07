@@ -147,6 +147,7 @@ impl IdleSpacing {
             .is_some_and(|&slot| slot != usize::MAX)
     }
 
+    #[inline(never)] // a symbol of its own for the Callgrind stage counters
     pub(crate) fn relocate(&mut self, id: EntityId, from: TileCoord, to: TileCoord) {
         if from == to {
             return;

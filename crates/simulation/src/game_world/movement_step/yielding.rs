@@ -266,6 +266,7 @@ impl GameWorld {
         })
     }
 
+    #[inline(never)] // a symbol of its own for the Callgrind stage counters
     pub(crate) fn advance_yields(&mut self, changed: &mut Vec<EntityId>) {
         if !self.yields.asks.is_empty() {
             self.answer_yield_asks();

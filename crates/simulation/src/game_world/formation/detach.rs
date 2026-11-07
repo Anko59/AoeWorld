@@ -308,6 +308,7 @@ impl GameWorld {
         group.members[at].remaining = i64::MAX;
     }
 
+    #[inline(never)] // a symbol of its own for the Callgrind stage counters
     pub(crate) fn rejoin_detached_members(&mut self) {
         // A detour body that gains no half tile along its own route while it
         // has an order and no search pending is not always counted by traffic

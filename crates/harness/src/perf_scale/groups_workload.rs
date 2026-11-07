@@ -3,6 +3,12 @@ use aoe_core::{Formation, PlayerId, Seed, WorldConfig, WorldPosition};
 use aoe_simulation::{GameWorld, UnitKind, WorldLimits};
 type BoxError = Box<dyn std::error::Error>;
 
+/// Units the default deployment spawns, all of them movers once under way.
+/// The Callgrind benchmark asserts it; its stage report divides by it.
+pub(super) const DEFAULT_MOVERS: u32 = 10_900;
+/// Full ticks the steady scenario advances before its one counted tick.
+pub(super) const STEADY_WARMUP_TICKS: u32 = 200;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Parameters {
     pub(super) armies: u32,

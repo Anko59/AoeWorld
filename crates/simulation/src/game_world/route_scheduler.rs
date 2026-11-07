@@ -138,6 +138,7 @@ impl GameWorld {
     /// Spends `budget` on the units that wait for a route, before anything
     /// moves this tick: a route found here is walked in the same tick.
     /// Returns the budget left over.
+    #[inline(never)] // a symbol of its own for the Callgrind stage counters
     pub(crate) fn serve_route_searches(&mut self, budget: u32, changed: &mut Vec<EntityId>) -> u32 {
         let probe = self.planning_probe.clone();
         let _span = probe.as_ref().and_then(|p| p.movement_span("plan_serve"));

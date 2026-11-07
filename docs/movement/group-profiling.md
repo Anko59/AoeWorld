@@ -187,6 +187,43 @@ forest pass 2803/2879 (1.289×), attack-move kills all ten by tick 1512 with all
 1731 / sealed give-up 1903. Both strict hit-before-tail and hit-before-give-up
 checks remain. No existing assertion was loosened or deleted.
 
+## Per-stage counters (movement rework, phase 0)
+
+`make perf-groups-instructions` also counts two whole ticks with Callgrind's cache simulation on
+(`stages_steady`: tick 201 of the movement benchmark, all 10,900 movers under way; `stages_start`:
+the first tick after the 200 orders, which plans and searches) and then runs
+`aoe-harness perf-stage-counters`. That splits each profile into stages and writes
+`reports/perf/group-stages.json` (the existing `group-instructions.ndjson` and the movement-only
+`movement` benchmark are unchanged). The same workload builder, one Rayon worker.
+
+Per stage the JSON has `ir`, `ll_misses` (`ILmr + DLmr + DLmw`), `dram_bytes` (`ll_misses` × 64 B),
+and each of those per mover (÷ 10,900) and per tick (÷ 1). Misses and bytes are the cache
+simulation's (its `simulated_caches` lines are in the file; Valgrind sizes the last level from the
+host's L3), never a hardware counter: `perf_event_paranoid` is 4 here.
+
+A stage is the inclusive cost of one function, of the calls from one function to another, the
+remainder of a function after named stages, or the sum of stages. Inclusive rows overlap their
+callees, so the rows do not add up to the tick. A row with `present: false` ran no function of its
+name in that tick: measured zero, not skipped. The stages:
+
+| Stage | Source |
+| --- | --- |
+| `tick` | everything counted |
+| `movement` | `advance_movement` |
+| `propose` | `advance_movement` → `propose_steps_into` |
+| `apply` | `advance_movement` less propose, formations, route search, yields, engage, rejoin, resume and vision flush: the ordered apply loop with its index relocation, per-step vision and sidestepping |
+| `group_prepare`, `group_propose`, `group_apply` | `prepare_group_targets`; `advance_formations` → `propose_steps_into`; `advance_formations` → `apply_step` |
+| `sidestep`, `refinement` | `avoid_unit_step`, `local_search` (inside propose and apply) |
+| `index_collision`, `index_idle_spacing`, `index_chunks`, `index_wildlife_cells` | the four spatial index relocations; the wildlife mirror is `track_unit_step` less the first two |
+| `vision_update`, `vision_flush`, `vision` | `update_unit_vision`, `flush_vision_batch`, their sum |
+| `collect_changed` | the changed-unit sort and fetch |
+| `route_serve`, `route_ahead`, `route_search` | `serve_route_searches`, `plan_routes_ahead`, their sum |
+
+The stage functions carry `#[inline(never)]` so each has a symbol of its own; that changes no
+behaviour and no hash. Stages that tick 201 does not run (route search, sidestep, refinement) are
+the ones `stages_start` or a crowded workload exercises. The post-processor
+(`crates/harness/src/perf_scale/callgrind.rs`, `stages.rs`) is tested on a synthetic profile.
+
 ## Validation
 
 Checks use Dockerized Make targets, serially, with the shared resource caps and

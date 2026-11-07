@@ -1,4 +1,5 @@
-# Same army builder as perf-groups; instrument only movement at tick 201.
+# Same army builder as perf-groups; instrument movement at tick 201, then whole ticks per stage
+# (instructions and cache-simulation LL misses, reports/perf/group-stages.json).
 .PHONY: perf-groups-instructions perf-groups-instructions-steps
 perf-groups-instructions: resource-bootstrap
 	@$(RESOURCE_LONG) perf-groups-instructions -- $(MAKE) --no-print-directory perf-groups-instructions-admitted
@@ -11,6 +12,7 @@ perf-groups-instructions-steps:
 	@$(MAKE) --no-print-directory analysis-tools
 	@mkdir -p reports/perf
 	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GUNGRAUN_ALLOW_ASLR=yes -e CARGO_PROFILE_BENCH_DEBUG=1 $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo bench --locked -p aoe-simulation --bench group_instructions -- --output-format=json --save-summary=json > reports/perf/group-instructions.ndjson
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-stage-counters
 
 GROUP_CALLGRIND ?= target/gungraun/aoe-simulation/group_instructions/simulation/movement/callgrind.movement.out
 GROUP_CALLGRIND_REPORT ?= reports/perf/group-callgrind-inclusive.txt

@@ -233,6 +233,7 @@ impl GameWorld {
         self.local_search(index, goal, true, STEP)
     }
 
+    #[inline(never)] // a symbol of its own for the Callgrind stage counters
     fn local_search(
         &self,
         index: usize,

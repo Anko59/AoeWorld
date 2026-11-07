@@ -128,6 +128,7 @@ impl GameWorld {
     /// as when the phases pushed whole unit records. Economy may alter a
     /// mover a second time in the same tick; the fetch returns that final
     /// state, not the earlier movement interpolation state.
+    #[inline(never)] // a symbol of its own for the Callgrind stage counters
     fn collect_changed(&self, mut ids: Vec<EntityId>) -> Vec<GameUnit> {
         self.passes
             .record(crate::game_world::Pass::CollectChanged, ids.len());

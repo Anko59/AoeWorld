@@ -62,6 +62,7 @@ impl GameWorld {
             .collect()
     }
 
+    #[inline(never)] // a symbol of its own for the Callgrind stage counters
     pub(crate) fn resume_queued_moves(&mut self, changed: &mut [EntityId]) {
         if self.move_queues.is_empty() {
             return;
