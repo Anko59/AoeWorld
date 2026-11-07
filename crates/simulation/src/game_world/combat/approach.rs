@@ -1,11 +1,13 @@
 //! Bounded, canonical search for a firing tile in the attacker's component.
 use super::{MELEE_RANGE_SUBUNITS, tick::Goal};
+use crate::game_world::movement_step::{CellHasher, tile_key};
 use crate::{GameWorld, GameWorldError};
 use aoe_core::{EntityId, TileCoord, WorldPosition};
 use aoe_map::HierarchicalOutcome;
 use std::{
     cmp::Reverse,
-    collections::{BTreeMap, BTreeSet, BinaryHeap},
+    collections::{BTreeSet, BinaryHeap, HashMap},
+    hash::BuildHasherDefault,
 };
 
 /// Bounds both search work and retained frontier entries, independent of map size.
@@ -177,7 +179,10 @@ impl GameWorld {
                 * 999
                 / 1000
         };
-        let mut reached = BTreeMap::from([(origin, 0_u64)]);
+        // Only point reads and writes: the heap alone orders the search.
+        let mut reached: HashMap<u64, u64, BuildHasherDefault<CellHasher>> =
+            HashMap::with_capacity_and_hasher(64, BuildHasherDefault::default());
+        reached.insert(tile_key(origin), 0);
         let mut frontier = BinaryHeap::from([Reverse((
             estimate(unit.position),
             0_u64,
@@ -188,7 +193,7 @@ impl GameWorld {
         let mut capped = false;
         'search: while let Some(Reverse((_, cost, y, x))) = frontier.pop() {
             let tile = TileCoord::new(x, y);
-            if reached.get(&tile) != Some(&cost) {
+            if reached.get(&tile_key(tile)) != Some(&cost) {
                 continue;
             }
             let at = WorldPosition::from_tile_center(tile)
@@ -227,7 +232,9 @@ impl GameWorld {
             ] {
                 let next = TileCoord::new(x + dx, y + dy);
                 let next_cost = cost + if dx == 0 || dy == 0 { 1024 } else { 1448 };
-                if reached.get(&next).is_some_and(|&old| old <= next_cost)
+                if reached
+                    .get(&tile_key(next))
+                    .is_some_and(|&old| old <= next_cost)
                     || self.economy.blocked_tiles.contains(&next)
                     || (dx != 0
                         && dy != 0
@@ -250,7 +257,7 @@ impl GameWorld {
                 }
                 let at = WorldPosition::from_tile_center(next)
                     .map_err(|_| GameWorldError::InvalidPosition)?;
-                reached.insert(next, next_cost);
+                reached.insert(tile_key(next), next_cost);
                 frontier.push(Reverse((
                     next_cost + estimate(at),
                     next_cost,
