@@ -2,6 +2,44 @@ use super::*;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BinaryHeap};
 
+/// What the unit was doing in the window before an oscillation, in priority
+/// order: the first of these that happened names the cause.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) struct Causes {
+    /// Another body obstructed its step (sidestep, yield or pass).
+    pub contact: u32,
+    /// The leg it follows changed waypoint, or it was planning a route.
+    pub replan: u32,
+    /// Its slot offset or rank in the formation changed.
+    pub rerank: u32,
+    pub other: u32,
+}
+
+impl Causes {
+    pub fn total(&self) -> u32 {
+        self.contact + self.replan + self.rerank + self.other
+    }
+}
+
+/// Evidence gathered since the unit last moved half a tile.
+#[derive(Clone, Copy, Default)]
+struct Window {
+    contact: bool,
+    replan: bool,
+    rerank: bool,
+}
+
+impl Window {
+    fn cause(&self, causes: &mut Causes) {
+        match *self {
+            Window { contact: true, .. } => causes.contact += 1,
+            Window { replan: true, .. } => causes.replan += 1,
+            Window { rerank: true, .. } => causes.rerank += 1,
+            _ => causes.other += 1,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(super) struct Metrics {
     pub arrived: usize,
@@ -9,6 +47,8 @@ pub(super) struct Metrics {
     pub ideal_ticks: u32,
     pub max_stuck_ticks: u32,
     pub oscillations: u32,
+    /// `oscillations` split by cause; the parts add up to it.
+    pub oscillation_causes: Causes,
     pub max_slot_error: i64,
     pub route_work: u64,
     pub max_tick_route_work: u64,
@@ -61,6 +101,10 @@ pub(super) struct Tracker {
     directions: Vec<(i32, i32)>,
     still: Vec<u32>,
     reversal_at: Vec<Option<u32>>,
+    windows: Vec<Window>,
+    leg: Vec<Option<WorldPosition>>,
+    slot: Vec<Option<(WorldPosition, usize)>>,
+    path_leg: Vec<Option<WorldPosition>>,
     start_work: [u64; 4],
     old_work: u64,
     old_path: u64,
@@ -84,6 +128,10 @@ impl Tracker {
             directions: vec![(0, 0); ids.len()],
             still: vec![0; ids.len()],
             reversal_at: vec![None; ids.len()],
+            windows: vec![Window::default(); ids.len()],
+            leg: vec![None; ids.len()],
+            slot: vec![None; ids.len()],
+            path_leg: vec![None; ids.len()],
             start_work: [
                 work,
                 m.group_member_work,
@@ -98,6 +146,7 @@ impl Tracker {
                 ideal_ticks: 0,
                 max_stuck_ticks: 0,
                 oscillations: 0,
+                oscillation_causes: Causes::default(),
                 max_slot_error: 0,
                 route_work: 0,
                 max_tick_route_work: 0,
@@ -139,7 +188,8 @@ impl Tracker {
     pub fn observe(&mut self, w: &GameWorld, tick: u32) -> bool {
         self.out.arrived = 0;
         self.out.max_slot_error = 0;
-        for (n, &(id, _)) in self.starts.iter().enumerate() {
+        for n in 0..self.starts.len() {
+            let id = self.starts[n].0;
             let unit = w.unit(id).unwrap();
             let at = unit.position;
             let (speed, denominator) = w.movement_speed(unit.kind, unit.player);
@@ -185,6 +235,7 @@ impl Tracker {
             } else {
                 self.still[n] = 0;
             }
+            self.watch(w, n, id);
             if distance(at, self.significant[n]) >= 512 {
                 let direction = (at.x - self.significant[n].x, at.y - self.significant[n].y);
                 let last = self.directions[n];
@@ -194,10 +245,18 @@ impl Tracker {
                 {
                     if self.reversal_at[n].is_some_and(|last| tick - last <= 60) {
                         self.out.oscillations += 1;
+                        self.windows[n].cause(&mut self.out.oscillation_causes);
                         if self.out.oscillations <= 8 {
                             eprintln!(
-                                "terrain-reversal tick={tick} id={id:?} kind={:?} at={at:?} previous={:?} direction={direction:?} prior={last:?} goal={:?}",
-                                unit.kind, self.significant[n], self.goals[n]
+                                "terrain-reversal tick={tick} id={id:?} kind={:?} at={at:?} previous={:?} direction={direction:?} prior={last:?} goal={:?} moving={} grouped={} arrived={arrived} contact={} replan={} rerank={}",
+                                unit.kind,
+                                self.significant[n],
+                                self.goals[n],
+                                unit.moving,
+                                grouped,
+                                self.windows[n].contact,
+                                self.windows[n].replan,
+                                self.windows[n].rerank
                             );
                         }
                     }
@@ -205,6 +264,7 @@ impl Tracker {
                 }
                 self.directions[n] = direction;
                 self.significant[n] = at;
+                self.windows[n] = Window::default();
             }
             self.previous[n] = at;
             if let Some(goal) = self.goals[n] {
@@ -228,7 +288,39 @@ impl Tracker {
         self.out.arrived == self.starts.len()
     }
 
+    /// Records what happened to unit `n` this tick that could turn it round.
+    fn watch(&mut self, w: &GameWorld, n: usize, id: EntityId) {
+        let stored = &w.units[w.lookup[&id]];
+        let window = &mut self.windows[n];
+        window.contact |= stored
+            .obstruction
+            .is_some_and(|o| o.last_tick != u64::MAX && o.last_tick + 1 >= w.tick.0);
+        // A member held up by traffic, or sent on its own detour.
+        if let Some((_, _, detached, blocked)) = w.formation_member_probe(id) {
+            window.contact |= blocked > 0;
+            window.replan |= detached;
+        }
+        // A formation member follows its leader's leg.
+        let carrier = stored
+            .formation
+            .and_then(|leader| w.lookup.get(&leader))
+            .map_or(stored, |&leader| &w.units[leader]);
+        let leg = carrier.order.map(|order| order.waypoint);
+        window.replan |= stored.state.planning || carrier.state.planning;
+        window.replan |= self.leg[n].is_some() && leg != self.leg[n];
+        self.leg[n] = leg;
+        let (slot, path_leg) = match w.formation_slot_probe(id) {
+            Some((slot, leg)) => (Some(slot), Some(leg)),
+            None => (None, None),
+        };
+        window.replan |= self.path_leg[n].is_some() && path_leg != self.path_leg[n];
+        self.path_leg[n] = path_leg;
+        window.rerank |= self.slot[n].is_some() && slot != self.slot[n];
+        self.slot[n] = slot;
+    }
+
     pub fn finish(mut self, ideal_ticks: u32) -> Metrics {
+        assert_eq!(self.out.oscillation_causes.total(), self.out.oscillations);
         self.out.ideal_ticks = ideal_ticks;
         self.out
     }
