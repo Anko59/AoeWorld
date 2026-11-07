@@ -248,6 +248,12 @@ fn bridge_chunk_index_follows_decks_across_chunk_edges() {
         );
     }
     assert!(overlay.bridge_in_chunk((1, 0)));
+    assert!(
+        overlay.bridge_near(TileCoord::new(30, 5)) && overlay.bridge_near(TileCoord::new(31, 32))
+    );
+    assert!(
+        !overlay.bridge_near(TileCoord::new(30, 33)) && !overlay.bridge_near(TileCoord::new(66, 5))
+    );
     assert!(!overlay.bridge_in_chunk((0, 1)));
     assert_eq!(overlay.bridge_connections(TileCoord::new(30, 6)), None);
     overlay.remove_bridge(span);

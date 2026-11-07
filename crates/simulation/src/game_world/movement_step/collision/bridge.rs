@@ -248,6 +248,10 @@ impl GameWorld {
             return None;
         };
         let here = at.tile_floor();
+        // Most bodies are far from any deck: no bridge chunk, no link.
+        if !overlay.bridge_near(here) {
+            return None;
+        }
         let mut best: Option<(i128, i128)> = None;
         for y in -1..=1 {
             for x in -1..=1 {

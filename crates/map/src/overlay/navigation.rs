@@ -167,6 +167,20 @@ impl ResourceOverlay {
             .bridge_chunk(chunk)
             .is_some_and(|c| !c.bridges.is_empty())
     }
+    /// Whether a chunk holding a deck tile covers any tile within one of
+    /// `tile` (a necessary condition for a deck link beside it).
+    pub fn bridge_near(&self, tile: TileCoord) -> bool {
+        let snapshot = &self.navigation_state.snapshot;
+        if snapshot.bridge_tiles == 0 {
+            return false;
+        }
+        let (low, high) = (
+            key(TileCoord::new(tile.x - 1, tile.y - 1)),
+            key(TileCoord::new(tile.x + 1, tile.y + 1)),
+        );
+        (low.1..=high.1).any(|y| (low.0..=high.0).any(|x| snapshot.bridge_chunks.contains((x, y))))
+    }
+
     /// Neighbour direction bits of a completed raster deck tile.
     #[inline]
     pub fn bridge_connections(&self, tile: TileCoord) -> Option<u16> {
