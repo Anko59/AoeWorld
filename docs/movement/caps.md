@@ -70,10 +70,26 @@ name-based false positives of the lint, not caps.
 
 ## 3. Forbidden per-tick passes
 
-Counted by the diagnostics of the next step in this phase, not capped: `collision_opened` and
-`collision_closed` unit scans, `remember_visible_buildings`, `advance_gates`, the wildlife id
-collection, `advance_transports`, `collect_changed`, `Tables::refresh` and the server `UnitFrame`
-build. Phase 1 takes each to 0.
+Eight passes over every unit, building, animal, journey or session run each tick or each map
+change. They are counted, not capped: cumulative `{calls, visited}` pairs that are diagnostics only
+(never hashed, never snapshotted, never read by behaviour; `GameWorld::pass_counts`,
+`simulation/src/game_world/route_scheduler/passes.rs`, server counter in
+`server/src/gameplay/probe.rs`). Phase 1 takes each `visited` per tick to 0.
+
+| Counter | Pass | `visited` is |
+|---|---|---|
+| `collision_opened` | `resources.rs:123`, every unit on each tree felled or building removed | units |
+| `collision_closed` | `resources.rs:150`, every unit on each building placed or gate closed | units |
+| `remember_visible_buildings` | the per-tick calls of `economy/tick.rs` (event-driven callers are not counted) | watched buildings cloned |
+| `advance_gates` | `economy/construction/gates.rs:36`, every building | buildings |
+| `wildlife_ids` | `wildlife/ai.rs:7`, every animal's id collected | animals |
+| `advance_transports` | `navy/journeys.rs:134`, every journey | journeys |
+| `collect_changed` | `economy/tick.rs`, every changed id sorted and fetched | ids |
+| `tables_refresh` | `Tables::refresh` in `movement_step/mod.rs`, dense tables sized by every entity id | entity ids |
+| `unit_frame` | the server's `UnitFrame::build`, every unit converted for the wire | units |
+
+They are exposed in `GET /admin/match/routes` under `passes`, and the scale-match report copies
+that object into each minute's `routes.passes` (take the delta between minutes).
 
 ## 4. The semantic lint
 

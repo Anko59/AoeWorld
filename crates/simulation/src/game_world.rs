@@ -30,7 +30,7 @@ mod resources;
 mod snapshot;
 pub use snapshot::{RestoreReport, SnapshotError, WorldSnapshot};
 mod route_scheduler;
-pub(crate) use route_scheduler::far_route;
+pub(crate) use route_scheduler::{Pass, far_route};
 mod spacing;
 mod spawning;
 mod unit_index;
@@ -55,9 +55,9 @@ pub use formation::GroupProbe;
 pub use research::*;
 pub use resources::PreparedResourceDepletion;
 pub use route_scheduler::{
-    PLANNING_SPANS, PlanningProbe, ROUTE_CATEGORIES, ROUTE_DISTANCES, ROUTE_FAILURES, ROUTE_REACH,
-    ROUTE_REQUESTERS, RouteAttribution, RouteCaller, RouteClass, RouteQueueBreakdown,
-    RouteQueueCell, RouteSchedulerStats,
+    PASS_NAMES, PLANNING_SPANS, PassCount, PlanningProbe, ROUTE_CATEGORIES, ROUTE_DISTANCES,
+    ROUTE_FAILURES, ROUTE_REACH, ROUTE_REQUESTERS, RouteAttribution, RouteCaller, RouteClass,
+    RouteQueueBreakdown, RouteQueueCell, RouteSchedulerStats,
 };
 pub use visibility::TileVisibility;
 pub use wildlife::*;
@@ -195,6 +195,8 @@ pub struct GameWorld {
     pub(crate) route_metrics: route_scheduler::RouteMetrics,
     pub(crate) planning_probe: Option<std::sync::Arc<dyn PlanningProbe>>,
     pub(crate) idle_spacing: spacing::IdleSpacing,
+    /// Whole-population pass counters: diagnostics, never hashed.
+    pub(crate) passes: route_scheduler::Passes,
 }
 impl GameWorld {
     pub fn new(config: WorldConfig) -> Result<Self, GameWorldError> {
@@ -242,6 +244,7 @@ impl GameWorld {
             planning_probe: None,
             route_queued: BTreeSet::new(),
             idle_spacing: Default::default(),
+            passes: Default::default(),
         }
     }
 

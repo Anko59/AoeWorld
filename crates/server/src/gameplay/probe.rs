@@ -39,6 +39,10 @@ struct CacheUsage {
 #[derive(Default)]
 pub(super) struct FanoutProbe {
     nanos: [AtomicU64; 4],
+    /// Cumulative `UnitFrame` builds and the units they converted: a pass over
+    /// every unit each tick (diagnostics only, `docs/movement/caps.md` section 3).
+    unit_frames: AtomicU64,
+    unit_frame_units: AtomicU64,
 }
 
 impl FanoutProbe {
@@ -48,6 +52,14 @@ impl FanoutProbe {
         for (slot, phase) in self.nanos.iter().zip(phases) {
             slot.store(phase.as_nanos() as u64, Ordering::Relaxed);
         }
+    }
+}
+
+impl FanoutProbe {
+    pub(super) fn record_unit_frame(&self, units: usize) {
+        self.unit_frames.fetch_add(1, Ordering::Relaxed);
+        self.unit_frame_units
+            .fetch_add(units as u64, Ordering::Relaxed);
     }
 }
 
@@ -133,6 +145,14 @@ impl GameplayService {
     /// each tick. Navigation spans are inclusive and can overlap in parallel.
     pub fn take_tick_phase_micros(&self) -> std::collections::BTreeMap<&'static str, u64> {
         self.probe.take_phase_micros()
+    }
+
+    /// Cumulative `UnitFrame` builds and units converted since the match began.
+    pub fn unit_frame_passes(&self) -> (u64, u64) {
+        (
+            self.fanout_probe.unit_frames.load(Ordering::Relaxed),
+            self.fanout_probe.unit_frame_units.load(Ordering::Relaxed),
+        )
     }
 
     pub fn last_fanout_timing(&self) -> FanoutTiming {

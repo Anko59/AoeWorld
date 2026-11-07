@@ -86,6 +86,8 @@ impl GameplayService {
             return;
         };
         self.probe.phase("fanout_wait", fanout_started.elapsed());
+        self.fanout_probe
+            .record_unit_frame(built.frame.unit_count());
         let delivery_started = std::time::Instant::now();
         let failed = {
             let mut sessions = self.sessions.lock().await;

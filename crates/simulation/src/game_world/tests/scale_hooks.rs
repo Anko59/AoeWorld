@@ -4,6 +4,7 @@ use crate::game_world::economy::MAX_ECONOMY_PLAYERS;
 use crate::{AnimalKind, AnimalTask, EconomyError, TickPhase, WorldLimits};
 
 mod capacity;
+mod passes;
 
 fn at(x: i32, y: i32) -> WorldPosition {
     WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap()

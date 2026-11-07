@@ -1,4 +1,4 @@
-use super::GameWorld;
+use super::{GameWorld, Pass};
 use crate::Terrain;
 use aoe_map::{Depletion, ResourceOverlay, ResourceOverlayError, ResourceOverlaySnapshot};
 
@@ -131,6 +131,7 @@ impl GameWorld {
             .get_mut()
             .unwrap_or_else(|error| error.into_inner())
             .invalidate(area);
+        self.passes.record(Pass::CollisionOpened, self.units.len());
         for index in 0..self.units.len() {
             if self.units[index]
                 .planner
@@ -158,6 +159,7 @@ impl GameWorld {
             .get_mut()
             .unwrap_or_else(|error| error.into_inner())
             .invalidate(area);
+        self.passes.record(Pass::CollisionClosed, self.units.len());
         for index in 0..self.units.len() {
             if self.units[index]
                 .planner

@@ -217,6 +217,11 @@ impl UnitFrame {
         })
     }
 
+    /// Units this frame converted.
+    pub(super) fn unit_count(&self) -> usize {
+        self.owner.len()
+    }
+
     pub(super) fn state(&self, slot: u32) -> &GameplayUnitState {
         &self.parts[slot as usize / PART][slot as usize % PART]
     }

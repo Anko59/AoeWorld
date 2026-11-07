@@ -13,6 +13,8 @@ impl GameWorld {
         let mut nearby: BTreeMap<EntityId, Option<EntityId>> =
             self.wildlife.engaged.iter().map(|id| (*id, None)).collect();
         let ids = self.wildlife.animals.keys().copied().collect::<Vec<_>>();
+        self.passes
+            .record(crate::game_world::Pass::WildlifeIds, ids.len());
         for id in ids {
             let a = self.wildlife.animals[&id].state;
             // Carcasses remain in the food-search index but never run animal

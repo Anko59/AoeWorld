@@ -114,6 +114,26 @@ pub(crate) fn attribution_json(a: &RouteAttribution) -> Value {
     })
 }
 
+/// Cumulative whole-population passes: the simulation's and the server's unit
+/// frame. Each is `{calls, visited}`; later phases gate `visited` per tick at 0.
+pub(crate) fn passes_json(
+    passes: &[(&'static str, aoe_simulation::PassCount)],
+    unit_frames: (u64, u64),
+) -> Value {
+    let mut out = serde_json::Map::new();
+    for (name, count) in passes {
+        out.insert(
+            (*name).to_owned(),
+            json!({"calls": count.calls, "visited": count.visited}),
+        );
+    }
+    out.insert(
+        "unit_frame".to_owned(),
+        json!({"calls": unit_frames.0, "visited": unit_frames.1}),
+    );
+    Value::Object(out)
+}
+
 pub(crate) fn scheduler_json(stats: &RouteSchedulerStats, tick: u64) -> Value {
     let m = &stats.metrics;
     json!({
@@ -148,6 +168,7 @@ async fn scheduler(
         .collect();
     let mut answer = scheduler_json(&world.route_scheduler_stats(), world.tick().0);
     answer["queue"] = queue_json(&world.route_queue_breakdown(), &humans);
+    answer["passes"] = passes_json(&world.pass_counts(), service.unit_frame_passes());
     Ok(Json(answer))
 }
 

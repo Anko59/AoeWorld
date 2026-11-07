@@ -20,6 +20,7 @@ mod group_end;
 mod issue;
 mod metrics;
 mod order;
+mod passes;
 mod queue;
 pub use accounting::RouteSchedulerStats;
 pub use attribution::{
@@ -27,6 +28,8 @@ pub use attribution::{
 };
 pub(crate) use metrics::{GroupWork, PlanningMeasurement};
 pub use metrics::{PLANNING_SPANS, PlanningProbe, RouteMetrics};
+pub use passes::{PASS_NAMES, PassCount};
+pub(crate) use passes::{Pass, Passes};
 pub use queue::{ROUTE_REACH, ROUTE_REQUESTERS, RouteQueueBreakdown, RouteQueueCell};
 #[cfg(test)]
 pub(crate) use {

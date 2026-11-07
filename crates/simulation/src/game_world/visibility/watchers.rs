@@ -151,14 +151,15 @@ impl GameWorld {
     /// Refreshes remembered snapshots for every watched building and drops
     /// the memory of destroyed ones whose site is now visible. Everything a
     /// player no longer sees keeps its last observation.
-    pub(crate) fn remember_visible_buildings(&mut self) {
+    pub(crate) fn remember_visible_buildings(&mut self) -> usize {
         if self.vision.disabled {
-            return;
+            return 0;
         }
         // Borrows the watcher sets in place (disjoint from the players'
         // memories), walks the buildings beside them (both in id order, so
         // no lookup per building) and clones a building only into a memory
         // it changes; the walk order (building id, then watcher) is the same.
+        let visited = self.vision.building_watchers.len();
         let mut buildings = self.economy.buildings.iter().peekable();
         // Each player's memory by id, so a watcher costs no map search.
         let mut players: Vec<Option<&mut _>> = Vec::new();
@@ -184,6 +185,7 @@ impl GameWorld {
                 }
             }
         }
+        visited
     }
 
     /// Queues a removed building for the next flush.
