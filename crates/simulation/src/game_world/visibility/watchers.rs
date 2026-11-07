@@ -155,22 +155,23 @@ impl GameWorld {
         if self.vision.disabled {
             return;
         }
-        let watched = self
-            .vision
-            .building_watchers
-            .iter()
-            .map(|(id, seen)| (*id, seen.watchers.clone()))
-            .collect::<Vec<_>>();
-        for (id, watchers) in watched {
-            let Some(building) = self.economy.buildings.get(&id).cloned() else {
+        // Borrows the watcher sets in place (disjoint from the players'
+        // memories), walks the buildings beside them (both in id order, so
+        // no lookup per building) and clones a building only into a memory
+        // it changes; the walk order (building id, then watcher) is the same.
+        let mut buildings = self.economy.buildings.iter().peekable();
+        let players = &mut self.vision.players;
+        for (id, seen) in &self.vision.building_watchers {
+            while buildings.next_if(|(at, _)| *at < id).is_some() {}
+            let Some((_, building)) = buildings.next_if(|(at, _)| *at == id) else {
                 continue;
             };
-            for player in watchers {
-                if let Some(vision) = self.vision.players.get_mut(&player) {
+            for player in &seen.watchers {
+                if let Some(vision) = players.get_mut(player) {
                     // Only a differing snapshot is a change.
-                    if vision.remembered.get(&id) != Some(&building) {
-                        vision.changed.insert(id);
-                        vision.remembered.insert(id, building.clone());
+                    if vision.remembered.get(id) != Some(building) {
+                        vision.changed.insert(*id);
+                        vision.remembered.insert(*id, building.clone());
                     }
                 }
             }
