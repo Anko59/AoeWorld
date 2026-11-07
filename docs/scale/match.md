@@ -226,6 +226,24 @@ In profile shares of the tick thread: building memory 5.6% to 3.7%,
 `deck_offset` 3.3% to 1.0%. Body sweeps (18%), formations and route
 serving stay the largest costs.
 
+Round 2 (same load): `ResourceOverlay::remaining` answers a recorded amount
+without decoding its page (0.99% to 0.47% of advance), the attack-position
+search keeps its costs in a hash map (4.2% to 3.3%), delivery patches
+resident units with one forward walk; none is visible in the phase p50s
+(tick 47.8 to 50.3 ms between runs on the shared machine).
+
+Why the owner's gathering phase was 21 ms and ours 3: the timer has the
+same boundaries in the owner's build 4953b6aec and now (the probe after
+construction to the probe after `advance_gathering`, resource sink
+included), and the gathering code differs only by an unused save helper.
+The load differs: at minute 4 here 397 villagers gather and 220 farm (of
+4,231; 1,499 walk, 756 shepherd); the owner's world had 765 and 544 (of
+3,355) and its resource-block cache was full (8,192 entries, LRU) all match
+long. Shrinking that cache to 512 entries changed nothing here, because
+our gatherers barely search for replacements (block builds 0.03%): what
+makes the owner's 21 ms is not reproduced, and profiling a resumed save of
+the owner's match (`#718`) is the direct way to find it.
+
 ## The match rules behind it
 
 `POST /match` accepts (see [the AI SDK](../ai-sdk.md)):
