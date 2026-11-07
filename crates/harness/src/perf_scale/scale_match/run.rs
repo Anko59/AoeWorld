@@ -103,12 +103,16 @@ pub(super) fn match_body(options: &Options) -> Result<Value, BoxError> {
     let mut body = json!({
         "slots": slots,
     });
-    if options.start_villagers + options.start_militia > 0 || options.march_probe {
+    if options.start_villagers + options.start_militia > 0
+        || options.march_probe
+        || options.late_game
+    {
         body["start_units"] =
             json!({ "villagers": options.start_villagers, "militia": options.start_militia });
     }
-    if options.march_probe {
-        body["start_units"]["probe_army"] = super::march::probe_army();
+    if options.march_probe || options.late_game {
+        body["start_units"]["probe_army"] = super::march::probe_army(options.march_probe);
+        body["start_units"]["late_game"] = json!(options.late_game);
         body["seed"] = json!(options.seed);
     }
     match options.map {
@@ -189,15 +193,6 @@ fn pull_ticks(server: &Server, cursor: &mut u64, rows: &mut Vec<TickRow>) -> Res
     Ok(())
 }
 
-fn mean_max(values: impl Iterator<Item = f64>) -> (f64, f64) {
-    let all: Vec<f64> = values.collect();
-    let mean = all.iter().sum::<f64>() / all.len().max(1) as f64;
-    (
-        crate::perf_scale::stats::round(mean),
-        crate::perf_scale::stats::round(all.iter().copied().fold(0.0, f64::max)),
-    )
-}
-
 pub(super) fn run(options: &Options) -> Result<(), BoxError> {
     let root = std::env::current_dir()?;
     let work = root.join(WORK);
@@ -276,6 +271,9 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
         };
         super::march::start(super::march::settings(options, admin, human))
     });
+    let late = options
+        .late_game
+        .then(|| super::late::start(&server.address, &info, options.seed));
     println!("scale-match: all bots connected {connect_seconds:.1} s after the hosts started");
     let _ = pull_ticks(&server, &mut cursor, &mut rows);
     rows.clear();
@@ -289,7 +287,14 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
     let mut last_cpu = procs::process(server.child.id()).map_or(0.0, |(seconds, _)| seconds);
     let mut last_sample = Instant::now();
     let mut failure = None;
+    let mut phase_minutes = Vec::<Value>::new();
     while run_started.elapsed() < wall {
+        if run_started.elapsed().as_secs_f64() >= 60.0 * (phase_minutes.len() + 1) as f64 {
+            let seconds = run_started.elapsed().as_secs_f64();
+            let row = report::phase_minute(server.get("/admin/perf").ok(), seconds);
+            println!("  phases (p50, p95 ms) {row}");
+            phase_minutes.push(row);
+        }
         if let Some(reason) = server.exited() {
             failure = Some(reason);
             break;
@@ -346,6 +351,7 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
     let wall_seconds = run_started.elapsed().as_secs_f64();
     let _ = pull_ticks(&server, &mut cursor, &mut rows);
     let march = probe.map(super::march::Probe::finish);
+    let late = late.map(super::late::Driver::finish);
 
     // The bots stop by themselves at their own time limit; give them a moment.
     let grace = Instant::now();
@@ -383,8 +389,8 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
         .filter_map(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
         .map(|value| value["bots"].clone())
         .collect();
-    let (server_mean, server_max) = mean_max(samples.iter().map(|s| s.server_cpu_cores));
-    let (bots_mean, bots_max) = mean_max(samples.iter().map(|s| s.bots_cpu_cores));
+    let (server_mean, server_max) = report::mean_max(samples.iter().map(|s| s.server_cpu_cores));
+    let (bots_mean, bots_max) = report::mean_max(samples.iter().map(|s| s.bots_cpu_cores));
     let first_units = rows.first().map_or(0, |row| row.units);
     let out = json!({
         "schema": 1,
@@ -428,6 +434,8 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
         "timeline": report::timeline(&samples),
         "planning_per_minute": report::planning(&rows, wall_seconds),
         "march": march,
+        "late": late,
+        "phases_per_minute": phase_minutes,
     });
     if let Some(march) = out.get("march").filter(|m| !m.is_null()) {
         super::march::print_table(&options.label, march);

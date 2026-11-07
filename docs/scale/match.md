@@ -40,7 +40,7 @@ Options (`aoe-harness scale-match --help`): `--players --humans --tiles
 --start-villagers --start-militia --minutes --hosts --map
 procedural|package|flat --map-hash --package-directory --port --seed
 --asset-pack --browser --browser-minutes --browser-delay --out --summary
---no-summary --label --march-probe --march-minute --march-scatter --march-no-ai`. The browser step needs `make build-wasm` (the server serves `web/`) and
+--no-summary --label --march-probe --march-minute --march-scatter --march-no-ai --late-game`. The browser step needs `make build-wasm` (the server serves `web/`) and
 an original-art pack (`AOE_ASSET_PACK=local-assets/packs/<hash>`).
 
 ## March probe: group movement in the real match
@@ -83,6 +83,46 @@ formation orders ended by the wait bound apart from single units. Its
 (`wait_expired`, `near_exhausted`, `carrier_stopped` with `carrier_failures`
 by reason, `replanned`, `rejected_at_issue`, `members_left_out`); the probe
 table prints it.
+
+## Late game: the owner's 100-player load
+
+`--late-game` seeds the shape of the owner's late game of 2026-11-06 (34
+minutes, 100 seats, 9.5-10.1 ticks/s, evidence in the play checkout's
+`.cache/game-2026-11-06/`) instead of a Dark Age start, so the per-phase
+profile of a real late game can be reproduced and optimised:
+
+```sh
+SCALE_MATCH_ARGS="--late-game --players 100 --hosts 8 --minutes 12 --port 8145 \
+  --map package --map-hash dc7e0d4b253af4e7e7106b69eba61169ef2f8f6b0fd7781fbe5a3ed6ccc60e68 \
+  --package-directory local-assets/map-packages --label late-game --no-summary \
+  --out .cache/late/late.json" make scale-match
+```
+
+The owner's world at minute 33: 9,207 units (3,355 villagers, about 5,700
+soldiers, 120 fishing ships, 104 galleys), 3,479 units moving, 664 attacking,
+about 1,800 villagers gathering, farming or returning; 4,355 buildings (80
+Town Centers, 16 Castles, 220 stone wall tiles, 12 bridges, 657 farms, 1,878
+houses); AIs 69 Castle, 17 Feudal, 10 Imperial and 4 Dark. Slot 0 alone had
+1,650 population, 25 Town Centers, all the Castles, walls and bridges and an
+870-soldier army.
+
+`start_units.late_game` (`crates/server/src/gameplay_match/late_game.rs`,
+seeding in `GameWorld::seed_late_game`) gives slot 0 that base (Imperial, 728
+villagers, 51 fishing ships, 856 Imperial soldiers, 24 extra Town Centers, 16
+Castles, 381 farms, 259 houses and the other buildings, 220 wall tiles on a
+ring with gaps, up to 12 finished bridges over river water within 200 tiles)
+and every AI seat a Castle Age start (every tenth Imperial, every sixth
+Feudal) with 27 villagers, a fishing ship, 48 soldiers, a galley, farms,
+mills, camps, houses and military buildings. Every seat gets a stockpile;
+the villagers start through the ordinary farm and gather orders. Placement
+walks fixed tile orders, so the same map, seed and seat give the same world.
+The bots play their seats from there (their armies march when they find a
+target). Slot 0 is played by a scripted human (`late` in the report): every
+45 s it splits its army into four groups and sends each a Line attack-move
+300 to 700 tiles away, the direction turning each round.
+
+The report adds `phases_per_minute`: the server's rolling p50/p95 per phase
+(`GET /admin/perf`, ms), the same numbers the owner's sampler recorded.
 
 ## The match rules behind it
 

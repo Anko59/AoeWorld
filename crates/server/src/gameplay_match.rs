@@ -364,6 +364,7 @@ async fn start_match(
 
 mod admin;
 mod flat;
+mod late_game;
 mod pause;
 pub(crate) mod routes;
 mod rules;

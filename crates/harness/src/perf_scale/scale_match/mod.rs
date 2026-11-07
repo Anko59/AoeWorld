@@ -10,6 +10,7 @@
 mod browser;
 mod hosts;
 mod http;
+mod late;
 mod march;
 mod procs;
 mod report;
@@ -108,6 +109,10 @@ pub struct Options {
     /// Seat the AI slots but start no bot: the same world without AI demand.
     #[arg(long, requires = "march_probe")]
     pub march_no_ai: bool,
+    /// Seed the owner's late game (ages, bases, walls, bridges, working
+    /// villagers, armies) and march slot 0's army by script (`late` in the report).
+    #[arg(long, conflicts_with = "march_probe")]
+    pub late_game: bool,
 }
 
 pub fn run(options: Options) -> Result<(), BoxError> {

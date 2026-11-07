@@ -357,3 +357,46 @@ pub(super) fn planning(rows: &[TickRow], wall_seconds: f64) -> Value {
         })
         .collect()
 }
+
+/// The server's rolling phase p50/p95 (`GET /admin/perf`, ms), as the
+/// owner's live sampler recorded them, for comparison with a real match.
+pub(super) fn phase_minute(perf: Option<Value>, seconds: f64) -> Value {
+    const PHASES: [&str; 12] = [
+        "total",
+        "advance",
+        "planning",
+        "plan_fast",
+        "plan_serve",
+        "plan_fair",
+        "movement",
+        "gathering",
+        "search",
+        "combat",
+        "group_apply",
+        "apply_loop",
+    ];
+    let Some(perf) = perf else {
+        return json!({"seconds": seconds, "error": "no /admin/perf"});
+    };
+    let mut row = json!({"seconds": crate::perf_scale::stats::round(seconds),
+        "tick_rate": perf["tick_rate"], "units": perf["gameplay_memory"]["units"]});
+    for name in PHASES {
+        let phase = &perf["phases"][name];
+        let ms = |key: &str| {
+            phase[key]
+                .as_f64()
+                .map(|us| crate::perf_scale::stats::round(us / 1000.0))
+        };
+        row[name] = json!([ms("p50_us"), ms("p95_us")]);
+    }
+    row
+}
+
+pub(super) fn mean_max(values: impl Iterator<Item = f64>) -> (f64, f64) {
+    let all: Vec<f64> = values.collect();
+    let mean = all.iter().sum::<f64>() / all.len().max(1) as f64;
+    (
+        crate::perf_scale::stats::round(mean),
+        crate::perf_scale::stats::round(all.iter().copied().fold(0.0, f64::max)),
+    )
+}
