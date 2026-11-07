@@ -30,6 +30,58 @@ struct CollisionSnapshot {
     shards: Arc<[Shard; SHARDS]>,
     stamp: [u8; 32],
     bridge_tiles: usize,
+    /// The chunks holding a deck tile. Nearly every tile of a map is far
+    /// from any bridge; this answers those without a shard lookup.
+    bridge_chunks: Arc<BridgeChunks>,
+}
+
+/// Sorted chunk keys and a 4,096-bit filter of them: a clear bit proves a
+/// chunk holds no deck tile with one load, the common answer of route
+/// expansions and body sweeps.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct BridgeChunks {
+    keys: Vec<Key>,
+    filter: [u64; 64],
+}
+
+impl Default for BridgeChunks {
+    fn default() -> Self {
+        Self {
+            keys: Vec::new(),
+            filter: [0; 64],
+        }
+    }
+}
+
+impl BridgeChunks {
+    #[inline(always)]
+    fn bit(key: Key) -> (usize, u64) {
+        let hash =
+            (key.0 as u32).wrapping_mul(0x9e37_79b9) ^ (key.1 as u32).wrapping_mul(0x85eb_ca6b);
+        let bit = (hash >> 20) as usize;
+        (bit >> 6, 1 << (bit & 63))
+    }
+
+    #[inline(always)]
+    fn contains(&self, key: Key) -> bool {
+        let (word, mask) = Self::bit(key);
+        self.filter[word] & mask != 0 && self.keys.binary_search(&key).is_ok()
+    }
+
+    fn set(&mut self, key: Key, bridged: bool) {
+        match (self.keys.binary_search(&key), bridged) {
+            (Ok(index), false) => {
+                self.keys.remove(index);
+            }
+            (Err(index), true) => self.keys.insert(index, key),
+            _ => return,
+        }
+        self.filter = [0; 64];
+        for &key in &self.keys {
+            let (word, mask) = Self::bit(key);
+            self.filter[word] |= mask;
+        }
+    }
 }
 
 impl Default for CollisionSnapshot {
@@ -39,6 +91,7 @@ impl Default for CollisionSnapshot {
             shards: Arc::new(std::array::from_fn(|_| Arc::clone(&empty))),
             stamp: [0; 32],
             bridge_tiles: 0,
+            bridge_chunks: Arc::default(),
         }
     }
 }
@@ -53,6 +106,15 @@ fn key(tile: TileCoord) -> Key {
 impl CollisionSnapshot {
     fn shard(key: Key) -> usize {
         ((key.0 as u32).wrapping_mul(31) ^ key.1 as u32) as usize % SHARDS
+    }
+
+    /// The chunk of `key` when it holds a deck tile.
+    #[inline]
+    fn bridge_chunk(&self, key: Key) -> Option<&Arc<CollisionChunk>> {
+        if self.bridge_tiles == 0 || !self.bridge_chunks.contains(key) {
+            return None;
+        }
+        self.chunk(key)
     }
 
     fn chunk(&self, key: Key) -> Option<&Arc<CollisionChunk>> {
@@ -100,21 +162,17 @@ impl ResourceOverlay {
         self.navigation_state.snapshot.bridge_tiles
     }
     pub(crate) fn bridge_in_chunk(&self, chunk: (i32, i32)) -> bool {
-        self.navigation_state.snapshot.bridge_tiles > 0
-            && self
-                .navigation_state
-                .snapshot
-                .chunk(chunk)
-                .is_some_and(|c| !c.bridges.is_empty())
-    }
-    /// Neighbour direction bits of a completed raster deck tile.
-    pub fn bridge_connections(&self, tile: TileCoord) -> Option<u16> {
-        if self.navigation_state.snapshot.bridge_tiles == 0 {
-            return None;
-        }
         self.navigation_state
             .snapshot
-            .chunk(key(tile))?
+            .bridge_chunk(chunk)
+            .is_some_and(|c| !c.bridges.is_empty())
+    }
+    /// Neighbour direction bits of a completed raster deck tile.
+    #[inline]
+    pub fn bridge_connections(&self, tile: TileCoord) -> Option<u16> {
+        self.navigation_state
+            .snapshot
+            .bridge_chunk(key(tile))?
             .bridges
             .get(&tile)
             .copied()
@@ -184,16 +242,20 @@ impl ResourceOverlay {
         for (local, byte) in chunk.stamp.iter_mut().zip(change.as_bytes()) {
             *local ^= byte;
         }
+        let bridged = !chunk.bridges.is_empty();
         let empty = chunk.stamp == [0; 32]
             && chunk.occupied.is_empty()
             && chunk.depleted.is_empty()
-            && chunk.bridges.is_empty();
+            && !bridged;
         for (global, byte) in snapshot.stamp.iter_mut().zip(change.as_bytes()) {
             *global ^= byte;
         }
         if empty {
             let shards = Arc::make_mut(&mut snapshot.shards);
             Arc::make_mut(&mut shards[CollisionSnapshot::shard(key(tile))]).remove(&key(tile));
+        }
+        if domain == 4 && snapshot.bridge_chunks.contains(key(tile)) != bridged {
+            Arc::make_mut(&mut snapshot.bridge_chunks).set(key(tile), bridged);
         }
     }
 

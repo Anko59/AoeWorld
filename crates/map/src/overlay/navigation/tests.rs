@@ -232,3 +232,36 @@ fn cached_collision_reads_follow_unique_and_shared_shard_writes() {
         );
     }
 }
+
+#[test]
+fn bridge_chunk_index_follows_decks_across_chunk_edges() {
+    let mut overlay = ResourceOverlay::default();
+    let span = aoe_core::BridgeSpan::new(TileCoord::new(28, 5), TileCoord::new(36, 5)).unwrap();
+    overlay.add_bridge(span).unwrap();
+    let snapshot = &overlay.navigation_state.snapshot;
+    assert_eq!(snapshot.bridge_chunks.keys.as_slice(), &[(0, 0), (1, 0)]);
+    assert!(snapshot.bridge_chunks.contains((1, 0)) && !snapshot.bridge_chunks.contains((2, 0)));
+    for x in 29..36 {
+        assert!(
+            overlay.bridge_connections(TileCoord::new(x, 5)).is_some(),
+            "{x}"
+        );
+    }
+    assert!(overlay.bridge_in_chunk((1, 0)));
+    assert!(!overlay.bridge_in_chunk((0, 1)));
+    assert_eq!(overlay.bridge_connections(TileCoord::new(30, 6)), None);
+    overlay.remove_bridge(span);
+    assert!(
+        overlay
+            .navigation_state
+            .snapshot
+            .bridge_chunks
+            .keys
+            .is_empty()
+    );
+    assert_eq!(
+        overlay.navigation_state.snapshot.bridge_chunks.filter,
+        [0; 64]
+    );
+    assert_eq!(overlay.bridge_connections(TileCoord::new(30, 5)), None);
+}
