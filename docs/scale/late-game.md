@@ -129,3 +129,19 @@ raising 266,322 to 272,377 against the unchanged 270,472-instruction cap.
 The query now collects matching entities directly and sorts/deduplicates by
 id, preserving spatial work counters and output order while removing the
 temporary tree. The existing baseline and threshold remain unchanged.
+
+## Tick costs outside pathfinding (2026-11-07, revision 5a9ae33c3)
+
+Late-game load (`scale-match --late-game`, 100 seats, France package, 6
+minutes, 9,800 to 12,900 units, shared machine), phase p50 / p95 in ms, medians
+of minutes 2 to 5 (`.cache/late/base2.json`):
+
+| Item | Finding | Measured |
+|---|---|---|
+| Unit scan on a felled tree or placed building (`collision_opened`/`closed`) | confirmed: every call walks all units | `route_cache` 0.04 / 1.3; one call 0.7 ms at 13,900 units (memory-bound), so about 5 ms at 100k per tree. Parallel scan tried: 0.60 vs 0.69 ms, not kept |
+| 32 commands per tick (`gameplay/tick.rs`) | cap exists; orders applied 175 to 295 per second against a cap of about 500 at 16 ticks/s | drops not shown; `ticks_at_command_cap` and `bots.rejections` now report it |
+| Server frame converts every unit | confirmed (`frame.rs`, parallel parts, serial merge) | `frame` 1.3 / 2.0, `session_views` 1.2, `viewers` 0.45, `fanout_wait` 3.0 |
+| `canonical_hash` single-threaded | confirmed; the server never calls it per tick (replay and desync checks only) | 70 ms before; 16 ms on the shared pool, 43 ms on one thread after (13,900 units) |
+| Tick counter advanced inside `advance_movement` | confirmed (`game_movement.rs`); moving it to the end of the tick changed about 45 timing assertions across combat, gathering, stewards, vassals and spacing, so it was not landed | patch in `.cache/late/item5-tick.patch` |
+
+Whole tick p50 at this load: total 49 ms, advance 37, movement 27.
