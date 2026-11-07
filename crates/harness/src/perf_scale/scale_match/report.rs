@@ -71,6 +71,10 @@ fn series(rows: &[TickRow], pick: impl Fn(&TickRow) -> f64) -> Value {
     Series(rows.iter().map(pick).collect()).summary()
 }
 
+/// The server admits this many commands per tick match-wide
+/// (`MAX_COMMANDS_PER_TICK` in `gameplay/tick.rs`).
+const COMMAND_CAP: u64 = 32;
+
 /// Tick timings of a window of rows.
 pub(super) fn window(rows: &[TickRow], wall_seconds: f64) -> Value {
     let missed = rows.iter().filter(|row| row.missed).count();
@@ -98,6 +102,8 @@ pub(super) fn window(rows: &[TickRow], wall_seconds: f64) -> Value {
         "ticks_per_second": round(ticks_per_second),
         "realtime_factor": round(ticks_per_second / TICK_HZ),
         "orders_applied": orders,
+        "ticks_at_command_cap": rows.iter().filter(|row| row.orders >= COMMAND_CAP).count(),
+        "ticks_with_orders": rows.iter().filter(|row| row.orders > 0).count(),
         "orders_per_second": round(if wall_seconds > 0.0 { orders as f64 / wall_seconds } else { 0.0 }),
         "units_first": rows.first().map_or(0, |row| row.units),
         "units_last": rows.last().map_or(0, |row| row.units),
@@ -361,7 +367,7 @@ pub(super) fn planning(rows: &[TickRow], wall_seconds: f64) -> Value {
 /// The server's rolling phase p50/p95 (`GET /admin/perf`, ms), as the
 /// owner's live sampler recorded them, for comparison with a real match.
 pub(super) fn phase_minute(perf: Option<Value>, routes: Option<Value>, seconds: f64) -> Value {
-    const PHASES: [&str; 17] = [
+    const PHASES: [&str; 34] = [
         "total",
         "advance",
         "planning",
@@ -379,6 +385,23 @@ pub(super) fn phase_minute(perf: Option<Value>, routes: Option<Value>, seconds: 
         "group_prepare",
         "group_propose",
         "resources",
+        "route_cache",
+        "sessions",
+        "world_lock",
+        "orders",
+        "spacing",
+        "wildlife",
+        "construction",
+        "research_training",
+        "steward_economy",
+        "building_memory",
+        "changed",
+        "resource_journal",
+        "viewers",
+        "frame",
+        "session_views",
+        "fanout_wait",
+        "delivery",
     ];
     let Some(perf) = perf else {
         return json!({"seconds": seconds, "error": "no /admin/perf"});
