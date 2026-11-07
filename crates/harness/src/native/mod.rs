@@ -30,7 +30,31 @@ const UNIT_BUDGET: Duration = Duration::from_secs(1200);
 pub(crate) fn run_in(root: &Path, environment: &[(&str, &str)]) -> Result<(), ProcessError> {
     let exclude = tiers::exclude();
     let args = [ARGS, &["-E", exclude.as_str()]].concat();
-    process::run_in(root, "cargo", &args, environment, UNIT_BUDGET)
+    let jobs = workspace_build_jobs();
+    let environment = [environment, &[("CARGO_BUILD_JOBS", jobs.as_str())]].concat();
+    process::run_in(root, "cargo", &args, &environment, UNIT_BUDGET)
+}
+
+/// Most compiler processes a whole-workspace test build may run at once.
+///
+/// Measured cold at `--workspace`: the aoe-harness test binary needs about
+/// 2.0 GiB of rustc memory and its non-test twin 1.4 GiB, aoe-simulation and
+/// aoe-server tests 1.2 GiB each. Any three of those together exceed the shared
+/// 4 GiB container cap (kernel OOM kill on `exhaustive` and the nightly), while
+/// any two fit. Scoped (`-p`) runs build fewer heavy crates and keep the
+/// container's own job count.
+const WORKSPACE_BUILD_JOBS: usize = 2;
+
+/// The inherited `CARGO_BUILD_JOBS`, capped at [`WORKSPACE_BUILD_JOBS`].
+pub(crate) fn workspace_build_jobs() -> String {
+    capped_jobs(std::env::var("CARGO_BUILD_JOBS").ok().as_deref()).to_string()
+}
+
+fn capped_jobs(inherited: Option<&str>) -> usize {
+    let inherited = inherited.and_then(|jobs| jobs.parse::<usize>().ok());
+    inherited.map_or(WORKSPACE_BUILD_JOBS, |jobs| {
+        jobs.clamp(1, WORKSPACE_BUILD_JOBS)
+    })
 }
 
 /// Budget of the source-qualification tier, which `test_unit` excludes.
@@ -40,7 +64,9 @@ const SOURCE_BUDGET: Duration = Duration::from_secs(1800);
 pub(crate) fn test_source_qualification() -> Result<(), ProcessError> {
     let include = tiers::include();
     let args = [ARGS, &["--no-tests", "fail", "-E", include.as_str()]].concat();
-    process::run("cargo", &args, SOURCE_BUDGET)
+    let jobs = workspace_build_jobs();
+    let environment = [("CARGO_BUILD_JOBS", jobs.as_str())];
+    process::run_with_env("cargo", &args, &environment, SOURCE_BUDGET)
 }
 
 /// Budget of the exhaustive tier, which `test_unit` excludes.
@@ -50,7 +76,9 @@ const EXHAUSTIVE_BUDGET: Duration = Duration::from_secs(1800);
 pub(crate) fn test_exhaustive() -> Result<(), ProcessError> {
     let include = tiers::include_exhaustive();
     let args = [ARGS, &["--no-tests", "fail", "-E", include.as_str()]].concat();
-    process::run("cargo", &args, EXHAUSTIVE_BUDGET)
+    let jobs = workspace_build_jobs();
+    let environment = [("CARGO_BUILD_JOBS", jobs.as_str())];
+    process::run_with_env("cargo", &args, &environment, EXHAUSTIVE_BUDGET)
 }
 
 pub(crate) fn deny() -> Result<(), ProcessError> {

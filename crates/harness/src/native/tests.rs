@@ -291,3 +291,13 @@ fn the_wasm_check_compiles_the_test_targets_of_every_wasm_package() {
     assert_eq!(packages, crate::wasm_test::packages());
     assert!(packages.contains(&"aoe-client") && packages.contains(&"aoe-rendering"));
 }
+
+#[test]
+fn workspace_test_builds_never_exceed_two_compiler_jobs() {
+    use super::capped_jobs;
+    assert_eq!(capped_jobs(None), 2);
+    assert_eq!(capped_jobs(Some("4")), 2);
+    assert_eq!(capped_jobs(Some("1")), 1);
+    assert_eq!(capped_jobs(Some("0")), 1);
+    assert_eq!(capped_jobs(Some("many")), 2);
+}
