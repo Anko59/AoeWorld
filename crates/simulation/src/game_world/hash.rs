@@ -27,6 +27,115 @@ fn movement_error_code(error: GameWorldError) -> u8 {
     }
 }
 
+/// Units per digest block of `canonical_hash`. Part of the hash's definition.
+const UNIT_BLOCK: usize = 1024;
+
+impl GameWorld {
+    fn hash_unit(&self, hash: &mut blake3::Hasher, unit: &super::StoredUnit) {
+        hash.update(&unit.state.id.0.to_le_bytes());
+        hash.update(&self.collisions.sampling_slot(unit.state.id).to_le_bytes());
+        let wildlife_slot = match unit.wildlife_slot {
+            usize::MAX => u64::MAX,
+            slot => slot as u64,
+        };
+        hash.update(&wildlife_slot.to_le_bytes());
+        hash.update(&unit.state.player.0.to_le_bytes());
+        hash.update(&unit.state.position.x.to_le_bytes());
+        hash.update(&unit.state.position.y.to_le_bytes());
+        hash.update(&unit.state.previous_position.x.to_le_bytes());
+        hash.update(&unit.state.previous_position.y.to_le_bytes());
+        hash.update(&[
+            unit.state.moving as u8,
+            unit.state.planning as u8,
+            unit.state.facing as u8,
+            unit.state.kind as u8,
+            unit.state.task as u8,
+        ]);
+        hash.update(&[u8::from(unit.state.auto_scout)]);
+        hash.update(&[unit.state.stance as u8]);
+        hash.update(&unit.next_hit_tick.to_le_bytes());
+        hash.update(&unit.state.hp.to_le_bytes());
+        hash.update(&unit.state.max_hp.to_le_bytes());
+        hash.update(
+            &unit
+                .state
+                .attack_target
+                .map_or(u32::MAX, |id| id.0)
+                .to_le_bytes(),
+        );
+        super::combat::hash_hit(hash, unit.state.last_hit);
+        hash.update(&[unit.state.death_hunt.map_or(u8::MAX, |k| k as u8)]);
+        hash.update(
+            &unit
+                .state
+                .death_tick
+                .map_or(u64::MAX, |t| t.0)
+                .to_le_bytes(),
+        );
+        if let Some(load) = unit.state.carried {
+            hash.update(&[1, load.kind as u8]);
+            hash.update(&load.amount.to_le_bytes());
+        } else {
+            hash.update(&[0]);
+        }
+        if let Some(order) = unit.order {
+            hash.update(&order.origin.x.to_le_bytes());
+            hash.update(&order.origin.y.to_le_bytes());
+            hash.update(&order.destination.x.to_le_bytes());
+            hash.update(&order.destination.y.to_le_bytes());
+            hash.update(&order.waypoint.x.to_le_bytes());
+            hash.update(&order.waypoint.y.to_le_bytes());
+            hash.update(&order.target_tile.x.to_le_bytes());
+            hash.update(&order.target_tile.y.to_le_bytes());
+            hash.update(&order.segment_length.to_le_bytes());
+            hash.update(&order.travelled.to_le_bytes());
+            hash.update(&order.speed_carry.to_le_bytes());
+        } else {
+            hash.update(&[0; 48]);
+        }
+        hash.update(&(unit.route.len() as u64).to_le_bytes());
+        for tile in &unit.route {
+            hash.update(&tile.x.to_le_bytes());
+            hash.update(&tile.y.to_le_bytes());
+        }
+        hash.update(&[u8::from(unit.fast_route_tried)]);
+        if let Some(obstruction) = unit.obstruction {
+            hash.update(&[1]);
+            hash.update(&obstruction.goal.x.to_le_bytes());
+            hash.update(&obstruction.goal.y.to_le_bytes());
+            hash.update(&obstruction.remaining.to_le_bytes());
+            hash.update(&obstruction.blocked.to_le_bytes());
+            hash.update(&obstruction.side.to_le_bytes());
+            hash.update(&obstruction.last_tick.to_le_bytes());
+            hash.update(&obstruction.search_tick.to_le_bytes());
+            hash.update(&obstruction.pass_until.to_le_bytes());
+        } else {
+            hash.update(&[0]);
+        }
+        match unit.unreachable_memo {
+            None => hash.update(&[0]),
+            Some((from, to, at)) => {
+                hash.update(&[1]);
+                for value in [from.x, from.y, to.x, to.y] {
+                    hash.update(&value.to_le_bytes());
+                }
+                hash.update(&at.to_le_bytes())
+            }
+        };
+        if let Some(planner) = &unit.planner {
+            hash.update(&[1]);
+            planner.update_hash(hash);
+        } else {
+            hash.update(&[0]);
+        }
+        if let Some(error) = unit.last_movement_error {
+            hash.update(&[1, movement_error_code(error)]);
+        } else {
+            hash.update(&[0, 0]);
+        }
+    }
+}
+
 impl GameWorld {
     pub fn canonical_hash(&self) -> [u8; 32] {
         let mut hash = blake3::Hasher::new();
@@ -72,108 +181,21 @@ impl GameWorld {
         self.combat.update_hash(&mut hash);
         self.wildlife.update_hash(&mut hash);
         self.vision.update_hash(&mut hash);
-        for unit in &self.units {
-            hash.update(&unit.state.id.0.to_le_bytes());
-            hash.update(&self.collisions.sampling_slot(unit.state.id).to_le_bytes());
-            let wildlife_slot = match unit.wildlife_slot {
-                usize::MAX => u64::MAX,
-                slot => slot as u64,
-            };
-            hash.update(&wildlife_slot.to_le_bytes());
-            hash.update(&unit.state.player.0.to_le_bytes());
-            hash.update(&unit.state.position.x.to_le_bytes());
-            hash.update(&unit.state.position.y.to_le_bytes());
-            hash.update(&unit.state.previous_position.x.to_le_bytes());
-            hash.update(&unit.state.previous_position.y.to_le_bytes());
-            hash.update(&[
-                unit.state.moving as u8,
-                unit.state.planning as u8,
-                unit.state.facing as u8,
-                unit.state.kind as u8,
-                unit.state.task as u8,
-            ]);
-            hash.update(&[u8::from(unit.state.auto_scout)]);
-            hash.update(&[unit.state.stance as u8]);
-            hash.update(&unit.next_hit_tick.to_le_bytes());
-            hash.update(&unit.state.hp.to_le_bytes());
-            hash.update(&unit.state.max_hp.to_le_bytes());
-            hash.update(
-                &unit
-                    .state
-                    .attack_target
-                    .map_or(u32::MAX, |id| id.0)
-                    .to_le_bytes(),
-            );
-            super::combat::hash_hit(&mut hash, unit.state.last_hit);
-            hash.update(&[unit.state.death_hunt.map_or(u8::MAX, |k| k as u8)]);
-            hash.update(
-                &unit
-                    .state
-                    .death_tick
-                    .map_or(u64::MAX, |t| t.0)
-                    .to_le_bytes(),
-            );
-            if let Some(load) = unit.state.carried {
-                hash.update(&[1, load.kind as u8]);
-                hash.update(&load.amount.to_le_bytes());
-            } else {
-                hash.update(&[0]);
-            }
-            if let Some(order) = unit.order {
-                hash.update(&order.origin.x.to_le_bytes());
-                hash.update(&order.origin.y.to_le_bytes());
-                hash.update(&order.destination.x.to_le_bytes());
-                hash.update(&order.destination.y.to_le_bytes());
-                hash.update(&order.waypoint.x.to_le_bytes());
-                hash.update(&order.waypoint.y.to_le_bytes());
-                hash.update(&order.target_tile.x.to_le_bytes());
-                hash.update(&order.target_tile.y.to_le_bytes());
-                hash.update(&order.segment_length.to_le_bytes());
-                hash.update(&order.travelled.to_le_bytes());
-                hash.update(&order.speed_carry.to_le_bytes());
-            } else {
-                hash.update(&[0; 48]);
-            }
-            hash.update(&(unit.route.len() as u64).to_le_bytes());
-            for tile in &unit.route {
-                hash.update(&tile.x.to_le_bytes());
-                hash.update(&tile.y.to_le_bytes());
-            }
-            hash.update(&[u8::from(unit.fast_route_tried)]);
-            if let Some(obstruction) = unit.obstruction {
-                hash.update(&[1]);
-                hash.update(&obstruction.goal.x.to_le_bytes());
-                hash.update(&obstruction.goal.y.to_le_bytes());
-                hash.update(&obstruction.remaining.to_le_bytes());
-                hash.update(&obstruction.blocked.to_le_bytes());
-                hash.update(&obstruction.side.to_le_bytes());
-                hash.update(&obstruction.last_tick.to_le_bytes());
-                hash.update(&obstruction.search_tick.to_le_bytes());
-                hash.update(&obstruction.pass_until.to_le_bytes());
-            } else {
-                hash.update(&[0]);
-            }
-            match unit.unreachable_memo {
-                None => hash.update(&[0]),
-                Some((from, to, at)) => {
-                    hash.update(&[1]);
-                    for value in [from.x, from.y, to.x, to.y] {
-                        hash.update(&value.to_le_bytes());
-                    }
-                    hash.update(&at.to_le_bytes())
+        // Units are hashed in fixed blocks on worker threads and the block
+        // digests are folded in index order, so the result never depends on
+        // the thread count.
+        hash.update(&(self.units.len() as u64).to_le_bytes());
+        for digest in super::parallel::par_map_each(
+            &self.units.chunks(UNIT_BLOCK).collect::<Vec<_>>(),
+            |block| {
+                let mut hash = blake3::Hasher::new();
+                for unit in *block {
+                    self.hash_unit(&mut hash, unit);
                 }
-            };
-            if let Some(planner) = &unit.planner {
-                hash.update(&[1]);
-                planner.update_hash(&mut hash);
-            } else {
-                hash.update(&[0]);
-            }
-            if let Some(error) = unit.last_movement_error {
-                hash.update(&[1, movement_error_code(error)]);
-            } else {
-                hash.update(&[0, 0]);
-            }
+                *hash.finalize().as_bytes()
+            },
+        ) {
+            hash.update(&digest);
         }
         if !self.move_queues.is_empty() {
             hash.update(b"player move queues\0");

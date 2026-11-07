@@ -113,7 +113,9 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
         // Direct orders that need clear lines, stalled detours that rejoin and
         // army orders that leave fallen members out move it again.
         // A packed block holding its files until the pass is behind it moves it again.
-        "aadc11b8d04e9b229ffdc03ba5dc6454582859755867ee6ed2b96cd4a8e4d8a2"
+        // The state hash folds per-block digests of 1,024 units (hashed on
+        // worker threads) instead of one stream: same state, new value.
+        "edfca9ebfa7aa2d437467fd39a938025a92f221670412fbae2a98a86bc3855eb"
     );
 }
 
