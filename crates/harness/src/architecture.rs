@@ -1,4 +1,6 @@
 //! Tested dependency and source-boundary rules for first-party crates.
+mod caps;
+
 use serde_json::Value;
 use std::{collections::BTreeSet, error::Error, fs, path::Path, process::Command};
 
@@ -81,6 +83,7 @@ pub fn check(root: &Path) -> Result<(), Box<dyn Error>> {
             }
         }
     }
+    violations.extend(caps::check(root)?);
     if violations.is_empty() {
         Ok(())
     } else {
