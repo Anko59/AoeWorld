@@ -25,7 +25,9 @@ pub(crate) const FAR_ROUTE_ANSWER_TICKS: u64 = 3_600;
 /// ticks while its route was still being searched or queued for a slot; a
 /// group is many units and the owner's order, so it waits longer. The bound
 /// stays: an order into sealed ground (the reason for the deadline) is still
-/// answered, by the planner's own proof or after `1 + MAX` waits.
+/// answered, by the planner's own proof or after `1 + MAX` waits. A near
+/// group's wait is renewed only while its search has spent under
+/// `MAX_NEAR_ROUTE_WORK`: it waited for a slot rather than searched.
 pub(crate) const MAX_GROUP_ROUTE_RENEWALS: u8 = 4;
 
 impl GameWorld {
@@ -59,7 +61,17 @@ impl GameWorld {
             };
             let far = self.waits_for_far_route(index);
             let unit = &mut self.units[index];
-            if far && unit.formation == Some(id) && unit.route_renewals < MAX_GROUP_ROUTE_RENEWALS {
+            // A near carrier that searched little only queued for a slot: in
+            // a 100-AI probe 35 group orders, nearly all near, ended so after
+            // one minute. One that searched its bound (sealed ground) ends.
+            let queued = unit
+                .planner
+                .as_ref()
+                .is_none_or(|planner| planner.work() < MAX_NEAR_ROUTE_WORK);
+            if (far || queued)
+                && unit.formation == Some(id)
+                && unit.route_renewals < MAX_GROUP_ROUTE_RENEWALS
+            {
                 // The carrier keeps its order and any search it holds.
                 unit.route_renewals += 1;
                 unit.planning_since = self.tick.0;

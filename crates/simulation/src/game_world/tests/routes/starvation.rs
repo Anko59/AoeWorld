@@ -203,6 +203,8 @@ fn a_group_sent_into_sealed_ground_is_answered_in_bounded_time() {
         let oldest = world.route_scheduler_stats().oldest_wait_ticks;
         assert!(oldest <= NEAR_ANSWER_TICKS, "waited {oldest}");
     }
+    // It searched its bound, so its wait is not renewed as a queued one is.
+    assert_eq!(world.route_metrics.attribution.group_wait_renewals, 0);
 }
 
 /// A fast attempt with no slot to keep its frontier spends half as much.
@@ -317,4 +319,55 @@ fn a_far_group_outlives_its_first_wait_and_ends_after_its_renewals() {
         "expiries {expiries} renewals {renewals}"
     );
     assert_eq!(units.len(), 6);
+}
+
+/// A near group that only queued for a slot keeps its order past the wait
+/// bound: in a 100-AI probe 35 group orders, nearly all near, were ended so
+/// after one minute and their armies stood idle short of the destination.
+#[test]
+fn a_near_group_queued_for_a_slot_outlives_its_wait() {
+    let mut world = sealed_near_world();
+    let player = PlayerId(3);
+    hopeless_orders(&mut world, player);
+    world.advance();
+    assert_eq!(world.route_slots[&player].searches, 2, "both slots held");
+    let units = (0..6)
+        .map(|n| {
+            world
+                .spawn_unit(player, tile_position(180 + n, 190))
+                .expect("unit")
+        })
+        .collect::<Vec<_>>();
+    let goal = tile_position(183, 210);
+    world
+        .issue_formation_move(
+            player,
+            &units,
+            aoe_core::Formation::Line,
+            goal,
+            false,
+            false,
+        )
+        .expect("accepted");
+    world.advance();
+    let carrier = *world.formations.keys().next().expect("group");
+    let index = world.lookup[&carrier];
+    assert!(world.units[index].state.planning, "carrier waits");
+    assert!(world.units[index].planner.is_none(), "no slot for it");
+    world.tick.0 += NEAR_ANSWER_TICKS;
+    for _ in 0..3 {
+        world.advance();
+    }
+    assert_eq!(world.formations.len(), 1, "the group keeps its order");
+    assert!(world.movement_order(carrier).is_some());
+    assert_eq!(world.route_metrics.attribution.group_orders_expired, 0);
+    assert_eq!(world.route_metrics.attribution.group_wait_renewals, 1);
+    // It is answered with its route once a slot frees.
+    for _ in 0..2_000 {
+        world.advance();
+    }
+    for id in units {
+        let unit = world.unit(id).expect("unit");
+        assert!(unit.position.tile_floor().y > 200, "{id:?} crossed");
+    }
 }
