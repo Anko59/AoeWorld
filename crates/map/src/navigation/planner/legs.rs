@@ -249,6 +249,7 @@ impl RoutePlanner {
                     self.search = Some(search);
                     return Ok(());
                 }
+                self.nearest_reached = Some(self.leg_best.map_or(self.leg_origin, |(t, _)| t));
                 return Err(Terminal::Unreachable);
             };
             self.charge(&mut remaining);

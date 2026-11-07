@@ -8,6 +8,7 @@ mod march;
 mod mounted;
 mod recovery;
 mod scene;
+mod sealed_river;
 mod short_mixed;
 mod table;
 mod yielding;

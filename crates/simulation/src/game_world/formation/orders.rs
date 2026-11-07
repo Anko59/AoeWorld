@@ -261,6 +261,32 @@ impl GameWorld {
         (speed, front_near_end)
     }
 
+    /// The carrier of `leader`'s group proved `target` unreachable. Rather
+    /// than leave every member steering at its slot across the water, the
+    /// group's next leg goes to `nearest` (the reachable tile nearest the
+    /// destination that the search proved; the anchor when it proved none),
+    /// where the group forms. False when a queued waypoint follows, or the
+    /// failed leg already aimed there (so it cannot repeat).
+    pub(crate) fn stop_group_short(
+        &mut self,
+        leader: EntityId,
+        target: TileCoord,
+        nearest: Option<TileCoord>,
+    ) -> bool {
+        let Some(group) = self.formations.get_mut(&leader) else {
+            return false;
+        };
+        let stop = nearest.unwrap_or_else(|| group.anchor.tile_floor());
+        if !group.queue.is_empty() || stop == target {
+            return false;
+        }
+        let Ok(stop) = WorldPosition::from_tile_center(stop) else {
+            return false;
+        };
+        group.queue.push_front((stop, group.attack_move));
+        true
+    }
+
     pub(super) fn next_formation_order(&mut self, leader: EntityId, group: &mut Group) {
         let index = self.lookup[&leader];
         while let Some((destination, attack_move)) = group.queue.pop_front() {

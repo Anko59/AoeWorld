@@ -127,7 +127,7 @@ impl GameWorld {
                         self.formations.insert(leader, group);
                         if error.is_some() {
                             let reason = route_failure_reason(error);
-                            self.group_route_failed(index, error, reason, &mut Vec::new());
+                            self.group_route_failed(index, error, reason, None, &mut Vec::new());
                         } else {
                             self.stop_route(index, error);
                         }
