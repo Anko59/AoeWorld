@@ -116,7 +116,10 @@ Feudal) with 27 villagers, a fishing ship, 48 soldiers, a galley, farms,
 mills, camps, houses and military buildings. Slot 0 holds 20,000 of each
 resource and an AI seat 1,500 (with 20,000 the bots trained to 14,000 units in
 12 minutes, past the owner's 9,200); the villagers start through the ordinary
-farm and gather orders. Placement
+farm and gather orders. The land around each village is worked out first, as
+in the owner's two-hour world: every tree, mine and bush within 90 tiles of
+slot 0's village and 30 of an AI's is exhausted (fish stay), and the seeded
+non-farmers take the nearest nodes beyond that disc. Placement
 walks fixed tile orders, so the same map, seed and seat give the same world.
 The bots play their seats from there (their armies march when they find a
 target). Slot 0 is played by a scripted human (`late` in the report): every
@@ -185,6 +188,43 @@ Run 3 carried an experiment (the sidestep candidates' building and terrain
 reads ahead of the body sweep, a pure reordering) and run 4 is the same code
 without it: sidestep 6.5 against 4.3 ms, movement 37 against 31, on a machine
 whose load fell between the runs. No gain shows, so it was not kept.
+
+### Profiling a run
+
+`--profile <dir>` (with `--profile-after` seconds from server start, default
+300, and `--profile-seconds`, default 60) builds the server with its opt-in
+sampling profiler (`--features sampling-profiler`: `pprof`, line tables for
+inlined frames; normal builds do not compile it) and writes `flame.svg`,
+`stacks.folded` and `top.txt` (threads, self and inclusive frames) into the
+directory; keep it under `.cache/`. Samples are 499 Hz of process CPU time
+over every thread, so the tick thread's share is the stacks under
+`advance_world`; the rayon workers (movement proposals, session builds) and
+the async fan-out are beside it.
+
+The depleted late game (2026-11-07, dev 19dc7fe4 plus the depletion, 90 s
+from about minute 3.5) spends 58% of the process's samples on the tick thread:
+movement 70% of it (formations 20%, route serving 17%, body sweeps
+`collision_sweep_bounded` 19%, `bridge_connections` 9% across route search
+and deck checks), gathering 9.5%, combat 9.4% (attack-position search 4.5%),
+building memory 5.6%. Depletion did not raise the gathering phase (3.8 to
+3.1 ms against the owner's 21): far walks cost movement and planning.
+
+Optimisations from that profile, one 8-minute run each (p50 medians of
+minutes 3 to 8, ms; shared machine, so a run moves by several percent):
+
+| | dev | + depletion | + building memory, single file | + bridge filter | + deck reject, player index |
+|---|---|---|---|---|---|
+| ticks/s | 17.0 | 18.4 | 18.2 | 19.4 | 19.4 |
+| tick | 56.4 | 51.9 | 52.5 | 48.9 | 48.0 |
+| advance | 42.6 | 39.8 | 40.2 | 37.4 | 36.1 |
+| movement | 30.1 | 29.5 | 29.7 | 27.2 | 26.8 |
+| search | 7.2 | 8.3 | 9.3 | 8.0 | 7.9 |
+| gathering | 3.8 | 3.1 | 2.9 | 2.9 | 2.8 |
+
+In profile shares of the tick thread: building memory 5.6% to 3.7%,
+`single_file_group` 1.8% to 0.5%, `bridge_connections` 8.8% to 2.4%,
+`deck_offset` 3.3% to 1.0%. Body sweeps (18%), formations and route
+serving stay the largest costs.
 
 ## The match rules behind it
 
