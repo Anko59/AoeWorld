@@ -8,6 +8,8 @@
 #   harness.sh exec duel|ship|ship-status|describe-check|review|review-floor|level-floor|level-stats|review-pr|issue|next|ledger|usage|compare|dev-server|dev-server-status|dev-server-stop|showcase|showcase-check|showcase-narrate|showcase-session|nightly-triage|carry-review|update-prs|metrics
 #   harness.sh build
 set -u
+# A Mac runs the launcher, the judge and its containers inside the Colima VM.
+[ "$(uname -s)" != Darwin ] || exec "$(dirname -- "$0")/colima.sh" "$0" "$@"
 probe=crates/harness/src/agents/runtime.rs
 case ${1:-} in
   build) runtime=claude event=build ;;
