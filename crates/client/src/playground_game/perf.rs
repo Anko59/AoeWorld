@@ -1,11 +1,16 @@
 //! Browser-side clocks and bounded samples; no clock reads when disabled.
 use wasm_bindgen::prelude::wasm_bindgen;
 
-#[wasm_bindgen(
-    inline_js = "export function perf_mark(section) { window.aoePerformance?.mark(section); }"
-)]
+#[wasm_bindgen(inline_js = "
+export function perf_mark(section) { window.aoePerformance?.mark(section); }
+export function perf_terrain(packets) {
+  const state = window.aoePerformance;
+  if (state?.enabled) state.terrainPackets += packets;
+}")]
 extern "C" {
     pub(super) fn perf_mark(section: u32);
+    /// Ground packets a frame had to build instead of reusing the kept ones.
+    pub(super) fn perf_terrain(packets: u32);
 }
 
 pub(super) struct Scope(u32);

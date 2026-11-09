@@ -211,7 +211,7 @@ fn install_colour(shared: Rc<RefCell<Client>>, colour: [u8; 3]) -> Result<(), Js
                         client.art = art;
                         client.native = native;
                         client.team_colour = colour;
-                        client.rendered_frame.clear();
+                        client.rendered_frame.art_replaced();
                         loaded.set(colour);
                     }
                     Err(error) => {

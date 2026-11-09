@@ -4,6 +4,7 @@ use aoe_protocol::FogState;
 #[derive(Default)]
 pub struct Fog {
     state: Option<FogState>,
+    generation: u64,
 }
 
 impl Fog {
@@ -21,10 +22,17 @@ impl Fog {
             old.disabled != state.disabled || old.region != state.region || old.tiles != state.tiles
         });
         self.state = Some(state);
+        self.generation += u64::from(changed);
         changed
     }
     pub fn clear(&mut self) {
         self.state = None;
+        self.generation += 1;
+    }
+    /// Counts the changes of what `disabled`, `state` and `brightness` answer:
+    /// shading computed at one generation stays right until the next.
+    pub fn generation(&self) -> u64 {
+        self.generation
     }
     pub fn disabled(&self) -> bool {
         self.state.as_ref().is_some_and(|s| s.disabled)

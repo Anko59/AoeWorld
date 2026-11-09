@@ -445,7 +445,8 @@ and a timestamp.
 In the game, append `?perf=1` to the URL or press **F3** to toggle the overlay;
 Ctrl+right-click is a queued movement order.
 `window.aoePerformance` exposes `enabled`, `frameMs`, `cpuMs` (`decode`, `upload`,
-`draw`, `ui`), `gpuMs`, `gpuStatus`, `frames`, `totalsMs`, and `enable(bool)`.
+`draw`, `ui`), `gpuMs`, `gpuStatus`, `frames`, `totalsMs`, `terrainPackets`, and
+`enable(bool)`.
 Each frame publishes the preceding frame interval and CPU sections accumulated
 since its start. Decode includes wire conversion and applying received state;
 draw includes scene preparation and CPU render submission; UI includes HUD
@@ -453,6 +454,9 @@ presentation. Upload measures synchronous GPU buffer/texture API calls and is
 subtracted from enclosing CPU sections. Totals help inspect sections that run
 less often than frames. Browser clock resolution may round short sections to
 zero. Disabled sampling performs no clock reads or GPU queries.
+`terrainPackets` counts, while sampling, the ground packets the WebGPU and
+WebGL2 tiers built: a frame that reuses the ground kept for its scene, art
+residency, fog, building ground, camera and grid switch adds none.
 
 WebGL2 reports asynchronous GPU elapsed time only when
 `EXT_disjoint_timer_query_webgl2` is available, keeping at most one pending

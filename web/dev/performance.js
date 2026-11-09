@@ -8,7 +8,7 @@ export function initPerformance() {
   const zero = () => ({ decode: 0, upload: 0, draw: 0, ui: 0 });
   const state = {
     enabled: false, frameMs: 0, cpuMs: zero(), gpuMs: null,
-    gpuStatus: 'disabled', frames: 0, totalsMs: zero(),
+    gpuStatus: 'disabled', frames: 0, totalsMs: zero(), terrainPackets: 0,
     enable, mark,
   };
   let previous = 0, updated = 0, pending = zero(), unobserve = null;

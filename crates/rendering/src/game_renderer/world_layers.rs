@@ -17,8 +17,85 @@ pub(super) fn direct_world_layers(
         Vec::new()
     };
     let surfaces = surfaces.into_iter().chain(compatibility);
-    // Reserve the ordinary shadow/body pairs and the extra Town Center pieces.
-    let object_capacity = resources
+    let mut entries = Vec::with_capacity(capacity(
+        surfaces.size_hint().0,
+        object_capacity(resources, units),
+        units,
+    ));
+    for mut face in surfaces {
+        ground.apply(&mut face);
+        ground.farm(&mut face, art);
+        entries.push(WorldLayer::Surface(face));
+    }
+    append_objects(
+        &mut entries,
+        art,
+        terrain,
+        resources,
+        units,
+        camera,
+        animation,
+    );
+    sort_layers(&mut entries);
+    entries
+}
+
+/// The ground alone, textured, worn and ploughed, in drawing order: the part
+/// of a scene that stays while only its objects move.
+pub(super) fn terrain_layers(
+    surfaces: &[ProjectedSurfaceTriangle],
+    art: &GameArt,
+    terrain: &[SceneTerrain],
+    ground: &ground::BuildingGround,
+    camera: SceneCamera,
+) -> Vec<WorldLayer> {
+    let compatibility = if terrain.is_empty() {
+        ground.compatibility_farms(camera)
+    } else {
+        Vec::new()
+    };
+    let mut entries = Vec::with_capacity(surfaces.len() + compatibility.len());
+    let textured = surfaces.iter().copied().map(|mut face| {
+        apply_terrain_textures(std::slice::from_mut(&mut face), art);
+        face
+    });
+    for mut face in textured.chain(compatibility) {
+        ground.apply(&mut face);
+        ground.farm(&mut face, art);
+        entries.push(WorldLayer::Surface(face));
+    }
+    sort_layers(&mut entries);
+    entries
+}
+
+/// Selections and sprites alone, in drawing order: the part of a scene built
+/// for every frame. Merged with `terrain_layers` by depth, ground first on a
+/// tie, it is the order `direct_world_layers` gives.
+pub(super) fn object_layers(
+    art: &GameArt,
+    terrain: &[SceneTerrain],
+    resources: &[SceneResource],
+    units: &[SceneUnit],
+    camera: SceneCamera,
+    animation: usize,
+) -> Vec<WorldLayer> {
+    let mut entries = Vec::with_capacity(capacity(0, object_capacity(resources, units), units));
+    append_objects(
+        &mut entries,
+        art,
+        terrain,
+        resources,
+        units,
+        camera,
+        animation,
+    );
+    sort_layers(&mut entries);
+    entries
+}
+
+/// Reserve the ordinary shadow/body pairs and the extra Town Center pieces.
+fn object_capacity(resources: &[SceneResource], units: &[SceneUnit]) -> usize {
+    resources
         .len()
         .saturating_add(units.len())
         .saturating_mul(2)
@@ -28,14 +105,22 @@ pub(super) fn direct_world_layers(
                 .filter(|u| u.kind == SceneUnitKind::TownCenter)
                 .count()
                 * 6,
-        );
-    let mut entries = Vec::with_capacity(capacity(surfaces.size_hint().0, object_capacity, units));
-    for mut face in surfaces {
-        ground.apply(&mut face);
-        ground.farm(&mut face, art);
-        entries.push(WorldLayer::Surface(face));
-    }
-    append_selections(&mut entries, units, camera);
+        )
+}
+
+// One shared emitter: the sprite callback is not specialized again for each
+// terrain source of `direct_world_layers`, nor for the object-only builder.
+#[inline(never)]
+fn append_objects(
+    entries: &mut Vec<WorldLayer>,
+    art: &GameArt,
+    terrain: &[SceneTerrain],
+    resources: &[SceneResource],
+    units: &[SceneUnit],
+    camera: SceneCamera,
+    animation: usize,
+) {
+    append_selections(entries, units, camera);
     world_sprites::emit_world_sprite_frames(
         art,
         terrain,
@@ -45,8 +130,6 @@ pub(super) fn direct_world_layers(
         animation,
         |(sprite, frame, depth, id)| entries.push(WorldLayer::Sprite(sprite, frame, depth, id)),
     );
-    sort_layers(&mut entries);
-    entries
 }
 
 #[cfg(test)]
