@@ -14,9 +14,14 @@ pub(crate) enum Pass {
     CollisionOpened,
     /// `collision_closed`: every unit, on each building placed or gate closed.
     CollisionClosed,
-    /// The per-tick `remember_visible_buildings`: every watched building cloned.
+    /// The per-tick `remember_visible_buildings`: every watched building
+    /// cloned. Replaced by changed-building events (`visibility/memory.rs`);
+    /// never recorded, so it reports 0.
+    #[allow(dead_code)]
     RememberVisibleBuildings,
-    /// `advance_gates`: every building, every tick.
+    /// `advance_gates`: every building, every tick. Replaced by the gate
+    /// index (`Economy::gates`); never recorded, so it reports 0.
+    #[allow(dead_code)]
     AdvanceGates,
     /// The wildlife id collection: every animal, every tick.
     WildlifeIds,

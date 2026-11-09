@@ -68,6 +68,7 @@ impl GameWorld {
             training.seconds
         };
         // No fallible work follows these mutations.
+        self.mark_building_changed(center);
         if let Some(building) = self.economy.buildings.get_mut(&center) {
             building.training_queue.push_back(TrainingEntry {
                 kind,
@@ -87,9 +88,7 @@ impl GameWorld {
         center: EntityId,
     ) -> Result<(), EconomyError> {
         let building = self
-            .economy
-            .buildings
-            .get_mut(&center)
+            .building_mut(center)
             .ok_or(EconomyError::UnknownEntity)?;
         if building.player != player {
             return Err(EconomyError::NotOwner);
@@ -127,6 +126,7 @@ impl GameWorld {
             .copied()
             .collect::<Vec<_>>();
         for id in centers {
+            self.mark_building_changed(id);
             let Some(building) = self.economy.buildings.get_mut(&id) else {
                 continue;
             };
@@ -207,7 +207,7 @@ impl GameWorld {
                 if kind == UnitKind::General {
                     self.bind_general_castle(unit, id);
                 }
-                if let Some(building) = self.economy.buildings.get_mut(&id) {
+                if let Some(building) = self.building_mut(id) {
                     building.training_queue.pop_front();
                     if building.training_queue.is_empty() {
                         self.economy.active_training.remove(&id);

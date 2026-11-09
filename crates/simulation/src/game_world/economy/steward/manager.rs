@@ -152,9 +152,7 @@ impl GameWorld {
         };
         let status = home.status;
         if let Some(entry) = self
-            .economy
-            .buildings
-            .get_mut(&town_center)
+            .building_mut(town_center)
             .and_then(|b| b.garrison.iter_mut().find(|g| g.unit.id == id))
             && entry.steward != Some(status)
         {

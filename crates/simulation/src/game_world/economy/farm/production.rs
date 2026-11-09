@@ -52,12 +52,7 @@ impl GameWorld {
             return None;
         }
         production.credits -= threshold;
-        let food = self
-            .economy
-            .buildings
-            .get_mut(&farm)?
-            .food_remaining
-            .as_mut()?;
+        let food = self.building_mut(farm)?.food_remaining.as_mut()?;
         *food -= 1;
         Some(*food)
     }

@@ -131,9 +131,7 @@ fn training_continues_beyond_the_former_five_thousand_match_ceiling() {
         .issue_train(PlayerId(0), center, UnitKind::Villager)
         .unwrap();
     let entry = world
-        .economy
-        .buildings
-        .get_mut(&center)
+        .building_mut(center)
         .unwrap()
         .training_queue
         .front_mut()

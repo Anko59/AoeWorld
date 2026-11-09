@@ -65,7 +65,7 @@ fn remembered_building_changes_are_taken_once_and_follow_memory() {
         w.take_remembered_building_changes().is_empty(),
         "an unchanged building is not reported again"
     );
-    w.economy.buildings.get_mut(&hall).unwrap().hp -= 100;
+    w.building_mut(hall).unwrap().hp -= 100;
     w.advance();
     let hit = w.take_remembered_building_changes();
     assert_eq!(
@@ -82,7 +82,7 @@ fn remembered_building_changes_are_taken_once_and_follow_memory() {
         w.advance();
     }
     let _ = w.take_remembered_building_changes();
-    w.economy.buildings.get_mut(&hall).unwrap().hp -= 100;
+    w.building_mut(hall).unwrap().hp -= 100;
     w.advance();
     let unseen = w.take_remembered_building_changes();
     assert!(!unseen.contains_key(&PlayerId(0)));

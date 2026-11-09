@@ -65,8 +65,8 @@ fn remembered_building_keeps_last_seen_state_until_revisited() {
         TileVisibility::Explored
     );
     let id = remembered[0].id;
-    w.economy.buildings.get_mut(&id).unwrap().hp -= 100;
-    w.economy.buildings.get_mut(&id).unwrap().age = crate::Age::Feudal;
+    w.building_mut(id).unwrap().hp -= 100;
+    w.building_mut(id).unwrap().age = crate::Age::Feudal;
     let owner = w.economy.players.get_mut(&PlayerId(1)).unwrap();
     owner.age = crate::Age::Feudal;
     owner.researched |= Tech::FeudalAge.bit();

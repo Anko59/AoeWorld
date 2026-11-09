@@ -55,6 +55,7 @@ impl GameWorld {
         }
         self.release_destroyed_garrison(id, building.footprint, building.garrison, &mut Vec::new());
         self.economy.open_gates.remove(&id);
+        self.economy.gates.remove(&id);
         self.combat.tower_ready.remove(&id);
         self.combat.tower_targets.remove(&id);
         self.combat.target_rounds.remove(&id);

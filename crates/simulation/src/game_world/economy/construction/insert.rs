@@ -154,6 +154,9 @@ impl GameWorld {
         let bucket = self.economy.dropoffs.entry((player, kind)).or_default();
         let at = bucket.binary_search(&id).unwrap_or_else(|at| at);
         bucket.insert(at, id);
+        if kind.is_gate() {
+            self.economy.gates.insert(id);
+        }
         if complete && matches!(kind, BuildingKind::Castle | BuildingKind::WatchTower) {
             self.combat.tower_ready.insert(id, 0);
         }

@@ -218,6 +218,7 @@ impl GameWorld {
             .values_mut()
             .filter(|b| b.player == player)
         {
+            self.vision.dirty_buildings.insert(building.id);
             for entry in &mut building.training_queue {
                 if entry.kind == UnitKind::Galley {
                     entry.kind = UnitKind::WarGalley;

@@ -20,7 +20,7 @@ impl GameWorld {
             return Err(EconomyError::InvalidTarget);
         }
         let footprint = shelter.footprint;
-        let Some(shelter) = self.economy.buildings.get_mut(&building) else {
+        let Some(shelter) = self.building_mut(building) else {
             return Err(EconomyError::UnknownEntity);
         };
         let occupants = std::mem::take(&mut shelter.garrison);
@@ -32,7 +32,7 @@ impl GameWorld {
                 retained.push(occupant);
             }
         }
-        if let Some(shelter) = self.economy.buildings.get_mut(&building) {
+        if let Some(shelter) = self.building_mut(building) {
             shelter.garrison = retained;
         } else {
             self.release_destroyed_garrison(building, footprint, retained, &mut Vec::new());

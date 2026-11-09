@@ -20,6 +20,7 @@ impl GameWorld {
         mill: EntityId,
         add: bool,
     ) -> Result<(), EconomyError> {
+        self.mark_building_changed(mill);
         let building = self
             .economy
             .buildings
@@ -82,7 +83,7 @@ impl GameWorld {
         let Some(mill) = mill else {
             return false;
         };
-        let Some(queue) = self.economy.buildings.get_mut(&mill) else {
+        let Some(queue) = self.building_mut(mill) else {
             return false;
         };
         if queue.farm_reseeds == 0 {
@@ -90,7 +91,7 @@ impl GameWorld {
         }
         queue.farm_reseeds -= 1;
         let food = self.farm_food(old.player);
-        let Some(building) = self.economy.buildings.get_mut(&farm) else {
+        let Some(building) = self.building_mut(farm) else {
             self.refund_reseed(mill);
             return false;
         };
@@ -100,6 +101,7 @@ impl GameWorld {
         building.food_remaining = Some(food);
         if self.issue_construct(old.player, &[worker], farm).is_err() {
             self.economy.buildings.insert(farm, old);
+            self.mark_building_changed(farm);
             self.refund_reseed(mill);
             return false;
         }
@@ -108,7 +110,7 @@ impl GameWorld {
     }
 
     fn refund_reseed(&mut self, mill: EntityId) {
-        if let Some(building) = self.economy.buildings.get_mut(&mill) {
+        if let Some(building) = self.building_mut(mill) {
             building.farm_reseeds = building.farm_reseeds.saturating_add(1);
         }
     }

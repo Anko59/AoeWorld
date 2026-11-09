@@ -35,7 +35,7 @@ impl GameWorld {
         s.wood -= bill.wood;
         s.gold -= bill.gold;
         s.stone -= bill.stone;
-        if let Some(building) = self.economy.buildings.get_mut(&id) {
+        if let Some(building) = self.building_mut(id) {
             building.hp = next as u16;
         }
         if next == max {

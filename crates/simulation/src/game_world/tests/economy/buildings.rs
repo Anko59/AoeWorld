@@ -368,8 +368,7 @@ fn many_houses_can_complete_without_changing_the_population_count() {
         let id = world
             .issue_build(PlayerId(0), &[worker], BuildingKind::House, at(x, y), false)
             .unwrap();
-        world.economy.buildings.get_mut(&id).unwrap().work_done =
-            world.building(id).unwrap().work_total - 3;
+        world.building_mut(id).unwrap().work_done = world.building(id).unwrap().work_total - 3;
         houses.push(id);
     }
     advance(&mut world, 2);

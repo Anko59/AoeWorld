@@ -46,9 +46,7 @@ fn completed_training_checks_local_occupants_and_retries_a_freed_exit() {
         .issue_train(PlayerId(0), center, UnitKind::Villager)
         .unwrap();
     let entry = world
-        .economy
-        .buildings
-        .get_mut(&center)
+        .building_mut(center)
         .unwrap()
         .training_queue
         .front_mut()
