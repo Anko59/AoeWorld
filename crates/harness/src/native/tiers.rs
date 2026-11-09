@@ -30,6 +30,12 @@ pub(crate) const EXHAUSTIVE: &[&str] = &[
     "terrain::tests::rivers::source_river_water_never_invents_invisible_crossings",
 ];
 
+/// The packages that own each tier's tests: a tier builds and runs only these.
+/// A member in any other package would run in neither tier nor `make test-unit`,
+/// so the tests below require every member to live in its tier's packages.
+pub(crate) const SOURCE_QUALIFICATION_PACKAGES: &[&str] = &["aoe-server"];
+pub(crate) const EXHAUSTIVE_PACKAGES: &[&str] = &["aoe-geodata", "aoe-map"];
+
 fn any_of(names: &[&str]) -> String {
     names
         .iter()
