@@ -5,6 +5,7 @@ use crate::{AnimalKind, AnimalTask, EconomyError, TickPhase, WorldLimits};
 
 mod capacity;
 mod passes;
+mod tick_collation;
 
 fn at(x: i32, y: i32) -> WorldPosition {
     WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap()

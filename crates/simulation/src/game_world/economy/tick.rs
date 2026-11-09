@@ -37,6 +37,28 @@ impl GameWorld {
         sink: &mut impl FnMut(&PreparedResourceDepletion<'_>) -> bool,
         probe: &mut impl FnMut(TickPhase),
     ) -> Vec<GameUnit> {
+        self.advance_tick(sink, probe, Self::collect_changed)
+    }
+
+    /// Same tick as `advance_with_probe` without the changed-unit list, for a
+    /// caller that reads the world afterwards. `TickPhase::Changed` is still
+    /// reported and then covers only the route-budget refill.
+    pub fn advance_uncollated(
+        &mut self,
+        sink: &mut impl FnMut(&PreparedResourceDepletion<'_>) -> bool,
+        probe: &mut impl FnMut(TickPhase),
+    ) {
+        self.advance_tick(sink, probe, |_, _| {});
+    }
+
+    /// One tick. `collate` makes the caller's result from the touched ids; it
+    /// is the only difference between the public entry points.
+    fn advance_tick<R>(
+        &mut self,
+        sink: &mut impl FnMut(&PreparedResourceDepletion<'_>) -> bool,
+        probe: &mut impl FnMut(TickPhase),
+        collate: impl FnOnce(&Self, Vec<EntityId>) -> R,
+    ) -> R {
         #[cfg(test)]
         {
             let units = &self.units;
@@ -44,7 +66,7 @@ impl GameWorld {
                 .resync_bodies(|index| units[index].state.position);
         }
         self.economy.stewards.automatic = true;
-        let changed = self.advance_phases(sink, probe);
+        let changed = self.advance_phases(sink, probe, collate);
         self.recover_market_prices();
         self.economy.stewards.automatic = false;
         // Every test tick checks that the route scheduler's counters equal
@@ -60,11 +82,12 @@ impl GameWorld {
         changed
     }
 
-    fn advance_phases(
+    fn advance_phases<R>(
         &mut self,
         sink: &mut impl FnMut(&PreparedResourceDepletion<'_>) -> bool,
         probe: &mut impl FnMut(TickPhase),
-    ) -> Vec<GameUnit> {
+        collate: impl FnOnce(&Self, Vec<EntityId>) -> R,
+    ) -> R {
         // A consumer has one tick to drain these bounded changes. Keeping an
         // undrained history would grow storage without a transport obligation.
         self.economy.depletions.clear();
@@ -89,7 +112,7 @@ impl GameWorld {
             if !changed.is_empty() {
                 self.remember_buildings_this_tick();
             }
-            return self.collect_changed(changed);
+            return collate(self, changed);
         }
         self.advance_garrisons(&mut changed);
         self.advance_combat(&mut changed);
@@ -111,7 +134,7 @@ impl GameWorld {
         probe(TickPhase::BuildingMemory);
         self.refill_route_budgets();
         self.economy.late_changed = changed[gathered..].to_vec();
-        let collected = self.collect_changed(changed);
+        let collected = collate(self, changed);
         probe(TickPhase::Changed);
         collected
     }

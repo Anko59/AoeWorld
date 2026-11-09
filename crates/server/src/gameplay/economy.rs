@@ -419,7 +419,7 @@ impl GameplayService {
         let probe = self.probe.clone();
         let advance = move || {
             let mut phase_started = std::time::Instant::now();
-            world.advance_with_probe(
+            world.advance_uncollated(
                 &mut |transaction| {
                     if let (Some(hash), Some(directory)) = (hash, &directory) {
                         match super::resources::save_gathering(

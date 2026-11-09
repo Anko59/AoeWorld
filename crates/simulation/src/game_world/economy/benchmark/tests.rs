@@ -4,7 +4,85 @@
 // and continuous yielding intentionally change this current replay checkpoint.
 // Keep the same workload, activity floors and independent replay comparisons.
 use super::*;
-use crate::UnitTask;
+use crate::{PreparedResourceDepletion, TickPhase, UnitTask};
+
+/// The transactions a resource sink was offered, so that two runs of one
+/// match can be compared. Every fifth one is refused: a refused harvest earns
+/// nothing and retries later, so the world depends on what the sink answers.
+#[derive(Default)]
+struct Sink(Vec<u64>);
+impl Sink {
+    fn offer(&mut self, transaction: &PreparedResourceDepletion<'_>) -> bool {
+        self.0.push(transaction.previous_revision());
+        !self.0.len().is_multiple_of(5)
+    }
+}
+
+/// Every phase but result collation, which an uncollated tick has no work for.
+fn work(phases: &[TickPhase]) -> Vec<TickPhase> {
+    phases
+        .iter()
+        .copied()
+        .filter(|phase| *phase != TickPhase::Changed)
+        .collect()
+}
+
+/// The server steps the match and reads the world afterwards; nothing there
+/// reads the changed-unit list. A tick that does not build the list must leave
+/// exactly the world the collating tick leaves, offer the resource sink the
+/// same transactions and report the same work phases.
+#[test]
+fn late_game_ticks_leave_the_same_world_without_result_collation() {
+    let (mut listing, mut silent) = (build(2).unwrap(), build(2).unwrap());
+    assert_eq!(silent.canonical_hash(), listing.canonical_hash());
+    let (mut listing_sink, mut silent_sink) = (Sink::default(), Sink::default());
+    let mut listed = 0;
+    for tick in 1..=300 {
+        let (mut listing_phases, mut silent_phases) = (Vec::new(), Vec::new());
+        let changed = listing.advance_with_probe(
+            &mut |transaction| listing_sink.offer(transaction),
+            &mut |phase| listing_phases.push(phase),
+        );
+        silent.advance_uncollated(
+            &mut |transaction| silent_sink.offer(transaction),
+            &mut |phase| silent_phases.push(phase),
+        );
+        // What the collating callers keep: each changed unit once, in id
+        // order, with its end-of-tick state.
+        assert!(
+            changed.windows(2).all(|pair| pair[0].id < pair[1].id),
+            "tick {tick}: the changed units are not in strict id order"
+        );
+        assert!(
+            changed
+                .iter()
+                .all(|unit| listing.unit(unit.id) == Some(*unit)),
+            "tick {tick}: a changed unit is not listed with its final state"
+        );
+        listed += changed.len();
+        assert_eq!(
+            listing_phases.last(),
+            Some(&TickPhase::Changed),
+            "tick {tick}: the fixture left the full tick"
+        );
+        assert_eq!(work(&silent_phases), work(&listing_phases), "tick {tick}");
+        assert_eq!(
+            silent.canonical_hash(),
+            listing.canonical_hash(),
+            "tick {tick}"
+        );
+    }
+    assert_eq!(silent_sink.0, listing_sink.0);
+    assert!(
+        listing_sink.0.len() >= 20,
+        "villagers must really harvest: {} transactions offered",
+        listing_sink.0.len()
+    );
+    assert!(
+        listed >= 300 * 40,
+        "an active match: {listed} unit records listed in 300 ticks"
+    );
+}
 
 mod sleep;
 
