@@ -105,6 +105,7 @@ impl GameWorld {
             self.vision.observers.clear();
             for vision in self.vision.players.values_mut() {
                 vision.revision += 1;
+                vision.reset_stamp = vision.revision;
                 vision.visible.clear();
                 vision.visible_tiles = 0;
                 vision.overview.clear_counts();
@@ -156,6 +157,20 @@ impl GameWorld {
             .players
             .get(&player)
             .map_or_else(Vec::new, |v| v.overview.states().collect())
+    }
+
+    /// Whether `player`'s fog view of `rect` (tiles and overview) may differ
+    /// from the one built at that player's vision revision `since`. Never a
+    /// false `false`: a fan-out skips rebuilding only views that are equal.
+    pub fn fog_changed_since(&self, player: PlayerId, rect: TileRect, since: u64) -> bool {
+        if self.vision.disabled {
+            // Disabled fog has one view; switching mode is the caller's test.
+            return false;
+        }
+        self.vision
+            .players
+            .get(&player)
+            .is_none_or(|vision| vision.fog_changed_since(rect, since))
     }
 
     pub fn unit_visible_to(&self, player: PlayerId, id: EntityId) -> bool {

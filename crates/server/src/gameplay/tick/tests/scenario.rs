@@ -70,7 +70,7 @@ fn found_village(
     panic!("no village site near {want:?}");
 }
 
-fn orders(world: &mut GameWorld, tick: u32, homes: &[TileCoord]) {
+pub(super) fn orders(world: &mut GameWorld, tick: u32, homes: &[TileCoord]) {
     if tick == 0 {
         for (index, home) in homes.iter().enumerate() {
             let player = PlayerId(index as u16);

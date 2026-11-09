@@ -103,18 +103,28 @@ impl GameWorld {
                 as u32,
         )
     }
+    /// The cache lock covers only the shared refresh and the memo: viewers'
+    /// clipped reports are built outside it, so a fan-out can build many in
+    /// parallel. Two racing builds of one report are equal; the first stored
+    /// is the one every caller shares.
     pub fn land_control(&self, viewer: PlayerId) -> Arc<LandControl> {
-        let mut cache = self.economy.land.lock().unwrap_or_else(|e| e.into_inner());
-        self.refresh_land(&mut cache);
         let key = (viewer, self.fog_disabled());
-        if let Some(report) = cache.viewers.get(&key) {
-            return report.clone();
-        }
-        let tiles = cache.totals.get(&viewer).copied().unwrap_or(0);
-        let mut shapes = Vec::new();
-        if self.fog_disabled() {
-            shapes.extend(cache.rows.values().flatten().copied());
-        } else {
+        let (tiles, epoch, mut shapes, own) = {
+            let mut cache = self.economy.land.lock().unwrap_or_else(|e| e.into_inner());
+            self.refresh_land(&mut cache);
+            if let Some(report) = cache.viewers.get(&key) {
+                return report.clone();
+            }
+            let tiles = cache.totals.get(&viewer).copied().unwrap_or(0);
+            let (shapes, own) = if self.fog_disabled() {
+                (cache.rows.values().flatten().copied().collect(), Vec::new())
+            } else {
+                let own = cache.own_sources.get(&viewer).cloned().unwrap_or_default();
+                (Vec::new(), own)
+            };
+            (tiles, cache.epoch, shapes, own)
+        };
+        if !self.fog_disabled() {
             // Intersect sparse explored runs with held rows, never extrapolating
             // an entire influence disc from a single explored building.
             let mut sources = self
@@ -134,14 +144,7 @@ impl GameWorld {
                 .collect::<Vec<_>>();
             // Enemy administrators/garrisons are private: never infer their
             // domains from live state. Building influence uses last sightings.
-            sources.extend(
-                cache
-                    .own_sources
-                    .get(&viewer)
-                    .into_iter()
-                    .flatten()
-                    .copied(),
-            );
+            sources.extend(own);
             let known = raster(&sources, self.config.width_tiles, self.config.height_tiles);
             for span in known.values().flatten() {
                 self.clip_land_span(viewer, *span, &mut shapes);
@@ -155,8 +158,13 @@ impl GameWorld {
                 as u32,
             shapes,
         });
-        cache.viewers.insert(key, report.clone());
-        report
+        let mut cache = self.economy.land.lock().unwrap_or_else(|e| e.into_inner());
+        if cache.epoch != epoch {
+            // A refresh ran meanwhile (only possible outside a read-only
+            // fan-out): this report belongs to the old epoch, so do not keep it.
+            return report;
+        }
+        cache.viewers.entry(key).or_insert(report).clone()
     }
     pub fn land_control_rebuilds(&self) -> u64 {
         self.economy

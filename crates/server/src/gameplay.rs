@@ -1,6 +1,6 @@
 use aoe_core::{EntityId, PlayerId, Seed, TileRect, WorldConfig, WorldPosition};
 use aoe_protocol::{
-    GameplayServerMessage, GameplayUnitState, MAX_ACK_HISTORY, MAX_PENDING_COMMANDS_GLOBAL,
+    GameplayServerMessage, MAX_ACK_HISTORY, MAX_PENDING_COMMANDS_GLOBAL,
     MAX_PENDING_COMMANDS_PER_CONNECTION, MAX_SUBSCRIBED_UNITS, MAX_SUBSCRIPTION_TILES, MapMetadata,
 };
 use aoe_simulation::{GameWorld, GameWorldError, NavigationCacheUsage};
@@ -86,7 +86,7 @@ pub(super) struct Session {
     subscription_times: VecDeque<Instant>,
     pending: VecDeque<PendingCommand>,
     /// Units the client holds, sorted by id.
-    resident: Vec<GameplayUnitState>,
+    resident: deliver::Resident,
     resource_revision: Option<u64>,
     resident_players: BTreeMap<aoe_core::PlayerId, aoe_protocol::GameplayPlayerState>,
     resident_buildings: BTreeMap<EntityId, aoe_protocol::GameplayBuildingState>,
@@ -441,7 +441,7 @@ impl GameplayService {
         };
         session.subscription = Some(Subscription { revision, region });
         session.resource_revision = None;
-        session.resident = units.clone();
+        session.resident = units.clone().into();
         session.resident_players = players;
         session.resident_buildings = buildings;
         session.resident_animals = animals;

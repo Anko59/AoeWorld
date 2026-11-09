@@ -56,16 +56,16 @@ struct Tables {
     /// Entities with a gather, hunt, attack or build job: their task is not
     /// overwritten by movement.
     busy: Vec<bool>,
+    /// The ids set in `busy`, cleared on the next refresh.
+    marked: Vec<EntityId>,
     neighbor_radius: [i32; 2],
     group_step_bound: i32,
 }
 
 impl Tables {
+    /// Clears only the entries the last refresh set and grows `busy` only by
+    /// new ids, so a refresh visits jobs and players, never every entity id.
     fn refresh(&mut self, world: &GameWorld, group_phase: bool) {
-        world.passes.record(
-            crate::game_world::Pass::TablesRefresh,
-            world.next_entity_id as usize,
-        );
         if group_phase {
             self.neighbor_radius = world.collisions.maximum_radii();
             self.group_step_bound = world.formation_step_bound();
@@ -78,7 +78,10 @@ impl Tables {
             }
             self.economies[at] = Some(economy);
         }
-        self.busy.clear();
+        for id in self.marked.drain(..) {
+            self.busy[id.0 as usize] = false;
+        }
+        // Ids only grow, so this is the bound the table always had.
         self.busy.resize(world.next_entity_id as usize, false);
         let jobs = world
             .economy
@@ -88,10 +91,16 @@ impl Tables {
             .chain(world.combat.attackers.keys())
             .chain(world.economy.builders.keys());
         for id in jobs {
-            if let Some(slot) = self.busy.get_mut(id.0 as usize) {
+            if let Some(slot) = self.busy.get_mut(id.0 as usize)
+                && !*slot
+            {
                 *slot = true;
+                self.marked.push(*id);
             }
         }
+        world
+            .passes
+            .record(crate::game_world::Pass::TablesRefresh, self.marked.len());
     }
 
     fn economy(&self, world: &GameWorld, player: PlayerId) -> Option<PlayerEconomy> {

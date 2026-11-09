@@ -43,6 +43,13 @@ pub(super) struct FanoutProbe {
     /// every unit each tick (diagnostics only, `docs/movement/caps.md` section 3).
     unit_frames: AtomicU64,
     unit_frame_units: AtomicU64,
+    /// Of those, units converted afresh and units whose state changed.
+    unit_frame_converted: AtomicU64,
+    unit_frame_changed: AtomicU64,
+    /// The last delivered tick's frame, which the next frame diffs against,
+    /// and the numbering of frames.
+    last_frame: std::sync::Mutex<Option<std::sync::Arc<super::frame::UnitFrame>>>,
+    generations: AtomicU64,
 }
 
 impl FanoutProbe {
@@ -56,8 +63,39 @@ impl FanoutProbe {
 }
 
 impl FanoutProbe {
-    pub(super) fn record_unit_frame(&self, units: usize) {
+    /// Takes the last frame (a failed fan-out leaves none, so the next frame
+    /// compares every unit) and a fresh frame number.
+    pub(super) fn take_last_frame(&self) -> (Option<std::sync::Arc<super::frame::UnitFrame>>, u64) {
+        let last = self
+            .last_frame
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .take();
+        (last, self.generations.fetch_add(1, Ordering::Relaxed) + 1)
+    }
+
+    #[cfg(test)]
+    pub(super) fn last_generation(&self) -> Option<u64> {
+        let last = self
+            .last_frame
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        last.as_ref().map(|frame| frame.generation())
+    }
+
+    pub(super) fn keep_frame(&self, frame: std::sync::Arc<super::frame::UnitFrame>) {
+        *self
+            .last_frame
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = Some(frame);
+    }
+
+    pub(super) fn record_unit_frame(&self, units: usize, (converted, changed): (usize, usize)) {
         self.unit_frames.fetch_add(1, Ordering::Relaxed);
+        self.unit_frame_converted
+            .fetch_add(converted as u64, Ordering::Relaxed);
+        self.unit_frame_changed
+            .fetch_add(changed as u64, Ordering::Relaxed);
         self.unit_frame_units
             .fetch_add(units as u64, Ordering::Relaxed);
     }
@@ -152,6 +190,17 @@ impl GameplayService {
         (
             self.fanout_probe.unit_frames.load(Ordering::Relaxed),
             self.fanout_probe.unit_frame_units.load(Ordering::Relaxed),
+        )
+    }
+
+    /// Cumulative units the frames converted afresh and units they marked
+    /// changed (the rest kept last tick's state and skip session diffs).
+    pub fn unit_frame_work(&self) -> (u64, u64) {
+        (
+            self.fanout_probe
+                .unit_frame_converted
+                .load(Ordering::Relaxed),
+            self.fanout_probe.unit_frame_changed.load(Ordering::Relaxed),
         )
     }
 

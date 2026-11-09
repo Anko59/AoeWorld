@@ -169,6 +169,9 @@ async fn scheduler(
     let mut answer = scheduler_json(&world.route_scheduler_stats(), world.tick().0);
     answer["queue"] = queue_json(&world.route_queue_breakdown(), &humans);
     answer["passes"] = passes_json(&world.pass_counts(), service.unit_frame_passes());
+    let (converted, changed) = service.unit_frame_work();
+    answer["passes"]["unit_frame_converted"] = json!({"visited": converted});
+    answer["passes"]["unit_frame_changed"] = json!({"visited": changed});
     Ok(Json(answer))
 }
 

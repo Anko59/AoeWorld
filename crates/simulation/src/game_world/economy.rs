@@ -473,6 +473,25 @@ impl super::GameWorld {
             .iter()
             .map(|(id, task)| (*id, task.kind, task.animal))
     }
+    /// Every unit a command report (General castle, army, controller or
+    /// Steward manager) may name, possibly repeated, and every loaded
+    /// transport with its cargo size: only these units' reports read more
+    /// than the unit itself. One pass instead of lookups per unit.
+    pub fn command_report_units(&self) -> impl Iterator<Item = EntityId> + '_ {
+        let generals = &self.economy.generals;
+        generals
+            .armies
+            .keys()
+            .chain(generals.controlled.keys())
+            .chain(self.economy.stewards.controlled.keys())
+            .copied()
+    }
+    pub fn loaded_transports(&self) -> impl Iterator<Item = (EntityId, usize)> + '_ {
+        self.economy
+            .cargo
+            .iter()
+            .map(|(id, cargo)| (*id, cargo.len()))
+    }
     pub fn gather_target(&self, id: EntityId) -> Option<u64> {
         self.economy.gatherers.get(&id).map(|task| task.node)
     }

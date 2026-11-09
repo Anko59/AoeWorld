@@ -1,10 +1,12 @@
-//! One tick's shared, read-only unit data: every unit's wire state computed
-//! once, an id index, and each viewer's own units. Sessions then gather their
-//! view from this instead of querying the world once per session.
+//! One tick's shared, read-only unit data: every unit's wire state, an id
+//! index, and each viewer's own units. Sessions then gather their view from
+//! this instead of querying the world once per session. A unit whose inputs
+//! equal last tick's keeps last tick's state without a conversion, and is
+//! marked unchanged so sessions holding that frame skip it in their diffs.
 use super::economy::wire_unit;
 use aoe_core::{EntityId, PlayerId, TileRect};
 use aoe_protocol::{GameplayUnitState, MAX_SUBSCRIBED_UNITS};
-use aoe_simulation::GameWorld;
+use aoe_simulation::{GameUnit, GameWorld};
 use rayon::prelude::*;
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Range;
@@ -70,18 +72,49 @@ fn resource_of(code: u8) -> Option<aoe_map::ResourceKind> {
     }
 }
 
+fn convert(world: &GameWorld, input: &Input) -> GameplayUnitState {
+    let unit = &input.unit;
+    let mut state = wire_unit(
+        unit,
+        resource_of(input.gather),
+        (input.hunt != ABSENT).then_some(EntityId(input.hunt)),
+    );
+    state.cargo_count = input.cargo;
+    if input.commanded {
+        super::economy::command_state(world, unit, &mut state);
+    }
+    state
+}
+
 /// Units are converted in fixed-size parts on shared workers; a unit's slot is
 /// `part * PART + position in part`, which is also its storage index.
 const PART: usize = 1 << 12;
 
+/// Everything a unit's wire state is computed from. A unit no command report
+/// can name is a pure function of these, so equal inputs give an equal state.
+#[derive(Clone, Copy, PartialEq)]
+struct Input {
+    unit: GameUnit,
+    gather: u8,
+    hunt: u32,
+    cargo: u8,
+    /// A General's army, controller or Steward may be reported for it: its
+    /// state reads other entities, so it is converted every tick.
+    commanded: bool,
+}
+
 struct Part {
+    converted: usize,
     states: Vec<GameplayUnitState>,
+    inputs: Vec<Input>,
+    changed: Vec<bool>,
     /// `(viewer list, slot)` for the units a requested viewer owns.
     owned: Vec<(u32, u32)>,
 }
 
 pub(super) struct UnitFrame {
     parts: Vec<Vec<GameplayUnitState>>,
+    inputs: Vec<Vec<Input>>,
     /// Owner of each slot, to tell a viewer's own units without loading them.
     owner: Vec<u16>,
     index: IdTable<u32>,
@@ -89,6 +122,14 @@ pub(super) struct UnitFrame {
     /// storage order, as the per-session scan took them) as `id << 32 | slot`,
     /// sorted.
     own: BTreeMap<PlayerId, Vec<u64>>,
+    /// This frame's number: fan-outs count up, never reusing one.
+    generation: u64,
+    /// The frame `changed` compares against, when there was one.
+    base: Option<u64>,
+    /// Per slot: the unit's state differs from `base`'s, or it is new there.
+    changed: Vec<bool>,
+    /// Units converted afresh (the rest kept last frame's state).
+    converted: usize,
 }
 
 /// What one session looks through.
@@ -116,7 +157,16 @@ impl UnitFrame {
     }
 
     /// `None` when a worker failed, so no half-built frame is ever used.
-    pub(super) fn build(world: &GameWorld, viewers: &[PlayerId], threads: usize) -> Option<Self> {
+    /// `previous` is the last tick's frame: every slot records whether its
+    /// unit's state differs from there, so sessions that hold that frame skip
+    /// the units that did not change.
+    pub(super) fn build(
+        world: &GameWorld,
+        viewers: &[PlayerId],
+        threads: usize,
+        generation: u64,
+        previous: Option<&Self>,
+    ) -> Option<Self> {
         let bound = world.entity_id_bound();
         let mut gather = IdTable::new(bound, 0u8);
         let mut hunt = IdTable::new(bound, ABSENT);
@@ -129,6 +179,14 @@ impl UnitFrame {
         // A hunt order outranks the carcass a gatherer works.
         for (id, animal) in world.hunts() {
             hunt.set(id, animal.0);
+        }
+        let mut cargo = IdTable::new(bound, 0u8);
+        for (id, count) in world.loaded_transports() {
+            cargo.set(id, count as u8);
+        }
+        let mut commanded = IdTable::new(bound, false);
+        for id in world.command_report_units() {
+            commanded.set(id, true);
         }
         // `viewers` are distinct; their lists are found by player id.
         let mut list_of = vec![
@@ -146,26 +204,53 @@ impl UnitFrame {
         let part = |at: usize| -> Part {
             let range: Range<usize> = at * PART..((at + 1) * PART).min(count);
             let mut states = Vec::with_capacity(range.len());
+            let mut inputs = Vec::with_capacity(range.len());
+            let mut changed = Vec::with_capacity(range.len());
             let mut owned = Vec::new();
+            let mut converted = 0;
             for (n, unit) in world.units_range(range.clone()).enumerate() {
-                let target = hunt.get(unit.id);
-                let mut state = wire_unit(
-                    &unit,
-                    resource_of(gather.get(unit.id)),
-                    (target != ABSENT).then_some(EntityId(target)),
-                );
-                state.cargo_count = world.transport_cargo(unit.id).len() as u8;
-                super::economy::command_state(world, &unit, &mut state);
-                states.push(state);
-                if world.unit_visible_to(unit.player, unit.id)
-                    && let Some(list) = list_of
-                        .get(usize::from(unit.player.0))
-                        .filter(|list| **list != ABSENT)
+                let input = Input {
+                    unit,
+                    gather: gather.get(unit.id),
+                    hunt: hunt.get(unit.id),
+                    cargo: cargo.get(unit.id),
+                    commanded: commanded.get(unit.id),
+                };
+                let before = previous
+                    .map(|previous| (previous, previous.index.get(unit.id)))
+                    .filter(|(_, slot)| *slot != ABSENT);
+                match before {
+                    Some((previous, slot))
+                        if !input.commanded && *previous.input(slot) == input =>
+                    {
+                        states.push(*previous.state(slot));
+                        changed.push(false);
+                    }
+                    _ => {
+                        converted += 1;
+                        let state = convert(world, &input);
+                        changed.push(
+                            before.is_none_or(|(previous, slot)| *previous.state(slot) != state),
+                        );
+                        states.push(state);
+                    }
+                }
+                inputs.push(input);
+                if let Some(list) = list_of
+                    .get(usize::from(unit.player.0))
+                    .filter(|list| **list != ABSENT)
+                    && world.unit_visible_to(unit.player, unit.id)
                 {
                     owned.push((*list, (range.start + n) as u32));
                 }
             }
-            Part { states, owned }
+            Part {
+                converted,
+                states,
+                inputs,
+                changed,
+                owned,
+            }
         };
         let wanted = count.div_ceil(PART);
         let parts = if threads <= 1 || wanted <= 1 {
@@ -178,14 +263,17 @@ impl UnitFrame {
                 .map(|at| std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| part(at))).ok())
                 .collect::<Option<Vec<_>>>()?
         };
+        let converted = parts.iter().map(|part| part.converted).sum();
         let mut index = IdTable::new(bound, ABSENT);
         let mut owner = Vec::with_capacity(count);
+        let mut changed = Vec::with_capacity(count);
         let mut lists = vec![Vec::new(); viewers.len()];
         for (at, part) in parts.iter().enumerate() {
             for (n, state) in part.states.iter().enumerate() {
                 index.set(state.id, (at * PART + n) as u32);
                 owner.push(state.player.0);
             }
+            changed.extend_from_slice(&part.changed);
             for (list, slot) in &part.owned {
                 let list = &mut lists[*list as usize];
                 if list.len() <= MAX_SUBSCRIBED_UNITS {
@@ -193,10 +281,10 @@ impl UnitFrame {
                 }
             }
         }
-        let parts = parts
+        let (parts, inputs): (Vec<_>, Vec<_>) = parts
             .into_iter()
-            .map(|part| part.states)
-            .collect::<Vec<_>>();
+            .map(|part| (part.states, part.inputs))
+            .unzip();
         let own = viewers
             .iter()
             .zip(lists)
@@ -211,15 +299,40 @@ impl UnitFrame {
             .collect();
         Some(Self {
             parts,
+            inputs,
             owner,
             index,
             own,
+            generation,
+            base: previous.map(|previous| previous.generation),
+            changed,
+            converted,
         })
     }
 
     /// Units this frame converted.
     pub(super) fn unit_count(&self) -> usize {
         self.owner.len()
+    }
+
+    /// Units converted afresh and units whose state changed this frame.
+    pub(super) fn work(&self) -> (usize, usize) {
+        let changed = self.changed.iter().filter(|changed| **changed).count();
+        (self.converted, changed)
+    }
+
+    pub(super) fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// Whether `slot`'s unit is as it was in frame `held`, so a baseline
+    /// taken from that frame needs no comparison for it.
+    pub(super) fn unchanged_since(&self, held: Option<u64>, slot: u32) -> bool {
+        held.is_some() && held == self.base && !self.changed[slot as usize]
+    }
+
+    fn input(&self, slot: u32) -> &Input {
+        &self.inputs[slot as usize / PART][slot as usize % PART]
     }
 
     pub(super) fn state(&self, slot: u32) -> &GameplayUnitState {

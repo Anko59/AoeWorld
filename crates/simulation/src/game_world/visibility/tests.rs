@@ -205,3 +205,51 @@ fn ghost_eviction_order_is_part_of_replay_state() {
         "different future eviction decisions need different replay hashes"
     );
 }
+
+/// A fog view reported unchanged since a revision is the view held then:
+/// the fan-out skips rebuilding only views that would be equal.
+#[test]
+fn a_fog_view_reported_unchanged_equals_the_view_held() {
+    use aoe_core::WorldPosition;
+    let (mut world, scout) = GameWorld::default_with_village(Seed(7));
+    let player = world.unit(scout).unwrap().player;
+    let home = world.unit(scout).unwrap().position.tile_floor();
+    let regions = [
+        TileRect::from_xywh(home.x - 40, home.y - 40, 80, 80),
+        TileRect::from_xywh(home.x + 60, home.y - 20, 64, 64),
+        TileRect::from_xywh(0, 0, 48, 48),
+    ];
+    let view = |world: &GameWorld, rect| {
+        (
+            world.visibility_tiles(player, rect),
+            world.vision_overview(player),
+        )
+    };
+    let mut held = regions.map(|rect| (world.player_vision_revision(player), view(&world, rect)));
+    let (mut skipped, mut rebuilt) = (0, 0);
+    let away = WorldPosition::from_tile_center(TileCoord::new(home.x + 70, home.y)).unwrap();
+    world.issue_move(scout, away).unwrap();
+    for tick in 0..600 {
+        if tick == 300 {
+            let back = WorldPosition::from_tile_center(home).unwrap();
+            world.issue_move(scout, back).unwrap();
+        }
+        world.advance();
+        let revision = world.player_vision_revision(player);
+        for (rect, (since, content)) in regions.iter().zip(held.iter_mut()) {
+            let now = view(&world, *rect);
+            if world.fog_changed_since(player, *rect, *since) {
+                rebuilt += 1;
+                *since = revision;
+                *content = now;
+            } else {
+                assert_eq!(*content, now, "tick {tick} {rect:?}");
+                skipped += 1;
+            }
+        }
+    }
+    assert!(
+        skipped > 100 && rebuilt > 10,
+        "{skipped} skipped, {rebuilt} rebuilt"
+    );
+}

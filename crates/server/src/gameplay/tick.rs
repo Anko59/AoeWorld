@@ -72,10 +72,12 @@ impl GameplayService {
         // are built on worker threads.
         let world = world.downgrade();
         let fanout_started = std::time::Instant::now();
-        let built = tokio::task::spawn_blocking(move || fanout::build(&world, &views, &changes))
-            .await
-            .ok()
-            .flatten();
+        let last = self.fanout_probe.take_last_frame();
+        let built =
+            tokio::task::spawn_blocking(move || fanout::build(&world, &views, &changes, last))
+                .await
+                .ok()
+                .flatten();
         let Some(built) = built else {
             tracing::error!("gameplay fan-out worker failed");
             // The tick's building changes were taken and are lost: every
@@ -87,7 +89,8 @@ impl GameplayService {
         };
         self.probe.phase("fanout_wait", fanout_started.elapsed());
         self.fanout_probe
-            .record_unit_frame(built.frame.unit_count());
+            .record_unit_frame(built.frame.unit_count(), built.frame.work());
+        self.fanout_probe.keep_frame(built.frame.clone());
         let delivery_started = std::time::Instant::now();
         let failed = {
             let mut sessions = self.sessions.lock().await;
@@ -161,6 +164,9 @@ fn view(session_id: u64, session: &Session) -> Option<View> {
     })
 }
 
+#[path = "tick/tests/dirty.rs"]
+#[cfg(test)]
+mod dirty;
 #[path = "tick/tests/rebuild.rs"]
 #[cfg(test)]
 mod rebuild;
