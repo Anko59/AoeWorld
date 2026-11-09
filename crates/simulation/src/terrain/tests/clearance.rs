@@ -92,3 +92,39 @@ fn clearance_land_and_water_pages_are_independent_and_do_not_change_replays() {
     assert!(open_water);
     assert_eq!(w.canonical_hash(), before);
 }
+
+#[test]
+fn clearance_rebuild_from_changed_areas_matches_brute_force() {
+    let mut w = world();
+    let tiles = || (52..76).flat_map(|y| (52..76).map(move |x| TileCoord::new(x, y)));
+    for p in tiles() {
+        w.static_clearance(UnitKind::Militia, p);
+    }
+    let mut houses = Vec::new();
+    for (x, y) in [(62, 63), (66, 60), (70, 70)] {
+        houses.push(
+            w.insert_building(
+                PlayerId(0),
+                BuildingKind::House,
+                TileRect::from_xywh(x, y, 2, 2),
+                true,
+            )
+            .unwrap(),
+        );
+        for p in tiles() {
+            assert_eq!(
+                w.static_clearance(UnitKind::Militia, p),
+                reference(&w, UnitKind::Militia, p),
+                "{p:?} after a house at {x},{y}"
+            );
+        }
+    }
+    w.remove_building(houses[1]);
+    for p in tiles() {
+        assert_eq!(
+            w.static_clearance(UnitKind::Militia, p),
+            reference(&w, UnitKind::Militia, p),
+            "{p:?} after a removal"
+        );
+    }
+}
