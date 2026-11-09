@@ -257,7 +257,7 @@ impl GameWorld {
             || self.units[index].route.len() >= 64
             || !self.units[index]
                 .planner
-                .as_ref()
+                .as_deref()
                 .is_some_and(RoutePlanner::has_route_continuation)
         {
             return;

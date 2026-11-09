@@ -226,7 +226,7 @@ impl GameWorld {
         self.units[index].state.planning = planning;
         self.units[index].planning_since = self.tick.0;
         self.units[index].fast_route_tried = fast_tried;
-        self.store_planner(index, planner);
+        self.store_planner(index, planner.map(Box::new));
         let id = self.units[index].state.id;
         if let Err(at) = self.active_movers.binary_search(&id) {
             self.active_movers.insert(at, id);

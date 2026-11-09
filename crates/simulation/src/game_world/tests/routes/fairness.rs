@@ -238,11 +238,11 @@ fn a_players_far_search_keeps_a_quarter_share_while_its_near_queue_is_busy() {
         if raw < 2 {
             world.store_planner(
                 index,
-                Some(aoe_map::RoutePlanner::new(
+                Some(Box::new(aoe_map::RoutePlanner::new(
                     origin,
                     target,
                     crate::MAX_ROUTE_WORK_PER_ORDER,
-                )),
+                ))),
             );
         }
     }
@@ -261,11 +261,11 @@ fn a_players_far_search_keeps_a_quarter_share_while_its_near_queue_is_busy() {
     world.units[index].order.as_mut().unwrap().waypoint = tile_position(origin.x, origin.y);
     world.store_planner(
         index,
-        Some(aoe_map::RoutePlanner::new(
+        Some(Box::new(aoe_map::RoutePlanner::new(
             origin,
             target,
             crate::MAX_ROUTE_WORK_PER_ORDER,
-        )),
+        ))),
     );
     let budget = 80;
     world.serve_route_searches(budget, &mut Vec::new());

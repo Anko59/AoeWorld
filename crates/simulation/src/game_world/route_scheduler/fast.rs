@@ -25,7 +25,7 @@ impl GameWorld {
                     continue;
                 };
                 let unit = &self.units[index];
-                let far = unit.planner.as_ref().map_or_else(
+                let far = unit.planner.as_deref().map_or_else(
                     || {
                         unit.order.is_some_and(|order| {
                             far_route(order.waypoint.tile_floor(), order.target_tile)

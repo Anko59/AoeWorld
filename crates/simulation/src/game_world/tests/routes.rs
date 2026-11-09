@@ -232,11 +232,11 @@ fn planner_slot_exhaustion_defers_a_new_order_without_rejecting_it() {
         let index = world.lookup[&id];
         world.store_planner(
             index,
-            Some(if raw < MAX_ROUTE_SEARCHES_PER_PLAYER {
+            Some(Box::new(if raw < MAX_ROUTE_SEARCHES_PER_PLAYER {
                 RoutePlanner::new(tile, TileCoord::new(tile.x + 20, tile.y), 4_096)
             } else {
                 continuation.clone()
-            }),
+            })),
         );
         planner_units.push(id);
     }
@@ -324,7 +324,10 @@ fn resumed_provider_failure_is_a_typed_stopped_reason() {
     let origin_position = WorldPosition::from_tile_center(origin).expect("origin position");
     let destination_position =
         WorldPosition::from_tile_center(destination).expect("destination position");
-    world.store_planner(index, Some(RoutePlanner::new(origin, destination, 4_096)));
+    world.store_planner(
+        index,
+        Some(Box::new(RoutePlanner::new(origin, destination, 4_096))),
+    );
     world.units[index].order = Some(MovementOrder {
         origin: origin_position,
         destination: destination_position,
@@ -370,3 +373,4 @@ mod freeze;
 mod long_run;
 mod saturation;
 mod starvation;
+mod storage;

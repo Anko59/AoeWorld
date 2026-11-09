@@ -379,11 +379,11 @@ impl GameWorld {
         }
         let budget = 0;
         let mut planner = self.take_planner(index).unwrap_or_else(|| {
-            RoutePlanner::new(
+            Box::new(RoutePlanner::new(
                 order.waypoint.tile_floor(),
                 order.target_tile,
                 MAX_ROUTE_WORK_PER_ORDER,
-            )
+            ))
         });
         let work_before = planner.work();
         let result = self.poll_world_route_planner(
@@ -455,7 +455,7 @@ impl GameWorld {
         let _ = self.take_planner(index);
     }
 
-    pub(crate) fn store_planner(&mut self, index: usize, planner: Option<RoutePlanner>) {
+    pub(crate) fn store_planner(&mut self, index: usize, planner: Option<Box<RoutePlanner>>) {
         self.clear_planner(index);
         if let Some(planner) = &planner {
             self.active_planner_count = self.active_planner_count.saturating_add(1);
@@ -467,7 +467,7 @@ impl GameWorld {
         self.units[index].planner = planner;
     }
 
-    pub(crate) fn take_planner(&mut self, index: usize) -> Option<RoutePlanner> {
+    pub(crate) fn take_planner(&mut self, index: usize) -> Option<Box<RoutePlanner>> {
         let planner = self.units[index].planner.take()?;
         self.active_planner_count = self.active_planner_count.saturating_sub(1);
         if planner.requires_search_slot() {

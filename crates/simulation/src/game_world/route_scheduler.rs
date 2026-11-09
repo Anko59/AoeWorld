@@ -290,7 +290,7 @@ impl GameWorld {
             return 0;
         };
         let kind = self.units[index].state.kind;
-        let held = self.units[index].planner.as_ref();
+        let held = self.units[index].planner.as_deref();
         let holds_planner = usize::from(held.is_some());
         let holds_search = held.is_some_and(RoutePlanner::requires_search_slot);
         let far = self.waits_for_far_route(index);
@@ -307,11 +307,11 @@ impl GameWorld {
             return 0;
         }
         let mut planner = self.take_planner(index).unwrap_or_else(|| {
-            RoutePlanner::new(
+            Box::new(RoutePlanner::new(
                 order.waypoint.tile_floor(),
                 order.target_tile,
                 MAX_ROUTE_WORK_PER_ORDER,
-            )
+            ))
         });
         let fresh = planner.work() == 0;
         let work_before = planner.work();

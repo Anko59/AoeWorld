@@ -221,11 +221,11 @@ fn exhausting_a_resource_releases_its_blocking_tile() {
     };
     world.store_planner(
         unit_index,
-        Some(RoutePlanner::new(
+        Some(Box::new(RoutePlanner::new(
             TileCoord::new(10, 10),
             resource.tile,
             4_096,
-        )),
+        ))),
     );
     assert_eq!(world.active_planner_count, 1);
     assert_eq!(world.active_route_searches, 1);
@@ -410,7 +410,10 @@ fn terminal_search_limit_stops_a_segment_after_resumable_polling() {
     let destination_position =
         WorldPosition::from_tile_center(destination).expect("destination position");
     world.units[index].state.moving = true;
-    world.store_planner(index, Some(RoutePlanner::new(origin, destination, 1)));
+    world.store_planner(
+        index,
+        Some(Box::new(RoutePlanner::new(origin, destination, 1))),
+    );
     world.units[index].order = Some(MovementOrder {
         origin: origin_position,
         destination: destination_position,

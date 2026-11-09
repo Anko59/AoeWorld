@@ -17,7 +17,7 @@ impl GameWorld {
                 self.units[index].order.is_some()
                     && self.units[index]
                         .planner
-                        .as_ref()
+                        .as_deref()
                         .is_some_and(RoutePlanner::wants_lookahead)
             })
             .collect::<Vec<_>>();
@@ -71,7 +71,7 @@ impl GameWorld {
         let own_search = usize::from(
             self.units[index]
                 .planner
-                .as_ref()
+                .as_deref()
                 .is_some_and(RoutePlanner::requires_search_slot),
         );
         let far = self.units[index].planner.as_ref().is_some_and(|planner| {

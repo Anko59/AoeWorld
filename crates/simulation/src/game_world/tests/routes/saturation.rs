@@ -234,11 +234,11 @@ fn an_unresolved_near_order_retains_a_bounded_search_beside_busy_far_slots() {
         let index = world.lookup[&id];
         world.store_planner(
             index,
-            Some(aoe_map::RoutePlanner::new(
+            Some(Box::new(aoe_map::RoutePlanner::new(
                 from,
                 TileCoord::new(500, 500),
                 4_096,
-            )),
+            ))),
         );
     }
     assert!(world.route_capacity_exhausted(player, 0, 0, true));

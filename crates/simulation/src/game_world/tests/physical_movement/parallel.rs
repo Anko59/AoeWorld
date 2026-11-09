@@ -198,7 +198,7 @@ fn a_walking_unit_with_pending_lookahead_still_gets_a_pure_proposal() {
         travelled: 0,
         speed_carry: 0,
     });
-    world.store_planner(index, Some(planner));
+    world.store_planner(index, Some(Box::new(planner)));
     let hash = world.canonical_hash();
     let proposal = world.propose_steps(&[id], 0).pop().unwrap();
     assert!(

@@ -40,7 +40,7 @@ impl GameWorld {
     /// True when the waiting unit's route uses its player's far slots.
     pub(super) fn waits_for_far_route(&self, index: usize) -> bool {
         let unit = &self.units[index];
-        unit.planner.as_ref().map_or_else(
+        unit.planner.as_deref().map_or_else(
             || {
                 unit.order
                     .is_some_and(|order| far_route(order.waypoint.tile_floor(), order.target_tile))
@@ -72,7 +72,7 @@ impl GameWorld {
             // one minute. One that searched its bound (sealed ground) ends.
             let queued = unit
                 .planner
-                .as_ref()
+                .as_deref()
                 .is_none_or(has_near_route_work_remaining);
             if (far || queued)
                 && unit.formation == Some(id)
@@ -107,7 +107,7 @@ impl GameWorld {
         if far || !self.waiting_for_route(index) {
             return;
         }
-        let Some(planner) = unit.planner.as_ref() else {
+        let Some(planner) = unit.planner.as_deref() else {
             return;
         };
         if has_near_route_work_remaining(planner) || planner.has_route_continuation() {
