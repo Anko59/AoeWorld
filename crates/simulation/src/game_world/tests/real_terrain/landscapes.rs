@@ -1,6 +1,15 @@
 use super::*;
 use crate::game_world::terrain_fixtures::{Command, Fixture, build};
-use metrics::{Tracker, reference_from};
+use metrics::{Causes, Tracker, reference_from};
+
+fn causes(contact: u32, replan: u32, rerank: u32, other: u32) -> Causes {
+    Causes {
+        contact,
+        replan,
+        rerank,
+        other,
+    }
+}
 
 pub(super) fn offered(f: &Fixture) -> Vec<Option<WorldPosition>> {
     f.ids
@@ -49,6 +58,8 @@ fn run(case: &str, count: usize, limit: u32) {
             result.assert_arrival_and_work(count);
             assert!(result.max_tick_route_work <= 24_576, "{result:?}");
             assert_eq!((result.max_stuck_ticks, result.oscillations), (8, 3));
+            // Current-output split of the 3 reversals by cause.
+            assert_eq!(result.oscillation_causes, causes(0, 0, 0, 3));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
                 (5522, 55349, 3108113)
@@ -59,6 +70,9 @@ fn run(case: &str, count: usize, limit: u32) {
             assert!(result.max_tick_route_work <= 16_384, "{result:?}");
             // 57: one arrived soldier steps aside and waits 56 ticks for the march to pass.
             assert_eq!((result.max_stuck_ticks, result.oscillations), (57, 18));
+            // 12 of the 18 reversals are traffic contact; the other 6 have none
+            // of the recorded causes. Phase 2 takes the contact ones to 0.
+            assert_eq!(result.oscillation_causes, causes(12, 0, 0, 6));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
                 (36804, 378134, 102402561)

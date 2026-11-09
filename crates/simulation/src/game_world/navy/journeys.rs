@@ -138,6 +138,8 @@ impl GameWorld {
             .keys()
             .copied()
             .collect::<Vec<_>>();
+        self.passes
+            .record(crate::game_world::Pass::AdvanceTransports, ships.len());
         for ship in ships {
             let Some(mut job) = self.economy.transport_journeys.remove(&ship) else {
                 continue;

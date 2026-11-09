@@ -87,7 +87,7 @@ impl GameWorld {
         {
             self.refill_route_budgets();
             if !changed.is_empty() {
-                self.remember_visible_buildings();
+                self.remember_buildings_this_tick();
             }
             return self.collect_changed(changed);
         }
@@ -106,12 +106,20 @@ impl GameWorld {
         self.advance_generals(&mut changed);
         self.advance_stewards(&mut changed);
         probe(TickPhase::StewardEconomy);
-        self.remember_visible_buildings();
+        self.remember_buildings_this_tick();
         probe(TickPhase::BuildingMemory);
         self.refill_route_budgets();
         let collected = self.collect_changed(changed);
         probe(TickPhase::Changed);
         collected
+    }
+
+    /// The per-tick building memory pass, counted (the other callers are
+    /// events: a building placed, removed or seen).
+    fn remember_buildings_this_tick(&mut self) {
+        let visited = self.remember_visible_buildings();
+        self.passes
+            .record(crate::game_world::Pass::RememberVisibleBuildings, visited);
     }
 
     /// Every phase reports only the ids it touched. Sorting and deduping ids
@@ -120,7 +128,10 @@ impl GameWorld {
     /// as when the phases pushed whole unit records. Economy may alter a
     /// mover a second time in the same tick; the fetch returns that final
     /// state, not the earlier movement interpolation state.
+    #[inline(never)] // a symbol of its own for the Callgrind stage counters
     fn collect_changed(&self, mut ids: Vec<EntityId>) -> Vec<GameUnit> {
+        self.passes
+            .record(crate::game_world::Pass::CollectChanged, ids.len());
         ids.sort_unstable();
         ids.dedup();
         ids.into_iter().filter_map(|id| self.unit(id)).collect()

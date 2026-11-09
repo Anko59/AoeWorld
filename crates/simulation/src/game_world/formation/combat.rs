@@ -35,6 +35,7 @@ impl GameWorld {
     /// melee spot, or reach); it attacks alone and leaves the group, and the
     /// others keep marching. Its way back to its slot travels with the attack
     /// (see `Resume`).
+    #[inline(never)] // a symbol of its own for the Callgrind stage counters
     pub(crate) fn engage_formations(&mut self, changed: &mut Vec<EntityId>) {
         let leaders = self
             .formations

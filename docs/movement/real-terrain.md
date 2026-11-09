@@ -347,3 +347,13 @@ The two-tile arrival rule (rule 6) is still needed. Removed, France falls to 6,6
 and 45, and two armies sharing a forest destination leave 54 stuck. That run had yields and
 the settling rule. A rule limited to a slot a stationary body took was not
 re-measured. Yielding does not solve a crowd in full body contact: it has no open spot.
+
+## Reversals by cause
+
+The tracker's `oscillations` (the 18 on the 1,000-tile march, 3 on the river) are direction
+reversals within 60 ticks of the unit's previous one. Each is attributed to the first cause
+recorded since the unit last moved half a tile, in this order: `contact` (an obstructed step, or a
+member blocked by traffic), `replan` (its leg changed waypoint, its group changed path leg, it was
+planning or detached on its own route), `rerank` (its slot offset or rank changed), else `other`.
+The causes add up to the total; the pins are `(contact, replan, rerank, other)` = (12, 0, 0, 6) on
+the march and (0, 0, 0, 3) on the river. Phase 2 gates the contact ones at 0.

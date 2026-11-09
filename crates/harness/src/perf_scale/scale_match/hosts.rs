@@ -30,14 +30,7 @@ fn docker_python(
             nix::unistd::Uid::current(),
             nix::unistd::Gid::current()
         ))
-        .args([
-            "--name",
-            name,
-            "-e",
-            "HOME=/tmp",
-            "-e",
-            "PYTHONDONTWRITEBYTECODE=1",
-        ])
+        .args(["-e", "HOME=/tmp", "-e", "PYTHONDONTWRITEBYTECODE=1"])
         .arg("-e")
         .arg(format!(
             "PYTHONPATH={}:{}/ai",
@@ -47,8 +40,14 @@ fn docker_python(
         .arg("-v")
         .arg(format!("{0}:{0}", root.display()))
         .arg("-w")
-        .arg(root)
-        .arg(&options.bot_image);
+        .arg(root);
+    if !name.is_empty() {
+        command.args(["--name", name]);
+    }
+    if options.save.is_some() {
+        command.args(["-i", "--label", &super::save::label(options)]);
+    }
+    command.arg(&options.bot_image);
     crate::jobs::guard::prepare_child(&mut command)?;
     Ok(command)
 }
@@ -145,4 +144,27 @@ pub(super) fn wait_connected(hosts: &mut [Host]) -> Result<f64, BoxError> {
         }
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
+}
+
+/// The skirmish owns these containers and hands each its restored seat tokens.
+pub(super) fn skirmish_command(
+    options: &Options,
+    root: &Path,
+    work: &Path,
+) -> Result<String, BoxError> {
+    let site = work.join("site");
+    install_wheel(options, root, &site)?;
+    let mut command = docker_python(options, root, "", &site)?;
+    command.args(["python3", "-m", "aoe_ai", "host"]);
+    let words: Vec<_> = std::iter::once(command.get_program())
+        .chain(command.get_args())
+        .map(|s| s.to_str().ok_or("AI command is not UTF-8"))
+        .collect::<Result<_, _>>()?;
+    if words.iter().any(|s| s.chars().any(char::is_whitespace)) {
+        return Err(
+            "saved benchmarks need paths and image names without whitespace (AOE_AI_COMMAND)"
+                .into(),
+        );
+    }
+    Ok(words.join(" "))
 }

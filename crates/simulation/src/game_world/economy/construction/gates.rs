@@ -2,6 +2,7 @@
 //! through a living unit. It is four by one tiles along a wall line in either axis.
 //! Route plans treat a completed gate as open ground (see `routes_through_gate`);
 //! only movement collision (`blocked_tiles`) closes it.
+use crate::game_world::Pass;
 use crate::{GameWorld, Terrain};
 use aoe_core::{TileCoord, TileRect};
 
@@ -34,6 +35,8 @@ impl GameWorld {
     }
 
     pub(super) fn advance_gates(&mut self) {
+        self.passes
+            .record(Pass::AdvanceGates, self.economy.buildings.len());
         let gates: Vec<_> = self
             .buildings()
             .filter(|b| b.kind.is_gate() && b.is_complete())

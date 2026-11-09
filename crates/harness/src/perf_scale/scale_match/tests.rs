@@ -1,22 +1,22 @@
 use super::{
     MapSource, Options, browser, http, procs,
     report::{self, Sample, TickRow},
-    run,
+    run, setup,
 };
 use clap::Parser;
 use serde_json::json;
 
 #[derive(Parser)]
-struct Cli {
+pub(super) struct Cli {
     #[command(flatten)]
     options: Options,
 }
 
-fn options(arguments: &[&str]) -> Options {
+pub(super) fn options(arguments: &[&str]) -> Options {
     Cli::parse_from(std::iter::once("scale-match").chain(arguments.iter().copied())).options
 }
 
-fn row(tick: u64, total_us: u64, sim_us: u64, units: u64, missed: bool) -> TickRow {
+pub(super) fn row(tick: u64, total_us: u64, sim_us: u64, units: u64, missed: bool) -> TickRow {
     TickRow {
         tick,
         total_us,
@@ -42,7 +42,7 @@ fn defaults_describe_the_promised_scale() {
 
 #[test]
 fn the_match_body_names_slots_rules_and_a_france_map() {
-    let body = run::match_body(&options(&["--players", "4", "--start-villagers", "30"])).unwrap();
+    let body = setup::match_body(&options(&["--players", "4", "--start-villagers", "30"])).unwrap();
     assert_eq!(body["slots"], json!(["human", "ai", "ai", "ai"]));
     assert_eq!(body["start_units"], json!({"villagers": 30, "militia": 0}));
     let map = &body["map"];
@@ -50,11 +50,11 @@ fn the_match_body_names_slots_rules_and_a_france_map() {
     assert_eq!(map["requested_side_meters"], 960_000);
     assert_eq!(map["compression"]["numerator"], 30);
     assert_eq!(map["center_latitude_e7"], 466_000_000);
-    let flat = run::match_body(&options(&["--map", "flat", "--tiles", "500"])).unwrap();
+    let flat = setup::match_body(&options(&["--map", "flat", "--tiles", "500"])).unwrap();
     assert_eq!(flat["flat"]["tiles_per_side"], 500);
     assert!(flat.get("start_units").is_none());
-    assert!(run::match_body(&options(&["--map", "package"])).is_err());
-    let late = run::match_body(&options(&["--late-game", "--seed", "9"])).unwrap();
+    assert!(setup::match_body(&options(&["--map", "package"])).is_err());
+    let late = setup::match_body(&options(&["--late-game", "--seed", "9"])).unwrap();
     assert_eq!(late["start_units"]["late_game"], true);
     assert_eq!(late["start_units"]["probe_army"], json!({}));
     assert_eq!(late["seed"], 9);
@@ -141,9 +141,6 @@ fn tick_rows_parse_and_summarise() {
     assert_eq!(window["units_first"], 1_000);
     assert_eq!(window["units_max"], 1_099);
     assert_eq!(window["advance_ms"]["p50_ms"], 30.0);
-    // 100 ticks over 150 s of wall time: three windows of the arrival order.
-    assert_eq!(report::per_minute(&rows, 150.0).len(), 3);
-    assert!(report::per_minute(&[], 60.0).is_empty());
 }
 
 #[test]
@@ -177,6 +174,8 @@ fn finished_report() -> serde_json::Value {
     ];
     let mut run = report::window(&rows, 0.1);
     run["wall_seconds"] = json!(60.0);
+    let mut minutes = report::Minutes::default();
+    minutes.record(&rows, 60.0);
     json!({
         "label": "smoke", "revision": "abc", "dirty": false,
         "config": {"players": 4, "humans": 1, "tiles": 500, "hosts": 1},
@@ -185,7 +184,7 @@ fn finished_report() -> serde_json::Value {
         "machine": {},
         "bots": report::bot_totals(&[]),
         "browser": {"phases": [{"name": "village", "fps_mean": 31.5, "frame_ms_p50": 30.0, "frame_ms_p95": 41.0, "frames": 900}]},
-        "per_minute": report::per_minute(&rows, 60.0),
+        "per_minute": minutes.windows,
     })
 }
 

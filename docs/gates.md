@@ -66,7 +66,7 @@ CI uses the same caps and immediate admission; each job has its own runner. `mak
 | preflight-unit | `make preflight-unit` | — | performance | [] | 1800 | yes | native unit tests and smoke benchmark |
 | perf-late-game | `make perf-late-game` | — | performance | [] | 1800 | yes | late-game profile measurements |
 | perf-late-game-instructions | `make perf-late-game-instructions` | — | performance | [] | 1800 | yes | late-game Callgrind instruction report |
-| perf-groups-instructions | `make perf-groups-instructions` | — | performance | [] | 1800 | yes | group-movement Callgrind instruction report |
+| perf-groups-instructions | `make perf-groups-instructions` | — | performance | [] | 1800 | yes | group-movement Callgrind instruction report and per-stage instruction and LL-miss counters |
 | perf-groups-profile | `make perf-groups-profile` | — | performance | [] | 3600 | yes | qualified movement timing and instruction reports |
 | scale-match | `make scale-match` | — | performance | [] | 3600 | yes | real server, AI hosts and browser scale measurements |
 | perf-baseline-propose | `make perf-baseline-propose` | — | performance | [] | 3600 | yes | benchmark observations and baseline proposal |

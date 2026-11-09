@@ -5,6 +5,7 @@ use super::*;
 use crate::game_world::movement_step::settling::GIVE_UP_AFTER_TICKS;
 
 impl GameWorld {
+    #[inline(never)] // a symbol of its own for the Callgrind stage counters
     pub(crate) fn advance_formations(
         &mut self,
         changed: &mut Vec<EntityId>,

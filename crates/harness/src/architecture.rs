@@ -1,8 +1,15 @@
 //! Tested dependency and source-boundary rules for first-party crates.
+mod caps;
+
 use serde_json::Value;
 use std::{collections::BTreeSet, error::Error, fs, path::Path, process::Command};
 
 pub fn check(root: &Path) -> Result<(), Box<dyn Error>> {
+    check_with_source(root, root)
+}
+
+/// Exported indexes have no history; read the ratchet base from the source repository.
+pub(crate) fn check_with_source(root: &Path, base_source: &Path) -> Result<(), Box<dyn Error>> {
     let mut command = Command::new("cargo");
     command.current_dir(root);
     for (name, _) in std::env::vars_os() {
@@ -81,6 +88,7 @@ pub fn check(root: &Path) -> Result<(), Box<dyn Error>> {
             }
         }
     }
+    violations.extend(caps::check(root, base_source)?);
     if violations.is_empty() {
         Ok(())
     } else {

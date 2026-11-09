@@ -301,6 +301,7 @@ impl GameWorld {
         self.vision.observers.get(&u.id) != observer
     }
 
+    #[inline(never)] // a symbol of its own for the Callgrind stage counters
     pub(crate) fn update_unit_vision(&mut self, id: EntityId) {
         let observer = self.unit(id).and_then(|u| self.unit_observer(&u));
         self.update_observer(id, observer);

@@ -15,6 +15,8 @@ mod march;
 mod procs;
 mod report;
 mod run;
+mod save;
+mod setup;
 #[cfg(test)]
 mod tests;
 
@@ -34,6 +36,9 @@ pub(crate) enum MapSource {
 
 #[derive(Args, Debug, Clone)]
 pub struct Options {
+    /// Resume a .save and its sibling JSON card; seats/map/AI hosts come from the save.
+    #[arg(long, conflicts_with_all = ["players", "humans", "tiles", "map", "map_hash", "seed", "hosts", "start_villagers", "start_militia", "late_game", "march_probe", "browser"])]
+    pub save: Option<PathBuf>,
     /// Match seats; the first `--humans` are people, the rest Python AIs.
     #[arg(long, default_value_t = 100)]
     pub players: usize,
@@ -126,5 +131,7 @@ pub struct Options {
 }
 
 pub fn run(options: Options) -> Result<(), BoxError> {
-    run::run(&options)
+    let mut options = options;
+    let saved = save::prepare(&mut options)?;
+    run::run(&options, saved)
 }

@@ -153,6 +153,8 @@ fn every_flat_match_village_gets_the_full_standard_start() {
     }
 }
 
+#[path = "tests/passes.rs"]
+mod passes;
 #[path = "tests/real_package.rs"]
 mod real_package;
 #[path = "tests/seats.rs"]

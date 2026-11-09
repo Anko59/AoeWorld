@@ -1,12 +1,12 @@
 //! The orchestration of one `scale-match` run.
 use super::{
-    BoxError, MapSource, Options, browser,
+    BoxError, Options, browser,
     hosts::{start_hosts, wait_connected},
     http, procs,
     report::{self, Sample, TickRow},
+    save, setup,
 };
 use crate::process;
-use aoe_map::{MapRequest, Ratio};
 use serde_json::{Value, json};
 use std::{
     fs,
@@ -18,19 +18,18 @@ use std::{
 
 const WORK: &str = "target/scale-match";
 /// A local development secret: the server listens on loopback only.
-const ADMIN_TOKEN: &str = "scale-match-local-0123456789";
+pub(super) const ADMIN_TOKEN: &str = "scale-match-local-0123456789";
 const SAMPLE_EVERY: Duration = Duration::from_secs(5);
 const BUILD_DEADLINE: Duration = Duration::from_secs(60 * 60);
-const MATCH_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
-struct Server {
+pub(super) struct Server {
     child: Child,
-    address: String,
+    pub(super) address: String,
 }
 
 impl Server {
-    fn get(&self, path: &str) -> Result<Value, BoxError> {
+    pub(super) fn get(&self, path: &str) -> Result<Value, BoxError> {
         let response = http::request(
             &self.address,
             "GET",
@@ -58,7 +57,7 @@ impl Server {
 /// error return after they started. Killing a container that already exited
 /// is harmless.
 struct Containers {
-    bots_prefix: String,
+    bots_filter: String,
     browser: String,
 }
 
@@ -66,7 +65,7 @@ impl Drop for Containers {
     fn drop(&mut self) {
         let listed = Command::new("docker")
             .args(["ps", "-q", "--filter"])
-            .arg(format!("name={}", self.bots_prefix))
+            .arg(&self.bots_filter)
             .output();
         let mut command = Command::new("docker");
         command.args(["kill", &self.browser]);
@@ -82,54 +81,6 @@ impl Drop for Server {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
-}
-
-pub(super) fn france_request(tiles: u32, seed: u64) -> Result<Value, BoxError> {
-    let request = MapRequest {
-        center_latitude_e7: 466_000_000,
-        center_longitude_e7: 25_000_000,
-        requested_side_meters: u64::from(tiles) * 2 * 30,
-        compression: Ratio::new(30, 1)?,
-        seed,
-        ..MapRequest::default()
-    };
-    Ok(serde_json::to_value(request)?)
-}
-
-/// The `POST /match` body for these options.
-pub(super) fn match_body(options: &Options) -> Result<Value, BoxError> {
-    let mut slots = vec!["human"; options.humans];
-    slots.resize(options.players, "ai");
-    let mut body = json!({
-        "slots": slots,
-    });
-    if options.start_villagers + options.start_militia > 0
-        || options.march_probe
-        || options.late_game
-    {
-        body["start_units"] =
-            json!({ "villagers": options.start_villagers, "militia": options.start_militia });
-    }
-    if options.march_probe || options.late_game {
-        body["start_units"]["probe_army"] = super::march::probe_army(options.march_probe);
-        body["start_units"]["late_game"] = json!(options.late_game);
-        body["seed"] = json!(options.seed);
-    }
-    match options.map {
-        MapSource::Procedural => body["map"] = france_request(options.tiles, options.seed)?,
-        MapSource::Package => {
-            body["map_hash"] = json!(
-                options
-                    .map_hash
-                    .as_deref()
-                    .ok_or("--map package needs --map-hash")?
-            );
-        }
-        MapSource::Flat => {
-            body["flat"] = json!({ "tiles_per_side": options.tiles, "seed": options.seed });
-        }
-    }
-    Ok(body)
 }
 
 fn git(args: &[&str]) -> String {
@@ -164,6 +115,12 @@ fn start_server(options: &Options, root: &Path, work: &Path) -> Result<Server, B
     {
         command.env("AOE_ASSET_PACK", pack);
     }
+    if options.save.is_some() {
+        command.env(
+            "AOE_AI_COMMAND",
+            super::hosts::skirmish_command(options, root, work)?,
+        );
+    }
     let mut server = Server {
         child: command.spawn()?,
         address,
@@ -194,7 +151,7 @@ fn pull_ticks(server: &Server, cursor: &mut u64, rows: &mut Vec<TickRow>) -> Res
     Ok(())
 }
 
-pub(super) fn run(options: &Options) -> Result<(), BoxError> {
+pub(super) fn run(options: &Options, saved: Option<Value>) -> Result<(), BoxError> {
     let root = std::env::current_dir()?;
     let work = root.join(WORK);
     fs::create_dir_all(&work)?;
@@ -202,6 +159,14 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
     let dirty = !git(&["status", "--porcelain"]).is_empty();
     println!("scale-match: building the release server");
     process::run("cargo", &procs::server_build_args(options), BUILD_DEADLINE)?;
+    let _containers = Containers {
+        bots_filter: if saved.is_some() {
+            format!("label={}", save::label(options))
+        } else {
+            format!("name=aoe-scale-bots-{}-", options.port)
+        },
+        browser: browser::container_name(options),
+    };
     let mut server = start_server(options, &root, &work)?;
 
     println!(
@@ -209,24 +174,8 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
         options.players, options.tiles
     );
     let created = Instant::now();
-    let response = http::request(
-        &server.address,
-        "POST",
-        "/match",
-        &[("X-AoeWorld-Admin-Token", ADMIN_TOKEN)],
-        Some(&serde_json::to_vec(&match_body(options)?)?),
-        MATCH_TIMEOUT,
-    )?;
+    let (info, human, skirmish) = setup::start(options, &server, saved.as_ref())?;
     let create_seconds = created.elapsed().as_secs_f64();
-    if response.status != 200 {
-        return Err(format!(
-            "POST /match: status {}: {}",
-            response.status,
-            String::from_utf8_lossy(&response.body)
-        )
-        .into());
-    }
-    let info: Value = serde_json::from_slice(&response.body)?;
     let tokens: Vec<String> = info["slots"]
         .as_array()
         .into_iter()
@@ -236,27 +185,35 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
         .collect();
     println!(
         "scale-match: match created in {create_seconds:.0} s, {} AI slots",
-        tokens.len()
+        if saved.is_some() {
+            options.players - options.humans
+        } else {
+            tokens.len()
+        }
     );
 
     let (mut cursor, mut rows) = (0u64, Vec::new());
     // The first record of the new world is the start of the run.
     let _ = pull_ticks(&server, &mut cursor, &mut rows);
     rows.clear();
-    let _containers = Containers {
-        bots_prefix: format!("aoe-scale-bots-{}-", options.port),
-        browser: browser::container_name(options),
-    };
-    let no_bots = options.march_no_ai;
+    let no_bots = options.march_no_ai || saved.is_some();
     let mut hosts = if no_bots {
         Vec::new()
     } else {
         start_hosts(options, &root, &work, &tokens)?
     };
-    let host_names: Vec<String> = hosts.iter().map(|host| host.name.clone()).collect();
+    let host_names: Vec<String> = if saved.is_some() {
+        save::host_names(options)?
+    } else {
+        hosts.iter().map(|host| host.name.clone()).collect()
+    };
     // Every host reports once all its bots hold a session: that is the connect
     // time, and the measured window starts after it, without earlier ticks.
-    let connect_seconds = wait_connected(&mut hosts)?;
+    let connect_seconds = if let Some(status) = &skirmish {
+        status["connect_seconds"].as_f64().unwrap_or(0.0)
+    } else {
+        wait_connected(&mut hosts)?
+    };
     let probe = options.march_probe.then(|| {
         let human = info["slots"][0]["token"]
             .as_str()
@@ -285,16 +242,8 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
     let mut last_sample = Instant::now();
     let mut failure = None;
     let mut phase_minutes = Vec::<Value>::new();
+    let mut minutes = report::Minutes::default();
     while run_started.elapsed() < wall {
-        // Sampled 1 s before each whole minute (the loop sleeps 0.9 s), so a
-        // run ending on its wall clock still reports its last minute.
-        if run_started.elapsed().as_secs_f64() >= 60.0 * (phase_minutes.len() + 1) as f64 - 1.0 {
-            let seconds = run_started.elapsed().as_secs_f64();
-            let routes = server.get("/admin/match/routes").ok();
-            let row = report::phase_minute(server.get("/admin/perf").ok(), routes, seconds);
-            println!("  phases (p50, p95 ms) {row}");
-            phase_minutes.push(row);
-        }
         if let Some(reason) = server.exited() {
             failure = Some(reason);
             break;
@@ -302,6 +251,17 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
         if let Err(error) = pull_ticks(&server, &mut cursor, &mut rows) {
             failure = Some(error.to_string());
             break;
+        }
+        if saved.is_some()
+            && let Err(error) = save::check_running(&server, human.as_ref())
+        {
+            failure = Some(error.to_string());
+            break;
+        }
+        let seconds = run_started.elapsed().as_secs_f64();
+        if seconds >= 60.0 * (minutes.windows.len() + 1) as f64 && seconds < wall.as_secs_f64() {
+            phase_minutes.push(save::sample(&server, seconds, saved.is_some())?);
+            minutes.record(&rows, seconds);
         }
         if options.browser
             && browser_child.is_none()
@@ -350,6 +310,8 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
     }
     let wall_seconds = run_started.elapsed().as_secs_f64();
     let _ = pull_ticks(&server, &mut cursor, &mut rows);
+    phase_minutes.push(save::sample(&server, wall_seconds, saved.is_some())?);
+    minutes.record(&rows, wall_seconds);
     let march = probe.map(super::march::Probe::finish);
     let late = late.map(super::late::Driver::finish);
 
@@ -400,15 +362,16 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
         "failure": failure,
         "config": {
             "players": options.players, "humans": options.humans, "tiles": options.tiles,
-            "minutes": options.minutes,
+            "minutes": options.minutes, "save_path": options.save,
             "hosts": options.hosts, "start_villagers": options.start_villagers,
             "start_militia": options.start_militia, "seed": options.seed,
         },
         "setup": {
             "map_kind": format!("{:?}", options.map).to_lowercase(),
+            "save": saved, "skirmish": skirmish,
             "content_hash": info["content_hash"],
             "match_create_seconds": crate::perf_scale::stats::round(create_seconds),
-            "bots_connect_seconds": crate::perf_scale::stats::round(connect_seconds),
+            "bots_connect_seconds": if saved.is_some() { skirmish.as_ref().map(|s| s["connect_seconds"].clone()).unwrap_or(Value::Null) } else { json!(crate::perf_scale::stats::round(connect_seconds)) },
             "seeded_units": info["seeded_units"],
             "partial_starting_kits": info["partial_starting_kits"],
             "units_at_first_tick": first_units,
@@ -428,9 +391,9 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
             "bots_rss_max_mib": crate::perf_scale::stats::round(samples.iter().map(|s| s.bots_rss_mib).fold(0.0, f64::max)),
             "cores": std::thread::available_parallelism().map_or(0, usize::from),
         },
-        "bots": report::bot_totals(&bot_reports),
+        "bots": if saved.is_some() { Value::Null } else { report::bot_totals(&bot_reports) },
         "browser": browser,
-        "per_minute": report::per_minute(&rows, wall_seconds),
+        "per_minute": minutes.windows,
         "timeline": report::timeline(&samples),
         "planning_per_minute": report::planning(&rows, wall_seconds),
         "march": march,

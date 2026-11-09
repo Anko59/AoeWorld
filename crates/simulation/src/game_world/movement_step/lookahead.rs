@@ -8,6 +8,7 @@ impl GameWorld {
     /// the waiting units left of the tick budget, so a walking unit does not
     /// pause between legs. A search that fails here is reported when the unit
     /// has used the segments already planned.
+    #[inline(never)] // a symbol of its own for the Callgrind stage counters
     pub(crate) fn plan_routes_ahead(&mut self, movers: &[EntityId], start: usize, mut budget: u32) {
         let wanting = (0..movers.len())
             .map(|turn| movers[(start + turn) % movers.len()])

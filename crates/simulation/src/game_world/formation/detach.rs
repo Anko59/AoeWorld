@@ -58,6 +58,19 @@ impl GameWorld {
         Some((group.direct, navigating, member.detached, member.blocked))
     }
 
+    /// Test probe: a member's slot offset and rank in its group, and the
+    /// heading of the anchor path leg the group is on.
+    #[cfg(test)]
+    pub(crate) fn formation_slot_probe(
+        &self,
+        id: EntityId,
+    ) -> Option<((WorldPosition, usize), WorldPosition)> {
+        let leader = self.units[*self.lookup.get(&id)?].formation?;
+        let group = self.formations.get(&leader)?;
+        let member = &group.members[group.member_index(id)?];
+        Some(((member.offset, member.rank), group.travel_heading))
+    }
+
     pub(super) fn reset_group_detours(&mut self, group: &mut Group) {
         for member in group.members.iter_mut().filter(|member| member.detached) {
             let index = self.lookup[&member.id];
@@ -295,6 +308,7 @@ impl GameWorld {
         group.members[at].remaining = i64::MAX;
     }
 
+    #[inline(never)] // a symbol of its own for the Callgrind stage counters
     pub(crate) fn rejoin_detached_members(&mut self) {
         // A detour body that gains no half tile along its own route while it
         // has an order and no search pending is not always counted by traffic

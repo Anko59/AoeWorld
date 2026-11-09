@@ -100,6 +100,8 @@ enum Command {
     PerfScale(perf_scale::Options),
     /// Hundreds of armies crossing on open ground: the movement span split for group movement.
     PerfGroups(perf_scale::groups::Options),
+    /// Callgrind instructions and last-level misses per movement stage, from `make perf-groups-instructions`.
+    PerfStageCounters(perf_scale::stages::Options),
     /// The real server at scale: one human, Python AIs, a browser frame rate.
     ScaleMatch(perf_scale::scale_match::Options),
     #[command(name = "perf-soak-10")]

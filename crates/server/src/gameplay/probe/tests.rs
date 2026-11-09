@@ -22,3 +22,16 @@ async fn retired_world_is_released_after_its_service_and_sessions_are_dropped() 
         "the retired service must not pin its world"
     );
 }
+
+#[tokio::test]
+async fn every_tick_counts_one_unit_frame_build_over_every_unit() {
+    let service = GameplayService::new(Seed(1));
+    let (tx, _rx) = tokio::sync::mpsc::channel(64);
+    service.register(None, tx).await;
+    assert_eq!(service.unit_frame_passes(), (0, 0));
+    for _ in 0..3 {
+        service.tick().await;
+    }
+    let units = service.world.read().await.unit_count() as u64;
+    assert_eq!(service.unit_frame_passes(), (3, 3 * units));
+}

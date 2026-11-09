@@ -48,6 +48,7 @@ impl GameWorld {
     }
 
     /// Applies the queued changes, one player per parallel task.
+    #[inline(never)] // a symbol of its own for the Callgrind stage counters
     pub(crate) fn flush_vision_batch(&mut self) {
         let Some(changes) = self.vision.batch.take() else {
             return;

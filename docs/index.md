@@ -22,3 +22,9 @@
 - [QA](qa.md)
 - [Troubleshooting](troubleshooting.md)
 - [ADRs](adr/index.md)
+- Movement rework plan (v4):
+  [plan](movement/pathfinding-rework.md),
+  [delivery](movement/pathfinding-rework-delivery.md),
+  [scale](movement/pathfinding-rework-scale.md),
+  [evidence](movement/pathfinding-rework-evidence.md),
+  [cap inventory](movement/caps.md)

@@ -62,6 +62,10 @@ struct Tables {
 
 impl Tables {
     fn refresh(&mut self, world: &GameWorld, group_phase: bool) {
+        world.passes.record(
+            crate::game_world::Pass::TablesRefresh,
+            world.next_entity_id as usize,
+        );
         if group_phase {
             self.neighbor_radius = world.collisions.maximum_radii();
             self.group_step_bound = world.formation_step_bound();
