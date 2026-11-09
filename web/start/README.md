@@ -5,14 +5,20 @@ The root page opens the cinematic once per browser session, then the main menu.
 Existing camera fragments also open the game directly, preserving capture links.
 `?introStills=1` keeps the cinematic timing but uses its animated poster fallback.
 The game renderer starts after the cinematic finishes or is skipped, so GPU
-recovery cannot replace the entry document during its playback.
+recovery cannot replace the entry document during its playback. Its module
+(`/pkg/aoe_client_bg.wasm`) is downloaded and compiled from the first script on,
+behind the cinematic or the resume probe, and handed to the client compiled
+(`bootstrap.js`): one request per page. If that early attempt fails, or the
+browser has no streaming compilation, the client downloads the module itself
+when it starts, and a failure is reported there as before.
 
 The opening preloads four muted, inline, non-looping clips. Each plays at normal
 speed. A shot follows its clip's own length: the next shot begins its 0.7 s
 crossfade while the previous clip plays its last 0.7 s, so no final frame is
 held (`shotSchedule` in `cinematic.js`; clips default to 3 s until their
 metadata loads). Posters remain beneath video until playback begins, and handle
-rejected playback or media errors.
+rejected playback or media errors. Posters and clips are requested when the
+cinematic starts, so a visitor who has already seen it downloads neither.
 The castle closes the sequence, with the logo revealed after its motion ends.
 
 Skirmish owns map creation using the current map request schema and retained

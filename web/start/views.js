@@ -23,7 +23,7 @@ export function views() {
   return `
     <section id="entry-intro" class="entry-screen" aria-label="Opening cinematic" hidden>
       <div class="intro-paintings" aria-hidden="true">${cinematicShots.map((name, index) =>
-        `<div class="intro-shot${index === 0 ? ' active entered' : ''}" data-playback="poster"><img src="/art/cinematic/${name}-poster.jpg" alt="" width="1280" height="720"><video muted playsinline preload="auto" poster="/art/cinematic/${name}-poster.jpg" data-src="/art/cinematic/${name}.webm" tabindex="-1"></video></div>`).join('')}</div>
+        `<div class="intro-shot${index === 0 ? ' active entered' : ''}" data-playback="poster"><img alt="" width="1280" height="720"><video muted playsinline preload="auto" data-poster="/art/cinematic/${name}-poster.jpg" data-src="/art/cinematic/${name}.webm" tabindex="-1"></video></div>`).join('')}</div>
       <div class="intro-shade"></div>
       <div class="intro-caption"><span class="eyebrow">A WORLD AWAITS</span><p id="intro-line">Every story begins with a place.</p></div>
       <div class="intro-title">${logo}${rule}<p>A world to discover. A history to shape.</p></div>
