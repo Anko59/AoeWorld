@@ -6,7 +6,7 @@ use super::Result;
 use std::path::{Path, PathBuf};
 
 /// The tools image plus Python; it runs the release server unchanged.
-pub(super) const SDK_IMAGE: &str = "aoeworld/sdk-python:1.15.0";
+pub(super) const SDK_IMAGE: &str = "aoeworld/sdk-python:1.15.0-sccache0.19.0";
 const SITE: &str = "target/dev-ai/site";
 
 fn site(root: &Path) -> PathBuf {
