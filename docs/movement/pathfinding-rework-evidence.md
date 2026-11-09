@@ -192,6 +192,21 @@ before/after footage.
 Movement plus pathfinding is 58–75% of the tick in every view. #727, #731 and #732 have not been
 re-measured on a late-game match. No measurement exists beyond 100 players or ~101k units.
 
+**Phase 1 events (`rework/phase1-events`, 11-09).** Gates, building memory and the map-change unit
+scans moved to indexes and events (`0d2db5af5`, `9201245df`); naval clearance pages keep their
+generator inputs (`26de3a16a`). On the generated 14,000-unit late-game workload, 400 ticks, an
+uncommitted probe run through `make test-native-focused` (dev profile, not release):
+- canonical hashes equal to the base `8045708ab` at every 50th tick;
+- whole-population passes removed per 400 ticks: `collision_closed` 400 calls / 2,781,000 units
+  visited, `remember_visible_buildings` and `advance_gates` 400 / 160,000 each; all now 0;
+- ticks 101–400, p50 base → events: building memory 0.353 → 0.260 ms, construction
+  0.013 → 0.003 ms; the whole tick (85.2 → 82.4 ms p50) is within run-to-run noise.
+
+Not measured: release `perf-late-game` and `scale-match --late-game` (the long-job slot was held by
+other agents), and whether naval clearance rebuilds are what produced the owner's `terrain_point`
+spikes (p50 2.5 ms, p95 7–13 ms, max 17–48 ms per tick in the 11-06 match, 120 fishing ships and
+104 galleys at minute 32).
+
 ## 4. Prior art
 
 | System | Design | Demonstrated scale | Lesson for us |
