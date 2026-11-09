@@ -135,14 +135,19 @@ impl GameWorld {
             .as_ref()
             .and_then(|probe| probe.cache_span());
         self.invalidate_collision_caches(area);
-        self.clear_planners_where(|planner| planner.opening_invalidates_proof(area));
-        self.clear_movement_errors();
+        let mut visited =
+            self.clear_planners_where(|planner| planner.opening_invalidates_proof(area));
+        visited += self.clear_movement_errors();
         // Opened ground can make a refused target reachable.
-        for id in std::mem::take(&mut self.collision_subscribers.memos) {
+        let memos = std::mem::take(&mut self.collision_subscribers.memos);
+        visited += memos.len();
+        for id in memos {
             if let Some(&index) = self.lookup.get(&id) {
                 self.units[index].unreachable_memo = None;
             }
         }
+        self.passes
+            .record(crate::game_world::Pass::CollisionOpened, visited);
         #[cfg(test)]
         self.assert_collision_subscribers_complete(area, true);
     }
@@ -155,8 +160,10 @@ impl GameWorld {
             .as_ref()
             .and_then(|probe| probe.cache_span());
         self.invalidate_collision_caches(area);
-        self.clear_planners_where(|planner| planner.touches(area));
-        self.clear_movement_errors();
+        let visited = self.clear_planners_where(|planner| planner.touches(area))
+            + self.clear_movement_errors();
+        self.passes
+            .record(crate::game_world::Pass::CollisionClosed, visited);
         #[cfg(test)]
         self.assert_collision_subscribers_complete(area, false);
     }
@@ -171,8 +178,9 @@ impl GameWorld {
     }
 
     /// Clears the planners `invalid` selects, in unit order as the full
-    /// scan did, visiting only the units that hold one.
-    fn clear_planners_where(&mut self, invalid: impl Fn(&aoe_map::RoutePlanner) -> bool) {
+    /// scan did, visiting only the units that hold one. Returns the visits.
+    fn clear_planners_where(&mut self, invalid: impl Fn(&aoe_map::RoutePlanner) -> bool) -> usize {
+        let visited = self.collision_subscribers.planners.len();
         let (mut cleared, mut gone) = (Vec::new(), Vec::new());
         for id in &self.collision_subscribers.planners {
             match self.lookup.get(id) {
@@ -190,14 +198,18 @@ impl GameWorld {
         for index in cleared {
             self.clear_planner(index);
         }
+        visited
     }
 
-    fn clear_movement_errors(&mut self) {
-        for id in std::mem::take(&mut self.collision_subscribers.errors) {
+    fn clear_movement_errors(&mut self) -> usize {
+        let errors = std::mem::take(&mut self.collision_subscribers.errors);
+        let visited = errors.len();
+        for id in errors {
             if let Some(&index) = self.lookup.get(&id) {
                 self.units[index].last_movement_error = None;
             }
         }
+        visited
     }
 
     /// Sets a unit's movement error; an error subscribes it to the next
