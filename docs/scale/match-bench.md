@@ -35,3 +35,41 @@ MATCH_BENCH_ARGS="--scale 1,5,10 --callgrind --warmup 100 --counted 3" make matc
 
 Reports go to `.cache/match-bench/` (ignored). Wall time is on a shared machine with the load
 recorded, not pinned cores.
+
+## Rung 0 (2026-11-09, revision 882e146d8)
+
+100 seats, seed 1, 1,000 ticks, 6 workers, `--suite phase0`; the machine was shared (1-minute
+load 38 to 67), so wall times move by up to 2x. Phase values are p50 ms over the run; the
+whole tick includes the bots' route-heavy start (p95, p99 much higher). Waiting is
+`route_scheduler_stats().waiting_units` at tick 1,000: this is a **starved baseline** (most
+waiting units hold no planner: they wait for a search slot, and 92 to 97 players sit at the
+per-player search cap).
+
+| scale | units | buildings | map side | ticks/s | tick p50 | p95 | movement | gathering | building memory | waiting | RSS MiB |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1x | 9,729 | 4,723 | 2,000 | 8.84 | 86 | 238 | 59.1 | 11.5 | 3.2 | 1,279 | 61 |
+| 5x | 46,787 | 22,387 | 4,472 | 2.01 | 372 | 1,317 | 218.8 | 87.6 | 12.2 | 4,362 | 207 |
+| 10x | 93,075 | 44,477 | 6,324 | 1.14 | 634 | 1,952 | 393.9 | 131.1 | 25.1 | 5,965 | 400 |
+
+What breaks first as units grow (whole-population passes per tick, `pass_counts`):
+
+- `collision_closed` visits grow far faster than units: 19.7k, 451k, 1.79M per tick (91x for
+  9.6x the units). It is the first superlinear pass.
+- Gathering grows faster than units (11.5, 87.6, 131 ms p50; p95 910 ms at 5x).
+- Movement grows about linearly with movers (59, 219, 394 ms for 1.4k, 4.8k, 6.5k movers).
+- `remember_visible_buildings` and `advance_gates` visit every building every tick (4.7k to 44k),
+  `tables_refresh` 32k to 275k entries per tick: linear, not yet dominant.
+- The route queue saturates: 1.3k, 4.4k, 6.0k units waiting, oldest wait the whole run at 5x
+  and 10x.
+
+1x is close to the owner's minute 33 (9,250 units, 97 ms tick p50, movement 54 ms).
+
+## Worker determinism (2026-11-09, revision 882e146d8)
+
+100 seats, 1x, seed 1, 3,000 ticks (2.5 game-minutes), hash every 100 ticks: the 31 canonical
+hashes are identical at 1, 2, 6 and 12 workers (final `35589148f6dca3b9...`, 9,807 units, 255
+army waves and 3 General marches issued by the bots). No divergence was found, so none was
+fixed. The plan's gate asks for 30 game-minutes (36,000 ticks); that length was not run.
+
+Workers barely help this load: 9.05, 10.22, 8.93 and 11.17 ticks/s at 1, 2, 6 and 12
+(machine load 14 to 25), so most of the tick is serial today.
