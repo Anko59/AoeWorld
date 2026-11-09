@@ -209,6 +209,8 @@ fn reviewer_target(target: &str) -> bool {
                 | "deny"
                 | "test-unit"
                 | "test-harness"
+                | "test-native-focused"
+                | "test-harness-focused"
                 | "test-wasm"
                 | "pre-commit"
                 | "preflight"

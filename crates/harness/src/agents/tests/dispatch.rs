@@ -29,6 +29,35 @@ fn reviewers_cannot_file_or_select_issues() {
     denied(&fixture, Role::Reviewer, "make next");
 }
 
+/// `.claude/agents/reviewer.md` names the focused test targets among the
+/// reviewer's checks; the judge must not refuse what the instructions ask for.
+#[test]
+fn reviewers_run_the_focused_test_targets_their_instructions_name() {
+    let fixture = Fixture::new();
+    allowed(
+        &fixture,
+        Role::Reviewer,
+        "make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='test(navy::)'",
+    );
+    allowed(
+        &fixture,
+        Role::Reviewer,
+        "make test-harness-focused HARNESS_TEST_FILTER=agents::",
+    );
+    let instructions = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.claude/agents/reviewer.md"),
+    )
+    .unwrap();
+    for target in ["make test-native-focused", "make test-harness-focused"] {
+        assert!(
+            instructions.contains(target),
+            "reviewer.md no longer names {target}"
+        );
+    }
+    denied(&fixture, Role::Reviewer, "make fmt");
+    denied(&fixture, Role::Reviewer, "make test-e2e");
+}
+
 #[test]
 fn unknown_agents_cannot_file_or_select_issues() {
     let fixture = Fixture::new();
