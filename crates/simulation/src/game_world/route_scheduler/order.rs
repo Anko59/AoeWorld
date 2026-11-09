@@ -190,6 +190,8 @@ impl GameWorld {
     pub(crate) fn remember_unreachable(&mut self, index: usize, target: TileCoord) {
         let at = self.units[index].state.position.tile_floor();
         self.units[index].unreachable_memo = Some((at, target, self.tick.0));
+        let id = self.units[index].state.id;
+        self.collision_subscribers.memos.insert(id);
     }
 
     /// True when the unit, still where it stood, was refused `target` in the

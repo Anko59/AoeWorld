@@ -220,6 +220,10 @@ impl GameWorld {
         stored.state.moving = false;
         stored.state.planning = false;
         stored.last_movement_error = (!nearby).then_some(GameWorldError::Unreachable);
+        if !nearby {
+            let id = stored.state.id;
+            self.collision_subscribers.errors.insert(id);
+        }
         if plain_move && stored.state.task == UnitTask::Moving {
             stored.state.task = if unit.carried.is_some() {
                 UnitTask::Carrying
