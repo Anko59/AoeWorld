@@ -214,3 +214,6 @@ fn fixed_wall_without_a_gateway_is_proven_disconnected() {
 
 #[path = "far_orders.rs"]
 mod far_orders_tests;
+
+#[path = "leg_search_pins.rs"]
+mod leg_search_pins;
