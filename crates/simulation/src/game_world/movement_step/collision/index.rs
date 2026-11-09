@@ -1,13 +1,75 @@
 //! Fine bodies and conservative coarse population bounds share one index.
+//! Both live in flat sparse grids (`grid`), not hash maps: a cell read is two
+//! array loads. Each cell's body order (insertion with swap removals) is the
+//! order the hash map's cells had, so sampling windows are unchanged.
 use crate::UnitKind;
 use aoe_core::{EntityId, TileCoord, WorldPosition};
-use std::{
-    collections::HashMap,
-    hash::{BuildHasherDefault, Hasher},
-};
+use grid::Grid;
+use std::hash::Hasher;
+
+mod grid;
 
 const CELL_LIMIT: usize = 32;
-type Cells = HashMap<u64, Vec<CellBody>, BuildHasherDefault<CellHasher>>;
+const NO_CELL: u32 = u32::MAX;
+
+/// The non-empty 1-tile cells of one layer: a grid of slots into an arena of
+/// body lists. A freed list keeps its capacity for the next cell.
+#[derive(Debug)]
+struct Cells {
+    grid: Grid,
+    bodies: Vec<Vec<CellBody>>,
+    free: Vec<u32>,
+}
+
+impl Default for Cells {
+    fn default() -> Self {
+        Self {
+            grid: Grid::new(NO_CELL),
+            bodies: Vec::new(),
+            free: Vec::new(),
+        }
+    }
+}
+
+impl Cells {
+    fn get(&self, tile: TileCoord) -> Option<&Vec<CellBody>> {
+        let slot = self.grid.get(tile.x, tile.y);
+        (slot != NO_CELL).then(|| &self.bodies[slot as usize])
+    }
+
+    fn get_mut(&mut self, tile: TileCoord) -> Option<&mut Vec<CellBody>> {
+        let slot = self.grid.get(tile.x, tile.y);
+        (slot != NO_CELL).then(|| &mut self.bodies[slot as usize])
+    }
+
+    fn entry(&mut self, tile: TileCoord) -> &mut Vec<CellBody> {
+        let mut slot = self.grid.get(tile.x, tile.y);
+        if slot == NO_CELL {
+            slot = self.free.pop().unwrap_or_else(|| {
+                self.bodies.push(Vec::new());
+                (self.bodies.len() - 1) as u32
+            });
+            self.grid.set(tile.x, tile.y, slot);
+        }
+        &mut self.bodies[slot as usize]
+    }
+
+    /// Frees an emptied cell.
+    fn release(&mut self, tile: TileCoord) {
+        let slot = self.grid.get(tile.x, tile.y);
+        if slot != NO_CELL {
+            self.grid.set(tile.x, tile.y, NO_CELL);
+            self.free.push(slot);
+        }
+    }
+
+    #[cfg(test)]
+    fn entries(&self) -> impl Iterator<Item = (TileCoord, &Vec<CellBody>)> + '_ {
+        self.grid
+            .entries()
+            .map(|(x, y, slot)| (TileCoord::new(x, y), &self.bodies[slot as usize]))
+    }
+}
 
 /// A body's centre beside its id: most bodies of a queried cell are outside
 /// the query's box, and rejecting them must not touch the large unit records.
@@ -47,10 +109,19 @@ pub(crate) struct CollisionIndex {
     cells: [Cells; 2],
     slots: Vec<usize>,
     indices: Vec<usize>,
-    recycled: Vec<Vec<CellBody>>,
     overfull_cells: usize,
     maximum_radii: [i32; 2],
-    land_counts: HashMap<u64, usize, BuildHasherDefault<CellHasher>>,
+    /// Land bodies per 2×2-tile cell.
+    land_counts: LandCounts,
+}
+
+#[derive(Debug)]
+struct LandCounts(Grid);
+
+impl Default for LandCounts {
+    fn default() -> Self {
+        Self(Grid::new(0))
+    }
 }
 
 impl CollisionIndex {
@@ -94,20 +165,24 @@ impl CollisionIndex {
         if self.slots.get(at).is_some_and(|&slot| slot != usize::MAX) {
             return;
         }
+        // Bodies are on the map: the grids hold no negative tiles.
+        debug_assert!(tile.x >= 0 && tile.y >= 0, "{tile:?}");
+        if tile.x < 0 || tile.y < 0 {
+            return;
+        }
         if at >= self.slots.len() {
             self.slots.resize(at + 1, usize::MAX);
             self.indices.resize(at + 1, usize::MAX);
         }
         self.indices[at] = index;
-        let recycled = &mut self.recycled;
-        let cell = self.cells[usize::from(naval)]
-            .entry(key(tile))
-            .or_insert_with(|| recycled.pop().unwrap_or_default());
+        let cell = self.cells[usize::from(naval)].entry(tile);
         self.slots[at] = cell.len();
         cell.push(CellBody { id, at: position });
         self.overfull_cells += usize::from(cell.len() == CELL_LIMIT + 1);
         if !naval {
-            *self.land_counts.entry(coarse(tile)).or_default() += 1;
+            let (x, y) = coarse(tile);
+            let count = self.land_counts.0.get(x, y);
+            self.land_counts.0.set(x, y, count + 1);
         }
     }
 
@@ -119,22 +194,17 @@ impl CollisionIndex {
         else {
             return;
         };
-        let key = key(tile);
         let cells = &mut self.cells[usize::from(naval)];
-        let Some(cell) = cells.get_mut(&key) else {
+        let Some(cell) = cells.get_mut(tile) else {
             return;
         };
         if cell.get(slot).is_none_or(|body| body.id != id) {
             return;
         }
         if !naval {
-            let at = coarse(tile);
-            if let Some(count) = self.land_counts.get_mut(&at) {
-                *count -= 1;
-                if *count == 0 {
-                    self.land_counts.remove(&at);
-                }
-            }
+            let (x, y) = coarse(tile);
+            let count = self.land_counts.0.get(x, y);
+            self.land_counts.0.set(x, y, count.saturating_sub(1));
         }
         self.overfull_cells -= usize::from(cell.len() == CELL_LIMIT + 1);
         cell.swap_remove(slot);
@@ -142,11 +212,8 @@ impl CollisionIndex {
         if let Some(displaced) = cell.get(slot) {
             self.slots[displaced.id.0 as usize] = slot;
         }
-        if cell.is_empty()
-            && let Some(cell) = cells.remove(&key)
-            && self.recycled.len() < 4096
-        {
-            self.recycled.push(cell);
+        if cell.is_empty() {
+            cells.release(tile);
         }
     }
 
@@ -164,7 +231,7 @@ impl CollisionIndex {
             self.remove(id, from, naval);
             self.insert(id, position, naval, index);
         } else if let Some(&slot) = self.slots.get(id.0 as usize)
-            && let Some(cell) = self.cells[usize::from(naval)].get_mut(&key(to))
+            && let Some(cell) = self.cells[usize::from(naval)].get_mut(to)
             && let Some(body) = cell.get_mut(slot).filter(|body| body.id == id)
         {
             body.at = position;
@@ -180,7 +247,7 @@ impl CollisionIndex {
         naval: bool,
     ) -> Option<WorldPosition> {
         let slot = *self.slots.get(id.0 as usize)?;
-        let body = self.cells[usize::from(naval)].get(&key(tile))?.get(slot)?;
+        let body = self.cells[usize::from(naval)].get(tile)?.get(slot)?;
         (body.id == id).then_some(body.at)
     }
 
@@ -188,7 +255,12 @@ impl CollisionIndex {
     #[cfg(test)]
     pub(crate) fn resync_bodies(&mut self, centre: impl Fn(usize) -> WorldPosition) {
         let indices = &self.indices;
-        for body in self.cells.iter_mut().flat_map(|c| c.values_mut()).flatten() {
+        for body in self
+            .cells
+            .iter_mut()
+            .flat_map(|c| c.bodies.iter_mut())
+            .flatten()
+        {
             body.at = centre(indices[body.id.0 as usize]);
         }
     }
@@ -197,10 +269,10 @@ impl CollisionIndex {
     /// that wrote a unit into another tile left it in its old cell: not checked.
     #[cfg(test)]
     pub(crate) fn assert_bodies(&self, centre: impl Fn(usize) -> WorldPosition) {
-        for (tile, cell) in self.cells.iter().flatten() {
+        for (tile, cell) in self.cells.iter().flat_map(Cells::entries) {
             for body in cell {
                 let at = centre(self.indices[body.id.0 as usize]);
-                if key(at.tile_floor()) == *tile {
+                if at.tile_floor() == tile {
                     assert_eq!(body.at, at, "{:?}", body.id);
                 }
             }
@@ -228,11 +300,7 @@ impl CollisionIndex {
         for y in min.y.div_euclid(2)..=max.y.div_euclid(2) {
             for x in min.x.div_euclid(2)..=max.x.div_euclid(2) {
                 work.collision(1);
-                count += self
-                    .land_counts
-                    .get(&key(TileCoord::new(x, y)))
-                    .copied()
-                    .unwrap_or(0);
+                count += self.land_counts.0.get(x, y) as usize;
                 if count >= needed {
                     return true;
                 }
@@ -278,7 +346,7 @@ impl CollisionIndex {
             for x in min.x..=max.x {
                 probes += 1;
                 let tile = TileCoord::new(x, y);
-                let Some(cell) = self.cells[usize::from(naval)].get(&key(tile)) else {
+                let Some(cell) = self.cells[usize::from(naval)].get(tile) else {
                     continue;
                 };
                 if cell.len() > CELL_LIMIT && overflow(tile) {
@@ -315,8 +383,8 @@ impl CollisionIndex {
     }
 }
 
-fn coarse(tile: TileCoord) -> u64 {
-    key(TileCoord::new(tile.x.div_euclid(2), tile.y.div_euclid(2)))
+fn coarse(tile: TileCoord) -> (i32, i32) {
+    (tile.x.div_euclid(2), tile.y.div_euclid(2))
 }
 
 #[cfg(test)]
