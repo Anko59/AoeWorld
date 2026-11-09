@@ -2,6 +2,8 @@ use super::*;
 use aoe_core::{Tick, TileRect};
 use aoe_protocol::FogState;
 
+mod delta;
+
 #[test]
 fn repeated_distant_fog_views_replace_the_old_region_with_a_fixed_payload_budget() {
     let mut fog = Fog::default();

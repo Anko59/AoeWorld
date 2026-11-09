@@ -19,6 +19,7 @@ fn kind(message: &GameplayServerMessage) -> &'static str {
         GameplayServerMessage::Snapshot { .. } => "snapshot",
         GameplayServerMessage::Tick { .. } => "tick_delta",
         GameplayServerMessage::FogState(_) => "fog_state",
+        GameplayServerMessage::FogDelta(_) => "fog_delta",
         GameplayServerMessage::WildlifeState { .. } => "wildlife",
         GameplayServerMessage::Projectiles { .. } => "projectiles",
         GameplayServerMessage::CommandAck { .. } => "command_ack",

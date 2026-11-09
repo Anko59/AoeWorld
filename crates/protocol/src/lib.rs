@@ -3,7 +3,7 @@ mod gameplay;
 pub use gameplay::HUMAN_COMMAND_BURST;
 pub use gameplay::MoveQueue;
 pub use gameplay::{AnimalKind, AnimalState, AnimalTask, MAX_ANIMALS};
-pub use gameplay::{CombatStance, FogState, Formation};
+pub use gameplay::{CombatStance, FogDelta, FogError, FogState, Formation};
 pub use gameplay::{HoldingSpan, MAX_HOLDING_SPANS};
 pub use gameplay::{MAX_PROJECTILES, ProjectileKind, ProjectileState};
 

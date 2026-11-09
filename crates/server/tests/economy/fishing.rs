@@ -186,6 +186,7 @@ async fn coastal_village_builds_dock_trains_ship_and_feeds_fish_depletion() {
         for message in drain(&mut rx) {
             match message {
                 GameplayServerMessage::FogState(state) => fog = state,
+                GameplayServerMessage::FogDelta(delta) => follow(&mut fog, &delta),
                 GameplayServerMessage::CommandAck { result, .. } => {
                     assert_eq!(result, CommandResult::Accepted)
                 }
@@ -259,6 +260,7 @@ async fn coastal_village_builds_dock_trains_ship_and_feeds_fish_depletion() {
                         .any(|n| n.id == fish.id && n.remaining < fish.initial_amount)
                 }
                 GameplayServerMessage::FogState(state) => fog = state,
+                GameplayServerMessage::FogDelta(delta) => follow(&mut fog, &delta),
                 GameplayServerMessage::CommandAck { result, .. } => {
                     assert_eq!(result, CommandResult::Accepted)
                 }
@@ -295,6 +297,13 @@ async fn coastal_village_builds_dock_trains_ship_and_feeds_fish_depletion() {
         fishing && depleted,
         "fish work and depletion must reach the wire"
     );
+}
+
+/// Lays the server's changes over the view the client holds, as a client does:
+/// after its first whole view the scout's progress arrives as changes only.
+fn follow(fog: &mut aoe_protocol::FogState, delta: &aoe_protocol::FogDelta) {
+    fog.apply(delta)
+        .expect("fog changes are for the view the client holds");
 }
 
 fn dock_explored(fog: &aoe_protocol::FogState, site: TileCoord) -> bool {

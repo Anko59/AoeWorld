@@ -1,9 +1,9 @@
 //! What the slot remembers of the map's fog. The server sends the state of
-//! the subscribed region; the SDK keeps older regions so a bot that moves its
-//! view still knows what it explored.
+//! the subscribed region whole, then what changes in it; the SDK keeps older
+//! regions so a bot that moves its view still knows what it explored.
 use crate::model::Visibility;
 use aoe_core::{TileCoord, TileRect};
-use aoe_protocol::FogState;
+use aoe_protocol::{FogDelta, FogState};
 use std::collections::BTreeMap;
 
 const CHUNK: i32 = 32;
@@ -13,12 +13,10 @@ const OVERVIEW_AXIS: i64 = 256;
 
 #[derive(Clone, Debug)]
 pub struct FogMemory {
-    region: Option<TileRect>,
-    live: Vec<u8>,
+    /// The view the server last sent whole, with its changes since laid over.
+    view: Option<FogState>,
     /// Explored chunks: 0 unexplored, 1 explored (never downgraded).
     explored: BTreeMap<(i32, i32), Box<[u8; 1024]>>,
-    disabled: bool,
-    overview: Vec<(u16, u8)>,
     /// Pixels of the strategic overview ever seen explored: the slot's whole
     /// map memory at coarse resolution, whatever window it subscribed to.
     overview_explored: Box<[bool; 65_536]>,
@@ -28,11 +26,8 @@ pub struct FogMemory {
 impl Default for FogMemory {
     fn default() -> Self {
         Self {
-            region: None,
-            live: Vec::new(),
+            view: None,
             explored: BTreeMap::new(),
-            disabled: false,
-            overview: Vec::new(),
             overview_explored: Box::new([false; 65_536]),
             size: (0, 0),
         }
@@ -40,58 +35,85 @@ impl Default for FogMemory {
 }
 
 impl FogMemory {
-    pub(crate) fn apply(&mut self, fog: &FogState, size: (i32, i32)) {
-        self.disabled = fog.disabled;
+    pub(crate) fn apply(&mut self, fog: FogState, size: (i32, i32)) {
         self.size = size;
-        self.overview = fog.overview.clone();
-        for (pixel, _) in &fog.overview {
+        self.view = Some(fog);
+        self.remember(true);
+    }
+
+    /// Lays the server's changes over the held view. False when the view
+    /// they were made for is not held: changes are never laid over nothing.
+    pub(crate) fn apply_delta(&mut self, delta: &FogDelta) -> bool {
+        let laid = self
+            .view
+            .as_mut()
+            .is_some_and(|view| view.apply(delta).is_ok());
+        if laid {
+            self.remember(delta.changes_tiles());
+        }
+        laid
+    }
+
+    /// Keeps what the held view shows explored: its strategic pixels and,
+    /// when its `tiles` changed, the tiles of its window. A view without fog
+    /// has no tiles to keep.
+    fn remember(&mut self, tiles: bool) {
+        let Some(view) = &self.view else {
+            return;
+        };
+        for (pixel, _) in &view.overview {
             self.overview_explored[usize::from(*pixel)] = true;
         }
-        if fog.disabled {
-            self.region = Some(fog.region);
-            self.live.clear();
+        if !tiles || view.disabled {
             return;
         }
-        let width = fog.region.width();
-        for (index, state) in fog.tiles.iter().enumerate() {
+        let width = view.region.width();
+        for (index, state) in view.tiles.iter().enumerate() {
             if *state == 0 {
                 continue;
             }
-            let x = fog.region.min.x + (index as i32 % width);
-            let y = fog.region.min.y + (index as i32 / width);
+            let x = view.region.min.x + (index as i32 % width);
+            let y = view.region.min.y + (index as i32 / width);
             self.explored
                 .entry((x.div_euclid(CHUNK), y.div_euclid(CHUNK)))
                 .or_insert_with(|| Box::new([0; 1024]))
                 [(y.rem_euclid(CHUNK) * CHUNK + x.rem_euclid(CHUNK)) as usize] = 1;
         }
-        self.region = Some(fog.region);
-        self.live = fog.tiles.clone();
     }
 
-    /// The region the last fog message covered.
+    /// The region the last whole fog view covered.
     pub fn region(&self) -> Option<TileRect> {
-        self.region
+        self.view.as_ref().map(|view| view.region)
     }
 
     /// True when the server runs this match without fog of war.
     pub fn disabled(&self) -> bool {
-        self.disabled
+        self.view.as_ref().is_some_and(|view| view.disabled)
     }
 
     /// Sparse 256x256 strategic overview: `(pixel index, 1 explored | 2 visible)`.
     pub fn overview(&self) -> &[(u16, u8)] {
-        &self.overview
+        self.view
+            .as_ref()
+            .map_or(&[], |view| view.overview.as_slice())
+    }
+
+    /// The held view when its window covers `tile`, and the tile's place in it.
+    fn live(&self, tile: TileCoord) -> Option<(&FogState, usize)> {
+        let view = self.view.as_ref()?;
+        let region = view.region.contains(tile).then_some(view.region)?;
+        let index = (tile.y - region.min.y) * region.width() + tile.x - region.min.x;
+        Some((view, index as usize))
     }
 
     /// Build sites need tile-exact knowledge: an overview pixel may include
     /// unseen tiles. Older exact subscriptions remain usable after moving away.
     pub(crate) fn explored_exactly(&self, tile: TileCoord) -> bool {
-        if self.disabled {
+        if self.disabled() {
             return true;
         }
-        if let Some(region) = self.region.filter(|region| region.contains(tile)) {
-            let index = (tile.y - region.min.y) * region.width() + tile.x - region.min.x;
-            return matches!(self.live.get(index as usize), Some(1 | 2));
+        if let Some((view, index)) = self.live(tile) {
+            return matches!(view.tiles.get(index), Some(1 | 2));
         }
         self.explored
             .get(&(tile.x.div_euclid(CHUNK), tile.y.div_euclid(CHUNK)))
@@ -101,13 +123,12 @@ impl FogMemory {
     }
 
     pub fn visibility(&self, tile: TileCoord) -> Visibility {
-        if self.disabled {
+        if self.disabled() {
             return Visibility::Visible;
         }
         // Inside the live window the tile-exact state is authoritative.
-        if let Some(region) = self.region.filter(|region| region.contains(tile)) {
-            let index = (tile.y - region.min.y) * region.width() + (tile.x - region.min.x);
-            return match self.live.get(index as usize) {
+        if let Some((view, index)) = self.live(tile) {
+            return match view.tiles.get(index) {
                 Some(2) => Visibility::Visible,
                 Some(1) => Visibility::Explored,
                 _ => Visibility::Unexplored,
@@ -152,12 +173,13 @@ impl FogMemory {
     /// from the whole-map overview.
     pub(crate) fn known_chunks(&self) -> Vec<(i32, i32)> {
         let mut chunks = std::collections::BTreeSet::new();
-        if let Some(region) = self.region {
-            if self.disabled {
+        if let Some(view) = &self.view {
+            let region = view.region;
+            if view.disabled {
                 return chunks_of(region);
             }
             let width = region.width();
-            for (index, state) in self.live.iter().enumerate() {
+            for (index, state) in view.tiles.iter().enumerate() {
                 if *state != 0 {
                     let x = region.min.x + (index as i32 % width);
                     let y = region.min.y + (index as i32 / width);

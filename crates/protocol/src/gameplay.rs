@@ -28,12 +28,12 @@ mod resources;
 pub use rally::{RallyPoint, RallyTarget};
 mod wildlife;
 pub use economy::*;
-pub use fog::FogState;
+pub use fog::{FogDelta, FogError, FogState};
 pub use projectiles::{MAX_PROJECTILES, ProjectileKind, ProjectileState};
 pub use resources::{MAX_RESOURCE_CACHE, MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
 pub use wildlife::*;
 
-pub const VERSION: u16 = 7;
+pub const VERSION: u16 = 8;
 /// One gameplay frame: room for 65,536 units alongside bounded buildings,
 /// training queues and other view state. This is a memory guard, not housing.
 pub const MAX_MESSAGE: usize = 16 * 1_048_576;
@@ -281,7 +281,9 @@ pub enum ServerMessage {
         #[serde(deserialize_with = "wildlife::bounded_animals")]
         animals: Vec<AnimalState>,
     },
-    /// Appended variant: complete player view for one bounded subscription.
+    /// Appended variant: complete player view for one bounded subscription,
+    /// sent when the client holds none for it: on subscribe and resync, and
+    /// when fog is switched on or off.
     FogState(FogState),
     Projectiles {
         revision: u64,
@@ -304,6 +306,9 @@ pub enum ServerMessage {
         shapes: Vec<HoldingSpan>,
         complete: bool,
     },
+    /// Appended variant: what changed in the player view the client holds
+    /// for its subscription, since the last fog message it was sent.
+    FogDelta(FogDelta),
 }
 
 #[derive(Debug, thiserror::Error)]

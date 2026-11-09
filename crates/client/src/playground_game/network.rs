@@ -331,16 +331,11 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 }
             }
             Ok(GameplayServerMessage::FogState(state)) => {
-                if client.surface_fixture || state.revision != client.revision {
-                    return;
-                }
-                super::map::fog::minimap(&client, &state);
-                let was_disabled = client.fog.disabled();
-                if client.fog.apply(state) {
-                    client.rendered_frame.clear();
-                    if was_disabled != client.fog.disabled() {
-                        client.terrain_scene.borrow_mut().take();
-                    }
+                super::map::fog::receive(&mut client, state);
+            }
+            Ok(GameplayServerMessage::FogDelta(delta)) => {
+                if !super::map::fog::receive_delta(&mut client, &delta) {
+                    reconnect(&mut client, "fog out of sync; reconnect required");
                 }
             }
             Ok(GameplayServerMessage::Projectiles {

@@ -1,5 +1,5 @@
 use super::Client;
-use aoe_protocol::FogState;
+use aoe_protocol::{FogDelta, FogState};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(inline_js = "
@@ -15,7 +15,40 @@ extern "C" {
     fn fog_minimap(disabled: bool, pixels: &[u32], explored: usize, visible: usize);
 }
 
-pub(in super::super) fn minimap(_client: &Client, state: &FogState) {
+/// The whole view of the current subscription replaces the one held.
+pub(in super::super) fn receive(client: &mut Client, state: FogState) {
+    if client.surface_fixture || state.revision != client.revision {
+        return;
+    }
+    minimap(client, &state);
+    let was_disabled = client.fog.disabled();
+    if client.fog.apply(state) {
+        client.rendered_frame.clear();
+        if was_disabled != client.fog.disabled() {
+            client.terrain_scene.borrow_mut().take();
+        }
+    }
+}
+
+/// Changes to the held view of the current subscription. False when the view
+/// they were made for is not held: server and client no longer agree.
+pub(in super::super) fn receive_delta(client: &mut Client, delta: &FogDelta) -> bool {
+    if client.surface_fixture || delta.revision != client.revision {
+        return true;
+    }
+    if !client.fog.apply_delta(delta) {
+        return false;
+    }
+    if delta.changes_tiles() {
+        client.rendered_frame.clear();
+    }
+    if let Some(view) = client.fog.view() {
+        minimap(client, view);
+    }
+    true
+}
+
+fn minimap(_client: &Client, state: &FogState) {
     let pixels = state
         .overview
         .iter()

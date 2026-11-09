@@ -21,11 +21,23 @@ pub async fn prepare(url: &str) -> Result<(), Box<dyn std::error::Error>> {
     let mut destination = None;
     let mut touring = false;
     let mut sequence = 50_000;
+    // The view as the client holds it: a whole view on subscribe, then deltas.
+    let mut fog: Option<aoe_protocol::FogState> = None;
     while let Some(message) = socket.next().await {
         let Message::Binary(bytes) = message? else {
             continue;
         };
         let message = aoe_protocol::decode_gameplay_server(&bytes)?;
+        match &message {
+            Server::FogState(state) => fog = Some(state.clone()),
+            // A delta of another subscription's revision is not for this view.
+            Server::FogDelta(delta) => {
+                if let Some(view) = fog.as_mut().filter(|view| view.revision == delta.revision) {
+                    view.apply(delta)?;
+                }
+            }
+            _ => {}
+        }
         match &message {
             Server::Welcome {
                 width_tiles,
@@ -144,7 +156,8 @@ pub async fn prepare(url: &str) -> Result<(), Box<dyn std::error::Error>> {
                 .await?;
             println!("enemy DAT Town Center seen; scouting footprint, returning={returning}");
         }
-        if let Server::FogState(state) = message
+        if matches!(message, Server::FogState(_) | Server::FogDelta(_))
+            && let Some(state) = &fog
             && returning
             && !state.disabled
             && let Some(building) = &enemy
@@ -162,7 +175,9 @@ pub async fn prepare(url: &str) -> Result<(), Box<dyn std::error::Error>> {
                 fs::write(
                     ".cache/tc-shots/final-fog-memory.json",
                     serde_json::to_vec_pretty(&json!({
-                        "building": building, "fog": state,
+                        "building": building,
+                        // One state per tile, as held; the wire form packs four to a byte.
+                        "fog": {"region": state.region, "tiles": state.tiles},
                         "method": "ordinary scout move, enemy seen, scout returned; real simulation memory",
                     }))?,
                 )?;

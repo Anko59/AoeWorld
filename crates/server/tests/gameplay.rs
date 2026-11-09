@@ -89,6 +89,7 @@ async fn assert_command_ack(socket: &mut Socket, sequence: u64, expected: Comman
                 GameplayServerMessage::Tick { .. }
                 | GameplayServerMessage::WildlifeState { .. }
                 | GameplayServerMessage::FogState(_)
+                | GameplayServerMessage::FogDelta(_)
                 | GameplayServerMessage::Projectiles { .. }
                 | GameplayServerMessage::Holdings { .. } => {}
                 other => {
