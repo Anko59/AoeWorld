@@ -181,14 +181,15 @@ fn replay(installed: bool) {
         run(4),
         "navigation replay must agree across worker counts"
     );
-    // Steward controls, transfer reservations and current squad state change this
+    // Steward controls, transfer reservations, current squad state and the
+    // block-parallel unit hash change this
     // checkpoint. Keep the workload, 1/4-worker equality and installed-mode
     // no-construction assertions above intact when regenerating the pin.
     assert_eq!(
         single,
         [
-            19, 37, 174, 123, 81, 69, 198, 206, 118, 74, 53, 96, 207, 143, 74, 76, 180, 54, 59,
-            217, 114, 59, 68, 45, 16, 171, 55, 125, 210, 188, 197, 71,
+            139, 103, 155, 21, 226, 137, 93, 63, 38, 81, 252, 75, 194, 238, 107, 158, 225, 11, 156,
+            235, 44, 173, 149, 157, 203, 169, 98, 180, 45, 111, 117, 210
         ]
     );
 }

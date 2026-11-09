@@ -54,6 +54,27 @@ pub(crate) fn par_each_mut<T: Send>(items: &mut [T], f: impl Fn(&mut T) + Sync +
     items.iter_mut().for_each(f);
 }
 
+/// `f` of every item, collected in item order.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn par_map_each<T: Sync, R: Send>(
+    items: &[T],
+    f: impl Fn(&T) -> R + Sync + Send,
+) -> Vec<R> {
+    use rayon::prelude::*;
+    if rayon::current_num_threads() == 1 {
+        return items.iter().map(f).collect();
+    }
+    items.par_iter().map(f).collect()
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn par_map_each<T: Sync, R: Send>(
+    items: &[T],
+    f: impl Fn(&T) -> R + Sync + Send,
+) -> Vec<R> {
+    items.iter().map(f).collect()
+}
+
 /// A small number per worker thread, for diagnostics kept per worker.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn worker_slot() -> usize {
