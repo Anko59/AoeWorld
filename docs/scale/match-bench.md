@@ -19,12 +19,21 @@ or Python hosts, and reports what breaks first as units grow.
   march. Each seat's main Town Center gets a garrisoned Steward. Vassals are not used.
 - **Determinism.** `--threads 1,2,6,12` replays the same match per worker count and compares the
   canonical hash every `--hash-every` ticks; `--compare a.json,b.json` compares saved reports
-  (runs in separate processes).
+  (runs in separate processes). Unequal sequence lengths fail comparison, even when the
+  shared prefix agrees; the first unmatched tick is reported.
 - **Instructions.** `--callgrind` re-runs the binary under Callgrind (cache simulation, one
   worker): `--warmup` ticks uninstrumented, then `--counted` ticks collected only inside
   `counted_tick`. The profile is split into the stages of `perf-stage-counters` plus whole tick
   phases and a `bookkeeping` sum (index relocation, vision, collect_changed, building memory).
   Simulated LL misses x 64 B stand in for DRAM bytes: `perf_event_paranoid` is 4 here.
+  Cached profiles bind every option, the selected scale and the executable's contents;
+  only a successful Callgrind process leaves a reusable completion marker.
+
+Stewards spawn on the first passable tile around the main Town Center, so they can enter
+without a route from a fixed offset. Setup fails with the seat and error if a required
+Steward cannot be spawned or ordered inside. Earlier measurements below predate this check: their missing
+Stewards mean they do not qualify the documented one-Steward-per-seat workload. They have
+not been remeasured after the review fixes.
 
 ```sh
 MATCH_BENCH_ARGS="--ticks 2000 --threads 6 --scale 1,5,10" make match-bench

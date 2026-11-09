@@ -119,6 +119,14 @@ fn count(
     Ok(())
 }
 
+/// Bind all CLI options and the actual executable, including uncommitted builds.
+pub(super) fn cache_key(options: &Options, scale: f64, exe: &Path) -> Result<String, BoxError> {
+    let mut hash = blake3::Hasher::new();
+    hash.update(&serde_json::to_vec(&(options, scale))?);
+    hash.update_reader(fs::File::open(exe)?)?;
+    Ok(hash.finalize().to_hex().to_string())
+}
+
 pub(super) fn run(options: &Options) -> Result<(), BoxError> {
     let exe = std::env::current_exe()?;
     let dir = options
@@ -132,14 +140,20 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
         "scale  units  movers  Mi/tick  movement  propose  apply  formations  route  vision  index  bookkeeping  combat  gathering  stewards  Ir/mover(movement)  DRAM MiB/tick\n",
     );
     for &scale in &options.scale {
-        let child = dir.join(format!("child-{scale}.json"));
-        let out = dir.join(format!("callgrind.scale-{scale}.out"));
-        // A finished child (its JSON is written last) is reused: a long
-        // suite can be cut and resumed without re-running a scale.
-        if child.exists() && out.exists() {
+        let key = cache_key(options, scale, &exe)?;
+        let child = dir.join(format!("child-{key}.json"));
+        let out = dir.join(format!("callgrind.scale-{key}.out"));
+        let complete = dir.join(format!("complete-{key}"));
+        // Child JSON is written before Valgrind finishes its profile. Reuse
+        // only after the entire process succeeded, so interrupted runs retry.
+        if complete.exists() && child.exists() && out.exists() {
             eprintln!("match-bench: reusing {}", out.display());
         } else {
+            if complete.exists() {
+                fs::remove_file(&complete)?;
+            }
             count(options, scale, &exe, &child, &out)?;
+            fs::write(&complete, b"")?;
         }
         let meta: Value = serde_json::from_str(&fs::read_to_string(&child)?)?;
         let profile = parse(&fs::read_to_string(&out)?)?;
@@ -165,7 +179,7 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
             stages["tick"]["per_tick"]["dram_bytes"].as_f64().unwrap_or(0.0) / 1048576.0,
         ));
         scenarios.push(
-            json!({ "scale": scale, "child": meta, "caches": profile.caches,
+            json!({ "scale": scale, "cache_key": key, "child": meta, "caches": profile.caches,
             "profile": out.display().to_string(), "stages": stages }),
         );
     }

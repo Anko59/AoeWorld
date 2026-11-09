@@ -110,13 +110,27 @@ pub(super) fn build(shape: &Shape) -> Result<Built, BoxError> {
         let seat = owner.scaled(shape.scale);
         // A seat that refuses is left with its Dark Age kit, as the server does.
         let _ = world.seed_late_game(id, center, &seat);
-        if let Some(tc) = town_center
-            && let Ok(at) = WorldPosition::from_tile_center(TileCoord::new(center.x, center.y + 4))
-            && let Ok(steward) = world.spawn_kind(id, UnitKind::Steward, at)
-            && world.issue_garrison(id, steward, tc).is_ok()
-        {
-            stewards += 1;
-        }
+        let steward_error = |error| format!("match-bench: seat {index} required Steward: {error}");
+        let tc = town_center.ok_or_else(|| steward_error("main Town Center missing".to_owned()))?;
+        let rect = world
+            .building(tc)
+            .ok_or("main Town Center missing")?
+            .footprint;
+        // Spawn adjacent, so garrisoning does not depend on pathfinding from
+        // a fixed offset that may be blocked by the seeded late-game buildings.
+        let tile = (rect.min.y - 1..=rect.max.y)
+            .flat_map(|y| (rect.min.x - 1..=rect.max.x).map(move |x| TileCoord::new(x, y)))
+            .find(|tile| !rect.contains(*tile) && world.tile_passable(*tile))
+            .ok_or_else(|| steward_error("no passable Town Center perimeter tile".to_owned()))?;
+        let at = WorldPosition::from_tile_center(tile)
+            .map_err(|error| steward_error(format!("spawn position: {error}")))?;
+        let steward = world
+            .spawn_kind(id, UnitKind::Steward, at)
+            .map_err(|error| steward_error(format!("spawn failed: {error}")))?;
+        world
+            .issue_garrison(id, steward, tc)
+            .map_err(|error| steward_error(format!("garrison failed: {error}")))?;
+        stewards += 1;
         seats.push(Seat {
             id,
             center,

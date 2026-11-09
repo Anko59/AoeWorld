@@ -19,7 +19,7 @@ use clap::Args;
 use serde_json::{Value, json};
 use std::{fs, path::PathBuf};
 
-#[derive(Args, Debug, Clone)]
+#[derive(Args, Debug, Clone, serde::Serialize)]
 pub struct Options {
     #[arg(long, default_value_t = 100)]
     seats: u16,
@@ -134,8 +134,8 @@ fn shape(options: &Options, scale: f64) -> Shape {
     }
 }
 
-/// The first `(tick, a, b)` where two hash sequences differ, `None` when every
-/// common tick agrees.
+/// The first `(tick, a, b)` where two complete hash sequences differ.
+/// An unmatched suffix differs at its first tick, with `<missing>` on the other side.
 pub(super) fn divergence(
     a: &[(u64, String)],
     b: &[(u64, String)],
@@ -144,6 +144,14 @@ pub(super) fn divergence(
         .zip(b)
         .find(|(x, y)| x != y)
         .map(|(x, y)| (x.0.min(y.0), x.1.clone(), y.1.clone()))
+        .or_else(|| {
+            a.get(b.len())
+                .map(|(tick, hash)| (*tick, hash.clone(), "<missing>".into()))
+                .or_else(|| {
+                    b.get(a.len())
+                        .map(|(tick, hash)| (*tick, "<missing>".into(), hash.clone()))
+                })
+        })
 }
 
 fn hashes_of(report: &Value) -> Vec<(u64, String)> {

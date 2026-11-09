@@ -128,12 +128,8 @@ pub(super) fn step(
                 Some(index + columns),
             ];
             let target = neighbours[(round as usize + index) % 4]
-                .filter(|&n| n > 0 && n < seats.len())
-                .or(Some(if index + 1 < seats.len() {
-                    index + 1
-                } else {
-                    1
-                }));
+                .filter(|&n| n < seats.len() && n != index)
+                .or(Some((index + 1) % seats.len()));
             let Some(target) = target.and_then(|t| seats.get(t)) else {
                 continue;
             };
