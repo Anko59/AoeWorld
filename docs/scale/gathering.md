@@ -93,3 +93,68 @@ unchanged). Still superlinear: the unreachable route attempts per choice, from
 node workers (farmers make none), refused by the route scheduler; and the mean
 is dominated by spikes (p95 20 to 40 ms at 5x) from returns and replacement
 searches.
+
+## Filtering known unreachable return candidates
+
+A passable perimeter tile can be unreachable through the terrain's directed
+edges. In the current match-bench base, an observed carrier at `(963,509)`
+could not reach any neighbouring tile: every passable neighbour and every
+perimeter tile of its nearest drop-off returned `Unreachable`, with 11 units
+of route work. Other observed carriers exhausted small source components in
+47 or 119 work. The route terrain reads static terrain and the resource/building
+overlay; live unit bodies do not decide these failures.
+
+After a fresh unreachable return attempt, gathering floods the worker's source
+component once if candidates remain. `RouteOriginPocket` certifies only a complete component
+of at most 32 tiles, within four tiles in each axis of the origin. It reads the same directed
+edges, diagonal corner rules and costs as the ordinary planner. Outside targets
+need no further terrain search. Affordable cached failures and the existing
+short unit memo also filter candidates before movement orders are issued.
+
+The tiny component graph projects the ordinary A* work charge, including stale
+queue entries, without querying terrain. The scheduler still charges that work
+and records the same final failed-target memo. Candidate order, failed tiles,
+route-budget boundaries and the reachable fallback stay unchanged. Map targets
+more than 64 tiles away retain global guidance and nearest-point behavior;
+large/open components, incomplete reads and insufficient budgets use normal
+routing. A source proof lives for one drop-off choice; cached failures retain
+the ordinary planner's ground-invalidation bounds.
+
+`gather_work.return_routes` counts actual movement-order attempts;
+`return_known_unreachable` counts candidates rejected by proof. Add the latter
+to `return_unreachable` when comparing total unreachable candidates with older
+reports. Logical work charges are preserved to keep admission and canonical
+state identical; the saving is repeated terrain searches and order setup.
+
+Tests compare the graph's work and invalidation area with ordinary routing for
+3,267 targets, check exact canonical state at route-budget boundaries, verify a
+reachable fallback, and reopen a source component through building removal.
+The sealed-worker integration test checks all drop-off perimeter rejections
+against the normal movement API, including the final task and canonical hash.
+
+The historical 205 unreachable attempts per tick above were **not reproduced**
+on the newer match-bench base in a 16-seat, 5x, 600-tick diagnostic: it issued
+13 return attempts, eight unreachable. These counts cover that diagnostic,
+not a release timing comparison. This base also changed the workload: at 1x
+it seeds worked-out discs of 90 tiles for the human and 30 for AIs, scales those
+radii with the load, and assigns workers beyond the depleted discs. It also
+changed Steward setup. Their individual effects on return volume were not
+isolated. The requested release measurement was refused
+twice by long-job admission, with a different live holder on the retry. Retained
+local evidence is under `.cache/sleep-*.log` and
+`.cache/match-bench/dropoff-probes.json`. Release before/after gathering times,
+ticks/s and sleep-on/off comparisons remain unmeasured until admission succeeds.
+
+Validation of the filter (Dockerized Make, shared machine):
+
+- `make hooks-install hooks-check fmt-check lint structure-check architecture-check`: pass.
+- `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='all()'`: 1,215 passed, including the missed-wake detector and unchanged 384-tick 14,000-unit hash at 1/4 workers.
+- `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-map AOE_NATIVE_TEST_FILTER='all()'`: 376 passed.
+- `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-server AOE_NATIVE_TEST_FILTER='test(gameplay::)|test(source_qualification::tests::orchestration::synthetic_flat_sahara)|test(source_qualification::movement::tests::continuous_source_free_run)'`: 80 passed (77 gameplay and three offline qualification cases).
+- `make test-harness-focused HARNESS_TEST_FILTER=match_bench`: eight passed, including sleep on/off and 1/2/4-worker replays.
+- `make perf-wasm-cap`: pass; production gzip 396,211 bytes versus the 375,952-byte baseline (+5.4%, existing limit +25%).
+
+Logs for the final frozen source are `.cache/sleep-final-*.log`. These are local
+results; the branch has not been published or checked by CI. The change preserves
+visible gameplay and needs no before/after video under the performance-video rule
+in [shipping](../shipping.md).

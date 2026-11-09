@@ -11,6 +11,9 @@ mod memo;
 #[path = "planner/pocket.rs"]
 mod pocket;
 use pocket::POCKET_CHECK_WORK;
+#[path = "planner/origin_pocket.rs"]
+mod origin_pocket;
+pub use origin_pocket::RouteOriginPocket;
 #[path = "planner/reconstruction.rs"]
 mod reconstruction;
 #[path = "planner/search.rs"]

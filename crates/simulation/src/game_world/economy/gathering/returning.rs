@@ -49,14 +49,34 @@ impl GameWorld {
         // listed by two adjacent buildings is still tried under each.
         let failed_before = task.failed_dropoffs.clone();
         let mut untried = false;
+        let mut pocket = None;
+        let mut probed_origin = false;
         'buildings: for (at, &building) in order.iter().enumerate() {
             let tiles = self.dropoff_tiles(id, building, &failed_before, from);
             for (n, &tile) in tiles.iter().enumerate() {
-                self.count_gather(Count::ReturnRoutes, 1);
-                self.count_gather(Count::FarmReturnRoutes, farmer);
-                let issued =
-                    position(tile).and_then(|destination| self.issue_task_move(id, destination));
-                if let Err(error) = issued {
+                let known = self.reject_known_unreachable_task_move(id, tile, pocket.as_ref());
+                let issued = if known {
+                    self.count_gather(Count::ReturnKnownUnreachable, 1);
+                    Err(GameWorldError::Unreachable)
+                } else {
+                    self.count_gather(Count::ReturnRoutes, 1);
+                    self.count_gather(Count::FarmReturnRoutes, farmer);
+                    position(tile).and_then(|destination| self.issue_task_move(id, destination))
+                };
+                // Only a fresh failure with candidates left pays for a source
+                // flood; cached failures stay cheap. The component lives for
+                // this choice, so ground edits cannot leave a stale proof.
+                if issued == Err(GameWorldError::Unreachable)
+                    && !known
+                    && !probed_origin
+                    && (n + 1 < tiles.len() || at + 1 < order.len())
+                {
+                    probed_origin = true;
+                    pocket = self.route_origin_pocket(unit.kind, from).ok().flatten();
+                }
+                if let Err(error) = issued
+                    && !known
+                {
                     self.count_gather(
                         match error {
                             GameWorldError::Unreachable => Count::ReturnUnreachable,

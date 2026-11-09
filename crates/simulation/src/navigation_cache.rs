@@ -39,6 +39,11 @@ struct Entry {
     last_used: u64,
 }
 
+// Inspection and consumption share the same deterministic admission rule.
+fn affordable(entry: &Entry, budget: u32) -> bool {
+    entry.work <= budget
+}
+
 /// Bounded, non-canonical cache of already-planned map segments. Its byte
 /// limit accounts for logical entry, recency key and path payload bytes;
 /// allocator and tree metadata remain outside the reported budget. An entry records the
@@ -66,6 +71,25 @@ impl Default for NavigationCache {
 }
 
 impl NavigationCache {
+    /// Inspect an affordable answer without changing recency. A caller that
+    /// accepts a proof still consumes it through `get`, exactly as an order does.
+    pub(crate) fn peek(
+        &self,
+        naval: bool,
+        origin: TileCoord,
+        destination: TileCoord,
+        budget: u32,
+    ) -> Option<(&MovementOutcome, u32)> {
+        self.entries
+            .get(&Key {
+                naval,
+                origin,
+                destination,
+            })
+            .filter(|entry| affordable(entry, budget))
+            .map(|entry| (&entry.outcome, entry.work))
+    }
+
     fn with_limit(limit_bytes: usize) -> Self {
         Self {
             #[cfg(test)]
@@ -92,7 +116,7 @@ impl NavigationCache {
                 origin,
                 destination,
             })
-            .filter(|entry| entry.work <= budget)
+            .filter(|entry| affordable(entry, budget))
             .map(|entry| {
                 let key = Key {
                     naval,

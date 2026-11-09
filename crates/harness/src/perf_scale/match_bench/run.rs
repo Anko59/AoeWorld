@@ -68,6 +68,7 @@ fn gather_work(world: &GameWorld) -> Value {
         "replacements": w.replacements, "replacement_candidates": w.replacement_candidates,
         "work_spots": w.work_spots, "return_unreachable": w.return_unreachable,
         "return_invalid": w.return_invalid, "return_other": w.return_other,
+        "return_known_unreachable": w.return_known_unreachable,
         "farm_waits": w.farm_waits, "farm_returns": w.farm_returns,
         "farm_return_routes": w.farm_return_routes,
     })

@@ -10,6 +10,7 @@ mod facing;
 mod occupancy;
 mod rates;
 mod replacement;
+mod return_routes;
 
 #[test]
 fn returning_workers_deposit_on_every_side_before_finishing_an_old_target_order() {

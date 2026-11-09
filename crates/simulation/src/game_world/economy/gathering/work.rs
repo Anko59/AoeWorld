@@ -23,11 +23,14 @@ pub struct GatherWork {
     pub replacement_candidates: u64,
     /// Work-spot queries (`resource_work_positions`).
     pub work_spots: u64,
-    /// Failed drop-off route attempts: an unreachable answer (memo or
-    /// search), an invalid tile, or anything else.
+    /// Failed issued drop-off attempts: unreachable, invalid, or other errors.
+    /// Candidates rejected before issue are counted separately below.
     pub return_unreachable: u64,
     pub return_invalid: u64,
     pub return_other: u64,
+    /// Candidates rejected by an affordable cached or sealed-source proof,
+    /// before issuing a movement order. Logical route work is still charged.
+    pub return_known_unreachable: u64,
     /// Farmer steps that found FARM had not produced the next food yet.
     pub farm_waits: u64,
     /// Drop-off choices by farmers, and their route attempts.
@@ -37,7 +40,7 @@ pub struct GatherWork {
 
 /// The counters, one relaxed atomic each so shared readers count too.
 #[derive(Debug, Default)]
-pub(crate) struct GatherCounters([AtomicU64; 17]);
+pub(crate) struct GatherCounters([AtomicU64; 18]);
 
 #[derive(Clone, Copy)]
 pub(crate) enum Count {
@@ -58,6 +61,7 @@ pub(crate) enum Count {
     FarmWaits,
     FarmReturns,
     FarmReturnRoutes,
+    ReturnKnownUnreachable,
 }
 
 impl crate::GameWorld {
@@ -78,6 +82,7 @@ impl crate::GameWorld {
             return_unreachable: c(Count::ReturnUnreachable),
             return_invalid: c(Count::ReturnInvalid),
             return_other: c(Count::ReturnOther),
+            return_known_unreachable: c(Count::ReturnKnownUnreachable),
             farm_waits: c(Count::FarmWaits),
             farm_returns: c(Count::FarmReturns),
             farm_return_routes: c(Count::FarmReturnRoutes),

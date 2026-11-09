@@ -96,7 +96,7 @@ impl GameWorld {
         (result, allowance == attempt)
     }
 
-    fn charge_fast_route(&mut self, player: PlayerId, work: u32) {
+    pub(super) fn charge_fast_route(&mut self, player: PlayerId, work: u32) {
         self.fast_route_budget = self.fast_route_budget.saturating_sub(work);
         let spent = self.fast_route_spent.entry(player).or_default();
         *spent = spent.saturating_add(work);
