@@ -34,7 +34,7 @@ pub(crate) const MAX_FAST_ROUTE_WORK_PER_PLAYER: u32 = 2 * FAST_ROUTE_WORK;
 
 impl GameWorld {
     /// Moves every active mover once and returns the ids it touched, in
-    /// arbitrary order; the tick collation sorts and fetches final states.
+    /// arbitrary order; the tick collation dedupes and fetches final states.
     pub(crate) fn advance_movement(&mut self) -> Vec<EntityId> {
         // Rejoin before either movement batch snapshots its actors. A detached
         // body must spend this tick in exactly one of the two phases.

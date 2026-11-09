@@ -33,7 +33,8 @@ fn the_tick_passes_count_each_tick_and_the_hash_ignores_them() {
     assert_eq!(counted.canonical_hash(), unread.canonical_hash());
     // `collect_changed` closes every tick, whatever else the tick skipped.
     assert_eq!(count(&counted, "collect_changed").calls, 30);
-    assert!(count(&counted, "collect_changed").visited > 0);
+    // Dirty bits replaced its sort: the forbidden pass visits nothing.
+    assert_eq!(count(&counted, "collect_changed").visited, 0);
     assert!(count(&counted, "tables_refresh").calls > 0);
     assert_eq!(count(&counted, "advance_transports").visited, 0);
     // Replaced by events and indexes: these whole-population passes never run.

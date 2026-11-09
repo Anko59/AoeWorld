@@ -29,7 +29,8 @@ pub(crate) enum Pass {
     WildlifeIds,
     /// `advance_transports`: every transport journey, every tick.
     AdvanceTransports,
-    /// `collect_changed`: every changed id sorted and fetched, every tick.
+    /// `collect_changed`: every changed id sorted, every tick; dirty bits
+    /// replaced the sort, so it now visits nothing.
     CollectChanged,
     /// `Tables::refresh`: the dense per-tick lookups of every entity id.
     TablesRefresh,
