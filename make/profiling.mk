@@ -47,3 +47,17 @@ perf-census-instructions-steps:
 	@$(MAKE) --no-print-directory analysis-tools
 	@mkdir -p reports/perf
 	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GUNGRAUN_ALLOW_ASLR=yes -e CARGO_PROFILE_BENCH_DEBUG=1 $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo bench --locked -p aoe-server --features bench-fixtures --bench census_instructions -- --output-format=json --save-summary=json > reports/perf/census-instructions.ndjson
+
+# Closed-loop in-process late-game match with Rust bots (movement rework phase 0, rung 0):
+# ticks/s and phases per scale and worker count, hashes compared across workers.
+# MATCH_BENCH_ARGS passes harness flags, e.g. "--seats 1000 --ticks 2000" or "--scale 1,5,10 --callgrind".
+.PHONY: match-bench match-bench-admitted match-bench-steps
+match-bench: resource-bootstrap
+	@$(RESOURCE_LONG) match-bench -- $(MAKE) --no-print-directory match-bench-admitted
+
+match-bench-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory match-bench-steps
+
+match-bench-steps:
+	@$(MAKE) --no-print-directory analysis-tools
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo run --release --locked -p aoe-harness -- match-bench $(MATCH_BENCH_ARGS)

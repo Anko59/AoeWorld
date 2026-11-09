@@ -219,7 +219,7 @@ fn instructions(profile: &Profile, cost: &[u64]) -> Result<u64, String> {
 }
 
 /// Stage costs by name; `None` is a stage no function of the window ran.
-fn costs(profile: &Profile) -> Result<Vec<(&'static str, Option<Cost>)>, String> {
+pub(super) fn costs(profile: &Profile) -> Result<Vec<(&'static str, Option<Cost>)>, String> {
     let mut found: Vec<(&'static str, Option<Cost>)> = Vec::new();
     let value = |found: &[(&str, Option<Cost>)], name: &str| {
         found
@@ -267,7 +267,12 @@ fn costs(profile: &Profile) -> Result<Vec<(&'static str, Option<Cost>)>, String>
     Ok(found)
 }
 
-fn row(profile: &Profile, cost: Option<&Cost>, movers: u64, ticks: u64) -> Result<Value, String> {
+pub(super) fn row(
+    profile: &Profile,
+    cost: Option<&Cost>,
+    movers: u64,
+    ticks: u64,
+) -> Result<Value, String> {
     let Some(cost) = cost else {
         return Ok(json!({ "present": false, "ir": 0, "ll_misses": 0, "dram_bytes": 0 }));
     };

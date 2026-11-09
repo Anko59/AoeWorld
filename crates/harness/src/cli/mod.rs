@@ -104,6 +104,8 @@ enum Command {
     PerfStageCounters(perf_scale::stages::Options),
     /// The real server at scale: one human, Python AIs, a browser frame rate.
     ScaleMatch(perf_scale::scale_match::Options),
+    /// Closed-loop in-process late-game match with Rust bots: ticks/s, hashes per worker count, Callgrind stages.
+    MatchBench(perf_scale::match_bench::Options),
     #[command(name = "perf-soak-10")]
     PerfSoak10,
     #[command(name = "perf-soak-30")]
