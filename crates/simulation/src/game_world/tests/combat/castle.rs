@@ -373,7 +373,7 @@ fn masonry_preserves_damage_and_applies_to_future_buildings_not_walls() {
             true,
         )
         .unwrap();
-    w.economy.buildings.get_mut(&house).unwrap().hp -= 37;
+    w.building_mut(house).unwrap().hp -= 37;
     w.complete_research(PlayerId(0), Tech::Masonry, &mut Vec::new());
     assert_eq!(
         (

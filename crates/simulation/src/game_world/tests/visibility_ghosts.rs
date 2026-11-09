@@ -102,7 +102,7 @@ fn re_enabling_fog_does_not_keep_players_who_lost_sight_as_watchers() {
     let before = w.known_buildings(PlayerId(0));
     w.set_fog_disabled(true);
     w.set_fog_disabled(false);
-    w.economy.buildings.get_mut(&id).unwrap().hp -= 100;
+    w.building_mut(id).unwrap().hp -= 100;
     w.advance();
     let after = w.known_buildings(PlayerId(0));
     assert_eq!(after[0].hp, before[0].hp, "unseen damage stays unseen");

@@ -212,6 +212,7 @@ impl GameWorld {
         self.clear_planner(index);
         // Giving up reports the goal as unreachable for now, as on dev; an
         // arrival beside a taken goal (`nearby`) is a success and has no error.
+        self.set_movement_error(index, (!nearby).then_some(GameWorldError::Unreachable));
         let stored = &mut self.units[index];
         stored.order = None;
         stored.route.clear();
@@ -219,7 +220,6 @@ impl GameWorld {
         stored.state.previous_position = unit.position;
         stored.state.moving = false;
         stored.state.planning = false;
-        stored.last_movement_error = (!nearby).then_some(GameWorldError::Unreachable);
         if plain_move && stored.state.task == UnitTask::Moving {
             stored.state.task = if unit.carried.is_some() {
                 UnitTask::Carrying

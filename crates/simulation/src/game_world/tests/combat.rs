@@ -317,7 +317,7 @@ fn re_ordering_attacks_never_strikes_faster_than_one_hit_per_period() {
 fn a_stale_movement_error_does_not_make_the_attacker_give_up_the_chase() {
     let (mut world, militia, villager) = duel();
     let index = world.lookup[&militia];
-    world.units[index].last_movement_error = Some(GameWorldError::Unreachable);
+    world.set_movement_error(index, Some(GameWorldError::Unreachable));
     world.issue_attack(PlayerId(0), militia, villager).unwrap();
     advance(&mut world, 1);
     let first = world.unit(villager).unwrap().hp;

@@ -91,9 +91,7 @@ impl GameWorld {
             RallyTarget::Animal(id) => self.animal(id).map(|a| a.kind),
             _ => None,
         };
-        self.economy
-            .buildings
-            .get_mut(&id)
+        self.building_mut(id)
             .ok_or(EconomyError::UnknownEntity)?
             .rally_point = Some(RallyPoint {
             target,

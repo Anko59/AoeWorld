@@ -96,7 +96,7 @@ impl GameWorld {
         self.stop_gathering(id);
         self.cancel_attack(id);
         self.economy.builders.remove(&id);
-        self.units[index].last_movement_error = None;
+        self.set_movement_error(index, None);
         self.units[index].state.task = if unit.carried.is_some() {
             UnitTask::Carrying
         } else {
@@ -235,6 +235,8 @@ impl GameWorld {
         self.combat.target_rounds.remove(&id);
         self.stop_gathering(id);
         self.economy.builders.remove(&id);
+        self.collision_subscribers.errors.remove(&id);
+        self.collision_subscribers.memos.remove(&id);
         self.lookup.remove(&id);
         self.update_observer(id, None);
         self.units.swap_remove(index);

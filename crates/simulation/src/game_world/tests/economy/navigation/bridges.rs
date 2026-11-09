@@ -245,7 +245,7 @@ fn bridge_combat_collapse_kills_deck_occupants_and_notifies_the_tick() {
             WorldPosition::from_tile_center(TileCoord::new(28, 20)).unwrap(),
         )
         .unwrap();
-    world.economy.buildings.get_mut(&bridge).unwrap().hp = 1;
+    world.building_mut(bridge).unwrap().hp = 1;
     world.issue_attack(PlayerId(1), attacker, bridge).unwrap();
     let mut notified = false;
     for _ in 0..80 {

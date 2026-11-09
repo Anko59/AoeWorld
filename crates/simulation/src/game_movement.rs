@@ -146,8 +146,7 @@ impl GameWorld {
                         self.units[index].state.moving = false;
                         self.units[index].state.planning = false;
                         self.units[index].order = None;
-                        self.units[index].last_movement_error =
-                            Some(GameWorldError::Environment(error));
+                        self.set_movement_error(index, Some(GameWorldError::Environment(error)));
                         finished = true;
                         break;
                     }
@@ -189,7 +188,7 @@ impl GameWorld {
                     self.units[index].state.planning = true;
                     self.units[index].planning_since = self.tick.0;
                     self.units[index].fast_route_tried = false;
-                    self.units[index].last_movement_error = None;
+                    self.set_movement_error(index, None);
                     self.units[index].order = Some(MovementOrder {
                         origin: current_position,
                         waypoint: current_position,
@@ -278,7 +277,7 @@ impl GameWorld {
                         self.units[index].state.moving = false;
                         self.units[index].state.planning = false;
                         self.units[index].order = None;
-                        self.units[index].last_movement_error = error;
+                        self.set_movement_error(index, error);
                         finished = true;
                         break;
                     }
@@ -463,12 +462,16 @@ impl GameWorld {
                 self.active_route_searches = self.active_route_searches.saturating_add(1);
             }
             self.count_route_slots(self.units[index].state.player, planner, true);
+            let id = self.units[index].state.id;
+            self.collision_subscribers.planners.insert(id);
         }
         self.units[index].planner = planner;
     }
 
     pub(crate) fn take_planner(&mut self, index: usize) -> Option<RoutePlanner> {
         let planner = self.units[index].planner.take()?;
+        let id = self.units[index].state.id;
+        self.collision_subscribers.planners.remove(&id);
         self.active_planner_count = self.active_planner_count.saturating_sub(1);
         if planner.requires_search_slot() {
             self.active_route_searches = self.active_route_searches.saturating_sub(1);

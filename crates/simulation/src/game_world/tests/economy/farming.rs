@@ -153,12 +153,7 @@ fn a_farm_takes_one_farmer_depletes_and_is_removed_when_exhausted() {
 fn a_spent_farm_is_removed_when_its_farmer_is_ordered_away_before_delivering() {
     let (mut world, worker, _, farm) = mill_and_farm();
     finish(&mut world, farm, 700);
-    world
-        .economy
-        .buildings
-        .get_mut(&farm)
-        .unwrap()
-        .food_remaining = Some(1);
+    world.building_mut(farm).unwrap().food_remaining = Some(1);
     let mut guard = 0;
     while world.building(farm).unwrap().food_remaining != Some(0) {
         world.advance();
@@ -255,12 +250,7 @@ fn a_farmers_return_trip_goes_to_the_dropoff_the_shared_rule_names() {
 fn attacking_cancels_farming_and_removes_a_spent_farm() {
     let (mut world, worker, _, farm) = mill_and_farm();
     finish(&mut world, farm, 700);
-    world
-        .economy
-        .buildings
-        .get_mut(&farm)
-        .unwrap()
-        .food_remaining = Some(1);
+    world.building_mut(farm).unwrap().food_remaining = Some(1);
     for _ in 0..2000 {
         if world.building(farm).unwrap().food_remaining == Some(0) {
             break;
@@ -313,12 +303,7 @@ fn queued_reseed_rebuilds_once_and_keeps_the_same_farmer() {
     finish(&mut world, farm, 700);
     world.issue_farm_reseed(PlayerId(0), mill, true).unwrap();
     let wood = stock(&world).1;
-    world
-        .economy
-        .buildings
-        .get_mut(&farm)
-        .unwrap()
-        .food_remaining = Some(1);
+    world.building_mut(farm).unwrap().food_remaining = Some(1);
     let mut rebuilding = false;
     for _ in 0..3000 {
         world.advance();
@@ -422,12 +407,7 @@ fn destroying_a_mill_loses_its_prepaid_reseeds() {
     let wood = stock(&world).1;
     world.remove_building(mill);
     assert_eq!(stock(&world).1, wood);
-    world
-        .economy
-        .buildings
-        .get_mut(&farm)
-        .unwrap()
-        .food_remaining = Some(1);
+    world.building_mut(farm).unwrap().food_remaining = Some(1);
     for _ in 0..6000 {
         world.advance();
         if world.building(farm).is_none() {
@@ -443,7 +423,7 @@ fn prepaid_reseed_counts_are_part_of_authoritative_replay_state() {
     let (mut world, _, mill, _) = mill_and_farm();
     let before = world.canonical_hash();
     // Isolate queue state from its wood payment: both must be replay inputs.
-    world.economy.buildings.get_mut(&mill).unwrap().farm_reseeds = 1;
+    world.building_mut(mill).unwrap().farm_reseeds = 1;
     assert_ne!(world.canonical_hash(), before);
 }
 

@@ -128,7 +128,7 @@ impl GameWorld {
             self.leave_group(id);
             self.move_queues.remove(&id);
             self.clear_planner(index);
-            self.units[index].last_movement_error = None;
+            self.set_movement_error(index, None);
             self.units[index].order = None;
             self.units[index].obstruction = None;
             self.units[index].route.clear();
@@ -156,8 +156,8 @@ impl GameWorld {
         self.move_queues.remove(&id);
         let dx = i64::from(waypoint.x) - i64::from(origin.x);
         let dy = i64::from(waypoint.y) - i64::from(origin.y);
+        self.set_movement_error(index, None);
         let unit = &mut self.units[index];
-        unit.last_movement_error = None;
         unit.obstruction = None;
         unit.state.previous_position = origin;
         unit.state.facing = facing_for(dx, dy, unit.state.facing);
@@ -190,6 +190,8 @@ impl GameWorld {
     pub(crate) fn remember_unreachable(&mut self, index: usize, target: TileCoord) {
         let at = self.units[index].state.position.tile_floor();
         self.units[index].unreachable_memo = Some((at, target, self.tick.0));
+        let id = self.units[index].state.id;
+        self.collision_subscribers.memos.insert(id);
     }
 
     /// True when the unit, still where it stood, was refused `target` in the

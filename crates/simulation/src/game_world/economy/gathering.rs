@@ -297,11 +297,11 @@ impl GameWorld {
         }
         if self.gather_contact(index, task) {
             self.clear_planner(index);
+            self.set_movement_error(index, None);
             let stored = &mut self.units[index];
             stored.order = None;
             stored.route.clear();
             stored.obstruction = None;
-            stored.last_movement_error = None;
             stored.state.moving = false;
             stored.state.planning = false;
             self.refresh_spacing_order(id);

@@ -1,4 +1,4 @@
-use super::{GameWorld, Pass};
+use super::GameWorld;
 use crate::Terrain;
 use aoe_map::{Depletion, ResourceOverlay, ResourceOverlayError, ResourceOverlaySnapshot};
 
@@ -119,7 +119,7 @@ impl GameWorld {
             .clear();
         for index in 0..self.units.len() {
             self.clear_planner(index);
-            self.units[index].last_movement_error = None;
+            self.set_movement_error(index, None);
         }
     }
 
@@ -128,30 +128,28 @@ impl GameWorld {
     /// can invalidate a suspended reverse flood's sealed-destination proof.
     /// Restart those planners through the scheduler's normal budget; clearing
     /// every planner whenever a tree fell caused the long-game freeze.
+    /// Only the subscribed units are visited, never every unit.
     pub(crate) fn collision_opened(&mut self, area: aoe_core::TileRect) {
         let _span = self
             .planning_probe
             .as_ref()
             .and_then(|probe| probe.cache_span());
-        self.navigation_cache.invalidate(area);
-        self.economy.work_positions.invalidate(area);
-        self.clearance
-            .get_mut()
-            .unwrap_or_else(|error| error.into_inner())
-            .invalidate(area);
-        self.passes.record(Pass::CollisionOpened, self.units.len());
-        for index in 0..self.units.len() {
-            if self.units[index]
-                .planner
-                .as_ref()
-                .is_some_and(|planner| planner.opening_invalidates_proof(area))
-            {
-                self.clear_planner(index);
+        self.invalidate_collision_caches(area);
+        let mut visited =
+            self.clear_planners_where(|planner| planner.opening_invalidates_proof(area));
+        visited += self.clear_movement_errors();
+        // Opened ground can make a refused target reachable.
+        let memos = std::mem::take(&mut self.collision_subscribers.memos);
+        visited += memos.len();
+        for id in memos {
+            if let Some(&index) = self.lookup.get(&id) {
+                self.units[index].unreachable_memo = None;
             }
-            self.units[index].last_movement_error = None;
-            // Opened ground can make a refused target reachable.
-            self.units[index].unreachable_memo = None;
         }
+        self.passes
+            .record(crate::game_world::Pass::CollisionOpened, visited);
+        #[cfg(test)]
+        self.assert_collision_subscribers_complete(area, true);
     }
 
     /// `area` became blocked (a building placed, a gate closed): only the
@@ -161,24 +159,113 @@ impl GameWorld {
             .planning_probe
             .as_ref()
             .and_then(|probe| probe.cache_span());
+        self.invalidate_collision_caches(area);
+        let visited = self.clear_planners_where(|planner| planner.touches(area))
+            + self.clear_movement_errors();
+        self.passes
+            .record(crate::game_world::Pass::CollisionClosed, visited);
+        #[cfg(test)]
+        self.assert_collision_subscribers_complete(area, false);
+    }
+
+    fn invalidate_collision_caches(&mut self, area: aoe_core::TileRect) {
         self.navigation_cache.invalidate(area);
         self.economy.work_positions.invalidate(area);
         self.clearance
             .get_mut()
             .unwrap_or_else(|error| error.into_inner())
             .invalidate(area);
-        self.passes.record(Pass::CollisionClosed, self.units.len());
-        for index in 0..self.units.len() {
-            if self.units[index]
-                .planner
-                .as_ref()
-                .is_some_and(|planner| planner.touches(area))
-            {
-                self.clear_planner(index);
+    }
+
+    /// Clears the planners `invalid` selects, in unit order as the full
+    /// scan did, visiting only the units that hold one. Returns the visits.
+    fn clear_planners_where(&mut self, invalid: impl Fn(&aoe_map::RoutePlanner) -> bool) -> usize {
+        let visited = self.collision_subscribers.planners.len();
+        let (mut cleared, mut gone) = (Vec::new(), Vec::new());
+        for id in &self.collision_subscribers.planners {
+            match self.lookup.get(id) {
+                Some(&index) if self.units[index].planner.as_ref().is_some_and(&invalid) => {
+                    cleared.push(index);
+                }
+                Some(_) => {}
+                None => gone.push(*id),
             }
-            self.units[index].last_movement_error = None;
+        }
+        for id in gone {
+            self.collision_subscribers.planners.remove(&id);
+        }
+        cleared.sort_unstable();
+        for index in cleared {
+            self.clear_planner(index);
+        }
+        visited
+    }
+
+    fn clear_movement_errors(&mut self) -> usize {
+        let errors = std::mem::take(&mut self.collision_subscribers.errors);
+        let visited = errors.len();
+        for id in errors {
+            if let Some(&index) = self.lookup.get(&id) {
+                self.units[index].last_movement_error = None;
+            }
+        }
+        visited
+    }
+
+    /// Sets a unit's movement error; an error subscribes it to the next
+    /// collision change, which clears it.
+    pub(crate) fn set_movement_error(
+        &mut self,
+        index: usize,
+        error: Option<crate::GameWorldError>,
+    ) {
+        self.units[index].last_movement_error = error;
+        let id = self.units[index].state.id;
+        if error.is_some() {
+            self.collision_subscribers.errors.insert(id);
+        } else {
+            self.collision_subscribers.errors.remove(&id);
         }
     }
+
+    /// Test oracle: the full unit scan this replaced would change nothing more.
+    #[cfg(test)]
+    fn assert_collision_subscribers_complete(&self, area: aoe_core::TileRect, opened: bool) {
+        for unit in self.units.oracle_slice() {
+            let id = unit.state.id;
+            assert!(
+                unit.planner.as_ref().is_none_or(|planner| {
+                    if opened {
+                        !planner.opening_invalidates_proof(area)
+                    } else {
+                        !planner.touches(area)
+                    }
+                }),
+                "{id:?} kept an invalidated planner"
+            );
+            assert!(unit.last_movement_error.is_none(), "{id:?} kept its error");
+            assert!(
+                !opened || unit.unreachable_memo.is_none(),
+                "{id:?} kept its memo"
+            );
+            assert_eq!(
+                unit.planner.is_some(),
+                self.collision_subscribers.planners.contains(&id),
+                "{id:?} planner subscription"
+            );
+        }
+    }
+}
+
+/// The units a collision change can affect: planner holders (their search
+/// or route may cross the area), and the units holding a movement error or
+/// an unreachable memo (cleared on openings). Entries leave with their state
+/// or their unit, so storage is bounded by the live unit slots.
+#[derive(Debug, Default)]
+pub(crate) struct CollisionSubscribers {
+    pub(crate) planners: std::collections::BTreeSet<aoe_core::EntityId>,
+    pub(crate) errors: std::collections::BTreeSet<aoe_core::EntityId>,
+    pub(crate) memos: std::collections::BTreeSet<aoe_core::EntityId>,
 }
 
 /// The ground a resource node blocks: its tile (natural and starting node
@@ -193,50 +280,4 @@ pub(crate) fn resource_area(id: u64) -> aoe_core::TileRect {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use aoe_map::{MapPackage, MapRequest};
-
-    #[test]
-    fn dropped_mutation_and_failed_restore_preserve_world_then_commit_roundtrips() {
-        let package = MapPackage::new(1, MapRequest::default(), Vec::new()).unwrap();
-        let hash = package.content_hash;
-        let node = (0..16)
-            .find_map(|y| {
-                (0..16).find_map(|x| {
-                    package
-                        .generator()
-                        .chunk(x, y)
-                        .ok()?
-                        .resources
-                        .into_iter()
-                        .next()
-                })
-            })
-            .expect("fixture resource");
-        let mut world = GameWorld::from_map(package.clone()).unwrap();
-        let before = world.canonical_hash();
-        {
-            let transaction = world.prepare_resource_depletion(node.id, 1).unwrap();
-            assert_eq!(transaction.snapshot(hash).revision, 1);
-        }
-        assert_eq!(world.canonical_hash(), before);
-        let change = world
-            .prepare_resource_depletion(node.id, 1)
-            .unwrap()
-            .commit();
-        assert_eq!(change.removed, 1);
-        let snapshot = world.resource_snapshot(hash).unwrap();
-        let mut restored = GameWorld::from_map(package).unwrap();
-        assert!(
-            restored
-                .restore_resources(&snapshot, [9; 32], &|| false)
-                .is_err()
-        );
-        assert_eq!(restored.canonical_hash(), before);
-        restored
-            .restore_resources(&snapshot, hash, &|| false)
-            .unwrap();
-        assert_eq!(restored.canonical_hash(), world.canonical_hash());
-    }
-}
+mod tests;

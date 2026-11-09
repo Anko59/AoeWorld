@@ -13,12 +13,7 @@ fn farm_delivery(techs: &[Tech]) -> (u64, u16) {
             true,
         )
         .unwrap();
-    world
-        .economy
-        .buildings
-        .get_mut(&farm)
-        .unwrap()
-        .food_remaining = Some(10_000);
+    world.building_mut(farm).unwrap().food_remaining = Some(10_000);
     for tech in techs {
         world.complete_research(PlayerId(0), *tech, &mut Vec::new());
     }

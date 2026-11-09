@@ -263,7 +263,7 @@ fn crossbow_upgrade_rewrites_queues_preserves_progress_and_changes_future_traini
     .unwrap();
     w.issue_train(PlayerId(0), range, UnitKind::Archer).unwrap();
     let before = w.building(range).unwrap().training_queue[0].total_ticks / 2;
-    w.economy.buildings.get_mut(&range).unwrap().training_queue[0].progress_ticks = before;
+    w.building_mut(range).unwrap().training_queue[0].progress_ticks = before;
     w.complete_research(PlayerId(0), Tech::CastleAge, &mut Vec::new());
     w.complete_research(PlayerId(0), Tech::Crossbowman, &mut Vec::new());
     let entry = &w.building(range).unwrap().training_queue[0];

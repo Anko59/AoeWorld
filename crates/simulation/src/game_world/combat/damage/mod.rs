@@ -174,7 +174,7 @@ impl GameWorld {
             );
             let hp =
                 self.apply_combat_damage(attacker_id, target, building.hp, raw, power.elevation);
-            let Some(building) = self.economy.buildings.get_mut(&target) else {
+            let Some(building) = self.building_mut(target) else {
                 return;
             };
             building.hp = hp;

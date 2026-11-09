@@ -54,6 +54,9 @@ pub(crate) struct Economy {
     pub(crate) roads: BTreeSet<TileCoord>,
     pub(crate) blocked_tiles: BTreeSet<TileCoord>,
     pub(crate) open_gates: BTreeSet<EntityId>,
+    /// Every gate building, ascending by id, maintained as buildings are
+    /// placed and removed: the gate tick visits gates, never every building.
+    pub(crate) gates: BTreeSet<EntityId>,
     pub(crate) scouts: BTreeMap<EntityId, scouting::AutoScout>,
     pub(crate) scout_searches: BTreeSet<EntityId>,
     pub(crate) scout_cursor: Option<EntityId>,

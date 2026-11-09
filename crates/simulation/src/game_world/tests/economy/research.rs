@@ -333,11 +333,11 @@ fn unfinished_and_foreign_buildings_do_not_qualify_for_feudal() {
         Err(EconomyError::TechRequirementMissing)
     );
     finish(&mut world, camp, 1200);
-    world.economy.buildings.get_mut(&camp).unwrap().player = PlayerId(1);
+    world.building_mut(camp).unwrap().player = PlayerId(1);
     assert_eq!(
         research(&mut world, center, Tech::FeudalAge),
         Err(EconomyError::TechRequirementMissing)
     );
-    world.economy.buildings.get_mut(&camp).unwrap().player = PlayerId(0);
+    world.building_mut(camp).unwrap().player = PlayerId(0);
     research(&mut world, center, Tech::FeudalAge).unwrap();
 }

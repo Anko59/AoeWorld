@@ -100,7 +100,7 @@ fn right_click_repairs_a_damaged_own_building_and_releases_the_builder() {
         )
         .unwrap();
     finish(&mut world, house, 700);
-    world.economy.buildings.get_mut(&house).unwrap().hp -= 20;
+    world.building_mut(house).unwrap().hp -= 20;
     let mut replay = village().0;
     let replay_builder = villager_at(&mut replay, 99, 100);
     let replay_house = replay
@@ -113,7 +113,7 @@ fn right_click_repairs_a_damaged_own_building_and_releases_the_builder() {
         )
         .unwrap();
     finish(&mut replay, replay_house, 700);
-    replay.economy.buildings.get_mut(&replay_house).unwrap().hp -= 20;
+    replay.building_mut(replay_house).unwrap().hp -= 20;
     world
         .issue_construct(PlayerId(0), &[builder], house)
         .unwrap();
@@ -237,7 +237,7 @@ fn construction_adds_hit_points_without_healing_combat_damage() {
         .unwrap();
     advance(&mut world, 250);
     let before = world.building(id).unwrap().hp;
-    world.economy.buildings.get_mut(&id).unwrap().hp = before - 100;
+    world.building_mut(id).unwrap().hp = before - 100;
     world.advance();
     let after = world.building(id).unwrap().hp;
     assert!(after < before, "damage stays: {after} vs {before}");
