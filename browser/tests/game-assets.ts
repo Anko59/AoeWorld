@@ -126,17 +126,13 @@ const terrainSources = new Map<number, TerrainSource>([
   ],
 ]);
 
-/** Public CI uses original generated fixtures; local runs use the real pack. */
-export async function gameAssets(
-  page: Page,
-  forceSynthetic = false,
-  additionalSprites: readonly (readonly [number, number])[] = [],
-  omitSprites: readonly number[] = [],
-): Promise<string> {
-  if (!forceSynthetic) {
-    const response = await page.request.get("/asset-pack/manifest.json");
-    if (response.ok()) return "local AoE II pack";
-  }
+type AtlasPages = { colored: Buffer; shadows: Buffer; empty: Buffer };
+
+/**
+ * Paints and encodes the three fixture pages. It takes no argument, so no
+ * pixel can depend on a `gameAssets` call: those only shape the manifest.
+ */
+function encodeAtlasPages(): AtlasPages {
   const color = new PNG({ width: 2048, height: 2048 });
   const shadow = new PNG({ width: 2048, height: 2048 });
   const pixel = (x: number, y: number, rgb: readonly number[]) => {
@@ -170,6 +166,30 @@ export async function gameAssets(
       const dy = (y - 1_239.5) / 3.5;
       if (dx * dx + dy * dy <= 1) shadow.data[(y * 2048 + x) * 4 + 3] = 128;
     }
+  return {
+    colored: PNG.sync.write(color),
+    shadows: PNG.sync.write(shadow),
+    empty: PNG.sync.write(new PNG({ width: 2048, height: 2048 })),
+  };
+}
+
+// Encoded by the first synthetic call and kept for the Playwright worker's
+// lifetime, so painting a megapixel and deflating three 2048x2048 pages is not
+// repeated for every page of every test. Callers never get the buffers: they
+// go only to route handlers, and `route.fulfill` only reads them.
+let atlasPages: AtlasPages | undefined;
+
+/** Public CI uses original generated fixtures; local runs use the real pack. */
+export async function gameAssets(
+  page: Page,
+  forceSynthetic = false,
+  additionalSprites: readonly (readonly [number, number])[] = [],
+  omitSprites: readonly number[] = [],
+): Promise<string> {
+  if (!forceSynthetic) {
+    const response = await page.request.get("/asset-pack/manifest.json");
+    if (response.ok()) return "local AoE II pack";
+  }
   const frames = [
     ["graphics", 3008, 50],
     ["graphics", 3004, 50],
@@ -257,9 +277,8 @@ export async function gameAssets(
       },
     ],
   };
-  const colored = PNG.sync.write(color);
-  const shadows = PNG.sync.write(shadow);
-  const empty = PNG.sync.write(new PNG({ width: 2048, height: 2048 }));
+  atlasPages ??= encodeAtlasPages();
+  const { colored, shadows, empty } = atlasPages;
   await page.route("**/asset-pack/*", async (route) => {
     const url = route.request().url();
     if (url.endsWith("manifest.json")) {
