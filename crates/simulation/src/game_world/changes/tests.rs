@@ -46,6 +46,42 @@ fn report_only_changes_and_member_dependencies_are_published_without_unit_writes
     assert!(world.unit_changes().contains(&member));
 }
 
+#[test]
+fn repeated_changes_across_sparse_id_boundaries_are_sorted_unique_and_rearmed() {
+    let mut world = world();
+    world.next_entity_id = 63;
+    let first = world.spawn_unit(PlayerId(0), at(10)).unwrap();
+    let middle = world.spawn_unit(PlayerId(0), at(12)).unwrap();
+    world.next_entity_id = 4_097;
+    let last = world.spawn_unit(PlayerId(0), at(14)).unwrap();
+    world.advance();
+    assert_eq!(world.unit_changes(), &[first, middle, last]);
+    world.advance();
+    assert!(world.unit_changes().is_empty());
+
+    for _ in 0..3 {
+        // Out-of-order repeated unit writes overlap report-only invalidation.
+        for id in [last, middle, last, middle] {
+            let index = world.lookup[&id];
+            world.units[index].state.hp -= 1;
+        }
+        world.economy.generals.controlled.insert(last, first);
+        world.advance();
+        assert_eq!(world.unit_changes(), &[first, middle, last]);
+        world.advance();
+        assert!(world.unit_changes().is_empty());
+    }
+
+    // A whole-store mutation must still mark every id, including sparse ids.
+    for stored in &mut world.units {
+        stored.state.hp -= 1;
+    }
+    world.advance();
+    assert_eq!(world.unit_changes(), &[first, middle, last]);
+    world.advance();
+    assert!(world.unit_changes().is_empty());
+}
+
 // Determinism tests deliberately permute storage.
 impl Units {
     pub(crate) fn swap(&mut self, a: usize, b: usize) {

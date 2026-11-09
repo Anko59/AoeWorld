@@ -216,3 +216,94 @@ its tests and timeouts unchanged. The cause of that earlier timeout is
 unverified. Logs remain in `.cache/f1-server-verified.log`,
 `.cache/f1-server-final-check.log`, `.cache/f1-simulation-verified.log` and
 `.cache/f1-final-checks.log`.
+
+## PR #744: simulation instruction regression
+
+On 2026-11-09, `make perf-instructions` ran before any production edits at
+`b5bdaaee6aa461a2b28cdfbfe3aaaa290c39fe29`, then at the current `origin/dev`,
+`8ca8d40d656626dbb4f1572ed0300093791c9610`. Both ran serially in this worktree
+with the pinned Gungraun 0.19.4 / Callgrind 3.19.0 analysis image. The branch
+was restored without rebasing. Dev includes #746's economy changes, which are
+not imported by this fix; its counts are a measured comparison, not the gate's
+committed baseline.
+
+| Simulation kernel | Committed baseline | Current dev | Broken F1 | Fixed F1 |
+|---|---:|---:|---:|---:|
+| distributed_ticks | 10,330,744 | 8,983,949 | 27,705,150 | 8,943,073 |
+| smoke_ticks | 5,275,671 | 5,095,419 | 6,726,281 | 5,224,565 |
+| late_game | 240,557,748 | 192,013,384 | 220,668,282 | 207,084,754 |
+
+The distributed per-function profiles identify the journal as the regression:
+`publish_unit_changes` costs 16,224,232 inclusive instructions (58.6% of F1's
+total), and is absent on dev. Its conversion of the ordered set to a vector
+costs 10,419,522 inclusive instructions; its General-dependency collection costs
+5,480,908. These two child costs are included in publication, not additional
+costs to add to it. Ordered-set destruction alone has 6,519,127 self
+instructions, and ordered-set iteration has 4,444,444. `apply_step` also spends
+1,411,035 inclusive instructions in 4,096 ordered-set insertions.
+
+The four-tick population fixture starts immediately after spawning 128,000
+units. Only 512 are ordered to move, but the first publication consumes all
+128,000 spawn marks. This explains the large initial publication cost without
+claiming that every unit moves every tick.
+
+Unit mutation marks now use a bitmap to deduplicate a sparse id vector.
+Publication swaps reusable vectors, sorts only out-of-order insertions, and
+clears only touched bitmap words. With no controlled members it skips General
+lookups entirely. Report journals, mutation coverage and dependency semantics
+are retained, as are the movement-table and fog improvements. No baseline,
+allowance, workload or wire pin changes.
+
+The fixed distributed profile reduces `publish_unit_changes` from 16,224,232
+to 231,922 inclusive instructions. Fixed distributed, smoke and late-game
+counts are respectively 13.4%, 1.0% and 13.9% below their committed baselines.
+The retained frame's late-game gain is preserved and improved.
+
+Raw NDJSON and Callgrind profiles are retained outside Git in
+`.cache/perf744/{head,dev,fixed}-simulation.ndjson` and
+`.cache/perf744/{head,dev,fixed}-profiles/`. `make perf-groups-annotate` with
+`GROUP_CALLGRIND` pointing at each distributed profile and
+`GROUP_CALLGRIND_INCLUSIVE=yes` or `no` produced the inclusive/self reports in
+the same evidence directory.
+
+The sparse-id regression was added and passed before changing production code;
+the existing instruction measurements above supply the failing performance
+regression. It checks repeated, out-of-order writes across ids 63, 64 and 4097,
+overlapping report invalidation, whole-store mutation and repeated idle clears.
+
+Validation of the replacement, through Dockerized Make targets:
+
+- `make fmt`: passed.
+- `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='all()'`:
+  1,211 passed, zero skipped, including one/four-worker replay equality.
+- `NEXTEST_TEST_THREADS=2 make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-server AOE_NATIVE_TEST_FILTER='test(gameplay)|test(routes)'`:
+  128 passed, including the unchanged `per_session_messages_match_the_pinned_stream`,
+  `tick::dirty` and the test-only full-frame oracle on every fan-out.
+- The idle frame test still records zero visited units across 300 builds with
+  13,400 units; p50/p95 are 0.001467/0.001955 ms on this shared host. The
+  one-mover and spawn/death/storage-swap oracle regressions also pass.
+- `make perf-ci`: passed, including its fresh `make perf-instructions` run,
+  all seven instruction comparisons at the unchanged 3% cap, WASM size and
+  smoke/distributed/hotspot protocol workloads. All three late-game repetitions
+  completed. Improved-count notes request a baseline refresh; none is made.
+- `make hooks-install hooks-check fmt-check lint structure-check architecture-check docs-check`:
+  passed. Lint retains the two existing client dead-code warnings
+  (`travel_over`, `travel_at`). The final evidence-text update also passes
+  `make fmt-check structure-check docs-check`.
+
+Logs are `.cache/perf744/{journal-before,simulation-final,server-final}.log`
+and `.cache/perf744/frame-final.txt`. An initial test invocation was cancelled
+while waiting for the formatter's Cargo lock; the completed simulation run
+above started after formatting finished.
+
+`.cache/perf744/perf-ci-final.log`, `ci-final.json` and `ci-final.md` retain
+the complete local aggregate verdict. It measured the replacement before
+commit (`dirty: true`); `fixed-source.sha256` pins its two changed Rust files.
+Static gate output is `.cache/perf744/static-final.log`.
+
+No client files changed. There is no intended visible behavior change to film;
+unchanged wire pins and the independent full-frame oracle are the behavior
+regression evidence. No video is recorded. Browser execution, dedicated
+hardware, saved-game timing and finished RTS qualification remain unverified.
+Publication and CI for the new commit are not run: the brief explicitly forbids
+ship/push. Recordings and original assets remain outside Git.

@@ -6,13 +6,63 @@ use std::collections::{BTreeMap, BTreeSet, btree_map};
 use std::ops::{Deref, Index, IndexMut};
 use std::slice::SliceIndex;
 
+/// Sparse ids with constant-time deduplication. Reset only touched bitmap
+/// words, never the population or the entity-id high-water range. The two id
+/// vectors trade places at publication so initial spawns need no copying.
+#[derive(Debug, Default)]
+struct Journal {
+    ids: Vec<EntityId>,
+    words: Vec<u64>,
+    touched_words: Vec<usize>,
+    unordered: bool,
+}
+
+impl Journal {
+    #[inline]
+    fn insert(&mut self, id: EntityId) {
+        let word = id.0 as usize / 64;
+        if word >= self.words.len() {
+            self.words.resize(word + 1, 0);
+        }
+        let bit = 1 << (id.0 % 64);
+        let bits = &mut self.words[word];
+        if *bits & bit != 0 {
+            return;
+        }
+        if *bits == 0 {
+            self.touched_words.push(word);
+        }
+        *bits |= bit;
+        self.unordered |= self.ids.last().is_some_and(|last| *last > id);
+        self.ids.push(id);
+    }
+
+    fn extend(&mut self, ids: impl IntoIterator<Item = EntityId>) {
+        for id in ids {
+            self.insert(id);
+        }
+    }
+
+    fn publish(&mut self, output: &mut Vec<EntityId>) {
+        if self.unordered {
+            self.ids.sort_unstable();
+        }
+        std::mem::swap(&mut self.ids, output);
+        self.ids.clear();
+        self.unordered = false;
+        for word in self.touched_words.drain(..) {
+            self.words[word] = 0;
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct Units {
     #[cfg(not(test))]
     values: Vec<StoredUnit>,
     #[cfg(test)]
     values: super::unit_access::UnitStore,
-    dirty: BTreeSet<EntityId>,
+    dirty: Journal,
 }
 
 impl Deref for Units {
@@ -151,8 +201,9 @@ impl GameWorld {
         self.lookup.get(&id).copied()
     }
 
+    #[inline(never)] // Keep journal publication visible in instruction profiles.
     pub(crate) fn publish_unit_changes(&mut self, changed: &[super::GameUnit]) {
-        let mut ids = std::mem::take(&mut self.units.dirty);
+        let ids = &mut self.units.dirty;
         ids.extend(changed.iter().map(|u| u.id));
         ids.extend(self.economy.gatherers.take_changes());
         ids.extend(self.wildlife.take_unit_changes());
@@ -161,12 +212,16 @@ impl GameWorld {
         ids.extend(self.economy.generals.controlled.take_changes());
         ids.extend(self.economy.stewards.controlled.take_changes());
         // A member's movement, attack or HP changes its General's squad report.
-        let generals = ids
-            .iter()
-            .filter_map(|id| self.general_controller(*id))
-            .collect::<Vec<_>>();
-        ids.extend(generals);
-        self.unit_changes = ids.into_iter().collect();
+        // Without controlled members, even an initial population needs no
+        // per-id lookup. Appended generals need not be revisited themselves.
+        if !self.economy.generals.controlled.is_empty() {
+            for at in 0..ids.ids.len() {
+                if let Some(general) = self.economy.generals.controlled.get(&ids.ids[at]) {
+                    ids.insert(*general);
+                }
+            }
+        }
+        ids.publish(&mut self.unit_changes);
     }
 }
 
