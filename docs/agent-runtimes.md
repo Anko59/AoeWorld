@@ -234,6 +234,10 @@ UNAVAILABLE when `docker info` fails, which makes the run INCOMPLETE, never PASS
 
 A fingerprint of HEAD, the merge base, `git diff HEAD --binary` and untracked
 contents caches the result, so stopping again without a change reuses it.
+Agents that stop together on one tree share a single run: the first holds
+`.cache/agent-hook/run-full.lock` (`run-static.lock` for the Tester's subset)
+while its gates run, and the others wait up to ten minutes, then read its
+result or run their own if the tree changed meanwhile.
 State lives in `.cache/agent-hook/state.json` under a file lock.
 
 - **Agents** are blocked with the report for 5 red rounds (counted per
