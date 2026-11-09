@@ -133,17 +133,14 @@ The sealed-worker integration test checks all drop-off perimeter rejections
 against the normal movement API, including the final task and canonical hash.
 
 The historical 205 unreachable attempts per tick above were **not reproduced**
-on the newer match-bench base in a 16-seat, 5x, 600-tick diagnostic: it issued
-13 return attempts, eight unreachable. These counts cover that diagnostic,
-not a release timing comparison. This base also changed the workload: at 1x
-it seeds worked-out discs of 90 tiles for the human and 30 for AIs, scales those
-radii with the load, and assigns workers beyond the depleted discs. It also
-changed Steward setup. Their individual effects on return volume were not
-isolated. The requested release measurement was refused
-twice by long-job admission, with a different live holder on the retry. Retained
-local evidence is under `.cache/sleep-*.log` and
-`.cache/match-bench/dropoff-probes.json`. Release before/after gathering times,
-ticks/s and sleep-on/off comparisons remain unmeasured until admission succeeds.
+on the newer match-bench base. The baseline issued 13 return attempts, eight
+unreachable, over the entire 16-seat, 5x, 600-tick window. This base also changed
+the workload: at 1x it seeds worked-out discs of 90 tiles for the human and 30
+for AIs, scales those radii with the load, and assigns workers beyond those
+discs. It also changed Steward setup. Their individual effects on return volume
+were not isolated. Initial release admission was refused twice; after the code
+and checks were finished, the slot became free and the measurements below ran.
+The geometric probe is retained in `.cache/match-bench/dropoff-probes.json`.
 
 Validation of the filter (Dockerized Make, shared machine):
 
@@ -158,3 +155,131 @@ Logs for the final frozen source are `.cache/sleep-final-*.log`. These are local
 results; the branch has not been published or checked by CI. The change preserves
 visible gameplay and needs no before/after video under the performance-video rule
 in [shipping](../shipping.md).
+
+## Matched release measurements (2026-11-09)
+
+Baseline `bb4c228874b35962cde55e4d9fb9a0a7a0d4ae0b`; filter `e16040abc865031b41b87c28f6cc880774005e21`. Each configuration ran once: 16 seats, seed 1, one worker, 600 ticks (30 game-seconds), scales 1x and 5x. All runs use the release build. Setup, bots and hashing are outside the reported tick timings.
+
+| revision | scale | sleep | ticks/s | tick p50 / p95 ms | gathering mean / p95 ms |
+|---|---|---|---|---|---|
+| before | 1x | on | 34.92 | 4.408 / 17.581 | 1.618 / 0.582 |
+| before | 5x | on | 16.41 | 26.964 / 100.519 | 6.686 / 15.640 |
+| before | 1x | off | 43.67 | 4.005 / 12.872 | 1.363 / 0.451 |
+| before | 5x | off | 18.03 | 25.909 / 85.623 | 6.395 / 15.756 |
+| after | 1x | on | 43.00 | 3.892 / 11.712 | 1.418 / 0.364 |
+| after | 5x | on | 19.51 | 21.602 / 72.811 | 5.831 / 15.989 |
+| after | 1x | off | 39.34 | 3.993 / 12.531 | 1.502 / 0.494 |
+| after | 5x | off | 17.15 | 24.250 / 89.632 | 6.389 / 15.088 |
+
+All seven canonical checkpoints (initial state and ticks 100 through 600) agree across baseline/filter and sleep on/off at each scale. No hash was repinned.
+
+Actual return counters are identical between sleep modes:
+
+| scale | choices | routes before / after | unreachable answers before / after | proof rejections after |
+|---|---|---|---|---|
+| 1x | 15 | 3 / 3 | 0 / 0 | 0 |
+| 5x | 18 | 13 / 7 | 8 / 2 | 6 |
+
+All remaining `gather_work` fields are unchanged by the filter. Full common counts follow; combine these with the return-counter table above (`return_known_unreachable` is zero in the baseline).
+
+```json
+[
+  {
+    "scale": 1,
+    "sleep": "on",
+    "gather_work": {
+      "farm_return_routes": 3,
+      "farm_returns": 15,
+      "farm_waits": 98,
+      "replacement_candidates": 24797,
+      "replacements": 1541,
+      "return_buildings": 4,
+      "return_invalid": 0,
+      "return_other": 0,
+      "return_tiles": 35,
+      "returns": 15,
+      "slept": 11450,
+      "steps": 2231,
+      "visits": 58137,
+      "walkers": 44456,
+      "work_spots": 4644
+    }
+  },
+  {
+    "scale": 1,
+    "sleep": "off",
+    "gather_work": {
+      "farm_return_routes": 3,
+      "farm_returns": 15,
+      "farm_waits": 98,
+      "replacement_candidates": 24797,
+      "replacements": 1541,
+      "return_buildings": 4,
+      "return_invalid": 0,
+      "return_other": 0,
+      "return_tiles": 35,
+      "returns": 15,
+      "slept": 0,
+      "steps": 13511,
+      "visits": 57967,
+      "walkers": 44456,
+      "work_spots": 4644
+    }
+  },
+  {
+    "scale": 5,
+    "sleep": "on",
+    "gather_work": {
+      "farm_return_routes": 0,
+      "farm_returns": 0,
+      "farm_waits": 0,
+      "replacement_candidates": 264054,
+      "replacements": 9127,
+      "return_buildings": 8,
+      "return_invalid": 0,
+      "return_other": 0,
+      "return_tiles": 33,
+      "returns": 18,
+      "slept": 130346,
+      "steps": 14726,
+      "visits": 1424420,
+      "walkers": 1279348,
+      "work_spots": 24839
+    }
+  },
+  {
+    "scale": 5,
+    "sleep": "off",
+    "gather_work": {
+      "farm_return_routes": 0,
+      "farm_returns": 0,
+      "farm_waits": 0,
+      "replacement_candidates": 264054,
+      "replacements": 9127,
+      "return_buildings": 8,
+      "return_invalid": 0,
+      "return_other": 0,
+      "return_tiles": 33,
+      "returns": 18,
+      "slept": 0,
+      "steps": 141410,
+      "visits": 1420758,
+      "walkers": 1279348,
+      "work_spots": 24839
+    }
+  }
+]
+```
+
+Commands, run on the indicated committed revision:
+
+```sh
+make match-bench MATCH_BENCH_ARGS='--seats 16 --ticks 600 --threads 1 --scale 1,5 --hash-every 100 --out .cache/match-bench/before-on.json'
+make match-bench MATCH_BENCH_ARGS='--seats 16 --ticks 600 --threads 1 --scale 1,5 --hash-every 100 --no-work-sleep --out .cache/match-bench/before-off.json'
+make match-bench MATCH_BENCH_ARGS='--seats 16 --ticks 600 --threads 1 --scale 1,5 --hash-every 100 --out .cache/match-bench/after-on.json'
+make match-bench MATCH_BENCH_ARGS='--seats 16 --ticks 600 --threads 1 --scale 1,5 --hash-every 100 --no-work-sleep --out .cache/match-bench/after-off.json'
+```
+
+One-minute load at report completion: before-on 101.81, before-off 44.44, after-on 58.69, after-off 49.46. These single shared-machine samples do not isolate a wall-time speedup from the filter or sleep. Gathering means include large spikes (up to about one second); the current workload makes few returns in 600 ticks. The deterministic result is six fewer issued routes at 5x, with all other gathering counts and checkpoint hashes preserved. This synthetic in-process workload does not qualify finished RTS performance or dedicated hardware.
+
+Raw reports and logs remain outside Git under `.cache/match-bench/{before,after}-{on,off}.json` and `.cache/sleep-bench-*.log`; the inspected comparison is `.cache/match-bench/comparison-summary.json`.
