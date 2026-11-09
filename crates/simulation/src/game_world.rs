@@ -39,7 +39,7 @@ pub(crate) use route_scheduler::{Pass, far_route};
 mod spacing;
 mod spawning;
 mod unit_index;
-pub(crate) use unit_index::{IdSet, UnitIndex};
+pub(crate) use unit_index::{ChunkBuckets, IdSet, UnitIndex};
 #[path = "game_world/visibility/mod.rs"]
 mod visibility;
 mod wildlife;
@@ -164,7 +164,8 @@ pub struct GameWorld {
     pub(crate) units: changes::Units,
     pub(crate) unit_changes: Vec<EntityId>,
     pub(crate) lookup: UnitIndex,
-    pub(crate) chunks: BTreeMap<ChunkCoord, Vec<EntityId>>,
+    /// The all-unit presence index: unit ids per 32-tile chunk.
+    pub(crate) chunks: ChunkBuckets,
     /// Units with an order to walk, in id order: the Gauss-Seidel apply order.
     pub(crate) active_movers: IdSet,
     pub(crate) movement_scratch: movement_step::Scratch,
@@ -227,7 +228,7 @@ impl GameWorld {
             units: Default::default(),
             unit_changes: Vec::new(),
             lookup: UnitIndex::new(),
-            chunks: BTreeMap::new(),
+            chunks: ChunkBuckets::default(),
             active_movers: IdSet::default(),
             movement_scratch: Default::default(),
             yields: Default::default(),
@@ -448,24 +449,15 @@ impl GameWorld {
     pub(crate) fn move_bucket(&mut self, index: usize, bucket: ChunkCoord) {
         let old = self.units[index].bucket;
         let slot = self.units[index].bucket_slot;
-        let Some(ids) = self.chunks.get_mut(&old) else {
+        if self.chunks.get(&old).is_none() {
             return;
-        };
+        }
         // `swap_remove` puts the bucket's last unit into the vacated slot.
-        ids.swap_remove(slot);
-        let displaced = ids.get(slot).copied();
-        let emptied = ids.is_empty();
+        let displaced = self.chunks.swap_remove(old, slot);
         if let Some(displaced_index) = displaced.and_then(|id| self.lookup.get(&id).copied()) {
             self.units[displaced_index].bucket_slot = slot;
         }
-        if emptied {
-            self.chunks.remove(&old);
-        }
-        let new_slot = self.chunks.entry(bucket).or_default().len();
-        self.chunks
-            .entry(bucket)
-            .or_default()
-            .push(self.units[index].state.id);
+        let new_slot = self.chunks.push(bucket, self.units[index].state.id);
         self.units[index].bucket = bucket;
         self.units[index].bucket_slot = new_slot;
     }

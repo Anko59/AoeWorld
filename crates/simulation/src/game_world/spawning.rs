@@ -106,8 +106,7 @@ impl GameWorld {
             self.combat.seekers.insert(id);
         }
         let bucket = ChunkCoord::from_position(position);
-        let bucket_slot = self.chunks.entry(bucket).or_default().len();
-        self.chunks.entry(bucket).or_default().push(id);
+        let bucket_slot = self.chunks.push(bucket, id);
         self.lookup.insert(id, self.units.len());
         self.units.push(StoredUnit {
             formation: None,

@@ -3,7 +3,9 @@
 use aoe_core::EntityId;
 use std::ops::Index;
 
+mod chunk_buckets;
 mod id_set;
+pub(crate) use chunk_buckets::ChunkBuckets;
 pub(crate) use id_set::IdSet;
 
 const VACANT: usize = usize::MAX;

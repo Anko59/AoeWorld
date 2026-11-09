@@ -213,16 +213,9 @@ impl GameWorld {
         self.untrack_unit_at(id, at);
         let bucket = self.units[index].bucket;
         let slot = self.units[index].bucket_slot;
-        if let Some(ids) = self.chunks.get_mut(&bucket) {
-            ids.swap_remove(slot);
-            let displaced = ids.get(slot).copied();
-            let emptied = ids.is_empty();
-            if let Some(displaced_index) = displaced.and_then(|id| self.lookup.get(&id).copied()) {
-                self.units[displaced_index].bucket_slot = slot;
-            }
-            if emptied {
-                self.chunks.remove(&bucket);
-            }
+        let displaced = self.chunks.swap_remove(bucket, slot);
+        if let Some(displaced_index) = displaced.and_then(|id| self.lookup.get(&id).copied()) {
+            self.units[displaced_index].bucket_slot = slot;
         }
         self.active_movers.remove(id);
         self.combat.attackers.remove(&id);
