@@ -73,3 +73,37 @@ fixed. The plan's gate asks for 30 game-minutes (36,000 ticks); that length was 
 
 Workers barely help this load: 9.05, 10.22, 8.93 and 11.17 ticks/s at 1, 2, 6 and 12
 (machine load 14 to 25), so most of the tick is serial today.
+
+## 1,000 seats (2026-11-09, revision 882e146d8)
+
+1,000 seats, 1x, 2,000 ticks, 6 workers, map side 6,324 (load 16 to 19). The world takes
+`WorldLimits::for_match(1000)`; nothing else was raised. Setup 502 s: 83,205 units, 38,924
+buildings, 956 garrisoned Stewards, no village refused.
+
+| ticks/s | with bots | tick p50 | p95 | p99 | movement | gathering | wildlife | building memory | movers | waiting | RSS MiB |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0.69 | 0.55 | 1,181 | 3,042 | 5,786 | 787.8 | 282.1 | 31.1 | 21.0 | 19,373 | 18,083 | 706 |
+
+At tick 2,000 the route scheduler's world-wide bound is reached (`world_capacity_exhausted`), 115
+players sit at the search cap and 17,683 of 18,083 waiting units hold no planner: a starved
+baseline. `collision_closed` visits 742k bodies a tick. The bots cost 353 ms a tick on average
+(outside the tick timing, inside "with bots"): their every-second scan of all units is itself a
+whole-population pass.
+
+## Instructions per stage (Callgrind, 2026-11-09)
+
+`--callgrind --scale 1,5 --warmup 100 --counted 3`, one worker, ticks 101 to 103, millions of
+instructions per tick (simulated LL 8 MiB, host-derived). 10x was not run (setup alone would
+take about an hour under Valgrind).
+
+| scale | units | movers | tick | movement | group_prepare | formations | route_serve | propose | apply | sidestep | combat | wildlife | bookkeeping | DRAM MiB/tick |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1x | 9,692 | 1,636 | 1,312 | 1,199 | 737 | 777 | 403 | 13.4 | 4.8 | 4.1 | 3.4 | 9.2 | 0.9 | 15.6 |
+| 5x | 46,763 | 5,758 | 2,906 | 2,692 | 1,691 | 1,979 | 544 | 139 | 28.8 | 22.7 | 1.5 | 14.4 | 2.2 | 49.2 |
+
+`prepare_group_targets` (formation targets) is 56% to 58% of the counted tick, then route
+search. `bookkeeping` here is only the index relocations, vision and `collect_changed`: the
+gathering and building-memory phase functions are inlined in this build and have no symbol
+(`present: false`), so they are **not measured** (their wall time is in the rung-0 table).
+Three ticks right after warmup are not a steady-state sample; counts were not repeated, so the
+plan's ±3% over 3 runs is not shown.

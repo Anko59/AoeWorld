@@ -31,7 +31,8 @@ pub(super) fn hex(world: &GameWorld) -> String {
         .collect()
 }
 
-/// A tick Callgrind counts (`--toggle-collect=*counted_tick*`).
+/// A tick Callgrind counts (collection toggled around it by client requests;
+/// the linker may fold it with `plain_tick`, so it is not matched by name).
 #[inline(never)]
 pub(super) fn counted_tick(world: &mut GameWorld) {
     std::hint::black_box(world.advance());
@@ -171,7 +172,10 @@ pub(super) fn counted_child(shape: &Shape, warmup: u64, counted: u64) -> Result<
         for _ in 0..counted {
             movers += world.active_mover_count() as u64;
             units += world.unit_count() as u64;
+            // Collect only the tick: the bots between ticks stay out.
+            gungraun::client_requests::callgrind::toggle_collect();
             counted_tick(world);
+            gungraun::client_requests::callgrind::toggle_collect();
             bots::step(world, &built.seats, &built.generals, &mut counts);
         }
         gungraun::client_requests::callgrind::stop_instrumentation();

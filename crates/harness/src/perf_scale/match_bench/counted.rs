@@ -1,7 +1,7 @@
 //! `match-bench --callgrind`: re-runs this binary under Callgrind (cache
 //! simulation on, one rayon worker) for each `--scale`. The child builds the
 //! match and plays `--warmup` ticks uninstrumented, then instruments
-//! `--counted` ticks and collects only inside `counted_tick`, so world setup
+//! `--counted` ticks and collects only around each `counted_tick`, so world setup
 //! and the bots are outside the counts. The profile is split into the movement
 //! stages of `perf-stage-counters` plus the whole tick phases (bookkeeping:
 //! index relocation, vision, building memory, collect_changed). Instructions
@@ -97,6 +97,28 @@ fn ir(stages: &Map<String, Value>, name: &str) -> f64 {
     stages[name]["per_tick"]["ir"].as_f64().unwrap_or(0.0) / 1e6
 }
 
+fn count(
+    options: &Options,
+    scale: f64,
+    exe: &Path,
+    child: &Path,
+    out: &Path,
+) -> Result<(), BoxError> {
+    let status = Command::new("valgrind")
+        .arg("--tool=callgrind")
+        .arg("--cache-sim=yes")
+        .arg("--instr-atstart=no")
+        .arg("--collect-atstart=no")
+        .arg(format!("--callgrind-out-file={}", out.display()))
+        .arg(exe)
+        .args(child_args(options, scale, child))
+        .status()?;
+    if !status.success() {
+        return Err(format!("callgrind child at scale {scale} failed: {status}").into());
+    }
+    Ok(())
+}
+
 pub(super) fn run(options: &Options) -> Result<(), BoxError> {
     let exe = std::env::current_exe()?;
     let dir = options
@@ -112,18 +134,12 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
     for &scale in &options.scale {
         let child = dir.join(format!("child-{scale}.json"));
         let out = dir.join(format!("callgrind.scale-{scale}.out"));
-        let status = Command::new("valgrind")
-            .arg("--tool=callgrind")
-            .arg("--cache-sim=yes")
-            .arg("--instr-atstart=no")
-            .arg("--collect-atstart=no")
-            .arg("--toggle-collect=*counted_tick*")
-            .arg(format!("--callgrind-out-file={}", out.display()))
-            .arg(&exe)
-            .args(child_args(options, scale, &child))
-            .status()?;
-        if !status.success() {
-            return Err(format!("callgrind child at scale {scale} failed: {status}").into());
+        // A finished child (its JSON is written last) is reused: a long
+        // suite can be cut and resumed without re-running a scale.
+        if child.exists() && out.exists() {
+            eprintln!("match-bench: reusing {}", out.display());
+        } else {
+            count(options, scale, &exe, &child, &out)?;
         }
         let meta: Value = serde_json::from_str(&fs::read_to_string(&child)?)?;
         let profile = parse(&fs::read_to_string(&out)?)?;
