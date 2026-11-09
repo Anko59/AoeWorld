@@ -1,6 +1,8 @@
 use super::*;
 use aoe_core::{Seed, TileCoord, WorldConfig};
 
+mod mover_certificate;
+
 #[test]
 fn group_neighbor_radius_bound_grows_at_spawn_and_stays_conservative_after_removal() {
     let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(0)).unwrap()).unwrap();

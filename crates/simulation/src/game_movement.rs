@@ -70,7 +70,7 @@ impl GameWorld {
         {
             let probe = self.planning_probe.clone();
             let _span = probe.as_ref().and_then(|p| p.movement_span("propose"));
-            self.propose_steps_into(&movers, start, &mut scratch);
+            self.propose_ordered_steps(&movers, start, &mut scratch);
         }
         let probe = self.planning_probe.clone();
         let apply_span = probe.as_ref().and_then(|p| p.movement_span("apply_loop"));
@@ -337,6 +337,7 @@ impl GameWorld {
             }
             self.observe_unit_progress(index);
         }
+        self.collisions.end_drift_watch();
         drop(apply_span);
         self.work_approach_clearance = None;
         self.melee_traffic_clearance = None;

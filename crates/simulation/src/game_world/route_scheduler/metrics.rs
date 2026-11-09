@@ -41,6 +41,9 @@ pub struct RouteMetrics {
     pub group_path_work: u64,
     pub group_path_writes: u64,
     pub group_collision_work: u64,
+    /// Body sweeps the ordered apply loop ran again for ordinary proposals:
+    /// one for each proposal that reached it without a certificate in force.
+    pub apply_resweeps: u64,
     /// Orders answered when issued (path, cache or fast local search).
     pub solved_at_issue: u64,
     pub cache_hits: u64,

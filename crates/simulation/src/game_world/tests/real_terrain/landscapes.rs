@@ -62,7 +62,7 @@ fn run(case: &str, count: usize, limit: u32) {
             assert_eq!(result.oscillation_causes, causes(0, 0, 0, 3));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (5522, 55349, 3108113)
+                (5522, 55349, 3104703)
             );
         }
         "long" => {
@@ -75,7 +75,7 @@ fn run(case: &str, count: usize, limit: u32) {
             assert_eq!(result.oscillation_causes, causes(12, 0, 0, 6));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (36804, 378134, 102402561)
+                (36804, 378134, 102402476)
             );
         }
         _ => {
@@ -85,9 +85,9 @@ fn run(case: &str, count: usize, limit: u32) {
                 "forest" => (3288, 1027, 2198882),
                 "town" => (3740, 1193, 2510834),
                 "crossing" => (3278, 1933, 3051861),
-                "bridge" => (479, 354, 12365),
-                "siege" => (1556, 867, 33972),
-                "gap" => (580, 512, 8908),
+                "bridge" => (479, 354, 8857),
+                "siege" => (1556, 867, 19928),
+                "gap" => (580, 512, 5837),
                 _ => unreachable!(),
             };
             assert_eq!(

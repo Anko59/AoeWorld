@@ -5,7 +5,8 @@
 //! not depend on how the movers are split over threads. The apply phase then
 //! runs in the planning-cursor rotation order of the sequential engine and
 //! performs every shared write (unit store, vision, spatial buckets, output
-//! lists). A proposal re-checks follower spacing at apply time. Movers that
+//! lists). A proposal re-checks follower spacing at apply time, unless its
+//! step was certified against every earlier mover (`certificates`). Movers that
 //! search, fail, or cross two waypoints in one tick are not proposed (or are
 //! rejected at apply); they run
 //! the sequential path in the same order, so they consume the shared planning
@@ -46,6 +47,10 @@ pub(crate) struct FastStep {
     bucket: ChunkCoord,
     vision_stale: bool,
     member: Option<super::formation::Motion>,
+    /// The proposal's padded sweep proved the step clear of every body that
+    /// goes no farther than the batch's step bound before this unit's turn:
+    /// the ordered apply then needs no second sweep (`certificates`).
+    certified: bool,
 }
 
 /// Per-tick dense lookups that replace ordered-map reads on the per-mover path.
@@ -58,6 +63,8 @@ struct Tables {
     busy: Vec<bool>,
     neighbor_radius: [i32; 2],
     group_step_bound: i32,
+    /// Padding of the ordinary batch's step certificates (0: none this tick).
+    mover_step_bound: i32,
 }
 
 impl Tables {
@@ -183,6 +190,9 @@ impl GameWorld {
                 return;
             }
             tables.refresh(self, group_phase);
+            if !group_phase {
+                tables.mover_step_bound = self.mover_step_bound(jobs.iter().copied(), tables);
+            }
             par_map_into(jobs.len(), proposals, |slot| {
                 let index = jobs[slot];
                 if group_phase {
@@ -197,6 +207,10 @@ impl GameWorld {
             let Scratch {
                 tables, proposals, ..
             } = scratch;
+            if !group_phase {
+                let indices = movers.iter().filter_map(|id| self.lookup.get(id).copied());
+                tables.mover_step_bound = self.mover_step_bound(indices, tables);
+            }
             par_map_into(count, proposals, |turn| {
                 let index = *self.lookup.get(&movers[(start + turn) % count])?;
                 if group_phase {
@@ -205,6 +219,19 @@ impl GameWorld {
                 self.propose_step(index, tables)
             });
         }
+    }
+
+    /// The ordinary batch: proposals from the snapshot, then the collision
+    /// index measures how far bodies drift from it until the ordered loop
+    /// ends the watch. Step certificates count only in between.
+    pub(crate) fn propose_ordered_steps(
+        &mut self,
+        movers: &[EntityId],
+        start: usize,
+        scratch: &mut Scratch,
+    ) {
+        self.propose_steps_into(movers, start, scratch);
+        self.collisions.watch_drift(scratch.tables.mover_step_bound);
     }
 
     #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -254,9 +281,8 @@ impl GameWorld {
             interpolate(order, order.travelled)
         };
         let (previous_tile, tile) = (state.position.tile_floor(), position.tile_floor());
-        if !self.local_unit_step_clear(index, state.position, position) {
-            return None;
-        }
+        let certified =
+            self.proposal_step_clear(index, state.position, position, tables.mover_step_bound)?;
         if !matches!(
             self.unit_position_step_clear(state.kind, state.position, position),
             Ok(true)
@@ -344,6 +370,7 @@ impl GameWorld {
             pops,
             keeps_moving,
             member: None,
+            certified,
         })
     }
 
@@ -370,6 +397,26 @@ impl GameWorld {
         None
     }
 
+    /// Terrain and buildings were proved by the proposal and cannot change
+    /// during the apply phase. Only earlier movers' new positions can:
+    /// re-sweep the bodies, not the static footprints. A certified step needs
+    /// no sweep while the unit stands where it was proposed and the collision
+    /// index still vouches for every other body (`drift_within_watch`).
+    fn ordered_step_clear(&mut self, step: &FastStep) -> bool {
+        let (index, to) = (step.index, step.state.position);
+        let from = self.units[index].state.position;
+        if step.certified
+            && from == step.state.previous_position
+            && self.collisions.drift_within_watch()
+        {
+            #[cfg(debug_assertions)]
+            self.audit_certified_step(index, from, to);
+            return true;
+        }
+        self.route_metrics.apply_resweeps += 1;
+        self.collision_sweep(index, from, to, false, false)
+    }
+
     /// Commits a proposal: the shared writes of the sequential engine, in the
     /// same order (position, wildlife cells, vision, bucket). Returns `false`, writing nothing,
     /// when an assumption of the proposal no longer holds.
@@ -388,18 +435,7 @@ impl GameWorld {
         }
         if let Some(motion) = step.member {
             self.adjust_group_step(&mut step, motion);
-        } else if self.arrival_slot_occupied(index)
-            // Terrain and buildings were proved by the proposal and cannot
-            // change during the apply phase. Only earlier movers' new
-            // positions can: re-sweep the bodies, not the static footprints.
-            || !self.collision_sweep(
-                index,
-                self.units[index].state.position,
-                step.state.position,
-                false,
-                false,
-            )
-        {
+        } else if self.arrival_slot_occupied(index) || !self.ordered_step_clear(&step) {
             return false;
         }
         let stored = &mut self.units[index];

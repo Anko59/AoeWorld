@@ -51,6 +51,14 @@ pub(crate) struct CollisionIndex {
     overfull_cells: usize,
     maximum_radii: [i32; 2],
     land_counts: HashMap<u64, usize, BuildHasherDefault<CellHasher>>,
+    /// Squared distance no body may be from where the running ordered batch
+    /// found it. `None` outside a batch, and once a body went farther or a
+    /// new body appeared.
+    drift_limit: Option<i64>,
+    /// The running batch and, by body id, the batch of its latest move with
+    /// the centre that batch found it at.
+    batch: u64,
+    origins: Vec<(u64, WorldPosition)>,
 }
 
 impl CollisionIndex {
@@ -97,7 +105,10 @@ impl CollisionIndex {
         if at >= self.slots.len() {
             self.slots.resize(at + 1, usize::MAX);
             self.indices.resize(at + 1, usize::MAX);
+            self.origins.resize(at + 1, (0, position));
         }
+        // No certificate of the running batch saw this body.
+        self.drift_limit = None;
         self.indices[at] = index;
         let recycled = &mut self.recycled;
         let cell = self.cells[usize::from(naval)]
@@ -159,20 +170,71 @@ impl CollisionIndex {
         naval: bool,
     ) {
         let to = position.tile_floor();
+        // The insertion below is this body's own: it does not end the watch.
+        let watch = self.drift_limit.take();
+        let mut old = None;
         if from != to {
             let index = self.unit_index(id);
+            if watch.is_some() {
+                old = self.body_at(id, from, naval);
+            }
             self.remove(id, from, naval);
             self.insert(id, position, naval, index);
         } else if let Some(&slot) = self.slots.get(id.0 as usize)
             && let Some(cell) = self.cells[usize::from(naval)].get_mut(&key(to))
             && let Some(body) = cell.get_mut(slot).filter(|body| body.id == id)
         {
+            old = Some(body.at);
             body.at = position;
+        }
+        // A move the index could not follow ends the watch as well.
+        if let (Some(limit), Some(old)) = (watch, old)
+            && self.within_drift(id, old, position, limit)
+        {
+            self.drift_limit = watch;
         }
     }
 
+    /// Starts an ordered batch whose step certificates allow every body
+    /// `step` subunits from where it stands now (none for `step` 0). From here
+    /// to `end_drift_watch` the index measures what the bodies actually do.
+    pub(crate) fn watch_drift(&mut self, step: i32) {
+        self.batch += 1;
+        self.drift_limit = (step > 0).then(|| i64::from(step) * i64::from(step));
+    }
+
+    pub(crate) fn end_drift_watch(&mut self) {
+        self.drift_limit = None;
+    }
+
+    /// True while the running batch's certificates hold: no body is farther
+    /// from its place at the batch's start than they allow, none appeared,
+    /// and no cell is sampled.
+    pub(crate) fn drift_within_watch(&self) -> bool {
+        self.drift_limit.is_some() && self.overfull_cells == 0
+    }
+
+    /// Whether `id`, moved from `old` to `new`, is within `limit` (squared)
+    /// of the centre the running batch found it at.
+    fn within_drift(
+        &mut self,
+        id: EntityId,
+        old: WorldPosition,
+        new: WorldPosition,
+        limit: i64,
+    ) -> bool {
+        let Some(origin) = self.origins.get_mut(id.0 as usize) else {
+            return false;
+        };
+        if origin.0 != self.batch {
+            *origin = (self.batch, old);
+        }
+        let x = i64::from(new.x) - i64::from(origin.1.x);
+        let y = i64::from(new.y) - i64::from(origin.1.y);
+        x * x + y * y <= limit
+    }
+
     /// The indexed centre of a body, wherever its cell.
-    #[cfg(test)]
     pub(crate) fn body_at(
         &self,
         id: EntityId,

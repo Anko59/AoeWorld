@@ -131,6 +131,7 @@ impl GameWorld {
             pops: 0,
             keeps_moving: false,
             member: Some(motion),
+            certified: false,
         })
     }
 
