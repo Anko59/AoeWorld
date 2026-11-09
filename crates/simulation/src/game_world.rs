@@ -447,6 +447,10 @@ impl GameWorld {
     }
 
     pub(crate) fn move_bucket(&mut self, index: usize, bucket: ChunkCoord) {
+        let _span = self
+            .planning_probe
+            .as_ref()
+            .and_then(|probe| probe.movement_span("index_chunks"));
         let old = self.units[index].bucket;
         let slot = self.units[index].bucket_slot;
         if self.chunks.get(&old).is_none() {

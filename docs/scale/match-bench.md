@@ -45,6 +45,12 @@ MATCH_BENCH_ARGS="--scale 1,5,10 --callgrind --warmup 100 --counted 3" make matc
 Reports go to `.cache/match-bench/` (ignored). Wall time is on a shared machine with the load
 recorded, not pinned cores.
 
+Timed runs attach an index observer. `phases.index_collision` measures body relocation and
+`phases.index_chunks` measures all-unit presence-bucket relocation across the tick, excluding
+spatial queries. These spans are included in the outer tick phases; do not add them to movement
+as separate work. Clocks accumulate nanoseconds before reporting milliseconds. Observer
+overhead is part of the tick, so use the same observer on both versions in a comparison.
+
 ## Rung 0 (2026-11-09, revision 882e146d8)
 
 100 seats, seed 1, 1,000 ticks, 6 workers, `--suite phase0`; the machine was shared (1-minute

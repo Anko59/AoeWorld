@@ -5,9 +5,10 @@ use super::super::stats::{Series, memory};
 use super::super::{PHASES, world::BoxError};
 use super::bots::{self, BotCounts};
 use super::build::{self, Shape};
+use super::index_timing::{IndexProbe, NAMES as INDEX_PHASES};
 use aoe_simulation::{GameWorld, TickPhase};
 use serde_json::{Value, json};
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
 
 pub(super) struct Plan {
     pub shape: Shape,
@@ -84,6 +85,8 @@ pub(super) fn run(plan: &Plan) -> Result<Outcome, BoxError> {
 fn run_in_pool(plan: &Plan) -> Result<Outcome, BoxError> {
     let mut built = build::build(&plan.shape)?;
     let world = &mut built.world;
+    let indexes = Arc::new(IndexProbe::default());
+    world.set_planning_probe(indexes.clone());
     let start_units = world.unit_count();
     let start_buildings = world.buildings().count();
     let start_hash = hex(world);
@@ -91,11 +94,14 @@ fn run_in_pool(plan: &Plan) -> Result<Outcome, BoxError> {
     let mut tick_ms = Series::default();
     let mut bots_ms = Series::default();
     let mut phases = vec![Series::default(); PHASES.len()];
+    let mut index_phases = vec![Series::default(); INDEX_PHASES.len()];
     let mut samples = vec![sample(world)];
     let mut hashes = vec![(world.tick().0, start_hash.clone())];
     let mut hash_ms = Series::default();
     let begin = Instant::now();
     for n in 1..=plan.ticks {
+        // Orders issued by the bots between ticks are outside this window.
+        indexes.drain();
         let started = Instant::now();
         let mut last = started;
         let mut spent = [0u128; PHASES.len()];
@@ -105,6 +111,9 @@ fn run_in_pool(plan: &Plan) -> Result<Outcome, BoxError> {
             last = now;
         });
         let ended = Instant::now();
+        for (series, nanos) in index_phases.iter_mut().zip(indexes.drain()) {
+            series.push_ms(nanos);
+        }
         spent[PHASES.len() - 1] += (ended - last).as_nanos();
         tick_ms.push_ms((ended - started).as_nanos());
         for (series, nanos) in phases.iter_mut().zip(spent) {
@@ -126,6 +135,7 @@ fn run_in_pool(plan: &Plan) -> Result<Outcome, BoxError> {
     let phase_summary: serde_json::Map<String, Value> = PHASES
         .iter()
         .zip(&phases)
+        .chain(INDEX_PHASES.iter().zip(&index_phases))
         .map(|(name, series)| ((*name).to_owned(), series.summary()))
         .collect();
     let passes: serde_json::Map<String, Value> = world

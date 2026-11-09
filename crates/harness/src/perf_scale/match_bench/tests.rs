@@ -58,6 +58,13 @@ fn small_match_is_deterministic_across_workers() {
     assert_eq!(one.hashes, two.hashes);
     assert_eq!(one.hashes, four.hashes);
     assert!(one.report["setup"]["units"].as_u64().unwrap_or(0) > 20);
+    for report in [&one.report, &two.report] {
+        for phase in ["index_collision", "index_chunks"] {
+            let summary = &report["phases"][phase];
+            assert_eq!(summary["samples"], 60, "missing per-tick {phase} timings");
+            assert!(summary["p50_ms"].as_f64().is_some_and(f64::is_finite));
+        }
+    }
 }
 
 #[test]

@@ -164,7 +164,8 @@ pub trait PlanningProbe: std::fmt::Debug + Send + Sync {
 /// searches, and planning ahead. Each is inclusive of the planner's own phases.
 /// The rest split a real tick's movement: the parallel proposals, the groups,
 /// and the per-unit fallbacks and attack searches that run on the tick thread.
-pub const PLANNING_SPANS: [&str; 13] = [
+/// Index spans measure body and presence-bucket relocation, not spatial queries.
+pub const PLANNING_SPANS: [&str; 15] = [
     "plan_serve",
     "plan_fast",
     "plan_fair",
@@ -178,6 +179,8 @@ pub const PLANNING_SPANS: [&str; 13] = [
     "local_refinement",
     "sidestep",
     "attack_position_search",
+    "index_collision",
+    "index_chunks",
 ];
 
 pub(crate) struct PlanningMeasurement<'a>(pub(crate) &'a dyn PlanningProbe);

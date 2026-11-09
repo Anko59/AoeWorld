@@ -9,6 +9,7 @@
 mod bots;
 mod build;
 mod counted;
+mod index_timing;
 mod run;
 #[cfg(test)]
 mod tests;

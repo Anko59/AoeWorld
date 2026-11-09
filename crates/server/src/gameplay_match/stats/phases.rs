@@ -6,7 +6,7 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 
-const NAMES: [&str; 44] = [
+const NAMES: [&str; 46] = [
     "sessions",
     "world_lock",
     "orders",
@@ -51,6 +51,8 @@ const NAMES: [&str; 44] = [
     "local_refinement",
     "sidestep",
     "attack_position_search",
+    "index_collision",
+    "index_chunks",
 ];
 type Counters = Arc<[AtomicU64; NAMES.len()]>;
 
@@ -66,12 +68,14 @@ impl Default for Phases {
 impl Phases {
     pub(super) fn record(&self, name: &'static str, elapsed: Duration) {
         if let Some(at) = NAMES.iter().position(|key| *key == name) {
-            self.0[at].fetch_add(elapsed.as_micros() as u64, Ordering::Relaxed);
+            // Individual index updates can take less than a microsecond. Round
+            // only their accumulated tick total, rather than losing each one.
+            self.0[at].fetch_add(elapsed.as_nanos() as u64, Ordering::Relaxed);
         }
     }
     pub(super) fn drain(&self) -> Micros {
         Micros(std::array::from_fn(|at| {
-            self.0[at].swap(0, Ordering::Relaxed)
+            self.0[at].swap(0, Ordering::Relaxed) / 1_000
         }))
     }
     pub(super) fn span(&self, name: &'static str) -> Measurement {
