@@ -69,8 +69,8 @@ pub(crate) struct Army {
 }
 #[derive(Debug, Default)]
 pub(crate) struct Manager {
-    pub armies: BTreeMap<EntityId, Army>,
-    pub controlled: BTreeMap<EntityId, EntityId>,
+    pub armies: crate::game_world::changes::Reports<Army>,
+    pub controlled: crate::game_world::changes::Reports<EntityId>,
     // Only an empty building queue can be reserved. Its front is the recruit.
     pub recruits: BTreeMap<EntityId, (EntityId, UnitKind)>,
     /// Soldiers the player took out of an army by ordering them directly, with

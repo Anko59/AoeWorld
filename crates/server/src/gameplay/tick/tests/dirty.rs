@@ -86,7 +86,7 @@ async fn every_client_holds_the_full_conversion_of_its_view_each_tick() {
             {
                 continue;
             }
-            let frame = UnitFrame::build(&world, &[session.viewer], 1, 0, None).unwrap();
+            let frame = UnitFrame::build(&world, 1, 0, None).unwrap();
             let lens = Lens {
                 viewer: session.viewer,
                 primary: session.primary_unit_id,

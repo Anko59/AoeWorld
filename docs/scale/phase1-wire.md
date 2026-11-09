@@ -124,3 +124,95 @@ dedicated hardware and finished RTS performance are unverified. No publication
 was run, as requested by the task brief. This is a shared-machine saved-game
 measurement, not evidence for every RTS workload. There is no visible behavior
 change to film; unchanged wire pins are the behavior regression evidence.
+
+## F1: retain the unit frame and consume simulation changes
+
+The initial failing regression ran against `f2fe06ea79f7` production code:
+three idle service ticks visited 12 unit ids rather than the four ids required
+by the initial build.
+
+Unit storage now journals mutable access, insertion and swap-removal. The
+report maps journal gather/hunt/cargo/army/controller changes at their source.
+Member changes also invalidate their General's squad report; Steward territory
+events invalidate their workers and fishing ships. These derived journals are
+neither hashed nor saved and do not change simulation advancement's output.
+Marks are conservative: a mutable access can leave the final wire state equal.
+
+Fan-out takes ownership of the previous frame and updates only the published
+change ids. States, indexes and other owner-list entries remain in place.
+Owner lists maintain their storage-order cap and id-order output through
+ordered selected/overflow sets, including when removal swaps a storage slot.
+New viewers use the retained owner index. A missing previous frame, a shared
+previous frame that cannot transfer ownership, or a skipped simulation tick
+requires a fresh full build. The visit counter counts unique input ids,
+including removed ids, rather than every lookup or memory access in the build.
+
+In tests every fan-out independently scans and converts the full world and
+checks its states, indexes and capped owner lists. The existing 240-tick dirty
+client oracle additionally checks that applying delivered deltas reconstructs
+the full view. Focused regressions cover idle ticks, one mover among thousands,
+report-only invalidation, storage swaps, death/removal, list overflow and a
+missed frame. The wire-stream pin is retained without regeneration.
+
+The in-process comparison uses `Seed(7)`, a 1,024-square world, 13,400 Scouts
+on a four-tile grid and 100 owners. All units use `NoAttack`; each measured
+simulation advance must return no changed units and publish an empty journal.
+This prevents autonomous combat or spawn spacing from turning the idle fixture
+into an active workload. An earlier random-population trial did start combat;
+its timing is excluded from this idle comparison.
+
+The exact `f2fe06ea79f7` frame source (SHA-256
+`0175c45877f9a3e83067bbdd190e7a57705437463c23a621c8bd84508273b6d6`)
+was temporarily compiled as a test-only module to capture the scan baseline
+alongside a retained frame reading the same world. The final retained frame is
+measured again by the focused test against the identical fixture. Only the
+current implementation is retained in the committed code. Each case has two
+setup ticks and an initial frame before 300 measured builds. Simulation
+advancement, including journal publication, is outside the timed spans. Both
+builds use one worker in the optimized test profile with assertions enabled.
+The nearest-rank p50/p95 exclude sessions, transport and the oracle.
+
+| Steady idle frame metric | Original scan | Retained frame |
+|---|---:|---:|
+| Unit ids visited, 300 builds | 4,020,000 | 0 |
+| Unit ids visited per build | 13,400 | 0 |
+| Frame build p50 (ms) | 1.607064 | 0.001467 |
+| Frame build p95 (ms) | 2.170898 | 0.001956 |
+
+The one-mover regression visits exactly one id among 13,400 units and retains
+an unaffected owner's list. Initial frames still visit the whole population.
+The table uses `.cache/phase1-wire/frame-before-idle.txt` and
+`frame-final-idle.txt`. The original paired retained measurement is also kept
+as `frame-after-idle.txt`: zero visits and p50/p95 0.001885/0.002374 ms.
+`.cache/f1-idle-comparison.log` records that paired run; the final measurement
+ran in the full server selection below. All runs share the host with other
+work; counts establish scan removal independently of scheduling variation.
+
+This is a synthetic idle bookkeeping measurement on a shared host, not a
+saved-game rerun, an active-heavy performance comparison, finished RTS
+performance or dedicated hardware qualification. Browser/video and CI
+qualification remain separate; there is no intended visible behavior change.
+No publication is run under this brief's instructions.
+
+
+### F1 validation
+
+Dockerized Make commands on the final source:
+
+- `make hooks-install hooks-check`: passed.
+- `make hooks-check fmt-check lint structure-check architecture-check docs-check`:
+  passed. Lint retains the two existing client dead-code warnings.
+- `NEXTEST_TEST_THREADS=2 make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-server AOE_NATIVE_TEST_FILTER='test(gameplay)|test(routes)'`:
+  128 passed, including the unchanged wire-stream pin, `tick::dirty`, the
+  full-scan oracle and all new frame regressions.
+- `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='all()'`:
+  1,210 passed, zero skipped, including one/four-worker replay equality and
+  the new mutation-journal regressions.
+
+One earlier default-concurrency server selection passed 127 tests and timed out
+waiting for skirmish startup to reach `ConnectingAi` after placing all villages.
+The full selection subsequently passed twice with two concurrent tests, with
+its tests and timeouts unchanged. The cause of that earlier timeout is
+unverified. Logs remain in `.cache/f1-server-verified.log`,
+`.cache/f1-server-final-check.log`, `.cache/f1-simulation-verified.log` and
+`.cache/f1-final-checks.log`.

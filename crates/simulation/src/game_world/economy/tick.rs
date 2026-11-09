@@ -45,6 +45,7 @@ impl GameWorld {
         }
         self.economy.stewards.automatic = true;
         let changed = self.advance_phases(sink, probe);
+        self.publish_unit_changes(&changed);
         self.recover_market_prices();
         self.economy.stewards.automatic = false;
         // Every test tick checks that the route scheduler's counters equal

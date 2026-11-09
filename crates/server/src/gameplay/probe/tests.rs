@@ -24,7 +24,7 @@ async fn retired_world_is_released_after_its_service_and_sessions_are_dropped() 
 }
 
 #[tokio::test]
-async fn every_tick_counts_one_unit_frame_build_over_every_unit() {
+async fn idle_ticks_visit_units_only_for_the_initial_frame() {
     let service = GameplayService::new(Seed(1));
     let (tx, _rx) = tokio::sync::mpsc::channel(64);
     service.register(None, tx).await;
@@ -33,7 +33,7 @@ async fn every_tick_counts_one_unit_frame_build_over_every_unit() {
         service.tick().await;
     }
     let units = service.world.read().await.unit_count() as u64;
-    assert_eq!(service.unit_frame_passes(), (3, 3 * units));
+    assert_eq!(service.unit_frame_passes(), (3, units));
 }
 
 #[tokio::test]

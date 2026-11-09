@@ -2,8 +2,8 @@
 //!
 //! Indexing charges the returned slots. Any borrowed Vec/slice view conservatively
 //! charges every exposed slot, covering iterators, coercions and bulk methods.
-//! This is an access upper bound, not a performance metric. Production still
-//! stores an ordinary Vec; atomics preserve the world's Send + Sync contract.
+//! This is an access upper bound, not a performance metric. The journal embeds
+//! this only in tests; production embeds a Vec. Atomics preserve Send + Sync.
 use super::StoredUnit;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std::slice::SliceIndex;
@@ -32,8 +32,9 @@ impl UnitStore {
         self.units.is_empty()
     }
 
-    // Only the existing test-only correctness oracle needs an unmeasured
-    // view: its deliberate full scan is not part of the production operation.
+    // The correctness oracle deliberately scans outside the measured operation.
+    // Journaling also uses this view to avoid charging the caller twice for
+    // the slots its mutable view already exposes.
     pub(crate) fn oracle_slice(&self) -> &[StoredUnit] {
         &self.units
     }

@@ -244,10 +244,11 @@ pub(super) fn build(
     let started = std::time::Instant::now();
     let viewers = viewer_states(world, views, changes);
     let viewers_done = started.elapsed();
-    let distinct = viewers.keys().copied().collect::<Vec<_>>();
     let threads = rayon::current_num_threads().min(8);
-    let frame = UnitFrame::build(world, &distinct, threads, generation, previous.as_deref())?;
-    drop(previous);
+    let previous = previous.and_then(|frame| Arc::try_unwrap(frame).ok());
+    let frame = UnitFrame::build(world, threads, generation, previous)?;
+    #[cfg(test)]
+    frame.assert_matches_world(world);
     let frame_done = started.elapsed();
     let threads = threads.min(views.len() / 8 + 1);
     #[cfg(test)]

@@ -89,7 +89,7 @@ impl GameplayService {
         };
         self.probe.phase("fanout_wait", fanout_started.elapsed());
         self.fanout_probe
-            .record_unit_frame(built.frame.unit_count(), built.frame.work());
+            .record_unit_frame(built.frame.visited(), built.frame.work());
         self.fanout_probe.keep_frame(built.frame.clone());
         let delivery_started = std::time::Instant::now();
         let failed = {

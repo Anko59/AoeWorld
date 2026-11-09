@@ -473,10 +473,9 @@ impl super::GameWorld {
             .iter()
             .map(|(id, task)| (*id, task.kind, task.animal))
     }
-    /// Every unit a command report (General castle, army, controller or
-    /// Steward manager) may name, possibly repeated, and every loaded
-    /// transport with its cargo size: only these units' reports read more
-    /// than the unit itself. One pass instead of lookups per unit.
+    /// Every unit a command report (General castle, army, controller or Steward
+    /// manager) may name, possibly repeated: only these and loaded transports'
+    /// reports read more than the unit itself. One pass, not per-unit lookups.
     pub fn command_report_units(&self) -> impl Iterator<Item = EntityId> + '_ {
         let generals = &self.economy.generals;
         generals

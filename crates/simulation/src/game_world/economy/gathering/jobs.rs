@@ -55,13 +55,17 @@ impl GatherTask {
 
 #[derive(Debug, Default)]
 pub(crate) struct Gatherers {
-    tasks: BTreeMap<EntityId, GatherTask>,
+    tasks: crate::game_world::changes::Reports<GatherTask>,
     members: HashMap<u64, u64, BuildHasherDefault<CellHasher>>,
     targets: HashMap<WorkTarget, usize, BuildHasherDefault<CellHasher>>,
     pub(super) dozes: super::dozing::Dozes,
 }
 
 impl Gatherers {
+    pub(crate) fn take_changes(&mut self) -> std::collections::BTreeSet<EntityId> {
+        self.tasks.take_changes()
+    }
+
     /// Every working unit with its resource node and, for farmers, the farm.
     pub(crate) fn assignments(&self) -> Vec<(EntityId, u64, Option<EntityId>)> {
         self.tasks

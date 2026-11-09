@@ -39,8 +39,8 @@ struct CacheUsage {
 #[derive(Default)]
 pub(super) struct FanoutProbe {
     nanos: [AtomicU64; 4],
-    /// Cumulative `UnitFrame` builds and the units they converted: a pass over
-    /// every unit each tick (diagnostics only, `docs/movement/caps.md` section 3).
+    /// Cumulative frame builds and changed ids visited, including removals.
+    /// Initial builds visit every unit; retained frames visit only dirty ids.
     unit_frames: AtomicU64,
     unit_frame_units: AtomicU64,
     /// Of those, units converted afresh and units whose state changed.
@@ -185,7 +185,7 @@ impl GameplayService {
         self.probe.take_phase_micros()
     }
 
-    /// Cumulative `UnitFrame` builds and units converted since the match began.
+    /// Cumulative frame builds and unit ids visited since the match began.
     pub fn unit_frame_passes(&self) -> (u64, u64) {
         (
             self.fanout_probe.unit_frames.load(Ordering::Relaxed),
