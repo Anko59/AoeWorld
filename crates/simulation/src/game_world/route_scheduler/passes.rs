@@ -10,13 +10,11 @@ use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 /// A pass over a whole population, in the order of `PASS_NAMES`.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Pass {
-    /// `collision_opened`: every unit, on each tree felled or building removed.
-    /// Replaced by collision subscribers (`resources.rs`); reports 0.
-    #[allow(dead_code)]
+    /// `collision_opened`, on each tree felled or building removed: visits
+    /// only its subscribers (`resources.rs`), never every unit.
     CollisionOpened,
-    /// `collision_closed`: every unit, on each building placed or gate closed.
-    /// Replaced by collision subscribers (`resources.rs`); reports 0.
-    #[allow(dead_code)]
+    /// `collision_closed`, on each building placed or gate closed: visits
+    /// only its subscribers (`resources.rs`), never every unit.
     CollisionClosed,
     /// The per-tick `remember_visible_buildings`: every watched building
     /// cloned. Replaced by changed-building events (`visibility/memory.rs`);

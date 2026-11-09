@@ -45,6 +45,11 @@ fn the_tick_passes_count_each_tick_and_the_hash_ignores_them() {
 #[test]
 fn a_collision_change_visits_its_subscribers_not_every_unit() {
     let mut w = busy_world();
+    // Idle bystanders a full scan would visit.
+    for n in 0..100 {
+        w.spawn_unit(PlayerId(0), at(150 + n % 10 * 2, 150 + n / 10 * 2))
+            .unwrap();
+    }
     let far = w.spawn_unit(PlayerId(0), at(200, 200)).unwrap();
     let index = w.lookup[&far];
     w.set_movement_error(index, Some(crate::GameWorldError::Unreachable));
@@ -56,8 +61,14 @@ fn a_collision_change_visits_its_subscribers_not_every_unit() {
     assert!(w.units[index].unreachable_memo.is_some());
     w.collision_opened(area);
     assert_eq!(w.units[index].unreachable_memo, None);
-    for replaced in ["collision_closed", "collision_opened"] {
-        assert_eq!(count(&w, replaced), crate::PassCount::default());
+    // Each change ran once and visited a handful of subscribers, not the
+    // busy world's units: a return to full scans fails here.
+    let units = w.units.len() as u64;
+    assert!(units > 50, "the world must be busy for this check");
+    for pass in ["collision_closed", "collision_opened"] {
+        let counted = count(&w, pass);
+        assert_eq!(counted.calls, 1, "{pass}");
+        assert!(counted.visited <= 4, "{pass} visited {}", counted.visited);
     }
 }
 
