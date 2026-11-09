@@ -105,6 +105,7 @@ pub(super) fn run(
         Command::PerfGroups(options) => perf_scale::groups::run(options)?,
         Command::PerfStageCounters(options) => perf_scale::stages::run(options)?,
         Command::ScaleMatch(options) => perf_scale::scale_match::run(options)?,
+        Command::MatchBench(options) => perf_scale::match_bench::run(options)?,
         Command::PerfSoak10 => perf_soak::run(600, "soak-10")?,
         Command::PerfSoak30 => perf_soak::run(1_800, "soak-30")?,
         Command::PerfBaselinePropose => {

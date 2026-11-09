@@ -4,6 +4,7 @@ mod callgrind;
 mod driver;
 pub(crate) mod groups;
 mod groups_workload;
+pub(crate) mod match_bench;
 mod movement;
 pub(crate) mod scale_match;
 mod server;
