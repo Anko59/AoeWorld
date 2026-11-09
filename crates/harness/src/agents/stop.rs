@@ -20,11 +20,13 @@ use std::{
     io::Write,
     path::Path,
     process::Command,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 pub(crate) const ROUNDS: u32 = 5;
 const KEPT_RUNS: usize = 8;
+/// How long a stop waits for another stop's gate run before running its own.
+const RUN_WAIT: Duration = Duration::from_secs(600);
 const RECOVERY: &str = concat!(
     "Narrow the task into smaller testable tasks. File the unfinished work with `make issue`, ",
     "including the task, attempts, failing gates and log paths as evidence. Preserve that evidence, ",
@@ -167,35 +169,17 @@ pub(crate) fn respond(
     };
     let actor = format!("{session}/{}", agent.unwrap_or("main"));
     let root = &context.root;
-    let run = match fingerprint(root, scope) {
-        Ok(fingerprint) => {
-            let cached = with_state(root, |state| {
-                state
-                    .runs
-                    .iter()
-                    .find(|r| r.fingerprint == fingerprint && r.scope == scope)
-                    .cloned()
-            })
-            .ok()
-            .flatten();
-            cached.unwrap_or_else(|| execute(root, scope, fingerprint, slots))
-        }
-        Err(error) => Run {
-            fingerprint: String::new(),
-            scope,
-            verdict: Verdict::Incomplete,
-            report: format!("the change could not be fingerprinted: {error}"),
-        },
-    };
+    let run = shared_run(
+        root,
+        scope,
+        RUN_WAIT,
+        || fingerprint(root, scope),
+        |fingerprint| execute(root, scope, fingerprint, slots),
+    );
     let blocked = blocked_since(root);
     let now = seconds(SystemTime::now());
     let decision = with_state(root, |state| {
-        state
-            .runs
-            .retain(|r| !(r.fingerprint == run.fingerprint && r.scope == run.scope));
-        state.runs.push(run.clone());
-        let excess = state.runs.len().saturating_sub(KEPT_RUNS);
-        state.runs.drain(..excess);
+        record(state, &run);
         decide(state, context.role, &actor, &run, blocked, now)
     })
     .unwrap_or_else(|error| Decision::Note(format!("harness state unavailable: {error}")));
@@ -209,6 +193,91 @@ pub(crate) fn respond(
             Some(serde_json::json!({ "decision": "block", "reason": reason }))
         }
     }
+}
+
+fn cached(root: &Path, fingerprint: &str, scope: Scope) -> Option<Run> {
+    with_state(root, |state| {
+        state
+            .runs
+            .iter()
+            .find(|r| r.fingerprint == fingerprint && r.scope == scope)
+            .cloned()
+    })
+    .ok()
+    .flatten()
+}
+
+fn record(state: &mut State, run: &Run) {
+    state
+        .runs
+        .retain(|r| !(r.fingerprint == run.fingerprint && r.scope == run.scope));
+    state.runs.push(run.clone());
+    let excess = state.runs.len().saturating_sub(KEPT_RUNS);
+    state.runs.drain(..excess);
+}
+
+/// The scope's run lock, or `None` when it stays held for longer than `wait`.
+fn run_lock(root: &Path, scope: Scope, wait: Duration) -> Option<nix::fcntl::Flock<File>> {
+    let name = match scope {
+        Scope::Full => "run-full.lock",
+        Scope::Static => "run-static.lock",
+    };
+    let directory = root.join(RECORDS);
+    fs::create_dir_all(&directory).ok()?;
+    let mut file = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(directory.join(name))
+        .ok()?;
+    let deadline = Instant::now() + wait;
+    loop {
+        match nix::fcntl::Flock::lock(file, nix::fcntl::FlockArg::LockExclusiveNonblock) {
+            Ok(lock) => return Some(lock),
+            Err((_, _)) if Instant::now() >= deadline => return None,
+            Err((unlocked, _)) => file = unlocked,
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// Agents that stop together on one tree share one gate run: the first holds
+/// the scope's run lock while it executes and records its result, the others
+/// wait and then read that result. The fingerprint is taken again once the
+/// lock is held, because the tree may have changed during the wait. A lock
+/// still held after `wait` is not waited for: the stop runs its own gates.
+pub(crate) fn shared_run(
+    root: &Path,
+    scope: Scope,
+    wait: Duration,
+    fingerprint: impl Fn() -> Result<String, String>,
+    execute: impl FnOnce(String) -> Run,
+) -> Run {
+    let unfingerprinted = |error: String| Run {
+        fingerprint: String::new(),
+        scope,
+        verdict: Verdict::Incomplete,
+        report: format!("the change could not be fingerprinted: {error}"),
+    };
+    match fingerprint() {
+        Ok(fingerprint) => {
+            if let Some(run) = cached(root, &fingerprint, scope) {
+                return run;
+            }
+        }
+        Err(error) => return unfingerprinted(error),
+    }
+    let _lock = run_lock(root, scope, wait);
+    let fingerprint = match fingerprint() {
+        Ok(fingerprint) => fingerprint,
+        Err(error) => return unfingerprinted(error),
+    };
+    if let Some(run) = cached(root, &fingerprint, scope) {
+        return run;
+    }
+    let run = execute(fingerprint);
+    let _ = with_state(root, |state| record(state, &run));
+    run
 }
 
 fn seconds(time: SystemTime) -> u64 {
