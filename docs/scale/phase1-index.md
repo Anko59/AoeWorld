@@ -143,3 +143,75 @@ longer replay qualification and performance on the later economy dev update
 remain unverified. This storage/observer change has no intended visible game
 behavior change; [showcase guidance](../showcase.md) permits performance work
 with nothing visible to carry numbers without a video. Nothing was published.
+
+## PR #749 review fixes: F1–F3
+
+The fixes start from `0d5b7845a44eeb6e9fdef847ef00c75f3974d36a` on
+`ship/phase1-index`, without rebasing. F1 anchors the presence array and both
+collision directories at their first occupied coordinate. Their rectangles grow
+geometrically in every direction, with spare capacity on the growing side;
+lookups remain direct array reads. Growth preserves bucket order, swap-removal
+slots, collision arena slots and sampling order. These are growing rectangles,
+not a fully sparse directory: widely separated occupied coordinates and retained
+historical bounds can still reserve empty entries between them.
+
+The 16,384 × 16,384 far-corner regression measures the struct plus all its vector
+capacities on the 64-bit native target, excluding allocator metadata and RSS:
+
+| Storage / setup | Before (bytes) | After (bytes) |
+|---|---:|---:|
+| Presence: 32 IDs in chunk (511, 511) | 6,291,624 | 280 |
+| Fine collision grid: one set tile (16,383, 16,383) | 4,195,420 | 1,148 |
+| Coarse land-count grid: one set cell (8,191, 8,191) | not measured | 1,148 |
+
+The after-byte counts are asserted by the tests. Separate tests exercise 32
+far-corner collision bodies across land/naval layers, coarse-count removal,
+four-direction growth, page reuse, and successive left/up growth without
+repeated doubling.
+
+F2/F3 restores `collect_changed.visited` to its input-ID count, including repeated
+reports before deduplication. One mover among 1,024 idle villagers produces
+exactly 20 visits over 20 ticks, rather than zero or the whole population.
+A separate test verifies repeated/missing IDs, sorted deduplicated output and
+empty calls. The existing counter test again requires actual changed work.
+
+The initial four selected regressions all failed on the original implementation
+(`.cache/ixfix-red.log`). Focused checks then passed 14/14; the first green attempt
+caught a wrong import in the new test, corrected before the passing retry:
+
+```sh
+make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='test(far_corner_) | test(collect_changed_visits_) | test(the_tick_passes_count_)'
+make fmt
+make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='test(chunk_buckets::) | test(collision::index::) | test(scale_hooks::passes::) | test(economy::tick::tests::)'
+```
+
+Focused evidence is `.cache/ixfix-green-focused-retry.log`; the failed import
+attempt is `.cache/ixfix-green-focused.log`. No hash pin, gate or existing
+performance baseline changed. No visible game behavior changes; the
+[performance-video exemption](../showcase.md) applies. No footage was recorded,
+and no long-job benchmark, publication or CI run was requested for these fixes.
+
+The final full simulation suite passed **1,227/1,227**, zero skipped, in 286.736
+seconds, including the unchanged 14,000-unit, 384-tick checkpoint and its
+one/four-worker comparison. The earlier run also passed 1,227/1,227 in 409.930
+seconds. These are regression runs on a shared machine, not a new throughput
+qualification.
+
+```sh
+make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='all()'
+make -j1 hooks-install hooks-check fmt-check lint structure-check architecture-check docs-check
+```
+
+Final full-suite output is `.cache/ixfix-simulation-all-final.log`; the earlier
+run is `.cache/ixfix-simulation-all.log`.
+
+The first gate sequence (`.cache/ixfix-gates.log`) passed hooks, formatting, lint
+and structure, then architecture rejected two new production `.expect()` calls.
+Those calls were removed in favor of offsets within the just-grown bounds,
+without changing a gate or adding an allowlist.
+
+The final gate sequence passed all seven targets; output is
+`.cache/ixfix-gates-final.log`. Normal commit hooks recheck the staged tree.
+CI, browser/e2e QA, real-map startup RSS and timing remain unverified for these
+review fixes. The reported allocations do not qualify finished RTS performance
+or dedicated hardware.

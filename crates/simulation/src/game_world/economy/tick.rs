@@ -125,9 +125,8 @@ impl GameWorld {
     /// the earlier movement interpolation state.
     #[inline(never)] // a symbol of its own for the Callgrind stage counters
     fn collect_changed(&mut self, ids: Vec<EntityId>) -> Vec<GameUnit> {
-        // The sort this pass was counted for is gone: it visits nothing.
         self.passes
-            .record(crate::game_world::Pass::CollectChanged, 0);
+            .record(crate::game_world::Pass::CollectChanged, ids.len());
         let mut dirty = std::mem::take(&mut self.movement_scratch.changed);
         for &id in &ids {
             dirty.insert(id);
@@ -138,3 +137,6 @@ impl GameWorld {
         changed
     }
 }
+
+#[cfg(test)]
+mod tests;

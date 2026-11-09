@@ -71,3 +71,41 @@ fn a_window_rejects_outside_centres_without_a_body_test() {
     assert!(!tested((centre.x, centre.x + 99, centre.y, centre.y)));
     assert!(tested((centre.x, centre.x + 100, centre.y, centre.y)));
 }
+
+#[test]
+fn far_corner_units_keep_fine_and_coarse_collision_queries() {
+    use crate::game_world::route_scheduler::GroupWork;
+    let far = TileCoord::new(16_383, 16_383);
+    let centre = WorldPosition::from_tile_center(far).unwrap();
+    let mut index = CollisionIndex::default();
+    for id in 0..32 {
+        index.insert(EntityId(id), centre, id % 2 != 0, id as usize);
+    }
+    for naval in [false, true] {
+        let mut seen = Vec::new();
+        assert!(!index.blocked(
+            (centre, 0),
+            naval,
+            0,
+            &GroupWork::default(),
+            |id| {
+                seen.push(id);
+                false
+            },
+            |_| false
+        ));
+        assert_eq!(
+            seen,
+            (0..32)
+                .filter(|id| (id % 2 != 0) == naval)
+                .map(EntityId)
+                .collect::<Vec<_>>()
+        );
+    }
+    assert!(index.contact_may_be_crowded(centre, 16, &GroupWork::default()));
+    for id in (0..32).step_by(2) {
+        index.remove(EntityId(id), far, false);
+    }
+    assert!(!index.contact_may_be_crowded(centre, 2, &GroupWork::default()));
+    assert_eq!(index.cells[1].get(far).unwrap().len(), 16);
+}

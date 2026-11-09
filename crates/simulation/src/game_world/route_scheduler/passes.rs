@@ -3,7 +3,7 @@
 //!
 //! Diagnostics only: the counters are never hashed, never snapshotted and never
 //! read by behaviour. They are cumulative; the delta between two reads is the
-//! work done in between. Phase 1 takes each pass's `visited` to 0 per tick.
+//! work done in between. Event-driven passes still count the entities they process.
 use crate::GameWorld;
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 
@@ -29,8 +29,8 @@ pub(crate) enum Pass {
     WildlifeIds,
     /// `advance_transports`: every transport journey, every tick.
     AdvanceTransports,
-    /// `collect_changed`: every changed id sorted, every tick; dirty bits
-    /// replaced the sort, so it now visits nothing.
+    /// `collect_changed`: changed ids processed each tick, including repeated
+    /// reports of an id from different phases before dirty-bit deduplication.
     CollectChanged,
     /// `Tables::refresh`: the dense per-tick lookups of every entity id.
     TablesRefresh,

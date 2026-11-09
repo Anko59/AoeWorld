@@ -1,5 +1,5 @@
 //! A flat, sparse grid of `u32` values over tile-like coordinates: a
-//! row-major directory of 16×16 pages, allocated only where a value is set
+//! row-major directory bounded by occupied 16×16 pages, allocated where a value is set
 //! and released when the page holds none. A read is two array loads instead
 //! of a hash probe; out-of-range and negative coordinates read as vacant.
 const SHIFT: u32 = 4;
@@ -16,7 +16,9 @@ struct Page {
 #[derive(Debug)]
 pub(super) struct Grid {
     vacant: u32,
-    /// Pages per directory row; the directory grows to the farthest page set.
+    /// Page-space origin and row width of the directory; distant first writes
+    /// do not allocate the rectangle back to the map origin.
+    origin: (usize, usize),
     width: usize,
     directory: Vec<u32>,
     pages: Vec<Page>,
@@ -27,6 +29,7 @@ impl Grid {
     pub(super) const fn new(vacant: u32) -> Self {
         Self {
             vacant,
+            origin: (0, 0),
             width: 0,
             directory: Vec::new(),
             pages: Vec::new(),
@@ -44,10 +47,10 @@ impl Grid {
         let Some((px, py, local)) = Self::split(x, y) else {
             return self.vacant;
         };
-        if px >= self.width {
+        let Some(at) = self.at(px, py) else {
             return self.vacant;
-        }
-        match self.directory.get(py * self.width + px) {
+        };
+        match self.directory.get(at) {
             Some(&page) if page != NO_PAGE => self.pages[page as usize].values[local],
             _ => self.vacant,
         }
@@ -63,13 +66,8 @@ impl Grid {
         if value == vacant && self.get(x, y) == vacant {
             return;
         }
-        if px >= self.width {
-            self.widen(px + 1);
-        }
-        let at = py * self.width + px;
-        if at >= self.directory.len() {
-            self.directory.resize(at + 1, NO_PAGE);
-        }
+        self.grow_to(px, py);
+        let at = (py - self.origin.1) * self.width + (px - self.origin.0);
         if self.directory[at] == NO_PAGE {
             let page = Page {
                 values: [vacant; SIDE * SIDE],
@@ -104,7 +102,10 @@ impl Grid {
             .enumerate()
             .filter(|(_, page)| **page != NO_PAGE)
             .flat_map(move |(at, &page)| {
-                let (px, py) = (at % self.width, at / self.width);
+                let (px, py) = (
+                    at % self.width + self.origin.0,
+                    at / self.width + self.origin.1,
+                );
                 let values = &self.pages[page as usize].values;
                 values
                     .iter()
@@ -118,15 +119,54 @@ impl Grid {
             })
     }
 
-    /// Re-lays the directory out at least `width` pages wide. Rare.
-    fn widen(&mut self, width: usize) {
-        let width = width.max(self.width * 2).max(16);
-        let rows = self.directory.len().div_ceil(self.width.max(1));
-        let mut directory = vec![NO_PAGE; rows * width];
+    fn at(&self, x: usize, y: usize) -> Option<usize> {
+        let (x, y) = (x.checked_sub(self.origin.0)?, y.checked_sub(self.origin.1)?);
+        (x < self.width).then(|| y * self.width + x)
+    }
+
+    /// Re-lays the directory only when its occupied bounds grow, amortizing
+    /// small steps by doubling the growing dimension. Hot reads remain arrays.
+    fn grow_to(&mut self, x: usize, y: usize) {
+        if self.directory.is_empty() {
+            self.origin = (x, y);
+            self.width = 1;
+            self.directory.push(NO_PAGE);
+            return;
+        }
+        let rows = self.directory.len() / self.width;
+        let mut origin = (x.min(self.origin.0), y.min(self.origin.1));
+        let width = (x + 1).max(self.origin.0 + self.width) - origin.0;
+        let height = (y + 1).max(self.origin.1 + rows) - origin.1;
+        if width == self.width && height == rows {
+            return;
+        }
+        let required = (width, height);
+        let width = if width > self.width {
+            width.max(self.width * 2)
+        } else {
+            width
+        };
+        let height = if height > rows {
+            height.max(rows * 2)
+        } else {
+            height
+        };
+        // Put spare capacity on the growing side, so successive left/up steps
+        // do not each double the rectangle again.
+        if x < self.origin.0 {
+            origin.0 = origin.0.saturating_sub(width - required.0);
+        }
+        if y < self.origin.1 {
+            origin.1 = origin.1.saturating_sub(height - required.1);
+        }
+        let mut directory = vec![NO_PAGE; width * height];
+        let dx = self.origin.0 - origin.0;
+        let dy = self.origin.1 - origin.1;
         for (at, &page) in self.directory.iter().enumerate() {
-            directory[(at / self.width) * width + at % self.width] = page;
+            directory[(at / self.width + dy) * width + at % self.width + dx] = page;
         }
         self.directory = directory;
+        self.origin = origin;
         self.width = width;
     }
 }

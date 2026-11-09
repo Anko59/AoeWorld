@@ -1,12 +1,14 @@
 //! The all-unit presence index: the ids of the units in each 32-tile chunk,
-//! in a flat row-major array of buckets instead of an ordered map. A bucket's
+//! in an occupied-bounds row-major array instead of an ordered map. A bucket's
 //! order is its insertion order with swap removals, exactly as before; only
 //! keyed reads ever happened, so nothing observes the storage order.
 use aoe_core::{ChunkCoord, EntityId};
 
 #[derive(Debug, Default)]
 pub(crate) struct ChunkBuckets {
-    /// Chunks per row; the array grows to the farthest chunk ever occupied.
+    /// Lower corner and row width of the allocated rectangle. Empty space
+    /// between the map origin and the first occupied chunk costs nothing.
+    origin: (usize, usize),
     width: usize,
     buckets: Vec<Vec<EntityId>>,
     occupied: usize,
@@ -18,6 +20,7 @@ impl ChunkBuckets {
             usize::try_from(chunk.x).ok()?,
             usize::try_from(chunk.y).ok()?,
         );
+        let (x, y) = (x.checked_sub(self.origin.0)?, y.checked_sub(self.origin.1)?);
         (x < self.width).then(|| y * self.width + x)
     }
 
@@ -38,13 +41,8 @@ impl ChunkBuckets {
         // Unit positions are on the map, so their chunks are never negative.
         debug_assert!(chunk.x >= 0 && chunk.y >= 0, "{chunk:?}");
         let (x, y) = (chunk.x.max(0) as usize, chunk.y.max(0) as usize);
-        if x >= self.width {
-            self.widen(x + 1);
-        }
-        let at = y * self.width + x;
-        if at >= self.buckets.len() {
-            self.buckets.resize_with(at + 1, Vec::new);
-        }
+        self.grow_to(x, y);
+        let at = (y - self.origin.1) * self.width + (x - self.origin.0);
         let ids = &mut self.buckets[at];
         self.occupied += usize::from(ids.is_empty());
         ids.push(id);
@@ -61,18 +59,50 @@ impl ChunkBuckets {
         ids.get(slot).copied()
     }
 
-    /// Re-lays the rows out `width` chunks wide. Rare: once per new
-    /// farthest column.
-    fn widen(&mut self, width: usize) {
-        let width = width.max(self.width * 2).max(16);
-        let rows = self.buckets.len().div_ceil(self.width.max(1));
+    /// Grow geometrically around occupied bounds, including left/up growth.
+    /// Only growth moves buckets; reads and writes inside the bounds stay O(1).
+    fn grow_to(&mut self, x: usize, y: usize) {
+        if self.buckets.is_empty() {
+            self.origin = (x, y);
+            self.width = 1;
+            self.buckets.push(Vec::new());
+            return;
+        }
+        let rows = self.buckets.len() / self.width;
+        let mut origin = (x.min(self.origin.0), y.min(self.origin.1));
+        let width = (x + 1).max(self.origin.0 + self.width) - origin.0;
+        let height = (y + 1).max(self.origin.1 + rows) - origin.1;
+        if width == self.width && height == rows {
+            return;
+        }
+        let required = (width, height);
+        let width = if width > self.width {
+            width.max(self.width * 2)
+        } else {
+            width
+        };
+        let height = if height > rows {
+            height.max(rows * 2)
+        } else {
+            height
+        };
+        // Put spare capacity on the growing side, so successive left/up steps
+        // do not each double the rectangle again.
+        if x < self.origin.0 {
+            origin.0 = origin.0.saturating_sub(width - required.0);
+        }
+        if y < self.origin.1 {
+            origin.1 = origin.1.saturating_sub(height - required.1);
+        }
         let mut buckets = Vec::new();
-        buckets.resize_with(rows * width, Vec::new);
+        buckets.resize_with(width * height, Vec::new);
+        let dx = self.origin.0 - origin.0;
+        let dy = self.origin.1 - origin.1;
         for (at, ids) in self.buckets.drain(..).enumerate() {
-            let (x, y) = (at % self.width, at / self.width);
-            buckets[y * width + x] = ids;
+            buckets[(at / self.width + dy) * width + at % self.width + dx] = ids;
         }
         self.buckets = buckets;
+        self.origin = origin;
         self.width = width;
     }
 }
