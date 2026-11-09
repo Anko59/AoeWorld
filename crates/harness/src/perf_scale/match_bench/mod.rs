@@ -57,6 +57,72 @@ pub struct Options {
     /// Compare the hash sequences of earlier reports instead of running.
     #[arg(long, value_delimiter = ',')]
     compare: Vec<PathBuf>,
+    /// `phase0`: rung 0 (100 seats, 1x/5x/10x, at most 1,000 ticks), worker determinism (1x at
+    /// 1/2/6/12), 1,000 seats for `--ticks`, and Callgrind at 1x/5x/10x, one
+    /// report each beside `--out`. Other flags give the shared seed and ticks.
+    #[arg(long)]
+    suite: Option<String>,
+    /// Ticks of the suite's determinism replay.
+    #[arg(long, default_value_t = 3_000)]
+    determinism_ticks: u64,
+}
+
+fn suite(options: &Options) -> Result<(), BoxError> {
+    let dir = options
+        .out
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .to_path_buf();
+    let base = Options {
+        suite: None,
+        ..options.clone()
+    };
+    let studies = [
+        Options {
+            seats: 100,
+            scale: vec![1.0, 5.0, 10.0],
+            threads: vec![6],
+            ticks: options.ticks.min(1_000),
+            out: dir.join("rung0.json"),
+            ..base.clone()
+        },
+        Options {
+            seats: 100,
+            scale: vec![1.0],
+            threads: vec![1, 2, 6, 12],
+            ticks: options.determinism_ticks,
+            out: dir.join("determinism.json"),
+            ..base.clone()
+        },
+        Options {
+            seats: 1_000,
+            scale: vec![1.0],
+            threads: vec![6],
+            out: dir.join("seats1000.json"),
+            ..base.clone()
+        },
+        Options {
+            seats: 100,
+            scale: vec![1.0, 5.0, 10.0],
+            callgrind: true,
+            out: dir.join("stages.json"),
+            ..base
+        },
+    ];
+    let mut failed = Vec::new();
+    for study in studies {
+        let name = study.out.display().to_string();
+        eprintln!("match-bench suite: {name}");
+        if let Err(error) = run(study) {
+            eprintln!("match-bench suite: {name} failed: {error}");
+            failed.push(name);
+        }
+    }
+    if failed.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("match-bench suite: failed {failed:?}").into())
+    }
 }
 
 fn shape(options: &Options, scale: f64) -> Shape {
@@ -160,6 +226,11 @@ fn compare(paths: &[PathBuf]) -> Result<(), BoxError> {
 pub fn run(options: Options) -> Result<(), BoxError> {
     if !options.compare.is_empty() {
         return compare(&options.compare);
+    }
+    match options.suite.as_deref() {
+        Some("phase0") => return suite(&options),
+        Some(other) => return Err(format!("match-bench: unknown suite {other}").into()),
+        None => {}
     }
     if let Some(out) = &options.counted_child {
         let scale = options.scale.first().copied().unwrap_or(1.0);
