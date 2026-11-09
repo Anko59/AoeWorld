@@ -1,6 +1,10 @@
 use super::super::{
     role::Role,
-    stop::{Decision, ROUNDS, Run, Scope, State, Verdict, decide},
+    stop::{Decision, ROUNDS, Run, Scope, State, Verdict, decide, shared_run},
+};
+use std::{
+    sync::atomic::{AtomicUsize, Ordering},
+    time::Duration,
 };
 
 fn run(verdict: Verdict, fingerprint: &str) -> Run {
@@ -140,4 +144,131 @@ fn the_main_session_also_gets_autonomous_recovery() {
         };
         assert_recovery(&message);
     }
+}
+
+#[test]
+fn agents_that_stop_together_on_one_tree_share_a_single_gate_run() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let executions = AtomicUsize::new(0);
+    let reports: Vec<String> = std::thread::scope(|scope| {
+        let stops: Vec<_> = (0..6)
+            .map(|_| {
+                scope.spawn(|| {
+                    shared_run(
+                        root,
+                        Scope::Full,
+                        Duration::from_secs(30),
+                        || Ok("same tree".into()),
+                        |fingerprint| {
+                            let nth = executions.fetch_add(1, Ordering::SeqCst);
+                            std::thread::sleep(Duration::from_millis(200));
+                            Run {
+                                fingerprint,
+                                scope: Scope::Full,
+                                verdict: Verdict::Pass,
+                                report: format!("gate run {nth}"),
+                            }
+                        },
+                    )
+                    .report
+                })
+            })
+            .collect();
+        stops.into_iter().map(|stop| stop.join().unwrap()).collect()
+    });
+    assert_eq!(executions.load(Ordering::SeqCst), 1, "{reports:?}");
+    assert!(
+        reports.iter().all(|report| report == "gate run 0"),
+        "{reports:?}"
+    );
+}
+
+#[test]
+fn a_waiting_stop_judges_the_tree_as_it_is_when_its_turn_comes() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    // The tree changes while the second stop waits: it must run under the new
+    // fingerprint instead of recording the new tree under the old one.
+    let asked = AtomicUsize::new(0);
+    let first = shared_run(
+        root,
+        Scope::Full,
+        Duration::from_secs(30),
+        || Ok("before".into()),
+        |fingerprint| run_named(Verdict::Fail, &fingerprint),
+    );
+    assert_eq!(first.fingerprint, "before");
+    let second = shared_run(
+        root,
+        Scope::Full,
+        Duration::from_secs(30),
+        || {
+            Ok(if asked.fetch_add(1, Ordering::SeqCst) == 0 {
+                "stale".into()
+            } else {
+                "after".into()
+            })
+        },
+        |fingerprint| run_named(Verdict::Pass, &fingerprint),
+    );
+    assert_eq!(second.fingerprint, "after");
+    assert_eq!(second.verdict, Verdict::Pass);
+    // The same tree stopping again reuses the recorded run without executing.
+    let again = shared_run(
+        root,
+        Scope::Full,
+        Duration::from_secs(30),
+        || Ok("after".into()),
+        |_| panic!("a recorded run must be reused"),
+    );
+    assert_eq!(again.verdict, Verdict::Pass);
+    // Scopes never share a run.
+    let tester = shared_run(
+        root,
+        Scope::Static,
+        Duration::from_secs(30),
+        || Ok("after".into()),
+        |fingerprint| Run {
+            scope: Scope::Static,
+            ..run_named(Verdict::Fail, &fingerprint)
+        },
+    );
+    assert_eq!(tester.verdict, Verdict::Fail);
+}
+
+#[test]
+fn a_run_lock_that_stays_held_is_not_waited_for_beyond_the_limit() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let entered = std::sync::Barrier::new(2);
+    std::thread::scope(|scope| {
+        scope.spawn(|| {
+            shared_run(
+                root,
+                Scope::Full,
+                Duration::from_secs(30),
+                || Ok("slow".into()),
+                |fingerprint| {
+                    entered.wait();
+                    std::thread::sleep(Duration::from_millis(600));
+                    run_named(Verdict::Pass, &fingerprint)
+                },
+            )
+        });
+        entered.wait();
+        let impatient = shared_run(
+            root,
+            Scope::Full,
+            Duration::from_millis(50),
+            || Ok("other".into()),
+            |fingerprint| run_named(Verdict::Fail, &fingerprint),
+        );
+        assert_eq!(impatient.fingerprint, "other");
+        assert_eq!(impatient.verdict, Verdict::Fail);
+    });
+}
+
+fn run_named(verdict: Verdict, fingerprint: &str) -> Run {
+    run(verdict, fingerprint)
 }
