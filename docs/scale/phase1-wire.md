@@ -358,3 +358,39 @@ Logs remain outside Git in `.cache/wrmerge-{red,green,injected-scan}.log`,
 `.cache/wrmerge-continue{1,2}.log`. The first `make perf-ci` was refused by a live
 shared saved-match job (error 75); `.cache/wrmerge-perf-admission.log` records
 that refusal, which is not a performance result.
+
+### Post-rebase performance result
+
+The single later retry of `make perf-ci` was admitted and passed at clean
+revision `e5adcf109a00302cae593f2feddb547e25d687ea` (`dirty: false`). Its Rust
+source is identical to `c5bac8b58826e77b6cefa531462d89c5092717f8`; the intervening
+commit records the rebase/native evidence above. The aggregate freshly ran
+instruction benchmarks and WASM size, completed all three late-game repetitions,
+and passed the smoke, distributed and hotspot protocol workloads.
+
+| Simulation kernel | Pre-rebase reference | Rebased measurement | Unchanged baseline |
+|---|---:|---:|---:|
+| distributed_ticks | 8,943,073 | 8,950,261 | 10,330,744 |
+| smoke_ticks | 5,224,565 | 5,238,605 | 5,275,671 |
+| late_game | 207,084,754 | 196,808,435 | 240,557,748 |
+
+The reference column is the earlier branch measurement recorded above, not a
+new paired run. All three rebased counts are below their committed baselines.
+All seven instruction comparisons passed the unchanged +3% allowance. Optimized
+gzip WASM measured 396,211 bytes against baseline 375,952 with its unchanged 25%
+allowance; all eight aggregate comparisons passed. Improved-count notes request
+a baseline refresh; no baseline, threshold, workload or wire pin was changed.
+The standalone `make perf-wasm-size` also passed while admission was busy.
+
+The fresh aggregate JSON/Markdown, raw instruction NDJSON and Callgrind profiles
+are retained outside Git as `.cache/wrmerge-ci.{json,md}`,
+`.cache/wrmerge-{simulation,protocol,assets}.ndjson` and
+`.cache/wrmerge-callgrind/`. Console output is `.cache/wrmerge-perf-ci.log`;
+`.cache/wrmerge-wasm.log` records the standalone size measurement.
+
+The final documentation follow-up changes no Rust source. No client files
+changed, and there is no intended visible behavior change to film. No video is
+recorded; the unchanged wire pin and independent full-frame oracle are the
+behavior regressions. CI, browser execution, a new saved-game timing comparison,
+real-source and dedicated hardware qualification, and finished RTS performance
+remain unverified. No ship, push or PR publication was run, as the brief requires.
