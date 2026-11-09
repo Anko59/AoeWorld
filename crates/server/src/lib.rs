@@ -13,6 +13,7 @@ mod page_residency;
 #[cfg(any(test, feature = "sampling-profiler"))]
 mod sampling;
 mod source_qualification;
+mod static_files;
 mod terrain_cache;
 pub use config::{Config, SamplingProfile};
 pub use gameplay::{GameplayService, PersistedDepletion, ResourceLifecycleError, SlotInfo};
@@ -85,6 +86,8 @@ pub struct AppState {
     match_admin_token: Option<Arc<str>>,
     tick_stats: Arc<gameplay_match::TickStats>,
     skirmish: Arc<gameplay_match::Skirmish>,
+    /// Gzip bodies of the static files, made on first use.
+    static_files: Arc<static_files::Cache>,
 }
 
 impl AppState {
@@ -118,6 +121,7 @@ impl AppState {
             match_admin_token: Config::match_admin_token_from_env().map(Into::into),
             tick_stats: Arc::default(),
             skirmish: Arc::new(gameplay_match::Skirmish::from_env(config.bind.port())),
+            static_files: Arc::default(),
         })
     }
 
@@ -175,6 +179,12 @@ impl AppState {
 
     pub fn tick_deadline_misses(&self) -> u64 {
         self.tick_deadline_misses.load(Ordering::Relaxed)
+    }
+
+    /// Static responses this server has gzip-encoded so far: one per cache
+    /// miss that ran the encoder, never one per request.
+    pub fn static_compressions(&self) -> u64 {
+        self.static_files.compressions()
     }
 }
 
@@ -261,6 +271,9 @@ const SERIES_ART_DIR: &str = "local-assets/series-art";
 
 pub fn app(state: AppState) -> Router {
     let asset_pack = state.asset_pack.clone();
+    // Compressible files leave gzip-encoded, from one cache for all three roots.
+    let gzip = state.static_files.clone();
+    let web = ServeDir::new("web").append_index_html_on_directories(true);
     let router = Router::new()
         .route("/health", get(health))
         .route("/replay-hash", get(replay_hash))
@@ -270,17 +283,17 @@ pub fn app(state: AppState) -> Router {
         .route("/game/ws", get(gameplay_websocket))
         .merge(gameplay_match::routes())
         .merge(gameplay::arena::routes())
-        .fallback_service(ServeDir::new("web").append_index_html_on_directories(true))
+        .fallback_service(gzip.serve("", web))
         .with_state(state);
     let router = if let Some(pack) = asset_pack {
-        router.nest_service("/asset-pack", ServeDir::new(pack))
+        gzip.nest(router, "/asset-pack", ServeDir::new(pack))
     } else {
         router
     };
     // Optional local paintings (`make assets-series-art`) for the menu and
     // loading art. Absent directory: the page falls back to bundled art.
     let router = if std::path::Path::new(SERIES_ART_DIR).is_dir() {
-        router.nest_service("/series-art", ServeDir::new(SERIES_ART_DIR))
+        gzip.nest(router, "/series-art", ServeDir::new(SERIES_ART_DIR))
     } else {
         router
     };

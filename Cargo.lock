@@ -263,6 +263,7 @@ dependencies = [
  "aoe-scenario",
  "aoe-simulation",
  "axum",
+ "flate2",
  "futures-util",
  "gungraun",
  "memmap2",
