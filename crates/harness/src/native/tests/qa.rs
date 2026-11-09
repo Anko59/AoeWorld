@@ -36,10 +36,35 @@ fn locked_version(lock: &str, name: &str) -> String {
     // Only the generated lock's fixed nix/blake3 package records are needed here;
     // this fixture helper is not a general TOML parser or admission policy.
     let named = format!("name = \"{name}\"");
-    let matching: Vec<_> = lock
-        .split("[[package]]")
-        .skip(1)
+    let packages: Vec<_> = lock.split("[[package]]").skip(1).collect();
+    // When the lock holds several versions (another crate pins an older one),
+    // the harness names its own as "name version" in its dependency list.
+    let pinned = packages
+        .iter()
+        .find(|package| {
+            package
+                .lines()
+                .any(|line| line.trim() == "name = \"aoe-harness\"")
+        })
+        .and_then(|harness| {
+            harness.lines().find_map(|line| {
+                line.trim()
+                    .trim_end_matches(',')
+                    .trim_matches('"')
+                    .strip_prefix(&format!("{name} "))
+                    .map(str::to_owned)
+            })
+        });
+    let matching: Vec<_> = packages
+        .into_iter()
         .filter(|package| package.lines().any(|line| line.trim() == named))
+        .filter(|package| {
+            pinned.as_ref().is_none_or(|version| {
+                package
+                    .lines()
+                    .any(|line| line.trim() == format!("version = \"{version}\""))
+            })
+        })
         .collect();
     assert_eq!(
         matching.len(),
