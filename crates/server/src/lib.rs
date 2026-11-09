@@ -292,6 +292,20 @@ pub fn app(state: AppState) -> Router {
     ))
 }
 
+/// The listener the server serves [`app`] from: every connection it accepts
+/// has TCP_NODELAY set. A tick's frames are small, and with Nagle's algorithm
+/// the kernel holds one back until the peer acknowledges the write before it,
+/// which can take most of a tick.
+pub fn nodelay(
+    listener: tokio::net::TcpListener,
+) -> impl axum::serve::Listener<Io = tokio::net::TcpStream, Addr = std::net::SocketAddr> {
+    use axum::serve::ListenerExt;
+    listener.tap_io(|stream| {
+        // A connection that refuses the option is served all the same.
+        let _ = stream.set_nodelay(true);
+    })
+}
+
 fn states(entities: Vec<Entity>) -> BTreeMap<EntityId, EntityState> {
     entities
         .into_iter()
