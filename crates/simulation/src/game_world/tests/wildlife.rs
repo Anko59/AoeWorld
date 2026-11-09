@@ -443,7 +443,7 @@ fn a_new_hunt_ignores_an_earlier_failed_route() {
     let sheep = w.spawn_animal(AnimalKind::Sheep, at(103, 100)).unwrap();
     w.advance();
     let index = w.lookup[&worker];
-    w.units[index].last_movement_error = Some(GameWorldError::Unreachable);
+    w.set_movement_error(index, Some(GameWorldError::Unreachable));
     w.issue_hunt(PlayerId(0), &[worker], sheep).unwrap();
     run(&mut w, 40);
     assert_ne!(w.unit(worker).unwrap().task, UnitTask::Idle);

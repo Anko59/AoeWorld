@@ -216,7 +216,7 @@ fn walled_fishing() -> (GameWorld, EntityId, aoe_map::ResourceNode, Vec<TileCoor
     let index = w.lookup[&id];
     w.units[index].order = None;
     w.units[index].route.clear();
-    w.units[index].last_movement_error = Some(crate::GameWorldError::Unreachable);
+    w.set_movement_error(index, Some(crate::GameWorldError::Unreachable));
     (w, id, fish, wall)
 }
 

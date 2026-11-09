@@ -423,7 +423,7 @@ impl GameWorld {
         state.planning = false;
         self.units[index].order = None;
         self.units[index].route.clear();
-        self.units[index].last_movement_error = error;
+        self.set_movement_error(index, error);
         let id = self.units[index].state.id;
         self.refresh_spacing_order(id);
         if !self.economy.gatherers.contains_key(&id)

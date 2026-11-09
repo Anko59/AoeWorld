@@ -1,4 +1,4 @@
-use super::{GameWorld, Pass};
+use super::GameWorld;
 use crate::Terrain;
 use aoe_map::{Depletion, ResourceOverlay, ResourceOverlayError, ResourceOverlaySnapshot};
 
@@ -113,6 +113,7 @@ impl GameWorld {
             self.clear_planner(index);
             self.units[index].last_movement_error = None;
         }
+        self.collision_subscribers.errors.clear();
     }
 
     /// Ground became walkable (a resource exhausted, a building removed, a
@@ -120,30 +121,23 @@ impl GameWorld {
     /// can invalidate a suspended reverse flood's sealed-destination proof.
     /// Restart those planners through the scheduler's normal budget; clearing
     /// every planner whenever a tree fell caused the long-game freeze.
+    /// Only the subscribed units are visited, never every unit.
     pub(crate) fn collision_opened(&mut self, area: aoe_core::TileRect) {
         let _span = self
             .planning_probe
             .as_ref()
             .and_then(|probe| probe.cache_span());
-        self.navigation_cache.invalidate(area);
-        self.economy.work_positions.invalidate(area);
-        self.clearance
-            .get_mut()
-            .unwrap_or_else(|error| error.into_inner())
-            .invalidate(area);
-        self.passes.record(Pass::CollisionOpened, self.units.len());
-        for index in 0..self.units.len() {
-            if self.units[index]
-                .planner
-                .as_ref()
-                .is_some_and(|planner| planner.opening_invalidates_proof(area))
-            {
-                self.clear_planner(index);
+        self.invalidate_collision_caches(area);
+        self.clear_planners_where(|planner| planner.opening_invalidates_proof(area));
+        self.clear_movement_errors();
+        // Opened ground can make a refused target reachable.
+        for id in std::mem::take(&mut self.collision_subscribers.memos) {
+            if let Some(&index) = self.lookup.get(&id) {
+                self.units[index].unreachable_memo = None;
             }
-            self.units[index].last_movement_error = None;
-            // Opened ground can make a refused target reachable.
-            self.units[index].unreachable_memo = None;
         }
+        #[cfg(test)]
+        self.assert_collision_subscribers_complete(true);
     }
 
     /// `area` became blocked (a building placed, a gate closed): only the
@@ -153,24 +147,94 @@ impl GameWorld {
             .planning_probe
             .as_ref()
             .and_then(|probe| probe.cache_span());
+        self.invalidate_collision_caches(area);
+        self.clear_planners_where(|planner| planner.touches(area));
+        self.clear_movement_errors();
+        #[cfg(test)]
+        self.assert_collision_subscribers_complete(false);
+    }
+
+    fn invalidate_collision_caches(&mut self, area: aoe_core::TileRect) {
         self.navigation_cache.invalidate(area);
         self.economy.work_positions.invalidate(area);
         self.clearance
             .get_mut()
             .unwrap_or_else(|error| error.into_inner())
             .invalidate(area);
-        self.passes.record(Pass::CollisionClosed, self.units.len());
-        for index in 0..self.units.len() {
-            if self.units[index]
-                .planner
-                .as_ref()
-                .is_some_and(|planner| planner.touches(area))
-            {
-                self.clear_planner(index);
+    }
+
+    /// Clears the planners `invalid` selects, in unit order as the full
+    /// scan did, visiting only the units that hold one.
+    fn clear_planners_where(&mut self, invalid: impl Fn(&aoe_map::RoutePlanner) -> bool) {
+        let (mut cleared, mut gone) = (Vec::new(), Vec::new());
+        for id in &self.collision_subscribers.planners {
+            match self.lookup.get(id) {
+                Some(&index) if self.units[index].planner.as_ref().is_some_and(&invalid) => {
+                    cleared.push(index);
+                }
+                Some(_) => {}
+                None => gone.push(*id),
             }
-            self.units[index].last_movement_error = None;
+        }
+        for id in gone {
+            self.collision_subscribers.planners.remove(&id);
+        }
+        cleared.sort_unstable();
+        for index in cleared {
+            self.clear_planner(index);
         }
     }
+
+    fn clear_movement_errors(&mut self) {
+        for id in std::mem::take(&mut self.collision_subscribers.errors) {
+            if let Some(&index) = self.lookup.get(&id) {
+                self.units[index].last_movement_error = None;
+            }
+        }
+    }
+
+    /// Sets a unit's movement error; an error subscribes it to the next
+    /// collision change, which clears it.
+    pub(crate) fn set_movement_error(
+        &mut self,
+        index: usize,
+        error: Option<crate::GameWorldError>,
+    ) {
+        self.units[index].last_movement_error = error;
+        if error.is_some() {
+            let id = self.units[index].state.id;
+            self.collision_subscribers.errors.insert(id);
+        }
+    }
+
+    /// Test oracle: the full unit scan this replaced would change nothing more.
+    #[cfg(test)]
+    fn assert_collision_subscribers_complete(&self, opened: bool) {
+        for unit in &self.units {
+            let id = unit.state.id;
+            assert!(unit.last_movement_error.is_none(), "{id:?} kept its error");
+            assert!(
+                !opened || unit.unreachable_memo.is_none(),
+                "{id:?} kept its memo"
+            );
+            assert_eq!(
+                unit.planner.is_some(),
+                self.collision_subscribers.planners.contains(&id),
+                "{id:?} planner subscription"
+            );
+        }
+    }
+}
+
+/// The units a collision change can affect: planner holders (their search
+/// or route may cross the area), and the units holding a movement error or
+/// an unreachable memo, which every change clears. Ids are monotonic, so a
+/// removed unit's stale id is skipped by the lookup.
+#[derive(Debug, Default)]
+pub(crate) struct CollisionSubscribers {
+    pub(crate) planners: std::collections::BTreeSet<aoe_core::EntityId>,
+    pub(crate) errors: std::collections::BTreeSet<aoe_core::EntityId>,
+    pub(crate) memos: std::collections::BTreeSet<aoe_core::EntityId>,
 }
 
 /// The ground a resource node blocks: its tile (natural and starting node

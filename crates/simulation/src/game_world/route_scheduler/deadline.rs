@@ -210,7 +210,7 @@ impl GameWorld {
                 continue;
             };
             self.stop_member(at);
-            self.units[at].last_movement_error = Some(GameWorldError::PathBudgetExceeded);
+            self.set_movement_error(at, Some(GameWorldError::PathBudgetExceeded));
         }
     }
 }

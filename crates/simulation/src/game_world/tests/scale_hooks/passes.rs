@@ -43,15 +43,20 @@ fn the_tick_passes_count_each_tick_and_the_hash_ignores_them() {
 }
 
 #[test]
-fn a_collision_change_scans_every_unit_and_says_so() {
+fn a_collision_change_visits_its_subscribers_not_every_unit() {
     let mut w = busy_world();
-    let units = w.unit_count() as u64;
+    let far = w.spawn_unit(PlayerId(0), at(200, 200)).unwrap();
+    let index = w.lookup[&far];
+    w.set_movement_error(index, Some(crate::GameWorldError::Unreachable));
+    w.remember_unreachable(index, TileCoord::new(5, 5));
     let area = TileRect::new(TileCoord::new(10, 10), TileCoord::new(12, 12));
     w.collision_closed(area);
-    w.collision_closed(area);
+    // A closing clears every error, wherever the unit stands, but no memo.
+    assert_eq!(w.units[index].last_movement_error, None);
+    assert!(w.units[index].unreachable_memo.is_some());
     w.collision_opened(area);
-    let closed = count(&w, "collision_closed");
-    assert_eq!((closed.calls, closed.visited), (2, 2 * units));
-    let opened = count(&w, "collision_opened");
-    assert_eq!((opened.calls, opened.visited), (1, units));
+    assert_eq!(w.units[index].unreachable_memo, None);
+    for replaced in ["collision_closed", "collision_opened"] {
+        assert_eq!(count(&w, replaced), crate::PassCount::default());
+    }
 }

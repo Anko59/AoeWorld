@@ -197,6 +197,8 @@ pub struct GameWorld {
     pub(crate) idle_spacing: spacing::IdleSpacing,
     /// Whole-population pass counters: diagnostics, never hashed.
     pub(crate) passes: route_scheduler::Passes,
+    /// Units a collision change can affect (`resources.rs`). Derived, never hashed.
+    pub(crate) collision_subscribers: resources::CollisionSubscribers,
 }
 impl GameWorld {
     pub fn new(config: WorldConfig) -> Result<Self, GameWorldError> {
@@ -245,6 +247,7 @@ impl GameWorld {
             route_queued: BTreeSet::new(),
             idle_spacing: Default::default(),
             passes: Default::default(),
+            collision_subscribers: Default::default(),
         }
     }
 
