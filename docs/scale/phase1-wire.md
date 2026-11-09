@@ -307,3 +307,54 @@ regression evidence. No video is recorded. Browser execution, dedicated
 hardware, saved-game timing and finished RTS qualification remain unverified.
 Publication and CI for the new commit are not run: the brief explicitly forbids
 ship/push. Recordings and original assets remain outside Git.
+
+## Rebase of #744 onto #747
+
+The rebase is complete onto `55f6357742b163a22b34ee9331ed612140440259`.
+The merged simulation/server source is committed as
+`c5bac8b58826e77b6cefa531462d89c5092717f8`, following the F1 resolution
+`9db881a51`. The earlier port and evidence commits were replayed too.
+The final `0aedb7a9c` line-count patch became empty because its exact comment
+change was included in the F1 resolution before running the structure gate;
+`economy.rs` is 500 lines.
+
+`GameWorld` uses `changes::Units` in both configurations. Production embeds a
+`Vec<StoredUnit>`; tests embed #747's atomic access-counting `UnitStore` under
+that journal. Indexed and bulk access still passes through the probe. Explicit
+`len`/`is_empty` methods expose no slots. Mutable scalar access marks its unit,
+and mutable iteration marks all exposed ids. Test-only mutable slice/range
+helpers also journal their exposed ids; production has no `DerefMut` escape.
+Internal journal reads avoid charging the same exposed slots twice. The
+unmeasured collision correctness oracle remains separate from the probe.
+The optimized sparse bitmap journal and reusable publication vectors survive
+the second conflict without losing the test probe.
+
+The initial focused test build failed on the missing merged probe/view APIs.
+After the resolution, all ten focused journal/probe tests passed. A temporary
+read-only full loop injected into `collision_closed` then made
+`collision_closed_accesses_only_subscribed_units` fail with **104 unit accesses**
+against its unchanged limit of 16. The injected loop was removed, the focused
+selection passed again, and no experimental scan is committed. A new regression
+checks that bulk mutable views publish their ids while read-only views and
+subsequent idle ticks leave the journal empty.
+
+Validation of the final source, using Dockerized Make targets:
+
+- `make hooks-install hooks-check`: passed.
+- `make fmt-check lint structure-check architecture-check docs-check`: passed.
+  Lint reports only the existing client `travel_over`/`travel_at` warnings.
+- `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='all()'`:
+  1,229 passed, zero skipped, including the full late-game replay and sleep
+  replays, one/four-worker equality, collision probes and journal regressions.
+- `NEXTEST_TEST_THREADS=2 make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-server AOE_NATIVE_TEST_FILTER='test(gameplay)|test(routes)'`:
+  128 passed, 319 outside the selection. The unchanged wire-stream pin,
+  `tick::dirty`, full-frame oracle, idle zero-visit, one-mover and storage-swap
+  regressions all passed. The idle measurement visits zero ids over 300 frames
+  with 13,400 units.
+
+Logs remain outside Git in `.cache/wrmerge-{red,green,injected-scan}.log`,
+`.cache/wrmerge-f1-{gates,simulation,server}.log`,
+`.cache/wrmerge-final-{gates,simulation,server}.log` and
+`.cache/wrmerge-continue{1,2}.log`. The first `make perf-ci` was refused by a live
+shared saved-match job (error 75); `.cache/wrmerge-perf-admission.log` records
+that refusal, which is not a performance result.
