@@ -1,4 +1,4 @@
-use aoe_server::{AppState, Config, app};
+use aoe_server::{AppState, Config, app, nodelay};
 
 #[tokio::main]
 async fn main() {
@@ -34,7 +34,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     if !Config::arena_from_env() {
         tokio::spawn(state.clone().run_ticks());
     }
-    axum::serve(listener, app(state))
+    axum::serve(nodelay(listener), app(state))
         .with_graceful_shutdown(shutdown_signal())
         .await?;
     Ok(())

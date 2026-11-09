@@ -1,8 +1,12 @@
 use super::*;
 use aoe_core::Seed;
 
+#[path = "tests/batch.rs"]
+mod batch;
 #[path = "tests/combat.rs"]
 mod combat;
+#[path = "tests/nodelay.rs"]
+mod nodelay;
 
 #[tokio::test]
 async fn outgoing_validation_and_socket_failures_are_distinguishable() {
