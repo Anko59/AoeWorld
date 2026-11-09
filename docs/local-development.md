@@ -65,6 +65,13 @@ Limits:
 - `make dev` listens in the VM; Colima forwards its loopback port to the Mac, so
   `http://127.0.0.1:8080` works from the Mac's browser.
 - Build output lives on the shared mount, which is slower than a Linux disk.
+- Run `make test-e2e` on its own. The browser container uses host networking,
+  and Chromium aborts page loads with `net::ERR_NETWORK_CHANGED` whenever
+  another container starts or stops in the VM, so a spec then waits on
+  "Loading…" until it times out.
+- Keep 15 GiB free on the VM's Docker disk (`colima ssh -- df -h
+  /var/lib/docker`): below that floor the disk pre-check refuses to start jobs
+  and four harness tests that run the real ship command fail.
 - On Apple Silicon the VM and the tool images are arm64. The Rust tools image
   pins arm64 builds of `cargo-nextest` and `sccache`; Chrome for Testing
   publishes no Linux arm64 `chromedriver`, so `make test-wasm` runs in CI only.
