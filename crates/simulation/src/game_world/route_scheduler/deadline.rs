@@ -9,6 +9,7 @@
 use super::{GameWorld, far_planner, far_route};
 use crate::GameWorldError;
 use aoe_core::EntityId;
+use aoe_map::RoutePlanner;
 
 /// Work a near route may spend while other units queue for its slot. An
 /// ordinary detour commits its first leg by `ROUTE_LEG_COMMIT_WORK`; a route of
@@ -29,6 +30,11 @@ pub(crate) const FAR_ROUTE_ANSWER_TICKS: u64 = 3_600;
 /// group's wait is renewed only while its search has spent under
 /// `MAX_NEAR_ROUTE_WORK`: it waited for a slot rather than searched.
 pub(crate) const MAX_GROUP_ROUTE_RENEWALS: u8 = 4;
+
+/// Renewal and exhaustion use the same definition of a lightly searched route.
+fn has_near_route_work_remaining(planner: &RoutePlanner) -> bool {
+    planner.work() < MAX_NEAR_ROUTE_WORK
+}
 
 impl GameWorld {
     /// True when the waiting unit's route uses its player's far slots.
@@ -67,7 +73,7 @@ impl GameWorld {
             let queued = unit
                 .planner
                 .as_ref()
-                .is_none_or(|planner| planner.work() < MAX_NEAR_ROUTE_WORK);
+                .is_none_or(has_near_route_work_remaining);
             if (far || queued)
                 && unit.formation == Some(id)
                 && unit.route_renewals < MAX_GROUP_ROUTE_RENEWALS
@@ -104,7 +110,7 @@ impl GameWorld {
         let Some(planner) = unit.planner.as_ref() else {
             return;
         };
-        if planner.work() < MAX_NEAR_ROUTE_WORK || planner.has_route_continuation() {
+        if has_near_route_work_remaining(planner) || planner.has_route_continuation() {
             return;
         }
         let work = planner.work();

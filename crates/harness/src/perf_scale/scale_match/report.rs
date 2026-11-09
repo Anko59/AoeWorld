@@ -105,22 +105,27 @@ pub(super) fn window(rows: &[TickRow], wall_seconds: f64) -> Value {
     })
 }
 
-/// One window per wall-clock minute, by the order the rows arrived in
-/// (a row's wall time is its index over the measured ticks per second).
-pub(super) fn per_minute(rows: &[TickRow], wall_seconds: f64) -> Vec<Value> {
-    if rows.is_empty() || wall_seconds <= 0.0 {
-        return Vec::new();
+/// Tick rows grouped at their observed wall-clock minute boundaries.
+#[derive(Default)]
+pub(super) struct Minutes {
+    pub windows: Vec<Value>,
+    rows: usize,
+    seconds: f64,
+}
+
+impl Minutes {
+    pub fn record(&mut self, rows: &[TickRow], seconds: f64) {
+        if seconds - self.seconds <= 0.01 {
+            return;
+        }
+        let mut value = window(&rows[self.rows..], seconds - self.seconds);
+        value["minute"] = json!(self.windows.len() + 1);
+        value["start_seconds"] = json!(round(self.seconds));
+        value["end_seconds"] = json!(round(seconds));
+        self.windows.push(value);
+        self.rows = rows.len();
+        self.seconds = seconds;
     }
-    let minutes = (wall_seconds / 60.0).ceil().max(1.0) as usize;
-    let per = rows.len().div_ceil(minutes);
-    rows.chunks(per.max(1))
-        .enumerate()
-        .map(|(index, chunk)| {
-            let mut value = window(chunk, wall_seconds / minutes as f64);
-            value["minute"] = json!(index + 1);
-            value
-        })
-        .collect()
 }
 
 pub(super) fn timeline(samples: &[Sample]) -> Vec<Value> {
@@ -361,40 +366,13 @@ pub(super) fn planning(rows: &[TickRow], wall_seconds: f64) -> Value {
 /// The server's rolling phase p50/p95 (`GET /admin/perf`, ms), as the
 /// owner's live sampler recorded them, for comparison with a real match.
 pub(super) fn phase_minute(perf: Option<Value>, routes: Option<Value>, seconds: f64) -> Value {
-    const PHASES: [&str; 25] = [
-        "total",
-        "advance",
-        "planning",
-        "plan_fast",
-        "plan_serve",
-        "plan_fair",
-        "movement",
-        "gathering",
-        "search",
-        "combat",
-        "group_apply",
-        "apply_loop",
-        "sidestep",
-        "propose",
-        "group_prepare",
-        "group_propose",
-        "resources",
-        "orders",
-        "spacing",
-        "wildlife",
-        "construction",
-        "building_memory",
-        "fanout_wait",
-        "delivery",
-        "session_views",
-    ];
     let Some(perf) = perf else {
         return json!({"seconds": seconds, "error": "no /admin/perf"});
     };
     let mut row = json!({"seconds": crate::perf_scale::stats::round(seconds),
-        "tick_rate": perf["tick_rate"], "units": perf["gameplay_memory"]["units"]});
-    for name in PHASES {
-        let phase = &perf["phases"][name];
+        "tick_rate": perf["tick_rate"], "missed_ticks": perf["missed_ticks"],
+        "missed_total": perf["missed_total"], "units": perf["gameplay_memory"]["units"]});
+    for (name, phase) in perf["phases"].as_object().into_iter().flatten() {
         let ms = |key: &str| {
             phase[key]
                 .as_f64()

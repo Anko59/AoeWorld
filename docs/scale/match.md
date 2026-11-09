@@ -40,7 +40,7 @@ Options (`aoe-harness scale-match --help`): `--players --humans --tiles
 --start-villagers --start-militia --minutes --hosts --map
 procedural|package|flat --map-hash --package-directory --port --seed
 --asset-pack --browser --browser-minutes --browser-delay --out --summary
---no-summary --label --march-probe --march-minute --march-scatter --march-no-ai --late-game`. The browser step needs `make build-wasm` (the server serves `web/`) and
+--no-summary --label --march-probe --march-minute --march-scatter --march-no-ai --late-game --save`. The browser step needs `make build-wasm` (the server serves `web/`) and
 an original-art pack (`AOE_ASSET_PACK=local-assets/packs/<hash>`).
 
 ## March probe: group movement in the real match
@@ -83,6 +83,38 @@ formation orders ended by the wait bound apart from single units. Its
 (`wait_expired`, `near_exhausted`, `carrier_stopped` with `carrier_failures`
 by reason, `replanned`, `rejected_at_issue`, `members_left_out`); the probe
 table prints it.
+
+## Benchmark a saved game
+
+`--save <path.save>` resumes the current save format through `POST /skirmish`.
+Keep the JSON card beside the postcard file. The card's `map_hash` must name
+`<hash>.json` in `--package-directory`, with its terrain pages; a missing
+manifest fails before the release build. Both save files are copied into that
+package directory's `saves/` before the server starts. Copy external evidence
+into the worktree's ignored `.cache/` first so the Docker runner can read it.
+
+```sh
+SCALE_MATCH_ARGS="--save .cache/save-benchmark/input/1794176817-first.save \
+  --minutes 10 --port 8160 --package-directory local-assets/map-packages \
+  --label owner-save --no-summary --out .cache/save-benchmark/owner-save.json" make scale-match
+```
+
+The save determines seats, map and initial world. Creation/seeding flags,
+`--hosts`, browser and march modes conflict with `--save`. The skirmish starts
+its ordinary AI hosts (13 seats per process), and the harness holds a passive
+human connection so the skirmish remains active; it sends no human orders.
+AI decisions and simulation wall time can vary between repetitions.
+`setup.save` records the input card and `setup.skirmish` records readiness.
+Reports retain actual wall-minute tick windows (ticks/s, missed ticks and
+units), rolling p50/p95 milliseconds for **every** phase `/admin/perf` exposes,
+and each minute's route queue. Runtime sampling failures fail the saved run.
+Reports and save data belong in ignored directories; never commit game data.
+
+Local owner-save run: `.cache/save-benchmark/owner-save.json` (save
+`1794176817-first`, 601.966 s, 99 AIs on eight hosts). On the shared machine,
+the dirty `c21beae12c07724ba98d12200f3187f8c70c477a` build recorded 10,718 ticks
+(17.805 ticks/s), 5,177 missed ticks, and 9,351 to 9,587 units. This is one
+measurement, without a before/after comparison or dedicated-hardware qualification.
 
 ## Late game: the owner's 100-player load
 
