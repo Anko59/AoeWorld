@@ -16,7 +16,7 @@ pub use hierarchy::{NAVIGATION_FORMAT_VERSION, NavigationChunk, navigation_check
 pub use hierarchy::{NavigationSnapshot, NavigationStorage};
 pub use planner::{
     MAX_ROUTE_PLANNER_NODES, MAX_ROUTE_PLANNER_WORK, MAX_ROUTE_TILES, ROUTE_LEG_COMMIT_WORK,
-    ROUTE_LEG_PROGRESS_TILES, RoutePlanner, RoutePlannerPoll, RouteTerrain,
+    ROUTE_LEG_PROGRESS_TILES, RouteOriginPocket, RoutePlanner, RoutePlannerPoll, RouteTerrain,
 };
 
 pub const ORTHOGONAL_COST: u32 = 1_024;
@@ -382,3 +382,7 @@ mod priority_tests;
 #[cfg(test)]
 #[path = "navigation/tests/pocket.rs"]
 mod pocket_tests;
+
+#[cfg(test)]
+#[path = "navigation/tests/origin_pocket.rs"]
+mod origin_pocket_tests;

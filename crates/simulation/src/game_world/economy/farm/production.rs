@@ -18,6 +18,9 @@ impl FarmProduction {
 
 impl GameWorld {
     pub(crate) fn reset_farm_production(&mut self, farm: EntityId) {
+        self.economy
+            .gatherers
+            .wake_target(super::super::WorkTarget::Farm(farm));
         self.economy.farm_production.insert(
             farm,
             FarmProduction {

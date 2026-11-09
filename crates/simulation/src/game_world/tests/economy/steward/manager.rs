@@ -246,6 +246,10 @@ fn manager_builds_a_mill_and_farms_and_prepays_normal_reseeds() {
         .id;
     assert_eq!(w.steward_controller(farmer), Some(steward));
     w.economy.buildings.get_mut(&farm).unwrap().food_remaining = Some(0);
+    // A direct state edit, not an event: wake the dozing farmer by hand.
+    w.economy
+        .gatherers
+        .wake_target(crate::game_world::economy::WorkTarget::Farm(farm));
     advance(&mut w, 2_000);
     assert!(
         w.building(farm).unwrap().food_remaining.unwrap() > 0,

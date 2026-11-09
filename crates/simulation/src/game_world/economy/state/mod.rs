@@ -14,6 +14,9 @@ pub(crate) struct TickWork {
     pub(crate) training_buildings: usize,
     pub(crate) research_buildings: usize,
     pub(crate) spawn_units: usize,
+    /// Cumulative gatherer visits, and those that slept through the step.
+    pub(crate) gather_visits: usize,
+    pub(crate) gather_slept: usize,
 }
 
 #[derive(Debug, Default)]
@@ -58,6 +61,12 @@ pub(crate) struct Economy {
     pub(crate) work_positions: gathering::WorkPositions,
     /// Tick-local search allowance, reset before movement; not persistent state.
     pub(crate) gather_repick_budget: u8,
+    /// Replay oracle switch: every gatherer steps every tick (sleep off).
+    pub(crate) no_sleep: bool,
+    /// Units changed after last tick's gathering loop: they wake dozers.
+    pub(crate) late_changed: Vec<EntityId>,
+    /// Benchmark counters (`GameWorld::gather_work`). Not replay state.
+    pub(crate) gather_work: super::gathering::GatherCounters,
     pub(crate) builders: BTreeMap<EntityId, BuildTask>,
     pub(crate) depletions: Vec<aoe_map::Depletion>,
     pub(crate) limits: WorldLimits,

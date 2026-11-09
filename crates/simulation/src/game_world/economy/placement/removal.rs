@@ -6,6 +6,9 @@ impl GameWorld {
     pub(crate) fn remove_building(&mut self, id: EntityId) {
         self.cancel_general_recruit(id);
         self.economy.farm_production.remove(&id);
+        self.economy
+            .gatherers
+            .wake_target(super::super::WorkTarget::Farm(id));
         let Some(building) = self.economy.buildings.remove(&id) else {
             return;
         };

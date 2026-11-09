@@ -21,6 +21,9 @@ pub(super) const PHASES: [&str; 10] = [
     "building_memory",
     "changed",
 ];
+/// Off only for an A/B of economy sleep (`perf-late-game --no-work-sleep`).
+pub(super) static WORK_SLEEP: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(true);
 const RUNS: usize = 3;
 const WARMUP: usize = 384;
 const TICKS: usize = 128;
@@ -113,6 +116,7 @@ pub(super) fn measure() -> Result<WorkloadResult, Box<dyn Error>> {
         );
         let setup = Instant::now();
         let mut world = GameWorld::late_game_workload()?;
+        world.set_work_sleep(WORK_SLEEP.load(std::sync::atomic::Ordering::Relaxed));
         eprintln!(
             "late-game: generated {} units in {:.3}s",
             world.unit_count(),

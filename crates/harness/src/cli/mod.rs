@@ -91,6 +91,9 @@ enum Command {
         check: bool,
         #[arg(long)]
         instructions: bool,
+        /// Measure with economy sleep off (the replay oracle's other side).
+        #[arg(long)]
+        no_work_sleep: bool,
     },
     PerfCi,
     PerfFull,

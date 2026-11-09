@@ -6,6 +6,8 @@
 use super::*;
 use crate::UnitTask;
 
+mod sleep;
+
 #[test]
 fn late_game_workload_keeps_real_jobs_and_full_queues() {
     let mut world = build(2).unwrap();

@@ -109,6 +109,8 @@ impl GameWorld {
         // Automatic retargeting spreads cutters: trees that already carry
         // `AUTO_TREE_CUTTERS` gatherers rank after every freer tree in the
         // radius. Manual orders are not routed through here and may stack.
+        self.count_gather(Count::Replacements, 1);
+        self.count_gather(Count::ReplacementCandidates, candidates.len() as u64);
         let crowded = |n: &ResourceNode| self.tree_is_crowded(n, reserved);
         candidates.sort_unstable_by_key(|n| {
             (

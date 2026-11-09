@@ -230,7 +230,8 @@ fn offline(scenario: Scenario) -> Result<OfflineResult, Box<dyn Error>> {
 
 /// Keep a focused check/profile/instruction sequence in its admitted heavy
 /// slot. Child Make targets inherit the validated ticket and CPU allowance.
-pub fn late_game(check: bool, instructions: bool) -> Result<(), Box<dyn Error>> {
+pub fn late_game(check: bool, instructions: bool, work_sleep: bool) -> Result<(), Box<dyn Error>> {
+    late_game::WORK_SLEEP.store(work_sleep, std::sync::atomic::Ordering::Relaxed);
     if check {
         for (package, filter) in [
             ("aoe-simulation", "test(game_world)"),

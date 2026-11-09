@@ -44,7 +44,7 @@ const BOOKKEEPING: [&str; 7] = [
 ];
 
 fn child_args(options: &Options, scale: f64, out: &Path) -> Vec<String> {
-    vec![
+    let mut args = vec![
         "match-bench".into(),
         "--seats".into(),
         options.seats.to_string(),
@@ -60,7 +60,11 @@ fn child_args(options: &Options, scale: f64, out: &Path) -> Vec<String> {
         options.counted.to_string(),
         "--counted-child".into(),
         out.display().to_string(),
-    ]
+    ];
+    if options.no_work_sleep {
+        args.push("--no-work-sleep".into());
+    }
+    args
 }
 
 /// The stage report of one profile; `movers` and `ticks` divide.

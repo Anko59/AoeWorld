@@ -39,46 +39,73 @@ impl GameWorld {
             })
         });
         let has_dropoff = !order.is_empty();
-        let mut candidates = Vec::new();
-        for building in order {
-            let Some(footprint) = self.building(building).map(|b| b.footprint) else {
-                continue;
-            };
-            let mut tiles = perimeter(footprint);
-            tiles.retain(|tile| {
-                self.unit_tile_passable(unit.kind, *tile, &|| false)
-                    .unwrap_or(false)
-                    && !self.economy.blocked_tiles.contains(tile)
-                    && !task.failed_dropoffs.contains(tile)
-                    && self.managed_target_allowed(id, position(*tile).unwrap_or(unit.position))
-            });
-            // Stable like `sort_by_key`, but a sweep of nearby bodies per tile
-            // runs once instead of once per comparison.
-            tiles.sort_by_cached_key(|tile| {
-                (
-                    self.work_spot_busy(*tile, id),
-                    distance_squared(from, *tile),
-                    tile.y,
-                    tile.x,
-                )
-            });
-            candidates.extend(tiles.into_iter().map(|tile| (building, tile)));
-        }
-        for &(center, tile) in &candidates {
-            if let Ok(destination) = position(tile)
-                && self.issue_task_move(id, destination).is_ok()
-            {
-                task.phase = GatherPhase::Returning;
-                task.dropoff = Some(center);
-                task.return_target = Some(tile);
-                if let Some(&index) = self.lookup.get(&id) {
-                    self.units[index].state.task = UnitTask::Returning;
+        self.count_gather(Count::Returns, 1);
+        let farmer = u64::from(task.farm.is_some());
+        self.count_gather(Count::FarmReturns, farmer);
+        self.count_gather(Count::ReturnBuildings, order.len() as u64);
+        // Ranking a building's perimeter sweeps nearby bodies per tile, so
+        // buildings are ranked only as the attempts reach them, nearest first.
+        // Tiles that failed before this call stay excluded; the same tile
+        // listed by two adjacent buildings is still tried under each.
+        let failed_before = task.failed_dropoffs.clone();
+        let mut untried = false;
+        let mut pocket = None;
+        let mut probed_origin = false;
+        'buildings: for (at, &building) in order.iter().enumerate() {
+            let tiles = self.dropoff_tiles(id, building, &failed_before, from);
+            for (n, &tile) in tiles.iter().enumerate() {
+                let known = self.reject_known_unreachable_task_move(id, tile, pocket.as_ref());
+                let issued = if known {
+                    self.count_gather(Count::ReturnKnownUnreachable, 1);
+                    Err(GameWorldError::Unreachable)
+                } else {
+                    self.count_gather(Count::ReturnRoutes, 1);
+                    self.count_gather(Count::FarmReturnRoutes, farmer);
+                    position(tile).and_then(|destination| self.issue_task_move(id, destination))
+                };
+                // Only a fresh failure with candidates left pays for a source
+                // flood; cached failures stay cheap. The component lives for
+                // this choice, so ground edits cannot leave a stale proof.
+                if issued == Err(GameWorldError::Unreachable)
+                    && !known
+                    && !probed_origin
+                    && (n + 1 < tiles.len() || at + 1 < order.len())
+                {
+                    probed_origin = true;
+                    pocket = self.route_origin_pocket(unit.kind, from).ok().flatten();
                 }
-                return true;
-            }
-            task.failed_dropoffs.insert(tile);
-            if self.fast_route_allowance(unit.player) == 0 {
-                break;
+                if let Err(error) = issued
+                    && !known
+                {
+                    self.count_gather(
+                        match error {
+                            GameWorldError::Unreachable => Count::ReturnUnreachable,
+                            GameWorldError::InvalidPosition => Count::ReturnInvalid,
+                            _ => Count::ReturnOther,
+                        },
+                        1,
+                    );
+                }
+                if issued.is_ok() {
+                    task.phase = GatherPhase::Returning;
+                    task.dropoff = Some(building);
+                    task.return_target = Some(tile);
+                    if let Some(&index) = self.lookup.get(&id) {
+                        self.units[index].state.task = UnitTask::Returning;
+                    }
+                    return true;
+                }
+                task.failed_dropoffs.insert(tile);
+                if self.fast_route_allowance(unit.player) == 0 {
+                    // Untried candidates keep the job: the rest of this
+                    // perimeter or any later building's.
+                    let failed = &task.failed_dropoffs;
+                    untried = tiles[n + 1..].iter().any(|t| !failed.contains(t))
+                        || order[at + 1..].iter().any(|&later| {
+                            !self.dropoff_tiles_unranked(id, later, failed).is_empty()
+                        });
+                    break 'buildings;
+                }
             }
         }
         task.phase = GatherPhase::WaitingDropoff;
@@ -97,11 +124,54 @@ impl GameWorld {
         // A full farmer keeps its paid plot while a blocked Town Center
         // waits for a route or replacement drop-off. Other exhausted node
         // jobs can release their reservations and choose another resource.
-        task.farm.is_some()
-            || !has_dropoff
-            || candidates
-                .iter()
-                .any(|(_, tile)| !task.failed_dropoffs.contains(tile))
+        task.farm.is_some() || !has_dropoff || untried
+    }
+
+    /// A drop-off's usable perimeter tiles: passable, unblocked, not failed
+    /// before this trip and inside a managed worker's domain.
+    fn dropoff_tiles_unranked(
+        &self,
+        id: EntityId,
+        building: EntityId,
+        failed: &std::collections::BTreeSet<TileCoord>,
+    ) -> Vec<TileCoord> {
+        let (Some(unit), Some(footprint)) =
+            (self.unit(id), self.building(building).map(|b| b.footprint))
+        else {
+            return Vec::new();
+        };
+        let mut tiles = perimeter(footprint);
+        tiles.retain(|tile| {
+            self.unit_tile_passable(unit.kind, *tile, &|| false)
+                .unwrap_or(false)
+                && !self.economy.blocked_tiles.contains(tile)
+                && !failed.contains(tile)
+                && self.managed_target_allowed(id, position(*tile).unwrap_or(unit.position))
+        });
+        tiles
+    }
+
+    /// The same tiles, free work spots first, then nearest to `from`.
+    fn dropoff_tiles(
+        &self,
+        id: EntityId,
+        building: EntityId,
+        failed: &std::collections::BTreeSet<TileCoord>,
+        from: TileCoord,
+    ) -> Vec<TileCoord> {
+        let mut tiles = self.dropoff_tiles_unranked(id, building, failed);
+        self.count_gather(Count::ReturnTiles, tiles.len() as u64);
+        // Stable like `sort_by_key`, but a sweep of nearby bodies per tile
+        // runs once instead of once per comparison.
+        tiles.sort_by_cached_key(|tile| {
+            (
+                self.work_spot_busy(*tile, id),
+                distance_squared(from, *tile),
+                tile.y,
+                tile.x,
+            )
+        });
+        tiles
     }
 
     pub(super) fn task_remaining(&self, task: &GatherTask) -> Option<u16> {

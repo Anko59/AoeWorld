@@ -446,3 +446,27 @@ fn prepaid_reseed_counts_are_part_of_authoritative_replay_state() {
     world.economy.buildings.get_mut(&mill).unwrap().farm_reseeds = 1;
     assert_ne!(world.canonical_hash(), before);
 }
+
+/// Economy-sleep oracle for a farmer: work waits on FARM production, then
+/// a reseed rebuilds the farm under the same farmer.
+#[test]
+fn farming_sleep_on_and_off_agree_through_a_reseed() {
+    let run = |sleep: bool| {
+        let (mut world, _, mill, farm) = mill_and_farm();
+        world.set_work_sleep(sleep);
+        world.issue_farm_reseed(PlayerId(0), mill, true).unwrap();
+        let slept = world.economy.tick_work.gather_slept;
+        let hashes = (0..9_000)
+            .map(|_| {
+                world.advance();
+                world.canonical_hash_hex()
+            })
+            .collect::<Vec<_>>();
+        assert!(world.building(farm).is_some() || stock(&world).0 >= 175);
+        (hashes, world.economy.tick_work.gather_slept - slept)
+    };
+    let (on, slept) = run(true);
+    let (off, none) = run(false);
+    assert_eq!(on, off);
+    assert!(slept > 1_000 && none == 0, "slept {slept}, off {none}");
+}

@@ -37,6 +37,14 @@ impl PreparedResourceDepletion<'_> {
         }
         self.world
             .record_observed_resource(self.depletion.id, self.depletion.remaining);
+        if self.depletion.remaining == 0 {
+            self.world
+                .economy
+                .gatherers
+                .wake_target(crate::game_world::economy::WorkTarget::Node(
+                    self.depletion.id,
+                ));
+        }
         self.depletion
     }
 }

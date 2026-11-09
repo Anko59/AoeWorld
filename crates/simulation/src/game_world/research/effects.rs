@@ -129,6 +129,8 @@ impl GameWorld {
         tech: Tech,
         changed: &mut Vec<EntityId>,
     ) {
+        // Rates and carry capacity change: dozing workers re-check.
+        self.wake_player_gatherers(player);
         let Some(state) = self.economy.players.get_mut(&player) else {
             return;
         };

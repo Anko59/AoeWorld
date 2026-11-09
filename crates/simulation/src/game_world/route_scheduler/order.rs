@@ -26,6 +26,75 @@ pub(crate) type OrderRoute = (
 );
 
 impl GameWorld {
+    /// Filter a validated drop-off tile using an existing failure or a sealed
+    /// source component. Retain the ordinary failure's budget, memo and order
+    /// side effects; an unaffordable proof must still use normal admission.
+    #[track_caller]
+    pub(crate) fn reject_known_unreachable_task_move(
+        &mut self,
+        id: EntityId,
+        tile: TileCoord,
+        pocket: Option<&aoe_map::RouteOriginPocket>,
+    ) -> bool {
+        let Some(&index) = self.lookup.get(&id) else {
+            return false;
+        };
+        let unit = self.units[index].state;
+        if unit.hp == 0 || self.embarked(id) {
+            return false;
+        }
+        let origin = unit.position.tile_floor();
+        if self.recently_unreachable(index, origin, tile) {
+            return true;
+        }
+        if !self.has_route_navigation() {
+            return false;
+        }
+        let allowance = self.fast_route_allowance(unit.player);
+        let work = match self
+            .navigation_cache
+            .peek(unit.kind.is_naval(), origin, tile, allowance)
+        {
+            Some((aoe_map::MovementOutcome::Unreachable, work)) => work,
+            Some(_) => return false,
+            None => {
+                let Some(pocket) = pocket.filter(|p| p.origin() == origin) else {
+                    return false;
+                };
+                let Some(work) = pocket.failure_work(tile) else {
+                    return false;
+                };
+                // A fresh poll with exactly this much allowance can suspend
+                // before observing its exhausted queue. Preserve that boundary.
+                if work >= allowance {
+                    return false;
+                }
+                work
+            }
+        };
+        let cached = self
+            .navigation_cache
+            .get(unit.kind.is_naval(), origin, tile, allowance);
+        if cached.is_none() {
+            let Some(pocket) = pocket else { return false };
+            self.navigation_cache.insert(
+                unit.kind.is_naval(),
+                origin,
+                tile,
+                work,
+                pocket.explored_area(tile),
+                aoe_map::MovementOutcome::Unreachable,
+            );
+        }
+        self.charge_fast_route(unit.player, work);
+        self.units[index].route_renewals = 0;
+        let caller = Some(std::panic::Location::caller());
+        self.units[index].route_caller = caller;
+        self.route_metrics.caller = caller;
+        self.remember_unreachable(index, tile);
+        true
+    }
+
     #[track_caller]
     pub(crate) fn issue_task_move(
         &mut self,

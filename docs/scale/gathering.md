@@ -29,3 +29,257 @@ bound by first-touch terrain evaluation (`object_at`), which a block cache canno
 avoid, and the block lists add evaluation of tiles the old circle skipped.
 Collation is still a sort plus 43,000 `BTreeMap` fetches; a dense dirty list is
 not done. The whole tick is unchanged because movement (about 300 ms) dominates.
+
+## Economy sleep (movement rework phase 7b, gathering)
+
+A worker at its resource only adds a constant credit each tick until its next
+harvest, so it sleeps until that harvest tick (`economy/gathering/sleep.rs`).
+Skipped credits are reconstructed exactly: the canonical hash reads
+`credits_at(tick)`, never the stale stored value. A drop-off waiter skips until
+its retry tick.
+
+Sleepers doze (`economy/gathering/dozing.rs`): the loop walks only awake
+jobs, in id order, and a job begun during the loop waits for the next tick as
+before. A dozer returns at its harvest tick or on a wake event from every
+writer of what the pure step reads: its job (insert, remove), its unit (ids
+changed this tick before gathering, ids changed since last tick's gathering,
+`remove_unit`), its player's technologies (`complete_research`) and its target
+(a node or carcass emptied, a farm removed or reseeded, a target crossing the
+crowd mark). A woken dozer still runs the full check, so a spurious wake is
+exact. In test builds every dozer is re-checked before each loop and a stale
+one panics (the missed-wake detector); the whole `aoe-simulation` suite runs
+with it. Tests that edit state directly post the wake by hand
+(`wake_gatherer`, `wake_player_gatherers`, `wake_target`).
+
+The oracle switch is `GameWorld::set_work_sleep(false)` (`perf-late-game
+--no-work-sleep`, `match-bench --no-work-sleep`). Replay oracles compare sleep on
+and off: `benchmark::tests::sleep` (8 seats for 2,400 ticks, hash every tick;
+the 14,000-unit late-game workload for 512 ticks), `gathering::replay` (a node
+exhausted, gold mining and wheelbarrow landing under sleepers, a raid on a
+miner, hash every tick) and `farming_sleep_on_and_off_agree_through_a_reseed`
+(9,000 ticks).
+
+Measured (test profile: opt 2 with debug assertions, shared machine, on and
+off interleaved in one process, ticks 385 to 512 of the 14,000-unit workload):
+gathering p50 7.38 to 5.28 ms, p95 10.94 to 8.42 ms; whole tick p50 51.3 to
+48.3 ms. At tick 400, 3,583 gatherers sleep, 3,841 approach and 574 return
+under orders: walkers, not workers, are now most of the phase.
+
+Hunters on a carcass doze too (a carcass does not move). Farmers waiting for
+FARM production still step every tick; on the match-bench load they waited 0.1
+steps per tick at 1x and 0.0 at 5x, so a lazy wait was not built. Builders,
+trainers and attackers are unchanged.
+
+## Why gathering grew faster than units (match-bench)
+
+`GameWorld::gather_work` counts the phase's work (also in the match-bench
+report as `gather_work`). In-process, 16 seats, bots, ticks 301 to 600, test
+build without the detector, shared machine:
+
+| | 1x (2,820 units) | 5x (14,029 units) |
+|---|---|---|
+| drop-off choices per tick | 0.7 | 2.4 |
+| buildings ranked per choice, before | 48 | 166 |
+| perimeter tiles ranked per tick, before / after | 157 / 23 | 4,621 / 223 |
+| route attempts per choice (all but 1-2% unreachable) | 25 | 86 |
+| gathering mean, before / after lazy ranking | 1.61 / 1.46 ms | 14.81 / 6.33 ms |
+| gathering p50, sleep off / on (true sleep) | 412 / 91 us | 2.42 / 0.86 ms |
+
+Every drop-off choice ranked the perimeter of every drop-off building its
+player owned, with a body sweep per tile, before trying the first: 5x the
+buildings per seat times 5x the returns. Ranking is now lazy, nearest building
+first, in the same attempt order (the pinned late-game checkpoint is
+unchanged). Still superlinear: the unreachable route attempts per choice, from
+node workers (farmers make none), refused by the route scheduler; and the mean
+is dominated by spikes (p95 20 to 40 ms at 5x) from returns and replacement
+searches.
+
+## Filtering known unreachable return candidates
+
+A passable perimeter tile can be unreachable through the terrain's directed
+edges. In the current match-bench base, an observed carrier at `(963,509)`
+could not reach any neighbouring tile: every passable neighbour and every
+perimeter tile of its nearest drop-off returned `Unreachable`, with 11 units
+of route work. Other observed carriers exhausted small source components in
+47 or 119 work. The route terrain reads static terrain and the resource/building
+overlay; live unit bodies do not decide these failures.
+
+After a fresh unreachable return attempt, gathering floods the worker's source
+component once if candidates remain. `RouteOriginPocket` certifies only a complete component
+of at most 32 tiles, within four tiles in each axis of the origin. It reads the same directed
+edges, diagonal corner rules and costs as the ordinary planner. Outside targets
+need no further terrain search. Affordable cached failures and the existing
+short unit memo also filter candidates before movement orders are issued.
+
+The tiny component graph projects the ordinary A* work charge, including stale
+queue entries, without querying terrain. The scheduler still charges that work
+and records the same final failed-target memo. Candidate order, failed tiles,
+route-budget boundaries and the reachable fallback stay unchanged. Map targets
+more than 64 tiles away retain global guidance and nearest-point behavior;
+large/open components, incomplete reads and insufficient budgets use normal
+routing. A source proof lives for one drop-off choice; cached failures retain
+the ordinary planner's ground-invalidation bounds.
+
+`gather_work.return_routes` counts actual movement-order attempts;
+`return_known_unreachable` counts candidates rejected by proof. Add the latter
+to `return_unreachable` when comparing total unreachable candidates with older
+reports. Logical work charges are preserved to keep admission and canonical
+state identical; the saving is repeated terrain searches and order setup.
+
+Tests compare the graph's work and invalidation area with ordinary routing for
+3,267 targets, check exact canonical state at route-budget boundaries, verify a
+reachable fallback, and reopen a source component through building removal.
+The sealed-worker integration test checks all drop-off perimeter rejections
+against the normal movement API, including the final task and canonical hash.
+
+The historical 205 unreachable attempts per tick above were **not reproduced**
+on the newer match-bench base. The baseline issued 13 return attempts, eight
+unreachable, over the entire 16-seat, 5x, 600-tick window. This base also changed
+the workload: at 1x it seeds worked-out discs of 90 tiles for the human and 30
+for AIs, scales those radii with the load, and assigns workers beyond those
+discs. It also changed Steward setup. Their individual effects on return volume
+were not isolated. Initial release admission was refused twice; after the code
+and checks were finished, the slot became free and the measurements below ran.
+The geometric probe is retained in `.cache/match-bench/dropoff-probes.json`.
+
+Validation of the filter (Dockerized Make, shared machine):
+
+- `make hooks-install hooks-check fmt-check lint structure-check architecture-check`: pass.
+- `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='all()'`: 1,215 passed, including the missed-wake detector and unchanged 384-tick 14,000-unit hash at 1/4 workers.
+- `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-map AOE_NATIVE_TEST_FILTER='all()'`: 376 passed.
+- `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-server AOE_NATIVE_TEST_FILTER='test(gameplay::)|test(source_qualification::tests::orchestration::synthetic_flat_sahara)|test(source_qualification::movement::tests::continuous_source_free_run)'`: 80 passed (77 gameplay and three offline qualification cases).
+- `make test-harness-focused HARNESS_TEST_FILTER=match_bench`: eight passed, including sleep on/off and 1/2/4-worker replays.
+- `make perf-wasm-cap`: pass; production gzip 396,211 bytes versus the 375,952-byte baseline (+5.4%, existing limit +25%).
+
+Logs for the final frozen source are `.cache/sleep-final-*.log`. These are local
+results; the branch has not been published or checked by CI. The change preserves
+visible gameplay and needs no before/after video under the performance-video rule
+in [shipping](../shipping.md).
+
+## Matched release measurements (2026-11-09)
+
+Baseline `bb4c228874b35962cde55e4d9fb9a0a7a0d4ae0b`; filter `e16040abc865031b41b87c28f6cc880774005e21`. Each configuration ran once: 16 seats, seed 1, one worker, 600 ticks (30 game-seconds), scales 1x and 5x. All runs use the release build. Setup, bots and hashing are outside the reported tick timings.
+
+| revision | scale | sleep | ticks/s | tick p50 / p95 ms | gathering mean / p95 ms |
+|---|---|---|---|---|---|
+| before | 1x | on | 34.92 | 4.408 / 17.581 | 1.618 / 0.582 |
+| before | 5x | on | 16.41 | 26.964 / 100.519 | 6.686 / 15.640 |
+| before | 1x | off | 43.67 | 4.005 / 12.872 | 1.363 / 0.451 |
+| before | 5x | off | 18.03 | 25.909 / 85.623 | 6.395 / 15.756 |
+| after | 1x | on | 43.00 | 3.892 / 11.712 | 1.418 / 0.364 |
+| after | 5x | on | 19.51 | 21.602 / 72.811 | 5.831 / 15.989 |
+| after | 1x | off | 39.34 | 3.993 / 12.531 | 1.502 / 0.494 |
+| after | 5x | off | 17.15 | 24.250 / 89.632 | 6.389 / 15.088 |
+
+All seven canonical checkpoints (initial state and ticks 100 through 600) agree across baseline/filter and sleep on/off at each scale. No hash was repinned.
+
+Actual return counters are identical between sleep modes:
+
+| scale | choices | routes before / after | unreachable answers before / after | proof rejections after |
+|---|---|---|---|---|
+| 1x | 15 | 3 / 3 | 0 / 0 | 0 |
+| 5x | 18 | 13 / 7 | 8 / 2 | 6 |
+
+All remaining `gather_work` fields are unchanged by the filter. Full common counts follow; combine these with the return-counter table above (`return_known_unreachable` is zero in the baseline).
+
+```json
+[
+  {
+    "scale": 1,
+    "sleep": "on",
+    "gather_work": {
+      "farm_return_routes": 3,
+      "farm_returns": 15,
+      "farm_waits": 98,
+      "replacement_candidates": 24797,
+      "replacements": 1541,
+      "return_buildings": 4,
+      "return_invalid": 0,
+      "return_other": 0,
+      "return_tiles": 35,
+      "returns": 15,
+      "slept": 11450,
+      "steps": 2231,
+      "visits": 58137,
+      "walkers": 44456,
+      "work_spots": 4644
+    }
+  },
+  {
+    "scale": 1,
+    "sleep": "off",
+    "gather_work": {
+      "farm_return_routes": 3,
+      "farm_returns": 15,
+      "farm_waits": 98,
+      "replacement_candidates": 24797,
+      "replacements": 1541,
+      "return_buildings": 4,
+      "return_invalid": 0,
+      "return_other": 0,
+      "return_tiles": 35,
+      "returns": 15,
+      "slept": 0,
+      "steps": 13511,
+      "visits": 57967,
+      "walkers": 44456,
+      "work_spots": 4644
+    }
+  },
+  {
+    "scale": 5,
+    "sleep": "on",
+    "gather_work": {
+      "farm_return_routes": 0,
+      "farm_returns": 0,
+      "farm_waits": 0,
+      "replacement_candidates": 264054,
+      "replacements": 9127,
+      "return_buildings": 8,
+      "return_invalid": 0,
+      "return_other": 0,
+      "return_tiles": 33,
+      "returns": 18,
+      "slept": 130346,
+      "steps": 14726,
+      "visits": 1424420,
+      "walkers": 1279348,
+      "work_spots": 24839
+    }
+  },
+  {
+    "scale": 5,
+    "sleep": "off",
+    "gather_work": {
+      "farm_return_routes": 0,
+      "farm_returns": 0,
+      "farm_waits": 0,
+      "replacement_candidates": 264054,
+      "replacements": 9127,
+      "return_buildings": 8,
+      "return_invalid": 0,
+      "return_other": 0,
+      "return_tiles": 33,
+      "returns": 18,
+      "slept": 0,
+      "steps": 141410,
+      "visits": 1420758,
+      "walkers": 1279348,
+      "work_spots": 24839
+    }
+  }
+]
+```
+
+Commands, run on the indicated committed revision:
+
+```sh
+make match-bench MATCH_BENCH_ARGS='--seats 16 --ticks 600 --threads 1 --scale 1,5 --hash-every 100 --out .cache/match-bench/before-on.json'
+make match-bench MATCH_BENCH_ARGS='--seats 16 --ticks 600 --threads 1 --scale 1,5 --hash-every 100 --no-work-sleep --out .cache/match-bench/before-off.json'
+make match-bench MATCH_BENCH_ARGS='--seats 16 --ticks 600 --threads 1 --scale 1,5 --hash-every 100 --out .cache/match-bench/after-on.json'
+make match-bench MATCH_BENCH_ARGS='--seats 16 --ticks 600 --threads 1 --scale 1,5 --hash-every 100 --no-work-sleep --out .cache/match-bench/after-off.json'
+```
+
+One-minute load at report completion: before-on 101.81, before-off 44.44, after-on 58.69, after-off 49.46. These single shared-machine samples do not isolate a wall-time speedup from the filter or sleep. Gathering means include large spikes (up to about one second); the current workload makes few returns in 600 ticks. The deterministic result is six fewer issued routes at 5x, with all other gathering counts and checkpoint hashes preserved. This synthetic in-process workload does not qualify finished RTS performance or dedicated hardware.
+
+Raw reports and logs remain outside Git under `.cache/match-bench/{before,after}-{on,off}.json` and `.cache/sleep-bench-*.log`; the inspected comparison is `.cache/match-bench/comparison-summary.json`.

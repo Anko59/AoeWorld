@@ -39,6 +39,8 @@ fn assert_work(world: &mut GameWorld, id: EntityId, task: UnitTask, expected: Fa
         } else {
             Facing::North
         };
+        // A direct state edit, not an event: wake a dozing worker by hand.
+        world.wake_gatherer(id);
         let changed = world.advance();
         let unit = world.unit(id).unwrap();
         assert_eq!(unit.task, task, "phase {phase}");
@@ -194,4 +196,44 @@ fn relocate(world: &mut GameWorld, id: EntityId, to: WorldPosition) {
     world.units[index].state.position = to;
     let state = world.units[index].state;
     world.track_unit_step(id, from, &state);
+}
+
+/// Economy-sleep oracle for hunters: three villagers carve one boar carcass
+/// until it is empty (the emptying harvest wakes the others), hash per tick.
+#[test]
+fn carcass_hunters_sleep_on_and_off_agree_every_tick() {
+    let run = |sleep: bool| {
+        let mut world = flat();
+        world.set_work_sleep(sleep);
+        let animal = world.spawn_animal(AnimalKind::Boar, at(100, 100)).unwrap();
+        let hunters = [(98, 100), (102, 100), (100, 98)]
+            .map(|(x, y)| world.spawn_villager(PlayerId(0), at(x, y)).unwrap());
+        world
+            .insert_building(
+                PlayerId(0),
+                BuildingKind::TownCenter,
+                aoe_core::TileRect::from_xywh(104, 104, 4, 4),
+                true,
+            )
+            .unwrap();
+        world.strike_animal(animal, hunters[0], 255);
+        for _ in 0..world.config.tick_hz {
+            world.advance();
+        }
+        for hunter in hunters {
+            world.begin_carcass_gather(hunter, animal).unwrap();
+        }
+        let hashes = (0..9_000)
+            .map(|_| {
+                world.advance();
+                world.canonical_hash_hex()
+            })
+            .collect::<Vec<_>>();
+        assert!(world.animal(animal).is_none_or(|a| a.food_remaining == 0));
+        (hashes, world.economy.tick_work.gather_slept)
+    };
+    let (on, slept) = run(true);
+    let (off, none) = run(false);
+    assert_eq!(on, off);
+    assert!(slept > 1_000 && none == 0, "slept {slept}, off {none}");
 }

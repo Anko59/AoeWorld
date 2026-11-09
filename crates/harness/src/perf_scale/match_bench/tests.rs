@@ -36,7 +36,7 @@ fn divergence_names_the_first_differing_tick() {
     );
 }
 
-/// A small closed-loop match replays to the same hashes on 1 and 2 workers.
+/// A small closed-loop match replays to the same hashes on 1, 2 and 4 workers.
 #[test]
 fn small_match_is_deterministic_across_workers() {
     let plan = |threads| run::Plan {
@@ -53,8 +53,10 @@ fn small_match_is_deterministic_across_workers() {
     };
     let one = run::run(&plan(1)).expect("one worker");
     let two = run::run(&plan(2)).expect("two workers");
+    let four = run::run(&plan(4)).expect("four workers");
     assert_eq!(one.hashes.len(), 4);
     assert_eq!(one.hashes, two.hashes);
+    assert_eq!(one.hashes, four.hashes);
     assert!(one.report["setup"]["units"].as_u64().unwrap_or(0) > 20);
 }
 
@@ -157,6 +159,7 @@ fn options() -> super::Options {
         compare: vec![],
         suite: None,
         determinism_ticks: 3000,
+        no_work_sleep: false,
     }
 }
 
@@ -198,7 +201,32 @@ fn callgrind_cache_binds_every_option_and_executable_contents() {
     changed!(compare, vec!["report.json".into()]);
     changed!(suite, Some("phase0".into()));
     changed!(determinism_ticks, 4000);
+    changed!(no_work_sleep, true);
     assert_ne!(key, super::counted::cache_key(&base, 0.4, &exe).unwrap());
     std::fs::write(&exe, "executable revision two").unwrap();
     assert_ne!(key, super::counted::cache_key(&base, 0.2, &exe).unwrap());
+}
+
+/// The economy-sleep oracle on the closed-loop match: bots, farms, fights
+/// and Generals with sleep on and off agree on every tenth tick's hash.
+#[test]
+fn small_match_hashes_alike_with_work_sleep_on_and_off() {
+    let plan = run::Plan {
+        shape: Shape {
+            seats: 4,
+            scale: 0.2,
+            side_tiles: 400,
+            seed: 3,
+        },
+        threads: 1,
+        ticks: 400,
+        hash_every: 10,
+        sample_every: 0,
+    };
+    let on = run::run(&plan).expect("sleep on");
+    super::WORK_SLEEP.store(false, std::sync::atomic::Ordering::Relaxed);
+    let off = run::run(&plan).expect("sleep off");
+    super::WORK_SLEEP.store(true, std::sync::atomic::Ordering::Relaxed);
+    assert_eq!(on.hashes.len(), 41);
+    assert_eq!(divergence(&on.hashes, &off.hashes), None);
 }

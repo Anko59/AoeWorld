@@ -113,27 +113,13 @@ impl<'a> ExpansionContext<'a> {
     ) -> Result<(), Terminal> {
         let (delta_x, delta_y) = offset;
         let next = TileCoord::new(active.tile.x + delta_x, active.tile.y + delta_y);
-        let diagonal_ok = if delta_x != 0 && delta_y != 0 {
-            diagonal_clear_checked(
-                self.terrain,
-                self.overlay,
-                active.tile,
-                delta_x,
-                delta_y,
-                self.cancelled,
-            )?
-        } else {
-            true
-        };
-        if !checked_walkable(self.terrain, self.overlay, next, self.cancelled)?
-            || !self.terrain.route_overlay_edge_clear(
-                self.overlay,
-                active.tile,
-                next,
-                self.cancelled,
-            )?
-            || !diagonal_ok
-        {
+        if !neighbor_clear(
+            self.terrain,
+            self.overlay,
+            active.tile,
+            offset,
+            self.cancelled,
+        )? {
             return Ok(());
         }
         if let Some(snapshot) = self.proof_overlay
@@ -249,6 +235,23 @@ pub(super) fn checked_walkable(
         return Err(Terminal::Environment(EnvironmentPageError::Cancelled));
     }
     Ok(terrain.route_walkable(overlay, tile, cancelled)?)
+}
+
+/// The exact directed local edge read by an ordinary A* expansion.
+pub(super) fn neighbor_clear(
+    terrain: &dyn RouteTerrain,
+    overlay: &ResourceOverlay,
+    tile: TileCoord,
+    offset: (i32, i32),
+    cancelled: &dyn Fn() -> bool,
+) -> Result<bool, Terminal> {
+    let (dx, dy) = offset;
+    let next = TileCoord::new(tile.x + dx, tile.y + dy);
+    let diagonal_ok =
+        dx == 0 || dy == 0 || diagonal_clear_checked(terrain, overlay, tile, dx, dy, cancelled)?;
+    Ok(checked_walkable(terrain, overlay, next, cancelled)?
+        && terrain.route_overlay_edge_clear(overlay, tile, next, cancelled)?
+        && diagonal_ok)
 }
 
 fn diagonal_clear_checked(

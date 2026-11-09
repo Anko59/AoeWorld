@@ -141,6 +141,36 @@ impl GameWorld {
         self.terrain.has_map_navigation() || !self.economy.blocked_tiles.is_empty()
     }
 
+    pub(crate) fn route_origin_pocket(
+        &self,
+        kind: crate::UnitKind,
+        origin: TileCoord,
+    ) -> Result<Option<aoe_map::RouteOriginPocket>, EnvironmentPageError> {
+        if kind.is_naval() {
+            return aoe_map::RouteOriginPocket::build(
+                &super::fishing::navigation::NavalNavigation::new(self),
+                ResourceOverlay::empty(),
+                origin,
+                &|| false,
+            );
+        }
+        match &self.terrain {
+            Terrain::Map { generator, overlay } => {
+                aoe_map::RouteOriginPocket::build(generator, overlay, origin, &|| false)
+            }
+            Terrain::Uniform(_) => aoe_map::RouteOriginPocket::build(
+                &UniformNavigation {
+                    config: self.config,
+                    blocked: &self.economy.blocked_tiles,
+                    world: self,
+                },
+                ResourceOverlay::empty(),
+                origin,
+                &|| false,
+            ),
+        }
+    }
+
     pub(crate) fn poll_world_route_planner(
         &self,
         planner: &mut RoutePlanner,

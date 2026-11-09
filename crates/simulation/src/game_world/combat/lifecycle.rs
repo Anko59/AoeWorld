@@ -191,6 +191,8 @@ impl GameWorld {
 
     /// Removes a unit from every index. Its slot is filled by the last unit.
     pub(crate) fn remove_unit(&mut self, id: EntityId) {
+        // A dozing job of a removed worker is dropped by its next visit.
+        self.wake_gatherer(id);
         self.forget_vassal_unit(id);
         self.forget_steward_worker(id);
         self.stop_general(id);

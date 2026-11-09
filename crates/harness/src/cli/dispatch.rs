@@ -96,7 +96,8 @@ pub(super) fn run(
         Command::PerfLateGame {
             check,
             instructions,
-        } => perf::late_game(check, instructions)?,
+            no_work_sleep,
+        } => perf::late_game(check, instructions, !no_work_sleep)?,
         Command::PerfCi => perf::run("ci")?,
         Command::PerfFull => perf::run("full")?,
         Command::PerfPressure => perf_pressure::run()?,

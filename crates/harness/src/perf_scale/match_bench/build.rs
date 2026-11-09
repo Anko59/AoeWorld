@@ -70,6 +70,7 @@ pub(super) fn build(shape: &Shape) -> Result<Built, BoxError> {
     let started = Instant::now();
     let side = shape.side();
     let mut world = GameWorld::from_map(package(side, shape.seed)?)?;
+    world.set_work_sleep(super::WORK_SLEEP.load(std::sync::atomic::Ordering::Relaxed));
     // The simulation's seat storage follows the match, not the wire's
     // 128-seat `MAX_ECONOMY_PLAYERS`: 1,000 seats need no other change.
     world.set_limits(WorldLimits::for_match(usize::from(shape.seats)));
