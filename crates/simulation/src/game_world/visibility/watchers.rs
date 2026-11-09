@@ -153,6 +153,7 @@ impl GameWorld {
 
     /// Queues a removed building for the next flush.
     pub(crate) fn forget_building(&mut self, id: EntityId, footprint: TileRect) {
+        self.vision.dirty_buildings.remove(&id);
         for y in footprint.min.y..footprint.max.y {
             for x in footprint.min.x..footprint.max.x {
                 let tile = TileCoord::new(x, y);

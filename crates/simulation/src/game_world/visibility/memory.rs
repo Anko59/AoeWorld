@@ -11,13 +11,16 @@ impl GameWorld {
     /// The one mutable path to a building: the change reaches the memory of
     /// every player watching it at the next refresh.
     pub(crate) fn building_mut(&mut self, id: EntityId) -> Option<&mut GameBuilding> {
+        let building = self.economy.buildings.get_mut(&id)?;
         self.vision.dirty_buildings.insert(id);
-        self.economy.buildings.get_mut(&id)
+        Some(building)
     }
 
     /// Marks a building whose fields were changed without [`Self::building_mut`].
     pub(crate) fn mark_building_changed(&mut self, id: EntityId) {
-        self.vision.dirty_buildings.insert(id);
+        if self.economy.buildings.contains_key(&id) {
+            self.vision.dirty_buildings.insert(id);
+        }
     }
 
     /// Marks every building: restores and fog rebuilds re-derive all memory.

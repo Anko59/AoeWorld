@@ -288,7 +288,7 @@ impl GameWorld {
         let Some(&index) = self.lookup.get(&id) else {
             return;
         };
-        self.units[index].last_movement_error = None;
+        self.set_movement_error(index, None);
         self.combat.attackers.insert(
             id,
             Attacker {

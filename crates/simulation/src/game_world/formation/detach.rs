@@ -78,7 +78,7 @@ impl GameWorld {
             self.units[index].order = None;
             self.units[index].route.clear();
             self.units[index].obstruction = None;
-            self.units[index].last_movement_error = None;
+            self.set_movement_error(index, None);
             self.units[index].state.planning = false;
             if let Ok(at) = self.active_movers.binary_search(&member.id) {
                 self.active_movers.remove(at);
@@ -293,7 +293,7 @@ impl GameWorld {
         if let Some(obstruction) = &mut self.units[index].obstruction {
             obstruction.goal = goal;
         }
-        self.units[index].last_movement_error = None;
+        self.set_movement_error(index, None);
         let Some(group) = self.units[index]
             .formation
             .and_then(|leader| self.formations.get_mut(&leader))
@@ -392,7 +392,7 @@ impl GameWorld {
             self.units[index].order = None;
             self.units[index].route.clear();
             self.units[index].obstruction = None;
-            self.units[index].last_movement_error = None;
+            self.set_movement_error(index, None);
             self.units[index].state.planning = false;
             if let Ok(at) = self.active_movers.binary_search(&id) {
                 self.active_movers.remove(at);

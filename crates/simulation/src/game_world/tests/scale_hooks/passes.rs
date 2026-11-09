@@ -60,3 +60,52 @@ fn a_collision_change_visits_its_subscribers_not_every_unit() {
         assert_eq!(count(&w, replaced), crate::PassCount::default());
     }
 }
+
+#[test]
+fn cleared_errors_unsubscribe_before_the_next_collision() {
+    let mut w = world();
+    for action in 0..4 {
+        let id = w.spawn_unit(PlayerId(0), at(20 + action * 3, 20)).unwrap();
+        let index = w.lookup[&id];
+        w.set_movement_error(index, Some(crate::GameWorldError::Unreachable));
+        assert!(w.collision_subscribers.errors.contains(&id));
+        match action {
+            0 => w.set_movement_error(index, None),
+            1 => {
+                w.issue_move(id, at(40, 40)).unwrap();
+            }
+            2 => {
+                w.issue_move(id, w.units[index].state.position).unwrap();
+            }
+            _ => w.issue_stop(PlayerId(0), id).unwrap(),
+        }
+        assert!(w.units[index].last_movement_error.is_none());
+        assert!(
+            !w.collision_subscribers.errors.contains(&id),
+            "action {action}"
+        );
+    }
+}
+
+#[test]
+fn removing_units_unsubscribes_errors_memos_and_planners_without_collision() {
+    let mut w = world();
+    for _ in 0..128 {
+        let id = w.spawn_unit(PlayerId(0), at(20, 20)).unwrap();
+        let index = w.lookup[&id];
+        w.set_movement_error(index, Some(crate::GameWorldError::Unreachable));
+        w.remember_unreachable(index, TileCoord::new(40, 40));
+        w.store_planner(
+            index,
+            Some(aoe_map::RoutePlanner::new(
+                TileCoord::new(20, 20),
+                TileCoord::new(40, 40),
+                4096,
+            )),
+        );
+        w.remove_unit(id);
+        assert!(w.collision_subscribers.errors.is_empty());
+        assert!(w.collision_subscribers.memos.is_empty());
+        assert!(w.collision_subscribers.planners.is_empty());
+    }
+}
