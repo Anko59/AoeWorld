@@ -128,9 +128,7 @@ fn many_completed_houses_do_not_limit_training_or_change_the_population_count() 
     // Both prepaid entries finish independently of housing.
     w.issue_train(PlayerId(0), tc, UnitKind::Villager).unwrap();
     let entry = w
-        .economy
-        .buildings
-        .get_mut(&tc)
+        .building_mut(tc)
         .unwrap()
         .training_queue
         .front_mut()

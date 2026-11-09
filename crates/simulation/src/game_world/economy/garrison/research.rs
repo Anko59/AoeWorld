@@ -4,6 +4,14 @@ use aoe_core::PlayerId;
 impl GameWorld {
     pub(crate) fn upgrade_garrisoned_units(&mut self, player: PlayerId, tech: Tech) {
         let mut upgraded = 0;
+        let sheltering = self
+            .economy
+            .buildings
+            .values()
+            .filter(|b| b.garrison.iter().any(|g| g.unit.player == player))
+            .map(|b| b.id)
+            .collect::<Vec<_>>();
+        self.vision.dirty_buildings.extend(sheltering);
         let units = self
             .economy
             .buildings

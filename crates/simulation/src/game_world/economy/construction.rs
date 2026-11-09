@@ -442,6 +442,7 @@ impl GameWorld {
         id: EntityId,
         builders: u64,
     ) -> Option<(PlayerId, BuildingKind, TileRect)> {
+        self.mark_building_changed(id);
         let building = self.economy.buildings.get_mut(&id)?;
         let total = building.work_total.max(1);
         let max_hp = u64::from(building.max_hp);
@@ -465,12 +466,12 @@ impl GameWorld {
         if kind == BuildingKind::Bridge
             && bridge_span.is_none_or(|span| !self.complete_bridge(span))
         {
-            if let Some(building) = self.economy.buildings.get_mut(&id) {
+            if let Some(building) = self.building_mut(id) {
                 building.work_done = building.work_total.saturating_sub(1);
             }
             return None;
         }
-        self.economy.buildings.get_mut(&id)?.state = ConstructionState::Complete;
+        self.building_mut(id)?.state = ConstructionState::Complete;
         if kind == BuildingKind::Road {
             self.economy.roads.insert(footprint.min);
         }

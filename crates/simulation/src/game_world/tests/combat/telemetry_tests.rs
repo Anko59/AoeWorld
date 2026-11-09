@@ -74,7 +74,7 @@ fn telemetry_counts_destroyed_buildings_but_excludes_wildlife() {
     let building = world
         .place_town_center(PlayerId(1), TileCoord::new(101, 100))
         .unwrap();
-    world.economy.buildings.get_mut(&building).unwrap().hp = 1;
+    world.building_mut(building).unwrap().hp = 1;
     world.issue_attack(PlayerId(0), attacker, building).unwrap();
     world.advance();
     assert!(world.building(building).is_none());

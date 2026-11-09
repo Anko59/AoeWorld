@@ -147,6 +147,7 @@ impl GameWorld {
                             )
                     }) {
                         b.los += 1;
+                        self.vision.dirty_buildings.insert(b.id);
                     }
                 }
             }
@@ -171,6 +172,7 @@ impl GameWorld {
                     .filter(|b| b.player == player)
                 {
                     building.age = age;
+                    self.vision.dirty_buildings.insert(building.id);
                     let (hp, los) = building.kind.age_stats(age);
                     let hp = if state.researched & Tech::Masonry.bit() != 0
                         && building.kind != crate::BuildingKind::Farm
@@ -200,6 +202,7 @@ impl GameWorld {
                 for building in self.economy.buildings.values_mut() {
                     if building.player == player {
                         building.los = building.los.saturating_add(bonus);
+                        self.vision.dirty_buildings.insert(building.id);
                     }
                 }
             }

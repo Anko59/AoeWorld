@@ -230,7 +230,7 @@ fn garrison_destruction_ejects_every_occupant_and_replay_is_deterministic() {
         .into_iter()
         .map(|kind| enter(&mut world, building, kind))
         .collect();
-        world.economy.buildings.get_mut(&building).unwrap().hp = 1;
+        world.building_mut(building).unwrap().hp = 1;
         let enemy = world.spawn_militia(PlayerId(1), at(104, 100)).unwrap();
         world.issue_attack(PlayerId(1), enemy, building).unwrap();
         let mut destruction_changes = Vec::new();
@@ -420,9 +420,7 @@ fn garrison_research_upgrades_occupants_and_blocked_exits_never_drop_them() {
 fn castle_research_upgrades_sheltered_units_and_preserves_their_wounds() {
     let (mut world, building) = shelter(BuildingKind::TownCenter);
     let id = enter(&mut world, building, UnitKind::Militia);
-    world.economy.buildings.get_mut(&building).unwrap().garrison[0]
-        .unit
-        .hp -= 7;
+    world.building_mut(building).unwrap().garrison[0].unit.hp -= 7;
     for tech in [
         crate::Tech::FeudalAge,
         crate::Tech::ManAtArms,

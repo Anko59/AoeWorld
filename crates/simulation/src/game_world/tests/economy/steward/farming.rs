@@ -374,7 +374,7 @@ fn managed_farmer_reseeds_the_same_plot_without_leaving_an_extra_farm() {
     advance(&mut w, 600);
     assert_eq!(w.steward_controller(workers[0]), Some(steward));
     let wood = w.player_economy(PlayerId(0)).unwrap().stockpile.wood;
-    w.economy.buildings.get_mut(&plot).unwrap().food_remaining = Some(1);
+    w.building_mut(plot).unwrap().food_remaining = Some(1);
     let mut rebuilding = false;
     for _ in 0..3_000 {
         w.advance();

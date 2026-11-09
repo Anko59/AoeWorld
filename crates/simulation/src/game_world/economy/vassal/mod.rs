@@ -296,9 +296,7 @@ impl GameWorld {
             d.status.military = d.soldiers.len() as u8;
             let (castle, status) = (d.castle, d.status);
             if let Some(g) = self
-                .economy
-                .buildings
-                .get_mut(&castle)
+                .building_mut(castle)
                 .and_then(|b| b.garrison.iter_mut().find(|g| g.unit.id == id))
             {
                 g.vassal = Some(status);

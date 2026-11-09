@@ -91,7 +91,7 @@ fn a_town_center_foundation_opens_its_arches_only_on_completion() {
             WorldPosition::from_tile_center(TileCoord::new(63, 66)).unwrap(),
         )
         .unwrap();
-    world.economy.buildings.get_mut(&tc).unwrap().work_total = 3;
+    world.building_mut(tc).unwrap().work_total = 3;
     world.issue_construct(PlayerId(0), &[builder], tc).unwrap();
     world.advance();
     assert!(world.building(tc).unwrap().is_complete());

@@ -245,7 +245,7 @@ fn manager_builds_a_mill_and_farms_and_prepays_normal_reseeds() {
         .unwrap()
         .id;
     assert_eq!(w.steward_controller(farmer), Some(steward));
-    w.economy.buildings.get_mut(&farm).unwrap().food_remaining = Some(0);
+    w.building_mut(farm).unwrap().food_remaining = Some(0);
     advance(&mut w, 2_000);
     assert!(
         w.building(farm).unwrap().food_remaining.unwrap() > 0,

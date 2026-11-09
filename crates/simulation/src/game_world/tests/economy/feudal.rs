@@ -312,7 +312,7 @@ fn age_up_updates_existing_damaged_new_and_unfinished_building_stats() {
     rich(&mut world);
     let house = built(&mut world, BuildingKind::House, 110);
     let gate = built(&mut world, BuildingKind::PalisadeGate, 120);
-    world.economy.buildings.get_mut(&house).unwrap().hp = 300;
+    world.building_mut(house).unwrap().hp = 300;
     built(&mut world, BuildingKind::LumberCamp, 80);
     built(&mut world, BuildingKind::Mill, 90);
     world

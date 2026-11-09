@@ -53,6 +53,9 @@ pub(crate) struct Vision {
     /// Building footprint tiles, for sight-gain and sight-loss events.
     building_at_tile: TileBuildings,
     building_watchers: BTreeMap<EntityId, Watched>,
+    /// Buildings changed or newly watched since the last memory refresh
+    /// (`memory.rs`). Derived, never hashed.
+    pub(crate) dirty_buildings: BTreeSet<EntityId>,
     disabled: bool,
     revision: u64,
     /// While a movement tick runs, observer changes queue here and apply per
@@ -73,6 +76,7 @@ mod state;
 mod tests;
 use state::PlayerVision;
 
+mod memory;
 #[path = "watchers.rs"]
 mod watchers;
 use watchers::Watched;

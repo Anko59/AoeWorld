@@ -186,6 +186,7 @@ impl GameWorld {
                 *slot = *player;
             }
         }
+        self.mark_all_buildings_changed();
         self.remember_visible_buildings();
         Ok(report)
     }
@@ -212,7 +213,7 @@ impl GameWorld {
             report.buildings_lost += 1;
             return;
         }
-        let Some(building) = self.economy.buildings.get_mut(&id) else {
+        let Some(building) = self.building_mut(id) else {
             return;
         };
         building.age = record.age;
@@ -240,7 +241,7 @@ impl GameWorld {
         if record.complete
             && let Some(span) = record.bridge_span
         {
-            if let Some(bridge) = self.economy.buildings.get_mut(&id) {
+            if let Some(bridge) = self.building_mut(id) {
                 bridge.state = ConstructionState::Complete;
             }
             self.restore_bridge_deck(span);

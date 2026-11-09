@@ -36,6 +36,10 @@ fn the_tick_passes_count_each_tick_and_the_hash_ignores_them() {
     assert!(count(&counted, "collect_changed").visited > 0);
     assert!(count(&counted, "tables_refresh").calls > 0);
     assert_eq!(count(&counted, "advance_transports").visited, 0);
+    // Replaced by events and indexes: these whole-population passes never run.
+    for replaced in ["advance_gates", "remember_visible_buildings"] {
+        assert_eq!(count(&counted, replaced), crate::PassCount::default());
+    }
 }
 
 #[test]

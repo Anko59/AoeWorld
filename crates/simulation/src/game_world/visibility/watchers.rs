@@ -79,8 +79,10 @@ impl Vision {
     pub(super) fn apply_watch(&mut self, player: PlayerId, watch: Watch) {
         match watch {
             Watch::Gain(building) => {
-                if let Some(watched) = self.building_watchers.get_mut(&building) {
-                    watched.watchers.insert(player);
+                if let Some(watched) = self.building_watchers.get_mut(&building)
+                    && watched.watchers.insert(player)
+                {
+                    self.dirty_buildings.insert(building);
                 }
             }
             Watch::Loss { building, hidden } => {
@@ -117,6 +119,7 @@ impl GameWorld {
         if self.vision.disabled {
             return;
         }
+        self.vision.dirty_buildings.insert(id);
         let mut watchers = BTreeSet::from([player]);
         let players = self.vision.players.keys().copied().collect::<Vec<_>>();
         for seen in players {
@@ -146,46 +149,6 @@ impl GameWorld {
         for (id, player, footprint) in buildings {
             self.index_new_building(id, player, footprint);
         }
-    }
-
-    /// Refreshes remembered snapshots for every watched building and drops
-    /// the memory of destroyed ones whose site is now visible. Everything a
-    /// player no longer sees keeps its last observation.
-    pub(crate) fn remember_visible_buildings(&mut self) -> usize {
-        if self.vision.disabled {
-            return 0;
-        }
-        // Borrows the watcher sets in place (disjoint from the players'
-        // memories), walks the buildings beside them (both in id order, so
-        // no lookup per building) and clones a building only into a memory
-        // it changes; the walk order (building id, then watcher) is the same.
-        let visited = self.vision.building_watchers.len();
-        let mut buildings = self.economy.buildings.iter().peekable();
-        // Each player's memory by id, so a watcher costs no map search.
-        let mut players: Vec<Option<&mut _>> = Vec::new();
-        for (player, vision) in &mut self.vision.players {
-            let at = usize::from(player.0);
-            if players.len() <= at {
-                players.resize_with(at + 1, || None);
-            }
-            players[at] = Some(vision);
-        }
-        for (id, seen) in &self.vision.building_watchers {
-            while buildings.next_if(|(at, _)| *at < id).is_some() {}
-            let Some((_, building)) = buildings.next_if(|(at, _)| *at == id) else {
-                continue;
-            };
-            for player in &seen.watchers {
-                if let Some(Some(vision)) = players.get_mut(usize::from(player.0)) {
-                    // Only a differing snapshot is a change.
-                    if vision.remembered.get(id) != Some(building) {
-                        vision.changed.insert(*id);
-                        vision.remembered.insert(*id, building.clone());
-                    }
-                }
-            }
-        }
-        visited
     }
 
     /// Queues a removed building for the next flush.

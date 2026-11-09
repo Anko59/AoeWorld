@@ -142,6 +142,7 @@ impl GameWorld {
             .values_mut()
             .filter(|b| b.player == player)
         {
+            self.vision.dirty_buildings.insert(b.id);
             for e in &mut b.training_queue {
                 if e.kind == from {
                     e.kind = to;
@@ -164,6 +165,7 @@ impl GameWorld {
             })
         {
             let bonus = b.kind.age_stats(b.age).0 / 10;
+            self.vision.dirty_buildings.insert(b.id);
             b.max_hp += bonus;
             b.hp += if b.is_complete() {
                 bonus

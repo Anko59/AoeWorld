@@ -87,7 +87,7 @@ impl GameWorld {
         {
             self.refill_route_budgets();
             if !changed.is_empty() {
-                self.remember_buildings_this_tick();
+                self.remember_visible_buildings();
             }
             return self.collect_changed(changed);
         }
@@ -106,20 +106,12 @@ impl GameWorld {
         self.advance_generals(&mut changed);
         self.advance_stewards(&mut changed);
         probe(TickPhase::StewardEconomy);
-        self.remember_buildings_this_tick();
+        self.remember_visible_buildings();
         probe(TickPhase::BuildingMemory);
         self.refill_route_budgets();
         let collected = self.collect_changed(changed);
         probe(TickPhase::Changed);
         collected
-    }
-
-    /// The per-tick building memory pass, counted (the other callers are
-    /// events: a building placed, removed or seen).
-    fn remember_buildings_this_tick(&mut self) {
-        let visited = self.remember_visible_buildings();
-        self.passes
-            .record(crate::game_world::Pass::RememberVisibleBuildings, visited);
     }
 
     /// Every phase reports only the ids it touched. Sorting and deduping ids

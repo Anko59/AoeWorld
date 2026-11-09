@@ -52,7 +52,7 @@ fn a_building_at_zero_hit_points_is_destroyed_and_frees_its_tiles() {
         0
     );
     assert!(!world.tile_passable(TileCoord::new(121, 61)));
-    world.economy.buildings.get_mut(&theirs).unwrap().hp = 2;
+    world.building_mut(theirs).unwrap().hp = 2;
     let militia = world.spawn_militia(PlayerId(0), at(118, 62)).unwrap();
     world.issue_attack(PlayerId(0), militia, theirs).unwrap();
     ticks_until(&mut world, 400, |w| w.building(theirs).is_none());
@@ -128,7 +128,7 @@ fn population_may_exceed_the_space_after_a_town_center_falls_and_training_waits(
         world.player_economy(PlayerId(0)).unwrap().population_cap,
         10
     );
-    world.economy.buildings.get_mut(&ours).unwrap().hp = 1;
+    world.building_mut(ours).unwrap().hp = 1;
     let raider = world.spawn_militia(PlayerId(1), at(58, 62)).unwrap();
     world.issue_attack(PlayerId(1), raider, ours).unwrap();
     ticks_until(&mut world, 400, |w| w.building(ours).is_none());
@@ -262,7 +262,7 @@ fn destroying_a_house_uses_its_armour_without_changing_population() {
         1
     );
     assert!(!world.tile_passable(TileCoord::new(100, 100)));
-    world.economy.buildings.get_mut(&house).unwrap().hp = 4;
+    world.building_mut(house).unwrap().hp = 4;
     let enemy = world.spawn_militia(PlayerId(0), at(99, 101)).unwrap();
     world.issue_attack(PlayerId(0), enemy, house).unwrap();
     world.advance();

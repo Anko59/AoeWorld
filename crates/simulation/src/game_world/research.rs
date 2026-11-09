@@ -106,7 +106,7 @@ impl GameWorld {
         stock.gold -= need.gold;
         stock.stone -= need.stone;
         let total_ticks = u64::from(self.config.tick_hz) * u64::from(rules.seconds);
-        if let Some(site) = self.economy.buildings.get_mut(&building) {
+        if let Some(site) = self.building_mut(building) {
             site.research = Some(ResearchEntry {
                 tech,
                 progress_ticks: 0,
@@ -125,9 +125,7 @@ impl GameWorld {
         building: EntityId,
     ) -> Result<(), EconomyError> {
         let site = self
-            .economy
-            .buildings
-            .get_mut(&building)
+            .building_mut(building)
             .ok_or(EconomyError::UnknownEntity)?;
         if site.player != player {
             return Err(EconomyError::NotOwner);
@@ -181,7 +179,7 @@ impl GameWorld {
             .copied()
             .collect::<Vec<_>>();
         for id in active {
-            let Some(building) = self.economy.buildings.get_mut(&id) else {
+            let Some(building) = self.building_mut(id) else {
                 continue;
             };
             let Some(entry) = &mut building.research else {

@@ -103,7 +103,7 @@ fn attacking_army(kind: UnitKind, count: i32) -> (GameWorld, EntityId, Vec<Entit
         )
         .unwrap();
     // Keep the target alive long enough to observe every attacker's first strike.
-    w.economy.buildings.get_mut(&house).unwrap().hp = 20_000;
+    w.building_mut(house).unwrap().hp = 20_000;
     let ids = (0..count)
         .map(|i| {
             w.spawn_kind(PlayerId(0), kind, at(50 - i / 4, 59 + i % 4))

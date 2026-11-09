@@ -2,7 +2,6 @@
 //! through a living unit. It is four by one tiles along a wall line in either axis.
 //! Route plans treat a completed gate as open ground (see `routes_through_gate`);
 //! only movement collision (`blocked_tiles`) closes it.
-use crate::game_world::Pass;
 use crate::{GameWorld, Terrain};
 use aoe_core::{TileCoord, TileRect};
 
@@ -28,18 +27,21 @@ impl GameWorld {
             }
         }
         self.economy.open_gates.insert(id);
-        if let Some(gate) = self.economy.buildings.get_mut(&id) {
+        if let Some(gate) = self.building_mut(id) {
             gate.gate_open = true;
         }
         self.collision_opened(rect);
     }
 
     pub(super) fn advance_gates(&mut self) {
-        self.passes
-            .record(Pass::AdvanceGates, self.economy.buildings.len());
+        // Only the gate index is visited; `Pass::AdvanceGates` counts the
+        // whole-building scan this replaced and stays at 0.
         let gates: Vec<_> = self
-            .buildings()
-            .filter(|b| b.kind.is_gate() && b.is_complete())
+            .economy
+            .gates
+            .iter()
+            .filter_map(|id| self.economy.buildings.get(id))
+            .filter(|b| b.is_complete())
             .map(|b| (b.id, b.player, b.footprint))
             .collect();
         for (id, owner, rect) in gates {
@@ -78,7 +80,7 @@ impl GameWorld {
             } else {
                 self.economy.open_gates.remove(&id);
             }
-            if let Some(gate) = self.economy.buildings.get_mut(&id) {
+            if let Some(gate) = self.building_mut(id) {
                 gate.gate_open = open;
             }
             if open {
