@@ -6,16 +6,29 @@ use super::*;
 /// 100-tick checkpoint.
 #[test]
 fn gathering_and_dropoffs_replay_deterministically() {
-    assert_eq!(gather_replay(), gather_replay());
+    assert_eq!(gather_replay(true).0, gather_replay(true).0);
 }
 
-fn gather_replay() -> Vec<String> {
+/// The economy-sleep oracle on the same run: mid-sleep a node is exhausted,
+/// a gather technology lands, and an enemy attacks and kills a gatherer.
+/// Every one of the 600 ticks must hash alike with sleep on and off.
+#[test]
+fn gathering_sleep_on_and_off_agree_every_tick() {
+    let (on, slept, raided) = gather_replay(true);
+    let (off, none, _) = gather_replay(false);
+    assert_eq!(on, off);
+    assert!(slept > 1_000 && none == 0, "slept {slept}, off {none}");
+    assert!(raided, "the raider must hit the sleeping gold miner");
+}
+
+fn gather_replay(sleep: bool) -> (Vec<String>, usize, bool) {
     let (package, pages, water) = fixture::flat_fixture(false);
     let generator = package
         .generator_with_environment(pages.clone(), water.clone(), Vec::new(), Vec::new())
         .unwrap();
     let mut world =
         GameWorld::from_prepared_map(package, pages, water, Vec::new(), Vec::new()).unwrap();
+    world.set_work_sleep(sleep);
     // A search before the village exists warms any per-chunk resource cache;
     // the starting nodes inserted by the village must still be found after.
     let _ = world.nearest_resource(TileCoord::new(64, 64), ResourceKind::Wood, 10, None);
@@ -117,10 +130,27 @@ fn gather_replay() -> Vec<String> {
                 .deplete_resource(node.id, node.initial_amount)
                 .unwrap();
         }
+        if block == 2 {
+            // Rates and carry capacity change under sleeping workers.
+            let player = world.economy.players.get_mut(&PlayerId(0)).unwrap();
+            player.researched |= crate::Tech::GoldMining.bit() | crate::Tech::Wheelbarrow.bit();
+            world.wake_player_gatherers(PlayerId(0));
+        }
+        if block == 3 {
+            let gold = world.unit(jobs[2].2).unwrap().position;
+            [(768, 0), (-768, 0), (0, 768), (0, -768), (1024, 1024)]
+                .into_iter()
+                .find_map(|(dx, dy)| {
+                    let at = WorldPosition::new(gold.x + dx, gold.y + dy);
+                    world.spawn_militia(PlayerId(1), at).ok()
+                })
+                .expect("room for the raider");
+        }
         for _ in 0..100 {
             world.advance();
+            checkpoints.push(world.canonical_hash_hex());
         }
-        checkpoints.push(world.canonical_hash_hex());
     }
-    checkpoints
+    let raided = world.unit(jobs[2].2).is_none_or(|u| u.hp < u.max_hp);
+    (checkpoints, world.economy.tick_work.gather_slept, raided)
 }

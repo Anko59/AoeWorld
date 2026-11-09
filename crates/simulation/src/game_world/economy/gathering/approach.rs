@@ -119,6 +119,7 @@ impl GameWorld {
         let Some(unit) = self.unit(id) else {
             return Vec::new();
         };
+        self.count_gather(Count::WorkSpots, 1);
         let index = self.lookup[&id];
         if !unit.kind.is_naval()
             && self.at_work_position(id, target)

@@ -41,13 +41,13 @@ mod wildlife;
 pub use combat::*;
 pub use economy::{
     BUILDING_RULES, BUILDINGS_PER_PLAYER, BuildingKind, BuildingRules, CarriedResource,
-    ConstructionState, EconomyError, GameBuilding, GarrisonedUnit, GeneralState, GeneralStatus,
-    GeneralWork, HoldingSpan, LandControl, LateGameSeat, LateGameSeeded, MARKET_RULES,
-    MAX_BUILD_GROUP, MAX_WALL_SEGMENTS, MarketPrices, PlayerEconomy, RallyPoint, RallyTarget,
-    STEWARD_RULES, STEWARD_STALL_SECONDS, SquadKind, SquadStatus, StewardRules, StewardSettings,
-    StewardStatus, StewardWait, StewardWork, Stockpile, TickPhase, TrainingEntry, UnitKind,
-    UnitTask, VASSAL_LIMIT, VASSAL_RADIUS, VILLAGE_RULES, VassalStatus, VassalWait, VillageRules,
-    WorldLimits, trainable_units,
+    ConstructionState, EconomyError, GameBuilding, GarrisonedUnit, GatherWork, GeneralState,
+    GeneralStatus, GeneralWork, HoldingSpan, LandControl, LateGameSeat, LateGameSeeded,
+    MARKET_RULES, MAX_BUILD_GROUP, MAX_WALL_SEGMENTS, MarketPrices, PlayerEconomy, RallyPoint,
+    RallyTarget, STEWARD_RULES, STEWARD_STALL_SECONDS, SquadKind, SquadStatus, StewardRules,
+    StewardSettings, StewardStatus, StewardWait, StewardWork, Stockpile, TickPhase, TrainingEntry,
+    UnitKind, UnitTask, VASSAL_LIMIT, VASSAL_RADIUS, VILLAGE_RULES, VassalStatus, VassalWait,
+    VillageRules, WorldLimits, trainable_units,
 };
 pub use facing::Facing;
 pub(crate) use facing::facing_for;
@@ -394,6 +394,11 @@ impl GameWorld {
             self.collision_opened(resources::resource_area(depletion.id));
         }
         self.record_observed_resource(depletion.id, depletion.remaining);
+        if depletion.remaining == 0 {
+            self.economy
+                .gatherers
+                .wake_target(economy::WorkTarget::Node(depletion.id));
+        }
         Ok(depletion)
     }
 

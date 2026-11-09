@@ -101,6 +101,12 @@ impl GameWorld {
             return None;
         }
         a.state.food_remaining -= 1;
-        Some(a.state.food_remaining)
+        let left = a.state.food_remaining;
+        if left == 0 {
+            self.economy
+                .gatherers
+                .wake_target(crate::game_world::economy::WorkTarget::Animal(id));
+        }
+        Some(left)
     }
 }

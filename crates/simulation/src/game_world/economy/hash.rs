@@ -1,7 +1,7 @@
 use super::Economy;
 
 impl Economy {
-    pub(crate) fn update_hash(&self, hash: &mut blake3::Hasher) {
+    pub(crate) fn update_hash(&self, hash: &mut blake3::Hasher, tick: u64) {
         self.hash_garrisons(hash);
         // Pending rendezvous affect future movement and must participate in replay.
         if !self.transport_journeys.is_empty() {
@@ -165,7 +165,7 @@ impl Economy {
                 task.approach_failures,
                 u8::from(task.crowded),
             ]);
-            hash.update(&task.credits.to_le_bytes());
+            hash.update(&task.credits_at(tick).to_le_bytes());
             match task.dropoff {
                 Some(id) => {
                     hash.update(&[1]);

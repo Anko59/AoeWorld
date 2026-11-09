@@ -14,7 +14,7 @@ pub(crate) enum WorkTarget {
 }
 
 impl GatherTask {
-    fn target(&self) -> WorkTarget {
+    pub(super) fn target(&self) -> WorkTarget {
         if let Some(animal) = self.animal {
             WorkTarget::Animal(animal)
         } else if let Some(farm) = self.farm {
@@ -48,6 +48,7 @@ impl GatherTask {
             return_target: None,
             failed_dropoffs: Default::default(),
             retry_tick: 0,
+            sleep: None,
         }
     }
 }
@@ -57,6 +58,7 @@ pub(crate) struct Gatherers {
     tasks: BTreeMap<EntityId, GatherTask>,
     members: HashMap<u64, u64, BuildHasherDefault<CellHasher>>,
     targets: HashMap<WorkTarget, usize, BuildHasherDefault<CellHasher>>,
+    pub(super) dozes: super::dozing::Dozes,
 }
 
 impl Gatherers {
@@ -94,6 +96,13 @@ impl Gatherers {
         }
     }
 
+    /// Change a task's progress fields; its target and membership stay.
+    pub(super) fn update_progress(&mut self, id: &EntityId, change: impl FnOnce(&mut GatherTask)) {
+        if let Some(task) = self.tasks.get_mut(id) {
+            change(task);
+        }
+    }
+
     pub(crate) fn count_target(&self, target: WorkTarget) -> usize {
         self.targets.get(&target).copied().unwrap_or(0)
     }
@@ -109,6 +118,7 @@ impl Gatherers {
     pub(crate) fn insert(&mut self, id: EntityId, task: GatherTask) -> Option<GatherTask> {
         let target = task.target();
         let old = self.tasks.insert(id, task);
+        self.on_insert(id, old.as_ref());
         let previous = old.as_ref().map(GatherTask::target);
         // Progress and phase writes keep the same reservation and membership.
         if previous == Some(target) {
@@ -120,6 +130,9 @@ impl Gatherers {
             *self.members.entry(u64::from(id.0) >> 6).or_default() |= 1_u64 << (id.0 % 64);
         }
         *self.targets.entry(target).or_default() += 1;
+        if self.count_target(target) > 10 {
+            self.wake_uncrowded(target);
+        }
         old
     }
 
@@ -134,6 +147,7 @@ impl Gatherers {
 
     pub(crate) fn remove(&mut self, id: &EntityId) -> Option<GatherTask> {
         let task = self.tasks.remove(id)?;
+        self.on_remove(*id, &task);
         let word = u64::from(id.0) >> 6;
         if let Some(bits) = self.members.get_mut(&word) {
             *bits &= !(1_u64 << (id.0 % 64));
@@ -148,6 +162,7 @@ impl Gatherers {
     #[cfg(test)]
     pub(crate) fn clear(&mut self) {
         self.tasks.clear();
+        self.clear_dozes();
         self.members.clear();
         self.targets.clear();
     }

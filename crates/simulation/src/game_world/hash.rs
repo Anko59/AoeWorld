@@ -177,7 +177,7 @@ impl GameWorld {
         }
         self.terrain.update_mutable_state_hash(&mut hash);
         hash.update(&self.next_entity_id.to_le_bytes());
-        self.economy.update_hash(&mut hash);
+        self.economy.update_hash(&mut hash, self.tick.0);
         self.combat.update_hash(&mut hash);
         self.wildlife.update_hash(&mut hash);
         self.vision.update_hash(&mut hash);

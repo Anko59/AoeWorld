@@ -20,6 +20,12 @@ pub(crate) use jobs::{Gatherers, WorkTarget};
 pub(crate) use positions::WorkPositions;
 mod replacement;
 mod returning;
+mod sleep;
+pub(crate) use sleep::GatherSleep;
+mod dozing;
+mod work;
+pub use work::GatherWork;
+pub(crate) use work::{Count, GatherCounters};
 
 #[cfg(test)]
 mod tests;
@@ -213,23 +219,14 @@ impl GameWorld {
         sink: &mut impl FnMut(&PreparedResourceDepletion<'_>) -> bool,
         changed: &mut Vec<EntityId>,
     ) {
-        let ids = self.economy.gatherers.keys().copied().collect::<Vec<_>>();
-        for id in ids {
+        self.wake_before_gathering(changed);
+        self.economy.gatherers.begin_loop();
+        let mut cursor = None;
+        while let Some(id) = self.economy.gatherers.next_awake(cursor) {
+            cursor = Some(id);
             self.economy.gatherers.observe_crowd(id);
             self.refine_gather_approach(id);
-            // A gatherer that is walking under a movement order, with no
-            // failed route, changes nothing in `gather_step`: skip the
-            // remove/insert round trip through the task map.
-            if let (Some(&index), Some(task)) =
-                (self.lookup.get(&id), self.economy.gatherers.get(&id))
-                && task.phase != GatherPhase::WaitingDropoff
-                && self.units[index].order.is_some()
-                && !self.gather_contact(index, task)
-                && !(task.phase == GatherPhase::Returning
-                    && self.at_dropoff(self.units[index].state, task))
-                && !(task.phase == GatherPhase::Approaching
-                    && self.units[index].last_movement_error.is_some())
-            {
+            if self.gather_visit_skips(id) {
                 continue;
             }
             let Some(mut task) = self.economy.gatherers.remove(&id) else {
@@ -241,9 +238,15 @@ impl GameWorld {
             let before = self.units[index].state;
             let work_position = task.work_position;
             let phase = task.phase;
+            self.count_gather(Count::Steps, 1);
             let keep = self.gather_step(id, &mut task, sink);
             if keep {
+                self.try_sleep_gatherer(id, &mut task);
+                let dozes = task.sleep.is_some();
                 self.economy.gatherers.insert(id, task);
+                if dozes {
+                    self.economy.gatherers.doze(id);
+                }
             } else if self.hunting_target(id).is_none()
                 && !self.economy.builders.contains_key(&id)
                 && let Some(&index) = self.lookup.get(&id)
@@ -269,6 +272,7 @@ impl GameWorld {
                 changed.push(after.id);
             }
         }
+        self.economy.gatherers.end_loop();
     }
 
     fn gather_step(
@@ -406,21 +410,7 @@ impl GameWorld {
         if self.tick.0 < task.retry_tick {
             return true;
         }
-        // Fish rates use current DE naval balance, independent of land technologies.
-        let rate = match (task.fish, self.units[index].state.kind) {
-            (Some(aoe_map::ObjectKind::DeepFish), UnitKind::FishingShip) => 416500,
-            (Some(aoe_map::ObjectKind::ShoreFish), UnitKind::FishingShip) => 238000,
-            (Some(_), _) => 430000,
-            _ if task.farm.is_some() => u64::from(super::farm::FARMER_WORK_HUNDREDTHS) * 10_000,
-            _ => task.animal.and_then(|id| self.animal(id)).map_or_else(
-                || {
-                    let (numerator, denominator) =
-                        self.gather_rate(self.units[index].state.player, task.kind);
-                    u64::from(numerator) * 10_000 / u64::from(denominator)
-                },
-                |a| u64::from(a.kind.rules().gather_hundredths) * 10_000,
-            ),
-        };
+        let rate = self.gather_tick_rate(index, task);
         task.credits += rate;
         // Millionths retain stacked 1.15 * 1.15 = 1.3225 exactly.
         let threshold = u64::from(self.config.tick_hz) * 1_000_000;
@@ -439,6 +429,7 @@ impl GameWorld {
                     // Work can be ready before FARM has produced its next
                     // food. Keep one ready cycle, not an unbounded work bank.
                     task.credits = threshold;
+                    self.count_gather(Count::FarmWaits, 1);
                     return true;
                 }
                 return false;

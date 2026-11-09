@@ -65,7 +65,14 @@ pub struct Options {
     /// Ticks of the suite's determinism replay.
     #[arg(long, default_value_t = 3_000)]
     determinism_ticks: u64,
+    /// Economy sleep off: the other side of the sleep replay oracle.
+    #[arg(long)]
+    no_work_sleep: bool,
 }
+
+/// Read by `build` for every world of this process (and the Callgrind child).
+pub(super) static WORK_SLEEP: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(true);
 
 fn suite(options: &Options) -> Result<(), BoxError> {
     let dir = options
@@ -232,6 +239,7 @@ fn compare(paths: &[PathBuf]) -> Result<(), BoxError> {
 }
 
 pub fn run(options: Options) -> Result<(), BoxError> {
+    WORK_SLEEP.store(!options.no_work_sleep, std::sync::atomic::Ordering::Relaxed);
     if !options.compare.is_empty() {
         return compare(&options.compare);
     }

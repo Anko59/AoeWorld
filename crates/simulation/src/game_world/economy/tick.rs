@@ -97,6 +97,7 @@ impl GameWorld {
         self.advance_construction(&mut changed);
         self.advance_gates();
         probe(TickPhase::Construction);
+        let gathered = changed.len();
         self.advance_gathering(sink, &mut changed);
         probe(TickPhase::Gathering);
         self.advance_research(&mut changed);
@@ -109,6 +110,7 @@ impl GameWorld {
         self.remember_buildings_this_tick();
         probe(TickPhase::BuildingMemory);
         self.refill_route_budgets();
+        self.economy.late_changed = changed[gathered..].to_vec();
         let collected = self.collect_changed(changed);
         probe(TickPhase::Changed);
         collected

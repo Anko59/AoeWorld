@@ -58,6 +58,21 @@ fn sample(world: &GameWorld) -> Value {
     })
 }
 
+/// Cumulative gathering counts (`GameWorld::gather_work`) for the run.
+fn gather_work(world: &GameWorld) -> Value {
+    let w = world.gather_work();
+    json!({
+        "visits": w.visits, "slept": w.slept, "walkers": w.walkers, "steps": w.steps,
+        "returns": w.returns, "return_buildings": w.return_buildings,
+        "return_tiles": w.return_tiles, "return_routes": w.return_routes,
+        "replacements": w.replacements, "replacement_candidates": w.replacement_candidates,
+        "work_spots": w.work_spots, "return_unreachable": w.return_unreachable,
+        "return_invalid": w.return_invalid, "return_other": w.return_other,
+        "farm_waits": w.farm_waits, "farm_returns": w.farm_returns,
+        "farm_return_routes": w.farm_return_routes,
+    })
+}
+
 pub(super) fn run(plan: &Plan) -> Result<Outcome, BoxError> {
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(plan.threads)
@@ -149,6 +164,7 @@ fn run_in_pool(plan: &Plan) -> Result<Outcome, BoxError> {
         "samples": samples,
         "end": sample(world),
         "passes": passes,
+        "gather_work": gather_work(world),
         "memory": memory(),
         "final_hash": hashes.last().map(|(_, h)| h.clone()),
     });

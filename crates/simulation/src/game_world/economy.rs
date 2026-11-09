@@ -38,6 +38,7 @@ mod starting_kit;
 #[path = "economy/state/mod.rs"]
 mod state;
 mod tick;
+pub use gathering::GatherWork;
 pub(crate) use state::Economy;
 pub use tick::TickPhase;
 pub(crate) mod training;
@@ -405,6 +406,8 @@ pub(crate) struct GatherTask {
     return_target: Option<TileCoord>,
     failed_dropoffs: BTreeSet<TileCoord>,
     retry_tick: u64,
+    /// Skipped pure credit ticks; never hashed, see `gathering::sleep`.
+    sleep: Option<gathering::GatherSleep>,
 }
 
 /// A villager assigned to a foundation.
