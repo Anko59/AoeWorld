@@ -40,9 +40,13 @@ case ${1:-} in
 esac
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P) || exit 2
 common=$(git -C "$root" rev-parse --path-format=absolute --git-common-dir) || exit 2
-if git -C "$root" cat-file -e "refs/remotes/origin/dev:$probe" 2>/dev/null; then
-  revision=$(git -C "$root" rev-parse refs/remotes/origin/dev) || exit 2
-  key=$revision
+if resolved=$(git -C "$root" rev-parse refs/remotes/origin/dev "refs/remotes/origin/dev:$probe" 2>/dev/null); then
+  revision=${resolved%%[!0-9a-f]*}
+  # One judge per set of compiled inputs (crates and the files they embed), not
+  # per dev commit: a merge that changes none of them reuses the binary.
+  inputs=$(git -C "$root" ls-tree "$revision" -- crates gates fuzz Cargo.toml Cargo.lock rust-toolchain.toml) || exit 2
+  [ -n "$inputs" ] || exit 2
+  key=$(printf '%s\n' "$inputs" | git -C "$root" hash-object --stdin) || exit 2
   judge="origin/dev $revision"
 else
   # Bootstrap: the committed HEAD, never uncommitted edits to the judge.
