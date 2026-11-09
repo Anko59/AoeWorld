@@ -120,6 +120,7 @@ impl Tables {
 pub(crate) struct Scratch {
     pub(crate) group_phase: bool,
     pub(crate) movers: Vec<EntityId>,
+    pub(crate) still_moving: Vec<EntityId>,
     pub(crate) proposals: Vec<Option<FastStep>>,
     tables: Tables,
     #[cfg(not(target_arch = "wasm32"))]

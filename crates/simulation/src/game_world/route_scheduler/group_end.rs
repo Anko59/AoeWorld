@@ -62,9 +62,7 @@ impl GameWorld {
             unit.state.planning = true;
             unit.state.moving = true;
             self.route_metrics.attribution.group_replans += 1;
-            if let Err(at) = self.active_movers.binary_search(&id) {
-                self.active_movers.insert(at, id);
-            }
+            self.active_movers.insert(id);
             return;
         }
         // A proven failure stops the carrier as before; the group stays, and
@@ -80,9 +78,7 @@ impl GameWorld {
         {
             self.route_metrics.attribution.group_stopped_short += 1;
         }
-        if let Ok(at) = self.active_movers.binary_search(&id) {
-            self.active_movers.remove(at);
-        }
+        self.active_movers.remove(id);
         changed.push(id);
     }
 }

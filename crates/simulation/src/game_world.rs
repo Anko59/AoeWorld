@@ -39,7 +39,7 @@ pub(crate) use route_scheduler::{Pass, far_route};
 mod spacing;
 mod spawning;
 mod unit_index;
-pub(crate) use unit_index::UnitIndex;
+pub(crate) use unit_index::{IdSet, UnitIndex};
 #[path = "game_world/visibility/mod.rs"]
 mod visibility;
 mod wildlife;
@@ -165,7 +165,8 @@ pub struct GameWorld {
     pub(crate) unit_changes: Vec<EntityId>,
     pub(crate) lookup: UnitIndex,
     pub(crate) chunks: BTreeMap<ChunkCoord, Vec<EntityId>>,
-    pub(crate) active_movers: Vec<EntityId>,
+    /// Units with an order to walk, in id order: the Gauss-Seidel apply order.
+    pub(crate) active_movers: IdSet,
     pub(crate) movement_scratch: movement_step::Scratch,
     pub(crate) yields: movement_step::Yields,
     pub(crate) collisions: movement_step::CollisionIndex,
@@ -227,7 +228,7 @@ impl GameWorld {
             unit_changes: Vec::new(),
             lookup: UnitIndex::new(),
             chunks: BTreeMap::new(),
-            active_movers: Vec::new(),
+            active_movers: IdSet::default(),
             movement_scratch: Default::default(),
             yields: Default::default(),
             work_approach_clearance: None,

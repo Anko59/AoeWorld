@@ -90,9 +90,7 @@ impl GameWorld {
         self.cancel_transport_journey(id);
         self.cancel_auto_scout(id);
         self.stop_movement(index);
-        if let Ok(slot) = self.active_movers.binary_search(&id) {
-            self.active_movers.remove(slot);
-        }
+        self.active_movers.remove(id);
         self.stop_gathering(id);
         self.cancel_attack(id);
         self.economy.builders.remove(&id);
@@ -226,9 +224,7 @@ impl GameWorld {
                 self.chunks.remove(&bucket);
             }
         }
-        if let Ok(position) = self.active_movers.binary_search(&id) {
-            self.active_movers.remove(position);
-        }
+        self.active_movers.remove(id);
         self.combat.attackers.remove(&id);
         self.combat.healers.remove(&id);
         self.combat.seekers.remove(&id);

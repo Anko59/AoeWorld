@@ -3,6 +3,9 @@
 use aoe_core::EntityId;
 use std::ops::Index;
 
+mod id_set;
+pub(crate) use id_set::IdSet;
+
 const VACANT: usize = usize::MAX;
 
 #[derive(Clone, Debug, Default)]

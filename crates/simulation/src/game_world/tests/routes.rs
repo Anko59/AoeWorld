@@ -335,7 +335,7 @@ fn resumed_provider_failure_is_a_typed_stopped_reason() {
         speed_carry: 0,
     });
     world.units[index].state.moving = true;
-    world.active_movers.push(id);
+    world.active_movers.insert(id);
     world.planning_budget = 1;
 
     world.advance();

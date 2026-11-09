@@ -33,7 +33,7 @@ fn corner_fixture() -> (GameWorld, EntityId, WorldPosition, WorldPosition) {
         travelled: 0,
         speed_carry: 0,
     });
-    world.active_movers.push(id);
+    world.active_movers.insert(id);
     (world, id, corner, destination)
 }
 
@@ -122,7 +122,7 @@ fn short_segment_clamps_at_destination_without_banking_whole_credits() {
         travelled: 0,
         speed_carry: 0,
     });
-    world.active_movers.push(id);
+    world.active_movers.insert(id);
 
     world.advance();
 
@@ -155,7 +155,7 @@ fn off_center_final_tile_reaches_the_exact_destination() {
         travelled: 0,
         speed_carry: 0,
     });
-    world.active_movers.push(id);
+    world.active_movers.insert(id);
 
     for _ in 0..100 {
         world.advance();

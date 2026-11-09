@@ -82,9 +82,7 @@ impl GameWorld {
                 self.units[index].order = None;
                 self.units[index].route.clear();
                 self.units[index].state.planning = false;
-                if let Ok(at) = self.active_movers.binary_search(&leader) {
-                    self.active_movers.remove(at);
-                }
+                self.active_movers.remove(leader);
                 group.anchor = group.destination;
                 group.progress = group.path.end();
             }

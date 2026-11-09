@@ -47,7 +47,13 @@ impl GameWorld {
         // reserve) is shared here; orders issued later this tick get none.
         let fair_budget = std::mem::take(&mut self.planning_budget);
         let lookahead_budget = self.serve_route_searches(fair_budget, &mut changed);
-        let movers = std::mem::take(&mut self.active_movers);
+        let mut scratch = std::mem::take(&mut self.movement_scratch);
+        // The movers in id order, then an empty set: what the loop below adds
+        // or removes is replaced by `still_moving`, as when the list was taken.
+        let mut movers = std::mem::take(&mut scratch.movers);
+        movers.clear();
+        self.active_movers.extend_into(&mut movers);
+        self.active_movers.clear();
         let mover_count = movers.len();
         let start = if mover_count == 0 {
             0
@@ -59,8 +65,7 @@ impl GameWorld {
         } else {
             (start + 1) % mover_count
         };
-        let mut scratch = std::mem::take(&mut self.movement_scratch);
-        let mut still_moving = std::mem::take(&mut scratch.movers);
+        let mut still_moving = std::mem::take(&mut scratch.still_moving);
         still_moving.clear();
         still_moving.reserve(movers.len());
         changed.reserve(movers.len());
@@ -339,8 +344,11 @@ impl GameWorld {
         drop(apply_span);
         self.work_approach_clearance = None;
         self.melee_traffic_clearance = None;
-        still_moving.sort_unstable();
-        self.active_movers = still_moving;
+        self.active_movers.clear();
+        for &id in &still_moving {
+            self.active_movers.insert(id);
+        }
+        scratch.still_moving = still_moving;
         self.advance_formations(&mut changed, &mut scratch);
         self.advance_yields(&mut changed);
         {

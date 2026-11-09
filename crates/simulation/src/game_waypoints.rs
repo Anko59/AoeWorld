@@ -69,13 +69,7 @@ impl GameWorld {
             travelled: 0,
             speed_carry,
         });
-        if self.active_movers.binary_search(&id).is_err() {
-            let insert_at = self
-                .active_movers
-                .binary_search(&id)
-                .unwrap_or_else(|index| index);
-            self.active_movers.insert(insert_at, id);
-        }
+        self.active_movers.insert(id);
         self.index_destination(id);
         Ok(true)
     }

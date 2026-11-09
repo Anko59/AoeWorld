@@ -92,9 +92,7 @@ impl GameWorld {
             self.units[i].state.task = UnitTask::Moving;
             self.units[i].state.moving = true;
             self.set_movement_error(i, None);
-            if let Ok(at) = self.active_movers.binary_search(&id) {
-                self.active_movers.remove(at);
-            }
+            self.active_movers.remove(id);
             self.refresh_spacing_order(id);
         }
         let heading = WorldPosition::new(destination.x - origin.x, destination.y - origin.y);
@@ -228,9 +226,7 @@ impl GameWorld {
         self.units[index].fast_route_tried = fast_tried;
         self.store_planner(index, planner);
         let id = self.units[index].state.id;
-        if let Err(at) = self.active_movers.binary_search(&id) {
-            self.active_movers.insert(at, id);
-        }
+        self.active_movers.insert(id);
     }
 
     pub(super) fn group_speed(&self, group: &Group) -> ((u64, u64), bool) {
