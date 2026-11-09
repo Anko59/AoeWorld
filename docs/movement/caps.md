@@ -113,8 +113,16 @@ not part of the key, so unrelated edits do not touch it. It **ratchets**:
   shape);
 - an allowance beyond the findings is stale and fails too, so the PR that removes a cap must lower
   or delete the entry in the same change;
+- an allowance beyond its count at the merge base with `refs/remotes/origin/dev` fails, even
+  when a new cap and its matching allowance are committed together. Missing comparison history
+  fails closed; fetch `origin/dev` before checking. Pre-commit uses the source repository's
+  history while checking the exported index's sources and manifest;
 - nothing is ever added. A new cap in the rework is not allowed; a rule that is not a cap must be
   written without a counter compared to a constant.
+
+When the merge base predates this lint's manifest, its production sources establish the initial
+allowances. This also covers the previously omitted `gameplay_match.rs` and `gameplay_match/`
+sources: initial entries there must already exist at the base, never originate in the change.
 
 To regenerate after a deliberate removal, delete the file and run `make architecture-check`: the
 failure prints the current findings in the file's format. Review the diff; it may only shrink.

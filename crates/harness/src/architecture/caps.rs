@@ -35,10 +35,12 @@ use syn::{
 pub const ALLOWLIST: &str = "gates/movement-caps.json";
 
 /// Directories (or files) holding behaviour code, relative to the root.
-const SCOPES: [&str; 5] = [
+const SCOPES: [&str; 7] = [
     "crates/simulation/src",
     "crates/server/src/gameplay",
     "crates/server/src/gameplay.rs",
+    "crates/server/src/gameplay_match",
+    "crates/server/src/gameplay_match.rs",
     "crates/map/src/overlay",
     "crates/map/src/overlay.rs",
 ];
@@ -69,7 +71,7 @@ pub struct Finding {
 }
 
 /// Lints the repository at `root` and returns one message per violation.
-pub fn check(root: &Path) -> Result<Vec<String>, Box<dyn Error>> {
+pub fn check(root: &Path, base_source: &Path) -> Result<Vec<String>, Box<dyn Error>> {
     let findings = scan(root)?;
     let allowlist = match fs::read_to_string(root.join(ALLOWLIST)) {
         Ok(text) => serde_json::from_str::<Allowlist>(&text)
@@ -82,7 +84,10 @@ pub fn check(root: &Path) -> Result<Vec<String>, Box<dyn Error>> {
             )]);
         }
     };
-    Ok(compare(&findings, &allowlist))
+    let base = ratchet::baseline(base_source)?;
+    let mut problems = ratchet::compare(&allowlist, &base);
+    problems.extend(compare(&findings, &allowlist));
+    Ok(problems)
 }
 
 /// Every cap use in the behaviour code under `root`.
@@ -343,5 +348,6 @@ fn sources(path: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>> {
 }
 
 mod expr;
+mod ratchet;
 #[cfg(test)]
 mod tests;

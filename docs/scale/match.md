@@ -92,6 +92,9 @@ Keep the JSON card beside the postcard file. The card's `map_hash` must name
 manifest fails before the release build. Both save files are copied into that
 package directory's `saves/` before the server starts. Copy external evidence
 into the worktree's ignored `.cache/` first so the Docker runner can read it.
+If either destination filename is occupied, preparation refuses the import
+without replacing either file. To benchmark a save already in that directory,
+pass its stored `.save` path directly.
 
 ```sh
 SCALE_MATCH_ARGS="--save .cache/save-benchmark/input/1794176817-first.save \

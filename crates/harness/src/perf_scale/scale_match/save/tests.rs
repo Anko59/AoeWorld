@@ -124,3 +124,97 @@ fn minute_windows_use_observed_time_and_keep_every_tick_once() {
         900
     );
 }
+
+#[test]
+fn save_preparation_refuses_collisions_without_changing_either_file() {
+    for collision in ["save", "json", "both"] {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("owner.save");
+        std::fs::write(&source, b"backup-world").unwrap();
+        let packages = temp.path().join("packages");
+        let saves = packages.join("saves");
+        std::fs::create_dir_all(&saves).unwrap();
+        let package = aoe_map::MapPackage::new(1, aoe_map::MapRequest::default(), vec![]).unwrap();
+        let hash = package.content_hash_hex();
+        let card = json!({"id":"owner", "map_hash":hash, "opponents":1});
+        let card_bytes = serde_json::to_vec(&card).unwrap();
+        std::fs::write(source.with_extension("json"), &card_bytes).unwrap();
+        std::fs::write(
+            packages.join(format!("{hash}.json")),
+            serde_json::to_vec(&package).unwrap(),
+        )
+        .unwrap();
+        for extension in ["save", "json"] {
+            if collision == extension || collision == "both" {
+                std::fs::write(
+                    saves.join(format!("owner.{extension}")),
+                    b"existing-owner-data",
+                )
+                .unwrap();
+            }
+        }
+        let mut opts = options(&[
+            "--save",
+            source.to_str().unwrap(),
+            "--package-directory",
+            packages.to_str().unwrap(),
+        ]);
+        let error = save::prepare(&mut opts)
+            .expect_err("must refuse an occupied save ID")
+            .to_string();
+        assert!(error.contains("already exists"), "{error}");
+        for extension in ["save", "json"] {
+            let destination = saves.join(format!("owner.{extension}"));
+            if collision == extension || collision == "both" {
+                assert_eq!(std::fs::read(destination).unwrap(), b"existing-owner-data");
+            } else {
+                assert!(
+                    !destination.exists(),
+                    "collision must not leave a partial import"
+                );
+            }
+        }
+        assert_eq!(std::fs::read(&source).unwrap(), b"backup-world");
+        assert_eq!(
+            std::fs::read(source.with_extension("json")).unwrap(),
+            card_bytes
+        );
+    }
+}
+
+#[test]
+fn failed_save_copy_removes_only_its_reserved_files() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("missing.save");
+    let card = temp.path().join("missing.json");
+    let destination = temp.path().join("saves");
+    std::fs::create_dir(&destination).unwrap();
+    assert!(super::import_pair(&source, &card, &destination, "owner").is_err());
+    assert_eq!(std::fs::read_dir(&destination).unwrap().count(), 0);
+}
+
+#[cfg(unix)]
+#[test]
+fn dangling_save_destination_is_a_collision() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("owner.save");
+    let card = source.with_extension("json");
+    std::fs::write(&source, b"world").unwrap();
+    std::fs::write(&card, b"card").unwrap();
+    let destination = temp.path().join("saves");
+    std::fs::create_dir(&destination).unwrap();
+    let missing = temp.path().join("must-not-create");
+    std::os::unix::fs::symlink(&missing, destination.join("owner.save")).unwrap();
+    assert!(
+        super::import_pair(&source, &card, &destination, "owner")
+            .unwrap_err()
+            .to_string()
+            .contains("already exists")
+    );
+    assert!(!missing.exists());
+    assert!(!destination.join("owner.json").exists());
+    assert_eq!(
+        std::fs::read_link(destination.join("owner.save")).unwrap(),
+        missing
+    );
+}

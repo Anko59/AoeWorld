@@ -63,14 +63,7 @@ pub(super) fn prepare(options: &mut Options) -> Result<Option<Value>, BoxError> 
         .ok_or("save card needs 0..99 opponents")? as usize;
     let directory = options.package_directory.join("saves");
     fs::create_dir_all(&directory)?;
-    for (source, destination) in [
-        (path.clone(), directory.join(format!("{id}.save"))),
-        (card_path, directory.join(format!("{id}.json"))),
-    ] {
-        if !destination.exists() || fs::canonicalize(&source)? != fs::canonicalize(&destination)? {
-            fs::copy(source, destination)?;
-        }
-    }
+    import_pair(path, &card_path, &directory, id)?;
     options.players = opponents + 1;
     options.humans = 1;
     options.hosts = opponents.div_ceil(13);
@@ -78,6 +71,55 @@ pub(super) fn prepare(options: &mut Options) -> Result<Option<Value>, BoxError> 
     options.map = MapSource::Package;
     options.map_hash = Some(hash.to_owned());
     Ok(Some(card))
+}
+
+/// Reserve both names before copying; `create_new` also refuses races and dangling links.
+fn import_pair(
+    path: &std::path::Path,
+    card: &std::path::Path,
+    directory: &std::path::Path,
+    id: &str,
+) -> Result<(), BoxError> {
+    let destinations = [
+        directory.join(format!("{id}.save")),
+        directory.join(format!("{id}.json")),
+    ];
+    let sources = [path, card];
+    if sources
+        .iter()
+        .zip(&destinations)
+        .all(|(source, destination)| {
+            fs::canonicalize(source)
+                .ok()
+                .zip(fs::canonicalize(destination).ok())
+                .is_some_and(|(a, b)| a == b)
+        })
+    {
+        return Ok(());
+    }
+    for destination in &destinations {
+        match fs::symlink_metadata(destination) {
+            Ok(_) => return Err(format!("save destination already exists: {}; select the stored save directly or use another ID", destination.display()).into()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
+            Err(error) => return Err(error.into()),
+        }
+    }
+    let mut reserved = Vec::new();
+    let result = (|| -> Result<(), BoxError> {
+        for destination in &destinations {
+            reserved.push(fs::File::create_new(destination)?);
+        }
+        for (source, output) in sources.iter().zip(&mut reserved) {
+            std::io::copy(&mut fs::File::open(source)?, output)?;
+        }
+        Ok(())
+    })();
+    if result.is_err() {
+        for destination in destinations.iter().take(reserved.len()) {
+            fs::remove_file(destination)?;
+        }
+    }
+    result
 }
 
 /// A real human socket keeps the skirmish alive, without issuing any orders.

@@ -1,5 +1,9 @@
 use super::*;
 
+fn check(root: &Path) -> Result<Vec<String>, Box<dyn Error>> {
+    super::check(root, root)
+}
+
 fn kinds(source: &str) -> Vec<(&'static str, String)> {
     lint("crates/simulation/src/x.rs", source)
         .expect("source parses")
@@ -103,4 +107,164 @@ fn rendered_allowlist_round_trips() {
     assert_eq!(parsed.entries.len(), 1);
     assert_eq!(parsed.entries[0].count, 2);
     assert!(compare(&findings, &parsed).is_empty());
+}
+
+fn git(root: &Path, args: &[&str]) {
+    let output = std::process::Command::new("git")
+        .current_dir(root)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn repository(source: &str, manifest: bool) -> tempfile::TempDir {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    git(root, &["init", "--quiet", "--template="]);
+    git(root, &["config", "user.email", "fixture@example.invalid"]);
+    git(root, &["config", "user.name", "Fixture"]);
+    fs::create_dir_all(root.join("crates/simulation/src")).unwrap();
+    fs::create_dir_all(root.join("gates")).unwrap();
+    fs::write(root.join("crates/simulation/src/x.rs"), source).unwrap();
+    if manifest {
+        write_allowlist(root);
+    }
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    git(root, &["update-ref", "refs/remotes/origin/dev", "HEAD"]);
+    temp
+}
+
+fn write_allowlist(root: &Path) {
+    fs::write(root.join(ALLOWLIST), render(&scan(root).unwrap())).unwrap();
+}
+
+#[test]
+fn a_new_cap_cannot_grant_itself_an_allowance() {
+    for manifest in [false, true] {
+        let repo = repository("fn f(s: &S) -> bool { s.used > 3 }", manifest);
+        let root = repo.path();
+        // Commit the expansion too: comparing to HEAD would miss this trigger.
+        fs::write(
+            root.join("crates/simulation/src/x.rs"),
+            "fn f(s: &S) -> bool { s.used > 3 || s.spent > 10 }",
+        )
+        .unwrap();
+        write_allowlist(root);
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "new cap and allowance"]);
+        let problems = check(root).unwrap();
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("allowance") && p.contains("base")),
+            "{problems:?}"
+        );
+    }
+}
+
+#[test]
+fn increasing_an_existing_allowance_is_rejected_but_shrinking_is_allowed() {
+    let repo = repository("fn f(s: &S) -> bool { s.used > 3 }", true);
+    let root = repo.path();
+    fs::write(
+        root.join("crates/simulation/src/x.rs"),
+        "fn f(s: &S) -> bool { s.used > 3 || s.used > 3 }",
+    )
+    .unwrap();
+    write_allowlist(root);
+    assert!(!check(root).unwrap().is_empty());
+    fs::write(root.join("crates/simulation/src/x.rs"), "fn f() {}").unwrap();
+    write_allowlist(root);
+    assert!(check(root).unwrap().is_empty());
+}
+
+#[test]
+fn gameplay_match_file_and_nested_production_sources_are_scanned() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir_all(root.join("crates/server/src/gameplay_match/tests")).unwrap();
+    for name in [
+        "gameplay_match.rs",
+        "gameplay_match/routes.rs",
+        "gameplay_match/tests/caps.rs",
+    ] {
+        fs::write(
+            root.join("crates/server/src").join(name),
+            "fn f(s: &S) -> bool { s.used > 10 }",
+        )
+        .unwrap();
+    }
+    let findings = scan(root).unwrap();
+    assert_eq!(findings.len(), 2, "{findings:?}");
+    assert!(
+        findings
+            .iter()
+            .any(|f| f.file.ends_with("gameplay_match.rs"))
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|f| f.file.ends_with("gameplay_match/routes.rs"))
+    );
+}
+
+#[test]
+fn unavailable_or_invalid_base_is_an_error() {
+    let repo = repository("fn f() {}", true);
+    let root = repo.path();
+    fs::write(root.join(ALLOWLIST), "not JSON").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "invalid base"]);
+    git(root, &["update-ref", "refs/remotes/origin/dev", "HEAD"]);
+    write_allowlist(root);
+    assert!(
+        check(root).is_err(),
+        "must not fall back from a malformed base"
+    );
+    git(root, &["update-ref", "-d", "refs/remotes/origin/dev"]);
+    assert!(
+        check(root)
+            .unwrap_err()
+            .to_string()
+            .contains("base unavailable")
+    );
+}
+
+#[test]
+fn exported_index_checks_its_manifest_against_source_history() {
+    use crate::gates::scopes::{Kind, Snapshot};
+    let repo = repository("fn f(s: &S) -> bool { s.used > 3 }", true);
+    let root = repo.path();
+    let snapshot = Snapshot::prepare_independent(root, Kind::Index).unwrap();
+    assert!(super::check(snapshot.root(), root).unwrap().is_empty());
+    drop(snapshot);
+    fs::write(
+        root.join("crates/simulation/src/x.rs"),
+        "fn f(s: &S) -> bool { s.used > 3 || s.spent > 10 }",
+    )
+    .unwrap();
+    write_allowlist(root);
+    git(root, &["add", "."]);
+    let snapshot = Snapshot::prepare_independent(root, Kind::Index).unwrap();
+    let problems = super::check(snapshot.root(), root).unwrap();
+    assert!(
+        problems
+            .iter()
+            .any(|p| p.contains("allowance increased from base")),
+        "{problems:?}"
+    );
+}
+
+#[test]
+fn splitting_an_expanded_allowance_into_duplicates_cannot_bypass_the_ratchet() {
+    let base = allowance("s.used > 3", 1);
+    let mut expanded = allowance("s.used > 3", 1);
+    expanded.entries.extend(allowance("s.used > 3", 1).entries);
+    assert_eq!(ratchet::compare(&expanded, &base).len(), 1);
 }

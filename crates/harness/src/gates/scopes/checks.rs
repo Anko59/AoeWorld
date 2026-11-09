@@ -143,7 +143,9 @@ pub(super) fn run(source: &Path, kind: Kind) -> Result<()> {
     checked("structure", &|root| {
         crate::policy::structure(root).map_err(|error| error.into())
     })?;
-    checked("architecture", &crate::architecture::check)?;
+    checked("architecture", &|root| {
+        crate::architecture::check_with_source(root, &source)
+    })?;
     checked("docs", &crate::gates::docs_check)?;
     if skip {
         println!(
