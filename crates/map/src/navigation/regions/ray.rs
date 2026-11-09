@@ -40,7 +40,10 @@ impl Regions {
                         || next_class == start
                 }
             };
-            if !admitted || !label::step_allowed(ground, &class, previous, next) {
+            if !admitted
+                || !label::step_bucket(ground, &class, previous, next)
+                    .is_some_and(|limit| self.bucket <= limit)
+            {
                 return false;
             }
             previous = next;

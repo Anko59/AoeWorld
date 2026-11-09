@@ -4,7 +4,7 @@
 //! region. The layer is a pure cache of the ground; it is never hashed.
 use crate::{GameWorld, GameWorldError, Terrain};
 use aoe_core::{PlayerId, TileCoord, TileRect};
-use aoe_map::{MapRegionGround, RegionChunk, RegionGround, RegionTile, Regions};
+use aoe_map::{LandBucket, MapRegionGround, RegionChunk, RegionGround, RegionTile, Regions};
 use std::cell::OnceCell;
 use std::collections::BTreeMap;
 
@@ -105,14 +105,17 @@ impl RegionGround for Ground<'_> {
 impl GameWorld {
     fn with_regions<R>(
         &self,
+        bucket: LandBucket,
         read: impl FnOnce(&mut Regions, &Ground<'_>) -> R,
     ) -> Result<R, GameWorldError> {
         let mut cache = self
             .regions
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        let regions = cache
-            .get_or_insert_with(|| Regions::new(self.config.width_tiles, self.config.height_tiles));
+        let slot = &mut cache[bucket as usize];
+        let regions = slot.get_or_insert_with(|| {
+            Regions::new(self.config.width_tiles, self.config.height_tiles, bucket)
+        });
         let ground = Ground {
             world: self,
             gates: OnceCell::new(),
@@ -125,7 +128,7 @@ impl GameWorld {
         };
         let result = read(regions, &ground);
         if let Some(error) = ground.terrain.as_ref().and_then(MapRegionGround::error) {
-            *cache = None;
+            *slot = None;
             Err(GameWorldError::Environment(error))
         } else {
             Ok(result)
@@ -138,7 +141,7 @@ impl GameWorld {
             .regions
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        if let Some(regions) = regions.as_mut() {
+        for regions in regions.iter_mut().flatten() {
             regions.invalidate(area.min, area.max);
         }
     }
@@ -148,7 +151,7 @@ impl GameWorld {
             .regions
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        if let Some(regions) = regions.as_mut() {
+        for regions in regions.iter_mut().flatten() {
             regions.invalidate_all();
         }
     }
@@ -157,9 +160,10 @@ impl GameWorld {
     pub(crate) fn land_player_region(
         &self,
         player: PlayerId,
+        bucket: LandBucket,
         tile: TileCoord,
     ) -> Result<Option<u32>, GameWorldError> {
-        self.with_regions(|regions, ground| {
+        self.with_regions(bucket, |regions, ground| {
             regions.player_component(ground, u32::from(player.0), tile)
         })
     }
@@ -168,10 +172,11 @@ impl GameWorld {
     pub(crate) fn land_reachable(
         &self,
         player: PlayerId,
+        bucket: LandBucket,
         from: TileCoord,
         to: TileCoord,
     ) -> Result<bool, GameWorldError> {
-        self.with_regions(|regions, ground| {
+        self.with_regions(bucket, |regions, ground| {
             regions.reachable(ground, u32::from(player.0), from, to)
         })
     }
@@ -180,20 +185,30 @@ impl GameWorld {
     pub(crate) fn land_frontier(
         &self,
         player: PlayerId,
+        bucket: LandBucket,
         from: TileCoord,
         target: TileCoord,
     ) -> Result<Option<TileCoord>, GameWorldError> {
-        self.with_regions(|regions, ground| {
+        self.with_regions(bucket, |regions, ground| {
             regions.frontier(ground, u32::from(player.0), from, target)
         })
     }
 
     /// Region-layer work counters, for tests and diagnostics.
     pub fn region_stats(&self) -> aoe_map::RegionStats {
-        self.regions
+        let regions = self
+            .regions
             .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .as_ref()
-            .map_or_else(Default::default, Regions::stats)
+            .unwrap_or_else(|error| error.into_inner());
+        let mut total = aoe_map::RegionStats::default();
+        for layer in regions.iter().flatten() {
+            let stats = layer.stats();
+            total.builds += stats.builds;
+            total.relabels += stats.relabels;
+            total.unchanged += stats.unchanged;
+            total.super_rebuilds += stats.super_rebuilds;
+            total.global_rebuilds += stats.global_rebuilds;
+        }
+        total
     }
 }

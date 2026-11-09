@@ -1,8 +1,8 @@
 //! Regions and reachability: a pure layer over today's passability.
 //!
-//! Every 32 x 32 chunk carries `u16` region labels (one land bucket: every
-//! land radius fits today's 1-tile gap, so the three planned buckets share
-//! one passability until the overlay grid lands). Regions are joined by a
+//! Every 32 x 32 chunk carries `u16` region labels for its land radius bucket.
+//! Two-bit directed edge tags record the minimum clearance class. Today's
+//! passability admits all three buckets through a 1-tile gap. Regions are joined by a
 //! two-level union-find, chunks within 8 x 8 super-chunks and then
 //! super-chunks, with canonical minimum-key roots, so an answer depends on
 //! the ground alone, never on the order of changes.
@@ -16,7 +16,10 @@
 use aoe_core::TileCoord;
 use std::collections::{BTreeMap, BTreeSet};
 
+mod bucket;
 mod frontier;
+use bucket::BucketEdges;
+pub use bucket::LandBucket;
 mod label;
 mod ray;
 mod terrain;
@@ -49,6 +52,11 @@ pub trait RegionGround {
     fn tile(&self, tile: TileCoord) -> RegionTile;
     /// Height edges and bridge decks between two 8-neighbour tiles.
     fn edge_clear(&self, from: TileCoord, to: TileCoord) -> bool;
+    /// Clearance of an edge. Today's land predicate admits every radius;
+    /// adapters with narrower clearance return its largest admitted bucket.
+    fn edge_bucket(&self, from: TileCoord, to: TileCoord) -> Option<LandBucket> {
+        self.edge_clear(from, to).then_some(LandBucket::Large)
+    }
     /// Analytic decks can carry a diagonal over blocked orthogonal corners.
     fn diagonal_override(&self, _from: TileCoord, _to: TileCoord) -> Option<bool> {
         None
@@ -77,7 +85,7 @@ enum Cells<T> {
     Tiles(Box<[T]>),
 }
 type Labels = Cells<u16>;
-type Steps = Cells<u8>;
+type Steps = Cells<BucketEdges>;
 impl<T: Copy + Eq> Cells<T> {
     fn compact(cells: Vec<T>) -> Self {
         if cells.iter().all(|&cell| cell == cells[0]) {
@@ -109,6 +117,7 @@ struct ChunkRegions {
 
 #[derive(Debug)]
 pub struct Regions {
+    bucket: LandBucket,
     size: (i32, i32),
     chunks_x: i32,
     chunks_y: i32,
@@ -124,10 +133,11 @@ pub struct Regions {
 
 impl Regions {
     /// An empty layer; the first query labels the whole map.
-    pub fn new(width: i32, height: i32) -> Self {
+    pub fn new(width: i32, height: i32, bucket: LandBucket) -> Self {
         let chunks_x = (width.max(1) + CHUNK - 1) / CHUNK;
         let chunks_y = (height.max(1) + CHUNK - 1) / CHUNK;
         Self {
+            bucket,
             size: (width.max(1), height.max(1)),
             chunks_x,
             chunks_y,
@@ -259,7 +269,7 @@ impl Regions {
     }
 
     fn labelled(&mut self, ground: &dyn RegionGround, input: label::Input) -> ChunkRegions {
-        let done = label::label(&input);
+        let done = label::label(&input, self.bucket);
         self.refresh_owners(ground, &input.classes);
         ChunkRegions {
             signature: input.signature,
@@ -317,12 +327,14 @@ impl Regions {
                     continue;
                 };
                 if other != chunk {
-                    let forward = self.chunks[chunk as usize].steps.at(label::index(tile))
-                        & (1 << direction)
-                        != 0;
-                    let reverse = self.chunks[other as usize].steps.at(label::index(next))
-                        & (1 << (7 - direction))
-                        != 0;
+                    let forward = self.chunks[chunk as usize]
+                        .steps
+                        .at(label::index(tile))
+                        .allows(direction, self.bucket);
+                    let reverse = self.chunks[other as usize]
+                        .steps
+                        .at(label::index(next))
+                        .allows(7 - direction, self.bucket);
                     if forward {
                         links.push((own, other, label, reverse));
                     }

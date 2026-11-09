@@ -4,7 +4,7 @@ use super::*;
 #[test]
 fn an_edge_only_wall_splits_and_reopening_rejoins_regions() {
     let mut grid = Grid::new(65, 40);
-    let mut regions = Regions::new(65, 40);
+    let mut regions = Regions::new(65, 40, LandBucket::Small);
     let (a, b) = (TileCoord::new(5, 20), TileCoord::new(60, 20));
     assert!(regions.reachable(&grid, 1, a, b));
     // Both an intra-chunk cliff and a cliff on a chunk border.
@@ -21,7 +21,7 @@ fn an_edge_only_wall_splits_and_reopening_rejoins_regions() {
         assert!(!regions.reachable(&grid, 1, a, b), "wall at {x}");
         assert_eq!(
             components(&mut regions, &grid),
-            components(&mut Regions::new(65, 40), &grid)
+            components(&mut Regions::new(65, 40, LandBucket::Small), &grid)
         );
         grid.walls.clear();
         regions.invalidate(TileCoord::new(x - 1, 0), TileCoord::new(x + 1, 40));
@@ -39,7 +39,7 @@ fn more_than_255_pockets_keep_distinct_u16_labels() {
             }
         }
     }
-    let mut regions = Regions::new(32, 32);
+    let mut regions = Regions::new(32, 32, LandBucket::Small);
     let roots: BTreeSet<_> = components(&mut regions, &grid)
         .into_iter()
         .flatten()
@@ -59,7 +59,7 @@ fn one_way_drops_never_prove_the_reverse_trip_reachable() {
                     .insert((TileCoord::new(x, y), TileCoord::new(x - 1, y + dy)));
             }
         }
-        let mut regions = Regions::new(65, 40);
+        let mut regions = Regions::new(65, 40, LandBucket::Small);
         let (west, east) = (TileCoord::new(5, 20), TileCoord::new(60, 20));
         assert!(regions.reachable(&grid, 1, west, east));
         assert!(!regions.reachable(&grid, 1, east, west));
@@ -78,7 +78,7 @@ fn directed_connectivity_and_frontiers_match_a_tile_flood() {
         let a = TileCoord::new((rng.next() % 67) as i32, (rng.next() % 39) as i32);
         grid.walls.insert((a, TileCoord::new(a.x + 1, a.y)));
     }
-    let mut regions = Regions::new(67, 39);
+    let mut regions = Regions::new(67, 39, LandBucket::Small);
     for _ in 0..30 {
         let a = TileCoord::new((rng.next() % 67) as i32, (rng.next() % 39) as i32);
         let b = TileCoord::new((rng.next() % 67) as i32, (rng.next() % 39) as i32);
@@ -100,7 +100,7 @@ fn directed_connectivity_and_frontiers_match_a_tile_flood() {
 #[test]
 fn changing_a_gate_owner_updates_permission_without_relabelling() {
     let mut grid = walled_base();
-    let mut regions = Regions::new(120, 110);
+    let mut regions = Regions::new(120, 110, LandBucket::Small);
     let (a, b) = (TileCoord::new(50, 80), TileCoord::new(50, 45));
     assert!(regions.reachable(&grid, 1, a, b));
     assert!(!regions.reachable(&grid, 2, a, b));
@@ -120,7 +120,7 @@ fn a_diagonal_deck_connects_land_over_blocked_corners() {
         grid.cells.fill(RegionTile::Blocked);
         grid.set(from, RegionTile::Open);
         grid.set(to, RegionTile::Open);
-        let mut regions = Regions::new(64, 64);
+        let mut regions = Regions::new(64, 64, LandBucket::Small);
         assert!(!regions.reachable(&grid, 1, from, to));
         grid.decks.extend([(from, to), (to, from)]);
         regions.invalidate(from, TileCoord::new(to.x + 1, to.y + 1));
@@ -135,7 +135,7 @@ fn a_diagonal_deck_connects_land_over_blocked_corners() {
 #[test]
 fn a_clear_ray_answers_without_labelling_unrelated_chunks() {
     let grid = Grid::new(130, 90);
-    let mut regions = Regions::new(130, 90);
+    let mut regions = Regions::new(130, 90, LandBucket::Small);
     let (from, to) = (TileCoord::new(2, 3), TileCoord::new(125, 83));
     assert!(regions.reachable(&grid, 1, from, to));
     assert_eq!(regions.frontier(&grid, 1, from, to), Some(to));

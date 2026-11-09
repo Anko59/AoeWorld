@@ -50,6 +50,7 @@ impl GameWorld {
         ids: &[EntityId],
         centroid: WorldPosition,
     ) -> Result<WorldPosition, EconomyError> {
+        let bucket = self.formation_bucket(ids);
         let player = self.unit(ids[0]).ok_or(EconomyError::UnknownEntity)?.player;
         // The army starts in the land region most of its members stand in: a
         // spread selection's centroid can fall in a sealed pocket (the middle
@@ -68,10 +69,12 @@ impl GameWorld {
                 let unit = self.unit(id).ok_or(EconomyError::UnknownEntity)?;
                 if !self.land_reachable(
                     player,
+                    bucket,
                     unit.position.tile_floor(),
                     centroid.tile_floor(),
                 )? || !self.land_reachable(
                     player,
+                    bucket,
                     centroid.tile_floor(),
                     unit.position.tile_floor(),
                 )? {
@@ -83,10 +86,10 @@ impl GameWorld {
                 return Ok(centroid);
             }
         }
-        let region = self.formation_region(player, ids)?;
+        let region = self.formation_region(player, bucket, ids)?;
         if walkable
             && (region.is_none()
-                || self.land_player_region(player, centroid.tile_floor())? == region)
+                || self.land_player_region(player, bucket, centroid.tile_floor())? == region)
         {
             return Ok(centroid);
         }
@@ -94,7 +97,7 @@ impl GameWorld {
         for &id in ids {
             let unit = self.unit(id).ok_or(EconomyError::UnknownEntity)?;
             if region.is_some()
-                && self.land_player_region(player, unit.position.tile_floor())? != region
+                && self.land_player_region(player, bucket, unit.position.tile_floor())? != region
             {
                 continue;
             }
@@ -125,6 +128,7 @@ impl GameWorld {
     fn formation_region(
         &self,
         player: PlayerId,
+        bucket: aoe_map::LandBucket,
         ids: &[EntityId],
     ) -> Result<Option<u32>, EconomyError> {
         if !self.has_route_navigation() {
@@ -132,7 +136,9 @@ impl GameWorld {
         }
         let mut counts = BTreeMap::<u32, usize>::new();
         for unit in ids.iter().filter_map(|&id| self.unit(id)) {
-            if let Some(region) = self.land_player_region(player, unit.position.tile_floor())? {
+            if let Some(region) =
+                self.land_player_region(player, bucket, unit.position.tile_floor())?
+            {
                 *counts.entry(region).or_default() += 1;
             }
         }
@@ -153,13 +159,23 @@ impl GameWorld {
         form: Formation,
         ids: &[EntityId],
     ) -> Result<WorldPosition, EconomyError> {
+        let bucket = self.formation_bucket(ids);
         if !self.has_route_navigation()
-            || self.land_reachable(player, origin.tile_floor(), destination.tile_floor())?
+            || self.land_reachable(
+                player,
+                bucket,
+                origin.tile_floor(),
+                destination.tile_floor(),
+            )?
         {
             return Ok(destination);
         }
-        let Some(tile) =
-            self.land_frontier(player, origin.tile_floor(), destination.tile_floor())?
+        let Some(tile) = self.land_frontier(
+            player,
+            bucket,
+            origin.tile_floor(),
+            destination.tile_floor(),
+        )?
         else {
             return Ok(destination);
         };
@@ -202,7 +218,12 @@ impl GameWorld {
                 let point = layout::oriented(anchor, offset, heading);
                 if !self.config.valid_map_position(point)
                     || !self.body_position_clear(largest, point)
-                    || !self.land_reachable(player, origin.tile_floor(), point.tile_floor())?
+                    || !self.land_reachable(
+                        player,
+                        bucket,
+                        origin.tile_floor(),
+                        point.tile_floor(),
+                    )?
                 {
                     fits = false;
                     break;
@@ -213,6 +234,14 @@ impl GameWorld {
             }
         }
         Ok(frontier)
+    }
+
+    fn formation_bucket(&self, ids: &[EntityId]) -> aoe_map::LandBucket {
+        ids.iter()
+            .filter_map(|id| self.unit(*id))
+            .filter_map(|unit| aoe_map::LandBucket::for_radius(unit.kind.collision_radius()))
+            .max()
+            .unwrap_or(aoe_map::LandBucket::Small)
     }
 
     pub(super) fn formation_gaps(&self, ids: &[EntityId]) -> (i32, i32) {

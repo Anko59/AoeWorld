@@ -140,16 +140,28 @@ fn a_thousand_owner_gate_toggles_relabel_no_region() {
         .unwrap();
     let inside = TileCoord::new(o.x + 5, o.y + 4);
     let east = TileCoord::new(o.x + 22, o.y + 4);
-    assert!(
-        world
-            .land_reachable(PlayerId(0), TileCoord::new(o.x + 5, o.y + 20), inside)
-            .unwrap()
-    );
-    assert!(
-        !world
-            .land_reachable(PlayerId(1), TileCoord::new(o.x + 5, o.y + 20), inside)
-            .unwrap()
-    );
+    for bucket in aoe_map::LandBucket::ALL {
+        assert!(
+            world
+                .land_reachable(
+                    PlayerId(0),
+                    bucket,
+                    TileCoord::new(o.x + 5, o.y + 20),
+                    inside
+                )
+                .unwrap()
+        );
+        assert!(
+            !world
+                .land_reachable(
+                    PlayerId(1),
+                    bucket,
+                    TileCoord::new(o.x + 5, o.y + 20),
+                    inside
+                )
+                .unwrap()
+        );
+    }
     let before = world.region_stats();
     let mut toggles = 0;
     let mut open: Vec<bool> = gates
@@ -167,8 +179,14 @@ fn a_thousand_owner_gate_toggles_relabel_no_region() {
                 toggles += usize::from(now != *state);
                 *state = now;
             }
-            // Every toggle is followed by a reachability query.
-            assert!(world.land_reachable(PlayerId(0), east, inside).unwrap());
+            // Every toggle is followed by a query for each radius bucket.
+            for bucket in aoe_map::LandBucket::ALL {
+                assert!(
+                    world
+                        .land_reachable(PlayerId(0), bucket, east, inside)
+                        .unwrap()
+                );
+            }
             if world.unit(own).unwrap().position.tile_floor() == to {
                 break;
             }

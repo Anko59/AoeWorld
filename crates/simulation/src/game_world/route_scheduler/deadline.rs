@@ -111,8 +111,16 @@ impl GameWorld {
         let Some(planner) = unit.planner.as_ref() else {
             return;
         };
-        if self.land_reachable(unit.state.player, planner.origin(), planner.destination())
-            != Ok(false)
+        let Some(bucket) = aoe_map::LandBucket::for_radius(unit.state.kind.collision_radius())
+        else {
+            return;
+        };
+        if self.land_reachable(
+            unit.state.player,
+            bucket,
+            planner.origin(),
+            planner.destination(),
+        ) != Ok(false)
         {
             return;
         }
@@ -128,7 +136,7 @@ impl GameWorld {
             .failed(kind, from, to, work, 0, caller);
         if self.units[index].formation == Some(id) {
             let nearest = self
-                .land_frontier(self.units[index].state.player, from, to)
+                .land_frontier(self.units[index].state.player, bucket, from, to)
                 .ok()
                 .flatten();
             self.group_route_failed(

@@ -1,6 +1,8 @@
 //! Classify each step once, then label reversible links with compact arrays.
 //! One-way steps and gates stay explicit graph links.
-use super::{CELLS, CHUNK, Cells, Labels, RegionGround, RegionTile, Steps};
+use super::{
+    BucketEdges, CELLS, CHUNK, Cells, Labels, LandBucket, RegionGround, RegionTile, Steps,
+};
 use aoe_core::TileCoord;
 use std::hash::{Hash, Hasher};
 
@@ -62,7 +64,7 @@ pub(super) fn input(ground: &dyn RegionGround, key: (i32, i32), size: (i32, i32)
             ground.tile(tile)
         }
     };
-    let mut masks = vec![0_u8; CELLS];
+    let mut edges = vec![BucketEdges::default(); CELLS];
     for (cell, kind) in classes.iter().enumerate() {
         if *kind == RegionTile::Blocked {
             continue;
@@ -70,49 +72,75 @@ pub(super) fn input(ground: &dyn RegionGround, key: (i32, i32), size: (i32, i32)
         let tile = TileCoord::new(at.x + cell as i32 % CHUNK, at.y + cell as i32 / CHUNK);
         for (bit, (dx, dy)) in NEIGHBOURS.into_iter().enumerate() {
             let next = TileCoord::new(tile.x + dx, tile.y + dy);
-            if class(next) != RegionTile::Blocked && step_allowed(ground, &class, tile, next) {
-                masks[cell] |= 1 << bit;
+            if class(next) != RegionTile::Blocked {
+                edges[cell].set(bit, step_bucket(ground, &class, tile, next));
             }
         }
     }
-    Input::new(classes, masks)
+    Input::tagged(classes, edges)
 }
 
 impl Input {
     pub(super) fn new(classes: Vec<RegionTile>, masks: Vec<u8>) -> Self {
+        let edges = masks
+            .into_iter()
+            .map(|mask| {
+                let mut edges = BucketEdges::default();
+                for direction in 0..8 {
+                    edges.set(
+                        direction,
+                        (mask & (1 << direction) != 0).then_some(LandBucket::Large),
+                    );
+                }
+                edges
+            })
+            .collect();
+        Self::tagged(classes, edges)
+    }
+
+    fn tagged(classes: Vec<RegionTile>, edges: Vec<BucketEdges>) -> Self {
         let mut hash = std::collections::hash_map::DefaultHasher::new();
         classes.hash(&mut hash);
-        masks.hash(&mut hash);
+        edges.hash(&mut hash);
         Self {
             classes,
-            steps: Cells::compact(masks),
+            steps: Cells::compact(edges),
             signature: hash.finish(),
         }
     }
 }
 
 /// The planner's corner rule. Gate permission belongs to graph traversal.
+#[cfg(test)]
 pub(super) fn step_allowed(
     ground: &dyn RegionGround,
     class: &dyn Fn(TileCoord) -> RegionTile,
     from: TileCoord,
     to: TileCoord,
 ) -> bool {
+    step_bucket(ground, class, from, to).is_some()
+}
+
+pub(super) fn step_bucket(
+    ground: &dyn RegionGround,
+    class: &dyn Fn(TileCoord) -> RegionTile,
+    from: TileCoord,
+    to: TileCoord,
+) -> Option<LandBucket> {
+    let mut clearance = ground.edge_bucket(from, to)?;
     if from.x != to.x && from.y != to.y {
         if let Some(clear) = ground.diagonal_override(from, to) {
-            return clear;
+            return clear.then_some(clearance);
         }
         let horizontal = TileCoord::new(to.x, from.y);
         let vertical = TileCoord::new(from.x, to.y);
-        if class(horizontal) == RegionTile::Blocked
-            || class(vertical) == RegionTile::Blocked
-            || !ground.edge_clear(from, horizontal)
-            || !ground.edge_clear(from, vertical)
-        {
-            return false;
+        if class(horizontal) == RegionTile::Blocked || class(vertical) == RegionTile::Blocked {
+            return None;
         }
+        clearance = clearance.min(ground.edge_bucket(from, horizontal)?);
+        clearance = clearance.min(ground.edge_bucket(from, vertical)?);
     }
-    ground.edge_clear(from, to)
+    Some(clearance)
 }
 
 pub(super) struct Labelled {
@@ -123,7 +151,7 @@ pub(super) struct Labelled {
 
 /// Row-order labels over reversible same-class edges. Uniform open chunks
 /// keep implicit labels and step masks, rather than per-tile allocations.
-pub(super) fn label(input: &Input) -> Labelled {
+pub(super) fn label(input: &Input, bucket: LandBucket) -> Labelled {
     let classes = &input.classes;
     if classes.iter().all(|&class| class == RegionTile::Blocked) {
         return Labelled {
@@ -132,7 +160,9 @@ pub(super) fn label(input: &Input) -> Labelled {
             local: Vec::new(),
         };
     }
-    if matches!(input.steps, Steps::Uniform(u8::MAX)) && classes.iter().all(|&c| c == classes[0]) {
+    if matches!(input.steps, Steps::Uniform(BucketEdges::ALL))
+        && classes.iter().all(|&c| c == classes[0])
+    {
         return Labelled {
             labels: Cells::Uniform(1),
             gates: vec![gate(classes[0])],
@@ -157,8 +187,8 @@ pub(super) fn label(input: &Input) -> Labelled {
                 };
                 if labels[next] == 0
                     && classes[next] == classes[start]
-                    && input.steps.at(cell) & (1 << direction) != 0
-                    && input.steps.at(next) & (1 << (7 - direction)) != 0
+                    && input.steps.at(cell).allows(direction, bucket)
+                    && input.steps.at(next).allows(7 - direction, bucket)
                 {
                     labels[next] = region;
                     stack.push(next);
@@ -180,8 +210,8 @@ pub(super) fn label(input: &Input) -> Labelled {
             if b == 0 || a == b {
                 continue;
             }
-            let forward = input.steps.at(cell) & (1 << direction) != 0;
-            let reverse = input.steps.at(next) & (1 << (7 - direction)) != 0;
+            let forward = input.steps.at(cell).allows(direction, bucket);
+            let reverse = input.steps.at(next).allows(7 - direction, bucket);
             if forward {
                 local.push((a, b, reverse));
             } else if reverse {

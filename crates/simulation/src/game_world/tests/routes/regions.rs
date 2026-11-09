@@ -10,13 +10,17 @@ fn a_failed_region_build_is_retried_after_the_provider_recovers() {
     let to = TileCoord::new(60, 1);
     fail.store(true, Ordering::Relaxed);
     assert_eq!(
-        world.land_reachable(PlayerId(0), from, to),
+        world.land_reachable(PlayerId(0), aoe_map::LandBucket::Small, from, to),
         Err(GameWorldError::Environment(
             EnvironmentPageError::Unavailable
         ))
     );
     fail.store(false, Ordering::Relaxed);
-    assert!(world.land_reachable(PlayerId(0), from, to).unwrap());
+    assert!(
+        world
+            .land_reachable(PlayerId(0), aoe_map::LandBucket::Small, from, to)
+            .unwrap()
+    );
 }
 
 #[test]

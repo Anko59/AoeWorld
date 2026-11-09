@@ -121,7 +121,7 @@ fn components(regions: &mut Regions, grid: &Grid) -> Vec<Option<u32>> {
 fn components_match_a_reference_flood() {
     for seed in 1..4 {
         let grid = random_grid(seed, 100, 90, 38);
-        let mut regions = Regions::new(100, 90);
+        let mut regions = Regions::new(100, 90, LandBucket::Small);
         let mut rng = Lcg(seed * 77);
         for _ in 0..40 {
             let a = TileCoord::new((rng.next() % 100) as i32, (rng.next() % 90) as i32);
@@ -143,7 +143,7 @@ fn components_match_a_reference_flood() {
 #[test]
 fn incremental_changes_equal_a_fresh_build_in_any_order() {
     let mut grid = random_grid(9, 130, 75, 30);
-    let mut regions = Regions::new(130, 75);
+    let mut regions = Regions::new(130, 75, LandBucket::Small);
     components(&mut regions, &grid);
     let mut rng = Lcg(5);
     let mut changes = Vec::new();
@@ -162,10 +162,10 @@ fn incremental_changes_equal_a_fresh_build_in_any_order() {
         }
     }
     let incremental = components(&mut regions, &grid);
-    let mut fresh = Regions::new(130, 75);
+    let mut fresh = Regions::new(130, 75, LandBucket::Small);
     assert_eq!(incremental, components(&mut fresh, &grid));
     // Invalidating in the reverse order gives the same canonical roots.
-    let mut reversed = Regions::new(130, 75);
+    let mut reversed = Regions::new(130, 75, LandBucket::Small);
     components(&mut reversed, &grid);
     for tile in changes.iter().rev() {
         reversed.invalidate(*tile, TileCoord::new(tile.x + 1, tile.y + 1));
@@ -196,7 +196,7 @@ fn walled_base() -> Grid {
 #[test]
 fn a_gate_admits_its_owner_only_and_others_get_the_frontier() {
     let grid = walled_base();
-    let mut regions = Regions::new(120, 110);
+    let mut regions = Regions::new(120, 110, LandBucket::Small);
     let (outside, inside) = (TileCoord::new(50, 80), TileCoord::new(50, 45));
     assert!(regions.reachable(&grid, 1, outside, inside));
     assert!(!regions.reachable(&grid, 2, outside, inside));
@@ -226,7 +226,7 @@ fn a_gate_admits_its_owner_only_and_others_get_the_frontier() {
 #[test]
 fn a_thousand_gate_toggles_relabel_nothing() {
     let grid = walled_base();
-    let mut regions = Regions::new(120, 110);
+    let mut regions = Regions::new(120, 110, LandBucket::Small);
     regions.component(&grid, TileCoord::new(0, 0));
     let before = regions.stats();
     for _ in 0..1_000 {
@@ -243,7 +243,7 @@ fn a_thousand_gate_toggles_relabel_nothing() {
 #[test]
 fn closing_a_wall_splits_and_reopening_joins() {
     let mut grid = Grid::new(64, 64);
-    let mut regions = Regions::new(64, 64);
+    let mut regions = Regions::new(64, 64, LandBucket::Small);
     let (a, b) = (TileCoord::new(5, 30), TileCoord::new(60, 30));
     assert!(regions.reachable(&grid, 1, a, b));
     for y in 0..64 {
@@ -264,7 +264,7 @@ fn closing_a_wall_splits_and_reopening_joins() {
 fn blocked_starts_reach_nothing() {
     let mut grid = Grid::new(40, 40);
     grid.set(TileCoord::new(3, 3), RegionTile::Blocked);
-    let mut regions = Regions::new(40, 40);
+    let mut regions = Regions::new(40, 40, LandBucket::Small);
     assert!(!regions.reachable(&grid, 1, TileCoord::new(3, 3), TileCoord::new(9, 9)));
     assert_eq!(
         regions.frontier(&grid, 1, TileCoord::new(3, 3), TileCoord::new(9, 9)),
@@ -280,3 +280,6 @@ mod edges;
 
 #[path = "tests/terrain.rs"]
 mod terrain;
+
+#[path = "tests/buckets.rs"]
+mod buckets;

@@ -36,7 +36,7 @@ fn forest_map(rng: &mut Lcg) -> Grid {
 fn churn_flush_stays_within_two_milliseconds() {
     let mut rng = Lcg(2026);
     let mut grid = forest_map(&mut rng);
-    let mut regions = Regions::new(SIDE, SIDE);
+    let mut regions = Regions::new(SIDE, SIDE, LandBucket::Small);
     let started = Instant::now();
     regions.flush(&grid);
     let build = started.elapsed();
@@ -104,7 +104,7 @@ fn churn_flush_stays_within_two_milliseconds() {
     assert!(unions[unions.len() / 2].as_micros() <= 2_000);
     assert!(median.as_micros() <= 2_000, "median flush {median:?}");
     // Spot-check the incremental answer against a fresh build.
-    let mut fresh = Regions::new(SIDE, SIDE);
+    let mut fresh = Regions::new(SIDE, SIDE, LandBucket::Small);
     for _ in 0..200 {
         let a = TileCoord::new(
             (rng.next() % SIDE as u32) as i32,

@@ -38,7 +38,7 @@ fn bulk_ground_matches_planner_tiles_and_edges_across_chunks() {
 fn cancelled_bulk_ground_reports_an_error_instead_of_proving_unreachable() {
     let generator = flat_terrain_with_water_wall(64, 32, 17);
     let ground = MapRegionGround::new(&generator, ResourceOverlay::empty(), &|| true);
-    let mut regions = Regions::new(64, 64);
+    let mut regions = Regions::new(64, 64, LandBucket::Small);
     regions.reachable(&ground, 1, TileCoord::new(0, 0), TileCoord::new(63, 63));
     assert_eq!(ground.error(), Some(crate::EnvironmentPageError::Cancelled));
 }
@@ -66,8 +66,8 @@ fn bulk_chunk_topology_equals_point_only_ground() {
         .add_footprint(aoe_core::TileRect::from_xywh(30, 20, 5, 7))
         .unwrap();
     let ground = MapRegionGround::new(&generator, &overlay, &|| false);
-    let mut fast = Regions::new(96, 96);
-    let mut points = Regions::new(96, 96);
+    let mut fast = Regions::new(96, 96, LandBucket::Small);
+    let mut points = Regions::new(96, 96, LandBucket::Small);
     let point_ground = Points(&ground);
     for y in 0..96 {
         for x in 0..96 {
