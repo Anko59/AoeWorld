@@ -91,7 +91,7 @@ impl GameWorld {
             self.units[i].formation = Some(leader);
             self.units[i].state.task = UnitTask::Moving;
             self.units[i].state.moving = true;
-            self.units[i].last_movement_error = None;
+            self.set_movement_error(i, None);
             if let Ok(at) = self.active_movers.binary_search(&id) {
                 self.active_movers.remove(at);
             }

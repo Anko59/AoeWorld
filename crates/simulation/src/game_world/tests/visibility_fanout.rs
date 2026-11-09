@@ -110,3 +110,45 @@ fn chunk_candidates_cover_every_unit_a_query_returns() {
     assert!(none.is_empty(), "an invalid rectangle selects nothing");
     assert_eq!(w.entity_id_bound(), 40);
 }
+
+#[test]
+fn rejected_unknown_building_orders_do_not_accumulate_dirty_ids_on_idle_ticks() {
+    let mut w = world();
+    let before = w.canonical_hash();
+    for id in 1000..2024 {
+        assert_eq!(
+            w.issue_cancel_training(PlayerId(0), EntityId(id)),
+            Err(crate::EconomyError::UnknownEntity)
+        );
+        w.advance();
+    }
+    assert_eq!(w.buildings().count(), 0);
+    assert!(w.vision.dirty_buildings.is_empty(), "rejected ids retained");
+    assert_eq!(w.remember_visible_buildings(), 0);
+    // Compare at the same tick: only time, not rejected input, can change the hash.
+    let mut idle = world();
+    for _ in 1000..2024 {
+        idle.advance();
+    }
+    assert_ne!(w.canonical_hash(), before);
+    assert_eq!(w.canonical_hash(), idle.canonical_hash());
+}
+
+#[test]
+fn removed_buildings_leave_no_pending_memory_refresh() {
+    let mut w = world();
+    let id = w
+        .insert_building(
+            PlayerId(0),
+            crate::BuildingKind::House,
+            TileRect::from_xywh(20, 20, 2, 2),
+            true,
+        )
+        .unwrap();
+    w.building_mut(id).unwrap().hp -= 1;
+    assert!(w.vision.dirty_buildings.contains(&id));
+    w.remove_building(id);
+    assert!(!w.vision.dirty_buildings.contains(&id));
+    w.mark_building_changed(id);
+    assert!(!w.vision.dirty_buildings.contains(&id));
+}

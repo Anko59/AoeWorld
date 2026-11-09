@@ -111,9 +111,8 @@ impl GameWorld {
             .clear();
         for index in 0..self.units.len() {
             self.clear_planner(index);
-            self.units[index].last_movement_error = None;
+            self.set_movement_error(index, None);
         }
-        self.collision_subscribers.errors.clear();
     }
 
     /// Ground became walkable (a resource exhausted, a building removed, a
@@ -137,7 +136,7 @@ impl GameWorld {
             }
         }
         #[cfg(test)]
-        self.assert_collision_subscribers_complete(true);
+        self.assert_collision_subscribers_complete(area, true);
     }
 
     /// `area` became blocked (a building placed, a gate closed): only the
@@ -151,7 +150,7 @@ impl GameWorld {
         self.clear_planners_where(|planner| planner.touches(area));
         self.clear_movement_errors();
         #[cfg(test)]
-        self.assert_collision_subscribers_complete(false);
+        self.assert_collision_subscribers_complete(area, false);
     }
 
     fn invalidate_collision_caches(&mut self, area: aoe_core::TileRect) {
@@ -201,17 +200,29 @@ impl GameWorld {
         error: Option<crate::GameWorldError>,
     ) {
         self.units[index].last_movement_error = error;
+        let id = self.units[index].state.id;
         if error.is_some() {
-            let id = self.units[index].state.id;
             self.collision_subscribers.errors.insert(id);
+        } else {
+            self.collision_subscribers.errors.remove(&id);
         }
     }
 
     /// Test oracle: the full unit scan this replaced would change nothing more.
     #[cfg(test)]
-    fn assert_collision_subscribers_complete(&self, opened: bool) {
+    fn assert_collision_subscribers_complete(&self, area: aoe_core::TileRect, opened: bool) {
         for unit in &self.units {
             let id = unit.state.id;
+            assert!(
+                unit.planner.as_ref().is_none_or(|planner| {
+                    if opened {
+                        !planner.opening_invalidates_proof(area)
+                    } else {
+                        !planner.touches(area)
+                    }
+                }),
+                "{id:?} kept an invalidated planner"
+            );
             assert!(unit.last_movement_error.is_none(), "{id:?} kept its error");
             assert!(
                 !opened || unit.unreachable_memo.is_none(),
@@ -228,8 +239,8 @@ impl GameWorld {
 
 /// The units a collision change can affect: planner holders (their search
 /// or route may cross the area), and the units holding a movement error or
-/// an unreachable memo, which every change clears. Ids are monotonic, so a
-/// removed unit's stale id is skipped by the lookup.
+/// an unreachable memo (cleared on openings). Entries leave with their state
+/// or their unit, so storage is bounded by the live unit slots.
 #[derive(Debug, Default)]
 pub(crate) struct CollisionSubscribers {
     pub(crate) planners: std::collections::BTreeSet<aoe_core::EntityId>,
@@ -249,50 +260,4 @@ pub(crate) fn resource_area(id: u64) -> aoe_core::TileRect {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use aoe_map::{MapPackage, MapRequest};
-
-    #[test]
-    fn dropped_mutation_and_failed_restore_preserve_world_then_commit_roundtrips() {
-        let package = MapPackage::new(1, MapRequest::default(), Vec::new()).unwrap();
-        let hash = package.content_hash;
-        let node = (0..16)
-            .find_map(|y| {
-                (0..16).find_map(|x| {
-                    package
-                        .generator()
-                        .chunk(x, y)
-                        .ok()?
-                        .resources
-                        .into_iter()
-                        .next()
-                })
-            })
-            .expect("fixture resource");
-        let mut world = GameWorld::from_map(package.clone()).unwrap();
-        let before = world.canonical_hash();
-        {
-            let transaction = world.prepare_resource_depletion(node.id, 1).unwrap();
-            assert_eq!(transaction.snapshot(hash).revision, 1);
-        }
-        assert_eq!(world.canonical_hash(), before);
-        let change = world
-            .prepare_resource_depletion(node.id, 1)
-            .unwrap()
-            .commit();
-        assert_eq!(change.removed, 1);
-        let snapshot = world.resource_snapshot(hash).unwrap();
-        let mut restored = GameWorld::from_map(package).unwrap();
-        assert!(
-            restored
-                .restore_resources(&snapshot, [9; 32], &|| false)
-                .is_err()
-        );
-        assert_eq!(restored.canonical_hash(), before);
-        restored
-            .restore_resources(&snapshot, hash, &|| false)
-            .unwrap();
-        assert_eq!(restored.canonical_hash(), world.canonical_hash());
-    }
-}
+mod tests;

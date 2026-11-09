@@ -60,7 +60,7 @@ impl GameWorld {
             let index = self.lookup[&id];
             self.stop_movement(index);
             // A new hunt plans its own route; an earlier failure must not end it.
-            self.units[index].last_movement_error = None;
+            self.set_movement_error(index, None);
             if self.units[index]
                 .state
                 .carried

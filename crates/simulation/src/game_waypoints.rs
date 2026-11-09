@@ -33,7 +33,7 @@ impl GameWorld {
 
         let speed_carry = self.units[index].order.map_or(0, |order| order.speed_carry);
         self.clear_planner(index);
-        self.units[index].last_movement_error = None;
+        self.set_movement_error(index, None);
         let start_index = waypoints
             .iter()
             .position(|waypoint| *waypoint != origin)
