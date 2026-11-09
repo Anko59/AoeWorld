@@ -2,6 +2,7 @@ use super::{MAX_ROUTE_PLANNER_NODES, RouteTerrain, Terminal};
 use crate::{EnvironmentPageError, ResourceOverlay};
 use aoe_core::TileCoord;
 use std::cmp::Ordering;
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -122,8 +123,12 @@ impl<'a> ExpansionContext<'a> {
         )? {
             return Ok(());
         }
-        if let Some(snapshot) = self.proof_overlay
-            && (!checked_walkable(self.terrain, snapshot, next, self.cancelled)?
+        if let Some(snapshot) = self.proof_overlay {
+            // A provisional far leg has the live overlay itself as its proof
+            // snapshot. Its forward checks were made above and the reverse
+            // corners are checked once: only a distinct snapshot repeats them.
+            let distinct = !std::ptr::eq(snapshot, self.overlay);
+            if (distinct && !checked_walkable(self.terrain, snapshot, next, self.cancelled)?)
                 || !self.terrain.route_overlay_edge_clear(
                     snapshot,
                     next,
@@ -139,23 +144,25 @@ impl<'a> ExpansionContext<'a> {
                         -delta_x,
                         -delta_y,
                         self.cancelled,
-                    )? || !diagonal_clear_checked(
-                        self.terrain,
-                        snapshot,
-                        active.tile,
-                        delta_x,
-                        delta_y,
-                        self.cancelled,
-                    )? || !diagonal_clear_checked(
-                        self.terrain,
-                        snapshot,
-                        next,
-                        -delta_x,
-                        -delta_y,
-                        self.cancelled,
-                    )?)))
-        {
-            return Ok(());
+                    )? || (distinct
+                        && (!diagonal_clear_checked(
+                            self.terrain,
+                            snapshot,
+                            active.tile,
+                            delta_x,
+                            delta_y,
+                            self.cancelled,
+                        )? || !diagonal_clear_checked(
+                            self.terrain,
+                            snapshot,
+                            next,
+                            -delta_x,
+                            -delta_y,
+                            self.cancelled,
+                        )?))))
+            {
+                return Ok(());
+            }
         }
         let next_cost = active
             .cost
@@ -164,31 +171,34 @@ impl<'a> ExpansionContext<'a> {
                 next,
                 self.cancelled,
             )?));
-        if search
-            .records
-            .get(&next)
-            .is_some_and(|known| known.cost <= next_cost)
-        {
-            return Ok(());
-        }
-        let new_record = !search.records.contains_key(&next);
-        let retained_after_insert = search
+        let retained = search
             .open
             .len()
             .saturating_add(search.records.len())
-            .saturating_add(usize::from(search.active.is_some()))
-            .saturating_add(1)
-            .saturating_add(usize::from(new_record));
-        if retained_after_insert > MAX_ROUTE_PLANNER_NODES {
-            return Err(Terminal::SearchLimit);
+            .saturating_add(usize::from(search.active.is_some()));
+        let record = SearchRecord {
+            cost: next_cost,
+            parent: Some(active.tile),
+        };
+        // One descent finds the record, decides and writes it. A cheaper way
+        // to a known tile adds a frontier node; a new tile adds its record too.
+        match search.records.entry(next) {
+            Entry::Occupied(mut known) => {
+                if known.get().cost <= next_cost {
+                    return Ok(());
+                }
+                if retained.saturating_add(1) > MAX_ROUTE_PLANNER_NODES {
+                    return Err(Terminal::SearchLimit);
+                }
+                *known.get_mut() = record;
+            }
+            Entry::Vacant(unknown) => {
+                if retained.saturating_add(2) > MAX_ROUTE_PLANNER_NODES {
+                    return Err(Terminal::SearchLimit);
+                }
+                unknown.insert(record);
+            }
         }
-        search.records.insert(
-            next,
-            SearchRecord {
-                cost: next_cost,
-                parent: Some(active.tile),
-            },
-        );
         search.open.insert(OpenNode::new(
             next_cost.saturating_add(super::heuristic(next, self.destination)),
             super::super::priority_cost(next_cost),

@@ -419,8 +419,12 @@ impl RoutePlanner {
             )
     }
 
-    fn update_peak_retained_entries(&mut self) {
-        self.peak_retained_entries = self.peak_retained_entries.max(self.retained_entries());
+    /// Records the peak and returns the entries it counted, so that a caller
+    /// which also enforces the cap does not count them a second time.
+    fn update_peak_retained_entries(&mut self) -> usize {
+        let retained = self.retained_entries();
+        self.peak_retained_entries = self.peak_retained_entries.max(retained);
+        retained
     }
 
     /// Ends the search. Planned segments not yet emitted stay valid: `poll`

@@ -232,8 +232,7 @@ impl RoutePlanner {
                         );
                 context.expand_neighbor(&mut search, active, offset)?;
                 self.search = Some(search);
-                self.update_peak_retained_entries();
-                if self.retained_entries() > MAX_ROUTE_PLANNER_NODES {
+                if self.update_peak_retained_entries() > MAX_ROUTE_PLANNER_NODES {
                     return Err(Terminal::SearchLimit);
                 }
                 continue;

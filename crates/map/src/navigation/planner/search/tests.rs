@@ -109,3 +109,6 @@ fn memoized_search_still_reads_the_proof_snapshot() {
         .unwrap();
     assert!(!search.records.contains_key(&to));
 }
+
+#[path = "tests/probe.rs"]
+mod probe_tests;
