@@ -11,6 +11,15 @@ async fn main() {
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().with_env_filter("info").init();
     let config = Config::from_env()?;
+    if let Some(profile) = Config::sampling_profile_from_env()? {
+        #[cfg(feature = "sampling-profiler")]
+        aoe_server::start_sampling_profile(profile);
+        #[cfg(not(feature = "sampling-profiler"))]
+        tracing::warn!(
+            ?profile,
+            "AOE_SAMPLING_PROFILE needs --features sampling-profiler"
+        );
+    }
     let build = std::env::var("AOE_BUILD_SHA")
         .ok()
         .filter(|value| !value.is_empty())

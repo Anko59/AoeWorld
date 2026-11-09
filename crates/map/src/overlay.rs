@@ -202,15 +202,17 @@ impl ResourceOverlay {
     }
 
     pub fn remaining(&self, terrain: &MapChunkGenerator, id: u64) -> Option<u16> {
+        // Every changed amount belongs to a node that resolved when it was
+        // recorded (depletion, starting insertion and snapshot restore all
+        // resolve it first) and terrain is immutable, so the recorded amount
+        // is the answer without decoding the node's page again.
+        if let Some(&amount) = self.remaining.get(&id) {
+            return Some(amount);
+        }
         self.resource_by_id_with_cancel(terrain, id, &|| false)
             .ok()
             .flatten()
-            .map(|node| {
-                self.remaining
-                    .get(&id)
-                    .copied()
-                    .unwrap_or(node.initial_amount)
-            })
+            .map(|node| node.initial_amount)
     }
 
     pub fn blocks(&self, terrain: &MapChunkGenerator, id: u64) -> bool {

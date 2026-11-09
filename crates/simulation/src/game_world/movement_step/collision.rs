@@ -209,15 +209,18 @@ impl GameWorld {
         // not travelling the same way (oncoming or standing) pass through each
         // other, so a head-on meeting can never lock the lane for anyone.
         let mut narrow = None;
-        let file = self.single_file_group(index).filter(|_| {
-            let waited = self.units[index].obstruction.map_or(0, |o| o.blocked);
-            (waited >= 16 && self.near_deck(from))
-                || (waited >= 64 && self.static_clearance(unit.kind, from.tile_floor()) <= 1)
-        });
         // Inside a one-lane passage a single file's own members pass through
         // each other: a knot of friendly bodies at the mouth cannot lock it.
-        // Both passes are last resorts for a body that has stayed blocked.
+        // Both passes are last resorts for a body that has stayed blocked, so
+        // the group lookup waits for 16 blocked ticks (the same answer).
         let blocked = self.units[index].obstruction.map_or(0, |o| o.blocked);
+        let file = (blocked >= 16)
+            .then(|| self.single_file_group(index))
+            .flatten()
+            .filter(|_| {
+                self.near_deck(from)
+                    || (blocked >= 64 && self.static_clearance(unit.kind, from.tile_floor()) <= 1)
+            });
         // Every query can reject centres outside the swept box expanded by
         // the largest observed hull; overfull-cell policy remains independent.
         let window = {

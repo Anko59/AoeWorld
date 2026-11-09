@@ -10,13 +10,17 @@ mod map_store;
 mod map_worker;
 mod maps;
 mod page_residency;
+#[cfg(any(test, feature = "sampling-profiler"))]
+mod sampling;
 mod source_qualification;
 mod terrain_cache;
-pub use config::Config;
+pub use config::{Config, SamplingProfile};
 pub use gameplay::{GameplayService, PersistedDepletion, ResourceLifecycleError, SlotInfo};
 pub use gameplay_match::MAX_MATCH_SLOTS;
 pub use map_store::MapStoreError;
 pub(crate) use map_store::{PageResidency, load as load_map_packages};
+#[cfg(feature = "sampling-profiler")]
+pub use sampling::spawn as start_sampling_profile;
 pub use source_qualification::{
     ScaleQualificationError, SourceCountryProbe, SourceQualificationProgress,
     SourceQualificationReport, SourceScaleEvidence, SourceScalePackageReference,
