@@ -7,6 +7,9 @@ use aoe_core::{
 use aoe_map::{Depletion, ResourceNode, ResourceOverlayError, RoutePlanner};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Arc, Mutex};
+#[cfg(test)]
+#[path = "game_world/tests/scale_hooks/unit_access.rs"]
+mod unit_access;
 /// One chunk's shared candidate resource nodes.
 pub(crate) type ChunkNodes = Arc<Vec<ResourceNode>>;
 #[path = "terrain/clearance.rs"]
@@ -156,7 +159,10 @@ pub struct GameWorld {
     pub(crate) wildlife: wildlife::Wildlife,
     pub(crate) vision: visibility::Vision,
     pub(crate) tick: Tick,
+    #[cfg(not(test))]
     pub(crate) units: Vec<StoredUnit>,
+    #[cfg(test)]
+    pub(crate) units: unit_access::UnitStore,
     pub(crate) lookup: UnitIndex,
     pub(crate) chunks: BTreeMap<ChunkCoord, Vec<EntityId>>,
     pub(crate) active_movers: Vec<EntityId>,
@@ -217,7 +223,7 @@ impl GameWorld {
             combat: Default::default(),
             wildlife: Default::default(),
             vision: Default::default(),
-            units: Vec::new(),
+            units: Default::default(),
             lookup: UnitIndex::new(),
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),

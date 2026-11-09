@@ -231,7 +231,7 @@ impl GameWorld {
     /// Test oracle: the full unit scan this replaced would change nothing more.
     #[cfg(test)]
     fn assert_collision_subscribers_complete(&self, area: aoe_core::TileRect, opened: bool) {
-        for unit in &self.units {
+        for unit in self.units.oracle_slice() {
             let id = unit.state.id;
             assert!(
                 unit.planner.as_ref().is_none_or(|planner| {

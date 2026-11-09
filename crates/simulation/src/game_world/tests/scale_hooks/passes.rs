@@ -43,7 +43,16 @@ fn the_tick_passes_count_each_tick_and_the_hash_ignores_them() {
 }
 
 #[test]
-fn a_collision_change_visits_its_subscribers_not_every_unit() {
+fn collision_closed_accesses_only_subscribed_units() {
+    collision_accesses_only_subscribed_units(false);
+}
+
+#[test]
+fn collision_opened_accesses_only_subscribed_units() {
+    collision_accesses_only_subscribed_units(true);
+}
+
+fn collision_accesses_only_subscribed_units(opened: bool) {
     let mut w = busy_world();
     // Idle bystanders a full scan would visit.
     for n in 0..100 {
@@ -55,21 +64,64 @@ fn a_collision_change_visits_its_subscribers_not_every_unit() {
     w.set_movement_error(index, Some(crate::GameWorldError::Unreachable));
     w.remember_unreachable(index, TileCoord::new(5, 5));
     let area = TileRect::new(TileCoord::new(10, 10), TileCoord::new(12, 12));
-    w.collision_closed(area);
+    w.units.reset_accesses();
+    if opened {
+        w.collision_opened(area);
+    } else {
+        w.collision_closed(area);
+    }
+    let accesses = w.units.accesses();
     // A closing clears every error, wherever the unit stands, but no memo.
     assert_eq!(w.units[index].last_movement_error, None);
-    assert!(w.units[index].unreachable_memo.is_some());
-    w.collision_opened(area);
-    assert_eq!(w.units[index].unreachable_memo, None);
-    // Each change ran once and visited a handful of subscribers, not the
-    // busy world's units: a return to full scans fails here.
-    let units = w.units.len() as u64;
-    assert!(units > 50, "the world must be busy for this check");
-    for pass in ["collision_closed", "collision_opened"] {
-        let counted = count(&w, pass);
-        assert_eq!(counted.calls, 1, "{pass}");
-        assert!(counted.visited <= 4, "{pass} visited {}", counted.visited);
+    assert_eq!(w.units[index].unreachable_memo.is_none(), opened);
+    let pass = if opened {
+        "collision_opened"
+    } else {
+        "collision_closed"
+    };
+    let counted = count(&w, pass);
+    assert_eq!(counted.calls, 1, "{pass}");
+    assert!(counted.visited <= 4, "{pass} visited {}", counted.visited);
+    // Measured at the store boundary, independently of pass/subscriber counts.
+    // A bulk view charges all exposed slots; indexing charges one per access.
+    // No timing threshold: even a read-only full scan must exceed this bound.
+    assert!(w.units.len() > 100);
+    assert!(accesses <= 16, "opened={opened}: {accesses} unit accesses");
+}
+
+#[test]
+fn unit_access_probe_covers_indexing_iteration_and_slice_exposure() {
+    let mut w = busy_world();
+    let len = w.units.len();
+    w.units.reset_accesses();
+    std::hint::black_box(&w.units[0]);
+    std::hint::black_box(&mut w.units[1]);
+    assert_eq!(w.units.accesses(), 2);
+    w.units.reset_accesses();
+    std::hint::black_box(&w.units[..1]);
+    std::hint::black_box(&mut w.units[1..]);
+    assert_eq!(w.units.accesses(), len);
+    w.units.reset_accesses();
+    for unit in &w.units {
+        std::hint::black_box(unit);
     }
+    assert_eq!(w.units.accesses(), len);
+    w.units.reset_accesses();
+    for unit in &mut w.units {
+        std::hint::black_box(unit);
+    }
+    assert_eq!(w.units.accesses(), len);
+    w.units.reset_accesses();
+    std::hint::black_box(w.units.as_slice());
+    assert_eq!(w.units.accesses(), len);
+    w.units.reset_accesses();
+    std::hint::black_box(w.units.as_mut_slice());
+    assert_eq!(w.units.accesses(), len);
+    w.units.reset_accesses();
+    for index in 0..w.units.len() {
+        std::hint::black_box(&w.units[index]);
+    }
+    assert_eq!(w.units.accesses(), len);
 }
 
 #[test]
