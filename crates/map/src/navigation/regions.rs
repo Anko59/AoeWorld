@@ -21,6 +21,7 @@ mod frontier;
 use bucket::BucketEdges;
 pub use bucket::LandBucket;
 mod label;
+mod lazy;
 mod ray;
 mod terrain;
 pub use label::Input as RegionChunk;
@@ -45,6 +46,10 @@ pub enum RegionTile {
 /// The passability regions read. Answers must be a pure function of the
 /// current ground.
 pub trait RegionGround {
+    /// False after a provider failure; callers discard all derived labels.
+    fn available(&self) -> bool {
+        true
+    }
     /// Optional bulk capture of the same tiles and directed edges.
     fn chunk(&self, _key: (i32, i32), _size: (i32, i32)) -> Option<RegionChunk> {
         None
@@ -126,6 +131,8 @@ pub struct Regions {
     chunks_x: i32,
     chunks_y: i32,
     chunks: Vec<ChunkRegions>,
+    /// Demand-built labels, moved into the dense census by an explicit flush.
+    pending: BTreeMap<u32, ChunkRegions>,
     dirty: BTreeSet<u32>,
     supers: Vec<SuperRegions>,
     global: Global,
@@ -136,7 +143,7 @@ pub struct Regions {
 }
 
 impl Regions {
-    /// An empty layer; the first query labels the whole map.
+    /// An empty layer; endpoint queries label only chunks they visit.
     pub fn new(width: i32, height: i32, bucket: LandBucket) -> Self {
         let chunks_x = (width.max(1) + CHUNK - 1) / CHUNK;
         let chunks_y = (height.max(1) + CHUNK - 1) / CHUNK;
@@ -146,6 +153,7 @@ impl Regions {
             chunks_x,
             chunks_y,
             chunks: Vec::new(),
+            pending: BTreeMap::new(),
             dirty: BTreeSet::new(),
             supers: Vec::new(),
             global: Global::default(),
@@ -161,22 +169,23 @@ impl Regions {
 
     /// Ground in `area` may have changed (tile-exclusive maximum).
     pub fn invalidate(&mut self, min: TileCoord, max: TileCoord) {
-        if self.chunks.is_empty() {
-            return;
-        }
         let x0 = (min.x - 1).max(0).div_euclid(CHUNK);
         let y0 = (min.y - 1).max(0).div_euclid(CHUNK);
         let x1 = (max.x).min(self.size.0 - 1).div_euclid(CHUNK);
         let y1 = (max.y).min(self.size.1 - 1).div_euclid(CHUNK);
         for cy in y0..=y1.min(self.chunks_y - 1) {
             for cx in x0..=x1.min(self.chunks_x - 1) {
-                self.dirty.insert((cy * self.chunks_x + cx) as u32);
+                let chunk = (cy * self.chunks_x + cx) as u32;
+                if self.pending.contains_key(&chunk) || !self.chunks.is_empty() {
+                    self.dirty.insert(chunk);
+                }
             }
         }
     }
 
     /// Everything may have changed.
     pub fn invalidate_all(&mut self) {
+        self.dirty.extend(self.pending.keys().copied());
         self.dirty.extend(0..self.chunks.len() as u32);
     }
 
@@ -287,14 +296,22 @@ impl Regions {
     }
 
     fn build(&mut self, ground: &dyn RegionGround) {
-        self.stats.builds += 1;
+        self.stats.builds = self.stats.builds.max(1);
+        let pending: Vec<_> = self.pending.keys().copied().collect();
+        for chunk in pending {
+            self.load(ground, chunk);
+        }
         self.dirty.clear();
         let count = (self.chunks_x * self.chunks_y) as u32;
         let mut chunks = Vec::with_capacity(count as usize);
         for chunk in 0..count {
-            let key = self.key(chunk);
-            let input = label::input(ground, key, self.size);
-            chunks.push(self.labelled(ground, input));
+            let done = if let Some(done) = self.pending.remove(&chunk) {
+                done
+            } else {
+                let input = label::input(ground, self.key(chunk), self.size);
+                self.labelled(ground, input)
+            };
+            chunks.push(done);
         }
         self.chunks = chunks;
         for chunk in 0..count {
@@ -376,8 +393,9 @@ impl Regions {
         from: TileCoord,
         to: TileCoord,
     ) -> bool {
-        if self.chunks.is_empty() && self.clear_ray(ground, player, from, to) {
-            return true;
+        if self.chunks.is_empty() {
+            return self.clear_ray(ground, player, from, to)
+                || self.lazy_reachable(ground, player, from, to);
         }
         self.flush(ground);
         let Some(goal) = self.node(to) else {

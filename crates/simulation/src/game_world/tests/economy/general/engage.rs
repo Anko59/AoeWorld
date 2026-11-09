@@ -19,6 +19,8 @@ fn run_scene(
 ) -> Probe {
     let (mut w, _) = setup();
     w.set_fog_disabled(true);
+    let timer = std::sync::Arc::new(RouteTimer::default());
+    w.set_planning_probe(timer.clone());
     let ours = army(&mut w, 0, 190, 19, 60, 100);
     let theirs = army(&mut w, 1, enemies, 12, 120, 100 + defender_offset);
     let mut mine = ours.clone();
@@ -62,8 +64,10 @@ fn run_scene(
     std::fs::write(
         directory.join(format!("{name}.txt")),
         format!(
-            "{summary}with_target={} in_reach={}\n",
-            probe.with_target, probe.in_reach
+            "{summary}with_target={} in_reach={}\nroute spans ns: {:?}\n",
+            probe.with_target,
+            probe.in_reach,
+            timer.0.lock().unwrap()
         ),
     )
     .unwrap();
@@ -169,4 +173,81 @@ fn an_outnumbered_general_army_still_fights_what_reaches_it() {
     assert!(p.in_reach > 0);
     let share = p.with_target * 100 / p.in_reach;
     assert!(share >= 25, "{share}% of units in reach fight");
+}
+
+#[test]
+fn a_dead_commander_leaves_survivors_free_to_fight_instead_of_marching_home() {
+    let (mut w, _) = setup();
+    w.set_fog_disabled(true);
+    let ids: Vec<_> = (0..12)
+        .map(|n| soldier(&mut w, UnitKind::Knight, 100 + n % 6, 100 + n / 6))
+        .collect();
+    let g = soldier(&mut w, UnitKind::General, 104, 104);
+    w.issue_move(g, at(145, 104)).unwrap();
+    decide(&mut w);
+    w.advance();
+    let fighter = ids[0];
+    assert!(w.unit(fighter).unwrap().moving);
+    let position = w.unit(fighter).unwrap().position.tile_floor();
+    let enemy = w
+        .spawn_kind(
+            PlayerId(1),
+            UnitKind::Militia,
+            at(position.x + 1, position.y),
+        )
+        .unwrap();
+    w.units[w.lookup[&enemy]].state.stance = aoe_core::CombatStance::NoAttack;
+    w.issue_delete(PlayerId(0), &[g]).unwrap();
+    assert_eq!(w.general_controller(fighter), None);
+    for _ in 0..40 {
+        w.advance();
+    }
+    assert!(
+        w.unit(fighter).unwrap().attack_target == Some(enemy)
+            || w.unit(enemy).is_none_or(|enemy| enemy.hp == 0),
+        "a released soldier must not ignore the enemy beside its old march"
+    );
+}
+
+#[test]
+fn a_commanders_death_keeps_a_detached_players_move() {
+    let (mut w, _) = setup();
+    let id = soldier(&mut w, UnitKind::Knight, 100, 100);
+    let g = soldier(&mut w, UnitKind::General, 104, 104);
+    w.issue_move(g, at(145, 104)).unwrap();
+    decide(&mut w);
+    let destination = at(150, 120);
+    w.general_player_order(PlayerId(0), &[id], Some(destination));
+    w.issue_move(id, destination).unwrap();
+    let order = w.movement_order(id);
+    assert!(order.is_some());
+    w.issue_delete(PlayerId(0), &[g]).unwrap();
+    assert_eq!(w.general_controller(id), None);
+    assert_eq!(w.movement_order(id), order);
+}
+
+#[derive(Debug, Default)]
+struct RouteTimer(std::sync::Arc<std::sync::Mutex<std::collections::BTreeMap<&'static str, u128>>>);
+struct RouteSpan {
+    timer: RouteTimer,
+    name: &'static str,
+    start: std::time::Instant,
+}
+impl aoe_map::NavigationSpan for RouteSpan {}
+impl Drop for RouteSpan {
+    fn drop(&mut self) {
+        *self.timer.0.lock().unwrap().entry(self.name).or_default() +=
+            self.start.elapsed().as_nanos();
+    }
+}
+impl crate::PlanningProbe for RouteTimer {
+    fn begin(&self) {}
+    fn end(&self) {}
+    fn movement_span(&self, name: &'static str) -> Option<Box<dyn aoe_map::NavigationSpan>> {
+        Some(Box::new(RouteSpan {
+            timer: RouteTimer(self.0.clone()),
+            name,
+            start: std::time::Instant::now(),
+        }))
+    }
 }

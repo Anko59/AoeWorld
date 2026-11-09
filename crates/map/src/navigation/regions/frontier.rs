@@ -12,7 +12,7 @@ fn squared(a: TileCoord, b: TileCoord) -> i64 {
 }
 
 impl Regions {
-    fn chunk_distance(&self, chunk: u32, target: TileCoord) -> i64 {
+    pub(super) fn chunk_distance(&self, chunk: u32, target: TileCoord) -> i64 {
         let at = label::origin(self.key(chunk));
         let near = TileCoord::new(
             target.x.clamp(at.x, at.x + CHUNK - 1),
@@ -31,8 +31,12 @@ impl Regions {
         from: TileCoord,
         target: TileCoord,
     ) -> Option<TileCoord> {
-        if self.chunks.is_empty() && self.clear_ray(ground, player, from, target) {
-            return Some(target);
+        if self.chunks.is_empty() {
+            return if self.clear_ray(ground, player, from, target) {
+                Some(target)
+            } else {
+                self.lazy_frontier(ground, player, from, target)
+            };
         }
         self.flush(ground);
         let roots = self.reachable_roots(player, from);

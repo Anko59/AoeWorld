@@ -37,6 +37,9 @@ impl Ground<'_> {
 }
 
 impl RegionGround for Ground<'_> {
+    fn available(&self) -> bool {
+        self.terrain.as_ref().is_none_or(RegionGround::available)
+    }
     fn chunk(&self, key: (i32, i32), size: (i32, i32)) -> Option<RegionChunk> {
         let min = TileCoord::new(
             key.0 * aoe_map::CHUNK_TILES - 1,

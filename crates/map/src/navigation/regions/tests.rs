@@ -331,3 +331,6 @@ mod terrain;
 
 #[path = "tests/buckets.rs"]
 mod buckets;
+
+#[path = "tests/lazy.rs"]
+mod lazy;

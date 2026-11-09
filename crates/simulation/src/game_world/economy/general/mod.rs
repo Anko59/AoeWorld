@@ -216,6 +216,17 @@ impl GameWorld {
             for member in army.members {
                 self.set_sergeant(member, false);
                 self.economy.generals.controlled.remove(&member);
+                // These moves belonged to the commander. Once released, a
+                // moving soldier is no longer eligible for follower acquisition.
+                // Keep existing fights and every detached player's own order.
+                if let Some(&index) = self.lookup.get(&member) {
+                    let unit = self.units[index].state;
+                    if unit.attack_target.is_none()
+                        && (unit.moving || unit.planning || unit.task == crate::UnitTask::Moving)
+                    {
+                        self.stop_unit_orders(index);
+                    }
+                }
             }
             for building in army.pending.keys() {
                 self.economy.generals.recruits.remove(building);

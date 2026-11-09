@@ -83,6 +83,9 @@ impl<'a> MapRegionGround<'a> {
 }
 
 impl RegionGround for MapRegionGround<'_> {
+    fn available(&self) -> bool {
+        self.error.get().is_none()
+    }
     fn chunk(&self, key: (i32, i32), size: (i32, i32)) -> Option<RegionChunk> {
         Some(chunk::read(self, key, size))
     }

@@ -368,3 +368,84 @@ fn region_orders_replay_identically_with_one_and_four_workers() {
     };
     assert_eq!(run(1), run(4));
 }
+
+#[test]
+fn demand_region_labels_preserve_every_tick_of_a_complete_census_replay() {
+    fn scene(complete: bool) -> GameWorld {
+        let (mut world, _, _) = village();
+        let origin = TileCoord::new(100, 100);
+        fort(&mut world, origin, false);
+        advance(&mut world, 2);
+        if complete {
+            for bucket in aoe_map::LandBucket::ALL {
+                world
+                    .land_player_region(PlayerId(1), bucket, TileCoord::new(95, 95))
+                    .unwrap();
+            }
+        }
+        let ids = militia(&mut world, 1, &block(95, 115, 20));
+        let destination = WorldPosition::from_tile_center(TileCoord::new(105, 104)).unwrap();
+        world
+            .issue_formation_move(
+                PlayerId(1),
+                &ids,
+                Formation::Line,
+                destination,
+                false,
+                false,
+            )
+            .unwrap();
+        world
+    }
+    let mut demand = scene(false);
+    let mut complete = scene(true);
+    assert_eq!(demand.canonical_hash(), complete.canonical_hash());
+    for _ in 0..600 {
+        assert_eq!(demand.advance(), complete.advance());
+        assert_eq!(demand.canonical_hash(), complete.canonical_hash());
+    }
+}
+
+#[test]
+fn a_cold_large_village_formation_with_a_blocked_centroid_stays_local() {
+    let started = std::time::Instant::now();
+    let (mut world, _) = GameWorld::default_with_village(Seed(1));
+    let min = world.buildings().next().unwrap().footprint.min;
+    let ids = militia(
+        &mut world,
+        0,
+        &[
+            (min.x - 2, min.y),
+            (min.x, min.y - 2),
+            (min.x + 2, min.y + 2),
+        ],
+    );
+    let destination =
+        WorldPosition::from_tile_center(TileCoord::new(min.x + 12, min.y + 12)).unwrap();
+    world
+        .issue_formation_move(
+            PlayerId(0),
+            &ids,
+            Formation::Line,
+            destination,
+            false,
+            false,
+        )
+        .unwrap();
+    assert_eq!(
+        world.region_stats().global_rebuilds,
+        0,
+        "a local origin must not trigger a complete component census"
+    );
+    assert!(ids.iter().all(|&id| world.formation(id).is_some()));
+    let report = format!(
+        "cold village {}x{} formation: {:?}; {:?}\n",
+        world.config.width_tiles,
+        world.config.height_tiles,
+        started.elapsed(),
+        world.region_stats()
+    );
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/regions");
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(directory.join("cold-origin.txt"), report).unwrap();
+}

@@ -187,7 +187,7 @@ impl Regions {
         self.global.gated = gated;
     }
 
-    fn admits(&self, player: u32, gate: Option<u32>) -> bool {
+    pub(super) fn admits(&self, player: u32, gate: Option<u32>) -> bool {
         player == super::ANY_PLAYER
             || gate.is_none_or(|gate| {
                 self.gate_access

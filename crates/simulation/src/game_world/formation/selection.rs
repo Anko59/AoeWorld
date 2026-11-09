@@ -86,8 +86,29 @@ impl GameWorld {
                 return Ok(centroid);
             }
         }
-        let region = self.formation_region(player, bucket, ids)?;
-        if walkable
+        // When the centroid is blocked or isolated but all members share
+        // reachable ground, their nearest member is the same answer as a
+        // complete component census. Keep this common cold-map case local.
+        let first = self
+            .unit(ids[0])
+            .ok_or(EconomyError::UnknownEntity)?
+            .position
+            .tile_floor();
+        let mut shared = self.land_reachable(player, bucket, first, first)?;
+        for unit in ids.iter().filter_map(|&id| self.unit(id)) {
+            if !shared {
+                break;
+            }
+            shared = self.land_reachable(player, bucket, first, unit.position.tile_floor())?
+                && self.land_reachable(player, bucket, unit.position.tile_floor(), first)?;
+        }
+        let region = if shared {
+            None
+        } else {
+            self.formation_region(player, bucket, ids)?
+        };
+        if !shared
+            && walkable
             && (region.is_none()
                 || self.land_player_region(player, bucket, centroid.tile_floor())? == region)
         {
