@@ -8,9 +8,9 @@
 //! the ground alone, never on the order of changes.
 //!
 //! Gates are gated portals: a gate's tiles form their own regions, joined to
-//! the ground beside them only for the players the gate admits. The open
-//! state is not part of reachability (the hard collision keeps it), so
-//! toggling a gate changes no label. Changed chunks are batched and relabelled
+//! the ground beside them only for the players the gate admits. Ownership
+//! and open state affect only those joins, so toggling a gate changes no
+//! label. Changed chunks are batched and relabelled
 //! on the next query; a chunk whose tile classes did not change keeps
 //! everything.
 use aoe_core::TileCoord;
@@ -61,8 +61,12 @@ pub trait RegionGround {
     fn diagonal_override(&self, _from: TileCoord, _to: TileCoord) -> Option<bool> {
         None
     }
-    /// The one player a gate admits (today's owner-only rule).
+    /// The owner may pass even while the gate is closed.
     fn gate_owner(&self, gate: u32) -> u32;
+    /// An open gate admits every player. Invalidate its tiles when this changes.
+    fn gate_open(&self, _gate: u32) -> bool {
+        false
+    }
 }
 
 /// A player every gate admits: plain connectivity, as the route planner
@@ -125,7 +129,7 @@ pub struct Regions {
     dirty: BTreeSet<u32>,
     supers: Vec<SuperRegions>,
     global: Global,
-    gate_owner: BTreeMap<u32, u32>,
+    gate_access: BTreeMap<u32, (u32, bool)>,
     /// Per player: gated edges admitted, folded into a small union-find.
     closures: BTreeMap<u32, BTreeMap<u32, u32>>,
     stats: RegionStats,
@@ -145,7 +149,7 @@ impl Regions {
             dirty: BTreeSet::new(),
             supers: Vec::new(),
             global: Global::default(),
-            gate_owner: BTreeMap::new(),
+            gate_access: BTreeMap::new(),
             closures: BTreeMap::new(),
             stats: RegionStats::default(),
         }
@@ -209,7 +213,7 @@ impl Regions {
         for chunk in dirty {
             let key = self.key(chunk);
             let input = label::input(ground, key, self.size);
-            self.refresh_owners(ground, &input.classes);
+            self.refresh_gate_access(ground, &input.classes);
             if input.signature == self.chunks[chunk as usize].signature {
                 self.stats.unchanged += 1;
                 continue;
@@ -252,7 +256,7 @@ impl Regions {
         self.rebuild_global();
     }
 
-    fn refresh_owners(&mut self, ground: &dyn RegionGround, classes: &[RegionTile]) {
+    fn refresh_gate_access(&mut self, ground: &dyn RegionGround, classes: &[RegionTile]) {
         let gates: BTreeSet<_> = classes
             .iter()
             .filter_map(|class| match class {
@@ -261,8 +265,8 @@ impl Regions {
             })
             .collect();
         for gate in gates {
-            let owner = ground.gate_owner(gate);
-            if self.gate_owner.insert(gate, owner) != Some(owner) {
+            let access = (ground.gate_owner(gate), ground.gate_open(gate));
+            if self.gate_access.insert(gate, access) != Some(access) {
                 self.closures.clear();
             }
         }
@@ -270,7 +274,7 @@ impl Regions {
 
     fn labelled(&mut self, ground: &dyn RegionGround, input: label::Input) -> ChunkRegions {
         let done = label::label(&input, self.bucket);
-        self.refresh_owners(ground, &input.classes);
+        self.refresh_gate_access(ground, &input.classes);
         ChunkRegions {
             signature: input.signature,
             labels: done.labels,
@@ -352,7 +356,7 @@ impl Regions {
         self.node(tile).map(|node| self.global.root(node))
     }
 
-    /// The component `player` sees a passable tile in: its gates joined.
+    /// The component `player` sees: owned gates and all open gates joined.
     pub fn player_component(
         &mut self,
         ground: &dyn RegionGround,

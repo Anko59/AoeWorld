@@ -1,7 +1,7 @@
 //! Land reachability for orders, read from `aoe_map::Regions` over the same
 //! ground the route planner searches. A completed gate is a gated portal: it
-//! admits its owner only, whatever its open state, so toggling it changes no
-//! region. The layer is a pure cache of the ground; it is never hashed.
+//! admits its owner or anyone while open. Toggling changes only admitted
+//! edges, never chunk labels. The layer is a pure cache; it is never hashed.
 use crate::{GameWorld, GameWorldError, Terrain};
 use aoe_core::{PlayerId, TileCoord, TileRect};
 use aoe_map::{LandBucket, MapRegionGround, RegionChunk, RegionGround, RegionTile, Regions};
@@ -100,6 +100,13 @@ impl RegionGround for Ground<'_> {
             .find(|(id, _)| *id == gate)
             .map_or(u32::MAX, |&(_, owner)| owner)
     }
+
+    fn gate_open(&self, gate: u32) -> bool {
+        self.world
+            .economy
+            .open_gates
+            .contains(&aoe_core::EntityId(gate))
+    }
 }
 
 impl GameWorld {
@@ -156,7 +163,7 @@ impl GameWorld {
         }
     }
 
-    /// The land region `player` sees a tile in, its own gates joined.
+    /// The land region `player` sees, owned gates and all open gates joined.
     pub(crate) fn land_player_region(
         &self,
         player: PlayerId,

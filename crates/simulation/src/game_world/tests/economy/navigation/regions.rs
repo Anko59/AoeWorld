@@ -1,6 +1,6 @@
 //! Phase 3 (regions and reachability) scenarios: orders start in the army's
-//! own region and end at the nearest reachable point, gates admit their
-//! owner only, and toggling a gate relabels nothing.
+//! own region and end at the nearest reachable point, open gates admit
+//! everyone, and toggling a gate relabels nothing.
 use super::gate_routes::fort;
 use super::*;
 use aoe_core::Formation;
@@ -21,6 +21,129 @@ fn militia(world: &mut GameWorld, player: u16, tiles: &[(i32, i32)]) -> Vec<Enti
 
 fn block(x: i32, y: i32, count: i32) -> Vec<(i32, i32)> {
     (0..count).map(|n| (x + n % 5, y + n / 5)).collect()
+}
+
+fn enemy_enters_open_gate() -> [u8; 32] {
+    let (mut world, _, _) = village();
+    world.set_fog_disabled(true);
+    let o = TileCoord::new(100, 100);
+    let gate = fort(&mut world, o, false)[0];
+    advance(&mut world, 2);
+    let outside = TileCoord::new(o.x + 5, o.y + 20);
+    let inside = TileCoord::new(o.x + 5, o.y + 4);
+    let destination = WorldPosition::from_tile_center(inside).unwrap();
+    let army = militia(
+        &mut world,
+        1,
+        &[(outside.x, outside.y), (outside.x + 1, outside.y)],
+    );
+    for &id in &army {
+        world.units[world.lookup[&id]].state.stance = aoe_core::CombatStance::NoAttack;
+    }
+    let yard = aoe_core::TileRect::from_xywh(o.x, o.y, 11, 9);
+    let check_regions = |world: &GameWorld, open| {
+        for bucket in aoe_map::LandBucket::ALL {
+            assert_eq!(
+                world
+                    .land_reachable(PlayerId(1), bucket, outside, inside)
+                    .unwrap(),
+                open,
+                "enemy reachability, {bucket:?}, open={open}"
+            );
+            let frontier = world
+                .land_frontier(PlayerId(1), bucket, outside, inside)
+                .unwrap()
+                .unwrap();
+            assert_eq!(yard.contains(frontier), open);
+            if open {
+                assert_eq!(frontier, inside);
+            }
+            let from = world
+                .land_player_region(PlayerId(1), bucket, outside)
+                .unwrap()
+                .unwrap();
+            let to = world
+                .land_player_region(PlayerId(1), bucket, inside)
+                .unwrap()
+                .unwrap();
+            assert_eq!(from == to, open, "enemy components, {bucket:?}");
+            assert!(
+                world
+                    .land_reachable(PlayerId(0), bucket, outside, inside)
+                    .unwrap()
+            );
+        }
+    };
+    check_regions(&world, false);
+    world
+        .issue_formation_move(
+            PlayerId(1),
+            &army,
+            Formation::Line,
+            destination,
+            false,
+            false,
+        )
+        .unwrap();
+    assert!(!world.formation_matches(&army, destination));
+    assert!(
+        army.iter()
+            .all(|&id| !yard.contains(world.formation_destination_slot(id).unwrap().tile_floor()))
+    );
+    let before = world.region_stats();
+    // A defender beside the only entrance holds it physically open.
+    let defender = world
+        .spawn_villager(
+            PlayerId(0),
+            WorldPosition::from_tile_center(TileCoord::new(o.x + 3, o.y + 7)).unwrap(),
+        )
+        .unwrap();
+    world.units[world.lookup[&defender]].state.stance = aoe_core::CombatStance::NoAttack;
+    advance(&mut world, 2);
+    assert!(world.building(gate).unwrap().gate_open);
+    check_regions(&world, true);
+    world
+        .issue_formation_move(
+            PlayerId(1),
+            &army,
+            Formation::Line,
+            destination,
+            false,
+            false,
+        )
+        .unwrap();
+    assert!(world.formation_matches(&army, destination));
+    advance(&mut world, 300);
+    assert!(
+        army.iter()
+            .all(|&id| yard.contains(world.unit(id).unwrap().position.tile_floor()))
+    );
+    assert!(world.building(gate).unwrap().gate_open);
+    // Closing it must discard the enemy's cached joined components too.
+    world
+        .issue_move(
+            defender,
+            WorldPosition::from_tile_center(TileCoord::new(o.x + 2, o.y + 2)).unwrap(),
+        )
+        .unwrap();
+    advance(&mut world, 100);
+    assert!(!world.building(gate).unwrap().gate_open);
+    check_regions(&world, false);
+    assert_eq!(world.region_stats().relabels, before.relabels);
+    assert_eq!(world.region_stats().global_rebuilds, before.global_rebuilds);
+    world.canonical_hash()
+}
+
+#[test]
+fn an_enemy_formation_enters_a_gate_held_open_by_a_defender() {
+    let run = |workers| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(workers)
+            .build()
+            .unwrap()
+            .install(enemy_enters_open_gate)
+    };
+    assert_eq!(run(1), run(4));
 }
 
 /// The enemy army of the walled-base scenario after 30 s: members inside the

@@ -189,7 +189,11 @@ impl Regions {
 
     fn admits(&self, player: u32, gate: Option<u32>) -> bool {
         player == super::ANY_PLAYER
-            || gate.is_none_or(|gate| self.gate_owner.get(&gate) == Some(&player))
+            || gate.is_none_or(|gate| {
+                self.gate_access
+                    .get(&gate)
+                    .is_some_and(|&(owner, open)| owner == player || open)
+            })
     }
 
     /// The player's root of a global root: gated edges it may pass joined.

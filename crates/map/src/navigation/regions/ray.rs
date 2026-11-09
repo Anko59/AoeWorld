@@ -37,6 +37,7 @@ impl Regions {
                 RegionTile::Gate(gate) => {
                     player == super::ANY_PLAYER
                         || ground.gate_owner(gate) == player
+                        || ground.gate_open(gate)
                         || next_class == start
                 }
             };

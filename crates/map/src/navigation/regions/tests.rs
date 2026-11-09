@@ -5,6 +5,7 @@ struct Grid {
     size: (i32, i32),
     cells: Vec<RegionTile>,
     owners: BTreeMap<u32, u32>,
+    open_gates: BTreeSet<u32>,
     /// Blocked edges (height walls), stored both ways.
     walls: BTreeSet<(TileCoord, TileCoord)>,
     decks: BTreeSet<(TileCoord, TileCoord)>,
@@ -15,6 +16,7 @@ impl Grid {
             size: (width, height),
             cells: vec![RegionTile::Open; (width * height) as usize],
             owners: BTreeMap::new(),
+            open_gates: BTreeSet::new(),
             walls: BTreeSet::new(),
             decks: BTreeSet::new(),
         }
@@ -41,6 +43,9 @@ impl RegionGround for Grid {
     }
     fn gate_owner(&self, gate: u32) -> u32 {
         self.owners[&gate]
+    }
+    fn gate_open(&self, gate: u32) -> bool {
+        self.open_gates.contains(&gate)
     }
 }
 
@@ -194,7 +199,7 @@ fn walled_base() -> Grid {
 }
 
 #[test]
-fn a_gate_admits_its_owner_only_and_others_get_the_frontier() {
+fn a_closed_gate_admits_its_owner_only_and_others_get_the_frontier() {
     let grid = walled_base();
     let mut regions = Regions::new(120, 110, LandBucket::Small);
     let (outside, inside) = (TileCoord::new(50, 80), TileCoord::new(50, 45));
@@ -225,19 +230,62 @@ fn a_gate_admits_its_owner_only_and_others_get_the_frontier() {
 
 #[test]
 fn a_thousand_gate_toggles_relabel_nothing() {
-    let grid = walled_base();
+    let mut grid = walled_base();
     let mut regions = Regions::new(120, 110, LandBucket::Small);
     regions.component(&grid, TileCoord::new(0, 0));
     let before = regions.stats();
-    for _ in 0..1_000 {
+    for n in 0..1_000 {
+        let open = n % 2 == 0;
+        if open {
+            grid.open_gates.insert(7);
+        } else {
+            grid.open_gates.remove(&7);
+        }
         // The simulation reports a toggled gate as changed ground.
         regions.invalidate(TileCoord::new(48, 59), TileCoord::new(52, 60));
-        assert!(!regions.reachable(&grid, 2, TileCoord::new(0, 0), TileCoord::new(45, 45)));
+        let (outside, inside) = (TileCoord::new(0, 0), TileCoord::new(45, 45));
+        assert_eq!(regions.reachable(&grid, 2, outside, inside), open);
+        assert_eq!(
+            regions.player_component(&grid, 2, outside)
+                == regions.player_component(&grid, 2, inside),
+            open
+        );
+        assert_eq!(
+            regions.frontier(&grid, 2, outside, inside) == Some(inside),
+            open
+        );
+        assert!(regions.reachable(&grid, 1, outside, inside));
     }
     let after = regions.stats();
     assert_eq!(after.relabels, before.relabels);
     assert_eq!(after.global_rebuilds, before.global_rebuilds);
     assert!(after.unchanged >= 1_000);
+}
+
+#[test]
+fn an_open_enemy_gate_admits_a_direct_ray_and_a_cached_detour_in_every_bucket() {
+    let mut grid = walled_base();
+    grid.open_gates.insert(7);
+    let (outside, inside) = (TileCoord::new(50, 80), TileCoord::new(50, 45));
+    for bucket in LandBucket::ALL {
+        let mut regions = Regions::new(120, 110, bucket);
+        assert!(regions.reachable(&grid, 2, outside, inside));
+        assert_eq!(
+            regions.stats().builds,
+            0,
+            "direct ray through the open gate"
+        );
+        assert_eq!(regions.frontier(&grid, 2, outside, inside), Some(inside));
+        // From the north the path must detour to the south gate.
+        let north = TileCoord::new(50, 10);
+        assert!(regions.reachable(&grid, 2, north, inside));
+        assert_eq!(regions.stats().builds, 1);
+        assert_eq!(
+            regions.player_component(&grid, 2, north),
+            regions.player_component(&grid, 2, inside)
+        );
+        assert_eq!(regions.frontier(&grid, 2, north, inside), Some(inside));
+    }
 }
 
 #[test]
