@@ -4,7 +4,7 @@ use super::*;
 
 /// A closed 11x9 fort at `o` with a horizontal gate in the south side and,
 /// when `vertical`, a vertical gate in the east side. Returns the gate ids.
-fn fort(world: &mut GameWorld, o: TileCoord, vertical: bool) -> Vec<EntityId> {
+pub(super) fn fort(world: &mut GameWorld, o: TileCoord, vertical: bool) -> Vec<EntityId> {
     let tile = |x, y| TileCoord::new(o.x + x, o.y + y);
     let wall = |world: &mut GameWorld, at: TileCoord| {
         world

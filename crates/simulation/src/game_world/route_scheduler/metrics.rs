@@ -59,7 +59,7 @@ pub struct RouteMetrics {
     pub found: [u64; WORK_BUCKETS],
     /// Searches that ended without a route, by the work they spent.
     pub failed: [u64; WORK_BUCKETS],
-    /// Near routes ended by the work bound (`MAX_NEAR_ROUTE_WORK`).
+    /// Near searches answered as disconnected by the region layer.
     pub stuck: u64,
     /// Orders ended by the bound on their wait for an answer.
     pub expired: u64,

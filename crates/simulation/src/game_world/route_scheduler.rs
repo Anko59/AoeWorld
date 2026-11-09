@@ -22,6 +22,7 @@ mod metrics;
 mod order;
 mod passes;
 mod queue;
+mod regions;
 pub use accounting::RouteSchedulerStats;
 pub use attribution::{
     ROUTE_CATEGORIES, ROUTE_DISTANCES, ROUTE_FAILURES, RouteAttribution, RouteCaller, RouteClass,
@@ -32,10 +33,7 @@ pub use passes::{PASS_NAMES, PassCount};
 pub(crate) use passes::{Pass, Passes};
 pub use queue::{ROUTE_REACH, ROUTE_REQUESTERS, RouteQueueBreakdown, RouteQueueCell};
 #[cfg(test)]
-pub(crate) use {
-    deadline::{FAR_ROUTE_ANSWER_TICKS, MAX_GROUP_ROUTE_RENEWALS, NEAR_ROUTE_ANSWER_TICKS},
-    issue::NO_SLOT_ROUTE_WORK,
-};
+pub(crate) use {deadline::NEAR_ROUTE_ANSWER_TICKS, issue::NO_SLOT_ROUTE_WORK};
 
 /// Retained search frontiers one player may hold at once.
 pub(crate) const MAX_ROUTE_SEARCHES_PER_PLAYER: usize = 2;
@@ -264,9 +262,7 @@ impl GameWorld {
             };
             let spent = self.search_waiting_route(player, id, allowance, changed);
             share -= spent.min(share);
-            if ids.len() > takers {
-                self.end_exhausted_near_route(id, far, changed);
-            }
+            self.end_disconnected_near_route(id, far, changed);
         }
         share
     }

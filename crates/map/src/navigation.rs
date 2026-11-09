@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mod field;
 mod hierarchy;
 mod planner;
+mod regions;
 pub use field::{WalkingField, walking_field};
 pub(crate) use hierarchy::PortalCache;
 pub use hierarchy::{
@@ -17,6 +18,9 @@ pub use hierarchy::{NavigationSnapshot, NavigationStorage};
 pub use planner::{
     MAX_ROUTE_PLANNER_NODES, MAX_ROUTE_PLANNER_WORK, MAX_ROUTE_TILES, ROUTE_LEG_COMMIT_WORK,
     ROUTE_LEG_PROGRESS_TILES, RouteOriginPocket, RoutePlanner, RoutePlannerPoll, RouteTerrain,
+};
+pub use regions::{
+    ANY_PLAYER, MapRegionGround, RegionChunk, RegionGround, RegionStats, RegionTile, Regions,
 };
 
 pub const ORTHOGONAL_COST: u32 = 1_024;

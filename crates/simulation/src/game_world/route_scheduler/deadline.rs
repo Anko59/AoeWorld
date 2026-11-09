@@ -93,8 +93,9 @@ impl GameWorld {
         }
     }
 
-    /// Ends the waiting near route of `id` once it is over its work bound.
-    pub(super) fn end_exhausted_near_route(
+    /// Answer a disconnected land search from regions, independently of
+    /// work already spent or the fair share available this tick.
+    pub(super) fn end_disconnected_near_route(
         &mut self,
         id: EntityId,
         far: bool,
@@ -104,13 +105,15 @@ impl GameWorld {
             return;
         };
         let unit = &self.units[index];
-        if far || !self.waiting_for_route(index) {
+        if far || unit.state.kind.is_naval() || !self.waiting_for_route(index) {
             return;
         }
         let Some(planner) = unit.planner.as_ref() else {
             return;
         };
-        if has_near_route_work_remaining(planner) || planner.has_route_continuation() {
+        if self.land_reachable(unit.state.player, planner.origin(), planner.destination())
+            != Ok(false)
+        {
             return;
         }
         let work = planner.work();
@@ -122,11 +125,26 @@ impl GameWorld {
         let caller = self.units[index].route_caller;
         self.route_metrics
             .attribution
-            .failed(kind, from, to, work, 3, caller);
+            .failed(kind, from, to, work, 0, caller);
         if self.units[index].formation == Some(id) {
-            self.route_metrics.attribution.group_ends_exhausted += 1;
+            let nearest = self
+                .land_frontier(self.units[index].state.player, from, to)
+                .ok()
+                .flatten();
+            self.group_route_failed(
+                index,
+                Some(GameWorldError::Unreachable),
+                0,
+                nearest,
+                changed,
+            );
+        } else {
+            self.stop_route(index, Some(GameWorldError::Unreachable));
+            if let Ok(at) = self.active_movers.binary_search(&id) {
+                self.active_movers.remove(at);
+            }
+            changed.push(id);
         }
-        self.end_waiting_route(index, id, true, changed);
     }
 
     /// Diagnostics: who the wait bound ended (a formation's carrier ends

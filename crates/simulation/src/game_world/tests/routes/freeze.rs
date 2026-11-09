@@ -236,11 +236,10 @@ fn collision_changes_elsewhere_keep_route_searches() {
     assert_eq!(world.route_accounting_error(), None);
 }
 
-/// F7: a reverse flood has already rejected the corridor's entrance when
-/// its foundation is cancelled. Finishing that stale flood must not stop
-/// the existing order as unreachable.
+/// F7: cancelling an entrance invalidates a region's sealed verdict, so a
+/// fresh order crosses the opening immediately instead of reusing the closure.
 #[test]
-fn cancelling_an_entrance_during_a_reverse_flood_keeps_the_move_reachable() {
+fn cancelling_a_proven_sealed_entrance_allows_a_fresh_move() {
     use crate::BuildingKind;
 
     let config = WorldConfig::new(512, 512, Seed(0)).expect("config");
@@ -276,22 +275,19 @@ fn cancelling_an_entrance_during_a_reverse_flood_keeps_the_move_reachable() {
         units.push(id);
     }
     let id = units[0];
-    let index = world.lookup[&id];
     for _ in 0..7 {
         world.serve_route_searches(MAX_ROUTE_WORK_PER_TICK, &mut Vec::new());
     }
-    let planner = world.units[index].planner.as_ref().expect("searching");
-    let reverse_work = planner.work() - planner.leg_work();
-    assert!(
-        (9..512).contains(&reverse_work),
-        "the destination's eight neighbours were processed, but the 64-tile flood is unfinished: {reverse_work}"
+    assert!(world.movement_order(id).is_none());
+    assert_eq!(
+        world.movement_failure(id),
+        Some(GameWorldError::Unreachable)
     );
-    let order = world.movement_order(id);
     world
         .issue_cancel_construction(PlayerId(0), entrance)
         .expect("cancel entrance");
     assert!(world.tile_passable(TileCoord::new(199, 200)));
-    assert_eq!(world.movement_order(id), order);
+    assert_eq!(world.issue_task_move(id, destination), Ok(true));
     assert_eq!(world.route_accounting_error(), None);
     // Only route planning matters here; remove the background pressure
     // before checking that the original unit actually crosses the opening.

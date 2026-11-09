@@ -112,6 +112,7 @@ impl GameWorld {
 
     pub(super) fn resource_collision_changed(&mut self) {
         self.navigation_cache.clear();
+        self.regions_changed_everywhere();
         self.economy.work_positions.clear();
         self.clearance
             .get_mut()
@@ -170,6 +171,7 @@ impl GameWorld {
 
     fn invalidate_collision_caches(&mut self, area: aoe_core::TileRect) {
         self.navigation_cache.invalidate(area);
+        self.regions_changed(area);
         self.economy.work_positions.invalidate(area);
         self.clearance
             .get_mut()
