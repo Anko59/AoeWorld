@@ -17,6 +17,9 @@ use foundations::{FoundationKey, foundation_key};
 #[path = "scene/tests/cache.rs"]
 mod cache_tests;
 #[cfg(test)]
+#[path = "scene/tests/ordering.rs"]
+mod ordering_tests;
+#[cfg(test)]
 #[path = "scene/tests/review.rs"]
 mod review_tests;
 #[cfg(test)]
@@ -325,8 +328,7 @@ pub(in super::super) fn units(
                 as f32,
         }
         .with_actor_frame(frame);
-        let slot = units.partition_point(|u| u.id < animal.id);
-        units.insert(slot, unit);
+        units.push(unit);
     }
     // Index wall families once instead of scanning every wall for each neighbor.
     let walls: std::collections::HashSet<_> = client
@@ -401,8 +403,7 @@ pub(in super::super) fn units(
                 true,
             );
         }
-        let slot = units.partition_point(|unit| unit.id < building.id);
-        units.insert(slot, unit);
+        units.push(unit);
     }
     for (building, expiry) in &client.village.rubble {
         if *expiry <= client.village.tick || building.kind == aoe_protocol::BuildingKind::Bridge {
@@ -427,9 +428,11 @@ pub(in super::super) fn units(
                 .unwrap_or_else(|| elevation_at_world(client, position))
                 as f32,
         };
-        let slot = units.partition_point(|u| u.id < building.id);
-        units.insert(slot, unit);
+        units.push(unit);
     }
+    // One stable sort avoids shifting the growing actor tail for every
+    // building. Equal-ID bridge pieces retain their native span order.
+    units.sort_by_key(|unit| unit.id);
     projectiles::append(client, scene, &mut units);
     super::super::village::building_panel::preview(client, &mut units);
     units

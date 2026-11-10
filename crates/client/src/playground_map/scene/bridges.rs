@@ -34,8 +34,6 @@ pub(super) fn append(
         viewport: client.camera.viewport,
         focus_elevation_meters: client.camera.focus_elevation_meters,
     };
-    let insert = units.partition_point(|other| other.id <= building.id);
-    let before = units.len();
     for (offset, tile) in tiles.iter().enumerate() {
         let position = [f64::from(tile.x) + 0.5, f64::from(tile.y) + 0.5];
         let kind = if building.progress_permille < 1000 {
@@ -65,7 +63,4 @@ pub(super) fn append(
             units.push(unit);
         }
     }
-    // Move the tail once for the whole span, preserving canonical entity order.
-    let count = units.len() - before;
-    units[insert..].rotate_right(count);
 }
