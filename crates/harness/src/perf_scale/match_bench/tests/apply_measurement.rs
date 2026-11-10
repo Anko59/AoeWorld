@@ -49,7 +49,7 @@ fn progress(scale: f64, workers: usize, tick: u64) {
 }
 
 #[test]
-#[ignore = "explicit 100-seat profiling; use make movement-apply-census"]
+#[ignore = "explicit 100-seat profiling; run late_game_apply_census explicitly"]
 fn late_game_apply_census() {
     let baseline_path = output_dir().join("before.json");
     let baseline: Option<Vec<serde_json::Value>> = match std::fs::read(baseline_path) {

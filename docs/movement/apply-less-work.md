@@ -7,7 +7,7 @@ factors 1 and 5, independently replayed with 1 and 4 Rayon workers.
 ## Reproduction
 
 ```sh
-NEXTEST_TEST_THREADS=2 RUST_TEST_THREADS=2 CARGO_PROFILE_DEV_DEBUG=0 make movement-apply-census
+NEXTEST_TEST_THREADS=2 RUST_TEST_THREADS=2 CARGO_PROFILE_DEV_DEBUG=0 make test-harness-focused HARNESS_TEST_FILTER=late_game_apply_census (the test is #[ignore]d; run it with --run-ignored)
 ```
 
 This is an explicitly selected, otherwise ignored in-process profiling test,
@@ -189,7 +189,7 @@ CARGO_PROFILE_DEV_DEBUG=0` and Dockerized Make. No long-job slot was taken.
   and the unchanged 14,000-unit canonical checkpoint at 1/4 workers.
 - `make test-harness-focused HARNESS_TEST_FILTER=perf_scale::match_bench`:
   nine passed; the large census is ignored by ordinary unit runs.
-- `make movement-apply-census`: the explicitly selected large census passed;
+- the explicitly selected large census (`late_game_apply_census`) passed;
   all 60 saved baseline checkpoints agree, with worker equality at both scales.
 
 The baseline run used the instrumented `0df71a07c2e2` simulation (the simulation
