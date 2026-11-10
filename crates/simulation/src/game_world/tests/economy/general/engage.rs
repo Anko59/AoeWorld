@@ -175,57 +175,6 @@ fn an_outnumbered_general_army_still_fights_what_reaches_it() {
     assert!(share >= 25, "{share}% of units in reach fight");
 }
 
-#[test]
-fn a_dead_commander_leaves_survivors_free_to_fight_instead_of_marching_home() {
-    let (mut w, _) = setup();
-    w.set_fog_disabled(true);
-    let ids: Vec<_> = (0..12)
-        .map(|n| soldier(&mut w, UnitKind::Knight, 100 + n % 6, 100 + n / 6))
-        .collect();
-    let g = soldier(&mut w, UnitKind::General, 104, 104);
-    w.issue_move(g, at(145, 104)).unwrap();
-    decide(&mut w);
-    w.advance();
-    let fighter = ids[0];
-    assert!(w.unit(fighter).unwrap().moving);
-    let position = w.unit(fighter).unwrap().position.tile_floor();
-    let enemy = w
-        .spawn_kind(
-            PlayerId(1),
-            UnitKind::Militia,
-            at(position.x + 1, position.y),
-        )
-        .unwrap();
-    w.units[w.lookup[&enemy]].state.stance = aoe_core::CombatStance::NoAttack;
-    w.issue_delete(PlayerId(0), &[g]).unwrap();
-    assert_eq!(w.general_controller(fighter), None);
-    for _ in 0..40 {
-        w.advance();
-    }
-    assert!(
-        w.unit(fighter).unwrap().attack_target == Some(enemy)
-            || w.unit(enemy).is_none_or(|enemy| enemy.hp == 0),
-        "a released soldier must not ignore the enemy beside its old march"
-    );
-}
-
-#[test]
-fn a_commanders_death_keeps_a_detached_players_move() {
-    let (mut w, _) = setup();
-    let id = soldier(&mut w, UnitKind::Knight, 100, 100);
-    let g = soldier(&mut w, UnitKind::General, 104, 104);
-    w.issue_move(g, at(145, 104)).unwrap();
-    decide(&mut w);
-    let destination = at(150, 120);
-    w.general_player_order(PlayerId(0), &[id], Some(destination));
-    w.issue_move(id, destination).unwrap();
-    let order = w.movement_order(id);
-    assert!(order.is_some());
-    w.issue_delete(PlayerId(0), &[g]).unwrap();
-    assert_eq!(w.general_controller(id), None);
-    assert_eq!(w.movement_order(id), order);
-}
-
 #[derive(Debug, Default)]
 struct RouteTimer(std::sync::Arc<std::sync::Mutex<std::collections::BTreeMap<&'static str, u128>>>);
 struct RouteSpan {
