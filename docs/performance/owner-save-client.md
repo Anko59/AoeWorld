@@ -2,9 +2,10 @@
 
 Telemetry: `bbf2409501016e69fe992c3005220cc194aa4284`.
 HUD: `e9161a32717692a69f3a7f2028ccddf12a20b1b2`.
-The wall candidate is that HUD revision plus the adjacent `scene.rs` wall-index
-change committed with this report. Its exact working diff and WASM SHA-256
-are recorded in `.cache/owner-save/final.json`; `wall-fix.patch` preserves the diff.
+Wall index: `94d1f7e988f58239f31c4670242dbcc6686a50e2`.
+The wall measurement used that commit's client change before it was committed.
+Its exact working diff and WASM SHA-256 are recorded in
+`.cache/owner-save/final.json`; `wall-fix.patch` preserves the matching diff.
 
 The copied owner save is `1794176817-first.save`, SHA-256
 `c51582bf7eb4007ac5cdb72ef2ab3a733c7a451532b6b41d6816a2fc9c85c11a`.
@@ -84,11 +85,19 @@ claim.
 | Warm return | 1963 | 442 | 414 |
 | Far transition | 6475 | 775 | 1347 |
 
-An additional current-map/TownCenter/later-native-frame observation was
-5013 ms after the HUD fix and 3054 ms with the wall index.
-It was observed concurrently with cadence sampling. No equivalent strict
-baseline was captured. Cold-context opening remains expensive: the HUD video
-needed about 21.2 seconds before its checked recording start.
+The stronger observations below require the restored map identity, a TownCenter
+actor and a later rendered native frame. The reload observation runs concurrently
+with cadence sampling. The recording observation uses a fresh browser context,
+then captures a screenshot before timing the recorded segment.
+
+| Normal-view observation, ms | Baseline | HUD fix | HUD + wall index |
+| --- | ---: | ---: | ---: |
+| Reload: current map, TownCenter, later native frame | not captured | 5013 | 3054 |
+| Fresh recording context: checked native scene | not captured | 21186 | 20718 |
+
+These are distinct from the earlier readiness proxy. No equivalent strong
+baseline was captured, and a fresh context does not establish cold OS/server
+caches. Normal opening still takes about 21 seconds in the recording contexts.
 Cold-cache completeness and arbitrary camera/device recovery remain unqualified.
 
 The HUD-run normal jump fetched four terrain responses and six native frame
@@ -145,6 +154,6 @@ The final timed page's Resource Timing records include three manifest bodies
 (39,908,589 bytes), 33 PNG body entries (62,334,244 bytes) and 30 native cell
 chunks (30,656,983 bytes), including camera moves and repeated cached entries.
 These body sizes follow HTTP content decoding; they are not decoded pixel or
-GPU memory. The final cold-context recording start was 20.7 seconds. Fetch
+GPU memory. The final fresh-context recording start was 20.7 seconds. Fetch
 records alone do not establish its parsing/decode/upload breakdown; further
 cold-opening work and smooth-game qualification remain outstanding.
