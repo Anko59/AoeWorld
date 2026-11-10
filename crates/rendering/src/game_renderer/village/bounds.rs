@@ -129,7 +129,7 @@ pub(super) fn object_depth(object: WorldObject) -> f64 {
                 .building_slot()
                 .is_some_and(|slot| (65..=70).contains(&slot)) =>
         {
-            1.25
+            super::decks::DECK_CLEARANCE
         }
         WorldObject::Unit(unit) if unit.kind.building_side().is_some() => {
             super::super::ground::BUILDING_CLEARANCE

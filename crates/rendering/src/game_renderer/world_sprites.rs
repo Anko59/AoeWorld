@@ -14,6 +14,8 @@ pub use fish::scene_resource_animation_frame;
 
 #[path = "village/bounds.rs"]
 mod bounds;
+#[path = "village/decks.rs"]
+mod decks;
 use bounds::object_depth;
 #[path = "village/actors.rs"]
 mod actor_frames;
@@ -144,6 +146,7 @@ pub(super) fn emit_world_sprite_frames(
         viewport: camera.viewport,
         focus_elevation_meters: camera.focus_elevation_meters,
     };
+    let decks = decks::Decks::new(units);
     // Preserve resource-before-unit submission without allocating/copying an
     // unsorted intermediate object vector on every frame.
     for &r in resources.iter().filter(|&&r| environment::present(art, r)) {
@@ -315,12 +318,12 @@ pub(super) fn emit_world_sprite_frames(
             unit.position[1],
             f64::from(unit.elevation_meters),
         ]);
-        let depth = base
-            + crate::ground_contact::frame_clearance(
+        let depth =
+            base + crate::ground_contact::frame_clearance(
                 object_depth(object) - base,
                 frame.size[1],
                 frame.anchor[1],
-            );
+            ) + decks.lift(unit.position);
         if let Some((shadow, shadow_frame)) = alpha_shadow(
             frame,
             unit.position,
