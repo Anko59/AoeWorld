@@ -30,12 +30,7 @@ pub(super) fn select(
         let identity = source.manifest_source();
         if source.is_native()
             && source_present(manifest, &identity)
-            && manifest
-                .frames
-                .iter()
-                .filter(|f| f.source == identity)
-                .count()
-                != source.frames() as usize
+            && manifest.frames.sources().len(&identity) != source.frames() as usize
         {
             return Err(JsValue::from_str("Unsupported native actor topology"));
         }

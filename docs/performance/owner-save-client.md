@@ -157,3 +157,54 @@ These body sizes follow HTTP content decoding; they are not decoded pixel or
 GPU memory. The final fresh-context recording start was 20.7 seconds. Fetch
 records alone do not establish its parsing/decode/upload breakdown; further
 cold-opening work and smooth-game qualification remain outstanding.
+
+
+## Startup source index (extension)
+
+A cache-disabled fresh-context measurement without video capture took 21,238 ms
+before source indexing and 12,641 ms after it to the checked normal scene.
+The same map, camera, viewport and hardware WebGL2 path were used. This check
+requires the current map, a TownCenter actor, settled terrain and a subsequent
+native frame; screenshots show the complete sampled base. The live match and
+shared-host load continue changing, so these are informational single runs.
+
+| Observation, ms | Before index | After index |
+| --- | ---: | ---: |
+| Local art initialized | 18048 | 9826 |
+| Connected | 18449 | 10192 |
+| Checked current-map native scene | 21238 | 12641 |
+| Jump +64,+32 | 1047 | 1715 |
+| Warm return | 1165 | 1085 |
+| Distant owned base (1123,895) | 845 | 778 |
+| Return from distant base | 1041 | 1050 |
+
+The startup CPU profile sampled about 4.2 seconds in source-frame searches,
+building-part resolution and building selection. Repeated queries scanned the
+whole 157,854-record catalogue, including unrelated native actor sheets.
+The loader now builds a source/frame lookup once. It keeps original record
+indices and validates each requested contiguous prefix, rejecting duplicates
+and missing rows as before. Any mutable metadata access invalidates the index,
+including overlay iteration, append and direct edits. The manifest format and
+pixel/animation selection remain the current format; no alternate path is kept.
+
+Five new native tests cover interleaved records, malformed prefixes, large
+catalogues, overlay append and mutation invalidation. Client native tests pass
+31/31. A second, profiled pair measured 20,317 ms before and 16,744 ms after;
+source searches no longer appear among the twelve largest sampled functions.
+The two pairs show the expected shared-host timing spread. Existing
+source-selection and strict-manifest WASM tests are compiled by lint; standalone WASM execution retains the port limitation described above.
+
+Evidence: `.cache/owner-save/loading-before.json`, `loading-index-verified.json`,
+`loading-profile-before.cpuprofile` and `source-index.patch`. The two aborted
+terrain requests in the after run were superseded camera demand; checked
+frames report zero failed terrain chunks. The direct-capture setup helper was
+corrected to perform the normal UI's existing reconnect action after restore;
+disconnected attempts are excluded. Camera checks allow views without a
+TownCenter; the initial busy-base check still requires one.
+
+Startup and performance browser flows pass 16/16 across their configured
+WebGPU/WebGL2 projects, with zero failures, skips or flaky results. Hooks,
+formatting, lint, structure, architecture, browser and documentation checks pass.
+WASM gzip is 398,815 bytes (+6.1% against the unchanged 375,952-byte baseline),
+within the +25% cap. The normal base and four camera-jump screenshots were
+inspected; no missing terrain or native art was observed in those sampled views.
