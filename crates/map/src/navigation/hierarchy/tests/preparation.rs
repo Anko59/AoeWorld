@@ -126,7 +126,7 @@ fn a_nearby_component_query_only_composes_a_local_corridor() {
             .unwrap()
             .chunks
             .values()
-            .all(|(_, chunk, _)| chunk.costs.get().is_none()),
+            .all(|(chunk, _)| chunk.costs.get().is_none()),
         "connectivity does not need any inter-portal floods"
     );
     assert!(matches!(
@@ -140,7 +140,7 @@ fn a_nearby_component_query_only_composes_a_local_corridor() {
             .unwrap()
             .chunks
             .values()
-            .any(|(_, chunk, _)| chunk.costs.get().is_some()),
+            .any(|(chunk, _)| chunk.costs.get().is_some()),
         "the first route retains its local costs"
     );
 }

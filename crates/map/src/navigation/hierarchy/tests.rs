@@ -412,3 +412,28 @@ fn opening_ground_during_an_abstract_search_keeps_its_portal_snapshot_valid() {
     );
 }
 mod mapped;
+
+#[test]
+fn pinned_collision_snapshots_reuse_their_own_portal_graphs() {
+    let mut cache = PortalCache::with_limit(1 << 20);
+    let old = portals_of(4);
+    let current = portals_of(5);
+    cache.insert((2, 3), [1; 32], Arc::clone(&old));
+    cache.insert((2, 3), [2; 32], Arc::clone(&current));
+    for _ in 0..10 {
+        assert!(
+            cache
+                .chunk((2, 3), [1; 32])
+                .is_some_and(|p| Arc::ptr_eq(&p, &old)),
+            "a retained search must reuse its captured collision graph"
+        );
+        assert!(
+            cache
+                .chunk((2, 3), [2; 32])
+                .is_some_and(|p| Arc::ptr_eq(&p, &current))
+        );
+    }
+    assert_eq!(cache.len(), 2);
+    assert_eq!(cache.retained_bytes(), old.bytes() + current.bytes());
+    assert!(cache.chunk((2, 3), [3; 32]).is_none());
+}
