@@ -133,10 +133,17 @@ export function initBuildings() {
       return false;
     },
     refresh:menu,
+    // Top-bar age-up research bar: `age` is the age being researched (1-3), 0 when none.
+    ageProgress(age,fraction) {
+      const bar=byId('age-progress');bar.hidden=!age;if(!age)return;
+      const percent=Math.floor(Math.min(1,Math.max(0,fraction))*100);
+      bar.style.setProperty('--progress',percent+'%');bar.querySelector('small').textContent=percent+'%';
+      bar.setAttribute('aria-valuenow',String(percent));bar.title=`Advancing to ${['','Feudal','Castle','Imperial'][age]} Age · ${percent}%`;
+    },
     update(v) {
       state=Array.from(v);menu();
       window.aoeNavigation?.strategic?.building?.ready(v.slice(buildStart, buildStart + commands.length));
-      byId('age').textContent=['I  Dark Age','II  Feudal Age','III  Castle Age','IV  Imperial Age'][v[0]]??'I  Dark Age';
+      byId('age-name').textContent=['I  Dark Age','II  Feudal Age','III  Castle Age','IV  Imperial Age'][v[0]]??'I  Dark Age';
       const kind=v[1],selected=kind>=0,owned=byId('selection').dataset.owned==='true';
       const availability=foundationCount+1+(v[foundationCount]??0)*3;
       militaryTrain.forEach(({button,site,kind:unit})=>{button.hidden=!owned||kind!==site||v[4]<1000||v[availability+unit]===0;action(button,`Train ${button.textContent}`,v[availability+unit]);});

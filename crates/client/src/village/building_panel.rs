@@ -9,17 +9,46 @@ use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 
 #[wasm_bindgen(
-    inline_js = "export function buildings_update(v) { window.aoeBuildings?.update(v); } export function placement_update(v) { window.aoeBuildings?.preview(v); } export function buildings_bind(callback) { window.aoeBuildings.bind(callback); }"
+    inline_js = "export function buildings_update(v) { window.aoeBuildings?.update(v); } export function placement_update(v) { window.aoeBuildings?.preview(v); } export function age_progress_update(age, fraction) { window.aoeBuildings?.ageProgress(age, fraction); } export function buildings_bind(callback) { window.aoeBuildings.bind(callback); }"
 )]
 extern "C" {
     fn buildings_update(v: &[f64]);
     fn placement_update(v: &[f64]);
+    fn age_progress_update(age: f64, fraction: f64);
     #[wasm_bindgen(catch)]
     fn buildings_bind(callback: &js_sys::Function) -> Result<(), JsValue>;
 }
 
+/// Target age (1 Feudal, 2 Castle, 3 Imperial) and completed fraction of the
+/// owner's age-up research, found on whichever building carries it, so the top
+/// bar needs no selection. `None` while no age is being researched.
+pub(super) fn age_research_progress(
+    buildings: &[aoe_protocol::GameplayBuildingState],
+    owner: aoe_core::PlayerId,
+) -> Option<(u8, f64)> {
+    buildings
+        .iter()
+        .filter(|b| b.player == owner)
+        .filter_map(|b| b.research)
+        .find_map(|r| {
+            let age = match r.tech {
+                Tech::FeudalAge => 1,
+                Tech::CastleAge => 2,
+                Tech::ImperialAge => 3,
+                _ => return None,
+            };
+            Some((
+                age,
+                (r.progress_ticks as f64 / r.total_ticks.max(1) as f64).clamp(0.0, 1.0),
+            ))
+        })
+}
+
 #[inline(never)]
 pub(super) fn update(client: &Client) {
+    let (age, fraction) =
+        age_research_progress(&client.village.buildings, owner(client)).unwrap_or((0, 0.0));
+    age_progress_update(f64::from(age), fraction);
     let player = client
         .village
         .players

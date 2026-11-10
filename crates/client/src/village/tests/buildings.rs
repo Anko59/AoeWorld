@@ -219,3 +219,27 @@ fn training_buttons_allow_queues_at_or_above_population_space() {
         1.0
     );
 }
+
+#[wasm_bindgen_test]
+fn age_progress_follows_only_the_owners_age_research_on_any_building() {
+    use super::super::building_panel::age_research_progress as progress;
+    use aoe_protocol::{ResearchState, Tech};
+    let research = |tech, done, total| ResearchState {
+        tech,
+        progress_ticks: done,
+        total_ticks: total,
+    };
+    let mut centre = building(1);
+    let mut mill = building(2);
+    assert_eq!(progress(&[centre.clone(), mill.clone()], PlayerId(0)), None);
+    // Ordinary technologies are not age-ups.
+    mill.research = Some(research(Tech::Loom, 10, 20));
+    assert_eq!(progress(&[mill.clone()], PlayerId(0)), None);
+    centre.research = Some(research(Tech::CastleAge, 30, 120));
+    let list = [mill.clone(), centre.clone()];
+    assert_eq!(progress(&list, PlayerId(0)), Some((2, 0.25)));
+    // An opponent's age-up and a zero-length research never leak through.
+    assert_eq!(progress(&list, PlayerId(1)), None);
+    centre.research = Some(research(Tech::ImperialAge, 5, 0));
+    assert_eq!(progress(&[centre], PlayerId(0)), Some((3, 1.0)));
+}

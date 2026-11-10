@@ -63,7 +63,11 @@ async fn instance_buffer_grows_at_capacity_boundaries_with_layer_pressure() {
         .map(|(sprite, _)| sprite)
         .collect::<Vec<_>>();
     let border = [(0.0, 16.0), (32.0, 32.0)].map(|(x, y)| aoe_core::ScreenPoint { x, y });
-    let grid = crate::game_grid::grid_sprites(&[border], camera.viewport);
+    let border = crate::game_grid::GridLine {
+        ends: border,
+        depths: [0.0; 2],
+    };
+    let grid = crate::game_grid::grid_sprites(&[border], camera.viewport, 0.0);
     assert_eq!(ring.len(), crate::game_grid::SELECTION_RING_SPRITES);
     assert!(!grid.is_empty());
     let mut sprites = objects;

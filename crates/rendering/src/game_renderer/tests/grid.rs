@@ -39,7 +39,10 @@ fn field(side: i32, raised: Option<[i32; 2]>) -> Vec<SceneTerrain> {
 }
 
 fn segments(terrain: &[SceneTerrain], camera: SceneCamera) -> Vec<[ScreenPoint; 2]> {
-    game_grid::grid_segments(&projected_surface_triangles(terrain, camera), camera.zoom)
+    game_grid::grid_lines(&projected_surface_triangles(terrain, camera), camera.zoom)
+        .into_iter()
+        .map(|line| line.ends)
+        .collect()
 }
 
 fn has(segments: &[[ScreenPoint; 2]], ends: [ScreenPoint; 2]) -> usize {
@@ -139,7 +142,8 @@ fn grid_thins_out_instead_of_filling_a_distant_view() {
         assert!(step * 64.0 * zoom >= 16.0);
     }
     // The overlay is one translucent pixel wide, never an opaque fill.
-    let sprites = game_grid::grid_sprites(&segments(&terrain, camera), camera.viewport);
+    let lines = game_grid::grid_lines(&projected_surface_triangles(&terrain, camera), camera.zoom);
+    let sprites = game_grid::grid_sprites(&lines, camera.viewport, 0.0);
     assert!(!sprites.is_empty());
     for pair in sprites.as_chunks::<2>().0 {
         assert_eq!(pair[0].color[3], -2.0);
