@@ -148,9 +148,7 @@ impl GameWorld {
             );
         } else {
             self.stop_route(index, Some(GameWorldError::Unreachable));
-            if let Ok(at) = self.active_movers.binary_search(&id) {
-                self.active_movers.remove(at);
-            }
+            self.active_movers.remove(id);
             changed.push(id);
         }
     }
