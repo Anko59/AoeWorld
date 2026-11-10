@@ -94,6 +94,21 @@ fn idle_units_still_take_a_new_goal_within_one_tile() {
 }
 
 #[test]
+fn nearby_interaction_contacts_remain_distinct_but_exact_repeats_keep_progress() {
+    let mut w = world();
+    let id = w.spawn_unit(PlayerId(0), at(20, 20)).unwrap();
+    w.issue_task_move(id, at(100, 20)).unwrap();
+    for _ in 0..8 {
+        w.advance();
+    }
+    let before = w.canonical_hash();
+    w.issue_task_move(id, at(100, 20)).unwrap();
+    assert_eq!(w.canonical_hash(), before);
+    w.issue_task_move(id, at(101, 20)).unwrap();
+    assert_eq!(w.movement_order(id).unwrap().destination, at(101, 20));
+}
+
+#[test]
 fn repeated_goal_orders_replay_with_one_and_four_workers() {
     let run = |workers| {
         rayon::ThreadPoolBuilder::new()

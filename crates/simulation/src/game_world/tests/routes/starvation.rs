@@ -351,7 +351,7 @@ fn repeated_waiting_goals_retain_search_progress_and_the_original_deadline() {
     let before = w.canonical_hash();
     let requests = w.order_demand()[crate::OrderIssuer::Automation as usize].route_requests;
     for goal in [tile_position(CX, CY), tile_position(CX + 1, CY)] {
-        assert_eq!(w.issue_task_move(id, goal), Ok(true));
+        assert_eq!(w.issue_move(id, goal), Ok(true));
         assert_eq!(w.units[index].planning_since, started);
         assert_eq!(
             w.canonical_hash(),

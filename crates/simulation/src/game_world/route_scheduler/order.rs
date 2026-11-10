@@ -6,6 +6,7 @@
 use super::issue::MapRoutePlan;
 use crate::game_path::{next_waypoint, route_waypoint, segment_length};
 use crate::game_world::facing_for;
+use crate::game_world::orders::{GoalPrecision, diagnostics::near_goal};
 use crate::{GameWorld, GameWorldError, MovementOrder};
 use aoe_core::{EntityId, TileCoord, WorldPosition};
 use aoe_map::{MovementOutcome, RoutePlanner};
@@ -96,10 +97,11 @@ impl GameWorld {
     }
 
     #[track_caller]
-    pub(crate) fn issue_task_move(
+    pub(crate) fn issue_move_goal(
         &mut self,
         id: EntityId,
         destination: WorldPosition,
+        precision: GoalPrecision,
     ) -> Result<bool, GameWorldError> {
         let index = *self.lookup.get(&id).ok_or(GameWorldError::UnknownEntity)?;
         if self.units[index].state.hp == 0 || self.embarked(id) {
@@ -122,7 +124,13 @@ impl GameWorld {
             return Err(GameWorldError::InvalidPosition);
         }
         // Keep the existing route, search frontier, deadline and queued waypoints.
-        if self.moving_towards(id, destination) {
+        let unit = &self.units[index];
+        if unit.formation.is_none()
+            && unit.order.is_some_and(|order| match precision {
+                GoalPrecision::Contact => order.destination == destination,
+                GoalPrecision::Area => near_goal(order.destination, destination),
+            })
+        {
             return Ok(true);
         }
         let origin = self.units[index].state.position;

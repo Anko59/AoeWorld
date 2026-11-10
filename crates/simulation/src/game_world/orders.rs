@@ -3,7 +3,22 @@ use super::*;
 pub(crate) mod diagnostics;
 pub use diagnostics::{OrderDemand, OrderIssuer};
 
+/// Area commands tolerate a tile; interaction contacts need the exact point.
+pub(crate) enum GoalPrecision {
+    Contact,
+    Area,
+}
+
 impl GameWorld {
+    #[track_caller]
+    pub(crate) fn issue_task_move(
+        &mut self,
+        id: EntityId,
+        destination: WorldPosition,
+    ) -> Result<bool, GameWorldError> {
+        self.issue_move_goal(id, destination, GoalPrecision::Contact)
+    }
+
     pub(crate) fn moving_towards(&self, id: EntityId, destination: WorldPosition) -> bool {
         self.lookup.get(&id).is_some_and(|&index| {
             let unit = &self.units[index];
@@ -26,7 +41,7 @@ impl GameWorld {
         } else {
             self.spread_destination(id, destination)?
         };
-        let result = self.issue_task_move(id, destination)?;
+        let result = self.issue_move_goal(id, destination, GoalPrecision::Area)?;
         let retained_queue = if repeated {
             self.move_queues.remove(&id)
         } else {
