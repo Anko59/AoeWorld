@@ -131,6 +131,30 @@ fn site_projection_caps_after_owned_capitals_and_castles_and_visibility() {
 }
 
 #[wasm_bindgen_test]
+fn site_projection_hides_construction_before_cap_and_keeps_completed_buildings() {
+    use crate::playground::game::strategic::site_buildings;
+    use aoe_core::PlayerId;
+    use aoe_protocol::ConstructionState;
+    let mut buildings: Vec<_> = (0..2050).map(super::buildings::building).collect();
+    for (index, b) in buildings[..2048].iter_mut().enumerate() {
+        b.kind = aoe_protocol::BuildingKind::ALL[index % aoe_protocol::BuildingKind::ALL.len()];
+        b.construction = ConstructionState::UnderConstruction;
+        b.progress_permille = 999;
+    }
+    buildings[2049].player = PlayerId(1);
+    let ids = |explored| {
+        site_buildings(&buildings, PlayerId(0), move |_| explored)
+            .map(|b| b.id)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(ids(true).len(), 2);
+    assert_eq!(ids(true), vec![EntityId(2048), EntityId(2049)]);
+    assert_eq!(ids(false), vec![EntityId(2048)]);
+    buildings[0].construction = ConstructionState::Complete;
+    assert_eq!(site_buildings(&buildings, PlayerId(0), |_| true).count(), 3);
+}
+
+#[wasm_bindgen_test]
 fn site_record_ownership_is_explicit_even_when_player_colours_match() {
     use crate::playground::game::strategic::site_record;
     use aoe_core::PlayerId;
