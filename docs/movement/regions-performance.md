@@ -26,15 +26,16 @@ Diagnostic output is retained under ignored `.cache/region-perf/`.
 | original HEAD `8f4ec2ac5` | 296,637,438 | +50.15% |
 | `602e814aa` + existing `098852aca` build repair | 317,894,997 | +60.91% |
 | Portal cache + near-route proof reuse | 271,989,950 | +37.67% |
-| Above + sparse region point reads (current source) | 265,865,368 | +34.57% |
+| Above + sparse region point reads (`6701a7a29`) | 265,865,368 | +34.57% |
+| Above + two-way point memo (current source) | 260,977,583 | +32.10% |
 
 The local 3% ceiling is **203,487,343** instructions. The repository's stored
 CI comparison is 240,557,748; it is not the result of the fresh merge-base run.
 The supplied CI HEAD result, 296,624,316, is close to the measured HEAD.
 No baseline was repinned or relaxed.
-The current source reduces original HEAD by 30,772,070 instructions (10.37%),
+The current source reduces original HEAD by 35,659,855 instructions (12.02%),
 but **does not meet the 3% target**. Its count still exceeds that ceiling by
-62,378,025 instructions. The dependent frames work is not qualified by this
+57,490,240 instructions. The dependent frames work is not qualified by this
 partial improvement.
 
 ## Bisect limits
@@ -59,7 +60,7 @@ predecessor measurement is already worse than HEAD.
 
 Inclusive counts (nested rows must not be summed):
 
-| Stage | Measured base | Original HEAD | Current source |
+| Stage | Measured base | Original HEAD | `6701a7a29` |
 | --- | ---: | ---: | ---: |
 | Portal guidance | 270,582 | 65,714,982 | 54,211,135 |
 | Portal graph construction | 0 | 58,448,914 | 38,863,076 |
@@ -87,7 +88,7 @@ local cold orders, gates, and the five-deployment General engagement gate.
 The replay pin remains
 `2a0848c5c015012cd58c02c48a62c0849bca08e16a8db429275857df1aba9730`.
 
-## Current proof and point-read increment
+## Proof and point-read increment (`6701a7a29`)
 
 A successful current directed region query now discharges the near planner's
 duplicate reverse pocket flood, only when both the current leg origin and
@@ -115,10 +116,29 @@ region topology equivalence, cancellation, bounded pocket work, and the distant
 river detour. Five focused region simulation tests pass after the fixture
 correction. The full-population replay also passes (194.782 seconds). The
 earlier full simulation run passed 1,260 of 1,261 tests; its sole failure was
-the old replay pin, before the explained repin above. The final full run passes
+the old replay pin, before the explained repin above. The full run at this
+increment passes
 **all 1,262 simulation tests** (567.455 seconds, zero skipped), including the
 one/four-worker checkpoint and army bridge, river, recovery and General gates.
 The full map suite also passes **all 404 tests** (158.042 seconds, zero skipped).
+
+## Two-way point memo
+
+Composed-point reads remain a substantial cost after localizing sparse queries.
+The fixed native point/base tables now use two-entry sets instead of replacing
+each colliding entry immediately. Slot counts and retained byte budgets are
+unchanged; the browser still allocates no table. Immutable results, cancellation
+and source-error handling are unchanged. The collision regression fails before
+the change; it checks both tables' retained pair, fixed capacity and subsequent
+eviction. The implementation retains insertion order within each set.
+
+The same instruction target measures 260,977,583, 1.84% below `6701a7a29`.
+All **405 map tests** pass (152.143 seconds), as do **21 focused simulation
+tests**, including the unchanged full-population checkpoint (187.698 seconds),
+one/four-worker equality, crowd gathering, General engagement, regions and
+certified endpoints. Static/hook checks pass. No further replay repin was
+needed. The 1,262-test full simulation run above predates this cache-only change;
+it was not repeated. The saved count is `point-associative-working.ndjson`.
 
 Exact focused commands (all with `NEXTEST_TEST_THREADS=2`, serial builds):
 
