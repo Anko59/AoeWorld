@@ -24,7 +24,12 @@ async fn vassal_demo_delivers_attack_recall_and_return() {
     let mut damaged = false;
     for _ in 0..6_000 {
         while let Ok(message) = receiver.try_recv() {
-            encode_gameplay_server(&message).expect("valid Vassal match wire frame");
+            encode_gameplay_server(&message).unwrap_or_else(|error| {
+                panic!(
+                    "valid Vassal match wire frame: {error:?}; {:?}",
+                    aoe_protocol::gameplay_server_violations(&message)
+                )
+            });
             let (tick, buildings, units) = match message {
                 GameplayServerMessage::Snapshot {
                     tick,

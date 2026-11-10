@@ -69,7 +69,7 @@ impl GameWorld {
                 w.insert_building(
                     PlayerId(0),
                     BuildingKind::House,
-                    TileRect::from_xywh(129, 127, 2, 3),
+                    TileRect::from_xywh(129, 127, 2, 2),
                     true,
                 )?;
                 // Position setup only; the encounter begins through a hunt order.

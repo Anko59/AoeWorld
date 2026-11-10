@@ -3,6 +3,43 @@ use aoe_core::{PlayerId, Seed, TileCoord, TileRect, WorldConfig, WorldPosition};
 use aoe_protocol::GameplayServerMessage;
 use aoe_simulation::{AnimalKind, GameWorld};
 
+#[test]
+fn an_approaching_wolf_streams_a_valid_walk_before_its_melee_attack() {
+    let (mut world, _) =
+        GameWorld::behaviour_demo(Seed(7), aoe_simulation::BehaviourScene::Wolf).unwrap();
+    let mut approached = false;
+    let mut attacked = false;
+    for _ in 0..300 {
+        world.advance();
+        let animals = super::animals(&world, TileRect::from_xywh(0, 0, 256, 256), PlayerId(0));
+        for animal in &animals {
+            if animal.kind != aoe_protocol::AnimalKind::Wolf {
+                continue;
+            }
+            if animal.moving && animal.task == aoe_protocol::AnimalTask::Idle {
+                assert_eq!(animal.target, None, "walking is not an attack pose");
+                approached = true;
+            }
+            attacked |=
+                animal.task == aoe_protocol::AnimalTask::Attacking && animal.target.is_some();
+        }
+        let message = GameplayServerMessage::WildlifeState {
+            revision: 1,
+            tick: world.tick(),
+            animals,
+        };
+        let bytes = aoe_protocol::encode_gameplay_server(&message).unwrap();
+        assert_eq!(
+            aoe_protocol::decode_gameplay_server(&bytes).unwrap(),
+            message
+        );
+        if approached && attacked {
+            break;
+        }
+    }
+    assert!(approached && attacked, "wolf must walk, then reach melee");
+}
+
 #[tokio::test]
 async fn subscription_and_ticks_never_disclose_an_unseen_wolf_or_enemy() {
     let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();

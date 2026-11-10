@@ -149,13 +149,11 @@ impl GameWorld {
             a.state.facing,
         );
         if distance(a.state.position, target.position) > radius(1) {
-            self.move_animal(
-                a,
-                i64::from(target.position.x) - i64::from(a.state.position.x),
-                i64::from(target.position.y) - i64::from(a.state.position.y),
-            );
+            a.state.task = AnimalTask::Idle;
+            self.move_predator(a, target.position);
             return;
         }
+        a.herd = None;
         if a.cooldown > 0 {
             return;
         }
@@ -180,7 +178,7 @@ impl GameWorld {
         a.cooldown = (self.config.tick_hz * rules.attack_period_centiseconds / 100).max(1);
     }
 
-    fn move_animal(&self, a: &mut StoredAnimal, dx: i64, dy: i64) {
+    pub(super) fn move_animal(&self, a: &mut StoredAnimal, dx: i64, dy: i64) {
         a.state.facing = crate::game_world::facing_for(dx, dy, a.state.facing);
         let numerator =
             u64::from(a.state.kind.rules().speed_hundredths) * FIXED_SUBUNITS_PER_TILE as u64;

@@ -48,6 +48,11 @@ fn behaviour_recording_scenes_have_a_live_primary_and_deterministic_setup() {
         let (b, _) = GameWorld::behaviour_demo(Seed(7), scene)
             .unwrap_or_else(|e| panic!("{scene:?}: {e:?}"));
         assert!(a.unit(primary).unwrap().hp > 0);
+        for building in a.buildings() {
+            let rules = building.kind.rules();
+            assert_eq!(building.footprint.width(), rules.side);
+            assert_eq!(building.footprint.height(), rules.depth);
+        }
         assert_eq!(a.canonical_hash(), b.canonical_hash());
         if matches!(scene, Bridge) {
             let crate::Terrain::Map { generator, .. } = a.terrain() else {

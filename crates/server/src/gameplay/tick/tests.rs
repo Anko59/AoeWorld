@@ -73,13 +73,15 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
 /// Sergeant identity adds one byte per unit; all six session message counts are unchanged.
 // Holdings adds 2/4/3/3/9/2 frames; filtering it restores all six pre-boundary counts.
 // Armies work (e9b3fde5c: a body beside a deck lane returns to its tile centre first) moved only the fifth session.
+// #745 changes wildlife flight and melee behavior; regenerate the current
+// streams with all message counts, workload and visibility assertions intact.
 const PINNED: [(usize, u64); SEATS + 1] = [
-    (409, 16881762939065787622),
-    (191, 6076329610167181038),
-    (63, 2859331523750769443),
-    (179, 15129836462772536355),
-    (429, 578956678800935479),
-    (409, 7665489075394365115),
+    (409, 4178238537750952430),
+    (191, 3494928265427891350),
+    (63, 12717941767714454924),
+    (179, 11440359766668199837),
+    (429, 17975313275392204160),
+    (409, 6640147559241937027),
 ];
 
 #[tokio::test(flavor = "multi_thread")]
