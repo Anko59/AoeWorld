@@ -63,7 +63,7 @@ html[data-far-art=original] .far-tab { border:8px solid transparent; border-imag
 html[data-far-art=original] .dock-btn { border:6px solid transparent; border-image:var(--far-key) 16 fill / 6px stretch; background:none; width:46px; height:48px; padding:0; }
 .dock-btn .icon { width:26px; height:26px; display:block; }
 .dock-btn .art-icon { display:block; line-height:0; }
-.dock-btn kbd { position:absolute; right:-2px; top:auto; bottom:-2px; font:700 8px/10px system-ui,sans-serif; background:#000b; color:#f0d58a; border:1px solid #f0d58a66; border-radius:3px; padding:0 2px; }
+.dock-btn kbd { position:absolute; right:-2px; top:auto; bottom:-2px; font:700 8px/8px system-ui,sans-serif; background:#000b; color:#f0d58a; border:1px solid #f0d58a66; border-radius:2px; padding:0 2px; box-sizing:content-box; height:8px; }
 .dock-btn[aria-pressed=false] { opacity:.5; filter:grayscale(.7); }
 .dock-btn:disabled { opacity:.35; cursor:default; }
 .dock-btn:hover:not(:disabled) { filter:brightness(1.3); }
