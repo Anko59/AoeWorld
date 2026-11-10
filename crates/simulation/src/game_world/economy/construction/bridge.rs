@@ -44,16 +44,26 @@ impl GameWorld {
     ) -> Result<EntityId, EconomyError> {
         let builders = self.validate_builders(player, builders)?;
         self.validate_build_queue(&builders, 1, queued)?;
-        let snapped = aoe_core::snap_bridge_start(from, to, |span| {
-            self.validate_bridge_placement(span).is_ok()
-                && span.tiles().iter().all(|tile| {
-                    self.validate_explored_footprint(
-                        player,
-                        TileRect::from_xywh(tile.x, tile.y, 1, 1),
-                    )
-                    .is_ok()
-                })
-        });
+        let snapped = aoe_core::snap_bridge_start(
+            from,
+            to,
+            |tile| match &self.terrain {
+                Terrain::Map { generator, .. } => {
+                    generator.tile_at(tile).map(|t| t.water != WaterKind::None)
+                }
+                _ => None,
+            },
+            |span| {
+                self.validate_bridge_placement(span).is_ok()
+                    && span.tiles().iter().all(|tile| {
+                        self.validate_explored_footprint(
+                            player,
+                            TileRect::from_xywh(tile.x, tile.y, 1, 1),
+                        )
+                        .is_ok()
+                    })
+            },
+        );
         let span = snapped
             .or_else(|| BridgeSpan::new(from, to))
             .ok_or(EconomyError::InvalidFootprint)?;
