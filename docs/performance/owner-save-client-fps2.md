@@ -237,3 +237,78 @@ candidate is preserved for review, not qualified for publication.
 average normal-FPS target was observed, but far-view smoothness and the browser
 failures remain outstanding at the end of the time box. Standalone WASM tests,
 full CI suites and dedicated-hardware qualification were not run.
+
+## Final in-process confirmation
+
+After the owner finished playing, the unchanged production code at
+`fa7b6f8d87952aa8b567dfdf3ed6cb38d6b03ef4` was measured again in visible
+Chrome 156.0.8078.47 on the same hardware WebGL2 path, camera and viewport.
+This confirmation waits for the restored map hash, TownCenter, settled terrain
+and a subsequent painted native frame before starting each 120-second sample.
+The earlier runs started 0.2–0.8 seconds before that strict readiness point.
+RAF, game-stage summaries and Long Tasks were collected inside the page;
+no CDP profiler, compilation or video encoding ran during cadence sampling.
+
+| Code / sample | Normal FPS | Normal p95, ms | Far FPS | Far p95, ms |
+| --- | ---: | ---: | ---: | ---: |
+| `a78991dcc`, baseline + review fixes | 13.99 | 122.1 | 16.90 | 144.8 |
+| `2c3b29631`, batch ordering | 15.97 | 111.7 | 13.17 | 212.1 |
+| `f0b4322dc`, idle visibility | 13.78 | 144.2 | 16.62 | 146.7 |
+| `fa7b6f8d8`, viewport preparation | 33.33 | 75.5 | 20.67 | 126.1 |
+| `fa7b6f8d8`, final in-process confirmation | 43.30 | 63.2 | 31.98 | 97.7 |
+
+Final normal frame p50/max: 17.4/477.1 ms; far: 18.4/1228.3 ms. Average FPS
+exceeds 30 in both final samples, but those tails do not establish smooth play.
+The observer recorded 421 normal and 475 far long tasks, with longest durations
+469 and 1064 ms. These are observed main-thread task durations, not isolated
+CPU costs or proof of a particular cause. Final normal-stage p50/p95 summaries:
+interpolation 3.3/6.9, culling 0.9/1.9, sprites 4.0/8.4, UI 0.2/44.8 ms.
+Far UI remains 0.1/78.9 ms by the same stage-summary method.
+
+The shared host's one-minute load rose from 19.81 at capture start to 46.87
+after normal and 37.46 after far, on twelve cores. These runs are not controlled
+speedup estimates. Human starting population/buildings were 2866/7628; ending
+server rate was 5.93 ticks/s. The source save and local copy retain the SHA-256
+recorded above. Both cadence endpoints were connected, painted, with zero
+pending terrain. Seventeen aborted telemetry/terrain/minimap requests are
+retained in the raw capture; they are not silently excluded. Complete evidence:
+`.cache/owner-save/final-inprocess.json`, its capture helper and video probe.
+The served WASM hash still matches the viewport build listed above.
+
+The final five-file browser run passed 53/54 cases in 322 seconds. The only
+failure was an intro/menu case with 37 `ERR_NETWORK_CHANGED` console entries
+while loading modules, before entering the game. One unchanged startup-file
+retry passed 6/8 in 139 seconds: the original failing case passed, while two
+other startup cases failed with nine and eight network-change entries. Those
+two had passed in the first run. Every selected case passed at least once;
+**neither complete command was green**. All strategic, reveal, performance/input,
+bridge and preset/colour-loading cases passed. Assertions, retries and budgets
+were unchanged. The broader startup/network instability is recorded separately
+in [#757](https://github.com/Anko59/AoeWorld/issues/757); its cause remains
+unestablished. Both reports and failure traces remain in `.cache/owner-save/`.
+
+Final comparison video:
+`.cache/showcase/owner-save-fps2-final-before-after.webm` — VP9, 1280 × 720,
+48.00 seconds. Baseline normal/far occupies 0–24 seconds; the final confirmation
+normal/far occupies 24–48 seconds. First, middle and final exported frames were
+inspected for native art, terrain and HUD completeness. Recording was separate
+from cadence sampling. The earlier comparison and per-step clips are retained.
+
+Final commands retain `NEXTEST_TEST_THREADS=2 CARGO_PROFILE_DEV_DEBUG=0` and
+the unchanged four-job container cap:
+
+```text
+make hooks-install hooks-check fmt-check lint structure-check architecture-check browser-check docs-check perf-wasm-cap
+make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-client AOE_NATIVE_TEST_FILTER='all()'
+make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-rendering AOE_NATIVE_TEST_FILTER='all()'
+AOE_E2E_WORKERS=1 AOE_E2E_PORT_RANGE=8192-8192 make test-e2e AOE_E2E_SPECS='tests/rendering/strategic-transition.play.spec.ts tests/rendering/cockpit-reveal.play.spec.ts tests/village/input/performance.play.spec.ts tests/village/input/bridge.play.spec.ts tests/start/sequence.play.spec.ts'
+AOE_E2E_WORKERS=1 AOE_E2E_PORT_RANGE=8192-8192 make test-e2e AOE_E2E_SPECS=tests/start/sequence.play.spec.ts
+make video-probe SHIP_VIDEO=.cache/showcase/owner-save-fps2-final-before-after.webm
+```
+
+Native/static/size results are retained in `final-static-gates.log` and
+`final-rendering-native.log`; browser results are `final-five-flows-e2e.json`
+and `final-startup-retry.json`. Earlier failures remain evidence, even when a
+later case passes. Full CI, standalone WASM execution under the two-port runner,
+dedicated-hardware qualification and smooth-game qualification remain outside
+the demonstrated results. No publication was performed.
