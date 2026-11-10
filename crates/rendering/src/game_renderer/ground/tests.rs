@@ -303,7 +303,7 @@ fn test_unit(kind: SceneUnitKind) -> SceneUnit {
 }
 
 #[wasm_bindgen_test]
-fn unfinished_farm_uses_dirt_until_the_native_crop_sheet_is_ready() {
+fn farm_foundation_and_completed_farm_use_the_native_field_surface() {
     let mut art = crate::surface_mesh::mix::fixture::art();
     art.compositions.push(crate::BuildingArt {
         unit_id: 50,
@@ -315,7 +315,7 @@ fn unfinished_farm_uses_dirt_until_the_native_crop_sheet_is_ready() {
         damage: Vec::new(),
     });
     for (kind, expected) in [
-        (SceneUnitKind::ConstructionFarm, 2),
+        (SceneUnitKind::ConstructionFarm, 17),
         (SceneUnitKind::Farm, 17),
     ] {
         let mut tiles = [SceneTerrain {

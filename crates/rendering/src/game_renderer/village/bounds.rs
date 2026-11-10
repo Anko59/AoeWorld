@@ -104,11 +104,9 @@ pub(super) fn frames_visible(
         })
 }
 
-/// Depth by which an object clears the ground it stands on. A frame reaches
-/// below its hotspot (a gold pile by half its height), where flat ground is
-/// nearer the viewer by one depth unit per 32 pixels; the tallest reviewed
-/// overhang is 43 pixels. One shared offset keeps objects ordered among
-/// themselves, and a one-level rise in front (two units) still hides them.
+/// Shared minimum depth above the ground. Native actor frames that extend
+/// farther below their hotspot receive additional clearance at emission.
+/// Ordinary frames retain their relative ordering and one-level cliff hiding.
 const GROUND_CLEARANCE: f64 = 1.5;
 
 /// The rendered body depth, including clearance below the native hotspot.

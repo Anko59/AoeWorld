@@ -3,6 +3,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { test } from "../../server.js";
 import { centerVillage, freshHud } from "../village/fixtures/resources.js";
 
+import { contactProof } from "./contact-proof.js";
+
 type Capture = { bug: number; side: "before" | "after" };
 for (const bug of [18, 14, 9, 8, 6, 16, 12]) {
   test(`local owner playtest footage with imported game art #${bug}`, async ({
@@ -27,7 +29,7 @@ for (const bug of [18, 14, 9, 8, 6, 16, 12]) {
         : null;
     test.skip(!config, "Local original-art recording was not requested");
     if (!config) return;
-    test.setTimeout(config.bug === 8 ? 180_000 : 120_000);
+    test.setTimeout([6, 8].includes(config.bug) ? 180_000 : 120_000);
     await mkdir("../.cache/showcase/raw", { recursive: true });
     const browser = await playwright[browserName].launch({
       ...launchOptions,
@@ -45,6 +47,7 @@ for (const bug of [18, 14, 9, 8, 6, 16, 12]) {
       });
       try {
         const page = await context.newPage();
+        const proofTimes: number[] = [];
         const pack = await page.request.get(
           "/asset-pack/buildings/manifest.json",
         );
@@ -53,13 +56,14 @@ for (const bug of [18, 14, 9, 8, 6, 16, 12]) {
           "Imported DE building art is required for footage",
         ).toBe(true);
         const stoppedSite = [14, 9].includes(config.bug);
-        const scenario = stoppedSite
-          ? ""
-          : config.bug === 12
-            ? "?scenario=vassal-defense"
-            : config.bug === 16
-              ? "?scenario=imperial-army"
-              : "?scenario=feudal-economy";
+        const scenario =
+          stoppedSite || config.bug === 6
+            ? ""
+            : config.bug === 12
+              ? "?scenario=vassal-defense"
+              : config.bug === 16
+                ? "?scenario=imperial-army"
+                : "?scenario=feudal-economy";
         expect(
           (await page.request.post(`/maps/reset${scenario}`)).status(),
         ).toBe(204);
@@ -83,6 +87,9 @@ for (const bug of [18, 14, 9, 8, 6, 16, 12]) {
           });
         }
         const camera = async (x: number, y: number, zoom: number) => {
+          const previous = Number(
+            await page.locator("#scene").getAttribute("data-frame"),
+          );
           await page.evaluate(
             (value) => {
               location.hash = `x=${value.x}&y=${value.y}&zoom=${value.zoom}`;
@@ -97,8 +104,28 @@ for (const bug of [18, 14, 9, 8, 6, 16, 12]) {
             "data-chunks-pending",
             "0",
           );
+          await expect(page.locator("#minimap")).toHaveAttribute(
+            "data-zoom",
+            String(zoom),
+          );
+          await expect(page.locator("#scene")).toHaveAttribute(
+            "data-chunks-failed",
+            "0",
+          );
+          if (zoom >= 0.1)
+            await expect
+              .poll(
+                async () =>
+                  Number(
+                    await page.locator("#scene").getAttribute("data-frame"),
+                  ),
+                { timeout: 30_000 },
+              )
+              .toBeGreaterThan(previous);
           await freshHud(page);
         };
+        const contact = config.bug === 6 ? await contactProof(page, at) : null;
+        if (contact) Object.assign(at, contact.corpse);
         if (config.bug === 8) {
           const actors = async () =>
             JSON.parse(
@@ -244,23 +271,20 @@ for (const bug of [18, 14, 9, 8, 6, 16, 12]) {
           at.y = 92;
         }
         const zoom =
-          config.bug === 18
-            ? 0.1
-            : stoppedSite
-              ? 0.099
-              : [8, 12].includes(config.bug)
-                ? 0.6
-                : 0.045;
+          config.bug === 6
+            ? 2
+            : config.bug === 18
+              ? 0.1
+              : stoppedSite
+                ? 0.099
+                : [8, 12].includes(config.bug)
+                  ? 0.6
+                  : 0.045;
         if (config.bug === 18) {
           at.x += 40;
           at.y += 40;
         }
-        await page.evaluate(
-          ({ x, y, zoom }) => {
-            location.hash = `x=${x}&y=${y}&zoom=${zoom}`;
-          },
-          { ...at, zoom },
-        );
+        await camera(at.x, at.y, zoom);
         await expect(page.locator("#scene")).toHaveAttribute(
           "data-lod",
           zoom >= 0.1 ? "sprites" : "markers",
@@ -292,6 +316,12 @@ for (const bug of [18, 14, 9, 8, 6, 16, 12]) {
             )
             .toBeGreaterThan(0);
         }
+        if (config.bug === 16 && config.side === "after")
+          await expect(
+            page
+              .locator('#strategic-settlements [data-kind="TownCenter"]')
+              .first(),
+          ).toHaveAttribute("data-native", "142");
         if (config.bug === 14) {
           const labels = page.locator("#construction-labels");
           if (config.side === "before") await expect(labels).toBeVisible();
@@ -306,6 +336,7 @@ for (const bug of [18, 14, 9, 8, 6, 16, 12]) {
                 14: "unfinished buildings and world progress",
                 9: "compact F1 hotkey labels",
                 8: "villager queue and garrison portraits",
+                6: "carcass ground contact; farm foundation",
                 12: "Castle near corner",
                 16: "far buildings follow the current age",
               } as Record<number, string>
@@ -327,6 +358,33 @@ for (const bug of [18, 14, 9, 8, 6, 16, 12]) {
                   id,
                   box: node.getBoundingClientRect().toJSON(),
                   height: node.style.getPropertyValue("--frame-height"),
+                };
+              }),
+              layout: [
+                "selection-content",
+                "selection-heading",
+                "selection-portrait",
+                "selection-name",
+                "selection-task",
+                "selection-load",
+                "selection-health",
+                "building-panel",
+                "garrison-panel",
+                "garrison-units",
+                "selected-icons",
+              ].map((id) => {
+                const n = document.getElementById(id);
+                if (!n) return null;
+                const css = getComputedStyle(n);
+                return {
+                  id,
+                  box: n.getBoundingClientRect().toJSON(),
+                  hidden: n.hidden,
+                  display: css.display,
+                  rows: css.gridTemplateRows,
+                  font: css.font,
+                  margin: css.margin,
+                  padding: css.padding,
                 };
               }),
               keycaps: Array.from(
@@ -352,12 +410,30 @@ for (const bug of [18, 14, 9, 8, 6, 16, 12]) {
         await page.screenshot({
           path: `../.cache/showcase/bug-${config.bug}-${config.side}.png`,
         });
+        proofTimes.push(Date.now());
         // Intentional recorded screen time after all readiness checks.
         await page.waitForTimeout(2500);
         if (config.bug === 14)
           await expect
             .poll(() => page.locator("#construction-labels span").count())
             .toBeGreaterThan(0);
+        if (contact) {
+          await expect
+            .poll(() => page.locator("#construction-labels span").count())
+            .toBeGreaterThan(0);
+          await camera(contact.foundation.x, contact.foundation.y, 1);
+          await page.screenshot({
+            path: `../.cache/showcase/bug-6-${config.side}-farm.png`,
+          });
+          proofTimes.push(Date.now());
+          await page.waitForTimeout(2500);
+        }
+        proofTimes.push(Date.now());
+        if (contact)
+          await writeFile(
+            `../.cache/showcase/bug-6-${config.side}-timings.json`,
+            JSON.stringify(proofTimes),
+          );
         const video = page.video();
         await page.close();
         if (!video) throw new Error("Recording was not created");

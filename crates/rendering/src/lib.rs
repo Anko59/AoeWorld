@@ -1,3 +1,6 @@
+#[cfg(any(target_arch = "wasm32", test))]
+mod ground_contact;
+
 #[cfg(any(not(target_arch = "wasm32"), test, feature = "shader-source"))]
 pub mod shader_data;
 
