@@ -4,6 +4,13 @@ use crate::UnitKind;
 use aoe_core::TileCoord;
 
 impl GameWorld {
+    /// Counts one ordered individual turn for the movement census.
+    pub(crate) fn census_turn(&self) {
+        if let Some(probe) = &self.planning_probe {
+            probe.movement_count("individual_turns", 1);
+        }
+    }
+
     pub(crate) fn census_apply(&self, index: usize, to: WorldPosition) {
         let Some(probe) = &self.planning_probe else {
             return;

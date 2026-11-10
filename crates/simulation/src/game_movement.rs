@@ -80,9 +80,7 @@ impl GameWorld {
         let probe = self.planning_probe.clone();
         let apply_span = probe.as_ref().and_then(|p| p.movement_span("apply_loop"));
         for turn in 0..mover_count {
-            if let Some(probe) = &self.planning_probe {
-                probe.movement_count("individual_turns", 1);
-            }
+            self.census_turn();
             self.work_approach_clearance = None;
             self.melee_traffic_clearance = None;
             let id = movers[(start + turn) % mover_count];

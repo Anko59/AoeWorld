@@ -294,7 +294,7 @@ impl CollisionIndex {
     ) -> bool {
         for y in min.y..=max.y {
             for x in min.x..=max.x {
-                if let Some(cell) = self.cells[usize::from(naval)].get(&key(TileCoord::new(x, y)))
+                if let Some(cell) = self.cells[usize::from(naval)].get(TileCoord::new(x, y))
                     && cell.iter().any(|body| test(body.id, body.at))
                 {
                     return true;
@@ -315,7 +315,7 @@ impl CollisionIndex {
     ) -> bool {
         for y in min.y..=max.y {
             for x in min.x..=max.x {
-                if let Some(cell) = self.cells[usize::from(naval)].get(&key(TileCoord::new(x, y)))
+                if let Some(cell) = self.cells[usize::from(naval)].get(TileCoord::new(x, y))
                     && (cell.len() != 1 || cell[0].id != actor)
                 {
                     return false;
