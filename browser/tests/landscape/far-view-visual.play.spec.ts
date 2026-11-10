@@ -2,11 +2,8 @@ import { expect } from "@playwright/test";
 import { PNG } from "pngjs";
 import { test } from "../../server.js";
 
-// Building slp ids the far view bakes (web/navigation/landscape/sprites.js).
-const slps = [
-  889, 891, 2223, 3507, 3495, 3483, 2683, 4330, 376, 24, 1009, 93, 2278, 2655,
-  305, 281, 3835, 1363, 958,
-];
+// Native ids resolve through DAT recipes; the fixture supplies two compositions.
+const slps = [109, 82];
 const solid = (rgba: [number, number, number, number]) => {
   const png = new PNG({ width: 128, height: 128 });
   for (let i = 0; i < png.data.length; i += 4) png.data.set(rgba, i);
@@ -18,6 +15,7 @@ test("the far view paints terrain and real building sprites, not a black plane w
 }) => {
   const frames = slps.map((slp) => ({
     source: `fixture:${slp}`,
+    frame: 0,
     native: null,
     page: 0,
     x: 0,
@@ -27,17 +25,28 @@ test("the far view paints terrain and real building sprites, not a black plane w
     anchor_x: 48,
     anchor_y: 80,
   }));
-  await page.route("**/asset-pack/manifest.json", (route) =>
-    route.fulfill({ json: { frames } }),
+  await page.route("**/asset-pack/buildings/manifest.json", (route) =>
+    route.fulfill({
+      json: {
+        frames,
+        pages: [{ color: "color-000.png", player: "player-000.png" }],
+      },
+    }),
   );
-  await page.route("**/asset-pack/color-000.png", (route) =>
+  await page.route("**/asset-pack/buildings/color-000.png", (route) =>
     route.fulfill({
       contentType: "image/png",
       body: solid([200, 160, 90, 255]),
     }),
   );
-  await page.route("**/asset-pack/player-000.png", (route) =>
+  await page.route("**/asset-pack/buildings/player-000.png", (route) =>
     route.fulfill({ contentType: "image/png", body: solid([200, 0, 0, 255]) }),
+  );
+  await page.route("**/pkg/aoe_client.js", (route) =>
+    route.fulfill({
+      contentType: "text/javascript",
+      body: "export function strategic_building_parts() { return new Float64Array([109,1,0,0,0,82,1,1,0,0]); }",
+    }),
   );
   await page.route("**/landscape-test", (route) =>
     route.fulfill({
@@ -67,8 +76,8 @@ test("the far view paints terrain and real building sprites, not a black plane w
     ) as number[];
     s.terrain(raster);
     s.settlements([
-      10, 498, 498, 502, 502, 0, 0x4191f5, 1, 11, 506, 500, 509, 503, 5,
-      0x4191f5, 1, 12, 490, 500, 494, 504, 16, 0x4191f5, 0,
+      10, 498, 498, 502, 502, 0, 0x4191f5, 1, 109, 11, 506, 500, 509, 503, 5,
+      0x4191f5, 1, 50, 12, 490, 500, 494, 504, 16, 0x4191f5, 0, 82,
     ]);
     (window as unknown as { farFrame: () => void }).farFrame = () =>
       s.frame(frame);

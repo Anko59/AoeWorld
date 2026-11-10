@@ -162,8 +162,24 @@ fn site_record_ownership_is_explicit_even_when_player_colours_match() {
     let own = site_record(&building, PlayerId(0), [65, 145, 245]);
     building.player = PlayerId(1);
     let enemy = site_record(&building, PlayerId(0), [65, 145, 245]);
-    assert_eq!(own.len(), 8);
+    assert_eq!(own.len(), 9);
     assert_eq!(own[..7], enemy[..7]);
     assert_eq!(own[7], 1.0);
     assert_eq!(enemy[7], 0.0);
+}
+
+#[wasm_bindgen_test]
+fn site_record_uses_each_buildings_observed_age() {
+    use crate::playground::game::strategic::site_record;
+    use aoe_protocol::Age;
+    let mut b = super::buildings::building(77);
+    for (age, id) in [
+        (Age::Dark, 109.0),
+        (Age::Feudal, 71.0),
+        (Age::Castle, 141.0),
+        (Age::Imperial, 142.0),
+    ] {
+        b.age = age;
+        assert_eq!(site_record(&b, aoe_core::PlayerId(0), [0; 3])[8], id);
+    }
 }

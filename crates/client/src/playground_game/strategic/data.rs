@@ -54,7 +54,7 @@ pub(in super::super) fn site_record(
     b: &GameplayBuildingState,
     owner: PlayerId,
     colour: [u8; 3],
-) -> [f64; 8] {
+) -> [f64; 9] {
     let [r, g, blue] = colour.map(u32::from);
     [
         f64::from(b.id.0),
@@ -65,6 +65,11 @@ pub(in super::super) fn site_record(
         b.kind as u8 as f64,
         f64::from(r << 16 | g << 8 | blue),
         f64::from(u8::from(b.player == owner)),
+        f64::from(
+            crate::playground::game::map::scene::building_kind(b)
+                .building_id()
+                .unwrap_or(-1),
+        ),
     ]
 }
 

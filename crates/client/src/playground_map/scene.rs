@@ -434,7 +434,9 @@ pub(in super::super) fn units(
     units
 }
 
-fn building_kind(building: &aoe_protocol::GameplayBuildingState) -> aoe_rendering::SceneUnitKind {
+pub(crate) fn building_kind(
+    building: &aoe_protocol::GameplayBuildingState,
+) -> aoe_rendering::SceneUnitKind {
     #[cfg(test)]
     cache_tests::KEY_ENTRIES.with(|count| count.set(count.get() + 1));
     use aoe_protocol::{BuildingKind as Kind, ConstructionState};
