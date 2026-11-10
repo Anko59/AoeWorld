@@ -344,9 +344,7 @@ fn decay_body_keeps_its_anchor_and_clears_ground_below_the_hotspot() {
     let mut art = art();
     let kind = crate::SceneUnitKind::ScoutDecay;
     let slot = kind.actor_slot().unwrap();
-    let mut native = art.village[0][0];
-    native.size = [180.0, 160.0];
-    native.anchor = [90.0, 120.0];
+    let native = frame([180.0, 160.0], [90.0, 120.0]);
     art.actors.resize(slot + 1, Vec::new());
     art.actors[slot] = vec![native; 16];
     let unit = SceneUnit {
