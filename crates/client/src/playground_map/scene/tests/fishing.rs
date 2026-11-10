@@ -8,6 +8,12 @@ async fn seeding_and_animal_tasks_have_distinct_numeric_hud_tags() {
     let worker = client.units.get_mut(&EntityId(1)).unwrap();
     worker.kind = aoe_protocol::UnitKind::Villager;
     worker.task = aoe_protocol::UnitTask::Seeding;
+    let position = worker.position;
+    // Numeric HUD records cover visible actors. Keep every task under test
+    // on the camera's terrain and give its viewport matching canvas bounds.
+    client.canvas.set_width(512);
+    client.canvas.set_height(512);
+    *client.terrain_scene.borrow_mut() = Some(Rc::new(scene));
     for (id, task) in [
         (2, aoe_protocol::AnimalTask::Idle),
         (3, aoe_protocol::AnimalTask::Fleeing),
@@ -17,7 +23,7 @@ async fn seeding_and_animal_tasks_have_distinct_numeric_hud_tags() {
             kind: aoe_protocol::AnimalKind::Sheep,
             owner: Some(PlayerId(1)),
             hp: 7,
-            position: WorldPosition::new(0, 0),
+            position,
             task,
             food_remaining: 100,
             target: None,
@@ -42,7 +48,6 @@ async fn seeding_and_animal_tasks_have_distinct_numeric_hud_tags() {
         .collect();
     let tasks: Vec<_> = values[17..]
         .chunks_exact(19)
-        .take(3)
         .map(|record| (record[0] as u32, record[5] as u8))
         .collect();
     client.canvas.remove();
