@@ -3,6 +3,9 @@ use super::*;
 use aoe_rendering::{ProjectedSurfaceTriangle, SceneCamera, WorldKeyIndex};
 #[path = "scene/actors.rs"]
 mod actors;
+#[path = "scene/units.rs"]
+mod unit_scene;
+pub(in super::super) use unit_scene::units;
 #[path = "scene/bridges.rs"]
 mod bridges;
 #[path = "scene/foundations.rs"]
@@ -17,6 +20,9 @@ use foundations::{FoundationKey, foundation_key};
 #[path = "scene/tests/cache.rs"]
 mod cache_tests;
 #[cfg(test)]
+#[path = "scene/tests/ordering.rs"]
+mod ordering_tests;
+#[cfg(test)]
 #[path = "scene/tests/review.rs"]
 mod review_tests;
 #[cfg(test)]
@@ -25,6 +31,7 @@ mod worker_tests;
 
 pub(crate) struct PreparedScene {
     camera: Camera,
+    actor_extents: Option<[[f64; 2]; 2]>,
     foundations: Vec<FoundationKey>,
     pub terrain: Vec<SceneTerrain>,
     pub decorations: Vec<SceneDecoration>,
@@ -69,6 +76,7 @@ pub(in super::super) fn prepare(client: &Client) -> Rc<PreparedScene> {
     aoe_rendering::apply_building_foundations(&mut terrain, &client.art, &units);
     roads::paint(&mut terrain, &client.village.buildings);
     let mut scene = PreparedScene::new(client.camera, terrain);
+    scene.actor_extents = Some(client.art.scene_actor_extents());
     scene.foundations = foundations;
     scene.decorations = decorations::for_scene(client, &scene);
     let scene = Rc::new(scene);
@@ -101,7 +109,8 @@ pub(in super::super) fn replace_buildings(
 
 impl PreparedScene {
     pub(crate) fn resident_bytes(&self) -> usize {
-        self.bucket_keys.resident_bytes()
+        std::mem::size_of_val(&self.actor_extents)
+            + self.bucket_keys.resident_bytes()
             + self.terrain.capacity() * size_of::<SceneTerrain>()
             + self.decorations.capacity() * size_of::<SceneDecoration>()
             + self.triangles.capacity() * size_of::<ProjectedSurfaceTriangle>()
@@ -153,6 +162,7 @@ impl PreparedScene {
         );
         Self {
             camera,
+            actor_extents: None,
             foundations: Vec::new(),
             terrain,
             decorations: Vec::new(),
@@ -250,189 +260,6 @@ fn target_distance(client: &Client, unit: &aoe_protocol::GameplayUnitState) -> O
         )
     };
     Some(((x - tx).pow(2) + (y - ty).pow(2)).isqrt())
-}
-
-pub(in super::super) fn units(
-    client: &Client,
-    scene: &PreparedScene,
-) -> Vec<aoe_rendering::SceneUnit> {
-    let player = super::super::village::owner(client);
-    let mut units = client
-        .units
-        .values()
-        .filter(|u| {
-            u.player == player
-                || client
-                    .fog
-                    .state([u.position.tile_floor().x, u.position.tile_floor().y])
-                    == 2
-        })
-        .map(|unit| {
-            let (position, travelled) = client.presentation.pose(*unit);
-            let (shown, pose) = actors::shown_pose(client, unit);
-            let unit = &shown;
-            let kind = aoe_rendering::SceneUnitKind::actor(pose as u8);
-            let facing = actors::animation_frame(client, unit, pose, travelled);
-            aoe_rendering::SceneUnit {
-                kind,
-                id: unit.id,
-                position,
-                visual: aoe_rendering::SceneUnitVisual::new(
-                    unit.moving || position != unit.position.as_tiles(),
-                )
-                .with_player(Some(unit.player), player, client.team_colour, unit.hp > 0)
-                .with_selected(unit.hp > 0 && client.selected.units.contains(&unit.id)),
-                facing: 0,
-                elevation_meters: scene
-                    .height(position)
-                    .unwrap_or_else(|| elevation_at_world(client, position))
-                    as f32,
-            }
-            .with_actor_frame(facing)
-        })
-        .collect::<Vec<_>>();
-    for animal in &client.village.animals {
-        let position = animal.position.as_tiles();
-        let pose = crate::unit_visuals::lifecycle_pose(
-            crate::unit_visuals::animal_pose(animal),
-            animal.death_tick,
-            client.village.tick.max(client.village.wildlife_tick),
-            client.config.tick_hz,
-        );
-        let frame = crate::unit_visuals::packed_frame(
-            pose,
-            animal.facing,
-            client.last_frame,
-            animal.death_tick,
-            client
-                .presentation
-                .live_tick(client.last_frame)
-                .unwrap_or(client.village.tick as f64)
-                .max(client.village.wildlife_tick as f64),
-            client.config.tick_hz,
-        );
-        let unit = aoe_rendering::SceneUnit {
-            kind: aoe_rendering::SceneUnitKind::actor(pose as u8),
-            id: animal.id,
-            position,
-            visual: aoe_rendering::SceneUnitVisual::new(animal.moving)
-                .with_player(animal.owner, player, client.team_colour, animal.hp > 0)
-                .with_selected(client.selected.units.contains(&animal.id) && animal.hp > 0),
-            facing: 0,
-            elevation_meters: scene
-                .height(position)
-                .unwrap_or_else(|| elevation_at_world(client, position))
-                as f32,
-        }
-        .with_actor_frame(frame);
-        let slot = units.partition_point(|u| u.id < animal.id);
-        units.insert(slot, unit);
-    }
-    // Index wall families once instead of scanning every wall for each neighbor.
-    let walls: std::collections::HashSet<_> = client
-        .village
-        .buildings
-        .iter()
-        .filter(|b| b.kind.is_wall())
-        .map(|b| (b.footprint.min.x, b.footprint.min.y, b.kind as u8))
-        .collect();
-    for building in &client.village.buildings {
-        if building.kind == aoe_protocol::BuildingKind::Road {
-            continue;
-        }
-        if building.kind == aoe_protocol::BuildingKind::Bridge {
-            bridges::append(client, scene, building, &mut units);
-            continue;
-        }
-        let position = super::super::village::building_center(building);
-        let kind = crate::building_ui::gate_kind(
-            building.kind,
-            building.gate_open,
-            building.progress_permille,
-        )
-        .unwrap_or_else(|| building_kind(building));
-        let stage = client
-            .art
-            .compositions
-            .iter()
-            .find(|b| Some(b.unit_id) == kind.building_id())
-            .map(|art| art.damage_stage(building.hp, building.max_hp))
-            .unwrap_or(0);
-        let unit = aoe_rendering::SceneUnit {
-            kind,
-            id: building.id,
-            position,
-            visual: aoe_rendering::SceneUnitVisual::new(false)
-                .with_player(Some(building.player), player, client.team_colour, false)
-                .with_selected(client.selected.has_building(building.id))
-                .with_damage_stage(stage),
-            facing: if building.progress_permille < 1000 {
-                (u32::from(building.progress_permille) * 3 / 1000) as u8
-            } else if building.kind.is_wall() {
-                crate::building_ui::wall_frame(building.footprint.min, |t| {
-                    walls.contains(&(t.x, t.y, building.kind as u8))
-                })
-            } else {
-                0
-            },
-            elevation_meters: scene
-                .height(position)
-                .unwrap_or_else(|| elevation_at_world(client, position))
-                as f32,
-        };
-        if building.kind.is_gate() {
-            if !aoe_rendering::scene_building_visible(
-                &client.art,
-                unit,
-                SceneCamera {
-                    center: client.camera.center,
-                    zoom: client.camera.zoom,
-                    viewport: client.camera.viewport,
-                    focus_elevation_meters: client.camera.focus_elevation_meters,
-                },
-                0,
-            ) {
-                continue;
-            }
-            client.village.gate_art.borrow_mut().observe(
-                building.id,
-                building.gate_open,
-                building.progress_permille,
-                true,
-            );
-        }
-        let slot = units.partition_point(|unit| unit.id < building.id);
-        units.insert(slot, unit);
-    }
-    for (building, expiry) in &client.village.rubble {
-        if *expiry <= client.village.tick || building.kind == aoe_protocol::BuildingKind::Bridge {
-            continue;
-        }
-        let position = super::super::village::building_center(building);
-        let unit = aoe_rendering::SceneUnit {
-            kind: aoe_rendering::SceneUnitKind::building(crate::building_ui::age_sprite_slot(
-                building.kind,
-                1000,
-                false,
-                building.age,
-            ) as u8),
-            id: building.id,
-            position,
-            visual: aoe_rendering::SceneUnitVisual::new(true)
-                .with_player(Some(building.player), player, client.team_colour, false)
-                .with_selected(false),
-            facing: 0,
-            elevation_meters: scene
-                .height(position)
-                .unwrap_or_else(|| elevation_at_world(client, position))
-                as f32,
-        };
-        let slot = units.partition_point(|u| u.id < building.id);
-        units.insert(slot, unit);
-    }
-    projectiles::append(client, scene, &mut units);
-    super::super::village::building_panel::preview(client, &mut units);
-    units
 }
 
 pub(crate) fn building_kind(

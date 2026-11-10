@@ -117,8 +117,9 @@ export function initReveal() {
     show(value, state) {
       if (requested) return;
       if (value && state && !motion) latest = [state[0],state[1],state[2],state[3],NaN,NaN,state[4],state[5],state[6],0,1];
+      const changed = visible !== value;
       visible = value;
-      if (!value) { if (!motion) dismiss(); }
+      if (!value) { if (changed && !motion) dismiss(); }
       else if (!seen && !checking) start().catch(() => { checking = false; seen = true; if (visible) begin(); });
     },
     active: () => !!(motion || finish),

@@ -18,3 +18,14 @@ fn offscreen_selection_stays_available_without_retaining_the_world() {
     }
     assert!(!visible([f64::NAN, 200.0], 160.0, size, false));
 }
+
+#[test]
+fn construction_label_gutter_keeps_the_seventy_pixel_bar_and_raised_text() {
+    let size = [1280.0, 720.0];
+    for point in [[-34.0, 300.0], [1314.0, 300.0], [640.0, 739.0]] {
+        assert!(visible(point, point[1] - 24.0, size, false));
+    }
+    for point in [[-500.0, 300.0], [1800.0, 300.0], [640.0, 1000.0]] {
+        assert!(!visible(point, point[1] - 24.0, size, false));
+    }
+}

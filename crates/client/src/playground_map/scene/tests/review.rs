@@ -16,7 +16,7 @@ mod gates;
 #[path = "picking.rs"]
 mod picking;
 
-fn contact_scene() -> PreparedScene {
+pub(super) fn contact_scene() -> PreparedScene {
     let generator = fixture::plane(-432, -432);
     let source = generator
         .landscape_point_with_cancel(aoe_core::TileCoord::new(282, 603), &|| false)

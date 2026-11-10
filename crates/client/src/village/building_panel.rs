@@ -99,17 +99,25 @@ pub(super) fn update(client: &Client) {
         }),
     );
     v.push(train.number());
+    let scale = f64::from(client.canvas.client_width()) / f64::from(client.canvas.width());
+    let viewport = client.camera.viewport.map(|size| size * scale);
     let foundations: Vec<_> = client
         .village
         .buildings
         .iter()
         .filter(|b| b.construction == ConstructionState::UnderConstruction)
+        .filter_map(|b| {
+            let p = map::screen_position(client, super::building_center(b));
+            let p = [p.x * scale, p.y * scale];
+            // The CSS bar is 70px wide; the shared gutter also keeps its
+            // raised text when only that text overlaps a viewport edge.
+            crate::hud_visibility::visible(p, p[1] - 24.0, viewport, false)
+                .then_some((p, b.progress_permille))
+        })
         .collect();
     v.push(foundations.len() as f64);
-    let scale = f64::from(client.canvas.client_width()) / f64::from(client.canvas.width());
-    for b in foundations {
-        let p = map::screen_position(client, super::building_center(b));
-        v.extend_from_slice(&[p.x * scale, p.y * scale, f64::from(b.progress_permille)]);
+    for (p, progress) in foundations {
+        v.extend_from_slice(&[p[0], p[1], f64::from(progress)]);
     }
     for kind in aoe_protocol::UnitKind::ALL {
         let ready = super::production::availability(client, kind);
