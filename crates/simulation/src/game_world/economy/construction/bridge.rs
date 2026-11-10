@@ -5,6 +5,10 @@ use crate::{
 use aoe_core::{BridgeSpan, EntityId, PlayerId, TileCoord, TileRect};
 use aoe_map::WaterKind;
 
+#[cfg(test)]
+#[path = "../../tests/economy/navigation/bridges/work.rs"]
+pub(crate) mod work;
+
 impl GameBuilding {
     pub fn contains_tile(&self, tile: TileCoord) -> bool {
         self.bridge_span
@@ -69,6 +73,8 @@ impl GameWorld {
     }
 
     fn validate_bridge_placement(&self, span: BridgeSpan) -> Result<(), EconomyError> {
+        #[cfg(test)]
+        let mut work = work::Validation::new();
         let Terrain::Map { generator, overlay } = &self.terrain else {
             return Err(EconomyError::InvalidFootprint);
         };
@@ -80,12 +86,13 @@ impl GameWorld {
                 .0
                 .iter()
                 .any(|u| u.hp > 0 && !self.embarked(u.id) && span.contains(u.position.tile_floor()))
-            // One pass over the buildings per order, not one per span tile.
-            || {
-                let tiles = span.tiles();
-                self.buildings()
-                    .any(|b| tiles.iter().any(|&tile| b.contains_tile(tile)))
-            }
+            // The footprint index includes foundations, nonblocking roads,
+            // open gates and only the raster cells of angled bridges.
+            || span.tiles().into_iter().any(|tile| {
+                #[cfg(test)]
+                { work.visits += 1; }
+                self.building_at(tile).is_some()
+            })
         {
             return Err(EconomyError::InvalidFootprint);
         }

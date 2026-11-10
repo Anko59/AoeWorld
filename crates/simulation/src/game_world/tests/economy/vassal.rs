@@ -13,6 +13,8 @@ mod ownership;
 mod review;
 #[path = "vassal/roads.rs"]
 mod roads;
+#[path = "vassal/scale.rs"]
+mod scale;
 #[path = "vassal/snapshot.rs"]
 mod snapshot;
 #[path = "vassal/timeline.rs"]

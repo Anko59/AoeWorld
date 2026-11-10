@@ -128,8 +128,8 @@ pub(super) fn sites(
         roads: BTreeSet::new(),
         bridge_ok: BTreeMap::new(),
         fixed: w
-            .buildings()
-            .filter(|b| b.player == player && b.kind == BuildingKind::Bridge && b.hp > 0)
+            .player_buildings_of(player, BuildingKind::Bridge)
+            .filter(|b| b.hp > 0)
             .filter_map(|b| b.bridge_span)
             .flat_map(|span| {
                 let len = span.tiles().len() as u32;

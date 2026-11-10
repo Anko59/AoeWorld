@@ -1,0 +1,88 @@
+//! Reproducible river planning with late-game building counts.
+use super::*;
+use crate::game_world::economy::bridge_work as work;
+use std::time::Instant;
+
+#[test]
+fn vassal_bridge_planning_with_ten_thousand_buildings() {
+    let mut w = super::super::bridges::river_fixture::river_sized(true, 30..31, 100, None, 15_360);
+    w.set_fog_disabled(true);
+    w.place_town_center(PlayerId(0), TileCoord::new(140, 92))
+        .unwrap();
+    w.economy.players.get_mut(&PlayerId(0)).unwrap().age = Age::Castle;
+    let castle = w
+        .insert_building(
+            PlayerId(0),
+            BuildingKind::Castle,
+            TileRect::from_xywh(100, 90, 4, 4),
+            true,
+        )
+        .unwrap();
+    let v = w
+        .spawn_kind(
+            PlayerId(0),
+            UnitKind::Vassal,
+            WorldPosition::from_tile_center(TileCoord::new(99, 92)).unwrap(),
+        )
+        .unwrap();
+    w.issue_garrison(PlayerId(0), v, castle).unwrap();
+    w.prepare_navigation(&|| false).unwrap();
+    advance(&mut w, 20);
+    // One-tile foundations exercise occupancy without adding observers or
+    // changing the castle's work points. Keep them away from the domain.
+    let width = w.config.width_tiles;
+    let height = w.config.height_tiles;
+    assert!(width >= 250 && height >= 250, "{width}x{height}");
+    for y in 150..250 {
+        for x in 0..100 {
+            w.insert_building(
+                PlayerId(1),
+                BuildingKind::Road,
+                TileRect::from_xywh(x, y, 1, 1),
+                false,
+            )
+            .unwrap();
+        }
+    }
+    let mut worst = 0.0_f64;
+    let mut total = 0.0;
+    work::take();
+    for _ in 0..3 {
+        // Force an ordinary replan; no builders means the measured pass
+        // plans but does not place foundations that would change its input.
+        w.tick.0 += 1_200;
+        let start = Instant::now();
+        w.advance_vassals(&mut Vec::new());
+        let ms = start.elapsed().as_secs_f64() * 1_000.0;
+        worst = worst.max(ms);
+        total += ms;
+    }
+    let counts = work::take();
+    let net = w.vassal_network(v);
+    assert!(net.iter().any(|s| s.0 == BuildingKind::Bridge));
+    let report = format!(
+        "buildings={} passes=3 validation_calls={} occupancy_visits={} validation_ms={:.3} total_vassal_ms={total:.3} worst_vassal_ms={worst:.3} hash={} network={net:?}\n",
+        w.buildings().count(),
+        counts.calls,
+        counts.visits,
+        counts.elapsed.as_secs_f64() * 1_000.0,
+        w.canonical_hash_hex()
+    );
+    eprintln!("{report}");
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/cx-bridge");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("measurement.txt"), report).unwrap();
+    assert!(
+        counts.calls > 0,
+        "the fixture must exercise bridge validation"
+    );
+    assert_eq!(
+        w.canonical_hash_hex(),
+        "bf86364882cff97061b1c6dcc97acb200da621250ffb65b590d97dfe5acf870e",
+        "the optimization must preserve the pre-change plan and state"
+    );
+    assert!(
+        counts.visits <= counts.calls * 15,
+        "span occupancy must be bounded by its tiles: {counts:?}"
+    );
+}

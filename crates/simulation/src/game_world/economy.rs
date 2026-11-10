@@ -45,6 +45,8 @@ pub(crate) mod training;
 pub use training::rally::{RallyPoint, RallyTarget};
 #[path = "economy/construction/bridge.rs"]
 mod bridge;
+#[cfg(test)]
+pub(crate) use bridge::work as bridge_work;
 mod general;
 mod steward;
 pub use general::{GeneralState, GeneralStatus, GeneralWork, SquadKind, SquadStatus};

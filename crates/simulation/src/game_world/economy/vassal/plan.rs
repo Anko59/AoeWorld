@@ -146,8 +146,10 @@ pub(super) fn threat_vector(
     hot: Option<TileCoord>,
 ) -> (i32, i32) {
     let target = hot.unwrap_or_else(|| {
-        w.buildings()
-            .filter(|b| b.player != player && b.kind == BuildingKind::TownCenter && b.hp > 0)
+        w.players()
+            .filter(|p| p.player != player)
+            .flat_map(|p| w.player_buildings_of(p.player, BuildingKind::TownCenter))
+            .filter(|b| b.hp > 0)
             .map(|b| center_of(b.footprint))
             .min_by_key(|c| {
                 (

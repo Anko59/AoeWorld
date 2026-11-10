@@ -21,12 +21,22 @@ pub(super) fn river_lane(
     coverage: u8,
     cross: Option<usize>,
 ) -> GameWorld {
+    river_sized(horizontal, span, coverage, cross, 3_840)
+}
+
+pub(in crate::game_world::tests::economy) fn river_sized(
+    horizontal: bool,
+    span: std::ops::Range<usize>,
+    coverage: u8,
+    cross: Option<usize>,
+    side_meters: u64,
+) -> GameWorld {
     let (mut package, _, _) = fixture::flat_fixture(true);
     let mut elevation = Vec::new();
     let mut water = Vec::new();
     let mut vegetation = Vec::new();
     let mut axis = 64_u16;
-    package.request.requested_side_meters = 3_840;
+    package.request.requested_side_meters = side_meters;
     package.environment.samples_per_axis = axis;
     package.environment.elevation.levels.clear();
     package.environment.water.as_mut().unwrap().levels.clear();
