@@ -66,6 +66,7 @@ export function initStrategic(fog, actors) {
       layers.enabled.threats ? contacts.clock() : 0].join(',');
     if (key === previous) return false;
     const started = performance.now();
+    window.aoeTelemetry?.mark(10);
     previous = key;
     lastState = Array.from(state);
     if (canvas.width !== width) canvas.width = width;
@@ -83,6 +84,8 @@ export function initStrategic(fog, actors) {
     context.fillRect(0, 0, worldWidth, worldHeight);
     context.imageSmoothingEnabled = true;
     if (terrain) context.drawImage(terrain, 0, 0, worldWidth, worldHeight);
+    window.aoeTelemetry?.mark(17);
+    window.aoeTelemetry?.mark(11);
     const project = ([x, y]) => [width / 2 + (x - cx - y + cy) * 64 * zoom,
       height / 2 + (x - cx + y - cy) * 32 * zoom];
     pickRadius = 22;
@@ -95,12 +98,16 @@ export function initStrategic(fog, actors) {
     // One screen-space grid arbitrates every symbol: HUD, places, army tokens, then unit groups.
     space.clear(); tokens.hud(space, width, height);
     const holdings = settlements.draw(context, project, layers.enabled.ownership, width, height, scale, plane, zoom, space);
+    window.aoeTelemetry?.mark(18);
+    window.aoeTelemetry?.mark(13);
     if (!fog.disabled) {
       plane();
       context.imageSmoothingEnabled = false;
       context.drawImage(fog.canvas, 0, 0, worldWidth, worldHeight);
     }
     context.setTransform(1, 0, 0, 1, 0, 0);
+    window.aoeTelemetry?.mark(20);
+    window.aoeTelemetry?.mark(11);
     canvas.dataset.threats = String(layers.enabled.threats ? contacts.draw(context, project) : 0);
     tokens.draw(context, project, layers.enabled, scale, width, height, space);
     picks = drawUnits(context, records, project, width, height, scale, space, settlements.place, tokens.mine());
@@ -116,6 +123,7 @@ export function initStrategic(fog, actors) {
       context.fillStyle = colours[resource.kind] ?? '#e85b8a';
       context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
     }
+    window.aoeTelemetry?.mark(18);
     canvas.dataset.resources = String(resources.length);
     canvas.dataset.clusters = String(picks.length);
     canvas.dataset.terrainDraws = terrain ? '1' : '0';
@@ -202,6 +210,7 @@ export function initStrategic(fog, actors) {
     },
     terrain(value, raster) {
       const started = performance.now();
+    window.aoeTelemetry?.mark(10);
       terrain = raster ? paintTerrain(raster) ?? value : value;
       canvas.dataset.terrainBuildMs = (performance.now() - started).toFixed(3);
       canvas.dataset.terrainBytes = String(terrain ? terrain.width * terrain.height * 4 : 0);

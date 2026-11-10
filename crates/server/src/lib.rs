@@ -84,6 +84,7 @@ pub struct AppState {
     /// Secret for `POST /match`; without it match hosting is refused.
     match_admin_token: Option<Arc<str>>,
     tick_stats: Arc<gameplay_match::TickStats>,
+    client_perf: Arc<Mutex<gameplay_match::admin::client_perf::Reports>>,
     skirmish: Arc<gameplay_match::Skirmish>,
 }
 
@@ -117,6 +118,7 @@ impl AppState {
             gameplay: Arc::new(RwLock::new(GameplayService::new(config.scenario.seed))),
             match_admin_token: Config::match_admin_token_from_env().map(Into::into),
             tick_stats: Arc::default(),
+            client_perf: Arc::default(),
             skirmish: Arc::new(gameplay_match::Skirmish::from_env(config.bind.port())),
         })
     }
