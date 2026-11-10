@@ -76,6 +76,6 @@ export function initSteward() {
       const next=points.join(' ');if(next!==r.points){r.node.setAttribute('points',next);r.points=next;}
     }
     for(let i=count;i<rings.length;i++)rings[i].node.style.display='none';
-    status.hidden=!label;if(status.textContent!==label)status.textContent=label;
+    status.hidden=!label;if(status.textContent!==label){status.textContent=label;status.title=label;}
   }};
 }
