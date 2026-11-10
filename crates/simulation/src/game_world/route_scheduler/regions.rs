@@ -8,6 +8,10 @@ use aoe_map::{LandBucket, MapRegionGround, RegionChunk, RegionGround, RegionTile
 use std::cell::OnceCell;
 use std::collections::BTreeMap;
 
+/// A bounded optional witness can cover a modest detour around a chunk wall.
+/// Longer questions remain with the ordinary resumable route planner.
+const REGION_PROOF_NODES: u32 = 64;
+
 struct Ground<'a> {
     world: &'a GameWorld,
     /// Completed gates' tiles, read only when a chunk is relabelled.
@@ -113,6 +117,33 @@ impl RegionGround for Ground<'_> {
 }
 
 impl GameWorld {
+    /// A current directed region witness makes the far planner's separate
+    /// reverse destination flood redundant. A negative answer is left to the
+    /// planner's existing endpoint refinement, preserving reachable frontiers.
+    pub(crate) fn reuse_region_endpoint_proof(
+        &self,
+        planner: &mut aoe_map::RoutePlanner,
+        kind: crate::UnitKind,
+        player: PlayerId,
+    ) {
+        if kind.is_naval() {
+            return;
+        }
+        let Terrain::Map { overlay, .. } = &self.terrain else {
+            return;
+        };
+        let query = planner.pending_region_proof(overlay);
+        let Some((from, to)) = query else {
+            return;
+        };
+        let Some(bucket) = LandBucket::for_radius(kind.collision_radius()) else {
+            return;
+        };
+        if let Ok(reachable) = self.land_reachable_bounded(player, bucket, from, to) {
+            planner.record_region_proof(from, to, reachable, overlay);
+        }
+    }
+
     fn with_regions<R>(
         &self,
         bucket: LandBucket,
@@ -188,6 +219,20 @@ impl GameWorld {
     ) -> Result<bool, GameWorldError> {
         self.with_regions(bucket, |regions, ground| {
             regions.reachable(ground, u32::from(player.0), from, to)
+        })
+    }
+
+    /// Optional route certificates cannot traverse a continent synchronously.
+    /// This bounds only the shortcut; unknown leaves ordinary planning intact.
+    fn land_reachable_bounded(
+        &self,
+        player: PlayerId,
+        bucket: LandBucket,
+        from: TileCoord,
+        to: TileCoord,
+    ) -> Result<aoe_map::RegionReachability, GameWorldError> {
+        self.with_regions(bucket, |regions, ground| {
+            regions.reachable_bounded(ground, u32::from(player.0), from, to, REGION_PROOF_NODES)
         })
     }
 

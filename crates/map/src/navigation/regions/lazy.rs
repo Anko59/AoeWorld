@@ -16,7 +16,13 @@ fn squared(a: TileCoord, b: TileCoord) -> i64 {
 
 impl Regions {
     pub(super) fn load(&mut self, ground: &dyn RegionGround, chunk: u32) {
-        if self.pending.contains_key(&chunk) && !self.dirty.remove(&chunk) {
+        let invalidated = self.pending_dirty.remove(&chunk);
+        if self.pending.contains_key(&chunk) && !invalidated {
+            return;
+        }
+        if !self.chunks.is_empty() && !self.dirty.contains(&chunk) {
+            self.pending
+                .insert(chunk, self.chunks[chunk as usize].clone());
             return;
         }
         self.stats.builds = self.stats.builds.max(1);
@@ -114,11 +120,23 @@ impl Regions {
         start: Node,
         goal: Node,
     ) -> bool {
+        self.connected_bounded(ground, player, start, goal, None)
+            .unwrap_or(false)
+    }
+
+    fn connected_bounded(
+        &mut self,
+        ground: &dyn RegionGround,
+        player: u32,
+        start: Node,
+        goal: Node,
+        mut remaining: Option<u32>,
+    ) -> Option<bool> {
         if start == goal {
-            return true;
+            return Some(true);
         }
         if !self.allowed_node(player, goal, start) {
-            return false;
+            return Some(false);
         }
         let mut seen = [BTreeSet::from([start]), BTreeSet::from([goal])];
         let mut queues = [BTreeSet::from([(0, start)]), BTreeSet::from([(0, goal)])];
@@ -128,6 +146,12 @@ impl Regions {
         ];
         let mut turn = 0;
         while ground.available() && !queues[0].is_empty() && !queues[1].is_empty() {
+            if let Some(left) = &mut remaining {
+                if *left == 0 {
+                    return None;
+                }
+                *left -= 1;
+            }
             let side = turn % 2;
             turn += 1;
             let Some((_, node)) = queues[side].pop_first() else {
@@ -135,7 +159,7 @@ impl Regions {
             };
             for next in self.adjacent(ground, player, node, start, side == 1) {
                 if seen[1 - side].contains(&next) {
-                    return true;
+                    return Some(true);
                 }
                 if seen[side].insert(next) {
                     let near = label::origin(self.key(next.0));
@@ -143,7 +167,27 @@ impl Regions {
                 }
             }
         }
-        false
+        Some(false)
+    }
+
+    pub(super) fn lazy_reachable_bounded(
+        &mut self,
+        ground: &dyn RegionGround,
+        player: u32,
+        from: TileCoord,
+        to: TileCoord,
+        limit: u32,
+    ) -> Option<bool> {
+        if limit == 0 {
+            return None;
+        }
+        let Some(start) = self.lazy_node(ground, from) else {
+            return Some(false);
+        };
+        let Some(goal) = self.lazy_node(ground, to) else {
+            return Some(false);
+        };
+        self.connected_bounded(ground, player, start, goal, Some(limit))
     }
 
     pub(super) fn lazy_reachable(

@@ -266,6 +266,9 @@ impl Ground<'_> {
                 packed: None,
             });
         }
+        // The grid needs this projection in every case. Build it before border
+        // probes so their inside cells reuse the same prepared walk chunk.
+        let grid = grid::Grid::new(self, key)?;
         let mut portals = Vec::new();
         for side in 0..4 {
             let border = |i| border_pair(side, origin, i);
@@ -293,7 +296,6 @@ impl Ground<'_> {
                 });
             }
         }
-        let grid = grid::Grid::new(self, key)?;
         // Only diagonal border transitions that have no two-cardinal-step
         // equivalent need extra portals. Most chunks have none.
         for at in 0..grid::CELLS {

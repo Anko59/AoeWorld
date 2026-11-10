@@ -27,13 +27,14 @@ Diagnostic output is retained under ignored `.cache/region-perf/`.
 | `602e814aa` + existing `098852aca` build repair | 317,894,997 | +60.91% |
 | Portal cache + near-route proof reuse | 271,989,950 | +37.67% |
 | Above + sparse region point reads (`6701a7a29`) | 265,865,368 | +34.57% |
-| Above + two-way point memo (current source) | 260,977,583 | +32.10% |
+| Above + two-way point memo (`ad2a51975`) | 260,977,583 | +32.10% |
+| Bounded endpoint certificates | 245,005,616 | +24.02% |
 
 The local 3% ceiling is **203,487,343** instructions. The repository's stored
 CI comparison is 240,557,748; it is not the result of the fresh merge-base run.
 The supplied CI HEAD result, 296,624,316, is close to the measured HEAD.
 No baseline was repinned or relaxed.
-The current source reduces original HEAD by 35,659,855 instructions (12.02%),
+That increment reduces original HEAD by 35,659,855 instructions (12.02%),
 but **does not meet the 3% target**. Its count still exceeds that ceiling by
 57,490,240 instructions. The dependent frames work is not qualified by this
 partial improvement.
@@ -151,9 +152,91 @@ make -j1 hooks-install hooks-check fmt-check structure-check architecture-check 
 make -j1 lint
 ```
 
-Static/hook checks pass on the current production source. Lint retains the two
+Static/hook checks pass on that increment. Lint retains the two
 existing client presentation dead-code warnings. CI was not run. No push,
 publication or performance-baseline change was made. Raw logs and Callgrind
 profiles stay in ignored `.cache/region-perf/`, including the base, original
 HEAD, repaired midpoint, intermediate, and current NDJSON counts.
+
+## Bounded endpoint certificates
+
+The next increment reuses region labels for the far planner's destination
+pocket question too. An optional query visits at most 64 graph nodes, counting
+cached nodes identically; exhaustion returns unknown and leaves the ordinary
+resumable search intact. Negative answers also retain endpoint refinement and
+the legitimate search. Clean labels from the dense census are reused, while
+lazy and dense invalidations remain independently pending.
+
+Positive connectivity certificates discharge the duplicate reverse flood and
+survive continuation legs. A separate straight-path certificate can replace
+early connectivity-only portal guidance. A graph connection alone retains
+corridor guidance: suppressing it stranded two soldiers in the strict bridge
+regression, so that prototype was rejected. The difficult-leg work threshold
+still requests guidance even with a straight witness.
+
+Certificates retain a shared collision snapshot. Obstacle removal and resource
+depletion preserve positive witnesses; new obstacles, resource regrowth and
+bridge edits invalidate them. Certified nearest endpoints retain the original
+sealed-goal bounds, so opening that goal restarts the original order. Planner
+proof state participates in the deterministic replay hash.
+
+Region chunk interiors still use bulk terrain reads. Their one-tile halos use
+sparse reads, reducing the cold halo regression from nine composed chunks to
+one with identical directed topology. Portal construction also reuses its
+already-required chunk projection for inside border points; the cold point-read
+regression falls from 189 entries to at most 72. Cache byte caps are unchanged.
+
+The first unbounded prototype measured 238,558,060 Ir (+20.75% base), before
+the bounded query, continuation witness and certified endpoint refinements.
+Its inclusive profile attributes 97.35M to route service, 34.21M to guidance,
+30.38M to portal construction, 20.29M to point memoization and 5.96M to pocket
+checking. These nested counts must not be summed. It is diagnostic evidence,
+not qualification of the final source.
+
+The guarded candidate measures **245,005,616 Ir**, 6.12% below `ad2a51975`
+and 17.41% below original HEAD. It remains **41,518,273 above the 3% ceiling**;
+the performance regression is not resolved. The smaller unbounded prototype
+count does not qualify the guarded candidate's behavior.
+
+| Inclusive stage | Fresh base | Guarded candidate |
+| --- | ---: | ---: |
+| Route service | 57,229,304 | 104,157,048 |
+| Waiting-route search | 56,178,945 | 101,012,379 |
+| Neighbor expansion | 17,140,008 | 50,740,724 |
+| Guidance | 270,582 | 32,885,473 |
+| Portal construction | 0 | 29,620,872 |
+| Grid construction | 0 | 28,327,337 |
+| Navigation cells | 0 | 23,428,051 |
+| Pocket checking | 37,145,977 | 1,933,002 |
+
+Nested rows must not be summed. Named compiled call edges show 79 planner
+polls versus 165 at base, but 10,808 neighbor-expansion calls versus 4,324.
+Two grid constructions consume 28.33M Ir; one portal construction consumes
+29.62M. Region witness reuse costs 10.67M across 160 calls. These are Callgrind
+call edges, not replacements for the logical work gates. The remaining
+attribution is longer searches and expensive terrain projections, rather than
+more polls or the old pocket proof. Region connectivity alone cannot safely
+replace detour guidance; extracting usable corridor guidance from the labels
+is a possible next step, requiring the unchanged bridge-arrival regression.
+
+Raw evidence: `bounded-endpoint-final.ndjson`,
+`bounded-endpoint-final.callgrind`, `bounded-endpoint-final-inclusive.txt` and
+`route-call-attribution.json` in ignored `.cache/region-perf/`.
+
+Qualification: all **421 map tests pass** (174.047 seconds). The full simulation
+run passes 1,263/1,265 tests (743.010 seconds); its only failures are the old
+replay hash and lower exact long-march work pin. After explained current-output
+updates, **12 focused simulation tests pass** (228.942 seconds), including the
+full-population checkpoint, unchanged activity floors and one/four-worker
+equality, long march, river, strict three-river bridge and all region-route
+cases. The final checkpoint is `a1c5fae0…`. Long-march arrival tick, collision
+work, reversals, speed, membership and exact slots remain fixed; charged route
+work falls from 378,134 to 313,361. River route work falls from 55,349 to 55,320
+with its physical output pins fixed. No acceptance bound changes.
+
+`hooks-install`, `hooks-check`, `fmt-check`, `lint`, `structure-check`,
+`architecture-check` and `docs-check` pass. Lint retains the two existing client
+presentation warnings. No CI, push or publication was run. The full simulation
+suite was not repeated after those two output-pin updates; the focused rerun
+above verifies both, with production source unchanged.
 

@@ -77,7 +77,9 @@ impl GameWorld {
         let before = planner.work();
         let probe = self.planning_probe.clone();
         let span = probe.as_ref().and_then(|p| p.movement_span("plan_fast"));
+        self.reuse_region_endpoint_proof(planner, kind, player);
         let result = self.poll_world_route_planner(planner, allowance, &|| false, kind);
+        self.reuse_region_endpoint_proof(planner, kind, player);
         drop(span);
         let spent = planner.work().saturating_sub(before);
         if before == 0 && spent > 0 {

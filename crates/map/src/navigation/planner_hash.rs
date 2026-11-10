@@ -1,5 +1,5 @@
 use super::{ReconstructionPhase, ReconstructionState, RoutePlanner, SearchState, Terminal};
-use crate::EnvironmentPageError;
+use crate::{EnvironmentPageError, RegionReachability};
 
 fn environment_error_tag(error: EnvironmentPageError) -> u8 {
     match error {
@@ -44,6 +44,27 @@ impl RoutePlanner {
             hash.update(&tile.y.to_le_bytes());
         }
         hash.update(&[self.validation_step, u8::from(self.pocket_checked)]);
+        if let Some(proof) = &self.region_pocket {
+            hash.update(b"region-pocket-proof");
+            hash.update(&proof.to.x.to_le_bytes());
+            hash.update(&proof.to.y.to_le_bytes());
+            hash.update(&proof.snapshot.navigation_stamp());
+            hash.update(&[u8::from(proof.discharged)]);
+        }
+        if let Some(proof) = &self.region_proof {
+            hash.update(b"region-endpoint-proof");
+            hash.update(&proof.from.x.to_le_bytes());
+            hash.update(&proof.from.y.to_le_bytes());
+            hash.update(&proof.to.x.to_le_bytes());
+            hash.update(&proof.to.y.to_le_bytes());
+            hash.update(&proof.stamp);
+            hash.update(&[match proof.reachable {
+                RegionReachability::Unknown => 0,
+                RegionReachability::Unreachable => 1,
+                RegionReachability::Connected => 2,
+                RegionReachability::Straight => 3,
+            }]);
+        }
         hash.update(&[u8::from(self.guidance_checked)]);
         hash_usize(hash, self.guidance.len());
         for tile in &self.guidance {

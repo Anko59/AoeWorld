@@ -61,6 +61,8 @@ pub struct RoutePlanner {
     /// The sealed-destination proof has run (see `pocket`).
     pocket_checked: bool,
     pocket: Option<pocket::Proof>,
+    region_proof: Option<pocket::RegionProof>,
+    region_pocket: Option<pocket::RegionPocket>,
     guidance_checked: bool,
     guidance: std::collections::VecDeque<TileCoord>,
     hierarchy: Option<super::hierarchy::Search>,
@@ -128,6 +130,8 @@ impl RoutePlanner {
             nearest_reached: None,
             pocket_checked: false,
             pocket: None,
+            region_proof: None,
+            region_pocket: None,
             guidance_checked: false,
             guidance: Default::default(),
             hierarchy: None,

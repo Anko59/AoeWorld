@@ -3,12 +3,31 @@
 //! run thousands of uncharged terrain reads inside a one-work poll.
 use super::search::{checked_walkable, neighbor_offset};
 use super::{MAX_ROUTE_PLANNER_NODES, RoutePlanner, RouteTerrain, Terminal};
-use crate::ResourceOverlay;
+use crate::{RegionReachability, ResourceOverlay};
 use aoe_core::TileCoord;
 use std::collections::{BTreeSet, VecDeque};
 
 pub(super) const POCKET_CHECK_WORK: u32 = 1_024;
 const POCKET_TILES: usize = 1_024;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct RegionProof {
+    pub(super) from: TileCoord,
+    pub(super) to: TileCoord,
+    pub(super) stamp: [u8; 32],
+    pub(super) reachable: RegionReachability,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct RegionPocket {
+    pub(super) to: TileCoord,
+    pub(super) snapshot: ResourceOverlay,
+    pub(super) discharged: bool,
+}
+
+#[cfg(test)]
+#[path = "pocket/tests/regions.rs"]
+mod region_tests;
 
 fn step_allowed(
     terrain: &dyn RouteTerrain,
@@ -156,14 +175,140 @@ impl Proof {
 }
 
 impl RoutePlanner {
+    fn current_region_proof(&self, overlay: &ResourceOverlay) -> bool {
+        self.region_proof.as_ref().is_some_and(|proof| {
+            proof.from == self.leg_origin
+                && proof.to == self.effective_destination()
+                && (!proof.reachable.is_reachable() || proof.stamp == overlay.navigation_stamp())
+        })
+    }
+
+    pub(super) fn region_endpoint_direct(&self, overlay: &ResourceOverlay) -> bool {
+        self.current_region_proof(overlay)
+            && self
+                .region_proof
+                .as_ref()
+                .is_some_and(|proof| proof.reachable == RegionReachability::Straight)
+    }
+
+    pub(super) fn refresh_region_proof(&mut self, overlay: &ResourceOverlay) {
+        let goal = self.effective_destination();
+        let invalid = self.region_pocket.as_ref().is_some_and(|proof| {
+            proof.to != goal || !overlay.navigation_preserves_walkability(&proof.snapshot)
+        });
+        if invalid {
+            if self
+                .region_pocket
+                .take()
+                .is_some_and(|proof| proof.discharged)
+            {
+                self.pocket_checked = false;
+                self.pocket = None;
+            }
+        } else if let Some(proof) = &mut self.region_pocket
+            && proof.snapshot.navigation_stamp() != overlay.navigation_stamp()
+        {
+            proof.snapshot = overlay.navigation_snapshot();
+        }
+        if self.region_proof.as_ref().is_some_and(|proof| {
+            proof.from != self.leg_origin
+                || proof.to != goal
+                || (proof.reachable.is_reachable() && self.region_pocket.is_none())
+        }) {
+            self.region_proof = None;
+        } else if let Some(proof) = &mut self.region_proof
+            && proof.reachable.is_reachable()
+        {
+            proof.stamp = overlay.navigation_stamp();
+        }
+    }
+
+    /// Query a bounded region witness at most once per leg. Positive witnesses
+    /// survive openings; negative and unknown answers leave path finding intact.
+    /// Unknown and negative answers leave path finding and refinement intact.
+    pub fn pending_region_proof(
+        &mut self,
+        overlay: &ResourceOverlay,
+    ) -> Option<(TileCoord, TileCoord)> {
+        self.refresh_region_proof(overlay);
+        if self.terminal.is_some() || self.current_region_proof(overlay) {
+            return None;
+        }
+        (self.pending_destination_proof().is_some()
+            || (self.resolved_destination.is_some()
+                && self.hierarchy.is_some()
+                && self.resolution.is_none()
+                && self.guidance.is_empty())
+            || (self.early_guidance_due()
+                && self.guidance.is_empty()
+                && self.resolution.is_none()
+                && self.resolved_destination.is_none()))
+        .then(|| (self.leg_origin, self.effective_destination()))
+    }
+
+    /// A certificate replaces connectivity work, never the local path search.
+    pub fn record_region_proof(
+        &mut self,
+        from: TileCoord,
+        to: TileCoord,
+        reachable: RegionReachability,
+        overlay: &ResourceOverlay,
+    ) {
+        if from != self.leg_origin || to != self.effective_destination() {
+            return;
+        }
+        self.region_proof = Some(RegionProof {
+            from,
+            to,
+            stamp: overlay.navigation_stamp(),
+            reachable,
+        });
+        if reachable.is_reachable() {
+            let discharged = !self.pocket_checked
+                || self
+                    .region_pocket
+                    .as_ref()
+                    .is_some_and(|proof| proof.discharged);
+            self.region_pocket = Some(RegionPocket {
+                to,
+                snapshot: overlay.navigation_snapshot(),
+                discharged,
+            });
+            self.confirm_reachable_destination(from, to);
+            if reachable == RegionReachability::Straight
+                && self.hierarchy.is_some()
+                && self.resolution.is_none()
+                && self.guidance.is_empty()
+                && (self.resolved_destination.is_some()
+                    || (self.early_guidance_due() && !self.components_checked))
+            {
+                self.hierarchy = None;
+                self.guidance_checked = false;
+            }
+        }
+    }
+
+    /// Endpoints of a reverse proof that is due or already suspended. Cheap
+    /// first legs need no global query; adapters can reuse their region layer
+    /// when a difficult leg would otherwise start another destination flood.
+    fn pending_destination_proof(&self) -> Option<(TileCoord, TileCoord)> {
+        (self.terminal.is_none()
+            && !self.pocket_checked
+            && (self.pocket.is_some() || self.leg_work >= POCKET_CHECK_WORK))
+            .then(|| (self.leg_origin, self.effective_destination()))
+    }
+
     /// Reuse a current directed reachability proof for this leg's endpoint.
     /// A certificate for an older leg or a different endpoint cannot discharge
     /// its reverse flood. Geometry changes remain the caller's responsibility,
     /// just as after this planner finishes its own pocket check.
     pub fn confirm_reachable_destination(&mut self, from: TileCoord, to: TileCoord) {
         if from == self.leg_origin && to == self.effective_destination() {
+            let keep_seal = self.pocket_checked && self.resolved_destination.is_some();
             self.pocket_checked = true;
-            self.pocket = None;
+            if !keep_seal {
+                self.pocket = None;
+            }
         }
     }
 

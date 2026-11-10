@@ -36,6 +36,10 @@ impl EnvironmentPageProvider for ToggleProvider {
 }
 
 fn flat_map_terrain() -> Terrain {
+    flat_map_terrain_size(64)
+}
+
+fn flat_map_terrain_size(width: i32) -> Terrain {
     let elevation = ElevationPage {
         level: 0,
         x: 0,
@@ -111,7 +115,7 @@ fn flat_map_terrain() -> Terrain {
 
         hydrology_evidence: None,
     };
-    let generator = MapChunkGenerator::new([0; 32], 0, 64)
+    let generator = MapChunkGenerator::new([0; 32], 0, width)
         .with_prepared_elevation(
             Ratio::new(1, 1).expect("compression"),
             &environment,
@@ -121,8 +125,8 @@ fn flat_map_terrain() -> Terrain {
         .with_prepared_water(&environment, vec![water, water_overview])
         .expect("water");
     let mut overlay = ResourceOverlay::default();
-    for y in 0..64 {
-        for x in 0..64 {
+    for y in 0..width {
+        for x in 0..width {
             let tile = TileCoord::new(x, y);
             if let Some(node) = generator.object_at(tile) {
                 overlay

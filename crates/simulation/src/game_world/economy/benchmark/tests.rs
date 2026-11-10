@@ -125,7 +125,8 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
         // Current region proofs discharge duplicate destination-pocket work,
         // so planners spend their allowance on routes sooner. The full run
         // preserved the activity floors and complete one/four-worker equality.
-        "eeb9a171fb41f0e6c486edd0f2d5cb196ebb54e7436ec0a4236d068b98277960"
+        // Bounded region witnesses skip duplicate floods and straight-route guidance; worker equality holds.
+        "a1c5fae0da9435093a6493943db807744fe823155b7bd72f9cddb68187408f48"
     );
 }
 

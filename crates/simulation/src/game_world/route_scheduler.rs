@@ -310,6 +310,7 @@ impl GameWorld {
             )
         });
         let fresh = planner.work() == 0;
+        self.reuse_region_endpoint_proof(&mut planner, kind, player);
         let work_before = planner.work();
         let (result, spent) = if fast {
             let (result, full) = self.poll_fast_route(&mut planner, kind, player);
@@ -331,6 +332,7 @@ impl GameWorld {
                 .work(kind, from, to, 1, spent);
             (result, spent)
         };
+        self.reuse_region_endpoint_proof(&mut planner, kind, player);
         let reason = attribution::failure_reason(&result);
         let (from, to) = (planner.origin(), planner.destination());
         let error = match result {

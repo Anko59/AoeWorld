@@ -2,6 +2,8 @@
 use super::*;
 use crate::MAX_ROUTE_WORK_PER_ORDER;
 
+mod guidance;
+
 #[test]
 fn a_certified_frontier_route_survives_the_disconnected_requested_goal() {
     let mut world = GameWorld::new(WorldConfig::new(64, 64, Seed(0)).unwrap()).unwrap();
@@ -223,5 +225,60 @@ fn confirmed_regions_do_not_repeat_a_destination_pocket_flood() {
         probe.0.load(Ordering::Relaxed),
         0,
         "current region connectivity already rules out a sealed destination pocket"
+    );
+}
+
+#[test]
+fn far_search_reuses_region_connectivity_before_flooding_the_destination() {
+    use aoe_map::{NavigationPhase, NavigationProbe, NavigationSpan};
+    use std::sync::atomic::AtomicUsize;
+    #[derive(Debug, Default)]
+    struct Probe(AtomicUsize);
+    struct Span;
+    impl NavigationSpan for Span {}
+    impl NavigationProbe for Probe {
+        fn begin(&self, phase: NavigationPhase) -> Box<dyn NavigationSpan> {
+            if phase == NavigationPhase::Pocket {
+                self.0.fetch_add(1, Ordering::Relaxed);
+            }
+            Box::new(Span)
+        }
+    }
+    let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(0)).unwrap()).unwrap();
+    world.terrain = flat_map_terrain_size(256);
+    let wall = TileRect::from_xywh(128, 0, 1, 240);
+    let Terrain::Map { overlay, generator } = &mut world.terrain else {
+        unreachable!();
+    };
+    overlay.add_footprint(wall).unwrap();
+    let probe = Arc::new(Probe::default());
+    generator.set_navigation_probe(probe.clone());
+    world.regions_changed(wall);
+    let from = TileCoord::new(120, 10);
+    let target = TileCoord::new(220, 10);
+    assert!(
+        world
+            .land_reachable(PlayerId(0), aoe_map::LandBucket::Small, from, target)
+            .unwrap()
+    );
+    let id = world
+        .spawn_villager(PlayerId(0), WorldPosition::from_tile_center(from).unwrap())
+        .unwrap();
+    world.fast_route_budget = 0;
+    assert!(
+        world
+            .issue_task_move(id, WorldPosition::from_tile_center(target).unwrap())
+            .unwrap()
+    );
+    for _ in 0..16 {
+        world.serve_route_searches(1024, &mut Vec::new());
+    }
+    assert_eq!(world.movement_failure(id), None);
+    assert!(world.movement_order(id).is_some());
+    assert_eq!(world.route_accounting_error(), None);
+    assert_eq!(
+        probe.0.load(Ordering::Relaxed),
+        0,
+        "a reachable far endpoint needs no second destination-pocket flood"
     );
 }

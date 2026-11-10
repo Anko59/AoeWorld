@@ -20,8 +20,8 @@ pub use planner::{
     ROUTE_LEG_PROGRESS_TILES, RouteOriginPocket, RoutePlanner, RoutePlannerPoll, RouteTerrain,
 };
 pub use regions::{
-    ANY_PLAYER, LandBucket, MapRegionGround, RegionChunk, RegionGround, RegionStats, RegionTile,
-    Regions,
+    ANY_PLAYER, LandBucket, MapRegionGround, RegionChunk, RegionGround, RegionReachability,
+    RegionStats, RegionTile, Regions,
 };
 
 pub const ORTHOGONAL_COST: u32 = 1_024;

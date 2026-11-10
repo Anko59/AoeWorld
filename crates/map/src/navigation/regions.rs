@@ -88,13 +88,29 @@ pub struct RegionStats {
     pub global_rebuilds: u64,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum Cells<T> {
     Uniform(T),
     Tiles(Box<[T]>),
 }
 type Labels = Cells<u16>;
 type Steps = Cells<BucketEdges>;
+
+/// A straight witness supplies local routing; a graph witness certifies only
+/// connectivity, so a detour can still need corridor guidance.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RegionReachability {
+    Unknown,
+    Unreachable,
+    Connected,
+    Straight,
+}
+
+impl RegionReachability {
+    pub fn is_reachable(self) -> bool {
+        matches!(self, Self::Connected | Self::Straight)
+    }
+}
 impl<T: Copy + Eq> Cells<T> {
     fn compact(cells: Vec<T>) -> Self {
         if cells.iter().all(|&cell| cell == cells[0]) {
@@ -111,7 +127,7 @@ impl<T: Copy + Eq> Cells<T> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct ChunkRegions {
     signature: u64,
     labels: Labels,
@@ -133,6 +149,8 @@ pub struct Regions {
     chunks: Vec<ChunkRegions>,
     /// Demand-built labels, moved into the dense census by an explicit flush.
     pending: BTreeMap<u32, ChunkRegions>,
+    /// Lazy lookups and the dense census each retain their invalidations.
+    pending_dirty: BTreeSet<u32>,
     dirty: BTreeSet<u32>,
     supers: Vec<SuperRegions>,
     global: Global,
@@ -154,6 +172,7 @@ impl Regions {
             chunks_y,
             chunks: Vec::new(),
             pending: BTreeMap::new(),
+            pending_dirty: BTreeSet::new(),
             dirty: BTreeSet::new(),
             supers: Vec::new(),
             global: Global::default(),
@@ -179,12 +198,16 @@ impl Regions {
                 if self.pending.contains_key(&chunk) || !self.chunks.is_empty() {
                     self.dirty.insert(chunk);
                 }
+                if self.pending.contains_key(&chunk) {
+                    self.pending_dirty.insert(chunk);
+                }
             }
         }
     }
 
     /// Everything may have changed.
     pub fn invalidate_all(&mut self) {
+        self.pending_dirty.extend(self.pending.keys().copied());
         self.dirty.extend(self.pending.keys().copied());
         self.dirty.extend(0..self.chunks.len() as u32);
     }
@@ -383,6 +406,35 @@ impl Regions {
         self.flush(ground);
         let root = self.global.root(self.node(tile)?);
         Some(self.closure_root(player, root))
+    }
+
+    /// A bounded optional certificate. Exhaustion is unknown, never a proof
+    /// of disconnection. The node allowance counts cached labels too, so
+    /// warming changes cost but cannot change the returned verdict.
+    pub fn reachable_bounded(
+        &mut self,
+        ground: &dyn RegionGround,
+        player: u32,
+        from: TileCoord,
+        to: TileCoord,
+        limit: u32,
+    ) -> RegionReachability {
+        if limit == 0 {
+            return RegionReachability::Unknown;
+        }
+        let distance = (i64::from(from.x) - i64::from(to.x))
+            .abs()
+            .max((i64::from(from.y) - i64::from(to.y)).abs());
+        if distance <= i64::from(limit) * i64::from(CHUNK)
+            && self.clear_ray(ground, player, from, to)
+        {
+            return RegionReachability::Straight;
+        }
+        match self.lazy_reachable_bounded(ground, player, from, to, limit) {
+            None => RegionReachability::Unknown,
+            Some(false) => RegionReachability::Unreachable,
+            Some(true) => RegionReachability::Connected,
+        }
     }
 
     /// True when `player` can walk from `from` to `to` on today's ground.

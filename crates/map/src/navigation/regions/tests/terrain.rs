@@ -108,3 +108,17 @@ fn sparse_region_queries_do_not_compose_whole_walk_chunks() {
     );
     assert_eq!(ground.error(), None);
 }
+
+#[test]
+fn a_region_chunk_does_not_compose_whole_neighbour_chunks_for_its_halo() {
+    let generator = flat_terrain_with_water_wall(96, -1, -1);
+    let ground = MapRegionGround::new(&generator, ResourceOverlay::empty(), &|| false);
+    assert_eq!(generator.walk_cache_usage().1, 0);
+    assert!(ground.chunk((1, 1), (96, 96)).is_some());
+    assert_eq!(ground.error(), None);
+    assert_eq!(
+        generator.walk_cache_usage().1,
+        1,
+        "the one-tile halo must use local point reads instead of composing eight neighbours"
+    );
+}

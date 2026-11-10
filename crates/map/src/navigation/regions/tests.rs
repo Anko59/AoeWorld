@@ -1,6 +1,9 @@
 use super::*;
 use std::collections::VecDeque;
 
+#[path = "tests/bounded.rs"]
+mod bounded;
+
 struct Grid {
     size: (i32, i32),
     cells: Vec<RegionTile>,
