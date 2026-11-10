@@ -98,6 +98,51 @@ pub struct GameArt {
 }
 
 impl GameArt {
+    /// Conservative world-pixel reaches for actors and buildings. Compute once
+    /// per prepared scene: native geometry is immutable during atlas streaming.
+    pub fn scene_actor_extents(&self) -> [[f64; 2]; 2] {
+        // Covers diagnostic markers and selection rings even without native art.
+        let mut extents = [[512.0; 2]; 2];
+        let scale =
+            aoe_core::ISO_TILE_WIDTH / f64::from(crate::terrain::TERRAIN_NATIVE_DIAMOND_WIDTH);
+        for frame in self.actors.iter().flatten() {
+            crate::sprite_extents::include(
+                &mut extents[0],
+                frame.size,
+                frame.anchor,
+                [0.0; 2],
+                scale,
+            );
+        }
+        let mut include = |frame: GameFrame, offset| {
+            crate::sprite_extents::include(
+                &mut extents[1],
+                frame.size,
+                frame.anchor,
+                offset,
+                scale,
+            );
+        };
+        for &frame in self.buildings.iter().flatten() {
+            include(frame, [0.0; 2]);
+        }
+        for building in &self.compositions {
+            for part in building
+                .parts
+                .iter()
+                .chain(&building.construction)
+                .chain(building.states.iter().flat_map(|(_, parts)| parts))
+                .chain(building.damage.iter().flat_map(|damage| &damage.parts))
+            {
+                include(part.frame, part.offset);
+                for &frame in &part.animation {
+                    include(frame, part.offset);
+                }
+            }
+        }
+        extents
+    }
+
     /// A cold animation cell retains a resident phase in the same facing row.
     /// Return that phase's complete geometry as well as its physical address.
     pub fn resident_animation(

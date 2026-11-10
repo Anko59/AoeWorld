@@ -65,3 +65,27 @@ async fn interleaved_bridge_keeps_piece_order_in_the_sorted_scene() {
     assert_eq!(result.last().unwrap().id, EntityId(4));
     client.canvas.remove();
 }
+
+#[wasm_bindgen_test]
+async fn prepared_actor_culling_keeps_the_authoritative_and_selected_offscreen_units() {
+    let mut scene = contact_scene();
+    let mut client = client(&scene).await;
+    let mut distant = *client.units.values().next().unwrap();
+    distant.id = EntityId(9000);
+    distant.position = aoe_core::WorldPosition::new(1000 * aoe_core::FIXED_SUBUNITS_PER_TILE, 0);
+    client.units.insert(distant.id, distant);
+    client.selected.units.push(distant.id);
+    let mut far_building = building(3);
+    far_building.footprint = TileRect::from_xywh(1000, 0, 2, 2);
+    client.village.buildings = vec![building(2), far_building];
+    scene.actor_extents = Some(client.art.scene_actor_extents());
+    let result = units(&client, &scene);
+    assert_eq!(
+        result.iter().map(|u| u.id).collect::<Vec<_>>(),
+        [EntityId(1), EntityId(2)]
+    );
+    assert!(client.units.contains_key(&distant.id));
+    assert!(client.selected.units.contains(&distant.id));
+    assert_eq!(client.village.buildings.len(), 2);
+    client.canvas.remove();
+}

@@ -209,6 +209,7 @@ fn install_colour(shared: Rc<RefCell<Client>>, colour: [u8; 3]) -> Result<(), Js
                                 element.set_attribute("data-art-colour", &format!("{colour:?}"));
                         }
                         client.art = art;
+                        client.terrain_scene.get_mut().take();
                         client.native = native;
                         client.team_colour = colour;
                         client.rendered_frame.clear();
