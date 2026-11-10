@@ -39,3 +39,7 @@ mod chunk_requests;
 #[cfg(all(target_arch = "wasm32", not(feature = "diagnostics")))]
 #[path = "building_ui/mod.rs"]
 pub mod building_ui;
+
+#[cfg(any(all(target_arch = "wasm32", not(feature = "diagnostics")), test))]
+#[path = "village/hud/visibility.rs"]
+mod hud_visibility;

@@ -82,6 +82,7 @@ export async function inputFixture(
     player?: number[];
     military?: boolean;
     originalArt?: boolean;
+    offscreenUnits?: number;
     url?: string;
     resources?: Parameters<typeof chunks>[0];
   } = {},
@@ -152,7 +153,7 @@ export async function inputFixture(
               : villagerCombat;
         // Cargo precedes the optional home and management IDs, stance and General state.
         return [
-          id,
+          ...uint(id),
           player,
           ...position(x, y),
           0,
@@ -172,7 +173,7 @@ export async function inputFixture(
           1,
           ...revision,
           0,
-          navy ? 5 : 4,
+          ...uint((navy ? 5 : 4) + (options.offscreenUnits ?? 0)),
           ...unit(0, 8192.5, 8192.5, 1),
           ...unit(2, 8194.5, 8194.5, 0),
           ...unit(3, 8196.5, 8194.5, options.military ? 2 : 0),
@@ -184,6 +185,14 @@ export async function inputFixture(
             viewer === 0 ? 1 : 0,
           ),
           ...(navy ? unit(5, 8193.5, 8194.5, 20, viewer, navy.cargo) : []),
+          ...Array.from({ length: options.offscreenUnits ?? 0 }, (_, index) =>
+            unit(
+              index + 100,
+              64 + (index % 32),
+              64 + Math.floor(index / 32),
+              0,
+            ),
+          ).flat(),
           1,
           ...(options.player ?? [
             viewer,

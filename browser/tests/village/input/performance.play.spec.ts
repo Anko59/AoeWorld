@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { test } from "../../../server.js";
-import { inputFixture } from "./fixture.js";
+import { inputFixture, selectWorker } from "./fixture.js";
 
 type Measurements = {
   enabled: boolean;
@@ -222,4 +222,45 @@ test("summary percentiles retain stalls and stage totals without unbounded histo
   expect(result.frames).toBe(2048);
   expect(result.frame_ms).toEqual([16, 80, 1000]);
   expect(result.stages_ms["update"]).toEqual([3, 3, 3]);
+});
+
+test("normal HUD work follows visible actors while selected offscreen actors and global counts survive camera jumps", async ({
+  page,
+}, info) => {
+  const renderer = info.project.name === "webgpu" ? "webgpu" : "webgl2";
+  await inputFixture(page, renderer, [], false, 0, undefined, {
+    offscreenUnits: 1000,
+  });
+  const actors = () =>
+    page
+      .locator("#scene")
+      .getAttribute("data-actors")
+      .then(
+        (value) =>
+          JSON.parse(value ?? "[]") as { id: number; selected: boolean }[],
+      );
+  await expect.poll(async () => (await actors()).length).toBeLessThan(10);
+  await expect(page.locator("#idle-villager-count")).toHaveText("1002");
+  const population = await page.locator("#population").textContent();
+  await selectWorker(page);
+  await page.evaluate(() => {
+    location.hash = "x=16000&y=16000&zoom=.6";
+  });
+  await expect(page.locator("#minimap")).toHaveAttribute(
+    "data-camera-x",
+    "16000",
+  );
+  await expect
+    .poll(async () => (await actors()).map((actor) => actor.id))
+    .toEqual([2]);
+  expect((await actors())[0]?.selected).toBe(true);
+  await expect(page.locator("#selection")).toHaveAttribute("data-count", "1");
+  await expect(page.locator("#idle-villager-count")).toHaveText("1002");
+  await expect(page.locator("#population")).toHaveText(population ?? "");
+  await page.evaluate(() => {
+    location.hash = "x=8192.5&y=8192.5&zoom=.6";
+  });
+  await expect
+    .poll(async () => (await actors()).some((actor) => actor.id === 3))
+    .toBe(true);
 });

@@ -22,12 +22,9 @@ fn rendered_colour(client: &Client, player: aoe_core::PlayerId, owner: aoe_core:
     f64::from(r << 16 | g << 8 | b)
 }
 
-fn screen(client: &Client, position: [f64; 2]) -> [f64; 2] {
+fn screen(client: &Client, position: [f64; 2], scale: [f64; 2]) -> [f64; 2] {
     let p = map::screen_position(client, position);
-    [
-        p.x * f64::from(client.canvas.client_width()) / f64::from(client.canvas.width()),
-        p.y * f64::from(client.canvas.client_height()) / f64::from(client.canvas.height()),
-    ]
+    [p.x * scale[0], p.y * scale[1]]
 }
 
 pub(in super::super) fn update(client: &Client) {
@@ -53,7 +50,14 @@ pub(in super::super) fn update(client: &Client) {
     // Actor records contain eighteen numbers; queue records contain progress,
     // total and unit kind.
     // Decode immediately in JS; never retain a view of WASM memory.
-    let scene = map::scene::prepare(client);
+    let viewport = [
+        f64::from(client.canvas.client_width().max(1)),
+        f64::from(client.canvas.client_height().max(1)),
+    ];
+    let scale = [
+        viewport[0] / f64::from(client.canvas.width()),
+        viewport[1] / f64::from(client.canvas.height()),
+    ];
     let camera = aoe_rendering::SceneCamera {
         center: client.camera.center,
         zoom: client.camera.zoom,
@@ -63,9 +67,13 @@ pub(in super::super) fn update(client: &Client) {
     let heads = if overview {
         Vec::new()
     } else {
-        map::scene::units(client, &scene)
-            .into_iter()
-            .filter(|u| u.visual.selected())
+        // Reuse the displayed pose instead of rebuilding every world actor to
+        // find the few selected health-bar anchors.
+        client
+            .selected
+            .units
+            .iter()
+            .filter_map(|id| client.rendered_frame.unit(*id))
             .filter_map(|u| {
                 aoe_rendering::scene_unit_bounds(
                     &client.art,
@@ -123,9 +131,13 @@ pub(in super::super) fn update(client: &Client) {
         if overview && !selected {
             continue;
         }
-        values[12] += 1.0;
         let position = position_at(client, unit.id);
-        let [x, y] = screen(client, position);
+        let [x, y] = screen(client, position, scale);
+        let top = head(unit.id, y);
+        if !crate::hud_visibility::visible([x, y], top, viewport, selected) {
+            continue;
+        }
+        values[12] += 1.0;
         let resource = unit.carried.map(|load| load.kind).or(unit.gathering);
         let base = crate::building_ui::content::rules().units[unit.kind as usize].combat;
         let p = client
@@ -168,7 +180,7 @@ pub(in super::super) fn update(client: &Client) {
             f64::from(stats.attack),
             f64::from(stats.melee_armour) + if loom { 1.0 } else { 0.0 },
             f64::from(stats.pierce_armour) + if loom { 2.0 } else { 0.0 },
-            head(unit.id, y),
+            top,
             f64::from(if unit.kind == UnitKind::FishingShip {
                 15
             } else {
@@ -190,8 +202,16 @@ pub(in super::super) fn update(client: &Client) {
         if overview && !client.selected.has_building(building.id) {
             continue;
         }
+        let [x, y] = screen(client, building_center(building), scale);
+        if !crate::hud_visibility::visible(
+            [x, y],
+            y - 48.0,
+            viewport,
+            client.selected.has_building(building.id),
+        ) {
+            continue;
+        }
         values[12] += 1.0;
-        let [x, y] = screen(client, building_center(building));
         values.extend_from_slice(&[
             f64::from(building.id.0),
             2.0 + building.kind as u8 as f64,
@@ -223,8 +243,17 @@ pub(in super::super) fn update(client: &Client) {
         if overview && !client.selected.units.contains(&animal.id) {
             continue;
         }
+        let [x, y] = screen(client, animal.position.as_tiles(), scale);
+        let top = head(animal.id, y);
+        if !crate::hud_visibility::visible(
+            [x, y],
+            top,
+            viewport,
+            client.selected.units.contains(&animal.id),
+        ) {
+            continue;
+        }
         values[12] += 1.0;
-        let [x, y] = screen(client, animal.position.as_tiles());
         let (kind, hp, attack) = match animal.kind {
             aoe_protocol::AnimalKind::Sheep => {
                 (4.0 + aoe_protocol::BuildingKind::ALL.len() as f64, 7, 0)
@@ -253,7 +282,7 @@ pub(in super::super) fn update(client: &Client) {
             f64::from(attack),
             0.0,
             0.0,
-            head(animal.id, y),
+            top,
             0.0,
             0.0,
             animal.owner.map_or(-1.0, |p| f64::from(p.0)),
