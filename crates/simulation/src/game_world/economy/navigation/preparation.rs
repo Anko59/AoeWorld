@@ -6,6 +6,8 @@ use std::sync::Mutex;
 pub(super) struct LimitedMap<'a> {
     pub(super) generator: &'a MapChunkGenerator,
     pub(super) allowance: &'a Mutex<u32>,
+    pub(super) world: &'a crate::GameWorld,
+    pub(super) player: aoe_core::PlayerId,
 }
 impl RouteTerrain for LimitedMap<'_> {
     fn route_generator(&self) -> Option<&MapChunkGenerator> {
@@ -29,7 +31,8 @@ impl RouteTerrain for LimitedMap<'_> {
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError> {
-        self.generator.route_walkable(overlay, tile, cancelled)
+        Ok(self.world.route_tile_admitted(self.player, tile)
+            && self.generator.route_walkable(overlay, tile, cancelled)?)
     }
     fn route_edge_clear(
         &self,
@@ -37,7 +40,9 @@ impl RouteTerrain for LimitedMap<'_> {
         to: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError> {
-        self.generator.route_edge_clear(from, to, cancelled)
+        Ok(self.world.route_tile_admitted(self.player, from)
+            && self.world.route_tile_admitted(self.player, to)
+            && self.generator.route_edge_clear(from, to, cancelled)?)
     }
     fn route_step_cost(
         &self,

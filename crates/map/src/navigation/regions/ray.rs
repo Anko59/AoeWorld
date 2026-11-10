@@ -18,6 +18,11 @@ impl Regions {
         if start == RegionTile::Blocked {
             return false;
         }
+        if let RegionTile::Gate(gate) = start
+            && ground.gate_locked(gate)
+        {
+            return false;
+        }
         let class = |tile| ground.tile(tile);
         let (dx, dy) = (
             i64::from(to.x) - i64::from(from.x),
@@ -35,10 +40,11 @@ impl Regions {
                 RegionTile::Blocked => false,
                 RegionTile::Open => true,
                 RegionTile::Gate(gate) => {
-                    player == super::ANY_PLAYER
-                        || ground.gate_owner(gate) == player
-                        || ground.gate_open(gate)
-                        || next_class == start
+                    !ground.gate_locked(gate)
+                        && (player == super::ANY_PLAYER
+                            || ground.gate_owner(gate) == player
+                            || ground.gate_open(gate)
+                            || next_class == start)
                 }
             };
             if !admitted

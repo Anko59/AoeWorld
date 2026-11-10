@@ -188,12 +188,18 @@ impl Regions {
     }
 
     pub(super) fn admits(&self, player: u32, gate: Option<u32>) -> bool {
-        player == super::ANY_PLAYER
-            || gate.is_none_or(|gate| {
-                self.gate_access
-                    .get(&gate)
-                    .is_some_and(|&(owner, open)| owner == player || open)
-            })
+        gate.is_none_or(|gate| {
+            self.gate_access
+                .get(&gate)
+                .is_some_and(|&(owner, open, locked)| {
+                    !locked && (player == super::ANY_PLAYER || owner == player || open)
+                })
+        })
+    }
+
+    pub(super) fn locked(&self, gate: Option<u32>) -> bool {
+        gate.and_then(|gate| self.gate_access.get(&gate))
+            .is_some_and(|&(_, _, locked)| locked)
     }
 
     /// The player's root of a global root: gated edges it may pass joined.
@@ -229,6 +235,9 @@ impl Regions {
         let start = self.global.root(self.node_of(chunk, label));
         let root = self.closure_root(player, start);
         let gate = self.chunks[chunk as usize].gates[usize::from(label) - 1];
+        if self.locked(gate) {
+            return BTreeSet::new();
+        }
         let mut links = BTreeMap::<u32, Vec<u32>>::new();
         // Physical collision allows a unit already in a foreign gateway to
         // leave. It may not enter a different foreign gate on the way out.

@@ -41,10 +41,15 @@ fn a_cached_unreachable_perimeter_preserves_the_choice_and_canonical_state_witho
         crate::MAX_ROUTE_WORK_PER_ORDER,
     );
     assert_eq!(
-        warm.probe_route_poll(&mut planner, 8192, UnitKind::Villager),
+        warm.probe_route_poll(&mut planner, 8192, UnitKind::Villager, PlayerId(0)),
         RoutePlannerPoll::Unreachable
     );
-    warm.cache_route(&planner, UnitKind::Villager, &MovementOutcome::Unreachable);
+    warm.cache_route(
+        &planner,
+        UnitKind::Villager,
+        PlayerId(0),
+        &MovementOutcome::Unreachable,
+    );
     assert_eq!(
         cold.canonical_hash(),
         warm.canonical_hash(),
@@ -94,7 +99,7 @@ fn source_pocket_rejection_matches_normal_orders_at_every_budget_boundary() {
         let (mut reference, worker) = fenced_source();
         let (mut filtered, _) = fenced_source();
         let pocket = filtered
-            .route_origin_pocket(UnitKind::Villager, TileCoord::new(100, 100))
+            .route_origin_pocket(UnitKind::Villager, TileCoord::new(100, 100), PlayerId(0))
             .unwrap()
             .unwrap();
         for to in [
@@ -138,7 +143,7 @@ fn opening_the_source_component_discards_the_proof_and_cached_failures() {
     world.remove_building(wall);
     assert!(
         world
-            .route_origin_pocket(UnitKind::Villager, TileCoord::new(100, 100))
+            .route_origin_pocket(UnitKind::Villager, TileCoord::new(100, 100), PlayerId(0))
             .unwrap()
             .is_none()
     );

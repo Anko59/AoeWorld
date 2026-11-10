@@ -135,6 +135,9 @@ ordinary standing/walking art. Buildings use imported DAT recipes:
 stand graphics and ordered deltas, annex tile displacements, shadows,
 construction graphics, footprints and foundation terrain. The Town Center's
 head is unit 109; unit 618 is its main-building annex, not the whole recipe.
+The compiled recipe view stays within 32 KiB: repeated nonempty part lists use
+backreferences to earlier lists, preserving native offsets and state ordering.
+Import identities include this encoding; regenerate local packs when it changes.
 Signed and outside anchors are preserved; player masks use the current blue
 ramp. The foundation material is painted into the shared terrain before
 tessellation, so ordinary terrain blending owns its edges in every backend.

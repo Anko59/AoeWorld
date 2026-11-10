@@ -104,6 +104,7 @@ impl GameWorld {
                 food_remaining: b.food_remaining,
                 research: b.research,
                 gate_open: b.gate_open,
+                gate_locked: b.gate_locked,
                 rally_point: b.rally_point,
                 farm_reseeds: b.farm_reseeds,
             })
@@ -227,6 +228,7 @@ impl GameWorld {
         building.food_remaining = record.food_remaining;
         building.research = record.research;
         building.gate_open = record.gate_open;
+        building.gate_locked = record.gate_locked;
         building.rally_point = record.rally_point;
         building.farm_reseeds = record.farm_reseeds;
         if !record.training_queue.is_empty() {

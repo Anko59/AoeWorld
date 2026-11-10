@@ -175,7 +175,13 @@ fn a_walking_unit_with_pending_lookahead_still_gets_a_pure_proposal() {
     let target = TileCoord::new(60, 10);
     let mut planner = aoe_map::RoutePlanner::new(origin, target, crate::MAX_ROUTE_WORK_PER_ORDER);
     let path = loop {
-        match world.poll_world_route_planner(&mut planner, 1_024, &|| false, UnitKind::Scout) {
+        match world.poll_world_route_planner(
+            &mut planner,
+            1_024,
+            &|| false,
+            UnitKind::Scout,
+            aoe_core::PlayerId(0),
+        ) {
             aoe_map::RoutePlannerPoll::Path(path) => break path,
             aoe_map::RoutePlannerPoll::Pending => assert!(planner.work() < 16_384),
             other => panic!("expected a first leg: {other:?}"),

@@ -162,7 +162,7 @@ pub(super) fn animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> b
         return art
             .compositions
             .iter()
-            .find(|b| Some(b.unit_id) == unit.kind.building_id())
+            .find(|b| Some(b.unit_id) == unit.kind.oriented_building_id(unit.facing))
             .is_some_and(|b| {
                 let elapsed = art
                     .building_clocks
@@ -186,10 +186,13 @@ pub(super) fn animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> b
         return art
             .compositions
             .iter()
-            .find(|b| Some(b.unit_id) == unit.kind.building_id())
+            .find(|b| Some(b.unit_id) == unit.kind.oriented_building_id(unit.facing))
             .is_some_and(|b| {
                 // A healthy wall draws frame 0 of each part; only damage animates.
-                let wall = unit.kind == crate::SceneUnitKind::PalisadeWall;
+                let wall = matches!(
+                    unit.kind,
+                    SceneUnitKind::PalisadeWall | SceneUnitKind::StoneWall
+                );
                 let parts: &[_] = if wall { &[] } else { &b.parts };
                 let damage = usize::from(unit.visual.damage_stage())
                     .checked_sub(1)
