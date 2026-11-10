@@ -302,3 +302,21 @@ extern "C" {
     fn coverage_texture_is_live(bridge: &JsValue, texture: &JsValue) -> bool;
     fn track_coverage_storage(bridge: &JsValue) -> js_sys::Function;
 }
+
+#[wasm_bindgen_test]
+fn webgl_contours_return_after_a_long_run_without_effects() {
+    // A game spends long stretches with no unit behind an occluder; the coverage
+    // backing is released meanwhile and must come back with the same pixels.
+    let (canvas, mut renderer) = target(&effect_atlas());
+    let actor = body(0).with_unit_contour(Some([0, 0, 255]));
+    for _ in 0..3 {
+        render(&mut renderer, &mut [actor, blocker(4)]);
+        assert_pixel(&canvas, 87, 64, [0, 0, 255, 255]);
+        for _ in 0..90 {
+            render(&mut renderer, &mut [actor]);
+        }
+        assert_pixel(&canvas, 87, 64, [220, 30, 80, 255]);
+        render(&mut renderer, &mut [actor, blocker(4)]);
+        assert_pixel(&canvas, 87, 64, [0, 0, 255, 255]);
+    }
+}
