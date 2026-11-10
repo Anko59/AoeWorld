@@ -1,4 +1,6 @@
 mod continuation;
+mod flee;
+mod predators;
 use super::*;
 use crate::{AnimalKind, AnimalTask, EconomyError, UnitTask, WILDLIFE_RULES};
 

@@ -116,6 +116,7 @@ impl GameWorld {
             let unemployed = self.steward_idle(id, &mut snapshot, &mut budget, &mut work, changed);
             self.steward_refresh_farms(&mut snapshot, &mut budget, &mut work, changed);
             self.steward_refresh_wood(&mut snapshot, &mut budget, &mut work);
+            self.steward_retire_lumber_camp(&mut snapshot, &mut budget, &mut work);
             while discover && budget.searches < STEWARD_RULES.resource_searches_per_domain {
                 if !self.steward_discover(&mut snapshot, &mut budget, &mut work) {
                     break;

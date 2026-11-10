@@ -35,6 +35,7 @@ pub(crate) struct Home {
     pub(super) worker_after: Option<EntityId>,
     pub(super) scan_chunk: usize,
     pub(super) scan_offset: usize,
+    building_scan: Option<snapshot::BuildingScan>,
     pub(super) site_after: usize,
     pub(super) farm_after: Option<usize>,
     pub(super) repair_after: Option<EntityId>,
@@ -120,6 +121,7 @@ impl GameWorld {
                 worker_after: None,
                 scan_chunk: 0,
                 scan_offset: 0,
+                building_scan: None,
                 site_after: 0,
                 farm_after: None,
                 repair_after: None,
@@ -296,6 +298,7 @@ impl GameWorld {
                     h.worker_after = None;
                     h.scan_chunk = 0;
                     h.scan_offset = 0;
+                    h.building_scan = None;
                     h.site_after = 0;
                     h.farm_after = None;
                     (std::mem::take(&mut h.workers), refused)

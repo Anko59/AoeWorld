@@ -69,7 +69,9 @@ impl GameWorld {
                 self.units[index].state.carried = None;
             }
             // A villager walks to a living sheep; herding starts once it leads.
-            self.units[index].state.task = if a.kind != AnimalKind::Sheep {
+            self.units[index].state.task = if a.kind == AnimalKind::Wolf {
+                UnitTask::Attacking
+            } else if a.kind != AnimalKind::Sheep {
                 UnitTask::Hunting
             } else if a.hp > 0 {
                 UnitTask::Moving
@@ -156,10 +158,16 @@ impl GameWorld {
             }
         }
         let index = self.lookup[&id];
-        let reach = if a.kind == AnimalKind::Sheep { 1 } else { 4 };
+        let reach = if matches!(a.kind, AnimalKind::Sheep | AnimalKind::Wolf) {
+            1
+        } else {
+            4
+        };
         if distance(u.position, a.position) > radius(reach) {
             // Walking into reach is a walk, never the attack pose.
-            self.units[index].state.task = if a.kind == AnimalKind::Sheep {
+            self.units[index].state.task = if a.kind == AnimalKind::Wolf {
+                UnitTask::Attacking
+            } else if a.kind == AnimalKind::Sheep {
                 UnitTask::Moving
             } else {
                 UnitTask::Hunting
@@ -171,7 +179,9 @@ impl GameWorld {
         }
         self.stop_movement(index);
         self.units[index].state.face_towards(a.position);
-        self.units[index].state.task = if a.kind == AnimalKind::Sheep {
+        self.units[index].state.task = if a.kind == AnimalKind::Wolf {
+            UnitTask::Attacking
+        } else if a.kind == AnimalKind::Sheep {
             UnitTask::Shepherding
         } else {
             UnitTask::Hunting

@@ -1,4 +1,5 @@
 mod adoption;
+mod census;
 mod construction;
 mod farming;
 mod kingdom;

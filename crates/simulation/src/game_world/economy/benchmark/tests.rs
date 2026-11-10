@@ -117,7 +117,10 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
         // A packed block holding its files until the pass is behind it moves it again.
         // The state hash folds per-block digests of 1,024 units (hashed on
         // worker threads) instead of one stream: same state, new value.
-        "edfca9ebfa7aa2d437467fd39a938025a92f221670412fbae2a98a86bc3855eb"
+        // #745 changes wildlife movement/hunting and replaced-camp lifecycle.
+        // Repin the current output; workload, activity floors and the full
+        // one/four-worker replay equality above are unchanged.
+        "f06497a1b833ed312ac4e9efcf1a6e7607c125b18f2db79e9c40718ca8cd0775"
     );
 }
 

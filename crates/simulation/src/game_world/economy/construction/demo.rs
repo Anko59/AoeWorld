@@ -3,6 +3,9 @@
 use crate::{BuildingKind, EconomyError, GameWorld, Stockpile};
 use aoe_core::{EntityId, PlayerId, Seed, TileCoord, TileRect, WorldConfig};
 
+#[path = "demo/behaviour.rs"]
+mod behaviour;
+pub use behaviour::BehaviourScene;
 #[path = "demo/coast.rs"]
 mod coast;
 #[path = "demo/imperial.rs"]

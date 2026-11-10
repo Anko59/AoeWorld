@@ -276,6 +276,27 @@ impl GameWorld {
             return;
         }
         let radius = super::super::VILLAGE_RULES.replacement_radius_tiles;
+        if kind == BuildingKind::TownCenter {
+            let Some(origin) = self.unit(builder).map(|u| u.position.tile_floor()) else {
+                return;
+            };
+            let mut nodes = [
+                ResourceKind::Food,
+                ResourceKind::Wood,
+                ResourceKind::Gold,
+                ResourceKind::Stone,
+            ]
+            .into_iter()
+            .filter_map(|resource| self.nearest_resource(origin, resource, radius, None))
+            .collect::<Vec<_>>();
+            nodes.sort_unstable_by_key(|node| (distance_squared(origin, node.tile), node.id));
+            for node in nodes {
+                if self.issue_gather(player, builder, node.id).is_ok() {
+                    return;
+                }
+            }
+            return;
+        }
         let wanted: &[ResourceKind] = match kind {
             BuildingKind::LumberCamp => &[ResourceKind::Wood],
             BuildingKind::MiningCamp => &[ResourceKind::Gold, ResourceKind::Stone],

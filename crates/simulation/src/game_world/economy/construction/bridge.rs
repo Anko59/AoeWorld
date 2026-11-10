@@ -44,14 +44,38 @@ impl GameWorld {
     ) -> Result<EntityId, EconomyError> {
         let builders = self.validate_builders(player, builders)?;
         self.validate_build_queue(&builders, 1, queued)?;
-        let span = BridgeSpan::new(from, to).ok_or(EconomyError::InvalidFootprint)?;
+        let snapped = aoe_core::snap_bridge_start(
+            from,
+            to,
+            |tile| match &self.terrain {
+                Terrain::Map { generator, .. } => {
+                    generator.tile_at(tile).map(|t| t.water != WaterKind::None)
+                }
+                _ => None,
+            },
+            |span| {
+                self.validate_bridge_placement(span).is_ok()
+                    && span.tiles().iter().all(|tile| {
+                        self.validate_explored_footprint(
+                            player,
+                            TileRect::from_xywh(tile.x, tile.y, 1, 1),
+                        )
+                        .is_ok()
+                    })
+            },
+        );
+        let span = snapped
+            .or_else(|| BridgeSpan::new(from, to))
+            .ok_or(EconomyError::InvalidFootprint)?;
         let rect = span.footprint();
         let cost =
             self.check_buildable(player, BuildingKind::Bridge, span.tiles().len() as u32 - 2)?;
         for tile in span.tiles() {
             self.validate_explored_footprint(player, TileRect::from_xywh(tile.x, tile.y, 1, 1))?;
         }
-        self.validate_bridge_placement(span)?;
+        if snapped.is_none() {
+            self.validate_bridge_placement(span)?;
+        }
         let id =
             self.insert_building_shape(player, BuildingKind::Bridge, rect, false, Some(span))?;
         self.charge(player, cost);

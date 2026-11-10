@@ -136,7 +136,20 @@ pub(super) fn valid(client: &Client, kind: BuildingKind, origin: TileCoord) -> b
 pub(super) fn tiles(client: &Client, at: TileCoord) -> Option<Vec<TileCoord>> {
     if client.village.placement == Some(BuildingKind::Bridge) {
         let from = client.village.wall_start.unwrap_or(at);
-        aoe_core::raster_bridge_line(from, at)
+        aoe_core::snap_bridge_start(
+            from,
+            at,
+            |tile| {
+                map::terrain_tile(client, tile.x, tile.y)
+                    .map(|t| t.water != aoe_map::WaterKind::None)
+            },
+            |span| {
+                let tiles = span.tiles();
+                span_valid(client, BuildingKind::Bridge, &tiles)
+            },
+        )
+        .map(|span| span.tiles())
+        .or_else(|| aoe_core::raster_bridge_line(from, at))
     } else if client.village.placement.is_some_and(BuildingKind::is_line) {
         building_ui::wall_tiles(client.village.wall_start.unwrap_or(at), at)
     } else {
@@ -236,8 +249,8 @@ pub(in super::super) fn place(client: &mut Client, point: ScreenPoint, release: 
         Message::BuildBridgeOrder {
             sequence,
             builder_ids,
-            from: client.village.wall_start.unwrap_or(at),
-            to: at,
+            from: tiles[0],
+            to: tiles[tiles.len() - 1],
             queued: shift,
         }
     } else if kind.is_line() {
