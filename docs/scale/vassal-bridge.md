@@ -149,3 +149,20 @@ The memoized increment also passed:
 No visible behavior change is intended in this indexed lookup increment, so
 no before/after gameplay video was recorded. The owner's save and CI have not
 been run. Publication is excluded by the task brief; no ship or push is run.
+
+## Stop-check recovery
+
+The first stop check after `36eacfbafbfef502d2a0b3433ca2cef6b579c55f`
+hit the 180-second architecture-check budget during a cold harness build.
+The other reported failures were immediate resource-admission refusals below
+the 3 GiB available-memory floor. After memory recovered, the unchanged source
+passed `make architecture-check` and then `make browser-check deny docs-check
+fmt-check lint structure-check architecture-check`, using the default build
+profile that the stop checks use. No gate, baseline or test was weakened.
+
+Recovery logs are local ignored artifacts:
+`.cache/cx-bridge/stop-architecture-recovery.log` and
+`.cache/cx-bridge/stop-gates-recovery.log`. The original stop report remains in
+the hook-managed `.cache/agent-hook/state.json`. Build artifacts are retained
+through the successful stop rerun; final cleanup belongs at the end of the
+unfinished goal. These local results do not qualify CI or dedicated hardware.
