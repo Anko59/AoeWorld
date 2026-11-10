@@ -208,10 +208,14 @@ pub(in super::super::super) fn units(
         };
         units.push(unit);
     }
-    // One stable sort avoids shifting the growing actor tail for every
-    // building. Equal-ID bridge pieces retain their native span order.
-    units.sort_by_key(|unit| unit.id);
+    order(&mut units);
     projectiles::append(client, scene, &mut units);
     super::super::super::village::building_panel::preview(client, &mut units);
     units
+}
+
+/// One stable sort avoids shifting the growing actor tail for every building.
+/// Equal-ID bridge pieces retain their native span order.
+pub(super) fn order(units: &mut [aoe_rendering::SceneUnit]) {
+    units.sort_by_key(|unit| unit.id);
 }
