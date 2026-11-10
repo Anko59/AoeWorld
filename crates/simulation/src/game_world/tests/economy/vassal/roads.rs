@@ -55,6 +55,9 @@ fn road_demo_uses_ordinary_movement_and_a_fortified_vassal() {
             .count(),
         29
     );
+    // Planning is now asynchronous. Resolve the paused fixture before testing
+    // that enabling development does not take the villagers' live orders.
+    w.vassal_network(v);
     let lanes: Vec<_> = w
         .units()
         .filter(|u| u.kind == UnitKind::Villager && [120, 123].contains(&u.position.tile_floor().y))

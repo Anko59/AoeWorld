@@ -34,7 +34,7 @@ impl GameWorld {
                     super::ring::side_of(d.center, h) != super::ring::side_of(d.center, tile)
                 })
             {
-                d.plan.clear();
+                d.request_replan(self.tick.0);
                 d.hot = Some(tile);
             }
         }

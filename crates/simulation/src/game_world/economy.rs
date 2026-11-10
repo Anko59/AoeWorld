@@ -44,7 +44,7 @@ pub use tick::TickPhase;
 pub(crate) mod training;
 pub use training::rally::{RallyPoint, RallyTarget};
 #[path = "economy/construction/bridge.rs"]
-mod bridge;
+pub(crate) mod bridge;
 mod general;
 mod steward;
 pub use general::{GeneralState, GeneralStatus, GeneralWork, SquadKind, SquadStatus};

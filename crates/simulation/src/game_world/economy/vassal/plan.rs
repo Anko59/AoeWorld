@@ -5,6 +5,10 @@
 use super::*;
 use crate::Age;
 
+#[cfg(test)]
+#[path = "../../tests/economy/vassal/replan.rs"]
+mod replan_tests;
+
 /// A planned building. Lower `tier`s are built first.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Site {
@@ -50,17 +54,38 @@ impl GameWorld {
             return Vec::new();
         };
         let age = self.player_economy(d.player).map_or(Age::Dark, |p| p.age);
-        if !d.plan.is_empty()
-            && d.plan_age == age
-            && self.tick.0.saturating_sub(d.planned) < REPLAN_TICKS
+        let requested = d.replan_at.is_some_and(|at| self.tick.0 >= at);
+        if !requested
+            && (d.pending.is_some()
+                || (!d.plan.is_empty()
+                    && d.plan_age == age
+                    && self.tick.0.saturating_sub(d.planned) < REPLAN_TICKS))
         {
             return d.plan.clone();
         }
-        let plan = sites(self, d.center, d.player, age, &d.refused, d.hot);
+        let mut plan = sites(self, d.center, d.player, age, &d.refused, d.hot);
+        // Keep useful network orders while its replacement is being searched.
+        plan.extend(
+            d.plan
+                .iter()
+                .copied()
+                .filter(|s| matches!(s.kind, BuildingKind::Road | BuildingKind::Bridge)),
+        );
+        // Explicit fortification requests must not churn the retained network:
+        // builders may already be laying its retained roads and bridge spans.
+        let pending = if d.pending.is_none() && (!requested || d.plan.is_empty()) {
+            super::road_job::Planner::new(self, d.center, d.player, &plan)
+        } else {
+            None
+        };
         if let Some(d) = self.economy.vassals.domains.get_mut(&id) {
             d.plan.clone_from(&plan);
             d.plan_age = age;
             d.planned = self.tick.0;
+            d.replan_at = None;
+            if d.pending.is_none() {
+                d.pending = pending;
+            }
         }
         plan
     }
@@ -70,7 +95,7 @@ impl GameWorld {
     /// Footprints of the domain's planned fortification (every site but roads).
     #[cfg(test)]
     pub(crate) fn vassal_fortification(&mut self, id: EntityId) -> Vec<(BuildingKind, TileRect)> {
-        self.vassal_plan(id)
+        self.finished_vassal_plan(id)
             .into_iter()
             .filter(|s| !matches!(s.kind, BuildingKind::Road | BuildingKind::Bridge))
             .map(|s| {
@@ -93,7 +118,7 @@ impl GameWorld {
         &mut self,
         id: EntityId,
     ) -> Vec<(BuildingKind, TileCoord, Option<TileCoord>)> {
-        self.vassal_plan(id)
+        self.finished_vassal_plan(id)
             .into_iter()
             .filter(|s| matches!(s.kind, BuildingKind::Road | BuildingKind::Bridge))
             .map(|s| (s.kind, s.tile, s.end))
@@ -146,8 +171,10 @@ pub(super) fn threat_vector(
     hot: Option<TileCoord>,
 ) -> (i32, i32) {
     let target = hot.unwrap_or_else(|| {
-        w.buildings()
-            .filter(|b| b.player != player && b.kind == BuildingKind::TownCenter && b.hp > 0)
+        w.players()
+            .filter(|p| p.player != player)
+            .flat_map(|p| w.player_buildings_of(p.player, BuildingKind::TownCenter))
+            .filter(|b| b.hp > 0)
             .map(|b| center_of(b.footprint))
             .min_by_key(|c| {
                 (
@@ -192,7 +219,11 @@ pub(super) fn sites(
         };
         if let Some(b) = w
             .player_buildings_of(player, kind)
-            .filter(|b| b.hp > 0 && within(home, b.footprint, reuse))
+            .filter(|b| {
+                b.hp > 0
+                    && within(home, b.footprint, reuse)
+                    && (b.is_complete() || !refused.contains_key(&b.footprint.min))
+            })
             .min_by_key(|b| b.id)
         {
             sites.push(Site::new(kind, b.footprint.min, tier));
@@ -257,9 +288,68 @@ pub(super) fn sites(
         }
     }
     sites.extend(super::ring::sites(w, center, player, age, toward));
-    let roads = super::roads::sites(w, center, player, &sites);
-    sites.extend(roads);
     sites
+}
+
+impl GameWorld {
+    fn poll_vassal_plan(&mut self, id: EntityId) {
+        let pending = self
+            .economy
+            .vassals
+            .domains
+            .get_mut(&id)
+            .and_then(|d| d.pending.take());
+        let Some(mut pending) = pending else {
+            return;
+        };
+        let result = pending.poll(self);
+        if let Some(d) = self.economy.vassals.domains.get_mut(&id) {
+            if let Some(roads) = result {
+                d.plan
+                    .retain(|s| !matches!(s.kind, BuildingKind::Road | BuildingKind::Bridge));
+                d.plan.extend(roads);
+                d.planned = self.tick.0;
+            } else {
+                d.pending = Some(pending);
+            }
+        }
+    }
+    pub(super) fn advance_vassal_plans(&mut self) {
+        use std::ops::Bound::{Excluded, Unbounded};
+        let m = &self.economy.vassals;
+        let cursor = m.plan_cursor.unwrap_or(EntityId(0));
+        let next = m
+            .domains
+            .range((Excluded(cursor), Unbounded))
+            .chain(m.domains.range(..=cursor))
+            .find(|(_, d)| d.pending.is_some())
+            .map(|(&id, _)| id);
+        self.economy.vassals.plan_cursor = next;
+        if let Some(id) = next {
+            self.poll_vassal_plan(id);
+        }
+    }
+    #[cfg(test)]
+    pub(crate) fn vassal_planning_pending(&self, id: EntityId) -> bool {
+        self.economy
+            .vassals
+            .domains
+            .get(&id)
+            .is_some_and(|d| d.pending.is_some())
+    }
+    #[cfg(test)]
+    fn finished_vassal_plan(&mut self, id: EntityId) -> Vec<Site> {
+        self.vassal_plan(id);
+        while self.vassal_planning_pending(id) {
+            self.poll_vassal_plan(id);
+        }
+        self.economy
+            .vassals
+            .domains
+            .get(&id)
+            .map(|d| d.plan.clone())
+            .unwrap_or_default()
+    }
 }
 
 #[cfg(test)]

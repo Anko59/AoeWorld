@@ -1,5 +1,7 @@
 use super::*;
 use crate::{Age, Stockpile};
+#[path = "vassal/budget.rs"]
+mod budget;
 
 #[path = "vassal/bridging.rs"]
 mod bridging;
@@ -13,6 +15,8 @@ mod ownership;
 mod review;
 #[path = "vassal/roads.rs"]
 mod roads;
+#[path = "vassal/scale.rs"]
+mod scale;
 #[path = "vassal/snapshot.rs"]
 mod snapshot;
 #[path = "vassal/timeline.rs"]

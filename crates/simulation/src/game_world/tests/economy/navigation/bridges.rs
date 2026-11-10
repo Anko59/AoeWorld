@@ -11,6 +11,8 @@ mod angles;
 mod bridge_queue_tests;
 #[path = "bridges/head_on.rs"]
 mod head_on;
+#[path = "bridges/occupancy.rs"]
+mod occupancy;
 #[path = "bridges/off_lane.rs"]
 mod off_lane;
 #[path = "bridges/snapshot.rs"]
