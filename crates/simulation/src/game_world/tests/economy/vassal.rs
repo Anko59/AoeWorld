@@ -1,5 +1,7 @@
 use super::*;
 use crate::{Age, Stockpile};
+#[path = "vassal/budget.rs"]
+mod budget;
 
 #[path = "vassal/bridging.rs"]
 mod bridging;

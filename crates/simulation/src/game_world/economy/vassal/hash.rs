@@ -10,6 +10,7 @@ impl Economy {
             return;
         }
         h.update(b"vassal-defense");
+        h.update(&m.plan_cursor.map_or(u32::MAX, |id| id.0).to_le_bytes());
         h.update(&m.cursor.map_or(u32::MAX, |id| id.0).to_le_bytes());
         h.update(&(m.manual.len() as u64).to_le_bytes());
         for id in &m.manual {
@@ -34,6 +35,12 @@ impl Economy {
                 h.update(&since.to_le_bytes());
             }
             h.update(&d.planned.to_le_bytes());
+            if let Some(job) = &d.pending {
+                h.update(&[1]);
+                job.hash(h);
+            } else {
+                h.update(&[0]);
+            }
             h.update(&[d.plan_age as u8]);
             h.update(&(d.plan.len() as u64).to_le_bytes());
             for site in &d.plan {

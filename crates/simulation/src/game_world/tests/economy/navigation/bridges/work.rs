@@ -12,6 +12,9 @@ pub(crate) struct Counts {
     pub(crate) elapsed: Duration,
     pub(crate) terrain_reads: usize,
     pub(crate) max_tile_reads: usize,
+    pub(crate) operations: usize,
+    pub(crate) max_poll_operations: usize,
+    current_poll_operations: usize,
 }
 
 thread_local! { static COUNTS: Cell<Counts> = Cell::default(); }
@@ -19,6 +22,21 @@ thread_local! { static TILES: RefCell<BTreeMap<aoe_core::TileCoord, usize>> = Re
 
 pub(crate) fn begin_plan() {
     TILES.with(|tiles| tiles.borrow_mut().clear());
+    COUNTS.with(|counts| {
+        let mut c = counts.get();
+        c.current_poll_operations = 0;
+        counts.set(c);
+    });
+}
+
+pub(crate) fn operation() {
+    COUNTS.with(|counts| {
+        let mut c = counts.get();
+        c.operations += 1;
+        c.current_poll_operations += 1;
+        c.max_poll_operations = c.max_poll_operations.max(c.current_poll_operations);
+        counts.set(c);
+    });
 }
 
 pub(crate) fn tile_read(tile: aoe_core::TileCoord) {

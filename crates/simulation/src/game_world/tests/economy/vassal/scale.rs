@@ -28,6 +28,10 @@ fn vassal_bridge_planning_with_ten_thousand_buildings() {
     w.issue_garrison(PlayerId(0), v, castle).unwrap();
     w.prepare_navigation(&|| false).unwrap();
     advance(&mut w, 20);
+    while w.vassal_planning_pending(v) {
+        w.tick.0 += 1;
+        w.advance_vassals(&mut Vec::new());
+    }
     // One-tile foundations exercise occupancy without adding observers or
     // changing the castle's work points. Keep them away from the domain.
     let width = w.config.width_tiles;
@@ -46,16 +50,33 @@ fn vassal_bridge_planning_with_ten_thousand_buildings() {
     }
     let mut worst = 0.0_f64;
     let mut total = 0.0;
+    let mut worst_creation = 0.0_f64;
+    let mut worst_poll = 0.0_f64;
+    let mut ticks = 0_u32;
     work::take();
     for _ in 0..3 {
-        // Force an ordinary replan; no builders means the measured pass
-        // plans but does not place foundations that would change its input.
-        w.tick.0 += 1_200;
-        let start = Instant::now();
-        w.advance_vassals(&mut Vec::new());
-        let ms = start.elapsed().as_secs_f64() * 1_000.0;
-        worst = worst.max(ms);
-        total += ms;
+        w.tick.0 = ((w.tick.0 + 1_219) / 20) * 20;
+        let mut finished = false;
+        for _ in 0..2_000 {
+            let continuing = w.vassal_planning_pending(v);
+            let start = Instant::now();
+            w.advance_vassals(&mut Vec::new());
+            let ms = start.elapsed().as_secs_f64() * 1_000.0;
+            worst = worst.max(ms);
+            if continuing {
+                worst_poll = worst_poll.max(ms);
+            } else {
+                worst_creation = worst_creation.max(ms);
+            }
+            total += ms;
+            ticks += 1;
+            if !w.vassal_planning_pending(v) {
+                finished = true;
+                break;
+            }
+            w.tick.0 += 1;
+        }
+        assert!(finished, "a budgeted plan must not starve");
     }
     let counts = work::take();
     let net = w.vassal_network(v);
@@ -64,12 +85,20 @@ fn vassal_bridge_planning_with_ten_thousand_buildings() {
         counts.terrain_reads, counts.max_tile_reads
     );
     assert!(net.iter().any(|s| s.0 == BuildingKind::Bridge));
+    assert_eq!(
+        format!("{net:?}"),
+        include_str!("network-plan.txt").trim(),
+        "budgeting must preserve the static-world road and bridge decisions"
+    );
     let report = format!(
-        "buildings={} passes=3 validation_calls={} occupancy_visits={} validation_ms={:.3} total_vassal_ms={total:.3} worst_vassal_ms={worst:.3} terrain_reads={} max_tile_reads={} hash={} network={net:?}\n",
+        "buildings={} plans=3 ticks={ticks} mean_vassal_ms={:.6} validation_calls={} occupancy_visits={} validation_ms={:.3} total_vassal_ms={total:.3} worst_vassal_ms={worst:.3} worst_creation_ms={worst_creation:.3} worst_poll_ms={worst_poll:.3} operations={} max_poll_operations={} terrain_reads={} max_tile_reads={} hash={} network={net:?}\n",
         w.buildings().count(),
+        total / f64::from(ticks),
         counts.calls,
         counts.visits,
         counts.elapsed.as_secs_f64() * 1_000.0,
+        counts.operations,
+        counts.max_poll_operations,
         counts.terrain_reads,
         counts.max_tile_reads,
         w.canonical_hash_hex()
@@ -84,8 +113,13 @@ fn vassal_bridge_planning_with_ten_thousand_buildings() {
     );
     assert_eq!(
         w.canonical_hash_hex(),
-        "bf86364882cff97061b1c6dcc97acb200da621250ffb65b590d97dfe5acf870e",
-        "the optimization must preserve the pre-change plan and state"
+        std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src/game_world/tests/economy/vassal/budgeted-checkpoint.txt")
+        )
+        .unwrap()
+        .trim(),
+        "Vassal plan work budgeted per tick, decisions land a few ticks later"
     );
     assert!(
         counts.visits <= counts.calls * 15,
@@ -93,6 +127,10 @@ fn vassal_bridge_planning_with_ten_thousand_buildings() {
     );
     assert!(
         counts.max_tile_reads <= 1,
-        "read each terrain tile at most once per immutable plan: {counts:?}"
+        "read each terrain tile at most once per immutable poll: {counts:?}"
+    );
+    assert!(
+        counts.max_poll_operations <= 128,
+        "every planning poll must yield: {counts:?}"
     );
 }

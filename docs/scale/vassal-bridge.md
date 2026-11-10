@@ -1,168 +1,123 @@
-# Vassal bridge occupancy
+# Vassal road and bridge planning
 
-The bridge span placement predicate now looks up each raster cell in the
-existing building footprint index. That index includes unfinished and
-nonblocking structures, and indexes angled bridges by raster cell rather than
-by their bounding rectangle. No new persistent index or cross-tick placement
-cache is introduced. Unit-dependent validation still runs for each candidate.
+Bridge validation looks up each raster span cell in the existing footprint
+index, including foundations, nonblocking roads, gates and angled bridge cells.
+Road planning collects bridges and enemy Town Centers through the player/kind
+indexes instead of scanning unrelated buildings.
 
-Road planning collects existing bridges through the player/kind index. Threat
-selection visits enemy Town Centers through the same index, preserving the
-distance/y/x choice. Neither operation scans unrelated buildings.
+## Deterministic planning across ticks
 
-## Reproduction
+The road search is an owned continuation. Each world tick polls one pending
+Vassal in entity-ID round-robin order. Each poll performs at most 128 operations:
+heap pops (including stale pops), traceback edges, road tiles or bridge sites.
+The 40,000 settled-state search limit, 64-node limit, costs and heap tie order
+are unchanged. Yielding never discards a frontier or truncates a route.
 
-Run through the Dockerized target:
+Fortification sites remain usable while roads are pending. On a replan, the
+previous network remains usable until its replacement finishes. A domain with
+pending roads is not reported as developed, and a pending plan is never
+restarted merely because its age or replan timestamp is stale. Completion
+refreshes that timestamp. Removal of a domain drops its continuation.
+
+Terrain, occupancy and directed-edge memoization is local to one immutable
+poll. The fixed value arenas retain at most 65,536 answers per query map;
+storage misses read the live world normally. Unit-dependent bridge validation
+is checked again in later polls, and ordinary build orders validate placement
+again before charging or inserting a foundation.
+
+Pending state is included in the canonical hash. Ordered job data, traceback
+and output are hashed canonically; a deterministic trace of frontier insertions
+and pops hashes the lookup-only A* state without iterating its hash table.
+Tests compare pending progress and complete one-/four-worker replays.
+
+## Reproduction and measurements
+
+All commands below use Dockerized Make targets. The prepared 256-tile river
+fixture has one garrisoned Vassal, a Castle and Town Center on opposite banks,
+and 10,000 remote road foundations. No builders change its planning input.
+The benchmark forces three replans and measures every AI invocation through
+completion, including continuation ticks. It also compares the complete ordered
+road/bridge output against the original static-world plan.
 
 ```sh
-CARGO_PROFILE_DEV_DEBUG=0 NEXTEST_TEST_THREADS=2 make test-native-focused \
+NEXTEST_TEST_THREADS=1 make test-native-focused \
   AOE_NATIVE_TEST_PACKAGE=aoe-simulation \
-  AOE_NATIVE_TEST_FILTER='test(vassal::scale::)|test(bridges::occupancy::)'
+  AOE_NATIVE_TEST_FILTER='test(vassal::scale::)'
 ```
 
-The scale test constructs a 256-tile prepared river map, with a Castle and
-Town Center on opposite banks, a garrisoned Vassal and 10,000 remote road
-foundations. It measures three ordinary AI passes, forcing the normal
-1,200-tick replan interval between them. No builders mutate the planning input.
-It records validation calls, occupancy visits, validation time, total AI time,
-the worst AI pass, the complete road/bridge plan and the canonical state hash
-in ignored `.cache/cx-bridge/measurement.txt`.
+Results are written to ignored `.cache/cx-bridge/measurement.txt`; the retained
+samples are `before.txt`, `indexed.txt`, `final.txt` and
+`budgeted-measurement.txt` in that directory.
 
-The original scan at base `55f6357742b163a22b34ee9331ed612140440259`, with
-test-only counters/timers added, produced:
-
-| Measurement | Original scan | Indexed occupancy | Per-plan memoization |
+| Measurement, three complete plans | Original scan | Indexed + memoized | Budgeted ticks |
 | --- | ---: | ---: | ---: |
 | Buildings | 10,002 | 10,002 | 10,002 |
-| Bridge validations | 648 | 648 | 648 |
-| Occupancy visits | 6,481,296 buildings | 3,831 tiles | 3,831 tiles |
-| Validation total | 648.237 ms | 4.563 ms | 3.842 ms |
-| Three Vassal passes | 1,029.297 ms | 321.613 ms | 186.866 ms |
-| Worst Vassal pass | 353.178 ms | 128.722 ms | 76.490 ms |
+| Measured AI calls | 3 | 3 | 642 |
+| Bridge validations | 648 | 648 | 1,455 |
+| Occupancy visits | 6,481,296 buildings | 3,831 tiles | 8,565 tiles |
+| Validation total | 648.237 ms | 3.842 ms | 6.211 ms |
+| Total AI work | 1,029.297 ms | 186.866 ms | 285.497 ms |
+| Mean per measured AI tick | 343.099 ms | 62.288667 ms | 0.444699 ms |
+| Worst measured AI tick | 353.178 ms | 76.490 ms | 1.397 ms |
 
-The new occupancy work bound failed against that implementation, as intended.
-The captured pre-change canonical hash is pinned in the regression:
-`bf86364882cff97061b1c6dcc97acb200da621250ffb65b590d97dfe5acf870e`.
-No existing hash fixture has been repinned.
+The budgeted sample's worst creation call was 0.724 ms, worst continuation
+call 1.397 ms, and maximum observed poll work exactly 128 operations. Every
+plan finished in 213 continuation ticks; none was abandoned. Rechecking live
+validity across ticks increases aggregate work while reducing the tick stall.
+The earlier occupancy-only increment observed a 128.722 ms worst pass.
 
-Both runs produced that same hash and the same complete road/bridge plan.
-The indexed run passed the occupancy bound and both new correctness tests.
-The indexed lookup alone removes the all-building scan but does **not** finish
-the tick-latency requirement. The existing
-40,000-expansion limit is per route, with up to 64 nodes in a plan; it does not
-bound a whole planning pass to a small tick allowance. Spreading that work
-across ticks must account for its effect on action timing and replay hashes.
+These are shared-machine synthetic observations, with test-only counters and
+clock overhead. The mean covers active measured planning calls, not all idle
+world ticks between replans. The owner's full save and 99 simultaneous AIs
+were not replayed. This does not establish the cause of the owner's 2,192 ms
+maximum, qualify finished RTS performance or qualify dedicated hardware.
 
-These are shared-machine synthetic measurements, with test-only timing
-overhead; the final column also includes the passability counters below.
-They do not reproduce the owner's entire save, establish the cause
-of its 2,192 ms maximum, or qualify finished RTS performance or dedicated
-hardware. The occupancy bound is structural; elapsed times are observations.
+## Checkpoints and correctness
 
-## Per-plan navigation reads
+The supervisor explicitly authorized timing-dependent hash changes. Only the
+affected Vassal checkpoint is repinned, in
+`crates/simulation/src/game_world/tests/economy/vassal/budgeted-checkpoint.txt`:
+`9ad415012c52f1e713ddf354dd153670a4c86aecfd762c603cda27635641a15a`.
+Its reason is: **Vassal plan work budgeted per tick, decisions land a few ticks
+later.** The static-world road/bridge decision fixture remains exactly the
+original ordered output. Search costs and route expansion limits were not lowered.
 
-The remaining road search repeatedly queried the same ground and directed
-edges. A cache now lives only inside one immutable `roads::sites` call, for
-passability, free tiles, owned infrastructure and directed terrain edges.
-Each query map stores values in a fixed arena of 65,536 booleans; misses with
-no available storage read the world normally, without changing answers or
-truncating the search. False answers
-are cached too. No unit-dependent bridge validity survives a planning call.
+Correctness coverage includes:
 
-The best-state table now uses a lookup-only hash map. It is never iterated;
-the existing heap priority (estimated cost, path cost, y/x and direction)
-still orders the search.
-The original canonical hash assertion is unchanged and passes.
+- Original exact-footprint/index overlap oracles across insertion, rebuilding
+  and removal, including foundations, roads, gates and angled bridges.
+- Three competing domains yielding and completing without starvation.
+- Deterministic pending-progress hashing, plus one-/four-worker Vassal replay.
+- The original ordered river network, live placement checks and actual bridge
+  building/crossing tests.
+- Poll-operation and occupancy-visit bounds; false cache answers and arena
+  exhaustion still return the correct live answer.
 
-With additional terrain-read counters enabled on both sides of this change:
+## Checks and limits
 
-| Measurement, three replans | Before memoization | Memoized |
-| --- | ---: | ---: |
-| Explicit tile-passability reads | 303,621 | 27,840 |
-| Maximum explicit passability reads of one tile in one plan | 19 | 1 |
-| Bridge validations | 648 | 648 |
-| Occupancy visits | 3,831 | 3,831 |
-| Bridge validation total | 2.206 ms | 3.842 ms |
-| Three Vassal passes | 231.506 ms | 186.866 ms |
-| Worst Vassal pass | 86.974 ms | 76.490 ms |
+The pre-budget revision `36eacfbafbfef502d2a0b3433ca2cef6b579c55f` passed all
+1,228 simulation tests and the static gates. The budgeted change's local
+commands are:
 
-These counters cover the planner's explicit tile-passability queries, excluding
-tile reads inside edge and bridge validation. The new read bound failed before
-memoization and passed afterward. The cache
-capacity/false-answer regression also passed. These elapsed times are separate
-shared-machine observations, with additional instrumentation; they are not a
-dedicated-hardware qualification. The pass still exceeds approximately 5 ms.
-An earlier focused arena measurement observed 65.604 ms for the worst pass;
-the final sample above was taken after this checkout's full suite finished.
+```sh
+make hooks-install hooks-check fmt-check lint structure-check architecture-check browser-check deny docs-check
+NEXTEST_TEST_THREADS=4 make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='all()'
+```
 
-## Remaining work
+The initial yielding regression failed before the continuation API existed.
+The first budgeted Vassal run passed 43 of 44 cases, failing only its marked
+checkpoint. At 256 operations per poll a focused sample reached 5.020 ms;
+128 operations provide the measured margin shown above. Only the affected
+checkpoint was regenerated; no gate, baseline or search budget was weakened.
 
-Deterministic spreading across ticks is outstanding. The brief also requires
-"hashes identical (no repin)". `vassal_plan` currently installs the entire plan
-and its timestamp in the same AI tick; `hash_vassals` hashes that timestamp and
-every plan site (`economy/vassal/plan.rs`, `economy/vassal/hash.rs`). A deferred
-plan would expose different intermediate hashed state, and could delay builder
-orders. Clarification is pending on whether exact timing/hashes must remain
-identical, or deferred work may preserve completed plan decisions while changing
-intermediate timing. This increment keeps the original timing and hashes.
+The repository permits performance and AI-decision changes with nothing new
+to show in-game to ship without video (`docs/showcase.md`, “A change with
+nothing to see in the game”). Accordingly this delivery carries measured
+numbers and replay tests rather than a gameplay recording. CI and the owner's
+save have not been run. The brief excludes publication: no ship or push is run.
 
-## Correctness coverage
-
-The occupancy oracle compares indexed overlap with the original exact
-`contains_tile` predicate over many candidate angles. It exercises insertion,
-index rebuilding and removal for foundations, completed roads, farms, walls,
-gates and angled bridges. A separate placement test checks that a nonblocking
-road or foundation on a bank rejects the bridge and that removal restores
-validity. Existing bridge, Vassal and replay tests remain unchanged.
-
-## Local checks
-
-All commands use `CARGO_PROFILE_DEV_DEBUG=0` and Dockerized Make targets.
-The indexed lookup increment (`fd9ed3cb670b2134ac5c0d5223805ac7a4d963d9`)
-passed the following checks:
-
-- `make hooks-install hooks-check fmt-check structure-check architecture-check`:
-  passed.
-- `make lint`: passed, including WASM test-target compilation; two warnings
-  in untouched client presentation code remain.
-- The focused reproduction above: all three tests passed. The baseline run
-  failed only the intended occupancy-work bound.
-- `NEXTEST_TEST_THREADS=2 make test-native-focused
-  AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='all()'`:
-  1,227 passed, zero skipped, in 692.796 seconds. This includes Vassal and
-  bridge tests, one-/four-worker replay checks and both real-river Vassal tests.
-
-The memoized increment also passed:
-
-- `make hooks-install hooks-check fmt-check lint structure-check
-  architecture-check docs-check`.
-- `NEXTEST_TEST_THREADS=2 make test-native-focused
-  AOE_NATIVE_TEST_PACKAGE=aoe-simulation
-  AOE_NATIVE_TEST_FILTER='test(vassal::scale::)|test(road_cache::)'`: two passed.
-- `NEXTEST_TEST_THREADS=4 make test-native-focused
-  AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='all()'`:
-  1,228 passed, zero skipped, in 623.146 seconds.
-- `NEXTEST_TEST_THREADS=1 make test-native-focused
-  AOE_NATIVE_TEST_PACKAGE=aoe-simulation
-  AOE_NATIVE_TEST_FILTER='test(vassal::scale::)'`: final measurement passed.
-
-No visible behavior change is intended in this indexed lookup increment, so
-no before/after gameplay video was recorded. The owner's save and CI have not
-been run. Publication is excluded by the task brief; no ship or push is run.
-
-## Stop-check recovery
-
-The first stop check after `36eacfbafbfef502d2a0b3433ca2cef6b579c55f`
-hit the 180-second architecture-check budget during a cold harness build.
-The other reported failures were immediate resource-admission refusals below
-the 3 GiB available-memory floor. After memory recovered, the unchanged source
-passed `make architecture-check` and then `make browser-check deny docs-check
-fmt-check lint structure-check architecture-check`, using the default build
-profile that the stop checks use. No gate, baseline or test was weakened.
-
-Recovery logs are local ignored artifacts:
-`.cache/cx-bridge/stop-architecture-recovery.log` and
-`.cache/cx-bridge/stop-gates-recovery.log`. The original stop report remains in
-the hook-managed `.cache/agent-hook/state.json`. Build artifacts are retained
-through the successful stop rerun; final cleanup belongs at the end of the
-unfinished goal. These local results do not qualify CI or dedicated hardware.
+A previous stop check exhausted its 180-second cold-build budget and hit the
+3 GiB memory-admission floor. Every failed target subsequently passed unchanged.
+The recovery is recorded by `ac7a9e7c9cf95452729e1277e7934e484416b554` and
+local `stop-architecture-recovery.log` / `stop-gates-recovery.log`. Build caches
+are retained through the final stop check to avoid repeating that cold build.

@@ -130,7 +130,7 @@ impl GameWorld {
             .filter(|(_, site)| !self.vassal_site_done(player, **site))
             .map(|(i, site)| (i, *site))
             .collect();
-        let developed = deficits.is_empty();
+        let developed = deficits.is_empty() && d.pending.is_none();
         let Some(d) = self.economy.vassals.domains.get_mut(&id) else {
             return;
         };

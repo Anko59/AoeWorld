@@ -10,6 +10,8 @@ mod plan;
 mod ring;
 mod road_cache;
 mod road_demo;
+mod road_job;
+mod road_search;
 mod roads;
 mod threat;
 
@@ -56,6 +58,7 @@ pub(crate) struct Domain {
     plan: Vec<plan::Site>,
     plan_age: crate::Age,
     planned: u64,
+    pending: Option<road_job::Planner>,
     /// Where the latest raider was seen: the threatened side is walled first.
     hot: Option<TileCoord>,
 }
@@ -77,6 +80,7 @@ pub(crate) struct Manager {
     recalls: BTreeMap<EntityId, Recall>,
     returns: BTreeMap<EntityId, WorldPosition>,
     cursor: Option<EntityId>,
+    plan_cursor: Option<EntityId>,
 }
 impl GameWorld {
     pub(crate) fn activate_vassal(&mut self, id: EntityId, castle: EntityId) {
@@ -105,6 +109,7 @@ impl GameWorld {
                 plan: Vec::new(),
                 plan_age: crate::Age::Dark,
                 planned: 0,
+                pending: None,
                 hot: None,
                 status: VassalStatus {
                     development: true,
@@ -190,6 +195,7 @@ impl GameWorld {
         self.economy.vassals.manual.remove(&id);
     }
     pub(crate) fn advance_vassals(&mut self, changed: &mut Vec<EntityId>) {
+        self.advance_vassal_plans();
         if (self.economy.vassals.domains.is_empty() && self.economy.vassals.returns.is_empty())
             || !self.tick.0.is_multiple_of(20)
         {
