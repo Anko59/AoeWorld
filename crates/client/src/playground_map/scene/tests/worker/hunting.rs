@@ -58,6 +58,15 @@ fn hunt_work_poses_play_only_in_reach_and_never_while_a_route_is_planned() {
         unit_pose(&u, Some(&animal(AnimalKind::Sheep, TILE, 0))),
         Pose::Butcher
     );
+    u.task = UnitTask::Hunting;
+    assert_eq!(
+        unit_pose(&u, Some(&animal(AnimalKind::Deer, 4 * TILE, 0))),
+        Pose::HunterStand
+    );
+    assert_eq!(
+        unit_pose(&u, Some(&animal(AnimalKind::Deer, TILE, 0))),
+        Pose::Butcher
+    );
     u.task = UnitTask::Shepherding;
     u.moving = true;
     assert_eq!(

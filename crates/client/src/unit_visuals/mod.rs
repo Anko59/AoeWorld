@@ -99,7 +99,7 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
         };
     }
     let carcass = animal.is_some_and(|a| a.hp == 0);
-    let working = !u.planning && (carcass || in_reach(u, animal));
+    let working = !u.planning && in_reach(u, animal);
     if u.task == UnitTask::Shepherding {
         return if u.moving {
             ShepherdWalk
@@ -188,7 +188,9 @@ pub(crate) fn walks_as_villager(u: &GameplayUnitState, animal: Option<&AnimalSta
 /// for bow hunting.
 fn in_reach(u: &GameplayUnitState, animal: Option<&AnimalState>) -> bool {
     animal.is_some_and(|a| {
-        let reach = if matches!(a.kind, AnimalKind::Sheep | AnimalKind::Wolf) {
+        let reach = if a.hp == 0 {
+            3 * i64::from(FIXED_SUBUNITS_PER_TILE) / 2
+        } else if matches!(a.kind, AnimalKind::Sheep | AnimalKind::Wolf) {
             i64::from(FIXED_SUBUNITS_PER_TILE)
         } else {
             4 * i64::from(FIXED_SUBUNITS_PER_TILE)
