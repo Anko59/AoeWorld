@@ -38,7 +38,13 @@ impl GameWorld {
             let probe = self.planning_probe.clone();
             let span = probe.as_ref().and_then(|p| p.movement_span("plan_ahead"));
             self.reuse_region_endpoint_proof(&mut planner, kind, self.units[index].state.player);
-            self.plan_world_route_ahead(&mut planner, share, &|| false, kind);
+            self.plan_world_route_ahead(
+                &mut planner,
+                share,
+                &|| false,
+                kind,
+                self.units[index].state.player,
+            );
             self.reuse_region_endpoint_proof(&mut planner, kind, self.units[index].state.player);
             drop(span);
             if certified_before.is_none() && planner.certified_destination().is_some() {

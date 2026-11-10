@@ -78,7 +78,7 @@ impl GameWorld {
         let probe = self.planning_probe.clone();
         let span = probe.as_ref().and_then(|p| p.movement_span("plan_fast"));
         self.reuse_region_endpoint_proof(planner, kind, player);
-        let result = self.poll_world_route_planner(planner, allowance, &|| false, kind);
+        let result = self.poll_world_route_planner(planner, allowance, &|| false, kind, player);
         self.reuse_region_endpoint_proof(planner, kind, player);
         drop(span);
         let spent = planner.work().saturating_sub(before);
@@ -111,6 +111,7 @@ impl GameWorld {
         &mut self,
         planner: &RoutePlanner,
         kind: UnitKind,
+        player: PlayerId,
         outcome: &MovementOutcome,
     ) {
         if planner.certified_destination().is_none() {
@@ -119,7 +120,7 @@ impl GameWorld {
                 .as_ref()
                 .and_then(|probe| probe.cache_span());
             self.navigation_cache.insert(
-                kind.is_naval(),
+                (kind.is_naval(), player),
                 planner.origin(),
                 planner.destination(),
                 planner.work(),
@@ -147,7 +148,7 @@ impl GameWorld {
         let allowance = self.fast_route_allowance(player);
         if let Some((outcome, work)) =
             self.navigation_cache
-                .get(kind.is_naval(), origin, destination, allowance)
+                .get((kind.is_naval(), player), origin, destination, allowance)
         {
             self.charge_fast_route(player, work);
             self.route_metrics.cache_hits += 1;
@@ -169,7 +170,7 @@ impl GameWorld {
                 .failed(kind, origin, destination, work, reason, caller);
         };
         let settled = |world: &mut Self, outcome: MovementOutcome| {
-            world.cache_route(&planner, kind, &outcome);
+            world.cache_route(&planner, kind, player, &outcome);
             Some(MapRoutePlan::Outcome(outcome))
         };
         match result {

@@ -68,5 +68,21 @@ async fn zoomed_gate_culling_keeps_overlapping_sprite_and_skips_offscreen_sprite
         TileRect::new(TileCoord::new(108, 90), TileCoord::new(112, 91));
     assert!(units(&client, &scene).is_empty());
     assert_eq!(client.village.gate_art.borrow().updates(), updates);
+    client.camera.center = [100.0, 100.5];
+    for kind in [BuildingKind::PalisadeGate, BuildingKind::StoneGate] {
+        client.village.buildings[0].kind = kind;
+        client.village.buildings[0].progress_permille = 1000;
+        for open in [false, true] {
+            client.village.buildings[0].gate_open = open;
+            for (width, height, facing) in [(4, 1, 0), (1, 4, 16)] {
+                client.village.buildings[0].footprint = TileRect::from_xywh(98, 100, width, height);
+                assert_eq!(
+                    units(&client, &scene)[0].facing,
+                    facing,
+                    "{kind:?}, open={open}"
+                );
+            }
+        }
+    }
     client.canvas.remove();
 }

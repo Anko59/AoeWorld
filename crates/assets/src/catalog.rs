@@ -4,7 +4,7 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 23;
+pub const VERSION: u8 = 24;
 
 pub mod buildings;
 pub mod candidates;
@@ -22,24 +22,24 @@ pub const MAX_REVIEWED_FRAMES: u32 = 2_371;
 
 /// Shipped trial recipes. Its unused Imperial records include cyclic deltas;
 /// the licensed DE importer supplies the current Imperial architecture.
-pub const TRIAL_BUILDING_IDS: [i32; 47] = [
+pub const TRIAL_BUILDING_IDS: [i32; 49] = [
     109, 70, 68, 562, 584, 50, 12, 72, 598, 45, 87, 101, 103, 84, 79, 792, 71, 463, 129, 563, 585,
     498, 133, 82, 104, 209, 49, 141, 464, 564, 586, 130, 132, 47, 10, 86, 18, 116, 31, 605, 606,
-    607, 608, 609, 610, 117, 64,
+    607, 608, 609, 610, 117, 487, 490, 796,
 ];
 pub const IMPERIAL_BUILDING_IDS: [i32; 14] = [
     142, 465, 565, 587, 131, 20, 51, 14, 153, 19, 137, 32, 210, 150,
 ];
 
 /// All current gameplay recipes, imported from their authoritative edition.
-pub const GAMEPLAY_BUILDING_IDS: [i32; 61] = {
-    let mut ids = [0; 61];
+pub const GAMEPLAY_BUILDING_IDS: [i32; 63] = {
+    let mut ids = [0; 63];
     let mut i = 0;
-    while i < 61 {
-        ids[i] = if i < 47 {
+    while i < 63 {
+        ids[i] = if i < 49 {
             TRIAL_BUILDING_IDS[i]
         } else {
-            IMPERIAL_BUILDING_IDS[i - 47]
+            IMPERIAL_BUILDING_IDS[i - 49]
         };
         i += 1;
     }

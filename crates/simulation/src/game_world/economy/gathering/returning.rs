@@ -72,7 +72,10 @@ impl GameWorld {
                     && (n + 1 < tiles.len() || at + 1 < order.len())
                 {
                     probed_origin = true;
-                    pocket = self.route_origin_pocket(unit.kind, from).ok().flatten();
+                    pocket = self
+                        .route_origin_pocket(unit.kind, from, unit.player)
+                        .ok()
+                        .flatten();
                 }
                 if let Err(error) = issued
                     && !known

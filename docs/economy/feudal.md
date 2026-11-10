@@ -51,10 +51,11 @@ It queries visible enemy units through the spatial index, with canonical target 
 
 Palisade Gate is available in **Dark Age** (the installed tech tree says age 1).
 DE effect 293 scales its HP by 1.66667 at Feudal, giving 400 integer HP.
-The current command supports its 4×1 orientation. It opens for nearby owned
-units and remains open while any unit occupies it; other rotations and locking
-are not implemented. Long-distance route planning still sees a closed gate as
-blocked until a friendly unit approaches it.
+Both 4×1 and 1×4 orientations are supported. An unlocked gate opens for nearby
+owned units and remains physically open while any unit occupies it. Planning
+admits its owner whether it is open or closed, and enemies only while it is open.
+A locked gate blocks planning for everyone, even while held physically open.
+The simulation exposes owner-only locking; a player lock command is future work.
 
 ## Market trading
 
@@ -163,7 +164,8 @@ It keeps both packs; it replaces no regular file. `make assets-verify` accepts
 The trial DAT's Feudal Dock is unit 133 (`DOCK2`); its West European
 standing family `DOCK2NNW`, SLP 388, is present in the trial pack and supplies
 the fallback when the optional DE age-2 Dock is absent.
-The gate uses `b_dark_gate_palisade_se_{closed,open,constr,rubble}_x1.sld`.
+Gate DAT parents 796 and 792 select the SE and NE palisade assemblies, including
+their construction, open and rubble states.
 
 DE graphic ids: Range 12, Stable 513, Blacksmith 53, Market 2268, Tower 4202,
 Gate 8208; Feudal TC 3253, House 2209, Mill 368, Barracks 93, camps 3118/3133.
@@ -171,9 +173,8 @@ The DE Town Center standing SLD contains the complete building. Gameplay prefers
 DAT compositions for every available Dark and Feudal family, including the
 Feudal Town Center's age-specific annex graphics and the Dock's native body,
 shadow and wake. Missing ambient parent art does not hide available DAT deltas.
-The Palisade Gate is absent from the trial DAT and retains its DE overlay;
-additional gate orientations remain separate work. Foundations and one-tile
-aprons cover land only, including all Feudal buildings.
+The Palisade Gate is absent from the trial DAT and uses its DE overlay.
+Foundations and one-tile aprons cover land only, including all Feudal buildings.
 
 ## Stone Wall and Stone Gate
 
@@ -182,17 +183,20 @@ Feudal Age, built by villagers for stone. Values are the DE tech-tree numbers
 Stone Gate 30 stone, 2750 HP, armour 6/6. Build times are 5 s a tile and 70 s.
 The wall reuses the palisade line order (`BuildWallOrder` carries the
 `BuildingKind`); the gate is a 4x1 building like the Palisade Gate and shares
-its rule (`BuildingKind::is_gate`): it opens when a unit of its owner is within
-two tiles, stays shut for every other player and blocks their routes. Routing
-is shared, so a closed gate blocks the owner's routes too: walk up to it, it
-opens, then order the units through. Walls and
-gates are outside Masonry and are not arrow targets. There are no alliances yet,
-so allied passage and a lock command remain future work. Art comes from the DE
-install: `b_west_wall_stone_x1.sld` (five joint silhouettes, atlas slot 71),
-and `b_west_gate_stone_se_{closed,open}_x1.sld`
-(slots 72 and 73); rubble and foundations reuse the palisade slots, and the
-ambient fish of slot 0 are sampled every fourth cell to keep the 5120-frame
-atlas. Re-run `make assets-import-de` to add the art to an existing overlay.
+its rule (`BuildingKind::is_gate`): unlocked owner gates admit routes before
+opening on approach; enemies can route through an unlocked gate only while it
+is open. A lock blocks both players' planning. A living threshold occupant
+holds the physical gate open until it is safe to close. Route caches and the
+region layer use the same player admission rule. Walls and gates are outside
+Masonry and are not arrow targets. Alliances and a player lock command remain
+future work.
+
+Art comes from the DE install: `b_west_wall_stone_x1.sld` uses the same five
+neighbor-derived silhouettes as palisades, independently of entity ID. Stone
+DAT parents 490 (SE) and 487 (NE) supply complete assemblies for the two gate
+axes, in both closed and open states (slots 72 and 73). Rubble and foundations
+reuse the palisade slots. Re-run `make assets-import` and `make assets-import-de`
+to regenerate the current local pack after a catalog or recipe encoding change.
 
 ## Local demo
 

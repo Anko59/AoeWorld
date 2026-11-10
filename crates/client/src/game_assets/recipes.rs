@@ -5,6 +5,7 @@ use super::manifest::{BuildingComposition, BuildingDamage, BuildingPart, FrameRe
 struct Reader {
     bytes: Vec<u8>,
     pos: usize,
+    lists: Vec<Vec<BuildingPart>>,
 }
 impl Reader {
     fn array<const N: usize>(&mut self) -> Result<[u8; N], &'static str> {
@@ -34,6 +35,13 @@ impl Reader {
     }
     fn parts(&mut self, frames: &[FrameRecord]) -> Result<Vec<BuildingPart>, &'static str> {
         let count = self.u16()?;
+        if count & 0x8000 != 0 {
+            return self
+                .lists
+                .get(usize::from(count & 0x7fff))
+                .cloned()
+                .ok_or("invalid shared part list");
+        }
         if count > 256 {
             return Err("too many building parts");
         }
@@ -58,6 +66,9 @@ impl Reader {
                 offset: [self.i32()?, self.i32()?],
                 misplacement: [self.float()?, self.float()?],
             });
+        }
+        if !parts.is_empty() {
+            self.lists.push(parts.clone());
         }
         Ok(parts)
     }
@@ -85,7 +96,11 @@ pub(super) fn decode(
         .iter()
         .map(|b| Ok(nibble(b[0])? << 4 | nibble(b[1])?))
         .collect::<Result<Vec<_>, &'static str>>()?;
-    let mut r = Reader { bytes, pos: 0 };
+    let mut r = Reader {
+        bytes,
+        pos: 0,
+        lists: Vec::new(),
+    };
     let count = r.array::<1>()?[0];
     if usize::from(count) > aoe_assets::catalog::MAX_COMPOSITIONS {
         return Err("too many building recipes");

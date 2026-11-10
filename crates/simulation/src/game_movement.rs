@@ -388,7 +388,6 @@ impl GameWorld {
         if needs_search {
             return SegmentAdvance::Planning;
         }
-        let budget = 0;
         let mut planner = self.take_planner(index).unwrap_or_else(|| {
             RoutePlanner::new(
                 order.waypoint.tile_floor(),
@@ -399,11 +398,12 @@ impl GameWorld {
         let work_before = planner.work();
         let result = self.poll_world_route_planner(
             &mut planner,
-            budget,
+            0,
             &|| false,
             self.units[index].state.kind,
+            self.units[index].state.player,
         );
-        self.refund_unused_planning(budget, work_before, &planner);
+        self.refund_unused_planning(0, work_before, &planner);
         match result {
             RoutePlannerPoll::Path(path) => {
                 let mut route = VecDeque::from(path.tiles);

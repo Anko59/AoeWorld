@@ -4,14 +4,13 @@ use aoe_core::{TileCoord, WorldConfig};
 use aoe_map::{
     EnvironmentPageError, ResourceOverlay, RoutePlanner, RoutePlannerPoll, RouteTerrain,
 };
-use std::collections::BTreeSet;
 
 #[path = "navigation/preparation.rs"]
 mod preparation;
 
 struct UniformNavigation<'a> {
     config: WorldConfig,
-    blocked: &'a BTreeSet<TileCoord>,
+    player: aoe_core::PlayerId,
     world: &'a GameWorld,
 }
 
@@ -21,7 +20,7 @@ impl UniformNavigation<'_> {
             && tile.y >= 0
             && tile.x < self.config.width_tiles
             && tile.y < self.config.height_tiles
-            && (!self.blocked.contains(&tile) || self.world.routes_through_gate(tile))
+            && self.world.route_tile_admitted(self.player, tile)
     }
 }
 
@@ -68,6 +67,19 @@ impl RouteTerrain for UniformNavigation<'_> {
 }
 
 impl GameWorld {
+    /// A closed completed gate is a legal destination for its owner: approaching
+    /// opens it. Collision remains closed until that approach actually happens.
+    pub(crate) fn gate_allows_approach(&self, player: aoe_core::PlayerId, tile: TileCoord) -> bool {
+        self.building_at_tile(tile)
+            .and_then(|id| self.building(id))
+            .is_some_and(|b| {
+                b.kind.is_gate()
+                    && b.is_complete()
+                    && !b.gate_locked
+                    && (b.player == player || b.gate_open)
+            })
+    }
+
     /// Bounded, rotating immutable cache hints for an adapter-owned worker.
     /// Reading hints never changes authoritative scheduling or budgets.
     pub fn navigation_preparation_tiles(&self, limit: usize) -> Vec<TileCoord> {
@@ -130,24 +142,30 @@ impl GameWorld {
         Ok(())
     }
 
-    /// A completed gate is open ground to every route plan: its owner's units
-    /// open it on approach, and a closed gate stops anyone else by collision.
-    /// Routes cannot know the mover's player (the plan cache is shared), and
-    /// planning around closed gates left owners unable to reach their gates.
-    pub(crate) fn routes_through_gate(&self, tile: TileCoord) -> bool {
-        self.building_at_tile(tile)
+    /// Player-specific planning admission; a locked gate blocks even while
+    /// physically held open. Other buildings retain their collision footprint.
+    pub(crate) fn route_tile_admitted(&self, player: aoe_core::PlayerId, tile: TileCoord) -> bool {
+        if self
+            .building_at_tile(tile)
             .and_then(|id| self.building(id))
-            .is_some_and(|b| b.kind.is_gate() && b.is_complete())
+            .is_some_and(|b| b.kind.is_gate())
+        {
+            return self.gate_allows_approach(player, tile);
+        }
+        !self.economy.blocked_tiles.contains(&tile)
     }
 
     pub(crate) fn has_route_navigation(&self) -> bool {
-        self.terrain.has_map_navigation() || !self.economy.blocked_tiles.is_empty()
+        self.terrain.has_map_navigation()
+            || !self.economy.blocked_tiles.is_empty()
+            || !self.economy.gates.is_empty()
     }
 
     pub(crate) fn route_origin_pocket(
         &self,
         kind: crate::UnitKind,
         origin: TileCoord,
+        player: aoe_core::PlayerId,
     ) -> Result<Option<aoe_map::RouteOriginPocket>, EnvironmentPageError> {
         if kind.is_naval() {
             return aoe_map::RouteOriginPocket::build(
@@ -158,13 +176,21 @@ impl GameWorld {
             );
         }
         match &self.terrain {
-            Terrain::Map { generator, overlay } => {
-                aoe_map::RouteOriginPocket::build(generator, overlay, origin, &|| false)
-            }
+            Terrain::Map { generator, overlay } => aoe_map::RouteOriginPocket::build(
+                &preparation::LimitedMap {
+                    generator,
+                    allowance: &self.navigation_preparation_budget,
+                    world: self,
+                    player,
+                },
+                overlay,
+                origin,
+                &|| false,
+            ),
             Terrain::Uniform(_) => aoe_map::RouteOriginPocket::build(
                 &UniformNavigation {
                     config: self.config,
-                    blocked: &self.economy.blocked_tiles,
+                    player,
                     world: self,
                 },
                 ResourceOverlay::empty(),
@@ -180,6 +206,7 @@ impl GameWorld {
         budget: u32,
         cancelled: &dyn Fn() -> bool,
         kind: crate::UnitKind,
+        player: aoe_core::PlayerId,
     ) -> RoutePlannerPoll {
         let _measurement = self.measure_planning();
         if kind.is_naval() {
@@ -195,6 +222,8 @@ impl GameWorld {
                 &preparation::LimitedMap {
                     generator,
                     allowance: &self.navigation_preparation_budget,
+                    world: self,
+                    player,
                 },
                 overlay,
                 budget,
@@ -203,7 +232,7 @@ impl GameWorld {
             Terrain::Uniform(_) => planner.poll(
                 &UniformNavigation {
                     config: self.config,
-                    blocked: &self.economy.blocked_tiles,
+                    player,
                     world: self,
                 },
                 ResourceOverlay::empty(),
@@ -219,6 +248,7 @@ impl GameWorld {
         budget: u32,
         cancelled: &dyn Fn() -> bool,
         kind: crate::UnitKind,
+        player: aoe_core::PlayerId,
     ) {
         let _measurement = self.measure_planning();
         if kind.is_naval() {
@@ -235,6 +265,8 @@ impl GameWorld {
                 &preparation::LimitedMap {
                     generator,
                     allowance: &self.navigation_preparation_budget,
+                    world: self,
+                    player,
                 },
                 overlay,
                 budget,
@@ -243,13 +275,41 @@ impl GameWorld {
             Terrain::Uniform(_) => planner.plan_ahead(
                 &UniformNavigation {
                     config: self.config,
-                    blocked: &self.economy.blocked_tiles,
+                    player,
                     world: self,
                 },
                 ResourceOverlay::empty(),
                 budget,
                 cancelled,
             ),
+        }
+    }
+    /// Polls `planner` with `budget` work. Spends no tick budget, preparation
+    /// allowance or counter, so a probe never changes the simulation.
+    pub fn probe_route_poll(
+        &self,
+        planner: &mut RoutePlanner,
+        budget: u32,
+        kind: crate::UnitKind,
+        player: aoe_core::PlayerId,
+    ) -> RoutePlannerPoll {
+        if let Terrain::Map { generator, overlay } = &self.terrain
+            && !kind.is_naval()
+        {
+            let allowance = std::sync::Mutex::new(u32::MAX);
+            planner.poll(
+                &preparation::LimitedMap {
+                    generator,
+                    allowance: &allowance,
+                    world: self,
+                    player,
+                },
+                overlay,
+                budget,
+                &|| false,
+            )
+        } else {
+            self.poll_world_route_planner(planner, budget, &|| false, kind, player)
         }
     }
 }

@@ -23,7 +23,7 @@ pub struct NavigationCacheUsage {
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct Key {
     /// Ships and land units read different ground: water, and land.
-    naval: bool,
+    profile: (bool, aoe_core::PlayerId),
     origin: TileCoord,
     destination: TileCoord,
 }
@@ -75,14 +75,14 @@ impl NavigationCache {
     /// accepts a proof still consumes it through `get`, exactly as an order does.
     pub(crate) fn peek(
         &self,
-        naval: bool,
+        profile: (bool, aoe_core::PlayerId),
         origin: TileCoord,
         destination: TileCoord,
         budget: u32,
     ) -> Option<(&MovementOutcome, u32)> {
         self.entries
             .get(&Key {
-                naval,
+                profile,
                 origin,
                 destination,
             })
@@ -104,7 +104,7 @@ impl NavigationCache {
 
     pub(crate) fn get(
         &mut self,
-        naval: bool,
+        profile: (bool, aoe_core::PlayerId),
         origin: TileCoord,
         destination: TileCoord,
         budget: u32,
@@ -112,14 +112,14 @@ impl NavigationCache {
         self.clock = self.clock.saturating_add(1);
         self.entries
             .get_mut(&Key {
-                naval,
+                profile,
                 origin,
                 destination,
             })
             .filter(|entry| affordable(entry, budget))
             .map(|entry| {
                 let key = Key {
-                    naval,
+                    profile,
                     origin,
                     destination,
                 };
@@ -132,7 +132,7 @@ impl NavigationCache {
 
     pub(crate) fn insert(
         &mut self,
-        naval: bool,
+        profile: (bool, aoe_core::PlayerId),
         origin: TileCoord,
         destination: TileCoord,
         work: u32,
@@ -143,7 +143,7 @@ impl NavigationCache {
             return;
         }
         let key = Key {
-            naval,
+            profile,
             origin,
             destination,
         };

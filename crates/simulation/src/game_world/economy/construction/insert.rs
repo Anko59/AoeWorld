@@ -138,6 +138,7 @@ impl GameWorld {
                     ),
                 research: None,
                 gate_open: false,
+                gate_locked: false,
                 rally_point: None,
                 food_remaining: (kind == BuildingKind::Farm).then(|| self.farm_food(player)),
                 farm_reseeds: 0,

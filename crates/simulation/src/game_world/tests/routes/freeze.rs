@@ -22,7 +22,7 @@ fn send_into_ring(world: &mut GameWorld, id: EntityId, cx: i32, cy: i32) {
 fn refused_order(world: &mut GameWorld, id: EntityId, to: TileCoord) -> GameWorldError {
     let origin = world.unit(id).expect("unit").position.tile_floor();
     world.navigation_cache.insert(
-        false,
+        (false, world.unit(id).unwrap().player),
         origin,
         to,
         0,

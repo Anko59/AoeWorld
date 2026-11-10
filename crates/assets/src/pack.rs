@@ -296,7 +296,7 @@ pub fn import(input: &Path, output_root: &Path) -> Result<PathBuf, Error> {
     }
     let mut identity = blake3::Hasher::new();
     identity.update(b"AoK interface catalog: DAT icons, research table and reviewed HUD crops\0");
-    identity.update(b"PNG pages and independent native frame chunks\0");
+    identity.update(b"PNG pages, native frame chunks and shared recipe lists\0");
     identity.update(&[crate::catalog::interface::VERSION]);
     identity.update(hash.as_bytes());
     identity.update(&serde_json::to_vec(&buildings)?);
