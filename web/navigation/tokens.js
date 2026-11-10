@@ -159,7 +159,7 @@ export function initTokens() {
         const node = button(`e${id}`, 'steward-card');
         const [x, y] = project([wx, wy]);
         const visible = options.economy && inView(x, y) && positions.has(`e${id}`);
-        if (options.economy || options.ownership) {
+        if (wait !== -1 && (options.economy || options.ownership)) {
           context.beginPath();
           const ring = domains.get(id) ?? [];
           for (let k = 0; k < ring.length; k++) {
@@ -169,8 +169,8 @@ export function initTokens() {
           if (options.ownership && wait !== -1) {
             context.fillStyle = holdingColour; context.globalAlpha = .13; context.fill(); context.globalAlpha = 1;
           }
-          context.strokeStyle = wait === -1 ? '#d2c393' : holdingColour; context.lineWidth = selected ? 2.5 : 1.5;
-          context.setLineDash(wait === -1 ? [5, 5] : []); context.stroke(); context.setLineDash([]);
+          context.strokeStyle = holdingColour; context.lineWidth = selected ? 2.5 : 1.5;
+          context.stroke();
         }
         const label = waits[wait] ?? (wait === -1 ? 'Inactive · garrison in Town Center' : 'Evaluating');
         const total = f + w + g + s + idle || 1;
