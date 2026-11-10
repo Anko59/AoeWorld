@@ -76,6 +76,7 @@ export async function inputFixture(
   viewer: 0 | 1 = 0,
   observe?: (bytes: Buffer, socket: WebSocketRoute) => void,
   options: {
+    beforeSnapshot?: () => Promise<void>;
     carried?: boolean;
     query?: string;
     cargo?: number;
@@ -108,7 +109,7 @@ export async function inputFixture(
     );
   }
   await page.routeWebSocket("**/game/ws", (socket) => {
-    socket.onMessage((message) => {
+    socket.onMessage(async (message) => {
       const bytes =
         typeof message === "string" ? Buffer.from(message) : message;
       observe?.(bytes, socket);
@@ -137,6 +138,7 @@ export async function inputFixture(
         revision.push(byte);
         if (byte < 128) break;
       }
+      await options.beforeSnapshot?.();
       const unit = (
         id: number,
         x: number,

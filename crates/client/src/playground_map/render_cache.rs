@@ -218,6 +218,7 @@ pub(in super::super) fn render_if_changed(
         animation,
         camera,
     ) {
+        client.capture.current_view = true;
         return Ok(false);
     }
 
@@ -250,6 +251,7 @@ pub(in super::super) fn render_if_changed(
         animation,
         camera,
     );
+    client.capture.current_view = true;
     client.capture.frame = client.capture.frame.saturating_add(1);
     Ok(true)
 }

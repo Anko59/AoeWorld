@@ -270,7 +270,7 @@ export function initStartSequence({ readJson, start, cancel }) {
     const scene = el('scene');
     const minimap = el('minimap');
     const sameMap = minimap.dataset.mapHash === waiting.hash;
-    const terrain = sameMap && Number(scene.dataset.frame) > 0 && scene.dataset.chunksPending === '0'
+    const terrain = sameMap && scene.dataset.viewPainted === 'true' && Number(scene.dataset.frame) > 0 && scene.dataset.chunksPending === '0'
       && scene.dataset.chunksFailed === '0' && scene.dataset.frame !== waiting.frame;
     const pending = sameMap ? Number(scene.dataset.chunksPending) : NaN;
     const failed = sameMap ? Number(scene.dataset.chunksFailed) : 0;
@@ -316,7 +316,7 @@ export function initStartSequence({ readJson, start, cancel }) {
     }
   }
   const observer = new MutationObserver(checkTerrain);
-  observer.observe(el('scene'), { attributes: true, attributeFilter: ['data-connected', 'data-chunks-pending', 'data-chunks-failed', 'data-frame'] });
+  observer.observe(el('scene'), { attributes: true, attributeFilter: ['data-connected', 'data-chunks-pending', 'data-chunks-failed', 'data-frame', 'data-view-painted'] });
   observer.observe(el('minimap'), { attributes: true, attributeFilter: ['data-map-hash'] });
   observer.observe(el('connection'), { childList: true, subtree: true, characterData: true });
   function returnToSetup() {

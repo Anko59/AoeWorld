@@ -109,6 +109,8 @@ pub(crate) struct Capture {
     // Only the current, bounded visible demand survives settle_counts pruning.
     pub failures: Vec<(i32, i32)>,
     pub frame: u64,
+    pub current_view: bool,
+    pub snapshot_revision: Option<u64>,
 }
 
 impl Capture {
@@ -128,5 +130,8 @@ pub(super) fn update(client: &mut Client) {
         counts.pending,
         counts.failed,
         client.capture.frame,
+        client.capture.current_view
+            && client.capture.snapshot_revision == Some(client.revision)
+            && client.sent_region == Some(super::requested_region(client)),
     );
 }

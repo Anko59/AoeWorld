@@ -202,9 +202,41 @@ corrected to perform the normal UI's existing reconnect action after restore;
 disconnected attempts are excluded. Camera checks allow views without a
 TownCenter; the initial busy-base check still requires one.
 
-Startup and performance browser flows pass 16/16 across their configured
+Startup and performance browser flows pass 17/17 across their configured
 WebGPU/WebGL2 projects, with zero failures, skips or flaky results. Hooks,
 formatting, lint, structure, architecture, browser and documentation checks pass.
 WASM gzip is 398,815 bytes (+6.1% against the unchanged 375,952-byte baseline),
 within the +25% cap. The normal base and four camera-jump screenshots were
 inspected; no missing terrain or native art was observed in those sampled views.
+
+## Current-view painting after load and camera changes
+
+The cache-disabled before trace reported zero pending terrain at 18,727 ms,
+while frame 2 still represented the earlier empty view; populated actors first
+appeared with frame 3 at 19,532 ms. The indexed run also had a settled-terrain
+interval before its populated native frame. A lifetime frame counter plus zero
+pending terrain therefore did not establish that the requested view was drawn.
+
+The client now publishes `data-view-painted` only when the current render is
+presented (or its unchanged pixels remain valid), the accepted snapshot matches
+the subscription revision, and the sent region matches the requested camera.
+Waiting native coverage, backend presentation and a withheld snapshot leave it
+false. World replacement clears it immediately, without resetting camera
+preservation or the monotonic frame counter. The loading screen observes this
+signal alongside its existing map, terrain, connection and new-frame checks.
+This is a painting/snapshot condition; it is not a synchronization barrier for
+every fog or resource-overlay update.
+
+Tests were written first. Both new/resumed loading-screen cases failed on the
+old condition because the screen vanished while the painting signal was false.
+Browser coverage also withholds snapshots during opening, camera movement and
+reconnect, then checks that painting becomes current after release. The unchanged
+shot-clock helper moved into the existing lifecycle module to keep network.rs
+below the 500-line limit.
+
+Native client tests pass 31/31 and static/browser/WASM checks pass (399,082-byte
+gzip, +6.2% against the unchanged baseline). The selected browser run passed
+31/32; an existing menu-colour reload case timed out waiting for Single Player.
+Its unchanged start-sequence file passed on the bounded fresh rerun. All new
+readiness cases passed in the first run. The initial failure report is retained
+as `.cache/owner-save/view-painted-first-e2e-report.json`; no test was relaxed.

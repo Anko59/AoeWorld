@@ -264,3 +264,71 @@ test("normal HUD work follows visible actors while selected offscreen actors and
     .poll(async () => (await actors()).some((actor) => actor.id === 3))
     .toBe(true);
 });
+
+test("current view waits for its subscription snapshot before reporting painted", async ({
+  page,
+}, info) => {
+  const renderer = info.project.name === "webgpu" ? "webgpu" : "webgl2";
+  let release!: () => void;
+  let held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const opening = inputFixture(page, renderer, [], false, 0, undefined, {
+    beforeSnapshot: () => held,
+  });
+  try {
+    await expect(page.locator("#connection")).toHaveText("connected");
+    await expect
+      .poll(async () =>
+        Number(await page.locator("#scene").getAttribute("data-frame")),
+      )
+      .toBeGreaterThan(0);
+    await expect(page.locator("#scene")).toHaveAttribute(
+      "data-view-painted",
+      "false",
+    );
+  } finally {
+    release();
+    await opening;
+  }
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-view-painted",
+    "true",
+  );
+  held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  try {
+    await page.evaluate(() => {
+      location.hash = "x=8210&y=8210&zoom=.6";
+    });
+    await expect(page.locator("#scene")).toHaveAttribute(
+      "data-view-painted",
+      "false",
+    );
+  } finally {
+    release();
+  }
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-view-painted",
+    "true",
+  );
+  held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  try {
+    await page.locator("#reconnect").evaluate((button) => {
+      (button as HTMLButtonElement).click();
+    });
+    await expect(page.locator("#scene")).toHaveAttribute(
+      "data-view-painted",
+      "false",
+    );
+  } finally {
+    release();
+  }
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-view-painted",
+    "true",
+  );
+});

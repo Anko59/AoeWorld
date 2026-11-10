@@ -48,6 +48,7 @@ for (const resumed of [false, true]) {
       const scene = document.getElementById("scene");
       if (!scene) throw new Error("scene missing");
       scene.dataset["frame"] = "1";
+      scene.dataset["viewPainted"] = "false";
       scene.dataset["chunksPending"] = "7";
       scene.dataset["chunksFailed"] = "0";
       const connection = document.getElementById("connection");
@@ -96,6 +97,11 @@ for (const resumed of [false, true]) {
       primary.setAttribute("cx", "64");
       primary.setAttribute("cy", "64");
       primary.setAttribute("visibility", "visible");
+    });
+    await page.clock.fastForward(1000);
+    await expect(page.locator("#loading-screen")).toBeVisible();
+    await page.locator("#scene").evaluate((scene) => {
+      scene.dataset["viewPainted"] = "true";
     });
     await page.clock.fastForward(1000);
     await expect(page.locator("#start-sequence")).toBeHidden();

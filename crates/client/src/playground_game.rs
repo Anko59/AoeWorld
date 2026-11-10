@@ -226,6 +226,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         client.resources.expire_effects(time);
         controls::edge_pan(&mut client, delta_ms);
         subscribe(&mut client);
+        client.capture.current_view = false;
         let canvas = matches!(&client.renderer, GameRenderer::Canvas { .. });
         drop(update);
         let interpolation = perf::Scope::stage(1);

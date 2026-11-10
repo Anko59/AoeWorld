@@ -47,6 +47,7 @@ for (const resumed of [false, true]) {
         const connection = document.getElementById("connection");
         if (!scene || !connection) throw new Error("scene UI missing");
         scene.dataset["frame"] = "1";
+        scene.dataset["viewPainted"] = "true";
         scene.dataset["chunksPending"] = scene.dataset["chunksFailed"] = "0";
         connection.textContent = "connected";
         if (resumed)

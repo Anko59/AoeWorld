@@ -18,10 +18,10 @@ export function camera_fragment(state) {
   if (values) state.set(values);
 }
 const presentations = new WeakMap();
-export function capture_update(canvas, pending, failed, frame) {
+export function capture_update(canvas, pending, failed, frame, painted) {
   const previous = presentations.get(canvas) ?? [];
-  const values = [pending, failed, frame];
-  const names = ['data-chunks-pending', 'data-chunks-failed', 'data-frame'];
+  const values = [pending, failed, frame, painted];
+  const names = ['data-chunks-pending', 'data-chunks-failed', 'data-frame', 'data-view-painted'];
   for (let index = 0; index < values.length; index++) {
     if (previous[index] !== values[index]) canvas.setAttribute(names[index], String(values[index]));
   }
@@ -60,6 +60,7 @@ extern "C" {
         pending: usize,
         failed: usize,
         frame: u64,
+        painted: bool,
     );
     fn navigation_map(hash: &[u8]);
     pub(super) fn control_group(
