@@ -97,3 +97,26 @@ pub fn raster_bridge_line(from: TileCoord, to: TileCoord) -> Option<Vec<TileCoor
 
 #[cfg(test)]
 mod tests;
+
+/// Keep an exact valid drag; otherwise try only the eight neighbouring starts.
+/// The caller supplies its authoritative terrain, occupancy and knowledge rules.
+pub fn snap_bridge_start(
+    from: TileCoord,
+    to: TileCoord,
+    valid: impl Fn(BridgeSpan) -> bool,
+) -> Option<BridgeSpan> {
+    let mut starts = Vec::with_capacity(9);
+    for dy in -1_i32..=1 {
+        for dx in -1_i32..=1 {
+            starts.push((
+                dx * dx + dy * dy,
+                from.y.saturating_add(dy),
+                from.x.saturating_add(dx),
+            ));
+        }
+    }
+    starts.sort_unstable();
+    starts
+        .into_iter()
+        .find_map(|(_, y, x)| BridgeSpan::new(TileCoord::new(x, y), to).filter(|span| valid(*span)))
+}

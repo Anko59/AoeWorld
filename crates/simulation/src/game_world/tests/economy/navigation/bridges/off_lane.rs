@@ -37,3 +37,39 @@ fn a_body_off_a_diagonal_decks_lane_walks_off_the_deck() {
     }
     assert!(tried > 40, "{tried}");
 }
+
+#[test]
+fn bridge_order_snaps_a_start_one_tile_inland_or_in_the_river() {
+    for horizontal in [false, true] {
+        for start in [28, 30] {
+            let (mut world, worker) = setup_axis(horizontal);
+            // The inland misclick cannot be occupied by its own builder.
+            world
+                .issue_move(
+                    worker,
+                    WorldPosition::from_tile_center(if horizontal {
+                        TileCoord::new(27, 20)
+                    } else {
+                        TileCoord::new(20, 27)
+                    })
+                    .unwrap(),
+                )
+                .unwrap();
+            advance(&mut world, 40);
+            let tile = |axis| {
+                if horizontal {
+                    TileCoord::new(axis, 20)
+                } else {
+                    TileCoord::new(20, axis)
+                }
+            };
+            let id = world
+                .issue_build_bridge(PlayerId(0), &[worker], tile(start), tile(34), false)
+                .unwrap();
+            assert_eq!(
+                world.building(id).unwrap().bridge_span,
+                aoe_core::BridgeSpan::new(tile(29), tile(34))
+            );
+        }
+    }
+}

@@ -34,3 +34,31 @@ fn bridge_rasterization_accepts_every_slope_and_reversed_drags_are_identical() {
     assert_eq!(raster_bridge_line(origin, origin), Some(vec![origin]));
     assert!(raster_bridge_line(origin, TileCoord::new(i32::MAX, 0)).is_none());
 }
+
+#[test]
+fn bridge_start_snaps_one_tile_inland_or_into_water_in_every_drag_direction() {
+    for (from, to) in [
+        (TileCoord::new(10, 10), TileCoord::new(20, 10)),
+        (TileCoord::new(20, 10), TileCoord::new(10, 10)),
+        (TileCoord::new(10, 10), TileCoord::new(10, 20)),
+        (TileCoord::new(10, 20), TileCoord::new(10, 10)),
+        (TileCoord::new(10, 10), TileCoord::new(20, 20)),
+    ] {
+        let expected = BridgeSpan::new(from, to).unwrap();
+        for direction in [-1, 1] {
+            let off = TileCoord::new(
+                from.x + (to.x - from.x).signum() * direction,
+                from.y + (to.y - from.y).signum() * direction,
+            );
+            assert_eq!(
+                snap_bridge_start(off, to, |span| span == expected),
+                Some(expected)
+            );
+        }
+        assert_eq!(
+            snap_bridge_start(from, to, |span| span == expected),
+            Some(expected)
+        );
+        assert_eq!(snap_bridge_start(from, to, |_| false), None);
+    }
+}
