@@ -84,11 +84,38 @@ impl GameWorld {
                 }
                 AnimalKind::Deer => {
                     a.state.task = AnimalTask::Idle;
-                    if let Some(unit) = nearest {
-                        a.state.task = AnimalTask::Fleeing;
-                        let dx = i64::from(a.state.position.x) - i64::from(unit.position.x);
+                    if nearest.is_none() {
+                        a.herd = None;
+                    }
+                    // Close pressure starts one short run. A bow-range hunter
+                    // does not continually push prey beyond its own range.
+                    if a.herd.is_none()
+                        && let Some(unit) =
+                            nearest.filter(|u| distance(a.state.position, u.position) <= radius(2))
+                    {
+                        let mut dx = i64::from(a.state.position.x) - i64::from(unit.position.x);
                         let dy = i64::from(a.state.position.y) - i64::from(unit.position.y);
-                        self.move_animal(&mut a, if dx == 0 && dy == 0 { 1 } else { dx }, dy);
+                        if dx == 0 && dy == 0 {
+                            dx = 1;
+                        }
+                        let length = i64::from(crate::game_path::segment_length(dx, dy));
+                        let stride = 2 * i64::from(FIXED_SUBUNITS_PER_TILE);
+                        a.herd = Some(WorldPosition::new(
+                            (i64::from(a.state.position.x) + dx * stride / length) as i32,
+                            (i64::from(a.state.position.y) + dy * stride / length) as i32,
+                        ));
+                    }
+                    if let Some(to) = a.herd {
+                        let from = a.state.position;
+                        self.move_animal(
+                            &mut a,
+                            i64::from(to.x) - i64::from(from.x),
+                            i64::from(to.y) - i64::from(from.y),
+                        );
+                        a.state.task = AnimalTask::Fleeing;
+                        if a.state.position == to || !a.state.moving {
+                            a.herd = None;
+                        }
                     }
                 }
                 AnimalKind::Wolf => {
