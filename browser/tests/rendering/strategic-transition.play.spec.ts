@@ -203,3 +203,52 @@ test("strategic terrain construction records a completed terrain span", async ({
   expect(result.marks).toEqual([10, 17]);
   expect(result.terrain[0]).toBeGreaterThan(0);
 });
+
+test("unchanged near and far presentation avoids control and canvas mutations", async ({
+  page,
+}) => {
+  await page.route("**/strategic-idle-test", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<canvas id="scene" style="width:1280px;height:720px"></canvas>',
+    }),
+  );
+  await page.goto("/strategic-idle-test");
+  const samples = await page.evaluate(async () => {
+    // @ts-expect-error Served browser module.
+    const { initStrategic } = await import("/navigation/strategic.js");
+    const strategic = initStrategic(
+      { disabled: true, canvas: document.createElement("canvas"), revision: 0 },
+      { records: () => [], revision: () => 0 },
+    );
+    return [0, 1, 0, 1].map((level) => {
+      const state = [256, 256, 128, 128, 1280, 720, level ? 0.04 : 1, level];
+      strategic.frame(state);
+      if (!level) strategic.present();
+      const observer = new MutationObserver(() => {});
+      observer.observe(document.documentElement, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["hidden", "width", "height", "style"],
+      });
+      const redrawn: boolean[] = [];
+      for (let frame = 0; frame < 8; frame++) {
+        redrawn.push(strategic.frame(state));
+        if (!level) strategic.present();
+      }
+      const writes = observer.takeRecords().length;
+      observer.disconnect();
+      return {
+        writes,
+        redrawn,
+        visible:
+          document.getElementById("strategic-cockpit")?.hidden === !level,
+      };
+    });
+  });
+  expect(samples.every((sample) => sample.visible)).toBe(true);
+  expect(
+    samples.every((sample) => sample.redrawn.every((value) => !value)),
+  ).toBe(true);
+  expect(samples.map((sample) => sample.writes)).toEqual([0, 0, 0, 0]);
+});
