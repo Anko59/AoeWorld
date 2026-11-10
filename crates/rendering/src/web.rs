@@ -11,6 +11,10 @@ const ATLAS_BYTES: usize = (ATLAS_SIDE * ATLAS_SIDE * 4) as usize;
 mod instance_buffer;
 pub(crate) use instance_buffer::surface_instance;
 use instance_buffer::{InstanceBuffer, required_capacity};
+#[path = "web/contour_stats.rs"]
+mod contour_stats;
+pub use contour_stats::ContourStats;
+pub(crate) use contour_stats::normalize_depths_with_stats;
 #[path = "web/draw.rs"]
 mod draw;
 #[path = "web/health.rs"]
@@ -81,6 +85,7 @@ pub struct Renderer {
     mask: occlusion::Mask,
     occlusion: Option<occlusion::Contour>,
     has_occlusion: bool,
+    pub(crate) contour_stats: ContourStats,
     draws: Vec<(std::ops::Range<u32>, bool)>,
     contour_draws: Vec<std::ops::Range<u32>>,
     pub(crate) staging: Vec<Sprite>,
@@ -283,6 +288,7 @@ impl Renderer {
             mask,
             occlusion: None,
             has_occlusion: false,
+            contour_stats: ContourStats::default(),
             draws: Vec::new(),
             contour_draws: Vec::new(),
             staging: Vec::new(),
@@ -405,51 +411,9 @@ impl Renderer {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn normalize_depths(instances: &mut [Sprite]) -> bool {
-    let (mut units, mut occluders) = (false, false);
-    let mut range: Option<(f32, f32)> = None;
-    for sprite in instances.iter() {
-        if sprite.color[3] >= 0.0 {
-            // H || (U && O) == (U || H) && (O || H): retain the existing
-            // two flag checks, including for units, with no hover-only scan.
-            units |= sprite.pages[3] & (Sprite::UNIT_CONTOUR | 48) != 0;
-            occluders |= sprite.pages[3] & (Sprite::OCCLUDER | 48) != 0;
-        }
-        for depth in sprite.depths[..3].iter().copied() {
-            if depth.is_finite() {
-                range = Some(match range {
-                    Some((minimum, maximum)) => (minimum.min(depth), maximum.max(depth)),
-                    None => (depth, depth),
-                });
-            }
-        }
-    }
-    let (minimum, maximum) = range.unwrap_or((0.0, 0.0));
-    let span = maximum - minimum;
-    for sprite in instances {
-        // Variant-tagged surface w carries an exact numeric 24-bit floor packet,
-        // not geometry depth. Manual, metadata-free and object packets keep depth normalization.
-        let count = if sprite.color[3] < 0.0
-            && sprite.pages[3] & (crate::surface_mesh::landscape::INTERPOLATED_FLOOR | 1)
-                == (crate::surface_mesh::landscape::INTERPOLATED_FLOOR | 1)
-        {
-            3
-        } else {
-            4
-        };
-        for depth in &mut sprite.depths[..count] {
-            *depth = if *depth == f32::NEG_INFINITY {
-                1.0
-            } else if !depth.is_finite() {
-                0.0
-            } else if span <= f32::EPSILON {
-                0.5
-            } else {
-                ((maximum - *depth) / span).clamp(0.0, 1.0)
-            };
-        }
-    }
-    units && occluders
+    normalize_depths_with_stats(instances).effects()
 }
 
 fn create_depth_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {

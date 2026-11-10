@@ -63,7 +63,9 @@ impl Renderer {
             }
         };
         self.instances.ensure_capacity(required, &self.device)?;
-        self.has_occlusion = normalize_depths(instances);
+        let depth = normalize_depths_with_stats(instances);
+        self.contour_stats.record(depth);
+        self.has_occlusion = depth.effects();
         self.contour_draws.clear();
         if self.has_occlusion {
             draw::write_contour_ranges(instances, &mut self.contour_draws);

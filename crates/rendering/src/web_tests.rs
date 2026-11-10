@@ -368,3 +368,51 @@ fn sprite_array_page_abi_preserves_offsets_reserved_zero_and_instance_ceiling() 
         64 * 1024 * 1024 / std::mem::size_of::<Sprite>()
     );
 }
+
+#[wasm_bindgen_test]
+fn contour_stats_count_eligible_units_occluders_span_and_frame_kinds() {
+    let at = |depth: f32, flag: u32| {
+        let mut sprite = solid_sprite();
+        sprite.depths = [depth; 4];
+        sprite.pages[3] |= flag;
+        sprite
+    };
+    let mut terrain = at(40.0, Sprite::OCCLUDER | Sprite::UNIT_CONTOUR);
+    terrain.color[3] = -1.0; // Terrain packets are never counted.
+    let mut frame = [
+        at(-2.0, Sprite::UNIT_CONTOUR),
+        at(0.0, Sprite::UNIT_CONTOUR),
+        at(8.0, Sprite::OCCLUDER),
+        at(f32::NAN, 0),
+        terrain,
+    ];
+    let stats = normalize_depths_with_stats(&mut frame);
+    assert_eq!((stats.contours, stats.occluder_count), (2, 1));
+    assert_eq!(stats.span, 42.0);
+    assert!(stats.effects());
+    let mut lone = [at(1.0, Sprite::UNIT_CONTOUR)];
+    let plain = normalize_depths_with_stats(&mut lone);
+    assert!(!plain.effects());
+    let mut totals = ContourStats::default();
+    totals.record(stats);
+    totals.record(plain);
+    totals.record(plain);
+    assert_eq!((totals.effect_frames, totals.plain_frames), (1, 2));
+    assert_eq!((totals.contour_instances, totals.depth_span), (1, 0.0));
+}
+
+#[wasm_bindgen_test]
+fn one_distant_outlier_depth_does_not_merge_unit_and_occluder_depths() {
+    // Depths are normalized over the whole frame before a 24-bit depth buffer.
+    // Even a 100k-tile outlier keeps 0.5-tile neighbours distinct in f32/24 bit.
+    let mut unit = solid_sprite();
+    unit.depths = [10.0; 4];
+    let mut tree = solid_sprite();
+    tree.depths = [9.5; 4];
+    let mut far = solid_sprite();
+    far.depths = [100_000.0; 4];
+    let mut frame = [unit, tree, far];
+    normalize_depths_with_stats(&mut frame);
+    let quantized = |d: f32| (d * 16_777_215.0).round();
+    assert_ne!(quantized(frame[0].depths[0]), quantized(frame[1].depths[0]));
+}

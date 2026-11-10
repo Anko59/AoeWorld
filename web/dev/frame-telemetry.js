@@ -41,13 +41,20 @@ export function frameTelemetry(clock = () => performance.now()) {
 export function initFrameTelemetry() {
   const telemetry = frameTelemetry();
   let sent = performance.now(), posting = false;
-  const state = { latest: null, mark };
+  // Contour observations: cumulative frame counts since page load plus the last frame.
+  let contour = { effect_frames: 0, plain_frames: 0, eligible_instances: 0, occluder_instances: 0,
+    depth_span: 0, context_lost: 0, context_restored: 0 };
+  const state = { latest: null, mark, contour(effect_frames, plain_frames, eligible_instances,
+    occluder_instances, depth_span, context_lost, context_restored) {
+    contour = { effect_frames, plain_frames, eligible_instances, occluder_instances,
+      depth_span, context_lost, context_restored };
+  } };
   function mark(section) {
     if (document.hidden) { telemetry.reset(); sent = performance.now(); return; }
     telemetry.mark(section);
     if (section !== 21 || performance.now() - sent < 5000) return;
     sent = performance.now();
-    const report = { ...telemetry.summary(), renderer: document.getElementById('playground')?.dataset.renderer };
+    const report = { ...telemetry.summary(), renderer: document.getElementById('playground')?.dataset.renderer, contour };
     state.latest = report;
     telemetry.clear();
     // Keep cadence continuous across summary windows; reset only the history.

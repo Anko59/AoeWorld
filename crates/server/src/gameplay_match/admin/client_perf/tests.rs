@@ -6,6 +6,15 @@ fn report() -> Report {
         frame_ms: [16.0, 32.0, 80.0],
         draw_calls: q,
         renderer: "webgl2".into(),
+        contour: Contour {
+            effect_frames: 30,
+            plain_frames: 90,
+            eligible_instances: 12,
+            occluder_instances: 40,
+            depth_span: 180.5,
+            context_lost: 1,
+            context_restored: 1,
+        },
         stages_ms: Stages {
             update: q,
             interpolation: q,
@@ -66,4 +75,13 @@ fn cycling_more_than_the_history_limit_cannot_bypass_report_rate_limits() {
         reports.record(aoe_protocol::ResumeToken([0; 24]), report(), 0),
         Err(StatusCode::TOO_MANY_REQUESTS)
     );
+}
+
+#[test]
+fn contour_observations_must_be_finite_and_non_negative() {
+    for span in [f64::NAN, f64::INFINITY, -1.0] {
+        let mut sample = report();
+        sample.contour.depth_span = span;
+        assert!(!sample.valid());
+    }
 }

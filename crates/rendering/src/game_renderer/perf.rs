@@ -18,3 +18,14 @@ impl Drop for Stage {
         stage_mark(self.0 + 14);
     }
 }
+
+impl super::GameRenderer {
+    /// Contour/occlusion observations for client telemetry (zero on Canvas).
+    pub fn contour_stats(&self) -> crate::web::ContourStats {
+        match self {
+            Self::WebGpu(renderer) => renderer.contour_stats,
+            Self::WebGl(renderer) => renderer.contour_stats(),
+            Self::Canvas { .. } => Default::default(),
+        }
+    }
+}

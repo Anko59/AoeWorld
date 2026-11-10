@@ -8,6 +8,36 @@ extern "C" {
     pub(super) fn perf_mark(section: u32);
 }
 
+#[wasm_bindgen(
+    inline_js = "export function perf_contour(effect, plain, contours, occluders, span, lost, restored) {
+    window.aoeTelemetry?.contour(effect, plain, contours, occluders, span, lost, restored);
+}"
+)]
+extern "C" {
+    fn perf_contour(
+        effect: u32,
+        plain: u32,
+        contours: u32,
+        occluders: u32,
+        span: f32,
+        lost: u32,
+        restored: u32,
+    );
+}
+
+/// Contour observations of the last submitted frame; one cheap call per frame.
+pub(super) fn contour(stats: aoe_rendering::ContourStats) {
+    perf_contour(
+        stats.effect_frames,
+        stats.plain_frames,
+        stats.contour_instances,
+        stats.occluder_instances,
+        stats.depth_span,
+        stats.context_lost,
+        stats.context_restored,
+    );
+}
+
 pub(super) fn decode() -> (Scope, Scope) {
     (Scope::new(1), Scope::stage(0))
 }

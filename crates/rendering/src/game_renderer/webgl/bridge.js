@@ -28,8 +28,11 @@ export class AoeWebGl {
         this.atlasPixels = null;
         this.atlasMemory = null;
         this.restoreError = null;
+        // Telemetry: a lost context that never restores shows as lost > restored.
+        this.contextLostCount = 0;
+        this.contextRestoredCount = 0;
         this.initialize();
-        this.onLost = event => event.preventDefault();
+        this.onLost = event => { this.contextLostCount++; event.preventDefault(); };
         this.onRestored = () => {
             try {
                 this.initialize();
@@ -39,6 +42,7 @@ export class AoeWebGl {
                         : new Uint8Array(this.atlasMemory.buffer, this.atlasOffset, SIDE * SIDE * this.atlasPages * 4);
                     this.upload(pixels, this.atlasMemory);
                 }
+                this.contextRestoredCount++;
                 canvas.dispatchEvent(new Event('aoe-renderer-restored'));
             } catch (error) {
                 this.restoreError = error;

@@ -468,6 +468,9 @@ At capacity, a new session waits for the oldest session's rate window to expire.
 `window.aoeTelemetry.latest` exposes the latest local summary. Quantile triples
 are p50/p95/max; histories retain stalls and have a fixed 2,048-frame bound.
 Hidden pages reset cadence sampling to exclude background-tab throttling.
+`contour` explains a missing unit silhouette: cumulative `effect_frames`/`plain_frames`
+since page load (silhouettes need effects on), the last frame's `eligible_instances`,
+`occluder_instances` and `depth_span`, and `context_lost`/`context_restored` (WebGL2).
 
 `stages_ms` measures synchronous JS/WASM/browser API wall time: `update` includes
 network application and native frame decode/upload; `interpolation` includes
