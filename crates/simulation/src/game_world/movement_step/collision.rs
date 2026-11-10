@@ -132,6 +132,54 @@ impl GameWorld {
         self.collision_sweep_bounded(index, from, to, stationary, repairing_spawn, None)
     }
 
+    pub(crate) fn census_apply(&self, index: usize, to: WorldPosition) {
+        let Some(probe) = &self.planning_probe else {
+            return;
+        };
+        probe.movement_count("applied", 1);
+        let unit = self.units[index].state;
+        let from = unit.position;
+        if self.sweep_cells_clear(index, from, to, 0)
+            && self.body_step_clear(unit.kind, from, to)
+            && self
+                .unit_position_step_clear(unit.kind, from, to)
+                .unwrap_or(false)
+            && self.building_step_clear(from.tile_floor(), to.tile_floor())
+        {
+            probe.movement_count("applied_clear", 1);
+        }
+        if from == to {
+            probe.movement_count("applied_stationary", 1);
+        }
+    }
+
+    /// Conservative live-cell proof: includes every centre in the swept AABB,
+    /// expanded by both hulls. Static footprints are proved separately.
+    pub(super) fn sweep_cells_clear(
+        &self,
+        index: usize,
+        from: WorldPosition,
+        to: WorldPosition,
+        padding: i32,
+    ) -> bool {
+        let unit = &self.units[index].state;
+        let radius = unit.kind.collision_radius()
+            + self.collisions.maximum_radii()[usize::from(unit.kind.is_naval())]
+            + padding;
+        let min = WorldPosition::new(
+            from.x.min(to.x).saturating_sub(radius),
+            from.y.min(to.y).saturating_sub(radius),
+        )
+        .tile_floor();
+        let max = WorldPosition::new(
+            from.x.max(to.x).saturating_add(radius),
+            from.y.max(to.y).saturating_add(radius),
+        )
+        .tile_floor();
+        self.collisions
+            .cells_empty_except(min, max, unit.kind.is_naval(), unit.id)
+    }
+
     /// A movement-batch bound on neighbor radius and displacement. Padding
     /// requires strict separation, including already overlapping bodies.
     pub(in crate::game_world) fn collision_sweep_bounded(
@@ -143,6 +191,10 @@ impl GameWorld {
         repairing_spawn: bool,
         bounds: Option<(i32, i32)>,
     ) -> bool {
+        let _span = self
+            .planning_probe
+            .as_ref()
+            .and_then(|p| p.movement_span("body_sweep"));
         let unit = &self.units[index].state;
         let dx = i64::from(to.x) - i64::from(from.x);
         let dy = i64::from(to.y) - i64::from(from.y);

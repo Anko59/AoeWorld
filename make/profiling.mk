@@ -61,3 +61,11 @@ match-bench-admitted: job-bootstrap
 match-bench-steps:
 	@$(MAKE) --no-print-directory analysis-tools
 	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo run --release --locked -p aoe-harness -- match-bench $(MATCH_BENCH_ARGS)
+
+# Bounded test-profile census, explicitly requested without a long-job slot.
+.PHONY: movement-apply-census movement-apply-census-steps
+movement-apply-census: job-bootstrap
+	@$(JOB_RUN) movement-apply-census -- $(MAKE) --no-print-directory movement-apply-census-steps
+
+movement-apply-census-steps:
+	@$(DOCKER_RUN) cargo test --locked -p aoe-harness late_game_apply_census -- --ignored

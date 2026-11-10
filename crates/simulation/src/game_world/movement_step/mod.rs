@@ -414,6 +414,7 @@ impl GameWorld {
         {
             return false;
         }
+        self.census_apply(index, step.state.position);
         let stored = &mut self.units[index];
         let from = stored.state.position;
         let state_changed = stored.state != step.state;

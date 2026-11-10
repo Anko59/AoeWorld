@@ -109,3 +109,26 @@ fn far_corner_units_keep_fine_and_coarse_collision_queries() {
     assert!(!index.contact_may_be_crowded(centre, 2, &GroupWork::default()));
     assert_eq!(index.cells[1].get(far).unwrap().len(), 16);
 }
+
+#[test]
+fn empty_sweep_cells_exclude_only_the_actor_and_follow_relocations() {
+    let mut grid = CollisionIndex::default();
+    let actor = EntityId(1);
+    let at = WorldPosition::new(2048, 3072);
+    let min = TileCoord::new(1, 2);
+    let max = TileCoord::new(3, 4);
+    grid.insert(actor, at, false, 0);
+    assert!(grid.cells_empty_except(min, max, false, actor));
+    // An opposite movement layer cannot collide.
+    grid.insert(EntityId(2), at, true, 1);
+    assert!(grid.cells_empty_except(min, max, false, actor));
+    // Even a centre outside the precise sweep box vetoes this cell proof.
+    grid.insert(EntityId(3), WorldPosition::new(4095, 5119), false, 2);
+    assert!(!grid.cells_empty_except(min, max, false, actor));
+    grid.relocate(EntityId(3), max, WorldPosition::new(4096, 5120), false);
+    assert!(grid.cells_empty_except(min, max, false, actor));
+    grid.relocate(EntityId(3), TileCoord::new(4, 5), at, false);
+    assert!(!grid.cells_empty_except(min, max, false, actor));
+    grid.remove(EntityId(3), at.tile_floor(), false);
+    assert!(grid.cells_empty_except(min, max, false, actor));
+}

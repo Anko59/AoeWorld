@@ -6,6 +6,9 @@
 //! over time, the forbidden-pass counters, and whether the canonical hashes
 //! of every worker count agree. `--callgrind` instead re-runs itself under
 //! Callgrind and splits the counted ticks into stages (`counted.rs`).
+#[cfg(test)]
+#[path = "tests/apply_measurement.rs"]
+mod apply_measurement;
 mod bots;
 mod build;
 mod counted;

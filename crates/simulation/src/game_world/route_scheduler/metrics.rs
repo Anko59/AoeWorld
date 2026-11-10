@@ -154,6 +154,8 @@ pub trait PlanningProbe: std::fmt::Debug + Send + Sync {
     fn movement_span(&self, _name: &'static str) -> Option<Box<dyn aoe_map::NavigationSpan>> {
         None
     }
+    /// Optional work census. Counts are adapter-owned and never canonical.
+    fn movement_count(&self, _name: &'static str, _count: usize) {}
     fn cache_span(&self) -> Option<Box<dyn aoe_map::NavigationSpan>> {
         None
     }

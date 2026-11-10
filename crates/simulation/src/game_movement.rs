@@ -80,6 +80,9 @@ impl GameWorld {
         let probe = self.planning_probe.clone();
         let apply_span = probe.as_ref().and_then(|p| p.movement_span("apply_loop"));
         for turn in 0..mover_count {
+            if let Some(probe) = &self.planning_probe {
+                probe.movement_count("individual_turns", 1);
+            }
             self.work_approach_clearance = None;
             self.melee_traffic_clearance = None;
             let id = movers[(start + turn) % mover_count];
@@ -119,7 +122,7 @@ impl GameWorld {
             let mut current_position = self.units[index].state.position;
             let mut finished = false;
 
-            for _ in 0..MAX_WAYPOINTS_PER_TICK {
+            for waypoint in 0..MAX_WAYPOINTS_PER_TICK {
                 let remaining = order.segment_length.saturating_sub(order.travelled);
                 let step = u128::from(remaining)
                     .min(speed_budget / u128::from(denominator))
@@ -133,6 +136,9 @@ impl GameWorld {
                 };
                 let (position, skipped) =
                     self.refine_occupied_step(index, &mut order, proposed, step);
+                if waypoint == 0 {
+                    self.census_apply(index, position);
+                }
                 let detoured = !skipped && position != proposed;
                 let arrived = skipped || (!detoured && order.travelled >= order.segment_length);
                 if skipped {
