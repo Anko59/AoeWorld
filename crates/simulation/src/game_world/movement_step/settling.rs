@@ -161,6 +161,10 @@ impl GameWorld {
     }
 
     pub(crate) fn settle_obstructed_unit(&mut self, index: usize) -> bool {
+        let _span = self
+            .planning_probe
+            .as_ref()
+            .and_then(|p| p.movement_span("settling"));
         let Some(obstruction) = self.units[index].obstruction else {
             return false;
         };

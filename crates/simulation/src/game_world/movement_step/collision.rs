@@ -15,6 +15,16 @@ const HARD_FRIEND_IDLE: i64 = 50;
 const HARD_FRIEND_WORKING: i64 = 75;
 const HARD_OTHER: i64 = 100;
 
+#[derive(Clone, Copy)]
+struct SweepPolicy {
+    general_alone: bool,
+    file: Option<aoe_core::EntityId>,
+    soft: bool,
+    work_squeeze: bool,
+    narrow_water: bool,
+    blocked: u16,
+}
+
 impl crate::GameUnit {
     /// A body working in place: friendly traffic keeps most of its distance.
     #[inline(always)]
@@ -132,9 +142,25 @@ impl GameWorld {
         self.collision_sweep_bounded(index, from, to, stationary, repairing_spawn, None)
     }
 
+    pub(in crate::game_world) fn collision_sweep_bounded(
+        &self,
+        index: usize,
+        from: WorldPosition,
+        to: WorldPosition,
+        stationary: bool,
+        repairing_spawn: bool,
+        bounds: Option<(i32, i32)>,
+    ) -> bool {
+        let _span = self
+            .planning_probe
+            .as_ref()
+            .and_then(|p| p.movement_span("body_sweep"));
+        self.collision_sweep_impl::<true>(index, from, to, stationary, repairing_spawn, bounds)
+    }
+
     /// A movement-batch bound on neighbor radius and displacement. Padding
     /// requires strict separation, including already overlapping bodies.
-    pub(in crate::game_world) fn collision_sweep_bounded(
+    fn collision_sweep_impl<const FAST: bool>(
         &self,
         index: usize,
         from: WorldPosition,
@@ -173,54 +199,11 @@ impl GameWorld {
                 // beyond it hold no answer: skipping them changes no result.
                 swept.min(768 + padding)
             };
-        // Melee may strike within reach while still approaching its preferred
-        // point. Other traffic keeps full separation until its bounded squeeze.
-        let attack = unit.attack_target;
-        let crowded = attack
-            .and_then(|target| self.attack_goal(target, unit.player))
-            .is_some_and(|goal| self.melee_contact_traffic(unit.id, &goal));
-        // A persistently blocked group member earns the same bounded friendly
-        // passing clearance as an independent mover. Group membership must not
-        // make parked friendly bodies an unbreakable wall.
-        let soft = crowded
-            || (attack.is_none()
-                && self.units[index].obstruction.is_some_and(|o| {
-                    let (x, y) = (
-                        i64::from(o.goal.x) - i64::from(from.x),
-                        i64::from(o.goal.y) - i64::from(from.y),
-                    );
-                    o.pass_until > self.tick.0
-                        && (x * x + y * y > 2048 * 2048
-                            || self
-                                .formation_destination_slot(unit.id)
-                                .is_some_and(|goal| {
-                                    let dx = i64::from(goal.x) - i64::from(from.x);
-                                    let dy = i64::from(goal.y) - i64::from(from.y);
-                                    dx * dx + dy * dy > 2048 * 2048
-                                })
-                            || self.free_work_approach(index, o.goal))
-                }));
-        let general_alone = unit.kind == UnitKind::General && self.units[index].formation.is_none();
-        let work_squeeze = unit.kind == UnitKind::Villager
-            && self.units[index].obstruction.is_some()
-            && self.crowded_resource_approach(unit.id);
-        let narrow_water = unit.kind.is_naval() && unit.moving && self.narrow_water_lane(from);
-        // On a deck or in a one-lane passage a player's own bodies that are
-        // not travelling the same way (oncoming or standing) pass through each
-        // other, so a head-on meeting can never lock the lane for anyone.
+        // Fuse the cell proof with the normal traversal. Empty/actor-only
+        // cells and out-of-window centres never construct contact policy;
+        // crowded queries do not pay for a second scan of the same cells.
+        let mut policy = (!FAST).then(|| self.sweep_policy(index, from, unit));
         let mut narrow = None;
-        // Inside a one-lane passage a single file's own members pass through
-        // each other: a knot of friendly bodies at the mouth cannot lock it.
-        // Both passes are last resorts for a body that has stayed blocked, so
-        // the group lookup waits for 16 blocked ticks (the same answer).
-        let blocked = self.units[index].obstruction.map_or(0, |o| o.blocked);
-        let file = (blocked >= 16)
-            .then(|| self.single_file_group(index))
-            .flatten()
-            .filter(|_| {
-                self.near_deck(from)
-                    || (blocked >= 64 && self.static_clearance(unit.kind, from.tile_floor()) <= 1)
-            });
         // Every query can reject centres outside the swept box expanded by
         // the largest observed hull; overfull-cell policy remains independent.
         let window = {
@@ -233,7 +216,7 @@ impl GameWorld {
                 clamp(i64::from(from.y.max(to.y)) + broad_radius),
             )
         };
-        !self.collisions.blocked_in(
+        let clear = !self.collisions.blocked_in(
             (midpoint, reach),
             window,
             unit.kind.is_naval(),
@@ -247,6 +230,14 @@ impl GameWorld {
                 if other.hp == 0 || (stationary && other.moving) {
                     return false;
                 }
+                let SweepPolicy {
+                    general_alone,
+                    file,
+                    soft,
+                    work_squeeze,
+                    narrow_water,
+                    blocked,
+                } = *policy.get_or_insert_with(|| self.sweep_policy(index, from, unit));
                 // His own army yields to a General the player walks alone.
                 if general_alone && self.is_general_follower(other.id, unit.id) {
                     return false;
@@ -316,7 +307,82 @@ impl GameWorld {
                     box_distance(to) <= box_distance(from)
                 }
             },
-        )
+        );
+        if FAST && policy.is_none() {
+            if let Some(full) =
+                self.sweep_oracle(index, from, to, stationary, repairing_spawn, bounds)
+            {
+                assert_eq!(clear, full);
+            }
+            if let Some(probe) = &self.planning_probe {
+                probe.movement_count("body_policy_skipped", 1);
+            }
+        }
+        clear
+    }
+
+    fn sweep_policy(
+        &self,
+        index: usize,
+        from: WorldPosition,
+        unit: &crate::GameUnit,
+    ) -> SweepPolicy {
+        // Melee may strike within reach while still approaching its preferred
+        // point. Other traffic keeps full separation until its bounded squeeze.
+        let attack = unit.attack_target;
+        let crowded = attack
+            .and_then(|target| self.attack_goal(target, unit.player))
+            .is_some_and(|goal| self.melee_contact_traffic(unit.id, &goal));
+        // A persistently blocked group member earns the same bounded friendly
+        // passing clearance as an independent mover. Group membership must not
+        // make parked friendly bodies an unbreakable wall.
+        let obstruction = self.units[index].obstruction;
+        let soft = crowded
+            || (attack.is_none()
+                && obstruction.is_some_and(|o| {
+                    let (x, y) = (
+                        i64::from(o.goal.x) - i64::from(from.x),
+                        i64::from(o.goal.y) - i64::from(from.y),
+                    );
+                    o.pass_until > self.tick.0
+                        && (x * x + y * y > 2048 * 2048
+                            || self
+                                .formation_destination_slot(unit.id)
+                                .is_some_and(|goal| {
+                                    let dx = i64::from(goal.x) - i64::from(from.x);
+                                    let dy = i64::from(goal.y) - i64::from(from.y);
+                                    dx * dx + dy * dy > 2048 * 2048
+                                })
+                            || self.free_work_approach(index, o.goal))
+                }));
+        let general_alone = unit.kind == UnitKind::General && self.units[index].formation.is_none();
+        let work_squeeze = unit.kind == UnitKind::Villager
+            && obstruction.is_some()
+            && self.crowded_resource_approach(unit.id);
+        let narrow_water = unit.kind.is_naval() && unit.moving && self.narrow_water_lane(from);
+        // On a deck or in a one-lane passage a player's own bodies that are
+        // not travelling the same way (oncoming or standing) pass through each
+        // other, so a head-on meeting can never lock the lane for anyone.
+        // Inside a one-lane passage a single file's own members pass through
+        // each other: a knot of friendly bodies at the mouth cannot lock it.
+        // Both passes are last resorts for a body that has stayed blocked, so
+        // the group lookup waits for 16 blocked ticks (the same answer).
+        let blocked = obstruction.map_or(0, |o| o.blocked);
+        let file = (blocked >= 16)
+            .then(|| self.single_file_group(index))
+            .flatten()
+            .filter(|_| {
+                self.near_deck(from)
+                    || (blocked >= 64 && self.static_clearance(unit.kind, from.tile_floor()) <= 1)
+            });
+        SweepPolicy {
+            general_alone,
+            file,
+            soft,
+            work_squeeze,
+            narrow_water,
+            blocked,
+        }
     }
 
     /// Circle against adjacent static tile footprints. At tile centres the
@@ -353,5 +419,49 @@ impl GameWorld {
             }
         }
         true
+    }
+}
+
+#[cfg(not(test))]
+impl GameWorld {
+    #[inline(always)]
+    fn sweep_oracle(
+        &self,
+        _: usize,
+        _: WorldPosition,
+        _: WorldPosition,
+        _: bool,
+        _: bool,
+        _: Option<(i32, i32)>,
+    ) -> Option<bool> {
+        None
+    }
+}
+
+#[cfg(test)]
+impl GameWorld {
+    pub(super) fn collision_sweep_full(
+        &self,
+        index: usize,
+        from: WorldPosition,
+        to: WorldPosition,
+        stationary: bool,
+        repairing_spawn: bool,
+        bounds: Option<(i32, i32)>,
+    ) -> bool {
+        self.collision_sweep_impl::<false>(index, from, to, stationary, repairing_spawn, bounds)
+    }
+    fn sweep_oracle(
+        &self,
+        index: usize,
+        from: WorldPosition,
+        to: WorldPosition,
+        stationary: bool,
+        repairing_spawn: bool,
+        bounds: Option<(i32, i32)>,
+    ) -> Option<bool> {
+        Some(crate::game_world::route_scheduler::GroupWork::unmeasured(
+            || self.collision_sweep_full(index, from, to, stationary, repairing_spawn, bounds),
+        ))
     }
 }

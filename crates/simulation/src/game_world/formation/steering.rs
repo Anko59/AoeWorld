@@ -490,9 +490,7 @@ impl GameWorld {
             remaining: 0,
             near_center: false,
             certified: false,
-            static_clear: group.static_area.is_some_and(|area| {
-                area.covers(unit.state.position, unit.state.kind.collision_radius(), 513)
-            }),
+            static_clear: group.static_covers(unit.state.position, unit.state.kind),
         })
     }
 }

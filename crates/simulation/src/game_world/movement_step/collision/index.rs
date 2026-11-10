@@ -283,6 +283,48 @@ impl CollisionIndex {
         self.overfull_cells != 0
     }
 
+    /// Uncapped observer census, including every body in overfull cells.
+    /// This is never used for movement decisions.
+    pub(crate) fn census_any(
+        &self,
+        min: TileCoord,
+        max: TileCoord,
+        naval: bool,
+        mut test: impl FnMut(EntityId, WorldPosition) -> bool,
+    ) -> bool {
+        for y in min.y..=max.y {
+            for x in min.x..=max.x {
+                if let Some(cell) = self.cells[usize::from(naval)].get(TileCoord::new(x, y))
+                    && cell.iter().any(|body| test(body.id, body.at))
+                {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Cell-level absence proof, independent of cyclic sampling. A singleton
+    /// actor cell is empty for its own query; every other body vetoes it.
+    pub(crate) fn cells_empty_except(
+        &self,
+        min: TileCoord,
+        max: TileCoord,
+        naval: bool,
+        actor: EntityId,
+    ) -> bool {
+        for y in min.y..=max.y {
+            for x in min.x..=max.x {
+                if let Some(cell) = self.cells[usize::from(naval)].get(TileCoord::new(x, y))
+                    && (cell.len() != 1 || cell[0].id != actor)
+                {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
     /// Coarse counts conservatively reject sparse contact windows in at most
     /// nine cell reads. Dead/enemy bodies overestimate demand, never hide it.
     pub(crate) fn contact_may_be_crowded(
