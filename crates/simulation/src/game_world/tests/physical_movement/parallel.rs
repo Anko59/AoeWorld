@@ -113,6 +113,7 @@ fn thread_count_never_changes_the_replay() {
     let one = run(1, false);
     assert_eq!(run(2, false), one);
     assert_eq!(run(6, false), one);
+    assert_eq!(run(12, false), one);
 }
 
 #[test]
@@ -120,6 +121,7 @@ fn thread_count_never_changes_the_replay_with_buildings_in_sight() {
     let one = run(1, true);
     assert_eq!(run(2, true), one);
     assert_eq!(run(6, true), one);
+    assert_eq!(run(12, true), one);
 }
 
 fn waiting_fixture() -> (GameWorld, EntityId) {

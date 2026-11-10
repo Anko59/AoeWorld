@@ -7,10 +7,20 @@ fn run(name: &str, with_general: bool, enemy_marches: bool) -> Probe {
 }
 
 fn run_against(name: &str, with_general: bool, enemy_marches: bool, enemies: i32) -> Probe {
+    run_scene(name, with_general, enemy_marches, enemies, 0)
+}
+
+fn run_scene(
+    name: &str,
+    with_general: bool,
+    enemy_marches: bool,
+    enemies: i32,
+    defender_offset: i32,
+) -> Probe {
     let (mut w, _) = setup();
     w.set_fog_disabled(true);
     let ours = army(&mut w, 0, 190, 19, 60, 100);
-    let theirs = army(&mut w, 1, enemies, 12, 120, 100);
+    let theirs = army(&mut w, 1, enemies, 12, 120, 100 + defender_offset);
     let mut mine = ours.clone();
     if with_general {
         let g = soldier(&mut w, UnitKind::General, 70, 112);
@@ -46,7 +56,17 @@ fn run_against(name: &str, with_general: bool, enemy_marches: bool, enemies: i32
         spent += start.elapsed();
         probe.sample(&w, &mine);
     }
-    probe.report(name, 20, mine.len());
+    let summary = probe.report(name, 20, mine.len());
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/regions");
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(
+        directory.join(format!("{name}.txt")),
+        format!(
+            "{summary}with_target={} in_reach={}\n",
+            probe.with_target, probe.in_reach
+        ),
+    )
+    .unwrap();
     println!("{name}: advance total ms={}", spent.as_millis());
     probe
 }
@@ -64,7 +84,31 @@ fn check(name: &str, p: &Probe) {
 
 #[test]
 fn a_general_army_engages_idle_defenders() {
-    assert_engages("general_vs_idle", true, false);
+    // Fixed symmetric deployment perturbations, including the original scene.
+    // Route admission can shift a wounded retreat by a tick and change the
+    // battle trajectory; judge engagement across trajectories, not one outcome.
+    let shares: Vec<_> = (-2..=2)
+        .map(|offset| {
+            let name = format!("general_vs_idle_offset_{offset}");
+            let p = run_scene(&name, true, false, 120, offset);
+            assert!(p.in_reach > 0, "{name}: the armies must meet");
+            let share = p.with_target as f64 * 100.0 / p.in_reach as f64;
+            println!("{name}: engagement={share:.6}%");
+            assert!(share >= 80.0, "{name}: {share}% of units in reach fight");
+            assert!(p.stuck_units(6, 20) <= 5, "{name}: units idle in reach");
+            share
+        })
+        .collect();
+    let mean = shares.iter().sum::<f64>() / shares.len() as f64;
+    let summary = format!("shares={shares:?} mean={mean:.6}%\n");
+    println!("general_vs_idle: {summary}");
+    std::fs::write(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../.cache/regions/general_vs_idle_variants.txt"),
+        summary,
+    )
+    .unwrap();
+    assert!(mean >= 85.0, "mean engagement {mean}%: {shares:?}");
 }
 
 #[test]
