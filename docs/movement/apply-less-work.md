@@ -122,6 +122,61 @@ collision-count pins decrease deliberately (river 3,108,113 → 3,107,314; town
 102,322,464). Their arrival ticks, route work, behavior/throughput bounds and all
 canonical-hash pins remain unchanged. These are query counts, not CPU cycles.
 
+## Before/after results (2026-11-10)
+
+Optimized simulation: `a7e072abbaaf36951a006b7d92c704cdd8959d32`.
+The same plain ticks 101–125, profile ticks 126–150 and all 60 canonical
+checkpoints were used. All baseline comparisons passed; neither world-hash
+pins nor behavior limits changed.
+
+| Scale | Workers | Before mean ms | After mean ms | Before p50 ms | After p50 ms |
+|---|---:|---:|---:|---:|---:|
+| 1x | 1 | 20.311 | 19.193 | 4.365 | 4.848 |
+| 1x | 4 | 18.311 | 12.061 | 4.033 | 3.924 |
+| 5x | 1 | 120.776 | 103.698 | 105.800 | 84.640 |
+| 5x | 4 | 102.193 | 104.121 | 87.020 | 86.060 |
+
+Wall results are mixed: the 5x single-worker mean falls 14.1%, but the 5x
+four-worker mean rises 1.9%. The 1x single-worker median also rises. One-minute
+setup loads before/after were 34.08/28.31, 31.15/40.08, 29.07/23.84 and
+18.28/24.44 respectively. These short shared-machine windows do not establish
+a consistent speedup or isolate the cause of timing differences.
+
+Exact capsule/static census and stationary apply, per tick (counts identical
+at 1/4 workers):
+
+| Scale | Applied | No body + static clear | Share | Stationary | Bookkeeping-only apply |
+|---|---:|---:|---:|---:|---:|
+| 1x | 710.40 | 646.96 | 91.07% | 427.04 | 180.28 |
+| 5x | 10,499.52 | 9,971.12 | 94.97% | 9,187.56 | 7,905.36 |
+
+The exact census finds far more clear paths than whole-cell absence does.
+A stationary mover can still owe fractional credit: no wholly inert no-op
+apply was observed in these windows. The shortcut commits the required order
+without repeating physical state, vision, bucket or progress writes.
+
+Function calls and cache reuse, per tick (both worker counts agree):
+
+| Scale | Sweeps before → after | Settlement before → after | Contact policy skipped | Cached cell keys | Cache hits |
+|---|---:|---:|---:|---:|---:|
+| 1x | 1,273.64 → 1,093.36 | 205.76 → 16.52 | 267.44 | 487.72 | 506.32 |
+| 5x | 13,560.44 → 5,655.08 | 7,998.40 → 82.44 | 1,415.88 | 2,212.92 | 2,505.44 |
+
+At 5x, sweep calls fall 58.3% and settlement calls fall 99.0%; sidestep calls
+remain 819.56/tick (144.64/tick at 1x). These call reductions demonstrate less
+engine machinery, not the same percentage reduction in uninstrumented CPU time.
+
+Inclusive diagnostic cost, before → after us per applied mover; sweeps nested
+inside sidesteps are counted in both columns. Observer/timer overhead is not
+subtracted, and these columns must not be summed:
+
+| Scale | Workers | Body sweep | Sidestep | Settlement |
+|---|---:|---:|---:|---:|
+| 1x | 1 | 4.650 → 3.697 | 4.502 → 4.087 | 0.598 → 0.053 |
+| 1x | 4 | 5.993 → 4.280 | 4.922 → 3.881 | 0.615 → 0.052 |
+| 5x | 1 | 2.892 → 1.383 | 1.641 → 1.602 | 1.557 → 0.047 |
+| 5x | 4 | 4.616 → 2.547 | 1.684 → 1.794 | 1.662 → 0.069 |
+
 ## Validation
 
 All commands used `NEXTEST_TEST_THREADS=2 RUST_TEST_THREADS=2
