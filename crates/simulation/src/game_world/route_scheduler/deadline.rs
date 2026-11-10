@@ -119,7 +119,12 @@ impl GameWorld {
             unit.state.player,
             bucket,
             planner.origin(),
-            planner.destination(),
+            // Endpoint refinement can already have replaced an isolated
+            // work point with reachable ground. Test the route still being
+            // searched, rather than rejecting its original requested tile.
+            planner
+                .certified_destination()
+                .unwrap_or(planner.destination()),
         ) != Ok(false)
         {
             return;

@@ -120,7 +120,9 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
         // Formations starting from their members' reachable region, and cold
         // orders answered locally instead of by a whole-map region build,
         // move it again.
-        "4a5eb349156d851cdd3dffcde9f79dc48f30ff0fbb1d63f30e2898d338ccb082"
+        // Preserving searches toward certified endpoints restores valid
+        // gathering approaches that the region check previously cancelled.
+        "2a0848c5c015012cd58c02c48a62c0849bca08e16a8db429275857df1aba9730"
     );
 }
 
