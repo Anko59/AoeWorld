@@ -122,7 +122,10 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
         // move it again.
         // Preserving searches toward certified endpoints restores valid
         // gathering approaches that the region check previously cancelled.
-        "2a0848c5c015012cd58c02c48a62c0849bca08e16a8db429275857df1aba9730"
+        // Current region proofs discharge duplicate destination-pocket work,
+        // so planners spend their allowance on routes sooner. The full run
+        // preserved the activity floors and complete one/four-worker equality.
+        "eeb9a171fb41f0e6c486edd0f2d5cb196ebb54e7436ec0a4236d068b98277960"
     );
 }
 

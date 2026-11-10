@@ -115,20 +115,25 @@ impl GameWorld {
         else {
             return;
         };
-        if self.land_reachable(
-            unit.state.player,
-            bucket,
-            planner.origin(),
-            // Endpoint refinement can already have replaced an isolated
-            // work point with reachable ground. Test the route still being
-            // searched, rather than rejecting its original requested tile.
-            planner
-                .certified_destination()
-                .unwrap_or(planner.destination()),
-        ) != Ok(false)
-        {
-            return;
+        let from = planner.origin();
+        // Endpoint refinement may have replaced an isolated requested tile.
+        let to = planner
+            .certified_destination()
+            .unwrap_or(planner.destination());
+        match self.land_reachable(unit.state.player, bucket, from, to) {
+            Ok(true) => {
+                if let Some(planner) = self.units[index].planner.as_mut() {
+                    planner.confirm_reachable_destination(from, to);
+                }
+                return;
+            }
+            Err(_) => return,
+            Ok(false) => {}
         }
+        let unit = &self.units[index];
+        let Some(planner) = unit.planner.as_ref() else {
+            return;
+        };
         let work = planner.work();
         let (kind, sample) = (unit.state.kind, planner.clone());
         self.route_metrics.stuck += 1;

@@ -88,3 +88,23 @@ fn bulk_chunk_topology_equals_point_only_ground() {
         );
     }
 }
+
+#[test]
+fn sparse_region_queries_do_not_compose_whole_walk_chunks() {
+    let generator = flat_terrain_with_water_wall(96, 48, 17);
+    let ground = MapRegionGround::new(&generator, ResourceOverlay::empty(), &|| false);
+    assert_eq!(generator.walk_cache_usage().1, 0);
+    assert_eq!(ground.tile(TileCoord::new(10, 10)), RegionTile::Open);
+    assert!(ground.edge_clear(TileCoord::new(10, 10), TileCoord::new(11, 10)));
+    assert_eq!(
+        generator.walk_cache_usage().1,
+        0,
+        "sparse region reads must not populate the walk cache with unrelated tiles"
+    );
+    assert!(ground.chunk((0, 0), (96, 96)).is_some());
+    assert!(
+        generator.walk_cache_usage().1 > 0,
+        "dense labels retain the bulk read path"
+    );
+    assert_eq!(ground.error(), None);
+}

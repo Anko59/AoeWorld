@@ -44,6 +44,19 @@ impl<'a> MapRegionGround<'a> {
         if self.error.get().is_some() {
             return None;
         }
+        match self.generator.walk_at_with_cancel(tile, self.cancelled) {
+            Ok(cell) => cell,
+            Err(error) => {
+                self.error.set(Some(error));
+                None
+            }
+        }
+    }
+
+    fn bulk_cell(&self, tile: TileCoord) -> Option<WalkCell> {
+        if self.error.get().is_some() {
+            return None;
+        }
         if (self.cancelled)() {
             self.error.set(Some(EnvironmentPageError::Cancelled));
             return None;

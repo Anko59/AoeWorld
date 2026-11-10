@@ -156,6 +156,17 @@ impl Proof {
 }
 
 impl RoutePlanner {
+    /// Reuse a current directed reachability proof for this leg's endpoint.
+    /// A certificate for an older leg or a different endpoint cannot discharge
+    /// its reverse flood. Geometry changes remain the caller's responsibility,
+    /// just as after this planner finishes its own pocket check.
+    pub fn confirm_reachable_destination(&mut self, from: TileCoord, to: TileCoord) {
+        if from == self.leg_origin && to == self.effective_destination() {
+            self.pocket_checked = true;
+            self.pocket = None;
+        }
+    }
+
     /// The same charged reverse proof precedes both a difficult local search
     /// and global guidance. A small sealed far goal must not first flood the
     /// origin's whole continent through portals.

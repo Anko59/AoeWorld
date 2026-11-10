@@ -81,7 +81,12 @@ fn a_certified_frontier_route_survives_the_disconnected_requested_goal() {
 
 #[test]
 fn a_failed_region_build_is_retried_after_the_provider_recovers() {
-    let (terrain, fail) = toggle_provider_terrain();
+    let (mut terrain, fail) = toggle_provider_terrain();
+    // Node depletion projects every tile during setup. A provider failure
+    // needs a genuine cache miss, rather than unrelated chunk reads.
+    if let Terrain::Map { generator, .. } = &mut terrain {
+        *generator = generator.navigation_preparation_worker();
+    }
     let mut world = GameWorld::new(WorldConfig::new(64, 64, Seed(0)).unwrap()).unwrap();
     world.terrain = terrain;
     let from = TileCoord::new(1, 1);
@@ -98,6 +103,25 @@ fn a_failed_region_build_is_retried_after_the_provider_recovers() {
         world
             .land_reachable(PlayerId(0), aoe_map::LandBucket::Small, from, to)
             .unwrap()
+    );
+}
+
+#[test]
+fn a_cached_region_witness_does_not_require_unrelated_source_reads() {
+    let (terrain, fail) = toggle_provider_terrain();
+    let mut world = GameWorld::new(WorldConfig::new(64, 64, Seed(0)).unwrap()).unwrap();
+    world.terrain = terrain;
+    let from = TileCoord::new(1, 1);
+    let to = TileCoord::new(60, 1);
+    assert_eq!(
+        world.land_reachable(PlayerId(0), aoe_map::LandBucket::Small, from, to),
+        Ok(true)
+    );
+    fail.store(true, Ordering::Relaxed);
+    assert_eq!(
+        world.land_reachable(PlayerId(0), aoe_map::LandBucket::Small, from, to),
+        Ok(true),
+        "a cached immutable witness is still valid while its provider is unavailable"
     );
 }
 
@@ -143,4 +167,61 @@ fn sealed_near_searches_are_answered_by_regions_even_with_one_work_per_tick() {
             Some(GameWorldError::Unreachable)
         );
     }
+}
+
+#[test]
+fn confirmed_regions_do_not_repeat_a_destination_pocket_flood() {
+    use aoe_map::{NavigationPhase, NavigationProbe, NavigationSpan};
+    use std::sync::atomic::AtomicUsize;
+    #[derive(Debug, Default)]
+    struct Probe(AtomicUsize);
+    struct Span;
+    impl NavigationSpan for Span {}
+    impl NavigationProbe for Probe {
+        fn begin(&self, phase: NavigationPhase) -> Box<dyn NavigationSpan> {
+            if phase == NavigationPhase::Pocket {
+                self.0.fetch_add(1, Ordering::Relaxed);
+            }
+            Box::new(Span)
+        }
+    }
+    let (terrain, _) = toggle_provider_terrain();
+    let mut world = GameWorld::new(WorldConfig::new(64, 64, Seed(0)).unwrap()).unwrap();
+    world.terrain = terrain;
+    let wall = TileRect::from_xywh(32, 0, 1, 56);
+    let Terrain::Map { overlay, generator } = &mut world.terrain else {
+        unreachable!();
+    };
+    overlay.add_footprint(wall).unwrap();
+    let probe = Arc::new(Probe::default());
+    generator.set_navigation_probe(probe.clone());
+    world.regions_changed(wall);
+    let from = TileCoord::new(10, 10);
+    let target = TileCoord::new(50, 10);
+    assert!(
+        world
+            .land_reachable(PlayerId(0), aoe_map::LandBucket::Small, from, target)
+            .unwrap()
+    );
+    let id = world
+        .spawn_unit(PlayerId(0), WorldPosition::from_tile_center(from).unwrap())
+        .unwrap();
+    world.fast_route_budget = 0;
+    assert!(
+        world
+            .issue_task_move(id, WorldPosition::from_tile_center(target).unwrap())
+            .unwrap()
+    );
+    let mut changed = Vec::new();
+    for _ in 0..16 {
+        world.serve_route_searches(1024, &mut changed);
+    }
+    assert_eq!(world.movement_failure(id), None);
+    assert!(world.movement_order(id).is_some());
+    assert_eq!(world.route_accounting_error(), None);
+    assert_eq!(
+        probe.0.load(Ordering::Relaxed),
+        0,
+        "current region connectivity already rules out a sealed destination pocket"
+    );
 }

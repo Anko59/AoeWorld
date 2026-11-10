@@ -14,7 +14,7 @@ pub(super) fn read(ground: &MapRegionGround<'_>, key: (i32, i32), size: (i32, i3
             if tile.x < 0 || tile.y < 0 || tile.x >= size.0 || tile.y >= size.1 {
                 continue;
             }
-            let cell = ground.cell(tile);
+            let cell = ground.bulk_cell(tile);
             let index = y * SIDE + x;
             cells[index] = cell;
             open[index] = cell.is_some_and(|cell| {
