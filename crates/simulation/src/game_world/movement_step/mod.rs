@@ -21,6 +21,7 @@ mod avoidance;
 pub(in crate::game_world) mod certificates;
 mod collision;
 mod contact;
+mod fast_paths;
 mod group;
 mod static_collision;
 pub(crate) use collision::{CellHasher, CollisionIndex, key as tile_key};
@@ -36,6 +37,7 @@ pub(crate) use yielding::yield_candidate;
 
 /// A proposed tick of one mover.
 #[derive(Debug)]
+#[cfg_attr(test, derive(Clone))]
 pub(crate) struct FastStep {
     index: usize,
     state: GameUnit,
@@ -60,6 +62,8 @@ struct Tables {
     marked: Vec<EntityId>,
     neighbor_radius: [i32; 2],
     group_step_bound: i32,
+    /// Static answers live only for one immutable group proposal batch.
+    sealed_cells: std::collections::HashMap<(aoe_core::TileCoord, u8), bool>,
 }
 
 impl Tables {
@@ -67,6 +71,7 @@ impl Tables {
     /// new ids, so a refresh visits jobs and players, never every entity id.
     fn refresh(&mut self, world: &GameWorld, group_phase: bool) {
         if group_phase {
+            self.sealed_cells.clear();
             self.neighbor_radius = world.collisions.maximum_radii();
             self.group_step_bound = world.formation_step_bound();
         }
@@ -195,6 +200,9 @@ impl GameWorld {
                 return;
             }
             tables.refresh(self, group_phase);
+            if group_phase {
+                tables.cache_group_cells(self, jobs.iter().copied());
+            }
             par_map_into(jobs.len(), proposals, |slot| {
                 let index = jobs[slot];
                 if group_phase {
@@ -206,6 +214,12 @@ impl GameWorld {
         #[cfg(target_arch = "wasm32")]
         {
             scratch.tables.refresh(self, group_phase);
+            if group_phase {
+                scratch.tables.cache_group_cells(
+                    self,
+                    movers.iter().filter_map(|id| self.lookup.get(id).copied()),
+                );
+            }
             let Scratch {
                 tables, proposals, ..
             } = scratch;
@@ -385,7 +399,7 @@ impl GameWorld {
     /// Commits a proposal: the shared writes of the sequential engine, in the
     /// same order (position, wildlife cells, vision, bucket). Returns `false`, writing nothing,
     /// when an assumption of the proposal no longer holds.
-    pub(crate) fn apply_step(
+    pub(super) fn apply_step_full(
         &mut self,
         mut step: FastStep,
         still_moving: &mut Vec<EntityId>,

@@ -283,6 +283,27 @@ impl CollisionIndex {
         self.overfull_cells != 0
     }
 
+    /// Uncapped observer census, including every body in overfull cells.
+    /// This is never used for movement decisions.
+    pub(crate) fn census_any(
+        &self,
+        min: TileCoord,
+        max: TileCoord,
+        naval: bool,
+        mut test: impl FnMut(EntityId, WorldPosition) -> bool,
+    ) -> bool {
+        for y in min.y..=max.y {
+            for x in min.x..=max.x {
+                if let Some(cell) = self.cells[usize::from(naval)].get(&key(TileCoord::new(x, y)))
+                    && cell.iter().any(|body| test(body.id, body.at))
+                {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// Cell-level absence proof, independent of cyclic sampling. A singleton
     /// actor cell is empty for its own query; every other body vetoes it.
     pub(crate) fn cells_empty_except(

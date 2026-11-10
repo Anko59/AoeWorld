@@ -51,13 +51,14 @@ intentionally changed.
 
 Before any fast path, simulation behavior from `0df71a07c2e2`, plus the observer
 instrumentation in this change. The 1x runs have 9,619 units; the 5x run has 46,691 units.
-At 1x the 1/4-worker checkpoint sequences agree (15 checkpoints each).
+At both scales the 1/4-worker checkpoint sequences agree (15 checkpoints each).
 
 | Scale | Workers | Applied/tick | Clear/tick | Stationary/tick | Movement mean ms | Movement p50 ms |
 |---|---:|---:|---:|---:|---:|---:|
 | 1x | 1 | 710.40 | 85.72 | 427.04 | 20.311 | 4.365 |
 | 1x | 4 | 710.40 | 85.72 | 427.04 | 18.311 | 4.033 |
 | 5x | 1 | 10,499.52 | 362.88 | 9,187.56 | 120.776 | 105.800 |
+| 5x | 4 | 10,499.52 | 362.88 | 9,187.56 | 102.193 | 87.020 |
 
 Only 12.1% of applied movers pass this deliberately conservative clearance
 proof; 60.1% have a zero-length first segment. Stationary does not imply an
@@ -70,6 +71,7 @@ Inclusive microseconds normalized by applied movers (not just query calls):
 | 1x | 1 | 4.650 | 4.502 | 0.598 |
 | 1x | 4 | 5.993 | 4.922 | 0.615 |
 | 5x | 1 | 2.892 | 1.641 | 1.557 |
+| 5x | 4 | 4.616 | 1.684 | 1.662 |
 
 There are 1,273.64 sweep, 144.64 sidestep and 205.76 settling calls per tick.
 At one worker their inclusive means per call are 2.593, 22.109 and 2.065 us.
@@ -77,5 +79,73 @@ The one-minute host loads at setup were 34.08 and 31.15. Means include route
 outliers and differ sharply from the medians; this is not a worker speedup claim.
 
 At 5x, 3.46% pass the cell/static proof and 87.5% have a stationary first
-segment. The 5x four-worker replay and the optimized measurements are pending
-in this instrumentation increment.
+segment. 
+
+## Exact fast paths
+
+- The original grid traversal itself proves absence of relevant bodies:
+  empty cells, the actor, dead bodies and centres outside the swept box never
+  construct contact policy or run body geometry. A crowded query scans its
+  cells once, rather than first rescanning them for an emptiness proof. The
+  original whole-cell compressed-spawn policy remains. Every policy-free query
+  in unit tests executes the eager full path and asserts the same answer.
+  Static terrain/building checks remain at the existing callers.
+- An unchanged individual physical state can skip physical apply, vision,
+  spatial relocation and progress observation only with no obstruction, route
+  pop or stale vision, and an unchanged bucket. The live arrival reservation
+  check remains. Required order/carry updates and mover-list ordering remain;
+  when the order is also unchanged, apply writes nothing. The test oracle runs
+  full apply and compares the unit, order, route, planning age, bucket and output
+  lists. No movement is skipped merely because this tick's displacement is zero.
+- An unobstructed mover skips settlement; tests execute the full settlement
+  path and assert it leaves the same fields unchanged and returns false.
+- A group proposal batch caches the static "tile has no exit" answer by tile
+  and unit kind. It computes each key once, only outside existing static-area
+  certificates. Precise bridge proximity stays per position. The cache is
+  cleared before the next batch; tests compare every hit with the uncached
+  answer and rebuild after new walls. Live body emptiness is never cached
+  across ordered writes.
+
+The optimized census also records `applied_no_body`: no other living same-layer
+unit intersects the exact swept capsule, and the ordinary static checks pass.
+It scans every indexed body in the candidate cells, including those beyond the
+32-body cyclic decision sample. Zero-length capsules include initial overlaps;
+tangency is clear. This diagnostic does not make movement decisions. Its extra
+work is outside the uninstrumented wall window. Coarse instrumented apply-loop
+times include it and must not be compared directly with the old census.
+
+Oracle verification is outside engine collision-work accounting, in nested,
+unwind-safe worker-local test scopes. The fused traversal counts all original
+cell/body inspections without a duplicate emptiness scan. Four current-output
+collision-count pins decrease deliberately (river 3,108,113 → 3,107,314; town
+2,510,834 → 2,510,772; crossing 3,051,861 → 3,051,342; long march 102,402,561 →
+102,322,464). Their arrival ticks, route work, behavior/throughput bounds and all
+canonical-hash pins remain unchanged. These are query counts, not CPU cycles.
+
+## Validation
+
+All commands used `NEXTEST_TEST_THREADS=2 RUST_TEST_THREADS=2
+CARGO_PROFILE_DEV_DEBUG=0` and Dockerized Make. No long-job slot was taken.
+
+- `make hooks-install hooks-check fmt-check lint structure-check architecture-check`: pass.
+- `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='all()'`:
+  1,236 passed, zero skipped. This includes movement, formations, bridges,
+  deadlock, five General-engagement cases, two formation-engagement cases,
+  and the unchanged 14,000-unit canonical checkpoint at 1/4 workers.
+- `make test-harness-focused HARNESS_TEST_FILTER=perf_scale::match_bench`:
+  nine passed; the large census is ignored by ordinary unit runs.
+- `make movement-apply-census`: the explicitly selected large census passed;
+  all 60 saved baseline checkpoints agree, with worker equality at both scales.
+
+The baseline run used the instrumented `0df71a07c2e2` simulation (the simulation
+source committed in `98e3ccd68`). Its test invocation preceded the ignored-test
+annotation and root-anchored artifact path; those changes affect selection/output
+only. Raw reports remain outside Git in `.cache/apply-less/before.json` and
+`after.json`. The optimized simulation source is committed separately from the
+final measurement table.
+
+No CI, owner-save replay, release-build timing or dedicated hardware run was
+performed. No recording was made: the brief and launcher assign no `DEV_PORT`,
+and the shared-machine rules permit only an assigned recording-server port.
+A port request is pending. There is also no `local-assets` link in this worktree.
+No assets or recordings are committed. Shipping is prohibited by this task.

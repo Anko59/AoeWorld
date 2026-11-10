@@ -87,7 +87,7 @@ impl GameWorld {
             self.melee_traffic_clearance = None;
             let id = movers[(start + turn) % mover_count];
             if let Some(&index) = self.lookup.get(&id)
-                && self.settle_obstructed_unit(index)
+                && self.settle_movement_if_needed(index)
             {
                 changed.push(id);
                 continue;

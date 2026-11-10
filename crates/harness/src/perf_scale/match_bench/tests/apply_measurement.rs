@@ -51,6 +51,15 @@ fn progress(scale: f64, workers: usize, tick: u64) {
 #[test]
 #[ignore = "explicit 100-seat profiling; use make movement-apply-census"]
 fn late_game_apply_census() {
+    let baseline_path = output_dir().join("before.json");
+    let baseline: Option<Vec<serde_json::Value>> = match std::fs::read(baseline_path) {
+        Ok(bytes) => Some(serde_json::from_slice(&bytes).unwrap()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => panic!("baseline read failed: {error}"),
+    };
+    if let Some(before) = &baseline {
+        assert_eq!(before.len(), 4);
+    }
     let mut reports = Vec::new();
     for scale in [1.0, 5.0] {
         for workers in [1, 4] {
@@ -58,7 +67,7 @@ fn late_game_apply_census() {
                 .num_threads(workers)
                 .build()
                 .unwrap();
-            let report = pool.install(|| {
+            let mut report = pool.install(|| {
                 let load = std::fs::read_to_string("/proc/loadavg").unwrap_or_default();
                 progress(scale, workers, 0);
                 let setup = Instant::now();
@@ -103,6 +112,23 @@ fn late_game_apply_census() {
                     "movement_mean_ms": average, "movement_p50_ms": movement[12],
                     "profile_ticks": 25, "profile": *probe.0.lock().unwrap() })
             });
+            let baseline_equal = baseline.as_ref().map(|before| {
+                let matching: Vec<_> = before
+                    .iter()
+                    .filter(|run| run["scale"] == scale && run["workers"] == workers)
+                    .collect();
+                assert_eq!(
+                    matching.len(),
+                    1,
+                    "baseline must name this scale/worker once"
+                );
+                assert_eq!(
+                    matching[0]["hashes"], report["hashes"],
+                    "baseline divergence at scale {scale}, workers {workers}"
+                );
+                true
+            });
+            report["baseline_hashes_equal"] = json!(baseline_equal);
             eprintln!("apply census: {report}");
             if workers == 4 {
                 let previous: &serde_json::Value = reports.last().unwrap();

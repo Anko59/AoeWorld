@@ -230,9 +230,11 @@ impl GroupWork {
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
     pub(crate) fn collision(&self, count: u64) {
-        self.shard()
-            .collision
-            .fetch_add(count, std::sync::atomic::Ordering::Relaxed);
+        if self.collision_enabled() {
+            self.shard()
+                .collision
+                .fetch_add(count, std::sync::atomic::Ordering::Relaxed);
+        }
     }
     pub(crate) fn snapshot(&self, metrics: &mut RouteMetrics) {
         use std::sync::atomic::Ordering::Relaxed;
@@ -245,3 +247,41 @@ impl GroupWork {
         metrics.group_collision_work = total(|s| &s.collision);
     }
 }
+
+#[cfg(not(test))]
+impl GroupWork {
+    #[inline(always)]
+    fn collision_enabled(&self) -> bool {
+        true
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    static ORACLE_COLLISIONS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+impl GroupWork {
+    fn collision_enabled(&self) -> bool {
+        !ORACLE_COLLISIONS.get()
+    }
+
+    /// Reference validation is not engine work; nested scopes and unwinding
+    /// restore accounting before the next mover on this worker.
+    pub(crate) fn unmeasured<R>(f: impl FnOnce() -> R) -> R {
+        ORACLE_COLLISIONS.with(|flag| {
+            struct Restore<'a>(&'a std::cell::Cell<bool>, bool);
+            impl Drop for Restore<'_> {
+                fn drop(&mut self) {
+                    self.0.set(self.1);
+                }
+            }
+            let _restore = Restore(flag, flag.replace(true));
+            f()
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests;

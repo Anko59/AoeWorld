@@ -53,6 +53,8 @@ fn run(case: &str, count: usize, limit: u32) {
     // The audit reports increased long-march work/reversals, not just gains.
     // Pre-existing building-overlap recovery adds collision checks only; these
     // current-output counts retain every movement and bounded-work limit above.
+    // Static-cell reuse and lazy contact policy intentionally reduce collision
+    // queries. Oracle validation is excluded; arrival/route/hash pins stay put.
     match case {
         "river" => {
             result.assert_arrival_and_work(count);
@@ -62,7 +64,7 @@ fn run(case: &str, count: usize, limit: u32) {
             assert_eq!(result.oscillation_causes, causes(0, 0, 0, 3));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (5522, 55349, 3108113)
+                (5522, 55349, 3107314)
             );
         }
         "long" => {
@@ -75,7 +77,7 @@ fn run(case: &str, count: usize, limit: u32) {
             assert_eq!(result.oscillation_causes, causes(12, 0, 0, 6));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (36804, 378134, 102402561)
+                (36804, 378134, 102322464)
             );
         }
         _ => {
@@ -83,8 +85,8 @@ fn run(case: &str, count: usize, limit: u32) {
             // Current-output pins also retain work for the complete report.
             let expected = match case {
                 "forest" => (3288, 1027, 2198882),
-                "town" => (3740, 1193, 2510834),
-                "crossing" => (3278, 1933, 3051861),
+                "town" => (3740, 1193, 2510772),
+                "crossing" => (3278, 1933, 3051342),
                 "bridge" => (479, 354, 12365),
                 "siege" => (1556, 867, 33972),
                 "gap" => (580, 512, 8908),

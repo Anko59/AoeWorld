@@ -132,3 +132,18 @@ fn empty_sweep_cells_exclude_only_the_actor_and_follow_relocations() {
     grid.remove(EntityId(3), at.tile_floor(), false);
     assert!(grid.cells_empty_except(min, max, false, actor));
 }
+
+#[test]
+fn the_census_checks_bodies_beyond_the_cyclic_sample_limit() {
+    let mut grid = CollisionIndex::default();
+    let at = WorldPosition::new(2048, 3072);
+    for id in 0..65 {
+        grid.insert(EntityId(id), at, false, id as usize);
+    }
+    let tile = at.tile_floor();
+    assert!(
+        grid.census_any(tile, tile, false, |id, position| id == EntityId(64)
+            && position == at)
+    );
+    assert!(!grid.census_any(tile, tile, true, |_, _| true));
+}
