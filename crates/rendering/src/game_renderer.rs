@@ -397,10 +397,7 @@ impl GameRenderer {
             }));
             drop(fog_span);
             if grid {
-                instances.extend(game_grid::grid_sprites(
-                    &fog::grid_segments(&layers, camera, light),
-                    camera.viewport,
-                ));
+                instances.extend(fog::grid_sprites(&layers, camera, light, depth_origin));
             }
             let _submission = perf::Stage::new(4);
             return match self {

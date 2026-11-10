@@ -4,9 +4,8 @@ use crate::{
     web::Sprite,
 };
 use aoe_core::{Camera, ISO_TILE_HEIGHT, ISO_TILE_WIDTH, ScreenPoint};
-use web_sys::CanvasRenderingContext2d;
 
-/// Straight-alpha overlay colour; `draw_grid` spells the same value for Canvas.
+/// Straight-alpha overlay colour; `raster_grid` blends the same value for Canvas.
 const GRID_COLOR: [f32; 4] = [0.05, 0.08, 0.03, 0.6];
 /// Screen pixels kept between neighbouring parallel lines.
 const GRID_MIN_SPACING: f64 = 16.0;
@@ -90,13 +89,29 @@ pub(crate) fn selection_depth_at(
     layer_depth + top + (bottom - top) * (t + 1.0) * 0.5
 }
 
+/// A border with the world depth of each end, lifted just above the terrain
+/// plane it lies on. The depth test then hides the line wherever a building,
+/// unit, shadow or outline is the frontmost thing at a pixel, so the grid reads
+/// as painted on the ground. The lift covers the half pixel the one-pixel
+/// quad extends from the line: `1 / (32 zoom)` world depth per pixel.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct GridLine {
+    pub(crate) ends: [ScreenPoint; 2],
+    pub(crate) depths: [f64; 2],
+}
+
+pub(crate) fn grid_depth_lift(zoom: f64) -> f64 {
+    0.02 + 0.5 / (ISO_TILE_HEIGHT / 2.0 * zoom.max(1e-6))
+}
+
 /// Borders of the drawn terrain cells, so the overlay follows the mesh's
 /// heights and level of detail. Every border comes from the cell on its
 /// positive side; lines closer than `GRID_MIN_SPACING` thin out by twos.
-pub(crate) fn grid_segments<'a>(
+pub(crate) fn grid_lines<'a>(
     surfaces: impl IntoIterator<Item = &'a ProjectedSurfaceTriangle>,
     zoom: f64,
-) -> Vec<[ScreenPoint; 2]> {
+) -> Vec<GridLine> {
+    let lift = grid_depth_lift(zoom);
     let mut step = 1.0;
     // Neighbouring parallel lines of one family sit `step` world tiles apart,
     // a perpendicular screen distance of W * H / sqrt(W^2 + H^2) per tile in
@@ -106,7 +121,7 @@ pub(crate) fn grid_segments<'a>(
     while step * per_tile * zoom < GRID_MIN_SPACING && step < 1e9 {
         step *= 2.0;
     }
-    let mut segments = Vec::new();
+    let mut lines = Vec::new();
     for triangle in surfaces.into_iter().filter(|triangle| !triangle.skirt) {
         let points = triangle.points;
         for index in 0..3 {
@@ -121,18 +136,29 @@ pub(crate) fn grid_segments<'a>(
                     && apex.world[axis] > line
                     && line.rem_euclid(step) == 0.0
                 {
-                    segments.push([start.screen, end.screen]);
+                    lines.push(GridLine {
+                        ends: [start.screen, end.screen],
+                        depths: [
+                            surface_depth(start.world) + lift,
+                            surface_depth(end.world) + lift,
+                        ],
+                    });
                 }
             }
         }
     }
-    segments
+    lines
 }
 
 /// One-pixel lines as two solid, alpha-blended surface triangles each.
-pub(crate) fn grid_sprites(segments: &[[ScreenPoint; 2]], viewport: [f64; 2]) -> Vec<Sprite> {
-    let mut sprites = Vec::with_capacity(segments.len() * 2);
-    for [start, end] in segments {
+pub(crate) fn grid_sprites(lines: &[GridLine], viewport: [f64; 2], origin: f64) -> Vec<Sprite> {
+    let mut sprites = Vec::with_capacity(lines.len() * 2);
+    for GridLine {
+        ends: [start, end],
+        depths,
+    } in lines
+    {
+        let [near, far_depth] = depths.map(|depth| (depth - origin) as f32);
         let corner = |point: &ScreenPoint, offset: f64| {
             to_clip(
                 ScreenPoint {
@@ -143,13 +169,23 @@ pub(crate) fn grid_sprites(segments: &[[ScreenPoint; 2]], viewport: [f64; 2]) ->
             )
         };
         let far = corner(end, 0.5);
-        for [second, third] in [[corner(start, 0.5), far], [far, corner(end, -0.5)]] {
+        let triangles = [
+            (
+                [corner(start, 0.5), far],
+                [near, near, far_depth, far_depth],
+            ),
+            (
+                [far, corner(end, -0.5)],
+                [near, far_depth, far_depth, far_depth],
+            ),
+        ];
+        for ([second, third], depths) in triangles {
             sprites.push(Sprite {
                 position: corner(start, -0.5),
                 radius: second,
                 color: [third[0], third[1], 0.0, -2.0],
                 uv: GRID_COLOR,
-                depths: [f32::INFINITY; 4],
+                depths,
                 terrain_blend: [[0.0; 4]; 2],
                 pages: [0; 4],
             });
@@ -158,14 +194,55 @@ pub(crate) fn grid_sprites(segments: &[[ScreenPoint; 2]], viewport: [f64; 2]) ->
     sprites
 }
 
-pub(crate) fn draw_grid(context: &CanvasRenderingContext2d, segments: &[[ScreenPoint; 2]]) {
-    context.begin_path();
-    context.set_stroke_style_str("rgba(13,20,8,.6)");
-    for [start, end] in segments {
-        context.move_to(start.x, start.y);
-        context.line_to(end.x, end.y);
+/// Blends the lines into the software colour buffer inside `region`, only
+/// where the depth buffer shows the terrain is still the frontmost surface.
+pub(crate) fn raster_grid(
+    lines: &[GridLine],
+    region: [u32; 4],
+    width: u32,
+    color: &mut [u8],
+    depth: &[f64],
+) {
+    let [left, top, right, bottom] = region.map(f64::from);
+    for GridLine {
+        ends: [start, end],
+        depths,
+    } in lines
+    {
+        if start.x.max(end.x) < left
+            || start.x.min(end.x) >= right
+            || start.y.max(end.y) < top
+            || start.y.min(end.y) >= bottom
+        {
+            continue;
+        }
+        let steps = (end.x - start.x)
+            .abs()
+            .max((end.y - start.y).abs())
+            .ceil()
+            .max(1.0);
+        let mut last = None;
+        for step in 0..=steps as u32 {
+            let t = f64::from(step) / steps;
+            let (x, y) = (
+                (start.x + (end.x - start.x) * t).floor(),
+                (start.y + (end.y - start.y) * t).floor(),
+            );
+            if x < left || y < top || x >= right || y >= bottom || last == Some((x, y)) {
+                continue;
+            }
+            last = Some((x, y));
+            let index = y as usize * width as usize + x as usize;
+            if depth[index] > depths[0] + (depths[1] - depths[0]) * t {
+                continue;
+            }
+            for (channel, grid) in color[index * 4..index * 4 + 3].iter_mut().zip(GRID_COLOR) {
+                let blended =
+                    f32::from(*channel) * (1.0 - GRID_COLOR[3]) + grid * 255.0 * GRID_COLOR[3];
+                *channel = blended.round() as u8;
+            }
+        }
     }
-    context.stroke();
 }
 
 fn camera_projection(camera: SceneCamera) -> Camera {
@@ -187,3 +264,7 @@ fn to_clip(point: ScreenPoint, viewport: [f64; 2]) -> [f32; 2] {
 #[path = "game_grid/tests/ellipse.rs"]
 #[cfg(test)]
 mod tests;
+
+#[path = "game_grid/tests/lines.rs"]
+#[cfg(test)]
+mod line_tests;
