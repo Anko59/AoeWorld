@@ -97,6 +97,7 @@ fn long_make_targets_acquire_before_workload_prerequisites_and_recipes() {
         "perf-late-game-instructions",
         "scale-match-smoke",
         "match-bench",
+        "movement-apply-census",
     ];
     let files = files();
     let resources = fs::read_to_string(root().join("make/resources.mk")).unwrap();
