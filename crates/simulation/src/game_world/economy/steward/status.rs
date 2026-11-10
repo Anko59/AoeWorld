@@ -8,8 +8,8 @@ pub enum StewardWait {
     /// Not yet evaluated, or training is under way.
     #[default]
     Growing,
-    /// The unit census is incomplete (too many units nearby), so nothing is
-    /// trained or built until a full scan succeeds.
+    /// A budgeted residents/buildings census is still in progress. Production
+    /// resumes after its retained scan reaches the end.
     Census,
     /// Residents plus queued villagers reached the 100-villager limit.
     Full,

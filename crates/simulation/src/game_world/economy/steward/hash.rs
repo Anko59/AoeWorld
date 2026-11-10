@@ -45,6 +45,17 @@ impl Economy {
             home.navy.update_hash(h);
             h.update(&(home.scan_chunk as u64).to_le_bytes());
             h.update(&(home.scan_offset as u64).to_le_bytes());
+            if let Some(scan) = &home.building_scan {
+                h.update(b"building-census");
+                if let Some((kind, id)) = scan.after {
+                    h.update(&[kind as u8]);
+                    h.update(&id.0.to_le_bytes());
+                }
+                h.update(&(scan.known.len() as u64).to_le_bytes());
+                for id in &scan.known {
+                    h.update(&id.0.to_le_bytes());
+                }
+            }
             h.update(&(home.site_after as u64).to_le_bytes());
             h.update(&[u8::from(home.farm_after.is_some())]);
             if let Some(site) = home.farm_after {

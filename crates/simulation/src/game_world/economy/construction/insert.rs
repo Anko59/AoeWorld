@@ -162,6 +162,7 @@ impl GameWorld {
         }
         self.refresh_population_cap(player);
         self.index_new_building(id, player, footprint);
+        self.steward_building_added(id, player, footprint);
         if complete {
             if matches!(kind, BuildingKind::WatchTower | BuildingKind::Castle) {
                 self.combat.tower_ready.insert(id, 0);
