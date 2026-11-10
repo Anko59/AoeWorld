@@ -219,3 +219,29 @@ async fn contours_survive_resize_with_one_extra_draw_and_the_same_instance_buffe
     );
     renderer.device.destroy();
 }
+
+#[wasm_bindgen_test]
+async fn contours_survive_instance_buffer_growth_and_shrinking_scenes() {
+    let mut renderer = surface_renderer_with_atlas(&atlas()).await;
+    let scene = [unit([0.0, 0.0, 1.0, 1.0]), blocker(4)];
+    let first = renderer.render_sprites(&scene).unwrap();
+    // A crowded late-game frame outgrows the buffer; the next frames shrink back.
+    let filler = Sprite {
+        position: [4.0, 4.0],
+        radius: [0.01; 2],
+        depths: [0.5; 4],
+        ..unit([0.0; 4])
+    };
+    let mut crowd = vec![filler; instance_buffer::INITIAL_CAPACITY + 64];
+    crowd.extend(scene);
+    for frame in [&crowd[..], &scene[..], &crowd[..], &scene[..]] {
+        let counters = renderer.render_sprites(frame).unwrap();
+        assert!(counters.did_present);
+        assert_pixel(
+            read_pixels(&renderer, frame.len() as u32, [[87, 64]]).await[0],
+            [0, 0, 255, 255],
+        );
+    }
+    assert!(renderer.render_sprites(&scene).unwrap().gpu_buffer_bytes >= first.gpu_buffer_bytes);
+    renderer.device.destroy();
+}

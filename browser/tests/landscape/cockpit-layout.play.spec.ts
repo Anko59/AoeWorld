@@ -18,7 +18,8 @@ test("far-view hotkey keycaps fit one text line with original and fallback art",
     const key = await page.locator("kbd").boundingBox();
     const button = await page.locator("button").boundingBox();
     if (!key || !button) throw new Error("Hotkey box is missing");
-    expect(key.height).toBeLessThanOrEqual(14);
+    // 8px glyphs: a 1px frame and no vertical padding make a 10px keycap.
+    expect(key.height).toBeLessThanOrEqual(10.5);
     expect(key.height).toBeGreaterThanOrEqual(10);
     expect(key.y).toBeGreaterThan(button.y + button.height / 2);
   }

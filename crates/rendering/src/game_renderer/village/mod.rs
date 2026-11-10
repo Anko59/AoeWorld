@@ -415,6 +415,9 @@ pub(super) fn sprite_building(
 #[path = "tests/composition.rs"]
 mod composition_tests;
 #[cfg(test)]
+#[path = "tests/decks.rs"]
+mod deck_tests;
+#[cfg(test)]
 #[path = "tests/foundations.rs"]
 mod foundation_tests;
 
