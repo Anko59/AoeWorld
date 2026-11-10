@@ -4,6 +4,7 @@
 //! at most `MAX_BRIDGE` tiles, placeable by the ordinary bridge rules).
 use super::super::placement::{distance_squared, perimeter};
 use super::plan::{Site, TIER_ROAD};
+use super::road_cache::{Lookup, Memo};
 
 /// Roads to the gates wait for the second wall side.
 const TIER_GATE_ROAD: u8 = 5;
@@ -52,6 +53,8 @@ pub(super) fn sites(
     player: PlayerId,
     planned: &[Site],
 ) -> Vec<Site> {
+    #[cfg(test)]
+    super::super::bridge_work::begin_plan();
     let Some(castle) = w
         .player_buildings_of(player, BuildingKind::Castle)
         .find(|b| b.footprint.contains(center))
@@ -118,6 +121,10 @@ pub(super) fn sites(
         })
         .collect();
     let mut net = Network {
+        passability: Memo::default(),
+        free_tiles: Memo::default(),
+        existing_tiles: Memo::default(),
+        edges: Memo::default(),
         planned_spans: Vec::new(),
         w,
         player,
@@ -204,6 +211,10 @@ pub(super) fn sites(
 }
 
 struct Network<'a> {
+    passability: Memo<TileCoord>,
+    free_tiles: Memo<TileCoord>,
+    existing_tiles: Memo<TileCoord>,
+    edges: Memo<(TileCoord, TileCoord)>,
     w: &'a GameWorld,
     player: PlayerId,
     avoid: &'a BTreeSet<TileCoord>,
@@ -221,26 +232,43 @@ struct Network<'a> {
 }
 
 impl Network<'_> {
+    fn passable(&self, tile: TileCoord) -> bool {
+        self.passability.get(tile, || {
+            #[cfg(test)]
+            super::super::bridge_work::tile_read(tile);
+            self.w.tile_passable(tile)
+        })
+    }
+
+    fn crossable(&self, from: TileCoord, to: TileCoord) -> bool {
+        self.edges.get((from, to), || {
+            self.w.terrain.crossable(from, to, self.w.config)
+        })
+    }
     /// Free open ground a road tile may be laid on.
     fn free(&self, tile: TileCoord) -> bool {
-        !self.avoid.contains(&tile)
-            && !self.gate_tiles.contains(&tile)
-            && self.w.building_at(tile).is_none()
-            && self.w.tile_passable(tile)
+        self.free_tiles.get(tile, || {
+            !self.avoid.contains(&tile)
+                && !self.gate_tiles.contains(&tile)
+                && self.w.building_at(tile).is_none()
+                && self.passable(tile)
+        })
     }
 
     /// An own road, finished gate or bridge (a foundation too: re-planning
     /// must keep the span it already laid, not lay a parallel one).
     fn existing(&self, tile: TileCoord) -> bool {
-        self.w
-            .building_at(tile)
-            .and_then(|id| self.w.building(id))
-            .is_some_and(|b| {
-                b.player == self.player
-                    && (b.kind == BuildingKind::Road
-                        || b.kind == BuildingKind::Bridge
-                        || b.kind.is_gate() && b.is_complete())
-            })
+        self.existing_tiles.get(tile, || {
+            self.w
+                .building_at(tile)
+                .and_then(|id| self.w.building(id))
+                .is_some_and(|b| {
+                    b.player == self.player
+                        && (b.kind == BuildingKind::Road
+                            || b.kind == BuildingKind::Bridge
+                            || b.kind.is_gate() && b.is_complete())
+                })
+        })
     }
 
     fn walkable(&self, tile: TileCoord) -> bool {
@@ -305,7 +333,8 @@ impl Network<'_> {
         type State = (TileCoord, u8);
         // (cost, y, x, direction) keeps ties deterministic.
         let mut heap = BinaryHeap::new();
-        let mut best: BTreeMap<State, (u32, Option<(State, bool)>)> = BTreeMap::new();
+        // This table is never iterated; the heap alone orders the search.
+        let mut best: Lookup<State, (u32, Option<(State, bool)>)> = Lookup::default();
         for &t in starts.iter().filter(|t| self.walkable(**t)) {
             best.insert((t, 4), (0, None));
             heap.push(Reverse((h(t), 0_u32, t.y, t.x, 4_u8)));
@@ -348,33 +377,32 @@ impl Network<'_> {
                     0
                 };
                 let next = TileCoord::new(tile.x + dx, tile.y + dy);
-                let (to, step, bridge) =
-                    if self.walkable(next) && self.w.terrain.crossable(tile, next, self.w.config) {
-                        (next, 1, false)
-                    } else if !self.avoid.contains(&next)
-                        && self.w.building_at(next).is_none()
-                        && !self.w.tile_passable(next)
-                    {
-                        // Water (or other barrier) ahead: look for the far bank.
-                        let far = (2..=MAX_BRIDGE).find_map(|k| {
-                            let m = TileCoord::new(tile.x + dx * k, tile.y + dy * k);
-                            if self.free(m) {
-                                Some((k, m))
-                            } else if self.w.tile_passable(m) || self.w.building_at(m).is_some() {
-                                Some((0, m))
-                            } else {
-                                None
-                            }
-                        });
-                        match far {
-                            Some((k, m)) if k > 0 && self.bridgeable(tile, m) => {
-                                (m, NEW_BRIDGE_COST + BRIDGE_TILE_COST * (k as u32 - 1), true)
-                            }
-                            _ => continue,
+                let (to, step, bridge) = if self.walkable(next) && self.crossable(tile, next) {
+                    (next, 1, false)
+                } else if !self.avoid.contains(&next)
+                    && self.w.building_at(next).is_none()
+                    && !self.passable(next)
+                {
+                    // Water (or other barrier) ahead: look for the far bank.
+                    let far = (2..=MAX_BRIDGE).find_map(|k| {
+                        let m = TileCoord::new(tile.x + dx * k, tile.y + dy * k);
+                        if self.free(m) {
+                            Some((k, m))
+                        } else if self.passable(m) || self.w.building_at(m).is_some() {
+                            Some((0, m))
+                        } else {
+                            None
                         }
-                    } else {
-                        continue;
-                    };
+                    });
+                    match far {
+                        Some((k, m)) if k > 0 && self.bridgeable(tile, m) => {
+                            (m, NEW_BRIDGE_COST + BRIDGE_TILE_COST * (k as u32 - 1), true)
+                        }
+                        _ => continue,
+                    }
+                } else {
+                    continue;
+                };
                 let total = cost + step + turn;
                 let state = (to, d);
                 if best.get(&state).is_none_or(|(c, _)| total < *c) {

@@ -59,13 +59,19 @@ fn vassal_bridge_planning_with_ten_thousand_buildings() {
     }
     let counts = work::take();
     let net = w.vassal_network(v);
+    eprintln!(
+        "terrain_reads={} max_tile_reads={}",
+        counts.terrain_reads, counts.max_tile_reads
+    );
     assert!(net.iter().any(|s| s.0 == BuildingKind::Bridge));
     let report = format!(
-        "buildings={} passes=3 validation_calls={} occupancy_visits={} validation_ms={:.3} total_vassal_ms={total:.3} worst_vassal_ms={worst:.3} hash={} network={net:?}\n",
+        "buildings={} passes=3 validation_calls={} occupancy_visits={} validation_ms={:.3} total_vassal_ms={total:.3} worst_vassal_ms={worst:.3} terrain_reads={} max_tile_reads={} hash={} network={net:?}\n",
         w.buildings().count(),
         counts.calls,
         counts.visits,
         counts.elapsed.as_secs_f64() * 1_000.0,
+        counts.terrain_reads,
+        counts.max_tile_reads,
         w.canonical_hash_hex()
     );
     eprintln!("{report}");
@@ -84,5 +90,9 @@ fn vassal_bridge_planning_with_ten_thousand_buildings() {
     assert!(
         counts.visits <= counts.calls * 15,
         "span occupancy must be bounded by its tiles: {counts:?}"
+    );
+    assert!(
+        counts.max_tile_reads <= 1,
+        "read each terrain tile at most once per immutable plan: {counts:?}"
     );
 }
