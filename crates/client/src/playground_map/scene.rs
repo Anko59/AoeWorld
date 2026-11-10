@@ -328,12 +328,13 @@ pub(in super::super) fn units(
         let slot = units.partition_point(|u| u.id < animal.id);
         units.insert(slot, unit);
     }
-    let walls: Vec<_> = client
+    // Index wall families once instead of scanning every wall for each neighbor.
+    let walls: std::collections::HashSet<_> = client
         .village
         .buildings
         .iter()
         .filter(|b| b.kind.is_wall())
-        .map(|b| (b.footprint.min.x, b.footprint.min.y, b.kind))
+        .map(|b| (b.footprint.min.x, b.footprint.min.y, b.kind as u8))
         .collect();
     for building in &client.village.buildings {
         if building.kind == aoe_protocol::BuildingKind::Road {
@@ -369,7 +370,7 @@ pub(in super::super) fn units(
                 (u32::from(building.progress_permille) * 3 / 1000) as u8
             } else if building.kind.is_wall() {
                 crate::building_ui::wall_frame(building.footprint.min, |t| {
-                    walls.contains(&(t.x, t.y, building.kind))
+                    walls.contains(&(t.x, t.y, building.kind as u8))
                 })
             } else {
                 0

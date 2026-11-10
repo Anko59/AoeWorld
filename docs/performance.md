@@ -421,6 +421,9 @@ fallback sampling remains available.
 
 ## Live game measurements
 
+The [owner-save client investigation](performance/owner-save-client.md) records
+hardware WebGL2 samples and the HUD and wall-lookup changes.
+
 Use the authenticated [admin endpoints](admin.md) while a game is running.
 `GET /admin/perf` computes nearest-rank `p50_us`, `p95_us`, and `max_us` for
 `total`, simulation `advance`, scheduler `late`, `planning`, and every recorded
