@@ -221,4 +221,68 @@ impl GameWorld {
             changed.push(worker);
         }
     }
+    /// One retired camp per admitted pass. Keep research, returning loads,
+    /// useful nearby wood and the newest completed camp in each domain.
+    pub(super) fn steward_retire_lumber_camp(
+        &mut self,
+        s: &mut Snapshot,
+        budget: &mut Budget,
+        work: &mut StewardWork,
+    ) {
+        if !s.complete || !budget.support_available() {
+            return;
+        }
+        let camps: Vec<_> = s
+            .buildings
+            .iter()
+            .filter(|b| b.kind == BuildingKind::LumberCamp && b.is_complete())
+            .collect();
+        let candidates: Vec<_> = camps
+            .iter()
+            .filter(|b| {
+                b.research.is_none()
+                    && camps.iter().any(|new| {
+                        new.id > b.id
+                            && s.home.connects(
+                                TileCoord::new(b.footprint.min.x - 1, b.footprint.min.y),
+                                new.footprint,
+                            )
+                    })
+            })
+            .copied()
+            .collect();
+        if candidates.is_empty() {
+            return;
+        }
+        let index = (self.tick.0 / STEWARD_RULES.period_ticks) as usize % candidates.len();
+        let old = candidates[index];
+        if !budget.search(work) {
+            return;
+        }
+        let mut searched = super::super::gathering::ResourceSearchWork::default();
+        let nearby = self.nearest_resource_matching_counted(
+            old.footprint.min,
+            aoe_map::ResourceKind::Wood,
+            10,
+            None,
+            |node| super::super::dropoff::ring_distance(old.footprint, node.tile) <= 64,
+            &mut searched,
+        );
+        budget.queried_nodes(work, searched.nodes);
+        if nearby.is_some()
+            || s.units.iter().any(|unit| {
+                self.economy.gatherers.get(&unit.id).is_some_and(|job| {
+                    job.kind == aoe_map::ResourceKind::Wood
+                        && (job.dropoff == Some(old.id)
+                            || self.nearest_dropoff(s.player, job.tile, job.kind) == Some(old.id))
+                })
+            })
+        {
+            return;
+        }
+        let id = old.id;
+        if budget.order(work) && self.issue_delete(s.player, &[id]).is_ok() {
+            s.buildings.retain(|b| b.id != id);
+        }
+    }
 }
