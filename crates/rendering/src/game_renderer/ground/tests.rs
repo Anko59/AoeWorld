@@ -283,7 +283,7 @@ fn distant_farms_do_not_enter_the_per_triangle_candidates() {
     assert!(ground.farms.contains(&units[103].position));
 }
 
-fn test_camera() -> SceneCamera {
+pub(super) fn test_camera() -> SceneCamera {
     SceneCamera {
         center: [0.5; 2],
         zoom: 1.0,
@@ -291,7 +291,7 @@ fn test_camera() -> SceneCamera {
         focus_elevation_meters: 0.0,
     }
 }
-fn test_unit(kind: SceneUnitKind) -> SceneUnit {
+pub(super) fn test_unit(kind: SceneUnitKind) -> SceneUnit {
     SceneUnit {
         id: EntityId(1),
         kind,

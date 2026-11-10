@@ -131,7 +131,9 @@ pub(super) fn object_depth(object: WorldObject) -> f64 {
         {
             1.25
         }
-        WorldObject::Unit(unit) if unit.kind.building_side().is_some() => 3.0,
+        WorldObject::Unit(unit) if unit.kind.building_side().is_some() => {
+            super::super::ground::BUILDING_CLEARANCE
+        }
         _ => GROUND_CLEARANCE,
     };
     surface_depth([position[0], position[1], object.elevation_meters()]) + clearance
