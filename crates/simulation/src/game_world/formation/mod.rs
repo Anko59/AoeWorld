@@ -132,6 +132,18 @@ impl Group {
 }
 
 impl GameWorld {
+    pub(crate) fn formation_goal(&self, id: EntityId, leader: EntityId) -> Option<WorldPosition> {
+        self.formations
+            .get(&leader)
+            .filter(|g| {
+                !g.settled
+                    && g.members
+                        .binary_search_by_key(&id, |m| m.id)
+                        .is_ok_and(|at| !g.members[at].arrived)
+            })
+            .map(|g| g.destination)
+    }
+
     /// An unchanged squad keeps its current shared route and final slots.
     pub(crate) fn formation_matches(&self, ids: &[EntityId], goal: WorldPosition) -> bool {
         let Some(leader) = ids

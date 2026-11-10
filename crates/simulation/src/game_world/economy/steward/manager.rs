@@ -134,6 +134,7 @@ impl GameWorld {
             self.steward_publish_status(id, snapshot.villagers, wait);
             self.economy.stewards.ordering = None;
         }
+        self.record_order_decisions(work.orders as u64);
         self.economy.stewards.work = work;
     }
     /// Mirror the status into the TownCenter's occupant record, so a changed status

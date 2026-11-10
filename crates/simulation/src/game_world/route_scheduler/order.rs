@@ -108,6 +108,7 @@ impl GameWorld {
         // Snap into the legal edge band (as on dev), keeping the exact point:
         // radius movement honours positions inside a tile.
         let destination = self.config.clamp_ground_position(destination);
+        self.demand_attempt(id, destination);
         let kind = self.units[index].state.kind;
         let passable = self
             .unit_tile_passable(kind, destination.tile_floor(), &|| false)
@@ -151,6 +152,7 @@ impl GameWorld {
                     return Err(error);
                 }
             };
+        self.demand_accepted(id);
         let speed_carry = self.units[index].order.map_or(0, |order| order.speed_carry);
         self.leave_group(id);
         self.move_queues.remove(&id);
@@ -214,6 +216,7 @@ impl GameWorld {
         origin: WorldPosition,
         destination: WorldPosition,
     ) -> Result<OrderRoute, GameWorldError> {
+        self.order_diagnostics.demand[self.order_diagnostics.issuer as usize].route_requests += 1;
         let caller = Some(std::panic::Location::caller());
         self.route_metrics.caller = caller;
         self.units[index].route_caller = caller;

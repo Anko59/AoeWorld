@@ -395,6 +395,7 @@ pub(super) fn phase_minute(perf: Option<Value>, routes: Option<Value>, seconds: 
             "group_members_expired": a["group_members_expired"],
             "detours_declined": a["detours_declined"], "detours_at_capacity": a["detours_at_capacity"],
             "queue": r["queue"],
+            "order_demand": r["order_demand"],
             // Cumulative whole-population passes {calls, visited}, for deltas
             // between samples; later phases gate them at 0 per tick.
             "passes": r["passes"],

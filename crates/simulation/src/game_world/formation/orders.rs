@@ -45,6 +45,9 @@ impl GameWorld {
         {
             return Err(GameWorldError::InvalidPosition.into());
         }
+        for &id in &ids {
+            self.demand_attempt(id, destination);
+        }
         let leader = ids[0];
         let existing = self.units[self.lookup[&leader]].formation.unwrap_or(leader);
         if queued
@@ -83,6 +86,9 @@ impl GameWorld {
         self.route_metrics.attribution.group_stopped_short +=
             u64::from(destination != requested_destination);
         // Validation and the shared route preparation precede every task change.
+        for &id in &ids {
+            self.demand_accepted(id);
+        }
         self.leave_groups(&ids);
         for &id in &ids {
             let i = self.lookup[&id];

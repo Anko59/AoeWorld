@@ -70,7 +70,9 @@ impl GameWorld {
         // undrained history would grow storage without a transport obligation.
         self.economy.depletions.clear();
         let mut changed = self.advance_movement();
-        self.advance_auto_scout(&mut changed);
+        self.with_order_issuer(crate::OrderIssuer::AutoScout, |w| {
+            w.advance_auto_scout(&mut changed)
+        });
         probe(TickPhase::Movement);
         self.advance_transports(&mut changed);
         self.advance_spacing(&mut changed);
@@ -104,9 +106,15 @@ impl GameWorld {
         self.advance_research(&mut changed);
         self.advance_training(&mut changed);
         probe(TickPhase::ResearchTraining);
-        self.advance_vassals(&mut changed);
-        self.advance_generals(&mut changed);
-        self.advance_stewards(&mut changed);
+        self.with_order_issuer(crate::OrderIssuer::Vassal, |w| {
+            w.advance_vassals(&mut changed)
+        });
+        self.with_order_issuer(crate::OrderIssuer::General, |w| {
+            w.advance_generals(&mut changed)
+        });
+        self.with_order_issuer(crate::OrderIssuer::Steward, |w| {
+            w.advance_stewards(&mut changed)
+        });
         probe(TickPhase::StewardEconomy);
         self.remember_visible_buildings();
         probe(TickPhase::BuildingMemory);

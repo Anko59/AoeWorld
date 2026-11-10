@@ -239,3 +239,13 @@ fn the_browser_container_gets_the_pinned_image_the_server_url_and_the_script() {
     assert_eq!(args.last().map(String::as_str), Some(browser::SCRIPT));
     assert!(args.windows(2).any(|pair| pair == ["-w", "/repo/browser"]));
 }
+
+#[test]
+fn saved_phase_sample_retains_issuer_counters_for_wall_minute_deltas() {
+    let demand = json!({"reassignment_seconds": 10, "issuers": {"python_ai": {
+        "orders": 25, "near_reissues": 4, "reassigned_10s": 3,
+        "superseded": 2, "route_requests": 21, "route_searches": 19
+    }}});
+    let row = report::phase_minute(Some(json!({})), Some(json!({"order_demand": demand})), 60.0);
+    assert_eq!(row["routes"]["order_demand"], demand);
+}

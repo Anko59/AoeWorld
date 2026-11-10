@@ -324,6 +324,7 @@ impl GameWorld {
         changed.extend(std::mem::take(
             &mut self.economy.generals.appearance_changes,
         ));
+        self.record_order_decisions(work.orders as u64);
         self.economy.generals.work = work;
     }
 }
