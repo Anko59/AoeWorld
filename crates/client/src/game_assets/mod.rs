@@ -132,34 +132,12 @@ fn source_frames(manifest: &Manifest, source: &str, count: u32) -> Option<Vec<us
     if count as usize > MAX_SELECTED_FRAMES {
         return None;
     }
-    let mut frames = Vec::new();
-    for (index, frame) in manifest.frames.iter().enumerate() {
-        if frame.source == source && frame.frame < count {
-            if frames.len() == count as usize {
-                return None;
-            }
-            frames.push(index);
-        }
-    }
-    // Reject oversized and incomplete source groups before quadratic sorting.
-    if frames.len() != count as usize {
-        return None;
-    }
-    sort_indices(&mut frames, &mut |left, right| {
-        manifest.frames[*left]
-            .frame
-            .cmp(&manifest.frames[*right].frame)
-    });
-    frames
-        .iter()
-        .enumerate()
-        .all(|(i, index)| manifest.frames[*index].frame == i as u32)
-        .then_some(frames)
+    manifest.frames.sources().prefix(source, count)
 }
 
 #[inline(never)]
 fn source_present(manifest: &Manifest, source: &str) -> bool {
-    manifest.frames.iter().any(|frame| frame.source == source)
+    manifest.frames.sources().contains(source)
 }
 
 // Idle actors already display only the first cell of each facing row. Drop

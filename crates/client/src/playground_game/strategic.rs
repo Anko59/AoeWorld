@@ -63,6 +63,7 @@ pub(super) fn render(client: &mut Client) -> bool {
         f64::from(u8::from(level != Lod::Sprites)),
     ];
     if strategic_frame(&state) {
+        client.capture.current_view = true;
         client.capture.frame = client.capture.frame.saturating_add(1);
     }
     if level != Lod::Sprites {

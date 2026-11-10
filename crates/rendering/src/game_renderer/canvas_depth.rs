@@ -173,6 +173,7 @@ pub(super) fn render_canvas_world_with_fog(
     fog_active: bool,
     light: &dyn Fn([f64; 2]) -> f32,
 ) -> Result<(), String> {
+    let _submission = super::perf::Stage::new(4);
     let width = canvas.width();
     let height = canvas.height();
     if width == 0 || height == 0 {

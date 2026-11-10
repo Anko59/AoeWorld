@@ -30,11 +30,14 @@ pub(super) fn direct_world_layers(
                 * 6,
         );
     let mut entries = Vec::with_capacity(capacity(surfaces.size_hint().0, object_capacity, units));
+    let terrain_span = perf::Stage::new(3);
     for mut face in surfaces {
         ground.apply(&mut face);
         ground.farm(&mut face, art);
         entries.push(WorldLayer::Surface(face));
     }
+    drop(terrain_span);
+    let sprites_span = perf::Stage::new(4);
     append_selections(&mut entries, units, camera);
     world_sprites::emit_world_sprite_frames(
         art,
@@ -46,6 +49,7 @@ pub(super) fn direct_world_layers(
         |(sprite, frame, depth, id)| entries.push(WorldLayer::Sprite(sprite, frame, depth, id)),
     );
     sort_layers(&mut entries);
+    drop(sprites_span);
     entries
 }
 

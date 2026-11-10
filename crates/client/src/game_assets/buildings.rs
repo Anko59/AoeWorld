@@ -98,11 +98,7 @@ pub(super) fn select(
                 let declared = u32::from(part.frames) * u32::from(part.angles);
                 let native = manifest.frames[record].native.is_some();
                 let count = if native {
-                    manifest
-                        .frames
-                        .iter()
-                        .filter(|f| f.source == *source)
-                        .count() as u32
+                    manifest.frames.sources().len(source) as u32
                 } else {
                     declared
                 };
@@ -177,11 +173,7 @@ fn parts(
         // world axes differ, so project these native coordinates directly.
         let [ne, se] = part.misplacement;
         let step = 1;
-        let available = manifest
-            .frames
-            .iter()
-            .filter(|f| f.source == *source)
-            .count();
+        let available = manifest.frames.sources().len(source);
         // DAT static variant slots can include an absent placeholder. Animated
         // direction rows were validated above; terminal source cells stay selected.
         let angles = part

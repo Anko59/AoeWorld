@@ -421,6 +421,9 @@ fallback sampling remains available.
 
 ## Live game measurements
 
+The [owner-save client investigation](performance/owner-save-client.md) records
+hardware WebGL2 samples and the HUD and wall-lookup changes.
+
 Use the authenticated [admin endpoints](admin.md) while a game is running.
 `GET /admin/perf` computes nearest-rank `p50_us`, `p95_us`, and `max_us` for
 `total`, simulation `advance`, scheduler `late`, `planning`, and every recorded
@@ -452,7 +455,31 @@ draw includes scene preparation and CPU render submission; UI includes HUD
 presentation. Upload measures synchronous GPU buffer/texture API calls and is
 subtracted from enclosing CPU sections. Totals help inspect sections that run
 less often than frames. Browser clock resolution may round short sections to
-zero. Disabled sampling performs no clock reads or GPU queries.
+zero. Disabling the overlay stops its GPU queries; bounded CPU telemetry
+continues with the overlay hidden.
+
+Every five seconds, visible game pages POST a compact summary to `/client/perf`
+using their human resume token. `/admin/perf` includes up to 64 client summaries
+from the last 30 seconds, separate from server tick observations. Server logs
+include the observed server tick and the client report, never the token.
+Reports are untrusted client observations: bodies are capped at 4 KiB, samples
+at 2,048 frames, and each human token may report at most once per two seconds.
+At capacity, a new session waits for the oldest session's rate window to expire.
+`window.aoeTelemetry.latest` exposes the latest local summary. Quantile triples
+are p50/p95/max; histories retain stalls and have a fixed 2,048-frame bound.
+Hidden pages reset cadence sampling to exclude background-tab throttling.
+
+`stages_ms` measures synchronous JS/WASM/browser API wall time: `update` includes
+network application and native frame decode/upload; `interpolation` includes
+unit presentation; `culling` includes visible native demand and resource
+selection; `terrain` includes cached scene preparation and ground layer emission;
+`sprites` includes sprite emission and shared depth sorting; `fog` includes
+shading and GPU packet assembly; `ui` covers HUD/navigation presentation.
+Strategic terrain, symbols and fog use the same stage markers. Stage spans do
+not measure asynchronous fetch time or GPU execution and do not sum to frame
+cadence. `draw_calls` counts actual GPU draw API calls, or Canvas drawing calls
+for the scene and strategic canvas. Browser clock resolution may round short
+spans to zero. These observations alone do not establish complete-view latency.
 
 WebGL2 reports asynchronous GPU elapsed time only when
 `EXT_disjoint_timer_query_webgl2` is available, keeping at most one pending
