@@ -177,3 +177,31 @@ fn missing_cliff_art_keeps_impassable_cells_visibly_rock_at_both_zooms() {
         }
     }
 }
+
+#[wasm_bindgen_test]
+fn road_ground_draws_the_pebbly_sheet_and_falls_back_to_the_native_road() {
+    let frame = |page| GameFrame {
+        stream: 0,
+        atlas: crate::AtlasAddress { page, uv: [0.0; 4] },
+        size: [97.0, 49.0],
+        anchor: [0.0; 2],
+    };
+    let mut art = test_art(frame(1));
+    art.terrain[2] = vec![frame(2)];
+    art.terrain[10] = vec![frame(10)];
+    art.water_depth[4] = (vec![frame(24)], None);
+    let page = |art: &GameArt, material| {
+        crate::surface_mesh::terrain_texture_frame(art, material, [0, 0]).map(|f| f.atlas.page)
+    };
+    assert_eq!(
+        page(&art, 18),
+        Some(10),
+        "a road is not dirt or old cobbles"
+    );
+    assert_eq!(page(&art, 2), Some(2));
+    // Without the pebbly sheet the pack's own road, then dirt, still draw.
+    art.terrain[10] = Vec::new();
+    assert_eq!(page(&art, 18), Some(24));
+    art.water_depth[4] = (Vec::new(), None);
+    assert_eq!(page(&art, 18), Some(2));
+}
