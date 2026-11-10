@@ -117,7 +117,10 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
         // A packed block holding its files until the pass is behind it moves it again.
         // The state hash folds per-block digests of 1,024 units (hashed on
         // worker threads) instead of one stream: same state, new value.
-        "edfca9ebfa7aa2d437467fd39a938025a92f221670412fbae2a98a86bc3855eb"
+        // Formations starting from their members' reachable region, and cold
+        // orders answered locally instead of by a whole-map region build,
+        // move it again.
+        "4a5eb349156d851cdd3dffcde9f79dc48f30ff0fbb1d63f30e2898d338ccb082"
     );
 }
 
