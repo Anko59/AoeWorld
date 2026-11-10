@@ -59,9 +59,10 @@ pub fn apply_building_foundations(
             } else {
                 building.and_then(|b| b.foundation_material).unwrap_or(2)
             };
-            // The native farm foundation sheet already contains crops. Keep
-            // shared dirt while seeding; expose that sheet only on completion.
-            let crops = id == 50 && !unit.kind.is_foundation();
+            // A farm has no upright construction sprite. Its native field
+            // surface marks the foundation from placement through completion;
+            // the apron remains ordinary dirt.
+            let crops = id == 50;
             Some(Foundation {
                 lower,
                 upper,

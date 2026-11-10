@@ -22,11 +22,11 @@ export function initSettlements() {
   function clear() { plots.clear(); farms = new Path2D(); furrows = new Path2D(); fields = borders = 0; }
   return {
     update(values = []) {
-      const next = Array.from(values.slice(0, 2048 * 8)).join(',');
+      const next = Array.from(values.slice(0, 2048 * 9)).join(',');
       if (next === signature) return false;
       signature = next; rows = []; clear();
-      for (let at = 0; at + 7 < Math.min(values.length, 2048 * 8); at += 8) {
-        const r = Array.from(values.slice(at, at + 8));
+      for (let at = 0; at + 8 < Math.min(values.length, 2048 * 9); at += 9) {
+        const r = Array.from(values.slice(at, at + 9));
         if (r.every(Number.isFinite) && [0, 1].includes(r[7]) && buildingKinds[r[5]] && r[3] > r[1] && r[4] > r[2]) rows.push(r);
       }
       const rank = kind => kind === 0 ? 0 : kind === 16 ? 1 : kind === 13 ? 2 : 3;
@@ -63,9 +63,9 @@ export function initSettlements() {
       let sprites = 0;
       for (const row of ranked) {
         if (placed.length >= 192) break;
-        const [id,x0,y0,x1,y1,kind,colour,owned] = row;
+        const [id,x0,y0,x1,y1,kind,colour,owned,native] = row;
         const [x,y] = project([(x0+x1)/2,(y0+y1)/2]);
-        const sprite = buildingSprite(kind, colour);
+        const sprite = buildingSprite(native, colour);
         const minimum = MIN[kind] ?? 46;
         const css = Math.max(minimum, sprite ? sprite.native * zoom : 0);
         const w = css / scale;
@@ -98,6 +98,7 @@ export function initSettlements() {
           node.dataset.owned = flag; node.dataset.kind = name; node.textContent = buildingNames[kind];
           node.setAttribute('aria-label', `${owned ? 'Your ' : ''}${buildingNames[kind]}`);
         }
+        if (node.dataset.native !== String(native)) node.dataset.native = String(native);
         live.add(id);
         hits.push({ x: left + w / 2, y: top + h / 2, w, h, world: placed[index].world });
       }

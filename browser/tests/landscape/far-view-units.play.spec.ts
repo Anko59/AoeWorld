@@ -64,7 +64,7 @@ test("an enemy force on top of my town centre stays a marked enemy group", async
     page,
     1280,
     [...group(640, 330, 2, MINE), ...group(640, 330, 3, ENEMY)],
-    [10, 498, 498, 502, 502, 0, MINE, 1],
+    [10, 498, 498, 502, 502, 0, MINE, 1, 109],
   );
   const found = await picks();
   const hostile = found.filter((p) => p.hostile);
@@ -99,7 +99,7 @@ test("unit group occupancy follows CSS pixels when the canvas backing differs", 
     page,
     640,
     [...group(800, 500, 1, MINE)],
-    [10, bx - 1, by - 1, bx + 1, by + 1, 0, MINE, 1],
+    [10, bx - 1, by - 1, bx + 1, by + 1, 0, MINE, 1, 109],
   );
   const found = await picks();
   expect(

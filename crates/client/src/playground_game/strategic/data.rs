@@ -43,7 +43,10 @@ pub(in super::super) fn site_buildings<'a>(
             priority.map_or(!capital, |kind| b.player == owner && b.kind == kind)
         })
     })
-    .filter(move |b| b.hp > 0 && (b.player == owner || explored(b)))
+    .filter(move |b| {
+        crate::strategic::far_building_visible(b.hp, b.construction)
+            && (b.player == owner || explored(b))
+    })
     .take(2048)
 }
 
@@ -51,7 +54,7 @@ pub(in super::super) fn site_record(
     b: &GameplayBuildingState,
     owner: PlayerId,
     colour: [u8; 3],
-) -> [f64; 8] {
+) -> [f64; 9] {
     let [r, g, blue] = colour.map(u32::from);
     [
         f64::from(b.id.0),
@@ -62,6 +65,11 @@ pub(in super::super) fn site_record(
         b.kind as u8 as f64,
         f64::from(r << 16 | g << 8 | blue),
         f64::from(u8::from(b.player == owner)),
+        f64::from(
+            crate::playground::game::map::scene::building_kind(b)
+                .building_id()
+                .unwrap_or(-1),
+        ),
     ]
 }
 
@@ -188,6 +196,9 @@ pub(in super::super) fn update(client: &Client) {
     for b in &client.village.buildings {
         if b.player == owner && b.hp > 0 {
             report_hit(b.last_hit, village::building_center(b), &mut last_alert);
+        }
+        if !crate::strategic::far_building_visible(b.hp, b.construction) {
+            continue;
         }
         if matches!(b.kind, BuildingKind::Bridge | BuildingKind::Road) && bridges.len() < 2048 * 5 {
             bridges.extend([

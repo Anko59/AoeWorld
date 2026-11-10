@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { test } from "../../../server.js";
+import { isolatedTest as test } from "../../../server.js";
 import { nativeMenu, zoomFor } from "../fixtures/native-menu.js";
 
 // The selection panel must never need scrolling and never hide content: every
@@ -26,6 +26,49 @@ type Measure = {
   clip: string[];
   icons: { layout: string; tokens: number; minTok: number } | null;
 };
+
+test("Town Center queued villagers and garrison portraits remain visible and clickable", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await nativeMenu(page);
+  await page.addScriptTag({
+    path: new URL("../fixtures/selection-states.js", import.meta.url).pathname,
+  });
+  await page.waitForFunction(() => "__h" in window);
+  await page.evaluate(async () => {
+    await Reflect.get(window, "__h").tc(15, 15, true);
+  });
+  const queue = page.locator("#training-queue .unit-token");
+  await expect(queue).toHaveCount(15);
+  for (const token of await queue.all()) {
+    await expect(token).toBeVisible();
+    const box = await token.boundingBox();
+    if (!box) throw new Error("Queued villager is missing");
+    expect(box.height).toBeGreaterThanOrEqual(22);
+  }
+  const button = page.locator("#garrison-units button").last();
+  const portrait = button.locator(".art-icon");
+  const [target, art, container] = await Promise.all([
+    button.boundingBox(),
+    portrait.boundingBox(),
+    page.locator("#garrison-units").boundingBox(),
+  ]);
+  if (!target || !art || !container)
+    throw new Error("Garrison portrait is missing");
+  expect(target.width).toBeGreaterThanOrEqual(28);
+  expect(target.height).toBeGreaterThanOrEqual(28);
+  expect(art.x).toBeGreaterThanOrEqual(target.x);
+  expect(art.y).toBeGreaterThanOrEqual(target.y);
+  expect(art.x + art.width).toBeLessThanOrEqual(target.x + target.width + 0.1);
+  expect(art.y + art.height).toBeLessThanOrEqual(
+    target.y + target.height + 0.1,
+  );
+  expect(target.y + target.height).toBeLessThanOrEqual(
+    container.y + container.height + 0.1,
+  );
+  await button.click({ trial: true });
+});
 
 for (const [width, height] of [
   [1920, 1080],

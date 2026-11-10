@@ -109,16 +109,36 @@
    Garrison and queue tokens are sized by autoFit() to the room each has. */
 #bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) { display:grid; grid-template-columns:minmax(210px,min(40%,290px)) minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); column-gap:12px; align-items:stretch; }
 #bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])):has(#vassal-panel:not([hidden])) { grid-template-columns:minmax(210px,min(36%,290px)) minmax(0,1fr) minmax(130px,min(28%,200px)); }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])):has(#steward-controls:not([hidden])) { grid-template-columns:minmax(154px,min(31%,210px)) minmax(0,1fr) minmax(130px,min(28%,200px)); column-gap:8px; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#selected-icons:empty { display:none; }
 #bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#selection-heading { grid-column:1; grid-row:1; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#building-panel { grid-column:2; grid-row:1; align-self:start; min-width:0; margin:0; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) #selection-heading { gap:8px; min-width:0; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) #selection-heading>div:last-child { min-width:0; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) #selection-heading .eyebrow { display:none; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) #selection-portrait { width:40px; height:40px; flex:none; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) #selection-portrait>:is(.art-icon,.icon) { width:36px; height:36px; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) #selection-portrait .art-icon>.icon { width:100%; height:100%; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) #selection-name { font-size:14px; line-height:16px; margin:0; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) #selection-task { font-size:9px; line-height:10px; margin:0; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) #selection-load { font-size:9px; line-height:10px; white-space:normal; margin:0; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#building-panel { grid-column:2; grid-row:1; align-self:start; min-width:0; margin:0; padding-bottom:12px; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])):has(#training[hidden])>#building-panel { grid-row:1 / 3; }
 #bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#training { grid-column:2 / -1; grid-row:2; min-height:0; margin:2px 0 0; max-width:none; display:flex; flex-direction:column; }
 #bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#training[hidden] { display:none; }
 #bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#garrison-panel { grid-column:1; grid-row:2; min-height:0; margin:0; }
 #bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#vassal-panel { grid-column:3; grid-row:1; }
-#bottom-panel[data-frame=native] #garrison-panel:not([hidden]) { display:flex; flex-direction:column; align-items:stretch; gap:2px; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#steward-status { grid-column:2; grid-row:1; align-self:end; margin:0; font-size:9px; line-height:11px; white-space:normal; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#steward-controls { grid-column:3; grid-row:1 / 3; padding-bottom:44px; font-size:9px; line-height:12px; gap:1px; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#steward-controls label { gap:3px; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#steward-controls input[type=range] { min-width:40px; width:50px; height:14px; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#steward-controls output { width:18px; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])):has(#steward-controls:not([hidden]))>#training { grid-column:2; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])):has(#steward-controls:not([hidden]))>#steward-status { grid-column:3; grid-row:2; }
+#bottom-panel[data-frame=native] #garrison-panel>b { font-size:10px; line-height:10px; }
+#bottom-panel[data-frame=native] #garrison-panel:not([hidden]) { display:flex; flex-direction:column; align-items:stretch; gap:0; }
 #bottom-panel[data-frame=native] #garrison-units { flex:1 1 0; min-height:0; max-height:none; overflow:hidden; align-content:flex-start; gap:2px; }
-#bottom-panel[data-frame=native] #garrison-units button { width:var(--token,24px); height:var(--token,24px); min-height:0; }
-#bottom-panel[data-frame=native] #garrison-units .art-icon { width:100%; height:100%; }
+#bottom-panel[data-frame=native] #garrison-units button { position:relative; width:var(--token,28px); height:var(--token,28px); min-height:0; padding:0; line-height:0; }
+#bottom-panel[data-frame=native] #garrison-units .art-icon { position:absolute; inset:1px; width:auto; height:auto; }
 #bottom-panel[data-frame=native] #training-queue { flex:1 1 0; flex-wrap:wrap; align-content:flex-start; gap:2px; min-height:0; overflow:hidden; margin-top:3px; }
 #bottom-panel[data-frame=native] #training-queue .unit-token { flex:none; width:var(--token,28px); height:var(--token,28px); max-width:none; box-sizing:border-box; overflow:hidden; }
 #bottom-panel[data-frame=native] #research-status { flex-wrap:wrap; min-width:0; }
@@ -128,3 +148,6 @@
 /* Token art always fills its token exactly, whatever the intrinsic size of the art. */
 #bottom-panel[data-frame=native] :is(#selected-icons,#training-queue) .unit-token { position:relative; }
 #bottom-panel[data-frame=native] :is(#selected-icons,#training-queue) .unit-token>.art-icon { position:absolute; inset:0; width:auto; height:auto; }
+
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#steward-controls input[type=checkbox] { margin:0; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#steward-controls button { font-size:9px; line-height:10px; padding:1px 2px; }

@@ -65,10 +65,10 @@ export function initSteward() {
     for(let i=0;i<count;i++){
       const active=values[at]===1,selected=values[at+1]===1,n=values[at+2];at+=3;
       const r=ring(i);
-      r.node.style.display='';
+      r.node.style.display=active?'':'none';
       r.node.setAttribute('fill',active?'rgba(234,194,77,.035)':'none');
       r.node.setAttribute('stroke-width',selected?'2.5':'1.5');
-      r.node.setAttribute('stroke-dasharray',active?'':'8 6');
+      r.node.setAttribute('stroke-dasharray','');
       r.node.dataset.active=String(active);r.node.dataset.selected=String(selected);
       if(selected)layer.dataset.active=String(active);
       const points=[];for(let k=0;k<n;k++)points.push(`${values[at+2*k]},${values[at+2*k+1]}`);
@@ -76,6 +76,6 @@ export function initSteward() {
       const next=points.join(' ');if(next!==r.points){r.node.setAttribute('points',next);r.points=next;}
     }
     for(let i=count;i<rings.length;i++)rings[i].node.style.display='none';
-    status.hidden=!label;if(status.textContent!==label)status.textContent=label;
+    status.hidden=!label;if(status.textContent!==label){status.textContent=label;status.title=label;}
   }};
 }

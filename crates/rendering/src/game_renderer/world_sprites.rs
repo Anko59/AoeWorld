@@ -310,7 +310,17 @@ pub(super) fn emit_world_sprite_frames(
         let mut scaled_frame = frame;
         scaled_frame.size = scaled_frame.size.map(|value| value * scale);
         scaled_frame.anchor = scaled_frame.anchor.map(|value| value * scale);
-        let depth = object_depth(object);
+        let base = surface_depth([
+            unit.position[0],
+            unit.position[1],
+            f64::from(unit.elevation_meters),
+        ]);
+        let depth = base
+            + crate::ground_contact::frame_clearance(
+                object_depth(object) - base,
+                frame.size[1],
+                frame.anchor[1],
+            );
         if let Some((shadow, shadow_frame)) = alpha_shadow(
             frame,
             unit.position,

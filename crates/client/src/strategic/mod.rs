@@ -1,4 +1,13 @@
 //! Client presentation policy; it never changes authoritative simulation state.
+#[cfg(test)]
+mod tests;
+
+/// Strategic places represent completed, living buildings rather than work sites.
+#[cfg(any(all(target_arch = "wasm32", not(feature = "diagnostics")), test))]
+pub(crate) fn far_building_visible(hp: u16, state: aoe_protocol::ConstructionState) -> bool {
+    hp > 0 && state == aoe_protocol::ConstructionState::Complete
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum Lod {

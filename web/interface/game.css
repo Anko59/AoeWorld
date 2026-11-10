@@ -145,6 +145,7 @@ dialog>button { width:100%; display:block; margin:9px 0; padding:10px; }
 #construction-labels { position:fixed; inset:54px 0 var(--bottom); pointer-events:none; overflow:hidden; z-index:2; }
 #construction-labels span { position:fixed; transform:translate(-50%,-100%); width:70px; color:#fff0c1; text-shadow:0 1px 3px #000; text-align:center; font-size:11px; }
 #construction-labels progress { display:block; width:70px; height:6px; accent-color:#d5b569; }
+html:is([data-lod=map],[data-lod=markers]) #construction-labels { display:none; }
 
 #command-grid .build-command { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:10px 2px 2px; line-height:1.05; }
 #command-grid button.build-command>span:not(.cost) { position:static; font-size:10px; font-weight:650; }
