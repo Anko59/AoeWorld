@@ -16,8 +16,17 @@ are unchanged. Yielding never discards a frontier or truncates a route.
 Fortification sites remain usable while roads are pending. On a replan, the
 previous network remains usable until its replacement finishes. A domain with
 pending roads is not reported as developed, and a pending plan is never
-restarted merely because its age or replan timestamp is stale. Completion
-refreshes that timestamp. Removal of a domain drops its continuation.
+restarted merely because its age or replan timestamp is stale. Explicit
+replan requests have a separate earliest deadline: a changed threat side
+requests an immediate rebuild, and a refused placement or stalled foundation
+requests one within 200 ticks. Completion refreshes the ordinary cache timestamp
+without postponing that deadline. A due request rebuilds fortifications while
+retaining the current network and any in-flight road continuation. Builders may
+already be laying that network; restarting it here could choose a competing
+bridge span. The next ordinary network replan incorporates the updated sites.
+Defence keeps the existing
+fortifications available until that rebuild. Removal of a domain drops its
+continuation.
 
 Terrain, occupancy and directed-edge memoization is local to one immutable
 poll. The fixed value arenas retain at most 65,536 answers per query map;
@@ -74,12 +83,11 @@ maximum, qualify finished RTS performance or qualify dedicated hardware.
 
 ## Checkpoints and correctness
 
-The supervisor explicitly authorized timing-dependent hash changes. Only the
-affected Vassal checkpoint is repinned, in
+The Vassal checkpoint pins the current canonical state in
 `crates/simulation/src/game_world/tests/economy/vassal/budgeted-checkpoint.txt`:
-`9ad415012c52f1e713ddf354dd153670a4c86aecfd762c603cda27635641a15a`.
-Its reason is: **Vassal plan work budgeted per tick, decisions land a few ticks
-later.** The static-world road/bridge decision fixture remains exactly the
+`fec0c5fc80da10927a55e0164854d7be916fb51cf299a007bb3c50853ba4ecc1`.
+Its current reason is: **Vassal explicit replan deadlines are included in
+canonical state.** The static-world road/bridge decision fixture remains exactly the
 original ordered output. Search costs and route expansion limits were not lowered.
 
 Correctness coverage includes:
@@ -121,3 +129,75 @@ A previous stop check exhausted its 180-second cold-build budget and hit the
 The recovery is recorded by `ac7a9e7c9cf95452729e1277e7934e484416b554` and
 local `stop-architecture-recovery.log` / `stop-gates-recovery.log`. Build caches
 are retained through the final stop check to avoid repeating that cold build.
+
+## PR #750 review fixes F1–F3
+
+`tests/economy/vassal/replan.rs` covers a staffed foundation that stalls (F1),
+a raid from a new side (F2), and a refused building placement (F3), each while
+the road job is pending. All three failed against `b7aae95c0995` before the
+production fix. They now pass, including relocation of the refused foundation
+and building site. A fourth test checks earliest-deadline coalescing, distinct
+deadline hashes, and rebuilding during a still-pending search before tick 1,200.
+Finished buildings remain reusable even when their old foundation was refused.
+
+The same 10,002-building benchmark retains the original ordered network and
+identical work counts: 642 calls, 81,630 operations, 1,455 bridge validations,
+8,565 occupancy visits and a maximum of 128 operations per poll.
+
+| Fresh sample | Mean AI call (ms) | Worst AI call (ms) | Total AI work (ms) |
+| --- | ---: | ---: | ---: |
+| Before fixes | 0.385781 | 1.390 | 247.671 |
+| First after sample | 0.606811 | 4.131 | 389.572 |
+| Identical after recheck | 0.471560 | 1.567 | 302.741 |
+| Final network-retention fix | 0.306828 | 0.979 | 196.984 |
+
+All samples are retained in `.cache/cx-bridge/brfix-*-measurement.txt`;
+the first after run failed only the intentionally changed canonical checkpoint.
+The recheck passed after regenerating that checkpoint for the new deadline
+field. These shared-machine wall times vary; their cause was not measured.
+No operation budget, search cost, activity floor or network fixture was reduced.
+
+The first full simulation run passed 1,238/1,239 tests and exposed adjacent
+bridges in the real-river Vassal test. Explicit fortification requests now retain
+the existing network as well as its continuation; they do not start competing
+network jobs while builders are still laying the retained spans. The unchanged
+real-river assertions, review regressions and scale fixture passed together
+(7/7 tests) with `AOE_NATIVE_TEST_FILTER='test(replan_tests::)|test(vassal_river::)|test(vassal::scale::)'`.
+The final dedicated benchmark above ran after that fix, before the full rerun.
+
+The requested before/after recordings show the real regression transcripts,
+explicitly labelled as simulation-test evidence rather than gameplay. Both were
+made with `make showcase SHOWCASE_STORYBOARD=.cache/showcase/brfix-<side>.json
+SHOWCASE_OUT=.cache/showcase/brfix-<side>.webm SHOWCASE_LEVEL=medium`, checked
+with `make video-probe SHIP_VIDEO=<path>`, and visually inspected at seconds 13
+(before) and 16 (after).
+Both are VP9, 1280×720, 25 fps. Recordings and storyboards stay outside Git:
+
+- `.cache/showcase/brfix-before.webm`: 15.60 s;
+  SHA-256 `9d0547370f852fcd69d1d49d3e4d06d6a8a479fc137ec38d33f8bbea6006ffaf`.
+- `.cache/showcase/brfix-after.webm`: 17.92 s, refreshed seven-test take;
+  SHA-256 `5f83308ee5101271560fb62c122f23b133720e66fa6160aa11ebc0e13ebd3a09`.
+
+Local command logs use `.cache/cx-bridge/brfix-*.log`. The review regression
+command selects `AOE_NATIVE_TEST_FILTER='test(replan_tests::)'`; the benchmark
+selects `test(vassal::scale::)`; the full simulation run selects `all()`.
+Each uses `NEXTEST_TEST_THREADS=2 make test-native-focused
+AOE_NATIVE_TEST_PACKAGE=aoe-simulation`. No owner-save replay, gameplay capture,
+CI run or dedicated-hardware qualification is claimed. Publication remains
+excluded by the brief; these local videos are ready for a later `SHIP_VIDEO`.
+
+The review-fix static run passed `make hooks-install hooks-check fmt-check lint
+structure-check architecture-check browser-check deny docs-check` (native and
+wasm Clippy included). `economy.rs` remains exactly 500 lines. The full simulation
+result and exact committed revision are reported at handoff; a running test
+process is not a pass.
+
+The final refresh initially refused admission (Make exit 76) below the 3 GiB
+memory floor. The full-suite Make launcher later received SIGTERM (exit 143);
+its original Docker container remained running, with `OOMKilled=false`.
+Its exit status and log were attached separately rather than restarting a live
+workload: `.cache/cx-bridge/brfix-final-container-exit.txt` and
+`brfix-final-container.log`. Those observations do not turn Make's exit 143
+into a successful command. Final recovery results are reported at handoff.
+The later bounded static/probe retry passed every target unchanged, including
+the refreshed video's VP9 metadata check.

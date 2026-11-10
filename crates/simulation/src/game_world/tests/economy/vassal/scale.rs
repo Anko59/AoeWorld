@@ -119,7 +119,7 @@ fn vassal_bridge_planning_with_ten_thousand_buildings() {
         )
         .unwrap()
         .trim(),
-        "Vassal plan work budgeted per tick, decisions land a few ticks later"
+        "Vassal explicit replan deadlines are included in canonical state"
     );
     assert!(
         counts.visits <= counts.calls * 15,

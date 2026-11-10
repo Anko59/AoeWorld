@@ -5,6 +5,10 @@
 use super::*;
 use crate::Age;
 
+#[cfg(test)]
+#[path = "../../tests/economy/vassal/replan.rs"]
+mod replan_tests;
+
 /// A planned building. Lower `tier`s are built first.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Site {
@@ -50,10 +54,12 @@ impl GameWorld {
             return Vec::new();
         };
         let age = self.player_economy(d.player).map_or(Age::Dark, |p| p.age);
-        if d.pending.is_some()
-            || (!d.plan.is_empty()
-                && d.plan_age == age
-                && self.tick.0.saturating_sub(d.planned) < REPLAN_TICKS)
+        let requested = d.replan_at.is_some_and(|at| self.tick.0 >= at);
+        if !requested
+            && (d.pending.is_some()
+                || (!d.plan.is_empty()
+                    && d.plan_age == age
+                    && self.tick.0.saturating_sub(d.planned) < REPLAN_TICKS))
         {
             return d.plan.clone();
         }
@@ -65,12 +71,21 @@ impl GameWorld {
                 .copied()
                 .filter(|s| matches!(s.kind, BuildingKind::Road | BuildingKind::Bridge)),
         );
-        let pending = super::road_job::Planner::new(self, d.center, d.player, &plan);
+        // Explicit fortification requests must not churn the retained network:
+        // builders may already be laying its retained roads and bridge spans.
+        let pending = if d.pending.is_none() && (!requested || d.plan.is_empty()) {
+            super::road_job::Planner::new(self, d.center, d.player, &plan)
+        } else {
+            None
+        };
         if let Some(d) = self.economy.vassals.domains.get_mut(&id) {
             d.plan.clone_from(&plan);
             d.plan_age = age;
             d.planned = self.tick.0;
-            d.pending = pending;
+            d.replan_at = None;
+            if d.pending.is_none() {
+                d.pending = pending;
+            }
         }
         plan
     }
@@ -204,7 +219,11 @@ pub(super) fn sites(
         };
         if let Some(b) = w
             .player_buildings_of(player, kind)
-            .filter(|b| b.hp > 0 && within(home, b.footprint, reuse))
+            .filter(|b| {
+                b.hp > 0
+                    && within(home, b.footprint, reuse)
+                    && (b.is_complete() || !refused.contains_key(&b.footprint.min))
+            })
             .min_by_key(|b| b.id)
         {
             sites.push(Site::new(kind, b.footprint.min, tier));

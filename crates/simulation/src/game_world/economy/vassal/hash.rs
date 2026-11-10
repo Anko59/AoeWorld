@@ -35,6 +35,10 @@ impl Economy {
                 h.update(&since.to_le_bytes());
             }
             h.update(&d.planned.to_le_bytes());
+            h.update(&[u8::from(d.replan_at.is_some())]);
+            if let Some(at) = d.replan_at {
+                h.update(&at.to_le_bytes());
+            }
             if let Some(job) = &d.pending {
                 h.update(&[1]);
                 job.hash(h);

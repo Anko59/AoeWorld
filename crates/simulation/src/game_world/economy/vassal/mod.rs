@@ -58,9 +58,16 @@ pub(crate) struct Domain {
     plan: Vec<plan::Site>,
     plan_age: crate::Age,
     planned: u64,
+    /// Earliest explicit rebuild deadline, independent of road completion.
+    replan_at: Option<u64>,
     pending: Option<road_job::Planner>,
     /// Where the latest raider was seen: the threatened side is walled first.
     hot: Option<TileCoord>,
+}
+impl Domain {
+    fn request_replan(&mut self, at: u64) {
+        self.replan_at = Some(self.replan_at.map_or(at, |earlier| earlier.min(at)));
+    }
 }
 #[derive(Clone, Copy, Debug)]
 struct Recall {
@@ -109,6 +116,7 @@ impl GameWorld {
                 plan: Vec::new(),
                 plan_age: crate::Age::Dark,
                 planned: 0,
+                replan_at: None,
                 pending: None,
                 hot: None,
                 status: VassalStatus {
