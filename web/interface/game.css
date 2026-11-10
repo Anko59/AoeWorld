@@ -28,10 +28,10 @@ button:disabled { color:#9b9f8e; opacity:.55; cursor:default; }
 #age-name { font-weight:400; }
 #age { position:relative; }
 #age-name>span { display:inline-grid; place-items:center; border:1px solid #988254; width:24px; height:28px; margin-right:7px; font-size:17px; }
-#age-progress { position:absolute; left:0; right:0; top:calc(50% + 17px); display:flex; align-items:center; gap:6px; pointer-events:none; }
+#age-progress { display:inline; pointer-events:none; }
 #age-progress[hidden] { display:none; }
-#age-progress>i { flex:1; height:4px; border:1px solid #988254; background:#090b08cc linear-gradient(#e3cda0,#e3cda0) no-repeat; background-size:var(--progress,0%) 100%; box-shadow:0 1px 2px #000a; }
-#age-progress>small { font:10px/1 sans-serif; color:#e3cda0; letter-spacing:.03em; font-variant-numeric:tabular-nums; min-width:24px; text-align:right; text-shadow:0 1px #000; }
+#age-progress>i { position:absolute; left:0; right:0; bottom:0; height:3px; background:#090b08cc linear-gradient(#e3cda0,#e3cda0) no-repeat; background-size:var(--progress,0%) 100%; box-shadow:0 0 0 1px #988254aa; }
+#age-progress>small { margin-left:8px; font:13px Georgia,serif; color:#e3cda0; letter-spacing:.03em; font-variant-numeric:tabular-nums; }
 #top-bar nav { display:flex; justify-content:flex-end; align-items:center; gap:7px; }
 #top-bar button { padding:5px 9px; font-size:11px; background:#22281d66; }
 #top-bar #menu-toggle { border-color:#b39a63; }
