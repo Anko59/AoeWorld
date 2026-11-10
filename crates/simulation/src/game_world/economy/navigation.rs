@@ -77,8 +77,11 @@ impl GameWorld {
             return tiles;
         }
         let start = (self.tick.0 % count as u64) as usize;
-        for turn in 0..count.min(limit) {
-            let id = self.active_movers[(start + turn) % count];
+        let rotated = self.active_movers.iter().skip(start);
+        for id in rotated
+            .chain(self.active_movers.iter())
+            .take(count.min(limit))
+        {
             let Some(&index) = self.lookup.get(&id) else {
                 continue;
             };

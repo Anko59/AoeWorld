@@ -25,7 +25,7 @@ impl GameWorld {
         let member = group.and_then(|g| g.member_index(id).map(|at| &g.members[at]));
         format!(
             "active {} at {:?} since {} of {} planner {} order {:?} route {} obstruction {:?} member {:?}",
-            self.active_movers.binary_search(&id).is_ok(),
+            self.active_movers.contains(id),
             unit.state.position,
             unit.planning_since,
             self.tick.0,
@@ -80,9 +80,7 @@ impl GameWorld {
             self.units[index].obstruction = None;
             self.set_movement_error(index, None);
             self.units[index].state.planning = false;
-            if let Ok(at) = self.active_movers.binary_search(&member.id) {
-                self.active_movers.remove(at);
-            }
+            self.active_movers.remove(member.id);
             member.detached = false;
         }
     }
@@ -394,9 +392,7 @@ impl GameWorld {
             self.units[index].obstruction = None;
             self.set_movement_error(index, None);
             self.units[index].state.planning = false;
-            if let Ok(at) = self.active_movers.binary_search(&id) {
-                self.active_movers.remove(at);
-            }
+            self.active_movers.remove(id);
             let Some(group) = self.units[index]
                 .formation
                 .and_then(|leader| self.formations.get_mut(&leader))

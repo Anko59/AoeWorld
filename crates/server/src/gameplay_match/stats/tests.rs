@@ -1,6 +1,22 @@
 use super::*;
 
 #[test]
+fn relocation_phases_accumulate_submicrosecond_spans_before_rounding_and_reset() {
+    let phases = phases::Phases::default();
+    let names = ["orders", "index_collision", "index_chunks"];
+    for name in names {
+        phases.record(name, Duration::from_nanos(600));
+        phases.record(name, Duration::from_nanos(600));
+    }
+    let first = serde_json::to_value(phases.drain()).unwrap();
+    let second = serde_json::to_value(phases.drain()).unwrap();
+    for name in names {
+        assert_eq!(first[name], 1, "accumulated microseconds for {name}");
+        assert_eq!(second[name], 0, "drained counter for {name}");
+    }
+}
+
+#[test]
 fn timing_records_include_and_drain_planner_work_per_tick() {
     let probe = TickProbe::default();
     probe.record(Duration::from_micros(60), 3);
@@ -147,9 +163,13 @@ fn direct_benchmark_reads_the_real_server_phases_once_per_tick() {
     let probe = TickProbe::default();
     probe.phase("movement", Duration::from_micros(31));
     probe.phase("session_views", Duration::from_micros(7));
+    probe.phase("index_collision", Duration::from_micros(3));
+    probe.phase("index_chunks", Duration::from_micros(2));
     let first = probe.take_phase_micros();
     assert_eq!(first["movement"], 31);
     assert_eq!(first["session_views"], 7);
-    assert_eq!(first.len(), 44);
+    assert_eq!(first["index_collision"], 3);
+    assert_eq!(first["index_chunks"], 2);
+    assert_eq!(first.len(), 46);
     assert!(probe.take_phase_micros().values().all(|value| *value == 0));
 }

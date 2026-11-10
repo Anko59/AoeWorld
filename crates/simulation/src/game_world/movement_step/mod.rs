@@ -120,6 +120,9 @@ impl Tables {
 pub(crate) struct Scratch {
     pub(crate) group_phase: bool,
     pub(crate) movers: Vec<EntityId>,
+    pub(crate) still_moving: Vec<EntityId>,
+    /// The dirty bits of the tick's changed ids (`collect_changed`).
+    pub(crate) changed: crate::game_world::IdSet,
     pub(crate) proposals: Vec<Option<FastStep>>,
     tables: Tables,
     #[cfg(not(target_arch = "wasm32"))]

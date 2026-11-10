@@ -168,9 +168,7 @@ impl GameWorld {
         let group = self.end_group_of(index);
         self.stop_route(index, Some(GameWorldError::PathBudgetExceeded));
         self.fail_group_members(&group);
-        if let Ok(at) = self.active_movers.binary_search(&id) {
-            self.active_movers.remove(at);
-        }
+        self.active_movers.remove(id);
         changed.push(id);
     }
 

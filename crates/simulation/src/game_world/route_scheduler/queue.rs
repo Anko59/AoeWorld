@@ -62,8 +62,8 @@ impl GameWorld {
             tick: self.tick.0,
             ..RouteQueueBreakdown::default()
         };
-        for id in &self.active_movers {
-            let Some(&index) = self.lookup.get(id) else {
+        for id in self.active_movers.iter() {
+            let Some(&index) = self.lookup.get(&id) else {
                 continue;
             };
             let unit = &self.units[index];

@@ -90,9 +90,7 @@ impl GameWorld {
         self.cancel_transport_journey(id);
         self.cancel_auto_scout(id);
         self.stop_movement(index);
-        if let Ok(slot) = self.active_movers.binary_search(&id) {
-            self.active_movers.remove(slot);
-        }
+        self.active_movers.remove(id);
         self.stop_gathering(id);
         self.cancel_attack(id);
         self.economy.builders.remove(&id);
@@ -215,20 +213,11 @@ impl GameWorld {
         self.untrack_unit_at(id, at);
         let bucket = self.units[index].bucket;
         let slot = self.units[index].bucket_slot;
-        if let Some(ids) = self.chunks.get_mut(&bucket) {
-            ids.swap_remove(slot);
-            let displaced = ids.get(slot).copied();
-            let emptied = ids.is_empty();
-            if let Some(displaced_index) = displaced.and_then(|id| self.lookup.get(&id).copied()) {
-                self.units[displaced_index].bucket_slot = slot;
-            }
-            if emptied {
-                self.chunks.remove(&bucket);
-            }
+        let displaced = self.chunks.swap_remove(bucket, slot);
+        if let Some(displaced_index) = displaced.and_then(|id| self.lookup.get(&id).copied()) {
+            self.units[displaced_index].bucket_slot = slot;
         }
-        if let Ok(position) = self.active_movers.binary_search(&id) {
-            self.active_movers.remove(position);
-        }
+        self.active_movers.remove(id);
         self.combat.attackers.remove(&id);
         self.combat.healers.remove(&id);
         self.combat.seekers.remove(&id);

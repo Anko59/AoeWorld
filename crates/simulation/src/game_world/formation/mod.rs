@@ -237,10 +237,8 @@ impl GameWorld {
         new.planning_since = since;
         new.fast_route_tried = fast;
         self.store_planner(at, planner);
-        if order.is_some()
-            && let Err(slot) = self.active_movers.binary_search(&to)
-        {
-            self.active_movers.insert(slot, to);
+        if order.is_some() {
+            self.active_movers.insert(to);
         }
     }
 
@@ -259,9 +257,7 @@ impl GameWorld {
         self.stop_movement(index);
         self.move_queues.remove(&id);
         self.units[index].state.task = UnitTask::Idle;
-        if let Ok(at) = self.active_movers.binary_search(&id) {
-            self.active_movers.remove(at);
-        }
+        self.active_movers.remove(id);
     }
 
     pub(crate) fn formation_destinations(&self, id: EntityId) -> Option<Vec<WorldPosition>> {

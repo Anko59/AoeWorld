@@ -118,8 +118,8 @@ impl GameWorld {
                 || self.active_route_searches >= MAX_ACTIVE_ROUTE_SEARCHES,
             ..RouteSchedulerStats::default()
         };
-        for id in &self.active_movers {
-            let Some(&index) = self.lookup.get(id) else {
+        for id in self.active_movers.iter() {
+            let Some(&index) = self.lookup.get(&id) else {
                 continue;
             };
             let unit = &self.units[index];
@@ -138,9 +138,7 @@ impl GameWorld {
         stats.orphan_planners = self
             .units
             .iter()
-            .filter(|unit| {
-                unit.planner.is_some() && self.active_movers.binary_search(&unit.state.id).is_err()
-            })
+            .filter(|unit| unit.planner.is_some() && !self.active_movers.contains(unit.state.id))
             .count();
         stats.waiting_players = waiting.len();
         if let Some((player, count)) = waiting.iter().max_by_key(|(_, count)| **count) {

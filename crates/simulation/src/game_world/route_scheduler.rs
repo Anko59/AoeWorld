@@ -146,7 +146,7 @@ impl GameWorld {
         // sustained near demand must never consume another player's far share.
         let mut waiting = BTreeMap::<PlayerId, Vec<EntityId>>::new();
         let mut expired = Vec::new();
-        for &id in &self.active_movers {
+        for id in self.active_movers.iter() {
             let Some(&index) = self.lookup.get(&id) else {
                 continue;
             };
@@ -403,9 +403,7 @@ impl GameWorld {
             return spent;
         }
         self.stop_route(index, error);
-        if let Ok(at) = self.active_movers.binary_search(&id) {
-            self.active_movers.remove(at);
-        }
+        self.active_movers.remove(id);
         changed.push(id);
         spent
     }

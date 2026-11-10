@@ -179,9 +179,7 @@ impl GameWorld {
             speed_carry,
         });
         self.store_planner(index, planner);
-        if let Err(at) = self.active_movers.binary_search(&id) {
-            self.active_movers.insert(at, id);
-        }
+        self.active_movers.insert(id);
         self.index_destination(id);
         Ok(true)
     }

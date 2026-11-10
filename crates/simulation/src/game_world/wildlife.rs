@@ -265,8 +265,14 @@ impl GameWorld {
         let tile = unit.position.tile_floor();
         // The spacing index stores tile membership, not sub-tile positions. Keep
         // the exact collision and wildlife mirrors, which queries do observe.
-        self.collisions
-            .relocate(id, previous_tile, unit.position, unit.kind.is_naval());
+        {
+            let _span = self
+                .planning_probe
+                .as_ref()
+                .and_then(|probe| probe.movement_span("index_collision"));
+            self.collisions
+                .relocate(id, previous_tile, unit.position, unit.kind.is_naval());
+        }
         if previous_tile != tile && self.idle_spacing.contains(id) {
             self.idle_spacing.relocate(id, previous_tile, tile);
         }

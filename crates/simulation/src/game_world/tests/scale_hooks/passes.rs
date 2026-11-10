@@ -25,15 +25,17 @@ fn every_named_pass_is_reported_from_zero() {
 fn the_tick_passes_count_each_tick_and_the_hash_ignores_them() {
     let mut counted = busy_world();
     let mut unread = busy_world();
+    let mut changed = 0;
     for _ in 0..30 {
-        counted.advance();
+        changed += counted.advance().len() as u64;
         let _ = counted.pass_counts();
         unread.advance();
     }
     assert_eq!(counted.canonical_hash(), unread.canonical_hash());
     // `collect_changed` closes every tick, whatever else the tick skipped.
     assert_eq!(count(&counted, "collect_changed").calls, 30);
-    assert!(count(&counted, "collect_changed").visited > 0);
+    assert!(changed > 0);
+    assert_eq!(count(&counted, "collect_changed").visited, changed);
     assert!(count(&counted, "tables_refresh").calls > 0);
     assert_eq!(count(&counted, "advance_transports").visited, 0);
     // Replaced by events and indexes: these whole-population passes never run.
@@ -171,4 +173,25 @@ fn removing_units_unsubscribes_errors_memos_and_planners_without_collision() {
         assert!(w.collision_subscribers.memos.is_empty());
         assert!(w.collision_subscribers.planners.is_empty());
     }
+}
+
+#[test]
+fn collect_changed_visits_changed_ids_among_many_idle_units() {
+    let mut w = world();
+    for id in 0..1024 {
+        w.spawn_villager(PlayerId(0), at(10 + id % 64 * 3, 10 + id / 64 * 3))
+            .unwrap();
+    }
+    let mover = w.spawn_villager(PlayerId(0), at(100, 100)).unwrap();
+    w.issue_move(mover, at(130, 100)).unwrap();
+    let before = count(&w, "collect_changed");
+    for _ in 0..20 {
+        let changed = w.advance();
+        assert_eq!(changed.len(), 1, "only the mover should change");
+        assert_eq!(changed[0].id, mover);
+    }
+    let after = count(&w, "collect_changed");
+    assert_eq!(after.calls - before.calls, 20);
+    assert_eq!(after.visited - before.visited, 20);
+    assert!(after.visited - before.visited < w.unit_count() as u64);
 }

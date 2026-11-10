@@ -117,18 +117,26 @@ impl GameWorld {
         collected
     }
 
-    /// Every phase reports only the ids it touched. Sorting and deduping ids
-    /// is far cheaper than sorting unit records, and one final fetch returns
-    /// each changed unit's end-of-tick state in id order — the same output
-    /// as when the phases pushed whole unit records. Economy may alter a
-    /// mover a second time in the same tick; the fetch returns that final
-    /// state, not the earlier movement interpolation state.
+    /// Every phase reports only the ids it touched. Their dirty bits dedupe
+    /// them and read back in id order, with no sort, and one final fetch
+    /// returns each changed unit's end-of-tick state — the same output as
+    /// when the phases pushed whole unit records. Economy may alter a mover a
+    /// second time in the same tick; the fetch returns that final state, not
+    /// the earlier movement interpolation state.
     #[inline(never)] // a symbol of its own for the Callgrind stage counters
-    fn collect_changed(&self, mut ids: Vec<EntityId>) -> Vec<GameUnit> {
+    fn collect_changed(&mut self, ids: Vec<EntityId>) -> Vec<GameUnit> {
         self.passes
             .record(crate::game_world::Pass::CollectChanged, ids.len());
-        ids.sort_unstable();
-        ids.dedup();
-        ids.into_iter().filter_map(|id| self.unit(id)).collect()
+        let mut dirty = std::mem::take(&mut self.movement_scratch.changed);
+        for &id in &ids {
+            dirty.insert(id);
+        }
+        let changed = dirty.iter().filter_map(|id| self.unit(id)).collect();
+        dirty.clear();
+        self.movement_scratch.changed = dirty;
+        changed
     }
 }
+
+#[cfg(test)]
+mod tests;

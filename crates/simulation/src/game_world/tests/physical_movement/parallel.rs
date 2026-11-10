@@ -141,7 +141,7 @@ fn waiting_fixture() -> (GameWorld, EntityId) {
         travelled: 1,
         speed_carry: 0,
     });
-    world.active_movers.push(id);
+    world.active_movers.insert(id);
     world.tick = Tick(17);
     (world, id)
 }
