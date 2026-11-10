@@ -97,7 +97,7 @@ then captures a screenshot before timing the recorded segment.
 
 These are distinct from the earlier readiness proxy. No equivalent strong
 baseline was captured, and a fresh context does not establish cold OS/server
-caches. Normal opening still takes about 21 seconds in the recording contexts.
+caches. Before source indexing, normal opening took about 21 seconds in those recording contexts.
 Cold-cache completeness and arbitrary camera/device recovery remain unqualified.
 
 The HUD-run normal jump fetched four terrain responses and six native frame
@@ -144,7 +144,7 @@ VP9 WebM, with first/middle/final frames visually checked:
 
 Final `hooks-install`, `hooks-check`, `fmt-check`, `lint`, `structure-check`,
 `architecture-check`, `browser-check`, `perf-wasm-cap` and `docs-check` passed.
-Gameplay optimized WASM gzip is 396,326 bytes against the unchanged 375,952-byte
+The HUD/wall build optimized WASM gzip was 396,326 bytes against the unchanged 375,952-byte
 baseline (+5.4%, unchanged +25% gate); diagnostics is 90,233 bytes. Final E2E
 report: `.cache/owner-save/final-e2e.json`; gate log: `final-gates.log`.
 `SHIP_VIDEO=<absolute clip path> make video-probe` confirmed VP9, 1280 x 720,
@@ -240,3 +240,61 @@ gzip, +6.2% against the unchanged baseline). The selected browser run passed
 Its unchanged start-sequence file passed on the bounded fresh rerun. All new
 readiness cases passed in the first run. The initial failure report is retained
 as `.cache/owner-save/view-painted-first-e2e-report.json`; no test was relaxed.
+
+## Final extension observation
+
+Measured code revision: `08b83d534c688b51bd68c3099b883cf7fa749d6d`; the following evidence commit only
+updates this report. Runtime WASM SHA-256:
+`ef77701963c0a73bdda3d4f9b0033f4f33d33f7b63cc479f66353a02395b694f`.
+
+| View | Duration, s | FPS | Frame p50 / p95 / max, ms |
+| --- | ---: | ---: | --- |
+| normal | 60.0 | 13.34 | 63.5 / 133.7 / 583.7 |
+| far | 61.3 | 17.38 | 40.7 / 137.5 / 1439.2 |
+
+These are final confirmation samples on the same hardware WebGL2 path. The
+earlier baseline/HUD/wall samples above each cover at least 120 seconds per view;
+shorter confirmation samples do not replace their tail observations. The match
+advances on a shared host, so this is not a fixed-tick or dedicated-hardware
+qualification, and smooth-game completion is not established.
+
+The final warm reload proxy was 3224 ms; the stronger
+current-map/TownCenter/later-native-frame observation was 4132 ms.
+Neither is a new cold-load comparison. The cache-disabled paired opening
+measurements remain 21,238 → 12,641 ms (profiled pair 20,317 → 16,744 ms).
+
+A separate 10-second CPU profile after the cadence samples retains the
+remaining sampled work in `.cache/owner-save/extension-final.cpuprofile`.
+The largest named functions (sampled self time, not GPU duration) were:
+
+- `getError`: 1339 ms.
+- `__wbg_clientWidth_669677d957e958c7`: 809 ms.
+- `aoe_rendering::game_renderer::world_sprites::bounds::frames_visible`: 496 ms.
+- `<alloc::vec::Vec<aoe_rendering::game_renderer::scene_types::SceneUnit>>::insert`: 489 ms.
+- `__wbg_clientWidth_669677d957e958c7`: 416 ms.
+
+The final video is `.cache/showcase/owner-save-final.webm`; the unchanged
+baseline is `owner-save-before.webm` beside it. Capture runs separately from
+cadence sampling. Both native-base and far-view segments use original art.
+Structured confirmation data is `.cache/owner-save/extension-final.json`.
+The original save and both local copies still share the SHA-256 recorded above.
+
+The final confirmation was slower than the earlier HUD/wall run: 13.34 vs 16.27
+FPS normal, 17.38 vs 21.71 far. This uncontrolled run does not attribute that
+change to a specific cause. Both views ended connected with zero pending
+terrain; the normal HUD retained 86 actors. Nine request failures were logged:
+two aborted telemetry requests and seven aborted optional minimap requests.
+Their cause is not established; this is not an error-free completeness claim.
+The far view and arbitrary cache/device recovery remain unqualified.
+
+Extension commands (same Dockerized Make and port 8186 constraints):
+
+```text
+make browser-format fmt-check lint structure-check architecture-check browser-check perf-wasm-cap docs-check test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-client AOE_NATIVE_TEST_FILTER='all()'
+AOE_E2E_WORKERS=1 AOE_E2E_PORT_RANGE=8186-8186 make test-e2e AOE_E2E_SPECS='tests/village/input/performance.play.spec.ts tests/start/terrain-wait.play.spec.ts tests/start/minimap-retry.play.spec.ts tests/start/sequence.play.spec.ts'
+AOE_E2E_WORKERS=1 AOE_E2E_PORT_RANGE=8186-8186 make test-e2e AOE_E2E_SPECS=tests/start/sequence.play.spec.ts
+```
+
+The final 24-second clip passed `SHIP_VIDEO=<absolute path> make video-probe`:
+VP9, 1280 × 720, 25 FPS. First, middle and final frames were visually inspected;
+the native base and the far-view presentation are present.
