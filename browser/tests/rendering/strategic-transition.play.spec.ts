@@ -132,3 +132,74 @@ test("a complete far surface replaces the live game and returns to a complete ne
     );
   }
 });
+
+test("cached strategic frames remain painted between redraws", async ({
+  page,
+  request,
+}) => {
+  expect((await request.post("/maps/reset")).status()).toBe(204);
+  await gameAssets(page);
+  await forceWebGl(page);
+  await page.goto("/?play=1#x=128&y=128&zoom=.04&renderer=webgl2");
+  await expect(page.locator("#connection")).toHaveText("connected");
+  await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-view-painted",
+    "true",
+  );
+  const cached = await page.evaluate(async () => {
+    const scene = document.getElementById("scene");
+    const far = document.getElementById("strategic-scene");
+    if (!scene || !far) throw new Error("Scene missing");
+    let previous = far.dataset.redraws;
+    const painted: string[] = [];
+    for (let frame = 0; frame < 24; frame++) {
+      await new Promise(requestAnimationFrame);
+      const next = far.dataset.redraws;
+      if (next === previous)
+        painted.push(scene.dataset.viewPainted ?? "missing");
+      previous = next;
+    }
+    return painted;
+  });
+  expect(cached.length).toBeGreaterThan(0);
+  expect(cached.every((value) => value === "true")).toBe(true);
+});
+
+test("strategic terrain construction records a completed terrain span", async ({
+  page,
+}) => {
+  await page.route("**/terrain-span-test", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<canvas id="scene"></canvas>',
+    }),
+  );
+  await page.goto("/terrain-span-test");
+  const result = await page.evaluate(async () => {
+    // @ts-expect-error Served browser module.
+    const { initStrategic } = await import("/navigation/strategic.js");
+    // @ts-expect-error Served browser module.
+    const { frameTelemetry } = await import("/dev/frame-telemetry.js");
+    let clock = 0;
+    const telemetry = frameTelemetry(() => ++clock);
+    const marks: number[] = [];
+    Object.assign(window, {
+      aoeTelemetry: {
+        mark(section: number) {
+          marks.push(section);
+          telemetry.mark(section);
+        },
+      },
+    });
+    const strategic = initStrategic(
+      { disabled: true, canvas: document.createElement("canvas"), revision: 0 },
+      { records: () => [], revision: () => 0 },
+    );
+    strategic.terrain(document.createElement("canvas"));
+    telemetry.mark(21);
+    return { marks, terrain: telemetry.summary().stages_ms.terrain };
+  });
+  expect(result.marks).toEqual([10, 17]);
+  expect(result.terrain[0]).toBeGreaterThan(0);
+});

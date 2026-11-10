@@ -210,8 +210,12 @@ export function initStrategic(fog, actors) {
     },
     terrain(value, raster) {
       const started = performance.now();
-    window.aoeTelemetry?.mark(10);
-      terrain = raster ? paintTerrain(raster) ?? value : value;
+      window.aoeTelemetry?.mark(10);
+      try {
+        terrain = raster ? paintTerrain(raster) ?? value : value;
+      } finally {
+        window.aoeTelemetry?.mark(17);
+      }
       canvas.dataset.terrainBuildMs = (performance.now() - started).toFixed(3);
       canvas.dataset.terrainBytes = String(terrain ? terrain.width * terrain.height * 4 : 0);
       canvas.dataset.relief = raster ? 'source-shaded' : 'schematic';
