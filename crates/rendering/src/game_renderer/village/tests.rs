@@ -211,12 +211,25 @@ fn building_ground_is_darkened_on_the_shared_surface_without_extra_layers() {
             WorldLayer::Surface(face) => Some(face),
             _ => None,
         })
-        .zip(&surfaces)
-        .filter(|(after, before)| {
-            assert_eq!(
-                after.points.map(|p| p.world),
-                before.points.map(|p| p.world)
-            );
+        .filter(|after| {
+            // Sinking ground under the footprint reorders the sorted layers, so
+            // pair each face with its source by its unchanged screen points.
+            let before = surfaces
+                .iter()
+                .find(|b| (0..3).all(|i| b.points[i].screen == after.points[i].screen))
+                .expect("every drawn face comes from a surface");
+            // Only depth may move, and only under the building's footprint
+            // (a four-tile Town Center at 0.5): see ground/pits.rs.
+            let under = [0, 1].map(|axis| {
+                (before.points.iter().map(|p| p.world[axis]).sum::<f64>() / 3.0 - 0.5).abs() < 2.0
+            });
+            for (after, before) in after.points.iter().zip(before.points) {
+                assert_eq!(after.world[..2], before.world[..2]);
+                if under != [true; 2] {
+                    assert_eq!(after.world[2], before.world[2], "outside is untouched");
+                }
+                assert!(after.world[2] <= before.world[2], "ground only sinks");
+            }
             assert!(
                 after
                     .color
