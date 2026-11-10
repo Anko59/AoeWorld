@@ -53,7 +53,7 @@ impl DerefMut for View<'_> {
 impl<'a> View<'a> {
     pub(super) fn new(w: &'a GameWorld, net: &'a mut Network) -> Self {
         #[cfg(test)]
-        super::super::bridge_work::begin_plan();
+        super::super::bridge::work::begin_plan();
         Self {
             w,
             net,
@@ -67,7 +67,7 @@ impl<'a> View<'a> {
     pub(super) fn passable(&self, tile: TileCoord) -> bool {
         self.passability.get(tile, || {
             #[cfg(test)]
-            super::super::bridge_work::tile_read(tile);
+            super::super::bridge::work::tile_read(tile);
             self.w.tile_passable(tile)
         })
     }

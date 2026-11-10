@@ -165,7 +165,7 @@ impl Planner {
         // Pops, traceback and output each consume one operation.
         for _ in 0..128 {
             #[cfg(test)]
-            super::super::bridge_work::operation();
+            super::super::bridge::work::operation();
             if let Some(search) = &mut self.search {
                 if let Some(joined) = search.step(&mut view) {
                     if joined {

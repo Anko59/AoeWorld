@@ -1,6 +1,6 @@
 //! Reproducible river planning with late-game building counts.
 use super::*;
-use crate::game_world::economy::bridge_work as work;
+use crate::game_world::economy::bridge::work;
 use std::time::Instant;
 
 #[test]
