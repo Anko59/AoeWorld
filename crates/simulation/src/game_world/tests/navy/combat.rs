@@ -218,3 +218,29 @@ fn demolition_blast_reaches_two_point_five_tiles_but_not_beyond() {
     assert!(world.unit(edge).unwrap().hp < hp);
     assert_eq!(world.unit(outside).unwrap().hp, hp);
 }
+
+#[test]
+fn galley_line_fires_the_dat_bolt() {
+    for kind in [UnitKind::Galley, UnitKind::WarGalley] {
+        let mut world = coast();
+        let (_, water) = bank(&world);
+        let attacker = ship(&mut world, kind, water, 0);
+        let victim = ship(
+            &mut world,
+            UnitKind::FishingShip,
+            TileCoord::new(water.x + 3, water.y),
+            1,
+        );
+        world.issue_attack(PlayerId(0), attacker, victim).unwrap();
+        let mut kinds = std::collections::BTreeSet::new();
+        for _ in 0..60 {
+            advance(&mut world, 1);
+            kinds.extend(world.projectiles().map(|p| p.kind as u8));
+        }
+        assert_eq!(
+            kinds,
+            std::collections::BTreeSet::from([crate::ProjectileKind::Bolt as u8]),
+            "{kind:?}"
+        );
+    }
+}

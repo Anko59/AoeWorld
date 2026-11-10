@@ -311,7 +311,7 @@ fn identical_owned_actor_groups_share_their_selected_frames() {
 fn projectile_atlas_uses_level_flight_frames_in_each_native_direction() {
     let mut value = manifest::fixture();
     let template = value["frames"][0].clone();
-    value["frames"] = [Pose::Arrow, Pose::Javelin]
+    value["frames"] = [Pose::Arrow, Pose::Javelin, Pose::Bolt]
         .into_iter()
         .flat_map(|pose| {
             let source = SPRITES[pose as usize];
@@ -331,6 +331,7 @@ fn projectile_atlas_uses_level_flight_frames_in_each_native_direction() {
     for (pose, expected) in [
         (Pose::Arrow, [6, 49, 93, 137, 175]),
         (Pose::Javelin, [5, 45, 84, 125, 169]),
+        (Pose::Bolt, [8, 12, 16, 20, 24]),
     ] {
         let range = ranges[pose as usize].clone().unwrap();
         let actual = selected[range]

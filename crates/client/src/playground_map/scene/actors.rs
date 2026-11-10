@@ -74,7 +74,9 @@ pub(super) fn animation_frame(
     );
     if !matches!(
         pose,
-        crate::unit_visuals::Pose::Arrow | crate::unit_visuals::Pose::Javelin
+        crate::unit_visuals::Pose::Arrow
+            | crate::unit_visuals::Pose::Javelin
+            | crate::unit_visuals::Pose::Bolt
     ) && let Some(heading) = client.presentation.native_heading(*unit)
     {
         frame = (frame & !15) | u16::from(heading);

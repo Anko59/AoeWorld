@@ -101,6 +101,17 @@ fn real_siege_stone_has_thirty_native_rotation_cells() {
     assert!(frames.windows(2).any(|w| w[0].main != w[1].main));
 }
 
+#[test]
+fn real_galley_bolt_has_thirty_two_native_direction_cells() {
+    let Some(root) = std::env::var_os("AOE_DE_DIR") else {
+        return;
+    };
+    let path = Path::new(&root).join("resources/_common/drs/graphics/p_bolt_x1.sld");
+    let frames = aoe_assets::sld::parse(&fs::read(path).unwrap()).unwrap();
+    assert_eq!(frames.len(), 32);
+    assert!(frames.iter().all(|f| f.main.is_some()));
+}
+
 struct CurrentDirectory(PathBuf);
 
 impl Drop for CurrentDirectory {
@@ -187,7 +198,7 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
         .collect();
     assert_eq!(
         native.len(),
-        119_241,
+        119_273,
         "every native unit/stone source cell is chunked"
     );
     assert_eq!(
@@ -235,7 +246,7 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
         .find(|f| f.source == "de/terrain/g_fm1.dds")
         .expect("farm");
     assert_eq!((farm.width, farm.height), (32, 32));
-    assert_eq!(report.entries.len(), 196, "+1: the farmer seed sheet");
+    assert_eq!(report.entries.len(), 197, "+1: the galley bolt");
     assert_eq!(
         manifest
             .frames

@@ -362,6 +362,11 @@ impl GameWorld {
                 crate::UnitKind::Skirmisher | crate::UnitKind::EliteSkirmisher
             ) {
                 super::ProjectileKind::Javelin
+            } else if matches!(
+                stats.kind,
+                crate::UnitKind::Galley | crate::UnitKind::WarGalley
+            ) {
+                super::ProjectileKind::Bolt
             } else {
                 super::ProjectileKind::Arrow
             };

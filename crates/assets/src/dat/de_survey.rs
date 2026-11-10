@@ -94,6 +94,7 @@ const SOLDIERS: &[(i16, i32)] = &[
     (74, 5079),
     (75, 5080),
     (448, 5326),
+    (21, 5091),
 ];
 
 #[derive(Debug, Serialize)]

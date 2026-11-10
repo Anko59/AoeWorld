@@ -7,6 +7,8 @@ pub enum ProjectileKind {
     Arrow,
     Javelin,
     Stone,
+    /// The galley line's DE bolt (projectile unit 372, graphic `p_bolt`).
+    Bolt,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

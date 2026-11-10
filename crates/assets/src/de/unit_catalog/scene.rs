@@ -13,6 +13,7 @@ pub(super) fn generate(selected: &[Selected], count: usize) -> Result<(), Error>
                 72 => "Arrow",
                 73 => "Javelin",
                 120 => "Stone",
+                223 => "Bolt",
                 _ => "invalid",
             }
             .to_owned()
