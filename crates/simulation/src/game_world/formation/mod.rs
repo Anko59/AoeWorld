@@ -1,5 +1,6 @@
 //! The first member carries the group's scheduler state, never a second unit.
 //! Its physical position stays independent of the shared centroid anchor.
+use super::orders::diagnostics::near_goal;
 use super::*;
 use aoe_core::{Formation, MAX_FORMATION_MEMBERS, MAX_MOVE_DESTINATIONS};
 
@@ -154,7 +155,8 @@ impl GameWorld {
             return false;
         };
         self.formations.get(&leader).is_some_and(|group| {
-            group.destination == goal && group.members.iter().map(|m| m.id).eq(ids.iter().copied())
+            near_goal(group.destination, goal)
+                && group.members.iter().map(|m| m.id).eq(ids.iter().copied())
         })
     }
 

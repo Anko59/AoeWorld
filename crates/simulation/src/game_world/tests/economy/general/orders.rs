@@ -285,3 +285,26 @@ fn detached_soldiers_replay_alike_on_one_and_four_workers() {
     };
     assert_eq!(run(1), run(4));
 }
+
+#[test]
+fn an_unchanged_army_goal_retains_its_route_and_layout() {
+    let (mut w, _) = setup();
+    for x in 100..104 {
+        soldier(&mut w, UnitKind::Militia, x, 110);
+    }
+    let g = soldier(&mut w, UnitKind::General, 104, 110);
+    let goal = at(150, 112);
+    w.general_march(g, goal);
+    decide(&mut w);
+    let before = w.canonical_hash();
+    for same in [goal, at(151, 112)] {
+        w.general_march(g, same);
+        assert_eq!(
+            w.canonical_hash(),
+            before,
+            "retain the army's route and layout"
+        );
+    }
+    w.general_march(g, at(155, 112));
+    assert_ne!(w.canonical_hash(), before);
+}

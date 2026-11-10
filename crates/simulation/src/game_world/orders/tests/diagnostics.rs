@@ -13,8 +13,10 @@ fn movement_demand_counts_issuer_repeats_and_supersession_without_changing_hash(
         .unwrap();
     w.with_order_issuer(OrderIssuer::PythonAi, |w| w.issue_move(id, at(101)))
         .unwrap();
+    w.with_order_issuer(OrderIssuer::PythonAi, |w| w.issue_move(id, at(150)))
+        .unwrap();
     let row = &w.order_demand()[OrderIssuer::PythonAi as usize];
-    assert_eq!(row.orders, 2);
+    assert_eq!(row.orders, 3);
     assert_eq!(row.near_reissues, 1);
     assert_eq!(row.reassigned_10s, 1);
     assert_eq!(row.superseded, 1);

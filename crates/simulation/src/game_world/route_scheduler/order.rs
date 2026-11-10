@@ -121,6 +121,10 @@ impl GameWorld {
         {
             return Err(GameWorldError::InvalidPosition);
         }
+        // Keep the existing route, search frontier, deadline and queued waypoints.
+        if self.moving_towards(id, destination) {
+            return Ok(true);
+        }
         let origin = self.units[index].state.position;
         if self.recently_unreachable(index, origin.tile_floor(), destination.tile_floor()) {
             return Err(GameWorldError::Unreachable);

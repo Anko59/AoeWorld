@@ -253,3 +253,33 @@ fn scout_crosses_a_large_explored_square_to_reach_its_frontier() {
         "512-square search: {peak_pending} pending distances, {peak_settled_chunks} settled chunk bitsets"
     );
 }
+
+#[test]
+fn auto_scout_keeps_its_target_until_arrival_despite_new_vision() {
+    let (mut w, id) = world();
+    w.issue_auto_scout(PlayerId(0), id, true).unwrap();
+    for _ in 0..32 {
+        w.advance();
+        if w.movement_order(id).is_some() {
+            break;
+        }
+    }
+    let goal = w.movement_order(id).expect("first frontier").destination;
+    let requests = w.order_demand()[crate::OrderIssuer::AutoScout as usize].route_requests;
+    for _ in 0..400 {
+        w.advance();
+        if w.movement_order(id).is_some_and(|o| o.destination != goal) {
+            assert_eq!(
+                w.unit(id).unwrap().position,
+                goal,
+                "finish the old frontier first"
+            );
+            return;
+        }
+        assert_eq!(
+            w.order_demand()[crate::OrderIssuer::AutoScout as usize].route_requests,
+            requests
+        );
+    }
+    panic!("scout never completed its first frontier");
+}

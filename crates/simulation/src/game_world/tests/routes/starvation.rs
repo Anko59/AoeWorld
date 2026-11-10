@@ -339,3 +339,28 @@ fn a_near_group_queued_for_a_slot_outlives_its_wait() {
         assert!(unit.position.tile_floor().y > 200, "{id:?} crossed");
     }
 }
+
+#[test]
+fn repeated_waiting_goals_retain_search_progress_and_the_original_deadline() {
+    let mut w = sealed_near_world();
+    let id = hopeless_orders(&mut w, PlayerId(0))[0];
+    w.advance();
+    let index = w.lookup[&id];
+    assert!(w.units[index].state.planning);
+    let started = w.units[index].planning_since;
+    let before = w.canonical_hash();
+    let requests = w.order_demand()[crate::OrderIssuer::Automation as usize].route_requests;
+    for goal in [tile_position(CX, CY), tile_position(CX + 1, CY)] {
+        assert_eq!(w.issue_task_move(id, goal), Ok(true));
+        assert_eq!(w.units[index].planning_since, started);
+        assert_eq!(
+            w.canonical_hash(),
+            before,
+            "do not discard the retained frontier"
+        );
+    }
+    assert_eq!(
+        w.order_demand()[crate::OrderIssuer::Automation as usize].route_requests,
+        requests
+    );
+}

@@ -391,3 +391,53 @@ def test_rebalancing_waits_for_excess_food_workers_to_finish_their_loads():
     ctx = Context(FakeClient(), decision(world), Blackboard(), Config())
     EconomyManager(Constructor()).work(ctx)
     assert ctx.client.calls == [], "loaded returns must complete before reallocation"
+
+
+def imbalanced_live_workers():
+    units, buildings = base(28)
+    workers = units[:-1]
+    for worker in workers:
+        worker.task, worker.idle = UnitTask.GATHERING, False
+        worker.gathering = ResourceKind.FOOD
+    workers[-1].gathering = ResourceKind.WOOD
+    world = FakeWorld(units, buildings,
+                      nodes=[node(900, ResourceKind.WOOD, (53, 53)),
+                             node(901, ResourceKind.FOOD, (52, 48))],
+                      eco=economy(food=273, wood=14, gold=580, population=36,
+                                  cap=50, age=Age.FEUDAL))
+    return world, workers
+
+
+def test_productive_rebalance_observes_worker_dwell_then_responds():
+    world, workers = imbalanced_live_workers()
+    board, cfg = Blackboard(), Config()
+    board.assigned = {worker.id: world.tick for worker in workers}
+    first = Context(FakeClient(), decision(world), board, cfg)
+    EconomyManager(Constructor()).work(first)
+    assert first.client.calls == [], "fresh productive assignments need dwell"
+    world.tick += cfg.worker_dwell_seconds * world.tick_hz
+    later = Context(FakeClient(), decision(world), board, cfg)
+    EconomyManager(Constructor()).work(later)
+    assert len(later.client.named("gather")) == 1, "rebalance once the dwell expires"
+
+
+def test_productive_rebalance_does_not_interrupt_a_trip_or_waiting_route():
+    for moving in (False, True):
+        world, workers = imbalanced_live_workers()
+        for worker in workers[:-1]:
+            worker.task, worker.moving = UnitTask.MOVING, moving
+        ctx = Context(FakeClient(), decision(world), Blackboard(), Config())
+        EconomyManager(Constructor()).work(ctx)
+        assert ctx.client.calls == [], "finish the live trip, including route waiting"
+
+
+def test_idle_recovery_does_not_wait_for_the_productive_worker_dwell():
+    world, workers = imbalanced_live_workers()
+    board = Blackboard()
+    board.assigned = {worker.id: world.tick for worker in workers}
+    idle = workers[0]
+    idle.task, idle.idle, idle.gathering = UnitTask.IDLE, True, None
+    world.tick += 5 * world.tick_hz
+    ctx = Context(FakeClient(), decision(world), board, Config())
+    EconomyManager(Constructor()).work(ctx)
+    assert any(args[0] == idle.id for args in ctx.client.named("gather")), "recover idle workers promptly"

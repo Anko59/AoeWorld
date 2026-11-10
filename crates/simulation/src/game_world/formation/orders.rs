@@ -50,6 +50,17 @@ impl GameWorld {
         }
         let leader = ids[0];
         let existing = self.units[self.lookup[&leader]].formation.unwrap_or(leader);
+        if !queued
+            && self.formations.get(&existing).is_some_and(|group| {
+                !group.settled
+                    && group.form == form
+                    && group.attack_move == attack_move
+                    && near_goal(group.destination, destination)
+                    && group.members.iter().map(|m| m.id).eq(ids.iter().copied())
+            })
+        {
+            return Ok(());
+        }
         if queued
             && let Some(group) = self.formations.get_mut(&existing)
             && group.members.iter().map(|m| m.id).eq(ids.iter().copied())

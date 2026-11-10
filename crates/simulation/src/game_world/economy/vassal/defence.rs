@@ -56,6 +56,10 @@ impl GameWorld {
                 .is_some_and(|u| u.task == UnitTask::Attacking || !inside(center, u.position))
                 && let Ok(to) =
                     WorldPosition::from_tile_center(TileCoord::new(center.x, center.y + 4))
+                && (self
+                    .unit(soldier)
+                    .is_some_and(|u| u.attack_target.is_some())
+                    || !self.moving_towards(soldier, to))
             {
                 self.record_vassal_decision();
                 let _ = self.issue_move(soldier, to);
@@ -132,6 +136,7 @@ impl GameWorld {
             for (_, victim) in &wolves {
                 if self.building(castle).is_some()
                     && let Ok(to) = WorldPosition::from_tile_center(home)
+                    && !self.moving_towards(*victim, to)
                 {
                     self.record_vassal_decision();
                     let _ = self.issue_move(*victim, to);

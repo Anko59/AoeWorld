@@ -70,6 +70,11 @@ impl Economy {
                 h.update(&farm.0.to_le_bytes());
                 h.update(&(*cursor as u64).to_le_bytes());
             }
+            h.update(&(home.assigned_at.len() as u64).to_le_bytes());
+            for (worker, assigned) in &home.assigned_at {
+                h.update(&worker.0.to_le_bytes());
+                h.update(&assigned.to_le_bytes());
+            }
             h.update(&home.rebalance_after.to_le_bytes());
             h.update(
                 &home
