@@ -112,7 +112,7 @@ fn unit_frames_deliver_cargo_counts_and_hide_passengers_from_owners_and_enemies(
         .unwrap();
     let region = TileRect::from_xywh(land.x - 2, land.y - 2, 8, 8);
     let states = |world: &GameWorld, viewer, primary, region| {
-        let frame = UnitFrame::build(world, &[PlayerId(0), PlayerId(1)], 1).unwrap();
+        let frame = UnitFrame::build(world, 1, 1, None).unwrap();
         frame
             .current(
                 world,

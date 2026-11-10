@@ -12,6 +12,8 @@ use std::sync::{Arc, Mutex};
 mod unit_access;
 /// One chunk's shared candidate resource nodes.
 pub(crate) type ChunkNodes = Arc<Vec<ResourceNode>>;
+#[path = "game_world/changes/mod.rs"]
+mod changes;
 #[path = "terrain/clearance.rs"]
 mod clearance;
 mod combat;
@@ -159,10 +161,8 @@ pub struct GameWorld {
     pub(crate) wildlife: wildlife::Wildlife,
     pub(crate) vision: visibility::Vision,
     pub(crate) tick: Tick,
-    #[cfg(not(test))]
-    pub(crate) units: Vec<StoredUnit>,
-    #[cfg(test)]
-    pub(crate) units: unit_access::UnitStore,
+    pub(crate) units: changes::Units,
+    pub(crate) unit_changes: Vec<EntityId>,
     pub(crate) lookup: UnitIndex,
     pub(crate) chunks: BTreeMap<ChunkCoord, Vec<EntityId>>,
     pub(crate) active_movers: Vec<EntityId>,
@@ -224,6 +224,7 @@ impl GameWorld {
             wildlife: Default::default(),
             vision: Default::default(),
             units: Default::default(),
+            unit_changes: Vec::new(),
             lookup: UnitIndex::new(),
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),

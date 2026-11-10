@@ -31,6 +31,9 @@ pub(super) struct Evidence {
     final_hash: String,
     camera_updates: usize,
     activity: Vec<Census>,
+    /// Fan-out unit frames over the window: units visited, converted afresh
+    /// and changed (the rest skipped conversion and session diffs).
+    unit_frames: [u64; 3],
 }
 
 pub(super) async fn measure(
@@ -82,6 +85,8 @@ pub(super) async fn measure(
     }
     let mut result = ClientResult::default();
     let mut activity = Vec::new();
+    let (_, visited_before) = service.unit_frame_passes();
+    let work_before = service.unit_frame_work();
     let mut camera_updates = 0;
     for tick in 0..TICKS {
         for receiver in &mut receivers {
@@ -143,6 +148,11 @@ pub(super) async fn measure(
             return Err("late-game session missed its final delta".into());
         }
     }
+    let unit_frames = [
+        service.unit_frame_passes().1 - visited_before,
+        service.unit_frame_work().0 - work_before.0,
+        service.unit_frame_work().1 - work_before.1,
+    ];
     let (after, final_hash) = service
         .inspect_scale_world(|world| (Census::take(world, wood, initial_bound), hash(world)))
         .await;
@@ -159,6 +169,7 @@ pub(super) async fn measure(
             final_hash,
             camera_updates,
             activity,
+            unit_frames,
         },
     ))
 }

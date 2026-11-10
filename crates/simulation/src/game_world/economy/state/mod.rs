@@ -35,7 +35,7 @@ pub(crate) struct Economy {
     pub(crate) garrison_reservations: BTreeMap<EntityId, u8>,
     pub(crate) occupied_garrisons: BTreeSet<EntityId>,
     pub(crate) ejections: BTreeMap<EntityId, (TileRect, Vec<GarrisonedUnit>)>,
-    pub(crate) cargo: BTreeMap<EntityId, Vec<EntityId>>,
+    pub(crate) cargo: crate::game_world::changes::Reports<Vec<EntityId>>,
     pub(crate) transport_journeys: BTreeMap<EntityId, super::super::navy::Journey>,
     pub(crate) embarked: BTreeMap<EntityId, EntityId>,
     pub(crate) players: BTreeMap<PlayerId, PlayerEconomy>,

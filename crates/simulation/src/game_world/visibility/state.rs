@@ -27,6 +27,13 @@ pub(super) struct PlayerVision {
     pub(super) resources: BTreeMap<u64, u16>,
     /// Bumped whenever this player's own line of sight changes.
     pub(super) revision: u64,
+    /// Derived, never hashed: the `revision` at which each 32x32 chunk's
+    /// explored or visible state last changed, at which the overview was last
+    /// touched, and at which everything was reset. A fog view of a region
+    /// whose chunks and overview are older than the view equals it.
+    pub(super) fog_stamps: HashMap<(i32, i32), u64>,
+    pub(super) overview_stamp: u64,
+    pub(super) reset_stamp: u64,
 }
 
 #[derive(Debug)]
@@ -60,15 +67,21 @@ impl Overview {
         })
     }
 
-    pub(super) fn touch(&mut self, pixel: u16, add: bool) {
+    /// True when the pixel's reported state changed: first touched, or its
+    /// count left or reached zero.
+    pub(super) fn touch(&mut self, pixel: u16, add: bool) -> bool {
         let (row, column) = (usize::from(pixel) / 256, usize::from(pixel) % 256);
         let row = self.row(row);
+        let before = row.counts[column];
         if add {
             row.counts[column] += 1;
         } else {
             row.counts[column] -= 1;
         }
-        row.touched[column / 64] |= 1 << (column % 64);
+        let (word, bit) = (column / 64, 1 << (column % 64));
+        let first = row.touched[word] & bit == 0;
+        row.touched[word] |= bit;
+        first || (before == 0) != (row.counts[column] == 0)
     }
 
     pub(super) fn clear_counts(&mut self) {
@@ -204,6 +217,7 @@ impl PlayerVision {
         if fresh {
             counters.occupied += 1;
             self.visible_tiles += 1;
+            self.fog_stamps.insert(chunk, self.revision);
         }
         fresh
     }
@@ -221,6 +235,7 @@ impl PlayerVision {
         if counters.counts[index] == 0 {
             counters.occupied -= 1;
             self.visible_tiles -= 1;
+            self.fog_stamps.insert(chunk, self.revision);
             if counters.occupied == 0 {
                 self.visible.remove(&chunk);
             }
@@ -231,13 +246,31 @@ impl PlayerVision {
 
     pub(super) fn set_explored(&mut self, tile: TileCoord) {
         let (chunk, word, mask) = address(tile);
-        self.explored.entry(chunk).or_insert([0; 16])[word] |= mask;
+        let bits = &mut self.explored.entry(chunk).or_insert([0; 16])[word];
+        if *bits & mask == 0 {
+            *bits |= mask;
+            self.fog_stamps.insert(chunk, self.revision);
+        }
+    }
+
+    /// Whether the fog of `rect` (its explored and visible tiles, and the
+    /// overview) may differ from what it was at revision `since`.
+    pub(super) fn fog_changed_since(&self, rect: TileRect, since: u64) -> bool {
+        if self.reset_stamp > since || self.overview_stamp > since {
+            return true;
+        }
+        let (min, max) = (address(rect.min).0, address(rect.max).0);
+        (min.1..=max.1).any(|y| {
+            (min.0..=max.0).any(|x| self.fog_stamps.get(&(x, y)).is_some_and(|at| *at > since))
+        })
     }
 
     pub(super) fn touch_overview(&mut self, tile: TileCoord, add: bool, width: i32, height: i32) {
         for y in pixels(tile.y, height) {
             for x in pixels(tile.x, width) {
-                self.overview.touch((y * 256 + x) as u16, add);
+                if self.overview.touch((y * 256 + x) as u16, add) {
+                    self.overview_stamp = self.revision;
+                }
             }
         }
     }

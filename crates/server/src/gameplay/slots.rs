@@ -235,7 +235,7 @@ impl GameplayService {
                 last_command_refill: Instant::now(),
                 subscription_times: VecDeque::new(),
                 pending: VecDeque::new(),
-                resident: Vec::new(),
+                resident: Default::default(),
                 resident_fog: None,
                 rebuild_buildings: true,
                 resource_revision: None,

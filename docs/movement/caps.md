@@ -85,8 +85,14 @@ change. They are counted, not capped: cumulative `{calls, visited}` pairs that a
 | `wildlife_ids` | `wildlife/ai.rs:7`, every animal's id collected | animals |
 | `advance_transports` | `navy/journeys.rs:134`, every journey | journeys |
 | `collect_changed` | `economy/tick.rs`, every changed id sorted and fetched | ids |
-| `tables_refresh` | `Tables::refresh` in `movement_step/mod.rs`, dense tables sized by every entity id | entity ids |
-| `unit_frame` | the server's `UnitFrame::build`, every unit converted for the wire | units |
+| `tables_refresh` | `Tables::refresh` in `movement_step/mod.rs`; now clears only last tick's marks, so it visits jobs, not every entity id | job ids marked |
+| `unit_frame` | the server's `UnitFrame::build`, initial population or subsequent simulation change ids | unit ids (including removals) |
+
+`unit_frame_converted` and `unit_frame_changed` (in the same `passes`, `visited` only) count the
+units the frame converted afresh and the units whose wire state changed. The simulation journals
+unit and report mutations at their source; retained frames update only those ids. Unchanged
+states, indexes and owner-list entries stay in place, and sessions holding the previous frame
+skip unchanged states in their diffs. A missed tick or unavailable previous frame rebuilds once.
 
 They are exposed in `GET /admin/match/routes` under `passes`, and the scale-match report copies
 that object into each minute's `routes.passes` (take the delta between minutes).

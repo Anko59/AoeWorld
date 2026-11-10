@@ -86,7 +86,7 @@ pub(crate) struct Manager {
     pub(super) active: BTreeSet<EntityId>,
     /// Active domains per player with their centres; derived from `active`.
     pub(super) by_player: BTreeMap<PlayerId, BTreeMap<EntityId, WorldPosition>>,
-    pub(super) controlled: BTreeMap<EntityId, (EntityId, ResourceKind)>,
+    pub(crate) controlled: crate::game_world::changes::Reports<(EntityId, ResourceKind)>,
     /// Reverse owner of each bounded resource-refusal context.
     pub(super) refusal_owners: BTreeMap<EntityId, EntityId>,
     /// Only accepted owner orders on an already managed worker add membership.

@@ -1,227 +1,219 @@
-//! One tick's shared, read-only unit data: every unit's wire state computed
-//! once, an id index, and each viewer's own units. Sessions then gather their
-//! view from this instead of querying the world once per session.
-use super::economy::wire_unit;
-use aoe_core::{EntityId, PlayerId, TileRect};
+//! Retained shared unit states and owner lists. After the initial build only
+//! the simulation's changed ids are read; idle units and lists stay in place.
+use aoe_core::{EntityId, PlayerId, Tick, TileRect};
 use aoe_protocol::{GameplayUnitState, MAX_SUBSCRIBED_UNITS};
 use aoe_simulation::GameWorld;
 use rayon::prelude::*;
-use std::collections::{BTreeMap, HashMap};
-use std::ops::Range;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-/// Ids are dense small integers, so a flat table beats a map; ids beyond the
-/// dense bound (a very long game) fall back to a hash map.
-const DENSE_IDS: usize = 1 << 24;
 const ABSENT: u32 = u32::MAX;
-
-struct IdTable<T: Copy> {
-    dense: Vec<T>,
-    sparse: HashMap<u32, T>,
-    empty: T,
-}
-
-impl<T: Copy> IdTable<T> {
-    fn new(bound: usize, empty: T) -> Self {
-        let dense = if bound <= DENSE_IDS {
-            vec![empty; bound]
-        } else {
-            Vec::new()
-        };
-        Self {
-            dense,
-            sparse: HashMap::new(),
-            empty,
-        }
-    }
-
-    fn set(&mut self, id: EntityId, value: T) {
-        match self.dense.get_mut(id.0 as usize) {
-            Some(slot) => *slot = value,
-            None => {
-                self.sparse.insert(id.0, value);
-            }
-        }
-    }
-
-    fn get(&self, id: EntityId) -> T {
-        match self.dense.get(id.0 as usize) {
-            Some(value) => *value,
-            None => self.sparse.get(&id.0).copied().unwrap_or(self.empty),
-        }
-    }
-}
-
-fn resource_code(kind: aoe_map::ResourceKind) -> u8 {
-    match kind {
-        aoe_map::ResourceKind::Food => 1,
-        aoe_map::ResourceKind::Wood => 2,
-        aoe_map::ResourceKind::Gold => 3,
-        aoe_map::ResourceKind::Stone => 4,
-    }
-}
-
-fn resource_of(code: u8) -> Option<aoe_map::ResourceKind> {
-    match code {
-        1 => Some(aoe_map::ResourceKind::Food),
-        2 => Some(aoe_map::ResourceKind::Wood),
-        3 => Some(aoe_map::ResourceKind::Gold),
-        4 => Some(aoe_map::ResourceKind::Stone),
-        _ => None,
-    }
-}
-
-/// Units are converted in fixed-size parts on shared workers; a unit's slot is
-/// `part * PART + position in part`, which is also its storage index.
 const PART: usize = 1 << 12;
 
-struct Part {
-    states: Vec<GameplayUnitState>,
-    /// `(viewer list, slot)` for the units a requested viewer owns.
-    owned: Vec<(u32, u32)>,
+#[derive(Default)]
+struct Owned {
+    selected: BTreeMap<usize, u64>,
+    overflow: BTreeMap<usize, u64>,
+    keys: BTreeSet<u64>,
+}
+impl Owned {
+    fn insert(&mut self, rank: usize, key: u64) {
+        if self.selected.len() > MAX_SUBSCRIBED_UNITS
+            && let Some((&last, _)) = self.selected.last_key_value()
+        {
+            if rank > last {
+                self.overflow.insert(rank, key);
+                return;
+            }
+            if let Some((rank, key)) = self.selected.pop_last() {
+                self.keys.remove(&key);
+                self.overflow.insert(rank, key);
+            }
+        }
+        self.selected.insert(rank, key);
+        self.keys.insert(key);
+    }
+    fn remove(&mut self, rank: usize) {
+        if let Some(key) = self.selected.remove(&rank) {
+            self.keys.remove(&key);
+            if let Some((rank, key)) = self.overflow.pop_first() {
+                self.selected.insert(rank, key);
+                self.keys.insert(key);
+            }
+        } else {
+            self.overflow.remove(&rank);
+        }
+    }
 }
 
 pub(super) struct UnitFrame {
     parts: Vec<Vec<GameplayUnitState>>,
-    /// Owner of each slot, to tell a viewer's own units without loading them.
     owner: Vec<u16>,
-    index: IdTable<u32>,
-    /// Per viewer, the first `MAX_SUBSCRIBED_UNITS + 1` units it owns (in
-    /// storage order, as the per-session scan took them) as `id << 32 | slot`,
-    /// sorted.
-    own: BTreeMap<PlayerId, Vec<u64>>,
+    rank: Vec<usize>,
+    index: HashMap<EntityId, u32>,
+    own: BTreeMap<PlayerId, Owned>,
+    free: Vec<u32>,
+    tick: Tick,
+    generation: u64,
+    base: Option<u64>,
+    changed: BTreeSet<u32>,
+    visited: usize,
+    converted: usize,
 }
 
-/// What one session looks through.
 pub(super) struct Lens {
     pub viewer: PlayerId,
     pub primary: EntityId,
     pub region: TileRect,
 }
-
-/// Scratch space a worker reuses across sessions.
 #[derive(Default)]
 pub(super) struct Scratch {
     ids: Vec<EntityId>,
     keys: Vec<u64>,
 }
-
 fn key(id: EntityId, slot: u32) -> u64 {
     u64::from(id.0) << 32 | u64::from(slot)
 }
 
 impl UnitFrame {
-    #[cfg(test)]
-    pub(super) fn part_count(&self) -> usize {
-        self.parts.len()
-    }
-
-    /// `None` when a worker failed, so no half-built frame is ever used.
-    pub(super) fn build(world: &GameWorld, viewers: &[PlayerId], threads: usize) -> Option<Self> {
-        let bound = world.entity_id_bound();
-        let mut gather = IdTable::new(bound, 0u8);
-        let mut hunt = IdTable::new(bound, ABSENT);
-        for (id, kind, animal) in world.gatherers() {
-            gather.set(id, resource_code(kind));
-            if let Some(animal) = animal {
-                hunt.set(id, animal.0);
-            }
-        }
-        // A hunt order outranks the carcass a gatherer works.
-        for (id, animal) in world.hunts() {
-            hunt.set(id, animal.0);
-        }
-        // `viewers` are distinct; their lists are found by player id.
-        let mut list_of = vec![
-            ABSENT;
-            viewers
-                .iter()
-                .map(|p| usize::from(p.0) + 1)
-                .max()
-                .unwrap_or(0)
-        ];
-        for (at, viewer) in viewers.iter().enumerate() {
-            list_of[usize::from(viewer.0)] = at as u32;
-        }
-        let count = world.unit_count();
-        let part = |at: usize| -> Part {
-            let range: Range<usize> = at * PART..((at + 1) * PART).min(count);
-            let mut states = Vec::with_capacity(range.len());
-            let mut owned = Vec::new();
-            for (n, unit) in world.units_range(range.clone()).enumerate() {
-                let target = hunt.get(unit.id);
-                let mut state = wire_unit(
-                    &unit,
-                    resource_of(gather.get(unit.id)),
-                    (target != ABSENT).then_some(EntityId(target)),
-                );
-                state.cargo_count = world.transport_cargo(unit.id).len() as u8;
-                super::economy::command_state(world, &unit, &mut state);
-                states.push(state);
-                if world.unit_visible_to(unit.player, unit.id)
-                    && let Some(list) = list_of
-                        .get(usize::from(unit.player.0))
-                        .filter(|list| **list != ABSENT)
-                {
-                    owned.push((*list, (range.start + n) as u32));
+    /// Ownership transfers between ticks so retaining an idle frame does not
+    /// copy its states or indexes. A missed tick rebuilds from authoritative
+    /// state; the single-tick journal cannot cover a gap.
+    pub(super) fn build(
+        world: &GameWorld,
+        threads: usize,
+        generation: u64,
+        previous: Option<Self>,
+    ) -> Option<Self> {
+        let Some(mut frame) = previous.filter(|p| p.tick.0 + 1 == world.tick().0) else {
+            return Self::initial(world, threads, generation);
+        };
+        frame.base = Some(frame.generation);
+        frame.generation = generation;
+        frame.tick = world.tick();
+        frame.changed.clear();
+        frame.visited = world.unit_changes().len();
+        frame.converted = 0;
+        // Remove old list entries first: swap-removal may assign their ranks
+        // to another changed id in this same batch.
+        for id in world.unit_changes() {
+            if let Some(&slot) = frame.index.get(id) {
+                let owner = PlayerId(frame.owner[slot as usize]);
+                if let Some(own) = frame.own.get_mut(&owner) {
+                    own.remove(frame.rank[slot as usize]);
+                }
+                if world.unit(*id).is_none() {
+                    frame.index.remove(id);
+                    frame.free.push(slot);
                 }
             }
-            Part { states, owned }
-        };
+        }
+        for id in world.unit_changes() {
+            let Some(unit) = world.unit(*id) else {
+                continue;
+            };
+            let state = super::economy::unit_state(world, &unit);
+            frame.converted += 1;
+            let slot = if let Some(&slot) = frame.index.get(id) {
+                if *frame.state(slot) != state {
+                    frame.changed.insert(slot);
+                }
+                frame.parts[slot as usize / PART][slot as usize % PART] = state;
+                slot
+            } else {
+                let slot = frame.insert(state);
+                frame.changed.insert(slot);
+                slot
+            };
+            let rank = world.unit_storage_slot(*id)?;
+            frame.owner[slot as usize] = unit.player.0;
+            frame.rank[slot as usize] = rank;
+            if world.unit_visible_to(unit.player, *id) {
+                frame
+                    .own
+                    .entry(unit.player)
+                    .or_default()
+                    .insert(rank, key(*id, slot));
+            }
+        }
+        Some(frame)
+    }
+
+    fn initial(world: &GameWorld, threads: usize, generation: u64) -> Option<Self> {
+        let count = world.unit_count();
         let wanted = count.div_ceil(PART);
+        let part = |at: usize| {
+            world
+                .units_range(at * PART..((at + 1) * PART).min(count))
+                .map(|u| super::economy::unit_state(world, &u))
+                .collect::<Vec<_>>()
+        };
         let parts = if threads <= 1 || wanted <= 1 {
-            (0..wanted).map(part).collect::<Vec<_>>()
+            (0..wanted).map(part).collect()
         } else {
             (0..wanted)
                 .into_par_iter()
-                // At most `threads` concurrent parts, even in a larger pool.
                 .with_min_len(wanted.div_ceil(threads))
                 .map(|at| std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| part(at))).ok())
                 .collect::<Option<Vec<_>>>()?
         };
-        let mut index = IdTable::new(bound, ABSENT);
-        let mut owner = Vec::with_capacity(count);
-        let mut lists = vec![Vec::new(); viewers.len()];
-        for (at, part) in parts.iter().enumerate() {
-            for (n, state) in part.states.iter().enumerate() {
-                index.set(state.id, (at * PART + n) as u32);
-                owner.push(state.player.0);
-            }
-            for (list, slot) in &part.owned {
-                let list = &mut lists[*list as usize];
-                if list.len() <= MAX_SUBSCRIBED_UNITS {
-                    list.push(*slot);
-                }
+        let mut frame = Self {
+            parts,
+            owner: Vec::with_capacity(count),
+            rank: (0..count).collect(),
+            index: HashMap::with_capacity(count),
+            own: BTreeMap::new(),
+            free: Vec::new(),
+            tick: world.tick(),
+            generation,
+            base: None,
+            changed: (0..count as u32).collect(),
+            visited: count,
+            converted: count,
+        };
+        for (slot, state) in frame.parts.iter().flatten().enumerate() {
+            frame.index.insert(state.id, slot as u32);
+            frame.owner.push(state.player.0);
+            if world.unit_visible_to(state.player, state.id) {
+                frame
+                    .own
+                    .entry(state.player)
+                    .or_default()
+                    .insert(slot, key(state.id, slot as u32));
             }
         }
-        let parts = parts
-            .into_iter()
-            .map(|part| part.states)
-            .collect::<Vec<_>>();
-        let own = viewers
-            .iter()
-            .zip(lists)
-            .map(|(viewer, slots)| {
-                let mut keys = slots
-                    .into_iter()
-                    .map(|slot| key(parts[slot as usize / PART][slot as usize % PART].id, slot))
-                    .collect::<Vec<_>>();
-                keys.sort_unstable();
-                (*viewer, keys)
-            })
-            .collect();
-        Some(Self {
-            parts,
-            owner,
-            index,
-            own,
-        })
+        Some(frame)
     }
 
-    /// Units this frame converted.
-    pub(super) fn unit_count(&self) -> usize {
-        self.owner.len()
+    fn insert(&mut self, state: GameplayUnitState) -> u32 {
+        let slot = if let Some(slot) = self.free.pop() {
+            self.parts[slot as usize / PART][slot as usize % PART] = state;
+            slot
+        } else {
+            let slot = self.owner.len() as u32;
+            if (slot as usize).is_multiple_of(PART) {
+                self.parts.push(Vec::new());
+            }
+            self.parts[slot as usize / PART].push(state);
+            self.owner.push(state.player.0);
+            self.rank.push(0);
+            slot
+        };
+        self.index.insert(state.id, slot);
+        slot
     }
 
+    pub(super) fn visited(&self) -> usize {
+        self.visited
+    }
+    pub(super) fn work(&self) -> (usize, usize) {
+        (self.converted, self.changed.len())
+    }
+    pub(super) fn generation(&self) -> u64 {
+        self.generation
+    }
+    pub(super) fn unchanged_since(&self, held: Option<u64>, slot: u32) -> bool {
+        held.is_some() && held == self.base && !self.changed.contains(&slot)
+    }
     pub(super) fn state(&self, slot: u32) -> &GameplayUnitState {
         &self.parts[slot as usize / PART][slot as usize % PART]
     }
@@ -241,15 +233,16 @@ impl UnitFrame {
             .own
             .get(&lens.viewer)
             .filter(|_| economy)
-            .map_or(&[][..], |own| own.as_slice());
+            .map(|own| &own.keys);
+        let own_len = own.map_or(0, BTreeSet::len);
         // A complete list already holds every unit the viewer owns.
-        let own_complete = economy && own.len() <= MAX_SUBSCRIBED_UNITS;
+        let own_complete = economy && own_len <= MAX_SUBSCRIBED_UNITS;
         let Scratch { ids, keys } = scratch;
         ids.clear();
         keys.clear();
         world.collect_chunk_unit_ids(lens.region, ids);
         for id in ids.iter() {
-            let slot = self.index.get(*id);
+            let slot = self.index.get(id).copied().unwrap_or(ABSENT);
             if slot == ABSENT || (own_complete && self.owner[slot as usize] == lens.viewer.0) {
                 continue;
             }
@@ -259,7 +252,7 @@ impl UnitFrame {
             }
         }
         if !economy {
-            let slot = self.index.get(lens.primary);
+            let slot = self.index.get(&lens.primary).copied().unwrap_or(ABSENT);
             if slot != ABSENT && visible(self.state(slot)) {
                 keys.push(key(lens.primary, slot));
             }
@@ -267,8 +260,8 @@ impl UnitFrame {
         keys.sort_unstable();
         // The primary unit may already be in the region scan.
         keys.dedup();
-        let mut slots = Vec::with_capacity(keys.len() + own.len());
-        let (mut a, mut b) = (keys.iter().peekable(), own.iter().peekable());
+        let mut slots = Vec::with_capacity(keys.len() + own_len);
+        let (mut a, mut b) = (keys.iter().peekable(), own.into_iter().flatten().peekable());
         loop {
             let next = match (a.peek(), b.peek()) {
                 (Some(x), Some(y)) if x <= y => {
@@ -288,3 +281,7 @@ impl UnitFrame {
         slots
     }
 }
+
+#[path = "frame/tests.rs"]
+#[cfg(test)]
+mod tests;

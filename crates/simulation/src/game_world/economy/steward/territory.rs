@@ -44,6 +44,10 @@ impl GameWorld {
                 .copied()
                 .collect();
             if let Some(home) = self.economy.steward_homes.get_mut(&id) {
+                self.economy
+                    .stewards
+                    .controlled
+                    .mark(home.workers.iter().chain(&home.navy.ships).copied());
                 home.rivals = rivals;
                 home.regions = None;
             }

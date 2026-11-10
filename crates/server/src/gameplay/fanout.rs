@@ -65,7 +65,7 @@ pub(super) struct Built {
     workers: Vec<std::thread::ThreadId>,
     pub tick: Tick,
     pub fog_disabled: bool,
-    pub frame: UnitFrame,
+    pub frame: Arc<UnitFrame>,
     pub viewers: BTreeMap<PlayerId, ViewerState>,
     pub sessions: Vec<SessionBuild>,
     /// Time spent on viewers, the frame and the sessions.
@@ -83,56 +83,85 @@ fn viewer_states(
             view.rebuild || view.fog_disabled != Some(world.fog_disabled());
     }
     let disabled = world.fog_disabled();
-    let mut all_players = None;
-    let mut everything = None;
-    let mut viewers = BTreeMap::new();
-    for (viewer, rebuild) in rebuild {
-        let mut players = if disabled {
-            all_players
-                .get_or_insert_with(|| economy::players(world))
-                .clone()
-        } else {
-            economy::player(world, viewer)
-                .map(|state| (state.player, state))
-                .into_iter()
-                .collect()
-        };
-        if disabled && let Some(own) = economy::player(world, viewer) {
-            players.insert(viewer, own);
-        }
-        let buildings = if disabled {
-            // With fog disabled all targets are revealed as well. Keep one
-            // shared map even when a hundred seats have set their rally points.
-            let all: &Arc<_> =
-                everything.get_or_insert_with(|| Arc::new(economy::buildings(world, viewer)));
-            Buildings::Full(all.clone())
-        } else if rebuild {
-            Buildings::Full(Arc::new(economy::buildings(world, viewer)))
-        } else {
-            Buildings::Changes(
-                changes
-                    .get(&viewer)
-                    .into_iter()
-                    .flatten()
-                    .map(|id| {
-                        let known = world.remembered_building(viewer, *id);
-                        (*id, known.map(|b| wire_building_state(b, Some(viewer))))
-                    })
-                    .collect(),
-            )
-        };
-        viewers.insert(
-            viewer,
-            ViewerState {
-                players,
-                land: (world.tick().0.is_multiple_of(20) || rebuild)
-                    .then(|| world.land_control(viewer)),
-                buildings,
-                vision: world.player_vision_revision(viewer),
-            },
-        );
+    // Shared by every viewer when fog is disabled, so built once up front.
+    let first = rebuild.keys().next().filter(|_| disabled);
+    let all_players = first.map(|_| economy::players(world));
+    let everything = first.map(|first| Arc::new(economy::buildings(world, *first)));
+    let land_tick = world.tick().0.is_multiple_of(20);
+    let rebuild = rebuild.into_iter().collect::<Vec<_>>();
+    // Each viewer's state reads only the world, so viewers are built in
+    // parallel: once a second every viewer's land report is rastered.
+    rebuild
+        .par_iter()
+        .with_min_len(VIEWERS_PER_TASK)
+        .map(|&(viewer, rebuild)| {
+            let state = viewer_state(
+                world,
+                viewer,
+                rebuild,
+                changes,
+                all_players.as_ref(),
+                everything.as_ref(),
+                land_tick,
+            );
+            (viewer, state)
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+        .collect()
+}
+
+/// Viewers one worker task builds at least; a tick usually has few rebuilds,
+/// so small tasks would cost more to schedule than to run.
+const VIEWERS_PER_TASK: usize = 4;
+
+fn viewer_state(
+    world: &GameWorld,
+    viewer: PlayerId,
+    rebuild: bool,
+    changes: &BTreeMap<PlayerId, BTreeSet<EntityId>>,
+    all_players: Option<&BTreeMap<PlayerId, GameplayPlayerState>>,
+    everything: Option<&Arc<BTreeMap<EntityId, GameplayBuildingState>>>,
+    land_tick: bool,
+) -> ViewerState {
+    let mut players = if let Some(all) = all_players {
+        all.clone()
+    } else {
+        economy::player(world, viewer)
+            .map(|state| (state.player, state))
+            .into_iter()
+            .collect()
+    };
+    if all_players.is_some()
+        && let Some(own) = economy::player(world, viewer)
+    {
+        players.insert(viewer, own);
     }
-    viewers
+    let buildings = if let Some(all) = everything {
+        // With fog disabled all targets are revealed as well. Keep one
+        // shared map even when a hundred seats have set their rally points.
+        Buildings::Full(all.clone())
+    } else if rebuild {
+        Buildings::Full(Arc::new(economy::buildings(world, viewer)))
+    } else {
+        Buildings::Changes(
+            changes
+                .get(&viewer)
+                .into_iter()
+                .flatten()
+                .map(|id| {
+                    let known = world.remembered_building(viewer, *id);
+                    (*id, known.map(|b| wire_building_state(b, Some(viewer))))
+                })
+                .collect(),
+        )
+    };
+    ViewerState {
+        players,
+        land: (land_tick || rebuild).then(|| world.land_control(viewer)),
+        buildings,
+        vision: world.player_vision_revision(viewer),
+    }
 }
 
 fn build_session(
@@ -145,11 +174,16 @@ fn build_session(
     let Subscription { revision, region } = view.subscription;
     let vision = viewers.get(&view.viewer)?.vision;
     let tick = world.tick();
-    // An AI gets a changed fog view at most once a second.
+    // An AI gets a changed fog view at most once a second. A view whose
+    // region and overview did not change since the held one would equal it
+    // (and not be sent), so it is not rebuilt.
     let mode_changed = view.fog_disabled != Some(world.fog_disabled());
     let fog = (mode_changed
         || (view.vision != Some(vision)
-            && (view.vision.is_none() || !view.ai || tick.0.is_multiple_of(AI_FOG_TICKS))))
+            && (view.vision.is_none() || !view.ai || tick.0.is_multiple_of(AI_FOG_TICKS))
+            && view
+                .vision
+                .is_none_or(|held| world.fog_changed_since(view.viewer, region, held))))
     .then(|| {
         (
             super::fog::state(world, view.viewer, revision, region),
@@ -205,13 +239,16 @@ pub(super) fn build(
     world: &GameWorld,
     views: &[View],
     changes: &BTreeMap<PlayerId, BTreeSet<EntityId>>,
+    (previous, generation): (Option<Arc<UnitFrame>>, u64),
 ) -> Option<Built> {
     let started = std::time::Instant::now();
     let viewers = viewer_states(world, views, changes);
     let viewers_done = started.elapsed();
-    let distinct = viewers.keys().copied().collect::<Vec<_>>();
     let threads = rayon::current_num_threads().min(8);
-    let frame = UnitFrame::build(world, &distinct, threads)?;
+    let previous = previous.and_then(|frame| Arc::try_unwrap(frame).ok());
+    let frame = UnitFrame::build(world, threads, generation, previous)?;
+    #[cfg(test)]
+    frame.assert_matches_world(world);
     let frame_done = started.elapsed();
     let threads = threads.min(views.len() / 8 + 1);
     #[cfg(test)]
@@ -245,7 +282,7 @@ pub(super) fn build(
         workers: workers.into_inner().unwrap(),
         tick: world.tick(),
         fog_disabled: world.fog_disabled(),
-        frame,
+        frame: Arc::new(frame),
         viewers,
         sessions,
         phases: [viewers_done, frame_done - viewers_done, done - frame_done],

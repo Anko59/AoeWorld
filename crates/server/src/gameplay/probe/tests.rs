@@ -24,7 +24,7 @@ async fn retired_world_is_released_after_its_service_and_sessions_are_dropped() 
 }
 
 #[tokio::test]
-async fn every_tick_counts_one_unit_frame_build_over_every_unit() {
+async fn idle_ticks_visit_units_only_for_the_initial_frame() {
     let service = GameplayService::new(Seed(1));
     let (tx, _rx) = tokio::sync::mpsc::channel(64);
     service.register(None, tx).await;
@@ -33,5 +33,20 @@ async fn every_tick_counts_one_unit_frame_build_over_every_unit() {
         service.tick().await;
     }
     let units = service.world.read().await.unit_count() as u64;
-    assert_eq!(service.unit_frame_passes(), (3, 3 * units));
+    assert_eq!(service.unit_frame_passes(), (3, units));
+}
+
+#[tokio::test]
+async fn idle_units_are_converted_once_and_then_kept() {
+    let service = GameplayService::new(Seed(1));
+    let (tx, _rx) = tokio::sync::mpsc::channel(64);
+    service.register(None, tx).await;
+    for _ in 0..3 {
+        service.tick().await;
+    }
+    let units = service.world.read().await.unit_count() as u64;
+    assert!(units > 0);
+    // An untouched world: the first frame converts every unit, later frames
+    // keep every state, so nothing is marked changed after the first.
+    assert_eq!(service.unit_frame_work(), (units, units));
 }

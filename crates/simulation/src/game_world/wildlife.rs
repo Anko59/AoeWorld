@@ -109,11 +109,14 @@ pub(crate) struct Wildlife {
     /// Units mirrored by wildlife cell. Only point lookups and per-cell
     /// edits are made, so the hash map never biases a scan order.
     unit_cells: HashMap<u64, Vec<CellUnit>, BuildHasherDefault<CellHasher>>,
-    hunts: BTreeMap<EntityId, HuntJob>,
+    hunts: super::changes::Reports<HuntJob>,
     due: BTreeSet<(u64, EntityId)>,
     stats: WildlifeStats,
 }
 impl Wildlife {
+    pub(crate) fn take_unit_changes(&mut self) -> BTreeSet<EntityId> {
+        self.hunts.take_changes()
+    }
     /// Ids that currently hold a hunt job.
     pub(crate) fn hunter_ids(&self) -> impl Iterator<Item = &EntityId> {
         self.hunts.keys()

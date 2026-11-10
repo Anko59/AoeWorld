@@ -298,7 +298,7 @@ async fn pending_subscription_holds_all_revision_updates_until_snapshot() {
         rebuild: true,
     }];
     let world = service.world.read().await;
-    let mut built = build(&world, &views, &BTreeMap::new()).unwrap();
+    let mut built = build(&world, &views, &BTreeMap::new(), (None, 1)).unwrap();
     drop(world);
     // A projectile starting on this tick exercises its independent baseline
     // without depending on combat wind-up or attack-range timing.
@@ -437,7 +437,7 @@ fn session_views_reuse_the_same_bounded_worker_pool_across_ticks() {
     let mut workers = std::collections::HashSet::new();
     let mut baseline = None;
     for _ in 0..4 {
-        let built = pool.install(|| build(&world, &views, &BTreeMap::new()).unwrap());
+        let built = pool.install(|| build(&world, &views, &BTreeMap::new(), (None, 1)).unwrap());
         assert_eq!(built.sessions.len(), 100);
         workers.extend(built.workers.iter().copied());
         assert!(

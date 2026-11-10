@@ -7,6 +7,28 @@ use aoe_protocol::{FogState, GameplayServerMessage, GameplayUnitState};
 use std::collections::{BTreeMap, BTreeSet};
 use tokio::sync::mpsc::error::TrySendError;
 
+/// The units a client holds, sorted by id, and the frame they were last
+/// brought up to date from (`None` after a snapshot), so the next tick can
+/// skip the units that frame says did not change.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(super) struct Resident {
+    pub units: Vec<GameplayUnitState>,
+    pub frame: Option<u64>,
+}
+
+impl From<Vec<GameplayUnitState>> for Resident {
+    fn from(units: Vec<GameplayUnitState>) -> Self {
+        Self { units, frame: None }
+    }
+}
+
+impl std::ops::Deref for Resident {
+    type Target = [GameplayUnitState];
+    fn deref(&self) -> &Self::Target {
+        &self.units
+    }
+}
+
 /// What changed between a session's baseline and the units now in view.
 struct UnitDiff {
     changed: Vec<GameplayUnitState>,
@@ -15,29 +37,32 @@ struct UnitDiff {
     same_ids: bool,
 }
 
-fn diff_units(
-    resident: &[GameplayUnitState],
-    current: &[u32],
-    built: &Built,
-    viewer: PlayerId,
-) -> UnitDiff {
+/// Only units the frame marks changed are compared: one the baseline holds
+/// from the frame before is otherwise equal to it by construction.
+fn diff_units(resident: &Resident, current: &[u32], built: &Built, viewer: PlayerId) -> UnitDiff {
     let mut diff = UnitDiff {
         changed: Vec::new(),
         removals: Vec::new(),
         same_ids: true,
     };
-    let mut old = resident.iter().peekable();
+    let frame = &built.frame;
+    let mut old = resident.units.iter().peekable();
     for slot in current {
-        let now = built.frame.state(*slot).for_viewer(viewer);
-        while let Some(before) = old.next_if(|before| before.id < now.id) {
+        let state = frame.state(*slot);
+        while let Some(before) = old.next_if(|before| before.id < state.id) {
             diff.removals.push(before.id);
             diff.same_ids = false;
         }
-        match old.next_if(|before| before.id == now.id) {
-            Some(before) if before == &now => {}
-            Some(_) => diff.changed.push(now),
+        match old.next_if(|before| before.id == state.id) {
+            Some(_) if frame.unchanged_since(resident.frame, *slot) => {}
+            Some(before) => {
+                let now = state.for_viewer(viewer);
+                if before != &now {
+                    diff.changed.push(now);
+                }
+            }
             None => {
-                diff.changed.push(now);
+                diff.changed.push(state.for_viewer(viewer));
                 diff.same_ids = false;
             }
         }
@@ -50,7 +75,7 @@ fn diff_units(
 }
 
 fn patch_units(
-    resident: &mut Vec<GameplayUnitState>,
+    resident: &mut Resident,
     diff: &UnitDiff,
     current: &[u32],
     built: &Built,
@@ -64,16 +89,17 @@ fn patch_units(
             while at < resident.len() && resident[at].id < unit.id {
                 at += 1;
             }
-            if let Some(slot) = resident.get_mut(at).filter(|u| u.id == unit.id) {
+            if let Some(slot) = resident.units.get_mut(at).filter(|u| u.id == unit.id) {
                 *slot = *unit;
             }
         }
     } else {
-        *resident = current
+        resident.units = current
             .iter()
             .map(|slot| built.frame.state(*slot).for_viewer(viewer))
             .collect();
     }
+    resident.frame = Some(built.frame.generation());
 }
 
 /// Same fog as the client already holds? The tick it was built at does not
@@ -245,8 +271,10 @@ fn deliver_tick(
         && !built.tick.0.is_multiple_of(AI_HEARTBEAT_TICKS)
     {
         // Nothing to tell an AI: it keeps time from the heartbeat. Its
-        // baseline already equals a full rebuild, so that is settled too.
+        // baseline already equals a full rebuild, so that is settled too,
+        // and its units equal this frame's.
         session.rebuild_buildings = false;
+        session.resident.frame = Some(built.frame.generation());
         return true;
     }
     let message = GameplayServerMessage::Tick {
