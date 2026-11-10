@@ -267,27 +267,11 @@ pub(super) fn coastal_world(seed: Seed) -> Result<GameWorld, EconomyError> {
     kingdom_environment(seed, true, 15_360)
 }
 
-fn kingdom_environment(
+pub(super) fn kingdom_environment(
     seed: Seed,
     coast: bool,
     side_meters: u64,
 ) -> Result<GameWorld, EconomyError> {
-    let fine = ElevationPage {
-        level: 0,
-        x: 0,
-        y: 0,
-        width: 2,
-        height: 2,
-        geographic_height_centimeters: vec![0; 4],
-    };
-    let overview = ElevationPage {
-        level: 1,
-        x: 0,
-        y: 0,
-        width: 1,
-        height: 1,
-        geographic_height_centimeters: vec![0],
-    };
     let water = if coast {
         vec![
             WaterPage {
@@ -312,7 +296,41 @@ fn kingdom_environment(
     } else {
         Vec::new()
     };
-    let water_field = if coast {
+    kingdom_water_environment(seed, side_meters, water)
+}
+
+pub(super) fn kingdom_water_environment(
+    seed: Seed,
+    side_meters: u64,
+    water: Vec<WaterPage>,
+) -> Result<GameWorld, EconomyError> {
+    let (package, elevation, water) = kingdom_water_package(seed, side_meters, water)?;
+    GameWorld::from_prepared_map(package, elevation, water, Vec::new(), Vec::new())
+        .map_err(Into::into)
+}
+
+pub(super) fn kingdom_water_package(
+    seed: Seed,
+    side_meters: u64,
+    water: Vec<WaterPage>,
+) -> Result<(MapPackage, Vec<ElevationPage>, Vec<WaterPage>), EconomyError> {
+    let fine = ElevationPage {
+        level: 0,
+        x: 0,
+        y: 0,
+        width: 2,
+        height: 2,
+        geographic_height_centimeters: vec![0; 4],
+    };
+    let overview = ElevationPage {
+        level: 1,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+        geographic_height_centimeters: vec![0],
+    };
+    let water_field = if !water.is_empty() {
         let mut levels = Vec::new();
         for page in &water {
             levels.push(PyramidLevel {
@@ -361,8 +379,7 @@ fn kingdom_environment(
         environment,
     )
     .map_err(|_| EconomyError::InvalidFootprint)?;
-    GameWorld::from_prepared_map(package, vec![fine, overview], water, Vec::new(), Vec::new())
-        .map_err(Into::into)
+    Ok((package, vec![fine, overview], water))
 }
 
 fn kingdom_tree(world: &mut GameWorld) -> Result<ResourceNode, EconomyError> {

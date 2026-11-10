@@ -5,6 +5,18 @@ use super::{GameWorld, GameplayService, Seed};
 mod tests;
 
 impl GameplayService {
+    pub fn behaviour_demo(
+        seed: Seed,
+        scene: aoe_simulation::BehaviourScene,
+    ) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::behaviour_demo(seed, scene)?;
+        let (package, _, _) = GameWorld::behaviour_environment(seed, scene)?;
+        let metadata = crate::gameplay_map::map_metadata(&package);
+        let service = Self::from_world(world, primary, Some(package.content_hash), Some(metadata));
+        service.set_paused(true);
+        Ok(service)
+    }
+
     pub fn roads_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
         let (world, primary) = GameWorld::roads_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))

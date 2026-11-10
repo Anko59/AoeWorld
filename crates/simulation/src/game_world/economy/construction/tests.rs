@@ -38,3 +38,33 @@ fn completion_membership_visits_twenty_thousand_builders_once() {
     assert!(world.economy.builders.is_empty());
     continuation::COMPLETION_VISITS.with(|visits| assert_eq!(visits.get(), 20_000));
 }
+
+#[test]
+fn behaviour_recording_scenes_have_a_live_primary_and_deterministic_setup() {
+    use crate::BehaviourScene::*;
+    for scene in [TownCenter, Wolf, Deer, Hunt, Camps, Bridge] {
+        let (a, primary) = GameWorld::behaviour_demo(Seed(7), scene)
+            .unwrap_or_else(|e| panic!("{scene:?}: {e:?}"));
+        let (b, _) = GameWorld::behaviour_demo(Seed(7), scene)
+            .unwrap_or_else(|e| panic!("{scene:?}: {e:?}"));
+        assert!(a.unit(primary).unwrap().hp > 0);
+        assert_eq!(a.canonical_hash(), b.canonical_hash());
+        if matches!(scene, Bridge) {
+            let crate::Terrain::Map { generator, .. } = a.terrain() else {
+                panic!("map")
+            };
+            let wet: Vec<_> = (80..170)
+                .filter(|x| {
+                    generator
+                        .tile_at(TileCoord::new(*x, 127))
+                        .is_some_and(|t| t.water != aoe_map::WaterKind::None)
+                })
+                .collect();
+            let (from, to) = (
+                TileCoord::new(wet[0] - 1, 127),
+                TileCoord::new(wet[wet.len() - 1] + 1, 127),
+            );
+            assert!(a.bridge_site_valid(from, to), "{from:?} -> {to:?}");
+        }
+    }
+}

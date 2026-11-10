@@ -12,6 +12,52 @@ pub(crate) async fn reset(
 ) -> StatusCode {
     let service = match options.scenario.as_deref() {
         None => GameplayService::new(state.diagnostic_scenario.seed),
+        Some(
+            name @ ("behaviour-tc" | "behaviour-wolf" | "behaviour-deer" | "behaviour-hunt"
+            | "behaviour-camps" | "behaviour-bridge"),
+        ) => {
+            use aoe_simulation::BehaviourScene;
+            let scene = match name {
+                "behaviour-tc" => BehaviourScene::TownCenter,
+                "behaviour-wolf" => BehaviourScene::Wolf,
+                "behaviour-deer" => BehaviourScene::Deer,
+                "behaviour-hunt" => BehaviourScene::Hunt,
+                "behaviour-bridge" => BehaviourScene::Bridge,
+                _ => BehaviourScene::Camps,
+            };
+            let Ok((package, elevation, water)) = aoe_simulation::GameWorld::behaviour_environment(
+                state.diagnostic_scenario.seed,
+                scene,
+            ) else {
+                return StatusCode::INTERNAL_SERVER_ERROR;
+            };
+            let stored = package.clone();
+            let directory = state.map_package_directory.clone();
+            if !tokio::task::spawn_blocking(move || {
+                crate::map_store::persist_prepared(
+                    directory.as_deref(),
+                    &stored,
+                    &elevation,
+                    &water,
+                    &[],
+                    &[],
+                )
+            })
+            .await
+            .is_ok_and(|result| result.is_ok())
+            {
+                return StatusCode::INTERNAL_SERVER_ERROR;
+            }
+            state
+                .map_packages
+                .write()
+                .await
+                .insert(package.content_hash_hex(), package);
+            match GameplayService::behaviour_demo(state.diagnostic_scenario.seed, scene) {
+                Ok(service) => service,
+                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
+            }
+        }
         Some("movement-lane") => {
             match GameplayService::movement_lane_demo(state.diagnostic_scenario.seed) {
                 Ok(service) => service,
