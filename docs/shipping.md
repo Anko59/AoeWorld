@@ -121,10 +121,10 @@ reports do not block shipping. The `BLOCKING` constant in
 
 `make ship` and `make duel` try a nonblocking kernel lock on
 `<git common dir>/aoe-ship/ship.lock`, shared by every worktree. A second run
-immediately reports `busy: <command, branch, worktree, started>, retry later`
+immediately reports `busy: slot 0: <command, branch, worktree, started>; slot 1: …, retry later` once every long-job slot is held
 (harness exit 75; Make reports recipe failure). There is no waiting queue.
-`make ship-status` shows the current holder; `make load-status` shows the long-job
-holder and available memory. Read-only commands never acquire the ship lock.
+`make ship-status` shows the current holder; `make load-status` shows every long-job
+slot and holder and available memory. Read-only commands never acquire the ship lock.
 
 Ship holds the lock during the initial rebase and the final recheck and push,
 and releases it during gates and review. If reacquiring is busy, ship stops.

@@ -58,16 +58,16 @@ build. Qualification and authorization remain independent required planes.
 
 ## Resource admission and long jobs
 
-Short gates start without an exclusive lock or load wait. Workload containers
+Short gates start without a lock or load wait; long jobs share three slots (`AOE_LONG_SLOTS`, 1..=8). Workload containers
 share the memory/swap caps and CPU shares in `gates/container.args`; CPU quotas
 are not used. A host MemAvailable check refuses immediately below 3 GiB.
-`make load-status` shows available memory and the live long-job holder.
+`make load-status` shows available memory and every long-job slot with its holder.
 
 The `long` registry flag covers full e2e, coverage, local perf benchmarks and
 aggregates containing them. A nonempty `AOE_E2E_SPECS` selection is short.
-The std-only resource runner takes the long-job lock through Linux `flock` before
+The std-only resource runner takes the first free long-job slot (`long-N.lock`) through Linux `flock` before
 bootstrapping the harness or starting Cargo. The runner builds its tool image
-before compiling itself on a clean checkout. A second invocation names its holder
+before compiling itself on a clean checkout. When every slot is held, an invocation names all holders
 and stops with `retry later`. Intended children inherit the live descriptor and
 validated proof, so nested targets do not refuse themselves and controller death
 does not admit a competing long job while its child is running. Do useful work

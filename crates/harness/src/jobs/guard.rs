@@ -1,5 +1,5 @@
 //! Admission and inherited ownership for registry gates and direct Make commands.
-use super::{DIR_VAR, JobEnv, Result, TOKEN_VAR, lock::LongLock};
+use super::{DIR_VAR, JobEnv, Result, SLOT_VAR, TOKEN_VAR, lock::LongLock};
 use crate::{
     gates::registry::{Gate, Registry},
     ship::git,
@@ -60,20 +60,21 @@ impl Drop for Guard {
     }
 }
 
-pub(crate) fn lock_path(root: &Path, env: &JobEnv) -> Result<PathBuf> {
+/// The lock directory: an inherited one only while its slot's proof is live.
+pub(crate) fn lock_dir(root: &Path, env: &JobEnv) -> Result<PathBuf> {
     if let Some(directory) = env.dir.as_ref().filter(|dir| !dir.is_empty()) {
-        let path = PathBuf::from(directory).join("long.lock");
+        let path = super::lock::slot_path(Path::new(directory), env.slot.unwrap_or(0));
         if let Some(token) = env.token.as_deref()
             && super::lock::verify(&path, token)?
         {
-            return Ok(path);
+            return Ok(PathBuf::from(directory));
         }
     }
     let common = git::git(
         root,
         &["rev-parse", "--path-format=absolute", "--git-common-dir"],
     )?;
-    Ok(PathBuf::from(common).join("aoe-ship/long.lock"))
+    Ok(PathBuf::from(common).join("aoe-ship"))
 }
 
 pub(crate) fn checkout_of(from: &Path) -> Result<Option<PathBuf>> {
@@ -156,7 +157,8 @@ fn acquire_in(source: &Path, gate: &str, env: &JobEnv) -> Result<Guard> {
             outermost: false,
         });
     }
-    let path = lock_path(source, env)?;
+    let dir = lock_dir(source, env)?;
+    let slots = super::lock::slot_count(env.slots.as_deref())?;
     let started = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let holder = format!(
         "`make {gate}` on {} in {} (started {})",
@@ -164,19 +166,15 @@ fn acquire_in(source: &Path, gate: &str, env: &JobEnv) -> Result<Guard> {
         source.canonicalize()?.display(),
         crate::ship::lock::utc(started)
     );
-    let lock = LongLock::acquire(&path, &holder, &nonce()?, env.token.as_deref())?;
+    let inherited = env.token.as_deref().map(|t| (env.slot.unwrap_or(0), t));
+    let (lock, slot) = LongLock::acquire_any(&dir, &holder, &nonce()?, inherited, slots)?;
     if lock.owned() {
         eprintln!("long job admitted: {holder}");
     }
     let env = vec![
         (TOKEN_VAR, lock.token().to_owned()),
-        (
-            DIR_VAR,
-            path.parent()
-                .ok_or("long lock has no parent")?
-                .display()
-                .to_string(),
-        ),
+        (DIR_VAR, dir.display().to_string()),
+        (SLOT_VAR, slot.to_string()),
     ];
     *held = Some(Held {
         env: env.clone(),

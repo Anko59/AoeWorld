@@ -76,7 +76,7 @@ ignores it); they do not suspend a real machine, so the timing of a real resume 
 
 ## Container memory and long jobs
 
-`make load-status` shows MemAvailable and the live long-job holder. Short jobs
+`make load-status` shows MemAvailable and every long-job slot (three by default, `AOE_LONG_SLOTS` 1..=8) with its holder. Short jobs
 start without an exclusive lock. Each workload container uses the shared caps in
 `gates/container.args` (4 GiB memory and combined memory plus swap, CPU shares
 1024, four Cargo compiler jobs). There is no CPU quota. A lightweight std-only
@@ -86,7 +86,7 @@ an observation at admission, not a reservation against other processes.
 
 A container OOM kill reports that its memory cap was exceeded, with the observed
 cgroup peak when the observer survives. Reduce concurrent work or investigate the
-workload; do not weaken a gate. A second long job immediately reports its holder
+workload; do not weaken a gate. A long job started when every slot is held immediately reports all holders
 and `retry later` (harness exit 75). Full e2e, coverage, local perf benchmarks and
 aggregates containing them are long; a nonempty `AOE_E2E_SPECS` selection is short.
 Low-memory admission uses exit 76 in the host resource runner; Make reports the

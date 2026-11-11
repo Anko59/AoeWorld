@@ -8,6 +8,7 @@ use std::{
 };
 
 mod lock;
+mod slots;
 use lock::SERIAL;
 
 fn registry() -> Registry {
@@ -138,8 +139,13 @@ fn guard_role() {
     if role == "plan" {
         let registry = registry();
         let find = |id: &str| registry.gates.iter().find(|gate| gate.id == id).unwrap();
-        let path = guard::lock_path(&root, &env).unwrap();
-        let foreign = super::lock::LongLock::acquire(&path, "other job", "other", None).unwrap();
+        let dir = guard::lock_dir(&root, &env).unwrap();
+        let foreign = (0..3)
+            .map(|slot| {
+                let path = super::lock::slot_path(&dir, slot);
+                super::lock::LongLock::acquire(&path, "other job", "other", None).unwrap()
+            })
+            .collect::<Vec<_>>();
         let started = Instant::now();
         let short =
             guard::hold_plan(&root, "gate-run", &[find("lint"), find("build-wasm")], &env).unwrap();
@@ -165,8 +171,8 @@ fn guard_role() {
         return;
     }
     assert_ne!(
-        guard::lock_path(&root, &env).unwrap(),
-        root.join("locks/long.lock"),
+        guard::lock_dir(&root, &env).unwrap(),
+        root.join("locks"),
         "an arbitrary environment directory without live ownership cannot split the lock"
     );
     let long = guard::hold(&root, "coverage", &env).unwrap();
@@ -179,9 +185,12 @@ fn guard_role() {
     assert_eq!(long.env(), nested.env());
     drop(nested);
     drop(long);
-    assert!(
-        super::lock::status(&guard::lock_path(&root, &env).unwrap())
-            .unwrap()
-            .is_none()
-    );
+    let dir = guard::lock_dir(&root, &env).unwrap();
+    for slot in 0..3 {
+        assert!(
+            super::lock::status(&super::lock::slot_path(&dir, slot))
+                .unwrap()
+                .is_none()
+        );
+    }
 }
