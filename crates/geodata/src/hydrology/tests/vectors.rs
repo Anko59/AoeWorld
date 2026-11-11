@@ -65,9 +65,76 @@ fn coverage_comes_from_the_dataset_extent_and_includes_southern_finland() {
     }
 }
 
+fn selected_rivers(request: MapRequest) -> Option<String> {
+    project_river_footprint(request, 16, &AtomicBool::new(false))
+        .unwrap()
+        .rivers()
+        .ok()
+        .map(|region| region.id())
+}
+
+#[test]
+fn footprint_selects_the_regional_river_release_containing_it() {
+    // The 960 km Giant squares the owner plays: France and the Mekong.
+    let france = MapRequest {
+        center_latitude_e7: 466_000_000,
+        center_longitude_e7: 25_000_000,
+        requested_side_meters: 960_000,
+        ..MapRequest::default()
+    };
+    let mekong = MapRequest {
+        center_latitude_e7: 145_000_000,
+        center_longitude_e7: 1_048_000_000,
+        ..france
+    };
+    assert_eq!(
+        selected_rivers(france).as_deref(),
+        Some("hydrorivers-v1.0-eu-shp")
+    );
+    assert_eq!(
+        selected_rivers(mekong).as_deref(),
+        Some("hydrorivers-v1.0-as-shp")
+    );
+    // Inside both extents (Iran/Turkmenistan overlap): the first region wins.
+    let overlap = MapRequest {
+        center_latitude_e7: 380_000_000,
+        center_longitude_e7: 635_000_000,
+        requested_side_meters: 300_000,
+        ..france
+    };
+    assert_eq!(
+        selected_rivers(overlap).as_deref(),
+        Some("hydrorivers-v1.0-eu-shp")
+    );
+    // Outside every wired region: South America, and a square straddling
+    // the eu/as seam that fits neither extent.
+    for request in [
+        MapRequest {
+            center_latitude_e7: -150_000_000,
+            center_longitude_e7: -600_000_000,
+            ..france
+        },
+        MapRequest {
+            center_latitude_e7: 600_000_000,
+            center_longitude_e7: 650_000_000,
+            requested_side_meters: 1_200_000,
+            ..france
+        },
+    ] {
+        assert_eq!(selected_rivers(request), None, "{request:?}");
+        let error =
+            validate_vector_footprint(request, 16, &AtomicBool::new(false)).expect_err("uncovered");
+        assert!(
+            error
+                .to_string()
+                .contains("outside the pinned river dataset extent")
+        );
+    }
+}
+
 #[test]
 fn pinned_vector_selection_has_no_worldcover_or_catalog_inputs() {
-    let sources = hydrology_vector_sources();
+    let sources = hydrology_vector_sources(&crate::HYDRORIVERS_REGIONS[0]);
     assert_eq!(sources.len(), 2);
     assert_eq!(sources[0].id, "hydrolakes-v1.0-global-gdb");
     assert_eq!(sources[1].id, "hydrorivers-v1.0-eu-shp");

@@ -4,10 +4,7 @@ use std::{sync::Arc, time::Duration};
 
 const HYDROLAKES_URL: &str =
     "https://data.hydrosheds.org/file/HydroLAKES/HydroLAKES_polys_v10.gdb.zip";
-const HYDRORIVERS_EUROPE_URL: &str =
-    "https://data.hydrosheds.org/file/HydroRIVERS/HydroRIVERS_v10_eu_shp.zip";
 const HYDROLAKES_BYTES: u64 = 762_519_774;
-const HYDRORIVERS_EUROPE_BYTES: u64 = 67_648_957;
 pub const MAX_HYDROLOGY_DOWNLOAD_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
 pub fn worldcover_sources_for_bounds(
@@ -150,45 +147,130 @@ pub fn worldcover_tile_ids(
     Ok(tiles)
 }
 
-/// The official HydroSHEDS regional vector packages. The package URLs are
-/// fixed v1.0 release packages. The reviewed SHA-256 values pin these source
-/// objects independently of the provider's download endpoint.
-pub fn hydrology_vector_sources() -> Vec<KnownSource> {
-    vec![
+/// One fixed HydroRIVERS v1.0 regional shapefile package. HydroSHEDS
+/// publishes rivers per continental region; each wired region is pinned by
+/// SHA-256 and by the extent its shapefile header records.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HydroRiversRegion {
+    /// Provider region code used in the package and member names.
+    pub code: &'static str,
+    pub release: &'static str,
+    pub bytes: u64,
+    pub sha256: [u8; 32],
+    pub native_resolution: &'static str,
+    /// Header extent of the pinned shapefile: min/max longitude, min/max latitude.
+    pub extent: RiverExtent,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RiverExtent {
+    pub min_longitude: f64,
+    pub max_longitude: f64,
+    pub min_latitude: f64,
+    pub max_latitude: f64,
+}
+
+impl HydroRiversRegion {
+    pub fn id(&self) -> String {
+        format!("hydrorivers-v1.0-{}-shp", self.code)
+    }
+
+    pub fn url(&self) -> String {
+        format!(
+            "https://data.hydrosheds.org/file/HydroRIVERS/HydroRIVERS_v10_{}_shp.zip",
+            self.code
+        )
+    }
+
+    /// The shapefile inside the archive.
+    pub fn member(&self) -> String {
+        format!("HydroRIVERS_v10_{0}_shp/HydroRIVERS_v10_{0}.shp", self.code)
+    }
+
+    pub fn known_source(&self) -> KnownSource {
         KnownSource {
-            id: "hydrolakes-v1.0-global-gdb".to_owned(),
+            id: self.id(),
             provider: Provider::HydroSheds,
-            release: "HydroLAKES v1.0".to_owned(),
-            url: HYDROLAKES_URL.to_owned(),
-            bytes: HYDROLAKES_BYTES,
-            expected_checksum: ExpectedChecksum::Sha256([
-                0x1c, 0x13, 0x03, 0xa4, 0x88, 0x2c, 0x59, 0x7b, 0x76, 0x9f, 0x4a, 0x2b, 0xea, 0xe6,
-                0xc7, 0x28, 0x04, 0xc5, 0x2a, 0xd4, 0x18, 0xa0, 0xb4, 0x07, 0x88, 0x17, 0xcf, 0x10,
-                0x62, 0x11, 0x66, 0x43,
-            ]),
-            native_resolution: "global lakes >= 10 ha".to_owned(),
-            crs: "EPSG:4326".to_owned(),
-            vertical_datum: "not applicable".to_owned(),
-            license_reference: "HydroSHEDS license; CC BY 4.0 product attribution".to_owned(),
-        },
-        KnownSource {
-            id: "hydrorivers-v1.0-eu-shp".to_owned(),
-            provider: Provider::HydroSheds,
-            release: "HydroRIVERS v1.0 Europe and Middle East".to_owned(),
-            url: HYDRORIVERS_EUROPE_URL.to_owned(),
-            bytes: HYDRORIVERS_EUROPE_BYTES,
-            expected_checksum: ExpectedChecksum::Sha256([
-                0x50, 0x0d, 0xa7, 0xd3, 0x6c, 0xee, 0xe0, 0xaa, 0x4c, 0x82, 0xdd, 0x62, 0x5f, 0x5c,
-                0x53, 0xd8, 0x0b, 0xa2, 0xf7, 0xac, 0x14, 0xad, 0x02, 0x2c, 0xd3, 0xa6, 0x60, 0x1b,
-                0xf5, 0x50, 0x68, 0xe5,
-            ]),
-            native_resolution: "15 arc-seconds; regional Europe/Middle East".to_owned(),
+            release: self.release.to_owned(),
+            url: self.url(),
+            bytes: self.bytes,
+            expected_checksum: ExpectedChecksum::Sha256(self.sha256),
+            native_resolution: self.native_resolution.to_owned(),
             crs: "EPSG:4326".to_owned(),
             vertical_datum: "not applicable".to_owned(),
             license_reference: "HydroSHEDS license for scientific, educational, and commercial use"
                 .to_owned(),
+        }
+    }
+}
+
+/// The wired HydroRIVERS regions, in selection order: a footprint takes the
+/// first region whose extent contains all of it. Extents are the shapefile
+/// headers of the pinned archives (read from the SHA-pinned objects), not
+/// approximate continental outlines.
+pub static HYDRORIVERS_REGIONS: [HydroRiversRegion; 2] = [
+    HydroRiversRegion {
+        code: "eu",
+        release: "HydroRIVERS v1.0 Europe and Middle East",
+        bytes: 67_648_957,
+        sha256: [
+            0x50, 0x0d, 0xa7, 0xd3, 0x6c, 0xee, 0xe0, 0xaa, 0x4c, 0x82, 0xdd, 0x62, 0x5f, 0x5c,
+            0x53, 0xd8, 0x0b, 0xa2, 0xf7, 0xac, 0x14, 0xad, 0x02, 0x2c, 0xd3, 0xa6, 0x60, 0x1b,
+            0xf5, 0x50, 0x68, 0xe5,
+        ],
+        native_resolution: "15 arc-seconds; regional Europe/Middle East",
+        extent: RiverExtent {
+            min_longitude: -24.472916666666663,
+            max_longitude: 69.5166666666652,
+            min_latitude: 12.602083333333333,
+            max_latitude: 81.78958333333222,
         },
-    ]
+    },
+    HydroRiversRegion {
+        code: "as",
+        release: "HydroRIVERS v1.0 Asia",
+        bytes: 90_510_995,
+        sha256: [
+            0x29, 0x78, 0x0b, 0x0a, 0x75, 0xf9, 0x00, 0x24, 0xf2, 0x2e, 0x7e, 0x20, 0x29, 0xe5,
+            0xe3, 0x04, 0x5f, 0x73, 0x25, 0xcd, 0xa0, 0x52, 0x8d, 0xb6, 0x5c, 0x5c, 0xc4, 0xc8,
+            0x64, 0xb9, 0x85, 0x25,
+        ],
+        native_resolution: "15 arc-seconds; regional Asia",
+        extent: RiverExtent {
+            min_longitude: 57.63958333333335,
+            max_longitude: 150.46874999999847,
+            min_latitude: 1.2729166666666387,
+            max_latitude: 55.89999999999909,
+        },
+    },
+];
+
+/// The pinned global HydroLAKES package.
+pub fn hydrolakes_source() -> KnownSource {
+    KnownSource {
+        id: "hydrolakes-v1.0-global-gdb".to_owned(),
+        provider: Provider::HydroSheds,
+        release: "HydroLAKES v1.0".to_owned(),
+        url: HYDROLAKES_URL.to_owned(),
+        bytes: HYDROLAKES_BYTES,
+        expected_checksum: ExpectedChecksum::Sha256([
+            0x1c, 0x13, 0x03, 0xa4, 0x88, 0x2c, 0x59, 0x7b, 0x76, 0x9f, 0x4a, 0x2b, 0xea, 0xe6,
+            0xc7, 0x28, 0x04, 0xc5, 0x2a, 0xd4, 0x18, 0xa0, 0xb4, 0x07, 0x88, 0x17, 0xcf, 0x10,
+            0x62, 0x11, 0x66, 0x43,
+        ]),
+        native_resolution: "global lakes >= 10 ha".to_owned(),
+        crs: "EPSG:4326".to_owned(),
+        vertical_datum: "not applicable".to_owned(),
+        license_reference: "HydroSHEDS license; CC BY 4.0 product attribution".to_owned(),
+    }
+}
+
+/// The official HydroSHEDS vector packages for one footprint: global
+/// HydroLAKES and the HydroRIVERS region selected for it. The package URLs are
+/// fixed v1.0 release packages; the reviewed SHA-256 values pin these source
+/// objects independently of the provider's download endpoint.
+pub fn hydrology_vector_sources(rivers: &HydroRiversRegion) -> Vec<KnownSource> {
+    vec![hydrolakes_source(), rivers.known_source()]
 }
 
 fn latitude_tag(latitude: i32) -> String {
