@@ -125,3 +125,16 @@ fn a_foreign_gate_start_can_leave_across_a_chunk_boundary() {
     assert!(complete.reachable(&grid, 2, from, to));
     assert!(lazy.reachable(&grid, 2, from, to));
 }
+
+#[test]
+fn border_cells_match_a_full_scan_in_order() {
+    let scanned: Vec<usize> = (0..CELLS)
+        .filter(|&cell| {
+            let (x, y) = (cell as i32 % CHUNK, cell as i32 / CHUNK);
+            x == 0 || y == 0 || x == CHUNK - 1 || y == CHUNK - 1
+        })
+        .collect();
+    let direct: Vec<usize> = crate::navigation::regions::lazy::border_cells().collect();
+    assert_eq!(direct, scanned);
+    assert_eq!(direct.len(), 124);
+}

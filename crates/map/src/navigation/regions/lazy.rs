@@ -14,6 +14,14 @@ fn squared(a: TileCoord, b: TileCoord) -> i64 {
     dx * dx + dy * dy
 }
 
+/// Border cells of one chunk in ascending cell order.
+pub(super) fn border_cells() -> impl Iterator<Item = usize> {
+    let side = CHUNK as usize;
+    (0..side)
+        .chain((1..side - 1).flat_map(move |y| [y * side, y * side + side - 1]))
+        .chain((side - 1) * side..side * side)
+}
+
 impl Regions {
     pub(super) fn load(&mut self, ground: &dyn RegionGround, chunk: u32) {
         let invalidated = self.pending_dirty.remove(&chunk);
@@ -71,14 +79,18 @@ impl Regions {
             }
         }
         let at = label::origin(self.key(chunk));
-        for cell in 0..super::CELLS {
-            let (x, y) = (cell as i32 % CHUNK, cell as i32 / CHUNK);
-            if (x != 0 && y != 0 && x != CHUNK - 1 && y != CHUNK - 1)
-                || self.pending[&chunk].labels.at(cell) != own
-            {
+        // Only border cells can step into another chunk. Visit them in
+        // ascending cell order, as a full scan would, and collect crossings
+        // before loading so each neighbouring chunk is loaded once, in order
+        // of first use. Loading never changes this chunk's labels or steps.
+        let mut crossings = Vec::new();
+        let mut others: Vec<u32> = Vec::with_capacity(8);
+        let current = &self.pending[&chunk];
+        for cell in border_cells() {
+            if current.labels.at(cell) != own {
                 continue;
             }
-            let tile = TileCoord::new(at.x + x, at.y + y);
+            let tile = TileCoord::new(at.x + cell as i32 % CHUNK, at.y + cell as i32 / CHUNK);
             for (direction, (dx, dy)) in label::NEIGHBOURS.into_iter().enumerate() {
                 let next = TileCoord::new(tile.x + dx, tile.y + dy);
                 let Some(other) = self.chunk_of(next).filter(|&other| other != chunk) else {
@@ -86,27 +98,31 @@ impl Regions {
                 };
                 // A forward edge is already captured in this chunk's halo.
                 // Reverse edges must read the neighbouring chunk's step mask.
-                if !reverse
-                    && !self.pending[&chunk]
-                        .steps
-                        .at(cell)
-                        .allows(direction, self.bucket)
-                {
+                if !reverse && !current.steps.at(cell).allows(direction, self.bucket) {
                     continue;
                 }
-                self.load(ground, other);
-                if reverse
-                    && !self.pending[&other]
-                        .steps
-                        .at(label::index(next))
-                        .allows(7 - direction, self.bucket)
-                {
-                    continue;
+                if !others.contains(&other) {
+                    others.push(other);
                 }
-                let label = self.pending[&other].labels.at(label::index(next));
-                if label != 0 {
-                    out.insert((other, label));
-                }
+                crossings.push((direction, next, other));
+            }
+        }
+        for &other in &others {
+            self.load(ground, other);
+        }
+        for (direction, next, other) in crossings {
+            let neighbour = &self.pending[&other];
+            if reverse
+                && !neighbour
+                    .steps
+                    .at(label::index(next))
+                    .allows(7 - direction, self.bucket)
+            {
+                continue;
+            }
+            let label = neighbour.labels.at(label::index(next));
+            if label != 0 {
+                out.insert((other, label));
             }
         }
         out.retain(|&next| self.allowed_node(player, next, start));
