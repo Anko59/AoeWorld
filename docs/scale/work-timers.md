@@ -72,8 +72,8 @@ The shared sleep-off oracle also disables queue sleeping. Tests compare hashes,
 observations and saved queues every tick through cancellation, restart, housing
 loss, death, blocked exits and research completion. A raw progress edit is rejected
 by the test-only missed-wake detector. The initial focused training/research/
-Castle run passed 111 tests; final commit checks and whole-branch measurements
-are recorded below when complete.
+Castle run passed 111 tests; final branch checks and whole-branch measurements
+are recorded below.
 
 After the population-credit correction, all seven queue-timer scenarios and
 all three long benchmark replay oracles passed, including the unchanged
@@ -199,45 +199,162 @@ tests; all three long replay oracles passed, including the unchanged one/four
 worker checkpoint. Formatting, lint, structure and architecture checks passed.
 Logs: `.cache/garrison-{red,green,focused,replay,static}.log`.
 
-## Local video evidence
+## Source events and notification cost
 
-The construction baseline is `.cache/showcase/7b-construction-before-vp9.webm`:
-eight seconds, VP9, 1280x720, base `70d6b53231bfd3f7cf2dd0d191cbf6722bd01d08`.
-The inspected frames show the foundation, completion, and the worker walking
-to its next resource. The corresponding after take and other work scenes are
-pending. Videos and licensed assets remain outside Git.
+Formation rejoin and ordered motion commits wake acquisition and healers when
+moving, planning or task eligibility changes without displacement. Two one-unit
+phase regressions preserve the sampling clock through these events. The
+100-seat, 2,000-tick sleep on/off integration replay passed every tick; its
+local diagnostic source and log are `.cache/7b-owner-replay-source.rs` and
+`.cache/7b-owner-motion-green.log`. The permanent small regressions live in
+`formation/tests.rs` and `movement_step/tests.rs`.
 
-## Historical recovery measurements
+Contact notifications coalesce unchanged subscribers between deliveries, rather
+than repeating their ordered-set insertion for every nearby moving body.
+Subscription changes invalidate the tile memo. Same-tile endpoints notify once.
+Tile and walking-job lookup indexes use fixed hashers; due events and delivered
+identities retain ordered sets. The new contact-subscription regression and the
+broad queue/construction/walking replay filter passed 90 tests.
 
-The following measurements came from the interrupted implementation on
-2026-11-09. They are retained as historical evidence only: they do not compare
-this branch against its current base, `70d6b53231bfd3f7cf2dd0d191cbf6722bd01d08`.
-The required current-base release and instruction comparisons remain pending.
+## Current-base release measurements
 
-The initial production baseline is `8ca8d40d656626dbb4f1572ed0300093791c9610`.
-The baseline executable was built before linking the timer modules and retained
-locally as `.cache/timers-before-harness`. The in-process closed-loop run used
-16 seats, seed 1, one worker, 600 ticks, scales 1x and 5x, and hashes every 100
-ticks. These are whole-window samples, including startup spikes; they are not
-the steady-state ticks 301–600 used in older gathering measurements.
-
-| Baseline phase, ms | 1x mean / p50 / p95 | 5x mean / p50 / p95 |
-|---|---|---|
-| construction and gates | 0.111 / 0.111 / 0.142 | 0.412 / 0.366 / 0.447 |
-| gathering and economy | 1.517 / 0.198 / 0.326 | 5.695 / 0.969 / 14.672 |
-| research and training | 0.017 / 0.013 / 0.017 | 0.047 / 0.015 / 0.019 |
-
-The run ended with 2,815 / 14,021 units. Tick p50 was 3.3 / 18.6 ms.
-Gathering recorded 58,137 / 1,424,420 logical visits, including 11,450 / 130,346
-sleeping visits and 44,456 / 1,279,348 walking visits. Construction work counters
-were added with the timer implementation; the full-step oracle supplies its
-comparison counts.
-
-Raw baseline report: `.cache/match-bench/timers-before.json`; log:
-`.cache/timers-bench-before.log`. Measurements use a shared machine (baseline
-one-minute load 33.43), with no CPU pinning or dedicated-hardware qualification.
-Synthetic in-process work does not demonstrate finished RTS performance.
+Measured on 2026-11-11: before
+`70d6b53231bfd3f7cf2dd0d191cbf6722bd01d08`, after
+`589888b854f0c081311d11c5f0a106c6fb3356fb`. These are the final simulation
+code revisions; later documentation commits do not change that code.
+Both release runs used the identical in-process closed-loop recipe, seed 1,
+100 seats, six Rayon workers, 2,000 ticks, scales 1/5/10 and the same index
+observer. Whole-window times include startup spikes.
 
 ```sh
-make match-bench MATCH_BENCH_ARGS='--seats 16 --ticks 600 --threads 1 --scale 1,5 --hash-every 100 --out .cache/match-bench/timers-before.json'
+CARGO_PROFILE_DEV_DEBUG=0 make match-bench MATCH_BENCH_ARGS='--seats 100 --ticks 2000 --threads 6 --scale 1,5,10 --hash-every 100 --out .cache/match-bench/phase7b-before.json'
+CARGO_PROFILE_DEV_DEBUG=0 HARNESS_SCCACHE_DIR="$PWD/.cache/7b-cold-sccache" make match-bench MATCH_BENCH_ARGS='--seats 100 --ticks 2000 --threads 6 --scale 1,5,10 --hash-every 100 --out .cache/match-bench/phase7b-after.json'
 ```
+
+The before command ran in the owned detached base worktree
+`.cache/phase7b-before`; its report was copied unchanged to the path below.
+The empty local `HARNESS_SCCACHE_DIR` disables the optional compiler cache.
+Container resource caps, workload parameters and baselines were unchanged.
+Raw reports: `.cache/match-bench/phase7b-{before,after}.json`; logs:
+`.cache/7b-before-match-bench-attempt3.log` and
+`.cache/7b-after-match-bench-final.log`.
+
+Every run's tick-zero and tick-2,000 population samples agree between revisions:
+
+| Scale | Units: start → end (both runs) | Movers: start → end (both runs) |
+|---|---|---|
+| 1x | 9,719 → 10,175 | 2,661 → 44 |
+| 5x | 46,791 → 46,988 | 13,819 → 592 |
+| 10x | 93,080 → 93,277 | 27,744 → 1,593 |
+
+| Scale | Before tick mean / p50 / p95, ms | After tick mean / p50 / p95, ms |
+|---|---|---|
+| 1x | 50.832 / 22.316 / 38.762 | 43.292 / 19.413 / 32.436 |
+| 5x | 151.275 / 81.394 / 426.262 | 148.124 / 85.918 / 362.072 |
+| 10x | 329.976 / 176.037 / 807.324 | 279.632 / 184.216 / 565.309 |
+
+Phase p50 milliseconds, before → after; phase percentiles are not additive:
+
+| Scale | Movement | Gathering | Construction/gates | Research/training | Combat |
+|---|---|---|---|---|---|
+| 1x | 19.367 → 16.877 | 0.179 → 0.165 | 0.021 → 0.060 | 0.078 → 0.003 | 0.880 → 0.493 |
+| 5x | 74.131 → 75.393 | 1.044 → 1.138 | 0.002 → 0.003 | 0.059 → 0.003 | 0.786 → 1.073 |
+| 10x | 162.802 → 154.628 | 2.940 → 3.259 | 0.002 → 0.003 | 0.071 → 0.003 | 0.786 → 1.140 |
+
+| Scale | Job memberships enumerated by tables_refresh, before → after | Actual gather steps, before / after |
+|---|---|---|
+| 1x | 1,003,007 → 0 | 29,726 / 29,726 |
+| 5x | 10,105,564 → 0 | 114,371 / 114,371 |
+| 10x | 36,410,915 → 0 | 199,350 / 199,350 |
+
+Gatherer `visits` and `slept` include logical skipped turns, including sleeping
+walkers; they are not physical awake-job visit counts. The unchanged gather-step
+counts and canonical hashes establish that activity did not disappear.
+
+All 21 saved checkpoints per scale (63 total) matched. Per-scale comparison
+inputs select unchanged run objects from the complete reports and record their
+source JSON SHA-256. All three Dockerized comparisons passed:
+
+```sh
+make match-bench MATCH_BENCH_ARGS='--compare .cache/match-bench/phase7b-before-1x.json,.cache/match-bench/phase7b-after-1x.json'
+make match-bench MATCH_BENCH_ARGS='--compare .cache/match-bench/phase7b-before-5x.json,.cache/match-bench/phase7b-after-5x.json'
+make match-bench MATCH_BENCH_ARGS='--compare .cache/match-bench/phase7b-before-10x.json,.cache/match-bench/phase7b-after-10x.json'
+```
+
+Comparison logs: `.cache/7b-match-compare-final-{1,5,10}x.log`.
+Load averages at report completion (1/5/15 minutes) were
+5.85 / 9.96 / 12.10 before and
+5.91 / 6.04 / 6.40 after. The shared host was unpinned;
+other checks and captures also ran during these windows. These timings do not
+establish a controlled wall-time improvement or a quiet-machine 20 Hz result.
+
+## Instruction gate and final checks
+
+The generated 100-seat late-game kernel counts one authoritative tick after its
+384-tick warm-up, with one worker and the unchanged recipe/checkpoint.
+
+```sh
+NEXTEST_TEST_THREADS=2 CARGO_PROFILE_DEV_DEBUG=0 make -j1 perf-late-game-instructions
+NEXTEST_TEST_THREADS=2 HARNESS_SCCACHE_DIR="$PWD/.cache/7b-cold-sccache" make -j1 perf-late-game-instructions
+```
+
+The first command ran on the pinned base; the second ran on the source committed
+as `589888b854f0c081311d11c5f0a106c6fb3356fb`. Source file SHA-256 checks
+passed after the accepted measurement. The cap remains 1% above that base.
+
+| Before instructions | After instructions | Change | Maximum allowed | Result |
+|---|---|---|---|---|
+| 210,225,349 | 212,044,982 | +0.865563% | 212,327,602 | pass |
+
+Accepted raw NDJSON: `.cache/phase7b-perf/before-instructions.ndjson` and
+`.cache/phase7b-perf/after-final-instructions.ndjson`; complete Callgrind traces
+are retained beside them. Logs: `.cache/7b-before-instructions.log` and
+`.cache/7b-events-final-instructions.log`. A local unsupported Valgrind-client
+artifact was quarantined and rebuilt before the accepted measurement; no gate
+or performance baseline was changed.
+
+Final implementation validation passed:
+
+- `make hooks-install hooks-check fmt-check lint structure-check architecture-check`.
+- `NEXTEST_TEST_THREADS=2 make -j1 test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='all()'`: all 1,310 passed; `.cache/7b-simulation-full-events.log`.
+- Focused source-event/acquisition/General checks: 59 passed; final walking/queue/General checks: 20 passed. The five General summaries still match the base byte for byte.
+- Workload sanity retains the four-training-site, two-research-site and spawn-inspection floors on the full-step reference, and compares changes and hashes every warm-up tick. Sleeping therefore cannot pass by removing the workload.
+
+The final required `NEXTEST_TEST_THREADS=2 make -j1 preflight` command and
+outcome are recorded in `.cache/7b-body.md`, with complete output retained in
+`.cache/7b-preflight.log`.
+
+## Local video evidence
+
+`SHIP_VIDEO=.cache/showcase/phase7b-before-after-vp9.webm` is the paired
+48-second reel: VP9, 1280×720, 25 encoded fps, no audio. Individual baseline
+clips are `7b-<scene>-before-vp9.webm`; final implementation clips are
+`7b-<scene>-after-vp9.webm`, all under `.cache/showcase/`.
+
+| Scene | Individual clip duration per build |
+|---|---|
+| construction | 8 s |
+| walking | 3 s, derived from the completed-site worker's normal trip |
+| queues | 12 s |
+| research | 6 s |
+| idle-prepared | 6 s |
+| garrison | 8 s |
+
+The before server reported the pinned base; the after server reported
+`589888b854f0c081311d11c5f0a106c6fb3356fb` in `/health`
+(`.cache/7b-after-health.json`). Both used the same local game assets and real
+client with software WebGPU. The takes use ordinary UI actions after scene
+reset/activation. The prepared idle/garrison map is local fallback data, not
+source-geography qualification. Inspected frames show foundation/completion,
+walking, Villager training, Loom progress, the healthy idle Scout and `1 / 15`
+garrison occupancy. Failed readiness takes are excluded; no readiness floor
+was reduced. Both owned servers were stopped after recording.
+
+All twelve individual clips and the final reel passed `make video-probe` with
+`SHIP_VIDEO` set to the relevant path. Final metadata and checksum are
+`.cache/7b-combined-metadata.json` and `.cache/7b-combined.sha256`.
+Original assets and recordings remain outside Git and container images.
+
+These synthetic workloads and functional captures do not demonstrate finished
+RTS performance, sustained real-save load or dedicated-hardware qualification.
+No CI run, full e2e suite or publication was performed by this local task.
