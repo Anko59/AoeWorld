@@ -25,6 +25,8 @@ pub(crate) struct Report {
     pub(crate) instructions: BTreeMap<String, Option<u64>>,
     /// Kernel name to the gate's warning, failure or refresh note, if any.
     pub(crate) instruction_notes: BTreeMap<String, String>,
+    /// Workload hashes the counts were measured with (absent in old reports).
+    pub(crate) instruction_workloads: BTreeMap<String, String>,
     /// Scenario name to tick p50/p95 in nanoseconds.
     pub(crate) ticks: BTreeMap<String, Timing>,
     pub(crate) pressure: Option<Pressure>,
@@ -150,6 +152,10 @@ pub(crate) fn read(dir: &Path) -> Result<Report, String> {
         wasm_gzip: file_size(dir, "optimized.wasm.gz"),
         instructions: instructions(&report),
         instruction_notes: instruction_notes(&report),
+        instruction_workloads: report
+            .get("instruction_workloads")
+            .and_then(|value| serde_json::from_value(value.clone()).ok())
+            .unwrap_or_default(),
         ticks: ticks(&report),
         pressure: pressure(dir),
     })

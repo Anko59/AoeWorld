@@ -415,6 +415,7 @@ perf-soak-30-steps:
   perf-wasm-size \
   perf-baseline-propose \
   perf-comment \
+  perf-dev-reference \
   perf-hardware-check
 
 .PHONY: test-navigation test-navigation-steps
