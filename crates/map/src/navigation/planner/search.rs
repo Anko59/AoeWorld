@@ -113,6 +113,16 @@ impl<'a> ExpansionContext<'a> {
     ) -> Result<(), Terminal> {
         let (delta_x, delta_y) = offset;
         let next = TileCoord::new(active.tile.x + delta_x, active.tile.y + delta_y);
+        // Step costs are unsigned, so a record no costlier than this tile
+        // already dominates every edge into `next`: skip its terrain reads.
+        // Cancellation is still observed exactly where a read would check it.
+        let known = search.records.get(&next).map(|known| known.cost);
+        if known.is_some_and(|known| known <= active.cost) {
+            if (self.cancelled)() {
+                return Err(Terminal::Environment(EnvironmentPageError::Cancelled));
+            }
+            return Ok(());
+        }
         if !neighbor_clear(
             self.terrain,
             self.overlay,
@@ -164,14 +174,11 @@ impl<'a> ExpansionContext<'a> {
                 next,
                 self.cancelled,
             )?));
-        if search
-            .records
-            .get(&next)
-            .is_some_and(|known| known.cost <= next_cost)
-        {
+        // Terrain reads do not touch the search, so `known` is still current.
+        if known.is_some_and(|known| known <= next_cost) {
             return Ok(());
         }
-        let new_record = !search.records.contains_key(&next);
+        let new_record = known.is_none();
         let retained_after_insert = search
             .open
             .len()
