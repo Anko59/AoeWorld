@@ -20,6 +20,21 @@ pub(crate) struct Report {
     stages_ms: Stages,
     draw_calls: Quantiles,
     renderer: String,
+    contour: Contour,
+}
+/// Why a unit silhouette may be missing: cumulative frame counts since page
+/// load (effects on vs off), the last frame's eligible/occluder instances and
+/// depth span, and WebGL2 context loss/restore counters.
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct Contour {
+    effect_frames: u32,
+    plain_frames: u32,
+    eligible_instances: u32,
+    occluder_instances: u32,
+    depth_span: f64,
+    context_lost: u32,
+    context_restored: u32,
 }
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -37,6 +52,8 @@ impl Report {
         let s = &self.stages_ms;
         (1..=2048).contains(&self.frames)
             && matches!(self.renderer.as_str(), "webgl2" | "webgpu" | "canvas2d")
+            && self.contour.depth_span.is_finite()
+            && self.contour.depth_span >= 0.0
             && [
                 self.frame_ms,
                 self.draw_calls,
@@ -93,7 +110,8 @@ impl Reports {
         // Never log session secrets or trust client timing as server performance.
         tracing::info!(tick, frames = report.frames, frame_ms = ?report.frame_ms,
             stages_ms = ?serde_json::to_value(&report.stages_ms).ok(),
-            draw_calls = ?report.draw_calls, renderer = %report.renderer, "client frame summary");
+            draw_calls = ?report.draw_calls, renderer = %report.renderer,
+            contour = ?serde_json::to_value(&report.contour).ok(), "client frame summary");
         self.0.push_back(Entry {
             token,
             at: now,

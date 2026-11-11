@@ -375,6 +375,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }
         }
         drop(draw);
+        perf::contour(client.renderer.contour_stats());
         let ui_stage = perf::Scope::stage(5);
         let ui = perf::Scope::new(3);
         controls::navigation::present(&client);

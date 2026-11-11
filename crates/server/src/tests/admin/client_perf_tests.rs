@@ -18,7 +18,9 @@ fn report() -> Value {
         "stages_ms": {"update":[1.0,2.0,3.0], "interpolation":[0.0,1.0,2.0],
         "culling":[0.0,1.0,2.0], "terrain":[0.0,1.0,2.0],
         "sprites":[1.0,2.0,3.0], "ui":[0.0,1.0,2.0], "fog":[0.0,1.0,2.0]},
-        "draw_calls":[2.0,4.0,8.0], "renderer":"webgl2"})
+        "draw_calls":[2.0,4.0,8.0], "renderer":"webgl2",
+        "contour": {"effect_frames":30, "plain_frames":90, "eligible_instances":12,
+        "occluder_instances":40, "depth_span":180.5, "context_lost":1, "context_restored":1}})
 }
 
 #[tokio::test]
@@ -49,6 +51,8 @@ async fn authenticated_client_timings_are_bounded_rate_limited_and_visible_with_
     assert_eq!(status, 200);
     assert_eq!(body["clients"].as_array().unwrap().len(), 1);
     assert_eq!(body["clients"][0]["frame_ms"], json!([16.0, 32.0, 80.0]));
+    assert_eq!(body["clients"][0]["contour"]["effect_frames"], 30);
+    assert_eq!(body["clients"][0]["contour"]["context_lost"], 1);
     assert!(body.get("samples").is_some(), "tick summary retained");
     assert!(
         !body.to_string().contains(&token),

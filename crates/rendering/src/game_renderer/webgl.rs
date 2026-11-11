@@ -1,6 +1,6 @@
 //! WebGL2 middle tier sharing the WebGPU sprite ABI and depth normalization.
 //! The parent must replace a context-bound canvas before Canvas 2D recovery.
-use crate::web::{Sprite, normalize_depths};
+use crate::web::{ContourStats, Sprite, normalize_depths_with_stats};
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
@@ -43,6 +43,10 @@ extern "C" {
     fn buffer_bytes(this: &GlBridge) -> usize;
     #[wasm_bindgen(method, getter, js_name = textureBytes)]
     fn texture_bytes(this: &GlBridge) -> usize;
+    #[wasm_bindgen(method, getter, js_name = contextLostCount)]
+    fn context_lost_count(this: &GlBridge) -> u32;
+    #[wasm_bindgen(method, getter, js_name = contextRestoredCount)]
+    fn context_restored_count(this: &GlBridge) -> u32;
 }
 
 #[wasm_bindgen(module = "/src/game_renderer/webgl/shaders.js")]
@@ -60,9 +64,18 @@ extern "C" {
 pub struct WebGlRenderer {
     bridge: GlBridge,
     source_atlas: Vec<u8>,
+    stats: ContourStats,
 }
 
 impl WebGlRenderer {
+    pub(super) fn contour_stats(&self) -> ContourStats {
+        ContourStats {
+            context_lost: self.bridge.context_lost_count(),
+            context_restored: self.bridge.context_restored_count(),
+            ..self.stats
+        }
+    }
+
     pub(super) fn atlas_pages(&self) -> u32 {
         (self.source_atlas.len() / crate::GAME_ATLAS_PAGE_BYTES) as u32
     }
@@ -104,6 +117,7 @@ impl WebGlRenderer {
             bridge: GlBridge::create(canvas, &coverage_shaders(&terrain_shaders()))
                 .map_err(error)?,
             source_atlas: Vec::new(),
+            stats: ContourStats::default(),
         })
     }
 
@@ -151,14 +165,19 @@ impl WebGlRenderer {
             .checked_mul(INSTANCE_BYTES)
             .filter(|bytes| *bytes <= MAX_INSTANCE_BYTES)
             .ok_or_else(|| "WebGL2 instance buffer exceeds 64 MiB".to_owned())?;
-        let effects = normalize_depths(sprites);
+        let depth = normalize_depths_with_stats(sprites);
         // wasm-bindgen borrows a memory view for this synchronous import.
         // The bridge uploads immediately and never retains the packet or awaits.
         // The bridge independently rejects oversized packets before allocating
         // exactly their byte length; no extra capacity or retained CPU packet.
-        self.bridge
-            .render(bytemuck::cast_slice(sprites), black, effects)
-            .map_err(error)
+        let presented = self
+            .bridge
+            .render(bytemuck::cast_slice(sprites), black, depth.effects())
+            .map_err(error)?;
+        if presented {
+            self.stats.record(depth);
+        }
+        Ok(presented)
     }
 }
 

@@ -188,6 +188,24 @@ test("frame telemetry runs with the overlay hidden and posts bounded stage summa
     ].sort(),
   );
   expect((report["draw_calls"] as number[])[2]).toBeGreaterThan(0);
+  const contour = report["contour"] as Record<string, number>;
+  expect(Object.keys(contour).sort()).toEqual(
+    [
+      "context_lost",
+      "context_restored",
+      "depth_span",
+      "effect_frames",
+      "eligible_instances",
+      "occluder_instances",
+      "plain_frames",
+    ].sort(),
+  );
+  expect(Object.values(contour).every(Number.isFinite)).toBe(true);
+  // Every submitted frame is counted as effects-on or effects-off.
+  expect(
+    (contour["effect_frames"] ?? 0) + (contour["plain_frames"] ?? 0),
+  ).toBeGreaterThan(0);
+  expect(contour["context_lost"]).toBe(0);
 });
 
 test("summary percentiles retain stalls and stage totals without unbounded history", async ({
