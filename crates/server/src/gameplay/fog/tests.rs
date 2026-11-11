@@ -16,7 +16,7 @@ fn showcase_enemy_building_starts_unexplored_and_can_be_remembered() {
         .buildings()
         .find(|b| b.player == PlayerId(1))
         .expect("fog showcase needs a real enemy building for memory capture")
-        .clone();
+        .into_owned();
     assert_eq!(
         world.visibility(PlayerId(0), enemy.footprint.min),
         TileVisibility::Unexplored

@@ -264,6 +264,8 @@ impl GameWorld {
         previous_tile: TileCoord,
         unit: &GameUnit,
     ) {
+        self.wake_construction_at(previous_tile);
+        self.wake_construction_at(unit.position.tile_floor());
         let tile = unit.position.tile_floor();
         // The spacing index stores tile membership, not sub-tile positions. Keep
         // the exact collision and wildlife mirrors, which queries do observe.
@@ -315,6 +317,7 @@ impl GameWorld {
     }
 
     pub(crate) fn untrack_unit_at(&mut self, id: EntityId, at: WorldPosition) {
+        self.wake_construction_at(at.tile_floor());
         self.collisions.remove(
             id,
             at.tile_floor(),
@@ -325,6 +328,7 @@ impl GameWorld {
     }
 
     pub(crate) fn track_unit_death(&mut self, id: EntityId, at: WorldPosition) {
+        self.wake_construction_at(at.tile_floor());
         self.collisions.remove(
             id,
             at.tile_floor(),

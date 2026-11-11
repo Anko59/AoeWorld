@@ -25,7 +25,7 @@ fn houses(w: &mut GameWorld, count: i32) {
 }
 fn villager_orders(w: &GameWorld) -> usize {
     w.buildings()
-        .flat_map(|b| b.training_queue.iter())
+        .flat_map(|b| b.training_queue.iter().copied().collect::<Vec<_>>())
         .filter(|e| e.kind == UnitKind::Villager)
         .count()
 }

@@ -84,7 +84,9 @@ pub(super) fn match_state(world: &GameWorld, seats: &[SlotInfo]) -> Value {
                                   "gold": resources.gold, "stone": resources.stone});
     }
     // Shelter occupants retain population and identity outside map storage.
-    let sheltered = world.buildings().flat_map(occupants);
+    let sheltered = world
+        .buildings()
+        .flat_map(|b| occupants(&b).collect::<Vec<_>>());
     for (unit, at) in world
         .units()
         .map(|u| (u, u.position))

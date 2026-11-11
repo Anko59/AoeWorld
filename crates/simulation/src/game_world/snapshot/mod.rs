@@ -86,6 +86,7 @@ impl GameWorld {
             .economy
             .buildings
             .values()
+            .map(|b| self.economy.construction.project(b))
             .map(|b| BuildingRecord {
                 id: b.id,
                 player: b.player,
@@ -147,6 +148,7 @@ impl GameWorld {
             self.economy.players.insert(player.player, *player);
         }
         self.tick = aoe_core::Tick(snapshot.tick);
+        self.economy.construction.tick = snapshot.tick;
         self.restore_explored(&snapshot.explored);
         let mut report = RestoreReport::default();
         // Identities are placed one at a time at their own number: buildings

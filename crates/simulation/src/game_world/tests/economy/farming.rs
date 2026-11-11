@@ -106,6 +106,12 @@ fn a_farm_builder_waits_for_a_work_tile_instead_of_losing_its_farm_job() {
     finish(&mut world, farm, 700);
     assert_eq!(world.gather_target(farmer), None);
     assert!(world.economy.builders.contains_key(&farmer));
+    let visits = world.construction_work().visits;
+    advance(&mut world, 100);
+    assert!(
+        world.construction_work().visits - visits <= 10,
+        "farm staffing waits for its retry tick"
+    );
     for id in blockers {
         world.remove_unit(id);
     }

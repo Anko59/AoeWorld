@@ -71,7 +71,7 @@ impl GameWorld {
     /// The last load has been delivered. Rebuild in place with normal work
     /// time, then construction's usual completion path restores this farmer.
     pub(super) fn reseed_farm(&mut self, worker: EntityId, farm: EntityId) -> bool {
-        let Some(old) = self.building(farm).cloned() else {
+        let Some(old) = self.building(farm).map(|b| b.into_owned()) else {
             return false;
         };
         let center = TileCoord::new(old.footprint.min.x + 1, old.footprint.min.y + 1);

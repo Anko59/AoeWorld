@@ -169,7 +169,7 @@ fn farming_showcase_starts_with_twenty_four_workers_and_empty_farmland() {
     );
     assert_eq!(
         w.player_buildings_of(PlayerId(0), BuildingKind::TownCenter)
-            .flat_map(|b| &b.training_queue)
+            .flat_map(|b| b.training_queue.iter().copied().collect::<Vec<_>>())
             .filter(|entry| entry.kind == UnitKind::Villager)
             .count(),
         0,

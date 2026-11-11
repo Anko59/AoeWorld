@@ -86,7 +86,7 @@ impl GameWorld {
         if !shelter.kind.admits(actor.kind) {
             return Err(EconomyError::WrongUnitKind);
         }
-        if actor.kind == UnitKind::Steward && self.steward_reserved(shelter, Some(unit)) {
+        if actor.kind == UnitKind::Steward && self.steward_reserved(&shelter, Some(unit)) {
             return Err(EconomyError::StewardExists);
         }
         let reserved = usize::from(

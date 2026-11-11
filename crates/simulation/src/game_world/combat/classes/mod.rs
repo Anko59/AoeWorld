@@ -89,7 +89,7 @@ impl GameWorld {
         let melee = self.unit_armour(target).map(|a| a.0).or_else(|| {
             self.building(target).map(|b| {
                 super::age_armour(b.kind, b.age).melee_armour
-                    + i16::from(self.building_has_masonry(b))
+                    + i16::from(self.building_has_masonry(&b))
             })
         });
         bonus + melee.map_or(0, |a| (1_i32 - i32::from(a)).max(0) as u16)
@@ -109,7 +109,7 @@ impl GameWorld {
             return SECONDARY_BONUSES[0][index][v.kind as usize];
         }
         self.building(target).map_or(0, |v| {
-            SECONDARY_BONUSES[usize::from(self.building_has_masonry(v))][index]
+            SECONDARY_BONUSES[usize::from(self.building_has_masonry(&v))][index]
                 [UNITS + v.kind as usize]
         })
     }
@@ -123,7 +123,7 @@ impl GameWorld {
 
     fn building_class_bonus(&self, attacker: usize, target: EntityId) -> u16 {
         self.building(target).map_or(0, |v| {
-            BONUSES[usize::from(self.building_has_masonry(v))][attacker][UNITS + v.kind as usize]
+            BONUSES[usize::from(self.building_has_masonry(&v))][attacker][UNITS + v.kind as usize]
         })
     }
 

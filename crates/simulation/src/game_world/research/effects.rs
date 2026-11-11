@@ -131,6 +131,13 @@ impl GameWorld {
     ) {
         // Rates and carry capacity change: dozing workers re-check.
         self.wake_player_gatherers(player);
+        let sites = self
+            .player_buildings(player)
+            .map(|b| b.id)
+            .collect::<Vec<_>>();
+        for id in sites {
+            self.wake_construction(id);
+        }
         let Some(state) = self.economy.players.get_mut(&player) else {
             return;
         };

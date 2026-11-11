@@ -88,7 +88,8 @@ impl Economy {
             hash.update(&id.0.to_le_bytes());
         }
         hash.update(&(self.buildings.len() as u64).to_le_bytes());
-        for building in self.buildings.values() {
+        for stored in self.buildings.values() {
+            let building = self.construction.project(stored);
             hash.update(&[building.farm_reseeds]);
             if let Some(span) = building.bridge_span {
                 for c in [span.from.x, span.from.y, span.to.x, span.to.y] {

@@ -5,6 +5,7 @@ mod approach;
 mod continuation;
 mod crowd;
 mod eject;
+mod timers;
 
 #[test]
 fn six_builders_reserve_distinct_perimeter_tiles_before_and_after_arrival() {

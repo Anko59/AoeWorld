@@ -162,7 +162,7 @@ fn steward_controls_apply_owned_settings_and_dismiss_and_echo_only_to_owner() {
         CommandResult::Accepted
     );
     let native = world.building(castle).unwrap();
-    let own = crate::gameplay::economy::wire_building_state(native, Some(owner));
+    let own = crate::gameplay::economy::wire_building_state(&native, Some(owner));
     let report = own
         .garrison
         .iter()
@@ -175,7 +175,7 @@ fn steward_controls_apply_owned_settings_and_dismiss_and_echo_only_to_owner() {
         (settings.weights, 75, true)
     );
     assert!(
-        crate::gameplay::economy::wire_building_state(native, Some(PlayerId(1)))
+        crate::gameplay::economy::wire_building_state(&native, Some(PlayerId(1)))
             .garrison
             .is_empty()
     );
@@ -214,7 +214,7 @@ fn vassal_development_cannot_be_changed_by_another_owner() {
     world.advance();
     let vassal = world
         .buildings()
-        .flat_map(|b| &b.garrison)
+        .flat_map(|b| b.garrison.to_vec())
         .find(|g| g.unit.kind == UnitKind::Vassal)
         .unwrap()
         .unit

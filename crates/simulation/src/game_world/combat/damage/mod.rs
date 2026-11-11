@@ -164,7 +164,7 @@ impl GameWorld {
             }
         } else if let Some(building) = self.building(target) {
             let armour = super::table::age_armour(building.kind, building.age);
-            let masonry = self.building_has_masonry(building);
+            let masonry = self.building_has_masonry(&building);
             let raw = super::table::damage_components(
                 attack,
                 kind,
@@ -174,6 +174,7 @@ impl GameWorld {
             );
             let hp =
                 self.apply_combat_damage(attacker_id, target, building.hp, raw, power.elevation);
+            self.wake_construction(target);
             let Some(building) = self.building_mut(target) else {
                 return;
             };

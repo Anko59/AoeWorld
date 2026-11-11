@@ -1,12 +1,13 @@
 //! Mutable economy indexes and test-only work accounting.
 use super::{
-    BuildTask, BuildingKind, GameBuilding, GarrisonedUnit, PlayerEconomy, WorldLimits, farm,
-    gathering, scouting, steward,
+    BuildingKind, GameBuilding, GarrisonedUnit, PlayerEconomy, WorldLimits, farm, gathering,
+    scouting, steward,
 };
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 use std::collections::{BTreeMap, BTreeSet};
 mod census;
 mod income;
+mod query;
 
 #[cfg(test)]
 #[derive(Debug, Default)]
@@ -17,6 +18,7 @@ pub(crate) struct TickWork {
     /// Cumulative gatherer visits, and those that slept through the step.
     pub(crate) gather_visits: usize,
     pub(crate) gather_slept: usize,
+    pub(crate) builder_slept: usize,
 }
 
 #[derive(Debug, Default)]
@@ -70,7 +72,8 @@ pub(crate) struct Economy {
     pub(crate) late_changed: Vec<EntityId>,
     /// Benchmark counters (`GameWorld::gather_work`). Not replay state.
     pub(crate) gather_work: super::gathering::GatherCounters,
-    pub(crate) builders: BTreeMap<EntityId, BuildTask>,
+    pub(crate) builders: super::construction::Builders,
+    pub(crate) construction: super::construction::ConstructionTimers,
     pub(crate) depletions: Vec<aoe_map::Depletion>,
     pub(crate) limits: WorldLimits,
 }

@@ -50,7 +50,7 @@ async fn vassal_demo_delivers_attack_recall_and_return() {
                 .any(|u| u.player == PlayerId(0) && u.last_hit.is_some());
             for report in buildings
                 .iter()
-                .flat_map(|b| &b.garrison)
+                .flat_map(|b| b.garrison.to_vec())
                 .filter_map(|g| g.vassal)
             {
                 if report.alert && !alert {
