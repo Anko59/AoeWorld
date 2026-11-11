@@ -320,9 +320,15 @@ Final implementation validation passed:
 - Focused source-event/acquisition/General checks: 59 passed; final walking/queue/General checks: 20 passed. The five General summaries still match the base byte for byte.
 - Workload sanity retains the four-training-site, two-research-site and spawn-inspection floors on the full-step reference, and compares changes and hashes every warm-up tick. Sleeping therefore cannot pass by removing the workload.
 
-The final required `NEXTEST_TEST_THREADS=2 make -j1 preflight` command and
-outcome are recorded in `.cache/7b-body.md`, with complete output retained in
-`.cache/7b-preflight.log`.
+`NEXTEST_TEST_THREADS=2 make -j1 preflight` failed at `deny` (Make exit 2)
+on documentation revision `1c4e5e9cc7d7be6fddb733b8bc28267e84a71bfe`:
+the unchanged `rustix 1.1.5` dependency triggers `RUSTSEC-2026-0486`.
+`Cargo.lock` is byte-identical to the measured base. This dependency issue is
+outside the timer branch's scope; no advisory exception was added. The aggregate
+has not passed. Complete output and advisory details are retained in
+`.cache/7b-preflight.log` and `.cache/7b-preflight-deny-process.log`.
+The independently run remaining checks and their outcomes are recorded in
+`.cache/7b-body.md`, with output in `.cache/7b-preflight-remaining.log`.
 
 ## Local video evidence
 
