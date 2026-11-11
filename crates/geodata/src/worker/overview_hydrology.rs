@@ -28,6 +28,14 @@ impl OverviewHydrologyPreflight {
     pub fn has_vectors(&self) -> bool {
         self.footprint.is_some()
     }
+    /// The pinned vector inputs this plan acquires: none, or HydroLAKES and
+    /// the HydroRIVERS region whose extent contains the footprint.
+    pub fn vector_sources(&self) -> Result<Vec<crate::KnownSource>, GeodataError> {
+        self.footprint
+            .as_ref()
+            .map(|footprint| Ok(crate::hydrology_vector_sources(footprint.rivers()?)))
+            .unwrap_or(Ok(Vec::new()))
+    }
     pub(super) fn validate_binding(
         &self,
         request: MapRequest,
@@ -174,7 +182,22 @@ impl GeneratedMap {
                 "invalid overview vector composition",
             ));
         }
-        for source in crate::hydrology_vector_sources() {
+        // HydroLAKES plus exactly one wired HydroRIVERS region, each pinned.
+        let rivers = crate::HYDRORIVERS_REGIONS
+            .iter()
+            .filter(|region| {
+                hydrology
+                    .source_locks
+                    .iter()
+                    .any(|lock| lock.id == region.id())
+            })
+            .collect::<Vec<_>>();
+        let [rivers] = rivers.as_slice() else {
+            return Err(GeodataError::Preparation(
+                "vector source lock does not match pinned input",
+            ));
+        };
+        for source in crate::hydrology_vector_sources(rivers) {
             let expected = source
                 .cache_lock()
                 .ok_or(GeodataError::Preparation("vector source is not pinned"))?;

@@ -260,10 +260,10 @@ impl MapPackage {
             || (note == PreparationNote::GeographicWorkerUnavailable
                 && (!self.source_locks.is_empty()
                     || self.environment != PreparedEnvironment::default()))
-            || self.source_locks.iter().any(|lock| {
-                ["hydrolakes-v1.0-global-gdb", "hydrorivers-v1.0-eu-shp"]
-                    .contains(&lock.id.as_str())
-            })
+            || self
+                .source_locks
+                .iter()
+                .any(|lock| crate::is_vector_hydrology_lock(&lock.id))
         {
             return Err(MapPackageError::NonCanonicalFields);
         }

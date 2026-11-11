@@ -61,7 +61,7 @@ impl Sampler {
         tiles: Vec<Tile>,
         ocean: Vec<u8>,
         lakes_path: &Path,
-        rivers_path: Option<&Path>,
+        rivers_path: Option<(&Path, &str)>,
     ) -> Result<Self, GeodataError> {
         if tiles.is_empty() {
             return Err(GeodataError::Preparation(
@@ -76,7 +76,7 @@ impl Sampler {
         axis: u16,
         ocean: Vec<u8>,
         lakes_path: &Path,
-        rivers_path: Option<&Path>,
+        rivers_path: Option<(&Path, &str)>,
     ) -> Result<Self, GeodataError> {
         Self::open(request, axis, Vec::new(), ocean, lakes_path, rivers_path)
     }
@@ -87,7 +87,7 @@ impl Sampler {
         tiles: Vec<Tile>,
         ocean: Vec<u8>,
         lakes_path: &Path,
-        rivers_path: Option<&Path>,
+        rivers_path: Option<(&Path, &str)>,
     ) -> Result<Self, GeodataError> {
         if ocean.len() != usize::from(axis).pow(2) {
             return Err(GeodataError::Preparation(
@@ -97,7 +97,7 @@ impl Sampler {
         let reopen = Reopen {
             tiles: tiles.clone(),
             lakes: lakes_path.to_path_buf(),
-            rivers: rivers_path.map(Path::to_path_buf),
+            rivers: rivers_path.map(|(path, member)| (path.to_path_buf(), member.to_owned())),
         };
         let tiles = tiles
             .into_iter()
@@ -111,7 +111,7 @@ impl Sampler {
             .collect::<Result<Vec<_>, GeodataError>>()?;
         let lakes = open_vector_source(lakes_path, super::LAKES_MEMBER)?;
         let rivers = rivers_path
-            .map(|path| open_vector_source(path, super::RIVERS_MEMBER))
+            .map(|(path, member)| open_vector_source(path, member))
             .transpose()?;
         Ok(Self {
             request,

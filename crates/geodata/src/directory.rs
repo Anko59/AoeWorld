@@ -9,7 +9,10 @@ use std::{
 };
 
 pub const DIRECTORY_SCHEMA_VERSION: u16 = 1;
-pub const MAX_DIRECTORY_MANIFEST_BYTES: u64 = 64 * 1024;
+/// A GLO-90 overview may lock up to 96 one-degree tiles (about 650 bytes
+/// each) beside the overview and vector locks: about 80 KB at a Country map
+/// near the equator, so 64 KiB rejected it after preparation.
+pub const MAX_DIRECTORY_MANIFEST_BYTES: u64 = 128 * 1024;
 pub const MAX_DIRECTORY_PAGE_BYTES: u64 = 128 * 1024;
 
 mod page;

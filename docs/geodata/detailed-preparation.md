@@ -42,8 +42,9 @@ Hydrology samples currently cap at 1024 per axis; denser DEM grids nearest-map
 those categories and do not imply finer water evidence.
 
 Detailed water preparation also samples every WorldCover 2021 tile intersecting
-the conservative request bounds, plus global HydroLAKES. The current HydroRIVERS
-input is the Europe/Middle East release. The opened pinned dataset's extent
+the conservative request bounds, plus global HydroLAKES. HydroRIVERS comes from the
+first pinned regional release (Europe/Middle East, then Asia) whose extent
+contains the footprint, as described in [rivers](rivers.md). That extent
 sets coverage; every explicit hydrology path rejects an uncovered projected
 footprint before cache or input access. Automatic overview instead records that
 the area is outside river coverage and omits hydrology before acquiring overview

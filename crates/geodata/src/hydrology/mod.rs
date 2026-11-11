@@ -1,6 +1,7 @@
 use crate::{
-    GeodataError, KnownSource, SourceCache, acquisition_marker, hydrology_vector_sources,
-    worldcover_sources_for_bounds_cached, worldcover_tile_ids,
+    GeodataError, HYDRORIVERS_REGIONS, HydroRiversRegion, KnownSource, SourceCache,
+    acquisition_marker, hydrology_vector_sources, worldcover_sources_for_bounds_cached,
+    worldcover_tile_ids,
 };
 use aoe_map::{
     HydrologyEvidenceIndex, HydrologyEvidencePage, HydrologyWaterPolicy, MapRequest,
@@ -71,7 +72,6 @@ const WORLD_COVER_NODATA: u8 = 0;
 const WORLD_COVER_PERMANENT_WATER: u8 = 80;
 const WORLD_COVER_WETLAND: u8 = 90;
 const LAKES_MEMBER: &str = "HydroLAKES_polys_v10.gdb";
-const RIVERS_MEMBER: &str = "HydroRIVERS_v10_eu_shp/HydroRIVERS_v10_eu.shp";
 
 pub type HydrologyPage = HydrologyEvidencePage;
 
@@ -288,7 +288,7 @@ pub(crate) fn preflight_hydrology(
         &cache,
     )?;
     let mut sources = worldcover.clone();
-    sources.extend(hydrology_vector_sources());
+    sources.extend(hydrology_vector_sources(footprint.rivers()?));
     let estimate = cache.estimate_known_acquisition(&sources)?;
     if estimate.download_bytes > crate::MAX_HYDROLOGY_DOWNLOAD_BYTES {
         return Err(GeodataError::Preparation(
@@ -391,19 +391,24 @@ fn prepare_with_plan(
         .ok_or(GeodataError::Preparation(
             "HydroLAKES cache path is missing",
         ))?;
-    let river_path = paths
-        .get("hydrorivers-v1.0-eu-shp")
-        .ok_or(GeodataError::Preparation(
-            "HydroRIVERS cache path is missing",
-        ))?;
-    let rivers = Some(river_path.as_path());
+    let region = plan.footprint.rivers()?;
+    let river_path = paths.get(&region.id()).ok_or(GeodataError::Preparation(
+        "HydroRIVERS cache path is missing",
+    ))?;
+    let river_member = region.member();
+    let rivers = Some((river_path.as_path(), river_member.as_str()));
     {
         use gdal::vector::LayerAccess;
-        let dataset = hydrology_sampling::open_vector_source(river_path, RIVERS_MEMBER)?;
+        let dataset = hydrology_sampling::open_vector_source(river_path, &river_member)?;
         let extent = dataset.layer(0)?.get_extent()?;
-        let pinned = vectors::PINNED_RIVER_EXTENT;
+        let pinned = region.extent;
         if [extent.MinX, extent.MaxX, extent.MinY, extent.MaxY]
-            != [pinned.MinX, pinned.MaxX, pinned.MinY, pinned.MaxY]
+            != [
+                pinned.min_longitude,
+                pinned.max_longitude,
+                pinned.min_latitude,
+                pinned.max_latitude,
+            ]
         {
             return Err(GeodataError::Preparation(
                 "opened river dataset extent differs from pinned metadata",

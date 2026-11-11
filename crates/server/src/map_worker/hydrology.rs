@@ -14,10 +14,11 @@ pub(super) fn verify(package: &MapPackage, mode: HydrologyMode) -> Result<(), St
         return if package.preparation_notes == [aoe_map::PreparationNote::OutsideRiverCoverage]
             && aoe_map::overview_base_lock_count(&package.source_locks)
                 == aoe_map::LANDSCAPE_OVERVIEW_SOURCE_LOCKS
-            && !package.source_locks.iter().any(|lock| {
-                ["hydrolakes-v1.0-global-gdb", "hydrorivers-v1.0-eu-shp"]
-                    .contains(&lock.id.as_str())
-            }) {
+            && !package
+                .source_locks
+                .iter()
+                .any(|lock| aoe_map::is_vector_hydrology_lock(&lock.id))
+        {
             Ok(())
         } else {
             Err("automatic worker omitted rivers without an explicit coverage outcome".to_owned())
@@ -28,10 +29,29 @@ pub(super) fn verify(package: &MapPackage, mode: HydrologyMode) -> Result<(), St
         || index.samples_per_axis != aoe_map::LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS
         || index.water_model.is_none()
         || aoe_map::overview_base_lock_count(&package.source_locks) != VECTOR_OVERVIEW_SOURCE_LOCKS
-        || ["hydrolakes-v1.0-global-gdb","hydrorivers-v1.0-eu-shp"].iter().any(|id|
-            !package.source_locks.iter().any(|lock| lock.id == *id && lock.preprocessing_version.contains(
-                "modern-landcover=not-requested;modern-class=0-nodata;2021=classification-legend-only"))) {
+        || !vector_locks_are_marked(package)
+    {
         return Err("vector worker returned incompatible hydrology metadata".to_owned());
     }
     Ok(())
+}
+
+/// HydroLAKES and exactly one regional HydroRIVERS lock, both from vector-only
+/// preparation (modern land cover not requested).
+fn vector_locks_are_marked(package: &MapPackage) -> bool {
+    const MARKER: &str =
+        "modern-landcover=not-requested;modern-class=0-nodata;2021=classification-legend-only";
+    let marked = |lock: &&aoe_map::SourceLock| lock.preprocessing_version.contains(MARKER);
+    let lakes = package
+        .source_locks
+        .iter()
+        .filter(|lock| lock.id == aoe_map::HYDROLAKES_SOURCE_ID)
+        .filter(marked)
+        .count();
+    let rivers = package
+        .source_locks
+        .iter()
+        .filter(|lock| aoe_map::is_hydrorivers_lock(&lock.id))
+        .collect::<Vec<_>>();
+    lakes == 1 && rivers.len() == 1 && rivers.iter().all(marked)
 }
