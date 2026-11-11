@@ -131,6 +131,7 @@ impl GameWorld {
     ) {
         // Rates and carry capacity change: dozing workers re-check.
         self.combat.quiet.clear();
+        self.combat.healing.wake_all();
         self.wake_player_gatherers(player);
         let sites = self
             .player_buildings(player)

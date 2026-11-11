@@ -126,6 +126,7 @@ impl GameWorld {
         }
         if origin == destination {
             self.combat.quiet.wake(id);
+            self.combat.healing.wake(id);
             self.leave_group(id);
             self.move_queues.remove(&id);
             self.clear_planner(index);
@@ -155,6 +156,7 @@ impl GameWorld {
             };
         let speed_carry = self.units[index].order.map_or(0, |order| order.speed_carry);
         self.combat.quiet.wake(id);
+        self.combat.healing.wake(id);
         self.leave_group(id);
         self.move_queues.remove(&id);
         let dx = i64::from(waypoint.x) - i64::from(origin.x);

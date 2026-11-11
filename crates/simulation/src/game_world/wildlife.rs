@@ -119,9 +119,8 @@ impl Wildlife {
     pub(crate) fn take_unit_changes(&mut self) -> BTreeSet<EntityId> {
         self.hunts.take_changes()
     }
-    /// Ids that currently hold a hunt job.
-    pub(crate) fn hunter_ids(&self) -> impl Iterator<Item = &EntityId> {
-        self.hunts.keys()
+    pub(crate) fn has_hunt(&self, id: EntityId) -> bool {
+        self.hunts.contains_key(&id)
     }
 
     pub(crate) fn is_idle(&self) -> bool {
@@ -234,6 +233,10 @@ impl GameWorld {
     }
 
     pub(crate) fn track_unit_cell(&mut self, unit: &GameUnit) {
+        self.combat.healing.wake(unit.id);
+        if unit.hp > 0 && unit.hp < unit.max_hp && !unit.kind.is_naval() && !unit.kind.is_siege() {
+            self.combat.healing.notify(unit.position.tile_floor());
+        }
         self.economy
             .gatherers
             .notify_walkers_at(unit.position.tile_floor());
@@ -269,6 +272,11 @@ impl GameWorld {
         unit: &GameUnit,
     ) {
         self.combat.quiet.wake(id);
+        self.combat.healing.wake(id);
+        if unit.hp > 0 && unit.hp < unit.max_hp && !unit.kind.is_naval() && !unit.kind.is_siege() {
+            self.combat.healing.notify(previous_tile);
+            self.combat.healing.notify(unit.position.tile_floor());
+        }
         self.economy.gatherers.notify_walkers_at(previous_tile);
         self.wake_queue_exits(previous_tile);
         self.economy

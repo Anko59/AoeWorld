@@ -323,6 +323,7 @@ impl GameWorld {
     #[inline(never)] // a symbol of its own for the Callgrind stage counters
     pub(crate) fn update_unit_vision(&mut self, id: EntityId) {
         self.combat.quiet.wake(id);
+        self.combat.healing.wake(id);
         let observer = self.unit(id).and_then(|u| self.unit_observer(&u));
         self.update_observer(id, observer);
     }

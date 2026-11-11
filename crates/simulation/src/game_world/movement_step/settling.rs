@@ -233,6 +233,7 @@ impl GameWorld {
         }
         self.index_destination(unit.id);
         self.economy.gatherers.wake_walking(unit.id);
+        self.combat.healing.wake(unit.id);
         true
     }
 }

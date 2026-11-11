@@ -107,6 +107,7 @@ pub(crate) struct Combat {
     /// Current phase's admission floor; cleared before returning to callers.
     pub(crate) pursuit_floor: Option<EntityId>,
     pub(crate) healers: BTreeSet<EntityId>,
+    pub(crate) healing: castle::Rest,
     pub(crate) projectiles: BTreeMap<u64, Projectile>,
     pub(crate) next_projectile: u64,
     pub(crate) tower_ready: BTreeMap<EntityId, u64>,
@@ -139,6 +140,7 @@ impl Default for Combat {
             pursuit_cursor: None,
             pursuit_floor: None,
             healers: Default::default(),
+            healing: Default::default(),
             projectiles: Default::default(),
             next_projectile: 0,
             tower_ready: Default::default(),
@@ -288,6 +290,7 @@ impl GameWorld {
     /// the unit (`StoredUnit::next_hit_tick`), so no order sequence can speed it up.
     pub(crate) fn begin_attack(&mut self, id: EntityId, target: EntityId) {
         self.combat.quiet.wake(id);
+        self.combat.healing.wake(id);
         self.cancel_auto_scout(id);
         self.combat.resuming.remove(&id);
         let Some(&index) = self.lookup.get(&id) else {

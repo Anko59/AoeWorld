@@ -50,6 +50,7 @@ impl GameWorld {
     /// replay oracle compares both settings hash for hash.
     pub fn set_work_sleep(&mut self, enabled: bool) {
         self.combat.quiet.clear();
+        self.combat.healing.wake_all();
         self.economy.no_sleep = !enabled;
     }
 

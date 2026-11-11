@@ -141,6 +141,35 @@ hook checks passed. All three long replay oracles passed before that admission
 refactor; the final rerun is retained separately in
 `.cache/acquisition-admission-replay.log`.
 
+## Other idle work
+
+Movement's immutable proposal reads job ownership only for its own mover. It no
+longer clears or rebuilds a dense bitmap from every gatherer, hunter, attacker
+and builder for each proposal batch. The legacy `tables_refresh` population
+counter therefore records zero job visits; player-value caching and reusable
+proposal/mover buffers remain. The eight-tick late-game cost assertion failed
+with 128,000 memberships enumerated before the change and passed with zero.
+The buffer-reuse test now checks the remaining player table's actual allocation.
+
+Monks without a healable patient leave the ordered awake set. They subscribe to
+the spatial buckets around their healing radius. Combat and wildlife wounds,
+wounded unit movement and insertion, source movement/termination, embarkation,
+removal, and research wake the appropriate work. Healthy passing workers do not
+wake a resting Monk. Moving or embarked Monks wait on source events; the original
+healing cadence and entity ordering are unchanged. The sleep-off oracle retains
+the original full healer rotation. Test builds reject an empty-region proof
+that acquired a patient without a wake, or an unavailable Monk that became ready.
+
+The healthy-crowd test measured 960 bucket entries scanned over 240 ticks before
+the change; its sleep-on bound is fewer than 64 with every tick's changes and hash
+equal to sleep off. Ten initial tests passed, including genuine damage, wounded
+movement within one bucket, healthy motion, the missed-wake detector, embarked
+Monk healing suspension/resumption, and movement buffer reuse. Formatting, lint,
+structure and architecture checks passed. Broader and final replay runs are
+retained in `.cache/rest-focused.log` and `.cache/rest-replay.log`.
+The broader run passed 312 tests; all five General engagement results still
+match the baseline byte for byte.
+
 ## Local video evidence
 
 The construction baseline is `.cache/showcase/7b-construction-before-vp9.webm`:

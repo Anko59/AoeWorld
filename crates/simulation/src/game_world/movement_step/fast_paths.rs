@@ -111,6 +111,7 @@ impl GameWorld {
                 self.units[step.index].order = step.order;
                 if step.order.is_none() {
                     self.economy.gatherers.wake_walking(step.state.id);
+                    self.combat.healing.wake(step.state.id);
                 }
             }
             if step.keeps_moving {

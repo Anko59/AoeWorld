@@ -102,6 +102,7 @@ impl GameWorld {
         let (id, position) = (state.id, state.position);
         if state.kind == UnitKind::Monk {
             self.combat.healers.insert(id);
+            self.combat.healing.register(id);
         }
         if super::combat::acquisition::autonomous_kind(state.kind) {
             self.combat.seekers.insert(id);

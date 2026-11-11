@@ -142,7 +142,8 @@ impl GameWorld {
             let victim = &mut self.units[victim_index].state;
             victim.hp = hp;
             victim.last_hit = Some(hit);
-            let (hp, victim_player) = (victim.hp, victim.player);
+            let (hp, victim_player, at) = (victim.hp, victim.player, victim.position.tile_floor());
+            self.combat.healing.notify(at);
             self.record_combat_hit(
                 Some(attacker_player),
                 victim_player,

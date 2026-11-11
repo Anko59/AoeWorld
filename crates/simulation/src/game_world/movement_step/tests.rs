@@ -68,6 +68,9 @@ fn a_snapshot_with_overfull_cells_cannot_certify_an_ordered_group_step() {
 #[test]
 fn movement_reuses_proposals_and_dense_tables_between_ticks() {
     let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(0)).unwrap()).unwrap();
+    world
+        .place_town_center(aoe_core::PlayerId(0), TileCoord::new(5, 5))
+        .unwrap();
     for n in 0..64 {
         let at = WorldPosition::from_tile_center(TileCoord::new(20 + n % 8, 20 + n / 8)).unwrap();
         let id = world.spawn_unit(PlayerId(0), at).unwrap();
@@ -77,13 +80,14 @@ fn movement_reuses_proposals_and_dense_tables_between_ticks() {
     }
     world.advance();
     let proposals = world.movement_scratch.proposals.as_ptr();
-    let busy = world.movement_scratch.tables.busy.as_ptr();
+    let economies = world.movement_scratch.tables.economies.as_ptr();
+    assert!(world.movement_scratch.tables.economies.capacity() > 0);
     let spare = world.movement_scratch.movers.as_ptr();
     world.advance();
     world.advance();
     assert_eq!(world.active_mover_count(), 64);
     assert_eq!(world.movement_scratch.proposals.as_ptr(), proposals);
-    assert_eq!(world.movement_scratch.tables.busy.as_ptr(), busy);
+    assert_eq!(world.movement_scratch.tables.economies.as_ptr(), economies);
     assert_eq!(world.movement_scratch.movers.as_ptr(), spare);
 }
 
@@ -101,7 +105,7 @@ fn an_idle_population_does_not_build_movement_tables() {
     }
     world.advance();
     assert_eq!(world.movement_scratch.proposals.capacity(), 0);
-    assert_eq!(world.movement_scratch.tables.busy.capacity(), 0);
+    assert_eq!(world.movement_scratch.tables.economies.capacity(), 0);
 }
 
 #[test]

@@ -108,6 +108,7 @@ impl GameWorld {
         let id = self.units[index].state.id;
         self.leave_group(id);
         self.combat.quiet.wake(id);
+        self.combat.healing.wake(id);
         self.economy.gatherers.wake_walking(id);
         self.destinations.remove(id);
         self.clear_planner(index);
@@ -150,6 +151,7 @@ impl GameWorld {
         self.update_observer(id, None);
         self.combat.attackers.remove(&id);
         self.combat.healers.remove(&id);
+        self.combat.healing.remove(id);
         self.combat.seekers.remove(&id);
         self.combat.target_rounds.remove(&id);
         self.stop_gathering(id);
@@ -225,6 +227,7 @@ impl GameWorld {
         self.active_movers.remove(id);
         self.combat.attackers.remove(&id);
         self.combat.healers.remove(&id);
+        self.combat.healing.remove(id);
         self.combat.seekers.remove(&id);
         self.combat.target_rounds.remove(&id);
         self.stop_gathering(id);
