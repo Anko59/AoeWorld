@@ -115,13 +115,9 @@ impl GameWorld {
     }
 
     pub(crate) fn wake_construction_at(&mut self, tile: TileCoord) {
-        let ids = self
-            .economy
-            .construction
-            .tiles
-            .get(&tile)
-            .cloned()
-            .unwrap_or_default();
+        let Some(ids) = self.economy.construction.tiles.get(&tile).cloned() else {
+            return;
+        };
         for id in ids {
             self.wake_construction(id);
         }

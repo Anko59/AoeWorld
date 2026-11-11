@@ -141,3 +141,31 @@ fn work_sleep_can_be_disabled_while_a_walker_is_dozing() {
     assert_eq!(on.gather_work().slept, slept);
     assert!(on.economy.gatherers.dozing().is_empty());
 }
+
+#[test]
+fn empty_gathering_drains_deferred_changes_before_a_new_job() {
+    let (mut on, worker) = returning(true, TileCoord::new(116, 116));
+    let (mut off, _) = returning(false, TileCoord::new(116, 116));
+    let before = on.player_economy(PlayerId(0)).unwrap().stockpile.wood;
+    for world in [&mut on, &mut off] {
+        let task = world.economy.gatherers.remove(&worker).unwrap();
+        world.economy.late_changed.push(worker);
+        let mut changed = vec![worker];
+        world.advance_gathering(&mut |_| true, &mut changed);
+        assert!(world.economy.late_changed.is_empty());
+        assert_eq!(changed, [worker]);
+        world.economy.gatherers.insert(worker, task);
+    }
+    for tick in 0..700 {
+        assert_eq!(on.advance(), off.advance(), "new job changes at {tick}");
+        assert_eq!(
+            on.canonical_hash_hex(),
+            off.canonical_hash_hex(),
+            "new job hash at {tick}"
+        );
+    }
+    assert_eq!(
+        on.player_economy(PlayerId(0)).unwrap().stockpile.wood,
+        before + 10
+    );
+}

@@ -182,6 +182,15 @@ impl GameWorld {
     /// since the last loop (this tick's earlier phases, the last tick's later
     /// phases and the commands between ticks).
     pub(super) fn wake_before_gathering(&mut self, changed: &[EntityId]) {
+        if self.economy.gatherers.is_empty() {
+            // No job can consume these events. Drain them before a later job
+            // starts, without fetching every changed unit's contact position.
+            self.economy.late_changed.clear();
+            self.wake_walker_contacts();
+            #[cfg(test)]
+            self.assert_dozers_hold();
+            return;
+        }
         if self.economy.no_sleep {
             for id in self.economy.gatherers.dozing() {
                 self.economy.gatherers.wake(id);

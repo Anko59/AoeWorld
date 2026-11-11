@@ -72,13 +72,9 @@ impl GameWorld {
     }
 
     pub(crate) fn wake_queue_exits(&mut self, tile: TileCoord) {
-        let ids = self
-            .economy
-            .queues
-            .exits
-            .get(&tile)
-            .cloned()
-            .unwrap_or_default();
+        let Some(ids) = self.economy.queues.exits.get(&tile).cloned() else {
+            return;
+        };
         for id in ids {
             self.wake_queues(id);
         }
