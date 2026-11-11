@@ -19,6 +19,8 @@ mod late_game;
 pub use late_game::{LateGameSeat, LateGameSeeded};
 #[path = "demo/late_game_seats.rs"]
 mod late_game_seats;
+#[path = "demo/naval.rs"]
+mod naval;
 #[path = "demo/recovery.rs"]
 mod recovery;
 #[path = "demo/river.rs"]

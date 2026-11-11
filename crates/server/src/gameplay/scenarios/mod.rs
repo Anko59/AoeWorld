@@ -130,6 +130,10 @@ impl GameplayService {
         let (world, primary) = GameWorld::steward_farming_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))
     }
+    pub fn naval_battle_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::naval_battle_demo(seed)?;
+        Ok(Self::from_world(world, primary, None, None))
+    }
     pub fn steward_fishing_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
         let (world, primary) = GameWorld::steward_fishing_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))

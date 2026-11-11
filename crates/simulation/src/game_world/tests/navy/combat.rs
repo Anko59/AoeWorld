@@ -244,3 +244,24 @@ fn galley_line_fires_the_dat_bolt() {
         );
     }
 }
+
+#[test]
+fn naval_battle_demo_builds_and_a_galley_fires_a_bolt_within_a_second() {
+    let (mut world, _) = GameWorld::naval_battle_demo(aoe_core::Seed(1)).unwrap();
+    let galleys = |p| {
+        world
+            .units
+            .iter()
+            .filter(|u| u.state.player == PlayerId(p) && u.state.kind == UnitKind::WarGalley)
+            .count()
+    };
+    assert_eq!((galleys(0), galleys(1)), (3, 3));
+    let mut bolt = false;
+    for _ in 0..200 {
+        world.advance();
+        bolt |= world
+            .projectiles()
+            .any(|p| p.kind == crate::ProjectileKind::Bolt);
+    }
+    assert!(bolt, "a galley fires a bolt");
+}
