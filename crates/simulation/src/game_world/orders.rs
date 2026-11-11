@@ -37,7 +37,11 @@ impl GameWorld {
                     GoalPrecision::Contact => order.destination == destination,
                     GoalPrecision::Area => {
                         diagnostics::near_goal(order.destination, destination)
-                            && !self.destination_point_reserved(order.destination, id)
+                            // A soft arrival reservation cannot discard an
+                            // admitted frontier or renew a waiting deadline.
+                            && (unit.state.planning
+                                || unit.planner.is_some()
+                                || !self.destination_point_reserved(order.destination, id))
                     }
                 })
         })

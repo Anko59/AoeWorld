@@ -173,7 +173,19 @@ worker replay. General engagement shares are 87.774%, 88.112%, 85.400%, 92.231%
 and 89.035% (mean 88.510%); every unchanged wait limit also passes. The
 instrumentation-only baseline passes with mean 88.786%. These deterministic
 engagement observations are functional qualification, not timing measurements.
-No engagement floor or canonical pin was changed.
+No engagement floor changed. The current replay checkpoint was regenerated for
+retained goals and exact contacts: clean dev `82f7a3bf98d3` passes the preceding
+pin, while both the prior contact-retention revision `9e8c616e0f53` and the
+withdrawal correction produce `49d847124f3ec329d72805ecd276d785c2baa1d6d765cba0cc7a4f17daef394d`.
+The workload, activity floors and complete one-/four-worker comparison are
+unchanged. Soft arrival reservations also preserve pending frontiers and their
+original deadlines; completed plans still reselect newly reserved contacts.
+
+The full simulation run now passes 1,292/1,292 tests (zero skipped), and the full
+server run passes 453 tests with four pre-existing package-dependent ignored
+tests. Both use `make test-native-focused` with `AOE_NATIVE_TEST_FILTER='all()'`
+and the corresponding `AOE_NATIVE_TEST_PACKAGE`. Logs are
+`simulation-qualified-all.log` and `server-qualified-all.log`.
 
 The HTTP endpoint test passes the strict ten-second boundary, and all 23
 scale-match harness tests pass. Commands use `NEXTEST_TEST_THREADS=2
@@ -184,8 +196,8 @@ passes; logs are `followup-gates-final.log`, `followup-simulation-final.log`,
 
 The older rejected full run had 1236/1243 passing; the subsequent correction
 still failed General engagement (1243/1244). Their retained logs and rejected
-footage above do not qualify this follow-up. Full simulation/server suites,
-current SDK integration, fresh paired owner-save profiles with the ten-second
+footage above do not qualify this follow-up. Current SDK integration,
+fresh paired owner-save profiles with the ten-second
 counter, the one-percent instruction comparison, preflight, refreshed footage
 and CI remain unverified at this increment. The old saved-match reports lack
 the new counter and mover endpoints and cannot establish the requested 50%
