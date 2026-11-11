@@ -5,7 +5,7 @@ use std::{
     fs::{self, File, OpenOptions, TryLockError},
     io::{Read, Seek, Write},
     os::unix::fs::OpenOptionsExt,
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
@@ -69,6 +69,37 @@ impl LongLock {
         }
     }
 
+    /// Take the first free of `slots` slot files in `dir`. A nested job proves
+    /// ownership of its own slot first, so it never grabs a different free slot.
+    pub(crate) fn acquire_any(
+        dir: &Path,
+        holder: &str,
+        nonce: &str,
+        inherited: Option<(usize, &str)>,
+        slots: usize,
+    ) -> Result<(Self, usize)> {
+        if let Some((slot, token)) = inherited
+            && verify(&slot_path(dir, slot), token)?
+        {
+            let lock = Self {
+                file: None,
+                token: token.into(),
+            };
+            return Ok((lock, slot));
+        }
+        let mut holders = Vec::new();
+        for slot in 0..slots {
+            match Self::acquire(&slot_path(dir, slot), holder, nonce, None) {
+                Ok(lock) => return Ok((lock, slot)),
+                Err(error) => {
+                    let busy = error.downcast::<Busy>()?;
+                    holders.push(format!("slot {slot}: {}", busy.0));
+                }
+            }
+        }
+        Err(Box::new(Busy(holders.join("; "))))
+    }
+
     pub(crate) fn token(&self) -> &str {
         &self.token
     }
@@ -79,6 +110,25 @@ impl LongLock {
     pub(crate) fn duplicate(&self) -> std::io::Result<Option<File>> {
         self.file.as_ref().map(File::try_clone).transpose()
     }
+}
+
+pub(crate) const DEFAULT_SLOTS: usize = 3;
+pub(crate) const MAX_SLOTS: usize = 8;
+
+/// Concurrent long-job slots from `AOE_LONG_SLOTS`: unset means the default.
+pub(crate) fn slot_count(raw: Option<&str>) -> Result<usize> {
+    match raw.map(str::trim).filter(|text| !text.is_empty()) {
+        None => Ok(DEFAULT_SLOTS),
+        Some(text) => text
+            .parse::<usize>()
+            .ok()
+            .filter(|count| (1..=MAX_SLOTS).contains(count))
+            .ok_or_else(|| format!("AOE_LONG_SLOTS must be 1..={MAX_SLOTS}, got {text:?}").into()),
+    }
+}
+
+pub(crate) fn slot_path(dir: &Path, slot: usize) -> PathBuf {
+    dir.join(format!("long-{slot}.lock"))
 }
 
 /// Status probes never keep a lock, never wait, and ignore a dead holder's text.

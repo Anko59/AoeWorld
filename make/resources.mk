@@ -36,6 +36,6 @@ ifneq ($(strip $(filter-out test-e2e,$(filter $(LONG_GOALS),$(MAKECMDGOALS)))$(i
 resource-bootstrap .cache/resource-runner: | long-precheck
 long-precheck: .EXTRA_PREREQS :=
 long-precheck:
-	@lock=$(call MOUNT_QUOTE,$(GIT_COMMON)/aoe-ship/long.lock); if [ -f "$$lock" ]; then flock -n -E 75 "$$lock" true || { status=$$?; [ "$$status" = 75 ] || exit "$$status"; { IFS= read -r proof; IFS= read -r holder || :; } < "$$lock"; if [ -n "$$AOE_LONG_JOB" ] && [ "$$proof" = "$$AOE_LONG_JOB" ] && [ "$$AOE_LONG_DIR/long.lock" = "$$lock" ]; then exit 0; fi; echo "long job busy: $${holder:-holder metadata is being recorded}, retry later" >&2; exit 75; }; fi
+	@dir=$(call MOUNT_QUOTE,$(GIT_COMMON)/aoe-ship); n=$${AOE_LONG_SLOTS:-3}; case "$$n" in [1-8]) ;; *) echo "AOE_LONG_SLOTS must be 1..=8, got $$n" >&2; exit 1;; esac; i=0; msg=; while [ $$i -lt $$n ]; do lock="$$dir/long-$$i.lock"; [ -f "$$lock" ] || exit 0; flock -n -E 75 "$$lock" true; status=$$?; [ "$$status" = 0 ] && exit 0; [ "$$status" = 75 ] || exit "$$status"; { IFS= read -r proof; IFS= read -r holder || :; } < "$$lock"; if [ -n "$$AOE_LONG_JOB" ] && [ "$$proof" = "$$AOE_LONG_JOB" ] && [ "$$AOE_LONG_DIR/long-$${AOE_LONG_SLOT:-0}.lock" = "$$lock" ]; then exit 0; fi; msg="$$msg$${msg:+; }slot $$i: $${holder:-holder metadata is being recorded}"; i=$$((i+1)); done; echo "long job busy: $$msg, retry later" >&2; exit 75
 endif
 endif
