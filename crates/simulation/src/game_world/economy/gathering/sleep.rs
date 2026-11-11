@@ -49,6 +49,7 @@ impl GameWorld {
     /// On by default. Off, every gatherer runs its full step each tick: the
     /// replay oracle compares both settings hash for hash.
     pub fn set_work_sleep(&mut self, enabled: bool) {
+        self.combat.quiet.clear();
         self.economy.no_sleep = !enabled;
     }
 

@@ -268,6 +268,7 @@ impl GameWorld {
         previous_tile: TileCoord,
         unit: &GameUnit,
     ) {
+        self.combat.quiet.wake(id);
         self.economy.gatherers.notify_walkers_at(previous_tile);
         self.wake_queue_exits(previous_tile);
         self.economy

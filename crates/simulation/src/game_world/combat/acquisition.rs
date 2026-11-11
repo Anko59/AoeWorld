@@ -3,6 +3,7 @@ use super::{MELEE_RANGE_SUBUNITS, targeting::TargetArea, tick::Goal};
 use crate::{EconomyError, GameWorld, UnitKind, UnitTask};
 use aoe_core::{CombatStance, EntityId, PlayerId, WorldPosition};
 use std::ops::Bound::{Excluded, Unbounded};
+pub(crate) mod sleep;
 
 pub(super) const MAX_ACQUISITIONS: usize = 128;
 pub(crate) fn autonomous_kind(kind: UnitKind) -> bool {
@@ -92,6 +93,7 @@ impl GameWorld {
             }
         }
         for &id in ids {
+            self.combat.quiet.wake(id);
             self.vassal_player_override(id);
             if self
                 .combat
@@ -122,6 +124,8 @@ impl GameWorld {
     }
 
     pub(super) fn advance_acquisition(&mut self, changed: &mut Vec<EntityId>) {
+        #[cfg(test)]
+        self.assert_quiet_acquisition();
         let cursor = self.combat.seeker_cursor;
         let ids: Vec<_> = self
             .combat
@@ -136,6 +140,9 @@ impl GameWorld {
                 break;
             }
             self.combat.seeker_cursor = id;
+            if self.skip_quiet_acquisition(id) {
+                continue;
+            }
             self.combat.stats.acquisition_checks += 1;
             let Some(u) = self.unit(id) else {
                 continue;
@@ -168,10 +175,11 @@ impl GameWorld {
             }
             // A melee unit does not take on an enemy whose every spot is
             // taken: it would only stand and wait out of reach.
-            if let Some(target) = self
-                .acquire_target(&area, building_attack.is_none())
-                .filter(|&target| self.attack_spot_free(id, target))
-            {
+            let target = self.acquire_target(&area, building_attack.is_none());
+            if target.is_none() && matches!(u.task, UnitTask::Idle) && !u.moving && !u.planning {
+                self.sleep_quiet_acquisition(&u, &area);
+            }
+            if let Some(target) = target.filter(|&target| self.attack_spot_free(id, target)) {
                 if building_attack.is_some() {
                     self.stop_movement(self.lookup[&id]);
                 }

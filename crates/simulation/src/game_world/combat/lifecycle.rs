@@ -107,6 +107,7 @@ impl GameWorld {
         self.units[index].obstruction = None;
         let id = self.units[index].state.id;
         self.leave_group(id);
+        self.combat.quiet.wake(id);
         self.economy.gatherers.wake_walking(id);
         self.destinations.remove(id);
         self.clear_planner(index);
@@ -214,6 +215,8 @@ impl GameWorld {
         let at = self.units[index].state.position;
         self.untrack_unit_at(id, at);
         let bucket = self.units[index].bucket;
+        self.combat.quiet.wake_chunk(bucket);
+        self.combat.quiet.wake(id);
         let slot = self.units[index].bucket_slot;
         let displaced = self.chunks.swap_remove(bucket, slot);
         if let Some(displaced_index) = displaced.and_then(|id| self.lookup.get(&id).copied()) {

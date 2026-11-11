@@ -130,6 +130,7 @@ impl GameWorld {
         changed: &mut Vec<EntityId>,
     ) {
         // Rates and carry capacity change: dozing workers re-check.
+        self.combat.quiet.clear();
         self.wake_player_gatherers(player);
         let sites = self
             .player_buildings(player)

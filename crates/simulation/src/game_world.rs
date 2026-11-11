@@ -455,6 +455,8 @@ impl GameWorld {
             .as_ref()
             .and_then(|probe| probe.movement_span("index_chunks"));
         let old = self.units[index].bucket;
+        self.combat.quiet.wake_chunk(old);
+        self.combat.quiet.wake_chunk(bucket);
         let slot = self.units[index].bucket_slot;
         if self.chunks.get(&old).is_none() {
             return;

@@ -105,6 +105,42 @@ tests. All three long replay oracles passed with unchanged canonical hashes:
 and architecture checks passed. A distant returning worker performs fewer than
 five awake visits over 160 ticks, versus 160 with sleep disabled.
 
+## Idle military acquisition
+
+An idle fighter can sleep after proving that every spatial bucket its query
+touches contains only friendly identities and that its building search rectangle
+contains no hostile structure. Hidden enemies and dense sampled buckets therefore
+cannot produce a false empty proof. Such regions wake on unit insertion, removal
+or bucket crossings, building placement/removal, source motion/orders/stance,
+source vision updates, and research. An unseen enemy already in a touched bucket
+keeps acquisition awake, so later sight gains need no separate polling deadline.
+
+Sleeping turns still advance the exact fair cursor and target-sampling round and
+charge the original logical targeting budget. Removing those turns would change
+which active fighter or tower acquires a target first. `acquisition_checks` counts
+actual unit visits; `acquisition_slept` counts turns whose empty query was replayed.
+The sleep-off oracle retains the original loop. Test builds verify each empty
+proof, source eligibility, spatial membership and charged bucket count.
+
+The base General gate was measured on exact revision
+`70d6b53231bfd3f7cf2dd0d191cbf6722bd01d08`. Its five engagement shares were
+87.83023054822358%, 89.91759127112012%, 86.36903791038516%,
+91.36138757930271%, and 88.45196789682123% (mean 88.786043%).
+Command: `NEXTEST_TEST_THREADS=2 make -j1 test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='test(a_general_army_engages_idle_defenders)'`.
+Raw baseline: `.cache/7b-general-before.log` and
+`.cache/phase7b-before/.cache/regions/general_vs_idle_variants.txt`.
+The acquisition implementation reproduced all five values exactly; `cmp` of the
+two generated summaries passed. No engagement threshold or trajectory pin changed.
+
+The broad combat/General/naval/garrison run passed 270 tests. Six new sleep
+scenarios cover empty-army visit cost, incoming movement, orders/stances, hostile
+buildings, dense friendly buckets alongside an active battle, and the missed-wake
+detector. After sharing admission with the ordinary targeting path, those six
+and the General gate passed again. Formatting, lint, structure, architecture and
+hook checks passed. All three long replay oracles passed before that admission
+refactor; the final rerun is retained separately in
+`.cache/acquisition-admission-replay.log`.
+
 ## Local video evidence
 
 The construction baseline is `.cache/showcase/7b-construction-before-vp9.webm`:
