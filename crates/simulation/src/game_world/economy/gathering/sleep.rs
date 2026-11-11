@@ -109,20 +109,28 @@ impl GameWorld {
         if task.sleep.is_none() {
             let walks = self.gatherer_walks(index, task);
             self.count_gather(Count::Walkers, u64::from(walks));
+            if walks {
+                self.sleep_walking_gatherer(id);
+            }
             return walks;
         }
         self.economy
             .gatherers
             .update_progress(&id, |task| task.wake(now));
-        self.economy
+        let walks = self
+            .economy
             .gatherers
             .get(&id)
-            .is_some_and(|task| self.gatherer_walks(index, task))
+            .is_some_and(|task| self.gatherer_walks(index, task));
+        if walks {
+            self.sleep_walking_gatherer(id);
+        }
+        walks
     }
 
     /// A gatherer walking under a movement order, with no failed route,
     /// changes nothing in `gather_step`: it skips the task-map round trip.
-    fn gatherer_walks(&self, index: usize, task: &GatherTask) -> bool {
+    pub(super) fn gatherer_walks(&self, index: usize, task: &GatherTask) -> bool {
         task.phase != GatherPhase::WaitingDropoff
             && self.units[index].order.is_some()
             && !self.gather_contact(index, task)

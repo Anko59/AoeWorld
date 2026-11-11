@@ -456,6 +456,9 @@ impl GameWorld {
             self.finish_formation_member(id, motion, from, step.state.position);
         }
         self.observe_unit_progress(index);
+        if step.member.is_none() && step.order.is_none() {
+            self.economy.gatherers.wake_walking(id);
+        }
         // Wildlife's unit cells follow every step, before vision, as in the
         // sequential path.
         if position_changed {

@@ -170,6 +170,7 @@ impl GameWorld {
     }
 
     fn invalidate_collision_caches(&mut self, area: aoe_core::TileRect) {
+        self.economy.gatherers.notify_walker_ground(area);
         self.wake_queue_ground(area);
         self.navigation_cache.invalidate(area);
         self.regions_changed(area);
@@ -225,6 +226,7 @@ impl GameWorld {
         self.units[index].last_movement_error = error;
         let id = self.units[index].state.id;
         if error.is_some() {
+            self.economy.gatherers.wake_walking(id);
             self.collision_subscribers.errors.insert(id);
         } else {
             self.collision_subscribers.errors.remove(&id);

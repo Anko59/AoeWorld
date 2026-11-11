@@ -421,6 +421,7 @@ impl GameWorld {
         self.units[index].route.clear();
         self.set_movement_error(index, error);
         let id = self.units[index].state.id;
+        self.economy.gatherers.wake_walking(id);
         self.refresh_spacing_order(id);
         if !self.economy.gatherers.contains_key(&id)
             && self.hunting_target(id).is_none()

@@ -107,6 +107,7 @@ impl GameWorld {
         self.units[index].obstruction = None;
         let id = self.units[index].state.id;
         self.leave_group(id);
+        self.economy.gatherers.wake_walking(id);
         self.destinations.remove(id);
         self.clear_planner(index);
         let unit = &mut self.units[index];

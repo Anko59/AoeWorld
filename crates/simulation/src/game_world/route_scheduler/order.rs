@@ -130,6 +130,7 @@ impl GameWorld {
             self.clear_planner(index);
             self.set_movement_error(index, None);
             self.units[index].order = None;
+            self.economy.gatherers.wake_walking(id);
             self.units[index].obstruction = None;
             self.units[index].route.clear();
             self.units[index].state.moving = false;

@@ -81,6 +81,30 @@ all three long benchmark replay oracles passed, including the unchanged
 Commands: the focused simulation filter `test(training::timers::)` and, with
 `NEXTEST_TEST_THREADS=2`, `test(benchmark::tests::sleep::)|test(late_game_full_population_replays_at_the_profile_checkpoint)`.
 
+## Walking gatherers
+
+Walking jobs leave the ordered awake set until movement reports contact,
+termination or failure. Intermediate movement updates only refresh derived
+contact subscriptions. A job already at geometric contact but blocked by a body
+subscribes to nearby occupancy changes. Ground and gathering-job changes notify
+the same subscribers. Crowded ordinary nodes retain their original near-site
+worker-id-modulo-second refinement deadlines.
+
+Deferred contact notifications drain between awake jobs in entity order. Thus a
+lower-id job can release a work spot for a later job in the same tick, preserving
+the original serial phase. Turning sleep off wakes every walking subscription.
+The test-only detector checks that each sleeping walker still satisfies the
+original skip predicate.
+
+Five focused scenarios cover distant travel, exact delivery/contact timing,
+cancellation, movement termination without a position change, and disabling sleep
+mid-trip. The broad gathering/farming/fishing/construction filter passed 177
+tests. All three long replay oracles passed with unchanged canonical hashes:
+2,400 ticks compared individually, the full late-game sleep pair, and the pinned
+14,000-unit checkpoint at one/four workers. Static formatting, lint, structure
+and architecture checks passed. A distant returning worker performs fewer than
+five awake visits over 160 ticks, versus 160 with sleep disabled.
+
 ## Local video evidence
 
 The construction baseline is `.cache/showcase/7b-construction-before-vp9.webm`:

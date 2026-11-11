@@ -11,6 +11,7 @@ mod occupancy;
 mod rates;
 mod replacement;
 mod return_routes;
+mod walking;
 
 #[test]
 fn returning_workers_deposit_on_every_side_before_finishing_an_old_target_order() {

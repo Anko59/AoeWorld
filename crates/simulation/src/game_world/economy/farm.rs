@@ -168,6 +168,11 @@ impl GameWorld {
     /// End `id`'s gather job. A farm whose last food is already on the farmer
     /// would otherwise linger empty and unworkable, so it is removed here.
     pub(crate) fn stop_gathering(&mut self, id: EntityId) {
+        if let Some(unit) = self.unit(id) {
+            self.economy
+                .gatherers
+                .notify_walkers_at(unit.position.tile_floor());
+        }
         self.player_override(id);
         self.cancel_garrison_order(id);
         self.move_queues.remove(&id);

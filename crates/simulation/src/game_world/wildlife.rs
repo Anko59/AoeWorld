@@ -234,6 +234,9 @@ impl GameWorld {
     }
 
     pub(crate) fn track_unit_cell(&mut self, unit: &GameUnit) {
+        self.economy
+            .gatherers
+            .notify_walkers_at(unit.position.tile_floor());
         self.wake_queue_exits(unit.position.tile_floor());
         self.collisions.observe_kind(unit.kind);
         self.collisions.insert(
@@ -265,7 +268,11 @@ impl GameWorld {
         previous_tile: TileCoord,
         unit: &GameUnit,
     ) {
+        self.economy.gatherers.notify_walkers_at(previous_tile);
         self.wake_queue_exits(previous_tile);
+        self.economy
+            .gatherers
+            .notify_walkers_at(unit.position.tile_floor());
         self.wake_queue_exits(unit.position.tile_floor());
         self.wake_construction_at(previous_tile);
         self.wake_construction_at(unit.position.tile_floor());
@@ -320,6 +327,7 @@ impl GameWorld {
     }
 
     pub(crate) fn untrack_unit_at(&mut self, id: EntityId, at: WorldPosition) {
+        self.economy.gatherers.notify_walkers_at(at.tile_floor());
         self.wake_queue_exits(at.tile_floor());
         self.wake_construction_at(at.tile_floor());
         self.collisions.remove(
@@ -332,6 +340,7 @@ impl GameWorld {
     }
 
     pub(crate) fn track_unit_death(&mut self, id: EntityId, at: WorldPosition) {
+        self.economy.gatherers.notify_walkers_at(at.tile_floor());
         self.wake_queue_exits(at.tile_floor());
         self.wake_construction_at(at.tile_floor());
         self.collisions.remove(
