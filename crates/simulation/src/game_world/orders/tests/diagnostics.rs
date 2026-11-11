@@ -66,3 +66,29 @@ fn stopping_a_measured_trip_supersedes_its_original_issuer() {
         0
     );
 }
+
+#[test]
+fn redundant_order_sources_distinguish_callers_without_changing_flat_counts_or_hash() {
+    let mut w = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
+    let id = w.spawn_unit(PlayerId(0), at(20)).unwrap();
+    w.issue_task_move(id, at(100)).unwrap();
+    w.issue_task_move(id, at(100)).unwrap();
+    w.issue_task_move(id, at(101)).unwrap();
+    let sources = w.order_redundancy_sources();
+    assert_eq!(
+        sources.len(),
+        2,
+        "the two redundant request sites stay distinct"
+    );
+    assert!(sources.keys().all(|source| source.contains(file!())));
+    assert_eq!(sources.values().map(|v| v.near_reissues).sum::<u64>(), 2);
+    assert_eq!(sources.values().map(|v| v.superseded_10s).sum::<u64>(), 1);
+    let flat = w.order_demand()[OrderIssuer::Automation as usize];
+    assert_eq!(flat.orders, 3);
+    assert_eq!(flat.near_reissues, 2);
+    assert_eq!(flat.superseded_10s, 1);
+    let hash = w.canonical_hash();
+    w.order_diagnostics = Default::default();
+    assert_eq!(w.canonical_hash(), hash);
+    assert!(w.order_redundancy_sources().is_empty());
+}

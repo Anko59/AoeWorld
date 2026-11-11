@@ -37,11 +37,21 @@ pub struct OrderDemand {
     pub route_searches: u64,
 }
 
+#[derive(Clone, Copy, Debug, Default, serde::Serialize)]
+pub struct OrderRedundancy {
+    pub near_reissues: u64,
+    pub superseded_10s: u64,
+}
+
+type Site = (&'static str, u32);
+type Source = (usize, Option<Site>, Site, usize);
+
 #[derive(Debug, Default)]
 pub(crate) struct OrderDiagnostics {
     pub issuer: OrderIssuer,
     pub demand: [OrderDemand; 7],
-    last: BTreeMap<EntityId, (u64, OrderIssuer)>,
+    last: BTreeMap<EntityId, (u64, OrderIssuer, Site)>,
+    sources: BTreeMap<Source, OrderRedundancy>,
 }
 
 impl GameWorld {
@@ -71,10 +81,39 @@ impl GameWorld {
         &self.order_diagnostics.demand
     }
 
+    /// Redundant requests by charged issuer, old request site and new caller.
+    /// These observations never participate in movement decisions or saves.
+    pub fn order_redundancy_sources(&self) -> BTreeMap<String, OrderRedundancy> {
+        let issuers = [
+            "player",
+            "python_ai",
+            "auto_scout",
+            "steward",
+            "vassal",
+            "general",
+            "rally_automation",
+        ];
+        self.order_diagnostics
+            .sources
+            .iter()
+            .map(|(&(charged, old, new, current), &counts)| {
+                let old = old.unwrap_or(("restored", 0));
+                (
+                    format!(
+                        "{} -> {} | {}:{} -> {}:{}",
+                        issuers[charged], issuers[current], old.0, old.1, new.0, new.1
+                    ),
+                    counts,
+                )
+            })
+            .collect()
+    }
+
     pub(crate) fn forget_order_demand(&mut self, id: EntityId) {
         self.order_diagnostics.last.remove(&id);
     }
 
+    #[track_caller]
     pub(crate) fn demand_attempt(&mut self, id: EntityId, destination: WorldPosition) {
         if self.order_diagnostics.issuer == OrderIssuer::Automation {
             self.record_order_decisions(1);
@@ -85,26 +124,42 @@ impl GameWorld {
         let row = &mut self.order_diagnostics.demand[self.order_diagnostics.issuer as usize];
         row.orders += 1;
         row.near_reissues += u64::from(near);
+        if near {
+            let caller = std::panic::Location::caller();
+            let issuer = self.order_diagnostics.issuer as usize;
+            let previous = self.order_diagnostics.last.get(&id).map(|p| p.2);
+            self.order_diagnostics
+                .sources
+                .entry((issuer, previous, (caller.file(), caller.line()), issuer))
+                .or_default()
+                .near_reissues += 1;
+        }
     }
 
+    #[track_caller]
     pub(crate) fn demand_cancelled(&mut self, id: EntityId) {
         if self.movement_goal(id).is_some()
-            && let Some((tick, issuer)) = self.order_diagnostics.last.get(&id).copied()
+            && let Some((tick, issuer, previous)) = self.order_diagnostics.last.get(&id).copied()
         {
             let row = &mut self.order_diagnostics.demand[issuer as usize];
             row.superseded += 1;
             row.superseded_10s +=
                 u64::from(self.tick.0.saturating_sub(tick) < 10 * u64::from(self.config.tick_hz));
+            if self.tick.0.saturating_sub(tick) < 10 * u64::from(self.config.tick_hz) {
+                self.record_superseded_source(issuer, previous);
+            }
         }
     }
 
+    #[track_caller]
     pub(crate) fn demand_accepted(&mut self, id: EntityId) {
         let unfinished = self.movement_goal(id).is_some();
         let issuer = self.order_diagnostics.issuer;
-        if let Some((tick, previous)) = self
+        let caller = std::panic::Location::caller();
+        if let Some((tick, previous, site)) = self
             .order_diagnostics
             .last
-            .insert(id, (self.tick.0, issuer))
+            .insert(id, (self.tick.0, issuer, (caller.file(), caller.line())))
         {
             if self.tick.0.saturating_sub(tick) < 10 * u64::from(self.config.tick_hz) {
                 self.order_diagnostics.demand[issuer as usize].reassigned_10s += 1;
@@ -115,8 +170,27 @@ impl GameWorld {
                 row.superseded_10s += u64::from(
                     self.tick.0.saturating_sub(tick) < 10 * u64::from(self.config.tick_hz),
                 );
+                if self.tick.0.saturating_sub(tick) < 10 * u64::from(self.config.tick_hz) {
+                    self.record_superseded_source(previous, site);
+                }
             }
         }
+    }
+
+    #[track_caller]
+    fn record_superseded_source(&mut self, previous: OrderIssuer, site: Site) {
+        let caller = std::panic::Location::caller();
+        let issuer = self.order_diagnostics.issuer as usize;
+        self.order_diagnostics
+            .sources
+            .entry((
+                previous as usize,
+                Some(site),
+                (caller.file(), caller.line()),
+                issuer,
+            ))
+            .or_default()
+            .superseded_10s += 1;
     }
 
     pub(crate) fn movement_goal(&self, id: EntityId) -> Option<WorldPosition> {

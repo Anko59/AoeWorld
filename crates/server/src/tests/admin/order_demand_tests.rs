@@ -33,5 +33,20 @@ async fn route_demand_reports_movers_and_supersessions_inside_ten_seconds() {
         let row = &body["order_demand"]["issuers"]["python_ai"];
         assert_eq!(row["superseded"], 1);
         assert_eq!(row["superseded_10s"], u64::from(elapsed < 200));
+        let sources = body["order_demand"]["sources"]
+            .as_object()
+            .expect("caller breakdown is an object even when empty");
+        assert!(
+            sources
+                .keys()
+                .all(|site| site.starts_with("python_ai -> rally_automation | "))
+        );
+        assert_eq!(
+            sources
+                .values()
+                .map(|v| v["superseded_10s"].as_u64().unwrap())
+                .sum::<u64>(),
+            u64::from(elapsed < 200)
+        );
     }
 }

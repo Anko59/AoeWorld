@@ -171,6 +171,7 @@ async fn scheduler(
     answer["movers"] = json!(world.units().filter(|u| u.moving || u.planning).count());
     answer["order_demand"] = json!({
         "reassignment_seconds": 10,
+        "sources": world.order_redundancy_sources(),
         "issuers": (["player", "python_ai", "auto_scout", "steward", "vassal", "general", "rally_automation"]
             .into_iter().zip(world.order_demand()).collect::<BTreeMap<_, _>>())
     });

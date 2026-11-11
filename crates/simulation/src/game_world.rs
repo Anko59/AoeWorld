@@ -28,7 +28,7 @@ mod movement_step;
 #[path = "game_world/navy/mod.rs"]
 mod navy;
 mod orders;
-pub use orders::{OrderDemand, OrderIssuer};
+pub use orders::{OrderDemand, OrderIssuer, OrderRedundancy};
 mod parallel;
 mod research;
 mod resources;
