@@ -31,7 +31,7 @@ impl RouteTerrain for LimitedMap<'_> {
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError> {
-        Ok(self.world.route_tile_admitted(self.player, tile)
+        Ok(self.world.gate_tile_admitted(self.player, tile)
             && self.generator.route_walkable(overlay, tile, cancelled)?)
     }
     fn route_edge_clear(
@@ -40,8 +40,8 @@ impl RouteTerrain for LimitedMap<'_> {
         to: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError> {
-        Ok(self.world.route_tile_admitted(self.player, from)
-            && self.world.route_tile_admitted(self.player, to)
+        Ok(self.world.gate_tile_admitted(self.player, from)
+            && self.world.gate_tile_admitted(self.player, to)
             && self.generator.route_edge_clear(from, to, cancelled)?)
     }
     fn route_step_cost(

@@ -145,14 +145,29 @@ impl GameWorld {
     /// Player-specific planning admission; a locked gate blocks even while
     /// physically held open. Other buildings retain their collision footprint.
     pub(crate) fn route_tile_admitted(&self, player: aoe_core::PlayerId, tile: TileCoord) -> bool {
-        if self
-            .building_at_tile(tile)
-            .and_then(|id| self.building(id))
-            .is_some_and(|b| b.kind.is_gate())
-        {
+        let blocked = self.economy.blocked_tiles.contains(&tile);
+        if !blocked && self.economy.open_gates.is_empty() {
+            return true;
+        }
+        if self.is_gate_tile(tile) {
             return self.gate_allows_approach(player, tile);
         }
-        !self.economy.blocked_tiles.contains(&tile)
+        !blocked
+    }
+
+    fn is_gate_tile(&self, tile: TileCoord) -> bool {
+        self.building_at_tile(tile)
+            .and_then(|id| self.building(id))
+            .is_some_and(|b| b.kind.is_gate())
+    }
+
+    /// Admission on map terrain, where the overlay already carries every
+    /// building's collision: only a gate tile needs the per-player rule, so a
+    /// world without gates pays one emptiness check.
+    pub(crate) fn gate_tile_admitted(&self, player: aoe_core::PlayerId, tile: TileCoord) -> bool {
+        self.economy.gates.is_empty()
+            || !self.is_gate_tile(tile)
+            || self.gate_allows_approach(player, tile)
     }
 
     pub(crate) fn has_route_navigation(&self) -> bool {
