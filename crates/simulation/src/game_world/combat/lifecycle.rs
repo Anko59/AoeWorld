@@ -156,6 +156,7 @@ impl GameWorld {
         if let Some(economy) = self.economy.players.get_mut(&player) {
             economy.population_used = economy.population_used.saturating_sub(1);
         }
+        self.wake_player_training(player);
         let die_millis = match self.units[index].state.kind {
             crate::UnitKind::Villager => 1500_u64,
             crate::UnitKind::Scout => 1900,

@@ -45,6 +45,7 @@ pub(crate) struct Economy {
     pub(crate) buildings: BTreeMap<EntityId, GameBuilding>,
     pub(crate) farm_production: BTreeMap<EntityId, farm::FarmProduction>,
     // Derived ordered worksets; building queues remain the canonical state.
+    pub(crate) queues: super::training::timers::QueueTimers,
     pub(crate) active_training: BTreeSet<EntityId>,
     pub(crate) active_research: BTreeSet<EntityId>,
     /// Every building per player and kind, ascending by id: drop-off

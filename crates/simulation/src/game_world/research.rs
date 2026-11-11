@@ -113,6 +113,7 @@ impl GameWorld {
                 total_ticks,
             });
             self.economy.active_research.insert(building);
+            self.economy.queues.research.awake.insert(building);
         }
         Ok(())
     }
@@ -134,6 +135,7 @@ impl GameWorld {
             return Ok(());
         };
         self.economy.active_research.remove(&building);
+        self.economy.queues.research.awake.remove(&building);
         let refund = entry.tech.rules().cost;
         if let Some(state) = self.economy.players.get_mut(&player) {
             let stock = &mut state.stockpile;
@@ -167,17 +169,12 @@ impl GameWorld {
 
     /// Advance every research by one tick and apply those that finish.
     pub(super) fn advance_research(&mut self, changed: &mut Vec<EntityId>) {
+        let active = self.begin_queues(false);
         #[cfg(test)]
         {
-            self.economy.tick_work.research_buildings = self.economy.active_research.len();
+            self.economy.tick_work.research_buildings = active.len();
         }
         let mut finished = Vec::new();
-        let active = self
-            .economy
-            .active_research
-            .iter()
-            .copied()
-            .collect::<Vec<_>>();
         for id in active {
             let Some(building) = self.building_mut(id) else {
                 continue;
@@ -193,8 +190,12 @@ impl GameWorld {
                 finished.push((id, building.player, entry.tech));
                 building.research = None;
                 self.economy.active_research.remove(&id);
+                self.economy.queues.research.awake.remove(&id);
+            } else {
+                self.sleep_research(id);
             }
         }
+        self.economy.queues.research.tick = self.tick.0;
         for (_, player, tech) in finished {
             self.complete_research(player, tech, changed);
         }

@@ -12,6 +12,7 @@ impl GameWorld {
     /// every player watching it at the next refresh.
     pub(crate) fn building_mut(&mut self, id: EntityId) -> Option<&mut GameBuilding> {
         self.wake_construction(id);
+        self.wake_queues(id);
         let building = self.economy.buildings.get_mut(&id)?;
         self.vision.dirty_buildings.insert(id);
         Some(building)
@@ -39,6 +40,9 @@ impl GameWorld {
         self.vision
             .dirty_buildings
             .extend(self.economy.construction.progressing());
+        self.vision
+            .dirty_buildings
+            .extend(self.economy.queues.progressing());
         let dirty = std::mem::take(&mut self.vision.dirty_buildings);
         if self.vision.disabled {
             return 0;
@@ -51,7 +55,10 @@ impl GameWorld {
             ) else {
                 continue;
             };
-            let building = self.economy.construction.project(building);
+            let building = self
+                .economy
+                .queues
+                .project(self.economy.construction.project(building));
             for player in &watched.watchers {
                 if let Some(vision) = self.vision.players.get_mut(player)
                     // Only a differing snapshot is a change.
@@ -74,7 +81,10 @@ impl GameWorld {
             let Some(building) = self.economy.buildings.get(id) else {
                 continue;
             };
-            let building = self.economy.construction.project(building);
+            let building = self
+                .economy
+                .queues
+                .project(self.economy.construction.project(building));
             for player in &watched.watchers {
                 if let Some(vision) = self.vision.players.get(player) {
                     assert_eq!(

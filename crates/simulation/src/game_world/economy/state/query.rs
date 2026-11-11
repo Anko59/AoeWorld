@@ -5,10 +5,11 @@ use aoe_core::{EntityId, PlayerId};
 
 impl GameWorld {
     pub fn buildings(&self) -> impl Iterator<Item = std::borrow::Cow<'_, GameBuilding>> {
-        self.economy
-            .buildings
-            .values()
-            .map(|b| self.economy.construction.project(b))
+        self.economy.buildings.values().map(|b| {
+            self.economy
+                .queues
+                .project(self.economy.construction.project(b))
+        })
     }
     /// One player's buildings, kind by kind, from the per-player index.
     pub(crate) fn player_buildings(
@@ -36,9 +37,10 @@ impl GameWorld {
             .filter_map(|id| self.building(*id))
     }
     pub fn building(&self, id: EntityId) -> Option<std::borrow::Cow<'_, GameBuilding>> {
-        self.economy
-            .buildings
-            .get(&id)
-            .map(|b| self.economy.construction.project(b))
+        self.economy.buildings.get(&id).map(|b| {
+            self.economy
+                .queues
+                .project(self.economy.construction.project(b))
+        })
     }
 }

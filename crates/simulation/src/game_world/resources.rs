@@ -170,6 +170,7 @@ impl GameWorld {
     }
 
     fn invalidate_collision_caches(&mut self, area: aoe_core::TileRect) {
+        self.wake_queue_ground(area);
         self.navigation_cache.invalidate(area);
         self.regions_changed(area);
         self.economy.work_positions.invalidate(area);

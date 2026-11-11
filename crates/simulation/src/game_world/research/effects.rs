@@ -137,6 +137,7 @@ impl GameWorld {
             .collect::<Vec<_>>();
         for id in sites {
             self.wake_construction(id);
+            self.wake_queues(id);
         }
         let Some(state) = self.economy.players.get_mut(&player) else {
             return;

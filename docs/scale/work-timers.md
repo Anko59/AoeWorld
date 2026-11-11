@@ -46,6 +46,32 @@ Construction validation (Dockerized Make):
   detector also rejects an unannounced damage mutation. The existing 9,000-tick
   farm-reseed oracle passed in the same focused run. No replay hash was repinned.
 
+## Training and research
+
+Queues keep their canonical entries and derived completion deadlines. Only awake
+sites and due deadlines run queue logic. Reads, hashes, memory publication and
+snapshots project the exact intervening head-entry progress. Research and training
+retain separate phase clocks: research effects still precede this tick's training.
+
+Queue edits materialize progress before mutation. Population and housing events
+wake the affected player's indexed training sites. A blocked completed queue
+subscribes to its exit tiles; movement, removal, embarkation and ground changes
+wake it. Cancellation and building loss retire deadlines and subscriptions.
+Recoverable environment-page errors retain the ordinary retry path, since those
+pages can recover without a ground-change event.
+
+Within training, a population event credits lower-id sites through the current
+tick and higher-id sites through the preceding tick. This preserves the serial
+rule when one Town Center fills the last housing space while another trains.
+Technology effects materialize affected queues before changing their inputs.
+
+The shared sleep-off oracle also disables queue sleeping. Tests compare hashes,
+observations and saved queues every tick through cancellation, restart, housing
+loss, death, blocked exits and research completion. A raw progress edit is rejected
+by the test-only missed-wake detector. The initial focused training/research/
+Castle run passed 111 tests; final commit checks and whole-branch measurements
+are recorded below when complete.
+
 ## Historical recovery measurements
 
 The following measurements came from the interrupted implementation on
