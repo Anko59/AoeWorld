@@ -56,7 +56,11 @@ impl Rest {
         self.awake.remove(&id);
     }
 
+    #[inline]
     pub(crate) fn wake(&mut self, id: EntityId) {
+        if self.jobs.is_empty() && self.parked.is_empty() {
+            return;
+        }
         let region = self.take(id).is_some();
         if self.parked.remove(&id) || region {
             self.awake.insert(id);

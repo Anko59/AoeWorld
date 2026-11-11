@@ -34,7 +34,11 @@ fn chunks(bounds: TileRect) -> impl Iterator<Item = ChunkCoord> {
 }
 
 impl Quiet {
+    #[inline]
     pub(crate) fn wake(&mut self, id: EntityId) {
+        if self.jobs.is_empty() && self.parked.is_empty() {
+            return;
+        }
         self.parked.remove(&id);
         let Some(job) = self.jobs.remove(&id) else {
             return;

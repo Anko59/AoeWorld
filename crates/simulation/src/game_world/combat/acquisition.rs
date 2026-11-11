@@ -179,8 +179,14 @@ impl GameWorld {
             }
             // A melee unit does not take on an enemy whose every spot is
             // taken: it would only stand and wait out of reach.
-            let target = self.acquire_target(&area, building_attack.is_none());
-            if target.is_none() && matches!(u.task, UnitTask::Idle) && !u.moving && !u.planning {
+            let probe = self.acquire_target(&area, building_attack.is_none());
+            let target = probe.target;
+            if target.is_none()
+                && !probe.sampled_hostile
+                && matches!(u.task, UnitTask::Idle)
+                && !u.moving
+                && !u.planning
+            {
                 self.sleep_quiet_acquisition(&u, &area);
             }
             if let Some(target) = target.filter(|&target| self.attack_spot_free(id, target)) {
@@ -225,6 +231,7 @@ impl GameWorld {
         };
         if let Some(target) = self
             .acquire_target(&area, false)
+            .target
             .filter(|&target| self.attack_spot_free(id, target))
         {
             self.begin_autonomous_attack(id, target, origin);
@@ -259,7 +266,7 @@ impl GameWorld {
             return None;
         }
         let area = self.acquisition_area(&u)?;
-        self.acquire_target(&area, true)
+        self.acquire_target(&area, true).target
     }
 
     pub(crate) fn begin_autonomous_attack(
