@@ -43,7 +43,6 @@ impl GameWorld {
             running,
             #[cfg(test)]
             input: (entry.kind as u8, entry.progress_ticks, entry.total_ticks),
-            #[cfg(test)]
             population: Some(population),
         };
         self.economy.queues.training.insert(id, clock);
@@ -81,7 +80,6 @@ impl GameWorld {
             running: true,
             #[cfg(test)]
             input: (entry.tech as u8, entry.progress_ticks, entry.total_ticks),
-            #[cfg(test)]
             population: None,
         };
         self.economy.queues.research.insert(id, clock);

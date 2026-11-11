@@ -14,7 +14,6 @@ pub(super) struct Clock {
     running: bool,
     #[cfg(test)]
     input: (u8, u64, u64),
-    #[cfg(test)]
     population: Option<bool>,
 }
 

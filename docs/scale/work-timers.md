@@ -60,7 +60,10 @@ wake it. Cancellation and building loss retire deadlines and subscriptions.
 Recoverable environment-page errors retain the ordinary retry path, since those
 pages can recover without a ground-change event.
 
-Within training, a population event credits lower-id sites through the current
+Population notifications wake clocks only when available space changes. Waking
+a later-id running queue on a spawn that still leaves space would remove its
+clock after the awake snapshot and lose one tick of progress; a focused replay
+pins this case. Within training, a population event credits lower-id sites through the current
 tick and higher-id sites through the preceding tick. This preserves the serial
 rule when one Town Center fills the last housing space while another trains.
 Technology effects materialize affected queues before changing their inputs.
@@ -71,6 +74,20 @@ loss, death, blocked exits and research completion. A raw progress edit is rejec
 by the test-only missed-wake detector. The initial focused training/research/
 Castle run passed 111 tests; final commit checks and whole-branch measurements
 are recorded below when complete.
+
+After the population-credit correction, all seven queue-timer scenarios and
+all three long benchmark replay oracles passed, including the unchanged
+14,000-unit checkpoint at one/four workers and 2,400 per-tick sleep comparisons.
+Commands: the focused simulation filter `test(training::timers::)` and, with
+`NEXTEST_TEST_THREADS=2`, `test(benchmark::tests::sleep::)|test(late_game_full_population_replays_at_the_profile_checkpoint)`.
+
+## Local video evidence
+
+The construction baseline is `.cache/showcase/7b-construction-before-vp9.webm`:
+eight seconds, VP9, 1280x720, base `70d6b53231bfd3f7cf2dd0d191cbf6722bd01d08`.
+The inspected frames show the foundation, completion, and the worker walking
+to its next resource. The corresponding after take and other work scenes are
+pending. Videos and licensed assets remain outside Git.
 
 ## Historical recovery measurements
 

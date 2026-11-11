@@ -269,3 +269,34 @@ fn queue_detector_rejects_an_unannounced_progress_edit() {
     w.economy.buildings.get_mut(&center).unwrap().training_queue[0].progress_ticks += 1;
     w.advance();
 }
+
+#[test]
+fn another_spawn_with_spare_population_does_not_lose_a_sleeping_queues_credit() {
+    let setup_pair = |sleep| {
+        let (mut w, first, _) = setup(sleep);
+        let second = w
+            .insert_building(
+                PlayerId(0),
+                BuildingKind::TownCenter,
+                TileRect::from_xywh(100, 130, 4, 4),
+                true,
+            )
+            .unwrap();
+        w.issue_train(PlayerId(0), first, UnitKind::Villager)
+            .unwrap();
+        (w, second)
+    };
+    let (mut on, second) = setup_pair(true);
+    let (mut off, _) = setup_pair(false);
+    for tick in 0..650 {
+        for w in [&mut on, &mut off] {
+            if tick == 100 {
+                w.issue_train(PlayerId(0), second, UnitKind::Villager)
+                    .unwrap();
+            }
+            w.advance();
+        }
+        same(&on, &off, tick);
+    }
+    assert!(on.building(second).unwrap().training_queue.is_empty());
+}

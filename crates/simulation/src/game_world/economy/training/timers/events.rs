@@ -46,6 +46,7 @@ impl GameWorld {
     }
 
     pub(crate) fn wake_player_training(&mut self, player: PlayerId) {
+        let population = self.training_has_population(player);
         let ids = self
             .economy
             .queues
@@ -54,7 +55,19 @@ impl GameWorld {
             .cloned()
             .unwrap_or_default();
         for id in ids {
-            self.wake_queues(id);
+            // The step reads availability, not the population count. Waking
+            // an unchanged later-id queue during training would remove its
+            // clock after the awake snapshot and lose this tick's credit.
+            if self
+                .economy
+                .queues
+                .training
+                .clocks
+                .get(&id)
+                .is_some_and(|clock| clock.population != Some(population))
+            {
+                self.wake_queues(id);
+            }
         }
     }
 
