@@ -80,6 +80,8 @@ pub(super) fn append(client: &Client, scene: &PreparedScene, units: &mut Vec<Sce
             Pose::Stone
         } else if shot.kind == ProjectileKind::Arrow {
             Pose::Arrow
+        } else if shot.kind == ProjectileKind::Bolt {
+            Pose::Bolt
         } else {
             Pose::Javelin
         };

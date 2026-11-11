@@ -267,35 +267,35 @@ pub(super) fn coastal_world(seed: Seed) -> Result<GameWorld, EconomyError> {
     kingdom_environment(seed, true, 15_360)
 }
 
+pub(super) fn coast_water() -> Vec<WaterPage> {
+    vec![
+        WaterPage {
+            level: 0,
+            x: 0,
+            y: 0,
+            width: 2,
+            height: 2,
+            ocean_coverage_percent: vec![0, 100, 0, 100],
+            inland_coverage_percent: vec![0; 4],
+        },
+        WaterPage {
+            level: 1,
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+            ocean_coverage_percent: vec![50],
+            inland_coverage_percent: vec![0],
+        },
+    ]
+}
+
 pub(super) fn kingdom_environment(
     seed: Seed,
     coast: bool,
     side_meters: u64,
 ) -> Result<GameWorld, EconomyError> {
-    let water = if coast {
-        vec![
-            WaterPage {
-                level: 0,
-                x: 0,
-                y: 0,
-                width: 2,
-                height: 2,
-                ocean_coverage_percent: vec![0, 100, 0, 100],
-                inland_coverage_percent: vec![0; 4],
-            },
-            WaterPage {
-                level: 1,
-                x: 0,
-                y: 0,
-                width: 1,
-                height: 1,
-                ocean_coverage_percent: vec![50],
-                inland_coverage_percent: vec![0],
-            },
-        ]
-    } else {
-        Vec::new()
-    };
+    let water = if coast { coast_water() } else { Vec::new() };
     kingdom_water_environment(seed, side_meters, water)
 }
 

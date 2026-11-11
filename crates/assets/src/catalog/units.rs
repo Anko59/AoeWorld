@@ -4,7 +4,7 @@
 mod native;
 #[path = "units/projectile.rs"]
 mod projectile;
-pub use projectile::{PROJECTILE_PHASES, projectile_facing, release_frame};
+pub use projectile::{BOLT_SPRITE, PROJECTILE_PHASES, projectile_facing, release_frame};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum Pose {
@@ -232,6 +232,8 @@ pub enum Pose {
     CarryStoneIdle,
     FarmerSeed,
     HunterCarryIdle,
+    /// The galley line's DE bolt, drawn like the arrow from five cells.
+    Bolt,
 }
 
 #[derive(Clone, Copy)]
@@ -255,7 +257,7 @@ impl ActorSource {
         }
     }
     pub const fn is_native(self) -> bool {
-        self.native.is_some() || self.id == 4500
+        self.native.is_some() || self.id == 4500 || self.id == BOLT_SPRITE
     }
     /// Native DE durations retain fractional milliseconds (DAT f32 seconds).
     pub fn frame_millis(self) -> f64 {
@@ -296,6 +298,7 @@ impl ActorSource {
         }
         match self.id {
             4500 => 30,
+            BOLT_SPRITE => 32,
             3799 => 176,
             3820 => 170,
             _ => self.stride as u32 * 5,
@@ -324,6 +327,7 @@ impl ActorSource {
         }
         match self.id {
             4500 => phase,
+            BOLT_SPRITE => projectile::BOLT_CELLS[row],
             3799 | 3820 => projectile::source_cell(self.id, row),
             _ => row * self.stride as usize + phase,
         }
@@ -334,6 +338,9 @@ impl ActorSource {
         }
         if self.id == 4500 {
             return "de/p_mangonel_x1.sld".to_owned();
+        }
+        if self.id == BOLT_SPRITE {
+            return "de/p_bolt_x1.sld".to_owned();
         }
         format!("graphics.drs:[32, 112, 108, 115]:{}", self.id)
     }

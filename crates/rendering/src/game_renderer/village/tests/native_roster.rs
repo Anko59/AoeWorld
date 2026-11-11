@@ -186,3 +186,21 @@ fn imperial_actor_tags_round_trip_all_current_poses_in_a_compact_scene() {
         assert_eq!(kind.building_slot(), None);
     }
 }
+#[wasm_bindgen_test]
+fn galley_bolt_uses_the_five_projectile_rows_and_mirrors_eastward_flights() {
+    // Packed facings run south, then south-west to north-west, then back via
+    // the mirrored east side, exactly like the arrow.
+    for (facing, row, mirrored) in [
+        (0, 0, false),
+        (1, 1, true),
+        (2, 2, true),
+        (3, 3, true),
+        (4, 4, false),
+        (5, 3, false),
+        (6, 2, false),
+        (7, 1, false),
+    ] {
+        let u = unit(SceneUnitKind::Bolt).with_actor_frame(facing);
+        assert_eq!(unit_direction(u, 5), (row, mirrored), "facing {facing}");
+    }
+}

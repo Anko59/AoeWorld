@@ -58,6 +58,40 @@ pub(crate) async fn reset(
                 Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
             }
         }
+        Some("naval-battle") => {
+            let seed = state.diagnostic_scenario.seed;
+            let Ok((package, elevation, water)) =
+                aoe_simulation::GameWorld::naval_battle_environment(seed)
+            else {
+                return StatusCode::INTERNAL_SERVER_ERROR;
+            };
+            let stored = package.clone();
+            let directory = state.map_package_directory.clone();
+            if !tokio::task::spawn_blocking(move || {
+                crate::map_store::persist_prepared(
+                    directory.as_deref(),
+                    &stored,
+                    &elevation,
+                    &water,
+                    &[],
+                    &[],
+                )
+            })
+            .await
+            .is_ok_and(|result| result.is_ok())
+            {
+                return StatusCode::INTERNAL_SERVER_ERROR;
+            }
+            state
+                .map_packages
+                .write()
+                .await
+                .insert(package.content_hash_hex(), package);
+            match GameplayService::naval_battle_demo(seed) {
+                Ok(service) => service,
+                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
+            }
+        }
         Some("movement-lane") => {
             match GameplayService::movement_lane_demo(state.diagnostic_scenario.seed) {
                 Ok(service) => service,

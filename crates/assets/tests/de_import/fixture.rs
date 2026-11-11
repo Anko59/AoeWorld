@@ -61,6 +61,12 @@ pub(super) fn actors(install: &Path) {
         stone.extend_from_slice(&cell[16..]);
     }
     fs::write(graphics.join("p_mangonel_x1.sld"), stone).unwrap();
+    let mut bolt = cell[..16].to_vec();
+    bolt[6..8].copy_from_slice(&32_u16.to_le_bytes());
+    for _ in 0..32 {
+        bolt.extend_from_slice(&cell[16..]);
+    }
+    fs::write(graphics.join("p_bolt_x1.sld"), bolt).unwrap();
     units::append(&mut records);
     buildings::append(&mut records);
     for id in aoe_assets::catalog::ENVIRONMENT_UNIT_IDS {

@@ -218,3 +218,50 @@ fn demolition_blast_reaches_two_point_five_tiles_but_not_beyond() {
     assert!(world.unit(edge).unwrap().hp < hp);
     assert_eq!(world.unit(outside).unwrap().hp, hp);
 }
+
+#[test]
+fn galley_line_fires_the_dat_bolt() {
+    for kind in [UnitKind::Galley, UnitKind::WarGalley] {
+        let mut world = coast();
+        let (_, water) = bank(&world);
+        let attacker = ship(&mut world, kind, water, 0);
+        let victim = ship(
+            &mut world,
+            UnitKind::FishingShip,
+            TileCoord::new(water.x + 3, water.y),
+            1,
+        );
+        world.issue_attack(PlayerId(0), attacker, victim).unwrap();
+        let mut kinds = std::collections::BTreeSet::new();
+        for _ in 0..60 {
+            advance(&mut world, 1);
+            kinds.extend(world.projectiles().map(|p| p.kind as u8));
+        }
+        assert_eq!(
+            kinds,
+            std::collections::BTreeSet::from([crate::ProjectileKind::Bolt as u8]),
+            "{kind:?}"
+        );
+    }
+}
+
+#[test]
+fn naval_battle_demo_builds_and_a_galley_fires_a_bolt_within_a_second() {
+    let (mut world, _) = GameWorld::naval_battle_demo(aoe_core::Seed(1)).unwrap();
+    let galleys = |p| {
+        world
+            .units
+            .iter()
+            .filter(|u| u.state.player == PlayerId(p) && u.state.kind == UnitKind::WarGalley)
+            .count()
+    };
+    assert_eq!((galleys(0), galleys(1)), (3, 3));
+    let mut bolt = false;
+    for _ in 0..200 {
+        world.advance();
+        bolt |= world
+            .projectiles()
+            .any(|p| p.kind == crate::ProjectileKind::Bolt);
+    }
+    assert!(bolt, "a galley fires a bolt");
+}

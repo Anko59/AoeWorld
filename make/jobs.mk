@@ -185,7 +185,7 @@ test-assets-de: job-bootstrap
 	@$(JOB_RUN) test-assets-de -- make --no-print-directory test-assets-de-steps
 
 test-assets-de-steps:
-	@$(subst $(TOOL_IMAGE),-e AOE_DE_DIR=/de-install $(call BIND_MOUNT,$(DE_DIR),/de-install,1) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo nextest run --locked -p aoe-assets --no-tests fail --success-output immediate -E 'test(real_house)|test(real_siege_stone)|test(real_all_unit)|test(real_de_building)|test(real_terrain_directory)'
+	@$(subst $(TOOL_IMAGE),-e AOE_DE_DIR=/de-install $(call BIND_MOUNT,$(DE_DIR),/de-install,1) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo nextest run --locked -p aoe-assets --no-tests fail --success-output immediate -E 'test(real_house)|test(real_siege_stone)|test(real_galley_bolt)|test(real_all_unit)|test(real_de_building)|test(real_terrain_directory)'
 
 .PHONY: test-assets-dat test-assets-dat-steps
 test-assets-dat: job-bootstrap

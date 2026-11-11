@@ -34,6 +34,7 @@ pub(super) fn projectiles(
                     aoe_simulation::ProjectileKind::Javelin => {
                         aoe_protocol::ProjectileKind::Javelin
                     }
+                    aoe_simulation::ProjectileKind::Bolt => aoe_protocol::ProjectileKind::Bolt,
                 },
             }
         })

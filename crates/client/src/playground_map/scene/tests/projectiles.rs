@@ -56,6 +56,45 @@ async fn siege_stone_scene_advances_every_native_cell_and_expires_at_impact() {
     client.canvas.remove();
 }
 
+#[wasm_bindgen_test]
+async fn galley_bolt_is_drawn_as_the_bolt_actor_until_impact() {
+    use aoe_core::{Tick, TileRect, WorldPosition};
+    let scene = PreparedScene::new(
+        Camera {
+            center: [10.0, 10.0],
+            zoom: 1.0,
+            viewport: [512.0; 2],
+            focus_elevation_meters: 0.0,
+        },
+        Vec::new(),
+    );
+    let mut client = super::super::review_tests::client(&scene).await;
+    client.config.tick_hz = 20;
+    assert!(client.fog.apply(aoe_protocol::FogState {
+        revision: 1,
+        tick: Tick(100),
+        region: TileRect::from_xywh(0, 0, 16, 16),
+        disabled: false,
+        tiles: vec![2; 256],
+        overview: vec![],
+    }));
+    client.village.tick = 105;
+    client.village.projectiles = vec![aoe_protocol::ProjectileState {
+        id: 1,
+        attacker: None,
+        from: WorldPosition::new(10_000, 10_000),
+        to: WorldPosition::new(12_000, 10_000),
+        launched: Tick(100),
+        impact: Tick(110),
+        kind: ProjectileKind::Bolt,
+    }];
+    let mut units = Vec::new();
+    append(&client, &scene, &mut units);
+    assert_eq!(units.len(), 1);
+    assert_eq!(units[0].kind, SceneUnitKind::Bolt);
+    client.canvas.remove();
+}
+
 fn unpack(packed: u8) -> (u8, u8) {
     (packed & 7, packed >> 3)
 }

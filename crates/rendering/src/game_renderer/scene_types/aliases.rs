@@ -225,6 +225,7 @@ impl SceneUnitKind {
     pub const CarryStoneIdle: Self = Self::Actor142;
     pub const FarmerSeed: Self = Self::Actor207;
     pub const HunterCarryIdle: Self = Self::Actor10;
+    pub const Bolt: Self = Self::Actor208;
     pub const Scout: Self = Self::ScoutStand;
     pub const Villager: Self = Self::VillagerStand;
     pub const VillagerChopping: Self = Self::ChopperWork;

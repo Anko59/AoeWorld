@@ -11,7 +11,7 @@ impl SceneUnitKind {
     }
     pub(in crate::game_renderer) fn native_directions(self) -> bool {
         self.actor_slot()
-            .is_some_and(|slot| !matches!(slot, 72 | 73 | 120))
+            .is_some_and(|slot| !matches!(slot, 72 | 73 | 120 | 223))
     }
     pub(in crate::game_renderer) fn actor_slot(self) -> Option<usize> {
         (self as usize)

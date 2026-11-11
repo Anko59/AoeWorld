@@ -160,7 +160,8 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
                 "unsupported native actor topology",
             ));
         }
-        if building == "projectile" && frames.len() != 30 {
+        let projectile_cells = if role == "bolt" { 32 } else { 30 };
+        if building == "projectile" && frames.len() != projectile_cells {
             return Err(crate::invalid(
                 "DE projectile",
                 0,

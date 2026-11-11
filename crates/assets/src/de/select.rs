@@ -15,6 +15,11 @@ pub const SELECTION: &[Item] = &[
         stem: "p_mangonel",
     },
     Item {
+        building: "projectile",
+        role: "bolt",
+        stem: "p_bolt",
+    },
+    Item {
         building: "rally_point",
         role: "flag",
         stem: "b_misc_waypoint_flag",

@@ -365,7 +365,7 @@ pub(crate) fn packed_frame(
             / millis)
             .min((stride - 1) as f64) as u8
     };
-    if !matches!(pose, Pose::Arrow | Pose::Javelin | Pose::Stone) {
+    if !matches!(pose, Pose::Arrow | Pose::Javelin | Pose::Stone | Pose::Bolt) {
         let direction = (20 - u16::from(facing % 8) * 2) % 16;
         direction | (u16::from(phase) << 4)
     } else {

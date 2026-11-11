@@ -11,6 +11,14 @@ use super::Pose;
 /// Atlas cells per row.
 pub const PROJECTILE_PHASES: u8 = 1;
 
+/// DE sprite id of `p_bolt_x1.sld` (graphic 3391, unit 372 `Projectile GAL`):
+/// 32 directions of one cell each, 11.25 degrees apart, clockwise on screen
+/// from east (cell 0) through south (8), west (16) and north (24). Mirrored
+/// rows reuse the west half.
+pub const BOLT_SPRITE: u32 = 3812;
+/// Native cell of each of the five rows: south, south-west, west, north-west, north.
+pub(super) const BOLT_CELLS: [usize; 5] = [8, 12, 16, 20, 24];
+
 /// Native cell of `row` for the projectile SLP `id` (3799 or 3820): the
 /// level-flight cell measured on the real art.
 pub(super) const fn source_cell(id: u32, row: usize) -> usize {

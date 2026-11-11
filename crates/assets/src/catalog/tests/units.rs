@@ -151,6 +151,19 @@ fn projectile_cells_cover_every_direction_within_twenty_three_degrees() {
 }
 
 #[test]
+fn galley_bolt_draws_the_native_de_cells_in_five_rows() {
+    let source = SPRITES[Pose::Bolt as usize];
+    assert_eq!(source.manifest_source(), "de/p_bolt_x1.sld");
+    assert!(source.is_native());
+    assert_eq!(
+        (source.frames(), source.rows(), source.selected_frames()),
+        (32, 5, 5)
+    );
+    let cells: Vec<_> = (0..5).map(|row| source.source_frame(row, 0)).collect();
+    assert_eq!(cells, [8, 12, 16, 20, 24]);
+}
+
+#[test]
 fn projectile_facing_follows_the_cardinal_screen_directions() {
     use crate::catalog::units::projectile_facing as facing;
     // West is the unmirrored native row, east its mirror, level at cell 5.

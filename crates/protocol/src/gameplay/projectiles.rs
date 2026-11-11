@@ -6,6 +6,7 @@ pub enum ProjectileKind {
     Arrow,
     Javelin,
     Stone,
+    Bolt,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ProjectileState {
