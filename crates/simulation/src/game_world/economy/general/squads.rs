@@ -406,14 +406,18 @@ impl GameWorld {
             }
             if !self.formation_matches(&ids, goal) {
                 work.orders += 1;
-                let order = self.issue_formation_move(
-                    general.player,
-                    &ids,
-                    aoe_core::Formation::Line,
-                    goal,
-                    false,
-                    false,
-                );
+                let order = match self.general_squad_goal_reachable(&ids, goal, general.position) {
+                    Ok(true) => self.issue_formation_move(
+                        general.player,
+                        &ids,
+                        aoe_core::Formation::Line,
+                        goal,
+                        false,
+                        false,
+                    ),
+                    Ok(false) => Err(crate::GameWorldError::Unreachable.into()),
+                    Err(error) => Err(error.into()),
+                };
                 if order.is_err() {
                     // A refusal is not completion: ground may open later, so
                     // the march stays unrouted. The squad is asked again only

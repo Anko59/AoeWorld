@@ -8,6 +8,9 @@ use std::{
     sync::Arc,
 };
 
+#[cfg(test)]
+#[path = "navigation/tests/monotone.rs"]
+mod monotone_tests;
 mod occupied;
 mod recent;
 use occupied::Occupied;
@@ -215,6 +218,46 @@ impl ResourceOverlay {
 
     pub(crate) fn navigation_stamp(&self) -> [u8; 32] {
         self.navigation_state.snapshot.stamp
+    }
+
+    /// Prove that an old positive path witness survives. Openings preserve
+    /// walkability; bridge edits are conservatively treated as invalidating.
+    pub(crate) fn navigation_preserves_walkability(&self, older: &Self) -> bool {
+        let (now, old) = (
+            &self.navigation_state.snapshot,
+            &older.navigation_state.snapshot,
+        );
+        if now.stamp == old.stamp {
+            return true;
+        }
+        for (current, previous) in now.shards.iter().zip(old.shards.iter()) {
+            if Arc::ptr_eq(current, previous) {
+                continue;
+            }
+            for (key, chunk) in current.iter() {
+                if let Some(before) = previous.get(key) {
+                    if Arc::ptr_eq(chunk, before) {
+                        continue;
+                    }
+                    if !chunk.occupied.is_subset_of(&before.occupied)
+                        || !before.depleted.is_subset(&chunk.depleted)
+                        || before.bridges != chunk.bridges
+                    {
+                        return false;
+                    }
+                } else if !chunk.occupied.is_empty() || !chunk.bridges.is_empty() {
+                    return false;
+                }
+            }
+            for (key, chunk) in previous.iter() {
+                if !current.contains_key(key)
+                    && (!chunk.depleted.is_empty() || !chunk.bridges.is_empty())
+                {
+                    return false;
+                }
+            }
+        }
+        true
     }
 
     pub(crate) fn navigation_toggle(&mut self, tile: TileCoord, domain: u8, identity: u64) {

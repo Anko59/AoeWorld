@@ -2,6 +2,34 @@ use super::super::super::MapChunkGenerator;
 use aoe_core::TileCoord;
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn colliding_points_share_a_set_without_expanding_the_tables() {
+    use super::{PointMemo, SLOTS};
+    // These tiles collide in the point table. Alternating two nearby routes
+    // must not force immutable terrain to be composed again on every read.
+    let [a, b, c] = [0, 5599, 11198].map(|x| TileCoord::new(x, 0));
+    let mut memo = PointMemo::default();
+    for tile in [a, b] {
+        memo.insert(tile, None);
+        memo.insert_base(tile, None);
+    }
+    for tile in [a, b] {
+        assert_eq!(memo.get(tile), Some(None));
+        assert_eq!(memo.get_base(tile), Some(None));
+    }
+    assert_eq!(memo.slots.len(), SLOTS);
+    assert_eq!(memo.bases.len(), SLOTS);
+    memo.insert(c, None);
+    memo.insert_base(c, None);
+    assert_eq!(memo.get(a), None);
+    assert_eq!(memo.get_base(a), None);
+    for tile in [b, c] {
+        assert_eq!(memo.get(tile), Some(None));
+        assert_eq!(memo.get_base(tile), Some(None));
+    }
+}
+
+#[test]
 fn memoized_answers_equal_direct_evaluation_and_reset_with_inputs() {
     let generator = MapChunkGenerator::new([7; 32], 11, 256);
     for y in (0..256).step_by(7) {

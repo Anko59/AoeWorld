@@ -62,6 +62,8 @@ impl GameWorld {
             return Ok(());
         }
         let origin = self.formation_origin(&ids, centroid)?;
+        let requested_destination = destination;
+        let destination = self.formation_goal(player, origin, destination, form, &ids)?;
         let index = self.lookup[&leader];
         let previous = self.take_planner(index);
         self.route_metrics.attribution.group_orders += 1;
@@ -78,6 +80,8 @@ impl GameWorld {
         } else {
             (destination, VecDeque::new())
         };
+        self.route_metrics.attribution.group_stopped_short +=
+            u64::from(destination != requested_destination);
         // Validation and the shared route preparation precede every task change.
         self.leave_groups(&ids);
         for &id in &ids {
@@ -102,17 +106,7 @@ impl GameWorld {
             heading
         };
         let facing = facing_for(i64::from(heading.x), i64::from(heading.y), Facing::South);
-        let (diameter, step) = ids.iter().fold((0, 0), |(diameter, step), id| {
-            let unit = self.units[self.lookup[id]].state;
-            let (speed, denominator) = self.movement_speed(unit.kind, unit.player);
-            (
-                diameter.max(unit.kind.collision_radius() * 2),
-                step.max(speed.div_ceil(denominator).min(512) as i32),
-            )
-        });
-        // Hard bodies need room for a late member to pass between occupied slots,
-        // plus one snapshot step. Narrow files use just diameter plus a step.
-        let gap = diameter * 2 + step + 16;
+        let (gap, narrow_gap) = self.formation_gaps(&ids);
         let members = ids
             .iter()
             .copied()
@@ -151,7 +145,7 @@ impl GameWorld {
             settled: false,
             direct: false,
             gap,
-            narrow_gap: diameter + step + 16,
+            narrow_gap,
             slots_tight: false,
             packing_files: ids.len(),
             long_files: false,
@@ -285,10 +279,20 @@ impl GameWorld {
 
     pub(super) fn next_formation_order(&mut self, leader: EntityId, group: &mut Group) {
         let index = self.lookup[&leader];
+        let player = self.units[index].state.player;
         while let Some((destination, attack_move)) = group.queue.pop_front() {
+            let ids: Vec<_> = group.members.iter().map(|member| member.id).collect();
+            let requested_destination = destination;
+            let Ok(destination) =
+                self.formation_goal(player, group.anchor, destination, group.form, &ids)
+            else {
+                continue;
+            };
             if let Ok((waypoint, route, planner, planning, fast_tried)) =
                 self.order_route(index, group.anchor, destination)
             {
+                self.route_metrics.attribution.group_stopped_short +=
+                    u64::from(destination != requested_destination);
                 let (waypoint, route) = if self.has_route_navigation() {
                     (waypoint, route)
                 } else {

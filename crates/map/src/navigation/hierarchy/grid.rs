@@ -66,6 +66,12 @@ pub(super) struct Grid {
     pub(super) uniform_height: bool,
 }
 
+impl std::fmt::Debug for Grid {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Grid").finish_non_exhaustive()
+    }
+}
+
 impl Grid {
     pub(super) fn new(ground: &Ground<'_>, key: Key) -> Result<Self> {
         let mut grid = Self {
@@ -84,10 +90,13 @@ impl Grid {
             .iter()
             .flatten()
             .all(|cell| Some(cell.game_height_level) == height);
+        // Every tile read below lies inside `key`; without a deck in this
+        // chunk no bridge lookup can answer, so skip them all.
+        let bridged = ground.overlay.bridge_in_chunk(key);
         for (at, cell) in cells.iter().enumerate() {
             let tile = tile(key, at);
             grid.open[at] = cell.is_some_and(|cell| {
-                (cell.passable || ground.overlay.bridge_connections(tile).is_some())
+                (cell.passable || (bridged && ground.overlay.bridge_connections(tile).is_some()))
                     && !ground.overlay.blocks_tile(tile)
                     && cell
                         .node
@@ -95,7 +104,7 @@ impl Grid {
             });
         }
         let edge = |a: usize, b: usize| {
-            if let Some(clear) = ground.overlay.bridge_edge(tile(key, a), tile(key, b)) {
+            if bridged && let Some(clear) = ground.overlay.bridge_edge(tile(key, a), tile(key, b)) {
                 return clear;
             }
             let (Some(a), Some(b)) = (cells[a], cells[b]) else {
@@ -124,7 +133,10 @@ impl Grid {
                 if !grid.open[next] || !edge(at, next) {
                     continue;
                 }
-                if dx != 0 && dy != 0 && ground.overlay.bridge_edge(from, to) != Some(true) {
+                if dx != 0
+                    && dy != 0
+                    && !(bridged && ground.overlay.bridge_edge(from, to) == Some(true))
+                {
                     let horizontal = index(TileCoord::new(to.x, from.y));
                     let vertical = index(TileCoord::new(from.x, to.y));
                     if !grid.open[horizontal]

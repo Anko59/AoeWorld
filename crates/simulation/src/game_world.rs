@@ -191,6 +191,8 @@ pub struct GameWorld {
     /// Fast-attempt work each player spent this tick.
     pub(crate) fast_route_spent: BTreeMap<PlayerId, u32>,
     pub(crate) navigation_cache: NavigationCache,
+    /// Land regions over the planner's ground: a cache, never hashed.
+    pub(crate) regions: Mutex<[Option<aoe_map::Regions>; 3]>,
     pub(crate) planning_cursor: usize,
     pub(crate) active_planner_count: usize,
     pub(crate) active_route_searches: usize,
@@ -244,6 +246,7 @@ impl GameWorld {
             fast_route_budget: crate::game_movement::MAX_FAST_ROUTE_WORK_PER_TICK,
             fast_route_spent: BTreeMap::new(),
             navigation_cache: NavigationCache::default(),
+            regions: Mutex::new(std::array::from_fn(|_| None)),
             resource_chunks: Mutex::new(Default::default()),
             planning_cursor: 0,
             active_planner_count: 0,

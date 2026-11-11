@@ -168,6 +168,7 @@ impl RoutePlanner {
             self.pocket = None;
         }
         self.leg_origin = leg_end;
+        self.region_proof = None;
         self.leg_work = 0;
         self.leg_best = None;
         if map_guidance && self.guidance.is_empty() {

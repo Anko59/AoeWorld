@@ -243,6 +243,10 @@ impl Ground<'_> {
     }
 
     fn build_portals(&self, key: Key) -> Result<ChunkPortals> {
+        Ok(self.build_portals_with_grid(key)?.0)
+    }
+
+    fn build_portals_with_grid(&self, key: Key) -> Result<(ChunkPortals, Option<grid::Grid>)> {
         let _span = self
             .generator
             .measure_navigation(crate::NavigationPhase::Portals);
@@ -257,15 +261,19 @@ impl Ground<'_> {
                 self.cancelled,
             )?
         {
-            return Ok(ChunkPortals {
+            let empty = ChunkPortals {
                 portals: Vec::new(),
                 costs: OnceLock::new(),
                 labels: grid::Labels::Empty,
                 components: 0,
                 links: Vec::new(),
                 packed: None,
-            });
+            };
+            return Ok((empty, None));
         }
+        // The grid needs this projection in every case. Build it before border
+        // probes so their inside cells reuse the same prepared walk chunk.
+        let grid = grid::Grid::new(self, key)?;
         let mut portals = Vec::new();
         for side in 0..4 {
             let border = |i| border_pair(side, origin, i);
@@ -293,7 +301,6 @@ impl Ground<'_> {
                 });
             }
         }
-        let grid = grid::Grid::new(self, key)?;
         // Only diagonal border transitions that have no two-cardinal-step
         // equivalent need extra portals. Most chunks have none.
         for at in 0..grid::CELLS {
@@ -341,14 +348,15 @@ impl Ground<'_> {
             }
         }
         let (labels, components, links) = grid.components();
-        Ok(ChunkPortals {
+        let chunk = ChunkPortals {
             costs: OnceLock::new(),
             portals,
             labels,
             components,
             links,
             packed: None,
-        })
+        };
+        Ok((chunk, Some(grid)))
     }
 
     fn portals(&self, key: Key) -> Result<Arc<ChunkPortals>> {
@@ -366,9 +374,11 @@ impl Ground<'_> {
         {
             return Ok(found);
         }
-        let built = Arc::new(self.build_portals(key)?);
+        let (built, grid) = self.build_portals_with_grid(key)?;
+        let built = Arc::new(built);
         if let Ok(mut cache) = self.generator.portal_cache().lock() {
             cache.insert(key, stamp, Arc::clone(&built));
+            cache.grid = grid.map(|grid| (key, stamp, Box::new(grid)));
         }
         Ok(built)
     }
@@ -385,8 +395,27 @@ impl Ground<'_> {
                 .atlas
                 .as_ref()
                 .map_or(self.overlay, |atlas| atlas.overlay());
-            let ground = Ground::new(self.generator, overlay, self.cancelled);
-            let grid = grid::Grid::new(&ground, key)?;
+            // The grid is a pure function of the chunk and its collision
+            // fingerprint, so the one retained from its portal build is exact.
+            let stamp = overlay.navigation_key(key);
+            let retained = self
+                .generator
+                .portal_cache()
+                .lock()
+                .ok()
+                .and_then(|mut cache| {
+                    cache
+                        .grid
+                        .take_if(|(at, seen, _)| *at == key && *seen == stamp)
+                        .map(|(_, _, grid)| grid)
+                });
+            let grid = match retained {
+                Some(grid) => grid,
+                None => Box::new(grid::Grid::new(
+                    &Ground::new(self.generator, overlay, self.cancelled),
+                    key,
+                )?),
+            };
             let mut costs = Vec::with_capacity(chunk.portals.len());
             for source in &chunk.portals {
                 let reached = grid.costs(source.tile, self.cancelled)?;

@@ -1,5 +1,37 @@
 use super::*;
 impl GameWorld {
+    /// A squad cut off from both its commander and its goal must retry after
+    /// an opening, rather than completing a local frontier formation.
+    pub(super) fn general_squad_goal_reachable(
+        &self,
+        ids: &[EntityId],
+        goal: WorldPosition,
+        commander: WorldPosition,
+    ) -> Result<bool, crate::GameWorldError> {
+        let bucket = ids
+            .iter()
+            .filter_map(|&id| self.unit(id))
+            .filter_map(|unit| aoe_map::LandBucket::for_radius(unit.kind.collision_radius()))
+            .max()
+            .unwrap_or(aoe_map::LandBucket::Small);
+        for unit in ids.iter().filter_map(|&id| self.unit(id)) {
+            if self.land_reachable(
+                unit.player,
+                bucket,
+                unit.position.tile_floor(),
+                goal.tile_floor(),
+            )? || self.land_reachable(
+                unit.player,
+                bucket,
+                unit.position.tile_floor(),
+                commander.tile_floor(),
+            )? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     pub(super) fn general_formation(
         &mut self,
         g: EntityId,

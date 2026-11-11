@@ -161,7 +161,7 @@ impl RoutePlanner {
                 }
                 continue;
             }
-            if self.needs_guidance(terrain) {
+            if self.needs_guidance(terrain, overlay) {
                 remaining = self.guide(terrain, overlay, remaining, cancelled)?;
                 if remaining == 0 {
                     return Ok(());

@@ -20,6 +20,8 @@ mod gate_routes;
 mod gathering;
 mod general;
 mod market;
+#[path = "economy/navigation/regions.rs"]
+mod regions;
 mod rejections;
 #[path = "economy/navigation/resource_collision.rs"]
 mod resource_collision;

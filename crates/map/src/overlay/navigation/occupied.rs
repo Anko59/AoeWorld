@@ -25,6 +25,17 @@ impl Occupied {
         self.count == 0
     }
 
+    pub(super) fn is_subset_of(&self, older: &Self) -> bool {
+        match (&self.flags, &older.flags) {
+            (None, _) => true,
+            (Some(_), None) => false,
+            (Some(current), Some(previous)) => current
+                .iter()
+                .zip(previous.iter())
+                .all(|(&now, &was)| now == 0 || was != 0),
+        }
+    }
+
     pub(super) fn toggle(&mut self, tile: TileCoord, flag: u8) -> bool {
         let flags = self.flags.get_or_insert_with(|| Box::new([0; TILES]));
         let at = Self::offset(tile);

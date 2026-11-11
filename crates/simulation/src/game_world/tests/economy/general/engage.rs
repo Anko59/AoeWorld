@@ -19,6 +19,8 @@ fn run_scene(
 ) -> Probe {
     let (mut w, _) = setup();
     w.set_fog_disabled(true);
+    let timer = std::sync::Arc::new(RouteTimer::default());
+    w.set_planning_probe(timer.clone());
     let ours = army(&mut w, 0, 190, 19, 60, 100);
     let theirs = army(&mut w, 1, enemies, 12, 120, 100 + defender_offset);
     let mut mine = ours.clone();
@@ -62,8 +64,10 @@ fn run_scene(
     std::fs::write(
         directory.join(format!("{name}.txt")),
         format!(
-            "{summary}with_target={} in_reach={}\n",
-            probe.with_target, probe.in_reach
+            "{summary}with_target={} in_reach={}\nroute spans ns: {:?}\n",
+            probe.with_target,
+            probe.in_reach,
+            timer.0.lock().unwrap()
         ),
     )
     .unwrap();
@@ -169,4 +173,30 @@ fn an_outnumbered_general_army_still_fights_what_reaches_it() {
     assert!(p.in_reach > 0);
     let share = p.with_target * 100 / p.in_reach;
     assert!(share >= 25, "{share}% of units in reach fight");
+}
+
+#[derive(Debug, Default)]
+struct RouteTimer(std::sync::Arc<std::sync::Mutex<std::collections::BTreeMap<&'static str, u128>>>);
+struct RouteSpan {
+    timer: RouteTimer,
+    name: &'static str,
+    start: std::time::Instant,
+}
+impl aoe_map::NavigationSpan for RouteSpan {}
+impl Drop for RouteSpan {
+    fn drop(&mut self) {
+        *self.timer.0.lock().unwrap().entry(self.name).or_default() +=
+            self.start.elapsed().as_nanos();
+    }
+}
+impl crate::PlanningProbe for RouteTimer {
+    fn begin(&self) {}
+    fn end(&self) {}
+    fn movement_span(&self, name: &'static str) -> Option<Box<dyn aoe_map::NavigationSpan>> {
+        Some(Box::new(RouteSpan {
+            timer: RouteTimer(self.0.clone()),
+            name,
+            start: std::time::Instant::now(),
+        }))
+    }
 }

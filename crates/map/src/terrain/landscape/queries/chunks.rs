@@ -28,6 +28,30 @@ impl MapChunkGenerator {
         reserved_at: &dyn Fn(TileCoord) -> Reservations,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<LandscapeChunk>, EnvironmentPageError> {
+        self.evaluate_chunk::<false>(x, y, policy_at, reserved_at, cancelled)
+    }
+
+    /// The same chunk without decorations: identical tiles and resources for
+    /// physical consumers (walk and gameplay chunks) that discard dressing.
+    pub(in crate::terrain) fn evaluate_physical_chunk_with_cancel(
+        &self,
+        x: i32,
+        y: i32,
+        policy_at: &dyn Fn(TileCoord, Tile) -> LandscapePolicy,
+        reserved_at: &dyn Fn(TileCoord) -> Reservations,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<LandscapeChunk>, EnvironmentPageError> {
+        self.evaluate_chunk::<true>(x, y, policy_at, reserved_at, cancelled)
+    }
+
+    fn evaluate_chunk<const PHYSICAL: bool>(
+        &self,
+        x: i32,
+        y: i32,
+        policy_at: &dyn Fn(TileCoord, Tile) -> LandscapePolicy,
+        reserved_at: &dyn Fn(TileCoord) -> Reservations,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<LandscapeChunk>, EnvironmentPageError> {
         if cancelled() {
             return Err(EnvironmentPageError::Cancelled);
         }
@@ -54,13 +78,15 @@ impl MapChunkGenerator {
                     ox.checked_add(lx).ok_or(EnvironmentPageError::Invalid)?,
                     oy.checked_add(ly).ok_or(EnvironmentPageError::Invalid)?,
                 );
-                if let Some(point) = self.evaluate_landscape_point_with_memo::<false, 1296, 2500>(
-                    position,
-                    policy_at,
-                    reserved_at,
-                    cancelled,
-                    &memo,
-                )? {
+                if let Some(point) = self
+                    .evaluate_landscape_point_with_memo::<false, PHYSICAL, 1296, 2500>(
+                        position,
+                        policy_at,
+                        reserved_at,
+                        cancelled,
+                        &memo,
+                    )?
+                {
                     chunk.tiles.push(point.tile);
                     if let Some(resource) = point.resource {
                         chunk.resources.push(resource);
@@ -74,7 +100,7 @@ impl MapChunkGenerator {
         Ok(Some(chunk))
     }
 
-    pub(in crate::terrain) fn evaluate_landscape_point_with_cancel(
+    pub(in crate::terrain) fn evaluate_landscape_point_with_cancel<const PHYSICAL: bool>(
         &self,
         position: TileCoord,
         policy_at: &dyn Fn(TileCoord, Tile) -> LandscapePolicy,
@@ -82,7 +108,7 @@ impl MapChunkGenerator {
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<super::LandscapePoint>, EnvironmentPageError> {
         let memo = memo::PointMemo::new(self, position, cancelled);
-        self.evaluate_landscape_point_with_memo::<false, 25, 361>(
+        self.evaluate_landscape_point_with_memo::<false, PHYSICAL, 25, 361>(
             position,
             policy_at,
             reserved_at,
@@ -100,7 +126,7 @@ impl MapChunkGenerator {
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<super::LandscapePoint>, EnvironmentPageError> {
         let memo = memo::PointMemo::new(self, position, cancelled);
-        self.evaluate_landscape_point_with_memo::<true, 25, 361>(
+        self.evaluate_landscape_point_with_memo::<true, true, 25, 361>(
             position,
             &crate::terrain::landscape_dispatch::default_policy,
             &|at| self.landscape_reservations_at(at),
@@ -111,6 +137,7 @@ impl MapChunkGenerator {
 
     fn evaluate_landscape_point_with_memo<
         const SURFACE_ONLY: bool,
+        const PHYSICAL: bool,
         const N: usize,
         const W: usize,
     >(
@@ -253,6 +280,15 @@ impl MapChunkGenerator {
         } else {
             None
         };
+        if PHYSICAL {
+            // Decorations never feed back into terrain or resources.
+            return Ok(Some(super::LandscapePoint {
+                tile,
+                historical_land_use: sample.historical_land_use,
+                resource,
+                decoration: None,
+            }));
+        }
         let mut decoration = None;
         if base.surface.kind == SurfaceKind::CliffLedge
             && let Some(piece) = memo.cliff(position)?

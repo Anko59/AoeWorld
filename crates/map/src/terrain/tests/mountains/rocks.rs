@@ -210,3 +210,34 @@ fn loose_rocks_stay_off_a_high_cold_lake_and_its_shore() {
         "{wet} wet tiles, {stones} stones"
     );
 }
+
+#[test]
+fn physical_chunks_and_points_drop_only_decorations() {
+    let generator = alpine(1).with_latitude(459_000_000, 60_000);
+    let mut decorated = 0;
+    for (x, y) in [(6, 6), (9, 11), (12, 14)] {
+        let full = generator
+            .landscape_chunk_with_cancel(x, y, &|| false)
+            .unwrap();
+        let physical = generator
+            .physical_chunk_with_cancel(x, y, &|| false)
+            .unwrap();
+        decorated += full.decorations.len();
+        assert!(physical.decorations.is_empty());
+        assert_eq!(physical.tiles, full.tiles);
+        assert_eq!(physical.resources, full.resources);
+        for tile in full.tiles.iter().step_by(97) {
+            let point = generator
+                .landscape_point_with_cancel(tile.tile, &|| false)
+                .unwrap()
+                .unwrap();
+            let cached = generator
+                .memoized_point(tile.tile, &|| false)
+                .unwrap()
+                .unwrap();
+            assert_eq!(cached.0, point.tile.terrain);
+            assert_eq!(cached.1, point.resource.map(|resource| resource.node));
+        }
+    }
+    assert!(decorated > 0, "the fixture must exercise skipped dressing");
+}

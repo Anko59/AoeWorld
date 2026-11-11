@@ -109,3 +109,67 @@ fn memoized_search_still_reads_the_proof_snapshot() {
         .unwrap();
     assert!(!search.records.contains_key(&to));
 }
+
+/// Counts every terrain read; a dominated neighbour must need none.
+struct Counting(std::cell::Cell<u32>);
+impl RouteTerrain for Counting {
+    fn route_walkable(
+        &self,
+        _: &ResourceOverlay,
+        _: TileCoord,
+        _: &dyn Fn() -> bool,
+    ) -> Result<bool, EnvironmentPageError> {
+        self.0.set(self.0.get() + 1);
+        Ok(true)
+    }
+    fn route_edge_clear(
+        &self,
+        _: TileCoord,
+        _: TileCoord,
+        _: &dyn Fn() -> bool,
+    ) -> Result<bool, EnvironmentPageError> {
+        self.0.set(self.0.get() + 1);
+        Ok(true)
+    }
+    fn route_step_cost(
+        &self,
+        _: TileCoord,
+        _: TileCoord,
+        _: &dyn Fn() -> bool,
+    ) -> Result<u32, EnvironmentPageError> {
+        self.0.set(self.0.get() + 1);
+        Ok(0)
+    }
+}
+
+#[test]
+fn a_dominated_neighbour_skips_terrain_but_still_observes_cancellation() {
+    let overlay = ResourceOverlay::default();
+    let (origin, active) = (TileCoord::new(0, 0), TileCoord::new(1, 0));
+    let expansion = ActiveExpansion {
+        tile: active,
+        cost: 0,
+        next_neighbor: 0,
+    };
+    let terrain = Counting(std::cell::Cell::new(0));
+    let mut search = SearchState::new(origin, TileCoord::new(5, 0));
+    let before = search.clone();
+    ExpansionContext::new(TileCoord::new(5, 0), &terrain, &overlay, &|| false)
+        .expand_neighbor(&mut search, expansion, (-1, 0))
+        .unwrap();
+    assert_eq!(terrain.0.get(), 0, "an equal-cost record cannot improve");
+    assert_eq!(search, before);
+    let cancelled = ExpansionContext::new(TileCoord::new(5, 0), &terrain, &overlay, &|| true)
+        .expand_neighbor(&mut search, expansion, (-1, 0));
+    assert!(matches!(
+        cancelled,
+        Err(Terminal::Environment(EnvironmentPageError::Cancelled))
+    ));
+    // A zero-cost step to a costlier record still reads and improves it.
+    search.records.get_mut(&origin).unwrap().cost = 1;
+    ExpansionContext::new(TileCoord::new(5, 0), &terrain, &overlay, &|| false)
+        .expand_neighbor(&mut search, expansion, (-1, 0))
+        .unwrap();
+    assert!(terrain.0.get() > 0);
+    assert_eq!(search.records[&origin].cost, 0);
+}

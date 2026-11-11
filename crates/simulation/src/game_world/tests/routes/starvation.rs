@@ -79,12 +79,25 @@ fn hopeless_near_searches_do_not_starve_the_routes_of_their_player() {
     for _ in 0..10 {
         world.advance();
     }
-    assert_eq!(world.route_slots[&player].searches, 2, "both slots held");
+    assert_eq!(
+        world.route_scheduler_stats().searches,
+        0,
+        "sealed searches are proved without holding slots"
+    );
     let detours = detour_orders(&mut world, player, 60);
+    let mut served = std::collections::BTreeSet::new();
     let mut oldest = 0;
     for _ in 0..NEAR_ANSWER_TICKS + 5 {
         world.advance();
         oldest = oldest.max(world.route_scheduler_stats().oldest_wait_ticks);
+        for &id in &detours {
+            if answered(&world, id) && served.insert(id) {
+                assert_eq!(world.movement_failure(id), None, "route answer for {id:?}");
+                // This checks route service. Stop answered units before
+                // their many overlapping detours meet at the wall's ends.
+                world.issue_stop(player, id).expect("stop served unit");
+            }
+        }
     }
     let stats = world.route_scheduler_stats();
     let unanswered = detours.iter().filter(|id| !answered(&world, **id)).count();
@@ -92,12 +105,7 @@ fn hopeless_near_searches_do_not_starve_the_routes_of_their_player() {
         unanswered, 0,
         "units behind the hopeless searches: {stats:?}"
     );
-    // They were answered with routes, not merely turned away.
-    let failed = detours
-        .iter()
-        .filter(|id| world.movement_failure(**id).is_some())
-        .count();
-    assert_eq!(failed, 0, "{stats:?}");
+    assert_eq!(served.len(), detours.len(), "{stats:?}");
     assert!(oldest <= NEAR_ANSWER_TICKS, "waited {oldest}: {stats:?}");
     for id in hopeless {
         let unit = world.unit(id).expect("unit");
@@ -116,21 +124,24 @@ fn hopeless_near_searches_do_not_starve_the_routes_of_their_player() {
 #[test]
 fn a_search_restarted_by_ground_changes_still_answers_in_bounded_time() {
     let mut world = sealed_near_world();
+    world.fast_route_budget = 0;
     let hopeless = hopeless_orders(&mut world, PlayerId(3));
     let area = aoe_core::TileRect::new(
         TileCoord::new(CX, CY - RADIUS - 2),
         TileCoord::new(CX + 1, CY - RADIUS - 1),
     );
-    let mut restarted = 0;
-    for tick in 0..NEAR_ANSWER_TICKS + 5 {
-        if tick % 4 == 0 {
-            let before = world.route_scheduler_stats().planners;
-            world.collision_closed(area);
-            restarted += before - world.route_scheduler_stats().planners;
-        }
+    for _ in 0..10 {
+        world.collision_closed(area);
+        world.planning_budget = 1;
+        world.fast_route_budget = 0;
         world.advance();
+        assert!(
+            hopeless
+                .iter()
+                .all(|&id| world.movement_order(id).is_none()),
+            "region proof must not wait for a search budget"
+        );
     }
-    assert!(restarted > 2, "the ground changes reached the searches");
     for id in hopeless {
         assert!(world.movement_order(id).is_none());
         assert_eq!(world.unit(id).expect("unit").task, crate::UnitTask::Idle);
@@ -212,7 +223,9 @@ fn a_group_sent_into_sealed_ground_is_answered_in_bounded_time() {
 fn an_attempt_with_no_slot_for_its_frontier_is_cut_short() {
     let mut world = sealed_near_world();
     let player = PlayerId(3);
-    hopeless_orders(&mut world, player);
+    world.fast_route_budget = 0;
+    detour_orders(&mut world, player, 2);
+    world.planning_budget = 0;
     world.advance();
     let before = world.route_metrics.issue_work;
     detour_orders(&mut world, player, 1);
@@ -222,59 +235,24 @@ fn an_attempt_with_no_slot_for_its_frontier_is_cut_short() {
     );
 }
 
-/// When a group's route wait expires, the whole group's move fails: the
-/// members must not keep steering toward their slots without a carrier.
+/// Sealed targets project to a reachable layout and settle, without a deadline.
 #[test]
-fn an_expired_group_route_ends_the_move_of_every_member() {
-    let mut world = sealed_near_world();
-    let out = RADIUS + 1;
-    let units = (0..6)
-        .map(|n| {
-            world
-                .spawn_unit(PlayerId(3), tile_position(CX - 3 + n, CY - out - 2))
-                .expect("unit")
-        })
-        .collect::<Vec<_>>();
-    world
-        .issue_formation_move(
-            PlayerId(3),
-            &units,
-            aoe_core::Formation::Line,
-            tile_position(CX, CY),
-            false,
-            false,
-        )
-        .expect("accepted");
-    // The carrier searches the sealed ground; its wait runs out before any
-    // member is blocked long enough to detach with a route of its own.
-    for _ in 0..40 {
-        world.advance();
-    }
-    let carrier = *world.formations.keys().next().expect("group");
-    assert!(world.unit(carrier).expect("unit").planning, "carrier waits");
-    world.tick.0 += NEAR_ANSWER_TICKS;
-    for _ in 0..5 {
-        world.advance();
-    }
-    assert!(world.formations.is_empty(), "no group state steers them");
-    for id in units {
-        let unit = world.unit(id).expect("unit");
-        assert!(world.movement_order(id).is_none());
-        assert_eq!(unit.task, crate::UnitTask::Idle, "{id:?}");
-        assert!(!unit.moving && !unit.planning, "{id:?}");
-        assert!(world.units[world.lookup[&id]].formation.is_none());
-    }
+fn a_near_group_stops_at_its_frontier_without_waiting_for_an_expiry() {
+    frontier_group_settles(RADIUS + 3, 600);
 }
 
 #[test]
-fn a_far_group_outlives_its_first_wait_and_ends_after_its_renewals() {
-    use crate::game_world::route_scheduler::{FAR_ROUTE_ANSWER_TICKS, MAX_GROUP_ROUTE_RENEWALS};
+fn a_far_group_stops_at_its_frontier_without_wait_renewals() {
+    frontier_group_settles(RADIUS + 100, 3_000);
+}
+
+fn frontier_group_settles(distance: i32, ticks: usize) {
     let mut world = sealed_near_world();
     let units = (0..6)
         .map(|n| {
             world
-                .spawn_unit(PlayerId(3), tile_position(CX - 3 + n, CY - RADIUS - 100))
-                .expect("unit")
+                .spawn_unit(PlayerId(3), tile_position(CX - 3 + n, CY - distance))
+                .unwrap()
         })
         .collect::<Vec<_>>();
     world
@@ -286,39 +264,25 @@ fn a_far_group_outlives_its_first_wait_and_ends_after_its_renewals() {
             false,
             false,
         )
-        .expect("accepted");
-    for _ in 0..40 {
+        .unwrap();
+    for _ in 0..ticks {
         world.advance();
     }
-    // Each expired wait of a far carrier is renewed: the group keeps its
-    // order. The bound stays: the carrier's order ends in bounded time, by
-    // the next expiry after the renewals or by the planner's own limit.
-    let mut expiries = 0;
-    let carrier = *world.formations.keys().next().expect("group");
-    for _ in 0..4_000 {
-        if world.movement_order(carrier).is_none() {
-            break;
-        }
-        if world.unit(carrier).expect("unit").planning {
-            world.tick.0 += FAR_ROUTE_ANSWER_TICKS;
-            expiries += 1;
-            if expiries == 1 {
-                world.advance();
-                assert_eq!(world.formations.len(), 1, "the first expiry is renewed");
-            }
-        }
-        world.advance();
+    assert_eq!(world.route_metrics.attribution.group_orders_expired, 0);
+    assert_eq!(world.route_metrics.attribution.group_wait_renewals, 0);
+    assert_eq!(world.route_metrics.attribution.group_stopped_short, 1);
+    for id in units {
+        let unit = world.unit(id).unwrap();
+        assert!(
+            !unit.moving && !unit.planning,
+            "{id:?} still pressing: {unit:?}"
+        );
+        assert!(
+            unit.position.tile_floor().y < CY - RADIUS,
+            "outside the sealed ring"
+        );
     }
-    let renewals = world.route_metrics.attribution.group_wait_renewals;
-    assert!(
-        world.movement_order(carrier).is_none(),
-        "ends in bounded time"
-    );
-    assert!(
-        (1..=u64::from(MAX_GROUP_ROUTE_RENEWALS)).contains(&renewals),
-        "expiries {expiries} renewals {renewals}"
-    );
-    assert_eq!(units.len(), 6);
+    assert_eq!(world.route_accounting_error(), None);
 }
 
 /// A near group that only queued for a slot keeps its order past the wait
@@ -328,17 +292,19 @@ fn a_far_group_outlives_its_first_wait_and_ends_after_its_renewals() {
 fn a_near_group_queued_for_a_slot_outlives_its_wait() {
     let mut world = sealed_near_world();
     let player = PlayerId(3);
-    hopeless_orders(&mut world, player);
+    world.fast_route_budget = 0;
+    detour_orders(&mut world, player, 2);
+    world.planning_budget = 0;
     world.advance();
     assert_eq!(world.route_slots[&player].searches, 2, "both slots held");
     let units = (0..6)
         .map(|n| {
             world
-                .spawn_unit(player, tile_position(180 + n, 190))
+                .spawn_unit(player, tile_position(220 + n, 190))
                 .expect("unit")
         })
         .collect::<Vec<_>>();
-    let goal = tile_position(183, 210);
+    let goal = tile_position(223, 210);
     world
         .issue_formation_move(
             player,
@@ -349,6 +315,8 @@ fn a_near_group_queued_for_a_slot_outlives_its_wait() {
             false,
         )
         .expect("accepted");
+    world.planning_budget = 0;
+    world.fast_route_budget = 0;
     world.advance();
     let carrier = *world.formations.keys().next().expect("group");
     let index = world.lookup[&carrier];

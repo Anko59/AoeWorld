@@ -50,31 +50,232 @@ impl GameWorld {
         ids: &[EntityId],
         centroid: WorldPosition,
     ) -> Result<WorldPosition, EconomyError> {
-        // A centroid inside a tree/building is projected to the nearest member;
-        // the ordinary scheduler must start on walkable ground.
-        Ok(
-            if self
-                .unit_step_clear(
-                    UnitKind::Militia,
+        let bucket = self.formation_bucket(ids);
+        let player = self.unit(ids[0]).ok_or(EconomyError::UnknownEntity)?.player;
+        // The army starts in the land region most of its members stand in: a
+        // spread selection's centroid can fall in a sealed pocket (the middle
+        // of a village), and an order from there reached nothing.
+        let walkable = self
+            .unit_step_clear(
+                UnitKind::Militia,
+                centroid.tile_floor(),
+                centroid.tile_floor(),
+            )
+            .map_err(GameWorldError::Environment)?
+            && self.building_step_clear(centroid.tile_floor(), centroid.tile_floor());
+        if walkable {
+            let mut common = true;
+            for &id in ids {
+                let unit = self.unit(id).ok_or(EconomyError::UnknownEntity)?;
+                if !self.land_reachable(
+                    player,
+                    bucket,
+                    unit.position.tile_floor(),
                     centroid.tile_floor(),
+                )? || !self.land_reachable(
+                    player,
+                    bucket,
                     centroid.tile_floor(),
-                )
-                .unwrap_or(false)
-                && self.building_step_clear(centroid.tile_floor(), centroid.tile_floor())
+                    unit.position.tile_floor(),
+                )? {
+                    common = false;
+                    break;
+                }
+            }
+            if common {
+                return Ok(centroid);
+            }
+        }
+        // When the centroid is blocked or isolated but all members share
+        // reachable ground, their nearest member is the same answer as a
+        // complete component census. Keep this common cold-map case local.
+        let first = self
+            .unit(ids[0])
+            .ok_or(EconomyError::UnknownEntity)?
+            .position
+            .tile_floor();
+        let mut shared = self.land_reachable(player, bucket, first, first)?;
+        for unit in ids.iter().filter_map(|&id| self.unit(id)) {
+            if !shared {
+                break;
+            }
+            shared = self.land_reachable(player, bucket, first, unit.position.tile_floor())?
+                && self.land_reachable(player, bucket, unit.position.tile_floor(), first)?;
+        }
+        let region = if shared {
+            None
+        } else {
+            self.formation_region(player, bucket, ids)?
+        };
+        if !shared
+            && walkable
+            && (region.is_none()
+                || self.land_player_region(player, bucket, centroid.tile_floor())? == region)
+        {
+            return Ok(centroid);
+        }
+        let mut nearest = None;
+        for &id in ids {
+            let unit = self.unit(id).ok_or(EconomyError::UnknownEntity)?;
+            if region.is_some()
+                && self.land_player_region(player, bucket, unit.position.tile_floor())? != region
             {
-                centroid
-            } else {
-                ids.iter()
-                    .filter_map(|&id| self.unit(id))
-                    .min_by_key(|u| {
-                        let dx = i64::from(u.position.x) - i64::from(centroid.x);
-                        let dy = i64::from(u.position.y) - i64::from(centroid.y);
-                        dx * dx + dy * dy
-                    })
-                    .ok_or(EconomyError::UnknownEntity)?
-                    .position
-            },
-        )
+                continue;
+            }
+            let dx = i64::from(unit.position.x) - i64::from(centroid.x);
+            let dy = i64::from(unit.position.y) - i64::from(centroid.y);
+            let key = (dx * dx + dy * dy, id, unit.position);
+            if nearest
+                .as_ref()
+                .is_none_or(|best: &(i64, EntityId, WorldPosition)| {
+                    (key.0, key.1) < (best.0, best.1)
+                })
+            {
+                nearest = Some(key);
+            }
+        }
+        nearest
+            .map(|(_, _, point)| point)
+            .or_else(|| {
+                ids.first()
+                    .and_then(|&id| self.unit(id))
+                    .map(|u| u.position)
+            })
+            .ok_or(EconomyError::UnknownEntity)
+    }
+
+    /// The land region holding most members (ties: the lowest region), or
+    /// `None` on ground without obstacles, where every point is reachable.
+    fn formation_region(
+        &self,
+        player: PlayerId,
+        bucket: aoe_map::LandBucket,
+        ids: &[EntityId],
+    ) -> Result<Option<u32>, EconomyError> {
+        if !self.has_route_navigation() {
+            return Ok(None);
+        }
+        let mut counts = BTreeMap::<u32, usize>::new();
+        for unit in ids.iter().filter_map(|&id| self.unit(id)) {
+            if let Some(region) =
+                self.land_player_region(player, bucket, unit.position.tile_floor())?
+            {
+                *counts.entry(region).or_default() += 1;
+            }
+        }
+        Ok(counts
+            .into_iter()
+            .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))
+            .map(|(region, _)| region))
+    }
+
+    /// Lay the army out around the nearest reachable frontier. The whole
+    /// front must fit outside a wall: centring the block on its nearest tile
+    /// would squeeze front rows against the wall and leave them pressing.
+    pub(super) fn formation_goal(
+        &self,
+        player: PlayerId,
+        origin: WorldPosition,
+        destination: WorldPosition,
+        form: Formation,
+        ids: &[EntityId],
+    ) -> Result<WorldPosition, EconomyError> {
+        let bucket = self.formation_bucket(ids);
+        if !self.has_route_navigation()
+            || self.land_reachable(
+                player,
+                bucket,
+                origin.tile_floor(),
+                destination.tile_floor(),
+            )?
+        {
+            return Ok(destination);
+        }
+        let Some(tile) = self.land_frontier(
+            player,
+            bucket,
+            origin.tile_floor(),
+            destination.tile_floor(),
+        )?
+        else {
+            return Ok(destination);
+        };
+        let frontier = WorldPosition::from_tile_center(tile).unwrap_or(destination);
+        let heading = WorldPosition::new(frontier.x - origin.x, frontier.y - origin.y);
+        let (gap, _) = self.formation_gaps(ids);
+        let slots: Vec<_> = self
+            .general_role_slots(ids.iter().copied(), gap)
+            .map_or_else(
+                || {
+                    layout::slots(form, ids.len())
+                        .into_iter()
+                        .map(|p| WorldPosition::new(p.x * gap / 1040, p.y * gap / 1040))
+                        .collect()
+                },
+                |roles| roles.into_iter().map(|(_, point)| point).collect(),
+            );
+        let largest = ids
+            .iter()
+            .map(|id| self.units[self.lookup[id]].state.kind)
+            .max_by_key(|kind| kind.collision_radius())
+            .unwrap_or(UnitKind::Militia);
+        let extent = slots
+            .iter()
+            .map(|p| i64::from(p.x.abs()) + i64::from(p.y.abs()))
+            .max()
+            .unwrap_or(0);
+        let distance = path::distance(origin, frontier);
+        // Search the approach band occupied by this layout, in half-tile
+        // increments. If no complete layout fits, ordinary tight packing
+        // still places the block at the frontier.
+        for retreat in 0..=(extent + i64::from(gap)) / 512 {
+            let anchor = path::step(
+                frontier,
+                origin,
+                (retreat * 512).min(distance).min(i64::from(i32::MAX)) as i32,
+            );
+            let mut fits = true;
+            for &offset in &slots {
+                let point = layout::oriented(anchor, offset, heading);
+                if !self.config.valid_map_position(point)
+                    || !self.body_position_clear(largest, point)
+                    || !self.land_reachable(
+                        player,
+                        bucket,
+                        origin.tile_floor(),
+                        point.tile_floor(),
+                    )?
+                {
+                    fits = false;
+                    break;
+                }
+            }
+            if fits {
+                return Ok(anchor);
+            }
+        }
+        Ok(frontier)
+    }
+
+    fn formation_bucket(&self, ids: &[EntityId]) -> aoe_map::LandBucket {
+        ids.iter()
+            .filter_map(|id| self.unit(*id))
+            .filter_map(|unit| aoe_map::LandBucket::for_radius(unit.kind.collision_radius()))
+            .max()
+            .unwrap_or(aoe_map::LandBucket::Small)
+    }
+
+    pub(super) fn formation_gaps(&self, ids: &[EntityId]) -> (i32, i32) {
+        // Leave room for a late member to pass occupied slots, plus one step.
+        let (diameter, step) = ids.iter().fold((0, 0), |(diameter, step), id| {
+            let unit = self.units[self.lookup[id]].state;
+            let (speed, denominator) = self.movement_speed(unit.kind, unit.player);
+            (
+                diameter.max(unit.kind.collision_radius() * 2),
+                step.max(speed.div_ceil(denominator).min(512) as i32),
+            )
+        });
+        (diameter * 2 + step + 16, diameter + step + 16)
     }
 
     /// Apply a posture now, retaining an existing group's route and FIFO.

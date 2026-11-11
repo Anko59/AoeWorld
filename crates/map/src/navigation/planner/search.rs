@@ -113,6 +113,16 @@ impl<'a> ExpansionContext<'a> {
     ) -> Result<(), Terminal> {
         let (delta_x, delta_y) = offset;
         let next = TileCoord::new(active.tile.x + delta_x, active.tile.y + delta_y);
+        // Step costs are unsigned, so a record no costlier than this tile
+        // already dominates every edge into `next`: skip its terrain reads.
+        // Cancellation is still observed exactly where a read would check it.
+        let known = search.records.get(&next).map(|known| known.cost);
+        if known.is_some_and(|known| known <= active.cost) {
+            if (self.cancelled)() {
+                return Err(Terminal::Environment(EnvironmentPageError::Cancelled));
+            }
+            return Ok(());
+        }
         if !neighbor_clear(
             self.terrain,
             self.overlay,
@@ -123,37 +133,7 @@ impl<'a> ExpansionContext<'a> {
             return Ok(());
         }
         if let Some(snapshot) = self.proof_overlay
-            && (!checked_walkable(self.terrain, snapshot, next, self.cancelled)?
-                || !self.terrain.route_overlay_edge_clear(
-                    snapshot,
-                    next,
-                    active.tile,
-                    self.cancelled,
-                )?
-                || (delta_x != 0
-                    && delta_y != 0
-                    && (!diagonal_clear_checked(
-                        self.terrain,
-                        self.overlay,
-                        next,
-                        -delta_x,
-                        -delta_y,
-                        self.cancelled,
-                    )? || !diagonal_clear_checked(
-                        self.terrain,
-                        snapshot,
-                        active.tile,
-                        delta_x,
-                        delta_y,
-                        self.cancelled,
-                    )? || !diagonal_clear_checked(
-                        self.terrain,
-                        snapshot,
-                        next,
-                        -delta_x,
-                        -delta_y,
-                        self.cancelled,
-                    )?)))
+            && !self.proof_clear(snapshot, active.tile, next, offset)?
         {
             return Ok(());
         }
@@ -164,14 +144,11 @@ impl<'a> ExpansionContext<'a> {
                 next,
                 self.cancelled,
             )?));
-        if search
-            .records
-            .get(&next)
-            .is_some_and(|known| known.cost <= next_cost)
-        {
+        // Terrain reads do not touch the search, so `known` is still current.
+        if known.is_some_and(|known| known <= next_cost) {
             return Ok(());
         }
-        let new_record = !search.records.contains_key(&next);
+        let new_record = known.is_none();
         let retained_after_insert = search
             .open
             .len()
@@ -195,6 +172,53 @@ impl<'a> ExpansionContext<'a> {
             next,
         ));
         Ok(())
+    }
+}
+
+impl ExpansionContext<'_> {
+    /// The reverse edge and corners must also be clear in the proof snapshot.
+    /// When the snapshot is the current overlay itself, its forward reads were
+    /// already proved by `neighbor_clear`; only the reverse reads remain.
+    fn proof_clear(
+        &self,
+        snapshot: &ResourceOverlay,
+        tile: TileCoord,
+        next: TileCoord,
+        (delta_x, delta_y): (i32, i32),
+    ) -> Result<bool, Terminal> {
+        let same = std::ptr::eq(snapshot, self.overlay);
+        if !same && !checked_walkable(self.terrain, snapshot, next, self.cancelled)? {
+            return Ok(false);
+        }
+        if !self
+            .terrain
+            .route_overlay_edge_clear(snapshot, next, tile, self.cancelled)?
+        {
+            return Ok(false);
+        }
+        if delta_x == 0 || delta_y == 0 {
+            return Ok(true);
+        }
+        let reverse = |overlay| {
+            diagonal_clear_checked(
+                self.terrain,
+                overlay,
+                next,
+                -delta_x,
+                -delta_y,
+                self.cancelled,
+            )
+        };
+        Ok(reverse(self.overlay)?
+            && (same
+                || (diagonal_clear_checked(
+                    self.terrain,
+                    snapshot,
+                    tile,
+                    delta_x,
+                    delta_y,
+                    self.cancelled,
+                )? && reverse(snapshot)?)))
     }
 }
 
@@ -247,11 +271,13 @@ pub(super) fn neighbor_clear(
 ) -> Result<bool, Terminal> {
     let (dx, dy) = offset;
     let next = TileCoord::new(tile.x + dx, tile.y + dy);
-    let diagonal_ok =
-        dx == 0 || dy == 0 || diagonal_clear_checked(terrain, overlay, tile, dx, dy, cancelled)?;
+    // Pure predicates: evaluate the cheap destination test first and stop at
+    // the first failure. The conjunction itself is unchanged.
     Ok(checked_walkable(terrain, overlay, next, cancelled)?
         && terrain.route_overlay_edge_clear(overlay, tile, next, cancelled)?
-        && diagonal_ok)
+        && (dx == 0
+            || dy == 0
+            || diagonal_clear_checked(terrain, overlay, tile, dx, dy, cancelled)?))
 }
 
 fn diagonal_clear_checked(

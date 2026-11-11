@@ -72,17 +72,26 @@ impl RoutePlanner {
         Ok(())
     }
 
-    pub(super) fn needs_guidance(&self, terrain: &dyn RouteTerrain) -> bool {
+    pub(super) fn early_guidance_due(&self) -> bool {
+        self.work < GUIDANCE_AFTER_WORK
+            && (self.origin.x - self.leg_origin.x)
+                .abs()
+                .max((self.origin.y - self.leg_origin.y).abs())
+                >= GUIDANCE_AFTER_TILES
+    }
+
+    pub(super) fn needs_guidance(
+        &self,
+        terrain: &dyn RouteTerrain,
+        overlay: &ResourceOverlay,
+    ) -> bool {
         self.hierarchy.is_none()
             && self.resolution.is_none()
             && !self.guidance_checked
             && (self.leg_work >= GUIDANCE_AFTER_WORK
-                || (self.work < GUIDANCE_AFTER_WORK
+                || (self.early_guidance_due()
                     && terrain.route_generator().is_some()
-                    && (self.origin.x - self.leg_origin.x)
-                        .abs()
-                        .max((self.origin.y - self.leg_origin.y).abs())
-                        >= GUIDANCE_AFTER_TILES))
+                    && !self.region_endpoint_direct(overlay)))
         // Straight-line proximity says nothing about the required detour.
     }
 
@@ -94,6 +103,7 @@ impl RoutePlanner {
         cancelled: &dyn Fn() -> bool,
     ) -> Result<u32, Terminal> {
         let mut remaining = budget;
+        self.refresh_region_proof(overlay);
         if self.validation_step == 0
             && let Some(generator) = terrain.route_generator()
         {
@@ -102,7 +112,7 @@ impl RoutePlanner {
                 self.begin_components(generator, overlay, cancelled)?;
             }
         }
-        if self.needs_guidance(terrain) {
+        if self.needs_guidance(terrain, overlay) {
             self.begin_guidance(terrain, overlay, cancelled)?;
         }
         if (self.hierarchy.is_some() || self.resolution.is_some())

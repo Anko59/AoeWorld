@@ -117,10 +117,19 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
         // A packed block holding its files until the pass is behind it moves it again.
         // The state hash folds per-block digests of 1,024 units (hashed on
         // worker threads) instead of one stream: same state, new value.
+        // Formations starting from their members' reachable region, and cold
+        // orders answered locally instead of by a whole-map region build,
+        // move it again.
+        // Preserving searches toward certified endpoints restores valid
+        // gathering approaches that the region check previously cancelled.
+        // Current region proofs discharge duplicate destination-pocket work,
+        // so planners spend their allowance on routes sooner. The full run
+        // preserved the activity floors and complete one/four-worker equality.
+        // Bounded region witnesses skip duplicate floods and straight-route guidance; worker equality holds.
         // #745 changes wildlife movement/hunting and replaced-camp lifecycle.
         // Repin the current output; workload, activity floors and the full
         // one/four-worker replay equality above are unchanged.
-        "f06497a1b833ed312ac4e9efcf1a6e7607c125b18f2db79e9c40718ca8cd0775"
+        "d740cb40fccae011217e7d45f4adcd11e840cf1c7067e28d1b5c914facf5328a"
     );
 }
 
