@@ -1,8 +1,11 @@
 //! Exact construction clocks. Only arrival/wake and completion/sight events
 //! visit builders; reads project the intervening integer work and earned HP.
 use super::*;
+use crate::game_world::visibility::TileHasher;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::collections::{BTreeMap, BTreeSet};
+use std::hash::BuildHasherDefault;
 
 /// Cumulative work counters, excluded from canonical state.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -26,7 +29,7 @@ pub(crate) struct Clock {
 pub(crate) struct ConstructionTimers {
     clocks: BTreeMap<EntityId, Clock>,
     due: BTreeSet<(u64, EntityId)>,
-    tiles: BTreeMap<TileCoord, BTreeSet<EntityId>>,
+    tiles: HashMap<TileCoord, BTreeSet<EntityId>, BuildHasherDefault<TileHasher>>,
     pub(crate) tick: u64,
     pub(crate) visits: u64,
     pub(crate) slept: u64,

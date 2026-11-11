@@ -1,8 +1,11 @@
 //! Queue clocks use the last completed phase, preserving reads before training.
+use crate::game_world::visibility::TileHasher;
 use crate::{GameBuilding, GameWorld};
 use aoe_core::{EntityId, PlayerId, TileCoord};
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::collections::{BTreeMap, BTreeSet};
+use std::hash::BuildHasherDefault;
 
 mod events;
 mod scheduling;
@@ -68,7 +71,7 @@ pub(crate) struct QueueTimers {
     /// During training, lower ids have already received this tick's credit.
     pub(crate) cursor: Option<EntityId>,
     players: BTreeMap<PlayerId, BTreeSet<EntityId>>,
-    exits: BTreeMap<TileCoord, BTreeSet<EntityId>>,
+    exits: HashMap<TileCoord, BTreeSet<EntityId>, BuildHasherDefault<TileHasher>>,
     subscribed: BTreeMap<EntityId, Vec<TileCoord>>,
 }
 

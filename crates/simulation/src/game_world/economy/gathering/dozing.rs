@@ -204,23 +204,27 @@ impl GameWorld {
         for &id in changed {
             self.wake_gatherer_event(id);
             if let Some(unit) = self.unit(id) {
-                self.economy
-                    .gatherers
-                    .notify_walkers_at(unit.position.tile_floor());
-                self.economy
-                    .gatherers
-                    .notify_walkers_at(unit.previous_position.tile_floor());
+                let (at, before) = (
+                    unit.position.tile_floor(),
+                    unit.previous_position.tile_floor(),
+                );
+                self.economy.gatherers.notify_walkers_at(at);
+                if before != at {
+                    self.economy.gatherers.notify_walkers_at(before);
+                }
             }
         }
         for id in std::mem::take(&mut self.economy.late_changed) {
             self.wake_gatherer_event(id);
             if let Some(unit) = self.unit(id) {
-                self.economy
-                    .gatherers
-                    .notify_walkers_at(unit.position.tile_floor());
-                self.economy
-                    .gatherers
-                    .notify_walkers_at(unit.previous_position.tile_floor());
+                let (at, before) = (
+                    unit.position.tile_floor(),
+                    unit.previous_position.tile_floor(),
+                );
+                self.economy.gatherers.notify_walkers_at(at);
+                if before != at {
+                    self.economy.gatherers.notify_walkers_at(before);
+                }
             }
         }
         self.wake_walker_contacts();

@@ -279,13 +279,15 @@ impl GameWorld {
         }
         self.economy.gatherers.notify_walkers_at(previous_tile);
         self.wake_queue_exits(previous_tile);
-        self.economy
-            .gatherers
-            .notify_walkers_at(unit.position.tile_floor());
-        self.wake_queue_exits(unit.position.tile_floor());
-        self.wake_construction_at(previous_tile);
-        self.wake_construction_at(unit.position.tile_floor());
         let tile = unit.position.tile_floor();
+        if previous_tile != tile {
+            self.economy.gatherers.notify_walkers_at(tile);
+            self.wake_queue_exits(tile);
+        }
+        self.wake_construction_at(previous_tile);
+        if previous_tile != tile {
+            self.wake_construction_at(tile);
+        }
         // The spacing index stores tile membership, not sub-tile positions. Keep
         // the exact collision and wildlife mirrors, which queries do observe.
         {

@@ -1,7 +1,12 @@
 //! Walking jobs subscribe to movement/contact events, not the gathering loop.
 use super::*;
+use crate::game_world::{movement_step::CellHasher, visibility::TileHasher};
 use aoe_core::TileRect;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::hash::BuildHasherDefault;
+
+#[cfg(test)]
+mod tests;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct Walk {
@@ -11,9 +16,10 @@ struct Walk {
 
 #[derive(Debug, Default)]
 pub(super) struct Walks {
-    jobs: BTreeMap<EntityId, Walk>,
-    tiles: BTreeMap<TileCoord, BTreeSet<EntityId>>,
+    jobs: HashMap<EntityId, Walk, BuildHasherDefault<CellHasher>>,
+    tiles: HashMap<TileCoord, BTreeSet<EntityId>, BuildHasherDefault<TileHasher>>,
     notified: BTreeSet<EntityId>,
+    notified_tiles: HashSet<TileCoord, BuildHasherDefault<TileHasher>>,
 }
 
 fn contact_tiles(at: TileCoord) -> impl Iterator<Item = TileCoord> {
@@ -24,6 +30,9 @@ fn contact_tiles(at: TileCoord) -> impl Iterator<Item = TileCoord> {
 impl Walks {
     fn subscribe(&mut self, id: EntityId, at: TileCoord, add: bool) {
         for tile in contact_tiles(at) {
+            // A changed subscription must receive the next event even when
+            // this tile already notified its previous subscribers.
+            self.notified_tiles.remove(&tile);
             if add {
                 self.tiles.entry(tile).or_default().insert(id);
             } else if let Some(ids) = self.tiles.get_mut(&tile) {
@@ -84,8 +93,11 @@ impl Gatherers {
     }
 
     pub(crate) fn notify_walkers_at(&mut self, tile: TileCoord) {
-        if let Some(ids) = self.dozes.walking.tiles.get(&tile) {
-            self.dozes.walking.notified.extend(ids);
+        let walks = &mut self.dozes.walking;
+        if let Some(ids) = walks.tiles.get(&tile)
+            && walks.notified_tiles.insert(tile)
+        {
+            walks.notified.extend(ids);
         }
     }
 
@@ -155,6 +167,9 @@ impl GameWorld {
     /// failure, or its existing near-site refinement deadline. Intermediate
     /// positions only update the derived contact subscription.
     pub(super) fn wake_gatherer_event(&mut self, id: EntityId) {
+        if !self.economy.gatherers.contains_key(&id) {
+            return;
+        }
         if !self.economy.gatherers.walking(id) {
             self.economy.gatherers.wake(id);
             return;
@@ -175,6 +190,7 @@ impl GameWorld {
     }
 
     pub(super) fn wake_walker_contacts(&mut self) {
+        self.economy.gatherers.dozes.walking.notified_tiles.clear();
         for id in std::mem::take(&mut self.economy.gatherers.dozes.walking.notified) {
             self.wake_gatherer_event(id);
         }
