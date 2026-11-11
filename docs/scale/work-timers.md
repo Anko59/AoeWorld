@@ -221,7 +221,9 @@ broad queue/construction/walking replay filter passed 90 tests.
 Measured on 2026-11-11: before
 `70d6b53231bfd3f7cf2dd0d191cbf6722bd01d08`, after
 `589888b854f0c081311d11c5f0a106c6fb3356fb`. These are the final simulation
-code revisions; later documentation commits do not change that code.
+code revisions; later documentation commits do not change that code. The
+stop-hook dependency follow-up below changes the lockfile only; these original
+reports and recordings retain their measured revision and lockfile provenance.
 Both release runs used the identical in-process closed-loop recipe, seed 1,
 100 seats, six Rayon workers, 2,000 ticks, scales 1/5/10 and the same index
 observer. Whole-window times include startup spikes.
@@ -320,15 +322,28 @@ Final implementation validation passed:
 - Focused source-event/acquisition/General checks: 59 passed; final walking/queue/General checks: 20 passed. The five General summaries still match the base byte for byte.
 - Workload sanity retains the four-training-site, two-research-site and spawn-inspection floors on the full-step reference, and compares changes and hashes every warm-up tick. Sleeping therefore cannot pass by removing the workload.
 
-`NEXTEST_TEST_THREADS=2 make -j1 preflight` failed at `deny` (Make exit 2)
-on documentation revision `1c4e5e9cc7d7be6fddb733b8bc28267e84a71bfe`:
-the unchanged `rustix 1.1.5` dependency triggers `RUSTSEC-2026-0486`.
-`Cargo.lock` is byte-identical to the measured base. This dependency issue is
-outside the timer branch's scope; no advisory exception was added. The aggregate
-has not passed. Complete output and advisory details are retained in
-`.cache/7b-preflight.log` and `.cache/7b-preflight-deny-process.log`.
-The independently run remaining checks and their outcomes are recorded in
-`.cache/7b-body.md`, with output in `.cache/7b-preflight-remaining.log`.
+The initial `NEXTEST_TEST_THREADS=2 make -j1 preflight` failed at `deny`
+(Make exit 2) on documentation revision
+`1c4e5e9cc7d7be6fddb733b8bc28267e84a71bfe`: its base-identical lockfile
+contained `rustix 1.1.5`, triggering `RUSTSEC-2026-0486`. Original output and
+advisory details remain in `.cache/7b-preflight.log` and
+`.cache/7b-preflight-deny-process.log`. Two independent five-crate native runs
+then reached the existing scoped 600-second deadline; the standalone release
+smoke passed. Those attempts remain recorded in `.cache/7b-body.md`.
+
+The stop hook subsequently requested correction of the advisory. Dockerized
+`make cargo-pin CARGO_PIN_PACKAGE=rustix CARGO_PIN_VERSION=1.1.6` changed only
+the transitive version and checksum. `make deny` passed without any exception;
+logs are `.cache/7b-rustix-{pin,deny}.log`. Simulation source, replay pins,
+recipes and gate code are unchanged by this follow-up.
+
+`NEXTEST_TEST_THREADS=4 CARGO_PROFILE_DEV_DEBUG=0 make -j1 preflight` selects
+all 12 crates because the lockfile changed. Its native suite passed all 4,377
+selected tests (20 skipped under the existing policy), followed by passing
+doctests. The full-workspace path uses its existing 1,200-second budget and
+two-job compiler cap; scoped runs use 600 seconds. Four test threads replace
+the earlier conservative two-thread setting. The complete aggregate outcome is
+recorded in `.cache/7b-body.md`; output is `.cache/7b-rustix-preflight.log`.
 
 ## Local video evidence
 
