@@ -10,6 +10,9 @@ use super::*;
 pub(crate) struct PortalCache {
     pub(super) chunks: HashMap<(Key, [u8; 32]), (Arc<ChunkPortals>, u64)>,
     pub(super) prepared: Option<Arc<prepared::Atlas>>,
+    /// The transient grid of the latest portal build, so the cost matrix
+    /// that usually follows reuses it. Keyed like an entry; at most one.
+    pub(super) grid: Option<(Key, [u8; 32], Box<grid::Grid>)>,
     bytes: usize,
     clock: u64,
     limit: usize,
@@ -26,6 +29,7 @@ impl PortalCache {
         Self {
             chunks: HashMap::new(),
             prepared: None,
+            grid: None,
             bytes: 0,
             clock: 0,
             limit,

@@ -172,3 +172,36 @@ fn a_blocked_goal_in_a_large_land_mass_still_only_visits_a_local_corridor() {
     );
     assert!(generator.walk_cache_usage().1 < 64);
 }
+
+#[test]
+fn portal_costs_reuse_the_built_grid_only_for_the_same_snapshot() {
+    let generator = flat_terrain_with_water_wall(256, -1, -1);
+    let mut overlay = ResourceOverlay::default();
+    overlay
+        .add_footprint(aoe_core::TileRect::from_xywh(104, 102, 2, 16))
+        .unwrap();
+    let key = (3, 3);
+    let fresh = Ground::new(&generator, &overlay, &|| false)
+        .build_portals(key)
+        .unwrap();
+    Ground::new(&generator, &overlay, &|| false)
+        .ensure_costs(key, &fresh)
+        .unwrap();
+    let ground = Ground::new(&generator, &overlay, &|| false);
+    let built = ground.portals(key).unwrap();
+    let slot =
+        |generator: &MapChunkGenerator| generator.portal_cache().lock().unwrap().grid.is_some();
+    assert!(slot(&generator), "the portal build retains its grid");
+    // A different snapshot must not take the retained grid.
+    let other = ResourceOverlay::default();
+    let unrelated = Ground::new(&generator, &other, &|| false)
+        .build_portals(key)
+        .unwrap();
+    Ground::new(&generator, &other, &|| false)
+        .ensure_costs(key, &unrelated)
+        .unwrap();
+    assert!(slot(&generator));
+    ground.ensure_costs(key, &built).unwrap();
+    assert!(!slot(&generator), "the matching cost matrix consumed it");
+    assert_eq!(built.costs.get(), fresh.costs.get());
+}
