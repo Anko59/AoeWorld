@@ -57,65 +57,107 @@ carriers: one formation carrier can represent many moving units.
 ```sh
 SCALE_MATCH_ARGS="--save .cache/order-volume/maps/saves/1794176817-first.save \
   --minutes 5 --port 8185 --package-directory .cache/order-volume/maps \
-  --label orders-before-current --no-summary --out .cache/order-volume/before-current.json" make scale-match
+  --label orders-regions-before --no-summary --out .cache/order-volume/resumed/regions/before.json" make scale-match
 ```
 
 The copied map store already contains the same verified saved pair. Select
 that stored save directly: the importer deliberately refuses occupied names.
-For the second run keep the save path, change the label to `orders-after-current`
-and the output to `after-current.json`.
+For the current candidate keep the save path, change the label to
+`orders-regions-after2` and the output to
+`.cache/order-volume/resumed/regions/after2.json`.
+For a repetition, choose unused labels and output paths; retain existing evidence.
 Both runs start from the same input. Wall-clock AI decisions and shared-host
 load vary; this is neither dedicated-hardware qualification nor a controlled
 causal timing benchmark.
 
 ## Current qualification status
 
-The functional code is `3dd22b72cfd95fd980f4c8dee07dc8377220e903`, rebased
-on dev `82f7a3bf98d3903ab8738d5c71801ba9222e2c80`. The required fresh
-owner-save comparison and instruction comparison are **blocked and unqualified**.
-Neither the requested 50% reduction nor the one-percent instruction limit has
-been demonstrated. The older `before.json` / `after.json` experiment used
-superseded revisions, lacked the new ten-second counter and mover endpoints,
-and included rejected behavior. Its figures are not reused here.
+The functional revision is `c1675e9ffb2be07d4a5904316c70b242db75cefd`,
+based on frozen dev `7e8ca5a6eb559de4d7e82ed183afe7b3750cd542`.
+The required redundant-order reduction and current-revision instruction gate
+remain unqualified pending the fresh candidate measurements. Current full
+simulation/server, bindings, harness and client-size checks pass; SDK AI
+gameplay is still running. No current preflight pass is claimed.
 
-The measurement baseline is instrumentation-only revision
-`f78fec1d7de604849e8c8c7212b2127d30c6a74f` plus the diagnostic patch
-`.cache/order-volume/measurement-counters-current.patch`, SHA-256
-`f092c93c9a57baecb82827cad0ef3172be0843c49eeba752e544c8b8d63bda25`.
-The applied diff has that same hash and changes only three diagnostic files;
-its dirty status is explicit. Bare dev, without that patch, was selected for
-the instruction control. No measured window started on either control.
+The measurement baseline is instrumentation-only
+`5f76887e3dda75b9d63660ea5410a1b0283f4fb8`, plus the explicitly dirty,
+four-file diagnostic patch
+`.cache/order-volume/resumed/regions/baseline-instrumentation.patch`, SHA-256
+`e34b383df570c1d25e6e5cf36a88fda3254fdfaef7cf86a77157dc5a4dfb40a4`.
+The applied diff has the same hash. It adds the ten-second subset and endpoint
+counts to the original instrumentation and renames its private formation
+accessor to avoid a new upstream API collision; it changes no gameplay rule.
 
-| Required saved-match observation | Before | After |
-| --- | --- | --- |
-| Decisions, orders, near reissues, reassigned <10s, superseded and fresh searches/min, for every issuer | Unmeasured | Unmeasured |
-| Near reissues + superseded <10s, per wall minute | Unmeasured | Unmeasured |
-| Same sum per 1,000 simulation ticks | Unmeasured | Unmeasured |
-| Units and movers at the initial/final endpoints | Unmeasured | Unmeasured |
-| TPS and route-serve p50/p95 ms | Unmeasured | Unmeasured |
-| Late-game authoritative-tick instructions | Unmeasured | Unmeasured |
+The fresh baseline completed 300.463 wall seconds and 5,127 simulation ticks:
+1,800.222 redundant requests/minute, or 1,758.338 per 1,000 ticks. The first
+candidate, `f8909ed10b7d`, completed 301.240 seconds and 4,172 ticks:
+1,384.278/minute and 1,665.868 per 1,000 ticks. That pair **fails** the target:
+23.105% lower per wall minute and only 5.259% lower per 1,000 ticks. Its lower
+TPS is not evidence of an improvement. Raw reports and the rejected pair are
+preserved as `before.json`, `after.json` and `pair-analysis.json` under
+`.cache/order-volume/resumed/regions/`. The new candidate must independently
+meet the target; old before/after experiments are not substituted.
 
-Player, Python AI, auto-scout, Steward, Vassal, General and rally/automation
-are all required in the issuer table once a fresh pair exists. Missing values
-are unavailable, never zero. After measurements were not started while their
-matching baseline was blocked by the shared slot.
+### First pair: target missed, historical candidate
 
-Each command below was tried once, followed by useful independent work and
-one delayed retry. All were refused before running, with Make exit 2 wrapping
-resource exit 75. These load averages describe **refused commands**, not a
-performance measurement window; all are from the shared twelve-core host.
+The table is the first `f8909ed10b7d` comparison, not a measurement of the
+current `c1675e9ffb2b` candidate. Mean host load is adjacent to all rates;
+endpoint loads and final rolling latency are recorded separately below.
 
-| Last attempt, UTC on 2026-11-11 | Command | Host load, 1/5/15 min | Result |
-| --- | --- | --- | --- |
-| 06:14:10 | `NEXTEST_TEST_THREADS=2 RUST_TEST_THREADS=2 CARGO_BUILD_JOBS=2 make -j1 perf-late-game-instructions` on bare dev | 8.49 / 12.44 / 17.81 | Long slot busy |
-| 06:25:26 | Five-minute `make scale-match` command above on the instrumented baseline | 8.61 / 13.25 / 15.62 | Long slot busy |
-| 06:25:34 | `NEXTEST_TEST_THREADS=2 RUST_TEST_THREADS=2 CARGO_BUILD_JOBS=2 make preflight` on the feature branch | 8.25 / 13.09 / 15.56 | Long slot busy |
+| Window | Seconds / ticks | TPS | Units start→end | Movers start→end | Redundant/min | Redundant/1,000 ticks | Fresh searches/min | Mean host load 1/5/15 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| before | 300.463 / 5127 | 17.064 | 9351→9704 | 4087→1808 | 1800.222 | 1758.338 | 9959.629 | 6.20/16.04/19.75 |
+| after | 301.240 / 4172 | 13.849 | 9351→9674 | 4091→1957 | 1384.278 | 1665.868 | 7891.382 | 13.52/11.09/15.02 |
 
-At all three last attempts the holder was `make match-bench` in the timers
-worktree's `.cache/phase7b-before`, started at 06:10:05 UTC. Logs are
-`dev-instructions-retry.log`, `before-current-retry.log` and
-`preflight-retry.log` under `.cache/order-volume/`. Earlier refusals are also
-retained. No lock, holder, gate, workload or baseline was changed to obtain admission.
+Rates below are per wall minute; supersession windows are simulation seconds.
+
+| Issuer / window | Decisions | Orders | Near reissues | Reassigned <10s | Superseded | Superseded <10s | Fresh searches | Mean host load 1/5/15 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| player / before | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 6.20/16.04/19.75 |
+| player / after | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 13.52/11.09/15.02 |
+| python_ai / before | 1904.660 | 2368.545 | 47.327 | 635.419 | 197.495 | 121.612 | 1072.944 | 6.20/16.04/19.75 |
+| python_ai / after | 1691.807 | 2121.830 | 98.592 | 463.883 | 142.611 | 75.687 | 894.702 | 13.52/11.09/15.02 |
+| auto_scout / before | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 6.20/16.04/19.75 |
+| auto_scout / after | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 13.52/11.09/15.02 |
+| steward / before | 411.765 | 322.502 | 0.200 | 244.423 | 61.505 | 47.726 | 292.549 | 6.20/16.04/19.75 |
+| steward / after | 322.666 | 255.145 | 0.199 | 192.206 | 47.205 | 36.848 | 231.443 | 13.52/11.09/15.02 |
+| vassal / before | 235.636 | 40.737 | 0.200 | 25.760 | 12.181 | 2.396 | 40.737 | 6.20/16.04/19.75 |
+| vassal / after | 178.662 | 33.063 | 0.000 | 20.914 | 8.365 | 1.394 | 33.063 | 13.52/11.09/15.02 |
+| general / before | 828.921 | 744.651 | 94.454 | 496.234 | 498.431 | 440.520 | 112.626 | 6.20/16.04/19.75 |
+| general / after | 266.100 | 493.759 | 97.397 | 326.650 | 333.422 | 301.952 | 52.583 | 13.52/11.09/15.02 |
+| rally_automation / before | 18114.443 | 18114.443 | 281.366 | 7158.752 | 887.430 | 764.420 | 8440.773 | 6.20/16.04/19.75 |
+| rally_automation / after | 14543.885 | 14543.885 | 235.626 | 5510.224 | 627.008 | 536.582 | 6679.591 | 13.52/11.09/15.02 |
+
+| Window | First sampled load 1/5/15 (UTC) | Last sampled load 1/5/15 (UTC) | Sampled load ranges 1 / 5 / 15 | Final rolling route-serve p50/p95 ms |
+| --- | --- | --- | --- | --- |
+| before | 8.80/22.05/22.13 (2026-11-11T17:09:29.190362+00:00) | 8.81/12.42/17.85 (2026-11-11T17:14:19.216964+00:00) | 4.34–8.81 / 12.33–22.05 / 17.85–22.13 | 7.089/19.436 |
+| after | 8.11/9.75/15.36 (2026-11-11T17:18:50.351859+00:00) | 21.03/14.82/15.72 (2026-11-11T17:23:50.377812+00:00) | 8.11–24.01 / 9.38–15.05 / 14.47–15.80 | 7.235/21.714 |
+
+Loads are ten-second observations on the shared twelve-core host. Preparation is excluded. Endpoint loads are observed within ten seconds of the measurement endpoints; the final rolling route-serve distribution is not a pooled five-minute latency distribution.
+
+Observed reduction: 23.105% per wall minute; 5.259% per 1,000 simulation ticks.
+
+The subsequent source probe at `6885ba341e62` attributed 2,872 redundant events
+exactly to their callers. Its three largest pairs were hunting (604), combat
+pursuit (530) and General squad marching (470). The source map reconciles both
+flat counters exactly; it does not change their definitions. Mean sampled
+host load (1/5/15 minutes) was 44.85/32.51/22.46. These are counts from a separate
+diagnostic run, not the final comparison.
+
+Bare frozen dev completed `make -j1 perf-late-game-instructions`: **183,199,043
+instructions**, so the candidate must use at most **185,031,033** (one percent).
+The control was admitted at 15:15:29 UTC on 2026-11-11 with host load
+27.45 / 25.50 / 22.58 (1/5/15 minutes); active-benchmark load at 15:21:07 was
+16.73 / 18.28 / 20.35, and completion load at 15:24:10 was
+17.74 / 18.94 / 20.29. This is a synthetic authoritative-tick instruction
+count, not an owner-save throughput result. The raw JSON's `Both[0]` is the
+current count; its cached older `Both[1]` is not the candidate comparison.
+Normal current-candidate instruction attempts at 20:03:57 and 20:08:53 UTC
+were refused before execution by the external preflight holder, started
+20:02:14 UTC. No current raw count was produced. No lock, workload or gate
+was changed to gain admission.
+The earlier `f8909ed10b7d` count of 178,850,645 passes for that revision only;
+it does not qualify `c1675e9ffb2b`.
 
 ## Movement and worker rules
 
@@ -131,6 +173,14 @@ its original admission deadline.
 Both precisions use the same routing engine. Individual
 overrides still leave formations; queued commands and attack-mode or formation
 membership changes remain meaningful.
+
+Hunting retains an admitted endpoint while it still reaches the moved prey.
+Ranged pursuit likewise keeps a firing point while it remains within the
+weapon's minimum/maximum range. Melee uses the original
+contact-retargeting rule; its exact clash baselines remain unchanged. General
+reinforcements receive their new formation orders without restarting soldiers
+already marching to the same squad goal. New scalar commanders still enter
+formation; changed goals and failed trips remain retryable.
 
 General and Vassal sources retain unchanged army goals. Vassal return orders
 still cancel a new pursuit. Auto-scout already selects its next goal only once
@@ -148,48 +198,60 @@ state; diagnostic issuer history is not.
 
 ## Functional checks
 
-All commands use `NEXTEST_TEST_THREADS=2 RUST_TEST_THREADS=2
-CARGO_BUILD_JOBS=2`. These results qualify code revision `3dd22b72cfd9`;
-later documentation-only commits do not change its behavior.
+These results refer to functional revision `c1675e9ffb2b` on the frozen base,
+unless a row explicitly identifies historical evidence.
+Commands use `NEXTEST_TEST_THREADS=2 RUST_TEST_THREADS=2 CARGO_BUILD_JOBS=1
+CARGO_PROFILE_DEV_DEBUG=0` and the operational Make override
+`RESOURCE_CAP='--memory=4g --memory-swap=4g --cpu-shares=1024 -e CARGO_BUILD_JOBS=1'`.
+Only compiler concurrency is reduced; caps, optimization, runtime workers,
+workloads and gate thresholds are unchanged. Development debug symbols are
+omitted to reduce compiler memory. All compilation and checks run through Make.
 
 | Command | Result |
 | --- | --- |
-| `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='all()'` | 1,292 passed, zero skipped |
-| Corresponding full `aoe-server` command | 453 passed; four pre-existing package-dependent tests ignored |
-| `make sdk-python-test` | 23 bindings tests and 163 AI tests passed |
-| `make test-harness` | 1,509 unit tests and the integration binaries passed; one explicit profiling test ignored |
-| `make test-harness-focused HARNESS_TEST_FILTER=perf_scale::scale_match` | 23 passed |
-| `make hooks-install hooks-check fmt-check lint structure-check architecture-check docs-check build-wasm` | Passed |
-| `make deny` | Passed |
-| `make perf-wasm-cap` | Passed: optimized gzip 407,793 bytes, existing repository cap unchanged |
-| Normal commit hooks | Passed |
-| `make preflight` and instruction comparison | Refused by shared resource admission; not passed |
+| `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='all()'` | 1,313 passed, no skips, 627.240 s |
+| Corresponding full `aoe-server` command | 453 passed; four existing package-dependent tests skipped; 262.942 s |
+| Focused order/General/replay checks | 11 current focused regressions passed; exact clash baselines, five General variants and three new retention tests; all also pass in the full suite |
+| `make sdk-python-test` | Current 23 binding tests passed (83.34 s); full 163-test AI run in progress |
+| `make test-harness` | 1,509 unit tests passed (459.96 s) plus all integration binaries; one existing explicit profiling ignore |
+| `make hooks-install hooks-check fmt-check lint structure-check architecture-check docs-check deny` | Passed |
+| `make build-wasm perf-wasm-cap` | Passed: optimized client gzip 407,730 bytes; diagnostics 90,396 bytes; unchanged cap |
+| Normal integration commit hooks | Passed |
+| `make preflight` | No current pass; admission has been busy |
 
-The ignored harness test is `late_game_apply_census`, which requests explicit
-100-seat profiling through `make movement-apply-census`. The four server
-ignores require local packages; one also requires a quiet machine. These and
-CI remain outside this qualification. Logs include
-`simulation-qualified-all.log`, `server-qualified-all.log`, `sdk-qualified.log`,
-`remaining-short-gates.log`, `frontier-gates-client.log`, `frontier-wasm-cap.log`
-and `frontier-commit.log` under `.cache/order-volume/`.
+The unchanged five-variant General gate passes with engagement shares
+86.582%, 92.165%, 88.346%, 87.694% and 88.597% (mean 88.677011%). Every original
+wait limit passes. Ten-minute Steward productivity and river-economy one-/four-
+worker replay checks pass too. These are deterministic functional observations,
+not wall-performance measurements. Reports are retained in
+`.cache/order-volume/resumed/regions/ranged-general/`.
 
-The unchanged five-variant General gate passes: engagement shares are
-87.774%, 88.112%, 85.400%, 92.231% and 89.035% (mean 88.510%). Every original
-wait limit passes. These are deterministic functional observations, not
-wall-performance measurements. The latest full-suite reports are copied to
-`.cache/order-volume/general-qualified/`.
+The current retained-goal/exact-contact replay pin is
+`21b25c880ce6937001c72f41f9a591665e673c3908d8b6455d9ffa87891e331b`.
+Clean dev independently passes its `d740cb40...` checkpoint. Before repinning,
+the feature passed every activity floor and complete one-/four-worker equality,
+then failed only the final old pin; the new pin subsequently passed both the
+focused and full suites. Region proofs now settle the old sealed waiting
+fixture immediately, so its test uses a connected detour, a nonempty pending
+frontier and an explicit peer reservation instead. Hash, route-request count
+and original-deadline assertions remain intact. No gate or floor was weakened.
 
-The current late-game replay pin was regenerated for retained goals and exact
-contacts. Clean dev passes the preceding `f06497a1…` pin; the prior contact
-retention revision `9e8c616e0f53` and the withdrawal correction both produce
-`49d847124f3ec329d72805ecd276d785c2baa1d6d765cba0cc7a4f17daef394d`.
-The exact workload, all activity floors and complete one-/four-worker equality
-remain unchanged. No engagement floor or performance gate was reduced.
+Current logs are `final-simulation-corrected.log`, `final-server-all.log`,
+`final-sdk-all.log`, `final-harness-all.log`, `final-wasm.log`,
+`melee-contact-green.log` and `melee-contact-gates.log` under the resumed
+`regions/` folder. `final-simulation-all.log` is the rejected earlier
+all-contact implementation: its two exact melee clashes failed. The source
+was corrected without changing those expected results; the full current
+suite subsequently passed. Historical integration logs remain preserved.
+The four server skips require local packages; one also requires a quiet host.
+CI remains outside this local qualification.
 
-## Fresh video evidence and capture limits
+## Paired worker footage and capture limits
 
-The paired VP9 WebM recordings show the same Steward fixture, initially twenty
-villagers, with original art. Both are 1280×720 at 25 fps. Extracted frames at
+The retained paired VP9 WebM recordings show the same Steward fixture, initially twenty
+villagers, with original art. They were captured on the preceding `82f7a3bf` base and retained-goal code
+`3dd22b72cfd9`, before the region-router rebase; they are not fresh evidence
+for the current routing base. Both are 1280×720 at 25 fps. Extracted frames at
 25/30 seconds show the farm camera and working villagers. They are fixture
 footage, separate from owner-save measurements, and do not compare equal game
 ticks, economic yield or performance. Baseline uses a release server; after
