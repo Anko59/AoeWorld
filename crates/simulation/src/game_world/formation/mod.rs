@@ -124,6 +124,13 @@ pub(crate) struct Group {
     path_cursor: usize,
 }
 
+impl Group {
+    pub(super) fn static_covers(&self, at: WorldPosition, kind: UnitKind) -> bool {
+        self.static_area
+            .is_some_and(|area| area.covers(at, kind.collision_radius(), 513))
+    }
+}
+
 impl GameWorld {
     /// An unchanged squad keeps its current shared route and final slots.
     pub(crate) fn formation_matches(&self, ids: &[EntityId], goal: WorldPosition) -> bool {

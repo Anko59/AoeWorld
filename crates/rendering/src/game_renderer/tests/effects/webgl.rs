@@ -302,3 +302,72 @@ extern "C" {
     fn coverage_texture_is_live(bridge: &JsValue, texture: &JsValue) -> bool;
     fn track_coverage_storage(bridge: &JsValue) -> js_sys::Function;
 }
+
+#[wasm_bindgen_test]
+fn webgl_contours_return_after_a_long_run_without_effects() {
+    // A game spends long stretches with no unit behind an occluder; the coverage
+    // backing is released meanwhile and must come back with the same pixels.
+    let (canvas, mut renderer) = target(&effect_atlas());
+    let actor = body(0).with_unit_contour(Some([0, 0, 255]));
+    for _ in 0..3 {
+        render(&mut renderer, &mut [actor, blocker(4)]);
+        assert_pixel(&canvas, 87, 64, [0, 0, 255, 255]);
+        for _ in 0..90 {
+            render(&mut renderer, &mut [actor]);
+        }
+        assert_pixel(&canvas, 87, 64, [220, 30, 80, 255]);
+        render(&mut renderer, &mut [actor, blocker(4)]);
+        assert_pixel(&canvas, 87, 64, [0, 0, 255, 255]);
+    }
+}
+
+#[wasm_bindgen(inline_js = "
+export function lose_and_restore_context(bridge) {
+    const gl = bridge.gl, ext = gl.getExtension('WEBGL_lose_context');
+    if (!ext) throw new Error('context loss extension unavailable');
+    const canvas = bridge.canvas;
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('restore timeout')), 5000);
+        canvas.addEventListener('aoe-renderer-restored', () => { clearTimeout(timer); resolve(); }, { once: true });
+        canvas.addEventListener('webglcontextlost', () => setTimeout(() => ext.restoreContext(), 20), { once: true });
+        ext.loseContext();
+    });
+}
+export function restore_error(bridge) { return String(bridge.restoreError ?? ''); }
+")]
+extern "C" {
+    fn lose_and_restore_context(bridge: &JsValue) -> js_sys::Promise;
+    fn restore_error(bridge: &JsValue) -> String;
+}
+
+#[wasm_bindgen_test]
+async fn webgl_contours_return_after_context_loss_with_live_coverage() {
+    // Firefox drops contexts under GPU memory pressure. Contour state (coverage
+    // framebuffer, mask unit, contour program uniforms) must be rebuilt.
+    let (canvas, mut renderer) = target(&effect_atlas());
+    let actor = body(0).with_unit_contour(Some([0, 0, 255]));
+    for round in 0..3 {
+        render(&mut renderer, &mut [actor, blocker(4)]);
+        assert_pixel(&canvas, 87, 64, [0, 0, 255, 255]);
+        let restored = lose_and_restore_context(renderer.test_bridge());
+        assert!(
+            !renderer.render(&mut [actor, blocker(4)]).unwrap_or(true),
+            "a lost context must not present"
+        );
+        wasm_bindgen_futures::JsFuture::from(restored)
+            .await
+            .expect("context restored");
+        assert_eq!(restore_error(renderer.test_bridge()), "", "round {round}");
+        render(&mut renderer, &mut [actor, blocker(4)]);
+        assert_pixel(&canvas, 87, 64, [0, 0, 255, 255]);
+        assert_pixel(&canvas, 48, 64, [220, 30, 80, 255]);
+        assert_pixel(&canvas, 80, 64, [240, 200, 20, 255]);
+        let stats = renderer.contour_stats();
+        assert_eq!(
+            (stats.context_lost, stats.context_restored),
+            (round + 1, round + 1)
+        );
+        assert_eq!((stats.contour_instances, stats.occluder_instances), (1, 1));
+        assert!(stats.effect_frames > round && stats.plain_frames == 0);
+    }
+}

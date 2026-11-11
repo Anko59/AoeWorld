@@ -230,7 +230,10 @@ impl GameWorld {
             Ok(()) | Err(EconomyError::InvalidFootprint) => {}
             Err(error) => return Err(error),
         }
-        self.initialize_wildlife(TileCoord::new(origin.x + side / 2, origin.y + side / 2));
+        self.initialize_wildlife(
+            TileCoord::new(origin.x + side / 2, origin.y + side / 2),
+            scout_tile,
+        );
         self.remember_visible_resources();
         Ok(scout)
     }

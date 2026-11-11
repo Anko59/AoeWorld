@@ -1,8 +1,11 @@
+import { initFrameTelemetry } from '/dev/frame-telemetry.js';
 import { gpuTiming, observeUploads } from '/dev/gpu-timing.js';
 
 // Samples describe the preceding real game frame. No history grows with match
-// duration, and disabled markers perform no clock reads or GPU work.
+// duration. Disabling the developer overlay stops its GPU timing queries.
 export function initPerformance() {
+  const telemetry = initFrameTelemetry();
+  window.aoeTelemetry = telemetry;
   const overlay = document.getElementById('performance-overlay');
   const names = ['decode', 'draw', 'ui'];
   const zero = () => ({ decode: 0, upload: 0, draw: 0, ui: 0 });
@@ -33,6 +36,8 @@ export function initPerformance() {
     }
   }
   function mark(section) {
+    telemetry.mark(section);
+    if (section >= 7) return;
     if (!state.enabled) return;
     const now = performance.now();
     if (section === 0) {

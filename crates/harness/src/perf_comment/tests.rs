@@ -6,6 +6,7 @@ use std::{fs, path::Path};
 use tempfile::tempdir;
 
 mod notes;
+mod reference;
 
 /// One artifact directory: `ci.json` plus the optional sibling files.
 fn fixture(

@@ -1,6 +1,14 @@
 use super::{Home, STEWARD_RULES, StewardWork};
 use crate::{BuildingKind, GameBuilding, GameUnit, GameWorld, UnitKind};
 use aoe_core::{ChunkCoord, EntityId, PlayerId, SPATIAL_CHUNK_TILES};
+use std::collections::BTreeSet;
+
+/// A work budget splits discovery; it must never become a kingdom size limit.
+#[derive(Clone, Debug, Default)]
+pub(super) struct BuildingScan {
+    pub after: Option<(BuildingKind, EntityId)>,
+    pub known: BTreeSet<EntityId>,
+}
 
 pub(super) struct Snapshot {
     pub steward: EntityId,
@@ -21,6 +29,23 @@ pub(super) struct Snapshot {
     pub offers: [Vec<aoe_map::ResourceNode>; 4],
 }
 impl GameWorld {
+    /// An owner may create a low-kind building behind a pending scan cursor.
+    pub(crate) fn steward_building_added(
+        &mut self,
+        id: EntityId,
+        player: PlayerId,
+        footprint: aoe_core::TileRect,
+    ) {
+        for home in self.economy.steward_homes.values_mut() {
+            if home.player == player
+                && home.covers(footprint, 0)
+                && let Some(scan) = home.building_scan.as_mut()
+            {
+                scan.known.insert(id);
+            }
+        }
+    }
+
     /// Spatial buckets only, with a retained position when crowds exceed the
     /// scan bound. A partial census never authorizes villager production.
     pub(super) fn steward_snapshot(
@@ -90,37 +115,68 @@ impl GameWorld {
         }
         units.sort_unstable_by_key(|u| u.id);
         boats.sort_unstable_by_key(|u| u.id);
-        let building_count: usize = self
+        let mut scan = home.building_scan.clone().unwrap_or_default();
+        let cursor = scan.after;
+        let first_kind = cursor.map_or(BuildingKind::TownCenter, |(kind, _)| kind);
+        let mut candidates = self
             .economy
             .dropoffs
-            .range((player, BuildingKind::TownCenter)..=(player, BuildingKind::Bridge))
-            .map(|(_, ids)| ids.len())
-            .sum();
-        let mut buildings = Vec::new();
-        let mut queued = 0;
-        let mut global_queued = 0;
-        let mut villagers = units.len();
-        for b in self
-            .player_buildings(player)
+            .range((player, first_kind)..=(player, BuildingKind::Road))
+            .flat_map(|((_, kind), ids)| {
+                let start = cursor
+                    .filter(|(previous, _)| previous == kind)
+                    .map_or(0, |(_, id)| {
+                        ids.partition_point(|candidate| *candidate <= id)
+                    });
+                ids[start..].iter().map(move |id| (*kind, *id))
+            })
+            .peekable();
+        let batch: Vec<_> = candidates
+            .by_ref()
             .take(STEWARD_RULES.building_visits_per_domain)
-        {
+            .collect();
+        let complete_buildings = candidates.peek().is_none();
+        for (kind, id) in batch {
             work.building_visits += 1;
-            global_queued += b.training_queue.len();
-            if !home.covers(b.footprint, 0) {
-                continue;
+            scan.after = Some((kind, id));
+            if self
+                .building(id)
+                .is_some_and(|b| home.covers(b.footprint, 0))
+            {
+                scan.known.insert(id);
             }
-            queued += b
-                .training_queue
+        }
+        // Read current state, not stale queue/garrison copies from prior slices.
+        let mut buildings: Vec<_> = scan
+            .known
+            .iter()
+            .filter_map(|id| self.building(*id))
+            .filter(|b| b.player == player && home.covers(b.footprint, 0))
+            .cloned()
+            .collect();
+        if let Some(h) = self.economy.steward_homes.get_mut(&id) {
+            h.building_scan = (!complete_buildings).then_some(scan);
+        }
+        let queued = buildings
+            .iter()
+            .flat_map(|b| &b.training_queue)
+            .filter(|entry| entry.kind == UnitKind::Villager)
+            .count();
+        let villagers = units.len()
+            + buildings
                 .iter()
-                .filter(|e| e.kind == UnitKind::Villager)
-                .count();
-            villagers += b
-                .garrison
-                .iter()
+                .flat_map(|b| &b.garrison)
                 .filter(|g| g.unit.kind == UnitKind::Villager && g.unit.hp > 0)
                 .count();
-            buildings.push(b.clone());
-        }
+        // Pending population is player-wide and changes while a census runs.
+        let global_queued = self
+            .economy
+            .active_training
+            .iter()
+            .filter_map(|id| self.building(*id))
+            .filter(|b| b.player == player)
+            .map(|b| b.training_queue.len())
+            .sum();
         buildings.sort_unstable_by_key(|b| b.id);
         Some(Snapshot {
             steward: id,
@@ -129,7 +185,7 @@ impl GameWorld {
             units,
             boats,
             buildings,
-            complete: complete_units && building_count <= STEWARD_RULES.building_visits_per_domain,
+            complete: complete_units && complete_buildings,
             villagers,
             queued,
             global_queued,

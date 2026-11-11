@@ -97,3 +97,41 @@ pub fn raster_bridge_line(from: TileCoord, to: TileCoord) -> Option<Vec<TileCoor
 
 #[cfg(test)]
 mod tests;
+
+/// Keep an exact valid drag or an existing land-to-water entry. Only a missing
+/// entry permits searching the eight neighbouring starts, never repairing an end.
+/// The caller supplies its authoritative terrain, occupancy and knowledge rules.
+pub fn snap_bridge_start(
+    from: TileCoord,
+    to: TileCoord,
+    water: impl Fn(TileCoord) -> Option<bool>,
+    valid: impl Fn(BridgeSpan) -> bool,
+) -> Option<BridgeSpan> {
+    if let Some(span) = BridgeSpan::new(from, to).filter(|span| valid(*span)) {
+        return Some(span);
+    }
+    let mut tiles = raster_bridge_line(from, to)?;
+    if tiles.first() != Some(&from) {
+        tiles.reverse();
+    }
+    if water(from) == Some(false) && tiles.get(1).is_some_and(|tile| water(*tile) == Some(true)) {
+        return None;
+    }
+    let mut starts = Vec::with_capacity(9);
+    for dy in -1_i32..=1 {
+        for dx in -1_i32..=1 {
+            if dx == 0 && dy == 0 {
+                continue;
+            }
+            starts.push((
+                dx * dx + dy * dy,
+                from.y.saturating_add(dy),
+                from.x.saturating_add(dx),
+            ));
+        }
+    }
+    starts.sort_unstable();
+    starts
+        .into_iter()
+        .find_map(|(_, y, x)| BridgeSpan::new(TileCoord::new(x, y), to).filter(|span| valid(*span)))
+}

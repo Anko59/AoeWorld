@@ -79,7 +79,13 @@ pub(super) fn animals(
                 aoe_simulation::AnimalTask::Carcass => AnimalTask::Carcass,
             },
             food_remaining: a.food_remaining,
-            target: a.target,
+            // A chase target belongs to simulation intent; the wire target
+            // names an actual attack and is invalid on the walking/Idle pose.
+            target: if a.task == aoe_simulation::AnimalTask::Attacking {
+                a.target
+            } else {
+                None
+            },
             facing: a.facing as u8,
             moving: a.moving,
             death_tick: a.death_tick,

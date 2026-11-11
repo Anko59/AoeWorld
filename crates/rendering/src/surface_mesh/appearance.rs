@@ -295,6 +295,11 @@ fn terrain_group_all(
     if material == 17 && !art.foundation.0.is_empty() {
         return Some((16, &art.foundation.0, art.foundation.1));
     }
+    // A built road draws the pale pebbly sheet: the native worn cobbles read as
+    // old, and as part of the dirt where a track crosses a dirt patch.
+    if material == 18 && !art.terrain[10].is_empty() {
+        return Some((10, &art.terrain[10], art.terrain_topology[10]));
+    }
     // Snow and rock own distinct native sheets; ice is an optional water sheet.
     // Missing forest art uses dirt uniformly: no 8×8 parity substitution.
     // Water classes: the light shallow sheet is terrain group 5; medium,

@@ -61,8 +61,8 @@ async fn webgpu_live_source_grid_has_pixels_and_toggle_off_removes_them() {
     game.upload_game_atlas(&art, vec![255; crate::GAME_ATLAS_BYTES])
         .unwrap();
     let surfaces = crate::surface_mesh::projected_surface_triangles(&terrain, camera);
-    let segments = game_grid::grid_segments(&surfaces, camera.zoom);
-    let count = game_grid::grid_sprites(&segments, camera.viewport).len();
+    let lines = game_grid::grid_lines(&surfaces, camera.zoom);
+    let count = game_grid::grid_sprites(&lines, camera.viewport, 0.0).len();
     assert!(count > 0);
     let mut pixels = Vec::new();
     for enabled in [false, true, false] {

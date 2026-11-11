@@ -66,6 +66,9 @@ pub(super) fn render(client: &mut Client) -> bool {
         client.capture.frame = client.capture.frame.saturating_add(1);
     }
     if level != Lod::Sprites {
+        // An unchanged strategic frame retains its already painted pixels.
+        // Only the lifetime frame counter above requires an actual redraw.
+        client.capture.current_view = true;
         client.rendered_frame.clear();
         true
     } else {

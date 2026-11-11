@@ -1,8 +1,15 @@
+#[cfg(any(target_arch = "wasm32", test))]
+mod ground_contact;
+
 #[cfg(any(not(target_arch = "wasm32"), test, feature = "shader-source"))]
 pub mod shader_data;
 
 mod player;
 pub use player::{PLAYER_COLOURS, SceneUnitVisual, player_colour};
+
+#[cfg(any(target_arch = "wasm32", test))]
+#[path = "game_renderer/village/extents.rs"]
+mod sprite_extents;
 
 #[cfg(target_arch = "wasm32")]
 mod web;

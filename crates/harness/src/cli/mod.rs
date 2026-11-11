@@ -118,6 +118,8 @@ enum Command {
     PerfWasmSizeCheck,
     /// Post or rewrite the pull request's one informational CI performance comment.
     PerfComment,
+    /// Write the latest passing dev instruction counts for the perf-ci gate (never fails the job).
+    PerfDevReference,
     PerfHardwareCheck {
         #[arg(long, default_value = "reports/perf/hardware-environment.json")]
         environment: PathBuf,

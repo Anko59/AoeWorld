@@ -99,7 +99,11 @@ fn selection_uses_an_analytic_ellipse_and_grid_lines_are_solid_packets() {
         focus_elevation_meters: 0.0,
     };
     let point = |x, y| aoe_core::ScreenPoint { x, y };
-    let grid = crate::game_grid::grid_sprites(&[[point(0.0, 32.0), point(64.0, 64.0)]], [128.0; 2]);
+    let line = crate::game_grid::GridLine {
+        ends: [point(0.0, 32.0), point(64.0, 64.0)],
+        depths: [0.0; 2],
+    };
+    let grid = crate::game_grid::grid_sprites(&[line], [128.0; 2], 0.0);
     let ring = crate::game_grid::selection_ring(camera, [0.5; 2], 0.0);
     assert_eq!(grid.len(), 2);
     assert_eq!(ring.len(), crate::game_grid::SELECTION_RING_SPRITES);

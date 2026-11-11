@@ -99,9 +99,7 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
         };
     }
     let carcass = animal.is_some_and(|a| a.hp == 0);
-    // The work pose plays only while the hunter actually strikes or carves:
-    // a unit waiting for its route or still out of reach stands.
-    let working = !u.planning && (carcass || in_reach(u, animal));
+    let working = !u.planning && in_reach(u, animal);
     if u.task == UnitTask::Shepherding {
         return if u.moving {
             ShepherdWalk
@@ -127,6 +125,8 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
     if u.task == UnitTask::Attacking {
         return if u.moving {
             VillagerWalk
+        } else if u.hunt_target.is_some() && !working {
+            VillagerStand
         } else {
             VillagerAttack
         };
@@ -188,8 +188,13 @@ pub(crate) fn walks_as_villager(u: &GameplayUnitState, animal: Option<&AnimalSta
 /// for bow hunting.
 fn in_reach(u: &GameplayUnitState, animal: Option<&AnimalState>) -> bool {
     animal.is_some_and(|a| {
-        let reach =
-            if a.kind == AnimalKind::Sheep { 1 } else { 4 } * i64::from(FIXED_SUBUNITS_PER_TILE);
+        let reach = if a.hp == 0 {
+            3 * i64::from(FIXED_SUBUNITS_PER_TILE) / 2
+        } else if matches!(a.kind, AnimalKind::Sheep | AnimalKind::Wolf) {
+            i64::from(FIXED_SUBUNITS_PER_TILE)
+        } else {
+            4 * i64::from(FIXED_SUBUNITS_PER_TILE)
+        };
         let dx = i64::from(u.position.x) - i64::from(a.position.x);
         let dy = i64::from(u.position.y) - i64::from(a.position.y);
         dx * dx + dy * dy <= reach * reach

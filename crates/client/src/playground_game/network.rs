@@ -9,7 +9,7 @@ mod tests;
 
 #[path = "network/lifecycle.rs"]
 mod lifecycle;
-use lifecycle::{clear_world, reconnect};
+use lifecycle::{clear_world, reconnect, record_shots};
 
 pub(super) struct ConnectionCallbacks {
     socket: WebSocket,
@@ -122,7 +122,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         if client.connection_id != id {
             return;
         }
-        let _decode = super::perf::Scope::new(1);
+        let _decode = super::perf::decode();
         let bytes = match incoming_bytes(&event.data()) {
             Ok(bytes) => bytes,
             Err(message) => {
@@ -199,6 +199,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     return;
                 }
                 client.revision = revision;
+                client.capture.snapshot_revision = Some(revision);
                 let mut resident = BTreeMap::new();
                 for unit in units {
                     resident.insert(unit.id, unit);
@@ -479,22 +480,4 @@ pub(super) fn merge_buildings(
     }
     (merged.len() <= aoe_protocol::MAX_RETAINED_BUILDINGS)
         .then(|| merged.into_values().cloned().collect())
-}
-
-/// Remembers when each shooter last released, so its animation can be phased
-/// to the shot. Entries of idle shooters expire after half a minute.
-fn record_shots(
-    village: &mut village::Village,
-    projectiles: &[aoe_protocol::ProjectileState],
-    tick: u64,
-) {
-    for shot in projectiles {
-        if let Some(attacker) = shot.attacker {
-            let last = village.last_shot.entry(attacker).or_insert(shot.launched.0);
-            *last = (*last).max(shot.launched.0);
-        }
-    }
-    village
-        .last_shot
-        .retain(|_, launched| tick.saturating_sub(*launched) < 600);
 }

@@ -126,7 +126,10 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
         // so planners spend their allowance on routes sooner. The full run
         // preserved the activity floors and complete one/four-worker equality.
         // Bounded region witnesses skip duplicate floods and straight-route guidance; worker equality holds.
-        "a1c5fae0da9435093a6493943db807744fe823155b7bd72f9cddb68187408f48"
+        // #745 changes wildlife movement/hunting and replaced-camp lifecycle.
+        // Repin the current output; workload, activity floors and the full
+        // one/four-worker replay equality above are unchanged.
+        "d740cb40fccae011217e7d45f4adcd11e840cf1c7067e28d1b5c914facf5328a"
     );
 }
 

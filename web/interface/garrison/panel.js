@@ -12,7 +12,7 @@ export function initGarrison() {
   const panel=document.createElement('div');panel.id='garrison-panel';panel.hidden=true;
   panel.innerHTML='<b>Garrison: <span id="garrison-count"></span></b><div id="garrison-units"></div>';
   document.getElementById('selection-content').append(panel);
-  autoFit(document.getElementById('garrison-units'),{high:28,low:22});
+  autoFit(document.getElementById('garrison-units'),{high:36,low:28});
   let previous='';
   window.aoeGarrison={update(values){
     const capacity=values[0], count=(values.length-2)/4;

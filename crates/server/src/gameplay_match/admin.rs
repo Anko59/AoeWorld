@@ -10,6 +10,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+pub(crate) mod client_perf;
 mod summary;
 
 pub(super) fn routes() -> Router<AppState> {
@@ -18,6 +19,10 @@ pub(super) fn routes() -> Router<AppState> {
         .route("/admin/match/players/{id}", get(player_state))
         .route("/admin/fog", post(set_fog))
         .route("/admin/perf", get(perf))
+        .route(
+            "/client/perf",
+            post(client_perf::receive).layer(axum::extract::DefaultBodyLimit::max(4096)),
+        )
 }
 
 type Error = (StatusCode, String);
@@ -93,6 +98,7 @@ async fn set_fog(
 async fn perf(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Value>, Error> {
     authorize(&state, &headers)?;
     let mut report = state.tick_stats.summary(state.tick_period);
+    report["clients"] = state.client_perf.lock().await.recent();
     let service = state.gameplay.read().await.clone();
     report["gameplay_memory"] =
         serde_json::to_value(service.memory_usage().await).map_err(internal)?;

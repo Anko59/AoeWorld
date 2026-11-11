@@ -30,6 +30,8 @@ pub(super) fn reconnect(client: &mut Client, status: &str) {
 
 // The pieces of a connection's world that a new Welcome or a WorldReset drops.
 pub(super) fn clear_world(client: &mut Client) {
+    client.capture.current_view = false;
+    client.capture.snapshot_revision = None;
     client.terrain_scene.get_mut().take();
     client.resources.clear();
     client.fog.clear();
@@ -42,4 +44,23 @@ pub(super) fn clear_world(client: &mut Client) {
     let tick_hz = client.config.tick_hz;
     client.presentation.reset(tick_hz);
     client.rendered_frame.clear();
+    capture::update(client);
+}
+
+/// Remembers when each shooter last released, so its animation can be phased
+/// to the shot. Entries of idle shooters expire after half a minute.
+pub(super) fn record_shots(
+    village: &mut village::Village,
+    projectiles: &[aoe_protocol::ProjectileState],
+    tick: u64,
+) {
+    for shot in projectiles {
+        if let Some(attacker) = shot.attacker {
+            let last = village.last_shot.entry(attacker).or_insert(shot.launched.0);
+            *last = (*last).max(shot.launched.0);
+        }
+    }
+    village
+        .last_shot
+        .retain(|_, launched| tick.saturating_sub(*launched) < 600);
 }

@@ -17,6 +17,8 @@ pub(crate) mod fog;
 #[path = "game_renderer/ground/mod.rs"]
 mod ground;
 pub use ground::apply_building_foundations;
+#[path = "game_renderer/perf.rs"]
+mod perf;
 #[path = "game_renderer/world_layers.rs"]
 mod world_layers;
 #[path = "game_renderer/world_sprites.rs"]
@@ -359,7 +361,9 @@ impl GameRenderer {
         });
         let mut layers =
             direct_world_layers(surfaces, art, terrain, resources, units, camera, animation);
+        let fog_span = perf::Stage::new(6);
         fog::shade_objects(&mut layers, art, resources, units, animation, light);
+        drop(fog_span);
         if matches!(self, Self::WebGpu(_) | Self::WebGl(_)) {
             let depth_origin = surface_depth([
                 camera.center[0],
@@ -371,6 +375,7 @@ impl GameRenderer {
                 _ => Vec::new(),
             };
             instances.clear();
+            let fog_span = perf::Stage::new(6);
             instances.extend(layers.iter().map(|layer| match layer {
                 WorldLayer::Surface(triangle) => {
                     let mut packet =
@@ -390,12 +395,11 @@ impl GameRenderer {
                     sprite
                 }
             }));
+            drop(fog_span);
             if grid {
-                instances.extend(game_grid::grid_sprites(
-                    &fog::grid_segments(&layers, camera, light),
-                    camera.viewport,
-                ));
+                instances.extend(fog::grid_sprites(&layers, camera, light, depth_origin));
             }
+            let _submission = perf::Stage::new(4);
             return match self {
                 Self::WebGpu(renderer) => {
                     let result = renderer

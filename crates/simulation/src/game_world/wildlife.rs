@@ -11,6 +11,7 @@ mod continuation;
 mod hash;
 mod hunting;
 mod lure;
+mod navigation;
 mod spawning;
 mod table;
 pub use table::{AnimalKind, WILDLIFE_RULES, WildlifeRules};
@@ -53,6 +54,7 @@ struct StoredAnimal {
     cooldown: u32,
     speed_carry: u64,
     decay_carry: u64,
+    /// Sheep/deer destination or a predator's next local detour waypoint.
     herd: Option<WorldPosition>,
 }
 

@@ -36,7 +36,7 @@ pub(super) struct Manifest {
     _input_hash: DiscardString,
     pub pages: Vec<AtlasPage>,
     pub chunks: Vec<aoe_assets::pack::frame_chunks::FrameChunk>,
-    pub frames: Vec<FrameRecord>,
+    pub frames: crate::asset_sources::IndexedFrames<FrameRecord>,
     pub building_data: String,
     pub terrains: Vec<aoe_assets::pack::TerrainSheet>,
     #[cfg_attr(test, serde(skip))]
@@ -113,6 +113,22 @@ pub(super) struct FrameRecord {
     pub height: u16,
     pub anchor_x: i32,
     pub anchor_y: i32,
+}
+
+impl crate::asset_sources::FrameIdentity for FrameRecord {
+    fn source(&self) -> &str {
+        &self.source
+    }
+    fn frame(&self) -> u32 {
+        self.frame
+    }
+}
+
+#[cfg(test)]
+impl<'de> Deserialize<'de> for crate::asset_sources::IndexedFrames<FrameRecord> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Vec::<FrameRecord>::deserialize(deserializer).map(Into::into)
+    }
 }
 
 #[cfg(test)]
@@ -232,7 +248,7 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Manifest, JsValue> {
                 })
             })
             .collect::<Result<Vec<_>, JsValue>>()?,
-        frames,
+        frames: frames.into(),
         buildings: Vec::new(),
         #[cfg(test)]
         _converter: DiscardString,

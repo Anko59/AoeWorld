@@ -155,12 +155,25 @@ impl FogFactors {
     }
 }
 
-pub(super) fn grid_segments(
+pub(super) fn grid_sprites(
     layers: &[WorldLayer],
     camera: SceneCamera,
     light: &dyn Fn([f64; 2]) -> f32,
-) -> Vec<[aoe_core::ScreenPoint; 2]> {
-    game_grid::grid_segments(
+    depth_origin: f64,
+) -> Vec<crate::web::Sprite> {
+    game_grid::grid_sprites(
+        &grid_lines(layers, camera, light),
+        camera.viewport,
+        depth_origin,
+    )
+}
+
+pub(super) fn grid_lines(
+    layers: &[WorldLayer],
+    camera: SceneCamera,
+    light: &dyn Fn([f64; 2]) -> f32,
+) -> Vec<game_grid::GridLine> {
+    game_grid::grid_lines(
         layers.iter().filter_map(|layer| match layer {
             WorldLayer::Surface(t)
                 if t.points

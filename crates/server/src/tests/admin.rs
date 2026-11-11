@@ -11,6 +11,7 @@ use tokio::task::JoinHandle;
 
 const SECRET: &str = "admin-observability-test-secret";
 
+mod client_perf_tests;
 mod garrison_tests;
 
 struct Server {

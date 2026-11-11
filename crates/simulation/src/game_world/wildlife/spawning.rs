@@ -72,7 +72,10 @@ impl GameWorld {
         if self.wildlife.animals.len() >= self.economy.limits.animals {
             return Err(EconomyError::Capacity);
         }
-        if !self.config.valid_ground_position(at) || !self.tile_passable(at.tile_floor()) {
+        if !self.config.valid_ground_position(at)
+            || !self.tile_passable(at.tile_floor())
+            || (kind == AnimalKind::Wolf && !self.animal_spawn_open(at.tile_floor()))
+        {
             return Err(crate::GameWorldError::InvalidPosition.into());
         }
         let id = self.allocate_entity_id()?;
@@ -121,7 +124,8 @@ impl GameWorld {
 
     /// The terrain generator has no animal hooks. A bounded local kit is
     /// placed after the resource kit without changing terrain or collision.
-    pub(crate) fn initialize_wildlife(&mut self, center: TileCoord) {
+    pub(crate) fn initialize_wildlife(&mut self, center: TileCoord, root: TileCoord) {
+        let region = self.animal_start_region(center, root);
         let mut used = std::collections::BTreeSet::new();
         for (kind, count, offset) in [
             (AnimalKind::Sheep, 8, (-4, 0)),
@@ -139,7 +143,11 @@ impl GameWorld {
                             }
                             let tile =
                                 TileCoord::new(center.x + offset.0 + dx, center.y + offset.1 + dy);
-                            if !used.contains(&tile) && self.tile_free(tile) {
+                            if !used.contains(&tile)
+                                && self.tile_free(tile)
+                                && (kind != AnimalKind::Wolf
+                                    || region.contains(&tile) && self.animal_spawn_open(tile))
+                            {
                                 chosen = WorldPosition::from_tile_center(tile).ok();
                                 break 'search;
                             }

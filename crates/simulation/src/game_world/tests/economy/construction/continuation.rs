@@ -355,3 +355,54 @@ fn auto_continue_includes_ten_tiles_and_excludes_eleven() {
         );
     }
 }
+
+#[test]
+fn town_center_builders_gather_nearest_kind_unless_another_site_needs_them() {
+    fn run(nearby_site: bool) -> [u8; 32] {
+        let (mut world, node, builder) = resource_world(ResourceKind::Wood);
+        let origin = world.unit(builder).unwrap().position.tile_floor();
+        let tc = world
+            .insert_building(
+                PlayerId(0),
+                BuildingKind::TownCenter,
+                aoe_core::TileRect::from_xywh(
+                    origin.x + if origin.x >= node.tile.x { 1 } else { -4 },
+                    origin.y + if origin.y >= node.tile.y { 1 } else { -4 },
+                    4,
+                    4,
+                ),
+                false,
+            )
+            .unwrap();
+        let next = nearby_site.then(|| foundation(&mut world, PlayerId(0), origin.x - 3, origin.y));
+        world.economy.builders.insert(
+            builder,
+            crate::game_world::economy::BuildTask {
+                building: tc,
+                attempts: 0,
+                queue: Vec::new(),
+            },
+        );
+        let building = world.economy.buildings.get_mut(&tc).unwrap();
+        building.work_done = building.work_total - 3;
+        finish(&mut world, tc, 1000);
+        if let Some(next) = next {
+            assert_eq!(world.economy.builders[&builder].building, next);
+            assert_eq!(world.gather_target(builder), None);
+        } else {
+            assert_eq!(world.gather_target(builder), Some(node.id));
+        }
+        advance(&mut world, 20);
+        world.canonical_hash()
+    }
+    for nearby in [false, true] {
+        let hashes = [1, 4].map(|workers| {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(workers)
+                .build()
+                .unwrap()
+                .install(|| run(nearby))
+        });
+        assert_eq!(hashes[0], hashes[1]);
+    }
+}

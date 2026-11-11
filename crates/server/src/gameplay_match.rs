@@ -362,7 +362,7 @@ async fn start_match(
     }))
 }
 
-mod admin;
+pub(crate) mod admin;
 mod flat;
 mod late_game;
 mod pause;

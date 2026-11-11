@@ -23,6 +23,7 @@ pub struct CanvasPresentation {
     pub(super) image_pixels: Option<Uint8ClampedArray>,
     pub(super) image_store: Option<Uint8ClampedArray>,
     damage: damage::Damage,
+    grid: bool,
     size: [u32; 2],
 }
 
@@ -45,6 +46,7 @@ impl CanvasPresentation {
             image_pixels: None,
             image_store: None,
             damage: Default::default(),
+            grid: false,
             size: [width, height],
         }
     }
@@ -173,6 +175,7 @@ pub(super) fn render_canvas_world_with_fog(
     fog_active: bool,
     light: &dyn Fn([f64; 2]) -> f32,
 ) -> Result<(), String> {
+    let _submission = super::perf::Stage::new(4);
     let width = canvas.width();
     let height = canvas.height();
     if width == 0 || height == 0 {
@@ -181,6 +184,14 @@ pub(super) fn render_canvas_world_with_fog(
     let (pixel_count, color_bytes) = buffer_lengths(width, height)
         .ok_or_else(|| "Canvas depth buffer size overflowed".to_owned())?;
     presentation.resize(width, height);
+    if std::mem::replace(&mut presentation.grid, grid) != grid {
+        presentation.invalidate();
+    }
+    let lines = if grid {
+        super::fog::grid_lines(layers, camera, light)
+    } else {
+        Vec::new()
+    };
     let lights = layers
         .iter()
         .map(|layer| match layer {
@@ -266,6 +277,15 @@ pub(super) fn render_canvas_world_with_fog(
                 }
             }
         }
+        // Terrain is the only thing the lines may cover: they are tested
+        // against the depth every other layer has already written.
+        game_grid::raster_grid(
+            &lines,
+            [dirty_left, dirty_top, dirty_right, dirty_bottom],
+            width,
+            color,
+            depth,
+        );
     }
 
     presentation.present(context, width, height)?;
@@ -277,9 +297,6 @@ pub(super) fn render_canvas_world_with_fog(
         fog_active,
         atlas,
     );
-    if grid {
-        game_grid::draw_grid(context, &super::fog::grid_segments(layers, camera, light));
-    }
     Ok(())
 }
 

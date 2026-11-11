@@ -141,10 +141,12 @@ jobs:
     if: ${{ needs.select.outputs.target_performance == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    permissions: { contents: read, actions: read }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: ./.github/actions/docker-setup
       - run: make bootstrap
+      - { if: "github.event_name == 'pull_request'", run: make perf-dev-reference, env: { GITHUB_TOKEN: "${{ github.token }}" } }
       - run: make perf-ci
       - run: make perf-pressure
       - if: always()
@@ -159,17 +161,12 @@ jobs:
     if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.target-performance.result != 'skipped' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    permissions:
-      actions: read
-      pull-requests: write
+    permissions: { actions: read, pull-requests: write }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: ./.github/actions/docker-setup
       - run: make bootstrap
-      - run: make perf-comment
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          AOE_PR_NUMBER: ${{ github.event.pull_request.number }}
+      - { run: make perf-comment, env: { GITHUB_TOKEN: "${{ github.token }}", AOE_PR_NUMBER: "${{ github.event.pull_request.number }}" } }
 
   fuzz-smoke:
     needs: select

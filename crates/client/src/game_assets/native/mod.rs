@@ -11,6 +11,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::prelude::wasm_bindgen;
 
+mod far;
 mod pixels;
 mod prepare;
 mod retry;

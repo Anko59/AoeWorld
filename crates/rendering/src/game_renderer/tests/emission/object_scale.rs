@@ -338,3 +338,25 @@ fn canvas_draws_a_whole_pile_over_its_tile() {
         "no wider than 4/3 native"
     );
 }
+
+#[wasm_bindgen_test]
+fn decay_body_keeps_its_anchor_and_clears_ground_below_the_hotspot() {
+    let mut art = art();
+    let kind = crate::SceneUnitKind::ScoutDecay;
+    let slot = kind.actor_slot().unwrap();
+    let native = frame([180.0, 160.0], [90.0, 120.0]);
+    art.actors.resize(slot + 1, Vec::new());
+    art.actors[slot] = vec![native; 16];
+    let unit = SceneUnit {
+        id: EntityId(1),
+        kind,
+        position: [10.5; 2],
+        elevation_meters: 0.0,
+        visual: crate::SceneUnitVisual::new(false),
+        facing: 0,
+    };
+    let drawn = world_sprite_frames(&art, &[], &[], &[unit], camera(1.0), 0);
+    let (_, frame, depth, _) = drawn.last().unwrap();
+    assert!((f64::from(frame.anchor[1]) - f64::from(native.anchor[1]) * WORLD).abs() < 0.001);
+    assert!((depth - 21.0) * 32.0 > f64::from(frame.size[1] - frame.anchor[1]));
+}

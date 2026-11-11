@@ -5,13 +5,20 @@ use crate::UnitKind;
 use crate::game_world::formation::{Motion, group_step};
 
 impl GameWorld {
-    fn group_tile_sealed(&self, kind: UnitKind, from: WorldPosition) -> bool {
+    fn group_tile_sealed(&self, kind: UnitKind, from: WorldPosition, tables: &Tables) -> bool {
         // A body on or beside a diagonal deck can stand over a water corner
         // whose tile has no grid exit; the continuous deck still carries it.
         if self.near_deck(from) {
             return false;
         }
-        let tile = from.tile_floor();
+        tables.group_cell_sealed(self, kind, from.tile_floor())
+    }
+
+    pub(super) fn uncached_group_cell_sealed(
+        &self,
+        kind: UnitKind,
+        tile: aoe_core::TileCoord,
+    ) -> bool {
         (-1..=1).all(|dy| {
             (-1..=1).all(|dx| {
                 if dx == 0 && dy == 0 {
@@ -79,7 +86,7 @@ impl GameWorld {
         let from = state.position;
         // An isolated tile has no exit, so do not creep toward its edge or
         // spend a detached route search. Keep the independent arrival wait.
-        if !motion.static_clear && self.group_tile_sealed(state.kind, from) {
+        if !motion.static_clear && self.group_tile_sealed(state.kind, from, tables) {
             motion.target = from;
             motion.center = from;
         }

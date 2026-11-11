@@ -40,7 +40,7 @@ fn settle_attributes_preserve_full_frame_integer_and_write_only_on_change() {
         .expect("canvas element")
         .dyn_into()
         .expect("HTML canvas");
-    capture_update(&canvas, 2, 1, u64::MAX);
+    capture_update(&canvas, 2, 1, u64::MAX, false);
     assert_eq!(
         canvas.get_attribute("data-chunks-pending").as_deref(),
         Some("2")
@@ -53,6 +53,10 @@ fn settle_attributes_preserve_full_frame_integer_and_write_only_on_change() {
         canvas.get_attribute("data-frame").as_deref(),
         Some("18446744073709551615")
     );
+    assert_eq!(
+        canvas.get_attribute("data-view-painted").as_deref(),
+        Some("false")
+    );
     // An unchanged update must leave the attributes alone.
     canvas
         .set_attribute("data-frame", "probe")
@@ -60,13 +64,13 @@ fn settle_attributes_preserve_full_frame_integer_and_write_only_on_change() {
     canvas
         .set_attribute("data-chunks-pending", "probe")
         .expect("pending probe");
-    capture_update(&canvas, 2, 1, u64::MAX);
+    capture_update(&canvas, 2, 1, u64::MAX, false);
     assert_eq!(canvas.get_attribute("data-frame").as_deref(), Some("probe"));
     assert_eq!(
         canvas.get_attribute("data-chunks-pending").as_deref(),
         Some("probe")
     );
-    capture_update(&canvas, 0, 0, 42);
+    capture_update(&canvas, 0, 0, 42, true);
     assert_eq!(
         canvas.get_attribute("data-chunks-pending").as_deref(),
         Some("0")
@@ -76,6 +80,10 @@ fn settle_attributes_preserve_full_frame_integer_and_write_only_on_change() {
         Some("0")
     );
     assert_eq!(canvas.get_attribute("data-frame").as_deref(), Some("42"));
+    assert_eq!(
+        canvas.get_attribute("data-view-painted").as_deref(),
+        Some("true")
+    );
 }
 
 #[wasm_bindgen_test]

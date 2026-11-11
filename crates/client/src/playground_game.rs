@@ -215,6 +215,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 _ => client.status = error,
             }
         }
+        let update = perf::Scope::stage(0);
         resize(&mut client);
         let delta_ms = if client.last_frame == 0.0 {
             16.0
@@ -225,8 +226,12 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         client.resources.expire_effects(time);
         controls::edge_pan(&mut client, delta_ms);
         subscribe(&mut client);
+        client.capture.current_view = false;
         let canvas = matches!(&client.renderer, GameRenderer::Canvas { .. });
+        drop(update);
+        let interpolation = perf::Scope::stage(1);
         client.presentation.advance(time, canvas);
+        drop(interpolation);
         // Keep input, networking and the HUD live while the overview covers the scene.
         let draw = perf::Scope::new(2);
         let mut native_requests = Vec::new();
@@ -249,8 +254,13 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 })
                 .collect();
             client.art.building_clocks = clocks;
+            let terrain = perf::Scope::stage(3);
             let scene = map::scene::prepare(&client);
+            drop(terrain);
+            let interpolation = perf::Scope::stage(1);
             let units = map::scene::units(&client, &scene);
+            drop(interpolation);
+            let culling = perf::Scope::stage(2);
             let camera = SceneCamera {
                 center: client.camera.center,
                 zoom: client.camera.zoom,
@@ -291,6 +301,8 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             } else {
                 Vec::new()
             };
+            drop(culling);
+            let streaming = perf::Scope::stage(0);
             let Client {
                 native,
                 art,
@@ -309,6 +321,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     Err(error) => client.status = format!("Native art unavailable: {error:?}"),
                 }
             }
+            drop(streaming);
             let grid = client.grid;
             let animation = time as usize;
             let result = if coverage.ready(&client.art, &required)
@@ -362,6 +375,8 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }
         }
         drop(draw);
+        perf::contour(client.renderer.contour_stats());
+        let ui_stage = perf::Scope::stage(5);
         let ui = perf::Scope::new(3);
         controls::navigation::present(&client);
         village::waypoints::present(&client);
@@ -378,6 +393,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         );
         capture::update(&mut client);
         drop(ui);
+        drop(ui_stage);
         let surface_fixture = client.surface_fixture;
         drop(client);
         for request in native_requests {
@@ -386,6 +402,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         if !surface_fixture {
             map::request_visible(shared.clone());
         }
+        perf::perf_mark(21);
         if let Some(window) = web_sys::window()
             && let Some(cb) = next.borrow().as_ref()
         {

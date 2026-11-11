@@ -162,7 +162,7 @@
     );
     await frames();
   };
-  H.tc = async (queue = 15, garrison = 15) => {
+  H.tc = async (queue = 15, garrison = 15, steward = false) => {
     setSel(1, "TownCenter", "Town Center", {
       task: "Training",
       load: "Resource drop-off · supports 5 population",
@@ -183,8 +183,23 @@
         `<span class="unit-token" title="queued">${ui.entityIcon("Villager")}</span>`,
     ).join("");
     const g = [];
-    for (let i = 0; i < garrison; i++) g.push(i + 1, 0, 25, 25);
+    for (let i = 0; i < garrison; i++)
+      g.push(
+        i + 1,
+        steward && i === 0 ? ui.trainingKinds.indexOf("Steward") : 0,
+        25,
+        25,
+      );
     O["aoeGarrison.update"]([15, 1, ...g]);
+    if (steward) {
+      $("#research-status").hidden = true;
+      $("#cancel-research").hidden = true;
+      O["aoeSteward.update"](
+        [],
+        "Steward domain active · 15/20 villagers managed",
+        new Uint8Array([1, 40, 30, 20, 10, 20, 1]),
+      );
+    }
     await frames();
   };
   H.castle = async () => {

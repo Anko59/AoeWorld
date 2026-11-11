@@ -24,7 +24,12 @@ async fn vassal_demo_delivers_attack_recall_and_return() {
     let mut damaged = false;
     for _ in 0..6_000 {
         while let Ok(message) = receiver.try_recv() {
-            encode_gameplay_server(&message).expect("valid Vassal match wire frame");
+            encode_gameplay_server(&message).unwrap_or_else(|error| {
+                panic!(
+                    "valid Vassal match wire frame: {error:?}; {:?}",
+                    aoe_protocol::gameplay_server_violations(&message)
+                )
+            });
             let (tick, buildings, units) = match message {
                 GameplayServerMessage::Snapshot {
                     tick,
@@ -416,4 +421,14 @@ async fn road_demo_stream_contains_valid_road_buildings() {
         }
     }
     assert_eq!(roads, 29);
+}
+
+#[tokio::test]
+async fn behaviour_recordings_pause_the_real_world_before_the_first_frame() {
+    use aoe_simulation::BehaviourScene::*;
+    for scene in [TownCenter, Wolf, Deer, Hunt, Camps, Bridge] {
+        let service = GameplayService::behaviour_demo(Seed(7), scene).unwrap();
+        assert!(service.paused());
+        assert!(service.world.read().await.units().any(|u| u.hp > 0));
+    }
 }

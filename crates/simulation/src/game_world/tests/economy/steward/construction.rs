@@ -187,3 +187,38 @@ fn a_partial_census_counts_builders_from_the_previous_slice() {
         "exercise a live foundation"
     );
 }
+
+#[test]
+fn steward_retires_an_old_lumber_camp_only_after_its_replacement_completes() {
+    let (mut w, _, _) = manager::active();
+    let old = w
+        .insert_building(
+            PlayerId(0),
+            BuildingKind::LumberCamp,
+            aoe_core::TileRect::from_xywh(100, 90, 2, 2),
+            true,
+        )
+        .unwrap();
+    let new = w
+        .insert_building(
+            PlayerId(0),
+            BuildingKind::LumberCamp,
+            aoe_core::TileRect::from_xywh(120, 90, 2, 2),
+            false,
+        )
+        .unwrap();
+    for _ in 0..8 {
+        manager::pass(&mut w);
+    }
+    assert!(w.building(old).is_some());
+    w.building_mut(new).unwrap().state = crate::ConstructionState::Complete;
+    for _ in 0..8 {
+        manager::pass(&mut w);
+    }
+    assert!(w.building(old).is_none(), "an exhausted camp was replaced");
+    assert!(w.building(new).is_some(), "retain the replacement");
+    assert!(
+        w.tile_passable(TileCoord::new(100, 90)),
+        "release the old footprint"
+    );
+}

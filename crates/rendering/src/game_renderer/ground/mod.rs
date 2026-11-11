@@ -1,9 +1,14 @@
 //! Footprint wear and Farm textures share ground triangles across backends.
 use super::*;
 
+#[path = "pits.rs"]
+mod pits;
+pub(super) use pits::BUILDING_CLEARANCE;
+
 pub(super) struct BuildingGround {
     centers: Vec<[f64; 2]>,
     farms: Vec<[f64; 2]>,
+    pits: Vec<pits::Pit>,
 }
 /// Paint the DAT's foundation material plus a one-tile apron before tessellation.
 /// The decoded building record has no margin field. The ordinary world-anchored
@@ -59,9 +64,10 @@ pub fn apply_building_foundations(
             } else {
                 building.and_then(|b| b.foundation_material).unwrap_or(2)
             };
-            // The native farm foundation sheet already contains crops. Keep
-            // shared dirt while seeding; expose that sheet only on completion.
-            let crops = id == 50 && !unit.kind.is_foundation();
+            // A farm has no upright construction sprite. Its native field
+            // surface marks the foundation from placement through completion;
+            // the apron remains ordinary dirt.
+            let crops = id == 50;
             Some(Foundation {
                 lower,
                 upper,
@@ -161,7 +167,29 @@ impl BuildingGround {
             })
             .map(|u| u.position)
             .collect();
-        Self { centers, farms }
+        // The footprint reaches its half side farther than the farms' extent.
+        let pits = units
+            .iter()
+            .copied()
+            .filter_map(pits::Pit::for_building)
+            .filter(|pit| {
+                let p = projection.world_to_screen_at_height(pit.position(), 0.0);
+                let reach = pit.reach() + 1.0;
+                let extent = [
+                    reach * aoe_core::ISO_TILE_WIDTH * camera.zoom,
+                    reach * aoe_core::ISO_TILE_HEIGHT * camera.zoom,
+                ];
+                p.x + extent[0] >= 0.0
+                    && p.y + extent[1] >= 0.0
+                    && p.x - extent[0] <= camera.viewport[0]
+                    && p.y - extent[1] <= camera.viewport[1]
+            })
+            .collect();
+        Self {
+            centers,
+            farms,
+            pits,
+        }
     }
 
     pub(super) fn compatibility_farms(&self, camera: SceneCamera) -> Vec<ProjectedSurfaceTriangle> {
@@ -191,7 +219,13 @@ impl BuildingGround {
 
     #[inline(never)]
     pub(super) fn apply(&self, face: &mut ProjectedSurfaceTriangle) {
-        if self.centers.is_empty() || face.skirt {
+        if face.skirt {
+            return;
+        }
+        for pit in &self.pits {
+            pit.sink(face);
+        }
+        if self.centers.is_empty() {
             return;
         }
         let points = &face.points;

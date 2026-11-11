@@ -31,6 +31,7 @@ export function initStrategic(fog, actors) {
   const knownResources = new Map(), retiredResources = new Set();
   let resourceSnapshot = false;
   let modelRevision = 0, modelSignature = '', lastState = null;
+  let controlsVisible = null;
   const tokens = initTokens(), contacts = initContacts();
   const cockpit = initCockpit(() => { tokens.invalidate(); modelRevision++; previous = ''; if (lastState) frame(lastState); }), reveal = initReveal();
   const settlements = initSettlements(), holdingsLayer = initHoldings();
@@ -41,21 +42,29 @@ export function initStrategic(fog, actors) {
     if (lastState) frame(lastState);
   });
   cockpit.mount();
+  function showControls(value) {
+    if (controlsVisible === value) return;
+    controlsVisible = value;
+    tokens.show(value); layers.show(value); cockpit.show(value);
+    settlements.show(value); mapKey.show(value);
+    window.aoeNavigation?.views?.show(value);
+  }
   function frame(state) {
     // Renderer fallback replaces a context-bound canvas during startup.
     const scene = document.getElementById('scene');
     const [worldWidth, worldHeight, cx, cy, width, height, zoom, level] = state;
     const drawing = !!level || !!state[8];
     const lod = ['sprites', 'markers', 'map'][level];
-    tokens.show(!!level); layers.show(!!level); cockpit.show(!!level); reveal.show(drawing, state);
-    settlements.show(!!level);
-    mapKey.show(!!level);
-    window.aoeNavigation?.views?.show(!!level);
+    showControls(!!level);
+    reveal.show(drawing, state);
     if (scene.dataset.lod !== lod) {
       scene.dataset.lod = lod;
       document.documentElement.dataset.lod = lod;
     }
-    if (drawing) canvas.hidden = label.hidden = false;
+    if (drawing) {
+      if (canvas.hidden) canvas.hidden = false;
+      if (label.hidden) label.hidden = false;
+    }
     const title = `${level === 2 ? 'Kingdom' : 'Province'} · ${worldWidth.toLocaleString()} × ${worldHeight.toLocaleString()} tiles · ${(zoom * 100).toPrecision(3)}%`;
     if (label.textContent !== title) label.textContent = title;
     if (!drawing || !context) {
@@ -66,6 +75,7 @@ export function initStrategic(fog, actors) {
       layers.enabled.threats ? contacts.clock() : 0].join(',');
     if (key === previous) return false;
     const started = performance.now();
+    window.aoeTelemetry?.mark(10);
     previous = key;
     lastState = Array.from(state);
     if (canvas.width !== width) canvas.width = width;
@@ -83,6 +93,8 @@ export function initStrategic(fog, actors) {
     context.fillRect(0, 0, worldWidth, worldHeight);
     context.imageSmoothingEnabled = true;
     if (terrain) context.drawImage(terrain, 0, 0, worldWidth, worldHeight);
+    window.aoeTelemetry?.mark(17);
+    window.aoeTelemetry?.mark(11);
     const project = ([x, y]) => [width / 2 + (x - cx - y + cy) * 64 * zoom,
       height / 2 + (x - cx + y - cy) * 32 * zoom];
     pickRadius = 22;
@@ -95,12 +107,16 @@ export function initStrategic(fog, actors) {
     // One screen-space grid arbitrates every symbol: HUD, places, army tokens, then unit groups.
     space.clear(); tokens.hud(space, width, height);
     const holdings = settlements.draw(context, project, layers.enabled.ownership, width, height, scale, plane, zoom, space);
+    window.aoeTelemetry?.mark(18);
+    window.aoeTelemetry?.mark(13);
     if (!fog.disabled) {
       plane();
       context.imageSmoothingEnabled = false;
       context.drawImage(fog.canvas, 0, 0, worldWidth, worldHeight);
     }
     context.setTransform(1, 0, 0, 1, 0, 0);
+    window.aoeTelemetry?.mark(20);
+    window.aoeTelemetry?.mark(11);
     canvas.dataset.threats = String(layers.enabled.threats ? contacts.draw(context, project) : 0);
     tokens.draw(context, project, layers.enabled, scale, width, height, space);
     picks = drawUnits(context, records, project, width, height, scale, space, settlements.place, tokens.mine());
@@ -116,6 +132,7 @@ export function initStrategic(fog, actors) {
       context.fillStyle = colours[resource.kind] ?? '#e85b8a';
       context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
     }
+    window.aoeTelemetry?.mark(18);
     canvas.dataset.resources = String(resources.length);
     canvas.dataset.clusters = String(picks.length);
     canvas.dataset.terrainDraws = terrain ? '1' : '0';
@@ -148,11 +165,10 @@ export function initStrategic(fog, actors) {
   }
   function present() {
     delete document.getElementById('scene').dataset.strategicCovered;
-    canvas.hidden = label.hidden = true;
-    tokens.show(false); layers.show(false); cockpit.show(false); reveal.show(false);
-    settlements.show(false);
-    mapKey.show(false);
-    window.aoeNavigation?.views?.show(false);
+    if (!canvas.hidden) canvas.hidden = true;
+    if (!label.hidden) label.hidden = true;
+    showControls(false);
+    reveal.show(false);
     if (canvas.width !== 1) canvas.width = canvas.height = 1;
     canvas.dataset.workingBytes = '4';
   }
@@ -194,6 +210,7 @@ export function initStrategic(fog, actors) {
     holdings(values) { if (holdingsLayer.update(values)) { modelRevision++; previous = ''; } },
     settlements(values) { if (settlements.update(values)) { modelRevision++; previous = ''; } },
     reset() {
+      controlsVisible = null;
       cockpit.reset(); reveal.reset();
       settlements.reset(); holdingsLayer.reset();
       tokens.update([], [], []); contacts.reset(); resources = [];
@@ -202,7 +219,12 @@ export function initStrategic(fog, actors) {
     },
     terrain(value, raster) {
       const started = performance.now();
-      terrain = raster ? paintTerrain(raster) ?? value : value;
+      window.aoeTelemetry?.mark(10);
+      try {
+        terrain = raster ? paintTerrain(raster) ?? value : value;
+      } finally {
+        window.aoeTelemetry?.mark(17);
+      }
       canvas.dataset.terrainBuildMs = (performance.now() - started).toFixed(3);
       canvas.dataset.terrainBytes = String(terrain ? terrain.width * terrain.height * 4 : 0);
       canvas.dataset.relief = raster ? 'source-shaded' : 'schematic';
