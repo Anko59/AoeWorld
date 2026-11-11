@@ -230,7 +230,7 @@ impl GameWorld {
         }
         // In a dense crowd, give units one complete rotation before falling
         // back to buildings. The actor continues probing while attacking one.
-        if !buildings || !complete {
+        if !buildings || !complete || self.economy.buildings.is_empty() {
             return result;
         }
         let mut seen = std::collections::BTreeSet::new();

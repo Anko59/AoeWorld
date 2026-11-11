@@ -216,7 +216,11 @@ Tile and walking-job lookup indexes use fixed hashers; due events and delivered
 identities retain ordered sets. The new contact-subscription regression and the
 broad queue/construction/walking replay filter passed 90 tests.
 
-## Current-base release measurements
+## Historical release measurements before the owner rebase
+
+This section, the instruction checks and the video evidence below record the
+pre-rebase implementation. The PR #773 follow-up at the end uses the current
+branch and its CI dev reference.
 
 Measured on 2026-11-11: before
 `70d6b53231bfd3f7cf2dd0d191cbf6722bd01d08`, after
@@ -379,3 +383,77 @@ Original assets and recordings remain outside Git and container images.
 These synthetic workloads and functional captures do not demonstrate finished
 RTS performance, sustained real-save load or dedicated-hardware qualification.
 No CI run, full e2e suite or publication was performed by this local task.
+
+## PR #773: small-workload timer overhead
+
+This follow-up starts at `c8e14a2178d158478a3c3d771279886bfffad16a`, after
+the owner's rebase. Earlier measurement sections describe the pre-rebase implementation, not this PR revision.
+The comparison is the [CI report for PR #773](https://github.com/Anko59/AoeWorld/pull/773#issuecomment-6799035895):
+PR run `43038321257`, dev run `43029364718` at
+`b7c6db5daa9bbb577f1634a135420b760e41c26e`. The owner's requested small-row
+limit is +1% of that dev run; no checked-in baseline or gate changed.
+
+Local measurements use the unchanged single-worker Callgrind kernels:
+`simulation::smoke_ticks` (8,000 units, four ticks),
+`simulation::distributed_ticks` (128,000 units, four ticks), and
+`simulation::late_game` (one tick after its 384-tick warm-up).
+
+| Kernel | CI dev | Local start | Dispatch fix | Combat fix | Final | Final vs dev |
+|---|---|---|---|---|---|---|
+| smoke_ticks | 5,121,831 | 5,450,635 | 5,309,599 | 5,178,706 | 5,132,786 | +0.214% |
+| distributed_ticks | 9,581,069 | 10,293,231 | 9,741,117 | 9,625,834 | 9,625,682 | +0.466% |
+| late_game | 210,877,587 | 187,732,602 | 186,172,783 | 184,566,363 | 184,524,496 | −12.497% |
+
+The small-row maxima are 5,173,049 and 9,676,879 instructions respectively.
+The local initial smoke row differs from CI by eight instructions; the local
+late-game row also differs, so the table preserves both provenances.
+
+The first fix (`4a6d9ed26`) returns when construction/queue tile subscriptions
+are absent and avoids gathering event lookups when there are no gathering jobs.
+Deferred notifications still drain, and test-only missed-wake checks still run.
+Distributed's construction, queue and gathering dispatch cost falls by 193,684,
+197,128 and 161,302 instructions: their sum, 552,114, exactly accounts for the
+row improvement. Two empty BTreeSet iterator advances per absent subscription
+had dominated the first two functions.
+
+The second fix (`9a4c66263`) inlines empty combat wake guards and carries one
+transient fact from target acquisition: whether its existing bounded sample saw a living enemy.
+Such an enemy already rules out a quiet region, including hidden/out-of-range
+enemies; there is no reason to repeat the full proof. An absent sampled enemy
+still requires the original proof over unsampled dense entries and buildings.
+Target ordering, sample rotation and inspection budgets are unchanged.
+
+The final fix skips the building-target fallback when the building table is
+empty. This is an existing scan adjacent to the timer proof, not an additional
+timer regression. It still runs the original unit sample and budget updates
+first. Compared with the combat fix it saves another 45,920 smoke instructions,
+152 distributed instructions and 41,867 late-game instructions. Both small
+rows now meet the requested +1% dev limit, while late game retains its gain.
+
+The added single-worker population oracle (`8a274a099`) uses the same seeded
+populations and movement orders as the small kernels. Sleep on/off worlds agree
+on changed units, canonical hashes and combat work at every tick. Diagnostic
+registry inspection on the first fix found no parked or sleeping acquisition/healing jobs in
+these four-tick fixtures. Three targeted contracts additionally cover a living
+out-of-range enemy, a retained corpse and an unsampled dense-bucket enemy.
+
+Measurements: `NEXTEST_TEST_THREADS=4 CARGO_PROFILE_DEV_DEBUG=0
+HARNESS_SCCACHE_DIR="$PWD/.cache/7b-cold-sccache" make -j1 perf-instructions`.
+Before, first-fix and final NDJSON and raw traces are retained under
+`.cache/773-perf/` with `before-`, `empty-after-`, `combat-after-` and
+`empty-targets-after-` prefixes.
+Logs are `.cache/773-before-instructions-retry.log`,
+`.cache/773-empty-instructions-monitored.log` and
+`.cache/773-combat-instructions.log` plus the final
+`.cache/773-empty-targets-perf-instructions.log`. Source SHA-256 snapshots
+identify the measured tree before committing it. No replay pin or benchmark recipe changed.
+
+Validation: all 1,332 simulation tests passed, zero skipped, including unchanged
+General checkpoints and long sleep oracles; focused contracts and all required
+static checks passed. Final simulation output is
+`.cache/773-empty-targets-simulation-full.log`; the focused and static logs use
+`.cache/773-empty-targets-{focused,static}.log`. The final commit's aggregate
+preflight result is recorded separately in `.cache/773-body.md`, with complete
+output at `.cache/773-final-preflight.log`. No CI run or push is claimed here.
+These synthetic instruction counts do not qualify dedicated hardware or
+finished RTS performance. The shared-host phase times are diagnostic only.
