@@ -132,3 +132,66 @@ fn the_acquisition_detector_rejects_an_unannounced_source_change() {
     w.units[w.lookup[&ids[0]]].state.stance = aoe_core::CombatStance::NoAttack;
     w.advance();
 }
+
+#[test]
+fn no_attack_units_wait_for_a_stance_event_even_when_an_enemy_is_near() {
+    let (mut on, ids) = quiet(true, 16);
+    let (mut off, _) = quiet(false, 16);
+    let mut enemy = None;
+    for w in [&mut on, &mut off] {
+        w.issue_stance(PlayerId(0), &ids, aoe_core::CombatStance::NoAttack)
+            .unwrap();
+        enemy = Some(w.spawn_villager(PlayerId(1), at(110, 100)).unwrap());
+    }
+    let mut visits = 0;
+    for n in 0..300 {
+        if n == 100 {
+            let u = on.unit(enemy.unwrap()).unwrap();
+            assert_eq!(u.hp, u.max_hp, "No Attack must hold fire");
+            for w in [&mut on, &mut off] {
+                w.issue_stance(PlayerId(0), &ids, aoe_core::CombatStance::Aggressive)
+                    .unwrap();
+            }
+        }
+        pair_tick(&mut on, &mut off, n);
+        if n < 100 {
+            visits += on.combat_stats().acquisition_checks;
+        }
+    }
+    assert!(
+        visits < 32,
+        "disabled acquisition made {visits} unit visits"
+    );
+    assert!(on.unit(enemy.unwrap()).is_none_or(|u| u.hp < u.max_hp));
+}
+
+#[test]
+fn a_retained_enemy_corpse_does_not_keep_an_idle_fighter_awake() {
+    let (mut on, _) = quiet(true, 1);
+    let (mut off, _) = quiet(false, 1);
+    let mut enemy = None;
+    for w in [&mut on, &mut off] {
+        enemy = Some(w.spawn_villager(PlayerId(1), at(102, 100)).unwrap());
+    }
+    let mut visits = 0;
+    for n in 0..180 {
+        if n == 20 {
+            for w in [&mut on, &mut off] {
+                w.issue_delete(PlayerId(1), &[enemy.unwrap()]).unwrap();
+            }
+        }
+        pair_tick(&mut on, &mut off, n);
+        if n >= 60 {
+            visits += on.combat_stats().acquisition_checks;
+        }
+    }
+    assert_eq!(
+        on.unit(enemy.unwrap()).unwrap().hp,
+        0,
+        "the corpse must still be resident"
+    );
+    assert!(
+        visits < 3,
+        "a corpse kept acquisition awake for {visits} turns"
+    );
+}

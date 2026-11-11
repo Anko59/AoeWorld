@@ -139,6 +139,9 @@ impl GameWorld {
             self.economy.scout_cursor = None;
         }
         if let Some(&index) = self.lookup.get(&id) {
+            if self.units[index].state.auto_scout {
+                self.combat.quiet.wake(id);
+            }
             self.units[index].state.auto_scout = false;
         }
     }

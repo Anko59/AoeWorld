@@ -147,6 +147,13 @@ impl GameWorld {
             let Some(u) = self.unit(id) else {
                 continue;
             };
+            if u.hp > 0 && (u.auto_scout || u.stance == CombatStance::NoAttack || self.embarked(id))
+            {
+                if !self.economy.no_sleep {
+                    self.combat.quiet.park(id);
+                }
+                continue;
+            }
             let building_attack = self
                 .combat
                 .attackers
@@ -158,10 +165,7 @@ impl GameWorld {
                 && (u.moving || u.planning || matches!(u.task, UnitTask::Moving));
             if u.hp == 0
                 || ((u.moving || u.planning) && building_attack.is_none() && !marching)
-                || u.auto_scout
-                || u.stance == CombatStance::NoAttack
                 || (!matches!(u.task, UnitTask::Idle) && building_attack.is_none() && !marching)
-                || self.embarked(id)
             {
                 continue;
             }

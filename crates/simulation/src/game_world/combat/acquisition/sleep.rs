@@ -17,6 +17,7 @@ struct Sleep {
 pub(crate) struct Quiet {
     jobs: BTreeMap<EntityId, Sleep>,
     chunks: BTreeMap<ChunkCoord, BTreeSet<EntityId>>,
+    parked: BTreeSet<EntityId>,
 }
 
 fn chunks(bounds: TileRect) -> impl Iterator<Item = ChunkCoord> {
@@ -34,6 +35,7 @@ fn chunks(bounds: TileRect) -> impl Iterator<Item = ChunkCoord> {
 
 impl Quiet {
     pub(crate) fn wake(&mut self, id: EntityId) {
+        self.parked.remove(&id);
         let Some(job) = self.jobs.remove(&id) else {
             return;
         };
@@ -65,6 +67,12 @@ impl Quiet {
     pub(crate) fn clear(&mut self) {
         self.jobs.clear();
         self.chunks.clear();
+        self.parked.clear();
+    }
+
+    pub(super) fn park(&mut self, id: EntityId) {
+        self.wake(id);
+        self.parked.insert(id);
     }
 }
 
@@ -75,9 +83,10 @@ impl GameWorld {
         // awake. In particular, sampled dense buckets cannot hide a threat.
         for chunk in chunks(bounds) {
             if self.chunks.get(&chunk).is_some_and(|bucket| {
-                bucket
-                    .iter()
-                    .any(|id| self.unit(*id).is_some_and(|other| other.player != u.player))
+                bucket.iter().any(|id| {
+                    self.unit(*id)
+                        .is_some_and(|other| other.player != u.player && other.hp > 0)
+                })
             }) {
                 return false;
             }
@@ -136,6 +145,10 @@ impl GameWorld {
             self.combat.quiet.wake(id);
             return false;
         }
+        if self.combat.quiet.parked.contains(&id) {
+            self.combat.stats.acquisition_slept += 1;
+            return true;
+        }
         let Some(job) = self.combat.quiet.jobs.get(&id) else {
             return false;
         };
@@ -151,6 +164,17 @@ impl GameWorld {
 
     #[cfg(test)]
     pub(in crate::game_world::combat) fn assert_quiet_acquisition(&self) {
+        for &id in &self.combat.quiet.parked {
+            let u = self.unit(id).expect("missed wake: inactive seeker removed");
+            assert!(
+                self.combat.seekers.contains(&id)
+                    && (u.hp == 0
+                        || u.auto_scout
+                        || u.stance == aoe_core::CombatStance::NoAttack
+                        || self.embarked(id)),
+                "missed wake: inactive seeker {id:?}"
+            );
+        }
         for (&id, job) in &self.combat.quiet.jobs {
             let u = self.unit(id).expect("missed wake: removed seeker");
             let old = job.source;

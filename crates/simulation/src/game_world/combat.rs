@@ -68,7 +68,7 @@ pub struct CombatStats {
     pub healing_candidates: u64,
     /// Military identities visited by the fair acquisition rotation.
     pub acquisition_checks: u32,
-    /// Empty-region turns replayed without visiting a unit or searching.
+    /// Inactive or empty-region turns replayed without visiting a unit.
     pub acquisition_slept: u32,
     /// Bucket entries inspected by military and defensive buildings together.
     pub targeting_scanned: u32,

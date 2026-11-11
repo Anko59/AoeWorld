@@ -108,7 +108,7 @@ five awake visits over 160 ticks, versus 160 with sleep disabled.
 ## Idle military acquisition
 
 An idle fighter can sleep after proving that every spatial bucket its query
-touches contains only friendly identities and that its building search rectangle
+touches contains no living hostile identities and that its building search rectangle
 contains no hostile structure. Hidden enemies and dense sampled buckets therefore
 cannot produce a false empty proof. Such regions wake on unit insertion, removal
 or bucket crossings, building placement/removal, source motion/orders/stance,
@@ -140,6 +140,20 @@ and the General gate passed again. Formatting, lint, structure, architecture and
 hook checks passed. All three long replay oracles passed before that admission
 refactor; the final rerun is retained separately in
 `.cache/acquisition-admission-replay.log`.
+
+No Attack, automatic-scouting and embarked identities also sleep through their
+unchanged acquisition exclusion. Source/stance changes and ending automatic
+scouting wake them. These turns advance the fair cursor without starting a target
+probe, exactly as before. Resident enemy corpses cannot become living threats;
+they no longer prevent the empty-region proof, while their bucket entries remain
+charged to the shared scan budget until removal.
+
+Two added cost replays originally failed with 1,600 disabled-acquisition visits
+and 120 corpse-only visits. They now pass bounds below 32 and three respectively,
+with unchanged per-tick hashes and correct engagement after the stance event.
+The focused acquisition/scouting/General run passed 32 tests; all three long
+replays and static checks passed. The five General summaries remain identical.
+Logs: `.cache/acquisition-inactive-{red,green,replay,static}.log`.
 
 ## Other idle work
 
