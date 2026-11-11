@@ -1,14 +1,31 @@
 //! Local naval skirmish: two seats of War Galleys already in range on open water.
-use super::kingdom::{coastal_world, kingdom_position};
+use super::kingdom::{coast_water, kingdom_position, kingdom_water_package};
 use crate::{BuildingKind, EconomyError, GameWorld, UnitKind};
 use aoe_core::{EntityId, PlayerId, Seed, TileCoord};
 
 impl GameWorld {
+    /// The coast the naval demo fights on; the server publishes it so the
+    /// client draws the sea.
+    pub fn naval_battle_environment(
+        seed: Seed,
+    ) -> Result<
+        (
+            aoe_map::MapPackage,
+            Vec<aoe_map::ElevationPage>,
+            Vec<aoe_map::WaterPage>,
+        ),
+        EconomyError,
+    > {
+        kingdom_water_package(seed, 15_360, coast_water())
+    }
+
     /// Three War Galleys per seat, four tiles apart on the first water east of
     /// a valid Dock shore, each ordered to attack the opposing galley in its row. Hulls carry five
     /// times the hit points so the exchange lasts long enough to film.
     pub fn naval_battle_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
-        let mut w = coastal_world(seed)?;
+        let (package, elevation, water) = Self::naval_battle_environment(seed)?;
+        let mut w =
+            GameWorld::from_prepared_map(package, elevation, water, Vec::new(), Vec::new())?;
         w.set_fog_disabled(true);
         let mut shore = None;
         'shore: for y in 20..100 {

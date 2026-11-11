@@ -132,7 +132,14 @@ impl GameplayService {
     }
     pub fn naval_battle_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
         let (world, primary) = GameWorld::naval_battle_demo(seed)?;
-        Ok(Self::from_world(world, primary, None, None))
+        let (package, _, _) = GameWorld::naval_battle_environment(seed)?;
+        let metadata = crate::gameplay_map::map_metadata(&package);
+        Ok(Self::from_world(
+            world,
+            primary,
+            Some(package.content_hash),
+            Some(metadata),
+        ))
     }
     pub fn steward_fishing_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
         let (world, primary) = GameWorld::steward_fishing_demo(seed)?;
