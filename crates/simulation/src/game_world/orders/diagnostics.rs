@@ -29,6 +29,8 @@ pub struct OrderDemand {
     pub reassigned_10s: u64,
     /// Accepted orders replacing an unfinished movement, charged to its issuer.
     pub superseded: u64,
+    /// Unfinished movement replaced before ten simulation seconds elapsed.
+    pub superseded_10s: u64,
     /// Calls to route admission (including cache hits and slot refusals).
     pub route_requests: u64,
     /// Fresh route planners at issue, excluding navigation-cache hits.
@@ -87,9 +89,12 @@ impl GameWorld {
 
     pub(crate) fn demand_cancelled(&mut self, id: EntityId) {
         if self.movement_goal(id).is_some()
-            && let Some((_, issuer)) = self.order_diagnostics.last.get(&id).copied()
+            && let Some((tick, issuer)) = self.order_diagnostics.last.get(&id).copied()
         {
-            self.order_diagnostics.demand[issuer as usize].superseded += 1;
+            let row = &mut self.order_diagnostics.demand[issuer as usize];
+            row.superseded += 1;
+            row.superseded_10s +=
+                u64::from(self.tick.0.saturating_sub(tick) < 10 * u64::from(self.config.tick_hz));
         }
     }
 
@@ -105,7 +110,11 @@ impl GameWorld {
                 self.order_diagnostics.demand[issuer as usize].reassigned_10s += 1;
             }
             if unfinished {
-                self.order_diagnostics.demand[previous as usize].superseded += 1;
+                let row = &mut self.order_diagnostics.demand[previous as usize];
+                row.superseded += 1;
+                row.superseded_10s += u64::from(
+                    self.tick.0.saturating_sub(tick) < 10 * u64::from(self.config.tick_hz),
+                );
             }
         }
     }

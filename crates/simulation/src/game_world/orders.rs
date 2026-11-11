@@ -4,6 +4,7 @@ pub(crate) mod diagnostics;
 pub use diagnostics::{OrderDemand, OrderIssuer};
 
 /// Area commands tolerate a tile; interaction contacts need the exact point.
+#[derive(Clone, Copy)]
 pub(crate) enum GoalPrecision {
     Contact,
     Area,
@@ -20,12 +21,25 @@ impl GameWorld {
     }
 
     pub(crate) fn moving_towards(&self, id: EntityId, destination: WorldPosition) -> bool {
+        self.moving_to_goal(id, destination, GoalPrecision::Area)
+    }
+
+    pub(crate) fn moving_to_goal(
+        &self,
+        id: EntityId,
+        destination: WorldPosition,
+        precision: GoalPrecision,
+    ) -> bool {
         self.lookup.get(&id).is_some_and(|&index| {
             let unit = &self.units[index];
             unit.formation.is_none()
-                && unit
-                    .order
-                    .is_some_and(|order| diagnostics::near_goal(order.destination, destination))
+                && unit.order.is_some_and(|order| match precision {
+                    GoalPrecision::Contact => order.destination == destination,
+                    GoalPrecision::Area => {
+                        diagnostics::near_goal(order.destination, destination)
+                            && !self.destination_point_reserved(order.destination, id)
+                    }
+                })
         })
     }
 
@@ -41,7 +55,29 @@ impl GameWorld {
         } else {
             self.spread_destination(id, destination)?
         };
-        let result = self.issue_move_goal(id, destination, GoalPrecision::Area)?;
+        self.issue_move_order(id, destination, GoalPrecision::Area, repeated)
+    }
+
+    /// A manager selected an exact free arrival contact, rather than an area.
+    #[track_caller]
+    pub(crate) fn issue_contact_order(
+        &mut self,
+        id: EntityId,
+        destination: WorldPosition,
+    ) -> Result<bool, GameWorldError> {
+        let repeated = self.moving_to_goal(id, destination, GoalPrecision::Contact);
+        self.issue_move_order(id, destination, GoalPrecision::Contact, repeated)
+    }
+
+    #[track_caller]
+    fn issue_move_order(
+        &mut self,
+        id: EntityId,
+        destination: WorldPosition,
+        precision: GoalPrecision,
+        repeated: bool,
+    ) -> Result<bool, GameWorldError> {
+        let result = self.issue_move_goal(id, destination, precision)?;
         let retained_queue = if repeated {
             self.move_queues.remove(&id)
         } else {

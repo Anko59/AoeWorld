@@ -6,7 +6,7 @@
 use super::issue::MapRoutePlan;
 use crate::game_path::{next_waypoint, route_waypoint, segment_length};
 use crate::game_world::facing_for;
-use crate::game_world::orders::{GoalPrecision, diagnostics::near_goal};
+use crate::game_world::orders::GoalPrecision;
 use crate::{GameWorld, GameWorldError, MovementOrder};
 use aoe_core::{EntityId, TileCoord, WorldPosition};
 use aoe_map::{MovementOutcome, RoutePlanner};
@@ -124,13 +124,7 @@ impl GameWorld {
             return Err(GameWorldError::InvalidPosition);
         }
         // Keep the existing route, search frontier, deadline and queued waypoints.
-        let unit = &self.units[index];
-        if unit.formation.is_none()
-            && unit.order.is_some_and(|order| match precision {
-                GoalPrecision::Contact => order.destination == destination,
-                GoalPrecision::Area => near_goal(order.destination, destination),
-            })
-        {
+        if self.moving_to_goal(id, destination, precision) {
             return Ok(true);
         }
         let origin = self.units[index].state.position;

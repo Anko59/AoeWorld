@@ -167,6 +167,8 @@ async fn scheduler(
         .map(|s| s.player)
         .collect();
     let mut answer = scheduler_json(&world.route_scheduler_stats(), world.tick().0);
+    answer["units"] = json!(world.units().count());
+    answer["movers"] = json!(world.units().filter(|u| u.moving || u.planning).count());
     answer["order_demand"] = json!({
         "reassignment_seconds": 10,
         "issuers": (["player", "python_ai", "auto_scout", "steward", "vassal", "general", "rally_automation"]

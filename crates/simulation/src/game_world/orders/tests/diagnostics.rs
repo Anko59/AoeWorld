@@ -20,6 +20,7 @@ fn movement_demand_counts_issuer_repeats_and_supersession_without_changing_hash(
     assert_eq!(row.near_reissues, 1);
     assert_eq!(row.reassigned_10s, 1);
     assert_eq!(row.superseded, 1);
+    assert_eq!(row.superseded_10s, 1);
     assert_eq!(row.route_requests, 2);
     let hash = w.canonical_hash();
     w.order_diagnostics = Default::default();
@@ -54,6 +55,10 @@ fn stopping_a_measured_trip_supersedes_its_original_issuer() {
         .unwrap();
     assert_eq!(
         w.order_demand()[OrderIssuer::PythonAi as usize].superseded,
+        1
+    );
+    assert_eq!(
+        w.order_demand()[OrderIssuer::PythonAi as usize].superseded_10s,
         1
     );
     assert_eq!(

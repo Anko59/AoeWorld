@@ -32,6 +32,9 @@ protocol command totals in its tick records.
   movement, charged to
   the **previous** issuer. The first replacement of a restored order has no
   measured previous issuer and is excluded.
+- `superseded_10s`: the subset replaced before ten simulation seconds elapsed
+  since the previous accepted request, charged to that previous issuer. The
+  requested redundancy sum is `near_reissues + superseded_10s`.
 - `route_requests`: route-admission calls, including cached outcomes and
   slot refusals. A formation requests one shared route.
 - `route_searches`: fresh planners created at route issue, excluding cache
@@ -44,19 +47,22 @@ fall into rally/automation. Diagnostics are absent from canonical hashes and
 saves; per-unit history is discarded on death. They never drive decisions.
 `scale-match` retains an initial sample and each wall-minute sample so rates
 use counter **deltas**, excluding restore and AI connection time.
+Samples also retain map-unit counts (including resident corpses) and movers
+whose public state is moving or planning. These are distinct from scheduler
+carriers: one formation carrier can represent many moving units.
 
 ## Reproduction
 
 ```sh
 SCALE_MATCH_ARGS="--save .cache/order-volume/maps/saves/1794176817-first.save \
   --minutes 5 --port 8185 --package-directory .cache/order-volume/maps \
-  --label orders-before --no-summary --out .cache/order-volume/before.json" make scale-match
+  --label orders-before-current --no-summary --out .cache/order-volume/before-current.json" make scale-match
 ```
 
 The copied map store already contains the same verified saved pair. Select
 that stored save directly: the importer deliberately refuses occupied names.
-For the second run keep the save path, change the label to `orders-after` and
-the output to `after.json`.
+For the second run keep the save path, change the label to `orders-after-current`
+and the output to `after-current.json`.
 Both runs start from the same input. Wall-clock AI decisions and shared-host
 load vary; this is neither dedicated-hardware qualification nor a controlled
 causal timing benchmark.
@@ -121,13 +127,21 @@ Area movement commands retain their route, search frontier, deadline and
 queued waypoints when the active goal is within one tile. Identical contact
 points are also retained; distinct precise interaction points remain distinct
 even within a tile, so workers can reach the resource and soldiers can enter
-attack range. Both precisions use the same routing engine. Individual
+attack range. Attack-move formation contacts also require exact equality.
+An arrival point newly reserved by another task is selected again.
+Both precisions use the same routing engine. Individual
 overrides still leave formations; queued commands and attack-mode or formation
 membership changes remain meaningful.
 
 General and Vassal sources retain unchanged army goals. Vassal return orders
 still cancel a new pursuit. Auto-scout already selects its next goal only once
 the current trip ends; a regression test covers arrival/failure behavior.
+Wounded withdrawal compares the selected free arrival contact before issuing
+an order. A retained trip rejoins its existing corridor through the ordinary
+bounded local-refinement budget; its global search frontier and admission
+deadline survive. Simply keeping an old local segment changed retreat timing
+and failed the engagement gate. Repeating a live gather job preserves its
+phase, work credits, partial loads and return trip; failed trips remain retryable.
 Steward and Python AI productive rebalancing use a 20-game-second dwell and
 leave workers in transit alone. Idle recovery and failed-job recovery retain
 their existing prompt paths. Steward assignment tenure is canonical replay
@@ -152,25 +166,27 @@ this task does not authorize publication.
 
 ## Qualification
 
-The corrected contact/area distinction passes all 19 selected simulation
-tests, including the original gathering activity limits, original combat
-timing/participation pins, automatic planner-slot admission, queue preservation,
-and one-/four-worker replay. The original full-population checkpoint hash
-matches; no pin or activity floor was changed. Full simulation and SDK
-qualification are still in progress at this checkpoint.
+The rebased follow-up passes all 21 selected simulation tests, including the
+five-variant General engagement gate, queued-goal retention, exact contacts,
+arrival reservations, gather-job retention/recovery, diagnostics and one-/four-
+worker replay. General engagement shares are 87.774%, 88.112%, 85.400%, 92.231%
+and 89.035% (mean 88.510%); every unchanged wait limit also passes. The
+instrumentation-only baseline passes with mean 88.786%. These deterministic
+engagement observations are functional qualification, not timing measurements.
+No engagement floor or canonical pin was changed.
 
-Commands use `NEXTEST_TEST_THREADS=2 RUST_TEST_THREADS=2`, with one build at a
-time. `make hooks-install hooks-check fmt-check lint structure-check
-architecture-check` passed on the correction. Logs are retained in
-`.cache/order-volume/contact-gates.log` and `contact-green.log`.
-The selected simulation command is `make test-native-focused
-AOE_NATIVE_TEST_PACKAGE=aoe-simulation`, with filter
-`test(noop_tests) | test(repeated_waiting_goals) | test(occupancy::six_lumberjacks)
-| test(gathering::crowd::) | test(group_baseline::clash::)
-| test(planner_slot_exhaustion) | test(late_game_full_population_replays)`.
+The HTTP endpoint test passes the strict ten-second boundary, and all 23
+scale-match harness tests pass. Commands use `NEXTEST_TEST_THREADS=2
+RUST_TEST_THREADS=2 CARGO_BUILD_JOBS=2`, one build at a time. The required
+`make hooks-install hooks-check fmt-check lint structure-check architecture-check`
+passes; logs are `followup-gates-final.log`, `followup-simulation-final.log`,
+`endpoint-green.log` and `report-green.log` under `.cache/order-volume/`.
 
-The rejected revision's full run had 1236/1243 passing and seven failures;
-its log is `simulation-rejected-all.log`. The correction is being tested with
-the required `AOE_NATIVE_TEST_FILTER='all()'`. An additional corrected-save
-measurement requires the owner's approval because the brief permits only one
-after run. No additional run has been taken at this checkpoint.
+The older rejected full run had 1236/1243 passing; the subsequent correction
+still failed General engagement (1243/1244). Their retained logs and rejected
+footage above do not qualify this follow-up. Full simulation/server suites,
+current SDK integration, fresh paired owner-save profiles with the ten-second
+counter, the one-percent instruction comparison, preflight, refreshed footage
+and CI remain unverified at this increment. The old saved-match reports lack
+the new counter and mover endpoints and cannot establish the requested 50%
+reduction. Publication is outside this task's authorization.

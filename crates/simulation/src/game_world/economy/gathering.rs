@@ -165,6 +165,21 @@ impl GameWorld {
         id: EntityId,
         mut task: GatherTask,
     ) -> Result<(), EconomyError> {
+        // Repeating a job is not a new approach: keep return trips, partial
+        // loads and work credits. A failed trip may still be retried explicitly.
+        if self
+            .economy
+            .gatherers
+            .get(&id)
+            .is_some_and(|old| old.target() == task.target())
+            && self
+                .lookup
+                .get(&id)
+                .is_some_and(|&i| self.units[i].last_movement_error.is_none())
+        {
+            self.player_override(id);
+            return Ok(());
+        }
         let farm = task.farm;
         if task.farm.is_none() && task.animal.is_none() && task.fish.is_none() {
             if !self.admit_resource_approach(id, &mut task) {

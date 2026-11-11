@@ -13,6 +13,7 @@ const SECRET: &str = "admin-observability-test-secret";
 
 mod client_perf_tests;
 mod garrison_tests;
+mod order_demand_tests;
 
 struct Server {
     address: SocketAddr,

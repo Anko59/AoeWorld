@@ -246,6 +246,12 @@ fn saved_phase_sample_retains_issuer_counters_for_wall_minute_deltas() {
         "orders": 25, "near_reissues": 4, "reassigned_10s": 3,
         "superseded": 2, "route_requests": 21, "route_searches": 19
     }}});
-    let row = report::phase_minute(Some(json!({})), Some(json!({"order_demand": demand})), 60.0);
+    let row = report::phase_minute(
+        Some(json!({})),
+        Some(json!({"order_demand": demand, "movers": 12, "units": 25})),
+        60.0,
+    );
     assert_eq!(row["routes"]["order_demand"], demand);
+    assert_eq!(row["routes"]["movers"], 12);
+    assert_eq!(row["routes"]["units"], 25);
 }

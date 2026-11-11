@@ -55,7 +55,13 @@ impl GameWorld {
                 !group.settled
                     && group.form == form
                     && group.attack_move == attack_move
-                    && near_goal(group.destination, destination)
+                    // Combat firing points are contacts, like individual
+                    // attack approaches; a nearby point may enter range.
+                    && if attack_move {
+                        group.destination == destination
+                    } else {
+                        near_goal(group.destination, destination)
+                    }
                     && group.members.iter().map(|m| m.id).eq(ids.iter().copied())
             })
         {

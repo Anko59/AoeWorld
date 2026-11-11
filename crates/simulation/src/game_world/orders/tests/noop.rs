@@ -82,6 +82,36 @@ fn a_near_formation_goal_keeps_the_shared_route_and_slots() {
 }
 
 #[test]
+fn an_attack_move_retains_the_same_contact_but_accepts_a_different_nearby_contact() {
+    let mut w = world();
+    let ids: Vec<_> = (0..4)
+        .map(|x| {
+            w.spawn_kind(PlayerId(0), UnitKind::Militia, at(20 + 2 * x, 20))
+                .unwrap()
+        })
+        .collect();
+    w.issue_formation_move(PlayerId(0), &ids, Formation::Line, at(100, 20), false, true)
+        .unwrap();
+    let before = w.canonical_hash();
+    let requests = w.order_demand()[OrderIssuer::Automation as usize].route_requests;
+    w.issue_formation_move(PlayerId(0), &ids, Formation::Line, at(100, 20), false, true)
+        .unwrap();
+    assert_eq!(w.canonical_hash(), before);
+    assert_eq!(
+        w.order_demand()[OrderIssuer::Automation as usize].route_requests,
+        requests
+    );
+    w.issue_formation_move(PlayerId(0), &ids, Formation::Line, at(101, 20), false, true)
+        .unwrap();
+    assert_eq!(
+        w.move_destinations(ids[0]),
+        [at(101, 20)],
+        "a changed firing contact is meaningful even one tile away"
+    );
+    assert!(w.order_demand()[OrderIssuer::Automation as usize].route_requests > requests);
+}
+
+#[test]
 fn idle_units_still_take_a_new_goal_within_one_tile() {
     let mut w = world();
     let id = w.spawn_unit(PlayerId(0), at(20, 20)).unwrap();
@@ -91,6 +121,29 @@ fn idle_units_still_take_a_new_goal_within_one_tile() {
     }
     assert!(w.movement_order(id).is_none());
     assert_eq!(w.issue_move(id, at(22, 20)), Ok(true));
+}
+
+#[test]
+fn a_retained_move_reselects_a_contact_reserved_by_a_new_task() {
+    let mut w = world();
+    let id = w
+        .spawn_kind(PlayerId(0), UnitKind::Militia, at(20, 20))
+        .unwrap();
+    let other = w
+        .spawn_kind(PlayerId(0), UnitKind::Militia, at(20, 30))
+        .unwrap();
+    let goal = at(100, 20);
+    w.issue_move(id, goal).unwrap();
+    assert_eq!(w.movement_order(id).unwrap().destination, goal);
+    w.issue_task_move(other, goal).unwrap();
+    assert!(w.destination_point_reserved(goal, id));
+    w.issue_move(id, goal).unwrap();
+    let contact = w.movement_order(id).unwrap().destination;
+    assert_ne!(
+        contact, goal,
+        "the old arrival contact is no longer available"
+    );
+    assert!(!w.destination_point_reserved(contact, id));
 }
 
 #[test]

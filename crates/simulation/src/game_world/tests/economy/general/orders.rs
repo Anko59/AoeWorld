@@ -308,3 +308,27 @@ fn an_unchanged_army_goal_retains_its_route_and_layout() {
     w.general_march(g, at(155, 112));
     assert_ne!(w.canonical_hash(), before);
 }
+
+#[test]
+fn wounded_soldiers_keep_their_home_trip_without_new_general_orders() {
+    let (mut w, _) = setup();
+    let ids: Vec<_> = (0..8)
+        .map(|n| soldier(&mut w, UnitKind::Knight, 100 + n, 110))
+        .collect();
+    let g = soldier(&mut w, UnitKind::General, 104, 112);
+    w.units[w.lookup[&ids[0]]].state.hp = 1;
+    w.spawn_kind(PlayerId(1), UnitKind::Militia, at(115, 110))
+        .unwrap();
+    w.set_fog_disabled(true);
+    w.with_order_issuer(crate::OrderIssuer::General, decide);
+    assert_eq!(w.general_status(g).unwrap().state, GeneralState::Fighting);
+    assert!(w.unit(ids[0]).unwrap().moving);
+    let before = w.order_demand()[crate::OrderIssuer::General as usize].orders;
+    for _ in 0..10 {
+        w.with_order_issuer(crate::OrderIssuer::General, decide);
+    }
+    assert_eq!(
+        w.order_demand()[crate::OrderIssuer::General as usize].orders,
+        before
+    );
+}
