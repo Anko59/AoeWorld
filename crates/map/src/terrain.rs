@@ -423,7 +423,7 @@ impl MapChunkGenerator {
         y: i32,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Chunk, EnvironmentPageError> {
-        let scene = self.landscape_chunk_with_cancel(x, y, cancelled)?;
+        let scene = self.physical_chunk_with_cancel(x, y, cancelled)?;
         Ok(Chunk {
             x,
             y,

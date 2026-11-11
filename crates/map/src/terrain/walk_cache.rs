@@ -266,7 +266,7 @@ impl MapChunkGenerator {
         (x, y): (i32, i32),
         cancelled: &dyn Fn() -> bool,
     ) -> Result<WalkChunk, EnvironmentPageError> {
-        let scene = self.landscape_chunk_with_cancel(x, y, cancelled)?;
+        let scene = self.physical_chunk_with_cancel(x, y, cancelled)?;
         let mut chunk = WalkChunk {
             present: [0; WORDS],
             passable: [0; WORDS],

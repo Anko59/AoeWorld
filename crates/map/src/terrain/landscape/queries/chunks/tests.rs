@@ -418,7 +418,7 @@ fn ground_variety_changes_only_the_drawn_sheet_and_stays_in_its_family() {
                 // Seamless: a single point query draws the same sheet.
                 if tile.tile.x % 32 == 31 || tile.tile.y % 32 == 0 {
                     let point = generator
-                        .evaluate_landscape_point_with_cancel(
+                        .evaluate_landscape_point_with_cancel::<false>(
                             tile.tile,
                             &policy,
                             &|_| Reservations::default(),
@@ -476,7 +476,7 @@ fn meadow_dressing_forms_noticeable_patches_and_preserves_physics() {
         for d in &scene.decorations {
             assert!(!scene.resources.iter().any(|r| r.node.tile == d.tile));
             let point = generator
-                .evaluate_landscape_point_with_cancel(
+                .evaluate_landscape_point_with_cancel::<false>(
                     d.tile,
                     &meadow,
                     &|_| Reservations::default(),

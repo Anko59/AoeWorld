@@ -146,7 +146,12 @@ impl MapChunkGenerator {
         }
         let _span = self.measure_navigation(crate::NavigationPhase::TerrainPoint);
         let point = self
-            .landscape_point_with_cancel(tile, cancelled)?
+            .evaluate_landscape_point_with_cancel::<true>(
+                tile,
+                &default_policy,
+                &|position| self.landscape_reservations_at(position),
+                cancelled,
+            )?
             .map(|point| {
                 (
                     point.tile.terrain,
@@ -166,7 +171,7 @@ impl MapChunkGenerator {
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<LandscapePoint>, EnvironmentPageError> {
-        self.evaluate_landscape_point_with_cancel(
+        self.evaluate_landscape_point_with_cancel::<false>(
             tile,
             &default_policy,
             &|position| self.landscape_reservations_at(position),
@@ -194,24 +199,42 @@ impl MapChunkGenerator {
         y: i32,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<LandscapeChunk, EnvironmentPageError> {
+        self.compose_chunk::<false>(x, y, cancelled)
+    }
+
+    /// Tiles and resources of [`Self::landscape_chunk_with_cancel`] without
+    /// decorations, for consumers of the physical projection only.
+    pub(crate) fn physical_chunk_with_cancel(
+        &self,
+        x: i32,
+        y: i32,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<LandscapeChunk, EnvironmentPageError> {
+        self.compose_chunk::<true>(x, y, cancelled)
+    }
+
+    fn compose_chunk<const PHYSICAL: bool>(
+        &self,
+        x: i32,
+        y: i32,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<LandscapeChunk, EnvironmentPageError> {
         if cancelled() {
             return Err(EnvironmentPageError::Cancelled);
         }
-        Ok(self
-            .evaluate_landscape_chunk_with_cancel(
-                x,
-                y,
-                &default_policy,
-                &|position| self.landscape_reservations_at(position),
-                cancelled,
-            )?
-            .unwrap_or_else(|| LandscapeChunk {
-                x,
-                y,
-                tiles: Vec::new(),
-                resources: Vec::new(),
-                decorations: Vec::new(),
-            }))
+        let reserved = |position| self.landscape_reservations_at(position);
+        Ok(if PHYSICAL {
+            self.evaluate_physical_chunk_with_cancel(x, y, &default_policy, &reserved, cancelled)?
+        } else {
+            self.evaluate_landscape_chunk_with_cancel(x, y, &default_policy, &reserved, cancelled)?
+        }
+        .unwrap_or_else(|| LandscapeChunk {
+            x,
+            y,
+            tiles: Vec::new(),
+            resources: Vec::new(),
+            decorations: Vec::new(),
+        }))
     }
 }
 
