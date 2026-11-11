@@ -2,6 +2,42 @@ use super::*;
 use aoe_core::{Seed, TileCoord, WorldConfig};
 
 #[test]
+fn a_motion_commit_without_displacement_wakes_idle_acquisition() {
+    let build = |sleep| {
+        let mut w = GameWorld::new(WorldConfig::new(256, 256, Seed(1)).unwrap()).unwrap();
+        w.set_work_sleep(sleep);
+        let at = WorldPosition::from_tile_center(TileCoord::new(100, 100)).unwrap();
+        let id = w
+            .spawn_kind(PlayerId(0), crate::UnitKind::Militia, at)
+            .unwrap();
+        w.advance_combat(&mut Vec::new());
+        (w, id)
+    };
+    let (mut on, id) = build(true);
+    let (mut off, _) = build(false);
+    assert_eq!(on.canonical_hash(), off.canonical_hash());
+    for w in [&mut on, &mut off] {
+        let index = w.lookup[&id];
+        let mut state = w.units[index].state;
+        state.moving = true;
+        state.task = UnitTask::Moving;
+        let proposal = FastStep {
+            index,
+            state,
+            order: None,
+            pops: 0,
+            keeps_moving: true,
+            bucket: w.units[index].bucket,
+            vision_stale: false,
+            member: None,
+        };
+        assert!(w.apply_step_full(proposal, &mut Vec::new(), &mut Vec::new()));
+        w.advance_combat(&mut Vec::new());
+    }
+    assert_eq!(on.canonical_hash(), off.canonical_hash());
+}
+
+#[test]
 fn group_neighbor_radius_bound_grows_at_spawn_and_stays_conservative_after_removal() {
     let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(0)).unwrap()).unwrap();
     let center = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();

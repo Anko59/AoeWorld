@@ -407,6 +407,11 @@ impl GameWorld {
         let stored = &mut self.units[index];
         let from = stored.state.position;
         let state_changed = stored.state != step.state;
+        let previous_motion = (
+            stored.state.moving,
+            stored.state.planning,
+            stored.state.task,
+        );
         let position_changed = stored.state.position != step.state.position;
         let previous_tile = stored.state.position.tile_floor();
         if step.state.planning && !stored.state.planning {
@@ -431,6 +436,11 @@ impl GameWorld {
             self.finish_formation_member(id, motion, from, step.state.position);
         }
         self.observe_unit_progress(index);
+        let state = self.units[index].state;
+        if previous_motion != (state.moving, state.planning, state.task) {
+            self.combat.quiet.wake(id);
+            self.combat.healing.wake(id);
+        }
         if step.member.is_none() && step.order.is_none() {
             self.economy.gatherers.wake_walking(id);
             self.combat.healing.wake(id);
