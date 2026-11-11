@@ -288,6 +288,28 @@ pub fn wall_frame(at: TileCoord, mut occupied: impl FnMut(TileCoord) -> bool) ->
     frame.unwrap_or(2)
 }
 
+/// Gate axis occupies bit 4, leaving construction stages in the low bits.
+pub fn building_facing(
+    kind: BuildingKind,
+    progress: u16,
+    footprint: aoe_core::TileRect,
+    occupied: impl FnMut(TileCoord) -> bool,
+) -> u8 {
+    let frame = if progress < 1000 {
+        (u32::from(progress) * 3 / 1000) as u8
+    } else if kind.is_wall() {
+        wall_frame(footprint.min, occupied)
+    } else {
+        0
+    };
+    frame
+        | if kind.is_gate() && footprint.height() > footprint.width() {
+            16
+        } else {
+            0
+        }
+}
+
 /// Age choices share the dat's architectural families; camps already use age2
 /// art in Dark Age because DE has no age1 camp sprites.
 #[inline(never)]

@@ -97,3 +97,40 @@ fn damage_instances_share_animation_and_keep_each_offset() {
     bytes[first_index] = 1;
     assert!(decode(&hex(&bytes), &[]).is_err());
 }
+
+#[wasm_bindgen_test]
+fn shared_part_lists_preserve_every_field_and_reject_forward_references() {
+    let mut bytes = Vec::from(1u16.to_le_bytes());
+    bytes.extend(u32::MAX.to_le_bytes());
+    bytes.extend(20u16.to_le_bytes());
+    bytes.extend(5u16.to_le_bytes());
+    bytes.push(1);
+    bytes.extend(0.05f32.to_le_bytes());
+    bytes.extend(0.2f32.to_le_bytes());
+    for v in [-12i32, 5] {
+        bytes.extend(v.to_le_bytes());
+    }
+    for v in [1.0f32, -2.0] {
+        bytes.extend(v.to_le_bytes());
+    }
+    bytes.extend(0x8000u16.to_le_bytes());
+    bytes.extend(0x8000u16.to_le_bytes());
+    bytes.extend(0x8001u16.to_le_bytes());
+    let mut r = Reader {
+        bytes,
+        pos: 0,
+        lists: Vec::new(),
+    };
+    let original = r.parts(&[]).unwrap();
+    for _ in 0..2 {
+        let shared = r.parts(&[]).unwrap();
+        assert_eq!(shared.len(), 1);
+        let p = &shared[0];
+        assert_eq!(p.record, original[0].record);
+        assert_eq!((p.frames, p.angles, p.primary), (20, 5, true));
+        assert_eq!((p.frame_rate, p.replay_delay), (0.05, 0.2));
+        assert_eq!(p.offset, [-12, 5]);
+        assert_eq!(p.misplacement, [1.0, -2.0]);
+    }
+    assert_eq!(r.parts(&[]).err().unwrap(), "invalid shared part list");
+}

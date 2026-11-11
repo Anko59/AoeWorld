@@ -273,7 +273,12 @@ async fn route_probe(
     let outcome = loop {
         let poll = {
             let world = service.world.read().await;
-            world.probe_route_poll(&mut planner, PROBE_POLL_WORK, kind)
+            world.probe_route_poll(
+                &mut planner,
+                PROBE_POLL_WORK,
+                kind,
+                PlayerId(request.player),
+            )
         };
         match poll {
             RoutePlannerPoll::Path(path) => {

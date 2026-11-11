@@ -131,11 +131,17 @@ pub(in super::super::super) fn units(
             building.progress_permille,
         )
         .unwrap_or_else(|| building_kind(building));
+        let facing = crate::building_ui::building_facing(
+            building.kind,
+            building.progress_permille,
+            building.footprint,
+            |t| walls.contains(&(t.x, t.y, building.kind as u8)),
+        );
         let stage = client
             .art
             .compositions
             .iter()
-            .find(|b| Some(b.unit_id) == kind.building_id())
+            .find(|b| Some(b.unit_id) == kind.oriented_building_id(facing))
             .map(|art| art.damage_stage(building.hp, building.max_hp))
             .unwrap_or(0);
         let unit = aoe_rendering::SceneUnit {
@@ -146,15 +152,7 @@ pub(in super::super::super) fn units(
                 .with_player(Some(building.player), player, client.team_colour, false)
                 .with_selected(client.selected.has_building(building.id))
                 .with_damage_stage(stage),
-            facing: if building.progress_permille < 1000 {
-                (u32::from(building.progress_permille) * 3 / 1000) as u8
-            } else if building.kind.is_wall() {
-                crate::building_ui::wall_frame(building.footprint.min, |t| {
-                    walls.contains(&(t.x, t.y, building.kind as u8))
-                })
-            } else {
-                0
-            },
+            facing,
             elevation_meters: height,
         };
         if building.kind.is_gate() {
@@ -203,7 +201,12 @@ pub(in super::super::super) fn units(
             visual: aoe_rendering::SceneUnitVisual::new(true)
                 .with_player(Some(building.player), player, client.team_colour, false)
                 .with_selected(false),
-            facing: 0,
+            facing: crate::building_ui::building_facing(
+                building.kind,
+                1000,
+                building.footprint,
+                |t| walls.contains(&(t.x, t.y, building.kind as u8)),
+            ),
             elevation_meters: height,
         };
         units.push(unit);

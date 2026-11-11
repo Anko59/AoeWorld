@@ -134,7 +134,7 @@ impl GameWorld {
         let click = self.config.snap_ground_position(click);
         let target = click.tile_floor();
         if !self.unit_tile_passable(unit.kind, target, &|| false)?
-            || self.economy.blocked_tiles.contains(&target)
+            || !self.route_tile_admitted(unit.player, target)
         {
             return Err(GameWorldError::InvalidPosition);
         }

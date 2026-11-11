@@ -66,16 +66,19 @@ pub trait RegionGround {
     fn diagonal_override(&self, _from: TileCoord, _to: TileCoord) -> Option<bool> {
         None
     }
-    /// The owner may pass even while the gate is closed.
+    /// The owner may pass an unlocked gate even while it is closed.
     fn gate_owner(&self, gate: u32) -> u32;
-    /// An open gate admits every player. Invalidate its tiles when this changes.
+    /// An unlocked open gate admits every player. Invalidate its tiles when this changes.
     fn gate_open(&self, _gate: u32) -> bool {
+        false
+    }
+    /// Locked gates admit no planning, even for their owner or while open.
+    fn gate_locked(&self, _gate: u32) -> bool {
         false
     }
 }
 
-/// A player every gate admits: plain connectivity, as the route planner
-/// (which treats a completed gate as open ground) sees it.
+/// Geometry queries admit every unlocked gate. Unit planning supplies its player.
 pub const ANY_PLAYER: u32 = u32::MAX;
 
 /// Work counters; `relabels` counts chunks whose classes changed.
@@ -154,7 +157,7 @@ pub struct Regions {
     dirty: BTreeSet<u32>,
     supers: Vec<SuperRegions>,
     global: Global,
-    gate_access: BTreeMap<u32, (u32, bool)>,
+    gate_access: BTreeMap<u32, (u32, bool, bool)>,
     /// Per player: gated edges admitted, folded into a small union-find.
     closures: BTreeMap<u32, BTreeMap<u32, u32>>,
     stats: RegionStats,
@@ -297,7 +300,11 @@ impl Regions {
             })
             .collect();
         for gate in gates {
-            let access = (ground.gate_owner(gate), ground.gate_open(gate));
+            let access = (
+                ground.gate_owner(gate),
+                ground.gate_open(gate),
+                ground.gate_locked(gate),
+            );
             if self.gate_access.insert(gate, access) != Some(access) {
                 self.closures.clear();
             }
@@ -396,7 +403,8 @@ impl Regions {
         self.node(tile).map(|node| self.global.root(node))
     }
 
-    /// The component `player` sees: owned gates and all open gates joined.
+    /// The component `player` sees: unlocked owned gates and unlocked open
+    /// enemy gates joined.
     pub fn player_component(
         &mut self,
         ground: &dyn RegionGround,

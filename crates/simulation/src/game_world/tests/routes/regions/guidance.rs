@@ -81,7 +81,13 @@ fn a_certified_near_endpoint_uses_its_region_witness_and_keeps_terminal_unreacha
     let mut planner = aoe_map::RoutePlanner::new(from, target, MAX_ROUTE_WORK_PER_ORDER);
     for _ in 0..MAX_ROUTE_WORK_PER_ORDER {
         assert_eq!(
-            world.poll_world_route_planner(&mut planner, 1, &|| false, UnitKind::Villager),
+            world.poll_world_route_planner(
+                &mut planner,
+                1,
+                &|| false,
+                UnitKind::Villager,
+                PlayerId(0)
+            ),
             RoutePlannerPoll::Pending
         );
         if planner.certified_destination().is_some() {
@@ -112,7 +118,13 @@ fn a_certified_near_endpoint_uses_its_region_witness_and_keeps_terminal_unreacha
             planner.opening_invalidates_proof(opening),
             "the original sealed goal must still be retried if its entrance opens"
         );
-        match world.poll_world_route_planner(&mut planner, 1024, &|| false, UnitKind::Villager) {
+        match world.poll_world_route_planner(
+            &mut planner,
+            1024,
+            &|| false,
+            UnitKind::Villager,
+            PlayerId(0),
+        ) {
             RoutePlannerPoll::Pending => {}
             RoutePlannerPoll::Path(path) => last = *path.tiles.last().unwrap(),
             RoutePlannerPoll::Unreachable => {
