@@ -51,6 +51,9 @@ impl GameWorld {
     pub fn set_work_sleep(&mut self, enabled: bool) {
         self.combat.quiet.clear();
         self.combat.healing.wake_all();
+        self.economy
+            .garrison_timers
+            .reset(self.economy.occupied_garrisons.iter().copied());
         self.economy.no_sleep = !enabled;
     }
 

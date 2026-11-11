@@ -170,6 +170,21 @@ retained in `.cache/rest-focused.log` and `.cache/rest-replay.log`.
 The broader run passed 312 tests; all five General engagement results still
 match the baseline byte for byte.
 
+Garrison healing now schedules each occupant's existing `heal_at` deadline.
+Staggered occupants do not cause a whole shelter scan when only one is due.
+Due identities run in the original building/id order; healthy occupants retain
+their canonical deadline changes and fractional-HP reset rule. Entry, ejection,
+restoration and building mutation refresh affected subscriptions. Destruction
+retires them; switching the sleep oracle rebuilds the derived index.
+
+The healthy shelter fixture performs eight healing visits over 300 ticks,
+versus 2,400 before, with all hashes and changes identical. Four new scenarios
+cover staggered arrivals, wounds, ejection, sleep toggles and a missed-deadline
+mutation. The broader garrison/queue/construction/snapshot filter passed 45
+tests; all three long replay oracles passed, including the unchanged one/four
+worker checkpoint. Formatting, lint, structure and architecture checks passed.
+Logs: `.cache/garrison-{red,green,focused,replay,static}.log`.
+
 ## Local video evidence
 
 The construction baseline is `.cache/showcase/7b-construction-before-vp9.webm`:

@@ -13,6 +13,7 @@ impl GameWorld {
     pub(crate) fn building_mut(&mut self, id: EntityId) -> Option<&mut GameBuilding> {
         self.wake_construction(id);
         self.wake_queues(id);
+        self.wake_garrison(id);
         let building = self.economy.buildings.get_mut(&id)?;
         self.vision.dirty_buildings.insert(id);
         Some(building)

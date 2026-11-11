@@ -19,6 +19,8 @@ pub(crate) struct TickWork {
     pub(crate) gather_visits: usize,
     pub(crate) gather_slept: usize,
     pub(crate) builder_slept: usize,
+    /// Occupant entries actually visited by garrison healing.
+    pub(crate) garrison_units: usize,
 }
 
 #[derive(Debug, Default)]
@@ -36,6 +38,7 @@ pub(crate) struct Economy {
     pub(crate) garrison_stewards: BTreeMap<EntityId, EntityId>,
     pub(crate) garrison_reservations: BTreeMap<EntityId, u8>,
     pub(crate) occupied_garrisons: BTreeSet<EntityId>,
+    pub(crate) garrison_timers: super::garrison::timers::Timers,
     pub(crate) ejections: BTreeMap<EntityId, (TileRect, Vec<GarrisonedUnit>)>,
     pub(crate) cargo: crate::game_world::changes::Reports<Vec<EntityId>>,
     pub(crate) transport_journeys: BTreeMap<EntityId, super::super::navy::Journey>,
