@@ -150,6 +150,15 @@ impl GameWorld {
     }
 
     /// An unchanged squad keeps its current shared route and final slots.
+    pub(crate) fn formation_keeps_march(&self, id: EntityId, goal: WorldPosition) -> bool {
+        self.lookup
+            .get(&id)
+            .and_then(|&index| self.units[index].formation)
+            .and_then(|leader| self.formations.get(&leader))
+            .is_some_and(|group| !group.attack_move && near_goal(group.destination, goal))
+    }
+
+    /// An unchanged squad keeps its current shared route and final slots.
     pub(crate) fn formation_matches(&self, ids: &[EntityId], goal: WorldPosition) -> bool {
         let Some(leader) = ids
             .first()

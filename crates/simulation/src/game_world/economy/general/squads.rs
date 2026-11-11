@@ -2,6 +2,10 @@
 //! route; all squads consume the General's single bounded threat census.
 use super::*;
 
+#[cfg(test)]
+#[path = "tests/march_churn.rs"]
+mod march_churn_tests;
+
 pub(super) const SQUAD_LIMIT: usize = 10;
 const CAPACITY: [usize; 4] = [20, 15, 10, 5];
 
@@ -404,20 +408,29 @@ impl GameWorld {
                 complete = false;
                 continue;
             }
-            if !self.formation_matches(&ids, goal) {
+            let pending: Vec<_> = if self.formation_matches(&ids, goal) {
+                Vec::new()
+            } else {
+                ids.iter()
+                    .copied()
+                    .filter(|&id| !self.general_march_retained(id, goal))
+                    .collect()
+            };
+            if !pending.is_empty() {
                 work.orders += 1;
-                let order = match self.general_squad_goal_reachable(&ids, goal, general.position) {
-                    Ok(true) => self.issue_formation_move(
-                        general.player,
-                        &ids,
-                        aoe_core::Formation::Line,
-                        goal,
-                        false,
-                        false,
-                    ),
-                    Ok(false) => Err(crate::GameWorldError::Unreachable.into()),
-                    Err(error) => Err(error.into()),
-                };
+                let order =
+                    match self.general_squad_goal_reachable(&pending, goal, general.position) {
+                        Ok(true) => self.issue_formation_move(
+                            general.player,
+                            &pending,
+                            aoe_core::Formation::Line,
+                            goal,
+                            false,
+                            false,
+                        ),
+                        Ok(false) => Err(crate::GameWorldError::Unreachable.into()),
+                        Err(error) => Err(error.into()),
+                    };
                 if order.is_err() {
                     // A refusal is not completion: ground may open later, so
                     // the march stays unrouted. The squad is asked again only
