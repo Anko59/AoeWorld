@@ -189,16 +189,21 @@ impl GameWorld {
             let counts_as_far = attacker.far.is_some()
                 || i64::from((from.x - centre.x).abs().max((from.y - centre.y).abs()))
                     > super::approach::FAR_REUSE_TILES;
-            let stats = self.unit_state_stats(&before);
-            let range = super::super::navy::attack_range(&stats);
-            let min = i64::from(stats.min_range) * MELEE_RANGE_SUBUNITS;
-            // A changed target tile need not replace a firing contact that
-            // still reaches it. A taken melee contact still needs a new one.
+            // Ranged firing points remain useful across target tiles. Melee
+            // contacts keep their target-tile and free-slot rules: those
+            // positions also determine how the crowd makes room at the front.
             let retained = order.filter(|o| {
-                !counts_as_far
-                    && (min * min..=range * range).contains(&goal.distance_squared(o.destination))
-                    && (!Self::uses_melee_position(before.kind)
-                        || self.interaction_point_free(id, o.destination))
+                if counts_as_far {
+                    return false;
+                }
+                if Self::uses_melee_position(before.kind) {
+                    return attacker.goal_tile == Some(centre)
+                        && self.interaction_point_free(id, o.destination);
+                }
+                let stats = self.unit_state_stats(&before);
+                let range = super::super::navy::attack_range(&stats);
+                let min = i64::from(stats.min_range) * MELEE_RANGE_SUBUNITS;
+                (min * min..=range * range).contains(&goal.distance_squared(o.destination))
             });
             let destination = if let Some(order) = retained {
                 Some(order.destination)
