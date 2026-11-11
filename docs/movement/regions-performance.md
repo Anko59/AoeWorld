@@ -240,3 +240,33 @@ presentation warnings. No CI, push or publication was run. The full simulation
 suite was not repeated after those two output-pin updates; the focused rerun
 above verifies both, with production source unchanged.
 
+
+## Read pruning and physical composition
+
+Measured with the same command and kernel, one commit per step:
+
+| Commit | Change | Instructions |
+| --- | --- | ---: |
+| `5cbc451e9` | bounded endpoint certificates (start) | 245,005,616 |
+| `debcd0d13` | dominated neighbours skip terrain reads | 230,154,941 |
+| `bf54b36ec` | region adjacency visits border cells only | 222,851,974 |
+| `de7bf3cf2` | walk/gameplay chunks and points skip decorations | 211,766,181 |
+| `f468886b5` | short-circuit neighbour and same-snapshot proof reads | 209,012,825 |
+| `bc7af06d7` | cost matrix reuses the portal build's grid | 206,057,090 |
+| `9b29dbd37` | deck-free chunk grids skip bridge lookups | 205,492,520 |
+| this commit | adjacency skips inward steps, resolves neighbours once | 202,497,486 |
+
+The final count is 2.50% above the fresh base and 989,857 below the
+**203,487,343** ceiling. These are shared-host synthetic counts, not RTS or
+dedicated-hardware qualification.
+
+A per-tick diagnostic of the native workload (not committed) shows the
+portal build inside the measured tick is steady-state streaming, not a
+one-off: about one cold chunk per tick, following auto-scouts into ground no
+village pre-composed. Pre-building at load would mean composing the whole
+16,384-tile map, so it was not done; the cold build itself was made cheaper.
+Each step is exact: unsigned step costs make the record test a pure guard,
+pure predicates were reordered only, decorations never feed back into tiles
+or resources, and a grid is a function of its chunk and collision
+fingerprint. The full-population checkpoint and the 12 focused simulation
+tests are unchanged; all 425 map tests pass.

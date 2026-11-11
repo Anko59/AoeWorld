@@ -90,9 +90,14 @@ impl Regions {
             if current.labels.at(cell) != own {
                 continue;
             }
-            let tile = TileCoord::new(at.x + cell as i32 % CHUNK, at.y + cell as i32 / CHUNK);
+            let (x, y) = (cell as i32 % CHUNK, cell as i32 / CHUNK);
             for (direction, (dx, dy)) in label::NEIGHBOURS.into_iter().enumerate() {
-                let next = TileCoord::new(tile.x + dx, tile.y + dy);
+                // A step that stays inside the chunk's own cells never
+                // reaches another chunk (nor leaves the map).
+                if (0..CHUNK).contains(&(x + dx)) && (0..CHUNK).contains(&(y + dy)) {
+                    continue;
+                }
+                let next = TileCoord::new(at.x + x + dx, at.y + y + dy);
                 let Some(other) = self.chunk_of(next).filter(|&other| other != chunk) else {
                     continue;
                 };
@@ -101,17 +106,22 @@ impl Regions {
                 if !reverse && !current.steps.at(cell).allows(direction, self.bucket) {
                     continue;
                 }
-                if !others.contains(&other) {
-                    others.push(other);
-                }
-                crossings.push((direction, next, other));
+                let slot = others
+                    .iter()
+                    .position(|&seen| seen == other)
+                    .unwrap_or_else(|| {
+                        others.push(other);
+                        others.len() - 1
+                    });
+                crossings.push((direction, next, slot));
             }
         }
         for &other in &others {
             self.load(ground, other);
         }
-        for (direction, next, other) in crossings {
-            let neighbour = &self.pending[&other];
+        let neighbours: Vec<_> = others.iter().map(|other| &self.pending[other]).collect();
+        for (direction, next, slot) in crossings {
+            let (other, neighbour) = (others[slot], neighbours[slot]);
             if reverse
                 && !neighbour
                     .steps
