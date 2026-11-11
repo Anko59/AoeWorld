@@ -115,6 +115,7 @@ pub(super) fn run(
         }
         Command::PerfWasmSizeCheck => perf_size::check()?,
         Command::PerfComment => perf_comment::run()?,
+        Command::PerfDevReference => perf_comment::run_reference()?,
         Command::PerfHardwareCheck {
             environment,
             samples,

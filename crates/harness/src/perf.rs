@@ -115,6 +115,8 @@ pub struct Report {
     environment: Environment,
     workloads: Vec<WorkloadResult>,
     comparisons: Vec<Comparison>,
+    /// Workload hashes the instruction counts were measured with.
+    instruction_workloads: std::collections::BTreeMap<String, String>,
     notes: Vec<String>,
     hardware_qualification: &'static str,
     verdict: Verdict,
@@ -359,7 +361,10 @@ pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
     }
     if matches!(mode, "ci" | "full") {
         match crate::perf_micro::comparisons() {
-            Ok(results) => comparisons.extend(results),
+            Ok((results, reference_notes)) => {
+                comparisons.extend(results);
+                notes.extend(reference_notes);
+            }
             Err(error) => {
                 notes.push(format!("instruction measurements unavailable: {error}"));
                 comparisons.push(compare("instructions", None, Some(1)));
@@ -409,6 +414,7 @@ pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
         },
         workloads,
         comparisons,
+        instruction_workloads: crate::perf_micro::dev::identity(),
         notes,
         hardware_qualification: "NOT_ESTABLISHED",
         verdict,

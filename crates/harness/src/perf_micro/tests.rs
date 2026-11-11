@@ -100,9 +100,16 @@ fn proposal_reads_both_suite_files_without_changing_baseline() {
     propose_at(&simulation, &protocol, &assets, &baseline, &proposed).expect("proposal");
     assert_eq!(fs::read(&baseline).expect("baseline"), original_bytes);
     assert_eq!(
-        comparisons_at(&baseline, &simulation, &protocol, &assets)
-            .expect("comparison")
-            .len(),
+        comparisons_at(
+            &baseline,
+            &simulation,
+            &protocol,
+            &assets,
+            &temp.path().join("absent.json")
+        )
+        .expect("comparison")
+        .0
+        .len(),
         7
     );
     assert!(proposed.is_file());
@@ -128,7 +135,16 @@ fn late_game_identity_and_complete_case_set_are_required() {
 }
 
 fn judged(observed: u64, baseline: u64, reference: u64) -> (Verdict, Option<String>) {
-    let row = judge("instructions::k", observed, baseline, reference);
+    judged_with(observed, baseline, reference, None)
+}
+
+fn judged_with(
+    observed: u64,
+    baseline: u64,
+    reference: u64,
+    latest: Option<(u64, u64)>,
+) -> (Verdict, Option<String>) {
+    let row = judge("instructions::k", observed, baseline, reference, latest);
     (row.verdict, row.note)
 }
 
@@ -186,4 +202,132 @@ fn proposal_keeps_the_committed_reference_and_starts_new_cases_at_observed() {
     assert_eq!(proposed.instructions["a"], 90);
     assert_eq!(proposed.instruction_reference["a"], 100);
     assert_eq!(proposed.instruction_reference["b"], 50);
+}
+
+fn dev_reference(late: u64, workloads: BTreeMap<String, String>) -> dev::DevReference {
+    dev::DevReference {
+        run: 42,
+        revision: "abc".to_owned(),
+        workloads,
+        instructions: [("simulation::late_game".to_owned(), late)].into(),
+    }
+}
+
+#[test]
+fn regression_over_the_latest_dev_run_fails_even_under_a_stale_baseline() {
+    // Baseline is stale at 1_000; dev improved to 800. 880 is +10% over dev but
+    // only -12% vs the baseline: the old gate passed it, this one fails it.
+    let (verdict, note) = judged_with(880, 1_000, 1_000, Some((800, 42)));
+    assert_eq!(verdict, Verdict::Regression);
+    let note = note.expect("failure");
+    assert!(
+        note.starts_with("FAIL") && note.contains("dev run 42"),
+        "{note}"
+    );
+    // +3% exactly over dev passes; one instruction more fails.
+    assert_eq!(
+        judged_with(824, 1_000, 1_000, Some((800, 42))).0,
+        Verdict::Pass
+    );
+    assert_eq!(
+        judged_with(825, 1_000, 1_000, Some((800, 42))).0,
+        Verdict::Regression
+    );
+}
+
+#[test]
+fn improvement_over_dev_passes_and_the_baseline_checks_stay() {
+    assert_eq!(
+        judged_with(700, 1_000, 1_000, Some((800, 42))).0,
+        Verdict::Pass
+    );
+    assert_eq!(
+        judged_with(800, 800, 800, Some((800, 42))),
+        (Verdict::Pass, None)
+    );
+    // Dev being generous never loosens the committed baseline.
+    assert_eq!(
+        judged_with(1_031, 1_000, 1_000, Some((2_000, 42))).0,
+        Verdict::Regression
+    );
+}
+
+#[test]
+fn dev_counts_gate_each_kernel_and_unlisted_kernels_use_the_baseline_only() {
+    let observed: BTreeMap<_, _> = [
+        "instructions::simulation::late_game",
+        "instructions::b",
+        "instructions::c",
+        "instructions::d",
+        "instructions::e",
+        "instructions::f",
+        "instructions::g",
+    ]
+    .into_iter()
+    .map(|name| (name.to_owned(), 100))
+    .collect();
+    let mut baseline = proposal(&observed, &BTreeMap::new()).unwrap();
+    for value in baseline.instructions.values_mut() {
+        *value = 130;
+    }
+    let dev = dev_reference(90, dev::identity());
+    let rows = compare_with_dev(baseline, observed, Some(&dev)).unwrap();
+    let late = rows
+        .iter()
+        .find(|row| row.metric.ends_with("late_game"))
+        .unwrap();
+    assert_eq!(late.verdict, Verdict::Regression);
+    assert!(
+        rows.iter()
+            .filter(|row| row.verdict == Verdict::Regression)
+            .count()
+            == 1
+    );
+}
+
+#[test]
+fn missing_or_unusable_dev_reference_falls_back_with_a_reason() {
+    let temp = tempfile::tempdir().expect("directory");
+    let path = temp.path().join("dev-reference.json");
+    let reason = dev::load(&path).expect_err("missing");
+    assert!(reason.contains("missing"), "{reason}");
+
+    fs::write(
+        &path,
+        br#"{"unavailable":"no passing dev run with a performance artifact"}"#,
+    )
+    .unwrap();
+    assert!(
+        dev::load(&path)
+            .expect_err("unavailable")
+            .contains("no passing dev run")
+    );
+
+    fs::write(&path, b"not json").unwrap();
+    assert!(
+        dev::load(&path)
+            .expect_err("garbage")
+            .contains("unreadable")
+    );
+
+    // A run measured with other workloads (or before identity was recorded).
+    let other = dev_reference(1, BTreeMap::new());
+    fs::write(
+        &path,
+        serde_json::to_vec(&dev::DevFile::Measured(other)).unwrap(),
+    )
+    .unwrap();
+    assert!(
+        dev::load(&path)
+            .expect_err("identity")
+            .contains("different workloads")
+    );
+
+    let good = dev_reference(1, dev::identity());
+    fs::write(
+        &path,
+        serde_json::to_vec(&dev::DevFile::Measured(good)).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(dev::load(&path).expect("usable").run, 42);
 }

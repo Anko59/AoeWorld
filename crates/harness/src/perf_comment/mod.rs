@@ -8,6 +8,7 @@
 //! run whose `target-performance` job passed, renders one compact table, and
 //! creates or rewrites the marked pull request comment. `PERF_COMMENT_PRINT=1`
 //! prints the body instead of posting (local checks).
+mod reference;
 mod render;
 mod reports;
 #[cfg(test)]
@@ -18,6 +19,8 @@ use render::Noise;
 use reports::Report;
 use serde::Deserialize;
 use std::{fs, path::Path};
+
+pub(crate) use reference::run as run_reference;
 
 pub(crate) struct Job {
     pub(crate) name: String,

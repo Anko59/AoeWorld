@@ -6,11 +6,18 @@
 //! fixed `instruction_reference` fails whatever the baseline says, so many
 //! small accepted steps cannot add up. A drop past [`FAIL_PERCENT`] asks for a
 //! baseline refresh (`make perf-baseline-propose`, reviewed in a commit).
+//!
+//! On pull requests a row also fails more than [`FAIL_PERCENT`] above the
+//! latest passing `dev` measurement ([`dev`]), so a gain merged on `dev`
+//! cannot be spent by later changes while the baseline is stale.
 use crate::perf::{Comparison, Verdict, compare_at, floor_at, over};
 use aoe_scenario::{LATE_GAME, SMOKE, TARGET_DISTRIBUTED};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::BTreeMap, error::Error, fs, path::Path};
+
+pub mod dev;
+use dev::DevReference;
 
 pub const WARN_PERCENT: u8 = 1;
 pub const FAIL_PERCENT: u8 = 3;
@@ -156,9 +163,18 @@ fn propose_at(
     Ok(())
 }
 
+#[cfg(test)]
 fn compare_observed(
     baseline: Baseline,
     observed: BTreeMap<String, u64>,
+) -> Result<Vec<Comparison>, Box<dyn Error>> {
+    compare_with_dev(baseline, observed, None)
+}
+
+fn compare_with_dev(
+    baseline: Baseline,
+    observed: BTreeMap<String, u64>,
+    dev: Option<&DevReference>,
 ) -> Result<Vec<Comparison>, Box<dyn Error>> {
     if baseline.instructions.len() != CASES
         || baseline.version != 1
@@ -181,19 +197,31 @@ fn compare_observed(
     Ok(observed
         .into_iter()
         .map(|(name, count)| {
+            let latest = dev.and_then(|dev| {
+                let kernel = name.strip_prefix("instructions::").unwrap_or(&name);
+                Some((dev.instructions.get(kernel).copied()?, dev.run))
+            });
             judge(
                 &format!("instructions::{name}"),
                 count,
                 baseline.instructions[&name],
                 baseline.instruction_reference[&name],
+                latest,
             )
         })
         .collect())
 }
 
-/// One instruction row: fail above +3% of `baseline` or +10% of `reference`,
-/// warn above +1%, ask for a refresh below -3%.
-fn judge(metric: &str, observed: u64, baseline: u64, reference: u64) -> Comparison {
+/// One instruction row: fail above +3% of `baseline`, +10% of `reference` or
+/// +3% of the latest passing dev run (`latest`: its count and run id), warn
+/// above +1% of the baseline, ask for a refresh below -3%.
+fn judge(
+    metric: &str,
+    observed: u64,
+    baseline: u64,
+    reference: u64,
+    latest: Option<(u64, u64)>,
+) -> Comparison {
     let mut row = compare_at(metric, Some(observed), Some(baseline), FAIL_PERCENT);
     let delta =
         |from: u64| (i128::from(observed) - i128::from(from)) as f64 * 100.0 / from.max(1) as f64;
@@ -209,6 +237,14 @@ fn judge(metric: &str, observed: u64, baseline: u64, reference: u64) -> Comparis
             delta(reference),
             floor_at(reference, CREEP_PERCENT) - 1
         ));
+    } else if let Some((dev, run)) = latest
+        && over(observed, dev, FAIL_PERCENT)
+    {
+        row.verdict = Verdict::Regression;
+        row.note = Some(format!(
+            "FAIL {:+.1}% over latest passing dev run {run} ({dev}; cap +{FAIL_PERCENT}%)",
+            delta(dev)
+        ));
     } else if over(observed, baseline, WARN_PERCENT) {
         row.note = Some(format!(
             "warning {:+.1}% over baseline {baseline} (fails above +{FAIL_PERCENT}%)",
@@ -223,12 +259,14 @@ fn judge(metric: &str, observed: u64, baseline: u64, reference: u64) -> Comparis
     row
 }
 
-pub fn comparisons() -> Result<Vec<Comparison>, Box<dyn Error>> {
+/// The rows and the notes that say which references they were checked against.
+pub fn comparisons() -> Result<(Vec<Comparison>, Vec<String>), Box<dyn Error>> {
     comparisons_at(
         Path::new("baselines/perf/micro.json"),
         Path::new("reports/perf/simulation.ndjson"),
         Path::new("reports/perf/protocol.ndjson"),
         Path::new("reports/perf/assets.ndjson"),
+        Path::new(dev::PATH),
     )
 }
 
@@ -237,9 +275,29 @@ fn comparisons_at(
     simulation: &Path,
     protocol: &Path,
     assets: &Path,
-) -> Result<Vec<Comparison>, Box<dyn Error>> {
+    dev_file: &Path,
+) -> Result<(Vec<Comparison>, Vec<String>), Box<dyn Error>> {
     let baseline: Baseline = serde_json::from_slice(&fs::read(baseline)?)?;
-    compare_observed(baseline, observed_samples_at(simulation, protocol, assets)?)
+    let observed = observed_samples_at(simulation, protocol, assets)?;
+    let (reference, note) = match dev::load(dev_file) {
+        Ok(reference) => {
+            let note = format!(
+                "instructions also gated against the latest passing dev run {} ({}): fail above +{FAIL_PERCENT}%",
+                reference.run, reference.revision
+            );
+            (Some(reference), note)
+        }
+        Err(reason) => (
+            None,
+            format!(
+                "dev reference unavailable ({reason}): instructions gated against the committed baseline only"
+            ),
+        ),
+    };
+    Ok((
+        compare_with_dev(baseline, observed, reference.as_ref())?,
+        vec![note],
+    ))
 }
 
 #[cfg(test)]

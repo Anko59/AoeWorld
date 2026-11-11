@@ -97,6 +97,7 @@ help:
 	@echo '  make perf-groups    Measure 200 armies (11k movers) crossing; reports the movement span split'
 	@echo '  make perf-wasm-functions Report Binaryen metrics for each client function'
 	@echo '  make perf-baseline-propose Write a reviewable baseline proposal'
+	@echo '  make perf-dev-reference  Fetch the latest passing dev instruction counts for the perf-ci gate'
 	@echo '  make perf-comment   Post the informational CI performance comment on a pull request'
 	@echo '  make qa-validate     Validate reports/qa/session.json'
 	@echo '  make qa-serve        Serve restricted MCP browser tools on stdio'
