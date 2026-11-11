@@ -34,7 +34,8 @@ protocol command totals in its tick records.
   measured previous issuer and is excluded.
 - `superseded_10s`: the subset replaced before ten simulation seconds elapsed
   since the previous accepted request, charged to that previous issuer. The
-  requested redundancy sum is `near_reissues + superseded_10s`.
+  requested redundancy sum is `near_reissues + superseded_10s`. These
+  counts can overlap; the sum is an indicator, not a unique-trip count.
 - `route_requests`: route-admission calls, including cached outcomes and
   slot refusals. A formation requests one shared route.
 - `route_searches`: fresh planners created at route issue, excluding cache
@@ -67,68 +68,66 @@ Both runs start from the same input. Wall-clock AI decisions and shared-host
 load vary; this is neither dedicated-hardware qualification nor a controlled
 causal timing benchmark.
 
-## Saved-match observations
+## Current qualification status
 
-The baseline is clean revision `27669157963834272a1cdc5a5ec5b096c62929cb`.
-The first after run is clean revision
-`82ca47a405f5be86aa0dd86a96c206dc3a2cfdd5`. **That implementation failed
-the full simulation suite and is rejected.** Its blanket one-tile suppression
-also suppressed distinct gathering and combat contact points. Its numbers
-below describe that experiment, not the corrected implementation.
+The functional code is `3dd22b72cfd95fd980f4c8dee07dc8377220e903`, rebased
+on dev `82f7a3bf98d3903ab8738d5c71801ba9222e2c80`. The required fresh
+owner-save comparison and instruction comparison are **blocked and unqualified**.
+Neither the requested 50% reduction nor the one-percent instruction limit has
+been demonstrated. The older `before.json` / `after.json` experiment used
+superseded revisions, lacked the new ten-second counter and mover endpoints,
+and included rejected behavior. Its figures are not reused here.
 
-Rates use the initial/final counter delta over the measured wall interval.
-Each cell in the issuer table is baseline / rejected after, per wall minute.
-Neither player nor auto-scout issued measured moves in this saved match.
+The measurement baseline is instrumentation-only revision
+`f78fec1d7de604849e8c8c7212b2127d30c6a74f` plus the diagnostic patch
+`.cache/order-volume/measurement-counters-current.patch`, SHA-256
+`f092c93c9a57baecb82827cad0ef3172be0843c49eeba752e544c8b8d63bda25`.
+The applied diff has that same hash and changes only three diagnostic files;
+its dirty status is explicit. Bare dev, without that patch, was selected for
+the instruction control. No measured window started on either control.
 
-| Issuer | Decisions | Unit moves | Near repeats | Reassigned <10s | Superseded | Route admissions | Fresh searches |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Player | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
-| Python AI | 2106.3 / 1341.2 | 2837.9 / 1949.7 | 438.8 / 75.1 | 818.2 / 250.6 | 596.5 / 58.5 | 1749.5 / 1026.3 | 1005.4 / 654.2 |
-| Auto-scout | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
-| Steward | 270.8 / 169.1 | 230.5 / 150.2 | 0 / 0 | 184.8 / 121.4 | 30.3 / 13.2 | 204.5 / 129.0 | 204.5 / 129.0 |
-| Vassal | 176.0 / 120.4 | 23.9 / 17.8 | 0.4 / 0.2 | 11.0 / 6.6 | 6.4 / 3.6 | 23.9 / 17.6 | 23.9 / 17.6 |
-| General | 444.2 / 49.1 | 461.0 / 183.5 | 63.1 / 46.7 | 263.6 / 112.2 | 288.4 / 107.2 | 59.1 / 20.8 | 59.1 / 20.8 |
-| Rally/automation | 15122.9 / 10972.3 | 15122.9 / 10972.3 | 263.6 / 600.1 | 5067.5 / 3268.1 | 663.1 / 333.9 | 11009.7 / 7958.5 | 6038.8 / 4047.2 |
+| Required saved-match observation | Before | After |
+| --- | --- | --- |
+| Decisions, orders, near reissues, reassigned <10s, superseded and fresh searches/min, for every issuer | Unmeasured | Unmeasured |
+| Near reissues + superseded <10s, per wall minute | Unmeasured | Unmeasured |
+| Same sum per 1,000 simulation ticks | Unmeasured | Unmeasured |
+| Units and movers at the initial/final endpoints | Unmeasured | Unmeasured |
+| TPS and route-serve p50/p95 ms | Unmeasured | Unmeasured |
+| Late-game authoritative-tick instructions | Unmeasured | Unmeasured |
 
-| Measured quantity | Baseline | Rejected after |
-| --- | ---: | ---: |
-| Wall seconds | 300.668 | 300.447 |
-| Simulation ticks | 4590 | 3089 |
-| Ticks/s | 15.266 | 10.281 |
-| Mean tick ms | 59.833 | 96.487 |
-| Mean world advance ms | 43.194 | 70.269 |
-| Unit movement intents/min | 18676.2 | 13273.4 |
-| Fresh issue-time searches/min | 7331.7 | 4868.7 |
-| Waiting routes, initial | 933 | 968 |
-| Waiting routes, wall minutes 1–5 | 341, 358, 241, 287, 331 | 320, 308, 220, 219, 244 |
+Player, Python AI, auto-scout, Steward, Vassal, General and rally/automation
+are all required in the issuer table once a fresh pair exists. Missing values
+are unavailable, never zero. After measurements were not started while their
+matching baseline was blocked by the shared slot.
 
-The slower simulation invalidates a claim that fewer wall-minute requests
-demonstrate improvement. Per 1,000 ticks, movement requests increased
-20389.8 → 21517.0, near repeats increased 836.2 → 1170.6, supersessions
-fell 1730.1 → 837.2, and fresh searches changed 8004.4 → 7892.5.
-There is **no demonstrated throughput gain** from these runs.
+Each command below was tried once, followed by useful independent work and
+one delayed retry. All were refused before running, with Make exit 2 wrapping
+resource exit 75. These load averages describe **refused commands**, not a
+performance measurement window; all are from the shared twelve-core host.
 
-The shared host had different load (observed one-minute load samples
-20.18/11.90 during/end baseline versus 35.13/22.05 after). Two unsuccessful
-browser recording attempts also connected during the baseline, whereas none
-connected during the after measurement. These are confounders, not measured
-causes of the timing difference. AI decisions use wall time too.
+| Last attempt, UTC on 2026-11-11 | Command | Host load, 1/5/15 min | Result |
+| --- | --- | --- | --- |
+| 06:14:10 | `NEXTEST_TEST_THREADS=2 RUST_TEST_THREADS=2 CARGO_BUILD_JOBS=2 make -j1 perf-late-game-instructions` on bare dev | 8.49 / 12.44 / 17.81 | Long slot busy |
+| 06:25:26 | Five-minute `make scale-match` command above on the instrumented baseline | 8.61 / 13.25 / 15.62 | Long slot busy |
+| 06:25:34 | `NEXTEST_TEST_THREADS=2 RUST_TEST_THREADS=2 CARGO_BUILD_JOBS=2 make preflight` on the feature branch | 8.25 / 13.09 / 15.56 | Long slot busy |
 
-The largest raw trip source was automatic gathering/contact approach, including
-unreachable fishing approaches. Such attempts are not all redundant manager
-decisions. Changing pathfinding or unreachable-resource policy is outside this
-change. `before-routes-mid.json` and `after-routes-mid.json` retain raw source
-attribution; `before.json` and `after.json` retain the complete reports under
-`.cache/order-volume/`.
+At all three last attempts the holder was `make match-bench` in the timers
+worktree's `.cache/phase7b-before`, started at 06:10:05 UTC. Logs are
+`dev-instructions-retry.log`, `before-current-retry.log` and
+`preflight-retry.log` under `.cache/order-volume/`. Earlier refusals are also
+retained. No lock, holder, gate, workload or baseline was changed to obtain admission.
 
 ## Movement and worker rules
+
 
 Area movement commands retain their route, search frontier, deadline and
 queued waypoints when the active goal is within one tile. Identical contact
 points are also retained; distinct precise interaction points remain distinct
 even within a tile, so workers can reach the resource and soldiers can enter
 attack range. Attack-move formation contacts also require exact equality.
-An arrival point newly reserved by another task is selected again.
+An arrival point newly reserved by another task is selected again once planning
+has completed. Soft reservations cannot discard a pending frontier or renew
+its original admission deadline.
 Both precisions use the same routing engine. Individual
 overrides still leave formations; queued commands and attack-mode or formation
 membership changes remain meaningful.
@@ -147,58 +146,83 @@ leave workers in transit alone. Idle recovery and failed-job recovery retain
 their existing prompt paths. Steward assignment tenure is canonical replay
 state; diagnostic issuer history is not.
 
-## Video evidence
+## Functional checks
 
-The paired VP9 WebM recordings show the Steward kingdom fixture with twenty
-working villagers and original art. They are **fixture footage**, separate
-from owner-save profiling; owner-save recorder attempts did not produce usable
-footage. The farm camera and visible work were checked using extracted frames.
+All commands use `NEXTEST_TEST_THREADS=2 RUST_TEST_THREADS=2
+CARGO_BUILD_JOBS=2`. These results qualify code revision `3dd22b72cfd9`;
+later documentation-only commits do not change its behavior.
 
-- Baseline: `.cache/showcase/orders-before.webm`, SHA-256
-  `59a2d0cad4a45987b1176e3f2af9142ceeef7ba83aa44aba9f378964a1cfc7ac`.
-- First after (rejected revision `82ca47a405f5`):
-  `.cache/showcase/orders-after.webm`, SHA-256
-  `74a58ab3ccabb1881c211bbcc1f1f65ded987689b660229c7aa7fa246015cb0c`.
+| Command | Result |
+| --- | --- |
+| `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='all()'` | 1,292 passed, zero skipped |
+| Corresponding full `aoe-server` command | 453 passed; four pre-existing package-dependent tests ignored |
+| `make sdk-python-test` | 23 bindings tests and 163 AI tests passed |
+| `make test-harness` | 1,509 unit tests and the integration binaries passed; one explicit profiling test ignored |
+| `make test-harness-focused HARNESS_TEST_FILTER=perf_scale::scale_match` | 23 passed |
+| `make hooks-install hooks-check fmt-check lint structure-check architecture-check docs-check build-wasm` | Passed |
+| `make deny` | Passed |
+| `make perf-wasm-cap` | Passed: optimized gzip 407,793 bytes, existing repository cap unchanged |
+| Normal commit hooks | Passed |
+| `make preflight` and instruction comparison | Refused by shared resource admission; not passed |
 
-Storyboards and probe metadata are retained alongside ignored local evidence.
-Attach recordings using `SHIP_VIDEO` if a later session publishes this branch;
-this task does not authorize publication.
+The ignored harness test is `late_game_apply_census`, which requests explicit
+100-seat profiling through `make movement-apply-census`. The four server
+ignores require local packages; one also requires a quiet machine. These and
+CI remain outside this qualification. Logs include
+`simulation-qualified-all.log`, `server-qualified-all.log`, `sdk-qualified.log`,
+`remaining-short-gates.log`, `frontier-gates-client.log`, `frontier-wasm-cap.log`
+and `frontier-commit.log` under `.cache/order-volume/`.
 
-## Qualification
+The unchanged five-variant General gate passes: engagement shares are
+87.774%, 88.112%, 85.400%, 92.231% and 89.035% (mean 88.510%). Every original
+wait limit passes. These are deterministic functional observations, not
+wall-performance measurements. The latest full-suite reports are copied to
+`.cache/order-volume/general-qualified/`.
 
-The rebased follow-up passes all 21 selected simulation tests, including the
-five-variant General engagement gate, queued-goal retention, exact contacts,
-arrival reservations, gather-job retention/recovery, diagnostics and one-/four-
-worker replay. General engagement shares are 87.774%, 88.112%, 85.400%, 92.231%
-and 89.035% (mean 88.510%); every unchanged wait limit also passes. The
-instrumentation-only baseline passes with mean 88.786%. These deterministic
-engagement observations are functional qualification, not timing measurements.
-No engagement floor changed. The current replay checkpoint was regenerated for
-retained goals and exact contacts: clean dev `82f7a3bf98d3` passes the preceding
-pin, while both the prior contact-retention revision `9e8c616e0f53` and the
-withdrawal correction produce `49d847124f3ec329d72805ecd276d785c2baa1d6d765cba0cc7a4f17daef394d`.
-The workload, activity floors and complete one-/four-worker comparison are
-unchanged. Soft arrival reservations also preserve pending frontiers and their
-original deadlines; completed plans still reselect newly reserved contacts.
+The current late-game replay pin was regenerated for retained goals and exact
+contacts. Clean dev passes the preceding `f06497a1…` pin; the prior contact
+retention revision `9e8c616e0f53` and the withdrawal correction both produce
+`49d847124f3ec329d72805ecd276d785c2baa1d6d765cba0cc7a4f17daef394d`.
+The exact workload, all activity floors and complete one-/four-worker equality
+remain unchanged. No engagement floor or performance gate was reduced.
 
-The full simulation run now passes 1,292/1,292 tests (zero skipped), and the full
-server run passes 453 tests with four pre-existing package-dependent ignored
-tests. Both use `make test-native-focused` with `AOE_NATIVE_TEST_FILTER='all()'`
-and the corresponding `AOE_NATIVE_TEST_PACKAGE`. Logs are
-`simulation-qualified-all.log` and `server-qualified-all.log`.
+## Fresh video evidence and capture limits
 
-The HTTP endpoint test passes the strict ten-second boundary, and all 23
-scale-match harness tests pass. Commands use `NEXTEST_TEST_THREADS=2
-RUST_TEST_THREADS=2 CARGO_BUILD_JOBS=2`, one build at a time. The required
-`make hooks-install hooks-check fmt-check lint structure-check architecture-check`
-passes; logs are `followup-gates-final.log`, `followup-simulation-final.log`,
-`endpoint-green.log` and `report-green.log` under `.cache/order-volume/`.
+The paired VP9 WebM recordings show the same Steward fixture, initially twenty
+villagers, with original art. Both are 1280×720 at 25 fps. Extracted frames at
+25/30 seconds show the farm camera and working villagers. They are fixture
+footage, separate from owner-save measurements, and do not compare equal game
+ticks, economic yield or performance. Baseline uses a release server; after
+uses the debug server built by the passing SDK gate. Each uses its own client
+build and the same art pack. Binary/client hashes and baseline diagnostic-patch
+provenance are retained under `.cache/order-volume/`.
 
-The older rejected full run had 1236/1243 passing; the subsequent correction
-still failed General engagement (1243/1244). Their retained logs and rejected
-footage above do not qualify this follow-up. Current SDK integration,
-fresh paired owner-save profiles with the ten-second
-counter, the one-percent instruction comparison, preflight, refreshed footage
-and CI remain unverified at this increment. The old saved-match reports lack
-the new counter and mover endpoints and cannot establish the requested 50%
-reduction. Publication is outside this task's authorization.
+- Before: `.cache/showcase/orders-current-before.webm`, 35.96 seconds,
+  SHA-256 `38403ada576ab6777f4e3a9f978958caf5dd3994c86a8bccc7d2c5f6ad6a614b`.
+- After: `.cache/showcase/orders-current-after.webm`, 39.44 seconds,
+  SHA-256 `4b6dea91a9de6c3d95fb0c8f80648d0fdbfe588f2825fa1b3c71997a02c316bb`.
+
+Retained goals and withdrawal rejoining can change army trajectories and
+retreat timing. Army footage could not be qualified on the baseline. The
+existing focused `tests/proofs/ui-panel.spec.ts` General proof trained and
+selected its General, then timed out in both Firefox/WebGL2 and Chromium
+because the minimap parent intercepted its inner-canvas click, before a march
+order. A separate recorder attempt using the supported camera path failed its
+90-second view-settling requirement with zero pending/failed chunks. Neither
+failure is treated as an order-regression result or a passing browser gate.
+Tests, selectors and settling rules were not weakened; these unrelated helpers
+were left outside the change. The after army proof was not run.
+
+The proof command used `AOE_E2E_WORKERS=1 AOE_E2E_PORT_RANGE=8185-8185
+AOE_E2E_SPECS=tests/proofs/ui-panel.spec.ts AOE_ASSET_PACK=local-assets/packs/54916fcb9c1e43c7a63aa486e3c47824b24ba94c887168ed210517273626bff6
+make test-e2e`. Logs are `general-before-browser.log` and
+`general-before-video.log`; failed browser artifacts remain in
+`.cache/order-volume/general-before-ui-failed/`. The temporary opt-in request
+was moved to `general-proof-config.json`, so it does not enable future runs.
+
+Assets, inputs and recordings remain outside Git and images. Attach footage
+with `SHIP_VIDEO` if a later session publishes; this task does not authorize
+publication. Shared-host observations, synthetic functional workloads and
+fixture footage do not establish finished RTS performance or dedicated-hardware
+qualification. The branch remains unqualified for the requested performance
+thresholds until resource admission permits the fresh comparison and preflight.
