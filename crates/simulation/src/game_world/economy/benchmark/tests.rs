@@ -129,7 +129,10 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
         // #745 changes wildlife movement/hunting and replaced-camp lifecycle.
         // Repin the current output; workload, activity floors and the full
         // one/four-worker replay equality above are unchanged.
-        "d740cb40fccae011217e7d45f4adcd11e840cf1c7067e28d1b5c914facf5328a"
+        // Retained active goals and exact contacts change this output on
+        // the region router. Clean dev passes its pin; this run preserves
+        // every activity floor and the complete one-/four-worker comparison.
+        "21b25c880ce6937001c72f41f9a591665e673c3908d8b6455d9ffa87891e331b"
     );
 }
 

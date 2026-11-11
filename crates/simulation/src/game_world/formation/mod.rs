@@ -133,7 +133,11 @@ impl Group {
 }
 
 impl GameWorld {
-    pub(crate) fn formation_goal(&self, id: EntityId, leader: EntityId) -> Option<WorldPosition> {
+    pub(crate) fn formation_movement_goal(
+        &self,
+        id: EntityId,
+        leader: EntityId,
+    ) -> Option<WorldPosition> {
         self.formations
             .get(&leader)
             .filter(|g| {

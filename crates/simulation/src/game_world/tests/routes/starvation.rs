@@ -343,14 +343,27 @@ fn a_near_group_queued_for_a_slot_outlives_its_wait() {
 #[test]
 fn repeated_waiting_goals_retain_search_progress_and_the_original_deadline() {
     let mut w = sealed_near_world();
-    let id = hopeless_orders(&mut w, PlayerId(0))[0];
+    // Region proofs now answer sealed destinations immediately. A connected
+    // detour with a small first allowance leaves a real frontier to retain.
+    w.fast_route_budget = 256;
+    w.planning_budget = 0;
+    let id = detour_orders(&mut w, PlayerId(0), 1)[0];
+    let other = w.spawn_unit(PlayerId(0), tile_position(182, 190)).unwrap();
+    assert_eq!(w.issue_task_move(other, tile_position(180, 210)), Ok(true));
     w.advance();
     let index = w.lookup[&id];
+    assert!(w.destination_point_reserved(tile_position(180, 210), id));
     assert!(w.units[index].state.planning);
+    assert!(
+        w.units[index]
+            .planner
+            .as_ref()
+            .is_some_and(|p| p.work() > 0)
+    );
     let started = w.units[index].planning_since;
     let before = w.canonical_hash();
     let requests = w.order_demand()[crate::OrderIssuer::Automation as usize].route_requests;
-    for goal in [tile_position(CX, CY), tile_position(CX + 1, CY)] {
+    for goal in [tile_position(180, 210), tile_position(181, 210)] {
         assert_eq!(w.issue_move(id, goal), Ok(true));
         assert_eq!(w.units[index].planning_since, started);
         assert_eq!(

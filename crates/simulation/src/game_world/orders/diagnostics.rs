@@ -122,7 +122,7 @@ impl GameWorld {
     pub(crate) fn movement_goal(&self, id: EntityId) -> Option<WorldPosition> {
         let unit = &self.units[*self.lookup.get(&id)?];
         if let Some(leader) = unit.formation {
-            return self.formation_goal(id, leader);
+            return self.formation_movement_goal(id, leader);
         }
         unit.order.map(|order| order.destination)
     }
