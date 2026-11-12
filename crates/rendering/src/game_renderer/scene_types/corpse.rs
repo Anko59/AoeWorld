@@ -86,6 +86,8 @@ impl SceneUnitKind {
                 | Self::SiegeRamDecay
                 | Self::OnagerDie
                 | Self::OnagerDecay
+                | Self::FireShipDie
+                | Self::FireShipDecay
         )
     }
 }
