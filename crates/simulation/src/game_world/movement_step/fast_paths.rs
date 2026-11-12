@@ -15,6 +15,9 @@ impl GameWorld {
         let Some(probe) = &self.planning_probe else {
             return;
         };
+        if !probe.movement_census_enabled() {
+            return;
+        }
         probe.movement_count("applied", 1);
         let unit = self.units[index].state;
         let from = unit.position;

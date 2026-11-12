@@ -8,6 +8,8 @@ use grid::Grid;
 use std::hash::Hasher;
 
 mod grid;
+mod neighborhood;
+pub(crate) use neighborhood::Neighborhood;
 
 const CELL_LIMIT: usize = 32;
 const NO_CELL: u32 = u32::MAX;
@@ -81,6 +83,14 @@ struct CellBody {
 
 /// Centres a query can answer for, inclusive: `(min x, max x, min y, max y)`.
 pub(crate) type BodyBox = (i32, i32, i32, i32);
+
+pub(super) struct BodyQuery {
+    pub(super) at: WorldPosition,
+    pub(super) reach: i32,
+    pub(super) window: BodyBox,
+    pub(super) naval: bool,
+    pub(super) salt: u64,
+}
 
 // Coordinates are internal integer keys. Mix the packed pair once instead of
 // running the general-purpose keyed byte hasher on every neighbour probe.
@@ -370,58 +380,58 @@ impl CollisionIndex {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn blocked_in(
         &self,
-        (at, reach): (WorldPosition, i32),
+        query: (WorldPosition, i32),
         window: BodyBox,
         naval: bool,
         salt: u64,
         work: &crate::game_world::route_scheduler::GroupWork,
-        mut test: impl FnMut(EntityId) -> bool,
-        mut overflow: impl FnMut(TileCoord) -> bool,
+        test: impl FnMut(EntityId) -> bool,
+        overflow: impl FnMut(TileCoord) -> bool,
     ) -> bool {
-        let min =
-            WorldPosition::new(at.x.saturating_sub(reach), at.y.saturating_sub(reach)).tile_floor();
-        let max =
-            WorldPosition::new(at.x.saturating_add(reach), at.y.saturating_add(reach)).tile_floor();
-        // One counter write per query: this runs for every mover on every worker.
-        let mut probes = 0;
-        for y in min.y..=max.y {
-            for x in min.x..=max.x {
-                probes += 1;
-                let tile = TileCoord::new(x, y);
-                let Some(cell) = self.cells[usize::from(naval)].get(tile) else {
-                    continue;
-                };
-                if cell.len() > CELL_LIMIT && overflow(tile) {
-                    work.collision(probes);
-                    return true;
-                }
-                let len = cell.len();
-                let mut at = if len == 1 {
-                    0
-                } else {
-                    (salt % len as u64) as usize
-                };
-                for _ in 0..len.min(CELL_LIMIT) {
-                    probes += 1;
-                    let body = cell[at];
-                    if body.at.x >= window.0
-                        && body.at.x <= window.1
-                        && body.at.y >= window.2
-                        && body.at.y <= window.3
-                        && test(body.id)
-                    {
-                        work.collision(probes);
-                        return true;
-                    }
-                    at += 1;
-                    if at == len {
-                        at = 0;
-                    }
-                }
-            }
+        neighborhood::blocked_cells(query, window, work, test, overflow, |tile| {
+            self.sample(tile, naval, salt)
+        })
+    }
+
+    pub(crate) fn neighborhood(
+        &self,
+        at: WorldPosition,
+        naval: bool,
+        salt: u64,
+    ) -> Neighborhood<'_> {
+        Neighborhood::new(self, at.tile_floor(), naval, salt)
+    }
+
+    pub(super) fn blocked_in_with(
+        &self,
+        query: BodyQuery,
+        neighbors: Option<&Neighborhood<'_>>,
+        work: &crate::game_world::route_scheduler::GroupWork,
+        test: impl FnMut(EntityId) -> bool,
+        overflow: impl FnMut(TileCoord) -> bool,
+    ) -> bool {
+        let BodyQuery {
+            at,
+            reach,
+            window,
+            naval,
+            salt,
+        } = query;
+        match neighbors {
+            Some(neighbors) => neighbors.blocked_in((at, reach), window, work, test, overflow),
+            None => self.blocked_in((at, reach), window, naval, salt, work, test, overflow),
         }
-        work.collision(probes);
-        false
+    }
+
+    fn sample(&self, tile: TileCoord, naval: bool, salt: u64) -> Option<neighborhood::Sample<'_>> {
+        self.cells[usize::from(naval)].get(tile).map(|cell| {
+            neighborhood::Sample::new(
+                cell,
+                salt,
+                cell.len().min(CELL_LIMIT),
+                cell.len() > CELL_LIMIT,
+            )
+        })
     }
 }
 

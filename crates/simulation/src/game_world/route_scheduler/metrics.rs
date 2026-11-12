@@ -156,6 +156,11 @@ pub trait PlanningProbe: std::fmt::Debug + Send + Sync {
     }
     /// Optional work census. Counts are adapter-owned and never canonical.
     fn movement_count(&self, _name: &'static str, _count: usize) {}
+    /// Request extra geometric queries for the diagnostic apply census.
+    /// Timing observers do not need these body and static-clearance proofs.
+    fn movement_census_enabled(&self) -> bool {
+        false
+    }
     fn cache_span(&self) -> Option<Box<dyn aoe_map::NavigationSpan>> {
         None
     }

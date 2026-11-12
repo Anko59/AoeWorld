@@ -1,6 +1,75 @@
 use super::*;
 
 #[test]
+fn sidestep_neighborhood_keeps_live_query_order_bounds_and_work() {
+    use crate::game_world::route_scheduler::{GroupWork, RouteMetrics};
+    let tile = TileCoord::new(2, 3);
+    let centre = WorldPosition::from_tile_center(tile).unwrap();
+    let mut index = CollisionIndex::default();
+    for id in 0..80 {
+        let x = if id < 70 { 0 } else { (id - 69) as i32 * 1024 };
+        index.insert(
+            EntityId(id),
+            WorldPosition::new(centre.x + x, centre.y),
+            id % 2 != 0,
+            id as usize,
+        );
+    }
+    for naval in [false, true] {
+        for salt in [0, 1, 31, 64, u64::MAX] {
+            let neighbors = index.neighborhood(centre, naval, salt);
+            for reach in [0, 700, 1800, 6 * 1024] {
+                for stop in [None, Some(EntityId(7))] {
+                    for refuse_overflow in [false, true] {
+                        for window in [
+                            (i32::MIN, i32::MAX, i32::MIN, i32::MAX),
+                            (centre.x + 1, centre.x + 4096, centre.y, centre.y),
+                        ] {
+                            let query = |cached| {
+                                let work = GroupWork::default();
+                                let mut seen = Vec::new();
+                                let mut overflowed = Vec::new();
+                                let mut test = |id| {
+                                    seen.push(id);
+                                    Some(id) == stop
+                                };
+                                let mut overflow = |tile| {
+                                    overflowed.push(tile);
+                                    refuse_overflow
+                                };
+                                let blocked = if cached {
+                                    neighbors.blocked_in(
+                                        (centre, reach),
+                                        window,
+                                        &work,
+                                        &mut test,
+                                        &mut overflow,
+                                    )
+                                } else {
+                                    index.blocked_in(
+                                        (centre, reach),
+                                        window,
+                                        naval,
+                                        salt,
+                                        &work,
+                                        &mut test,
+                                        &mut overflow,
+                                    )
+                                };
+                                let mut metrics = RouteMetrics::default();
+                                work.snapshot(&mut metrics);
+                                (blocked, seen, overflowed, metrics.group_collision_work)
+                            };
+                            assert_eq!(query(true), query(false));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn cyclic_collision_samples_keep_order_and_the_actual_work_bound() {
     use crate::game_world::route_scheduler::GroupWork;
     let tile = TileCoord::new(2, 3);
