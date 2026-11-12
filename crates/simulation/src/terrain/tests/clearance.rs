@@ -1,5 +1,51 @@
 use super::*;
 
+#[test]
+fn snapshot_land_clearance_does_not_compose_unused_walk_chunks() {
+    let source = aoe_map::MapChunkGenerator::new([7; 32], 7, 64);
+    let loaded = aoe_map::MapChunkGenerator::new([7; 32], 7, 64);
+    let chunks = (0..2)
+        .flat_map(|y| (0..2).map(move |x| (x, y)))
+        .map(|(x, y)| {
+            source
+                .prepare_static_navigation_chunk(x, y, &|| false)
+                .unwrap()
+        })
+        .collect();
+    loaded.install_static_navigation(chunks).unwrap();
+    let mut world = GameWorld::new(WorldConfig::new(64, 64, Seed(7)).unwrap()).unwrap();
+    world.terrain = Terrain::Map {
+        generator: loaded.clone(),
+        overlay: ResourceOverlay::default(),
+    };
+    let before = world.canonical_hash();
+    for y in [5, 30, 63] {
+        for x in [5, 30, 63] {
+            let tile = TileCoord::new(x, y);
+            assert_eq!(
+                world.static_clearance(UnitKind::Militia, tile),
+                reference(&world, UnitKind::Militia, tile)
+            );
+        }
+    }
+    assert_eq!(world.canonical_hash(), before);
+    assert_eq!(
+        loaded.walk_cache_usage(),
+        (0, 0),
+        "land reads must reuse the complete navigation snapshot"
+    );
+    let tile = TileCoord::new(30, 30);
+    assert_eq!(
+        world.static_clearance(UnitKind::Galley, tile),
+        reference(&world, UnitKind::Galley, tile)
+    );
+    assert!(
+        loaded.walk_cache_usage().1 > 0,
+        "naval clearance still prepares full water samples"
+    );
+    assert_eq!(world.canonical_hash(), before);
+}
+
 fn reference(w: &GameWorld, kind: UnitKind, tile: TileCoord) -> u8 {
     let mut nearest = 15;
     for dy in -8_i32..=8 {

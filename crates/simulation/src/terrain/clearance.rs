@@ -150,7 +150,7 @@ impl GameWorld {
             }
             return Some(solid);
         }
-        self.prepare_clearance_page(key.1, key.2);
+        self.prepare_clearance_page(kind, key.1, key.2);
         let mut solid = Box::new(Solid {
             bits: [0; WORDS],
             dirty: [0; WORDS],
@@ -167,10 +167,15 @@ impl GameWorld {
     /// tiles: a cold point read evaluates the landscape alone (about 85,000
     /// instructions a tile), a composed chunk shares that work. Chunks are a
     /// pure function of the generator, so this changes cost, never a value.
-    fn prepare_clearance_page(&self, page_x: i32, page_y: i32) {
+    fn prepare_clearance_page(&self, kind: UnitKind, page_x: i32, page_y: i32) {
         let super::Terrain::Map { generator, .. } = &self.terrain else {
             return;
         };
+        // Land passability already comes from the complete navigation snapshot.
+        // Naval reads still need the full water samples in composed walk chunks.
+        if !kind.is_naval() && generator.has_static_navigation() {
+            return;
+        }
         let chunks = |page: i32, limit: i32| {
             let last = (limit - 1).div_euclid(aoe_map::CHUNK_TILES);
             let low = (page * SIDE).div_euclid(aoe_map::CHUNK_TILES).max(0);
