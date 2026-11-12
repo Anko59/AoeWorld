@@ -1,6 +1,7 @@
 //! Unordered armies defend their owners without a controller issuing targets.
 use super::*;
 use crate::{BuildingKind, UnitKind};
+mod sleep;
 
 #[test]
 fn far_pursuit_budget_does_not_starve_later_units_when_the_target_keeps_moving() {

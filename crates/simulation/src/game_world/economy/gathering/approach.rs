@@ -66,13 +66,20 @@ impl GameWorld {
     /// clearance, rather than another worker's future point, decide arrival.
     pub(super) fn gather_contact(&self, index: usize, task: &GatherTask) -> bool {
         let unit = self.units[index].state;
+        self.gather_contact_geometry(index, task)
+            && self.body_position_clear(unit.kind, unit.position)
+            && self.work_contact_clear(index)
+    }
+
+    pub(super) fn gather_contact_geometry(&self, index: usize, task: &GatherTask) -> bool {
+        let unit = self.units[index].state;
         if task.phase != GatherPhase::Approaching
             || unit.kind != UnitKind::Villager
             || task.animal.is_some()
         {
             return false;
         }
-        let contact = if task.farm.is_some() {
+        if task.farm.is_some() {
             // Keep the whole body on this walkable 3-by-3 crop, so stopping
             // early cannot obstruct a neighboring plot's entrance.
             let scale = i64::from(FIXED_SUBUNITS_PER_TILE);
@@ -85,10 +92,7 @@ impl GameWorld {
                 && y + radius <= (cy + 2) * scale
         } else {
             within_work_reach(unit.kind, unit.position, task.tile)
-        };
-        contact
-            && self.body_position_clear(unit.kind, unit.position)
-            && self.work_contact_clear(index)
+        }
     }
 
     pub(crate) fn resource_has_work_spot(&self, id: EntityId, target: TileCoord) -> bool {

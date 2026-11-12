@@ -11,6 +11,9 @@ impl GameWorld {
     /// The one mutable path to a building: the change reaches the memory of
     /// every player watching it at the next refresh.
     pub(crate) fn building_mut(&mut self, id: EntityId) -> Option<&mut GameBuilding> {
+        self.wake_construction(id);
+        self.wake_queues(id);
+        self.wake_garrison(id);
         let building = self.economy.buildings.get_mut(&id)?;
         self.vision.dirty_buildings.insert(id);
         Some(building)
@@ -33,6 +36,14 @@ impl GameWorld {
     /// Copies each changed or newly watched building into the memory of the
     /// players watching it. Returns the buildings visited.
     pub(crate) fn remember_visible_buildings(&mut self) -> usize {
+        // Progress changes the externally observed snapshot on every tick even
+        // while the crew sleeps. Visit sites for publication, never workers.
+        self.vision
+            .dirty_buildings
+            .extend(self.economy.construction.progressing());
+        self.vision
+            .dirty_buildings
+            .extend(self.economy.queues.progressing());
         let dirty = std::mem::take(&mut self.vision.dirty_buildings);
         if self.vision.disabled {
             return 0;
@@ -45,13 +56,17 @@ impl GameWorld {
             ) else {
                 continue;
             };
+            let building = self
+                .economy
+                .queues
+                .project(self.economy.construction.project(building));
             for player in &watched.watchers {
                 if let Some(vision) = self.vision.players.get_mut(player)
                     // Only a differing snapshot is a change.
-                    && vision.remembered.get(&id) != Some(building)
+                    && vision.remembered.get(&id) != Some(building.as_ref())
                 {
                     vision.changed.insert(id);
-                    vision.remembered.insert(id, building.clone());
+                    vision.remembered.insert(id, building.clone().into_owned());
                 }
             }
         }
@@ -67,11 +82,15 @@ impl GameWorld {
             let Some(building) = self.economy.buildings.get(id) else {
                 continue;
             };
+            let building = self
+                .economy
+                .queues
+                .project(self.economy.construction.project(building));
             for player in &watched.watchers {
                 if let Some(vision) = self.vision.players.get(player) {
                     assert_eq!(
                         vision.remembered.get(id),
-                        Some(building),
+                        Some(building.as_ref()),
                         "building {id:?} changed without building_mut (player {player:?})"
                     );
                 }

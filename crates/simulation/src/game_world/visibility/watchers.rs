@@ -105,6 +105,7 @@ impl GameWorld {
         player: PlayerId,
         footprint: TileRect,
     ) {
+        self.combat.quiet.wake_area(footprint);
         let span = self.building(id).and_then(|b| b.bridge_span);
         for y in footprint.min.y..footprint.max.y {
             for x in footprint.min.x..footprint.max.x {
@@ -153,6 +154,7 @@ impl GameWorld {
 
     /// Queues a removed building for the next flush.
     pub(crate) fn forget_building(&mut self, id: EntityId, footprint: TileRect) {
+        self.combat.quiet.wake_area(footprint);
         self.vision.dirty_buildings.remove(&id);
         for y in footprint.min.y..footprint.max.y {
             for x in footprint.min.x..footprint.max.x {

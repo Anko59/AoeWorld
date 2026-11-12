@@ -1,6 +1,7 @@
 //! Integer Castle mechanics; values from the local licensed DE VER 8.9 DAT.
 use super::*;
 use crate::{Age, BuildingKind, Tech, UnitKind};
+mod rest;
 
 fn castle() -> GameWorld {
     let mut w = world();

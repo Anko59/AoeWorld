@@ -185,7 +185,7 @@ fn training_counts_existing_workers_all_tc_queues_and_sheltered_villagers() {
     pass(&mut w);
     let queued = |w: &GameWorld| {
         w.buildings()
-            .flat_map(|b| &b.training_queue)
+            .flat_map(|b| b.training_queue.iter().copied().collect::<Vec<_>>())
             .filter(|e| e.kind == UnitKind::Villager)
             .count()
     };

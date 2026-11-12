@@ -169,6 +169,10 @@ fn an_enemy_on_a_foundation_stalls_construction_until_it_leaves() {
     advance(&mut world, 700);
     assert!(!world.building(id).unwrap().is_complete());
     assert!(world.unit(enemy).is_some());
+    assert!(
+        world.construction_work().visits < 20,
+        "a blocked site must not poll its crew"
+    );
     world.remove_unit(enemy);
     finish(&mut world, id);
 }

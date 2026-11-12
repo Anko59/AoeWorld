@@ -125,11 +125,14 @@ impl GameWorld {
             return Err(GameWorldError::Unreachable);
         }
         if origin == destination {
+            self.combat.quiet.wake(id);
+            self.combat.healing.wake(id);
             self.leave_group(id);
             self.move_queues.remove(&id);
             self.clear_planner(index);
             self.set_movement_error(index, None);
             self.units[index].order = None;
+            self.economy.gatherers.wake_walking(id);
             self.units[index].obstruction = None;
             self.units[index].route.clear();
             self.units[index].state.moving = false;
@@ -152,6 +155,8 @@ impl GameWorld {
                 }
             };
         let speed_carry = self.units[index].order.map_or(0, |order| order.speed_carry);
+        self.combat.quiet.wake(id);
+        self.combat.healing.wake(id);
         self.leave_group(id);
         self.move_queues.remove(&id);
         let dx = i64::from(waypoint.x) - i64::from(origin.x);

@@ -196,7 +196,8 @@ impl GameWorld {
             attacker: a.state.id,
             tick: self.tick,
         });
-        let (victim, killed) = (unit.player, unit.hp == 0);
+        let (victim, killed, at) = (unit.player, unit.hp == 0, unit.position.tile_floor());
+        self.combat.healing.notify(at);
         self.record_combat_hit(None, victim, false, killed);
         if killed {
             self.kill_unit(index);

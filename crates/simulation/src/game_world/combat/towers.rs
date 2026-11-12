@@ -150,7 +150,7 @@ impl GameWorld {
             if manual.is_none() {
                 self.combat.tower_targets.remove(&id);
             }
-            let target = manual.or_else(|| self.acquire_target(&area, true));
+            let target = manual.or_else(|| self.acquire_target(&area, true).target);
             if let Some(target) = target {
                 self.combat.tower_ready.insert(
                     id,

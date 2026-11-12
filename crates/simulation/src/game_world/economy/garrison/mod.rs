@@ -6,6 +6,7 @@ use aoe_core::{EntityId, PlayerId, TileRect};
 mod hash;
 mod release;
 mod research;
+pub(crate) mod timers;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct GarrisonedUnit {
@@ -86,7 +87,7 @@ impl GameWorld {
         if !shelter.kind.admits(actor.kind) {
             return Err(EconomyError::WrongUnitKind);
         }
-        if actor.kind == UnitKind::Steward && self.steward_reserved(shelter, Some(unit)) {
+        if actor.kind == UnitKind::Steward && self.steward_reserved(&shelter, Some(unit)) {
             return Err(EconomyError::StewardExists);
         }
         let reserved = usize::from(
@@ -261,24 +262,10 @@ impl GameWorld {
                 self.set_steward_town_center(id, Some(building));
             }
             self.economy.occupied_garrisons.insert(building);
+            self.wake_garrison(building);
             self.combat.tower_ready.entry(building).or_insert(0);
         }
-        for id in self.economy.occupied_garrisons.clone() {
-            self.mark_building_changed(id);
-            let Some(building) = self.economy.buildings.get_mut(&id) else {
-                continue;
-            };
-            for occupant in &mut building.garrison {
-                if self.tick.0 >= occupant.heal_at {
-                    occupant.unit.hp = occupant.unit.hp.saturating_add(1).min(occupant.unit.max_hp);
-                    if occupant.unit.hp == occupant.unit.max_hp {
-                        self.combat.hp_quarters[occupant.unit.id.0 as usize] = 0;
-                    }
-                    occupant.heal_at =
-                        self.tick.0 + building.kind.heal_seconds() * u64::from(self.config.tick_hz);
-                }
-            }
-        }
+        self.advance_garrison_healing();
         // Rare blocked destruction exits retry once per second, retaining units.
         if self.tick.0.is_multiple_of(u64::from(self.config.tick_hz)) {
             let pending = std::mem::take(&mut self.economy.ejections);
@@ -330,6 +317,7 @@ impl GameWorld {
             self.set_steward_town_center(id, Some(building));
         }
         self.economy.occupied_garrisons.insert(building);
+        self.wake_garrison(building);
         self.combat.tower_ready.entry(building).or_insert(0);
         true
     }

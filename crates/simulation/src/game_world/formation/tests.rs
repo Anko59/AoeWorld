@@ -1,6 +1,47 @@
 use super::*;
 
 #[test]
+fn a_detached_member_rejoining_without_displacement_wakes_acquisition() {
+    let build = |sleep| {
+        let mut w = GameWorld::new(WorldConfig::new(256, 256, aoe_core::Seed(1)).unwrap()).unwrap();
+        w.set_work_sleep(sleep);
+        let at = WorldPosition::new(100 * 1024, 100 * 1024);
+        let id = w.spawn_kind(PlayerId(0), UnitKind::Militia, at).unwrap();
+        w.issue_formation_move(
+            PlayerId(0),
+            &[id],
+            Formation::Line,
+            WorldPosition::new(125 * 1024, at.y),
+            false,
+            true,
+        )
+        .unwrap();
+        // A detached member finished an intermediate route and is idle until
+        // the normal rejoin pass restores the remaining group march.
+        w.formations.get_mut(&id).unwrap().members[0].detached = true;
+        let index = w.lookup[&id];
+        w.units[index].order = None;
+        w.units[index].state.moving = false;
+        w.units[index].state.planning = false;
+        w.units[index].state.task = UnitTask::Idle;
+        w.active_movers.remove(id);
+        w.advance_combat(&mut Vec::new());
+        (w, id)
+    };
+    let (mut on, id) = build(true);
+    let (mut off, _) = build(false);
+    assert_eq!(on.canonical_hash(), off.canonical_hash());
+    let position = on.unit(id).unwrap().position;
+    for w in [&mut on, &mut off] {
+        w.rejoin_detached_members();
+        assert_eq!(w.unit(id).unwrap().position, position);
+        assert!(w.unit(id).unwrap().moving);
+        w.advance_combat(&mut Vec::new());
+    }
+    assert_eq!(on.canonical_hash(), off.canonical_hash());
+}
+
+#[test]
 fn formation_certificate_bound_respects_homogeneous_physical_speed_and_carry() {
     let mut w = GameWorld::new(WorldConfig::new(256, 256, aoe_core::Seed(1)).unwrap()).unwrap();
     let at = WorldPosition::new(100 * 1024, 100 * 1024);

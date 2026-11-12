@@ -119,9 +119,8 @@ impl Wildlife {
     pub(crate) fn take_unit_changes(&mut self) -> BTreeSet<EntityId> {
         self.hunts.take_changes()
     }
-    /// Ids that currently hold a hunt job.
-    pub(crate) fn hunter_ids(&self) -> impl Iterator<Item = &EntityId> {
-        self.hunts.keys()
+    pub(crate) fn has_hunt(&self, id: EntityId) -> bool {
+        self.hunts.contains_key(&id)
     }
 
     pub(crate) fn is_idle(&self) -> bool {
@@ -234,6 +233,14 @@ impl GameWorld {
     }
 
     pub(crate) fn track_unit_cell(&mut self, unit: &GameUnit) {
+        self.combat.healing.wake(unit.id);
+        if unit.hp > 0 && unit.hp < unit.max_hp && !unit.kind.is_naval() && !unit.kind.is_siege() {
+            self.combat.healing.notify(unit.position.tile_floor());
+        }
+        self.economy
+            .gatherers
+            .notify_walkers_at(unit.position.tile_floor());
+        self.wake_queue_exits(unit.position.tile_floor());
         self.collisions.observe_kind(unit.kind);
         self.collisions.insert(
             unit.id,
@@ -264,7 +271,23 @@ impl GameWorld {
         previous_tile: TileCoord,
         unit: &GameUnit,
     ) {
+        self.combat.quiet.wake(id);
+        self.combat.healing.wake(id);
+        if unit.hp > 0 && unit.hp < unit.max_hp && !unit.kind.is_naval() && !unit.kind.is_siege() {
+            self.combat.healing.notify(previous_tile);
+            self.combat.healing.notify(unit.position.tile_floor());
+        }
+        self.economy.gatherers.notify_walkers_at(previous_tile);
+        self.wake_queue_exits(previous_tile);
         let tile = unit.position.tile_floor();
+        if previous_tile != tile {
+            self.economy.gatherers.notify_walkers_at(tile);
+            self.wake_queue_exits(tile);
+        }
+        self.wake_construction_at(previous_tile);
+        if previous_tile != tile {
+            self.wake_construction_at(tile);
+        }
         // The spacing index stores tile membership, not sub-tile positions. Keep
         // the exact collision and wildlife mirrors, which queries do observe.
         {
@@ -315,6 +338,9 @@ impl GameWorld {
     }
 
     pub(crate) fn untrack_unit_at(&mut self, id: EntityId, at: WorldPosition) {
+        self.economy.gatherers.notify_walkers_at(at.tile_floor());
+        self.wake_queue_exits(at.tile_floor());
+        self.wake_construction_at(at.tile_floor());
         self.collisions.remove(
             id,
             at.tile_floor(),
@@ -325,6 +351,9 @@ impl GameWorld {
     }
 
     pub(crate) fn track_unit_death(&mut self, id: EntityId, at: WorldPosition) {
+        self.economy.gatherers.notify_walkers_at(at.tile_floor());
+        self.wake_queue_exits(at.tile_floor());
+        self.wake_construction_at(at.tile_floor());
         self.collisions.remove(
             id,
             at.tile_floor(),

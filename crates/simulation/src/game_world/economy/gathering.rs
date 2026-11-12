@@ -23,6 +23,7 @@ mod returning;
 mod sleep;
 pub(crate) use sleep::GatherSleep;
 mod dozing;
+mod walking;
 mod work;
 pub use work::GatherWork;
 pub(crate) use work::{Count, GatherCounters};
@@ -206,6 +207,11 @@ impl GameWorld {
             self.economy.gatherers.remove(&id);
         }
         self.index_destination(id);
+        if let Some(unit) = self.unit(id) {
+            self.economy
+                .gatherers
+                .notify_walkers_at(unit.position.tile_floor());
+        }
         if let Some(old) = previous_farm
             && Some(old) != farm
         {
@@ -222,7 +228,11 @@ impl GameWorld {
         self.wake_before_gathering(changed);
         self.economy.gatherers.begin_loop();
         let mut cursor = None;
-        while let Some(id) = self.economy.gatherers.next_awake(cursor) {
+        loop {
+            self.wake_walker_contacts();
+            let Some(id) = self.economy.gatherers.next_awake(cursor) else {
+                break;
+            };
             cursor = Some(id);
             self.economy.gatherers.observe_crowd(id);
             self.refine_gather_approach(id);
@@ -266,9 +276,17 @@ impl GameWorld {
             {
                 self.index_destination(id);
             }
+            if !keep && let Some(unit) = self.unit(id) {
+                self.economy
+                    .gatherers
+                    .notify_walkers_at(unit.position.tile_floor());
+            }
             if let Some(after) = self.unit(id)
                 && after != before
             {
+                self.economy
+                    .gatherers
+                    .notify_walkers_at(after.position.tile_floor());
                 changed.push(after.id);
             }
         }

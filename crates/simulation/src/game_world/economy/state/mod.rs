@@ -1,12 +1,13 @@
 //! Mutable economy indexes and test-only work accounting.
 use super::{
-    BuildTask, BuildingKind, GameBuilding, GarrisonedUnit, PlayerEconomy, WorldLimits, farm,
-    gathering, scouting, steward,
+    BuildingKind, GameBuilding, GarrisonedUnit, PlayerEconomy, WorldLimits, farm, gathering,
+    scouting, steward,
 };
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 use std::collections::{BTreeMap, BTreeSet};
 mod census;
 mod income;
+mod query;
 
 #[cfg(test)]
 #[derive(Debug, Default)]
@@ -17,6 +18,9 @@ pub(crate) struct TickWork {
     /// Cumulative gatherer visits, and those that slept through the step.
     pub(crate) gather_visits: usize,
     pub(crate) gather_slept: usize,
+    pub(crate) builder_slept: usize,
+    /// Occupant entries actually visited by garrison healing.
+    pub(crate) garrison_units: usize,
 }
 
 #[derive(Debug, Default)]
@@ -34,6 +38,7 @@ pub(crate) struct Economy {
     pub(crate) garrison_stewards: BTreeMap<EntityId, EntityId>,
     pub(crate) garrison_reservations: BTreeMap<EntityId, u8>,
     pub(crate) occupied_garrisons: BTreeSet<EntityId>,
+    pub(crate) garrison_timers: super::garrison::timers::Timers,
     pub(crate) ejections: BTreeMap<EntityId, (TileRect, Vec<GarrisonedUnit>)>,
     pub(crate) cargo: crate::game_world::changes::Reports<Vec<EntityId>>,
     pub(crate) transport_journeys: BTreeMap<EntityId, super::super::navy::Journey>,
@@ -43,6 +48,7 @@ pub(crate) struct Economy {
     pub(crate) buildings: BTreeMap<EntityId, GameBuilding>,
     pub(crate) farm_production: BTreeMap<EntityId, farm::FarmProduction>,
     // Derived ordered worksets; building queues remain the canonical state.
+    pub(crate) queues: super::training::timers::QueueTimers,
     pub(crate) active_training: BTreeSet<EntityId>,
     pub(crate) active_research: BTreeSet<EntityId>,
     /// Every building per player and kind, ascending by id: drop-off
@@ -70,7 +76,8 @@ pub(crate) struct Economy {
     pub(crate) late_changed: Vec<EntityId>,
     /// Benchmark counters (`GameWorld::gather_work`). Not replay state.
     pub(crate) gather_work: super::gathering::GatherCounters,
-    pub(crate) builders: BTreeMap<EntityId, BuildTask>,
+    pub(crate) builders: super::construction::Builders,
+    pub(crate) construction: super::construction::ConstructionTimers,
     pub(crate) depletions: Vec<aoe_map::Depletion>,
     pub(crate) limits: WorldLimits,
 }

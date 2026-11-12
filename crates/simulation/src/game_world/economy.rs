@@ -6,6 +6,7 @@ use std::collections::{BTreeSet, VecDeque};
 mod benchmark;
 mod buildings;
 mod construction;
+pub use construction::ConstructionWork;
 #[path = "economy/construction/demo.rs"]
 mod demo;
 pub use demo::{BehaviourScene, LateGameSeat, LateGameSeeded};
@@ -425,34 +426,6 @@ impl super::GameWorld {
     /// Replace the capacity limits (scale measurements only).
     pub fn set_limits(&mut self, limits: WorldLimits) {
         self.economy.limits = limits;
-    }
-    pub fn buildings(&self) -> impl Iterator<Item = &GameBuilding> {
-        self.economy.buildings.values()
-    }
-    /// One player's buildings, kind by kind, from the per-player index.
-    pub(crate) fn player_buildings(&self, player: PlayerId) -> impl Iterator<Item = &GameBuilding> {
-        self.economy
-            .dropoffs
-            .range((player, BuildingKind::TownCenter)..)
-            .take_while(move |((owner, _), _)| *owner == player)
-            .flat_map(|(_, ids)| ids.iter())
-            .filter_map(|id| self.economy.buildings.get(id))
-    }
-    /// One player's buildings of one kind, ascending by id.
-    pub(crate) fn player_buildings_of(
-        &self,
-        player: PlayerId,
-        kind: BuildingKind,
-    ) -> impl Iterator<Item = &GameBuilding> {
-        self.economy
-            .dropoffs
-            .get(&(player, kind))
-            .into_iter()
-            .flatten()
-            .filter_map(|id| self.economy.buildings.get(id))
-    }
-    pub fn building(&self, id: EntityId) -> Option<&GameBuilding> {
-        self.economy.buildings.get(&id)
     }
     pub fn player_economy(&self, player: PlayerId) -> Option<PlayerEconomy> {
         self.economy.players.get(&player).copied()

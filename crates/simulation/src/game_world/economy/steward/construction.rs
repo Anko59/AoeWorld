@@ -152,7 +152,7 @@ impl GameWorld {
             if let Ok(id) = self.issue_build(s.player, &[worker], kind, tile, false) {
                 self.steward_site_cursor(s, cursor, 0);
                 if let Some(b) = self.building(id) {
-                    s.buildings.push(b.clone());
+                    s.buildings.push(b.into_owned());
                 }
                 return true;
             }
