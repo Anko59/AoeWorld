@@ -49,8 +49,15 @@ pub(super) fn assign_materials(
     }
 }
 
+/// Scene material of the native farm field, painted by the building foundations.
+const FARM_FIELD: u8 = 17;
+
 fn blendable(triangle: &ProjectedSurfaceTriangle, wet: bool) -> bool {
-    !triangle.skirt
+    // A farm field is one material to its very edge. Its vertices read the
+    // tile half a tile behind each corner, so blending would turn the far
+    // corner of an isolated field into the dirt around it.
+    triangle.material != FARM_FIELD
+        && !triangle.skirt
         && triangle.texture_materials.is_some()
         && water_material(triangle.material) == wet
 }
