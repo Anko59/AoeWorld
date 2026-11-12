@@ -44,12 +44,23 @@ pub fn apply_building_foundations(
             {
                 return None;
             }
-            let id = unit.kind.building_id()?;
+            let id = unit.kind.oriented_building_id(unit.facing)?;
             let building = art.compositions.iter().find(|b| b.unit_id == id);
             let side = unit.kind.building_side().unwrap_or(1.0) as f32;
-            let footprint = building.map_or(if id == 792 { [4.0, 1.0] } else { [side; 2] }, |b| {
-                b.footprint
-            });
+            let footprint = building.map_or(
+                match id {
+                    796 => [4.0, 1.0],
+                    792 => [1.0, 4.0],
+                    _ => [side; 2],
+                },
+                |b| {
+                    if matches!(id, 792 | 796) {
+                        [b.footprint[1], b.footprint[0]]
+                    } else {
+                        b.footprint
+                    }
+                },
+            );
             let lower = [0, 1].map(|axis| unit.position[axis] - f64::from(footprint[axis]) / 2.0);
             let upper = [0, 1].map(|axis| unit.position[axis] + f64::from(footprint[axis]) / 2.0);
             if (0..2).any(|axis| upper[axis] + 1.0 <= min[axis] || lower[axis] - 1.0 > max[axis]) {

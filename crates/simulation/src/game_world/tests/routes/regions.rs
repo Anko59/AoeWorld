@@ -33,7 +33,13 @@ fn a_certified_frontier_route_survives_the_disconnected_requested_goal() {
     // Stop at the first certified endpoint, before its path has been emitted.
     for _ in 0..MAX_ROUTE_WORK_PER_ORDER {
         assert_eq!(
-            world.poll_world_route_planner(&mut planner, 1, &|| false, UnitKind::Villager),
+            world.poll_world_route_planner(
+                &mut planner,
+                1,
+                &|| false,
+                UnitKind::Villager,
+                aoe_core::PlayerId(0)
+            ),
             RoutePlannerPoll::Pending
         );
         if planner.certified_destination().is_some() {

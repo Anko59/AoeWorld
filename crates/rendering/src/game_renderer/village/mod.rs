@@ -202,7 +202,7 @@ pub(super) fn building_select(
     let Some(building) = art
         .compositions
         .iter()
-        .find(|b| Some(b.unit_id) == unit.kind.building_id())
+        .find(|b| Some(b.unit_id) == unit.kind.oriented_building_id(unit.facing))
     else {
         sprite_building(art, unit, camera, animation, emit);
         return;
@@ -289,14 +289,16 @@ pub(super) fn building_select(
         if !part.animation.is_empty() {
             let angles = usize::from(part.angles).max(1);
             let count = part.animation.len() / angles;
-            let angle = if unit.kind.is_foundation() || unit.kind == SceneUnitKind::PalisadeWall {
-                usize::from(unit.facing).min(angles - 1)
+            let wall = matches!(
+                unit.kind,
+                SceneUnitKind::PalisadeWall | SceneUnitKind::StoneWall
+            );
+            let angle = if unit.kind.is_foundation() || wall {
+                usize::from(unit.facing & 15).min(angles - 1)
             } else {
                 unit.id.0 as usize % angles
             };
-            let index = if unit.kind.is_foundation()
-                || (unit.kind == SceneUnitKind::PalisadeWall && !is_overlay)
-            {
+            let index = if unit.kind.is_foundation() || (wall && !is_overlay) {
                 0
             } else if part.frame_rate > 0.0 {
                 {
@@ -377,7 +379,7 @@ pub(super) fn sprite_building(
         return;
     }
     let index = if (9..=12).contains(&art_slot) || matches!(art_slot, 24 | 43) {
-        usize::from(unit.facing).min(frames.len() - 1)
+        usize::from(unit.facing & 15).min(frames.len() - 1)
     } else if art_slot == 40 {
         animation % frames.len()
     } else if art_slot == 7 || art_slot == 71 {

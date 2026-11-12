@@ -1,11 +1,44 @@
 //! A completed (palisade or stone) gate opens when an owned unit approaches, and cannot close
 //! through a living unit. It is four by one tiles along a wall line in either axis.
-//! Route plans treat a completed gate as open ground (see `routes_through_gate`);
-//! only movement collision (`blocked_tiles`) closes it.
+//! Planning admits an unlocked owner gate, or an unlocked currently open enemy
+//! gate. Collision opens on approach, and never closes through a living unit.
 use crate::{GameWorld, Terrain};
 use aoe_core::{TileCoord, TileRect};
 
 impl GameWorld {
+    /// Locking changes planning admission immediately. Physical closing waits
+    /// for the ordinary gate tick, which keeps a living threshold occupant safe.
+    pub fn set_gate_locked(
+        &mut self,
+        player: aoe_core::PlayerId,
+        id: aoe_core::EntityId,
+        locked: bool,
+    ) -> Result<(), crate::EconomyError> {
+        let gate = self
+            .building_mut(id)
+            .ok_or(crate::EconomyError::UnknownEntity)?;
+        if gate.player != player {
+            return Err(crate::EconomyError::NotOwner);
+        }
+        if !gate.kind.is_gate() {
+            return Err(crate::EconomyError::NotBuildable);
+        }
+        if !gate.is_complete() {
+            return Err(crate::EconomyError::UnderConstruction);
+        }
+        if gate.gate_locked == locked {
+            return Ok(());
+        }
+        gate.gate_locked = locked;
+        let rect = gate.footprint;
+        if locked {
+            self.collision_closed(rect);
+        } else {
+            self.collision_opened(rect);
+        }
+        self.remember_visible_buildings();
+        Ok(())
+    }
     /// A save puts a completed gate back: ground opens as it does on the first
     /// tick, and an open gate also frees its collision tiles.
     pub(crate) fn restore_gate(&mut self, id: aoe_core::EntityId, open: bool) {
@@ -42,9 +75,9 @@ impl GameWorld {
             .iter()
             .filter_map(|id| self.economy.buildings.get(id))
             .filter(|b| b.is_complete())
-            .map(|b| (b.id, b.player, b.footprint))
+            .map(|b| (b.id, b.player, b.footprint, b.gate_locked))
             .collect();
-        for (id, owner, rect) in gates {
+        for (id, owner, rect, locked) in gates {
             if let Terrain::Map { overlay, .. } = &mut self.terrain
                 && overlay.blocks_tile(rect.min)
             {
@@ -59,7 +92,7 @@ impl GameWorld {
                 ),
             );
             let nearby = self.query(query).0;
-            let open = nearby.iter().any(|u| u.hp > 0 && u.player == owner)
+            let open = (!locked && nearby.iter().any(|u| u.hp > 0 && u.player == owner))
                 || nearby
                     .iter()
                     .any(|u| u.hp > 0 && rect.contains(u.position.tile_floor()));

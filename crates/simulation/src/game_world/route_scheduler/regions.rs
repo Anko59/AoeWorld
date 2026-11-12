@@ -1,6 +1,6 @@
 //! Land reachability for orders, read from `aoe_map::Regions` over the same
 //! ground the route planner searches. A completed gate is a gated portal: it
-//! admits its owner or anyone while open. Toggling changes only admitted
+//! admits its owner or anyone while open, unless locked. Toggling changes only admitted
 //! edges, never chunk labels. The layer is a pure cache; it is never hashed.
 use crate::{GameWorld, GameWorldError, Terrain};
 use aoe_core::{PlayerId, TileCoord, TileRect};
@@ -102,10 +102,15 @@ impl RegionGround for Ground<'_> {
     }
 
     fn gate_owner(&self, gate: u32) -> u32 {
-        self.gates()
-            .values()
-            .find(|(id, _)| *id == gate)
-            .map_or(u32::MAX, |&(_, owner)| owner)
+        self.world
+            .building(aoe_core::EntityId(gate))
+            .map_or(u32::MAX, |b| u32::from(b.player.0))
+    }
+
+    fn gate_locked(&self, gate: u32) -> bool {
+        self.world
+            .building(aoe_core::EntityId(gate))
+            .is_some_and(|b| b.gate_locked)
     }
 
     fn gate_open(&self, gate: u32) -> bool {

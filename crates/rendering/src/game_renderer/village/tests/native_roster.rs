@@ -129,7 +129,7 @@ fn single_direction_ship_deaths_use_their_dat_row_for_every_native_heading() {
 fn rebased_stone_barriers_keep_dat_identity_and_do_not_alias_native_actors() {
     assert_eq!(std::mem::size_of::<SceneUnitKind>(), 2);
     assert_eq!(std::mem::size_of::<SceneUnit>(), 32);
-    for (slot, id) in [(71, 117), (72, 64), (73, 64)] {
+    for (slot, id) in [(71, 117), (72, 490), (73, 490)] {
         let kind = SceneUnitKind::building(slot);
         assert_eq!(kind.building_id(), Some(id));
         assert_eq!(kind.building_slot(), Some(slot));
@@ -145,7 +145,7 @@ fn rebased_stone_barriers_keep_dat_identity_and_do_not_alias_native_actors() {
 fn rebased_stone_gate_uses_the_dat_open_state() {
     let mut art = art();
     let building = &mut art.compositions[0];
-    building.unit_id = 64;
+    building.unit_id = 490;
     let closed = building.parts[0].clone();
     let mut open = closed.clone();
     open.frame.atlas.uv[0] += 0.25;

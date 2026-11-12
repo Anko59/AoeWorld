@@ -307,7 +307,15 @@ pub(in super::super) fn rubble_ticks(
         .art
         .compositions
         .iter()
-        .find(|b| Some(b.unit_id) == kind.building_id())
+        .find(|b| {
+            Some(b.unit_id)
+                == kind.oriented_building_id(crate::building_ui::building_facing(
+                    building.kind,
+                    1000,
+                    building.footprint,
+                    |_| false,
+                ))
+        })
         .map_or(0, |b| b.destruction_millis());
     (u64::from(millis) + 3000)
         .saturating_mul(u64::from(client.config.tick_hz))

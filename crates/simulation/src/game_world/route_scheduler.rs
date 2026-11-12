@@ -14,7 +14,6 @@ use std::collections::{BTreeMap, VecDeque};
 mod accounting;
 mod attribution;
 mod deadline;
-mod diagnostic;
 mod fast;
 mod group_end;
 mod issue;
@@ -319,7 +318,8 @@ impl GameWorld {
         } else {
             let probe = self.planning_probe.clone();
             let span = probe.as_ref().and_then(|p| p.movement_span("plan_fair"));
-            let result = self.poll_world_route_planner(&mut planner, allowance, &|| false, kind);
+            let result =
+                self.poll_world_route_planner(&mut planner, allowance, &|| false, kind, player);
             drop(span);
             let spent = planner.work().saturating_sub(work_before);
             if work_before == 0 && spent > 0 {
@@ -347,7 +347,7 @@ impl GameWorld {
                     self.route_metrics.sample("slow", kind, &planner);
                 }
                 if fast && fresh && planner.is_terminal() {
-                    self.cache_route(&planner, kind, &MovementOutcome::Path(path.clone()));
+                    self.cache_route(&planner, kind, player, &MovementOutcome::Path(path.clone()));
                 }
                 let mut route = VecDeque::from(path.tiles);
                 if route.pop_front() == Some(order.waypoint.tile_floor()) {
@@ -388,7 +388,7 @@ impl GameWorld {
             RoutePlannerPoll::Environment(error) => Some(GameWorldError::Environment(error)),
         };
         if fast && fresh && error == Some(GameWorldError::Unreachable) {
-            self.cache_route(&planner, kind, &MovementOutcome::Unreachable);
+            self.cache_route(&planner, kind, player, &MovementOutcome::Unreachable);
         }
         self.route_metrics.failed(planner.work());
         let caller = self.units[index].route_caller;

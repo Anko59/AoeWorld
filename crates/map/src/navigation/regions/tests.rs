@@ -9,6 +9,7 @@ struct Grid {
     cells: Vec<RegionTile>,
     owners: BTreeMap<u32, u32>,
     open_gates: BTreeSet<u32>,
+    locked_gates: BTreeSet<u32>,
     /// Blocked edges (height walls), stored both ways.
     walls: BTreeSet<(TileCoord, TileCoord)>,
     decks: BTreeSet<(TileCoord, TileCoord)>,
@@ -20,6 +21,7 @@ impl Grid {
             cells: vec![RegionTile::Open; (width * height) as usize],
             owners: BTreeMap::new(),
             open_gates: BTreeSet::new(),
+            locked_gates: BTreeSet::new(),
             walls: BTreeSet::new(),
             decks: BTreeSet::new(),
         }
@@ -49,6 +51,9 @@ impl RegionGround for Grid {
     }
     fn gate_open(&self, gate: u32) -> bool {
         self.open_gates.contains(&gate)
+    }
+    fn gate_locked(&self, gate: u32) -> bool {
+        self.locked_gates.contains(&gate)
     }
 }
 
@@ -337,3 +342,45 @@ mod buckets;
 
 #[path = "tests/lazy.rs"]
 mod lazy;
+
+#[test]
+fn locked_gates_block_owner_and_open_enemies_for_rays_and_cached_regions() {
+    for bucket in LandBucket::ALL {
+        for open in [false, true] {
+            let mut grid = walled_base();
+            if open {
+                grid.open_gates.insert(7);
+            }
+            let mut regions = Regions::new(120, 110, bucket);
+            let inside = TileCoord::new(50, 45);
+            let outside = TileCoord::new(50, 80);
+            let north = TileCoord::new(50, 10);
+            assert!(regions.reachable(&grid, 1, north, inside));
+            let before = regions.stats().relabels;
+            grid.locked_gates.insert(7);
+            regions.invalidate(TileCoord::new(48, 59), TileCoord::new(52, 60));
+            for player in [1, 2] {
+                let on_gate = TileCoord::new(50, 59);
+                assert!(!regions.reachable(&grid, player, on_gate, on_gate));
+                assert!(!regions.reachable(&grid, player, on_gate, north));
+                assert!(
+                    !regions.reachable(&grid, player, outside, inside),
+                    "ray: {bucket:?}, open={open}"
+                );
+                assert!(
+                    !regions.reachable(&grid, player, north, inside),
+                    "cached graph: {bucket:?}, open={open}"
+                );
+            }
+            assert_eq!(
+                regions.stats().relabels,
+                before,
+                "locking changes admission, never chunk labels"
+            );
+            grid.locked_gates.remove(&7);
+            regions.invalidate(TileCoord::new(48, 59), TileCoord::new(52, 60));
+            assert!(regions.reachable(&grid, 1, north, inside));
+            assert_eq!(regions.reachable(&grid, 2, north, inside), open);
+        }
+    }
+}

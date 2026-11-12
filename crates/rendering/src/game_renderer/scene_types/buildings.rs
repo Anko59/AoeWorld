@@ -50,19 +50,19 @@ const ROWS: [(SceneUnitKind, i16, u8); 88] = [
     (Blacksmith, 103, 3),
     (Market, 84, 4),
     (WatchTower, 79, 1),
-    (PalisadeGate, 792, 4),
+    (PalisadeGate, 796, 4),
     (RubbleArcheryRange, 87, 3),
     (RubbleStable, 101, 3),
     (RubbleBlacksmith, 103, 3),
     (RubbleMarket, 84, 4),
     (RubbleWatchTower, 79, 1),
-    (RubblePalisadeGate, 792, 4),
+    (RubblePalisadeGate, 796, 4),
     (FeudalTownCenter, 71, 4),
     (FeudalHouse, 463, 2),
     (FeudalMill, 129, 2),
     (FeudalBarracks, 498, 3),
-    (OpenPalisadeGate, 792, 4),
-    (GateFoundation, 792, 4),
+    (OpenPalisadeGate, 796, 4),
+    (GateFoundation, 796, 4),
     (FeudalDock, 133, 3),
     (Castle, 82, 4),
     (Monastery, 104, 3),
@@ -91,8 +91,8 @@ const ROWS: [(SceneUnitKind, i16, u8); 88] = [
     (BridgeBMiddle, 609, 1),
     (BridgeBBottom, 610, 1),
     (StoneWall, 117, 1),
-    (StoneGate, 64, 4),
-    (OpenStoneGate, 64, 4),
+    (StoneGate, 490, 4),
+    (OpenStoneGate, 490, 4),
     (ImperialTownCenter, 142, 4),
     (ImperialHouse, 465, 2),
     (ImperialLumberCamp, 565, 2),
@@ -125,7 +125,7 @@ const FOUNDATIONS: [(SceneUnitKind, i16, u8, u8); 53] = [
     (ConstructionBlacksmith, 103, 3, 11),
     (ConstructionMarket, 84, 4, 12),
     (ConstructionTower, 79, 1, 9),
-    (ConstructionGate, 792, 4, 43),
+    (ConstructionGate, 796, 4, 43),
     (ConstructionFeudalTownCenter, 71, 4, 12),
     (ConstructionFeudalHouse, 463, 2, 10),
     (ConstructionFeudalMill, 129, 2, 10),
@@ -178,7 +178,13 @@ const META: [Meta; SceneUnitKind::Actor0 as usize] = {
                 id,
                 slot: i as u8,
                 side,
-                flags: if rubble { RUBBLE } else { 0 },
+                flags: if i == 43 {
+                    FOUNDATION
+                } else if rubble {
+                    RUBBLE
+                } else {
+                    0
+                },
             };
         }
         i += 1;
@@ -243,6 +249,15 @@ impl SceneUnitKind {
     pub fn building_id(self) -> Option<i32> {
         let id = self.building_meta().id;
         (id >= 0).then_some(i32::from(id))
+    }
+    /// Gate axes select complete DAT assemblies, including their corner towers.
+    /// Bit 4 carries the axis independently of the low construction-stage bits.
+    pub fn oriented_building_id(self, facing: u8) -> Option<i32> {
+        match self.building_id()? {
+            490 if facing & 16 != 0 => Some(487),
+            796 if facing & 16 != 0 => Some(792),
+            id => Some(id),
+        }
     }
     pub(in crate::game_renderer) fn building_side(self) -> Option<f64> {
         let side = self.building_meta().side;
