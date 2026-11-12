@@ -14,6 +14,8 @@ mod tags;
 pub use tags::SceneUnitKind;
 #[path = "scene_types/aliases.rs"]
 mod aliases;
+#[path = "scene_types/corpse.rs"]
+mod corpse;
 
 #[path = "scene_actors.rs"]
 mod actors;

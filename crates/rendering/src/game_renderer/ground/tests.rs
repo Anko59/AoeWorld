@@ -446,3 +446,55 @@ fn bridge_rubble_and_destroyed_recipe_ids_do_not_paint_building_foundations() {
         assert_eq!(terrain[0].material, 0, "{kind:?} is not a live foundation");
     }
 }
+
+#[wasm_bindgen_test]
+fn an_isolated_farm_keeps_its_crops_to_the_far_corner() {
+    let mut art = crate::surface_mesh::mix::fixture::art();
+    art.compositions.push(crate::BuildingArt {
+        unit_id: 50,
+        footprint: [3.0; 2],
+        foundation_material: Some(17),
+        parts: Vec::new(),
+        states: Vec::new(),
+        construction: Vec::new(),
+        damage: Vec::new(),
+    });
+    let camera = test_camera();
+    let mut tiles = (-4..=4)
+        .flat_map(|y| {
+            (-4..=4).map(move |x| SceneTerrain {
+                position: [f64::from(x) + 0.5, f64::from(y) + 0.5],
+                material: 0,
+                elevation_meters: 0.0,
+                surface: SceneTerrainSurface::flat(0.0),
+                appearance: Some(SceneTerrainAppearance {
+                    canopy_strength: 0,
+                    floor_strength: 0,
+                    palette: 0,
+                    exposure: 0,
+                    height_band: 0,
+                }),
+            })
+        })
+        .collect::<Vec<_>>();
+    apply_building_foundations(&mut tiles, &art, &[test_unit(SceneUnitKind::Farm)]);
+    let faces = projected_surface_triangles(&tiles, camera);
+    let mut checked = 0;
+    for face in faces.iter().filter(|face| !face.skirt) {
+        let center =
+            [0, 1].map(|axis| face.points.iter().map(|p| p.world[axis]).sum::<f64>() / 3.0);
+        if center.iter().all(|v| (*v - 0.5).abs() < 1.5) {
+            // Vertex materials are read half a tile off the corners; the
+            // far edges of the field then blended into the dirt around it.
+            assert_eq!(
+                face.texture_materials,
+                Some([17; 3]),
+                "crops at {:?} order {}",
+                face.tile,
+                face.order
+            );
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, 18);
+}
