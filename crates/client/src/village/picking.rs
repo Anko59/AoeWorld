@@ -23,7 +23,13 @@ fn target(client: &Client, point: ScreenPoint, units_only: bool) -> Option<(Enti
     }
     let scene = map::scene::prepare(client);
     let terrain_depth = aoe_rendering::surface_depth_at(&scene.triangles, point);
-    let rendered = map::scene::units(client, &scene);
+    let fresh;
+    let rendered = if let Some(units) = client.rendered_frame.picking_units(&scene) {
+        units
+    } else {
+        fresh = map::scene::units(client, &scene);
+        &fresh
+    };
     let camera = SceneCamera {
         center: client.camera.center,
         zoom: client.camera.zoom,
@@ -131,7 +137,13 @@ fn building_target(client: &Client, point: ScreenPoint) -> Option<(f64, EntityId
         viewport: client.camera.viewport,
         focus_elevation_meters: client.camera.focus_elevation_meters,
     };
-    let rendered = map::scene::units(client, &scene);
+    let fresh;
+    let rendered = if let Some(units) = client.rendered_frame.picking_units(&scene) {
+        units
+    } else {
+        fresh = map::scene::units(client, &scene);
+        &fresh
+    };
     let world = map::world_at_screen(client, point);
     let road = world.and_then(|p| {
         let tile = aoe_core::TileCoord::new(p[0].floor() as i32, p[1].floor() as i32);
@@ -301,9 +313,9 @@ fn resource_unchecked(
         focus_elevation_meters: client.camera.focus_elevation_meters,
     };
     let world = map::world_at_screen(client, point);
+    let starting: Vec<_> = client.resources.starting_nodes().collect();
     if let Some(point) = world {
         let tile = aoe_core::TileCoord::new(point[0].floor() as i32, point[1].floor() as i32);
-        let starting: Vec<_> = client.resources.starting_nodes().collect();
         if let Some(node) = client
             .terrain_chunks
             .values()
@@ -330,8 +342,17 @@ fn resource_unchecked(
     }
     // Use the same reviewed body rectangle as rendering: clicking a tree's crown
     // must target the tree, not the ground several tiles behind it.
-    map::scene_resources(client)
+    let scene = map::scene::prepare(client);
+    let displayed = client.rendered_frame.picking_resources(&scene);
+    let fresh = if displayed.is_none() {
+        map::scene_resources(client)
+    } else {
+        Vec::new()
+    };
+    displayed
         .into_iter()
+        .flatten()
+        .chain(fresh)
         .filter(|r| r.kind <= aoe_rendering::SceneResource::CHOPPED_TREE)
         .filter_map(|r| {
             let bounds = scene_resource_frame(&client.art, r)
@@ -342,7 +363,14 @@ fn resource_unchecked(
             let tile = world.is_some_and(|p| {
                 p[0].floor() == r.position[0].floor() && p[1].floor() == r.position[1].floor()
             });
-            (body || tile).then_some((
+            // Live state wins over old pixels, including starting nodes absent
+            // from a replacement snapshot (unknown natural nodes default full).
+            let current = (body || tile)
+                && client.resources.visible(r.id)
+                && client.fog.state(r.position.map(|v| v.floor() as i32)) > 0
+                && (aoe_map::ResourceNode::starting_from_id(r.id).is_none()
+                    || starting.binary_search_by_key(&r.id, |node| node.id).is_ok());
+            current.then_some((
                 r.position[0] + r.position[1] + r.elevation_meters * 2.0,
                 r.id,
                 r.kind,

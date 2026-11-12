@@ -28,7 +28,7 @@ fn building(id: u32, x: i32, y: i32) -> GameplayBuildingState {
     }
 }
 
-async fn fixture(zoom: f64) -> Client {
+pub(in super::super) async fn fixture(zoom: f64) -> Client {
     let scene = PreparedScene::new(
         Camera {
             center: [100.0, 100.0],
@@ -469,3 +469,6 @@ async fn road_ground_paints_only_complete_tiles_and_remains_selectable() {
     assert_eq!(client.selected.building_id, Some(EntityId(77)));
     client.canvas.remove();
 }
+
+#[path = "resource_picking.rs"]
+mod resource_picking;

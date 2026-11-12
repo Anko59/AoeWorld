@@ -14,7 +14,7 @@ mod fixture;
 #[path = "gates.rs"]
 mod gates;
 #[path = "picking.rs"]
-mod picking;
+pub(super) mod picking;
 
 pub(super) fn contact_scene() -> PreparedScene {
     let generator = fixture::plane(-432, -432);

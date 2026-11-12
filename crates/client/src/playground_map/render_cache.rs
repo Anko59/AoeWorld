@@ -113,6 +113,27 @@ impl<S> RenderFrameCache<S> {
         Some(units[index])
     }
 
+    fn matching_scene(&self, scene: &Rc<S>) -> Option<&RenderedFrame<S>> {
+        self.previous
+            .as_ref()
+            .filter(|frame| Rc::ptr_eq(&frame.scene, scene))
+    }
+
+    /// Borrow displayed geometry only while terrain and camera still match.
+    /// Art invalidation keeps these pixels until a replacement succeeds.
+    pub(crate) fn picking_units(&self, scene: &Rc<S>) -> Option<&[SceneUnit]> {
+        self.matching_scene(scene)
+            .map(|frame| frame.units.as_slice())
+    }
+
+    pub(crate) fn picking_resources(
+        &self,
+        scene: &Rc<S>,
+    ) -> Option<impl Iterator<Item = SceneResource>> {
+        self.matching_scene(scene)
+            .map(|frame| frame.resources.iter().map(|(resource, _)| *resource))
+    }
+
     pub(crate) fn clear(&mut self) {
         self.previous = None;
         self.invalidated = false;

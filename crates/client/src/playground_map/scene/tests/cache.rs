@@ -201,3 +201,72 @@ fn building_family_uses_its_observed_age_including_construction() {
         }
     }
 }
+
+#[wasm_bindgen_test]
+async fn offscreen_foundation_changes_preserve_the_visible_mesh() {
+    let mut client = review_tests::picking::fixture(1.0).await;
+    client.fog.apply(aoe_protocol::FogState {
+        revision: 1,
+        tick: aoe_core::Tick(0),
+        region: TileRect::from_xywh(0, 0, 1, 1),
+        tiles: vec![],
+        overview: vec![],
+        disabled: true,
+    });
+    let scene = prepare(&client);
+    assert!(!scene.terrain.is_empty());
+    let mut distant = client.village.buildings[0].clone();
+    distant.id = EntityId(999);
+    distant.footprint = TileRect::from_xywh(10000, 10000, 4, 4);
+    let mut buildings = client.village.buildings.clone();
+    buildings.push(distant);
+    replace_buildings(&mut client, buildings.clone());
+    assert!(
+        Rc::ptr_eq(&scene, &prepare(&client)),
+        "offscreen additions cannot repaint displayed terrain"
+    );
+    buildings[1].age = aoe_protocol::Age::Imperial;
+    replace_buildings(&mut client, buildings.clone());
+    assert!(
+        Rc::ptr_eq(&scene, &prepare(&client)),
+        "offscreen age changes cannot repaint displayed terrain"
+    );
+    buildings[1].footprint = TileRect::from_xywh(102, 102, 4, 4);
+    replace_buildings(&mut client, buildings);
+    assert!(
+        !Rc::ptr_eq(&scene, &prepare(&client)),
+        "entering the displayed ground must invalidate it"
+    );
+    client.canvas.remove();
+}
+
+#[wasm_bindgen_test]
+async fn offscreen_native_foundation_apron_still_invalidates_visible_ground() {
+    let mut client = review_tests::picking::fixture(1.0).await;
+    client.art.compositions[0].footprint = [16.0; 2];
+    client.fog.apply(aoe_protocol::FogState {
+        revision: 1,
+        tick: aoe_core::Tick(0),
+        region: TileRect::from_xywh(0, 0, 1, 1),
+        tiles: vec![],
+        overview: vec![],
+        disabled: true,
+    });
+    let scene = prepare(&client);
+    let edge = scene
+        .terrain
+        .iter()
+        .map(|t| t.position[0])
+        .fold(f64::NEG_INFINITY, f64::max);
+    let mut near = client.village.buildings[0].clone();
+    near.id = EntityId(998);
+    near.footprint = TileRect::from_xywh(edge.ceil() as i32 + 3, 98, 4, 4);
+    let mut buildings = client.village.buildings.clone();
+    buildings.push(near);
+    replace_buildings(&mut client, buildings);
+    assert!(
+        !Rc::ptr_eq(&scene, &prepare(&client)),
+        "native apron reaches displayed samples even with its centre outside"
+    );
+    client.canvas.remove();
+}

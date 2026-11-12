@@ -427,3 +427,6 @@ fn offscreen_actor_phase_does_not_invalidate_even_with_real_frames() {
     actor.facing |= 1 << 4;
     assert!(!cache.needs_render(&scene, &art, &[actor], &[], false, 1, camera()));
 }
+
+#[path = "tests/picking.rs"]
+mod picking_tests;
