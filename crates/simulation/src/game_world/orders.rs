@@ -82,19 +82,15 @@ impl GameWorld {
         repeated: bool,
     ) -> Result<bool, GameWorldError> {
         let result = self.issue_move_goal(id, destination, precision)?;
-        let retained_queue = if repeated {
-            self.move_queues.remove(&id)
-        } else {
-            None
-        };
+        // A kept route skips the goal's queue reset; a plain order still replaces queued waypoints.
+        if repeated {
+            self.move_queues.remove(&id);
+        }
         self.cancel_transport_journey(id);
         self.cancel_auto_scout(id);
         self.stop_gathering(id);
         self.cancel_attack(id);
         self.economy.builders.remove(&id);
-        if let Some(queue) = retained_queue {
-            self.move_queues.insert(id, queue);
-        }
         if let Some(&index) = self.lookup.get(&id) {
             self.units[index].state.task = if result {
                 UnitTask::Moving

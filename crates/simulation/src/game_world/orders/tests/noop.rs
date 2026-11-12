@@ -9,11 +9,10 @@ fn world() -> GameWorld {
 }
 
 #[test]
-fn a_near_goal_reissue_keeps_progress_and_queued_destinations() {
+fn a_near_goal_reissue_keeps_progress() {
     let mut w = world();
     let id = w.spawn_unit(PlayerId(0), at(20, 20)).unwrap();
     w.issue_move(id, at(100, 20)).unwrap();
-    w.issue_queued_move(id, at(140, 20)).unwrap();
     for _ in 0..8 {
         w.advance();
     }
@@ -31,6 +30,21 @@ fn a_near_goal_reissue_keeps_progress_and_queued_destinations() {
     );
     w.issue_move(id, at(103, 20)).unwrap();
     assert_eq!(w.movement_order(id).unwrap().destination, at(103, 20));
+}
+
+#[test]
+fn a_near_goal_plain_move_keeps_the_route_but_drops_queued_waypoints() {
+    let mut w = world();
+    let id = w.spawn_unit(PlayerId(0), at(20, 20)).unwrap();
+    w.issue_move(id, at(100, 20)).unwrap();
+    w.issue_queued_move(id, at(140, 20)).unwrap();
+    for _ in 0..8 {
+        w.advance();
+    }
+    let order = w.movement_order(id);
+    assert_eq!(w.issue_move(id, at(101, 20)), Ok(true));
+    assert_eq!(w.movement_order(id), order);
+    assert!(!w.move_queues.contains_key(&id));
 }
 
 #[test]

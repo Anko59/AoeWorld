@@ -1,6 +1,6 @@
 # Ordered movement: doing less work
 
-The ordered apply remains serial. No replay pins are changed. The workload is
+The ordered apply remains serial. The apply changes alone change no replay pins; the order-retention change shipped with them repins the late-game replay (see `docs/scale/order-volume.md`). The workload is
 [match-bench](../scale/match-bench.md): 100 seats, seed 1, owner density, load
 factors 1 and 5, independently replayed with 1 and 4 Rayon workers.
 
