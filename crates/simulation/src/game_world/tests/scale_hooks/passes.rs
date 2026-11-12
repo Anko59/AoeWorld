@@ -1,5 +1,6 @@
 //! The whole-population pass counters: diagnostics that count and change nothing.
 use super::*;
+mod idle;
 
 fn count(world: &GameWorld, name: &str) -> crate::PassCount {
     world

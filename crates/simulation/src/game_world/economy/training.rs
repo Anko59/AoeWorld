@@ -6,6 +6,7 @@ use crate::GameWorld;
 use aoe_core::{ChunkCoord, EntityId, PlayerId, SPATIAL_CHUNK_TILES};
 
 pub(crate) mod rally;
+pub(crate) mod timers;
 
 impl GameWorld {
     pub fn issue_train(
@@ -68,6 +69,7 @@ impl GameWorld {
             training.seconds
         };
         // No fallible work follows these mutations.
+        self.wake_queues(center);
         self.mark_building_changed(center);
         if let Some(building) = self.economy.buildings.get_mut(&center) {
             building.training_queue.push_back(TrainingEntry {
@@ -76,6 +78,8 @@ impl GameWorld {
                 total_ticks: u64::from(self.config.tick_hz) * u64::from(seconds),
             });
             self.economy.active_training.insert(center);
+            self.economy.queues.training.awake.insert(center);
+            self.economy.queues.register_training(center, player);
         }
         Ok(())
     }
@@ -98,6 +102,8 @@ impl GameWorld {
         };
         if building.training_queue.is_empty() {
             self.economy.active_training.remove(&center);
+            self.economy.queues.training.awake.remove(&center);
+            self.economy.queues.unregister_training(center, player);
         }
         self.cancel_general_recruit(center);
         if entry.kind == UnitKind::Villager {
@@ -114,18 +120,14 @@ impl GameWorld {
     }
 
     pub(super) fn advance_training(&mut self, changed: &mut Vec<EntityId>) {
+        let centers = self.begin_queues(true);
         #[cfg(test)]
         {
-            self.economy.tick_work.training_buildings = self.economy.active_training.len();
+            self.economy.tick_work.training_buildings = centers.len();
             self.economy.tick_work.spawn_units = 0;
         }
-        let centers = self
-            .economy
-            .active_training
-            .iter()
-            .copied()
-            .collect::<Vec<_>>();
         for id in centers {
+            self.economy.queues.cursor = Some(id);
             self.mark_building_changed(id);
             let Some(building) = self.economy.buildings.get_mut(&id) else {
                 continue;
@@ -137,6 +139,7 @@ impl GameWorld {
                 .get(&building.player)
                 .is_none_or(|state| state.population_used >= state.population_cap)
             {
+                self.sleep_training(id, false);
                 continue;
             }
             let Some(entry) = building.training_queue.front_mut() else {
@@ -148,6 +151,7 @@ impl GameWorld {
                 .saturating_add(1)
                 .min(entry.total_ticks);
             if entry.progress_ticks != entry.total_ticks {
+                self.sleep_training(id, false);
                 continue;
             }
             let rally = building.rally_point;
@@ -168,9 +172,13 @@ impl GameWorld {
             });
             #[cfg(test)]
             let mut inspected = 0;
+            let mut environment_pending = false;
             let spawn = exits.into_iter().find(|tile| {
                 self.unit_tile_passable(kind, *tile, &|| false)
-                    .unwrap_or(false)
+                    .unwrap_or_else(|_| {
+                        environment_pending = true;
+                        false
+                    })
                     && !self.economy.blocked_tiles.contains(tile)
                     && !self
                         .chunks
@@ -196,6 +204,9 @@ impl GameWorld {
                 self.economy.tick_work.spawn_units += inspected;
             }
             let Some(tile) = spawn else {
+                if !environment_pending {
+                    self.sleep_training(id, true);
+                }
                 continue;
             };
             let Ok(position) = position(tile) else {
@@ -211,6 +222,8 @@ impl GameWorld {
                     building.training_queue.pop_front();
                     if building.training_queue.is_empty() {
                         self.economy.active_training.remove(&id);
+                        self.economy.queues.training.awake.remove(&id);
+                        self.economy.queues.unregister_training(id, player);
                     }
                 }
                 self.finish_general_recruit(id, unit);
@@ -218,7 +231,10 @@ impl GameWorld {
                     self.apply_rally(unit, rally);
                 }
                 changed.push(unit);
+                self.sleep_training(id, false);
             }
         }
+        self.economy.queues.cursor = None;
+        self.economy.queues.training.tick = self.tick.0;
     }
 }

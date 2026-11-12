@@ -52,10 +52,12 @@ impl GameWorld {
             return false;
         }
         let allowance = self.fast_route_allowance(unit.player);
-        let work = match self
-            .navigation_cache
-            .peek(unit.kind.is_naval(), origin, tile, allowance)
-        {
+        let work = match self.navigation_cache.peek(
+            (unit.kind.is_naval(), unit.player),
+            origin,
+            tile,
+            allowance,
+        ) {
             Some((aoe_map::MovementOutcome::Unreachable, work)) => work,
             Some(_) => return false,
             None => {
@@ -73,13 +75,13 @@ impl GameWorld {
                 work
             }
         };
-        let cached = self
-            .navigation_cache
-            .get(unit.kind.is_naval(), origin, tile, allowance);
+        let cached =
+            self.navigation_cache
+                .get((unit.kind.is_naval(), unit.player), origin, tile, allowance);
         if cached.is_none() {
             let Some(pocket) = pocket else { return false };
             self.navigation_cache.insert(
-                unit.kind.is_naval(),
+                (unit.kind.is_naval(), unit.player),
                 origin,
                 tile,
                 work,
@@ -116,10 +118,7 @@ impl GameWorld {
             .unit_tile_passable(kind, destination.tile_floor(), &|| false)
             .map_err(GameWorldError::Environment)?;
         if !passable
-            || self
-                .economy
-                .blocked_tiles
-                .contains(&destination.tile_floor())
+            || !self.route_tile_admitted(self.units[index].state.player, destination.tile_floor())
         {
             return Err(GameWorldError::InvalidPosition);
         }
@@ -132,11 +131,14 @@ impl GameWorld {
             return Err(GameWorldError::Unreachable);
         }
         if origin == destination {
+            self.combat.quiet.wake(id);
+            self.combat.healing.wake(id);
             self.leave_group(id);
             self.move_queues.remove(&id);
             self.clear_planner(index);
             self.set_movement_error(index, None);
             self.units[index].order = None;
+            self.economy.gatherers.wake_walking(id);
             self.units[index].obstruction = None;
             self.units[index].route.clear();
             self.units[index].state.moving = false;
@@ -160,6 +162,8 @@ impl GameWorld {
             };
         self.demand_accepted(id);
         let speed_carry = self.units[index].order.map_or(0, |order| order.speed_carry);
+        self.combat.quiet.wake(id);
+        self.combat.healing.wake(id);
         self.leave_group(id);
         self.move_queues.remove(&id);
         let dx = i64::from(waypoint.x) - i64::from(origin.x);

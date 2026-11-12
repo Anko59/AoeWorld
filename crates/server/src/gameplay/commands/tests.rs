@@ -46,8 +46,8 @@ fn garrison_orders_and_occupant_views_share_ownership_and_fog_rules() {
     }
     assert!(world.unit(worker).is_none());
     let native = world.building(center).unwrap();
-    let own = crate::gameplay::economy::wire_building_state(native, Some(PlayerId(0)));
-    let enemy = crate::gameplay::economy::wire_building_state(native, Some(PlayerId(1)));
+    let own = crate::gameplay::economy::wire_building_state(&native, Some(PlayerId(0)));
+    let enemy = crate::gameplay::economy::wire_building_state(&native, Some(PlayerId(1)));
     assert_eq!(own.garrison[0].id, worker);
     assert!(
         enemy.garrison.is_empty(),

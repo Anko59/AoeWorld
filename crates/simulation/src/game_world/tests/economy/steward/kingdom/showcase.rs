@@ -93,7 +93,7 @@ fn kingdom_showcase_starts_with_twenty_distinct_working_farms_before_management(
     assert_eq!(
         w.buildings()
             .filter(|b| b.kind == BuildingKind::TownCenter)
-            .flat_map(|b| &b.training_queue)
+            .flat_map(|b| b.training_queue.iter().copied().collect::<Vec<_>>())
             .filter(|entry| entry.kind == UnitKind::Villager)
             .count(),
         0

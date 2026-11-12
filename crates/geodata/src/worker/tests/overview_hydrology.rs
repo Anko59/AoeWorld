@@ -45,7 +45,7 @@ fn named_lock_counts_match_the_documented_source_lists() {
         LANDSCAPE_OVERVIEW_SOURCE_LOCKS
     );
     assert_eq!(
-        crate::hydrology_vector_sources().len(),
+        crate::hydrology_vector_sources(&crate::HYDRORIVERS_REGIONS[0]).len(),
         VECTOR_HYDROLOGY_SOURCE_LOCKS
     );
 }

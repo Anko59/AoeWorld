@@ -152,7 +152,7 @@ impl GameWorld {
             .iter()
             .filter_map(|id| self.building(*id))
             .filter(|b| b.player == player && home.covers(b.footprint, 0))
-            .cloned()
+            .map(|b| b.into_owned())
             .collect();
         if let Some(h) = self.economy.steward_homes.get_mut(&id) {
             h.building_scan = (!complete_buildings).then_some(scan);

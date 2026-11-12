@@ -57,6 +57,9 @@ impl Regions {
     fn allowed_node(&self, player: u32, node: Node, start: Node) -> bool {
         let gate = self.pending[&node.0].gates[usize::from(node.1) - 1];
         let initial = self.pending[&start.0].gates[usize::from(start.1) - 1];
+        if self.locked(gate) {
+            return false;
+        }
         node == start || (gate.is_some() && gate == initial) || self.admits(player, gate)
     }
 
@@ -158,6 +161,9 @@ impl Regions {
         goal: Node,
         mut remaining: Option<u32>,
     ) -> Option<bool> {
+        if !self.allowed_node(player, start, start) {
+            return Some(false);
+        }
         if start == goal {
             return Some(true);
         }

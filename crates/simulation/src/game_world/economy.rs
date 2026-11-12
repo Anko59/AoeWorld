@@ -1,11 +1,12 @@
 //! Authoritative village rules and bounded integer economy state.
-use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
+use aoe_core::{EntityId, PlayerId, TileCoord};
 use aoe_map::ResourceKind;
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::BTreeSet;
 
 mod benchmark;
 mod buildings;
 mod construction;
+pub use construction::ConstructionWork;
 #[path = "economy/construction/demo.rs"]
 mod demo;
 pub use demo::{BehaviourScene, LateGameSeat, LateGameSeeded};
@@ -226,46 +227,9 @@ pub struct TrainingEntry {
     pub progress_ticks: u64,
     pub total_ticks: u64,
 }
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GameBuilding {
-    /// Age of this building, retained in player observations.
-    pub age: crate::Age,
-    pub id: EntityId,
-    pub player: PlayerId,
-    pub kind: BuildingKind,
-    pub footprint: TileRect,
-    pub training_queue: VecDeque<TrainingEntry>,
-    pub last_hit: Option<super::HitRecord>,
-    pub state: ConstructionState,
-    /// Work done and work needed; one builder adds 3 per tick, n add n + 2.
-    pub work_done: u64,
-    pub work_total: u64,
-    pub hp: u16,
-    pub max_hp: u16,
-    pub los: u8,
-    /// Food left on a farm; `Some(0)` is an exhausted farm.
-    pub food_remaining: Option<u16>,
-    pub research: Option<super::ResearchEntry>,
-    /// Authoritative gate state, also retained in fog observations.
-    pub gate_open: bool,
-    pub rally_point: Option<RallyPoint>,
-    /// Prepaid farm rebuilds held by a Mill (at most 99).
-    pub farm_reseeds: u8,
-    pub garrison: Vec<GarrisonedUnit>,
-    pub bridge_span: Option<aoe_core::BridgeSpan>,
-}
-impl GameBuilding {
-    /// Construction progress in thousandths, 1000 once complete.
-    pub fn progress_permille(&self) -> u16 {
-        if self.state == ConstructionState::Complete || self.work_total == 0 {
-            return 1000;
-        }
-        (self.work_done.saturating_mul(1000) / self.work_total).min(1000) as u16
-    }
-    pub fn is_complete(&self) -> bool {
-        self.state == ConstructionState::Complete
-    }
-}
+#[path = "economy/construction/building.rs"]
+mod building_state;
+pub use building_state::GameBuilding;
 
 /// The single current rules table. Rates are hundredths of a resource / second;
 /// speed is tiles / second. Scout speed remains the world's movement config.
@@ -425,34 +389,6 @@ impl super::GameWorld {
     /// Replace the capacity limits (scale measurements only).
     pub fn set_limits(&mut self, limits: WorldLimits) {
         self.economy.limits = limits;
-    }
-    pub fn buildings(&self) -> impl Iterator<Item = &GameBuilding> {
-        self.economy.buildings.values()
-    }
-    /// One player's buildings, kind by kind, from the per-player index.
-    pub(crate) fn player_buildings(&self, player: PlayerId) -> impl Iterator<Item = &GameBuilding> {
-        self.economy
-            .dropoffs
-            .range((player, BuildingKind::TownCenter)..)
-            .take_while(move |((owner, _), _)| *owner == player)
-            .flat_map(|(_, ids)| ids.iter())
-            .filter_map(|id| self.economy.buildings.get(id))
-    }
-    /// One player's buildings of one kind, ascending by id.
-    pub(crate) fn player_buildings_of(
-        &self,
-        player: PlayerId,
-        kind: BuildingKind,
-    ) -> impl Iterator<Item = &GameBuilding> {
-        self.economy
-            .dropoffs
-            .get(&(player, kind))
-            .into_iter()
-            .flatten()
-            .filter_map(|id| self.economy.buildings.get(id))
-    }
-    pub fn building(&self, id: EntityId) -> Option<&GameBuilding> {
-        self.economy.buildings.get(&id)
     }
     pub fn player_economy(&self, player: PlayerId) -> Option<PlayerEconomy> {
         self.economy.players.get(&player).copied()

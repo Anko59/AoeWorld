@@ -6,8 +6,11 @@ use aoe_core::{
     WorldPosition,
 };
 
+#[cfg(test)]
+mod tests;
+
 pub(super) const MAX_TARGET_INSPECTIONS: u32 = 16_384;
-const BUCKET_WINDOW: usize = 128;
+pub(super) const BUCKET_WINDOW: usize = 128;
 pub(super) const MAX_QUERY_INSPECTIONS: u32 = 16 * BUCKET_WINDOW as u32;
 
 pub(super) struct TargetArea {
@@ -17,6 +20,14 @@ pub(super) struct TargetArea {
     pub max: i64,
     pub actor: EntityId,
     pub ram: bool,
+}
+
+#[derive(Default)]
+pub(super) struct TargetProbe {
+    pub target: Option<EntityId>,
+    /// A sampled living enemy rules out quietness. False is not an empty proof:
+    /// unseen entries of a dense bucket still require the full region check.
+    pub sampled_hostile: bool,
 }
 
 impl TargetArea {
@@ -38,7 +49,7 @@ impl TargetArea {
         let d = self.distance(goal);
         d >= self.min * self.min && d <= self.max * self.max
     }
-    fn bounds(&self, world: &GameWorld) -> TileRect {
+    pub(super) fn bounds(&self, world: &GameWorld) -> TileRect {
         let radius = (self.max.div_euclid(i64::from(FIXED_SUBUNITS_PER_TILE)) as i32 + 1).min(32);
         let rect = match self.source {
             Goal::Unit(at, _) => TileRect::from_xywh(at.tile_floor().x, at.tile_floor().y, 1, 1),
@@ -55,6 +66,22 @@ impl TargetArea {
 }
 
 impl GameWorld {
+    /// One admission and sampling clock for full and sleeping target queries.
+    pub(in crate::game_world::combat) fn start_target_probe(
+        &mut self,
+        actor: EntityId,
+        needed: u32,
+    ) -> Option<u64> {
+        if MAX_TARGET_INSPECTIONS.saturating_sub(self.combat.stats.targeting_scanned) < needed {
+            return None;
+        }
+        // Actual probe turns, not global ticks, advance the bucket stride.
+        let round = self.combat.target_rounds.entry(actor).or_default();
+        let offset = *round;
+        *round = round.saturating_add(BUCKET_WINDOW as u64);
+        Some(offset)
+    }
+
     /// A live unit or building of another player, else `None`.
     pub(crate) fn attack_goal(&self, target: EntityId, attacker: PlayerId) -> Option<Goal> {
         if let Some(unit) = self.unit(target) {
@@ -135,11 +162,7 @@ impl GameWorld {
 
     /// Units precede structures. Stable (class, distance, id) ordering within
     /// a rotating bounded sample; no sort/allocation proportional to a crowd.
-    pub(super) fn acquire_target(
-        &mut self,
-        area: &TargetArea,
-        buildings: bool,
-    ) -> Option<EntityId> {
+    pub(super) fn acquire_target(&mut self, area: &TargetArea, buildings: bool) -> TargetProbe {
         let bounds = area.bounds(self);
         let chunks_x = (bounds.max.x - 1).div_euclid(SPATIAL_CHUNK_TILES)
             - bounds.min.x.div_euclid(SPATIAL_CHUNK_TILES)
@@ -148,14 +171,10 @@ impl GameWorld {
             - bounds.min.y.div_euclid(SPATIAL_CHUNK_TILES)
             + 1;
         let needed = chunks_x as u32 * chunks_y as u32 * BUCKET_WINDOW as u32;
-        if MAX_TARGET_INSPECTIONS.saturating_sub(self.combat.stats.targeting_scanned) < needed {
-            return None;
-        }
-        // Advance on this actor's actual probes, not global ticks: a sparse
-        // polling cadence must never alias the bucket stride and hide enemies.
-        let round = self.combat.target_rounds.entry(area.actor).or_default();
-        let offset = *round;
-        *round = round.saturating_add(BUCKET_WINDOW as u64);
+        let Some(offset) = self.start_target_probe(area.actor, needed) else {
+            return TargetProbe::default();
+        };
+        let mut result = TargetProbe::default();
         let mut best = None;
         let mut complete = true;
         for y in bounds.min.y.div_euclid(SPATIAL_CHUNK_TILES)
@@ -180,9 +199,11 @@ impl GameWorld {
                     let Some(u) = self.unit(id) else {
                         continue;
                     };
-                    if u.player == area.player
-                        || u.hp == 0
-                        || self.embarked(id)
+                    if u.player == area.player || u.hp == 0 {
+                        continue;
+                    }
+                    result.sampled_hostile = true;
+                    if self.embarked(id)
                         || !bounds.contains(u.position.tile_floor())
                         || !area.accepts(Goal::Unit(u.position, u.kind.collision_radius()))
                         || !self.unit_visible_to(area.player, id)
@@ -204,12 +225,13 @@ impl GameWorld {
             }
         }
         if let Some((_, _, id)) = best {
-            return Some(id);
+            result.target = Some(id);
+            return result;
         }
         // In a dense crowd, give units one complete rotation before falling
         // back to buildings. The actor continues probing while attacking one.
-        if !buildings || !complete {
-            return None;
+        if !buildings || !complete || self.economy.buildings.is_empty() {
+            return result;
         }
         let mut seen = std::collections::BTreeSet::new();
         let mut best = None;
@@ -242,6 +264,7 @@ impl GameWorld {
                 best = Some(best.map_or(key, |old| std::cmp::min(old, key)));
             }
         }
-        best.map(|(_, _, id)| id)
+        result.target = best.map(|(_, _, id)| id);
+        result
     }
 }

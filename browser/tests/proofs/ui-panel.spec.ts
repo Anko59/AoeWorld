@@ -17,12 +17,14 @@ import { imperialArtProof } from "./imperial/art.js";
 import { startupProof } from "./imperial/startup.js";
 import { skirmishStartupProof } from "./imperial/skirmish-startup.js";
 import { centerVillage } from "../village/fixtures/resources.js";
+import { barriersProof } from "./barriers/proof.js";
 
 test.use({ video: { mode: "on", size: { width: 1280, height: 720 } } });
 
 test("local original panel proof with real selection and training", async ({
   page,
 }) => {
+  const recordingStarted = Date.now();
   const config = await readFile("../.cache/ui/proof.json", "utf8").then(
     (text) =>
       JSON.parse(text) as {
@@ -52,6 +54,17 @@ test("local original panel proof with real selection and training", async ({
   expect(["8080", "8081", "8097"]).not.toContain(url.port);
   const health = await page.request.get(`${config.url}health`);
   expect(health.ok()).toBe(true);
+  if (config.phase === "barriers") {
+    test.setTimeout(300_000);
+    await barriersProof(
+      page,
+      config.url,
+      config.side ?? "after",
+      config.arenaToken ?? "",
+      recordingStarted,
+    );
+    return;
+  }
   if (config.phase.startsWith("skirmish-startup-")) {
     test.setTimeout(600_000);
     await skirmishStartupProof(page, config.url, config.phase.slice(17));

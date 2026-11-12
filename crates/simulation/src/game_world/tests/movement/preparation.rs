@@ -37,9 +37,21 @@ fn preparation_is_bounded_across_planners_and_independent_of_cache_residency() {
     for planner in &mut planners {
         // Prepay more than one poll's credit while execution is forbidden;
         // completed credits must still share the next tick's execution cap.
-        world.poll_world_route_planner(planner, 32_768, &|| false, UnitKind::Scout);
+        world.poll_world_route_planner(
+            planner,
+            32_768,
+            &|| false,
+            UnitKind::Scout,
+            aoe_core::PlayerId(0),
+        );
         assert_eq!(
-            world.poll_world_route_planner(planner, 32_768, &|| false, UnitKind::Scout),
+            world.poll_world_route_planner(
+                planner,
+                32_768,
+                &|| false,
+                UnitKind::Scout,
+                aoe_core::PlayerId(0)
+            ),
             aoe_map::RoutePlannerPoll::Pending
         );
     }
@@ -51,7 +63,13 @@ fn preparation_is_bounded_across_planners_and_independent_of_cache_residency() {
     let mut warm = planners.clone();
     *world.navigation_preparation_budget.lock().unwrap() = 2;
     for planner in &mut planners {
-        world.poll_world_route_planner(planner, 32_768, &|| false, UnitKind::Scout);
+        world.poll_world_route_planner(
+            planner,
+            32_768,
+            &|| false,
+            UnitKind::Scout,
+            aoe_core::PlayerId(0),
+        );
     }
     assert_eq!(*world.navigation_preparation_budget.lock().unwrap(), 0);
     assert!(
@@ -61,7 +79,13 @@ fn preparation_is_bounded_across_planners_and_independent_of_cache_residency() {
     probe.0.store(0, Ordering::Relaxed);
     *world.navigation_preparation_budget.lock().unwrap() = 2;
     for planner in &mut warm {
-        world.poll_world_route_planner(planner, 32_768, &|| false, UnitKind::Scout);
+        world.poll_world_route_planner(
+            planner,
+            32_768,
+            &|| false,
+            UnitKind::Scout,
+            aoe_core::PlayerId(0),
+        );
     }
     assert_eq!(*world.navigation_preparation_budget.lock().unwrap(), 0);
     assert_eq!(

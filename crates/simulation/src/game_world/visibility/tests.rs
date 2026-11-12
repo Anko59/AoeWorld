@@ -105,7 +105,7 @@ fn remembered_building() -> GameBuilding {
         .buildings()
         .find(|building| building.id == id)
         .unwrap()
-        .clone()
+        .into_owned()
 }
 
 #[test]

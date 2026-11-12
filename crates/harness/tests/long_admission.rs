@@ -17,7 +17,7 @@ fn long_busy_make_refuses_before_missing_or_stale_runner_bootstrap() {
         .read(true)
         .write(true)
         .create_new(true)
-        .open(lock_dir.join("long.lock"))
+        .open(lock_dir.join("long-0.lock"))
         .unwrap();
     lock.try_lock().unwrap();
     write!(
@@ -75,6 +75,7 @@ fn long_busy_make_refuses_before_missing_or_stale_runner_bootstrap() {
             .args(["--no-print-directory", "-j4", "coverage"])
             .env_remove("AOE_LONG_JOB")
             .env_remove("AOE_LONG_DIR")
+            .env("AOE_LONG_SLOTS", "1")
             .env("HARNESS_TARGET_CACHE", root.join("target"))
             .env("PATH", &path)
             .output()
@@ -96,7 +97,7 @@ fn long_lock_does_not_block_short_make_target() {
     let workspace = make_fixture::workspace_named("long-short-");
     let root = workspace.path();
     fs::create_dir_all(root.join(".git/aoe-ship")).unwrap();
-    let lock = fs::File::create(root.join(".git/aoe-ship/long.lock")).unwrap();
+    let lock = fs::File::create(root.join(".git/aoe-ship/long-0.lock")).unwrap();
     lock.try_lock().unwrap();
     let bin = root.join("bin");
     fs::create_dir(&bin).unwrap();
@@ -129,7 +130,7 @@ fn long_make_precheck_allows_valid_inheritance_and_focused_e2e() {
     let root = workspace.path();
     let dir = root.join(".git/aoe-ship");
     fs::create_dir_all(&dir).unwrap();
-    let mut lock = fs::File::create(dir.join("long.lock")).unwrap();
+    let mut lock = fs::File::create(dir.join("long-0.lock")).unwrap();
     lock.try_lock().unwrap();
     write!(lock, "proof\nheld job").unwrap();
     let runner = root.join(".cache/resource-runner");
@@ -146,6 +147,7 @@ fn long_make_precheck_allows_valid_inheritance_and_focused_e2e() {
             .args(["--no-print-directory", target])
             .env("AOE_LONG_DIR", &dir)
             .env("AOE_LONG_JOB", token)
+            .env("AOE_LONG_SLOTS", "1")
             .env("AOE_E2E_SPECS", specs)
             .output()
             .unwrap();
@@ -179,6 +181,7 @@ fn runner_lock_survives_controller_death_and_nested_jobs_validate_ownership() {
         ])
         .env_remove("AOE_LONG_JOB")
         .env_remove("AOE_LONG_DIR")
+        .env("AOE_LONG_SLOTS", "1")
         .stdout(std::process::Stdio::piped())
         .spawn()
         .unwrap();
@@ -198,6 +201,7 @@ fn runner_lock_survives_controller_death_and_nested_jobs_validate_ownership() {
         .args(["--long", "coverage", "--", "true"])
         .env_remove("AOE_LONG_JOB")
         .env_remove("AOE_LONG_DIR")
+        .env("AOE_LONG_SLOTS", "1")
         .output()
         .unwrap();
     assert!(
@@ -216,7 +220,7 @@ fn focused_e2e_skips_long_admission_but_full_e2e_does_not() {
     let workspace = make_fixture::workspace_named("long-focused-");
     let root = workspace.path();
     fs::create_dir_all(root.join(".git/aoe-ship")).unwrap();
-    let lock = fs::File::create(root.join(".git/aoe-ship/long.lock")).unwrap();
+    let lock = fs::File::create(root.join(".git/aoe-ship/long-0.lock")).unwrap();
     lock.try_lock().unwrap();
     for (specs, expected) in [("tests/one.spec.ts", 0), ("", 75)] {
         let result = Command::new(root.join(".cache/resource-runner"))
@@ -224,9 +228,56 @@ fn focused_e2e_skips_long_admission_but_full_e2e_does_not() {
             .args(["--long", "test-e2e", "--", "true"])
             .env_remove("AOE_LONG_JOB")
             .env_remove("AOE_LONG_DIR")
+            .env("AOE_LONG_SLOTS", "1")
             .env("AOE_E2E_SPECS", specs)
             .output()
             .unwrap();
         assert_eq!(result.status.code(), Some(expected));
+    }
+}
+
+#[test]
+fn runner_takes_the_first_free_slot_and_refuses_only_when_all_are_held() {
+    let workspace = make_fixture::workspace_named("long-slots-");
+    let root = workspace.path();
+    fs::create_dir_all(root.join(".git/aoe-ship")).unwrap();
+    let mut held = Vec::new();
+    for slot in 0..3 {
+        let mut lock =
+            fs::File::create(root.join(format!(".git/aoe-ship/long-{slot}.lock"))).unwrap();
+        let admitted = Command::new(root.join(".cache/resource-runner"))
+            .current_dir(root)
+            .args(["--long", "coverage", "--", "true"])
+            .env_remove("AOE_LONG_JOB")
+            .env_remove("AOE_LONG_DIR")
+            .output()
+            .unwrap();
+        assert_eq!(
+            admitted.status.code(),
+            Some(0),
+            "slot {slot} was still free"
+        );
+        lock.try_lock().unwrap();
+        write!(
+            lock,
+            "proof{slot}\n`make coverage` on holder{slot} in /holder{slot}"
+        )
+        .unwrap();
+        held.push(lock);
+    }
+    let refusal = Command::new(root.join(".cache/resource-runner"))
+        .current_dir(root)
+        .args(["--long", "coverage", "--", "true"])
+        .env_remove("AOE_LONG_JOB")
+        .env_remove("AOE_LONG_DIR")
+        .output()
+        .unwrap();
+    assert_eq!(refusal.status.code(), Some(75));
+    let stderr = String::from_utf8_lossy(&refusal.stderr);
+    for slot in 0..3 {
+        assert!(
+            stderr.contains(&format!("slot {slot}: `make coverage` on holder{slot}")),
+            "{stderr}"
+        );
     }
 }

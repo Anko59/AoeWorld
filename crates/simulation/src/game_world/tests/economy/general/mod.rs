@@ -127,7 +127,14 @@ fn reinforcements_balance_available_production_and_reserve_the_cap() {
     }
     let queued: Vec<_> = buildings
         .iter()
-        .flat_map(|id| &w.building(*id).unwrap().training_queue)
+        .flat_map(|id| {
+            w.building(*id)
+                .unwrap()
+                .training_queue
+                .iter()
+                .copied()
+                .collect::<Vec<_>>()
+        })
         .map(|e| e.kind)
         .collect();
     for kind in [

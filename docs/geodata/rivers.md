@@ -1,8 +1,11 @@
 # River geometry and crossings
 
 The creator defaults to Automatic rivers and landscape overview preparation.
-Preflight includes the pinned HydroRIVERS Europe/Middle East and global
-HydroLAKES inputs where the whole footprint is covered. Outside that coverage,
+Preflight includes global HydroLAKES and one pinned regional HydroRIVERS
+release where the whole footprint lies inside that release's extent. Wired
+releases, in selection order: Europe/Middle East (`eu`, 24.47°W–69.52°E,
+12.60°N–81.79°N) and Asia (`as`, 57.64°E–150.47°E, 1.27°N–55.90°N); the
+first release containing the footprint is used. Outside that coverage,
 Automatic prepares the global overview without hydrology and records
 `preparation_notes: ["outside_river_coverage"]` in the package and job result;
 the creator displays the note. With rivers explicitly requires coverage and
@@ -14,13 +17,15 @@ explicit With rivers requirement permits procedural fallback. Its package and
 job record `geographic_worker_unavailable`. Explicit source preparation and
 With rivers requests reject the missing worker instead of changing their mode.
 
-Coverage uses the exact geographic extent recorded from the SHA-pinned river
-archive's shapefile header, inset by 0.01 degrees of query padding. The same
+Coverage uses the exact geographic extent recorded from each SHA-pinned river
+archive's shapefile header, inset by 0.01 degrees of query padding. A footprint
+that straddles two releases without fitting inside either is uncovered. The same
 projected-footprint check runs before cache or input access on every hydrology
 path. Its immutable decision is bound to the normalized request and grid and
 reused by execution, including the CLI; sampling does not project it again for
-coverage. The opened layer must match the pinned extent. This includes southern
-Finland and replaces the former pilot restriction. File coverage does not prove
+coverage. The opened layer must match the selected release's pinned extent. Adding a
+region means pinning its archive SHA-256, size and header extent in
+`crates/geodata/src/source_catalog/hydrology.rs`. File coverage does not prove
 uniform completeness of the reach inventory.
 
 Hydrology pages persist projected source line segments in 1/256 tile units.

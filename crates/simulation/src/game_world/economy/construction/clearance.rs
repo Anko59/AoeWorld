@@ -33,6 +33,26 @@ fn overlaps(footprint: TileRect, u: &crate::GameUnit) -> bool {
 }
 
 impl GameWorld {
+    /// Pure predicate shared with the missed-wake detector.
+    #[cfg(test)]
+    pub(crate) fn foundation_has_blocker(&self, id: EntityId) -> bool {
+        let Some(b) = self.building(id) else {
+            return false;
+        };
+        let Some(rect) = b.kind.collision_rect(b.footprint, false) else {
+            return false;
+        };
+        self.query(self.clamp_around(rect)).0.into_iter().any(|u| {
+            u.hp > 0
+                && overlaps(rect, &u)
+                && self
+                    .economy
+                    .builders
+                    .get(&u.id)
+                    .is_none_or(|job| job.building != id)
+        })
+    }
+
     /// Nearest free walkable tile outside `footprint` for `unit`, skipping
     /// `taken`, searched ring by ring outward from the footprint edge (up to
     /// `EXIT_RINGS`). With `spare_edge` the first ring is tried last, so idle

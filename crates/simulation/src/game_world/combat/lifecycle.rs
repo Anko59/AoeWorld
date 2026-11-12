@@ -108,6 +108,9 @@ impl GameWorld {
         self.units[index].obstruction = None;
         let id = self.units[index].state.id;
         self.leave_group(id);
+        self.combat.quiet.wake(id);
+        self.combat.healing.wake(id);
+        self.economy.gatherers.wake_walking(id);
         self.destinations.remove(id);
         self.clear_planner(index);
         let unit = &mut self.units[index];
@@ -150,6 +153,7 @@ impl GameWorld {
         self.update_observer(id, None);
         self.combat.attackers.remove(&id);
         self.combat.healers.remove(&id);
+        self.combat.healing.remove(id);
         self.combat.seekers.remove(&id);
         self.combat.target_rounds.remove(&id);
         self.stop_gathering(id);
@@ -158,6 +162,7 @@ impl GameWorld {
         if let Some(economy) = self.economy.players.get_mut(&player) {
             economy.population_used = economy.population_used.saturating_sub(1);
         }
+        self.wake_player_training(player);
         let die_millis = match self.units[index].state.kind {
             crate::UnitKind::Villager => 1500_u64,
             crate::UnitKind::Scout => 1900,
@@ -214,6 +219,8 @@ impl GameWorld {
         let at = self.units[index].state.position;
         self.untrack_unit_at(id, at);
         let bucket = self.units[index].bucket;
+        self.combat.quiet.wake_chunk(bucket);
+        self.combat.quiet.wake(id);
         let slot = self.units[index].bucket_slot;
         let displaced = self.chunks.swap_remove(bucket, slot);
         if let Some(displaced_index) = displaced.and_then(|id| self.lookup.get(&id).copied()) {
@@ -222,6 +229,7 @@ impl GameWorld {
         self.active_movers.remove(id);
         self.combat.attackers.remove(&id);
         self.combat.healers.remove(&id);
+        self.combat.healing.remove(id);
         self.combat.seekers.remove(&id);
         self.combat.target_rounds.remove(&id);
         self.stop_gathering(id);

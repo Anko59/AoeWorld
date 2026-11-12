@@ -53,7 +53,7 @@ AOE_MAP_PACKAGE=/data/maps/<package-hash>.json make map-verify
 
 The estimate command performs no acquisition. Generation requires the pinned
 inputs and atomically publishes a bounded `<package-hash>.json` manifest in the
-output directory. Page files live below `pages/<package-hash>/` with bounded
+output directory (at most 128 KiB, enough for 96 GLO-90 tile locks). Page files live below `pages/<package-hash>/` with bounded
 coordinate names for each layer and pyramid level. The manifest binds the
 normalized request, local projection and preprocessing provenance, source
 locks, and prepared page roots. `map-verify` streams those pages one at a time
@@ -82,6 +82,10 @@ detail placement without moving source-backed relief.
 The current overview pipeline uses ETOPO elevation, Natural Earth coastline,
 potential-biome data, and HYDE historical land-use inputs. It has versioned
 locks and reproducible reductions, but it is an overview-quality stack.
+Coastline rasterization projects only Natural Earth land polygons whose
+bounds meet a degree-margined window around the footprint. A polygon holding
+the map's antipode (Peru for a Mekong map) turns inside out in the azimuthal
+projection and once made the whole map land, with no sea.
 
 Landscape overviews refine elevation with Copernicus GLO-90 (3 arc-second,
 about 90 m) whenever the footprint needs at most 96 one-degree tiles (a Large
@@ -102,7 +106,7 @@ cap are unchanged; the overview axis stays 1024 because hydrology, water,
 vegetation and history are bound to it. The
 explicit [detailed preparation command](detailed-preparation.md) adds regional
 Copernicus elevation and samples modern WorldCover, HydroLAKES, and the pinned
-Europe/Middle East HydroRIVERS dataset while retaining the overview's coarse
+regional HydroRIVERS release (Europe/Middle East or Asia) covering the footprint while retaining the overview's coarse
 vegetation and historical inputs. Packages persist typed hydrology and modern
 land-cover evidence in bounded, independently verified pages. Terrain consumes
 those observations through the package provider; the optional water coverage

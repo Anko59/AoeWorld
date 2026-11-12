@@ -33,7 +33,7 @@ const MAX_SLD: u64 = 64 * 1024 * 1024;
 const GRAPHICS: &str = "resources/_common/drs/graphics";
 const TEXTURES: &str = "resources/_common/terrain/textures/2x";
 /// Folded into the pack hash so a change of the conversion rules makes a new pack.
-const CONVERSION: &str = "de-sld-rgb565-weighted-player-chunked-dat-categories";
+const CONVERSION: &str = "de-sld-rgb565-weighted-player-chunked-dat-categories-shared-recipes";
 
 /// What one selected source contributed to the pack.
 #[derive(Clone, Debug)]

@@ -241,7 +241,7 @@ fn vassal_demo_stands_a_defensive_line_before_attack_and_general_response() {
     let (mut w, _) = GameWorld::vassal_defense_demo(Seed(7)).unwrap();
     let found = w.units().find(|u| u.kind == UnitKind::Vassal).map(|u| u.id);
     let v = found.or_else(|| {
-        let mut garrisoned = w.buildings().flat_map(|b| &b.garrison);
+        let mut garrisoned = w.buildings().flat_map(|b| b.garrison.to_vec());
         garrisoned
             .find(|g| g.unit.kind == UnitKind::Vassal)
             .map(|g| g.unit.id)

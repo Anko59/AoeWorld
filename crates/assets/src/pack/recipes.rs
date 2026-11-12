@@ -1,6 +1,6 @@
 //! Compiled startup view of the readable DAT recipes. Exactly one current
 //! encoding: little-endian fields, hex in JSON, source frame indices rather
-//! than repeated strings. The verifier checks it against the readable recipe.
+//! than repeated strings. Repeated part lists use bounded backreferences. The verifier checks it against the readable recipe.
 use super::FrameRecord;
 use crate::{
     Error,
@@ -13,6 +13,7 @@ pub fn encode(buildings: &[BuildingComposition], frames: &[FrameRecord]) -> Resu
         return Err(invalid("recipes", 0, "too many buildings"));
     }
     let mut bytes = vec![buildings.len() as u8];
+    let mut lists = Vec::new();
     for building in buildings {
         bytes.extend(building.unit_id.to_le_bytes());
         for v in building.footprint {
@@ -22,15 +23,15 @@ pub fn encode(buildings: &[BuildingComposition], frames: &[FrameRecord]) -> Resu
         for v in building.foundation_size {
             bytes.extend(v.to_le_bytes());
         }
-        parts(&mut bytes, &building.parts, frames)?;
-        parts(&mut bytes, &building.construction, frames)?;
+        parts(&mut bytes, &building.parts, frames, &mut lists)?;
+        parts(&mut bytes, &building.construction, frames, &mut lists)?;
         if building.states.len() > 8 {
             return Err(invalid("recipes", 0, "too many building states"));
         }
         bytes.push(building.states.len() as u8);
         for state in &building.states {
             bytes.push(state.role);
-            parts(&mut bytes, &state.parts, frames)?;
+            parts(&mut bytes, &state.parts, frames, &mut lists)?;
         }
         if building.damage.len() > 7 {
             return Err(invalid("recipes", 0, "too many damage states"));
@@ -46,7 +47,7 @@ pub fn encode(buildings: &[BuildingComposition], frames: &[FrameRecord]) -> Resu
                 shared.push(key);
             }
         }
-        parts(&mut bytes, &shared, frames)?;
+        parts(&mut bytes, &shared, frames, &mut lists)?;
         bytes.push(building.damage.len() as u8);
         for damage in &building.damage {
             bytes.extend(damage.damage_percent.to_le_bytes());
@@ -83,11 +84,16 @@ pub fn encode(buildings: &[BuildingComposition], frames: &[FrameRecord]) -> Resu
         .collect())
 }
 
-fn parts(bytes: &mut Vec<u8>, parts: &[BuildingPart], frames: &[FrameRecord]) -> Result<(), Error> {
+fn parts(
+    bytes: &mut Vec<u8>,
+    parts: &[BuildingPart],
+    frames: &[FrameRecord],
+    lists: &mut Vec<Vec<u8>>,
+) -> Result<(), Error> {
     if parts.len() > 256 {
         return Err(invalid("recipes", 0, "too many parts"));
     }
-    bytes.extend((parts.len() as u16).to_le_bytes());
+    let mut encoded = Vec::new();
     for part in parts {
         let record = if part.available {
             frames
@@ -98,18 +104,30 @@ fn parts(bytes: &mut Vec<u8>, parts: &[BuildingPart], frames: &[FrameRecord]) ->
         } else {
             u32::MAX
         };
-        bytes.extend(record.to_le_bytes());
-        bytes.extend(part.frames.to_le_bytes());
-        bytes.extend(part.angles.to_le_bytes());
-        bytes.push(u8::from(part.primary));
-        bytes.extend(part.frame_rate.to_le_bytes());
-        bytes.extend(part.replay_delay.to_le_bytes());
+        encoded.extend(record.to_le_bytes());
+        encoded.extend(part.frames.to_le_bytes());
+        encoded.extend(part.angles.to_le_bytes());
+        encoded.push(u8::from(part.primary));
+        encoded.extend(part.frame_rate.to_le_bytes());
+        encoded.extend(part.replay_delay.to_le_bytes());
         for v in part.offset {
-            bytes.extend(v.to_le_bytes());
+            encoded.extend(v.to_le_bytes());
         }
         for v in part.misplacement {
-            bytes.extend(v.to_le_bytes());
+            encoded.extend(v.to_le_bytes());
         }
     }
+    if !encoded.is_empty() {
+        if let Some(index) = lists.iter().position(|list| *list == encoded) {
+            bytes.extend((0x8000 | index as u16).to_le_bytes());
+            return Ok(());
+        }
+        if lists.len() >= 0x8000 {
+            return Err(invalid("recipes", 0, "too many shared part lists"));
+        }
+        lists.push(encoded.clone());
+    }
+    bytes.extend((parts.len() as u16).to_le_bytes());
+    bytes.extend(encoded);
     Ok(())
 }

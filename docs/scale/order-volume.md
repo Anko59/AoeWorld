@@ -70,14 +70,27 @@ Both runs start from the same input. Wall-clock AI decisions and shared-host
 load vary; this is neither dedicated-hardware qualification nor a controlled
 causal timing benchmark.
 
-## Current qualification status
+## Owner-build integration (2026-11-12)
 
-The functional revision is `c1675e9ffb2be07d4a5904316c70b242db75cefd`,
+This branch integrates owner build
+`d0a1677ecb63d56a2a14d52e751d5ebc07e0a162` (dev, timers #773,
+walls #777 and the Mekong map) into the order-volume branch at
+`26c081fca6c5a2cea868a875cb418d7c23bdd06d`. The simulation exports retain
+both `ConstructionWork` and the order-demand diagnostic types. Focused merge
+validation is recorded in `.cache/orders-body.md`; the owner will run the
+Mekong save benchmark. The earlier measurements below do not qualify this
+merged tree or demonstrate either performance threshold on the new base.
+Unfinished source-churn experiments were preserved separately and excluded
+from this merge.
+
+## Historical qualification before the owner-build merge
+
+The historical functional revision is `c1675e9ffb2be07d4a5904316c70b242db75cefd`,
 based on frozen dev `7e8ca5a6eb559de4d7e82ed183afe7b3750cd542`.
 The required redundant-order reduction and current-revision instruction gate
 remain unqualified pending the fresh candidate measurements. Current full
-simulation/server, bindings, harness and client-size checks pass; SDK AI
-gameplay is still running. No current preflight pass is claimed.
+simulation/server, full SDK AI/bindings, harness and client-size checks passed
+on that historical revision. No preflight pass was obtained.
 
 The measurement baseline is instrumentation-only
 `5f76887e3dda75b9d63660ea5410a1b0283f4fb8`, plus the explicitly dirty,
@@ -212,7 +225,7 @@ omitted to reduce compiler memory. All compilation and checks run through Make.
 | `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='all()'` | 1,313 passed, no skips, 627.240 s |
 | Corresponding full `aoe-server` command | 453 passed; four existing package-dependent tests skipped; 262.942 s |
 | Focused order/General/replay checks | 11 current focused regressions passed; exact clash baselines, five General variants and three new retention tests; all also pass in the full suite |
-| `make sdk-python-test` | Current 23 binding tests passed (83.34 s); full 163-test AI run in progress |
+| `make sdk-python-test` | 23 binding tests passed (83.34 s); all 163 AI tests passed (1,615.60 s) |
 | `make test-harness` | 1,509 unit tests passed (459.96 s) plus all integration binaries; one existing explicit profiling ignore |
 | `make hooks-install hooks-check fmt-check lint structure-check architecture-check docs-check deny` | Passed |
 | `make build-wasm perf-wasm-cap` | Passed: optimized client gzip 407,730 bytes; diagnostics 90,396 bytes; unchanged cap |

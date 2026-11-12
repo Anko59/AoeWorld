@@ -62,16 +62,31 @@ pub fn prepare_ocean_coverage(
             ..DatasetOptions::default()
         },
     )?;
+    let window = geographic_window(request, estimate.effective_side_meters);
     let geometries = {
         let mut layer = vector.layer(0)?;
-        layer
-            .features()
-            .filter_map(|feature| {
-                feature
-                    .geometry()
-                    .map(|geometry| geometry.transform(&transform))
-            })
-            .collect::<Result<Vec<_>, _>>()?
+        let mut parts = Vec::new();
+        for feature in layer.features() {
+            let Some(geometry) = feature.geometry() else {
+                continue;
+            };
+            // Natural Earth groups the world's polygons into a few multipolygons,
+            // so the window applies to each polygon, not to the feature.
+            let multi = gdal::vector::geometry_type_flatten(geometry.geometry_type())
+                == gdal::vector::OGRwkbGeometryType::wkbMultiPolygon;
+            let count = if multi { geometry.geometry_count() } else { 1 };
+            for index in 0..count {
+                let part = if multi {
+                    geometry.get_geometry(index).clone()
+                } else {
+                    geometry.clone()
+                };
+                if near_footprint(&window, &part.envelope()) {
+                    parts.push(part.transform(&transform)?);
+                }
+            }
+        }
+        parts
     };
     drop(vector);
     fs::remove_file(alias)?;
@@ -129,6 +144,45 @@ pub fn prepare_ocean_coverage(
     Ok(PreparedWater {
         field: FieldPyramid { levels },
         pages,
+    })
+}
+
+/// Longitude/latitude boxes, `[west, south, east, north]`, around the
+/// footprint with a degree of margin; two boxes where it wraps the antimeridian.
+/// Land polygons outside them are skipped before projection: a far polygon that
+/// contains the map's antipode (Peru for the Mekong) turns inside out in the
+/// azimuthal projection and would rasterize the whole map as land.
+fn geographic_window(request: MapRequest, side_meters: u64) -> Vec<[f64; 4]> {
+    let latitude = f64::from(request.center_latitude_e7) / 10_000_000.0;
+    let longitude = f64::from(request.center_longitude_e7) / 10_000_000.0;
+    let reach = side_meters as f64 * std::f64::consts::FRAC_1_SQRT_2 / 111_000.0 + 1.0;
+    let south = latitude - reach;
+    let north = latitude + reach;
+    if south <= -90.0 || north >= 90.0 {
+        return vec![[-180.0, south.max(-90.0), 180.0, north.min(90.0)]];
+    }
+    let widest = south.abs().max(north.abs()).to_radians().cos();
+    let half_width = reach / widest;
+    if half_width >= 180.0 {
+        return vec![[-180.0, south, 180.0, north]];
+    }
+    let (west, east) = (longitude - half_width, longitude + half_width);
+    let mut boxes = vec![[west.max(-180.0), south, east.min(180.0), north]];
+    if west < -180.0 {
+        boxes.push([west + 360.0, south, 180.0, north]);
+    }
+    if east > 180.0 {
+        boxes.push([-180.0, south, east - 360.0, north]);
+    }
+    boxes
+}
+
+fn near_footprint(window: &[[f64; 4]], envelope: &gdal::vector::Envelope) -> bool {
+    window.iter().any(|[west, south, east, north]| {
+        envelope.MinX <= *east
+            && envelope.MaxX >= *west
+            && envelope.MinY <= *north
+            && envelope.MaxY >= *south
     })
 }
 
@@ -252,6 +306,50 @@ mod tests {
         sync::atomic::{AtomicU64, Ordering},
     };
     use zip::{ZipWriter, write::SimpleFileOptions};
+
+    #[test]
+    fn land_window_wraps_the_antimeridian_and_excludes_the_antipode() {
+        let mekong = MapRequest {
+            center_latitude_e7: 145_000_000,
+            center_longitude_e7: 1_048_000_000,
+            requested_side_meters: 960_000,
+            ..MapRequest::default()
+        };
+        let window = geographic_window(mekong, 960_000);
+        let envelope = |west, south, east, north| gdal::vector::Envelope {
+            MinX: west,
+            MaxX: east,
+            MinY: south,
+            MaxY: north,
+        };
+        // Peru holds the Mekong antipode (14.5 S, 75.2 W); Indochina is kept.
+        assert!(!near_footprint(
+            &window,
+            &envelope(-81.0, -18.0, -68.0, 0.0)
+        ));
+        assert!(near_footprint(&window, &envelope(-10.0, 1.0, 180.0, 77.0)));
+        let fiji = MapRequest {
+            center_latitude_e7: -170_000_000,
+            center_longitude_e7: 1_790_000_000,
+            ..mekong
+        };
+        let window = geographic_window(fiji, 960_000);
+        assert_eq!(window.len(), 2);
+        assert!(near_footprint(
+            &window,
+            &envelope(-179.9, -17.0, -179.0, -16.0)
+        ));
+        let pole = MapRequest {
+            center_latitude_e7: 880_000_000,
+            ..mekong
+        };
+        let window = geographic_window(pole, 960_000);
+        assert_eq!(window.len(), 1);
+        assert_eq!(
+            [window[0][0], window[0][2], window[0][3]],
+            [-180.0, 180.0, 90.0]
+        );
+    }
 
     #[test]
     fn coastline_supersampling_preserves_partial_ocean_coverage() {

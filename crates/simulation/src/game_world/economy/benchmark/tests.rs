@@ -11,6 +11,8 @@ mod sleep;
 #[test]
 fn late_game_workload_keeps_real_jobs_and_full_queues() {
     let mut world = build(2).unwrap();
+    let mut reference = build(2).unwrap();
+    reference.set_work_sleep(false);
     assert_eq!(world.unit_count(), 280);
     assert_eq!(world.players().count(), 2);
     assert!(world.animals().count() >= 16);
@@ -32,14 +34,26 @@ fn late_game_workload_keeps_real_jobs_and_full_queues() {
             .all(|b| b.training_queue.len() == 5)
     );
     let initial = world.canonical_hash();
+    assert_eq!(initial, reference.canonical_hash());
     let stock: u32 = world.players().map(|p| p.stockpile.wood).sum();
-    for _ in 0..384 {
-        world.advance();
+    for tick in 1..=384 {
+        assert_eq!(
+            world.advance(),
+            reference.advance(),
+            "workload changes at {tick}"
+        );
+        assert_eq!(
+            world.canonical_hash(),
+            reference.canonical_hash(),
+            "workload hash at {tick}"
+        );
     }
     assert!(world.economy.gatherers.len() >= 120);
-    assert!(world.economy.tick_work.training_buildings >= 4);
-    assert!(world.economy.tick_work.research_buildings >= 2);
-    assert!(world.economy.tick_work.spawn_units > 0);
+    // These physical-visit floors qualify the original full-step workload.
+    // Sleep must reproduce it every tick without making the same visits.
+    assert!(reference.economy.tick_work.training_buildings >= 4);
+    assert!(reference.economy.tick_work.research_buildings >= 2);
+    assert!(reference.economy.tick_work.spawn_units > 0);
     assert!(world.units().filter(|u| u.moving).count() >= 10);
     assert!(world.units().any(|u| u.task == UnitTask::Gathering));
     assert!(

@@ -143,6 +143,55 @@ fn automatic_worker_requires_rivers_or_the_explicit_outside_coverage_note() {
     }
 }
 
+#[test]
+fn vector_packages_take_lakes_and_exactly_one_regional_river_release() {
+    let package = overview_response(true);
+    let relock = |edit: &dyn Fn(&mut Vec<aoe_map::SourceLock>)| {
+        let mut locks = package.source_locks.clone();
+        edit(&mut locks);
+        MapPackage::with_prepared_environment(
+            1,
+            package.request,
+            locks,
+            package.projection.clone(),
+            package.provenance.clone(),
+            package.environment.clone(),
+        )
+        .unwrap()
+    };
+    let river = |locks: &mut Vec<aoe_map::SourceLock>| {
+        locks
+            .iter()
+            .position(|lock| lock.id == "hydrorivers-v1.0-eu-shp")
+            .unwrap()
+    };
+    let asia = relock(&|locks| {
+        let index = river(locks);
+        locks[index].id = "hydrorivers-v1.0-as-shp".into();
+    });
+    let both = relock(&|locks| {
+        let index = river(locks);
+        let mut extra = locks[index].clone();
+        extra.id = "hydrorivers-v1.0-as-shp".into();
+        locks[0] = extra;
+    });
+    let no_lakes = relock(&|locks| {
+        let index = locks
+            .iter()
+            .position(|lock| lock.id == "hydrolakes-v1.0-global-gdb")
+            .unwrap();
+        locks[index].id = "fixture-lakes".into();
+    });
+    for mode in [
+        crate::map_jobs::HydrologyMode::Automatic,
+        crate::map_jobs::HydrologyMode::Vectors,
+    ] {
+        assert!(hydrology::verify(&asia, mode).is_ok());
+        assert!(hydrology::verify(&both, mode).is_err());
+        assert!(hydrology::verify(&no_lakes, mode).is_err());
+    }
+}
+
 pub(crate) fn overview_response(covered: bool) -> MapPackage {
     use aoe_map::*;
     let request = MapRequest::default();

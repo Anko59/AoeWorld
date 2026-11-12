@@ -50,7 +50,7 @@ fn stalled_food(
         .player_buildings_of(PlayerId(0), BuildingKind::Mill)
         .next()
         .unwrap()
-        .clone();
+        .into_owned();
     reserves(w, 0, 30_000, 30_000, 30_000);
     w.issue_garrison(PlayerId(0), remote, town_center).unwrap();
     let earned = make_farmers(w, workers, anchor);

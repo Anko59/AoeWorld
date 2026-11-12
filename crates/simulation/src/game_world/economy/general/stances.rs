@@ -44,11 +44,13 @@ impl GameWorld {
             });
         }
         // The accompanying formation/move order cancels the previous attack.
+        self.combat.quiet.wake(id);
         self.units[index].state.stance = stance;
     }
 
     fn restore_stance(&mut self, saved: StanceOverride) {
         if let Some(&index) = self.lookup.get(&saved.id) {
+            self.combat.quiet.wake(saved.id);
             self.units[index].state.stance = saved.original;
         }
     }

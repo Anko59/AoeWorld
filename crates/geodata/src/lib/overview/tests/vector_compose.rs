@@ -191,7 +191,7 @@ fn vector_fixture(
             policy: HydrologyWaterPolicy::HistoricalOverviewWithMappedNaturalWaterV1,
             hydrology_page_root: aoe_map::ordered_hydrology_page_root(&evidence).unwrap(),
             modern_land_cover_page_root: aoe_map::ordered_modern_land_cover_page_root(&modern).unwrap(), water_model: None },
-        source_locks: crate::hydrology_vector_sources().iter().map(|source| source.cache_lock().unwrap()
+        source_locks: crate::hydrology_vector_sources(&crate::HYDRORIVERS_REGIONS[0]).iter().map(|source| source.cache_lock().unwrap()
             .to_map_source_lock("offline-fixture".into(), "modern-landcover=not-requested;modern-class=0-nodata;2021=classification-legend-only".into()).unwrap()).collect(),
         hydrology_pages: evidence, modern_land_cover_pages: modern, river_topology };
     let elevation_context = crate::hydrology::overview_elevation_context(elevation).unwrap();

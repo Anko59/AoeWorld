@@ -385,6 +385,8 @@ impl GameWorld {
             }
         }
         for (id, timed_out) in ready {
+            self.combat.quiet.wake(id);
+            self.combat.healing.wake(id);
             let index = self.lookup[&id];
             self.clear_planner(index);
             self.units[index].order = None;

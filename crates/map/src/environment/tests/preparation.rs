@@ -47,3 +47,22 @@ fn elevation_tile_locks_do_not_count_toward_the_overview_stack() {
     ];
     assert_eq!(overview_base_lock_count(&locks), 2);
 }
+
+#[test]
+fn vector_hydrology_locks_are_lakes_or_any_regional_river_release() {
+    for id in [
+        "hydrolakes-v1.0-global-gdb",
+        "hydrorivers-v1.0-eu-shp",
+        "hydrorivers-v1.0-as-shp",
+    ] {
+        assert!(is_vector_hydrology_lock(id), "{id}");
+    }
+    for id in [
+        "hydrorivers-v1.0--shp",
+        "hydrorivers-v1.1-as-shp",
+        "etopo-2022-v1-60s-surface",
+    ] {
+        assert!(!is_vector_hydrology_lock(id), "{id}");
+    }
+    assert!(!is_hydrorivers_lock(HYDROLAKES_SOURCE_ID));
+}

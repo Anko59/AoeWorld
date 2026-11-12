@@ -1,6 +1,8 @@
 //! Local Castle mechanics, using the existing unit spatial index.
 use crate::{GameWorld, Projectile, UnitKind};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, TileCoord, TileRect};
+mod rest;
+pub(crate) use rest::Rest;
 
 impl GameWorld {
     pub(in crate::game_world::combat) fn resolve_splash(
@@ -82,16 +84,25 @@ impl GameWorld {
         if !self.tick.0.is_multiple_of(period) {
             return;
         }
+        #[cfg(test)]
+        self.assert_resting_healers();
         // Cache only wounded, healable ids, once per touched spatial bucket.
         // Healthy crowds are scanned once rather than sorted once per Monk.
         let mut wounded = std::collections::BTreeMap::new();
-        let healers: Vec<_> = self.combat.healers.iter().copied().collect();
+        let healers = self
+            .combat
+            .healing
+            .ready(self.economy.no_sleep, &self.combat.healers);
         for id in healers {
             let Some(m) = self.unit(id).filter(|u| u.hp > 0) else {
                 self.combat.healers.remove(&id);
+                self.combat.healing.remove(id);
                 continue;
             };
             if self.embarked(id) || m.moving || m.planning || m.attack_target.is_some() {
+                if !self.economy.no_sleep {
+                    self.combat.healing.park(id);
+                }
                 continue;
             }
             let tile = m.position.tile_floor();
@@ -161,6 +172,8 @@ impl GameWorld {
                     self.combat.hp_quarters[target.0 as usize] = 0;
                 }
                 changed.push(target);
+            } else if !self.economy.no_sleep {
+                self.combat.healing.sleep(&m, bounds);
             }
         }
     }

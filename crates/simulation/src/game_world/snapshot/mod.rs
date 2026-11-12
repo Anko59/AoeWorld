@@ -86,6 +86,11 @@ impl GameWorld {
             .economy
             .buildings
             .values()
+            .map(|b| {
+                self.economy
+                    .queues
+                    .project(self.economy.construction.project(b))
+            })
             .map(|b| BuildingRecord {
                 id: b.id,
                 player: b.player,
@@ -104,6 +109,7 @@ impl GameWorld {
                 food_remaining: b.food_remaining,
                 research: b.research,
                 gate_open: b.gate_open,
+                gate_locked: b.gate_locked,
                 rally_point: b.rally_point,
                 farm_reseeds: b.farm_reseeds,
             })
@@ -147,6 +153,9 @@ impl GameWorld {
             self.economy.players.insert(player.player, *player);
         }
         self.tick = aoe_core::Tick(snapshot.tick);
+        self.economy.construction.tick = snapshot.tick;
+        self.economy.queues.training.tick = snapshot.tick;
+        self.economy.queues.research.tick = snapshot.tick;
         self.restore_explored(&snapshot.explored);
         let mut report = RestoreReport::default();
         // Identities are placed one at a time at their own number: buildings
@@ -227,13 +236,17 @@ impl GameWorld {
         building.food_remaining = record.food_remaining;
         building.research = record.research;
         building.gate_open = record.gate_open;
+        building.gate_locked = record.gate_locked;
         building.rally_point = record.rally_point;
         building.farm_reseeds = record.farm_reseeds;
         if !record.training_queue.is_empty() {
             self.economy.active_training.insert(id);
+            self.economy.queues.training.awake.insert(id);
+            self.economy.queues.register_training(id, record.player);
         }
         if record.research.is_some() {
             self.economy.active_research.insert(id);
+            self.economy.queues.research.awake.insert(id);
         }
         if record.complete && record.kind.is_gate() {
             self.restore_gate(id, record.gate_open);

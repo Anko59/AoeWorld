@@ -142,7 +142,8 @@ impl GameWorld {
             let victim = &mut self.units[victim_index].state;
             victim.hp = hp;
             victim.last_hit = Some(hit);
-            let (hp, victim_player) = (victim.hp, victim.player);
+            let (hp, victim_player, at) = (victim.hp, victim.player, victim.position.tile_floor());
+            self.combat.healing.notify(at);
             self.record_combat_hit(
                 Some(attacker_player),
                 victim_player,
@@ -164,7 +165,7 @@ impl GameWorld {
             }
         } else if let Some(building) = self.building(target) {
             let armour = super::table::age_armour(building.kind, building.age);
-            let masonry = self.building_has_masonry(building);
+            let masonry = self.building_has_masonry(&building);
             let raw = super::table::damage_components(
                 attack,
                 kind,
@@ -174,6 +175,7 @@ impl GameWorld {
             );
             let hp =
                 self.apply_combat_damage(attacker_id, target, building.hp, raw, power.elevation);
+            self.wake_construction(target);
             let Some(building) = self.building_mut(target) else {
                 return;
             };

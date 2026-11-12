@@ -8,7 +8,7 @@ use aoe_core::{EntityId, Formation, PlayerId, TileRect, WorldPosition};
 use aoe_map::ResourceOverlaySnapshot;
 use serde::{Deserialize, Serialize};
 
-pub const WORLD_SNAPSHOT_VERSION: u16 = 2;
+pub const WORLD_SNAPSHOT_VERSION: u16 = 3;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WorldSnapshot {
@@ -83,6 +83,7 @@ pub struct BuildingRecord {
     pub food_remaining: Option<u16>,
     pub research: Option<ResearchEntry>,
     pub gate_open: bool,
+    pub gate_locked: bool,
     pub rally_point: Option<RallyPoint>,
     pub farm_reseeds: u8,
 }

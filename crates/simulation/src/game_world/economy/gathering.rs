@@ -23,6 +23,7 @@ mod returning;
 mod sleep;
 pub(crate) use sleep::GatherSleep;
 mod dozing;
+mod walking;
 mod work;
 pub use work::GatherWork;
 pub(crate) use work::{Count, GatherCounters};
@@ -160,75 +161,6 @@ impl GameWorld {
         self.begin_gather_task(id, task)
     }
 
-    fn begin_gather_task(
-        &mut self,
-        id: EntityId,
-        mut task: GatherTask,
-    ) -> Result<(), EconomyError> {
-        // Repeating a job is not a new approach: keep return trips, partial
-        // loads and work credits. A failed trip may still be retried explicitly.
-        if self
-            .economy
-            .gatherers
-            .get(&id)
-            .is_some_and(|old| old.target() == task.target())
-            && self
-                .lookup
-                .get(&id)
-                .is_some_and(|&i| self.units[i].last_movement_error.is_none())
-        {
-            self.player_override(id);
-            return Ok(());
-        }
-        let farm = task.farm;
-        if task.farm.is_none() && task.animal.is_none() && task.fish.is_none() {
-            if !self.admit_resource_approach(id, &mut task) {
-                return Err(EconomyError::InvalidResource);
-            }
-        } else {
-            self.approach_resource(id, task.tile)?;
-        }
-        task.work_position = self
-            .movement_order(id)
-            .map(|o| o.destination)
-            .or_else(|| self.unit(id).map(|u| u.position));
-        self.player_override(id);
-        self.cancel_garrison_order(id);
-        self.cancel_hunt(id);
-        self.cancel_attack(id);
-        let previous_farm = self.economy.gatherers.get(&id).and_then(|task| task.farm);
-        let Some(&index) = self.lookup.get(&id) else {
-            return Err(EconomyError::UnknownEntity);
-        };
-        if self.units[index]
-            .state
-            .carried
-            .is_some_and(|load| load.kind != task.kind)
-        {
-            self.units[index].state.carried = None;
-        }
-        self.units[index].state.task = if self.units[index].state.carried.is_some() {
-            UnitTask::Carrying
-        } else {
-            UnitTask::Moving
-        };
-        let keep = self.units[index].state.carried.is_none_or(|load| {
-            load.amount < self.gather_task_capacity(&self.units[index].state, &task)
-        }) || self.begin_return(id, &mut task);
-        if keep {
-            self.economy.gatherers.insert(id, task);
-        } else {
-            self.economy.gatherers.remove(&id);
-        }
-        self.index_destination(id);
-        if let Some(old) = previous_farm
-            && Some(old) != farm
-        {
-            self.remove_spent_farm(old);
-        }
-        Ok(())
-    }
-
     pub(super) fn advance_gathering(
         &mut self,
         sink: &mut impl FnMut(&PreparedResourceDepletion<'_>) -> bool,
@@ -237,7 +169,11 @@ impl GameWorld {
         self.wake_before_gathering(changed);
         self.economy.gatherers.begin_loop();
         let mut cursor = None;
-        while let Some(id) = self.economy.gatherers.next_awake(cursor) {
+        loop {
+            self.wake_walker_contacts();
+            let Some(id) = self.economy.gatherers.next_awake(cursor) else {
+                break;
+            };
             cursor = Some(id);
             self.economy.gatherers.observe_crowd(id);
             self.refine_gather_approach(id);
@@ -281,9 +217,17 @@ impl GameWorld {
             {
                 self.index_destination(id);
             }
+            if !keep && let Some(unit) = self.unit(id) {
+                self.economy
+                    .gatherers
+                    .notify_walkers_at(unit.position.tile_floor());
+            }
             if let Some(after) = self.unit(id)
                 && after != before
             {
+                self.economy
+                    .gatherers
+                    .notify_walkers_at(after.position.tile_floor());
                 changed.push(after.id);
             }
         }

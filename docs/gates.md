@@ -4,15 +4,15 @@ Generated from `gates/registry.json`. `make docs-check` detects drift.
 
 Registry v2 drives selection and dependency plans. The opt-in gate-run CLI executes cadence or complete CI-job plans with explicit budgets and local evidence. Existing Make/CI dispatch and minimum preflight remain mandatory until protected judging replaces bootstrap execution. No automatic agent interception is implied.
 
-**Resources and long jobs.** Short gates start immediately across worktrees; there is no ticket queue, load wait, slot count or CPU quota.
+**Resources and long jobs.** Short gates start immediately across worktrees; there is no ticket queue, load wait or CPU quota; long jobs have a small fixed slot count.
 Every build/test container uses the shared `gates/container.args` policy: 4 GiB memory including swap, relative CPU shares, and four Cargo build jobs. The harness's own Docker commands use the same caps.
 Before starting a container, the Rust launcher refuses immediately if host MemAvailable is below 3 GiB; the cap bounds one container, while admission checks the current host headroom. Concurrent admissions are observations, not memory reservations.
 A kernel OOM kill is reported as exceeding the container memory cap. Final cgroup memory.peak readings accompany Make container output.
-Only gates marked `long` (benchmarks, full E2E, coverage, and aggregates that run them) take the nonblocking kernel lock at `<git common dir>/aoe-ship/long.lock`. Focused `test-e2e` with nonempty `AOE_E2E_SPECS` is short; WASM size analysis is short too.
-A second long job refuses with exit 75 and `busy: <holder command, branch, worktree, started>, retry later`; it never waits. Make itself reports recipe failures as exit 2. Short jobs never take this lock.
-Exec children inherit the lock descriptor, so killing the parent does not free it while those children run. Nested targets carry `AOE_LONG_JOB` and `AOE_LONG_DIR`, accepting ownership only while the kernel lock and its proof are live. Snapshots use the source repository's lock directory.
+Only gates marked `long` (benchmarks, full E2E, coverage, and aggregates that run them) take one of N nonblocking kernel-lock slots, the files `<git common dir>/aoe-ship/long-0.lock` … `long-{N-1}.lock`; N is 3 unless `AOE_LONG_SLOTS` (1..=8) says otherwise. Focused `test-e2e` with nonempty `AOE_E2E_SPECS` is short; WASM size analysis is short too.
+A long job takes the first free slot; only when every slot is held does it refuse with exit 75 and `busy: slot 0: <holder command, branch, worktree, started>; slot 1: …, retry later`, listing every holder; it never waits. Make itself reports recipe failures as exit 2. Short jobs never take this lock.
+Exec children inherit the lock descriptor, so killing the parent does not free it while those children run. Nested targets carry `AOE_LONG_JOB`, `AOE_LONG_DIR` and `AOE_LONG_SLOT` (the held slot), accepting ownership only while that slot's kernel lock and proof are live. Snapshots use the source repository's lock directory.
 The host job wrapper takes the lock before running long-target prerequisites. The independent std-only resource launcher bootstraps in a small 256 MiB container; workspace compilation is admitted and capped, without a machine-wide bootstrap lock.
-CI uses the same caps and immediate admission; each job has its own runner. `make load-status` shows MemAvailable and the current long-job holder. No wait-time environment variables remain.
+CI uses the same caps and immediate admission; each job has its own runner. `make load-status` shows MemAvailable and every long-job slot with its holder. No wait-time environment variables remain.
 
 | Gate | Command | Depends on | Suites | Cadences | Budget (s) | Long job | Evidence |
 |---|---|---|---|---|---|---|---|

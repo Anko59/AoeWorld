@@ -85,7 +85,7 @@ change. They are counted, not capped: cumulative `{calls, visited}` pairs that a
 | `wildlife_ids` | `wildlife/ai.rs:7`, every animal's id collected | animals |
 | `advance_transports` | `navy/journeys.rs:134`, every journey | journeys |
 | `collect_changed` | `economy/tick.rs`, every changed id sorted and fetched | ids |
-| `tables_refresh` | `Tables::refresh` in `movement_step/mod.rs`; now clears only last tick's marks, so it visits jobs, not every entity id | job ids marked |
+| `tables_refresh` | `Tables::refresh` in `movement_step/mod.rs`; player values only, with job ownership read on demand for each proposed mover | 0 (the all-job scan was removed) |
 | `unit_frame` | the server's `UnitFrame::build`, initial population or subsequent simulation change ids | unit ids (including removals) |
 
 `unit_frame_converted` and `unit_frame_changed` (in the same `passes`, `visited` only) count the

@@ -4,7 +4,9 @@ use super::*;
 impl GameWorld {
     pub(super) fn at_dropoff(&self, unit: crate::GameUnit, task: &GatherTask) -> bool {
         task.dropoff
-            .and_then(|id| self.building(id))
+            // This predicate reads geometry and completion, not projected
+            // work or queue progress. Avoid cloning an actively training TC.
+            .and_then(|id| self.economy.buildings.get(&id))
             .is_some_and(|building| {
                 building.player == unit.player
                     && building.is_complete()
@@ -72,7 +74,10 @@ impl GameWorld {
                     && (n + 1 < tiles.len() || at + 1 < order.len())
                 {
                     probed_origin = true;
-                    pocket = self.route_origin_pocket(unit.kind, from).ok().flatten();
+                    pocket = self
+                        .route_origin_pocket(unit.kind, from, unit.player)
+                        .ok()
+                        .flatten();
                 }
                 if let Err(error) = issued
                     && !known
