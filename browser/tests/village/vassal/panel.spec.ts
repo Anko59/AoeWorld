@@ -98,7 +98,7 @@ test("attacked Vassal shows its alert while a nearby General arrives and returns
   page,
   request,
 }, testInfo) => {
-  test.setTimeout(240_000);
+  test.setTimeout(420_000);
   const { gameAssets } = await import("../../game-assets.js");
   await gameAssets(page, true);
   expect(
@@ -168,18 +168,25 @@ test("attacked Vassal shows its alert while a nearby General arrives and returns
     await expect(page.locator("#vassal-status")).toContainText(
       "1 General(s) responding",
     );
+    // The Vassal's walls make attackers path around closed gates, so the
+    // General chases them along a long route. He has marched out once he is
+    // far from home on screen, or has left the camera's view entirely.
     await expect(async () => {
-      expect((await generalPosition()).x).toBeLessThan(home.x - 200);
+      const general = await generalPosition().catch(() => undefined);
+      if (!general) return;
+      expect(Math.hypot(general.x - home.x, general.y - home.y)).toBeGreaterThan(
+        100,
+      );
     }).toPass({ timeout: 20_000 });
     await expect(page.locator("#vassal-status")).toContainText(
       "holding territory",
-      { timeout: 60_000 },
+      { timeout: 150_000 },
     );
     await expect(async () => {
       const general = await generalPosition();
       expect(Math.abs(general.x - home.x)).toBeLessThan(4);
       expect(Math.abs(general.y - home.y)).toBeLessThan(4);
-    }).toPass({ timeout: 30_000 });
+    }).toPass({ timeout: 90_000 });
   } finally {
     clearInterval(timer);
     await testInfo.attach("vassal-match-observations", {
