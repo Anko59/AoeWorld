@@ -174,9 +174,9 @@ test("attacked Vassal shows its alert while a nearby General arrives and returns
     await expect(async () => {
       const general = await generalPosition().catch(() => undefined);
       if (!general) return;
-      expect(Math.hypot(general.x - home.x, general.y - home.y)).toBeGreaterThan(
-        100,
-      );
+      expect(
+        Math.hypot(general.x - home.x, general.y - home.y),
+      ).toBeGreaterThan(100);
     }).toPass({ timeout: 20_000 });
     await expect(page.locator("#vassal-status")).toContainText(
       "holding territory",
