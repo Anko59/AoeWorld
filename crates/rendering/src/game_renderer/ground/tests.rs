@@ -338,7 +338,7 @@ fn feudal_and_imperial_buildings_paint_native_foundations_and_aprons_only_on_lan
         (28, 103),
         (29, 84),
         (30, 79),
-        (31, 792),
+        (31, 796),
         (44, 133),
         (74, 142),
         (75, 465),
@@ -358,7 +358,7 @@ fn feudal_and_imperial_buildings_paint_native_foundations_and_aprons_only_on_lan
         let mut art = crate::surface_mesh::mix::fixture::art();
         art.compositions.push(crate::BuildingArt {
             unit_id: id,
-            footprint: if id == 792 { [4.0, 1.0] } else { [3.0; 2] },
+            footprint: if id == 796 { [1.0, 4.0] } else { [3.0; 2] },
             foundation_material: None,
             parts: Vec::new(),
             states: Vec::new(),
