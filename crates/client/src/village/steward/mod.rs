@@ -120,7 +120,7 @@ pub(in super::super) fn general_command(client: &mut Client, action: u32, code: 
 
 /// Polygons (screen space) for every owned TownCenter's territory, laid out as
 /// `[count, (active, selected, points, x0, y0, x1, y1, ...) * count]`.
-fn domains(client: &Client, player: PlayerId, selected: EntityId) -> Vec<f64> {
+fn domains(client: &Client, player: PlayerId, selected: EntityId, scale: f64) -> Vec<f64> {
     let town_centers: Vec<_> = client
         .village
         .buildings
@@ -146,7 +146,6 @@ fn domains(client: &Client, player: PlayerId, selected: EntityId) -> Vec<f64> {
         .collect();
     let all: Vec<_> = town_centers.iter().map(|c| c.1).collect();
     let radius = f64::from(aoe_simulation::STEWARD_RULES.radius_tiles);
-    let scale = f64::from(client.canvas.client_width()) / f64::from(client.canvas.width());
     let scene = map::scene::prepare(client);
     let mut values = vec![town_centers.len() as f64];
     for (id, town_center) in &town_centers {
@@ -190,7 +189,7 @@ fn describe(report: Option<aoe_protocol::StewardReport>) -> String {
     )
 }
 
-pub(super) fn present(client: &Client) {
+pub(super) fn present(client: &Client, scale: f64) {
     vassal::present(client);
     let player = owner(client);
     let mut points = Vec::new();
@@ -209,7 +208,7 @@ pub(super) fn present(client: &Client) {
         // Strategic cards have their own cached, flat domain geometry. Do not
         // rebuild every TownCenter's elevated sprite outline behind that view.
         if !crate::playground::game::strategic::active(client) {
-            points = domains(client, player, b.id);
+            points = domains(client, player, b.id, scale);
         }
         label = if let Some(v) = steward {
             if let Some(r) = v.steward {

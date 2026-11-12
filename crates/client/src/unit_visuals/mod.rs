@@ -484,16 +484,10 @@ pub(crate) fn click_order(
     }
 }
 
-/// Native anchors may lie below the image; their small ground target is usable.
-pub(crate) fn actor_hit(bounds: [f64; 4], foot: [f64; 2], point: [f64; 2], zoom: f64) -> bool {
-    let dx = point[0] - foot[0];
-    let dy = point[1] - foot[1];
-    (point[0] >= bounds[0]
-        && point[0] <= bounds[2]
-        && point[1] >= bounds[1]
-        && point[1] <= bounds[3])
-        || dx * dx + dy * dy <= (5.0 * zoom).powi(2)
-}
+mod hit;
+#[cfg(test)]
+pub(crate) use hit::actor_hit;
+pub(crate) use hit::actor_hit_projected;
 
 #[cfg(test)]
 mod tests;

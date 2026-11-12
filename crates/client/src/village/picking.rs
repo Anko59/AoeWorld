@@ -59,27 +59,24 @@ fn target(client: &Client, point: ScreenPoint, units_only: bool) -> Option<(Enti
                     .ok()
                     .map(|index| rendered[index])
             })?;
-            let screen = map::screen_position(client, unit.position);
-            let fallback = [
-                screen.x - 7.0 * client.camera.zoom,
-                screen.y - 30.0 * client.camera.zoom,
-                screen.x + 7.0 * client.camera.zoom,
-                screen.y + 2.0 * client.camera.zoom,
-            ];
             let bounds = aoe_rendering::scene_unit_bounds(
                 &client.art,
                 unit,
                 camera,
                 client.last_frame as usize,
-            )
-            .unwrap_or(fallback);
+            );
             let depth = aoe_rendering::scene_unit_depth(unit);
-            (crate::unit_visuals::actor_hit(
-                bounds,
-                [screen.x, screen.y],
-                [point.x, point.y],
-                client.camera.zoom,
-            ) && terrain_depth.is_none_or(|surface| surface <= depth + 1e-6))
+            (terrain_depth.is_none_or(|surface| surface <= depth + 1e-6)
+                && crate::unit_visuals::actor_hit_projected(
+                    bounds,
+                    client.camera.world_to_screen(unit.position).x,
+                    [point.x, point.y],
+                    client.camera.zoom,
+                    || {
+                        let screen = map::screen_position(client, unit.position);
+                        [screen.x, screen.y]
+                    },
+                ))
             .then_some((depth, id, animal, enemy))
         })
         .max_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))

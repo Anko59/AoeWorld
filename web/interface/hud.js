@@ -1,3 +1,5 @@
+import { actorLabels } from '/interface/dom/actors.js';
+import { set, attribute } from '/interface/dom/update.js';
 import { castleUnits, castleUnitNames, castleKinds } from '/interface/castle.js';
 import { imperialUnits, imperialUnitNames } from '/interface/imperial.js';
 import { initBuildings, buildingKinds, buildingNames } from '/interface/buildings.js';
@@ -13,9 +15,8 @@ import { initSaveGame } from '/interface/saves.js';
 // from Rust at most four times per second; no frame loop or gameplay rules here.
 const icon = name => packIcon('resources',name,name);
 const byId = id => document.getElementById(id);
-const text = (id,value) => { const node = byId(id); const next = String(value); if (node && node.textContent !== next) node.textContent = next; };
-const show = (id,visible) => { byId(id).hidden = !visible; };
-const attribute = (node,name,value) => { if (node.getAttribute(name) !== value) node.setAttribute(name,value); };
+const text = (id,value) => { const node = byId(id); if (node) set(node, 'textContent', String(value)); };
+const show = (id,visible) => { set(byId(id), 'hidden', !visible); };
 
 export function initInterface() {
   initBuildings();autoFit(byId('training-queue'),{high:30,low:22});
@@ -29,7 +30,7 @@ export function initInterface() {
   const scene = () => byId('scene');
   const menu = byId('game-menu');
   const grid = byId('command-grid');
-  const empty = Array.from({length:15}, () => {
+  Array.from({length:15}, () => {
     const node = document.createElement('span'); node.className='empty-command'; node.setAttribute('aria-hidden','true'); grid.append(node); return node;
   });
   byId('menu-toggle').addEventListener('click', () => {
@@ -52,17 +53,20 @@ export function initInterface() {
     Object.assign(box.style,{left:`${Math.min(drag[0],event.clientX)}px`,top:`${Math.min(drag[1],event.clientY)}px`,width:`${width}px`,height:`${height}px`});
   });
   for (const event of ['pointerup','pointercancel','lostpointercapture']) document.addEventListener(event,()=>{ drag=null;box.hidden=true; });
-  let previousSelection='', previousLoads='', previousHealth='', previousIdle='', previousFlags='';
+  let previousSelection='';
+  const labels = actorLabels(icon);
   const update = state => {
+    // Read style before changing any panels or actor labels.
+    const bottom=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bottom'))||208;
     ['wood','food','gold','stone'].forEach((resource,index) => {
       text(`stockpile-${resource}`,state.stockpile[index]); text(`workers-${resource}`,state.workers[index]);
     });
     text('population',state.population.join('/'));
     text('idle-villager-count',state.idleVillagers);
-    byId('idle-villagers').disabled=state.idleVillagers===0;
+    set(byId('idle-villagers'), 'disabled', state.idleVillagers===0);
     byId('idle-villagers').classList.toggle('has-idle',state.idleVillagers>0);
     text('idle-military-count',state.idleMilitary);
-    byId('idle-military').disabled=state.idleMilitary===0;
+    set(byId('idle-military'), 'disabled', state.idleMilitary===0);
     byId('idle-military').classList.toggle('has-idle',state.idleMilitary>0);
     const minutes=Math.floor(state.seconds/60), seconds=state.seconds%60;
     text('game-clock',`${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`);
@@ -75,7 +79,7 @@ export function initInterface() {
     const military=units && count>1 && selected.every(u=>['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,...imperialUnits].includes(u.kind));
     const stance=units && selected.every(u=>!['Villager','FishingShip','TransportShip','Monk','Vassal','Steward','Sheep','Deer','Boar','Wolf'].includes(u.kind));
     show('combat-stance-label',stance);show('command-context',!stance);
-    byId('combat-stance').value=scene().dataset.selectedStance??'';
+    set(byId('combat-stance'), 'value', scene().dataset.selectedStance??'');
     for(const name of ['line','box','staggered','flank']){show(`formation-${name}`,military);}
     show('attack-move-units',military);
     show('general-only-move',owned && count===1 && first.kind==='General');
@@ -86,8 +90,7 @@ export function initInterface() {
     show('selection-empty',count===0); show('selection-content',count>0);
     show('train-villager',building && owned); show('move-units',units); show('stop-units',units);
     show('delete-units',owned && count>0);
-    const actions=building?2:units?3:0;
-    empty.forEach((node,index)=>{node.hidden=index>=15-actions;});
+    // The building menu sets placeholder visibility after all commands update.
     text('command-context',count>1?`${count} ${building?'buildings':'units'}`:first?.name ?? 'Select a unit');
     text('command-hint',!owned && first?'You cannot command this player’s units or buildings':building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: work or move · Ctrl+right-click: queue move · Ctrl+0–9: group':first.kind==='FishingShip'?'Right-click: fish or move':first.kind==='General'?'Right-click ground: march with your army · Alt+right-click: General only':first.kind==='Steward'?'Garrison in any owned Town Center without a Steward':first.kind==='Monk'?'Right-click: move · heals nearby injured units automatically':['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,...imperialUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley'].includes(first.kind)?'Right-click: attack or move · Ctrl+0–9: group':first.kind==='TransportShip'?'Load at the bank · sail · unload passengers':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag: group · arrows: camera · 0–9: recall group');
     show('selection-health',count===1);
@@ -95,7 +98,7 @@ export function initInterface() {
     if (first) {
       text('selection-owner',first.player<0?'Wildlife':first.owned?'Your village':`Player ${first.player+1}`);
       text('unit-hp',`${first.hp} / ${first.maxHp} HP`);
-      byId('selection-health').value=first.hp; byId('selection-health').max=Math.max(1,first.maxHp);
+      set(byId('selection-health'), 'value', first.hp); set(byId('selection-health'), 'max', Math.max(1,first.maxHp));
       text('unit-combat',`Attack ${first.attack} · Armour ${first.melee} / ${first.pierce} · Range ${first.range}`);
       const groupName=selected.every(unit=>unit.kind===first.kind)?(building&&first.name.endsWith('s')?first.name:building&&first.name.endsWith('y')?`${first.name.slice(0,-1)}ies`:`${first.name}s`):'units';
       text('selection-name',count>1?`${count} ${groupName} selected`:first.name);
@@ -112,19 +115,11 @@ export function initInterface() {
     attribute(scene(),'data-actors',JSON.stringify(state.actors));
     attribute(scene(),'data-resource-targets',JSON.stringify(state.resources));
     attribute(scene(),'data-village-art',state.art?'native':'markers');
-    const health=state.actors.filter(a=>a.selected && a.hp>0 && !buildingKinds.includes(a.kind)).map(a=>`<span class="unit-hp-bar" style="left:${a.x-18}px;top:${a.head}px"><span style="width:${100*a.hp/a.maxHp}%"></span></span>`).join('');
-    if (health!==previousHealth) { byId('unit-health-bars').innerHTML=health; previousHealth=health; }
-    // Own idle workers carry a marker so they can be found on the map.
-    const bottom=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bottom'))||208;
-    const idle=state.actors.filter(a=>a.owned && a.hp>0 && a.task==='Idle' && (a.kind==='Villager' || a.kind==='FishingShip') && a.x>0 && a.y>54 && a.y<innerHeight-bottom).map(a=>`<span class="idle-marker" style="left:${a.x-6}px;top:${a.head-16}px">z</span>`).join('');
-    if (idle!==previousIdle) { byId('idle-markers').innerHTML=idle; previousIdle=idle; }
-    const flags=state.actors.filter(actor=>actor.hp>0 && actor.garrison>0 && actor.x>0 && actor.y>54 && actor.y<innerHeight-bottom).map(actor=>`<span class="garrison-flag" data-building-id="${actor.id}" title="${actor.garrison} garrisoned" style="left:${actor.x}px;top:${actor.y-48}px">${actor.garrison}</span>`).join('');
-    if (flags!==previousFlags) { byId('garrison-flags').innerHTML=flags; previousFlags=flags; }
-    const loads=state.actors.filter(actor=>actor.hp>0 && actor.load && actor.x>0 && actor.y>54 && actor.y<innerHeight-bottom);
-    const signature=JSON.stringify(loads);
-    if (signature!==previousLoads) {
-      byId('carried-loads').innerHTML=loads.map(actor=>`<span class="load-badge" style="left:${actor.x+12}px;top:${actor.y-36}px">${icon(actor.load[0])}${actor.load[1]}</span>`).join('');previousLoads=signature;
-    }
+    labels.health(state.actors.filter(a=>a.selected && a.hp>0 && !buildingKinds.includes(a.kind)));
+    const onMap = a => a.hp>0 && a.x>0 && a.y>54 && a.y<innerHeight-bottom;
+    labels.idle(state.actors.filter(a=>onMap(a) && a.owned && a.task==='Idle' && (a.kind==='Villager' || a.kind==='FishingShip')));
+    labels.flags(state.actors.filter(a=>onMap(a) && a.garrison>0));
+    labels.loads(state.actors.filter(a=>onMap(a) && a.load));
   };
   window.aoeInterface = { details: updateDetails, numeric(values,status) {
     const kinds=['Scout','Villager',...buildingKinds,'Militia','FishingShip','Sheep','Deer','Boar','Wolf','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley','Vassal','General',...imperialUnits,'Steward'], names=['Scout Cavalry','Villager',...buildingNames,'Militia','Fishing Ship','Sheep','Deer','Boar','Wolf','Archer','Skirmisher','Spearman','Man-at-Arms',...castleUnitNames,'Galley','Fire Ship','Demolition Ship','Transport Ship','War Galley','Vassal','General',...imperialUnitNames,'Steward'];

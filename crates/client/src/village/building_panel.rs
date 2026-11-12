@@ -45,7 +45,7 @@ pub(super) fn age_research_progress(
 }
 
 #[inline(never)]
-pub(super) fn update(client: &Client) {
+pub(super) fn update(client: &Client, scale: f64) {
     let (age, fraction) =
         age_research_progress(&client.village.buildings, owner(client)).unwrap_or((0, 0.0));
     age_progress_update(f64::from(age), fraction);
@@ -85,8 +85,10 @@ pub(super) fn update(client: &Client) {
                 availability::research(b, player, owner(client), completed, duplicate, r).number();
         }
     }
+    let builders = player.is_some() && construction::has_builders(client);
+    let build_menu = availability::BuildMenu::new(player, completed, builders);
     for kind in KINDS.into_iter().skip(1).chain(std::iter::once(KINDS[0])) {
-        v.push(f64::from(u8::from(construction::enabled(client, kind, 1))));
+        v.push(f64::from(u8::from(build_menu.enabled(kind, 1))));
     }
     v.push(
         b.and_then(|b| b.training_queue.first())
@@ -99,7 +101,6 @@ pub(super) fn update(client: &Client) {
         }),
     );
     v.push(train.number());
-    let scale = f64::from(client.canvas.client_width()) / f64::from(client.canvas.width());
     let viewport = client.camera.viewport.map(|size| size * scale);
     let foundations: Vec<_> = client
         .village
@@ -154,7 +155,7 @@ pub(super) fn update(client: &Client) {
     ]);
     v.extend(super::automation::state(client));
     super::garrison::present(client);
-    v.extend(super::navy::state(client));
+    v.extend(super::navy::state(client, scale));
     v.push(f64::from(u8::from(
         b.is_some_and(|b| !b.training_queue.is_empty())
             && player.is_some_and(|p| p.population_used >= p.population_cap),

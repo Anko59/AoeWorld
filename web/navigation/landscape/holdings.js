@@ -3,12 +3,18 @@ import { actorColour } from '/minimap.js';
 // Build paths at HUD cadence from authorized row runs. Opposing edges of
 // adjacent runs cancel, so the stroke follows holdings rather than tile rows.
 export function initHoldings() {
-  let signature = '', paths = new Map(), count = 0;
+  let previous = new Float64Array(), paths = new Map(), count = 0;
   return {
     update(values = []) {
-      const next = Array.from(values).join(',');
-      if (next === signature) return false;
-      signature = next; paths = new Map(); count = 0;
+      // Keep an owned numeric snapshot: a string signature boxes every value
+      // even when the first changed row already tells us to rebuild the paths.
+      let same = values.length === previous.length;
+      for (let i = 0; same && i < values.length; i++) {
+        const value = values[i], old = previous[i];
+        same = value === old || Number.isNaN(value) && Number.isNaN(old);
+      }
+      if (same) return false;
+      previous = new Float64Array(values); paths = new Map(); count = 0;
       const edges = new Map(), horizontal = new Map();
       function edge(colour, x0, y0, x1, y1) {
         const a = `${x0},${y0}`, b = `${x1},${y1}`;
@@ -54,6 +60,6 @@ export function initHoldings() {
       context.globalAlpha = 1;
       return count;
     },
-    reset() { signature = ''; paths.clear(); count = 0; },
+    reset() { previous = new Float64Array(); paths.clear(); count = 0; },
   };
 }

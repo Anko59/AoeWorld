@@ -201,3 +201,56 @@ fn a_stalled_unit_draws_the_matching_rest_pose() {
     });
     assert_eq!(rest_pose(unit_pose(&unit, None)), Pose::CarryWoodIdle);
 }
+
+#[wasm_bindgen_test]
+fn actor_hit_projection_skips_horizontal_misses_and_preserves_body_and_ground_targets() {
+    use std::cell::Cell;
+    let queries = Cell::new(0);
+    for x in 1000..11_000 {
+        assert!(!super::actor_hit_projected(
+            Some([10.0, 10.0, 80.0, 80.0]),
+            50.0,
+            [f64::from(x), 50.0],
+            0.25,
+            || {
+                queries.set(queries.get() + 1);
+                [50.0, 90.0]
+            },
+        ));
+    }
+    assert_eq!(queries.get(), 0);
+    assert!(super::actor_hit_projected(
+        Some([10.0, 10.0, 80.0, 80.0]),
+        50.0,
+        [20.0, 20.0],
+        0.25,
+        || panic!("sprite hit queried ground")
+    ));
+    for zoom in [0.16, 0.25, 1.0, 2.0] {
+        for foot in [[50.0, 90.0], [-300.0, -500.0], [100.0, 10_000.0]] {
+            for bounds in [None, Some([10.0, 10.0, 80.0, 80.0])] {
+                for x in [
+                    -1000.0,
+                    10.0,
+                    50.0,
+                    80.0,
+                    foot[0] - 5.0 * zoom,
+                    foot[0] + 5.0 * zoom,
+                ] {
+                    for y in [-1000.0, 10.0, 50.0, 80.0, foot[1], 10_000.0] {
+                        let fallback = [
+                            foot[0] - 7.0 * zoom,
+                            foot[1] - 30.0 * zoom,
+                            foot[0] + 7.0 * zoom,
+                            foot[1] + 2.0 * zoom,
+                        ];
+                        assert_eq!(
+                            super::actor_hit_projected(bounds, foot[0], [x, y], zoom, || foot),
+                            super::actor_hit(bounds.unwrap_or(fallback), foot, [x, y], zoom)
+                        );
+                    }
+                }
+            }
+        }
+    }
+}

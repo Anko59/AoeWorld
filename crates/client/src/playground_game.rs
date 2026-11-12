@@ -165,9 +165,14 @@ pub(super) fn position_at(client: &Client, id: EntityId) -> [f64; 2] {
     let Some(state) = client.units.get(&id) else {
         return [0.0, 0.0];
     };
+    position_of(client, state)
+}
+
+/// A known state needs no second lookup to reuse its displayed world pose.
+pub(super) fn position_of(client: &Client, state: &GameplayUnitState) -> [f64; 2] {
     client
         .rendered_frame
-        .position(id)
+        .position(state.id)
         .unwrap_or_else(|| client.presentation.position(*state))
 }
 

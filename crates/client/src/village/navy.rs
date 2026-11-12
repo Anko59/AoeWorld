@@ -88,7 +88,7 @@ pub(super) fn at_pointer(client: &mut Client, point: ScreenPoint, forced_move: b
     true
 }
 
-pub(super) fn state(client: &Client) -> Vec<f64> {
+pub(super) fn state(client: &Client, scale: f64) -> Vec<f64> {
     let cargo = selected_transport(client)
         .and_then(|id| client.units.get(&id))
         .map(|u| u.cargo_count);
@@ -96,7 +96,6 @@ pub(super) fn state(client: &Client) -> Vec<f64> {
         f64::from(u8::from(cargo.is_some())),
         cargo.map_or(0.0, f64::from),
     ];
-    let scale = f64::from(client.canvas.client_width()) / f64::from(client.canvas.width());
     for u in client.units.values().filter(|u| {
         u.kind == UnitKind::TransportShip
             && u.hp > 0

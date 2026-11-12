@@ -222,11 +222,13 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
         if node.kind as u8 == 1 && !highlighted {
             continue;
         }
-        let p = map::screen_position(client, world);
-        let visible = p.x >= 0.0
-            && p.y >= 0.0
-            && p.x < client.camera.viewport[0]
-            && p.y < client.camera.viewport[1];
+        let Some((p, visible)) =
+            crate::hud_visibility::resource_projection(client.camera, world, highlighted, || {
+                map::screen_position(client, world)
+            })
+        else {
+            continue;
+        };
         if highlighted {
             values[4] = p.x * scale;
             values[5] = p.y * scale;

@@ -100,5 +100,7 @@ pub(super) fn present(client: &Client) {
     let value = point
         .map(|r| format!("{},{}", r.position.x, r.position.y))
         .unwrap_or_default();
-    let _ = client.canvas.set_attribute("data-rally-point", &value);
+    if client.canvas.get_attribute("data-rally-point").as_deref() != Some(value.as_str()) {
+        let _ = client.canvas.set_attribute("data-rally-point", &value);
+    }
 }

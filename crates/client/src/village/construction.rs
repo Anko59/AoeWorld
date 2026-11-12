@@ -33,19 +33,8 @@ pub(super) fn completed(client: &Client) -> u32 {
 }
 
 #[inline(never)]
-pub(super) fn enabled(client: &Client, kind: BuildingKind, count: u32) -> bool {
-    let Some(p) = client
-        .village
-        .players
-        .iter()
-        .find(|p| p.player == owner(client))
-    else {
-        return false;
-    };
-    let mut cost = building_ui::stock(building_ui::rules(kind).cost);
-    cost.wood = cost.wood.saturating_mul(count);
-    cost.stone = cost.stone.saturating_mul(count);
-    (if crate::playground::game::strategic::active(client) {
+pub(super) fn has_builders(client: &Client) -> bool {
+    if crate::playground::game::strategic::active(client) {
         client
             .units
             .values()
@@ -57,8 +46,24 @@ pub(super) fn enabled(client: &Client, kind: BuildingKind, count: u32) -> bool {
                 .get(id)
                 .is_some_and(|u| u.player == owner(client) && u.kind == UnitKind::Villager)
         })
-    }) && building_ui::build_enabled(kind, p.stockpile, completed(client), p.age)
-        && building_ui::affordable(p.stockpile, cost)
+    }
+}
+
+#[inline(never)]
+pub(super) fn enabled(client: &Client, kind: BuildingKind, count: u32) -> bool {
+    let Some(player) = client
+        .village
+        .players
+        .iter()
+        .find(|p| p.player == owner(client))
+    else {
+        return false;
+    };
+    if !has_builders(client) {
+        return false;
+    }
+    building_ui::availability::BuildMenu::new(Some(player), completed(client), true)
+        .enabled(kind, count)
 }
 
 #[inline(never)]
