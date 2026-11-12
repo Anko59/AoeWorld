@@ -1,17 +1,6 @@
 use super::*;
 use gdal::spatial_ref::{AxisMappingStrategy, CoordTransform, SpatialRef};
 
-// HydroRIVERS_v10_eu.shp header in source SHA-256
-// 500da7d36ceee0aa4c82dd625f5c53d80ba2f7ac14ad022cd3a6601bf55068e5.
-// Metadata is available before acquiring the archive; the opened layer is
-// checked against this same extent before sampling.
-pub(super) const PINNED_RIVER_EXTENT: gdal::vector::Envelope = gdal::vector::Envelope {
-    MinX: -24.472916666666663,
-    MaxX: 69.5166666666652,
-    MinY: 12.602083333333333,
-    MaxY: 81.78958333333222,
-};
-
 pub(super) const MODERN_NOT_REQUESTED: &str =
     "modern-landcover=not-requested;modern-class=0-nodata;2021=classification-legend-only";
 
@@ -67,7 +56,7 @@ impl PreparedHydrology {
     }
 }
 
-/// Prepares pinned HydroLAKES and Europe HydroRIVERS without requesting modern
+/// Prepares pinned HydroLAKES and the footprint's HydroRIVERS region without requesting modern
 /// land cover. Input overview pages are context only, not newly acquired locks:
 /// callers must retain their overview source locks when packaging both results.
 /// The returned locks describe only the two vector datasets actually acquired.
@@ -123,7 +112,7 @@ pub(crate) fn prepare_vectors_validated(
     )?;
     let plan = HydrologySourcePlan {
         worldcover: Vec::new(),
-        sources: hydrology_vector_sources(),
+        sources: hydrology_vector_sources(footprint.rivers()?),
         footprint,
     };
     check_cancelled(cancelled)?;
@@ -163,17 +152,24 @@ fn validate_vector_request(request: MapRequest, axis: u16) -> Result<MapRequest,
 
 // Check every cell's vertices, edge midpoints and center, not a degree approximation
 // or only four corners. Row-sized coordinate buffers retain the existing axis cap.
-// Coverage uses the SHA-pinned shapefile header extent, inset by query padding.
+// Coverage uses each SHA-pinned regional shapefile header extent, inset by query
+// padding; the first wired region containing the whole footprint supplies rivers.
 #[derive(Clone, Debug)]
 pub(crate) struct RiverFootprint {
     request: MapRequest,
     axis: u16,
-    covered: bool,
+    rivers: Option<&'static HydroRiversRegion>,
 }
 
 impl RiverFootprint {
     pub(crate) fn covered(&self) -> bool {
-        self.covered
+        self.rivers.is_some()
+    }
+    /// The HydroRIVERS region selected for this footprint.
+    pub(crate) fn rivers(&self) -> Result<&'static HydroRiversRegion, GeodataError> {
+        self.rivers.ok_or(GeodataError::Preparation(
+            "vector hydrology footprint is outside the pinned river dataset extent",
+        ))
     }
     pub(crate) fn check_binding(&self, request: MapRequest, axis: u16) -> Result<(), GeodataError> {
         if request.normalized().ok() != Some(self.request) || axis != self.axis {
@@ -181,12 +177,7 @@ impl RiverFootprint {
                 "hydrology preflight grid does not match sampling request",
             ));
         }
-        if !self.covered {
-            return Err(GeodataError::Preparation(
-                "vector hydrology footprint is outside the pinned river dataset extent",
-            ));
-        }
-        Ok(())
+        self.rivers().map(|_| ())
     }
 }
 
@@ -220,9 +211,7 @@ pub(crate) fn project_river_footprint(
         CoordTransform::new(&local, &geographic).map_err(|_| GeodataError::Projection)?;
     let spacing = side / f64::from(axis);
     let padding = 0.01;
-    let extent = PINNED_RIVER_EXTENT;
-    let longitudes = extent.MinX + padding..=extent.MaxX - padding;
-    let latitudes = extent.MinY + padding..=extent.MaxY - padding;
+    let mut candidates = vec![true; HYDRORIVERS_REGIONS.len()];
     for row in 0..=u32::from(axis) * 2 {
         check_cancelled(cancelled)?;
         let mut longitude = (0..=u32::from(axis) * 2)
@@ -232,23 +221,30 @@ pub(crate) fn project_river_footprint(
         transform
             .transform_coords(&mut longitude, &mut latitude, &mut [])
             .map_err(|_| GeodataError::Coordinate)?;
-        if longitude.iter().zip(&latitude).any(|(&lon, &lat)| {
-            !lon.is_finite()
-                || !lat.is_finite()
-                || !longitudes.contains(&lon)
-                || !latitudes.contains(&lat)
-        }) {
-            return Ok(RiverFootprint {
-                request,
-                axis,
-                covered: false,
-            });
+        for (candidate, region) in candidates.iter_mut().zip(&HYDRORIVERS_REGIONS) {
+            let extent = region.extent;
+            let longitudes = extent.min_longitude + padding..=extent.max_longitude - padding;
+            let latitudes = extent.min_latitude + padding..=extent.max_latitude - padding;
+            *candidate = *candidate
+                && longitude.iter().zip(&latitude).all(|(&lon, &lat)| {
+                    lon.is_finite()
+                        && lat.is_finite()
+                        && longitudes.contains(&lon)
+                        && latitudes.contains(&lat)
+                });
+        }
+        if !candidates.contains(&true) {
+            break;
         }
     }
+    let rivers = candidates
+        .iter()
+        .position(|candidate| *candidate)
+        .map(|index| &HYDRORIVERS_REGIONS[index]);
     Ok(RiverFootprint {
         request,
         axis,
-        covered: true,
+        rivers,
     })
 }
 

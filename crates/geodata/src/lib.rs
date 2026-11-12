@@ -73,8 +73,9 @@ pub use vegetation::{
 mod source_catalog;
 pub(crate) use source_catalog::worldcover_sources_for_bounds_cached;
 pub use source_catalog::{
-    ExpectedChecksum, KnownSource, MAX_HYDROLOGY_DOWNLOAD_BYTES, MAX_WORLDCOVER_TILES,
-    SourceCatalogError, etopo_2022_60s_surface, hyde_sources, hydrology_vector_sources,
+    ExpectedChecksum, HYDRORIVERS_REGIONS, HydroRiversRegion, KnownSource,
+    MAX_HYDROLOGY_DOWNLOAD_BYTES, MAX_WORLDCOVER_TILES, RiverExtent, SourceCatalogError,
+    etopo_2022_60s_surface, hyde_sources, hydrolakes_source, hydrology_vector_sources,
     natural_earth_10m_land, potential_biome_sources, worldcover_sources_for_bounds,
     worldcover_tile_ids,
 };

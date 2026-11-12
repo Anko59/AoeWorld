@@ -369,7 +369,8 @@ pub enum SourceCatalogError {
 mod hydrology_catalog;
 pub(crate) use hydrology_catalog::worldcover_sources_for_bounds_cached;
 pub use hydrology_catalog::{
-    MAX_HYDROLOGY_DOWNLOAD_BYTES, hydrology_vector_sources, worldcover_sources_for_bounds,
+    HYDRORIVERS_REGIONS, HydroRiversRegion, MAX_HYDROLOGY_DOWNLOAD_BYTES, RiverExtent,
+    hydrolakes_source, hydrology_vector_sources, worldcover_sources_for_bounds,
     worldcover_tile_ids,
 };
 

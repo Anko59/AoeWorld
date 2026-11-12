@@ -59,6 +59,21 @@ impl OverviewHydrologyMode {
 pub const LANDSCAPE_OVERVIEW_SOURCE_LOCKS: usize = 7;
 /// Locks added by vector hydrology: HydroLAKES and HydroRIVERS.
 pub const VECTOR_HYDROLOGY_SOURCE_LOCKS: usize = 2;
+/// Source-lock identifier of the pinned global HydroLAKES package.
+pub const HYDROLAKES_SOURCE_ID: &str = "hydrolakes-v1.0-global-gdb";
+
+/// Whether a lock identifies a pinned regional HydroRIVERS v1.0 package
+/// (`hydrorivers-v1.0-<region>-shp`).
+pub fn is_hydrorivers_lock(id: &str) -> bool {
+    id.strip_prefix("hydrorivers-v1.0-")
+        .and_then(|rest| rest.strip_suffix("-shp"))
+        .is_some_and(|region| !region.is_empty())
+}
+
+/// Whether a lock is a vector hydrology input: HydroLAKES or HydroRIVERS.
+pub fn is_vector_hydrology_lock(id: &str) -> bool {
+    id == HYDROLAKES_SOURCE_ID || is_hydrorivers_lock(id)
+}
 
 /// Locks of one-degree Copernicus DEM tiles start with this identifier prefix.
 const ELEVATION_TILE_LOCK_PREFIX: &str = "copernicus-dem-";
