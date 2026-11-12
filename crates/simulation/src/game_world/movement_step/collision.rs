@@ -6,7 +6,7 @@ use aoe_core::{TileCoord, WorldPosition};
 #[path = "collision/bridge.rs"]
 mod bridge;
 mod index;
-pub(crate) use index::{CellHasher, CollisionIndex, key};
+pub(crate) use index::{CellHasher, CollisionIndex, Neighborhood, key};
 
 /// Hard shares of the radii sum: friendly traffic 50%, workers 75%, others 100%.
 /// Ships keep whole hulls outside narrow-water and fishing contacts (contact.rs).
@@ -23,6 +23,11 @@ struct SweepPolicy {
     work_squeeze: bool,
     narrow_water: bool,
     blocked: u16,
+}
+
+pub(super) struct SweepContext<'a, 'b> {
+    pub(super) bounds: Option<(i32, i32)>,
+    pub(super) neighbors: Option<&'a Neighborhood<'b>>,
 }
 
 impl crate::GameUnit {
@@ -155,20 +160,31 @@ impl GameWorld {
             .planning_probe
             .as_ref()
             .and_then(|p| p.movement_span("body_sweep"));
-        self.collision_sweep_impl::<true>(index, from, to, stationary, repairing_spawn, bounds)
+        self.collision_sweep_impl::<true>(
+            index,
+            from,
+            to,
+            stationary,
+            repairing_spawn,
+            SweepContext {
+                bounds,
+                neighbors: None,
+            },
+        )
     }
 
     /// A movement-batch bound on neighbor radius and displacement. Padding
     /// requires strict separation, including already overlapping bodies.
-    fn collision_sweep_impl<const FAST: bool>(
+    pub(super) fn collision_sweep_impl<const FAST: bool>(
         &self,
         index: usize,
         from: WorldPosition,
         to: WorldPosition,
         stationary: bool,
         repairing_spawn: bool,
-        bounds: Option<(i32, i32)>,
+        context: SweepContext<'_, '_>,
     ) -> bool {
+        let SweepContext { bounds, neighbors } = context;
         let unit = &self.units[index].state;
         let dx = i64::from(to.x) - i64::from(from.x);
         let dy = i64::from(to.y) - i64::from(from.y);
@@ -216,11 +232,15 @@ impl GameWorld {
                 clamp(i64::from(from.y.max(to.y)) + broad_radius),
             )
         };
-        let clear = !self.collisions.blocked_in(
-            (midpoint, reach),
-            window,
-            unit.kind.is_naval(),
-            self.tick.0.wrapping_add(u64::from(unit.id.0)),
+        let clear = !self.collisions.blocked_in_with(
+            index::BodyQuery {
+                at: midpoint,
+                reach,
+                window,
+                naval: unit.kind.is_naval(),
+                salt: self.tick.0.wrapping_add(u64::from(unit.id.0)),
+            },
+            neighbors,
             &self.group_work,
             |id| {
                 if id == unit.id {
@@ -449,7 +469,17 @@ impl GameWorld {
         repairing_spawn: bool,
         bounds: Option<(i32, i32)>,
     ) -> bool {
-        self.collision_sweep_impl::<false>(index, from, to, stationary, repairing_spawn, bounds)
+        self.collision_sweep_impl::<false>(
+            index,
+            from,
+            to,
+            stationary,
+            repairing_spawn,
+            SweepContext {
+                bounds,
+                neighbors: None,
+            },
+        )
     }
     fn sweep_oracle(
         &self,
