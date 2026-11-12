@@ -255,6 +255,13 @@ impl GameWorld {
     }
     pub(crate) fn general_march(&mut self, id: EntityId, destination: WorldPosition) {
         if let Some(a) = self.economy.generals.armies.get_mut(&id) {
+            if !a.solo
+                && a.destination.is_some_and(|goal| {
+                    crate::game_world::orders::diagnostics::near_goal(goal, destination)
+                })
+            {
+                return;
+            }
             a.destination = Some(destination);
             a.routed = None;
             a.layout = None;
@@ -324,6 +331,7 @@ impl GameWorld {
         changed.extend(std::mem::take(
             &mut self.economy.generals.appearance_changes,
         ));
+        self.record_order_decisions(work.orders as u64);
         self.economy.generals.work = work;
     }
 }

@@ -1,5 +1,19 @@
 use super::*;
 impl GameWorld {
+    /// Reinforcements join the march without replacing admitted routes and
+    /// final slots of soldiers already following the same ordinary goal.
+    pub(super) fn general_march_retained(&self, id: EntityId, goal: WorldPosition) -> bool {
+        let Some(&index) = self.lookup.get(&id) else {
+            return false;
+        };
+        let unit = &self.units[index];
+        // A scalar order, including the commander's own move, still needs
+        // admission to its army formation and role slot.
+        unit.state.attack_target.is_none()
+            && self.movement_failure(id).is_none()
+            && self.formation_keeps_march(id, goal)
+    }
+
     /// A squad cut off from both its commander and its goal must retry after
     /// an opening, rather than completing a local frontier formation.
     pub(super) fn general_squad_goal_reachable(

@@ -219,9 +219,10 @@ impl GameWorld {
                 Poll::Frontier(tile) => {
                     self.economy.scout_searches.remove(&id);
                     job.search = None;
-                    let issued = WorldPosition::from_tile_center(tile)
-                        .ok()
-                        .is_some_and(|p| self.issue_task_move(id, p).is_ok());
+                    let issued = WorldPosition::from_tile_center(tile).ok().is_some_and(|p| {
+                        self.record_order_decisions(1);
+                        self.issue_task_move(id, p).is_ok()
+                    });
                     if issued {
                         job.goal = Some(tile);
                         self.units[index].state.task = UnitTask::Moving;

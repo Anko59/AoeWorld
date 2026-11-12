@@ -306,3 +306,35 @@ fn gold_worker_uses_a_far_mining_camp_and_deposits_income() {
 fn stone_worker_uses_a_far_mining_camp_and_deposits_income() {
     far_mining_camp(ResourceKind::Stone);
 }
+
+#[test]
+fn a_new_productive_worker_gets_dwell_before_shortage_reassignment() {
+    let (mut w, steward, workers, _) = wood_realm(1);
+    let worker = workers[0];
+    reserves(&mut w, 30_000, 0, 30_000, 30_000);
+    for _ in 0..100 {
+        w.advance();
+        let unit = w.unit(worker).unwrap();
+        if w.steward_controller(worker) == Some(steward)
+            && w.gathering_kind(worker) == Some(ResourceKind::Wood)
+            && !unit.moving
+            && !unit.planning
+        {
+            break;
+        }
+    }
+    assert_eq!(w.gathering_kind(worker), Some(ResourceKind::Wood));
+    reserves(&mut w, 0, 30_000, 30_000, 30_000);
+    advance(&mut w, 20);
+    assert_eq!(
+        w.gathering_kind(worker),
+        Some(ResourceKind::Wood),
+        "do not interrupt a fresh job"
+    );
+    advance(&mut w, 30 * 20);
+    assert!(
+        w.gathering_kind(worker) != Some(ResourceKind::Wood)
+            || w.economy.builders.contains_key(&worker),
+        "respond after the dwell expires"
+    );
+}

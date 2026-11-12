@@ -117,9 +117,10 @@ class EconomyManager:
         food, _, gold, _ = tech_cost(Tech.CASTLE_AGE)
         if not buildorder.wants_castle_food(ctx) or ctx.economy.food >= food or ctx.economy.gold < gold + tech_cost(Tech.CROSSBOWMAN)[2]:
             return
-        pause = ASSIGN_PAUSE_SECONDS * ctx.world.tick_hz
+        pause = ctx.config.worker_dwell_seconds * ctx.world.tick_hz
         for worker in ctx.villagers:
             if (worker.gathering == ResourceKind.GOLD and worker.carrying is None
+                    and not worker.moving and worker.task == UnitTask.GATHERING
                     and worker.id not in ctx.busy and worker.id not in ctx.board.builders
                     and ctx.tick - ctx.board.assigned.get(worker.id, -pause) >= pause
                     and self.send_to_food(ctx, worker)):
@@ -260,11 +261,12 @@ class EconomyManager:
         source = min(gaps, key=gaps.get)
         if gaps[target] <= 1 or gaps[source] >= -1:
             return
-        pause = ASSIGN_PAUSE_SECONDS * ctx.world.tick_hz
+        pause = ctx.config.worker_dwell_seconds * ctx.world.tick_hz
         for worker in ctx.villagers:
             if ((worker.managed_by is not None and ctx.config.defer_to_steward)
                     or worker.gathering != KEYS[source] or worker.carrying is not None
-                    or worker.task in (UnitTask.HUNTING, UnitTask.FARMING, UnitTask.BUILDING, UnitTask.SEEDING)
+                    or worker.moving
+                    or worker.task in (UnitTask.MOVING, UnitTask.RETURNING, UnitTask.HUNTING, UnitTask.FARMING, UnitTask.BUILDING, UnitTask.SEEDING)
                     or worker.id in ctx.busy or worker.id in ctx.board.builders
                     or worker.id in ctx.board.farmers.values()
                     or ctx.tick - ctx.board.assigned.get(worker.id, -pause) < pause):

@@ -9,6 +9,7 @@ use crate::game_world::tests::economy::fixture;
 mod facing;
 mod occupancy;
 mod rates;
+mod repeated_orders;
 mod replacement;
 mod return_routes;
 mod walking;

@@ -23,6 +23,7 @@ impl GameWorld {
         if unit.player != player {
             return Err(crate::EconomyError::NotOwner);
         }
+        self.demand_cancelled(id);
         if let Some(g) = self.general_controller(id) {
             self.restore_general_stance(g, id);
         }
@@ -135,6 +136,7 @@ impl GameWorld {
         self.forget_vassal_unit(id);
         self.forget_steward(id);
         self.forget_general(id);
+        self.forget_order_demand(id);
         self.sink_cargo(id);
         let death_hunt = self
             .hunting_target(id)

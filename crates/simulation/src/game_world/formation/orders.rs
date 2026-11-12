@@ -45,8 +45,28 @@ impl GameWorld {
         {
             return Err(GameWorldError::InvalidPosition.into());
         }
+        for &id in &ids {
+            self.demand_attempt(id, destination);
+        }
         let leader = ids[0];
         let existing = self.units[self.lookup[&leader]].formation.unwrap_or(leader);
+        if !queued
+            && self.formations.get(&existing).is_some_and(|group| {
+                !group.settled
+                    && group.form == form
+                    && group.attack_move == attack_move
+                    // Combat firing points are contacts, like individual
+                    // attack approaches; a nearby point may enter range.
+                    && if attack_move {
+                        group.destination == destination
+                    } else {
+                        near_goal(group.destination, destination)
+                    }
+                    && group.members.iter().map(|m| m.id).eq(ids.iter().copied())
+            })
+        {
+            return Ok(());
+        }
         if queued
             && let Some(group) = self.formations.get_mut(&existing)
             && group.members.iter().map(|m| m.id).eq(ids.iter().copied())
@@ -83,6 +103,9 @@ impl GameWorld {
         self.route_metrics.attribution.group_stopped_short +=
             u64::from(destination != requested_destination);
         // Validation and the shared route preparation precede every task change.
+        for &id in &ids {
+            self.demand_accepted(id);
+        }
         self.leave_groups(&ids);
         for &id in &ids {
             let i = self.lookup[&id];

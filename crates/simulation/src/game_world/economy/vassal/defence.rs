@@ -43,18 +43,25 @@ impl GameWorld {
         let wolves = self.vassal_wolves(id, &soldiers);
         for soldier in soldiers {
             if let Some((wolf, _)) = wolves.first().filter(|_| threat.is_none()) {
+                self.record_vassal_decision();
                 let _ = self.issue_attack(player, soldier, *wolf);
                 changed.push(soldier);
                 continue;
             }
             if let Some(enemy) = threat {
+                self.record_vassal_decision();
                 let _ = self.issue_attack(player, soldier, enemy.0);
             } else if self
                 .unit(soldier)
                 .is_some_and(|u| u.task == UnitTask::Attacking || !inside(center, u.position))
                 && let Ok(to) =
                     WorldPosition::from_tile_center(TileCoord::new(center.x, center.y + 4))
+                && (self
+                    .unit(soldier)
+                    .is_some_and(|u| u.attack_target.is_some())
+                    || !self.moving_towards(soldier, to))
             {
+                self.record_vassal_decision();
                 let _ = self.issue_move(soldier, to);
             }
             changed.push(soldier);
@@ -96,6 +103,7 @@ impl GameWorld {
                     called: enemy.1,
                 };
                 self.economy.vassals.returns.remove(&g);
+                self.record_vassal_decision();
                 self.general_march(g, enemy.1);
                 self.economy.vassals.recalls.insert(g, saved);
             }
@@ -128,7 +136,9 @@ impl GameWorld {
             for (_, victim) in &wolves {
                 if self.building(castle).is_some()
                     && let Ok(to) = WorldPosition::from_tile_center(home)
+                    && !self.moving_towards(*victim, to)
                 {
+                    self.record_vassal_decision();
                     let _ = self.issue_move(*victim, to);
                 }
             }
@@ -158,6 +168,7 @@ impl GameWorld {
             .map(|(&g, _)| g)
             .collect();
         for g in moved {
+            self.record_vassal_decision();
             self.general_march(g, threat);
             if let Some(recall) = self.economy.vassals.recalls.get_mut(&g) {
                 recall.called = threat;
@@ -187,6 +198,7 @@ impl GameWorld {
             {
                 if recall.solo {
                     if let Some(u) = self.unit(g) {
+                        self.record_vassal_decision();
                         let _ = self.issue_general_move(
                             u.player,
                             g,
@@ -194,6 +206,7 @@ impl GameWorld {
                         );
                     }
                 } else if let Some(destination) = recall.destination {
+                    self.record_vassal_decision();
                     self.general_march(g, destination);
                 } else {
                     self.general_march(g, recall.position);
@@ -223,6 +236,7 @@ impl GameWorld {
                 .unit(g)
                 .filter(|u| u.position.tile_floor() == goal.tile_floor())
             {
+                self.record_vassal_decision();
                 let _ = self.issue_stop(u.player, g);
                 self.economy.vassals.returns.remove(&g);
             }

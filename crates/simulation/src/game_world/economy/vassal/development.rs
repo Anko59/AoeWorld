@@ -110,6 +110,7 @@ impl GameWorld {
         }
         for s in crowd {
             if let Ok(to) = WorldPosition::from_tile_center(muster) {
+                self.record_vassal_decision();
                 let _ = self.issue_move(s, to);
             }
         }
@@ -213,6 +214,7 @@ impl GameWorld {
                             .get(worker)
                             .is_some_and(|job| job.building == building)
                         {
+                            self.record_vassal_decision();
                             let _ = self.issue_stop(player, *worker);
                         }
                     }
@@ -228,6 +230,7 @@ impl GameWorld {
             self.clear_vassal_soldiers(id, footprint);
             let crew = self.nearest_idle(&mut idle, target, crew_size(kind));
             if !crew.is_empty() {
+                self.record_vassal_decision();
                 let _ = self.issue_construct(player, &crew, building);
             }
         }
@@ -349,6 +352,7 @@ impl GameWorld {
             } else {
                 self.nearest_idle(&mut idle, tile, crew_size(kind))
             };
+            self.record_vassal_decision();
             let result = if kind.is_wall() || kind == BuildingKind::Road {
                 self.issue_build_wall(player, &crew, kind, tile, run[run.len() - 1], queued)
                     .map(|_| ())

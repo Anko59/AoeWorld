@@ -110,6 +110,7 @@ impl GameWorld {
                     entry.avoid_kind
                 };
                 entry.since = now;
+                self.record_order_decisions(1);
                 if self.issue_stop(s.player, worker).is_ok() {
                     changed.push(worker);
                 }

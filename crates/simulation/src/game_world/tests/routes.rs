@@ -287,11 +287,10 @@ fn planner_slot_exhaustion_defers_a_new_order_without_rejecting_it() {
     );
     assert_eq!(world.active_route_searches, 0);
     world.planning_budget = MAX_ROUTE_WORK_PER_TICK;
-    assert!(
-        world
-            .issue_move(queued, target)
-            .expect("resumed deferred order")
-    );
+    // Admission resumes through the scheduler, without a replacement order.
+    // An identical command must retain the original wait and frontier.
+    assert!(world.issue_move(queued, target).expect("retained order"));
+    world.serve_route_searches(MAX_ROUTE_WORK_PER_TICK, &mut Vec::new());
     assert!(
         world.units[world.lookup[&queued]]
             .planner

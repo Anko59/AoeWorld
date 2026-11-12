@@ -1,4 +1,4 @@
-use super::{StewardWork, rules::Budget, snapshot::Snapshot};
+use super::{STEWARD_RULES, StewardWork, rules::Budget, snapshot::Snapshot};
 use crate::{BuildingKind, GameWorld};
 use aoe_core::{EntityId, TileCoord};
 use aoe_map::ResourceKind;
@@ -241,6 +241,16 @@ impl GameWorld {
             .filter(|u| {
                 self.steward_controller(u.id) == Some(s.steward)
                     && u.carried.is_none()
+                    && !u.moving
+                    && !u.planning
+                    && self.economy.steward_homes[&s.steward]
+                        .assigned_at
+                        .get(&u.id)
+                        .is_none_or(|assigned| {
+                            now.saturating_sub(*assigned)
+                                >= STEWARD_RULES.worker_dwell_seconds
+                                    * u64::from(self.config.tick_hz)
+                        })
                     && !self.steward_has_held_job(u.id)
                     && !self.economy.builders.contains_key(&u.id)
                     && self.economy.gatherers.get(&u.id).is_some_and(|task| {
