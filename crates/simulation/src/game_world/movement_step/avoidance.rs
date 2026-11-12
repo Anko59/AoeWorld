@@ -230,6 +230,56 @@ impl GameWorld {
             && self.body_step_clear(self.units[index].state.kind, from, to)
     }
 
+    fn collision_sweep_neighborhood(
+        &self,
+        index: usize,
+        from: WorldPosition,
+        to: WorldPosition,
+        neighbors: &super::collision::Neighborhood<'_>,
+    ) -> bool {
+        let _span = self
+            .planning_probe
+            .as_ref()
+            .and_then(|p| p.movement_span("body_sweep"));
+        let clear = self.collision_sweep_impl::<true>(
+            index,
+            from,
+            to,
+            false,
+            false,
+            super::collision::SweepContext {
+                bounds: None,
+                neighbors: Some(neighbors),
+            },
+        );
+        #[cfg(test)]
+        crate::game_world::route_scheduler::GroupWork::unmeasured(|| {
+            assert_eq!(
+                clear,
+                self.collision_sweep_full(index, from, to, false, false, None)
+            );
+        });
+        clear
+    }
+
+    fn neighborhood_step_clear(
+        &self,
+        index: usize,
+        from: WorldPosition,
+        to: WorldPosition,
+        neighbors: &super::collision::Neighborhood<'_>,
+    ) -> bool {
+        if from == to {
+            return true;
+        }
+        let _span = self
+            .planning_probe
+            .as_ref()
+            .and_then(|p| p.movement_span("avoidance_query"));
+        self.collision_sweep_neighborhood(index, from, to, neighbors)
+            && self.body_step_clear(self.units[index].state.kind, from, to)
+    }
+
     /// Fixed-angle right-hand sidesteps, then the other side, then a wait.
     /// No whole movement credit is retained while blocked. Terrain is checked
     /// for every candidate, so avoidance cannot cut a tree/building corner.
@@ -261,6 +311,13 @@ impl GameWorld {
         if let Some(next) = self.water_head_on_step(index, proposed) {
             return next;
         }
+        // No relocation occurs until this decision returns. Reuse each cell's
+        // cyclic sample across angles, never across another actor's step.
+        let neighbors = self.collisions.neighborhood(
+            from,
+            unit.kind.is_naval(),
+            self.tick.0.wrapping_add(u64::from(unit.id.0)),
+        );
         let side = self.units[index].obstruction.map_or(1, |o| o.side) as i64;
         let yield_back = self.units[index]
             .obstruction
@@ -303,7 +360,7 @@ impl GameWorld {
             );
             if next != from
                 && self.config.valid_ground_position(next)
-                && self.local_unit_step_clear(index, from, next)
+                && self.neighborhood_step_clear(index, from, next, &neighbors)
                 && self
                     .unit_position_step_clear(unit.kind, from, next)
                     .unwrap_or(false)

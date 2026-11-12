@@ -33,12 +33,26 @@ impl GameplayService {
         self.probe.phase("world_lock", started.elapsed());
         let started = std::time::Instant::now();
         let orders = pending.len();
+        let humans: Vec<_> = self
+            .slots
+            .iter()
+            .filter(|s| s.human)
+            .map(|s| s.player)
+            .collect();
         // Attack-position and construction validation can be CPU work. Keep
         // it off the async runtime so one order cannot starve socket I/O.
         let applied = tokio::task::spawn_blocking(move || {
             let mut acknowledgements = BTreeMap::<u64, Vec<GameplayServerMessage>>::new();
             for (session_id, player, command) in pending {
-                let result = super::commands::apply(&mut world, player, command.action);
+                let issuer = if humans.contains(&player) {
+                    aoe_simulation::OrderIssuer::Player
+                } else {
+                    aoe_simulation::OrderIssuer::PythonAi
+                };
+                let result = world.with_order_issuer(issuer, |w| {
+                    w.record_order_decisions(1);
+                    super::commands::apply(w, player, command.action)
+                });
                 let tick = world.tick();
                 acknowledgements.entry(session_id).or_default().push(
                     GameplayServerMessage::CommandAck {

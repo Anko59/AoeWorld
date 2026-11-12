@@ -28,6 +28,7 @@ mod movement_step;
 #[path = "game_world/navy/mod.rs"]
 mod navy;
 mod orders;
+pub use orders::{OrderDemand, OrderIssuer, OrderRedundancy};
 mod parallel;
 mod research;
 mod resources;
@@ -202,6 +203,7 @@ pub struct GameWorld {
     /// pass: an order issued or planned ahead later does not jump that queue.
     pub(crate) route_queued: BTreeSet<(PlayerId, bool)>,
     pub(crate) group_work: std::sync::Arc<route_scheduler::GroupWork>,
+    pub(crate) order_diagnostics: orders::diagnostics::OrderDiagnostics,
     pub(crate) route_metrics: route_scheduler::RouteMetrics,
     pub(crate) planning_probe: Option<std::sync::Arc<dyn PlanningProbe>>,
     pub(crate) idle_spacing: spacing::IdleSpacing,
@@ -254,6 +256,7 @@ impl GameWorld {
             partial_kits: 0,
             route_slots: BTreeMap::new(),
             group_work: Default::default(),
+            order_diagnostics: Default::default(),
             route_metrics: Default::default(),
             planning_probe: None,
             route_queued: BTreeSet::new(),

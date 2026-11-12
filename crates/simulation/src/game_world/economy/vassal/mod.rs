@@ -165,6 +165,7 @@ impl GameWorld {
         for worker in workers {
             self.economy.vassals.controlled.remove(&worker);
             if let Some(u) = self.unit(worker) {
+                self.record_vassal_decision();
                 let _ = self.issue_stop(u.player, worker);
             }
         }

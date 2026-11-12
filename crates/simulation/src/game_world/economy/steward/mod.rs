@@ -42,6 +42,7 @@ pub(crate) struct Home {
     /// First tick at which another shortage rebalance may be tried.
     pub(super) rebalance_after: u64,
     pub(super) rebalance_cursor: Option<EntityId>,
+    pub(super) assigned_at: BTreeMap<EntityId, u64>,
     pub(super) repair_sites: BTreeMap<EntityId, usize>,
     held_jobs: BTreeMap<EntityId, jobs::HeldJob>,
     resources: search::Search,
@@ -127,6 +128,7 @@ impl GameWorld {
                 repair_after: None,
                 rebalance_after: 0,
                 rebalance_cursor: None,
+                assigned_at: BTreeMap::new(),
                 repair_sites: BTreeMap::new(),
                 held_jobs: BTreeMap::new(),
                 resources: search::Search::default(),
@@ -378,6 +380,7 @@ impl GameWorld {
             }
             if let Some(home) = self.economy.steward_homes.get_mut(&steward) {
                 home.workers.remove(&id);
+                home.assigned_at.remove(&id);
                 home.held_jobs.remove(&id);
                 home.navy.ships.remove(&id);
                 home.resources.forget_worker(id);
@@ -429,6 +432,7 @@ impl GameWorld {
                 }
                 home.workers.insert(worker);
             }
+            home.assigned_at.insert(worker, self.tick.0);
             self.economy
                 .stewards
                 .controlled

@@ -79,6 +79,24 @@ impl Probe {
                 }
                 let s = self.streak.entry(id).or_default();
                 *s += 1;
+                if u64::from(*s) == 6 * hz + 1 {
+                    let nearest = all
+                        .iter()
+                        .filter(|e| e.player != u.player)
+                        .map(|e| {
+                            let d = i64::from(e.position.x - u.position.x).pow(2)
+                                + i64::from(e.position.y - u.position.y).pow(2);
+                            (d, e.id, e.kind)
+                        })
+                        .min_by_key(|&(d, id, _)| (d, id));
+                    println!(
+                        "engagement wait: tick={} unit={u:?} goal={:?} failure={:?} nearest={nearest:?} range={}",
+                        w.tick.0,
+                        w.movement_goal(id),
+                        w.movement_failure(id),
+                        crate::game_world::navy::attack_range(&stats)
+                    );
+                }
                 let l = self.longest.entry(id).or_default();
                 *l = (*l).max(*s);
             }

@@ -1,6 +1,6 @@
 # Ordered movement: doing less work
 
-The ordered apply remains serial. No replay pins are changed. The workload is
+The ordered apply remains serial. The apply changes alone change no replay pins; the order-retention change shipped with them repins the late-game replay (see `docs/scale/order-volume.md`). The workload is
 [match-bench](../scale/match-bench.md): 100 seats, seed 1, owner density, load
 factors 1 and 5, independently replayed with 1 and 4 Rayon workers.
 
@@ -204,3 +204,92 @@ performed. No recording was made: the brief and launcher assign no `DEV_PORT`,
 and the shared-machine rules permit only an assigned recording-server port.
 A port request is pending. There is also no `local-assets` link in this worktree.
 No assets or recordings are committed. Shipping is prohibited by this task.
+
+## Owner-save timing observers (2026-11-12)
+
+The Mekong save at `d0a1677ecb63d56a2a14d52e751d5ebc07e0a162`
+revealed an unintended cost of attaching the server's timing observer.
+`census_apply` ran its extra body census and static-clearance queries whenever
+any planning probe was present, although the server discarded the resulting
+counts. These queries are diagnostics, separate from movement's collision
+decisions. Removing the observer itself would also remove required phase
+measurements, so the geometric census now requires an explicit
+`PlanningProbe::movement_census_enabled` request. The dedicated apply-census
+observer enables it; timing spans and ordinary work counters remain available.
+
+Before changing code, a two-minute `scale-match --save` run sampled the current
+Mekong save with `--profile-after 30 --profile-seconds 60`: 26,977 process-CPU
+samples at 499 Hz, with 11,748 to 11,796 units during the run.
+Under `apply_step_full`, 1,176 of 4,361 samples (27.0%) included `census_apply`.
+Across `advance_movement`, the census appeared in 1,535 of 11,665 samples
+(13.2%). The remaining prominent apply functions were `adjust_group_step`,
+`avoid_unit_step` and `collision_sweep_impl`, whose samples overlap.
+This short initial profile identifies work; the ten-minute save benchmark is
+the timing comparison. Raw profiles and save reports stay outside Git in the
+benchmark checkout's `.cache/save-bench/`.
+
+The regression first failed with 32 geometric census results on a timing-only
+observer. It now checks that timing requests remain active without those
+results, comparing every tick's output and canonical hash with an unobserved
+world. The dedicated harness observer separately retains all 32 clear-step
+census results, balanced apply spans and the same replay. Collision ordering,
+movement decisions, save data and canonical-hash pins are unchanged.
+
+The census opt-in alone did not qualify for a commit in its one ten-minute
+save run (`apply3-census-optin.json`). Whole-run ticks/s fell from 10.034 to
+9.758 (-2.8%). Median minute p50/p95 milliseconds were:
+
+| Phase | Baseline | Census opt-in |
+|---|---|---|
+| group_apply | 16.550 / 23.858 | 16.419 / 22.027 |
+| apply_loop | 18.036 / 27.595 | 16.178 / 24.167 |
+| sidestep | 6.683 / 9.659 | 7.895 / 10.884 |
+| index_collision | 5.328 / 6.277 | 5.567 / 7.188 |
+
+The sum of those p50 summaries fell only 1.2% (46.597 to 46.059 ms).
+These spans overlap, so that sum is not exclusive movement time. The first
+attempt was not committed or remeasured unchanged.
+
+The next change reuses collision-cell samples across one actor's sidestep
+candidates. The index is immutably borrowed until that decision returns; no
+sample survives an ordered relocation. Each cell retains its original cyclic
+32-body window as two slices. Overflow policy and candidate-window rejection
+still run for every query. A lazy 5-by-5 cache holds common nearby cells;
+queries outside it read the same live index without a movement-distance cap.
+Tests compare results, callback order, overflow handling and work counts with
+direct queries, and every cached movement sweep checks the full geometry in
+an unmeasured test oracle. No collision-work or canonical-hash pin changes.
+
+The combined change's one ten-minute run (`apply3-neighborhood.json`) completed
+6,671 ticks in 602.182 seconds: **11.078 ticks/s**, up **10.4%** from the
+baseline's 10.034. Units grew from 11,748 to 11,991 (baseline: 11,918).
+All three reports describe the identical input save; its stored bytes and card
+also match the original input. Median minute p50/p95 milliseconds:
+
+| Phase | Baseline | Census + neighborhood |
+|---|---|---|
+| group_apply | 16.550 / 23.858 | 12.572 / 17.615 |
+| apply_loop | 18.036 / 27.595 | 14.107 / 22.697 |
+| sidestep | 6.683 / 9.659 | 7.050 / 9.550 |
+| index_collision | 5.328 / 6.277 | 4.999 / 6.031 |
+| whole tick | 93.992 / 136.741 | 86.416 / 115.104 |
+
+The four requested p50 summaries sum to 38.728 ms, down 16.9% from 46.597.
+That remains above the 25 ms target, and sidestep p50 rose versus baseline.
+The ticks/s result meets the brief's >5% first-commit stopping rule; this is
+not a 20 Hz qualification. Planning cutover and owner rebasing are separate.
+
+Both changed trees were measured once, after an exclusive machine-wide lock
+and a load-below-six wait (initial loads 3.01 and 4.42). AI decisions and shared
+machine conditions vary between runs; no isolated per-optimization causal or
+dedicated-hardware claim follows. The phase summaries above use the same
+aggregation across all minutes, rather than mixing the brief's final-minute
+snapshot with a whole-run result. Timed spans remain enabled and inclusive.
+
+Final-source Dockerized checks: `make fmt-check lint structure-check
+architecture-check`, 231 focused simulation movement/formation/scale-hook
+tests, and 10 focused `perf_scale::match_bench` harness tests passed. The large
+census stayed ignored; no full suite, preflight, e2e or CI ran here.
+Bench3 built an uncommitted source copy of the intended patch; SHA-256 checks
+of all nine changed code files matched the primary checkout before and after
+measurement. Save data, raw reports and recordings remain outside Git.

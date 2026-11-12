@@ -2,6 +2,52 @@ use super::super::*;
 use aoe_core::{Seed, TileCoord, WorldConfig};
 
 #[test]
+fn timing_only_probe_does_not_run_the_geometric_census() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    #[derive(Debug, Default)]
+    struct Probe {
+        census: AtomicUsize,
+        spans: AtomicUsize,
+    }
+    impl crate::PlanningProbe for Probe {
+        fn begin(&self) {}
+        fn end(&self) {}
+        fn movement_count(&self, name: &'static str, count: usize) {
+            if name == "applied_no_body" {
+                self.census.fetch_add(count, Ordering::Relaxed);
+            }
+        }
+        fn movement_span(&self, name: &'static str) -> Option<Box<dyn aoe_map::NavigationSpan>> {
+            if name == "apply_loop" {
+                self.spans.fetch_add(1, Ordering::Relaxed);
+            }
+            None
+        }
+    }
+    let fixture = || {
+        let mut world = GameWorld::new(WorldConfig::new(128, 128, Seed(0)).unwrap()).unwrap();
+        let from = WorldPosition::from_tile_center(TileCoord::new(20, 20)).unwrap();
+        let to = WorldPosition::from_tile_center(TileCoord::new(40, 20)).unwrap();
+        let id = world.spawn_unit(PlayerId(0), from).unwrap();
+        world.issue_move(id, to).unwrap();
+        world
+    };
+    let mut plain = fixture();
+    let mut observed = fixture();
+    let probe = Arc::new(Probe::default());
+    observed.set_planning_probe(probe.clone());
+    for _ in 0..32 {
+        assert_eq!(plain.advance(), observed.advance());
+        assert_eq!(plain.canonical_hash(), observed.canonical_hash());
+    }
+    assert!(probe.spans.load(Ordering::Relaxed) > 0);
+    assert_eq!(probe.census.load(Ordering::Relaxed), 0);
+}
+
+#[test]
 fn empty_cell_sweeps_match_full_geometry_at_fractional_boundaries() {
     use crate::UnitKind;
     for kind in [UnitKind::Scout, UnitKind::Mangonel] {

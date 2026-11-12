@@ -3,6 +3,9 @@ use super::{Attacker, MELEE_RANGE_SUBUNITS, unit_combat};
 use crate::{GameWorld, UnitTask};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, TileRect, WorldPosition};
 
+#[cfg(test)]
+mod tests;
+
 /// What an attacker is walking to and hitting.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Goal {
@@ -186,13 +189,21 @@ impl GameWorld {
             let counts_as_far = attacker.far.is_some()
                 || i64::from((from.x - centre.x).abs().max((from.y - centre.y).abs()))
                     > super::approach::FAR_REUSE_TILES;
-            // An unchanged nearby target keeps its route, unless a melee
-            // attacker's reserved position has since been taken.
+            // Ranged firing points remain useful across target tiles. Melee
+            // contacts keep their target-tile and free-slot rules: those
+            // positions also determine how the crowd makes room at the front.
             let retained = order.filter(|o| {
-                !counts_as_far
-                    && attacker.goal_tile == Some(centre)
-                    && (!Self::uses_melee_position(before.kind)
-                        || self.interaction_point_free(id, o.destination))
+                if counts_as_far {
+                    return false;
+                }
+                if Self::uses_melee_position(before.kind) {
+                    return attacker.goal_tile == Some(centre)
+                        && self.interaction_point_free(id, o.destination);
+                }
+                let stats = self.unit_state_stats(&before);
+                let range = super::super::navy::attack_range(&stats);
+                let min = i64::from(stats.min_range) * MELEE_RANGE_SUBUNITS;
+                (min * min..=range * range).contains(&goal.distance_squared(o.destination))
             });
             let destination = if let Some(order) = retained {
                 Some(order.destination)

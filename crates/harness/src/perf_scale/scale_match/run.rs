@@ -241,7 +241,7 @@ pub(super) fn run(options: &Options, saved: Option<Value>) -> Result<(), BoxErro
     let mut last_cpu = procs::process(server.child.id()).map_or(0.0, |(seconds, _)| seconds);
     let mut last_sample = Instant::now();
     let mut failure = None;
-    let mut phase_minutes = Vec::<Value>::new();
+    let mut phase_minutes = vec![save::sample(&server, 0.0, saved.is_some())?];
     let mut minutes = report::Minutes::default();
     while run_started.elapsed() < wall {
         if let Some(reason) = server.exited() {

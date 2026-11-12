@@ -2,6 +2,9 @@ use super::{AnimalKind, AnimalTask, HuntJob, HuntStage, distance, radius};
 use crate::{EconomyError, GameWorld, UnitKind, UnitTask, unit_combat};
 use aoe_core::{EntityId, PlayerId};
 
+#[cfg(test)]
+mod tests;
+
 impl GameWorld {
     /// Validates the whole group before replacing any jobs. Reissuing the
     /// same hunt retains its cooldown, including while walking to the animal.
@@ -158,11 +161,7 @@ impl GameWorld {
             }
         }
         let index = self.lookup[&id];
-        let reach = if matches!(a.kind, AnimalKind::Sheep | AnimalKind::Wolf) {
-            1
-        } else {
-            4
-        };
+        let reach = hunt_reach(a.kind);
         if distance(u.position, a.position) > radius(reach) {
             // Walking into reach is a walk, never the attack pose.
             self.units[index].state.task = if a.kind == AnimalKind::Wolf {
@@ -224,18 +223,27 @@ impl GameWorld {
             .is_some_and(|&index| self.waiting_for_route(index));
         if self.tick.0 >= job.repath_tick && !waiting {
             job.repath_tick = self.tick.0.saturating_add(self.repath_ticks());
-            let to = self.config.snap_ground_position(to);
-            // Keep the retained detour and its obstruction allowance while
-            // prey stays in the same tile. Restarting each chase interval can
-            // turn the hunter back before it ever clears a crowded doorway.
+            let reach = self.animal(job.animal).map_or(1, |a| hunt_reach(a.kind));
+            // The prey's new tile is not a new trip while the admitted
+            // endpoint still reaches it. Keep that route and its allowance.
             if self
                 .movement_order(id)
-                .is_none_or(|order| order.destination != to)
-                && self.issue_task_move(id, to).is_err()
+                .is_none_or(|order| distance(order.destination, to) > radius(reach))
+                && self
+                    .issue_task_move(id, self.config.snap_ground_position(to))
+                    .is_err()
             {
                 return false;
             }
         }
         true
+    }
+}
+
+fn hunt_reach(kind: AnimalKind) -> i64 {
+    if matches!(kind, AnimalKind::Sheep | AnimalKind::Wolf) {
+        1
+    } else {
+        4
     }
 }

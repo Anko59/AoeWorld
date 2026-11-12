@@ -3,6 +3,10 @@
 use super::{survey::Survey, *};
 use aoe_core::CombatStance;
 
+#[cfg(test)]
+#[path = "tests/withdrawal.rs"]
+mod withdrawal_tests;
+
 /// Soldiers per fighting group.
 pub const FIGHT_GROUP: usize = 20;
 /// Groups an army of the limit (and its General) can form.
@@ -49,7 +53,19 @@ impl GameWorld {
                     CombatStance::NoAttack,
                     stances::Reason::Wounded,
                 );
-                let _ = self.issue_move(v.id, home);
+                if let Ok(destination) = self.spread_destination(v.id, home) {
+                    if v.attack_target.is_some()
+                        || !self.moving_to_goal(
+                            v.id,
+                            destination,
+                            crate::game_world::orders::GoalPrecision::Contact,
+                        )
+                    {
+                        let _ = self.issue_contact_order(v.id, destination);
+                    } else {
+                        self.retain_withdrawal(v.id);
+                    }
+                }
             } else if role(v.kind) == Some(3) || survey.enemies.is_empty() {
                 let siege = role(v.kind) == Some(3);
                 let first = survey
@@ -121,6 +137,41 @@ impl GameWorld {
                     work,
                 );
             }
+        }
+    }
+
+    /// Join the retained route from the tile reached, without a fresh search
+    /// or admission deadline. Obstruction belongs to the current local leg.
+    fn retain_withdrawal(&mut self, id: EntityId) {
+        let index = self.lookup[&id];
+        let from = self.units[index].state.position;
+        if let Some(mut order) = self.units[index].order
+            && (order.origin.tile_floor() != from.tile_floor()
+                || self.units[index]
+                    .obstruction
+                    .is_some_and(|o| o.blocked >= 16))
+            && self.refine_unit_route(index, &mut order)
+        {
+            self.units[index].order = Some(order);
+            self.units[index].obstruction = None;
+            self.units[index].state.previous_position = from;
+            return;
+        }
+        let unit = &mut self.units[index];
+        if let Some(order) = &mut unit.order {
+            if order.waypoint.tile_floor() == from.tile_floor()
+                && let Some(next) = unit.route.pop_front()
+            {
+                order.waypoint = next;
+                unit.obstruction = None;
+            }
+            order.origin = from;
+            order.segment_length = crate::game_path::segment_length(
+                i64::from(order.waypoint.x) - i64::from(from.x),
+                i64::from(order.waypoint.y) - i64::from(from.y),
+            );
+            order.travelled = 0;
+            unit.state.previous_position = from;
         }
     }
 

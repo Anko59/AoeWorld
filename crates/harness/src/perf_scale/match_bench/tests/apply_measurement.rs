@@ -23,6 +23,9 @@ struct Observer(Arc<Probe>);
 impl PlanningProbe for Observer {
     fn begin(&self) {}
     fn end(&self) {}
+    fn movement_census_enabled(&self) -> bool {
+        true
+    }
     fn movement_count(&self, name: &'static str, count: usize) {
         self.0.0.lock().unwrap().entry(name).or_default().0 += count as u64;
     }
@@ -46,6 +49,33 @@ fn progress(scale: f64, workers: usize, tick: u64) {
         json!({"scale": scale, "workers": workers, "tick": tick}).to_string(),
     )
     .unwrap();
+}
+
+#[test]
+fn apply_observer_retains_geometric_counts_without_changing_replay() {
+    use aoe_core::{PlayerId, Seed, TileCoord, WorldConfig, WorldPosition};
+    let fixture = || {
+        let config = WorldConfig::new(128, 128, Seed(0)).unwrap();
+        let mut world = aoe_simulation::GameWorld::new(config).unwrap();
+        let at = |x| WorldPosition::from_tile_center(TileCoord::new(x, 20)).unwrap();
+        let id = world.spawn_unit(PlayerId(0), at(20)).unwrap();
+        world.issue_move(id, at(40)).unwrap();
+        world
+    };
+    let mut plain = fixture();
+    let mut counted = fixture();
+    let probe = Arc::new(Probe::default());
+    counted.set_planning_probe(Arc::new(Observer(probe.clone())));
+    for _ in 0..32 {
+        assert_eq!(plain.advance(), counted.advance());
+        assert_eq!(plain.canonical_hash(), counted.canonical_hash());
+    }
+    let counts = probe.0.lock().unwrap();
+    assert_eq!(counts["applied"].0, 32);
+    assert_eq!(counts["applied_no_body"].0, 32);
+    assert_eq!(counts["applied_clear"].0, 32);
+    assert!(!counts.contains_key("applied_stationary"));
+    assert_eq!(counts["apply_loop"].0, 32);
 }
 
 #[test]

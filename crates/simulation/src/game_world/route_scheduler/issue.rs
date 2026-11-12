@@ -158,6 +158,7 @@ impl GameWorld {
             }
             return Some(MapRoutePlan::Outcome(outcome));
         }
+        self.order_diagnostics.demand[self.order_diagnostics.issuer as usize].route_searches += 1;
         let mut planner = RoutePlanner::new(origin, destination, MAX_ROUTE_WORK_PER_ORDER);
         let (result, full) = self.poll_fast_route(&mut planner, kind, player);
         let work = planner.work();

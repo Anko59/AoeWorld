@@ -6,6 +6,7 @@
 use super::issue::MapRoutePlan;
 use crate::game_path::{next_waypoint, route_waypoint, segment_length};
 use crate::game_world::facing_for;
+use crate::game_world::orders::GoalPrecision;
 use crate::{GameWorld, GameWorldError, MovementOrder};
 use aoe_core::{EntityId, TileCoord, WorldPosition};
 use aoe_map::{MovementOutcome, RoutePlanner};
@@ -98,10 +99,11 @@ impl GameWorld {
     }
 
     #[track_caller]
-    pub(crate) fn issue_task_move(
+    pub(crate) fn issue_move_goal(
         &mut self,
         id: EntityId,
         destination: WorldPosition,
+        precision: GoalPrecision,
     ) -> Result<bool, GameWorldError> {
         let index = *self.lookup.get(&id).ok_or(GameWorldError::UnknownEntity)?;
         if self.units[index].state.hp == 0 || self.embarked(id) {
@@ -110,6 +112,7 @@ impl GameWorld {
         // Snap into the legal edge band (as on dev), keeping the exact point:
         // radius movement honours positions inside a tile.
         let destination = self.config.clamp_ground_position(destination);
+        self.demand_attempt(id, destination);
         let kind = self.units[index].state.kind;
         let passable = self
             .unit_tile_passable(kind, destination.tile_floor(), &|| false)
@@ -118,6 +121,10 @@ impl GameWorld {
             || !self.route_tile_admitted(self.units[index].state.player, destination.tile_floor())
         {
             return Err(GameWorldError::InvalidPosition);
+        }
+        // Keep the existing route, search frontier, deadline and queued waypoints.
+        if self.moving_to_goal(id, destination, precision) {
+            return Ok(true);
         }
         let origin = self.units[index].state.position;
         if self.recently_unreachable(index, origin.tile_floor(), destination.tile_floor()) {
@@ -153,6 +160,7 @@ impl GameWorld {
                     return Err(error);
                 }
             };
+        self.demand_accepted(id);
         let speed_carry = self.units[index].order.map_or(0, |order| order.speed_carry);
         self.combat.quiet.wake(id);
         self.combat.healing.wake(id);
@@ -218,6 +226,7 @@ impl GameWorld {
         origin: WorldPosition,
         destination: WorldPosition,
     ) -> Result<OrderRoute, GameWorldError> {
+        self.order_diagnostics.demand[self.order_diagnostics.issuer as usize].route_requests += 1;
         let caller = Some(std::panic::Location::caller());
         self.route_metrics.caller = caller;
         self.units[index].route_caller = caller;

@@ -167,6 +167,14 @@ async fn scheduler(
         .map(|s| s.player)
         .collect();
     let mut answer = scheduler_json(&world.route_scheduler_stats(), world.tick().0);
+    answer["units"] = json!(world.units().count());
+    answer["movers"] = json!(world.units().filter(|u| u.moving || u.planning).count());
+    answer["order_demand"] = json!({
+        "reassignment_seconds": 10,
+        "sources": world.order_redundancy_sources(),
+        "issuers": (["player", "python_ai", "auto_scout", "steward", "vassal", "general", "rally_automation"]
+            .into_iter().zip(world.order_demand()).collect::<BTreeMap<_, _>>())
+    });
     answer["queue"] = queue_json(&world.route_queue_breakdown(), &humans);
     answer["passes"] = passes_json(&world.pass_counts(), service.unit_frame_passes());
     let (converted, changed) = service.unit_frame_work();
