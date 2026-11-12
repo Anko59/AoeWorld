@@ -33,6 +33,7 @@ pub(crate) struct PreparedScene {
     camera: Camera,
     actor_extents: Option<[[f64; 2]; 2]>,
     foundations: Vec<FoundationKey>,
+    foundation_view: Option<[[f64; 2]; 2]>,
     pub terrain: Vec<SceneTerrain>,
     pub decorations: Vec<SceneDecoration>,
     pub triangles: Vec<ProjectedSurfaceTriangle>,
@@ -52,13 +53,15 @@ pub(in super::super) fn prepare(client: &Client) -> Rc<PreparedScene> {
         *client.terrain_scene.borrow_mut() = Some(scene.clone());
         return scene;
     }
+    let mut terrain = scene_terrain(client);
+    let foundation_view = foundations::view_bounds(&terrain, &client.art);
     let foundations = client
         .village
         .buildings
         .iter()
         .map(foundation_key)
+        .filter(|key| foundations::in_view(key, foundation_view))
         .collect::<Vec<_>>();
-    let mut terrain = scene_terrain(client);
     let units = client
         .village
         .buildings
@@ -78,6 +81,7 @@ pub(in super::super) fn prepare(client: &Client) -> Rc<PreparedScene> {
     let mut scene = PreparedScene::new(client.camera, terrain);
     scene.actor_extents = Some(client.art.scene_actor_extents());
     scene.foundations = foundations;
+    scene.foundation_view = foundation_view;
     scene.decorations = decorations::for_scene(client, &scene);
     let scene = Rc::new(scene);
     *client.terrain_scene.borrow_mut() = Some(scene.clone());
@@ -95,11 +99,10 @@ pub(in super::super) fn replace_buildings(
         .get_mut()
         .as_ref()
         .is_some_and(|scene| {
-            !scene
-                .foundations
+            !scene.foundations.iter().copied().eq(buildings
                 .iter()
-                .copied()
-                .eq(buildings.iter().map(foundation_key))
+                .map(foundation_key)
+                .filter(|key| foundations::in_view(key, scene.foundation_view)))
         });
     if changed {
         client.terrain_scene.get_mut().take();
@@ -110,6 +113,7 @@ pub(in super::super) fn replace_buildings(
 impl PreparedScene {
     pub(crate) fn resident_bytes(&self) -> usize {
         std::mem::size_of_val(&self.actor_extents)
+            + std::mem::size_of_val(&self.foundation_view)
             + self.bucket_keys.resident_bytes()
             + self.terrain.capacity() * size_of::<SceneTerrain>()
             + self.decorations.capacity() * size_of::<SceneDecoration>()
@@ -164,6 +168,7 @@ impl PreparedScene {
             camera,
             actor_extents: None,
             foundations: Vec::new(),
+            foundation_view: None,
             terrain,
             decorations: Vec::new(),
             triangles,
