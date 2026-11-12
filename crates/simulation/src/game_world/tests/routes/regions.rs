@@ -5,6 +5,62 @@ use crate::MAX_ROUTE_WORK_PER_ORDER;
 mod guidance;
 
 #[test]
+fn region_gate_queries_visit_only_the_gate_index() {
+    use std::sync::atomic::AtomicUsize;
+    #[derive(Debug, Default)]
+    struct Census(AtomicUsize);
+    impl PlanningProbe for Census {
+        fn begin(&self) {}
+        fn end(&self) {}
+        fn movement_count(&self, name: &'static str, count: usize) {
+            if name == "region_gate_candidates" {
+                self.0.fetch_add(count, Ordering::Relaxed);
+            }
+        }
+    }
+    let mut world = GameWorld::new(WorldConfig::new(128, 128, Seed(7)).unwrap()).unwrap();
+    for (x, complete) in [(40, true), (60, false)] {
+        world
+            .insert_building(
+                PlayerId(0),
+                BuildingKind::StoneGate,
+                TileRect::from_xywh(x, 110, 4, 1),
+                complete,
+            )
+            .unwrap();
+    }
+    for n in 0..1000 {
+        world
+            .insert_building(
+                PlayerId(0),
+                BuildingKind::House,
+                TileRect::from_xywh((n % 32) * 3, 10 + (n / 32) * 3, 1, 1),
+                true,
+            )
+            .unwrap();
+    }
+    let census = Arc::new(Census::default());
+    world.set_planning_probe(census.clone());
+    let before = world.canonical_hash();
+    assert!(
+        world
+            .land_reachable(
+                PlayerId(0),
+                aoe_map::LandBucket::Small,
+                TileCoord::new(1, 1),
+                TileCoord::new(10, 1)
+            )
+            .unwrap()
+    );
+    assert_eq!(world.canonical_hash(), before);
+    assert_eq!(
+        census.0.load(Ordering::Relaxed),
+        2,
+        "region gate metadata must not project unrelated buildings"
+    );
+}
+
+#[test]
 fn a_certified_frontier_route_survives_the_disconnected_requested_goal() {
     let mut world = GameWorld::new(WorldConfig::new(64, 64, Seed(0)).unwrap()).unwrap();
     world.terrain = flat_map_terrain();
