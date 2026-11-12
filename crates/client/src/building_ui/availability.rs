@@ -3,8 +3,42 @@
 use super::{rules, stock};
 use aoe_core::PlayerId;
 use aoe_protocol::{
-    ConstructionState, GameplayBuildingState, GameplayPlayerState, Stockpile, Tech, UnitKind,
+    Age, BuildingKind, ConstructionState, GameplayBuildingState, GameplayPlayerState, Stockpile,
+    Tech, UnitKind,
 };
+
+/// Inputs shared by every build button during one synchronous HUD update.
+/// Own the small player values; never retain a client/world cache across updates.
+pub(crate) struct BuildMenu {
+    player: Option<(Stockpile, Age)>,
+    completed: u32,
+    builders: bool,
+}
+
+impl BuildMenu {
+    pub(crate) fn new(
+        player: Option<&GameplayPlayerState>,
+        completed: u32,
+        builders: bool,
+    ) -> Self {
+        Self {
+            player: player.map(|p| (p.stockpile, p.age)),
+            completed,
+            builders,
+        }
+    }
+
+    pub(crate) fn enabled(&self, kind: BuildingKind, count: u32) -> bool {
+        let Some((stockpile, age)) = self.player.filter(|_| self.builders) else {
+            return false;
+        };
+        let mut cost = stock(rules(kind).cost);
+        cost.wood = cost.wood.saturating_mul(count);
+        cost.stone = cost.stone.saturating_mul(count);
+        super::build_enabled(kind, stockpile, self.completed, age)
+            && super::affordable(stockpile, cost)
+    }
+}
 
 #[derive(Clone, Copy)]
 #[repr(u8)]

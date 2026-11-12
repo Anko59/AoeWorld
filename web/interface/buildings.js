@@ -1,3 +1,4 @@
+import { set, attribute } from '/interface/dom/update.js';
 import { transportLoads } from '/interface/navy/indicators.js';
 import { initGarrison } from '/interface/garrison/panel.js';
 import { castleKinds, castleNames, castleCommands, castleTechs, castleTraining, castleUnitNames } from '/interface/castle.js';
@@ -9,7 +10,7 @@ export const buildingKinds = ['TownCenter','House','LumberCamp','MiningCamp','Mi
 export const buildingNames = ['Town Center','House','Lumber Camp','Mining Camp','Mill','Farm','Barracks','Palisade Wall','Outpost','Dock','Archery Range','Stable','Blacksmith','Market','Watch Tower','Palisade Gate',...castleNames,'Bridge','Stone Wall','Stone Gate','Road'];
 // Codes are emitted by Rust building_ui::availability, where the rules live.
 const disabledReasons=['Unavailable','','requires Feudal Age','Already researched','Research in progress','Wait for the training queue to finish','Not enough food','Not enough wood','Not enough gold','Not enough stone','Training queue is full','Building is under construction','Requires prerequisite buildings or technology','Select your own building','requires Castle Age','A Steward is queued or garrisoned in this Town Center','requires Imperial Age'];
-const action=(button,label,code)=>{const reason=disabledReasons[code]??disabledReasons[0];button.disabled=code!==1;button.title=label+(reason?` · ${reason}`:'');button.setAttribute('aria-label',button.title);};
+const action=(button,label,code)=>{const reason=disabledReasons[code]??disabledReasons[0];set(button, 'disabled', code!==1);set(button, 'title', label+(reason?` · ${reason}`:''));attribute(button, 'aria-label', button.title);};
 const commands = [
   ['house','House','Q','25 wood'], ['lumber-camp','Lumber Camp','R','100 wood'],
   ['mining-camp','Mining Camp','E','100 wood'], ['mill','Mill','W','100 wood'],
@@ -96,13 +97,13 @@ export function initBuildings() {
   let open=false, state=[], lastPreview='', queue=[], previousQueue='', previousResearch=-1, previousLabels='';
   const menu=()=>{
     const villager=byId('selection').dataset.villagers==='true';
-    build.hidden=!villager;military.hidden=!villager;if(!villager)open=false;
-    buttons.forEach((b,i)=>{b.hidden=!villager||open!==category(i);b.disabled=state[buildStart+i]!==1;const [id,name,key,cost]=commands[i];b.title=`${name} · ${cost} · ${category(i)==='military'?'V':'B'} ${key}${(i>=15&&i<=18||id==='town-center')&&state[0]<2?' · requires Castle Age':state[0]===0&&(i>=9&&i<=13||i>=19&&i<=21)?' · requires Feudal Age':''}`;b.setAttribute('aria-label',b.title);});
-    if(open){for(const id of ['move-units','stop-units','delete-units'])byId(id).hidden=true;byId('command-context').textContent=open==='military'?'Military buildings':'Economic buildings';byId('command-hint').textContent=byId('scene').dataset.orderMode==='build'?(byId('scene').title||'Left-click a green footprint · drag walls or bridges bank to bank · Esc cancels'):'Choose a building · Esc closes the menu';}
+    set(build, 'hidden', !villager);set(military, 'hidden', !villager);if(!villager)open=false;
+    buttons.forEach((b,i)=>{set(b, 'hidden', !villager||open!==category(i));set(b, 'disabled', state[buildStart+i]!==1);const [id,name,key,cost]=commands[i];set(b, 'title', `${name} · ${cost} · ${category(i)==='military'?'V':'B'} ${key}${(i>=15&&i<=18||id==='town-center')&&state[0]<2?' · requires Castle Age':state[0]===0&&(i>=9&&i<=13||i>=19&&i<=21)?' · requires Feudal Age':''}`);attribute(b, 'aria-label', b.title);});
+    if(open){for(const id of ['move-units','stop-units','delete-units'])set(byId(id), 'hidden', true);set(byId('command-context'), 'textContent', open==='military'?'Military buildings':'Economic buildings');set(byId('command-hint'), 'textContent', byId('scene').dataset.orderMode==='build'?(byId('scene').title||'Left-click a green footprint · drag walls or bridges bank to bank · Esc cancels'):'Choose a building · Esc closes the menu');}
     grid.classList.toggle('building-menu-open',Boolean(open));
-    build.setAttribute('aria-expanded',String(open==='economy'));military.setAttribute('aria-expanded',String(open==='military'));
+    attribute(build, 'aria-expanded', String(open==='economy'));attribute(military, 'aria-expanded', String(open==='military'));
     const active=Array.from(grid.children).filter(n=>n.tagName==='BUTTON'&&!n.hidden).length;
-    grid.querySelectorAll('.empty-command').forEach((n,i)=>{n.hidden=i>=Math.max(0,15-active);});
+    grid.querySelectorAll('.empty-command').forEach((n,i)=>{set(n, 'hidden', i>=Math.max(0,15-active));});
   };
   build.addEventListener('click',()=>{open=open==='economy'?false:'economy';menu();});
   military.addEventListener('click',()=>{open=open==='military'?false:'military';menu();});
@@ -120,9 +121,9 @@ export function initBuildings() {
       formations.forEach((button,i)=>button.addEventListener('click',()=>callback(5,i)));
       attackMove.addEventListener('click',()=>callback(6,0));
       generalMove.addEventListener('click',()=>callback(8,0));
-      byId('combat-stance').addEventListener('change',event=>{ if(event.target.value!=='') callback(7,Number(event.target.value)); event.target.value=''; });
+      byId('combat-stance').addEventListener('change',event=>{ if(event.target.value!=='') callback(7,Number(event.target.value)); set(event.target, 'value', ''); });
     },
-    queue(values,visible) { queue=values; byId('training').hidden=!visible||!queue.length; },
+    queue(values,visible) { queue=values; set(byId('training'), 'hidden', !visible||!queue.length); },
     key(event) {
       const key=event.key.toUpperCase();
       if(key==='B'&&!build.hidden){build.click();event.preventDefault();return true;}
@@ -135,52 +136,52 @@ export function initBuildings() {
     refresh:menu,
     // Top-bar age-up research bar: `age` is the age being researched (1-3), 0 when none.
     ageProgress(age,fraction) {
-      const bar=byId('age-progress');bar.hidden=!age;if(!age)return;
+      const bar=byId('age-progress');set(bar, 'hidden', !age);if(!age)return;
       const percent=Math.floor(Math.min(1,Math.max(0,fraction))*100);
-      bar.style.setProperty('--progress',percent+'%');bar.querySelector('small').textContent=percent+'%';
-      bar.setAttribute('aria-valuenow',String(percent));bar.title=`Advancing to ${['','Feudal','Castle','Imperial'][age]} Age · ${percent}%`;
+      bar.style.setProperty('--progress',percent+'%');set(bar.querySelector('small'), 'textContent', percent+'%');
+      attribute(bar, 'aria-valuenow', String(percent));set(bar, 'title', `Advancing to ${['','Feudal','Castle','Imperial'][age]} Age · ${percent}%`);
     },
     update(v) {
       state=Array.from(v);menu();
       window.aoeNavigation?.strategic?.building?.ready(v.slice(buildStart, buildStart + commands.length));
-      byId('age-name').textContent=['I  Dark Age','II  Feudal Age','III  Castle Age','IV  Imperial Age'][v[0]]??'I  Dark Age';
+      set(byId('age-name'), 'textContent', ['I  Dark Age','II  Feudal Age','III  Castle Age','IV  Imperial Age'][v[0]]??'I  Dark Age');
       const kind=v[1],selected=kind>=0,owned=byId('selection').dataset.owned==='true';
       const availability=foundationCount+1+(v[foundationCount]??0)*3;
-      militaryTrain.forEach(({button,site,kind:unit})=>{button.hidden=!owned||kind!==site||v[4]<1000||v[availability+unit]===0;action(button,`Train ${button.textContent}`,v[availability+unit]);});
-      panel.hidden=!selected;
-      navalTrain.forEach(({button,kind:unit,name,cost})=>{button.hidden=!owned||kind!==9||v[4]<1000||v[availability+unit]===0;action(button,`Train ${name} · ${cost}`,v[availability+unit]);});
+      militaryTrain.forEach(({button,site,kind:unit})=>{set(button, 'hidden', !owned||kind!==site||v[4]<1000||v[availability+unit]===0);action(button,`Train ${button.textContent}`,v[availability+unit]);});
+      set(panel, 'hidden', !selected);
+      navalTrain.forEach(({button,kind:unit,name,cost})=>{set(button, 'hidden', !owned||kind!==9||v[4]<1000||v[availability+unit]===0);action(button,`Train ${name} · ${cost}`,v[availability+unit]);});
       const market=availability+trainingKinds.length+1;
       const reseed=market+15;
-      const transport=v[reseed+6]??0,cargo=v[reseed+7]??0;unload.hidden=!transport;unload.disabled=cargo===0;unload.title='Right-click a shore to sail there and unload';if(transport)byId('selection-load').textContent=`${cargo}/5 passengers`;transportLoads(v.slice(reseed+8,-1));
-      const cavalry=v[reseed+4]??0,scouting=v[reseed+5]??0;autoScout.hidden=cavalry===0;autoScout.disabled=false;autoScout.setAttribute('aria-pressed',scouting===0?'false':scouting===cavalry?'true':'mixed');autoScout.querySelector('.command-label').textContent=scouting===cavalry&&cavalry>0?'Stop auto-scout':'Auto-scout';
-      reseedQueue.hidden=kind!==4||!owned;byId('farm-reseed-count').textContent=String(v[reseed]??0);
-      reseedButtons.forEach((button,i)=>{button.hidden=!owned||kind!==4||v[4]<1000;button.disabled=v[reseed+1+i]!==1;button.title=i===0?`Queue farm reseed · ${v[reseed+3]} wood`:`Remove farm reseed · refund ${v[reseed+3]} wood`;button.setAttribute('aria-label',button.title);});
-      tradeButtons.forEach(({button,side,res},i)=>{const price=v[market+i%3];const gold=v[market+(side==='buy'?9:12)+i%3];button.hidden=!owned||kind!==13||v[4]<1000;button.disabled=v[market+3+i]!==1;const name=res[0].toUpperCase()+res.slice(1);const signature=`${side}:${res}:${gold}`;if(button.dataset.signature!==signature){button.innerHTML=icon('resources',res,res)+`<span class="command-label">${side==='buy'?'Buy':'Sell'} ${name}</span><span class="trade-side">${side==='buy'?'+':'−'}</span><small>${gold} gold</small>`;button.dataset.signature=signature;}button.dataset.price=String(price);button.title=`${side==='buy'?'Buy':'Sell'} 100 ${res} for ${gold} gold (price ${price})`;button.setAttribute('aria-label',button.title);});
-      byId('market-prices')&&(byId('market-prices').textContent=kind===13&&v[4]>=1000?`Prices per 100: wood ${v[market]} · food ${v[market+1]} · stone ${v[market+2]} gold`:'');
-      techs.forEach((b,i)=>{b.hidden=!owned||kind!==sites[i]||v[8+i]===0||v[8+i]===3;action(b,`Research ${research[i]}${i===8?' · Upgrades existing and future Militia':''}`,v[8+i]);});
+      const transport=v[reseed+6]??0,cargo=v[reseed+7]??0;set(unload, 'hidden', !transport);set(unload, 'disabled', cargo===0);set(unload, 'title', 'Right-click a shore to sail there and unload');if(transport)set(byId('selection-load'), 'textContent', `${cargo}/5 passengers`);transportLoads(v.slice(reseed+8,-1));
+      const cavalry=v[reseed+4]??0,scouting=v[reseed+5]??0;set(autoScout, 'hidden', cavalry===0);set(autoScout, 'disabled', false);attribute(autoScout, 'aria-pressed', scouting===0?'false':scouting===cavalry?'true':'mixed');set(autoScout.querySelector('.command-label'), 'textContent', scouting===cavalry&&cavalry>0?'Stop auto-scout':'Auto-scout');
+      set(reseedQueue, 'hidden', kind!==4||!owned);set(byId('farm-reseed-count'), 'textContent', String(v[reseed]??0));
+      reseedButtons.forEach((button,i)=>{set(button, 'hidden', !owned||kind!==4||v[4]<1000);set(button, 'disabled', v[reseed+1+i]!==1);set(button, 'title', i===0?`Queue farm reseed · ${v[reseed+3]} wood`:`Remove farm reseed · refund ${v[reseed+3]} wood`);attribute(button, 'aria-label', button.title);});
+      tradeButtons.forEach(({button,side,res},i)=>{const price=v[market+i%3];const gold=v[market+(side==='buy'?9:12)+i%3];set(button, 'hidden', !owned||kind!==13||v[4]<1000);set(button, 'disabled', v[market+3+i]!==1);const name=res[0].toUpperCase()+res.slice(1);const signature=`${side}:${res}:${gold}`;if(button.dataset.signature!==signature){button.innerHTML=icon('resources',res,res)+`<span class="command-label">${side==='buy'?'Buy':'Sell'} ${name}</span><span class="trade-side">${side==='buy'?'+':'−'}</span><small>${gold} gold</small>`;button.dataset.signature=signature;}attribute(button, 'data-price', price);set(button, 'title', `${side==='buy'?'Buy':'Sell'} 100 ${res} for ${gold} gold (price ${price})`);attribute(button, 'aria-label', button.title);});
+      byId('market-prices')&&(set(byId('market-prices'), 'textContent', kind===13&&v[4]>=1000?`Prices per 100: wood ${v[market]} · food ${v[market+1]} · stone ${v[market+2]} gold`:''));
+      techs.forEach((b,i)=>{set(b, 'hidden', !owned||kind!==sites[i]||v[8+i]===0||v[8+i]===3);action(b,`Research ${research[i]}${i===8?' · Upgrades existing and future Militia':''}`,v[8+i]);});
       const train=byId('train-villager');
       const unitNames=['Villager','Scout Cavalry','Militia','Fishing Ship','Archer','Skirmisher','Spearman','Man-at-Arms',...castleUnitNames,'Galley','Fire Ship','Demolition Ship','Transport Ship','War Galley','Vassal','General',...imperialUnitNames,'Steward'];
       const infantry=unitNames[v[availability+trainingKinds.length]]??'Militia';
-      if(selected){train.hidden=!owned||![0,6,9].includes(kind)||v[4]<1000;action(train,kind===9?'Train Fishing Ship, 75 wood, Q':kind===6?`Train ${infantry}, 50 food, 20 gold, Q`:'Train Villager, 50 food, Q',v[trainEnabled]);trainingName.hidden=kind!==6;trainingName.textContent=infantry;setEntityIcon(trainIcon,kind===9?'FishingShip':kind===6?trainingKinds[v[availability+trainingKinds.length]]:'Villager');train.querySelector('.cost').textContent=kind===9?'75 W':kind===6?'50 F · 20 G':'50';}
+      if(selected){set(train, 'hidden', !owned||![0,6,9].includes(kind)||v[4]<1000);action(train,kind===9?'Train Fishing Ship, 75 wood, Q':kind===6?`Train ${infantry}, 50 food, 20 gold, Q`:'Train Villager, 50 food, Q',v[trainEnabled]);set(trainingName, 'hidden', kind!==6);set(trainingName, 'textContent', infantry);setEntityIcon(trainIcon,kind===9?'FishingShip':kind===6?trainingKinds[v[availability+trainingKinds.length]]:'Villager');set(train.querySelector('.cost'), 'textContent', kind===9?'75 W':kind===6?'50 F · 20 G':'50');}
       const labels=Array.from({length:v[foundationCount]??0},(_,i)=>{const at=foundationCount+1+i*3;return `<span style="left:${v[at]}px;top:${v[at+1]}px">${Math.floor(v[at+2]/10)}%<progress max="1000" value="${v[at+2]}"></progress></span>`;}).join('');
       if(labels!==previousLabels){progressLabels.innerHTML=labels;previousLabels=labels;}
-      if(selected){if(owned)byId('command-hint').textContent=v[4]<1000?'Right-click this foundation with villagers to resume construction':kind===0?'Q: train a villager · train a Steward to manage the economy':kind===9?'Q: train a Fishing Ship · 75 wood':kind===6?`Q: train ${infantry} · 50 food, 20 gold`:kind===16?'Train a General · Vassal garrison in a Castle · fortify and defend · 20 villagers + 20 military':kind===5?'Right-click this Farm with a villager to work it':[10,11].includes(kind)?'Train military units below':kind===12?'Research equipment for your army':'Select villagers to gather or build';byId('selection-task').textContent=v[4]<1000?'Under construction':v[6]>=0?'Researching':byId('training').hidden===false?`Training ${unitNames[v[trainKind]]}`:'Ready';byId('selection-load').textContent=['Resource drop-off · supports 5 population','Supports 5 population','Wood drop-off','Gold and stone drop-off','Food drop-off','Food production','Trains infantry','Blocks movement','Scouts the surrounding area','Fish drop-off · trains fishing, transport and war ships','Trains Archers and Skirmishers','Trains Scout Cavalry','Upgrades infantry, cavalry and archers','Market · buy and sell wood, food and stone for gold','Arrow defence · 5 pierce attack · range 1–8','Opens for nearby friendly units','Arrow defence · 11 pierce attack · five arrows','Trains Monks · nearby injured units heal automatically','Research building and ranged upgrades','Trains Mangonels and Battering Rams','Connects land across water · crossing along its length only'][kind];}
-      byId('building-hp').textContent=`${v[2]} / ${v[3]} HP`;
-      byId('building-status').textContent=v[4]<1000?`Constructing · ${Math.floor(v[4]/10)}%`:v[5]>=0?`Complete · ${v[5]} food remaining`:'Complete';
-      byId('construction-progress').hidden=v[4]>=1000;byId('construction-progress').value=v[4];
-      byId('cancel-construction').hidden=!owned||!selected||v[4]>=1000;
-      byId('cancel-research').hidden=!owned||v[6]<0;
+      if(selected){if(owned)set(byId('command-hint'), 'textContent', v[4]<1000?'Right-click this foundation with villagers to resume construction':kind===0?'Q: train a villager · train a Steward to manage the economy':kind===9?'Q: train a Fishing Ship · 75 wood':kind===6?`Q: train ${infantry} · 50 food, 20 gold`:kind===16?'Train a General · Vassal garrison in a Castle · fortify and defend · 20 villagers + 20 military':kind===5?'Right-click this Farm with a villager to work it':[10,11].includes(kind)?'Train military units below':kind===12?'Research equipment for your army':'Select villagers to gather or build');set(byId('selection-task'), 'textContent', v[4]<1000?'Under construction':v[6]>=0?'Researching':byId('training').hidden===false?`Training ${unitNames[v[trainKind]]}`:'Ready');set(byId('selection-load'), 'textContent', ['Resource drop-off · supports 5 population','Supports 5 population','Wood drop-off','Gold and stone drop-off','Food drop-off','Food production','Trains infantry','Blocks movement','Scouts the surrounding area','Fish drop-off · trains fishing, transport and war ships','Trains Archers and Skirmishers','Trains Scout Cavalry','Upgrades infantry, cavalry and archers','Market · buy and sell wood, food and stone for gold','Arrow defence · 5 pierce attack · range 1–8','Opens for nearby friendly units','Arrow defence · 11 pierce attack · five arrows','Trains Monks · nearby injured units heal automatically','Research building and ranged upgrades','Trains Mangonels and Battering Rams','Connects land across water · crossing along its length only'][kind]);}
+      set(byId('building-hp'), 'textContent', `${v[2]} / ${v[3]} HP`);
+      set(byId('building-status'), 'textContent', v[4]<1000?`Constructing · ${Math.floor(v[4]/10)}%`:v[5]>=0?`Complete · ${v[5]} food remaining`:'Complete');
+      set(byId('construction-progress'), 'hidden', v[4]>=1000);set(byId('construction-progress'), 'value', v[4]);
+      set(byId('cancel-construction'), 'hidden', !owned||!selected||v[4]>=1000);
+      set(byId('cancel-research'), 'hidden', !owned||v[6]<0);
       const researching=v[6]>=0;
       if(v[6]!==previousResearch){byId('research-icon').innerHTML=researching?icon('technologies',techIds[v[6]],'technology'):'';previousResearch=v[6];}
-      byId('research-label').textContent=researching?`${research[v[6]].split(' · ')[0]} · ${Math.floor(v[7]*100)}%`:'';
-      byId('research-progress').hidden=!researching;byId('research-progress').value=Math.floor(v[7]*100);
+      set(byId('research-label'), 'textContent', researching?`${research[v[6]].split(' · ')[0]} · ${Math.floor(v[7]*100)}%`:'');
+      set(byId('research-progress'), 'hidden', !researching);set(byId('research-progress'), 'value', Math.floor(v[7]*100));
       if(queue.length){
         const percent=Math.floor(queue[0][0]/Math.max(1,queue[0][1])*100), name=unitNames[queue[0][2]];
-        byId('training-progress').value=percent;byId('training-progress').setAttribute('aria-label',`${name} training progress`);
+        set(byId('training-progress'), 'value', percent);attribute(byId('training-progress'), 'aria-label', `${name} training progress`);
         const waiting=v[v.length-1]===1;
-        byId('training-label').textContent=waiting?`Waiting for housing · ${name} · ${percent}%`:`Training ${name} · ${percent}%`;
-        if(waiting)byId('selection-task').textContent='Waiting for housing';
-        byId('cancel-training').title=`Cancel active ${name} training and refund its cost`;
+        set(byId('training-label'), 'textContent', waiting?`Waiting for housing · ${name} · ${percent}%`:`Training ${name} · ${percent}%`);
+        if(waiting)set(byId('selection-task'), 'textContent', 'Waiting for housing');
+        set(byId('cancel-training'), 'title', `Cancel active ${name} training and refund its cost`);
         const signature=queue.map(entry=>entry[2]).join(',');
         if(signature!==previousQueue){byId('training-queue').innerHTML=queue.map(([,,kind])=>`<span class="unit-token" title="${unitNames[kind]} queued">${entityIcon(trainingKinds[kind])}</span>`).join('');previousQueue=signature;}
       } else previousQueue='';
@@ -192,8 +193,8 @@ export function initBuildings() {
       byId('scene').dataset.placementCount=String(v[1]??0);
       byId('scene').dataset.placementInvalid=String(v[2]??0);
       const reasons=['','Drag between two land banks','Bridge is too long or has an invalid direction','Bridge start must be on land','Bridge end must be on land','Not enough resources for this bridge','Bridge tiles must be clear and cross water'];
-      byId('scene').title=reasons[v[3]??0]??'';
-      if(open&&byId('scene').dataset.orderMode==='build')byId('command-hint').textContent=byId('scene').title||'Left-click a green footprint · drag walls or bridges bank to bank · Esc cancels';
+      set(byId('scene'), 'title', reasons[v[3]??0]??'');
+      if(open&&byId('scene').dataset.orderMode==='build')set(byId('command-hint'), 'textContent', byId('scene').title||'Left-click a green footprint · drag walls or bridges bank to bank · Esc cancels');
     },
   };
 }

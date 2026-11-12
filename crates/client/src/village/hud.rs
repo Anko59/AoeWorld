@@ -1,5 +1,5 @@
 use super::{Client, building_center, owner};
-use crate::playground::game::{map, position_at};
+use crate::playground::game::{map, position_of};
 use aoe_protocol::{ResourceKind, UnitKind, UnitTask};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, prelude::wasm_bindgen};
@@ -22,9 +22,24 @@ fn rendered_colour(client: &Client, player: aoe_core::PlayerId, owner: aoe_core:
     f64::from(r << 16 | g << 8 | b)
 }
 
-fn screen(client: &Client, position: [f64; 2], scale: [f64; 2]) -> [f64; 2] {
-    let p = map::screen_position(client, position);
-    [p.x * scale[0], p.y * scale[1]]
+fn screen(
+    client: &Client,
+    position: [f64; 2],
+    scale: [f64; 2],
+    viewport: [f64; 2],
+    selected: bool,
+) -> Option<[f64; 2]> {
+    crate::hud_visibility::project_if_horizontal(
+        client.camera,
+        position,
+        scale,
+        viewport,
+        selected,
+        || {
+            let p = map::screen_position(client, position);
+            [p.x * scale[0], p.y * scale[1]]
+        },
+    )
 }
 
 pub(in super::super) fn update(client: &Client) {
@@ -42,7 +57,14 @@ pub(in super::super) fn update(client: &Client) {
             })
         })
         .map_or("", |u| ["0", "1", "2", "3"][u.stance as usize]);
-    let _ = client.canvas.set_attribute("data-selected-stance", stance);
+    if client
+        .canvas
+        .get_attribute("data-selected-stance")
+        .as_deref()
+        != Some(stance)
+    {
+        let _ = client.canvas.set_attribute("data-selected-stance", stance);
+    }
     let owner = owner(client);
     let overview = crate::playground::game::strategic::active(client);
     // Header: four stockpiles, used/cap, four worker counts, clock,
@@ -50,10 +72,11 @@ pub(in super::super) fn update(client: &Client) {
     // Actor records contain eighteen numbers; queue records contain progress,
     // total and unit kind.
     // Decode immediately in JS; never retain a view of WASM memory.
-    let viewport = [
-        f64::from(client.canvas.client_width().max(1)),
-        f64::from(client.canvas.client_height().max(1)),
-    ];
+    // One geometry snapshot precedes every panel write. Later panels share it
+    // instead of forcing layout after the numeric HUD has changed the DOM.
+    let css_viewport = [client.canvas.client_width(), client.canvas.client_height()];
+    let viewport = css_viewport.map(|size| f64::from(size.max(1)));
+    let panel_scale = f64::from(css_viewport[0]) / f64::from(client.canvas.width());
     let scale = [
         viewport[0] / f64::from(client.canvas.width()),
         viewport[1] / f64::from(client.canvas.height()),
@@ -84,7 +107,7 @@ pub(in super::super) fn update(client: &Client) {
                 .map(|bounds| {
                     (
                         u.id,
-                        (bounds[1] - 5.0) * f64::from(client.canvas.client_height())
+                        (bounds[1] - 5.0) * f64::from(css_viewport[1])
                             / f64::from(client.canvas.height()),
                     )
                 })
@@ -131,8 +154,10 @@ pub(in super::super) fn update(client: &Client) {
         if overview && !selected {
             continue;
         }
-        let position = position_at(client, unit.id);
-        let [x, y] = screen(client, position, scale);
+        let position = position_of(client, unit);
+        let Some([x, y]) = screen(client, position, scale, viewport, selected) else {
+            continue;
+        };
         let top = head(unit.id, y);
         if !crate::hud_visibility::visible([x, y], top, viewport, selected) {
             continue;
@@ -199,16 +224,15 @@ pub(in super::super) fn update(client: &Client) {
         ]);
     }
     for building in &client.village.buildings {
-        if overview && !client.selected.has_building(building.id) {
+        let selected = client.selected.has_building(building.id);
+        if overview && !selected {
             continue;
         }
-        let [x, y] = screen(client, building_center(building), scale);
-        if !crate::hud_visibility::visible(
-            [x, y],
-            y - 48.0,
-            viewport,
-            client.selected.has_building(building.id),
-        ) {
+        let Some([x, y]) = screen(client, building_center(building), scale, viewport, selected)
+        else {
+            continue;
+        };
+        if !crate::hud_visibility::visible([x, y], y - 48.0, viewport, selected) {
             continue;
         }
         values[12] += 1.0;
@@ -217,7 +241,7 @@ pub(in super::super) fn update(client: &Client) {
             2.0 + building.kind as u8 as f64,
             x,
             y,
-            flag(client.selected.has_building(building.id)),
+            flag(selected),
             if building.training_queue.is_empty() {
                 5.0
             } else {
@@ -240,17 +264,21 @@ pub(in super::super) fn update(client: &Client) {
         ]);
     }
     for animal in &client.village.animals {
-        if overview && !client.selected.units.contains(&animal.id) {
+        let selected = client.selected.units.contains(&animal.id);
+        if overview && !selected {
             continue;
         }
-        let [x, y] = screen(client, animal.position.as_tiles(), scale);
-        let top = head(animal.id, y);
-        if !crate::hud_visibility::visible(
-            [x, y],
-            top,
+        let Some([x, y]) = screen(
+            client,
+            animal.position.as_tiles(),
+            scale,
             viewport,
-            client.selected.units.contains(&animal.id),
-        ) {
+            selected,
+        ) else {
+            continue;
+        };
+        let top = head(animal.id, y);
+        if !crate::hud_visibility::visible([x, y], top, viewport, selected) {
             continue;
         }
         values[12] += 1.0;
@@ -273,7 +301,7 @@ pub(in super::super) fn update(client: &Client) {
             kind,
             x,
             y,
-            flag(client.selected.units.contains(&animal.id)),
+            flag(selected),
             13.0 + animal.task as u8 as f64,
             0.0,
             f64::from(animal.food_remaining),
@@ -309,8 +337,8 @@ pub(in super::super) fn update(client: &Client) {
     }
     let details = super::presentation::values(client);
     village_update(&values, map::feedback::connection_label(client), &details);
-    super::building_panel::update(client);
-    super::steward::present(client);
+    super::building_panel::update(client, panel_scale);
+    super::steward::present(client, panel_scale);
     crate::playground::game::strategic::update(client);
 }
 

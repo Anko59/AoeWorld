@@ -16,15 +16,14 @@ export function initMinimapView(svg, panel, jump) {
     if (node.getAttribute(key) !== value) node.setAttribute(key, value);
   }
   function render() {
-    const bounds = svg.getBoundingClientRect();
-    side = Math.max(1, Math.floor(Math.min(bounds.width, bounds.height)));
     const next = [world, center, zoom, side, revision].flat().join(',');
     if (signature === next) return;
     signature = next;
     const p = minimapProject(center, world);
     attribute(layer, 'transform', `translate(128 128) scale(${zoom}) translate(${-p[0]} ${-p[1]})`);
-    panel.dataset.minimapZoom = String(zoom);
-    indicator.textContent = `${Number(zoom.toFixed(1))}×`;
+    attribute(panel, 'data-minimap-zoom', zoom);
+    const label = `${Number(zoom.toFixed(1))}×`;
+    if (indicator.textContent !== label) indicator.textContent = label;
     const live = new Set();
     for (const pixel of aggregateActors(actors, world, state(), side)) {
       live.add(pixel.key);
@@ -85,10 +84,21 @@ export function initMinimapView(svg, panel, jump) {
   for (const name of ['pointercancel', 'lostpointercapture']) svg.addEventListener(name, cancel);
   window.addEventListener('blur', cancel);
   indicator.addEventListener('click', reset);
-  new ResizeObserver(render).observe(svg);
+  // Actor and camera updates follow HUD writes. Reading layout there forces a
+  // document-wide flush even when the minimap has not changed size. Measure
+  // only at initialization and on resize, before updating its retained dots.
+  function resize() {
+    const bounds = svg.getBoundingClientRect();
+    side = Math.max(1, Math.floor(Math.min(bounds.width, bounds.height)));
+    render();
+  }
+  new ResizeObserver(resize).observe(svg);
+  resize();
   return { update, reset, state, records: () => actors, revision: () => revision,
     actors(values) {
       if (values.length === actors.length && values.every((value, index) => value === actors[index])) return;
-      actors = Array.from(values); revision++; render();
+      // Own a bulk copy: the incoming typed view belongs to WASM and may be
+      // overwritten or detached as soon as this callback returns.
+      actors = new Float64Array(values); revision++; render();
     } };
 }

@@ -1,3 +1,4 @@
+import { set, attribute } from '/interface/dom/update.js';
 import { icon } from '/interface/ui-art.js';
 import { transportHint } from '/interface/navy/indicators.js';
 // Presentation only; authoritative values and the simulation's movement rule
@@ -72,33 +73,33 @@ window.aoeOrderPing = (x, y) => {
   setTimeout(() => ring.remove(), 900);
 };
 export function updateDetails(values) {
-  byId('scene').dataset.connected = String(values[0] === 1);
+  attribute(byId('scene'), 'data-connected', String(values[0] === 1));
   if (values[1] >= 0) {
-    byId('selection').dataset.count = '1';
-    byId('selection').dataset.kind = 'Resource';
-    byId('selection-empty').hidden = true;
-    byId('selection-content').hidden = false;
-    byId('selection-owner').textContent = 'Natural resource';
-    byId('selection-name').textContent = kinds[values[1]];
-    byId('selection-task').textContent = values[2] ? 'Natural resource' : 'Exhausted';
-    byId('selection-load').textContent = `${values[2]} ${icons[values[1]]} remaining`;
+    attribute(byId('selection'), 'data-count', '1');
+    attribute(byId('selection'), 'data-kind', 'Resource');
+    set(byId('selection-empty'), 'hidden', true);
+    set(byId('selection-content'), 'hidden', false);
+    set(byId('selection-owner'), 'textContent', 'Natural resource');
+    set(byId('selection-name'), 'textContent', kinds[values[1]]);
+    set(byId('selection-task'), 'textContent', values[2] ? 'Natural resource' : 'Exhausted');
+    set(byId('selection-load'), 'textContent', `${values[2]} ${icons[values[1]]} remaining`);
     const portrait=byId('selection-portrait'), key=`resource-${values[1]}`;
     if (portrait.dataset.entityIcon!==key) {
       portrait.dataset.entityIcon=key;
       portrait.innerHTML=icon('units',[59,349,66,102,53,53][values[1]],icons[values[1]]);
     }
-    byId('selection-health').hidden=true;
-    byId('selected-icons').replaceChildren();
-    byId('command-context').textContent = kinds[values[1]];
+    set(byId('selection-health'), 'hidden', true);
+    if (byId('selected-icons').firstChild) byId('selected-icons').replaceChildren();
+    set(byId('command-context'), 'textContent', kinds[values[1]]);
   }
   const cursor = ['', 'gather', 'move', 'forbidden', 'attack', 'hunt', 'gather', 'gather', 'gather', 'gather', 'build', 'garrison', 'board'][values[3]];
-  byId('scene').dataset.commandCursor = cursor;
+  attribute(byId('scene'), 'data-command-cursor', cursor);
   transportHint(cursor === 'board');
-  byId('scene').dataset.gatherKind = ['fish', 'forage', 'chop', 'mine'][values[3] - 6] ?? '';
+  attribute(byId('scene'), 'data-gather-kind', ['fish', 'forage', 'chop', 'mine'][values[3] - 6] ?? '');
   // GPU backends follow the sprite silhouette; Canvas keeps the
   // contextual gather cursor. The former ground ellipse is no longer drawn.
-  byId('scene').dataset.hoverMode = byId('playground')?.dataset.hoverMode ?? 'outline';
-  byId('scene').dataset.resourceHovered = String(cursor === 'gather' && values[8] > 0);
+  attribute(byId('scene'), 'data-hover-mode', byId('playground')?.dataset.hoverMode ?? 'outline');
+  attribute(byId('scene'), 'data-resource-hovered', String(cursor === 'gather' && values[8] > 0));
   const panel = byId('minimap');
   const world = [Number(panel.dataset.worldWidth), Number(panel.dataset.worldHeight)];
   if (!world.every(value => value > 0)) return;
@@ -113,8 +114,8 @@ export function updateDetails(values) {
   }
   const targets = [];
   for (; at+3<values.length; at+=4) targets.push({kind:values[at], x:values[at+1], y:values[at+2], distance:values[at+3]});
-  byId('scene').dataset.resourceTargets = JSON.stringify(targets);
-  byId('scene').dataset.hudRevision = String(Number(byId('scene').dataset.hudRevision ?? 0) + 1);
+  attribute(byId('scene'), 'data-resource-targets', JSON.stringify(targets));
+  attribute(byId('scene'), 'data-hud-revision', String(Number(byId('scene').dataset.hudRevision ?? 0) + 1));
   const signature = resources;
   if (signature !== markers) {
     byId('minimap-resources').innerHTML = resources;

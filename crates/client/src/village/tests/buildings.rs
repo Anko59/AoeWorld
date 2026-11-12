@@ -82,6 +82,30 @@ fn rich_player(researched: u64) -> aoe_protocol::GameplayPlayerState {
 }
 
 #[wasm_bindgen_test]
+fn build_menu_snapshot_keeps_costs_prerequisites_and_fresh_player_state() {
+    use crate::building_ui::availability::BuildMenu;
+    let mut player = rich_player(0);
+    player.stockpile.wood = 61;
+    let mill = 1 << BuildingKind::Mill as u8;
+    let menu = BuildMenu::new(Some(&player), mill, true);
+    assert!(menu.enabled(BuildingKind::Farm, 1));
+    assert!(!menu.enabled(BuildingKind::Farm, 2));
+    assert!(!BuildMenu::new(Some(&player), 0, true).enabled(BuildingKind::Farm, 1));
+    assert!(!BuildMenu::new(Some(&player), mill, false).enabled(BuildingKind::Farm, 1));
+    assert!(!BuildMenu::new(None, mill, true).enabled(BuildingKind::Farm, 1));
+    // A menu owns its per-update inputs. The next update must take new inputs,
+    // rather than retaining a world/player cache across HUD calls.
+    player.stockpile.wood = 0;
+    assert!(menu.enabled(BuildingKind::Farm, 1));
+    assert!(!BuildMenu::new(Some(&player), mill, true).enabled(BuildingKind::Farm, 1));
+    player.stockpile.wood = 10_000;
+    player.age = aoe_protocol::Age::Dark;
+    assert!(!BuildMenu::new(Some(&player), mill, true).enabled(BuildingKind::Castle, 1));
+    player.age = aoe_protocol::Age::Castle;
+    assert!(BuildMenu::new(Some(&player), mill, true).enabled(BuildingKind::Castle, 1));
+}
+
+#[wasm_bindgen_test]
 fn training_buttons_allow_fifteen_entries_with_housing() {
     use crate::building_ui::availability::training;
     let mut b = building(1);
