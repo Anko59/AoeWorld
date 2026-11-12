@@ -375,7 +375,7 @@ impl GameWorld {
         }
         if let Ok(id) = self.issue_build(s.player, &[worker], kind, tile, false) {
             if let Some(building) = self.building(id) {
-                s.buildings.push(building.clone());
+                s.buildings.push(building.into_owned());
             }
             return true;
         }

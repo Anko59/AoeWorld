@@ -108,6 +108,12 @@ pub(super) fn frames_visible(
 /// farther below their hotspot receive additional clearance at emission.
 /// Ordinary frames retain their relative ordering and one-level cliff hiding.
 const GROUND_CLEARANCE: f64 = 1.5;
+/// Corpses start flatter than standing actors; the frame below the hotspot
+/// still lifts a tall one clear of the ground (`frame_clearance`).
+pub(super) const CORPSE_CLEARANCE: f64 = 0.5;
+/// Most depth a corpse reaches above its ground: native frames stay below two
+/// depth units so a one-level rise in front of them still hides them.
+pub(super) const CORPSE_CEILING: f64 = 2.0;
 
 /// The rendered body depth, including clearance below the native hotspot.
 pub fn scene_unit_depth(unit: SceneUnit) -> f64 {
@@ -134,6 +140,7 @@ pub(super) fn object_depth(object: WorldObject) -> f64 {
         WorldObject::Unit(unit) if unit.kind.building_side().is_some() => {
             super::super::ground::BUILDING_CLEARANCE
         }
+        WorldObject::Unit(unit) if unit.kind.is_corpse() => CORPSE_CLEARANCE,
         _ => GROUND_CLEARANCE,
     };
     surface_depth([position[0], position[1], object.elevation_meters()]) + clearance

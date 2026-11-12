@@ -42,7 +42,7 @@ fn road_demo_uses_ordinary_movement_and_a_fortified_vassal() {
     );
     let v = w
         .buildings()
-        .flat_map(|b| &b.garrison)
+        .flat_map(|b| b.garrison.to_vec())
         .find(|g| g.unit.kind == UnitKind::Vassal)
         .unwrap()
         .unit

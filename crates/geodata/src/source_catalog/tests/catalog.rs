@@ -91,7 +91,23 @@ fn worldcover_selection_keeps_every_closed_boundary_tile() {
 
 #[test]
 fn hydrology_vector_catalog_is_separate_from_dem_budget() {
-    let sources = hydrology_vector_sources();
+    let asia = hydrology_vector_sources(&HYDRORIVERS_REGIONS[1]);
+    assert_eq!(asia[1].id, "hydrorivers-v1.0-as-shp");
+    assert_eq!(
+        asia[1].url,
+        "https://data.hydrosheds.org/file/HydroRIVERS/HydroRIVERS_v10_as_shp.zip"
+    );
+    assert_eq!(asia[1].bytes, 90_510_995);
+    assert_eq!(
+        asia[1].cache_lock().expect("Asia HydroRIVERS lock").sha256,
+        "29780b0a75f90024f22e7e2029e5e3045f7325cda0528db65c5cc4c864b98525"
+    );
+    let sources = hydrology_vector_sources(&HYDRORIVERS_REGIONS[0]);
+    assert_eq!(sources[1].id, "hydrorivers-v1.0-eu-shp");
+    assert_eq!(
+        sources[1].url,
+        "https://data.hydrosheds.org/file/HydroRIVERS/HydroRIVERS_v10_eu_shp.zip"
+    );
     assert_eq!(sources.len(), 2);
     assert_eq!(sources[0].bytes + sources[1].bytes, 830_168_731);
     assert_eq!(

@@ -130,9 +130,7 @@ fn map_generate() -> Result<(), String> {
     aoe_geodata::preparation_progress::trace_mark("preflight done");
     let cache = cache()?;
     let mut sources = overview_sources().map_err(|error| error.to_string())?;
-    if plan.has_vectors() {
-        sources.extend(aoe_geodata::hydrology_vector_sources());
-    }
+    sources.extend(plan.vector_sources().map_err(|error| error.to_string())?);
     print_acquisition_estimate(&cache, &sources)?;
     aoe_geodata::preparation_progress::trace_mark("acquisition estimate done");
     let response = aoe_geodata::execute_overview_with_preflight(

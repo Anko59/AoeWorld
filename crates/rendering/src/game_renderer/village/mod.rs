@@ -422,6 +422,9 @@ mod deck_tests;
 #[cfg(test)]
 #[path = "tests/foundations.rs"]
 mod foundation_tests;
+#[cfg(test)]
+#[path = "tests/occlusion.rs"]
+mod occlusion_tests;
 
 #[cfg(test)]
 #[path = "tests/hero.rs"]

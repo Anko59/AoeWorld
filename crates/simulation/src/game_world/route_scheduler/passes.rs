@@ -32,7 +32,7 @@ pub(crate) enum Pass {
     /// `collect_changed`: changed ids processed each tick, including repeated
     /// reports of an id from different phases before dirty-bit deduplication.
     CollectChanged,
-    /// `Tables::refresh`: the dense per-tick lookups of every entity id.
+    /// `Tables::refresh` calls; the former all-job scan has zero visits.
     TablesRefresh,
 }
 

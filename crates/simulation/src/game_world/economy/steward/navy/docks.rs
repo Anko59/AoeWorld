@@ -116,7 +116,7 @@ impl GameWorld {
                 self.claim_steward_worker(s.steward, worker, ResourceKind::Food);
                 changed.push(worker);
                 if let Some(building) = self.building(id) {
-                    s.buildings.push(building.clone());
+                    s.buildings.push(building.into_owned());
                 }
                 break;
             }

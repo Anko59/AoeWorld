@@ -109,6 +109,7 @@ impl GameWorld {
         if let Some(state) = self.economy.players.get_mut(&player) {
             state.population_cap = cap;
         }
+        self.wake_player_training(player);
     }
 
     pub(super) fn open_town_center_arches(&mut self, footprint: TileRect) {

@@ -107,6 +107,7 @@ impl GameWorld {
         changed: &mut Vec<EntityId>,
     ) {
         self.economy.occupied_garrisons.remove(&id);
+        self.economy.garrison_timers.remove(id);
         let mut retained = Vec::new();
         for occupant in occupants {
             if occupant.unit.kind == UnitKind::Steward {
@@ -126,6 +127,7 @@ impl GameWorld {
     pub(super) fn refresh_garrison_fire(&mut self, id: EntityId) {
         if self.building(id).is_some_and(|b| b.garrison.is_empty()) {
             self.economy.occupied_garrisons.remove(&id);
+            self.economy.garrison_timers.remove(id);
             // Keep the building's reload tick across entry/ejection cycles.
             // Empty Town Centers skip target queries in advance_towers.
         }

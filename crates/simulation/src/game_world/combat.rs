@@ -68,6 +68,8 @@ pub struct CombatStats {
     pub healing_candidates: u64,
     /// Military identities visited by the fair acquisition rotation.
     pub acquisition_checks: u32,
+    /// Inactive or empty-region turns replayed without visiting a unit.
+    pub acquisition_slept: u32,
     /// Bucket entries inspected by military and defensive buildings together.
     pub targeting_scanned: u32,
     /// Pursuit searches in the combat phase (order validation is separate).
@@ -94,6 +96,7 @@ pub(crate) struct Combat {
     /// transport preserve identities; allocation happens at spawn, never a hit.
     pub(crate) hp_quarters: Vec<u8>,
     pub(crate) seekers: BTreeSet<EntityId>,
+    pub(crate) quiet: acquisition::sleep::Quiet,
     pub(crate) seeker_cursor: EntityId,
     pub(crate) tower_cursor: EntityId,
     pub(crate) tower_targets: BTreeMap<EntityId, EntityId>,
@@ -104,6 +107,7 @@ pub(crate) struct Combat {
     /// Current phase's admission floor; cleared before returning to callers.
     pub(crate) pursuit_floor: Option<EntityId>,
     pub(crate) healers: BTreeSet<EntityId>,
+    pub(crate) healing: castle::Rest,
     pub(crate) projectiles: BTreeMap<u64, Projectile>,
     pub(crate) next_projectile: u64,
     pub(crate) tower_ready: BTreeMap<EntityId, u64>,
@@ -126,6 +130,7 @@ impl Default for Combat {
         Self {
             hp_quarters: Vec::new(),
             seekers: Default::default(),
+            quiet: Default::default(),
             seeker_cursor: Default::default(),
             tower_cursor: Default::default(),
             tower_targets: Default::default(),
@@ -135,6 +140,7 @@ impl Default for Combat {
             pursuit_cursor: None,
             pursuit_floor: None,
             healers: Default::default(),
+            healing: Default::default(),
             projectiles: Default::default(),
             next_projectile: 0,
             tower_ready: Default::default(),
@@ -283,6 +289,8 @@ impl GameWorld {
     /// Sets the attack target and the visible state. The hit rate belongs to
     /// the unit (`StoredUnit::next_hit_tick`), so no order sequence can speed it up.
     pub(crate) fn begin_attack(&mut self, id: EntityId, target: EntityId) {
+        self.combat.quiet.wake(id);
+        self.combat.healing.wake(id);
         self.cancel_auto_scout(id);
         self.combat.resuming.remove(&id);
         let Some(&index) = self.lookup.get(&id) else {

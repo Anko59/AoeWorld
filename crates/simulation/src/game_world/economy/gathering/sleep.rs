@@ -49,6 +49,11 @@ impl GameWorld {
     /// On by default. Off, every gatherer runs its full step each tick: the
     /// replay oracle compares both settings hash for hash.
     pub fn set_work_sleep(&mut self, enabled: bool) {
+        self.combat.quiet.clear();
+        self.combat.healing.wake_all();
+        self.economy
+            .garrison_timers
+            .reset(self.economy.occupied_garrisons.iter().copied());
         self.economy.no_sleep = !enabled;
     }
 
@@ -109,20 +114,28 @@ impl GameWorld {
         if task.sleep.is_none() {
             let walks = self.gatherer_walks(index, task);
             self.count_gather(Count::Walkers, u64::from(walks));
+            if walks {
+                self.sleep_walking_gatherer(id);
+            }
             return walks;
         }
         self.economy
             .gatherers
             .update_progress(&id, |task| task.wake(now));
-        self.economy
+        let walks = self
+            .economy
             .gatherers
             .get(&id)
-            .is_some_and(|task| self.gatherer_walks(index, task))
+            .is_some_and(|task| self.gatherer_walks(index, task));
+        if walks {
+            self.sleep_walking_gatherer(id);
+        }
+        walks
     }
 
     /// A gatherer walking under a movement order, with no failed route,
     /// changes nothing in `gather_step`: it skips the task-map round trip.
-    fn gatherer_walks(&self, index: usize, task: &GatherTask) -> bool {
+    pub(super) fn gatherer_walks(&self, index: usize, task: &GatherTask) -> bool {
         task.phase != GatherPhase::WaitingDropoff
             && self.units[index].order.is_some()
             && !self.gather_contact(index, task)

@@ -23,7 +23,7 @@ fn army_centroid_castle_knight_uses_shelter_center_instead_of_storage_sentinel()
     }
     // Reuse the actual off-map storage record for a Castle's sheltered Knight.
     // The server has no scenario mutation API; the summary consumes these public records.
-    let mut castle = world.building(shelter).unwrap().clone();
+    let mut castle = world.building(shelter).unwrap().into_owned();
     assert_eq!(castle.garrison.len(), 1);
     castle.kind = BuildingKind::Castle;
     castle.footprint = TileRect::from_xywh(100, 100, 4, 4);

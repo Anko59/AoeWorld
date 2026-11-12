@@ -93,7 +93,7 @@ fn vassal_recall_and_return_preserve_every_surviving_general_member() {
         w.advance();
         called |= w
             .buildings()
-            .flat_map(|b| &b.garrison)
+            .flat_map(|b| b.garrison.to_vec())
             .any(|g| g.vassal.is_some_and(|s| s.responding > 0));
         if !called {
             continue;

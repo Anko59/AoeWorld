@@ -410,7 +410,7 @@ fn fishing_showcase_uses_real_coast_building_training_and_fleet_orders() {
     );
     let king = w
         .buildings()
-        .flat_map(|b| &b.garrison)
+        .flat_map(|b| b.garrison.to_vec())
         .find(|g| g.unit.kind == UnitKind::Steward)
         .unwrap()
         .unit

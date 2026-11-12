@@ -119,7 +119,7 @@ impl GameWorld {
                     {
                         let Some(actual) = self
                             .building(building)
-                            .and_then(|b| b.training_queue.back())
+                            .and_then(|b| b.training_queue.back().copied())
                             .map(|e| e.kind)
                         else {
                             return;

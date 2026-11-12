@@ -2,6 +2,42 @@ use super::*;
 use aoe_core::{Seed, TileCoord, WorldConfig};
 
 #[test]
+fn a_motion_commit_without_displacement_wakes_idle_acquisition() {
+    let build = |sleep| {
+        let mut w = GameWorld::new(WorldConfig::new(256, 256, Seed(1)).unwrap()).unwrap();
+        w.set_work_sleep(sleep);
+        let at = WorldPosition::from_tile_center(TileCoord::new(100, 100)).unwrap();
+        let id = w
+            .spawn_kind(PlayerId(0), crate::UnitKind::Militia, at)
+            .unwrap();
+        w.advance_combat(&mut Vec::new());
+        (w, id)
+    };
+    let (mut on, id) = build(true);
+    let (mut off, _) = build(false);
+    assert_eq!(on.canonical_hash(), off.canonical_hash());
+    for w in [&mut on, &mut off] {
+        let index = w.lookup[&id];
+        let mut state = w.units[index].state;
+        state.moving = true;
+        state.task = UnitTask::Moving;
+        let proposal = FastStep {
+            index,
+            state,
+            order: None,
+            pops: 0,
+            keeps_moving: true,
+            bucket: w.units[index].bucket,
+            vision_stale: false,
+            member: None,
+        };
+        assert!(w.apply_step_full(proposal, &mut Vec::new(), &mut Vec::new()));
+        w.advance_combat(&mut Vec::new());
+    }
+    assert_eq!(on.canonical_hash(), off.canonical_hash());
+}
+
+#[test]
 fn group_neighbor_radius_bound_grows_at_spawn_and_stays_conservative_after_removal() {
     let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(0)).unwrap()).unwrap();
     let center = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
@@ -68,6 +104,9 @@ fn a_snapshot_with_overfull_cells_cannot_certify_an_ordered_group_step() {
 #[test]
 fn movement_reuses_proposals_and_dense_tables_between_ticks() {
     let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(0)).unwrap()).unwrap();
+    world
+        .place_town_center(aoe_core::PlayerId(0), TileCoord::new(5, 5))
+        .unwrap();
     for n in 0..64 {
         let at = WorldPosition::from_tile_center(TileCoord::new(20 + n % 8, 20 + n / 8)).unwrap();
         let id = world.spawn_unit(PlayerId(0), at).unwrap();
@@ -77,13 +116,14 @@ fn movement_reuses_proposals_and_dense_tables_between_ticks() {
     }
     world.advance();
     let proposals = world.movement_scratch.proposals.as_ptr();
-    let busy = world.movement_scratch.tables.busy.as_ptr();
+    let economies = world.movement_scratch.tables.economies.as_ptr();
+    assert!(world.movement_scratch.tables.economies.capacity() > 0);
     let spare = world.movement_scratch.movers.as_ptr();
     world.advance();
     world.advance();
     assert_eq!(world.active_mover_count(), 64);
     assert_eq!(world.movement_scratch.proposals.as_ptr(), proposals);
-    assert_eq!(world.movement_scratch.tables.busy.as_ptr(), busy);
+    assert_eq!(world.movement_scratch.tables.economies.as_ptr(), economies);
     assert_eq!(world.movement_scratch.movers.as_ptr(), spare);
 }
 
@@ -101,7 +141,7 @@ fn an_idle_population_does_not_build_movement_tables() {
     }
     world.advance();
     assert_eq!(world.movement_scratch.proposals.capacity(), 0);
-    assert_eq!(world.movement_scratch.tables.busy.capacity(), 0);
+    assert_eq!(world.movement_scratch.tables.economies.capacity(), 0);
 }
 
 #[test]

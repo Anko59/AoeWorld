@@ -55,11 +55,6 @@ pub(crate) struct FastStep {
 struct Tables {
     /// Owner economy by player id; players past the table use the map.
     economies: Vec<Option<PlayerEconomy>>,
-    /// Entities with a gather, hunt, attack or build job: their task is not
-    /// overwritten by movement.
-    busy: Vec<bool>,
-    /// The ids set in `busy`, cleared on the next refresh.
-    marked: Vec<EntityId>,
     neighbor_radius: [i32; 2],
     group_step_bound: i32,
     /// Static answers live only for one immutable group proposal batch.
@@ -67,8 +62,8 @@ struct Tables {
 }
 
 impl Tables {
-    /// Clears only the entries the last refresh set and grows `busy` only by
-    /// new ids, so a refresh visits jobs and players, never every entity id.
+    /// Refresh player values and immutable geometry. Job ownership is read
+    /// only for the mover whose task a proposal may change.
     fn refresh(&mut self, world: &GameWorld, group_phase: bool) {
         if group_phase {
             self.sealed_cells.clear();
@@ -83,29 +78,9 @@ impl Tables {
             }
             self.economies[at] = Some(economy);
         }
-        for id in self.marked.drain(..) {
-            self.busy[id.0 as usize] = false;
-        }
-        // Ids only grow, so this is the bound the table always had.
-        self.busy.resize(world.next_entity_id as usize, false);
-        let jobs = world
-            .economy
-            .gatherers
-            .keys()
-            .chain(world.wildlife.hunter_ids())
-            .chain(world.combat.attackers.keys())
-            .chain(world.economy.builders.keys());
-        for id in jobs {
-            if let Some(slot) = self.busy.get_mut(id.0 as usize)
-                && !*slot
-            {
-                *slot = true;
-                self.marked.push(*id);
-            }
-        }
         world
             .passes
-            .record(crate::game_world::Pass::TablesRefresh, self.marked.len());
+            .record(crate::game_world::Pass::TablesRefresh, 0);
     }
 
     fn economy(&self, world: &GameWorld, player: PlayerId) -> Option<PlayerEconomy> {
@@ -113,10 +88,6 @@ impl Tables {
             Some(found) => *found,
             None => world.player_economy(player),
         }
-    }
-
-    fn busy(&self, id: EntityId) -> bool {
-        self.busy.get(id.0 as usize).copied().unwrap_or(true)
     }
 }
 
@@ -352,7 +323,11 @@ impl GameWorld {
                 }
             }
         }
-        if !tables.busy(id) {
+        if !self.economy.gatherers.contains_key(&id)
+            && !self.wildlife.has_hunt(id)
+            && !self.combat.attackers.contains_key(&id)
+            && !self.economy.builders.contains_key(&id)
+        {
             state.task = if state.moving || state.planning {
                 UnitTask::Moving
             } else if state.carried.is_some() {
@@ -432,6 +407,11 @@ impl GameWorld {
         let stored = &mut self.units[index];
         let from = stored.state.position;
         let state_changed = stored.state != step.state;
+        let previous_motion = (
+            stored.state.moving,
+            stored.state.planning,
+            stored.state.task,
+        );
         let position_changed = stored.state.position != step.state.position;
         let previous_tile = stored.state.position.tile_floor();
         if step.state.planning && !stored.state.planning {
@@ -456,6 +436,15 @@ impl GameWorld {
             self.finish_formation_member(id, motion, from, step.state.position);
         }
         self.observe_unit_progress(index);
+        let state = self.units[index].state;
+        if previous_motion != (state.moving, state.planning, state.task) {
+            self.combat.quiet.wake(id);
+            self.combat.healing.wake(id);
+        }
+        if step.member.is_none() && step.order.is_none() {
+            self.economy.gatherers.wake_walking(id);
+            self.combat.healing.wake(id);
+        }
         // Wildlife's unit cells follow every step, before vision, as in the
         // sequential path.
         if position_changed {

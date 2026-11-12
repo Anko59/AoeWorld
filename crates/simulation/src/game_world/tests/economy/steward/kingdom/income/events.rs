@@ -166,6 +166,7 @@ fn real_carried_garrison_food_counts_as_income_once() {
             .garrison
             .iter()
             .find(|g| g.unit.id == *id)
+            .copied()
             .unwrap();
         assert!(occupant.unit.carried.is_none());
     }

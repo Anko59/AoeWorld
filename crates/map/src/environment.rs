@@ -5,8 +5,9 @@ mod hydrology;
 mod pages;
 mod preparation;
 pub use preparation::{
-    LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS, LANDSCAPE_OVERVIEW_SOURCE_LOCKS, OverviewFieldAxes,
-    OverviewHydrologyMode, VECTOR_HYDROLOGY_SOURCE_LOCKS, overview_base_lock_count,
+    HYDROLAKES_SOURCE_ID, LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS, LANDSCAPE_OVERVIEW_SOURCE_LOCKS,
+    OverviewFieldAxes, OverviewHydrologyMode, VECTOR_HYDROLOGY_SOURCE_LOCKS, is_hydrorivers_lock,
+    is_vector_hydrology_lock, overview_base_lock_count,
 };
 mod provider;
 pub use hydrology::{

@@ -41,6 +41,9 @@ fn assert_work(world: &mut GameWorld, id: EntityId, task: UnitTask, expected: Fa
         };
         // A direct state edit, not an event: wake a dozing worker by hand.
         world.wake_gatherer(id);
+        if let Some(job) = world.economy.builders.get(&id) {
+            world.wake_construction(job.building);
+        }
         let changed = world.advance();
         let unit = world.unit(id).unwrap();
         assert_eq!(unit.task, task, "phase {phase}");

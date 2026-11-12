@@ -293,7 +293,7 @@ pub(super) fn subscription_buildings(
                     && b.footprint.max.y > region.min.y)
         })
         .take(aoe_protocol::MAX_ECONOMY_BUILDINGS + 1)
-        .map(|b| (b.id, wire_building_state(b, None)))
+        .map(|b| (b.id, wire_building_state(&b, None)))
         .collect()
 }
 

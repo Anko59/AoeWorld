@@ -86,6 +86,7 @@ impl GameWorld {
         if let Some(player) = self.economy.players.get_mut(&player) {
             player.population_used = player.population_used.saturating_add(1);
         }
+        self.wake_player_training(player);
         self.insert_map_unit(state, 0);
         self.change_unit_census(player, None, Some(kind), 1);
         if kind == UnitKind::General {
@@ -101,11 +102,13 @@ impl GameWorld {
         let (id, position) = (state.id, state.position);
         if state.kind == UnitKind::Monk {
             self.combat.healers.insert(id);
+            self.combat.healing.register(id);
         }
         if super::combat::acquisition::autonomous_kind(state.kind) {
             self.combat.seekers.insert(id);
         }
         let bucket = ChunkCoord::from_position(position);
+        self.combat.quiet.wake_chunk(bucket);
         let bucket_slot = self.chunks.push(bucket, id);
         self.lookup.insert(id, self.units.len());
         self.units.push(StoredUnit {

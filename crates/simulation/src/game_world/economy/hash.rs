@@ -88,7 +88,8 @@ impl Economy {
             hash.update(&id.0.to_le_bytes());
         }
         hash.update(&(self.buildings.len() as u64).to_le_bytes());
-        for building in self.buildings.values() {
+        for stored in self.buildings.values() {
+            let building = self.queues.project(self.construction.project(stored));
             if building.gate_locked {
                 hash.update(b"locked-gate");
                 hash.update(&building.id.0.to_le_bytes());

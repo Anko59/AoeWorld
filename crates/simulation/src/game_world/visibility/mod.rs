@@ -196,7 +196,7 @@ impl GameWorld {
     /// Authoritative last observations, including buildings destroyed unseen.
     pub fn known_buildings(&self, player: PlayerId) -> Vec<GameBuilding> {
         if self.vision.disabled {
-            return self.buildings().cloned().collect();
+            return self.buildings().map(|b| b.into_owned()).collect();
         }
         let mut known = self
             .vision
@@ -208,7 +208,7 @@ impl GameWorld {
             .buildings()
             .filter(|b| b.player == player || self.building_visible_to(player, b.footprint))
         {
-            known.insert(building.id, building.clone());
+            known.insert(building.id, building.into_owned());
         }
         known.into_values().collect()
     }
@@ -322,6 +322,8 @@ impl GameWorld {
 
     #[inline(never)] // a symbol of its own for the Callgrind stage counters
     pub(crate) fn update_unit_vision(&mut self, id: EntityId) {
+        self.combat.quiet.wake(id);
+        self.combat.healing.wake(id);
         let observer = self.unit(id).and_then(|u| self.unit_observer(&u));
         self.update_observer(id, observer);
     }

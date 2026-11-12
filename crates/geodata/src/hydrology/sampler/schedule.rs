@@ -10,7 +10,7 @@ use std::path::PathBuf;
 pub(super) struct Reopen {
     pub(super) tiles: Vec<Tile>,
     pub(super) lakes: PathBuf,
-    pub(super) rivers: Option<PathBuf>,
+    pub(super) rivers: Option<(PathBuf, String)>,
 }
 
 /// Everything a page contributes; merged in page order by the owning sampler.
@@ -68,7 +68,10 @@ impl Sampler {
             reopen.tiles.clone(),
             ocean.to_vec(),
             &reopen.lakes,
-            reopen.rivers.as_deref(),
+            reopen
+                .rivers
+                .as_ref()
+                .map(|(path, member)| (path.as_path(), member.as_str())),
         )?;
         worker.river_cells = Vec::new();
         Ok(worker)

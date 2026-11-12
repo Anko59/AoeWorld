@@ -16,6 +16,8 @@ pub use fish::scene_resource_animation_frame;
 mod bounds;
 #[path = "village/decks.rs"]
 mod decks;
+#[path = "village/fronts.rs"]
+mod fronts;
 use bounds::object_depth;
 #[path = "village/actors.rs"]
 mod actor_frames;
@@ -147,6 +149,7 @@ pub(super) fn emit_world_sprite_frames(
         focus_elevation_meters: camera.focus_elevation_meters,
     };
     let decks = decks::Decks::new(units);
+    let fronts = fronts::Fronts::new(art, units);
     // Preserve resource-before-unit submission without allocating/copying an
     // unsorted intermediate object vector on every frame.
     for &r in resources.iter().filter(|&&r| environment::present(art, r)) {
@@ -318,12 +321,17 @@ pub(super) fn emit_world_sprite_frames(
             unit.position[1],
             f64::from(unit.elevation_meters),
         ]);
-        let depth =
-            base + crate::ground_contact::frame_clearance(
-                object_depth(object) - base,
-                frame.size[1],
-                frame.anchor[1],
-            ) + decks.lift(unit.position);
+        let clearance = crate::ground_contact::frame_clearance(
+            object_depth(object) - base,
+            frame.size[1],
+            frame.anchor[1],
+        );
+        let mut depth = base + clearance + decks.lift(unit.position);
+        if !unit.kind.is_corpse()
+            && let Some(floor) = fronts.floor(unit.position, f64::from(unit.elevation_meters))
+        {
+            depth = depth.max(floor);
+        }
         if let Some((shadow, shadow_frame)) = alpha_shadow(
             frame,
             unit.position,
