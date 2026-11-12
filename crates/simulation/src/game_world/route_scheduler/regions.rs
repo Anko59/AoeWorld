@@ -20,12 +20,22 @@ struct Ground<'a> {
 }
 
 impl Ground<'_> {
+    // Navigation reads stable gate metadata, without projecting construction
+    // progress or training queues for unrelated buildings.
     fn gates(&self) -> &BTreeMap<TileCoord, (u32, u32)> {
         self.gates.get_or_init(|| {
             let mut gates = BTreeMap::new();
             for gate in self
                 .world
-                .buildings()
+                .economy
+                .gates
+                .iter()
+                .filter_map(|id| self.world.economy.buildings.get(id))
+                .inspect(|_| {
+                    if let Some(probe) = &self.world.planning_probe {
+                        probe.movement_count("region_gate_candidates", 1);
+                    }
+                })
                 .filter(|b| b.kind.is_gate() && b.is_complete())
             {
                 let rect = gate.footprint;
@@ -103,13 +113,17 @@ impl RegionGround for Ground<'_> {
 
     fn gate_owner(&self, gate: u32) -> u32 {
         self.world
-            .building(aoe_core::EntityId(gate))
+            .economy
+            .buildings
+            .get(&aoe_core::EntityId(gate))
             .map_or(u32::MAX, |b| u32::from(b.player.0))
     }
 
     fn gate_locked(&self, gate: u32) -> bool {
         self.world
-            .building(aoe_core::EntityId(gate))
+            .economy
+            .buildings
+            .get(&aoe_core::EntityId(gate))
             .is_some_and(|b| b.gate_locked)
     }
 
