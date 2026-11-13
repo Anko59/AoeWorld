@@ -23,7 +23,7 @@ CI uses the same caps and immediate admission; each job has its own runner. `mak
 | lint | `make lint` | fmt-check | native | [Stop, Commit, Pr, Ci, Nightly, Preflight] | 600 | — | Clippy exit status |
 | deny | `make deny` | — | native | [Stop, Commit, Pr, Ci, Nightly, Preflight] | 600 | — | Cargo advisory, source, license, and bans audit |
 | test-unit | `make test-unit` | lint | native | [Pr, Ci, Nightly] | 900 | — | native unit, integration, and doctest results |
-| coverage | `make coverage` | test-unit, build-wasm | native | [Ci, Nightly] | 7200 | yes | LCOV production-line counts and JSON report |
+| coverage | `make coverage` | test-unit, build-wasm | native | [Ci, Nightly] | 2700 | yes | LCOV production-line counts and JSON report |
 | fuzz-smoke | `make fuzz-smoke` | test-unit | native, assets, release | [Pr, Ci, Nightly] | 1800 | — | 512 bounded libFuzzer runs per parser and JSON report |
 | fuzz-nightly | `make fuzz-nightly` | fuzz-smoke | native, assets, release | [Nightly] | 5400 | — | 300-second libFuzzer campaign per parser and JSON report |
 | browser-check | `make browser-check` | — | browser | [Stop, Commit, Pr, Ci, Nightly] | 600 | — | TypeScript, ESLint, and Prettier results |

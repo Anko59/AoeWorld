@@ -63,12 +63,12 @@ jobs:
       - uses: ./.github/actions/rust-cache-save
         with: { leg: '${{ matrix.part }}' }
 
-  # 120 min: the instrumented native suite takes ~25; the e2e shards produce the release evidence.
+  # 45 min: build plus the instrumented native suite took 28 min (dev run 43420808942); the e2e shards produce the release evidence.
   native-coverage:
     needs: select
     if: ${{ needs.select.outputs.native_coverage == 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: ./.github/actions/docker-setup
