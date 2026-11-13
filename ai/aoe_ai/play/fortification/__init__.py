@@ -91,15 +91,18 @@ class FortificationManager:
         # Every tower belongs to exactly one site: the nearest threatened site
         # whose reach contains it, ties broken by the site's position. Overlapping
         # reaches can then neither starve a site nor let it exceed its cap.
+        def owner_of(point):
+            owners = [(dist(site[0], point), site[0], site) for site in sites
+                      if dist(site[0], point) <= site[1]]
+            return min(owners)[2] if owners else None
         held = {site: 0 for site in sites}
         for t in towers:
-            owners = [(dist(site[0], t), site[0], site) for site in sites
-                      if dist(site[0], t) <= site[1]]
-            if owners:
-                held[min(owners)[2]] += 1
+            owner = owner_of(t)
+            if owner is not None:
+                held[owner] += 1
         active = sum(held.values())
         ceiling = len(ctx.villagers) // cfg.fort_workers_per_tower
-        targets = [(c, cfg.fort_site_radius, (tuple(c), camp_reach)) for c in camps]
+        targets = [(c, cfg.fort_site_radius) for c in camps]
         lane = center = None
         if frontiers:
             center = frontiers[board.fort_cursor % len(frontiers)]
@@ -117,13 +120,14 @@ class FortificationManager:
                 axis = 0 if abs(lane[0] - center[0]) > abs(lane[1] - center[1]) else 1
                 tower = list(lane)
                 tower[axis] -= cfg.fort_lane_tower_offset * (1 if lane[axis] > center[axis] else -1)
-                targets.insert(0, (tuple(tower), cfg.fort_lane_tower_radius,
-                                   (tuple(center), center_reach)))
+                targets.insert(0, (tuple(tower), cfg.fort_lane_tower_radius))
         if active < ceiling:
-            for target, radius, owner in targets:
+            for target, radius in targets:
                 if any(dist(target, tower) <= cfg.fort_tower_coverage for tower in towers):
                     continue
-                if held[owner] >= cfg.fort_towers_per_frontier:
+                # Cap the site the nearest-site rule will credit once it stands.
+                owner = owner_of(target)
+                if owner is not None and held[owner] >= cfg.fort_towers_per_frontier:
                     continue
                 if self.place(ctx, BuildingKind.WATCH_TOWER, target, radius=radius):
                     return

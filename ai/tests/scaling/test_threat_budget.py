@@ -242,3 +242,26 @@ def test_town_center_towers_on_its_far_side_do_not_deny_an_overlapping_camp():
 
 def test_camp_cannot_exceed_its_cap_when_its_reach_overlaps_a_threatened_center():
     assert not overlapping_sites([(42, 0), (25, 17)], villagers=90), 'two towers in the camp reach fill its cap'
+
+
+def test_candidate_tower_is_capped_against_the_site_that_will_own_it():
+    ctx = kingdom(villagers=90, centers=1)
+    cx, cy = ctx.centers[0]
+    ctx.world.find_build_site = lambda kind, x, y, *args: (x, y)
+    # 2x2 footprints are centred on the stated offsets: camp (16,0), towers (16,+-12).
+    ctx.buildings.append(building(900, BuildingKind.LUMBER_CAMP, tile=(cx + 15, cy - 1)))
+    ctx.buildings += [building(800 + i, BuildingKind.WATCH_TOWER, tile=(cx + 15, cy + dy - 1))
+                      for i, dy in enumerate((12, -12))]
+    ctx.world._enemy_buildings = [building(998, BuildingKind.BARRACKS, tile=(cx + 80, cy), mine=False)]
+    manager = FortificationManager(Constructor())
+    # The fixture must reproduce the geometry: the centre's own lane tower lies nearer the camp.
+    lane = manager.lane(ctx, ctx.centers[0])
+    camp = ctx.buildings[-3]
+    assert abs(camp.center[0] - cx - 16) < 1e-6 and camp.center[1] == cy
+    assert lane is not None
+    spot = (lane[0] - ctx.config.fort_lane_tower_offset, lane[1])
+    assert (spot[0] - camp.center[0]) ** 2 + (spot[1] - cy) ** 2 < (spot[0] - cx) ** 2 + (spot[1] - cy) ** 2
+    ctx.board.fort_lanes[ctx.centers[0]] = lane
+    manager.step(ctx)
+    assert not [a for a in ctx.client.named('build') if a[1] == BuildingKind.WATCH_TOWER], (
+        'a tower the nearest-site rule gives to the full camp must not be placed')
