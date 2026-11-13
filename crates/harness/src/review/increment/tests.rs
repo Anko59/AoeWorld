@@ -148,3 +148,49 @@ fn a_passing_review_of_fixes_settles_what_failed_before_it() {
         0
     );
 }
+
+/// #823 on 2026-11-13: dev was merged into an approved branch without touching
+/// the branch's files, the file list came out empty, and an unrestricted diff put
+/// every merged dev change into the increment review.
+#[test]
+fn merging_dev_without_touching_the_branch_gives_an_empty_increment() {
+    use std::process::Command;
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let git = |args: &[&str]| {
+        let out = Command::new("git")
+            .current_dir(root)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8(out.stdout).unwrap().trim().to_owned()
+    };
+    git(&["init", "--quiet", "--initial-branch=dev"]);
+    git(&["config", "user.email", "t@example.com"]);
+    git(&["config", "user.name", "t"]);
+    let write = |path: &str, text: &str| std::fs::write(root.join(path), text).unwrap();
+    write("dev.rs", "a\n");
+    git(&["add", "."]);
+    git(&["commit", "--quiet", "-m", "base"]);
+    git(&["checkout", "--quiet", "-b", "fix"]);
+    write("own.rs", "fix\n");
+    git(&["add", "."]);
+    git(&["commit", "--quiet", "-m", "fix"]);
+    let approved = git(&["rev-parse", "HEAD"]);
+    git(&["checkout", "--quiet", "dev"]);
+    write("dev.rs", "a\nb\nc\n");
+    git(&["commit", "--quiet", "-am", "dev moves on"]);
+    git(&["checkout", "--quiet", "fix"]);
+    git(&["merge", "--quiet", "--no-edit", "dev"]);
+    let merge_base = git(&["merge-base", "dev", "HEAD"]);
+    let (files, diff) = view(root, &merge_base, &Scope::Since(approved.clone())).unwrap();
+    assert!(files.is_empty(), "{files:?}");
+    assert_eq!(diff, "");
+    assert_eq!(since_diff(root, &merge_base, &approved).unwrap(), "");
+    assert_eq!(stat(root, &approved, &[]).unwrap(), "");
+}

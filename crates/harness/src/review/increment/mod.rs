@@ -188,22 +188,31 @@ pub(super) fn view(
         }
         Scope::Files(files) => (merge_base, files.clone()),
     };
-    let mut args = vec!["--literal-pathspecs", "diff", from, "HEAD", "--"];
-    args.extend(files.iter().map(String::as_str));
-    Ok((files.clone(), git::git(root, &args)?))
+    let diff = diff_files(root, &["diff", from, "HEAD"], &files)?;
+    Ok((files, diff))
 }
 
 /// `git diff --stat` of an increment.
 pub(super) fn stat(root: &Path, from: &str, files: &[String]) -> Result<String, String> {
-    let mut args = vec!["--literal-pathspecs", "diff", "--stat", from, "HEAD", "--"];
-    args.extend(files.iter().map(String::as_str));
-    git::git(root, &args)
+    diff_files(root, &["diff", "--stat", from, "HEAD"], files)
 }
 
 /// The diff `since..HEAD` limited to the branch's own files.
 pub(super) fn since_diff(root: &Path, merge_base: &str, since: &str) -> Result<String, String> {
     let files = since_files(root, merge_base, since)?;
-    let mut args = vec!["--literal-pathspecs", "diff", since, "HEAD", "--"];
+    diff_files(root, &["diff", since, "HEAD"], &files)
+}
+
+/// A diff limited to `files`. No files means no diff: Git reads an empty path
+/// list after `--` as every path, which once put 3574 lines of merged dev code
+/// into a review of a branch whose own files had not changed.
+fn diff_files(root: &Path, diff: &[&str], files: &[String]) -> Result<String, String> {
+    if files.is_empty() {
+        return Ok(String::new());
+    }
+    let mut args = vec!["--literal-pathspecs"];
+    args.extend(diff);
+    args.push("--");
     args.extend(files.iter().map(String::as_str));
     git::git(root, &args)
 }
