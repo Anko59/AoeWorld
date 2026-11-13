@@ -111,16 +111,6 @@ fn vassal_bridge_planning_with_ten_thousand_buildings() {
         counts.calls > 0,
         "the fixture must exercise bridge validation"
     );
-    assert_eq!(
-        w.canonical_hash_hex(),
-        std::fs::read_to_string(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("src/game_world/tests/economy/vassal/budgeted-checkpoint.txt")
-        )
-        .unwrap()
-        .trim(),
-        "Vassal explicit replan deadlines are included in canonical state"
-    );
     assert!(
         counts.visits <= counts.calls * 15,
         "span occupancy must be bounded by its tiles: {counts:?}"

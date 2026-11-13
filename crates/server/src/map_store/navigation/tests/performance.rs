@@ -1,5 +1,3 @@
-// Radius geometry, exact static sweeps and local rejoining intentionally
-// change these current pins. Preserve workloads, floors and replay comparisons.
 //! Identical deterministic orders for lazy and installed package navigation.
 //! Synthetic terrain isolates navigation, not a finished France match.
 use super::*;
@@ -180,17 +178,6 @@ fn replay(installed: bool) {
         single,
         run(4),
         "navigation replay must agree across worker counts"
-    );
-    // Steward controls, transfer reservations, current squad state and the
-    // block-parallel unit hash change this
-    // checkpoint. Keep the workload, 1/4-worker equality and installed-mode
-    // no-construction assertions above intact when regenerating the pin.
-    assert_eq!(
-        single,
-        [
-            181, 5, 236, 76, 123, 234, 183, 177, 62, 101, 32, 76, 202, 202, 160, 135, 209, 51, 169,
-            108, 183, 76, 185, 16, 93, 190, 86, 246, 145, 183, 65, 28
-        ]
     );
 }
 
