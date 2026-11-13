@@ -168,13 +168,21 @@ fn failed_review_returns_at_once_and_kills_the_playtest() {
     );
     for file in ["pid", "sleeper"] {
         let pid = std::fs::read_to_string(mark.join(file)).unwrap();
-        let stat = std::fs::read_to_string(format!("/proc/{}/stat", pid.trim()));
-        // Gone, or a zombie awaiting its reaper: either way no longer running.
-        let running = stat.is_ok_and(|stat| {
-            !stat
-                .rsplit_once(')')
-                .is_some_and(|(_, rest)| rest.trim_start().starts_with('Z'))
-        });
-        assert!(!running, "{file} {pid} still runs");
+        // A kill is delivered asynchronously: on a loaded runner the process can
+        // still show as running for a moment, so wait (bounded) for it to stop.
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while running(pid.trim()) && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert!(!running(pid.trim()), "{file} {pid} still runs");
     }
+}
+
+/// Gone, or a zombie awaiting its reaper: either way no longer running.
+fn running(pid: &str) -> bool {
+    std::fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|stat| {
+        !stat
+            .rsplit_once(')')
+            .is_some_and(|(_, rest)| rest.trim_start().starts_with('Z'))
+    })
 }
