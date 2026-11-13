@@ -57,6 +57,12 @@ def trace(host, tick, seed):
             "tasks": dict(Counter(f"{u.kind}:{u.task}" for u in units)),
             "stats": board.stats,
             "target": board.attack_target,
+            "expedition": None if board.expedition is None else {
+                "phase": board.expedition.phase, "origin": board.expedition.origin,
+                "goal": board.expedition.goal, "crew": list(board.expedition.crew),
+                "builder": board.expedition.builder, "transport": board.expedition.transport,
+                "crossing": board.expedition.crossed, "proof": board.expedition.proof,
+            },
             "age": str(eco.age),
             "population": eco.population,
             "population_space": eco.population_cap,

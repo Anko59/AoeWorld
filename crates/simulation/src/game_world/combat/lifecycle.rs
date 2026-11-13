@@ -125,6 +125,7 @@ impl GameWorld {
     pub(crate) fn kill_unit(&mut self, index: usize) {
         let unit = self.units[index].state;
         if unit.death_tick.is_none() {
+            self.record_unit_loss(unit.player);
             self.change_unit_census(unit.player, Some(unit.kind), None, 1);
         }
         self.cancel_auto_scout(self.units[index].state.id);

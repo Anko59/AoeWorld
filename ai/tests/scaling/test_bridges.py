@@ -32,8 +32,8 @@ def test_optional_bridge_orders_use_a_reachable_villager_and_span_cost():
     assert len(client.named("build_bridge")) == 1, "cooldown bounds repeated decisions"
 
 
-def test_bridge_heuristic_is_disabled_by_default_and_respects_resources_and_known_sites():
-    assert not Config().build_bridges
+def test_bridge_heuristic_is_enabled_by_default_and_respects_resources_and_known_sites():
+    assert Config().build_bridges
     for enabled, stone in [(False, 200), (True, 0)]:
         ctx, client = setup(enabled, stone)
         BridgeManager().step(ctx)

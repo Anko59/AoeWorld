@@ -49,6 +49,17 @@ pub enum ViewPolicy {
     Fixed(TileRect),
 }
 
+impl ViewPolicy {
+    /// A bounded expedition view, or the default automatic follow policy.
+    pub fn focused(tile: Option<TileCoord>) -> Self {
+        tile.map_or_else(Self::default, |tile| {
+            let min = TileCoord::new(tile.x.saturating_sub(64), tile.y.saturating_sub(64));
+            let max = TileCoord::new(tile.x.saturating_add(64), tile.y.saturating_add(64));
+            Self::Fixed(TileRect::new(min, max))
+        })
+    }
+}
+
 impl Default for ViewPolicy {
     fn default() -> Self {
         ViewPolicy::Follow {

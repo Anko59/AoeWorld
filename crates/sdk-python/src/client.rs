@@ -127,6 +127,13 @@ impl Client {
 
 #[pymethods]
 impl Client {
+    /// Focus a bounded view on an expedition; None restores automatic following.
+    #[pyo3(signature = (tile=None))]
+    fn focus_view(&self, tile: Option<(i32, i32)>) {
+        self.inner
+            .set_view(ViewPolicy::focused(tile.map(|(x, y)| TileCoord::new(x, y))));
+    }
+
     /// Waits (GIL released) for the next decision point; `None` on timeout.
     #[pyo3(signature = (timeout=None))]
     fn wait_decision(&self, py: Python<'_>, timeout: Option<f64>) -> PyResult<Option<Decision>> {

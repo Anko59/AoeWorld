@@ -15,8 +15,20 @@ class Config:
     # --- decision pacing ---------------------------------------------------
     decision_hz: float = 2.0
     #: Enable the bounded known-water crossing heuristic for army targets.
-    build_bridges: bool = False
+    build_bridges: bool = True
     bridge_retry_seconds: int = 30
+    force_projection: bool = True
+    projection_start_seconds: int = 1200
+    projection_army_size: int = 16
+    projection_stage_min: int = 8
+    projection_stage_distance: int = 12
+    projection_distance: int = 80
+    projection_forward_radius: int = 32
+    projection_attack_min: int = 8
+    projection_ferry_soldiers: int = 4
+    projection_water_distance: int = 4
+    projection_interval_seconds: int = 4
+    projection_timeout_seconds: int = 1800
 
     #: Bound host-issued work below the server's 100 orders/game-second budget.
     orders_per_decision: int = 40

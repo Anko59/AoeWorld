@@ -191,6 +191,13 @@ impl GameWorld {
                 killed,
             );
             if killed {
+                self.record_building_kill(
+                    attacker_player,
+                    player,
+                    target,
+                    attacker_id,
+                    footprint.min,
+                );
                 // Ejection restores map units during this hit. Include their
                 // identities in the ordinary delta for simulation consumers.
                 changed.extend(occupants);

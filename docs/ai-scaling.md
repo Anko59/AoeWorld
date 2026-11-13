@@ -428,3 +428,11 @@ These shared-host lockstep runs do not qualify live tick rate, dedicated hardwar
 the scale ladder, defensive efficacy, transport attacks or force projection.
 Network delivery can change decisions; this is one paired workload, not an ablation.
 No qualifying attack video was captured. Full suites and CI were not run here.
+
+## Force-projection follow-up
+
+The [expedition implementation and measurement limits](ai-projection.md) record
+one attempt stopped at 27 game minutes by the session cutoff. It used one
+transport but recorded no destroyed enemy buildings. Its 30/60/120 checkpoints
+and the later recovery fixes remain unmeasured. The complete economy table above
+is the current control; it does not qualify the new expedition implementation.

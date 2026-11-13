@@ -98,3 +98,42 @@ def test_fortification_counts_separate_gates_and_retain_auditable_positions():
     assert row['fortifications'] == dict(castles=1, towers=1, wall_segments=1, gates=1)
     assert {s['id'] for s in row['fortification_sites']} == {600, 601, 602, 603}
     assert next(s['tile'] for s in row['fortification_sites'] if s['id'] == 602) == list(buildings[-3].center)
+
+
+def test_projection_kill_requires_matching_attacker_target_and_observed_crossing():
+    from aoe_ai.benchmark.projection import projection_sample
+    from aoe_ai.blackboard import Blackboard
+    board = Blackboard()
+    board.projection_records = [dict(target=9, crew=[3], crossing='water',
+        origin=(0,0), goal=(100,0), proof={'kind':'water'}, tick=200)]
+    player = dict(enemy_buildings_destroyed=1, unit_losses=2,
+                  last_building_destroyed=dict(target=9, attacker=4, tick=190, tile=[100,0]))
+    assert not projection_sample(board, player)['qualified_attacks']
+    player['last_building_destroyed']['attacker'] = 3
+    row = projection_sample(board, player)
+    assert len(row['qualified_attacks']) == 1 and row['unit_losses'] == 2
+    board.projection_records[0]['crossing'] = None
+    assert not projection_sample(board, player)['qualified_attacks']
+
+
+def test_projection_kill_beside_another_own_town_center_is_not_distant():
+    from aoe_ai.benchmark.projection import projection_sample
+    from aoe_ai.blackboard import Blackboard
+    board = Blackboard()
+    board.projection_records = [dict(target=9,crew=[3],crossing='water',
+        origin=(0,0),goal=(100,0),proof={'kind':'water'},tick=200)]
+    kill = dict(target=9,attacker=3,tick=190,tile=[100,0],own_centers=[[100,5]])
+    player = dict(enemy_buildings_destroyed=1,unit_losses=0,last_building_destroyed=kill)
+    assert not projection_sample(board,player)['qualified_attacks']
+
+
+def test_active_forward_construction_can_be_observed_with_native_building_kinds():
+    from aoe_ai.benchmark.projection import projection_sample
+    from aoe_ai.blackboard import Blackboard
+    from aoe_ai.play.projection import Expedition
+    board = Blackboard()
+    board.expedition = Expedition((0,0),(100,0),[3],4,target=9,crossed='water',
+        proof={'kind':'water'},sites={BuildingKind.BARRACKS:(90,0)})
+    player = dict(enemy_buildings_destroyed=1,unit_losses=0,
+        last_building_destroyed=dict(target=9,attacker=3,tick=190,tile=[100,0]))
+    assert len(projection_sample(board,player)['qualified_attacks']) == 1

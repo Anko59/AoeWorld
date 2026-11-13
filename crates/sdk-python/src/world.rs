@@ -24,6 +24,14 @@ fn buildings(list: Vec<aoe_sdk::Building>) -> Vec<Building> {
 
 #[pymethods]
 impl World {
+    fn water_passable(&self, x: i32, y: i32) -> Option<bool> {
+        self.inner.water_passable(TileCoord::new(x, y))
+    }
+    fn water_frontier(&self, x: i32, y: i32, tx: i32, ty: i32) -> Option<(i32, i32)> {
+        self.inner
+            .water_frontier(TileCoord::new(x, y), TileCoord::new(tx, ty))
+            .map(|p| (p.x, p.y))
+    }
     /// The game clock, in 20 Hz ticks.
     #[getter]
     fn tick(&self) -> u64 {

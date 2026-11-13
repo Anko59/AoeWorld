@@ -97,3 +97,25 @@ fn dock_build_sites_accept_explored_wadeable_marsh_banks() {
         Some(bank)
     );
 }
+
+#[test]
+fn water_queries_distinguish_known_water_from_land_and_unexplored_chunks() {
+    let world = shoreline(WaterKind::River, false, true);
+    assert_eq!(world.water_passable(TileCoord::new(20, 10)), Some(true));
+    assert_eq!(world.water_passable(TileCoord::new(10, 10)), Some(false));
+    assert_eq!(
+        shoreline(WaterKind::River, false, false).water_passable(TileCoord::new(20, 10)),
+        None
+    );
+    let from = TileCoord::new(20, 10);
+    let toward = TileCoord::new(30, 20);
+    let next = world.water_frontier(from, toward).unwrap();
+    assert_eq!(next, toward);
+    assert!(
+        world
+            .water_frontier(TileCoord::new(10, 10), toward)
+            .is_none()
+    );
+    let coast = world.water_frontier(from, TileCoord::new(10, 10)).unwrap();
+    assert_eq!(coast.x, 16, "a ship stays on its side of the shoreline");
+}

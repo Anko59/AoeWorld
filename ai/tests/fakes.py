@@ -21,6 +21,7 @@ def unit(id, kind=UnitKind.VILLAGER, tile=(50, 50), task=UnitTask.IDLE, gatherin
         military=kind in (UnitKind.SPEARMAN, UnitKind.ARCHER, UnitKind.SKIRMISHER, UnitKind.MILITIA),
         hp=25, max_hp=25, attack_target=None, carrying=None, moving=False,
         managed_by=None, commanded_by=None, army_size=None, general_state=None, home_castle=None,
+        cargo_count=0, auto_scout=False,
     )
 
 
@@ -53,6 +54,18 @@ def economy(food=200, wood=200, gold=100, stone=200, population=4, cap=10, age=A
 
 
 class FakeWorld:
+    def unit(self, identity):
+        return next((u for u in self._units if u.id == identity), None)
+
+    def building(self, identity):
+        return next((b for b in self._buildings + self._enemy_buildings if b.id == identity), None)
+
+    def water_passable(self, x, y):
+        return False
+
+    def water_frontier(self, x, y, tx, ty):
+        return None
+
     def __init__(self, units=(), buildings=(), eco=None, nodes=(), animals=(), enemies=(),
                  enemy_buildings=(), tick=100, size=(300, 300)):
         self.tick = tick

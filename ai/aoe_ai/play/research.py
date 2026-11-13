@@ -64,6 +64,8 @@ class ResearchManager:
 
     def upgrades(self, ctx: Context) -> None:
         eco = ctx.economy
+        if ctx.board.expedition is not None and (eco.has_researched(Tech.CROSSBOWMAN) or eco.has_researched(Tech.PIKEMAN)):
+            return  # fund the active expedition before optional science
         reserve = funding_reserve(ctx)
         for tech, kind in buildorder.wanted_upgrades(ctx):
             if eco.has_researched(tech) or any(b.researching == tech for b in ctx.buildings) or ctx.board.cooling("research:" + str(tech), ctx.tick):

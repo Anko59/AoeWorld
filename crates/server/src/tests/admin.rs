@@ -148,6 +148,9 @@ async fn match_summary_reports_each_seat_and_live_economy_without_tokens() {
         assert_eq!(player["activity"], "idle");
         assert_eq!(player["kills"], 0);
         assert_eq!(player["losses"], 0);
+        assert_eq!(player["enemy_buildings_destroyed"], 0);
+        assert_eq!(player["unit_losses"], 0);
+        assert!(player["last_building_destroyed"].is_null());
     }
     assert_eq!(
         body["combat_per_minute"],

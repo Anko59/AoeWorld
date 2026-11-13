@@ -1,12 +1,12 @@
 """Optional local crossing heuristic, using only explored public terrain."""
-from aoeworld import Age, BuildingKind, UnitTask, building_cost
+from aoeworld import BuildingKind, UnitTask, building_cost
 from ..blackboard import Plan
 from ..geometry import dist, nearest
 
 
 class BridgeManager:
     def step(self, ctx):
-        if not ctx.config.build_bridges or ctx.economy.age != Age.FEUDAL or not ctx.army:
+        if not ctx.config.build_bridges or not ctx.feudal or not ctx.army:
             return
         if ctx.board.cooling("bridge", ctx.tick):
             return

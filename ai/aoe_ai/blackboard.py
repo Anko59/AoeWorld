@@ -108,6 +108,10 @@ class Blackboard:
     expansion_cursor: int = 0
     hold_villagers_tick: int = -10**9
     fort_cursor: int = 0
+    expedition: Any = None
+    projection_records: list = field(default_factory=list)
+    used_transports: set[int] = field(default_factory=set)
+    bad_landings: set[Tile] = field(default_factory=set)
     defence_alerts: dict[Tile, int] = field(default_factory=dict)
     defence_buildings: dict[int, Tile] = field(default_factory=dict)
     fort_lanes: dict[Tile, Tile] = field(default_factory=dict)

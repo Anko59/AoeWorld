@@ -250,7 +250,7 @@ disconnected or beyond the query bound. Rivers, cliff edges and blocked diagonal
 corners remain barriers. `world.land_frontier(x, y, tx, ty)` instead returns an
 explored reachable tile toward the goal. The example AI chooses known land
 routes for attacks and follows reachable frontiers while exploring; it never
-assumes that a loaded but unexplored tile proves a connection.
+assumes loaded unexplored terrain proves a route. See [expeditions](ai-projection.md) for water queries and view control.
 
 ### Events
 

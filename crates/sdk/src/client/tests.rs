@@ -90,3 +90,17 @@ fn a_remote_scout_or_dead_soldier_does_not_drag_the_economy_view_away() {
         "home is outside {region:?}"
     );
 }
+
+#[test]
+fn expedition_focus_is_bounded_and_none_restores_following() {
+    let ViewPolicy::Fixed(region) = ViewPolicy::focused(Some(TileCoord::new(500, 500))) else {
+        panic!("focus should be fixed");
+    };
+    assert!(region.contains(TileCoord::new(500, 500)));
+    assert_eq!(region.width(), 128);
+    assert_eq!(region.height(), 128);
+    assert!(matches!(
+        ViewPolicy::focused(None),
+        ViewPolicy::Follow { .. }
+    ));
+}

@@ -23,6 +23,7 @@ from .play.bridges import BridgeManager
 from .play.management import ManagementManager
 from .play.market import MarketManager
 from .play.fortification import FortificationManager
+from .play.projection import ProjectionManager
 
 #: Refusals that mean "this target will never work for this unit".
 HOPELESS = (
@@ -55,6 +56,7 @@ class Brain:
         self.management = ManagementManager()
         self.market = MarketManager()
         self.fortifications = FortificationManager(self.constructor)
+        self.projection = ProjectionManager(self.constructor)
 
     def on_tick(self, client: Any, decision: Any) -> None:
         self.decide(client, decision)
@@ -81,11 +83,13 @@ class Brain:
             except OrderBudgetExhausted:
                 pass
         self.constructor.refresh(ctx)
+        self.projection.prepare(ctx)
         if ctx.center is not None and buildorder.imperial_ready(ctx) and buildorder.imperial_requirement_kinds(ctx) < 2:
             run(1, self.constructor.production)
             ctx.spent[1] += min(buildorder.imperial_prerequisite_wood(ctx), max(0, ctx.economy.wood - ctx.spent[1]))
         run(2, self.research.step)
         run(1, self.market.step)
+        run(4, self.projection.step)
         run(14, self.combat.step)
         run(2, lambda c: self.management.lead(c, self.combat))
         run(2, self.military.rally)
@@ -138,6 +142,7 @@ class Brain:
     def absorb(self, ctx: Context) -> None:
         from .play.fortification.threat import observe
         observe(ctx)
+        self.projection.observe(ctx)
         mem = ctx.board
         for event in ctx.events:
             if event.kind == "order_result":
@@ -166,6 +171,10 @@ class Brain:
     def on_rejected(self, ctx: Context, tracked: Any, result: Any) -> None:
         mem = ctx.board
         name, args = tracked.name, tracked.args
+        if name == 'unload':
+            if len(mem.bad_landings)>=64:
+                mem.bad_landings.clear()
+            mem.bad_landings.add((args[1],args[2]))
         if name in ("steward_settings", "vassal_development"):
             mem.manager_settings.pop(args[0], None)
         elif name == "general_train":
@@ -183,6 +192,8 @@ class Brain:
             mem.bad_resources.add(args[1])
         elif name == "build":
             kind, x, y = args[1], args[2], args[3]
+            if mem.expedition and mem.expedition.sites.get(kind) == (x,y):
+                mem.expedition.sites.pop(kind,None)
             # Exploration can make this site legal later. Keep permanent
             # refusals for blocked or unreachable ground only.
             if result != CommandResult.REJECTED_UNEXPLORED_PLACEMENT:

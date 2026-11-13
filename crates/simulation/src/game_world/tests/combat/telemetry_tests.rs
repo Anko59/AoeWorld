@@ -29,6 +29,7 @@ fn melee_telemetry_retains_kills_after_cleanup_and_expires_an_idle_minute() {
     );
     assert_eq!(world.player_combat_totals(PlayerId(0)), (1, 0));
     assert_eq!(world.player_combat_totals(PlayerId(1)), (0, 1));
+    assert_eq!(world.player_projection_totals(PlayerId(1)).1, 1);
 }
 
 #[test]
@@ -80,6 +81,18 @@ fn telemetry_counts_destroyed_buildings_but_excludes_wildlife() {
     assert!(world.building(building).is_none());
     assert_eq!(world.combat_telemetry().deaths, 1);
     assert_eq!(world.player_combat_totals(PlayerId(0)), (1, 0));
+    let (buildings, unit_losses, last) = world.player_projection_totals(PlayerId(0));
+    assert_eq!((buildings, unit_losses), (1, 0));
+    let (target, killer, tile, _) = last.unwrap();
+    assert_eq!(
+        (target, killer, tile),
+        (building, attacker, TileCoord::new(101, 100))
+    );
+    assert_eq!(
+        world.player_projection_totals(PlayerId(1)).1,
+        0,
+        "a building is not a lost unit"
+    );
     assert_eq!(world.player_combat_totals(PlayerId(1)), (0, 1));
     let before = world.combat_telemetry();
     let sheep = world
@@ -258,4 +271,33 @@ fn melee_fight_audit_measures_each_kind_without_changing_combat_rules() {
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../reports/movement");
     std::fs::create_dir_all(&directory).unwrap();
     std::fs::write(directory.join("fight-audit.txt"), report).unwrap();
+}
+
+#[test]
+fn projection_totals_and_gameplay_replay_alike_on_one_and_four_workers() {
+    let run = |workers| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(workers)
+            .build()
+            .unwrap()
+            .install(|| {
+                let mut w = world();
+                let attacker = w.spawn_militia(PlayerId(0), at(100, 100)).unwrap();
+                let victim = w.spawn_villager(PlayerId(1), at(99, 100)).unwrap();
+                w.units[w.lookup[&victim]].state.hp = 1;
+                w.issue_attack(PlayerId(0), attacker, victim).unwrap();
+                w.advance();
+                let target = w
+                    .place_town_center(PlayerId(1), TileCoord::new(101, 100))
+                    .unwrap();
+                w.building_mut(target).unwrap().hp = 1;
+                w.issue_attack(PlayerId(0), attacker, target).unwrap();
+                advance(&mut w, 100);
+                let winner = w.player_projection_totals(PlayerId(0));
+                let loser = w.player_projection_totals(PlayerId(1));
+                assert_eq!((winner.0, loser.1), (1, 1));
+                (w.canonical_hash(), winner, loser)
+            })
+    };
+    assert_eq!(run(1), run(4));
 }

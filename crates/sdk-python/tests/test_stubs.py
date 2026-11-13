@@ -9,6 +9,12 @@ from aoeworld import _native
 STUB = Path(aoeworld.__file__).with_name("_native.pyi")
 
 
+def test_projection_queries_and_view_controls_are_exposed():
+    assert hasattr(aoeworld.World, 'water_passable')
+    assert hasattr(aoeworld.World, 'water_frontier')
+    assert hasattr(aoeworld.Client, 'focus_view')
+
+
 def test_every_stubbed_name_exists_and_every_export_is_stubbed():
     tree = ast.parse(STUB.read_text())
     stubbed = {

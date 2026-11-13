@@ -239,6 +239,9 @@ fn sinking_a_transport_kills_its_passengers_and_clears_cargo() {
         Some(world.tick())
     );
     assert!(world.transport_cargo(transport).is_empty());
+    assert_eq!(world.player_projection_totals(PlayerId(0)).1, 2);
+    world.kill_unit(world.lookup[&transport]);
+    assert_eq!(world.player_projection_totals(PlayerId(0)).1, 2);
     assert!(
         world
             .issue_unload(PlayerId(0), transport, TileCoord::new(1, 1))

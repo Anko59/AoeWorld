@@ -34,7 +34,7 @@ impl World {
         if self.map_hash.is_none() {
             return self.flat_land_route(from, to);
         }
-        self.search_land(from, to, false)
+        self.search_terrain(from, to, false, false)
     }
 
     /// A reachable explored tile toward an exploration goal. Walking there
@@ -48,7 +48,23 @@ impl World {
                 .flat_land_route(from, toward)
                 .and_then(|path| path.last().copied());
         }
-        self.search_land(from, toward, true)
+        self.search_terrain(from, toward, true, false)
+            .and_then(|path| path.last().copied())
+    }
+
+    /// Navigable public water, only on exactly explored, loaded tiles.
+    pub fn water_passable(&self, tile: TileCoord) -> Option<bool> {
+        (self.in_bounds(tile) && self.fog.explored_exactly(tile))
+            .then(|| self.catalog.water(tile))
+            .flatten()
+    }
+
+    /// A bounded explored water hop toward a goal, without cutting shore corners.
+    pub fn water_frontier(&self, from: TileCoord, toward: TileCoord) -> Option<TileCoord> {
+        if !self.in_bounds(toward) {
+            return None;
+        }
+        self.search_terrain(from, toward, true, true)
             .and_then(|path| path.last().copied())
     }
 
@@ -97,13 +113,21 @@ impl World {
         true
     }
 
-    fn search_land(
+    fn search_terrain(
         &self,
         from: TileCoord,
         goal: TileCoord,
         frontier: bool,
+        water: bool,
     ) -> Option<Vec<TileCoord>> {
-        if !self.known_land(from) || (!frontier && !self.known_land(goal)) {
+        let known = |tile| {
+            if water {
+                self.water_passable(tile) == Some(true)
+            } else {
+                self.known_land(tile)
+            }
+        };
+        if !known(from) || (!frontier && !known(goal)) {
             return None;
         }
         let mut records = Records::from([(from, (0, None))]);
@@ -141,7 +165,15 @@ impl World {
                 if records
                     .get(&next)
                     .is_some_and(|record| record.0 <= next_cost)
-                    || !self.land_step(at, next)
+                    || if water {
+                        !known(next)
+                            || (dx != 0
+                                && dy != 0
+                                && (!known(TileCoord::new(x + dx, y))
+                                    || !known(TileCoord::new(x, y + dy))))
+                    } else {
+                        !self.land_step(at, next)
+                    }
                 {
                     continue;
                 }

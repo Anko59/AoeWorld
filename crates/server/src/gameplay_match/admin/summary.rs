@@ -41,6 +41,9 @@ struct Player {
     activity: &'static str,
     kills: u64,
     losses: u64,
+    enemy_buildings_destroyed: u64,
+    unit_losses: u64,
+    last_building_destroyed: Option<Value>,
     #[serde(skip)]
     activities: [usize; 5],
     #[serde(skip)]
@@ -175,6 +178,12 @@ pub(super) fn match_state(world: &GameWorld, seats: &[SlotInfo]) -> Value {
         });
         player.army = json!({"size":size,"centroid":centroid});
         (player.kills, player.losses) = world.player_combat_totals(*id);
+        let (buildings, losses, last) = world.player_projection_totals(*id);
+        player.enemy_buildings_destroyed = buildings;
+        player.unit_losses = losses;
+        player.last_building_destroyed = last.map(|(target, attacker, tile, tick)| {
+            json!({"target":target.0,"attacker":attacker.0,"tile":[tile.x,tile.y],"tick":tick})
+        });
     }
     let counts = world.combat_telemetry();
     json!({"tick":world.tick().0,"fog_disabled":world.fog_disabled(),

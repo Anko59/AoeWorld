@@ -10,11 +10,13 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import aoeworld
+from aoeworld import BuildingKind
 
 from .. import arena
 from ..config import Config
 from ..tournament import CostBrain
 from . import Checkpoints, TickStream, measure
+from .projection import projection_sample
 
 
 def request(url, path, body=None):
@@ -53,15 +55,21 @@ class MeasuredBrain(CostBrain):
 def viewer_files(root, setup):
     # Local, ignored bootstrap for filming one AI's ordinary fog-filtered view.
     # It sends no orders and is removed when this run exits.
-    slot = setup['slots'][min(1, len(setup['slots']) - 1)]
+    files = []
+    for index, slot in enumerate(setup['slots']):
+        files.extend(viewer_slot(root, slot, str(index)))
+    return files + viewer_slot(root, setup['slots'][min(1, len(setup['slots']) - 1)], '')
+
+
+def viewer_slot(root, slot, suffix):
     directory = root / 'web/pkg'
     directory.mkdir(parents=True, exist_ok=True)
-    script, page = directory / 'ai-view.js', directory / 'ai-view.html'
+    script, page = directory / f'ai-view{suffix}.js', directory / f'ai-view{suffix}.html'
     x, y = slot['start_tile']
     script.write_text("localStorage.setItem('aoeworld.resume-token', "
                       + json.dumps(slot['token']) + ");\n"
                       + f"location.replace('/#x={x}&y={y}&zoom=1.5');\n")
-    page.write_text('<!doctype html><script src="/pkg/ai-view.js"></script>')
+    page.write_text(f'<!doctype html><script src="/pkg/ai-view{suffix}.js"></script>')
     return [script, page]
 
 
@@ -90,6 +98,7 @@ def run(args):
     timings = TickStream()
     costs = timings.records
     cursor, seen = 0, -1
+    kill_history = {}
     identity = source_hashes(root)
     document = dict(source_files_sha256=identity, revision=os.environ['AOE_BENCHMARK_REVISION'], workload=workload,
                     config=asdict(Config()), complete=False, samples=checkpoints.samples)
@@ -127,6 +136,22 @@ def run(args):
                 with args.out.with_suffix('.ticks.jsonl').open('a') as log:
                     for row in page['ticks']:
                         log.write(json.dumps(row) + '\n')
+                admin = request(server.url, '/admin/match')
+                projection = []
+                for i, client in enumerate(host.clients):
+                    player = next(p for p in admin['players'] if p['id'] == client.world.me)
+                    history = kill_history.setdefault(player['id'], {})
+                    kill = player['last_building_destroyed']
+                    if kill:
+                        kill = dict(kill, own_centers=[list(b.center) for b in client.world.my_buildings()
+                                    if b.complete and b.kind == BuildingKind.TOWN_CENTER])
+                        history.setdefault((kill['target'], kill['tick']), kill)
+                        if len(history) > 64:
+                            del history[next(iter(history))]
+                    projection.append(dict(slot=i, **projection_sample(brains[i].board, player, history.values())))
+                document['projection'] = projection
+                document['last_tick'] = tick
+                write(args.out, document)
                 print(f'game minute {seen}, tick {tick}', flush=True)
             if checkpoints.due(tick) is not None:
                 admin = request(server.url, '/admin/match')
@@ -137,6 +162,7 @@ def run(args):
                     if abs(tick - world.tick) > world.tick_hz:
                         raise RuntimeError(f'stale slot {i} observation at checkpoint')
                     row = measure(world, kills=kills[world.me], orders=client.orders_sent)
+                    row.update(document['projection'][i])
                     row.update(slot=i, start_kind=workload['slots'][i]['kind'], cpu_seconds=brains[i].cpu,
                         cpu_ms_per_decision=1000 * brains[i].cpu / max(1, brains[i].calls),
                         cpu_ms_slowest=1000 * brains[i].slowest,
