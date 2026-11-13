@@ -86,15 +86,20 @@ class FortificationManager:
             return
         camp_reach = cfg.fort_tower_coverage + cfg.fort_site_radius
         center_reach = max(cfg.fort_lane_distances) + cfg.fort_lane_tower_radius
-        sites = ([(c, center_reach) for c in frontiers] + [(c, camp_reach) for c in camps])
-
-        def held(site):
-            return sum(dist(site[0], t) <= site[1] for t in towers)
-        # Towers at quiet sites neither count against a threatened site nor
-        # against the ceiling: only towers serving a site under threat do.
-        active = sum(any(dist(s[0], t) <= s[1] for s in sites) for t in towers)
+        sites = sorted([(tuple(c), center_reach) for c in frontiers]
+                       + [(tuple(c), camp_reach) for c in camps])
+        # Every tower belongs to exactly one site: the nearest threatened site
+        # whose reach contains it, ties broken by the site's position. Overlapping
+        # reaches can then neither starve a site nor let it exceed its cap.
+        held = {site: 0 for site in sites}
+        for t in towers:
+            owners = [(dist(site[0], t), site[0], site) for site in sites
+                      if dist(site[0], t) <= site[1]]
+            if owners:
+                held[min(owners)[2]] += 1
+        active = sum(held.values())
         ceiling = len(ctx.villagers) // cfg.fort_workers_per_tower
-        targets = [(c, cfg.fort_site_radius) for c in camps]
+        targets = [(c, cfg.fort_site_radius, (tuple(c), camp_reach)) for c in camps]
         lane = center = None
         if frontiers:
             center = frontiers[board.fort_cursor % len(frontiers)]
@@ -112,13 +117,13 @@ class FortificationManager:
                 axis = 0 if abs(lane[0] - center[0]) > abs(lane[1] - center[1]) else 1
                 tower = list(lane)
                 tower[axis] -= cfg.fort_lane_tower_offset * (1 if lane[axis] > center[axis] else -1)
-                targets.insert(0, (tuple(tower), cfg.fort_lane_tower_radius))
+                targets.insert(0, (tuple(tower), cfg.fort_lane_tower_radius,
+                                   (tuple(center), center_reach)))
         if active < ceiling:
-            for target, radius in targets:
+            for target, radius, owner in targets:
                 if any(dist(target, tower) <= cfg.fort_tower_coverage for tower in towers):
                     continue
-                owner = next((s for s in sites if dist(s[0], target) <= s[1]), None)
-                if owner is not None and held(owner) >= cfg.fort_towers_per_frontier:
+                if held[owner] >= cfg.fort_towers_per_frontier:
                     continue
                 if self.place(ctx, BuildingKind.WATCH_TOWER, target, radius=radius):
                     return

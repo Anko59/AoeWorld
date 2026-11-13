@@ -220,3 +220,25 @@ def test_threatened_site_stops_at_its_own_cap():
     ctx.enemies = [unit(999, UnitKind.MILITIA, tile=(255, 55), mine=False)]
     FortificationManager(Constructor()).step(ctx)
     assert not ctx.client.named('build'), 'a site never exceeds its per-site tower cap'
+
+
+def overlapping_sites(towers, villagers=120):
+    """Threatened centre at the origin, threatened camp centred 25 tiles east of it."""
+    ctx = kingdom(villagers=villagers, centers=1)
+    cx, cy = ctx.centers[0]
+    # Tiles are chosen so the 2x2 footprints are CENTRED on the stated offsets.
+    camp = building(900, BuildingKind.LUMBER_CAMP, tile=(cx + 24, cy - 1))
+    ctx.buildings.append(camp)
+    ctx.buildings += [building(800 + i, BuildingKind.WATCH_TOWER, tile=(cx + dx - 1, cy + dy - 1))
+                      for i, (dx, dy) in enumerate(towers)]
+    ctx.enemies = [unit(999, UnitKind.MILITIA, tile=(cx + 12, cy + 8), mine=False)]
+    FortificationManager(Constructor()).step(ctx)
+    return [a for a in ctx.client.named('build') if a[1] == BuildingKind.WATCH_TOWER]
+
+
+def test_town_center_towers_on_its_far_side_do_not_deny_an_overlapping_camp():
+    assert overlapping_sites([(-20, 0), (-22, 0)]), 'each tower is counted once, for the site it serves'
+
+
+def test_camp_cannot_exceed_its_cap_when_its_reach_overlaps_a_threatened_center():
+    assert not overlapping_sites([(42, 0), (25, 17)], villagers=90), 'two towers in the camp reach fill its cap'
