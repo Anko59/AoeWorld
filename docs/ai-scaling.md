@@ -299,8 +299,12 @@ median TCs at 120 minutes: 7; ordinary slot's 60-minute TCs: 2.
 | 3 | 15.99 | 185.67 | 202.18 | 16 | 12021 |
 
 Evidence: `.cache/ai-scaling/fortifications-vassal.json` and adjacent `.ticks.jsonl`;
-the 1029-file source SHA-256 manifest matches the current tree. The JSON revision names
-the starting HEAD, not the later commit; source hashes identify the measured changes.
+the 1029-file source SHA-256 manifest was taken from tree
+`cef11537f56df6024eaa89d30320de692d9fcfd0` (cherry-picked onto dev as `426b3c4d5`), the
+only measured revision. The benchmark was not rerun after later commits (including the
+fortification lane, gate-fit and castle-reachability fixes), so those are not remeasured
+and the manifest does not describe the current tree. The JSON revision names the starting
+HEAD, not the later commit.
 The three prototype runs are incomplete and excluded. The funded prototype was
 deliberately interrupted at minute 96 after exposing the Vassal gate; its Make launcher
 had ended with exit 143 while the original Docker child remained live.

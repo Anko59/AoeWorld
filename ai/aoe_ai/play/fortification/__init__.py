@@ -24,7 +24,7 @@ class FortificationManager:
     def __init__(self, constructor):
         self.constructor = constructor
 
-    def lane(self, ctx, center):
+    def lane(self, ctx, center, rejected=()):
         """Prefer a narrow explored cross-section of a reachable approach.
 
         Unknown terrain is never counted as a wall. The local probe has a fixed
@@ -38,6 +38,7 @@ class FortificationManager:
         dx, dy = goal[0] - center[0], goal[1] - center[1]
         across = (0, 1) if abs(dx) > abs(dy) else (1, 0)
         candidates = []
+        gate_width = building_size(BuildingKind.STONE_GATE)[0]
         passable = getattr(ctx.world, 'passable', None)
         for reach in ctx.config.fort_lane_distances:
             point = clamp_tile((round(center[0] + dx * reach / length),
@@ -48,8 +49,14 @@ class FortificationManager:
                 if any(tile is None for tile in cross) or passable(*point) is not True:
                     continue
                 width = sum(tile is True for tile in cross)
+                # The gate must fit the opening, and its own footprint must be known open.
+                if width < gate_width or any(passable(point[0] - 2 + n, point[1]) is not True
+                                             for n in range(gate_width)):
+                    continue
             else:
                 width = 2 * ctx.config.fort_wall_wing + 1
+            if point in rejected:
+                continue
             if ctx.land_route(center, point) is not None:
                 candidates.append((width, abs(reach - ctx.config.fort_lane_distances[1]), point))
         return min(candidates)[2] if candidates else None
@@ -73,9 +80,10 @@ class FortificationManager:
         # Retain a layout while it is being built; new scouting must not move
         # the gate between its two wings. Forget lost settlements.
         board.fort_lanes = {c: lane for c, lane in board.fort_lanes.items() if c in ctx.centers}
+        board.fort_rejected = {c: r for c, r in board.fort_rejected.items() if c in ctx.centers}
         lane = board.fort_lanes.get(center)
         if lane is None:
-            lane = self.lane(ctx, center)
+            lane = self.lane(ctx, center, board.fort_rejected.get(center, ()))
             if lane is not None:
                 board.fort_lanes[center] = lane
         if lane is not None:
@@ -94,6 +102,7 @@ class FortificationManager:
 
     def place(self, ctx, kind, target, exact=False, radius=None):
         cfg = ctx.config
+        self.refused = False
         if ctx.board.cooling('world-limit:build', ctx.tick):
             return False
         cost = building_cost(kind)
@@ -104,15 +113,20 @@ class FortificationManager:
         builder = self.constructor.builder_near(ctx, target)
         if builder is None:
             return False
+        queries = ctx._site_queries
         site = ctx.find_build_site(kind, *target, 1 if exact else (radius or cfg.fort_site_radius), 0)
         if (site is None or (exact and site != target)
                 or (str(kind), *site) in ctx.board.bad_sites):
+            # An exhausted query budget says nothing about the site itself.
+            self.refused = ctx._site_queries > queries or (
+                site is not None and (str(kind), *site) in ctx.board.bad_sites)
             return False
         width, height = building_size(kind)
         x, y = site
         edges = ((x - 1, y), (x + width, y), (x, y - 1), (x, y + height))
         if not any(ctx.land_route(builder.tile, edge) is not None
                    for edge in sorted(edges, key=lambda tile: dist(builder.tile, tile))):
+            self.refused = True
             return False
         ctx.spend(cost)
         ctx.order('build', [builder.id], kind, *site)
@@ -135,7 +149,10 @@ class FortificationManager:
         planned = {(p.kind, p.tile) for p in ctx.board.plans}
         if gate is None:
             if (BuildingKind.STONE_GATE, origin) not in planned:
-                self.place(ctx, BuildingKind.STONE_GATE, origin, exact=True)
+                if not self.place(ctx, BuildingKind.STONE_GATE, origin, exact=True) and self.refused:
+                    # Unbuildable here: forget this lane so the next sampled one is tried.
+                    ctx.board.fort_lanes.pop(center, None)
+                    ctx.board.fort_rejected.setdefault(center, set()).add(lane)
             return
         if not gate.complete:
             return

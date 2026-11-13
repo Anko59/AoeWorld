@@ -111,9 +111,10 @@ def test_exact_wall_footprints_are_never_shifted_into_gate_or_worker_lanes():
 def test_terrain_narrows_the_selected_known_enemy_approach():
     ctx = kingdom(villagers=60, centers=1)
     enemy(ctx, (52, 250))
-    # A three-tile opening south of home is preferable to a broad open lane.
+    # A gate-wide (four-tile) opening south of home is preferable to a broad open lane.
     narrow_y = ctx.home[1] + 18
-    ctx.world.passable = lambda x, y: not (y == narrow_y and abs(x - ctx.home[0]) > 1)
+    ctx.world.passable = lambda x, y: not (
+        y == narrow_y and not ctx.home[0] - 2 <= x <= ctx.home[0] + 1)
     lane = FortificationManager(Constructor()).lane(ctx, ctx.home)
     assert lane[1] == narrow_y
 
@@ -190,3 +191,72 @@ def test_vassal_defences_do_not_wait_for_every_future_castle():
     ManagementManager().settings(ctx)
     ManagementManager().settings(ctx)
     assert ctx.client.named('vassal_development') == [(951, True), (951, False)]
+
+
+def test_chokepoint_too_narrow_for_the_gate_is_rejected_for_another_cross_section():
+    ctx = kingdom(villagers=60, centers=1)
+    enemy(ctx, (52, 250))
+    manager = FortificationManager(Constructor())
+    x0 = ctx.home[0]
+    # Every cross-section at 18 tiles has only three open tiles: a four-tile gate cannot fit.
+    narrow = ctx.home[1] + 18
+    ctx.world.passable = lambda x, y: not (y == narrow and not x0 - 1 <= x <= x0 + 1)
+    lane = manager.lane(ctx, ctx.home)
+    assert lane is not None and lane[1] != narrow
+    ctx.world.passable = lambda x, y: not (abs(y - ctx.home[1]) > 5 and not x0 - 1 <= x <= x0 + 1)
+    assert manager.lane(ctx, ctx.home) is None, 'no sampled cross-section can hold the gate'
+
+
+def test_obstructed_gate_footprint_drops_the_lane_and_next_lane_is_used():
+    ctx = kingdom(villagers=60, centers=1)
+    enemy(ctx)
+    exact_sites(ctx)
+    manager = FortificationManager(Constructor())
+    first = manager.lane(ctx, ctx.home)
+    ctx.buildings.append(building(900, BuildingKind.WATCH_TOWER, tile=first))
+    # A tree blocks the first lane's gate footprint; the engine refuses it.
+    refuse = (first[0] - 2, first[1])
+    ctx.world.find_build_site = lambda kind, x, y, *a: None if (x, y) == refuse else (x, y)
+    manager.step(ctx)
+    assert not ctx.client.named('build')
+    assert ctx.board.fort_lanes.get(ctx.home) is None
+    ctx.tick += 1200
+    manager.step(ctx)
+    second = ctx.board.fort_lanes[ctx.home]
+    assert second != first
+    ctx.buildings.append(building(901, BuildingKind.WATCH_TOWER, tile=second))
+    ctx.tick += 1200
+    manager.step(ctx)
+    gates = [a for a in ctx.client.named('build') if a[1] == BuildingKind.STONE_GATE]
+    assert gates and gates[0][2:] == (second[0] - 2, second[1])
+
+
+def test_every_lane_refused_stops_after_the_sampled_candidates():
+    ctx = kingdom(villagers=60, centers=1)
+    enemy(ctx)
+    ctx.world.find_build_site = lambda *a: None
+    manager = FortificationManager(Constructor())
+    for _ in range(12):
+        ctx.tick += 1200
+        ctx.board.plans.clear()
+        manager.step(ctx)
+        lane = ctx.board.fort_lanes.get(ctx.home)
+        if lane is not None:
+            ctx.buildings.append(building(900 + len(ctx.buildings), BuildingKind.WATCH_TOWER, tile=lane))
+    assert len(ctx.board.fort_rejected[ctx.home]) <= len(ctx.config.fort_lane_distances)
+    assert not [a for a in ctx.client.named('build') if a[1] == BuildingKind.STONE_GATE]
+
+
+def test_castle_across_water_falls_back_to_a_reachable_settlement_site():
+    ctx = kingdom(villagers=120, centers=3)
+    enemy(ctx, (300, 50))
+    far = frontier(ctx)
+    # East of every settlement is sea: no builder can walk to anything there.
+    limit = max(c[0] for c in ctx.centers)
+    real = ctx.world.land_route
+    ctx.world.land_route = lambda x, y, tx, ty: None if tx > limit + 1 else real(x, y, tx, ty)
+    ctx.world.find_build_site = lambda kind, x, y, *a: (x, y)
+    ManagementManager().castles(ctx)
+    castle = ctx.client.named('build')[0]
+    assert castle[1] == BuildingKind.CASTLE
+    assert castle[2] <= limit + 1 and castle[2] < far[0]
