@@ -290,13 +290,16 @@ assigns longest-duration tests first to the least-loaded shard (stable title
 and shard-index ties), and passes `--test-list` to Playwright. Unknown tests
 weigh the median committed duration. The filtered discovery and execution
 must both match the assignment exactly. Its container is named
-`aoeworld-e2e-shard-i-of-n-…`, it writes
-`reports/e2e/shard-i-of-n.json` instead of the release evidence
-`reports/e2e/pass.json`, and CI uploads `e2e-i-diagnostics`. The shards
-together run every discovered project/file/title identity once.
+`aoeworld-e2e-shard-i-of-n-…`, it writes `reports/e2e/shard-i-of-n.json` (the
+release evidence's fields plus its shard) instead of `reports/e2e/pass.json`,
+and CI uploads `e2e-i-diagnostics`. On a `dev` push each shard also uploads
+`e2e-evidence-i`, and the `e2e-evidence` job runs `make e2e-evidence`, which
+refuses unless every shard 1..n is present, passed and names one revision, then
+writes `pass.json` and uploads `release-e2e-evidence`. The shards together run
+every discovered project/file/title identity once.
 `make test-e2e` without `AOE_E2E_SHARD` runs the whole suite and writes
-`pass.json` (`make coverage` produces it for reuse by the dev release job);
-a shard together with `AOE_E2E_COVERAGE` is refused. `AOE_E2E_SHARD` must be
+`pass.json`. `make coverage` is native-only and runs no browser suite.
+`AOE_E2E_SHARD` must be
 `i/n` with `1 <= i <= n <= 16`; it does not apply to the duel's focused specs.
 
 Regenerate `crates/harness/src/e2e/shard/durations.json` with
