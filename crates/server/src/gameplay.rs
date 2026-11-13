@@ -401,9 +401,9 @@ impl GameplayService {
             return;
         }
         let player = viewer;
-        let players = economy::players(&world)
+        let players = economy::player(&world, player)
             .into_iter()
-            .filter(|(id, _)| *id == player || world.fog_disabled())
+            .map(|state| (state.player, state))
             .collect::<BTreeMap<_, _>>();
         let all_buildings = economy::subscription_buildings(&world, player, region);
         let more_buildings = all_buildings.len() > aoe_protocol::MAX_ECONOMY_BUILDINGS;

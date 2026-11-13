@@ -184,29 +184,6 @@ fn wire_market_prices(prices: aoe_simulation::MarketPrices) -> aoe_protocol::Mar
         stone: prices.stone,
     }
 }
-pub(super) fn players(world: &GameWorld) -> BTreeMap<PlayerId, GameplayPlayerState> {
-    if world.players().next().is_none() {
-        return BTreeMap::new();
-    }
-    let census = world.unit_census();
-    world
-        .players()
-        .map(|state| {
-            let mut unit_counts = [0; UnitKind::ALL.len()];
-            if let Some(counts) = census.get(&state.player) {
-                for (out, kind) in unit_counts.iter_mut().zip(UnitKind::ALL) {
-                    *out = counts[native_kind(kind) as usize];
-                }
-            }
-            (state.player, {
-                let mut p =
-                    player_state(&state, world.recent_deliveries(state.player), unit_counts);
-                (p.held_tiles, p.held_share_ppm) = world.held_land(state.player);
-                p
-            })
-        })
-        .collect()
-}
 pub(super) fn player(world: &GameWorld, viewer: PlayerId) -> Option<GameplayPlayerState> {
     let state = world.player_economy(viewer)?;
     let census = world.unit_census();

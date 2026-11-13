@@ -484,3 +484,6 @@ mod census;
 
 #[path = "tests/holdings.rs"]
 mod holdings;
+
+#[path = "tests/fog_identity.rs"]
+mod fog_identity;

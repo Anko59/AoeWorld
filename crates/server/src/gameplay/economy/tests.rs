@@ -14,7 +14,10 @@ fn cockpit_player_report_keeps_real_delivery_totals() {
     }
     let expected = world.recent_deliveries(PlayerId(0));
     assert!(expected.iter().any(|n| *n > 0));
-    assert_eq!(players(&world)[&PlayerId(0)].recent_deliveries, expected);
+    assert_eq!(
+        player(&world, PlayerId(0)).unwrap().recent_deliveries,
+        expected
+    );
 }
 
 /// A Dying body keeps its General records in the simulation until removed; the

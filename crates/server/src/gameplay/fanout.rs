@@ -85,7 +85,6 @@ fn viewer_states(
     let disabled = world.fog_disabled();
     // Shared by every viewer when fog is disabled, so built once up front.
     let first = rebuild.keys().next().filter(|_| disabled);
-    let all_players = first.map(|_| economy::players(world));
     let everything = first.map(|first| Arc::new(economy::buildings(world, *first)));
     let land_tick = world.tick().0.is_multiple_of(20);
     let rebuild = rebuild.into_iter().collect::<Vec<_>>();
@@ -100,7 +99,6 @@ fn viewer_states(
                 viewer,
                 rebuild,
                 changes,
-                all_players.as_ref(),
                 everything.as_ref(),
                 land_tick,
             );
@@ -120,23 +118,13 @@ fn viewer_state(
     viewer: PlayerId,
     rebuild: bool,
     changes: &BTreeMap<PlayerId, BTreeSet<EntityId>>,
-    all_players: Option<&BTreeMap<PlayerId, GameplayPlayerState>>,
     everything: Option<&Arc<BTreeMap<EntityId, GameplayBuildingState>>>,
     land_tick: bool,
 ) -> ViewerState {
-    let mut players = if let Some(all) = all_players {
-        all.clone()
-    } else {
-        economy::player(world, viewer)
-            .map(|state| (state.player, state))
-            .into_iter()
-            .collect()
-    };
-    if all_players.is_some()
-        && let Some(own) = economy::player(world, viewer)
-    {
-        players.insert(viewer, own);
-    }
+    let players = economy::player(world, viewer)
+        .map(|state| (state.player, state))
+        .into_iter()
+        .collect();
     let buildings = if let Some(all) = everything {
         // With fog disabled all targets are revealed as well. Keep one
         // shared map even when a hundred seats have set their rally points.
