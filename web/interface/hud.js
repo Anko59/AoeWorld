@@ -11,6 +11,7 @@ import { updateDetails } from '/interface/details.js';
 import { renderSelectionIcons, autoFit } from '/interface/selection-grid.js';
 import { initPause } from '/interface/pause.js';
 import { initSaveGame } from '/interface/saves.js';
+import { initActivity } from '/interface/activity/panel.js';
 // Original interface artwork and DOM presentation. Authoritative values arrive
 // from Rust at most four times per second; no frame loop or gameplay rules here.
 const icon = name => packIcon('resources',name,name);
@@ -20,6 +21,7 @@ const show = (id,visible) => { set(byId(id), 'hidden', !visible); };
 
 export function initInterface() {
   initBuildings();autoFit(byId('training-queue'),{high:30,low:22});
+  initActivity();
   initSteward();
   initVassal();
   initGeneralPanel();

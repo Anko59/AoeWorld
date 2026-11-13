@@ -5,6 +5,13 @@ use super::{GameWorld, GameplayService, Seed};
 mod tests;
 
 impl GameplayService {
+    pub fn volley_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::volley_demo(seed)?;
+        let service = Self::from_world(world, primary, None, None);
+        service.set_paused(true);
+        Ok(service)
+    }
+
     pub fn behaviour_demo(
         seed: Seed,
         scene: aoe_simulation::BehaviourScene,

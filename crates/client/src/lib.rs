@@ -45,6 +45,10 @@ pub mod building_ui;
 mod hud_visibility;
 
 #[cfg(any(all(target_arch = "wasm32", not(feature = "diagnostics")), test))]
+#[path = "village/hud/activity/mod.rs"]
+mod kingdom_activity;
+
+#[cfg(any(all(target_arch = "wasm32", not(feature = "diagnostics")), test))]
 #[path = "game_assets/source_index.rs"]
 mod asset_sources;
 

@@ -1,6 +1,7 @@
 use super::*;
 use crate::{BuildingKind, CarriedResource, UnitKind};
 mod timers;
+mod volley_scene;
 
 fn shelter(kind: BuildingKind) -> (GameWorld, EntityId) {
     let mut world = world();

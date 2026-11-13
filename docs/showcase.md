@@ -155,6 +155,13 @@ SHOWCASE_BEFORE_URL=http://127.0.0.1:8082/ make showcase SHOWCASE_STORYBOARD=.ca
 
 ## Step library
 
+`/maps/reset?scenario=defensive-volley` starts a paused, real-time defensive-fire
+encounter: a Castle with 20 infantry, a Town Center with 15, and 48 stationary
+enemy Knights near each. Load native art before resuming. Camera centres
+`x=124&y=122&zoom=0.8` and `x=124&y=146&zoom=0.8` frame their flights.
+Verify extracted in-flight pixels before accepting a recording; a projectile
+count alone does not establish that arrows are visible.
+
 Fog is enabled in ordinary games. For terrain/art showcases that need the whole
 map, start the filmed server with `AOE_FOG_DISABLED=1 make dev DEV_PORT=8097`.
 This is a server scenario setting; camera links cannot reveal hidden entities.

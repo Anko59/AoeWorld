@@ -9,6 +9,8 @@ export type ProductionBuilding = {
   player?: number;
   complete?: boolean;
   queue?: number[];
+  progress?: number;
+  research?: number;
 };
 export function productionBuilding(b: ProductionBuilding) {
   const side = b.kind === 0 ? 4 : b.kind === 2 ? 2 : 3;
@@ -28,8 +30,14 @@ export function productionBuilding(b: ProductionBuilding) {
     8,
     0,
     queue.length,
-    ...queue.flatMap((kind) => [kind, 0, ...uint(500)]),
-    0,
+    ...queue.flatMap((kind, i) => [
+      kind,
+      ...uint(i === 0 ? (b.progress ?? 0) : 0),
+      ...uint(500),
+    ]),
+    ...(b.research === undefined
+      ? [0]
+      : [1, b.research, ...uint(b.progress ?? 0), ...uint(500)]),
     0,
     0,
     0,

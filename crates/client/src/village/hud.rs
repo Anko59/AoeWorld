@@ -12,6 +12,13 @@ extern "C" {
     fn village_update(values: &[f64], status: &str, details: &[f64]);
 }
 
+#[wasm_bindgen(
+    inline_js = "export function kingdom_activity_update(v) { window.aoeActivity?.update(v); }"
+)]
+extern "C" {
+    fn kingdom_activity_update(values: &[f64]);
+}
+
 fn flag(value: bool) -> f64 {
     f64::from(u8::from(value))
 }
@@ -338,6 +345,18 @@ pub(in super::super) fn update(client: &Client) {
     let details = super::presentation::values(client);
     village_update(&values, map::feedback::connection_label(client), &details);
     super::building_panel::update(client, panel_scale);
+    let activity = crate::kingdom_activity::summarize(&client.village.buildings, owner);
+    let mut rows = vec![activity.more as f64];
+    for entry in activity.entries {
+        rows.extend_from_slice(&[
+            flag(entry.research),
+            f64::from(entry.kind),
+            f64::from(entry.count),
+            f64::from(entry.progress),
+            f64::from(entry.building.0),
+        ]);
+    }
+    kingdom_activity_update(&rows);
     super::steward::present(client, panel_scale);
     crate::playground::game::strategic::update(client);
 }
