@@ -53,6 +53,8 @@ pub(super) fn run(args: &[String], locked: bool) -> Result<i32> {
         );
         fs::write(&path, format!("{token}\n{holder}"))?;
         eprintln!("long job admitted: {holder}");
+        let me = super::holder(format!("`make {gate}`"))?;
+        super::cpu::ledger(&dir, "long", "admitted", &me, &[("slot", slot.to_string())]);
         command
             .env("AOE_LONG_JOB", token)
             .env("AOE_LONG_DIR", &dir)
@@ -95,6 +97,14 @@ pub(super) fn run(args: &[String], locked: bool) -> Result<i32> {
         holders.push(format!("slot {slot}: {holder}"));
     }
     eprintln!("long job busy: {}, retry later", holders.join("; "));
+    let me = super::holder(format!("`make {gate}`"))?;
+    super::cpu::ledger(
+        &dir,
+        "long",
+        "refused",
+        &me,
+        &[("reason", holders.join("; "))],
+    );
     Ok(75)
 }
 

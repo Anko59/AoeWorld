@@ -22,6 +22,14 @@ fn main() {
             lock::exit_code(error.as_ref())
         }));
     }
+    if args.first().is_some_and(|arg| arg == "--build-locked") {
+        let error = cpu::locked(&args[1..]).err();
+        eprintln!(
+            "build slot: {}",
+            error.map_or_else(String::new, |e| e.to_string())
+        );
+        std::process::exit(1);
+    }
     if args.first().is_some_and(|arg| arg == "--run") {
         args.remove(0);
         std::process::exit(run(&args).unwrap_or_else(|error| {
@@ -45,37 +53,20 @@ fn run(args: &[String]) -> std::io::Result<i32> {
         .split_first()
         .ok_or_else(|| std::io::Error::other("resource run: missing command"))?;
     policy::check()?;
-    let mut args = args.to_vec();
     let build = program == "docker" && args.first().is_some_and(|arg| arg == "run");
-    let admitted = match build.then(|| admit_build(&args)).transpose() {
-        Ok(admitted) => admitted.flatten(),
-        Err(error) if error.is::<lock::Busy>() => {
-            eprintln!("build pool {error}");
-            return Ok(75);
+    let code = if build {
+        match run_build(program, args) {
+            Ok(code) => code,
+            Err(error) if error.is::<lock::Busy>() => {
+                eprintln!("build pool {error}");
+                return Ok(75);
+            }
+            Err(error) => return Err(std::io::Error::other(error.to_string())),
         }
-        Err(error) => return Err(std::io::Error::other(error.to_string())),
+    } else {
+        let status = std::process::Command::new(program).args(args).status()?;
+        status.code().unwrap_or(137)
     };
-    if let Some((_, _, slot)) = &admitted {
-        args.splice(
-            1..1,
-            [
-                "-e".to_owned(),
-                format!("{}={}", cpu::TOKEN_VAR, slot.token),
-            ],
-        );
-    }
-    let started = std::time::Instant::now();
-    let status = std::process::Command::new(program).args(&args).status()?;
-    let code = status.code().unwrap_or(137);
-    if let Some((dir, me, _slot)) = &admitted {
-        let seconds = started.elapsed().as_secs().to_string();
-        cpu::ledger(
-            dir,
-            "finished",
-            me,
-            &[("exit", code.to_string()), ("seconds", seconds)],
-        );
-    }
     if code == 137 {
         eprintln!(
             "resource: command killed (exit 137); container caps: {}; a kernel OOM kill means the memory cap was exceeded",
@@ -85,10 +76,17 @@ fn run(args: &[String]) -> std::io::Result<i32> {
     Ok(code)
 }
 
-type Admitted = (std::path::PathBuf, cpu::Holder, cpu::Slot);
-
-/// Take a build slot for one `docker run`; `None` when a parent job's slot covers it.
-fn admit_build(args: &[String]) -> Result<Option<Admitted>, Box<dyn std::error::Error>> {
+/// Run one `docker run` under a build slot, or under its parent job's slot.
+fn run_build(program: &str, args: &[String]) -> Result<i32, Box<dyn std::error::Error>> {
+    let plain = |args: &[String]| -> std::io::Result<i32> {
+        let status = std::process::Command::new(program).args(args).status()?;
+        Ok(status.code().unwrap_or(137))
+    };
+    match cpu::parent()? {
+        cpu::Parent::Build(token) => return Ok(plain(&cpu::with_token(args, &token))?),
+        cpu::Parent::Long => return Ok(plain(args)?),
+        cpu::Parent::None => {}
+    }
     let dir = match std::env::var_os("AOE_LONG_DIR") {
         Some(dir) => std::path::PathBuf::from(dir),
         None => std::path::PathBuf::from(git(&[
@@ -98,24 +96,55 @@ fn admit_build(args: &[String]) -> Result<Option<Admitted>, Box<dyn std::error::
         ])?)
         .join("aoe-ship"),
     };
+    let me = holder(describe(args))?;
+    let slots = (
+        cpu::slot_count(std::env::var(cpu::SLOTS_VAR).ok().as_deref())?,
+        lock::slot_count(std::env::var("AOE_LONG_SLOTS").ok().as_deref())?,
+    );
+    let launcher = std::env::current_exe()?;
+    let started = std::time::Instant::now();
+    let (mut child, slot) = match cpu::start(&dir, &me, slots, cpu::WAIT, &launcher, program, args)
+    {
+        Ok(started) => started,
+        Err(error) => {
+            cpu::ledger(
+                &dir,
+                "build",
+                "refused",
+                &me,
+                &[("reason", error.to_string())],
+            );
+            return Err(error);
+        }
+    };
+    cpu::ledger(
+        &dir,
+        "build",
+        "admitted",
+        &me,
+        &[("slot", slot.to_string())],
+    );
+    let code = child.wait()?.code().unwrap_or(137);
+    let seconds = started.elapsed().as_secs().to_string();
+    cpu::ledger(
+        &dir,
+        "build",
+        "finished",
+        &me,
+        &[("exit", code.to_string()), ("seconds", seconds)],
+    );
+    Ok(code)
+}
+
+/// This job's identity in the build pool and the ledger.
+fn holder(description: String) -> std::io::Result<cpu::Holder> {
     let worktree = git(&["rev-parse", "--show-toplevel"])
         .or_else(|_| std::env::current_dir().map(|dir| dir.display().to_string()))?;
-    let me = cpu::Holder {
+    Ok(cpu::Holder {
         worktree,
         coordinator: std::env::var(cpu::COORDINATOR_VAR).unwrap_or_default(),
-        description: describe(args),
-    };
-    match cpu::admit(&dir, &me, None) {
-        Ok(Some(slot)) => {
-            cpu::ledger(&dir, "admitted", &me, &[]);
-            Ok(Some((dir, me, slot)))
-        }
-        Ok(None) => Ok(None),
-        Err(error) => {
-            cpu::ledger(&dir, "refused", &me, &[("reason", error.to_string())]);
-            Err(error)
-        }
-    }
+        description,
+    })
 }
 
 /// The command a container runs: the words after its image, which is the first

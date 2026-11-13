@@ -1,14 +1,20 @@
-//! Machine-wide build pool: each short `docker run` holds one slot while it runs.
+//! Machine-wide build pool: each `docker run` holds one slot while it runs.
 //! A slot is about `CARGO_BUILD_JOBS` (4) compilers, so the default pool of 4 keeps
-//! the 12-core host near 16 compilers. One worktree, and one coordinator with all
-//! its agents, may hold only part of the pool. A nested container inherits its
-//! parent's slot or long-job slot instead of taking another.
+//! the 12-core host near 16 compilers. Running long jobs count against the pool, one
+//! worktree may hold only part of it, and so may one coordinator with all its agents.
+//! A nested container uses its parent's build or long-job slot instead of another.
+//!
+//! Admission runs under one short machine-wide lock: read the holders, pick a slot,
+//! and wait until the new holder has it. `flock --no-fork` takes the slot and execs
+//! the launcher's `--build-locked` mode, which records the holder and execs Docker,
+//! so the kernel lock lives exactly as long as the Docker client.
 use super::lock;
 use std::{
     error::Error,
     fs::{self, File, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
+    process::{Child, Command},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -21,8 +27,10 @@ pub(crate) const DEFAULT_SLOTS: usize = 4;
 pub(crate) const MAX_SLOTS: usize = 16;
 pub(crate) const PER_WORKTREE: usize = 2;
 pub(crate) const PER_COORDINATOR: usize = 3;
-/// A short job waits this long for a slot, then is refused; never an open queue.
-const WAIT: Duration = Duration::from_secs(90);
+/// A build waits this long for a slot, then is refused; never an open queue.
+pub(crate) const WAIT: Duration = Duration::from_secs(90);
+/// flock's exit code when another process took the slot first.
+const TAKEN: &str = "197";
 
 /// Who holds a slot. Stored as tab-separated fields after the lock's proof line.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -33,7 +41,7 @@ pub(crate) struct Holder {
 }
 
 impl Holder {
-    fn encode(&self) -> String {
+    pub(crate) fn encode(&self) -> String {
         format!(
             "{}\t{}\t{}",
             self.worktree, self.coordinator, self.description
@@ -61,15 +69,26 @@ impl Holder {
     }
 }
 
-/// The admission decision for one job, given every slot's current holder.
+/// The admission decision for one build, given every build and long-job holder.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Plan {
-    /// Free slots to try, in order.
+    /// Free build slots to try, in order.
     Try(Vec<usize>),
     Refuse(String),
 }
 
-pub(crate) fn plan(held: &[Option<Holder>], me: &Holder) -> Plan {
+pub(crate) fn plan(held: &[Option<Holder>], long: &[String], me: &Holder) -> Plan {
+    let listed = |keep: &dyn Fn(&Holder) -> bool| -> String {
+        held.iter()
+            .enumerate()
+            .filter_map(|(slot, h)| {
+                h.as_ref()
+                    .filter(|h| keep(h))
+                    .map(|h| format!("build slot {slot}: {}", h.display()))
+            })
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
     let mine = held
         .iter()
         .flatten()
@@ -77,8 +96,9 @@ pub(crate) fn plan(held: &[Option<Holder>], me: &Holder) -> Plan {
         .count();
     if mine >= PER_WORKTREE {
         return Plan::Refuse(format!(
-            "{} already runs {mine} build containers (limit {PER_WORKTREE} per worktree)",
-            me.worktree
+            "{} already runs {mine} build containers (limit {PER_WORKTREE} per worktree): {}",
+            me.worktree,
+            listed(&|h| h.worktree == me.worktree)
         ));
     }
     if !me.coordinator.is_empty() {
@@ -89,30 +109,28 @@ pub(crate) fn plan(held: &[Option<Holder>], me: &Holder) -> Plan {
             .count();
         if ours >= PER_COORDINATOR {
             return Plan::Refuse(format!(
-                "{} and its agents already run {ours} build containers (limit {PER_COORDINATOR} per coordinator)",
-                me.coordinator
+                "{} and its agents already run {ours} build containers (limit {PER_COORDINATOR} per coordinator): {}",
+                me.coordinator,
+                listed(&|h| h.coordinator == me.coordinator)
             ));
         }
     }
-    let free: Vec<usize> = (0..held.len())
-        .filter(|&slot| held[slot].is_none())
-        .collect();
-    if free.is_empty() {
-        let holders: Vec<String> = held
-            .iter()
-            .enumerate()
-            .filter_map(|(slot, h)| {
-                h.as_ref()
-                    .map(|h| format!("build slot {slot}: {}", h.display()))
-            })
-            .collect();
+    let busy = held.iter().flatten().count() + long.len();
+    if busy >= held.len() {
+        let mut holders = vec![listed(&|_| true)];
+        holders.extend(long.iter().map(|h| format!("long job: {h}")));
+        holders.retain(|h| !h.is_empty());
         return Plan::Refuse(format!(
-            "all {} build slots are held: {}",
+            "{busy} of {} build slots are in use, counting long jobs: {}",
             held.len(),
             holders.join("; ")
         ));
     }
-    Plan::Try(free)
+    Plan::Try(
+        (0..held.len())
+            .filter(|&slot| held[slot].is_none())
+            .collect(),
+    )
 }
 
 pub(crate) fn slot_count(raw: Option<&str>) -> Result<usize> {
@@ -136,47 +154,82 @@ pub(crate) fn holders(dir: &Path, slots: usize) -> Result<Vec<Option<Holder>>> {
         .collect()
 }
 
-/// A held build slot; dropping it releases the kernel lock.
-pub(crate) struct Slot {
-    _lock: lock::LongLock,
-    /// `<lock path>:<proof>`, passed to the container so nested jobs inherit it.
-    pub(crate) token: String,
+fn long_holders(dir: &Path, slots: usize) -> Result<Vec<String>> {
+    (0..slots)
+        .filter_map(|slot| lock::status(&lock::slot_path(dir, slot)).transpose())
+        .collect()
 }
 
-/// Admit one build container, waiting up to `WAIT` for a slot. `None` means the
-/// caller already runs inside an admitted job and needs no slot of its own.
-pub(crate) fn admit(dir: &Path, me: &Holder, wait: Option<Duration>) -> Result<Option<Slot>> {
-    if inherited()? {
-        return Ok(None);
+/// What a build inside another admitted job inherits.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Parent {
+    None,
+    /// An admitted build container: pass its token on to this container too.
+    Build(String),
+    /// A long job, whose variables Make already passes into containers.
+    Long,
+}
+
+pub(crate) fn parent() -> Result<Parent> {
+    if let Ok(token) = std::env::var(TOKEN_VAR)
+        && let Some((path, proof)) = token.rsplit_once(':')
+        && lock::verify(Path::new(path), proof)?
+    {
+        return Ok(Parent::Build(token));
     }
-    let slots = slot_count(std::env::var(SLOTS_VAR).ok().as_deref())?;
-    admit_with(dir, me, slots, wait.unwrap_or(WAIT)).map(Some)
+    let long = std::env::var("AOE_LONG_JOB").unwrap_or_default();
+    let slot = std::env::var("AOE_LONG_SLOT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    let held = match std::env::var_os("AOE_LONG_DIR") {
+        Some(dir) => lock::verify(&lock::slot_path(Path::new(&dir), slot), &long)?,
+        None => false,
+    };
+    Ok(if held { Parent::Long } else { Parent::None })
 }
 
-/// Admission against `slots` build slots, ignoring any inherited parent slot.
-pub(crate) fn admit_with(dir: &Path, me: &Holder, slots: usize, wait: Duration) -> Result<Slot> {
+/// `docker run …` with `-e AOE_CPU_TOKEN=<token>` right after `run`.
+pub(crate) fn with_token(args: &[String], token: &str) -> Vec<String> {
+    let mut args = args.to_vec();
+    args.splice(1..1, ["-e".to_owned(), format!("{TOKEN_VAR}={token}")]);
+    args
+}
+
+/// Start `program args` holding a build slot, waiting up to `wait` for one.
+/// `launcher` is the executable whose `--build-locked` mode records the holder.
+pub(crate) fn start(
+    dir: &Path,
+    me: &Holder,
+    slots: (usize, usize),
+    wait: Duration,
+    launcher: &Path,
+    program: &str,
+    args: &[String],
+) -> Result<(Child, usize)> {
+    fs::create_dir_all(dir)?;
     let deadline = Instant::now() + wait;
     let mut announced = false;
     loop {
-        let reason = match plan(&holders(dir, slots)?, me) {
+        let gate = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(dir.join("cpu-admit.lock"))?;
+        gate.lock()?;
+        let reason = match plan(&holders(dir, slots.0)?, &long_holders(dir, slots.1)?, me) {
             Plan::Try(free) => {
-                let proof = nonce()?;
-                let mut last = String::new();
                 for slot in free {
-                    let path = slot_path(dir, slot);
-                    match lock::LongLock::acquire(&path, &me.encode(), &proof, None) {
-                        Ok(held) => {
-                            let token = format!("{}:{proof}", path.display());
-                            return Ok(Slot { _lock: held, token });
-                        }
-                        Err(error) if error.is::<lock::Busy>() => last = error.to_string(),
-                        Err(error) => return Err(error),
+                    if let Some(child) = launch(dir, slot, me, launcher, program, args)? {
+                        drop(gate);
+                        return Ok((child, slot));
                     }
                 }
-                last
+                "every free build slot was taken while admitting".to_owned()
             }
             Plan::Refuse(reason) => reason,
         };
+        drop(gate);
         if Instant::now() >= deadline {
             return Err(Box::new(lock::Busy(format!(
                 "{reason}; do non-build work and retry later (`make load-status` shows the holders)"
@@ -190,23 +243,69 @@ pub(crate) fn admit_with(dir: &Path, me: &Holder, slots: usize, wait: Duration) 
     }
 }
 
-/// Inside a long job or an admitted container, the parent's slot covers this one.
-fn inherited() -> Result<bool> {
-    if let Ok(token) = std::env::var(TOKEN_VAR)
-        && let Some((path, proof)) = token.rsplit_once(':')
-        && lock::verify(Path::new(path), proof)?
-    {
-        return Ok(true);
+/// Take `slot` through flock and return once the new holder has recorded itself,
+/// or `None` when another process holds the slot.
+fn launch(
+    dir: &Path,
+    slot: usize,
+    me: &Holder,
+    launcher: &Path,
+    program: &str,
+    args: &[String],
+) -> Result<Option<Child>> {
+    let path = slot_path(dir, slot);
+    OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&path)?;
+    let proof = nonce()?;
+    let token = format!("{}:{proof}", path.display());
+    let mut child = Command::new("flock")
+        .args(["--nonblock", "--conflict-exit-code", TAKEN, "--no-fork"])
+        .arg(&path)
+        .arg(launcher)
+        .arg("--build-locked")
+        .arg(&path)
+        .arg(&proof)
+        .arg(me.encode())
+        .arg("--")
+        .arg(program)
+        .args(if program == "docker" {
+            with_token(args, &token)
+        } else {
+            args.to_vec()
+        })
+        .spawn()?;
+    // Only the process holding the slot writes this proof; polling with a lock
+    // probe instead could briefly take the free slot from the starting flock.
+    let recorded = format!("{proof}\n");
+    loop {
+        if fs::read_to_string(&path)?.starts_with(&recorded) {
+            return Ok(Some(child));
+        }
+        if let Some(status) = child.try_wait()? {
+            // A command that finished before we saw it still ran under the slot.
+            return Ok(
+                (status.code().map(|code| code.to_string()) != Some(TAKEN.into())).then_some(child),
+            );
+        }
+        std::thread::sleep(Duration::from_millis(10));
     }
-    let long = std::env::var("AOE_LONG_JOB").unwrap_or_default();
-    let slot = std::env::var("AOE_LONG_SLOT")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
-    match std::env::var_os("AOE_LONG_DIR") {
-        Some(dir) => lock::verify(&lock::slot_path(Path::new(&dir), slot), &long),
-        None => Ok(false),
+}
+
+/// The `--build-locked` mode, run by flock while it holds the slot: record the
+/// holder, then become the command.
+pub(crate) fn locked(args: &[String]) -> Result<std::convert::Infallible> {
+    let [path, proof, holder, separator, program, rest @ ..] = args else {
+        return Err("expected <slot> <proof> <holder> -- <command>".into());
+    };
+    if separator != "--" {
+        return Err("expected -- before the command".into());
     }
+    fs::write(path, format!("{proof}\n{holder}"))?;
+    use std::os::unix::process::CommandExt;
+    Err(Command::new(program).args(rest).exec().into())
 }
 
 fn nonce() -> Result<String> {
@@ -216,12 +315,13 @@ fn nonce() -> Result<String> {
 }
 
 /// One JSON line per admission, refusal or finish, for `make load-status` and tuning.
-pub(crate) fn ledger(dir: &Path, event: &str, me: &Holder, extra: &[(&str, String)]) {
+pub(crate) fn ledger(dir: &Path, kind: &str, event: &str, me: &Holder, extra: &[(&str, String)]) {
     let seconds = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
     let mut line = format!(
-        "{{\"ts\":{seconds},\"kind\":\"build\",\"event\":{},\"worktree\":{},\"coordinator\":{},\"command\":{}",
+        "{{\"ts\":{seconds},\"kind\":{},\"event\":{},\"worktree\":{},\"coordinator\":{},\"command\":{}",
+        quote(kind),
         quote(event),
         quote(&me.worktree),
         quote(&me.coordinator),
