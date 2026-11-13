@@ -1,241 +1,259 @@
-# Owner-save command replay
+# Saved-match command replay
 
-`make save-replay` measures the same recorded simulation workload without Python
-AIs, clients, networking or a scheduled tick clock. Inputs and reports belong in
-`.cache/`, never Git. Copy the save, its sibling card and its map package/pages
-there before recording; do not modify the owner's originals.
+`make save-replay` measures recorded simulation work without Python execution,
+clients, networking or a scheduled tick clock. The current reference below was
+grown by the ordinary Python AIs on current-dev Mekong, then saved through the
+server. Saves, map packages, command streams, reports and footage stay in
+`.cache/`, never Git; original game assets stay in `local-assets/`.
 
-Record once through the ordinary saved skirmish (choose an unused local port):
+## Prepare current inputs
 
-```sh
-make scale-match SCALE_MATCH_ARGS='--save .cache/save-bench/input/1794451672-mekong.save --package-directory .cache/save-bench/packages --record-commands .cache/save-replay/commands.jsonl --record-ticks 1500 --minutes 30 --port 9288 --no-summary --out .cache/save-replay/record.json'
+Use the [map-package workflow](../geodata/workflow.md) and the geodata already
+hard-linked under `.cache/geodata`. Create
+`.cache/dev-replay/mekong-request.json` with this current `MapRequest`:
+
+```json
+{
+  "schema_version": 1,
+  "center_latitude_e7": 145000000,
+  "center_longitude_e7": 1048000000,
+  "requested_side_meters": 960000,
+  "compression": {"numerator": 240, "denominator": 1},
+  "year_ce": 600,
+  "seed": 1,
+  "reconstruction_profile": "circa600_v1"
+}
 ```
 
-The 30-minute value is a safety deadline, not a benchmark duration: this run
-stops when the 1,500 recorded ticks are complete. On subsequent invocations,
-select the imported save directly under `packages/saves/` or use a fresh package
-directory; the importer refuses to overwrite saves. The recording itself also
-refuses overwrite. A partial recording is rejected rather than silently used.
-
-Recording is armed before the restored service is installed. Every applied
-`PendingAction`, including rejected actions, retains its player, tick and actual
-application order. It covers Python AI commands and all external Steward,
-Vassal, General, rally and other settings in this command path. Their internal
-deterministic decisions remain simulation work during replay. No synthetic
-replacement AI is used. This capture mode is for the saved-skirmish harness,
-whose human socket sends no commands; unrelated admin/scenario mutations are
-outside its input contract.
-
-During saved recording only, the restored clock stays paused until the ordinary
-skirmish fleet reports all AI seats connected. Readiness resumes this clock once;
-ordinary matches and later manual pauses retain their existing behavior.
-
-Replay from the same initial save:
+For `.cache/dev-replay/france-request.json`, use the same fields with
+`center_latitude_e7: 466000000` and `center_longitude_e7: 25000000`.
+Automatic rivers are the generation default. Both requests cover a 960 km
+square at 1:240 compression: 2,000 × 2,000 two-metre game tiles.
 
 ```sh
-make save-replay AOE_SAVE_REPLAY_ARGS='--save .cache/save-bench/input/1794451672-mekong.save --package-directory .cache/save-bench/packages --recording .cache/save-replay/commands.jsonl --out .cache/save-replay/report.json'
+make map-generate AOE_MAP_REQUEST=.cache/dev-replay/mekong-request.json AOE_MAP_PACKAGE=.cache/dev-replay/packages
+make map-verify AOE_MAP_PACKAGE=.cache/dev-replay/packages/4d9cb16c1c286a5b29ba1d94e70371af966ac7a130a1c3c0f6bcbe95f3b5b683.json
+make map-generate AOE_MAP_REQUEST=.cache/dev-replay/france-request.json AOE_MAP_PACKAGE=.cache/dev-replay/packages
+make map-verify AOE_MAP_PACKAGE=.cache/dev-replay/packages/fdc59853e2404cb5c7fb245f21768970aeb01febe20fd4f15dc96ff522fc9a49.json
 ```
 
-Replay builds use a private `.cache/save-replay/target` in each worktree, even
-when `HARNESS_TARGET_CACHE` is shared. This prevents Cargo freshness metadata
-from accepting another worktree's simulation library through the normalized
-source alias. The content-addressed compiler object cache can still be reused.
+Both were freshly generated and verified at recipe 4. France was inexpensive
+from the cache and is retained as an optional input; only Mekong was played
+and measured. Mekong's manifest binds 90 source locks, including its elevation
+refinement; the package verifier checks the published pages.
 
-The default is three independent restores and replays in one measurement
-invocation (`--runs 1` through `10` is supported). Use the same recording on each
-revision's worktree, with this measurement adapter applied identically. Reports
-identify HEAD, dirty status and the recording's BLAKE3 digest. Retain the adapter
-diff alongside results when measuring revisions predating the command.
+Use asset pack `8f7abe8c330d7fd710daa076c8ef07de65f8973feed59b99f4d01f9cbc9c4530`
+under the canonical `local-assets/packs` root. Its existing `buildings` link is
+relative to sibling pack `3db32320fb1e15d3ccdeb6b00290e401d54714b074fadca23687c4650dd47769`,
+whose `actors` link is relative to sibling
+`2db1eba05188acc065bec338e3426a2bd23ffd7d4823ef3e0a0ec81fa2cbaaa6`.
+All three must be accessible in the worktree; no absolute links or original
+assets are copied into images or Git.
 
-The report contains total and per-phase mean/p50/p95 for retired instructions
-and thread CPU milliseconds, raw paired samples, every resulting canonical hash, final hash and the first
-divergence tick. Initial-state disagreement reports the initial tick. Later
-divergence does not suppress instruction results or stop replay. Tick gaps and incomplete
-streams fail. Spread is `(largest mean - smallest mean) / average mean * 100`.
+## Grow and save the war state
 
-The Linux native adapter uses `perf-event2` / `perf_event_open` with
-`PERF_COUNT_HW_INSTRUCTIONS`, current thread (`pid=0`), any CPU, inheritance off,
-and kernel/hypervisor instructions excluded. A counter is opened on the simulation
-thread for each tick. One Rayon worker executes the tick and its proposal work.
-Both metrics are always reported together. CPU time uses Linux
-`CLOCK_THREAD_CPUTIME_ID` on the same worker; unlike the user-only instruction
-event, this clock includes the thread's kernel CPU work. The PMU event is pinned
-(not CPU affinity); each tick
-must have equal nonzero enabled/running times. Unavailable counters, failed reads,
-wrong-thread reads and multiplexing fail rather than emit estimated counts.
-
-Check the real PMU before running the owner-save measurement:
+For a fresh `target/scale-match` path, keep scratch output under `.cache/`:
 
 ```sh
+mkdir -p .cache/dev-replay/work target
+ln -s ../.cache/dev-replay/work target/scale-match
+make build-wasm
 make save-replay-counter-check
+make scale-match SCALE_MATCH_ARGS='--players 100 --humans 1 --tiles 2000 --map package --map-hash 4d9cb16c1c286a5b29ba1d94e70371af966ac7a130a1c3c0f6bcbe95f3b5b683 --package-directory .cache/dev-replay/packages --asset-pack local-assets/packs/8f7abe8c330d7fd710daa076c8ef07de65f8973feed59b99f4d01f9cbc9c4530 --hosts 8 --minutes 150 --port 9288 --label current-mekong --no-summary --out .cache/dev-replay/growth.json'
 ```
 
-Both this check and `save-replay` request Docker `--cap-add PERFMON`, retaining
-the default seccomp profile. On the measured host (`perf_event_paranoid=1`), the
-default container was denied and PERFMON alone allowed the event; an unconfined
-seccomp profile was unnecessary. Host policy and PMU availability still matter;
-access failures explain the prerequisite. Ordinary unit tests use a fixture
-counter; the explicit hardware check verifies live counting, thread ownership,
-sleep exclusion and complete PMU scheduling.
-
-Paired instruction/CPU spans reuse the running-match profiler's instrumentation points.
-Inclusive navigation/movement spans overlap: do not sum percentile rows.
-Probe overhead is included consistently; counter setup, canonical hashing,
-restore/navigation warmup, bookkeeping, fanout, AI execution and save/recording
-I/O are outside the counted tick. Lazy terrain work remains counted.
-
-The instruction metric reports user-space work, not latency, live ticks/s, parallel speedup,
-finished RTS performance or dedicated-hardware qualification. Descheduling does
-not add instructions. Runtime/allocator paths can still vary, so report three-run
-instruction spread; the repeatability aim is well under 1%. CPU spread is reported
-separately and remains sensitive to host frequency/cache conditions. Raw integer samples and integer
-percentiles retain exact units; means are unscaled instructions per tick.
-
-## Late war window and comparison
-
-Copy `1794535945-mekong-2.save` and its sibling `.json` card from the owner's
-evidence directory into `.cache/save-bench-late/input/`. Never edit or move the
-originals. Copy the Mekong package `2976b04b…` and its `pages/` and `navigation/`
-directories into `.cache/save-bench-late/packages/`. Hard-link the local asset
-pack `8f7abe8c…` and its referenced building pack under
-`.cache/save-bench-late/packs/`; convert any absolute symlinks to relative ones
-so the container can resolve them. Assets, saves, command streams, video and raw
-reports stay ignored under `.cache/`.
-
-The server validates packs against the canonical `local-assets/packs` root. On
-a fresh worktree, expose the copied set with
-`ln -s ../.cache/save-bench-late/packs local-assets/packs` after creating
-`local-assets/`; the pack files still live under `.cache/`. Do not replace an
-existing pack directory. For scratch logs too, create
-`.cache/save-bench-late/work/` and link `target/scale-match` to
-`../.cache/save-bench-late/work` before running the harness.
-
-The card describes tick 588,067, 99 opponents, 8,573 units and 12,423 buildings.
-The human's population and town-center count describe one player; benchmark
-normalization uses all restored units. Record exactly once, with all 99 ordinary
-Python AIs connected:
+Do not replace an existing scratch directory or symlink. The 150-minute value
+is a wall-clock safety ceiling. No extra units were seeded: 400 starting units
+grew through ordinary play by 99 Python AIs and one idle human seat. All AIs
+connected in 3.5 seconds. Save after reaching the desired game-time and war
+state, using the game menu or `POST /saves` with the human's
+`X-AoeWorld-Controller-Token` and `{"name":"Mekong dev late"}`.
+The local adapter used for that API call is retained with its SHA-256 in
+`.cache/rec-inputs.md`:
 
 ```sh
-make scale-match SCALE_MATCH_ARGS='--save .cache/save-bench-late/input/1794535945-mekong-2.save --package-directory .cache/save-bench-late/packages --asset-pack .cache/save-bench-late/packs/8f7abe8c330d7fd710daa076c8ef07de65f8973feed59b99f4d01f9cbc9c4530 --record-commands .cache/save-bench-late/commands.jsonl --record-ticks 1500 --minutes 30 --port 9288 --no-summary --out .cache/save-bench-late/record.json'
-make save-replay AOE_SAVE_REPLAY_ARGS='--save .cache/save-bench-late/input/1794535945-mekong-2.save --package-directory .cache/save-bench-late/packages --recording .cache/save-bench-late/commands.jsonl --runs 3 --out .cache/save-bench-late/replay.json'
+python3 .cache/dev-replay/control.py 'Mekong dev late'
 ```
 
-For optional in-game footage, prepare `make build-wasm` and `make browser-deps`
-before recording. While the saved match is ready, use `make showcase` with
-`SHOWCASE_APP_URL=http://127.0.0.1:9288` and a browser scene at `/?play=1`
-([storyboards](../showcase.md)). Saved matches reject `--browser`; the separate
-recorder connects to the human seat. Footage is outside the instruction
-measurement, which always replays headlessly.
+The chosen save is
+`.cache/dev-replay/packages/saves/1794572640-mekong-dev-late.save`, with its
+sibling JSON card. It contains snapshot 5 at tick **72,380**, **60.32 game
+minutes**, **10,761 units**, **5,765 buildings**, and **99 opponent seats**.
+The adjacent admin observation at tick 72,381 has 7,069 cumulative player
+kills and `combat_per_minute` counters of 344 deaths, 6,967 melee hits and
+10,083 ranged hits. Sixty-one players were Imperial, 17 Castle, 20 Feudal
+and two Dark. The idle human and two AIs were eliminated; all 100 seats remain
+in the save, and defeated AI seats still connect normally.
 
-Copy the earlier `.cache/save-bench/` inputs and
-`.cache/save-replay/commands.jsonl` from the original benchmark worktree, naming
-the latter `.cache/save-replay/commands-mid.jsonl`, then measure once:
+The growth server was deliberately stopped after saving and filming. Its
+`growth.json.failure` records that stop; it is not a completed 150-minute
+performance baseline. The save was sealed before fog was disabled for footage.
+Preserve growth logs before the saved capture reuses the scratch path:
 
 ```sh
-make save-replay AOE_SAVE_REPLAY_ARGS='--save .cache/save-bench/input/1794451672-mekong.save --package-directory .cache/save-bench/packages --recording .cache/save-replay/commands-mid.jsonl --runs 3 --out .cache/save-replay/mid.json'
+mv .cache/dev-replay/work .cache/dev-replay/growth-work
+mkdir .cache/dev-replay/work
 ```
 
-Compare the average of the three run means, each run's mean, per-phase means,
-spread, restored counts, initial/final hashes and divergence ticks. Divide each
-window's instructions/tick by its restored unit count to get instructions per
-tick per unit; retain building counts alongside it because buildings also cost
-work. These are different game states and command streams, so their ratio is a
-workload comparison, not an optimization speedup. Hash disagreement is reported
-as evidence; it is not a reason to preserve superseded gameplay. Neither window
-qualifies the 100-player/100k-unit, 1000-player/1M-unit or 1000-player/10M-unit
-real-time scale targets.
+## Capture and replay the reference
 
+```sh
+make scale-match SCALE_MATCH_ARGS='--save .cache/dev-replay/packages/saves/1794572640-mekong-dev-late.save --package-directory .cache/dev-replay/packages --asset-pack local-assets/packs/8f7abe8c330d7fd710daa076c8ef07de65f8973feed59b99f4d01f9cbc9c4530 --record-commands .cache/dev-replay/commands.jsonl --record-ticks 1500 --minutes 30 --port 9288 --no-summary --out .cache/dev-replay/record.json'
+make save-replay AOE_SAVE_REPLAY_ARGS='--save .cache/dev-replay/packages/saves/1794572640-mekong-dev-late.save --package-directory .cache/dev-replay/packages --recording .cache/dev-replay/commands.jsonl --runs 3 --out .cache/dev-replay/replay.json'
+```
 
-## Measured windows on this branch
+The capture succeeded with all **99 AIs ready across eight hosts** in 5.855
+seconds before the saved clock resumed. It contains **10,055 commands** over
+exactly **1,500 contiguous input ticks, 72,380–73,879**; the final resulting
+state is tick 73,880. The 30-minute value is a safety deadline: capture stops
+when the requested ticks are complete. Output recordings refuse overwrite and
+partial streams fail. Select the stored save directly under `packages/saves/`
+when reusing a package directory; importing a different copy refuses overwrite.
 
-Measured at `e4edfb9db67344e4953a7d1397a7d823d10b0f5b` plus the benchmark
-port, before its commit. Both reports identify the same source diff BLAKE3
-`06584aaa6b116b1ee4a65e278ca56101051482c08981bcc4c391c9592bc5cb39`.
-The measured production diff SHA-256 is
-`0cda2b5bff85ef7e745ff70f5ca890b6a65607ad9682727431a4127d5395616d`;
-only documentation/results were added afterward. Raw reports are
-`.cache/save-replay/mid.json` and `.cache/save-bench-late/replay.json`.
-One measurement invocation per window, three 1,500-tick runs each.
+Recording is armed before the restored service is installed. The restored clock
+stays paused until every ordinary skirmish AI seat connects, then resumes once.
+The human socket sends no orders. Every applied `PendingAction`, including
+rejected actions, retains its player, tick and actual application order.
+Current `Move.attack_move`, queue flags and external Steward, Vassal, General,
+rally and other settings in this path are captured. Their internal deterministic
+decisions remain simulation work. Unrelated admin/scenario mutations are outside
+the stream's contract; the observer fog toggle was confined to the earlier
+source match, after its reference save, and is absent from this capture.
 
-| Window | Run 1 instructions/tick | Run 2 | Run 3 | Mean | Spread | Units / buildings restored | Instructions/tick/unit |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Mid | 391,768,962.50 | 391,771,935.00 | 391,781,403.26 | 391,774,100.25 | 0.0032% | 11,756 / 7,632 | 33,325.46 |
-| Late | 217,162,374.89 | 217,165,308.44 | 217,170,706.72 | 217,166,130.02 | 0.0038% | 8,573 / 12,423 | 25,331.40 |
+Replay uses a private `.cache/save-replay/target` per worktree even when
+`HARNESS_TARGET_CACHE` is shared, preventing another worktree's Cargo freshness
+metadata from selecting a stale simulation library through the normalized source
+alias. The content-addressed compiler object cache can still be reused.
 
-Per-phase means across the three runs (instructions/tick); spread uses the
-same `(max - min) / mean` formula on each phase’s run means. Inclusive spans
-overlap, so these rows must not be summed.
+## Measured current reference
 
-| Phase | Mid mean | Mid spread | Late mean | Late spread |
-| --- | ---: | ---: | ---: | ---: |
-| `apply_loop` | 45,023,961.28 | 0.0011% | 15,769,634.84 | 0.0021% |
-| `attack_position_search` | 33,272,374.62 | 0.0081% | 2,677,658.11 | 0.0045% |
-| `building_memory` | 284,053.37 | 0.0458% | 86,386.38 | 0.0355% |
-| `changed` | 644,618.03 | 1.2807% | 324,688.03 | 0.9750% |
-| `combat` | 36,464,920.00 | 0.0043% | 8,921,818.40 | 0.0014% |
-| `components` | 1,794,337.71 | 0.0180% | 1,135,502.69 | 0.0082% |
-| `construction` | 5,435,596.83 | 0.0056% | 7,980,224.61 | 0.0036% |
-| `gathering` | 11,233,177.71 | 0.0027% | 10,720,857.81 | 0.0035% |
-| `group_apply` | 71,014,145.10 | 0.0018% | 26,170,752.92 | 0.0025% |
-| `group_prepare` | 25,222,520.42 | 0.0010% | 11,610,333.37 | 0.0021% |
-| `group_propose` | 51,247,674.07 | 0.0005% | 23,626,827.55 | 0.0001% |
-| `hierarchy` | 24,244,351.09 | 0.0090% | 5,610,102.02 | 0.0037% |
-| `index_chunks` | 34,530.41 | 0.0101% | 23,701.50 | 0.0049% |
-| `index_collision` | 2,676,217.67 | 0.0002% | 1,208,383.06 | 0.0002% |
-| `local_refinement` | 341,974.55 | 0.0049% | 238,938.44 | 0.0008% |
-| `movement` | 303,319,985.26 | 0.0010% | 169,407,881.54 | 0.0014% |
-| `orders` | 18,180,023.88 | 0.0112% | 6,148,127.41 | 0.0023% |
-| `plan_ahead` | 2,174,645.66 | 0.0023% | 1,454,135.17 | 0.0127% |
-| `plan_fair` | 33,217,899.20 | 0.0003% | 38,065,398.64 | 0.0016% |
-| `plan_fast` | 64,142,801.84 | 0.0022% | 53,390,751.67 | 0.0016% |
-| `plan_serve` | 81,687,869.62 | 0.0022% | 77,615,419.18 | 0.0015% |
-| `pocket` | 16,178,075.45 | 0.0020% | 13,946,673.80 | 0.0011% |
-| `portal_costs` | 1,434,991.43 | 0.0058% | 893,022.01 | 0.0067% |
-| `portals` | 5,084,762.99 | 0.0058% | 2,810,560.03 | 0.0074% |
-| `propose` | 17,244,132.12 | 0.0008% | 8,325,900.47 | 0.0030% |
-| `research_training` | 46,618.69 | 0.0326% | 43,745.88 | 0.0311% |
-| `route_cache` | 527,957.38 | 0.0024% | 141,572.97 | 0.0100% |
-| `search` | 57,950,448.74 | 0.0016% | 40,418,513.54 | 0.0016% |
-| `sidestep` | 66,218,420.55 | 0.0001% | 19,323,956.57 | 0.0001% |
-| `spacing` | 1,777,444.06 | 0.0004% | 844,178.00 | 0.0014% |
-| `steward_economy` | 10,890,945.01 | 0.0056% | 10,921,496.86 | 0.0241% |
-| `terrain_point` | 30,854,646.56 | 0.0028% | 35,015,859.51 | 0.0049% |
-| `vision_flush` | 3,351,182.10 | 0.0010% | 1,815,101.22 | 0.0006% |
-| `wildlife` | 1,811,348.84 | 0.0030% | 968,109.85 | 0.0040% |
+Measured 2026-11-13 at runtime revision
+`dfad610ac7af6e5b0266bfa800cb4d460dffc056`, with only the documentation warning
+dirty. The report's source-diff BLAKE3 is
+`2f71987586a110f74a3ac14eaaeb6e51ff0f78c1e539d595dcfb9de09316177d`;
+the diff is retained in `.cache/dev-replay/measurement-source.diff`.
+No gameplay or measurement-tool code changed. Results were added afterward.
+There was one measurement invocation, three independent restores and
+1,500-tick replays. The raw report retains every paired instruction/CPU sample,
+per-phase percentile, resulting canonical hash and first-divergence tick.
 
-Counters that remain zero in both headless windows: `delivery`, `fanout_wait`, `frame`, `observation_lock`, `prefetch`, `resource_journal`, `resources`, `session_views`, `sessions`, `terrain`, `viewers`, `walk_cache`, `world_lock`.
+| Run | Mean instructions/tick | p50 | p95 | Mean thread CPU ms/tick | Instructions/tick/restored unit |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | 391,450,081.31 | 339,850,631 | 705,039,504 | 179.876 | 36,376.74 |
+| 2 | 391,461,182.03 | 339,877,030 | 705,000,374 | 161.216 | 36,377.77 |
+| 3 | 391,490,955.67 | 339,831,370 | 704,897,736 | 143.132 | 36,380.54 |
+| Mean of run means | 391,467,406.34 | — | — | 161.408 | 36,378.35 |
 
-Mid: recording BLAKE3 `26df5866f47d1818fc7719b2ccf5fd0db796f5a9de9b2d3355ef3f39a343ea3d`;
-save BLAKE3 `be0229478c8fa849657c1512a41d96a937ba06620c608f182b1ac803fdaf3d4a`.
-Repeat hash streams agree: `true`.
-Initial hash, all three runs: `184046864036435ffc58a39578dd381add731ac8f32e917924cd676292a0386c`.
-Final hash, all three runs: `c7de659bf09f5585e8b05ea5d58ae683a8fcced4faa7dcc01ea59ccc168225e6`.
-First divergence ticks from capture: 184362, 184362, 184362.
-Restoration: `RestoreReport { buildings: 7632, units: 11756, buildings_lost: 0, units_lost: 0, jobs_resumed: 3451, jobs_lost: 52, animals: 412, animals_lost: 0, formations: 1424, managers: 13 }`.
-CPU mean ms/tick by run: 307.878, 286.26, 286.75; CPU spread 7.3623%.
+Instruction spread: **0.0104%**. Thread CPU-time spread:
+**22.7647%**. Spread is `(max run mean - min run mean) / average run mean * 100`.
+Normalization uses the **10,761 initially restored units**, with
+**5,765 buildings** retained alongside that count. Population can
+change during the window; this is not normalization by each tick's live count.
 
-Late: recording BLAKE3 `7cebcd87eb6dc948db0d8800b00dcfa34ca9a263cd6f8bb9d330ab059e92d7b5`;
-save BLAKE3 `cdb3d3b99198704d0ed8e5146f2fd741e03bc016accc9df93aad9550dd5a3b4c`.
-Repeat hash streams agree: `true`.
-Initial hash, all three runs: `e05bf0af0dc25553025d777f77aaa1e66ab7046891094a07c34f3548c12b3e93`.
-Final hash, all three runs: `805f4b197d39581f9eb164a6994ad18927ec1c038f982ce08abc9b5156d4af2e`.
-First divergence ticks from capture: none in any run.
-Restoration: `RestoreReport { buildings: 12423, units: 8573, buildings_lost: 0, units_lost: 0, jobs_resumed: 1744, jobs_lost: 42, animals: 351, animals_lost: 0, formations: 967, managers: 20 }`.
-CPU mean ms/tick by run: 136.324, 118.853, 129.413; CPU spread 13.6283%.
+| Phase | Mean instructions/tick | Three-run spread |
+| --- | ---: | ---: |
+| `apply_loop` | 43,874,821.92 | 0.0017% |
+| `attack_position_search` | 13,872,887.48 | 0.0042% |
+| `building_memory` | 664,107.66 | 0.0344% |
+| `changed` | 656,550.32 | 3.0885% |
+| `combat` | 23,032,766.64 | 0.0019% |
+| `components` | 2,067,752.04 | 0.0305% |
+| `construction` | 3,314,392.98 | 0.0052% |
+| `gathering` | 26,990,639.08 | 0.0075% |
+| `group_apply` | 19,889,313.73 | 0.0016% |
+| `group_prepare` | 9,488,938.85 | 0.0004% |
+| `group_propose` | 22,082,081.75 | 0.0001% |
+| `hierarchy` | 10,553,488.06 | 0.0140% |
+| `index_chunks` | 25,765.21 | 0.0142% |
+| `index_collision` | 2,793,313.79 | 0.0005% |
+| `local_refinement` | 910,804.98 | 0.0083% |
+| `movement` | 294,974,041.92 | 0.0048% |
+| `orders` | 15,505,362.24 | 0.0053% |
+| `plan_ahead` | 6,773,963.58 | 0.0121% |
+| `plan_fair` | 87,952,395.89 | 0.0079% |
+| `plan_fast` | 75,084,411.60 | 0.0040% |
+| `plan_serve` | 141,066,113.45 | 0.0069% |
+| `pocket` | 6,790,814.76 | 0.0015% |
+| `portal_costs` | 2,164,567.89 | 0.0033% |
+| `portals` | 5,917,412.05 | 0.0073% |
+| `propose` | 45,724,775.29 | 0.0059% |
+| `research_training` | 1,361,309.49 | 0.0162% |
+| `route_cache` | 419,134.88 | 0.0047% |
+| `search` | 37,306,569.29 | 0.0017% |
+| `sidestep` | 22,085,897.35 | 0.0004% |
+| `spacing` | 1,383,842.18 | 0.0101% |
+| `steward_economy` | 21,570,804.59 | 0.0188% |
+| `terrain_point` | 151,871,868.14 | 0.0123% |
+| `vision_flush` | 3,197,024.61 | 0.0028% |
+| `wildlife` | 1,119,315.24 | 0.0090% |
 
-The late capture contains 4,763 applied commands, with 99 AIs ready across eight
-hosts before its clock resumed. Its three replay hash streams match the capture
-through the entire window. The historical mid capture differs already at its
-initial state; its three current replay streams agree with one another. No
-simulation behavior was changed by this tooling port.
+Phases zero in all three runs: `delivery`, `fanout_wait`, `frame`, `observation_lock`, `prefetch`, `resource_journal`, `resources`, `session_views`, `sessions`, `terrain`, `viewers`, `walk_cache`, `world_lock`.
+Inclusive spans overlap; these rows must not be summed.
 
-Every unit and building restored in both windows. The ordinary loader dropped
-52 mid-game jobs and 42 late-game jobs during restore, outside timing; the full
-restore reports above retain those losses. Movement accounts for about 77.4%
-of mid-game and 78.0% of late-game instructions. These are workload costs on
-this branch, not evidence of an optimization between the windows.
+Initial hash, all three runs and capture:
+`f7eb96449f4de09c82bb29fe8f8e79d63816eb93ca192f2ade7e1fca1482724d`.
+Final hash, all three runs and capture:
+`807ae7ff6a8491cb51009c415adc0cd1b346f251c655f77fb43a232c8c153b14`.
+Every per-tick hash agrees across all three replays and the capture; first
+divergence: none in every run. Hash agreement is observed evidence, not a
+requirement to preserve superseded gameplay.
 
-Local footage: `.cache/showcase/late-war.webm` (38.4 seconds, 1280×720 VP9),
-recorded during this late capture and decoded for visual inspection. The human
-HUD shows population 2,725/2,760 and the Imperial Age. Attach it later with
-`SHIP_VIDEO`; do not commit the video or any original game assets.
+Save BLAKE3: `2c35ae4d2f711a3bad545cb020acc69b5461d63119173f345ed92cdeba896a78`.
+Recording BLAKE3: `3b7cd6836ff9f2b8632237b45e4fd9bfdbe4ab2c69b0966eef689694a80b39e6`.
+
+All three restores report:
+
+```text
+RestoreReport { buildings: 5765, units: 10761, buildings_lost: 0, units_lost: 0, jobs_resumed: 7096, jobs_lost: 170, animals: 478, animals_lost: 0, formations: 531, managers: 52 }
+```
+
+All units, buildings and animals restored. The ordinary loader dropped 170
+jobs before timing; those losses are retained here rather than hidden.
+
+## Counter and qualification limits
+
+`make save-replay-counter-check` passed the real PMU thread-ownership,
+sleep-exclusion and complete-scheduling test. Both it and replay request Docker
+`--cap-add PERFMON` with the default seccomp profile. Host policy and PMU
+availability remain prerequisites; unavailable counters, failed reads,
+wrong-thread reads and multiplexing fail instead of emitting estimates.
+
+The Linux adapter measures `PERF_COUNT_HW_INSTRUCTIONS` on the simulation
+thread, `pid=0`, any CPU, inheritance off, kernel/hypervisor instructions
+excluded, with one Rayon worker. A pinned event must have equal nonzero
+running/enabled times on every tick. Paired CPU time uses
+`CLOCK_THREAD_CPUTIME_ID` on that worker and includes its kernel CPU work.
+Probe overhead within tick spans remains counted. Counter setup, restore and
+navigation warmup, canonical hashing, bookkeeping, AI execution, fanout,
+transport and save/recording I/O are outside the measured tick; lazy terrain
+work remains counted.
+
+Instructions describe user-space work, not latency, live tick rate, parallel
+speedup or finished RTS performance. The 0.0104% instruction spread is well
+under the repeatability aim of 1%; the 22.7647% CPU-time spread also records
+shared-host frequency/cache/runtime variation. Neither metric nor this
+10,761-unit workload qualifies real time at 100 players/100k units,
+1000 players/1M units or 1000 players/10M units, or dedicated hardware.
+
+## Local evidence and historical inputs
+
+`.cache/rec-inputs.md` lists exact absolute input paths and SHA-256s, with a
+full page/asset inventory for other sessions to hard-link. Keep the save/card,
+package pages/navigation and relative pack links together. Reports and inputs
+remain private ignored artifacts.
+
+Local footage is `.cache/showcase/current-dev-war.webm`: 39.64 seconds,
+1280×720 VP9, decoded and visually inspected. It shows the source match after
+the reference save with fog disabled for observation; the 0/0 Dark Age HUD
+belongs to the eliminated human. It is outside the captured command window and
+instruction measurement. It was recorded with `make showcase` using
+`.cache/showcase/current-dev-war.json`, then trimmed from the full take;
+`make video-probe` verified the final encoding and duration. Attach the final
+clip later with `SHIP_VIDEO`; never commit footage or original game assets.
+
+The old mid (`1794451672-mekong.save`) and late
+(`1794535945-mekong-2.save`) windows require a **pre-#800 checkout**, also before
+#801: they use snapshot 3, recipe 3 and command streams without
+`Move.attack_move`. They are not current-dev inputs. Regenerate inputs instead
+of adding compatibility readers. The fresh window is a different workload;
+its cost is not an optimization speedup against those obsolete windows.
