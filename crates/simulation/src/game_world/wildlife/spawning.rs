@@ -127,37 +127,51 @@ impl GameWorld {
     pub(crate) fn initialize_wildlife(&mut self, center: TileCoord, root: TileCoord) {
         let region = self.animal_start_region(center, root);
         let mut used = std::collections::BTreeSet::new();
-        for (kind, count, offset) in [
-            (AnimalKind::Sheep, 8, (-4, 0)),
-            (AnimalKind::Boar, 2, (9, 3)),
-            (AnimalKind::Deer, 4, (-8, 8)),
-            (AnimalKind::Wolf, 1, (16, 0)),
-        ] {
-            for _ in 0..count {
-                let mut chosen = None;
-                'search: for ring in 0_i32..=4 {
-                    for dy in -ring..=ring {
-                        for dx in -ring..=ring {
-                            if dx.abs().max(dy.abs()) != ring {
-                                continue;
-                            }
-                            let tile =
-                                TileCoord::new(center.x + offset.0 + dx, center.y + offset.1 + dy);
-                            if !used.contains(&tile)
-                                && self.tile_free(tile)
-                                && (kind != AnimalKind::Wolf
-                                    || region.contains(&tile) && self.animal_spawn_open(tile))
-                            {
-                                chosen = WorldPosition::from_tile_center(tile).ok();
-                                break 'search;
-                            }
-                        }
-                    }
-                }
-                if let Some(at) = chosen
+        let extra_boar = self.start_roll(center, 200).is_multiple_of(2);
+        for (slot, (kind, count, min, max)) in [
+            (
+                AnimalKind::Sheep,
+                if extra_boar { 7 } else { 8 },
+                3_u64,
+                6_u64,
+            ),
+            (AnimalKind::Boar, if extra_boar { 3 } else { 2 }, 9, 15),
+            (AnimalKind::Deer, if extra_boar { 2 } else { 4 }, 9, 15),
+            (AnimalKind::Wolf, 1, 16, 20),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let distance = |t: TileCoord, c: TileCoord| {
+                u64::from(t.x.abs_diff(c.x)).pow(2) + u64::from(t.y.abs_diff(c.y)).pow(2)
+            };
+            let mut candidates: Vec<_> = region
+                .iter()
+                .copied()
+                .filter(|tile| {
+                    (min.pow(2)..=max.pow(2)).contains(&distance(*tile, center))
+                        && self.tile_free(*tile)
+                        && (kind != AnimalKind::Wolf || self.animal_spawn_open(*tile))
+                })
+                .collect();
+            let salt = self.start_roll(center, 210 + slot as u64);
+            candidates.sort_by_key(|tile| self.start_roll(*tile, salt));
+            let Some(anchor) = candidates.first().copied() else {
+                continue;
+            };
+            candidates.sort_by_key(|tile| {
+                distance(*tile, anchor) * 8 + self.start_roll(*tile, salt) % 64
+            });
+            for tile in candidates
+                .into_iter()
+                .filter(|tile| !used.contains(tile))
+                .take(count)
+                .collect::<Vec<_>>()
+            {
+                if let Ok(at) = WorldPosition::from_tile_center(tile)
                     && self.spawn_animal(kind, at).is_ok()
                 {
-                    used.insert(at.tile_floor());
+                    used.insert(tile);
                 }
             }
         }

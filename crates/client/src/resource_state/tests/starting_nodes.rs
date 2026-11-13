@@ -70,3 +70,29 @@ fn emptied_natural_tree_stays_hidden_after_chunk_eviction_and_reconnect() {
     }));
     assert!(!cache.visible(tree));
 }
+
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn supplemental_tree_species_survives_snapshot_and_reconnect() {
+    use aoe_map::ResourceVisualFamily::{Broadleaf, Conifer, DryScrub, Tropical};
+    for family in [Broadleaf, Conifer, DryScrub, Tropical] {
+        let tree = ResourceNode::starting_tree(TileCoord::new(12, 13), family).unwrap();
+        let state = ResourceState {
+            snapshot_page: None,
+            subscription_revision: 1,
+            from_revision: None,
+            revision: 0,
+            changes: vec![ResourceAmount {
+                id: tree.id,
+                remaining: 100,
+            }],
+        };
+        let mut cache = ResourceStateCache::default();
+        for _ in 0..2 {
+            assert!(cache.apply(state.clone()));
+            let visible = cache.rendered_starting_nodes(0.0).next().unwrap();
+            assert_eq!(visible, tree);
+            assert_eq!(visible.starting_visual_family(), family);
+            cache.clear();
+        }
+    }
+}

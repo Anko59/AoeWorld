@@ -70,7 +70,14 @@ fn wolf_kit_skips_a_large_disconnected_pocket_even_with_local_walking_room() {
     let mut w = world();
     w.initialize_village(PlayerId(0), TileCoord::new(64, 64))
         .unwrap();
-    w.remove_animals(AnimalKind::Wolf);
+    for kind in [
+        AnimalKind::Wolf,
+        AnimalKind::Sheep,
+        AnimalKind::Boar,
+        AnimalKind::Deer,
+    ] {
+        w.remove_animals(kind);
+    }
     let tc = w
         .buildings()
         .find(|b| b.kind == BuildingKind::TownCenter)
@@ -99,8 +106,10 @@ fn wolf_kit_skips_a_large_disconnected_pocket_even_with_local_walking_room() {
         .tile_floor();
     w.initialize_wildlife(center, root);
     assert!(
-        !w.animals().any(|a| a.kind == AnimalKind::Wolf),
-        "all candidate starts are disconnected from the village"
+        !w.animals()
+            .any(|a| a.position.tile_floor().x.abs_diff(pocket.x) < 6
+                && a.position.tile_floor().y.abs_diff(pocket.y) < 6),
+        "no start animal may occupy a pocket disconnected from the village"
     );
 }
 

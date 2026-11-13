@@ -53,7 +53,12 @@ impl ResourceState {
             && self.changes.iter().all(|change| {
                 change.id & 1 == 0
                     && (change.id >> 37 == 0
-                        || (change.id & (1 << 37) != 0 && change.id >> 40 == 0))
+                        || (change.id & (1 << 37) != 0
+                            && if (change.id >> 38) & 3 == 1 {
+                                (1..=4).contains(&(change.id >> 40))
+                            } else {
+                                change.id >> 40 == 0
+                            }))
             })
             && self.changes.windows(2).all(|pair| pair[0].id < pair[1].id)
     }
