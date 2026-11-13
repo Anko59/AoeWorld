@@ -85,6 +85,9 @@ impl GameWorld {
             cache.clear();
         }
         self.navigation_cache.clear();
+        for cache in &mut self.economy.movement_ground {
+            cache.get_mut().unwrap_or_else(|e| e.into_inner()).clear();
+        }
         self.economy
             .naval_ground
             .get_mut()
@@ -117,6 +120,9 @@ impl GameWorld {
 
     pub(super) fn resource_collision_changed(&mut self) {
         self.navigation_cache.clear();
+        for cache in &mut self.economy.movement_ground {
+            cache.get_mut().unwrap_or_else(|e| e.into_inner()).clear();
+        }
         self.economy
             .naval_ground
             .get_mut()
@@ -180,6 +186,12 @@ impl GameWorld {
     }
 
     fn invalidate_collision_caches(&mut self, area: aoe_core::TileRect) {
+        for cache in &mut self.economy.movement_ground {
+            cache
+                .get_mut()
+                .unwrap_or_else(|e| e.into_inner())
+                .invalidate(area);
+        }
         self.economy
             .naval_ground
             .get_mut()

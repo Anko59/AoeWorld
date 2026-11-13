@@ -93,3 +93,48 @@ fn cached_ship_edges_observe_obstacles_in_the_neighboring_chunk() {
     world.collision_opened(TileRect::from_xywh(to.x, to.y, 1, 1));
     assert!(query_edge(&world));
 }
+
+#[test]
+fn movement_ground_keeps_land_and_water_separate_when_bridges_change() {
+    let mut world = coast();
+    let (_, water) = bank(&world);
+    let span = aoe_core::BridgeSpan::new(water, TileCoord::new(water.x + 4, water.y)).unwrap();
+    let tile = TileCoord::new(water.x + 2, water.y);
+    let next = TileCoord::new(tile.x + 1, tile.y);
+    for bridged in [false, true, false] {
+        let crate::Terrain::Map { overlay, .. } = &mut world.terrain else {
+            unreachable!()
+        };
+        if bridged {
+            overlay.add_bridge(span).unwrap();
+            world.collision_opened(span.footprint());
+        } else {
+            overlay.remove_bridge(span);
+            world.collision_closed(span.footprint());
+        }
+        assert_eq!(
+            world
+                .unit_tile_passable(UnitKind::Villager, tile, &|| false)
+                .unwrap(),
+            bridged
+        );
+        assert_eq!(
+            world
+                .unit_tile_passable(UnitKind::FishingShip, tile, &|| false)
+                .unwrap(),
+            !bridged
+        );
+        assert_eq!(
+            world
+                .unit_step_clear(UnitKind::Villager, tile, next)
+                .unwrap(),
+            bridged
+        );
+        assert_eq!(
+            world
+                .unit_step_clear(UnitKind::FishingShip, tile, next)
+                .unwrap(),
+            !bridged
+        );
+    }
+}
