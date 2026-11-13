@@ -198,8 +198,12 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
     if group_gathers {
         military.retain(|id| client.units[id].kind != UnitKind::Scout);
     }
-    let formation_move = military.len() > 1
-        && (queued || client.village.move_cursor || (enemy.is_none() && animal.is_none()));
+    let formation_move = sends_formation_order(
+        military.len(),
+        queued,
+        client.village.attack_move,
+        client.village.move_cursor || (enemy.is_none() && animal.is_none()),
+    );
     if formation_move {
         let sequence = client.next_sequence;
         let message = Message::FormationOrder {
@@ -334,6 +338,17 @@ pub(in super::super) fn focus_town_center(client: &mut Client, select: bool) {
             client.selected.building(id);
         }
     }
+}
+
+/// A group, or one unit queuing attack-move, travels as a formation order: only
+/// that path carries the attack-move flag onto a queued leg.
+pub(in super::super) const fn sends_formation_order(
+    military: usize,
+    queued: bool,
+    attack_move: bool,
+    plain_click: bool,
+) -> bool {
+    (military > 1 || (military == 1 && queued && attack_move)) && (queued || plain_click)
 }
 
 fn military(client: &Client) -> Vec<aoe_core::EntityId> {

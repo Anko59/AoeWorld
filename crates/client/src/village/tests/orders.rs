@@ -181,3 +181,25 @@ fn general_poses_use_mounted_hero_for_standing_walking_and_death() {
         Pose::GeneralDecay
     );
 }
+
+#[wasm_bindgen_test]
+fn one_unit_queued_attack_move_travels_as_a_formation_order() {
+    use super::village::orders::sends_formation_order as sends;
+    assert!(
+        sends(1, true, true, true),
+        "Shift attack-move keeps its flag"
+    );
+    assert!(
+        !sends(1, true, false, true),
+        "a plain queued move stays scalar"
+    );
+    assert!(
+        !sends(1, false, true, true),
+        "an unqueued single unit stays scalar"
+    );
+    assert!(sends(2, false, false, true), "a group still forms up");
+    assert!(
+        !sends(2, false, false, false),
+        "enemy clicks stay individual"
+    );
+}
