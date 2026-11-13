@@ -8,6 +8,8 @@ use surface::{appearance, material, soft_ground, tree_family};
 mod dressing;
 #[path = "chunks/memo.rs"]
 mod memo;
+#[path = "chunks/starting.rs"]
+mod starting;
 use crate::{
     Biome, CHUNK_TILES, DecorationFamily, EcologicalPalette, GroundMaterial, LandscapeAppearance,
     LandscapeChunk, LandscapeDecoration, LandscapeResource, LandscapeTile, NativeExposure,

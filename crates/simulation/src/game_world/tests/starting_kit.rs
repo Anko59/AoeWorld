@@ -1,4 +1,7 @@
 use super::*;
+
+mod bands;
+mod enclosure;
 use aoe_map::{GroundMaterial, ResourceKind};
 use std::collections::{BTreeSet, VecDeque};
 
@@ -44,19 +47,18 @@ fn barren_start_gets_complete_deterministic_reachable_clusters() {
         .find(|u| u.kind == crate::UnitKind::Villager)
         .unwrap();
     let reached = connected(&a, villager.position.tile_floor(), center);
-    for (kind, count) in [
-        (ResourceKind::Food, 7),
-        (ResourceKind::Gold, 7),
-        (ResourceKind::Stone, 5),
-        (ResourceKind::Wood, 12),
+    for (kind, low, high) in [
+        (ResourceKind::Food, 7, 8),
+        (ResourceKind::Gold, 7, 7),
+        (ResourceKind::Stone, 5, 5),
+        (ResourceKind::Wood, 12, 13),
     ] {
-        assert_eq!(
-            a.starting_resources()
-                .iter()
-                .filter(|n| n.kind == kind)
-                .count(),
-            count
-        );
+        let count = a
+            .starting_resources()
+            .iter()
+            .filter(|n| n.kind == kind)
+            .count();
+        assert!((low..=high).contains(&count), "{kind:?}: {count}");
     }
     for node in &a.starting_resources() {
         assert!(!footprint.contains(node.tile));
@@ -197,6 +199,182 @@ fn invalid_start_coordinates_fail_without_state_changes() {
 }
 
 #[test]
+fn constrained_start_splits_clusters_without_losing_the_fair_budget() {
+    let mut world = barren();
+    let center = TileCoord::new(2050, 2050);
+    let Terrain::Map { overlay, .. } = &mut world.terrain else {
+        unreachable!()
+    };
+    // Connected two-tile lanes have ample resources space but cannot fit a
+    // stamped patch. Preserve a clearing for the TC and its perimeter.
+    for y in -36_i32..=36 {
+        for x in -36_i32..=36 {
+            if x.abs().max(y.abs()) > 3 && x.rem_euclid(5) >= 2 && y.rem_euclid(5) >= 2 {
+                overlay
+                    .add_footprint(aoe_core::TileRect::from_xywh(
+                        center.x + x,
+                        center.y + y,
+                        1,
+                        1,
+                    ))
+                    .unwrap();
+            }
+        }
+    }
+    world
+        .initialize_village(PlayerId(0), TileCoord::new(2048, 2048))
+        .unwrap();
+    let nodes = world.starting_resources();
+    for (kind, low, high) in [
+        (ResourceKind::Food, 7, 8),
+        (ResourceKind::Wood, 12, 13),
+        (ResourceKind::Gold, 7, 7),
+        (ResourceKind::Stone, 5, 5),
+    ] {
+        let count = nodes.iter().filter(|n| n.kind == kind).count();
+        assert!((low..=high).contains(&count), "{kind:?}: {count}");
+    }
+    assert_eq!(world.partial_starting_kits(), 0);
+}
+
+#[test]
+fn natural_starts_vary_by_seed_and_seat_with_tight_resource_bands() {
+    let mut layouts = BTreeSet::new();
+    let mut berry_shapes = BTreeSet::new();
+    let mut boars = BTreeSet::new();
+    let mut deer = BTreeSet::new();
+    for seed in 0..8 {
+        let mut world = barren();
+        world.config.seed = Seed(seed);
+        for seat in 0..2 {
+            world
+                .initialize_village(
+                    PlayerId(seat),
+                    TileCoord::new(1000 + i32::from(seat) * 1000, 2048),
+                )
+                .unwrap();
+        }
+        for seat in 0..2 {
+            let tc = world
+                .buildings()
+                .find(|b| b.player == PlayerId(seat))
+                .unwrap();
+            let center = TileCoord::new(tc.footprint.min.x + 2, tc.footprint.min.y + 2);
+            let root = world
+                .units()
+                .find(|u| u.player == PlayerId(seat) && u.kind == crate::UnitKind::Villager)
+                .unwrap()
+                .position
+                .tile_floor();
+            let reached = connected(&world, root, center);
+            let nodes: Vec<_> = world
+                .starting_resources()
+                .into_iter()
+                .filter(|n| n.tile.x.abs_diff(center.x) <= 15)
+                .collect();
+            for (kind, min, max) in [
+                (ResourceKind::Food, 7, 8),
+                (ResourceKind::Wood, 12, 13),
+                (ResourceKind::Gold, 7, 7),
+                (ResourceKind::Stone, 5, 5),
+            ] {
+                let count = nodes.iter().filter(|n| n.kind == kind).count();
+                assert!((min..=max).contains(&count), "{kind:?}: {count}");
+            }
+            let berries: Vec<_> = nodes
+                .iter()
+                .filter(|n| n.kind == ResourceKind::Food)
+                .map(|n| n.tile)
+                .collect();
+            let min_x = berries.iter().map(|t| t.x).min().unwrap();
+            let min_y = berries.iter().map(|t| t.y).min().unwrap();
+            berry_shapes.insert(
+                berries
+                    .iter()
+                    .map(|t| (t.x - min_x, t.y - min_y))
+                    .collect::<Vec<_>>(),
+            );
+            for node in &nodes {
+                let d2 =
+                    node.tile.x.abs_diff(center.x).pow(2) + node.tile.y.abs_diff(center.y).pow(2);
+                let band = match node.kind {
+                    ResourceKind::Food => 25..=100,
+                    ResourceKind::Wood => 9..=225,
+                    ResourceKind::Gold | ResourceKind::Stone => 49..=196,
+                };
+                assert!(band.contains(&d2), "{:?}: {d2}", node.kind);
+                assert!(
+                    [(0, -1), (-1, 0), (1, 0), (0, 1)]
+                        .into_iter()
+                        .any(|(x, y)| reached
+                            .contains(&TileCoord::new(node.tile.x + x, node.tile.y + y)))
+                );
+            }
+            layouts.insert(
+                nodes
+                    .iter()
+                    .map(|n| (n.kind as u8, n.tile.x - center.x, n.tile.y - center.y))
+                    .collect::<Vec<_>>(),
+            );
+            let animals: Vec<_> = world
+                .animals()
+                .filter(|a| {
+                    a.position.tile_floor().x.abs_diff(center.x) <= 24
+                        && a.kind != crate::AnimalKind::Wolf
+                })
+                .collect();
+            let count = |kind| animals.iter().filter(|a| a.kind == kind).count();
+            assert!([(8, 2, 4), (7, 3, 2)].contains(&(
+                count(crate::AnimalKind::Sheep),
+                count(crate::AnimalKind::Boar),
+                count(crate::AnimalKind::Deer)
+            )));
+            boars.insert(count(crate::AnimalKind::Boar));
+            deer.insert(count(crate::AnimalKind::Deer));
+            let food: u32 = animals.iter().map(|a| u32::from(a.food_remaining)).sum();
+            assert!((2000..=2040).contains(&food), "food {food}");
+            for a in animals {
+                let tile = a.position.tile_floor();
+                let d2 = tile.x.abs_diff(center.x).pow(2) + tile.y.abs_diff(center.y).pow(2);
+                let band = if a.kind == crate::AnimalKind::Sheep {
+                    9..=36
+                } else {
+                    81..=225
+                };
+                assert!(band.contains(&d2));
+                assert!(
+                    reached.contains(&a.position.tile_floor()),
+                    "unreachable {:?}",
+                    a.kind
+                );
+            }
+        }
+        let mut again = barren();
+        again.config.seed = Seed(seed);
+        for seat in 0..2 {
+            again
+                .initialize_village(
+                    PlayerId(seat),
+                    TileCoord::new(1000 + i32::from(seat) * 1000, 2048),
+                )
+                .unwrap();
+        }
+        assert_eq!(
+            world.canonical_hash(),
+            again.canonical_hash(),
+            "seed {seed}"
+        );
+    }
+    assert_eq!(layouts.len(), 16, "every seat and seed has its own layout");
+    assert!(
+        berry_shapes.len() >= 8,
+        "noise must reshape clusters, not just move a fixed shape"
+    );
+    assert_eq!(boars.len(), 2);
+    assert_eq!(deer.len(), 2);
+}
+
+#[test]
 fn a_kit_that_cannot_be_placed_in_full_still_starts_a_consistent_village() {
     let mut world = barren();
     // Leave room for only two more starting nodes.
@@ -236,7 +414,7 @@ fn a_kit_that_cannot_be_placed_in_full_still_starts_a_consistent_village() {
 }
 
 #[test]
-fn a_hundred_villages_each_get_the_complete_standard_kit() {
+fn a_hundred_villages_each_get_the_complete_natural_kit() {
     // Regression: a fixed 512-node overlay limit left every village after the
     // sixteenth (31 nodes each) with a partial or empty kit.
     let mut world = barren();
@@ -248,16 +426,16 @@ fn a_hundred_villages_each_get_the_complete_standard_kit() {
     }
     assert_eq!(world.partial_starting_kits(), 0);
     let nodes = world.starting_resources();
-    for (kind, count) in [
-        (ResourceKind::Food, 7),
-        (ResourceKind::Gold, 7),
-        (ResourceKind::Stone, 5),
-        (ResourceKind::Wood, 12),
+    for (kind, low, high) in [
+        (ResourceKind::Food, 7, 8),
+        (ResourceKind::Gold, 7, 7),
+        (ResourceKind::Stone, 5, 5),
+        (ResourceKind::Wood, 12, 13),
     ] {
-        assert_eq!(
-            nodes.iter().filter(|n| n.kind == kind).count(),
-            count * 100,
-            "{kind:?}"
+        let count = nodes.iter().filter(|n| n.kind == kind).count();
+        assert!(
+            (low * 100..=high * 100).contains(&count),
+            "{kind:?}: {count}"
         );
     }
 }

@@ -36,9 +36,32 @@ test("a House completes over a stationary dying villager", async ({
     JSON.parse(
       (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
     ) as Actor[];
-  const start = await actors();
-  const boar = start.find((a) => a.kind === "Boar");
+  let start = await actors();
+  let boar = start.find((a) => a.kind === "Boar");
   if (!boar) throw new Error("Starting boar missing");
+  // Natural starts put the herd in a seeded direction. Zoom out until it sits
+  // clear of the bottom HUD panel (below y=512) so the order reaches the boar.
+  const size = page.viewportSize();
+  if (!size) throw new Error("Viewport missing");
+  const dy = boar.y - size.height / 2;
+  const fit = Math.min(
+    1,
+    (dy > 0 ? 120 : 280) / Math.max(1, Math.abs(dy)),
+    (size.width / 2 - 40) / Math.max(1, Math.abs(boar.x - size.width / 2)),
+  );
+  if (fit < 1) {
+    await page.evaluate(
+      (zoom) => {
+        location.hash = `zoom=${zoom}`;
+      },
+      (0.3 * fit * 0.9).toFixed(3),
+    );
+    await centerVillage(page);
+    await freshHud(page);
+    start = await actors();
+    boar = start.find((a) => a.id === boar?.id);
+    if (!boar) throw new Error("Starting boar missing after zoom");
+  }
   const hunter = start
     .filter((a) => a.kind === "Villager")
     .sort(

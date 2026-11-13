@@ -342,7 +342,9 @@ async fn gold_behind_a_tree_remains_a_resource_target() {
         subscription_revision: 1,
         from_revision: None,
         revision: 0,
-        changes: vec![tree, gold]
+        // Tree identities now carry the species in bits 40+, so a wood node
+        // sorts after gold; the wire requires ascending identities.
+        changes: [gold, tree]
             .into_iter()
             .map(|node| aoe_protocol::ResourceAmount {
                 id: node.id,

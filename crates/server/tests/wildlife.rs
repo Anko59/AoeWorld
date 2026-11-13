@@ -247,23 +247,39 @@ async fn a_military_hit_publishes_a_valid_retaliating_predator_in_the_same_tick(
             _ => None,
         };
         let mut target = initial.into_iter().find_map(predator);
-        // The starting predators are outside LOS. Discover their identities
-        // through real scout movement before issuing the combat order.
-        service
-            .queue_move(
-                session,
-                1,
-                EntityId(0),
-                aoe_core::WorldPosition::from_tile_center(TileCoord::new(center.x + 20, center.y))
+        // The starting predators are outside LOS. Their direction is seeded per
+        // village (natural starts), so the scout circles the village at 18 tiles
+        // and discovers them through real movement before the combat order.
+        let ring = [
+            (1, 0),
+            (1, 1),
+            (0, 1),
+            (-1, 1),
+            (-1, 0),
+            (-1, -1),
+            (0, -1),
+            (1, -1),
+        ];
+        'sweep: for (leg, (dx, dy)) in ring.into_iter().enumerate() {
+            service
+                .queue_move(
+                    session,
+                    1 + leg as u64,
+                    EntityId(0),
+                    aoe_core::WorldPosition::from_tile_center(TileCoord::new(
+                        center.x + dx * 18,
+                        center.y + dy * 18,
+                    ))
                     .unwrap(),
-            )
-            .await;
-        for _ in 0..1000 {
-            if target.is_some() {
-                break;
+                )
+                .await;
+            for _ in 0..250 {
+                if target.is_some() {
+                    break 'sweep;
+                }
+                service.tick().await;
+                target = drain(&mut rx).into_iter().find_map(predator);
             }
-            service.tick().await;
-            target = drain(&mut rx).into_iter().find_map(predator);
         }
         let debug = if target.is_none() {
             service.subscribe(session, 99, region).await;
@@ -282,14 +298,14 @@ async fn a_military_hit_publishes_a_valid_retaliating_predator_in_the_same_tick(
             panic!("scout must reveal the predator before attacking: {debug:?}")
         });
         service
-            .queue_attack(session, 2, EntityId(0), target.id)
+            .queue_attack(session, 9, EntityId(0), target.id)
             .await;
         let mut hit = false;
         for _ in 0..2000 {
             service.tick().await;
             for message in drain(&mut rx) {
                 if let GameplayServerMessage::CommandAck {
-                    sequence: 2,
+                    sequence: 9,
                     result,
                     ..
                 } = &message
