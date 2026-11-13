@@ -2,7 +2,7 @@ use super::Result;
 use serde_json::Value;
 use std::{
     fs::{self, OpenOptions},
-    io::Write,
+    io::{self, Write},
     path::{Path, PathBuf},
 };
 
@@ -77,11 +77,25 @@ pub(super) fn source_digest(root: &Path) -> Result<String> {
     paths.dedup();
     let mut hash = blake3::Hasher::new();
     for path in paths {
-        let bytes = fs::read(root.join(path))?;
+        // A tracked file deleted but not yet staged is still listed, so record
+        // the deletion instead of failing: the digest must describe the working
+        // tree that is about to be measured, staged or not.
+        let bytes = match fs::read(root.join(path)) {
+            Ok(bytes) => Some(bytes),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+        };
         hash.update(&(path.len() as u64).to_le_bytes());
         hash.update(path.as_bytes());
-        hash.update(&(bytes.len() as u64).to_le_bytes());
-        hash.update(&bytes);
+        match bytes {
+            Some(bytes) => {
+                hash.update(&(bytes.len() as u64).to_le_bytes());
+                hash.update(&bytes);
+            }
+            None => {
+                hash.update(&u64::MAX.to_le_bytes());
+            }
+        }
     }
     Ok(hash.finalize().to_hex().to_string())
 }

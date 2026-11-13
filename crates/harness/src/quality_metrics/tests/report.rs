@@ -93,6 +93,34 @@ fn source_content_identity_survives_staging_and_excludes_generated_history() {
 }
 
 #[test]
+fn source_identity_covers_a_tracked_file_deleted_but_not_staged() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    let git = |args: &[&str]| {
+        assert!(
+            std::process::Command::new("git")
+                .current_dir(root)
+                .args(args)
+                .status()
+                .unwrap()
+                .success()
+        )
+    };
+    git(&["init", "-q"]);
+    std::fs::create_dir(root.join("crates")).unwrap();
+    std::fs::write(root.join("crates/probe.rs"), "first").unwrap();
+    std::fs::write(root.join("crates/kept.rs"), "kept").unwrap();
+    git(&["add", "crates/probe.rs", "crates/kept.rs"]);
+    let both = source_digest(root).unwrap();
+    // An unstaged deletion still appears in the index listing: the digest must
+    // describe the tree about to be measured instead of refusing to read it.
+    std::fs::remove_file(root.join("crates/probe.rs")).unwrap();
+    let without = source_digest(root).unwrap();
+    assert_ne!(both, without, "a deletion must change the identity");
+    assert_eq!(without, source_digest(root).unwrap(), "and stay stable");
+}
+
+#[test]
 fn history_keeps_many_runs_within_the_repository_directory_file_limit() {
     let directory = tempfile::tempdir().unwrap();
     for _ in 0..30 {
