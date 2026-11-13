@@ -40,7 +40,9 @@ pub(super) fn rivers(name: &str) -> Option<Vec<RiverSegment>> {
         ],
         // One long river; its only crossing lies 50 tiles off the straight line.
         // The same river with no crossing at all.
-        "army-river" | "army-river-sealed" => vec![line((150, -2), (150, 652), 6)],
+        "army-river" => vec![line((150, -2), (150, 652), 6)],
+        // Seven tiles is wider than any ford can open, so the river stays sealed.
+        "army-river-sealed" => vec![line((150, -2), (150, 652), 7)],
         _ => return None,
     })
 }
