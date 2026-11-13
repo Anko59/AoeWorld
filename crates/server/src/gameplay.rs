@@ -28,7 +28,6 @@ mod frame;
 mod preparation;
 #[path = "gameplay/probe.rs"]
 pub(crate) mod probe;
-#[path = "gameplay/replay/mod.rs"]
 pub mod replay;
 #[path = "gameplay/scenarios/mod.rs"]
 mod scenarios;
