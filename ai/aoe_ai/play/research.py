@@ -6,6 +6,7 @@ from aoeworld import BuildingKind, Tech, UnitKind, tech_cost
 
 from ..context import Context
 from . import buildorder
+from .management import funding_reserve
 
 
 class ResearchManager:
@@ -47,7 +48,7 @@ class ResearchManager:
 
     def research(self, ctx: Context, tech: Tech, building) -> bool:
         key = "research:" + str(tech)
-        if building.researching is not None or ctx.board.cooling(key, ctx.tick):
+        if any(b.researching == tech for b in ctx.buildings) or building.researching is not None or ctx.board.cooling(key, ctx.tick):
             return False
         cost = tech_cost(tech)
         if ctx.can_afford(cost):
@@ -63,8 +64,9 @@ class ResearchManager:
 
     def upgrades(self, ctx: Context) -> None:
         eco = ctx.economy
+        reserve = funding_reserve(ctx)
         for tech, kind in buildorder.wanted_upgrades(ctx):
-            if eco.has_researched(tech) or ctx.board.cooling("research:" + str(tech), ctx.tick):
+            if eco.has_researched(tech) or any(b.researching == tech for b in ctx.buildings) or ctx.board.cooling("research:" + str(tech), ctx.tick):
                 continue
             builders = [b for b in ctx.buildings if b.kind == kind and b.complete and b.idle]
             cost = tech_cost(tech)
@@ -87,10 +89,26 @@ class ResearchManager:
                 ctx.spend(cost)
                 ctx.hold_town_center = True
                 return
-            if not builders:
+            if not first_army and any(reserve) and not ctx.can_afford(tuple(cost[i] + reserve[i] for i in range(4))):
                 continue
-            # Keep a float for units: upgrades only from a comfortable stockpile.
-            padded = cost if first_army else (cost[0] + 100, cost[1] + 75, cost[2], cost[3])
+            padded = cost if first_army else (cost[0] + 100, cost[1] + 75 + buildorder.castle_prerequisite_wood(ctx), cost[2], cost[3])
+            if (ctx.imperial and len(ctx.villagers) >= ctx.config.imperial_villagers
+                    and any(b.complete and b.kind == kind for b in ctx.buildings)
+                    and not ctx.can_afford(padded)):
+                ctx.spend(cost)
+                ctx.saving_castle = True
+                # Growth continues while a shortfall accumulates. Once the
+                # food price is present, keep it until the remaining gold arrives.
+                ctx.hold_town_center = ctx.economy.food >= cost[0] and cost[0] > 0
+                ctx.draining.add(kind)
+                return
+            if not builders:
+                if ctx.can_afford(padded):
+                    ctx.draining.add(kind)
+                    if kind == BuildingKind.TOWN_CENTER:
+                        ctx.hold_town_center = True
+                continue
+            # Keep a float for units after protecting the first management prices.
             if first_army:
                 # Fund the first Castle army before restarting villager spending.
                 ctx.hold_town_center = True

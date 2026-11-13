@@ -29,7 +29,7 @@ sdk-python-test: sdk-python-tools job-bootstrap
 	@$(JOB_RUN) sdk-python-test -- make --no-print-directory sdk-python-test-steps
 
 sdk-python-test-steps:
-	@$(SDK_RUN) cargo run --locked -p aoe-harness -- sdk-python test
+	@$(SDK_RUN) cargo run --locked -p aoe-harness -- sdk-python test $(SDK_PYTHON_TEST_ARGS)
 
 # Fast fake-world regressions; sdk-python-test remains the full integration gate.
 .PHONY: sdk-python-logic-test sdk-python-logic-test-steps

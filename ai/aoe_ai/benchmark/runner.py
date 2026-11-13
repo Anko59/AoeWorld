@@ -68,9 +68,9 @@ def viewer_files(root, setup):
 def source_hashes(root):
     paths = []
     for folder in ('ai/aoe_ai', 'crates/sdk/src', 'crates/sdk-python/src',
-                   'crates/server/src', 'crates/simulation/src', 'crates/map/src',
+                   'crates/sdk-python/python/aoeworld', 'crates/server/src', 'crates/simulation/src', 'crates/map/src',
                    'crates/protocol/src', 'crates/harness/src/sdk_python'):
-        paths.extend(p for p in (root / folder).rglob('*') if p.suffix in ('.py', '.rs'))
+        paths.extend(p for p in (root / folder).rglob('*') if p.suffix in ('.py', '.rs', '.pyi'))
     paths.extend(root / p for p in ('Cargo.lock', 'Cargo.toml', 'rust-toolchain.toml',
                                     'crates/sdk-python/Cargo.lock', 'make/sdk.mk'))
     return {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()

@@ -84,6 +84,9 @@ fn villager_capacity() -> u16 {
 }
 
 pub fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<Technology>()?;
+    module.add_function(wrap_pyfunction!(technologies, module)?)?;
+    module.add_function(wrap_pyfunction!(market_quote, module)?)?;
     module.add_function(wrap_pyfunction!(building_cost, module)?)?;
     module.add_function(wrap_pyfunction!(build_seconds, module)?)?;
     module.add_function(wrap_pyfunction!(building_size, module)?)?;
@@ -97,4 +100,30 @@ pub fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(tech_cost, module)?)?;
     module.add_function(wrap_pyfunction!(villager_capacity, module)?)?;
     Ok(())
+}
+
+/// Current public technology tree, without a separate Python rules table.
+#[pyclass(frozen, get_all)]
+#[derive(Clone)]
+struct Technology {
+    tech: Tech,
+    building: BuildingKind,
+    age: Age,
+    prerequisite: Option<Tech>,
+    building_count: usize,
+    building_kinds: Vec<BuildingKind>,
+}
+
+#[pyfunction]
+fn technologies() -> Vec<Technology> {
+    aoe_sdk::rules::technologies().into_iter().map(|row| Technology {
+        tech: row.tech.into(), building: row.building.into(), age: row.age.into(),
+        prerequisite: row.prerequisite.map(Into::into), building_count: row.building_count,
+        building_kinds: row.building_kinds.into_iter().map(Into::into).collect(),
+    }).collect()
+}
+
+#[pyfunction]
+fn market_quote(price: u16, buy: bool) -> u32 {
+    aoe_sdk::rules::market_quote(price, buy)
 }

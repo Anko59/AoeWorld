@@ -11,7 +11,7 @@ from .play.combat import CombatManager
 from .play import buildorder
 from .config import Config
 from .play.constructor import Constructor
-from .context import Context
+from .context import Context, OrderBudgetExhausted
 from .geometry import dist
 from .play.economy import EconomyManager
 from .blackboard import Blackboard
@@ -21,6 +21,7 @@ from .play.research import ResearchManager
 from .play.scouting import ScoutManager
 from .play.bridges import BridgeManager
 from .play.management import ManagementManager
+from .play.market import MarketManager
 
 #: Refusals that mean "this target will never work for this unit".
 HOPELESS = (
@@ -51,6 +52,7 @@ class Brain:
         self.combat = CombatManager()
         self.bridges = BridgeManager()
         self.management = ManagementManager()
+        self.market = MarketManager()
 
     def on_tick(self, client: Any, decision: Any) -> None:
         self.decide(client, decision)
@@ -67,36 +69,43 @@ class Brain:
         ctx.board.stats["villagers_peak"] = max(ctx.board.stats.get("villagers_peak", 0), len(ctx.villagers))
         if ctx.economy is None:
             return
-        # Priority order = spending order.
+        # Each stage gets an order slice; idle stages leave room for later work.
+        def run(limit, action):
+            if ctx.orders >= ctx.config.orders_per_decision:
+                return
+            ctx.order_limit = min(ctx.config.orders_per_decision, ctx.orders + limit)
+            try:
+                action(ctx)
+            except OrderBudgetExhausted:
+                pass
         self.constructor.refresh(ctx)
-        self.research.step(ctx)
-        self.bridges.step(ctx)
-        self.combat.step(ctx)
-        self.management.lead(ctx, self.combat)
-        # Rally existing soldiers before idle workers consume the shared route
-        # query budget. Queue spending follows the preparation priority below.
-        self.military.rally(ctx)
-        self.economy.produce(ctx)
-        self.constructor.houses(ctx)
-        self.management.step(ctx)
-        self.economy.wood_dropoff(ctx)
+        if ctx.center is not None and buildorder.imperial_ready(ctx) and buildorder.imperial_requirement_kinds(ctx) < 2:
+            run(1, self.constructor.production)
+            ctx.spent[1] += min(buildorder.imperial_prerequisite_wood(ctx), max(0, ctx.economy.wood - ctx.spent[1]))
+        run(2, self.research.step)
+        run(1, self.market.step)
+        run(14, self.combat.step)
+        run(2, lambda c: self.management.lead(c, self.combat))
+        run(2, self.military.rally)
+        run(2, self.scouts.step)
+        run(8, self.management.step)
+        run(5, self.economy.produce)
+        run(2, self.constructor.houses)
+        run(1, self.economy.wood_dropoff)
         if ((ctx.center is not None and ctx.center.researching == Tech.FEUDAL_AGE)
-                or (ctx.feudal and not ctx.castle
-                    and buildorder.castle_requirement_kinds(ctx) < 2)):
-            self.constructor.production(ctx)
-            # Protect the next unpaid prerequisite before lower-priority
-            # spending, without freezing surplus wood behind paid foundations.
+                or (ctx.feudal and not ctx.castle and buildorder.castle_requirement_kinds(ctx) < 2)):
+            run(1, self.constructor.production)
             ctx.spent[1] += buildorder.castle_prerequisite_wood(ctx)
         forming_army = (buildorder.wants_castle_food(ctx)
                         and ctx.board.stats.get("army_peak", 0) < ctx.config.castle_army_min)
         if forming_army:
-            self.military.train(ctx)
-        self.economy.work(ctx)
-        self.constructor.step(ctx)
+            run(4, self.military.train)
+        run(18, self.economy.work)
+        run(2, self.constructor.step)
         if not forming_army:
-            self.military.train(ctx)
-        self.naval.step(ctx)
-        self.scouts.step(ctx)
+            run(4, self.military.train)
+        run(1, self.naval.step)
+        run(1, self.bridges.step)
         self.board.bump("decisions")
 
     def note_damage(self, ctx: Context) -> None:
@@ -152,6 +161,10 @@ class Brain:
     def on_rejected(self, ctx: Context, tracked: Any, result: Any) -> None:
         mem = ctx.board
         name, args = tracked.name, tracked.args
+        if name in ("steward_settings", "vassal_development"):
+            mem.manager_settings.pop(args[0], None)
+        elif name == "general_train":
+            mem.general_training.pop(args[0], None)
         if result == CommandResult.REJECTED_WORLD_LIMIT:
             # The world is full, not the site or target: wait, then try again.
             mem.cool("world-limit:" + name, ctx.tick, ctx.config.world_limit_wait_seconds * ctx.world.tick_hz)

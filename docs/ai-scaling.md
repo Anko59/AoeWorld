@@ -122,3 +122,100 @@ during it. It establishes a reproducible behavior baseline; it does not
 establish 100-player performance or dedicated hardware qualification.
 The earlier `.cache/ai-scaling/baseline.json` attempt was stopped after
 detecting absent arena tick records; it is incomplete and is excluded.
+
+## Kingdom development
+
+The default workforce target grows with completed Town Centers. The next Town
+Center target grows with surviving villagers, so losing a center or workforce
+reopens production and construction. Expansion searches around living centers
+and checks separation from every existing center. Gathering, farms, houses and
+production use the surrounding settlements instead of a permanent first-base
+radius. Castle and production counts grow with the settlement count.
+
+Stewards, Vassals and Generals are enabled by default. Ordinary SDK controls
+activate Steward training, pause management spending while research or another
+manager is being funded, and enable Vassal fortification once Castle reserves
+are satisfied. A small local workforce is reserved for Vassal construction.
+Research plans read the complete current technology tree from Rust, including
+age and technology prerequisites, and reserve late-game upgrade prices ahead
+of continuous military production. Markets trade one lot per eight game
+seconds and use observed prices including the server's commission. Sale
+proceeds are available only after the next authoritative observation.
+
+The host issues at most 40 orders per decision (80 per game second at the
+default two decisions per second). Each manager gets a bounded share and build
+site queries have a shared four-query budget. Town Center and military queues
+rotate through the owned production buildings. Manager and fortification counts complement
+the host command counts.
+
+The SDK exposes `technologies()`, `market_quote(price, buy)`,
+`Client.steward_settings(unit, weights, cap=100, training=True)` and
+`Client.vassal_development(unit, enabled)`. The Python layer converts types;
+canonical prices and technology requirements stay in Rust. Run the focused
+binding regressions with:
+
+```sh
+make sdk-python-test SDK_PYTHON_TEST_ARGS=--bindings-only
+make sdk-python-logic-test
+make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-sdk AOE_NATIVE_TEST_FILTER='test(technology_catalog_covers) | test(management_settings_use) | test(market_quotes_include) | test(rules::) | test(orders::) | test(steward::)'
+```
+
+The benchmark additionally reports completed Castles, towers, wall/gate segments
+and management-unit counts. Forest clearing, island transports, bridges and
+forward force projection remain separate follow-up increments.
+
+The first scaling prototype was stopped after its 60-minute checkpoint:
+median population 161.5, Town Centers 2, age 2.5. Its modest population gain and
+absence of Stewards/Generals exposed research and management spending
+starvation. `.cache/ai-scaling/scaling.json` remains incomplete and is excluded
+from the final comparison. Queue drains now require the padded research price;
+science preserves the first managers' prices, and Imperial prerequisites are
+funded before more farms and drop-offs.
+
+The subsequent priority prototype reached median population 156.5, Town Centers
+2 and age 2.5 at 60 minutes, with management units active. It was also stopped
+and remains incomplete in `.cache/ai-scaling/scaling-priority.json`. The next
+workload uses a 30-villager expansion trigger, preserves a 100-wood float for
+essential work, and pauses further army spending while an established army
+protects an unpaid expansion. Defeated workforces can still re-boom.
+
+## Budget-limited kingdom measurement
+
+The four-hour session budget ended before the final 120-minute checkpoint.
+The growth tree remains unqualified for the full requested win condition.
+Its source/configuration and observed prefix remain in
+`.cache/ai-scaling/scaling-growth.json` and the adjacent `.ticks.jsonl`.
+
+| minute | version | median pop | median TCs | median age | median techs | median settled cells |
+| --- | --- | --- | --- | --- | --- | --- |
+| 30 | baseline | 57 | 1 | 1.5 | 4 | 2 |
+| 30 | kingdom | 53 | 1 | 2 | 4 | 1.5 |
+| 60 | baseline | 155 | 1 | 2 | 5 | 2 |
+| 60 | kingdom | 173 | 3 | 3 | 5 | 3 |
+| 120 | baseline | 292 | 1 | 2 | 9 | 2 |
+| 120 | kingdom | not measured | not measured | not measured | not measured | not measured |
+
+Age rank: Dark=0, Feudal=1, Castle=2, Imperial=3. The observed 60-minute
+population gain is 12%, with three times as many Town Centers and a full
+age-tier increase. No towers or walls were observed at that checkpoint.
+A separate observation at 92.43 minutes confirmed two completed watchtowers,
+86 completed stone-wall segments and two completed stone gates for slot 1.
+Near 89.57 minutes, an extra live observation had median population 315,
+median Town Centers 4 and all four players in Imperial Age. These extra
+observations do not replace the missing 120-minute checkpoint.
+
+| minute | slot | pop | TCs | cells | age | techs | food / wood / gold / stone | military | kills |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 30 | 0 | 73 | 2 | 3 | Castle | 4 | 338 / 80 / 505 / 170 | 33 | 0 |
+| 30 | 1 | 53 | 1 | 1 | Castle | 5 | 163 / 51 / 257 / 190 | 22 | 0 |
+| 30 | 2 | 53 | 1 | 1 | Castle | 4 | 213 / 225 / 334 / 180 | 21 | 0 |
+| 30 | 3 | 41 | 1 | 2 | Feudal | 2 | 2888 / 3 / 585 / 790 | 10 | 0 |
+| 60 | 0 | 213 | 3 | 4 | Imperial | 5 | 466 / 18 / 657 / 440 | 135 | 0 |
+| 60 | 1 | 179 | 3 | 3 | Imperial | 6 | 733 / 841 / 1342 / 170 | 115 | 0 |
+| 60 | 2 | 167 | 2 | 2 | Imperial | 5 | 1128 / 92 / 910 / 1287 | 110 | 3 |
+| 60 | 3 | 94 | 3 | 3 | Castle | 4 | 1185 / 103 / 768 / 33 | 27 | 2 |
+
+Validation passed: 188 AI decision tests, 23 binding/local-server tests,
+13 focused Rust SDK tests, 4 harness tests and all required static gates.
+The actual 59.88-second after video is `.cache/showcase/ai-kingdom.webm`.
+Full suites, CI, 100-player scale and dedicated hardware remain unqualified.

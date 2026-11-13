@@ -1,7 +1,5 @@
 """Type stubs of the native module (kept in sync by hand; see tests/test_stubs.py)."""
-
 from typing import Callable, Optional, Sequence, Tuple
-
 class CombatStance:
     AGGRESSIVE: CombatStance
     DEFENSIVE: CombatStance
@@ -9,7 +7,6 @@ class CombatStance:
     NO_ATTACK: CombatStance
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
-
 class Formation:
     LINE: Formation
     BOX: Formation
@@ -17,13 +14,11 @@ class Formation:
     FLANK: Formation
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
-
 class GeneralState:
     IDLE: GeneralState
     MARCHING: GeneralState
     FIGHTING: GeneralState
     RETREATING: GeneralState
-
 class UnitKind:
     VILLAGER: UnitKind
     SCOUT: UnitKind
@@ -52,7 +47,6 @@ class UnitKind:
     GENERAL: UnitKind
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
-
 class BuildingKind:
     TOWN_CENTER: BuildingKind
     HOUSE: BuildingKind
@@ -81,7 +75,6 @@ class BuildingKind:
     ROAD: BuildingKind
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
-
 class ResourceKind:
     FOOD: ResourceKind
     WOOD: ResourceKind
@@ -89,14 +82,12 @@ class ResourceKind:
     STONE: ResourceKind
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
-
 class TradeResource:
     WOOD: TradeResource
     FOOD: TradeResource
     STONE: TradeResource
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
-
 class Tech:
     LOOM: Tech
     TOWN_WATCH: Tech
@@ -134,14 +125,12 @@ class Tech:
     WAR_GALLEY: Tech
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
-
 class Age:
     DARK: Age
     FEUDAL: Age
     CASTLE: Age
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
-
 class UnitTask:
     IDLE: UnitTask
     MOVING: UnitTask
@@ -158,7 +147,6 @@ class UnitTask:
     SEEDING: UnitTask
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
-
 class AnimalKind:
     SHEEP: AnimalKind
     DEER: AnimalKind
@@ -166,7 +154,6 @@ class AnimalKind:
     WOLF: AnimalKind
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
-
 class AnimalTask:
     IDLE: AnimalTask
     FLEEING: AnimalTask
@@ -175,14 +162,12 @@ class AnimalTask:
     CARCASS: AnimalTask
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
-
 class Visibility:
     UNEXPLORED: Visibility
     EXPLORED: Visibility
     VISIBLE: Visibility
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
-
 class CommandResult:
     ACCEPTED: CommandResult
     REJECTED_DISCONNECTED: CommandResult
@@ -226,12 +211,9 @@ class CommandResult:
     REJECTED_REQUIRES_IMPERIAL_AGE: CommandResult
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
-
-
 class AoeError(Exception): ...
 class ConnectionClosed(AoeError): ...
 class Refused(AoeError): ...
-
 class Unit:
     id: int
     owner: int
@@ -261,7 +243,6 @@ class Unit:
     def tile(self) -> tuple[int, int]: ...
     @property
     def health(self) -> float: ...
-
 class Building:
     id: int
     owner: int
@@ -421,6 +402,8 @@ class Client:
     def queue_move(self, unit: int, x: int, y: int) -> int: ...
     def general_move(self, unit: int, x: int, y: int) -> int: ...
     def general_train(self, unit: int, enabled: bool = True) -> int: ...
+    def steward_settings(self, unit: int, weights: Sequence[int], cap: int = 100, training: bool = True) -> int: ...
+    def vassal_development(self, unit: int, enabled: bool) -> int: ...
     def general_mix(self, unit: int, mix: Sequence[int]) -> int: ...
     def set_rally_resource(self, building: int, resource: int) -> int: ...
     def set_rally_building(self, building: int, target: int) -> int: ...
@@ -499,3 +482,14 @@ def unit_cost(kind: UnitKind) -> Cost: ...
 def train_seconds(kind: UnitKind) -> int: ...
 def tech_cost(tech: Tech) -> Cost: ...
 def villager_capacity() -> int: ...
+
+class Technology:
+    tech: Tech
+    building: BuildingKind
+    age: Age
+    prerequisite: Optional[Tech]
+    building_count: int
+    building_kinds: list[BuildingKind]
+
+def technologies() -> list[Technology]: ...
+def market_quote(price: int, buy: bool) -> int: ...

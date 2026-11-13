@@ -23,7 +23,7 @@ const TESTS: [(&str, &str); 2] = [
     ),
     ("ai/tests", "ai/pyproject.toml"),
 ];
-const LOGIC_TESTS: [&str; 11] = [
+const LOGIC_TESTS: [&str; 12] = [
     "ai/tests/test_geometry.py",
     "ai/tests/test_logic.py",
     "ai/tests/test_navigation.py",
@@ -35,6 +35,7 @@ const LOGIC_TESTS: [&str; 11] = [
     "ai/tests/test_imperial.py",
     "ai/tests/test_management.py",
     "ai/tests/benchmark",
+    "ai/tests/scaling",
 ];
 const AI_SOURCE: &str = "ai";
 const BINDINGS_TARGET: &str = "target/sdk-python";
@@ -49,7 +50,11 @@ pub(crate) enum Action {
     /// Build the release wheel into `target/wheels`.
     Build,
     /// Build a debug wheel and the server, then run pytest against a local server.
-    Test,
+    Test {
+        /// Exercise bindings against the local server without the long AI games.
+        #[arg(long)]
+        bindings_only: bool,
+    },
     /// Run only the example AI's fake-world decision regressions.
     LogicTest,
     /// Play seeded lockstep AI matches against an arena server and print JSON (`make ai-arena`).
@@ -81,7 +86,7 @@ pub(crate) fn run(action: Action) -> Result<(), Box<dyn Error>> {
             let wheel = build_wheel(&root, true, RELEASE_WHEELS)?;
             println!("built {}", wheel.display());
         }
-        Action::Test => test(&root)?,
+        Action::Test { bindings_only } => test(&root, bindings_only)?,
         Action::LogicTest => logic_test(&root)?,
         Action::Arena(args) => arena(&root, &args)?,
         Action::Benchmark(args) => benchmark::run(&root, &args)?,
@@ -136,9 +141,9 @@ fn logic_test(root: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn test(root: &Path) -> Result<(), Box<dyn Error>> {
+fn test(root: &Path, bindings_only: bool) -> Result<(), Box<dyn Error>> {
     let (server, python_path) = prepare(root)?;
-    for (tests, project) in TESTS {
+    for &(tests, project) in &TESTS[..if bindings_only { 1 } else { TESTS.len() }] {
         let rootdir = Path::new(project)
             .parent()
             .map_or(".".into(), |p| p.to_string_lossy());

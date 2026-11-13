@@ -78,3 +78,20 @@ fn benchmark_requires_a_real_package_and_has_bounded_player_and_time_arguments()
         .is_ok()
     );
 }
+
+#[test]
+fn bindings_can_be_tested_without_launching_long_ai_games() {
+    use clap::Parser;
+    #[derive(clap::Parser)]
+    struct Cli {
+        #[command(subcommand)]
+        action: Action,
+    }
+    let parsed = Cli::try_parse_from(["sdk", "test", "--bindings-only"]).unwrap();
+    assert!(matches!(
+        parsed.action,
+        Action::Test {
+            bindings_only: true
+        }
+    ));
+}

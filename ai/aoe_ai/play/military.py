@@ -51,6 +51,8 @@ class MilitaryManager:
         return have
 
     def train(self, ctx: Context) -> None:
+        if ctx.board.cooling("world-limit:train", ctx.tick):
+            return
         if ctx.home is None or ctx.saving_castle or not ctx.feudal or len(ctx.villagers) < ctx.config.army_min_villagers:
             return
         # Let wood accumulate for the second distinct Feudal building before
@@ -61,7 +63,12 @@ class MilitaryManager:
         mix = dict(ctx.config.army_mix)
         mix["KNIGHT"] = ctx.config.castle_knight_weight
         have = self.composition(ctx)
-        for building in ctx.buildings:
+        trainers = [b for b in ctx.buildings if b.kind in TRAINERS and b.complete]
+        if not trainers:
+            return
+        start = ctx.board.military_cursor % len(trainers)
+        ctx.board.military_cursor = (start + 4) % len(trainers)
+        for building in trainers[start:] + trainers[:start]:
             if building.kind not in TRAINERS or not building.complete:
                 continue
             if building.queue_length >= 2 or building.researching is not None or building.kind in ctx.draining:

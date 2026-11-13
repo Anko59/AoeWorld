@@ -1,5 +1,5 @@
 """Measurements of the ordinary Brain, without privileged decision inputs."""
-from aoeworld import BuildingKind
+from aoeworld import BuildingKind, UnitKind
 
 SETTLEMENTS = (BuildingKind.TOWN_CENTER, BuildingKind.CASTLE, BuildingKind.BARRACKS,
                BuildingKind.ARCHERY_RANGE, BuildingKind.STABLE, BuildingKind.SIEGE_WORKSHOP)
@@ -41,7 +41,15 @@ def measure(world, *, kills, orders):
     buildings = [b for b in world.my_buildings() if b.complete]
     sites = [dict(id=b.id, kind=str(b.kind).split('.')[-1], tile=list(b.center))
              for b in buildings if b.kind in SETTLEMENTS]
-    return dict(player=world.me, observed_tick=world.tick, population=eco.population,
+    units = {u.id: u.kind for u in world.my_units()}
+    units.update({entry[0]: entry[1] for b in buildings for entry in b.garrison})
+    management = {name: sum(kind == target for kind in units.values()) for name, target in (
+        ('stewards', UnitKind.STEWARD), ('vassals', UnitKind.VASSAL), ('generals', UnitKind.GENERAL))}
+    fortifications = dict(castles=sum(b.kind == BuildingKind.CASTLE for b in buildings),
+        towers=sum(b.kind == BuildingKind.WATCH_TOWER for b in buildings),
+        wall_segments=sum(b.kind in (BuildingKind.PALISADE_WALL, BuildingKind.STONE_WALL,
+            BuildingKind.PALISADE_GATE, BuildingKind.STONE_GATE) for b in buildings))
+    return dict(management=management, fortifications=fortifications, player=world.me, observed_tick=world.tick, population=eco.population,
                 town_centers=sum(b.kind == BuildingKind.TOWN_CENTER for b in buildings),
                 settled_cells=len({(b.center[0] // 64, b.center[1] // 64)
                                    for b in buildings if b.kind in SETTLEMENTS}),
