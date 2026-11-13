@@ -352,6 +352,8 @@ fn other_malformed_findings_still_fail_the_answer() {
     use super::super::protocol::Answer;
     let bad_severity = r#"{"findings":[{"file":"a.rs","severity":"huge","claim":"x"}]}"#;
     assert!(serde_json::from_str::<Answer>(bad_severity).is_err());
+    let numeric_claim = r#"{"findings":[{"file":"a.rs","severity":"major","claim":7}]}"#;
+    assert!(serde_json::from_str::<Answer>(numeric_claim).is_err());
     let unknown_key = r#"{"findings":[],"verdict":[]}"#;
     assert!(serde_json::from_str::<Answer>(unknown_key).is_err());
 }

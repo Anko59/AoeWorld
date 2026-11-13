@@ -148,3 +148,11 @@ fn a_passing_review_of_fixes_settles_what_failed_before_it() {
         0
     );
 }
+
+#[test]
+fn a_finding_that_names_no_file_stays_a_finding_that_can_block() {
+    let mut filter = Filter::new(Some(Lines::of(DIFF)));
+    let inside = filter.admit(vec![reported("", None), reported("elsewhere", Some(1))]);
+    assert_eq!(inside, vec![reported("", None)]);
+    assert_eq!(filter.outside, vec![reported("elsewhere", Some(1))]);
+}
