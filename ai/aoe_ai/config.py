@@ -18,9 +18,13 @@ class Config:
     build_bridges: bool = False
     bridge_retry_seconds: int = 30
 
+    #: Bound host-issued work below the server's 100 orders/game-second budget.
+    orders_per_decision: int = 40
+    site_queries_per_decision: int = 4
+
     # --- economy -----------------------------------------------------------
-    #: Stop training villagers at this count.
-    max_villagers: int = 60
+    #: Initial workforce target; each completed Town Center adds growth room.
+    base_villagers: int = 60
     #: Save 800 food and 200 gold after the Feudal production buildings stand.
     castle_villagers: int = 28
     castle_army_min: int = 12
@@ -54,6 +58,14 @@ class Config:
     wood_camp_contact_tiles: int = 2
     #: Never send a villager to a node farther than this from the Town Center.
     max_gather_distance: int = 70
+    workers_per_center: int = 60
+    expand_workers_per_center: int = 30
+    settlement_spacing: int = 28
+    market_interval_seconds: int = 8
+    market_gold_reserve: int = 1400
+    market_wood_reserve: int = 800
+    market_food_reserve: int = 1200
+    market_stone_reserve: int = 1400
     #: Hunting is considered while an animal is this close to the Town Center.
     hunt_distance: int = 30
     #: Farms wanted per food-assigned villager once hunting and foraging end.
@@ -150,24 +162,26 @@ class Config:
     castle_first: bool = False
 
     # --- management units (docs/economy/steward.md, docs/gameplay/general.md) --
-    #: Castles to raise (650 stone each) once in Castle Age; Vassals and
+    #: Minimum Castles (650 stone each); more settlements raise the target once in Castle Age; Vassals and
     #: Generals are trained there.
-    castles: int = 0
+    castles: int = 1
     #: Stone share of the villagers while a wanted Castle is unpaid.
     castle_stone_share: float = 0.15
-    #: Town Centers to raise (the first is the start's) and the villagers
+    #: Minimum Town Centers (the first is the start's) and the villagers
     #: from which the next is placed; each trains villagers.
     town_centers: int = 1
-    expand_villagers: int = 36
+    expand_villagers: int = 30
     expand_distance: int = 28
+    #: Keep camps and houses fundable while the next Town Center is saved for.
+    expansion_wood_float: int = 100
     #: Stewards to field (one per Town Center), from this many villagers.
-    stewards: int = 0
-    steward_min_villagers: int = 30
+    stewards: int = 1
+    steward_min_villagers: int = 40
     #: Leave villagers a Steward manages to the Steward (no gather orders).
-    defer_to_steward: bool = False
+    defer_to_steward: bool = True
     #: Vassals to field (one per Castle) and Generals in total.
-    vassals: int = 0
-    generals: int = 0
+    vassals: int = 1
+    generals: int = 1
     #: Save the next management unit's price ahead of army spending.
     save_for_management: bool = True
     save_seconds: int = 240

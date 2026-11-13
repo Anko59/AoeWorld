@@ -37,6 +37,10 @@ DROPOFFS = {
 }
 
 
+class OrderBudgetExhausted(Exception):
+    """End a manager's admitted work before sending an excess order."""
+
+
 class Context:
     """Everything a manager needs for one decision, computed once."""
 
@@ -58,8 +62,10 @@ class Context:
         self.buildings = decision.world.my_buildings()
         self.enemies = decision.world.visible_enemies()
         self.center = decision.world.town_center()
-        if self.center is not None and board.home is None:
+        if self.center is not None:
             board.home = self.center.center
+        elif self.villagers:
+            board.home = self.villagers[0].tile
         self.home: Optional[Tile] = self.center.center if self.center else board.home
         self.queued = sum(b.queue_length for b in self.buildings)
         self.spent = [0, 0, 0, 0]
@@ -74,6 +80,20 @@ class Context:
         self._spots: dict[Any, list] = {}
         self._land_routes: dict[tuple[Tile, Tile], Any] = {}
         self._land_queries = 0
+        self._site_queries = 0
+        self.orders = 0
+        self.order_limit = config.orders_per_decision
+        self.centers = [b.center for b in self.buildings if b.kind == BuildingKind.TOWN_CENTER and b.complete]
+        managers = {u.id for u in self.units} | {entry[0] for b in self.buildings for entry in b.garrison}
+        board.generals.intersection_update(managers)
+        building_ids = {b.id for b in self.buildings}
+        board.seated = {i: target for i, target in board.seated.items() if i in managers and target in building_ids}
+        board.manager_settings = {i: settings for i, settings in board.manager_settings.items() if i in managers}
+        board.general_training = {i: training for i, training in board.general_training.items() if i in managers}
+        # Recovery: until a Town Center is complete, Vassal reservations are released so the survivors can rebuild one.
+        recovering = not any(b.kind == BuildingKind.TOWN_CENTER and b.complete for b in self.buildings)
+        self.reserved_workers = (set() if recovering or not board.vassal_workers
+                                 else set().union(*board.vassal_workers.values()))
         army_ids = {unit.id for unit in self.army if unit.alive}
         board.marched = {i: tick for i, tick in board.marched.items() if i in army_ids}
         board.land_failures = {key: until for key, until in board.land_failures.items() if until > self.tick}
@@ -112,6 +132,15 @@ class Context:
             return None
         self._land_queries += 1
         return self.world.land_frontier(*origin, *target)
+
+    def find_build_site(self, *args):
+        if self._site_queries >= self.config.site_queries_per_decision:
+            return None
+        self._site_queries += 1
+        return self.world.find_build_site(*args)
+
+    def settlement_distance(self, tile):
+        return min((dist(tile, center) for center in self.centers), default=dist(tile, self.home) if self.home else 1e9)
 
     # ----- queries ---------------------------------------------------------
     @property
@@ -174,6 +203,7 @@ class Context:
         return all(have[i] - self.spent[i] >= cost[i] for i in range(4))
 
     def spend(self, cost: tuple[int, int, int, int]) -> None:
+        self.require_order_budget()
         for i in range(4):
             self.spent[i] += cost[i]
 
@@ -189,9 +219,14 @@ class Context:
         return self.economy.population_cap - self.economy.population - self.queued
 
     # ----- orders ----------------------------------------------------------
+    def require_order_budget(self):
+        if self.orders >= min(self.order_limit, self.config.orders_per_decision):
+            raise OrderBudgetExhausted()
+
     def order(self, name: str, *args: Any, **options: Any) -> int:
         """Send an order and remember it until its verdict arrives. Keyword
         options (for example ``attack_move=True``) go to the client as given."""
+        self.require_order_budget()
         if name in UNIT_ORDERS and args:
             first = args[0]
             self.busy.update(first if isinstance(first, (list, tuple)) else (first,))
@@ -201,6 +236,7 @@ class Context:
         if len(tracked) > 4096:
             for stale in sorted(tracked)[:1024]:
                 del tracked[stale]
+        self.orders += 1
         self.board.bump("orders")
         self.board.bump("order:" + name)
         return sequence

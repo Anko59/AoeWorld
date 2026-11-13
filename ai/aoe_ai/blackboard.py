@@ -100,6 +100,12 @@ class Blackboard:
     saving_tick: int = -10**9
     #: Management units ordered and still training: kind -> [(tick, units existing then)].
     producing: dict[str, list] = field(default_factory=dict)
+    vassal_workers: dict[int, set[int]] = field(default_factory=dict)
+    manager_settings: dict[int, tuple] = field(default_factory=dict)
+    general_training: dict[int, bool] = field(default_factory=dict)
+    military_cursor: int = 0
+    production_cursor: int = 0
+    expansion_cursor: int = 0
     hold_villagers_tick: int = -10**9
 
     def bump(self, name: str, amount: int = 1) -> None:

@@ -59,13 +59,10 @@ class Constructor:
         radius = radius or ctx.config.build_search_radius
         site = None
         # A cramped village (rivers, cliffs, forest) has no site close by: widen the search.
-        for reach in (radius, 2 * radius, 3 * radius):
-            for spacing in dict.fromkeys((gap, gap + 1, gap + 2, 0)):
-                found = ctx.world.find_build_site(kind, near[0], near[1], reach, spacing)
-                if found is not None and (str(kind), *found) not in ctx.board.bad_sites:
-                    site = found
-                    break
-            if site is not None:
+        for reach, spacing in ((radius, gap), (radius, 0), (2 * radius, gap), (3 * radius, 0)):
+            found = ctx.find_build_site(kind, near[0], near[1], reach, spacing)
+            if found is not None and (str(kind), *found) not in ctx.board.bad_sites:
+                site = found
                 break
         if site is None:
             ctx.board.bump("no_site:" + str(kind).split(".")[-1])
@@ -85,6 +82,7 @@ class Constructor:
             for v in ctx.villagers
             if v.task not in (UnitTask.BUILDING, UnitTask.SEEDING, UnitTask.FARMING)
             and v.id not in ctx.busy
+            and v.id not in ctx.reserved_workers
             and v.id not in ctx.board.farmers.values()
         ]
         return nearest(free, tile)
@@ -158,8 +156,9 @@ class Constructor:
             return
         if self.pending(ctx, BuildingKind.HOUSE) >= ctx.config.house_pending + (centers - 1):
             return
-        builder = self.builder_near(ctx, ctx.home)
-        if builder is not None and self.place(ctx, BuildingKind.HOUSE, ctx.home, [builder], gap=ctx.config.building_gap):
+        near = ctx.centers[-1] if ctx.centers else ctx.home
+        builder = self.builder_near(ctx, near)
+        if builder is not None and self.place(ctx, BuildingKind.HOUSE, near, [builder], gap=ctx.config.building_gap):
             ctx.board.bump("houses")
 
     def age_requirements(self, ctx: Context) -> None:
@@ -194,7 +193,9 @@ class Constructor:
             cost = building_cost(kind)
             if not ctx.can_afford((cost[0], cost[1] + ctx.config.wood_reserve, cost[2], cost[3])):
                 continue
-            builder = self.builder_near(ctx, ctx.home)
-            if builder is not None and self.place(ctx, kind, ctx.home, [builder], gap=ctx.config.building_gap):
+            trainers = [b for b in ctx.buildings if b.kind == BuildingKind.TOWN_CENTER and b.complete]
+            near = min(trainers, key=lambda c: sum(dist(c.center, b.center) < 24 for b in ctx.buildings if b.kind == kind)).center if trainers else ctx.home
+            builder = self.builder_near(ctx, near)
+            if builder is not None and self.place(ctx, kind, near, [builder], gap=ctx.config.building_gap):
                 ctx.board.cool("production", ctx.tick, 3 * ctx.world.tick_hz)
                 return

@@ -67,6 +67,18 @@ pub enum Order {
         unit: EntityId,
         enabled: bool,
     },
+    /// Configure an owned Steward using the ordinary management controls.
+    StewardSettings {
+        unit: EntityId,
+        weights: [u8; 4],
+        cap: u8,
+        training: bool,
+    },
+    /// Enable or pause an owned Vassal's fortification spending.
+    VassalDevelopment {
+        unit: EntityId,
+        enabled: bool,
+    },
     /// Set the General's unit-mix sliders, 0..=100 per role (infantry,
     /// archers, cavalry, siege, scouts).
     GeneralMix {
@@ -254,6 +266,23 @@ impl Order {
                 sequence,
                 entity_id: unit,
                 command: aoe_protocol::GeneralCommand::SetTraining { enabled },
+            },
+            Order::StewardSettings {
+                unit,
+                weights,
+                cap,
+                training,
+            } => M::StewardSettingsOrder {
+                sequence,
+                steward_id: unit,
+                weights,
+                cap,
+                training,
+            },
+            Order::VassalDevelopment { unit, enabled } => M::VassalDevelopmentOrder {
+                sequence,
+                vassal_id: unit,
+                enabled,
             },
             Order::GeneralMix { unit, mix } => M::GeneralOrder {
                 sequence,

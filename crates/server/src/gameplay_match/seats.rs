@@ -353,3 +353,73 @@ fn dry(
     tiles.retain(|tile| !open_sea(world, *tile) && Terrain::on_main_land(masses.as_ref(), *tile));
     tiles
 }
+
+/// Start at each supplied local anchor without the normal mainland or far-site
+/// fallback. The simulation still validates and chooses its nearby village kit.
+pub(super) fn place_explicit(
+    world: &mut GameWorld,
+    count: usize,
+    tiles: &[TileCoord],
+    placed: &AtomicUsize,
+    cancelled: &dyn Fn() -> bool,
+) -> Result<Vec<aoe_core::EntityId>, MatchError> {
+    if count == 0 || tiles.len() != count {
+        return Err(MatchError::SlotCount);
+    }
+    let side = world.config().width_tiles;
+    for (i, tile) in tiles.iter().enumerate() {
+        if !usable(side, 64, &tiles[..i], *tile) {
+            return Err(MatchError::NoStart(i));
+        }
+    }
+    let mut scouts = Vec::with_capacity(count);
+    let mut actual = Vec::with_capacity(count);
+    for (i, tile) in tiles.iter().enumerate() {
+        if cancelled() {
+            return Err(GameWorldError::StartSearchLimit.into());
+        }
+        let candidates = (0..=24)
+            .step_by(2)
+            .flat_map(|radius| ring_tiles(*tile, radius))
+            .filter(|candidate| usable(side, 32, &actual, *candidate));
+        let (settled, scout) = settle(world, PlayerId(i as u16), candidates, false, cancelled)?
+            .ok_or(MatchError::NoStart(i))?;
+        actual.push(settled);
+        scouts.push(scout);
+        placed.store(scouts.len(), Ordering::Release);
+    }
+    Ok(scouts)
+}
+
+/// Immutable natural wood in the 65-by-65 tile square around a start. Standard
+/// kit resources are simulation records and never enter this source count.
+pub(super) fn natural_wood_near(world: &GameWorld, at: TileCoord) -> Result<usize, MatchError> {
+    let Terrain::Map { generator, .. } = world.terrain() else {
+        return Ok(0);
+    };
+    let side = world.config().width_tiles;
+    let mut count = 0;
+    for y in ((at.y - 32).max(0) / aoe_map::CHUNK_TILES)
+        ..=((at.y + 32).min(side - 1) / aoe_map::CHUNK_TILES)
+    {
+        for x in ((at.x - 32).max(0) / aoe_map::CHUNK_TILES)
+            ..=((at.x + 32).min(side - 1) / aoe_map::CHUNK_TILES)
+        {
+            let chunk = generator
+                .landscape_chunk_with_cancel(x, y, &|| false)
+                .map_err(GameWorldError::Environment)?;
+            count += chunk
+                .resources
+                .iter()
+                .filter(|r| {
+                    r.node.kind == aoe_map::ResourceKind::Wood
+                        && (r.node.tile.x - at.x)
+                            .abs()
+                            .max((r.node.tile.y - at.y).abs())
+                            <= 32
+                })
+                .count();
+        }
+    }
+    Ok(count)
+}

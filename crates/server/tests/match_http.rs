@@ -271,3 +271,34 @@ async fn the_stats_endpoint_needs_the_secret_and_records_ticks() {
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert!(json["ticks"].as_array().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn explicit_benchmark_starts_are_reproducible_over_http() {
+    let address = server().await;
+    let request = serde_json::json!({"flat":{"tiles_per_side":300,"seed":3},
+        "seed":7,"slots":["ai","ai"],"start_tiles":[[60,60],[200,200]]});
+    let mut prior = None;
+    for _ in 0..2 {
+        let (status, body) = post(address, Some(SECRET), &request.to_string()).await;
+        assert_eq!(status, 200, "{body}");
+        let doc: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let starts: Vec<_> = doc["slots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| s["start_tile"].clone())
+            .collect();
+        if let Some(prior) = &prior {
+            assert_eq!(prior, &starts);
+        }
+        prior = Some(starts);
+        assert_eq!(doc["seed"], 7);
+        assert!(doc["slots"][0]["main_land"].is_boolean());
+    }
+    let invalid = serde_json::json!({"flat":{"tiles_per_side":300,"seed":3},
+        "slots":["ai","ai"],"start_tiles":[[60,60]]});
+    assert_eq!(
+        post(address, Some(SECRET), &invalid.to_string()).await.0,
+        400
+    );
+}

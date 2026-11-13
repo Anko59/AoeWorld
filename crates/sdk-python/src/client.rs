@@ -291,6 +291,13 @@ impl Client {
     fn general_mix(&self, unit: u32, mix: [u8; 5]) -> u64 {
         self.order(Order::GeneralMix { unit: EntityId(unit), mix })
     }
+    #[pyo3(signature = (unit, weights, cap=100, training=true))]
+    fn steward_settings(&self, unit: u32, weights: [u8; 4], cap: u8, training: bool) -> u64 {
+        self.order(Order::StewardSettings { unit: EntityId(unit), weights, cap, training })
+    }
+    fn vassal_development(&self, unit: u32, enabled: bool) -> u64 {
+        self.order(Order::VassalDevelopment { unit: EntityId(unit), enabled })
+    }
     fn set_rally_resource(&self, building: u32, resource: u64) -> u64 {
         self.order(Order::SetRally {
             building: EntityId(building),

@@ -159,3 +159,68 @@ mod passes;
 mod real_package;
 #[path = "tests/seats.rs"]
 mod seats;
+
+#[test]
+fn explicit_benchmark_starts_remain_local_and_never_fall_back_to_mainland() {
+    let (package, pages) = flat::package(flat::FlatMap {
+        tiles_per_side: 300,
+        seed: 3,
+    })
+    .unwrap();
+    let mut world = GameWorld::from_prepared_map(package, pages, vec![], vec![], vec![]).unwrap();
+    let starts = [TileCoord::new(60, 60), TileCoord::new(200, 200)];
+    let units =
+        super::seats::place_explicit(&mut world, 2, &starts, &AtomicUsize::new(0), &|| false)
+            .unwrap();
+    assert_eq!(units.len(), 2);
+    for (i, at) in starts.iter().enumerate() {
+        assert!(world.buildings().any(|b| {
+            b.player == PlayerId(i as u16)
+                && b.kind == aoe_simulation::BuildingKind::TownCenter
+                && (b.footprint.min.x - at.x)
+                    .abs()
+                    .max((b.footprint.min.y - at.y).abs())
+                    <= 32
+        }));
+    }
+}
+
+#[test]
+fn explicit_benchmark_starts_reject_count_bounds_and_overlap() {
+    let (package, pages) = flat::package(flat::FlatMap {
+        tiles_per_side: 300,
+        seed: 3,
+    })
+    .unwrap();
+    for starts in [
+        vec![],
+        vec![TileCoord::new(-1, 50), TileCoord::new(200, 200)],
+        vec![TileCoord::new(60, 60), TileCoord::new(61, 61)],
+    ] {
+        let mut world =
+            GameWorld::from_prepared_map(package.clone(), pages.clone(), vec![], vec![], vec![])
+                .unwrap();
+        assert!(
+            super::seats::place_explicit(&mut world, 2, &starts, &AtomicUsize::new(0), &|| false)
+                .is_err()
+        );
+    }
+}
+
+#[test]
+fn benchmark_forest_measurement_excludes_the_standard_kit_trees() {
+    let (package, pages) = flat::package(flat::FlatMap {
+        tiles_per_side: 300,
+        seed: 3,
+    })
+    .unwrap();
+    let mut world = GameWorld::from_prepared_map(package, pages, vec![], vec![], vec![]).unwrap();
+    let anchor = TileCoord::new(100, 100);
+    let before = super::seats::natural_wood_near(&world, anchor).unwrap();
+    world.initialize_village(PlayerId(0), anchor).unwrap();
+    assert!(!world.starting_resources().is_empty());
+    assert_eq!(
+        super::seats::natural_wood_near(&world, anchor).unwrap(),
+        before
+    );
+}

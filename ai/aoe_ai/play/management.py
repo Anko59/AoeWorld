@@ -27,6 +27,28 @@ def garrisoned(building: Any, kind: UnitKind) -> bool:
     return any(entry[1] == kind for entry in building.garrison)
 
 
+def funding_reserve(ctx):
+    """Protect the first available manager of each enabled kind from science."""
+    cfg = ctx.config
+    result = [0, 0, 0, 0]
+    if not cfg.save_for_management or not ctx.castle:
+        return tuple(result)
+    kinds = [(cfg.stewards and len(ctx.villagers) >= cfg.steward_min_villagers,
+              UnitKind.STEWARD, BuildingKind.TOWN_CENTER),
+             (cfg.vassals, UnitKind.VASSAL, BuildingKind.CASTLE),
+             (cfg.generals, UnitKind.GENERAL, BuildingKind.CASTLE)]
+    for enabled, kind, house in kinds:
+        if not enabled or not ctx.count(house, complete=True):
+            continue
+        present = any(u.kind == kind for u in ctx.units) or any(garrisoned(b, kind) for b in ctx.buildings)
+        pending = any(ctx.tick - tick < (train_seconds(kind) + 20) * ctx.world.tick_hz
+                      for tick, _ in ctx.board.producing.get(str(kind), []))
+        if not present and not pending:
+            for i, price in enumerate(unit_cost(kind)):
+                result[i] += price
+    return tuple(result)
+
+
 class ManagementManager:
     # ----- one decision ----------------------------------------------------
     def step(self, ctx: Context) -> None:
@@ -41,41 +63,47 @@ class ManagementManager:
         self.seat(ctx, UnitKind.VASSAL, BuildingKind.CASTLE)
         self.recruit(ctx)
         self.generals(ctx)
+        self.settings(ctx)
+        self.defenders(ctx)
 
     # ----- buildings -------------------------------------------------------
     def expand(self, ctx: Context) -> None:
         """A second (third...) Town Center on the way to the map centre."""
         cfg, board = ctx.config, ctx.board
         total = ctx.count(BuildingKind.TOWN_CENTER) + sum(1 for p in board.plans if p.kind == BuildingKind.TOWN_CENTER)
-        if (total >= cfg.town_centers or len(ctx.villagers) < cfg.expand_villagers or not ctx.castle
+        if (total >= buildorder.wanted_centers(ctx) or (total > 0 and (len(ctx.villagers) < cfg.expand_villagers or not ctx.castle))
                 or board.cooling("expand", ctx.tick)):
             return
         cost = building_cost(BuildingKind.TOWN_CENTER)
         if not ctx.can_afford(cost):
             # Castle Age is bought: keep the wood back for the Town Center, shares lean to wood.
             have = (ctx.economy.food, ctx.economy.wood, ctx.economy.gold, ctx.economy.stone)
-            ctx.spent[1] += max(0, min(cost[1], have[1] - ctx.spent[1]))
+            ctx.spent[1] += max(0, min(cost[1], have[1] - ctx.spent[1] - cfg.expansion_wood_float))
+            if total == 0 or len(ctx.army) + len(ctx.led) >= cfg.imperial_army_min:
+                ctx.saving_castle = True
             board.bump("saving_for_town_center")
             return
-        width, height = ctx.world.map_size
-        d = max(1.0, dist(ctx.home, (width // 2, height // 2)))
-        toward = math.atan2(height // 2 - ctx.home[1], width // 2 - ctx.home[0])
-        ring = cfg.expand_distance * (1 + total // 6)
-        tried = 0
-        for turn in (0, 1, -1, 2, -2, 3):
-            angle = toward + turn * math.pi / 3 + (total % 6) * 0.2
-            near = clamp_tile((round(ctx.home[0] + math.cos(angle) * ring), round(ctx.home[1] + math.sin(angle) * ring)),
-                              ctx.world.map_size)
-            if near in board.bad_moves or ctx.land_route(ctx.home, near) is None:
+        centers = [b.center for b in ctx.buildings if b.kind == BuildingKind.TOWN_CENTER]
+        if not centers and not ctx.villagers:
+            return  # nobody left to build with; the rest of the decision continues
+        origin = centers[board.expansion_cursor % len(centers)] if centers else ctx.villagers[0].tile
+        board.expansion_cursor += 1
+        toward = math.atan2(ctx.world.map_size[1] // 2 - origin[1], ctx.world.map_size[0] // 2 - origin[0])
+        for turn in range(6):
+            angle = toward + (turn + board.expansion_cursor % 6) * math.pi / 3
+            near = clamp_tile((round(origin[0] + math.cos(angle) * cfg.settlement_spacing * 1.6),
+                               round(origin[1] + math.sin(angle) * cfg.settlement_spacing * 1.6)), ctx.world.map_size)
+            if total == 0:
+                near = origin
+            if any(dist(near, c) < cfg.settlement_spacing for c in centers):
+                continue
+            if ctx.land_route(origin, near) is None:
                 continue
             builders = self.builders(ctx, near, 4)
-            tried += 1
-            if builders and self.place(ctx, BuildingKind.TOWN_CENTER, near, builders, 10):
+            if builders and self.place(ctx, BuildingKind.TOWN_CENTER, near, builders, 8):
                 board.bump("expansions")
                 board.cool("expand", ctx.tick, 40 * ctx.world.tick_hz)
                 return
-            if tried >= 3:
-                break
         board.cool("expand", ctx.tick, 20 * ctx.world.tick_hz)
 
     def castles(self, ctx: Context) -> None:
@@ -83,20 +111,21 @@ class ManagementManager:
         if not cfg.castles or not ctx.castle or board.cooling("castle", ctx.tick):
             return
         total = ctx.count(BuildingKind.CASTLE) + sum(1 for p in board.plans if p.kind == BuildingKind.CASTLE)
-        if total >= cfg.castles:
+        if total >= buildorder.wanted_castles(ctx):
             return
         cost = building_cost(BuildingKind.CASTLE)
         if not ctx.can_afford(cost):
             return
-        builders = self.builders(ctx, ctx.home, 5)
-        if builders and self.place(ctx, BuildingKind.CASTLE, ctx.home, builders, 24, 2):
+        near = (ctx.centers or [ctx.home])[total % max(1, len(ctx.centers))]
+        builders = self.builders(ctx, near, 5)
+        if builders and self.place(ctx, BuildingKind.CASTLE, near, builders, 24, 2):
             board.bump("castles_placed")
         board.cool("castle", ctx.tick, 10 * ctx.world.tick_hz)
 
     def builders(self, ctx: Context, tile: Tile, count: int) -> list:
         free = sorted((v for v in ctx.villagers if v.alive and v.id not in ctx.busy
                        and v.task not in (UnitTask.BUILDING, UnitTask.SEEDING, UnitTask.FARMING)
-                       and v.id not in ctx.board.farmers.values()),
+                       and v.id not in ctx.board.farmers.values() and v.id not in ctx.reserved_workers),
                       key=lambda v: dist(v.tile, tile))
         return free[:count]
 
@@ -106,13 +135,13 @@ class ManagementManager:
         if ctx.board.cooling("world-limit:build", ctx.tick) or not ctx.try_spend(building_cost(kind)):
             return False
         site = None
-        for reach in (radius, 2 * radius):
-            for extra in (0, 1, 2):
-                found = ctx.world.find_build_site(kind, near[0], near[1], reach, gap + extra)
-                if found is not None and (str(kind), *found) not in ctx.board.bad_sites:
-                    site = found
-                    break
-            if site is not None:
+        for reach, spacing in ((radius, gap), (radius, 0), (2 * radius, gap), (2 * radius, 0)):
+            found = ctx.find_build_site(kind, near[0], near[1], reach, spacing)
+            if (found is not None and (str(kind), *found) not in ctx.board.bad_sites
+                    and (kind != BuildingKind.TOWN_CENTER or all(
+                        dist(found, b.center) >= ctx.config.settlement_spacing
+                        for b in ctx.buildings if b.kind == kind))):
+                site = found
                 break
         if site is None:
             cost = building_cost(kind)
@@ -147,12 +176,12 @@ class ManagementManager:
 
     def recruit(self, ctx: Context) -> None:
         cfg, board = ctx.config, ctx.board
-        if not ctx.castle:
+        if not ctx.castle or (ctx.hold_town_center and ctx.saving_castle):
             return
         # Stewards: one per Town Center, from enough villagers.
         if cfg.stewards and len(ctx.villagers) >= cfg.steward_min_villagers:
             have = self.fielded(ctx, UnitKind.STEWARD) + self.in_production(ctx, UnitKind.STEWARD)
-            if have < min(cfg.stewards, ctx.count(BuildingKind.TOWN_CENTER, complete=True)):
+            if have < min(max(cfg.stewards, math.ceil(len(ctx.villagers) / 80)), ctx.count(BuildingKind.TOWN_CENTER, complete=True)):
                 self.train(ctx, BuildingKind.TOWN_CENTER, UnitKind.STEWARD,
                            lambda b: not garrisoned(b, UnitKind.STEWARD))
         castles_ok = ctx.count(BuildingKind.CASTLE, complete=True) > 0
@@ -161,9 +190,9 @@ class ManagementManager:
         vassals = sum(1 for u in ctx.units if u.kind == UnitKind.VASSAL) + sum(
             1 for b in ctx.buildings if b.kind == BuildingKind.CASTLE and garrisoned(b, UnitKind.VASSAL))
         queued = sum(1 for b in ctx.buildings if b.kind == BuildingKind.CASTLE and b.queue_length)
-        if vassals + queued < min(cfg.vassals, ctx.count(BuildingKind.CASTLE, complete=True)):
+        if vassals + queued < (max(cfg.vassals, ctx.count(BuildingKind.CASTLE, complete=True)) if cfg.vassals else 0):
             self.train(ctx, BuildingKind.CASTLE, UnitKind.VASSAL, lambda b: not garrisoned(b, UnitKind.VASSAL))
-        elif cfg.generals and sum(1 for u in ctx.units if u.kind == UnitKind.GENERAL) + queued < cfg.generals:
+        elif cfg.generals and sum(1 for u in ctx.units if u.kind == UnitKind.GENERAL) + queued < max(cfg.generals, ctx.count(BuildingKind.CASTLE, complete=True)):
             self.train(ctx, BuildingKind.CASTLE, UnitKind.GENERAL, lambda b: True)
 
     def fielded(self, ctx: Context, kind: UnitKind) -> int:
@@ -229,21 +258,66 @@ class ManagementManager:
             ctx.spent[i] += max(0, min(cost[i], have[i] - ctx.spent[i]))
         board.bump("saving_for_management")
 
+    def defenders(self, ctx):
+        """Keep a small local workforce available for native Vassal fortification."""
+        castles = [b for b in ctx.buildings if b.complete and b.kind == BuildingKind.CASTLE
+                   and garrisoned(b, UnitKind.VASSAL)]
+        if not any(b.kind == BuildingKind.TOWN_CENTER and b.complete for b in ctx.buildings):
+            return  # recovery: workers stay free to rebuild the Town Center
+        alive = {u.id for u in ctx.villagers}
+        board = ctx.board
+        board.vassal_workers = {b.id: board.vassal_workers.get(b.id, set()) & alive for b in castles}
+        for castle in castles:
+            workers = board.vassal_workers[castle.id]
+            if len(workers) >= 8:
+                continue
+            near = (castle.x - 3, castle.y - 3)
+            candidates = sorted((v for v in ctx.villagers if v.id not in ctx.busy
+                                 and v.id not in ctx.reserved_workers
+                                 and v.task not in (UnitTask.BUILDING, UnitTask.FARMING, UnitTask.SEEDING)
+                                 and dist(v.tile, castle.center) < 90), key=lambda v: dist(v.tile, castle.center))
+            for worker in candidates[:8 - len(workers)]:
+                if ctx.land_route(worker.tile, near) is None:
+                    continue
+                ctx.order("move", worker.id, *near)
+                workers.add(worker.id)
+                ctx.reserved_workers.add(worker.id)
+
+    def settings(self, ctx):
+        """Apply ordinary UI management switches once per change."""
+        from .economy import EconomyManager
+        shares = EconomyManager(None).shares(ctx)
+        weights = tuple(round(shares.get(k, 0) * 100) for k in ("FOOD", "WOOD", "GOLD", "STONE"))
+        training = not (ctx.hold_town_center or ctx.board.hold_villagers_tick == ctx.tick)
+        for b in ctx.buildings:
+            for entry in b.garrison:
+                unit, kind = entry[:2]
+                if kind == UnitKind.STEWARD:
+                    desired = (weights, 100, training)
+                    if ctx.board.manager_settings.get(unit) != desired:
+                        ctx.order("steward_settings", unit, list(weights), 100, training)
+                        ctx.board.manager_settings[unit] = desired
+                elif kind == UnitKind.VASSAL:
+                    enabled = ctx.count(BuildingKind.CASTLE) >= buildorder.wanted_castles(ctx)
+                    desired = (enabled,)
+                    if ctx.board.manager_settings.get(unit) != desired:
+                        ctx.order("vassal_development", unit, enabled)
+                        ctx.board.manager_settings[unit] = desired
+
     # ----- Generals ----------------------------------------------------------
     def generals(self, ctx: Context) -> None:
         cfg, board = ctx.config, ctx.board
         for general in (u for u in ctx.units if u.kind == UnitKind.GENERAL and u.alive):
+            enabled = cfg.general_train and not (ctx.saving_castle or ctx.draining)
             if general.id not in board.generals:
-                board.generals.add(general.id)
-                if cfg.general_train:
-                    ctx.order("general_train", general.id, True)
                 ctx.order("general_mix", general.id, list(cfg.general_mix))
-            elif (cfg.general_train and general.army_size is not None and general.army_size < cfg.general_refill_below
-                  and not board.cooling(f"gtrain:{general.id}", ctx.tick)):
-                # A full army switches the Train button off for good: press it again after losses.
-                ctx.order("general_train", general.id, True)
+                board.generals.add(general.id)
+            if (board.general_training.get(general.id) != enabled
+                    or (enabled and general.army_size is not None and general.army_size < cfg.general_refill_below
+                        and not board.cooling(f"gtrain:{general.id}", ctx.tick))):
+                ctx.order("general_train", general.id, enabled)
+                board.general_training[general.id] = enabled
                 board.cool(f"gtrain:{general.id}", ctx.tick, 30 * ctx.world.tick_hz)
-                board.bump("general_refills")
         # `army_size` only counts the commanded soldiers; the General seat comes first.
         board.stats["led_peak"] = max(board.stats.get("led_peak", 0), sum(u.army_size or 0 for u in ctx.units if u.kind == UnitKind.GENERAL))
 

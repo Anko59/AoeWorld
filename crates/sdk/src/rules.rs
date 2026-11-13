@@ -235,3 +235,70 @@ pub fn villager_capacity() -> u16 {
 pub fn population_per_house() -> u16 {
     sim::BuildingKind::House.rules().population_support
 }
+
+/// One entry of the current public technology tree, including prerequisites.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Technology {
+    pub tech: Tech,
+    pub building: BuildingKind,
+    pub age: crate::Age,
+    pub prerequisite: Option<Tech>,
+    pub building_count: usize,
+    pub building_kinds: Vec<BuildingKind>,
+}
+
+pub fn technologies() -> Vec<Technology> {
+    sim::TECH_RULES
+        .iter()
+        .filter_map(|row| {
+            let tech = Tech::ALL
+                .into_iter()
+                .find(|t| native_tech(*t) == row.tech)?;
+            let building = BuildingKind::ALL
+                .into_iter()
+                .find(|b| native_building(*b) == row.building)?;
+            let mut result = Technology {
+                tech,
+                building,
+                age: public_age(row.age),
+                prerequisite: None,
+                building_count: 0,
+                building_kinds: Vec::new(),
+            };
+            match row.requires {
+                sim::TechRequirement::Technology(required) => {
+                    result.prerequisite =
+                        Tech::ALL.into_iter().find(|t| native_tech(*t) == required);
+                }
+                sim::TechRequirement::BuildingKinds { count, kinds } => {
+                    result.building_count = count;
+                    result.building_kinds = BuildingKind::ALL
+                        .into_iter()
+                        .filter(|b| kinds.contains(&native_building(*b)))
+                        .collect();
+                }
+                sim::TechRequirement::Age(age) => result.age = public_age(age),
+                sim::TechRequirement::None => {}
+            }
+            Some(result)
+        })
+        .collect()
+}
+
+/// Gold charged or paid for one ordinary 100-unit market trade.
+pub fn market_quote(price: u16, buy: bool) -> u32 {
+    if buy {
+        sim::MARKET_RULES.buy_cost(price)
+    } else {
+        sim::MARKET_RULES.sell_proceeds(price)
+    }
+}
+
+fn public_age(age: sim::Age) -> crate::Age {
+    match age {
+        sim::Age::Dark => crate::Age::Dark,
+        sim::Age::Feudal => crate::Age::Feudal,
+        sim::Age::Castle => crate::Age::Castle,
+        sim::Age::Imperial => crate::Age::Imperial,
+    }
+}

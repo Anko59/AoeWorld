@@ -103,12 +103,14 @@ impl ProbeArmy {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct MatchRules {
     pub start_units: StartUnits,
     /// Seeds which village each slot gets (and the human's seat in it). `None`
     /// keeps the canonical layout; a hosted match gets a fresh seed.
     pub seed: Option<u64>,
+    /// Optional local start anchors for reproducible scenario benchmarks.
+    pub start_tiles: Option<Vec<TileCoord>>,
 }
 
 impl MatchRules {
@@ -128,6 +130,7 @@ impl MatchRules {
         Ok(Self {
             start_units,
             seed: None,
+            start_tiles: None,
         })
     }
 

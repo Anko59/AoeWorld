@@ -8,8 +8,6 @@ mixed army. The managers only *execute* this plan.
 
 from __future__ import annotations
 
-from typing import Callable
-
 from aoeworld import BuildingKind, Tech, building_cost
 
 from ..context import Context
@@ -120,6 +118,27 @@ def farm_wood_reserve(ctx: Context) -> int:
                                       if advancing and not placed else 0)
 
 
+def imperial_prerequisite_wood(ctx):
+    if not imperial_ready(ctx) or imperial_requirement_kinds(ctx) >= 2:
+        return 0
+    placed = {b.kind for b in ctx.buildings} | {p.kind for p in ctx.board.plans}
+    if len(placed.intersection(IMPERIAL_REQUIREMENT)) >= 2:
+        return 0
+    return min((building_cost(k)[1] for k in IMPERIAL_BUILDINGS if k not in placed), default=0) + ctx.config.wood_reserve
+
+
+def wanted_centers(ctx):
+    return max(ctx.config.town_centers, 1 + len(ctx.villagers) // ctx.config.expand_workers_per_center)
+
+
+def villager_target(ctx):
+    return max(ctx.config.base_villagers, ctx.count(BuildingKind.TOWN_CENTER, complete=True) * ctx.config.workers_per_center)
+
+
+def wanted_castles(ctx):
+    return max(ctx.config.castles, (ctx.count(BuildingKind.TOWN_CENTER, complete=True) + 1) // 2) if ctx.config.castles else 0
+
+
 # ----- buildings ----------------------------------------------------------
 def wanted_buildings(ctx: Context) -> list[tuple[BuildingKind, int]]:
     """(kind, how many) in the order they should appear; Feudal Age only.
@@ -139,15 +158,17 @@ def wanted_buildings(ctx: Context) -> list[tuple[BuildingKind, int]]:
     ]
     wants.append((BuildingKind.BLACKSMITH, 1))
     if ctx.castle or (ctx.center is not None and ctx.center.researching == Tech.CASTLE_AGE):
-        wants.insert(2, (BuildingKind.STABLE, 1))
+        wants.insert(2, (BuildingKind.STABLE, max(1, ctx.count(BuildingKind.TOWN_CENTER, complete=True) // 2)))
     # The Imperial Age buildings come before the second Barracks and Range:
     # they are the age's prerequisite, the extra production is not.
-    if ctx.castle and not ctx.imperial and len(ctx.villagers) >= ctx.config.imperial_villagers - 6:
+    if ctx.castle and len(ctx.villagers) >= ctx.config.imperial_villagers - 6:
         wants.extend((kind, 1) for kind in IMPERIAL_BUILDINGS)
     if len(ctx.villagers) >= 22:
-        wants.append((BuildingKind.BARRACKS, ctx.config.max_barracks))
+        wants.append((BuildingKind.BARRACKS, max(ctx.config.max_barracks, ctx.count(BuildingKind.TOWN_CENTER, complete=True))))
     if len(ctx.villagers) >= 26:
-        wants.append((BuildingKind.ARCHERY_RANGE, ctx.config.max_ranges))
+        wants.append((BuildingKind.ARCHERY_RANGE, max(ctx.config.max_ranges, ctx.count(BuildingKind.TOWN_CENTER, complete=True))))
+    if len(ctx.villagers) >= 24:
+        wants.append((BuildingKind.MARKET, 1))
     return wants
 
 
@@ -157,59 +178,19 @@ PREREQUISITE = {BuildingKind.ARCHERY_RANGE: BuildingKind.BARRACKS, BuildingKind.
 
 
 # ----- technologies -------------------------------------------------------
-def _farms(ctx: Context) -> bool:
-    return ctx.count(BuildingKind.FARM) >= 2
-
-
-def _miners(ctx: Context) -> bool:
-    return len(ctx.villagers) >= 24
-
-
-def _army(size: int) -> Callable[[Context], bool]:
-    return lambda ctx: len(ctx.army) >= size
-
-
-#: (tech, building that researches it, condition), in priority order.
-UPGRADES: tuple[tuple[Tech, BuildingKind, Callable[[Context], bool]], ...] = (
-    (Tech.DOUBLE_BIT_AXE, BuildingKind.LUMBER_CAMP, lambda ctx: True),
-    (Tech.HORSE_COLLAR, BuildingKind.MILL, _farms),
-    (Tech.WHEELBARROW, BuildingKind.TOWN_CENTER, lambda ctx: len(ctx.villagers) >= 24),
-    (Tech.GOLD_MINING, BuildingKind.MINING_CAMP, _miners),
-    (Tech.FLETCHING, BuildingKind.BLACKSMITH, _army(6)),
-    (Tech.FORGING, BuildingKind.BLACKSMITH, _army(8)),
-    (Tech.PADDED_ARCHER_ARMOR, BuildingKind.BLACKSMITH, _army(10)),
-    (Tech.SCALE_MAIL_ARMOR, BuildingKind.BLACKSMITH, _army(10)),
-)
-
-
-def _has(tech: Tech) -> Callable[[Context], bool]:
-    return lambda ctx: ctx.economy is not None and ctx.economy.has_researched(tech)
-
-
-#: Imperial Age upgrades in priority order: the army's lines first (each step
-#: waits for the one before it), then armour and economy.
-IMPERIAL_UPGRADES: tuple[tuple[Tech, BuildingKind, Callable[[Context], bool]], ...] = (
-    (Tech.ARBALESTER, BuildingKind.ARCHERY_RANGE, _has(Tech.CROSSBOWMAN)),
-    (Tech.HALBERDIER, BuildingKind.BARRACKS, _has(Tech.PIKEMAN)),
-    (Tech.CAVALIER, BuildingKind.STABLE, lambda ctx: True),
-    (Tech.BRACER, BuildingKind.BLACKSMITH, _has(Tech.BODKIN_ARROW)),
-    (Tech.BLAST_FURNACE, BuildingKind.BLACKSMITH, _has(Tech.IRON_CASTING)),
-    (Tech.PLATE_MAIL_ARMOR, BuildingKind.BLACKSMITH, _has(Tech.CHAIN_MAIL_ARMOR)),
-    (Tech.RING_ARCHER_ARMOR, BuildingKind.BLACKSMITH, _has(Tech.LEATHER_ARCHER_ARMOR)),
-    (Tech.PLATE_BARDING_ARMOR, BuildingKind.BLACKSMITH, _has(Tech.CHAIN_BARDING_ARMOR)),
-    (Tech.PALADIN, BuildingKind.STABLE, _has(Tech.CAVALIER)),
-    (Tech.CROP_ROTATION, BuildingKind.MILL, _has(Tech.HEAVY_PLOW)),
-    (Tech.TWO_MAN_SAW, BuildingKind.LUMBER_CAMP, _has(Tech.BOW_SAW)),
-)
-
-
-def wanted_upgrades(ctx: Context) -> list[tuple[Tech, BuildingKind]]:
-    if not ctx.feudal:
-        return []
-    upgrades = [(tech, kind) for tech, kind, when in UPGRADES if when(ctx)]
-    if ctx.castle:
-        upgrades = [(Tech.CROSSBOWMAN, BuildingKind.ARCHERY_RANGE),
-                    (Tech.PIKEMAN, BuildingKind.BARRACKS)] + upgrades
+def wanted_upgrades(ctx):
+    from aoeworld import Age, technologies
+    rank = {Age.DARK: 0, Age.FEUDAL: 1, Age.CASTLE: 2, Age.IMPERIAL: 3}
+    ages = (Tech.FEUDAL_AGE, Tech.CASTLE_AGE, Tech.IMPERIAL_AGE)
+    all_rules = technologies()
+    priority = (Tech.CROSSBOWMAN, Tech.PIKEMAN, Tech.DOUBLE_BIT_AXE, Tech.HORSE_COLLAR)
     if ctx.imperial:
-        upgrades = [(tech, kind) for tech, kind, when in IMPERIAL_UPGRADES if when(ctx)] + upgrades
-    return upgrades
+        priority = (Tech.ARBALESTER, Tech.HALBERDIER, Tech.CAVALIER, Tech.BRACER,
+                    Tech.BLAST_FURNACE, Tech.PLATE_MAIL_ARMOR, Tech.RING_ARCHER_ARMOR,
+                    Tech.PLATE_BARDING_ARMOR, Tech.PALADIN, Tech.CROP_ROTATION,
+                    Tech.TWO_MAN_SAW) + priority
+    all_rules.sort(key=lambda row: (priority.index(row.tech) if row.tech in priority else len(priority)))
+    return [(row.tech, row.building) for row in all_rules
+            if row.tech not in ages and rank[ctx.economy.age] >= rank[row.age]
+            and (row.prerequisite is None or ctx.economy.has_researched(row.prerequisite))
+            and len({b.kind for b in ctx.buildings if b.complete and b.kind in row.building_kinds}) >= row.building_count]

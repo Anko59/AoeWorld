@@ -21,6 +21,7 @@ from . import buildorder
 from .constructor import Constructor
 from .naval import food_reachable
 from .reseeding import queue_reseeds
+from .production import train_villagers
 from ..context import Context
 from ..geometry import clamp_tile, dist, dist2, nearest, ring_points
 
@@ -95,14 +96,15 @@ class EconomyManager:
             return
         workers = [v for v in ctx.villagers if v.task in (UnitTask.GATHERING, UnitTask.MOVING)
                    and v.gathering == ResourceKind.WOOD and v.carrying is None
-                   and v.id not in ctx.busy and v.id not in ctx.board.builders]
+                   and v.id not in ctx.busy and v.id not in ctx.board.builders
+                   and (v.managed_by is None or not ctx.config.defer_to_steward)]
         if not workers:
             return
         worker = workers[ctx.board.wood_dropoff_cursor % len(workers)]
         ctx.board.wood_dropoff_cursor = (ctx.board.wood_dropoff_cursor + 1) % len(workers)
         node = nearest((n for n in ctx.resources(ResourceKind.WOOD) if n.remaining > 0), worker.tile)
         if (node is None or dist(node.tile, worker.tile) > ctx.config.wood_camp_contact_tiles
-                or dist(node.tile, ctx.home) > ctx.config.max_gather_distance
+                or ctx.settlement_distance(node.tile) > ctx.config.max_gather_distance
                 or ctx.dropoff_distance(node) <= ctx.config.dropoff_distance
                 or self.constructor.camp_near(ctx, kind, node)):
             return
@@ -130,40 +132,7 @@ class EconomyManager:
 
     # ----- production ------------------------------------------------------
     def train_villagers(self, ctx: Context) -> None:
-        center = ctx.center
-        if center is None or ctx.hold_town_center:
-            return
-        if ctx.tick - ctx.board.hold_villagers_tick <= 3 * ctx.world.tick_hz:
-            return
-        for kind in (ResourceKind.FOOD, ResourceKind.WOOD):
-            candidates = heapq.nsmallest(48, ctx.resources(kind), key=lambda n: dist2(n.tile, ctx.home))
-            target = next((n for n in candidates
-                           if dist(n.tile, ctx.home) <= ctx.config.max_gather_distance
-                           and ctx.land_route(ctx.home, n.tile) is not None), None)
-            if target is not None:
-                if getattr(center, "rally_resource", None) != target.id:
-                    ctx.order("set_rally_resource", center.id, target.id)
-                break
-        queued_villagers = sum(c.queue_length for c in ctx.buildings if c.kind == BuildingKind.TOWN_CENTER)
-        if len(ctx.villagers) + queued_villagers >= ctx.config.max_villagers:
-            return
-        cost = unit_cost(UnitKind.VILLAGER)
-        # A Town Center busy researching does not stop the others.
-        centers = [c for c in [center] + [c for c in ctx.buildings if c.kind == BuildingKind.TOWN_CENTER
-                                           and c.complete and c.id != center.id] if c.researching is None]
-        for c in centers:
-            queue = c.queue_length
-            while (
-                queue < ctx.config.town_center_queue
-                and ctx.free_population() > 0
-                and len(ctx.villagers) + queued_villagers < ctx.config.max_villagers
-                and ctx.try_spend(cost)
-            ):
-                ctx.order("train", c.id, UnitKind.VILLAGER)
-                ctx.queued += 1
-                queue += 1
-                queued_villagers += 1
-                ctx.board.bump("villagers_queued")
+        train_villagers(ctx)
 
     # ----- allocation ------------------------------------------------------
     def counts(self, ctx: Context) -> dict[str, int]:
@@ -193,15 +162,24 @@ class EconomyManager:
         # Early on nothing but food and wood matter.
         if ctx.tick - ctx.board.saving_tick <= 3 * ctx.world.tick_hz:
             shares = {"FOOD": 0.45, "WOOD": 0.25, "GOLD": 0.30, "STONE": 0.0}
-        elif cfg.town_centers > 1 and ctx.castle:
+        elif ctx.castle and buildorder.wanted_centers(ctx) > 1:
             shares = {"FOOD": 0.42, "WOOD": 0.40, "GOLD": 0.10, "STONE": 0.08}
         cfg_castles = cfg.castles and ctx.feudal and ctx.economy.stone < 700 and (
-            ctx.count(BuildingKind.CASTLE) + sum(1 for p in ctx.board.plans if p.kind == BuildingKind.CASTLE) < cfg.castles)
-        if cfg_castles or (cfg.town_centers > 1 and ctx.castle and ctx.economy.stone < 150):
+            ctx.count(BuildingKind.CASTLE) + sum(1 for p in ctx.board.plans if p.kind == BuildingKind.CASTLE) < buildorder.wanted_castles(ctx))
+        if cfg_castles or (buildorder.wanted_centers(ctx) > ctx.count(BuildingKind.TOWN_CENTER) and ctx.castle and ctx.economy.stone < 150):
             take = cfg.castle_stone_share
             shares["STONE"] = take
             shares["FOOD"] = max(0.2, shares["FOOD"] - take * 0.5)
             shares["WOOD"] = max(0.15, shares["WOOD"] - take * 0.5)
+        if ctx.castle:
+            if ctx.economy.wood > cfg.market_wood_reserve * 2 and ctx.economy.gold < cfg.market_gold_reserve:
+                take = min(0.2, shares["WOOD"] - 0.1)
+                shares["WOOD"] -= take
+                shares["GOLD"] += take
+            if ctx.economy.food > cfg.market_food_reserve * 2 and ctx.economy.gold < cfg.market_gold_reserve:
+                take = min(0.15, shares["FOOD"] - 0.2)
+                shares["FOOD"] -= take
+                shares["GOLD"] += take
         if len(ctx.villagers) < 10:
             shares.update(GOLD=0.0, STONE=0.0)
         return shares
@@ -210,11 +188,11 @@ class EconomyManager:
         idle = [
             v
             for v in ctx.villagers
-            if (v.managed_by is None or not ctx.config.defer_to_steward) and unemployed(v) and v.id not in ctx.busy and ctx.board.builders.get(v.id) is None
+            if (v.managed_by is None or not ctx.config.defer_to_steward) and unemployed(v) and v.id not in ctx.reserved_workers and v.id not in ctx.busy and ctx.board.builders.get(v.id) is None
         ]
         # A builder whose foundation finished (or vanished) is a worker again.
         for v in ctx.villagers:
-            if v.id in ctx.board.builders and unemployed(v) and v.id not in ctx.busy:
+            if v.id in ctx.board.builders and unemployed(v) and v.id not in ctx.reserved_workers and v.id not in ctx.busy:
                 del ctx.board.builders[v.id]
                 idle.append(v)
         if not idle:
@@ -236,6 +214,7 @@ class EconomyManager:
                 continue
             if given >= MAX_ASSIGN_PER_DECISION:
                 break  # the rest wait for the next decision, unstamped
+            ctx.require_order_budget()
             assigned[villager.id] = ctx.tick
             given += 1
             order = sorted(KEYS, key=lambda k: shares[k] * total - counts[k], reverse=True)
@@ -267,7 +246,7 @@ class EconomyManager:
                     or worker.gathering != KEYS[source] or worker.carrying is not None
                     or worker.moving
                     or worker.task in (UnitTask.MOVING, UnitTask.RETURNING, UnitTask.HUNTING, UnitTask.FARMING, UnitTask.BUILDING, UnitTask.SEEDING)
-                    or worker.id in ctx.busy or worker.id in ctx.board.builders
+                    or worker.id in ctx.busy or worker.id in ctx.reserved_workers or worker.id in ctx.board.builders
                     or worker.id in ctx.board.farmers.values()
                     or ctx.tick - ctx.board.assigned.get(worker.id, -pause) < pause):
                 continue
@@ -323,7 +302,8 @@ class EconomyManager:
         mem = ctx.board
         mem.bump("explored")
         ring = 12 + 6 * (mem.stats["explored"] // 8)
-        points = ring_points(ctx.home, min(ring, 60), spacing=8)
+        origin = min(ctx.centers, key=lambda c: dist(c, villager.tile), default=ctx.home)
+        points = ring_points(origin, min(ring, 60), spacing=8)
         goal = clamp_tile(points[mem.stats["explored"] % len(points)], ctx.world.map_size)
         target = goal if ctx.land_route(villager.tile, goal) else ctx.land_frontier(villager.tile, goal)
         if target is not None:
@@ -340,7 +320,7 @@ class EconomyManager:
             48, ctx.resources(kind), key=lambda n: dist2(n.tile, villager.tile)
         )
         for node in candidates:
-            if dist(node.tile, home) > reach or ctx.board.cooling(
+            if ctx.settlement_distance(node.tile) > reach or ctx.board.cooling(
                 f"unreachable:{node.id}:villager", ctx.tick
             ):
                 continue
@@ -356,7 +336,7 @@ class EconomyManager:
     def send_to_food(self, ctx: Context, villager: Any) -> bool:
         """Sheep first, then berries (with a Mill beside them), then deer and
         boar, then farms once the land runs dry."""
-        sheep = self.huntable(ctx, (AnimalKind.SHEEP,))
+        sheep = self.huntable(ctx, (AnimalKind.SHEEP,), villager.tile)
         if sheep is not None:
             return self.hunt(ctx, villager, sheep)
         node = self.best_node(ctx, villager, ResourceKind.FOOD)
@@ -366,7 +346,7 @@ class EconomyManager:
                     return True
             self.gather(ctx, villager, node)
             return True
-        game = self.huntable(ctx, (AnimalKind.DEER, AnimalKind.BOAR))
+        game = self.huntable(ctx, (AnimalKind.DEER, AnimalKind.BOAR), villager.tile)
         if game is not None:
             return self.hunt(ctx, villager, game)
         return self.send_to_farm(ctx, villager)
@@ -414,7 +394,8 @@ class EconomyManager:
                     del mem.hunters[villager_id]
                     mem.assigned.pop(villager_id, None)
 
-    def huntable(self, ctx: Context, kinds: tuple) -> Optional[Any]:
+    def huntable(self, ctx: Context, kinds: tuple, origin=None) -> Optional[Any]:
+        origin = origin or ctx.home
         for kind in kinds:
             animals = [
                 a
@@ -422,13 +403,13 @@ class EconomyManager:
                 if a.kind == kind
                 and a.owner in (None, ctx.world.me)
                 and a.food_remaining > 0
-                and dist(a.tile, ctx.home) <= ctx.config.hunt_distance
+                and dist(a.tile, origin) <= ctx.config.hunt_distance
                 and a.id not in ctx.board.bad_resources
                 # One hunter per quarry: the rest of a herd, or the wood and
                 # gold behind it, needs workers too.
                 and a.id not in ctx.board.hunters.values()
             ]
-            found = nearest(animals, ctx.home)
+            found = nearest(animals, origin)
             if found is not None:
                 return found
         return None
@@ -472,9 +453,14 @@ class EconomyManager:
             return True
         mill = nearest(
             [b for b in ctx.buildings if b.kind == BuildingKind.MILL and b.complete],
-            ctx.home,
+            villager.tile,
             key=lambda b: b.center,
         )
+        if mill is not None and dist(mill.center, villager.tile) > ctx.config.dropoff_distance * 2:
+            near = min(ctx.centers, key=lambda c: dist(c, villager.tile), default=ctx.home)
+            if not self.constructor.pending(ctx, BuildingKind.MILL):
+                if self.constructor.place(ctx, BuildingKind.MILL, near, [villager], radius=10, gap=1):
+                    return True
         if mill is None:
             if self.constructor.total(ctx, BuildingKind.MILL) == 0:
                 return self.constructor.place(
@@ -484,7 +470,7 @@ class EconomyManager:
         if self.constructor.pending(ctx, BuildingKind.FARM) >= 2:
             return False
         farms = self.constructor.total(ctx, BuildingKind.FARM)
-        if farms >= ctx.config.farm_target + len(ctx.villagers) // 8:
+        if farms >= max(ctx.config.farm_target, round(len(ctx.villagers) * self.shares(ctx)["FOOD"])):
             return False
         cost = building_cost(BuildingKind.FARM)
         if not ctx.can_afford((cost[0], cost[1] + buildorder.farm_wood_reserve(ctx), cost[2], cost[3])):
