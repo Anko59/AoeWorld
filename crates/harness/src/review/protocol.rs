@@ -74,21 +74,28 @@ fn findings<'de, D: serde::Deserializer<'de>>(input: D) -> Result<Vec<Reported>,
     let entries: Vec<Box<serde_json::value::RawValue>> = Deserialize::deserialize(input)?;
     let mut findings = Vec::new();
     for entry in entries {
-        let probe: serde_json::Value =
-            serde_json::from_str(entry.get()).map_err(D::Error::custom)?;
-        // Only a missing or blank claim is skipped; a claim of the wrong type
-        // fails the answer like any other malformed field.
-        let blank = match probe.get("claim") {
-            None => true,
-            Some(serde_json::Value::String(claim)) => claim.trim().is_empty(),
-            Some(_) => false,
+        // Parse strictly first, so a duplicated or malformed field still fails.
+        // Only an entry that has no claim at all (a stray vote or note), or one
+        // that parses with a blank claim, is skipped.
+        let skip = match serde_json::from_str::<Reported>(entry.get()) {
+            Ok(finding) if !finding.claim.trim().is_empty() => {
+                findings.push(finding);
+                continue;
+            }
+            Ok(_) => true,
+            Err(error) => {
+                let probe: serde_json::Value =
+                    serde_json::from_str(entry.get()).map_err(D::Error::custom)?;
+                if probe.get("claim").is_some() {
+                    return Err(D::Error::custom(error));
+                }
+                true
+            }
         };
-        if blank {
+        if skip {
             let text: String = entry.get().chars().take(160).collect();
             eprintln!("review: ignored a findings entry without a claim: {text}");
-            continue;
         }
-        findings.push(serde_json::from_str(entry.get()).map_err(D::Error::custom)?);
     }
     Ok(findings)
 }

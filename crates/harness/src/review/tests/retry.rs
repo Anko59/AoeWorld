@@ -356,6 +356,10 @@ fn other_malformed_findings_still_fail_the_answer() {
     let duplicated =
         r#"{"findings":[{"file":"a.rs","severity":"major","severity":"minor","claim":"x"}]}"#;
     assert!(serde_json::from_str::<Answer>(duplicated).is_err());
+    // A real claim followed by a blank one must not make the finding disappear.
+    let two_claims =
+        r#"{"findings":[{"file":"a.rs","severity":"major","claim":"real","claim":""}]}"#;
+    assert!(serde_json::from_str::<Answer>(two_claims).is_err());
     let numeric_claim = r#"{"findings":[{"file":"a.rs","severity":"major","claim":7}]}"#;
     assert!(serde_json::from_str::<Answer>(numeric_claim).is_err());
     let unknown_key = r#"{"findings":[],"verdict":[]}"#;
