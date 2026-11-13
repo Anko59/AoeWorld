@@ -13,9 +13,9 @@ pub use snapshot::{RESOURCE_OVERLAY_SCHEMA_VERSION, ResourceChange, ResourceOver
 /// exhaust about 5 trees a second, which filled 65,536 in about 3.5 hours.
 /// 2^20 entries (about 24 MiB) last over 50 hours of such a match.
 pub const MAX_RESOURCE_OVERLAY_CHANGES: usize = 1 << 20;
-/// Starting resource nodes of a match: a kit is at most 31 nodes, so every
+/// Starting resource nodes of a match: a kit is at most 33 nodes, so every
 /// village of 128 seats fits.
-pub const MAX_STARTING_NODES: usize = 4_096;
+pub const MAX_STARTING_NODES: usize = 8_192;
 /// Starting resource identities begin here (`ResourceNode::starting`).
 const STARTING_IDS: u64 = 1 << 37;
 /// Building collision tiles the overlay holds at once (towns, houses, walls).
@@ -146,8 +146,8 @@ impl ResourceOverlay {
     }
 
     /// Starting resources whose tiles lie in the inclusive rectangle, in the
-    /// same identity order as `starting_nodes`. Identities are kind-major and
-    /// then row-major, so each (kind, row) is one contiguous range.
+    /// same identity order as `starting_nodes`. Identities are family-major, then kind and row, so each
+    /// (family, kind, row) is one contiguous range.
     pub fn starting_nodes_in(
         &self,
         min: TileCoord,
@@ -158,16 +158,21 @@ impl ResourceOverlay {
         let (y0, y1) = (min.y.max(0), max.y.min(LIMIT - 1));
         let rows = (y0..=y1).filter(move |_| x0 <= x1);
         [
-            ResourceKind::Food,
-            ResourceKind::Wood,
-            ResourceKind::Gold,
-            ResourceKind::Stone,
+            (0_u64, ResourceKind::Food),
+            (0, ResourceKind::Gold),
+            (0, ResourceKind::Stone),
+            (1, ResourceKind::Wood),
+            (2, ResourceKind::Wood),
+            (3, ResourceKind::Wood),
+            (4, ResourceKind::Wood),
         ]
         .into_iter()
-        .flat_map(move |kind| {
+        .flat_map(move |(family, kind)| {
             rows.clone().flat_map(move |y| {
-                let first = ResourceNode::starting_id(TileCoord::new(x0, y), kind);
-                let last = ResourceNode::starting_id(TileCoord::new(x1, y), kind);
+                let first = ResourceNode::starting_id(TileCoord::new(x0, y), kind)
+                    .map(|id| id | (family << 40));
+                let last = ResourceNode::starting_id(TileCoord::new(x1, y), kind)
+                    .map(|id| id | (family << 40));
                 first.zip(last).into_iter().flat_map(move |(first, last)| {
                     self.remaining
                         .range(first..=last)

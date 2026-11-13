@@ -20,29 +20,42 @@ starts on the perimeter. Footprints cannot cover
 units, resources, water, other buildings or the map boundary. They participate
 in map route planning, passability and diagonal collision.
 
-Map starts top up reachable resources within fifteen tiles to seven berry
-bushes, seven gold nodes, five stone nodes and twelve trees. Compact clusters
-prefer offsets of six, nine, ten and eight tiles respectively. A cardinal graph
-within fifteen tiles certifies gathering access to every new and existing node
-and preserves all center exits after each cluster. Each kind tries at most 128
-anchors in two orientations; no terrain or natural resource is removed. Each
-kind tries its full cluster, then one node, and is omitted when neither fits, so
-a start with no room for a kit begins with an empty or partial one. Activation
-is refused when no footprint has enough reachable free perimeter tiles for the
-starting villagers, plus the scout when it must leave its found position.
-Restored overlays retain the original kit, including exhausted nodes.
-Starting nodes share the overlay's 1,048,576-entry limit and have a separate
-4,096-node startup bound. A 100-slot match needs 3,100 nodes for full kits.
-A kit that still cannot be placed in full (genuinely impossible terrain, or
-the overlay limit) is counted per world (`GameWorld::partial_starting_kits`),
-logged, and reported by `POST /match` as `partial_starting_kits`.
+Map starts top up reachable resources within fifteen tiles to 7–8 berry
+bushes, seven gold nodes, five stone nodes and 12–13 trees. The seed and village
+coordinates independently choose directions, distances and noise-shaped cluster
+members. Berries stay 5–10 tiles from the TC center, ores 7–14, woodlines 7–15,
+and up to three supplemental stragglers 3–6. Existing reachable resources in
+the eligible band count toward these guarantees; additional natural resources
+are left intact. Stragglers top up the combined 3–15-tile wood budget.
+A cardinal graph certifies gathering access to every new and existing node and
+preserves every reachable center exit after each cluster. A cluster may not seal
+any free tile into a pocket, and a one-tile patch must touch a solid neighbour,
+so no villager is boxed in by a start kit. Each kind tries at most
+128 anchors and two noise shapes per patch. Constrained terrain splits a group
+into smaller patches until its quota is full or no legal tile remains.
+No resource or terrain is removed. Activation still requires reachable
+perimeter tiles for the villagers and scout. Genuinely impossible terrain may
+produce a partial kit, reported by `GameWorld::partial_starting_kits` and
+`POST /match`. The fairness bands describe complete starts, not these reported
+exceptions or extra resources elsewhere in the surrounding landscape.
 
-Starting resources are authoritative overlay entries: bit 37 marks their
-identity, bits 38–39 select the kind, and the remaining coordinate fields match
-natural resource identities. Initial entries do not increment the depletion
-revision. Snapshots carry their complete amounts; normal deltas carry depletion.
-The client derives their existing sprite family from their kind. The overlay
-blocks their tiles and includes them in resource lookup, persistence and replay.
+The guaranteed budget is 1,200–1,300 wood (±4% of midpoint), exactly 5,600 gold
+and 1,750 stone. Berry plus wildlife food is 2,875–3,040 (±2.8% of midpoint);
+boar/deer/sheep counts are coupled rather than varied independently. These are
+initial harvestable amounts before ordinary animal decay. Seed and coordinates
+fully determine placement; there is no added per-tick generation work.
+
+Restored overlays retain the original kit, including exhausted nodes. Starting
+nodes share the overlay's 1,048,576-entry limit and have a separate 8,192-node
+startup bound (at most 33 per complete kit; 128 seats fit). Starting resource
+identities use bit 37 for the namespace, bits 38–39 for kind and bits 40–42 for
+tree family (1–4 only for wood, zero otherwise). Coordinates retain their natural
+resource fields. Variants are deterministically derived from coordinates.
+Supplemental trees use the same raw vegetation class, biome fallback and mixed
+stand selector as neighboring forests, including trees inside start clearings.
+Both renderers read that family from the identity instead of imposing pine art.
+Initial entries do not increment the depletion revision. Snapshots and deltas
+retain the full identity, amount and authoritative collision state.
 
 Gather commands require an owned villager and a live map or starting resource
 node. A villager walks to a passable adjacent tile and earns integer gathering
@@ -302,9 +315,13 @@ combat AttackOrder targets live units, buildings and animals. Owned sheep
 accept MoveOrder for herding.
 
 The map generator has no animal hooks. Village initialization therefore places
-a deterministic local kit of eight sheep, two boar, four deer and one wolf, searching
-bounded local rings for free passable tiles. Constrained starts may omit an
-animal if no tile fits.
+a seeded local kit: either eight sheep/two boar/four deer or seven sheep/three
+boar/two deer, totaling 2,040 or 2,000 food (a range below 2% of midpoint), plus
+one wolf. Sheep spawn 3–6 tiles from the TC center, boar/deer 9–15 and wolves
+16–20. Herds use irregular noise-ranked positions around seeded anchors. All
+animals must lie in the TC's connected land region, so water, cliffs and sealed
+forest pockets cannot hide a start herd. Constrained starts may omit animals
+when their distance band has no free reachable tile.
 
 Live animals occupy an eight-tile spatial index. Each tick probes a fixed
 neighborhood around living units and advances only candidate animals and

@@ -11,16 +11,11 @@ pub(in super::super) fn scene_resources(client: &Client) -> Vec<SceneResource> {
         .values()
         .filter(|chunk| heights::resident_may_be_visible(client, chunk.coordinate()))
         .flat_map(CachedChunk::resources)
-        .chain(starting.iter().map(|node| {
-            (
-                node,
-                if node.kind == aoe_map::ResourceKind::Wood {
-                    aoe_map::ResourceVisualFamily::Conifer as u8
-                } else {
-                    aoe_map::ResourceVisualFamily::Generic as u8
-                },
-            )
-        }))
+        .chain(
+            starting
+                .iter()
+                .map(|node| (node, node.starting_visual_family() as u8)),
+        )
         .filter(|(resource, _)| {
             scene_kind(resource, &client.resources, now).is_some()
                 && client.fog.state([resource.tile.x, resource.tile.y]) > 0

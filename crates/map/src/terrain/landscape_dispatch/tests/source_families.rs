@@ -1,5 +1,6 @@
 //! Trees take source-backed visual families from the raw PNV class.
 use super::*;
+use crate::ResourceOverlay;
 
 const CLASSES: [Option<u8>; 10] = [
     Some(1),
@@ -54,6 +55,47 @@ fn scene(generator: &MapChunkGenerator, x: i32, y: i32) -> LandscapeChunk {
     generator
         .landscape_chunk_with_cancel(x, y, &|| false)
         .unwrap()
+}
+
+#[test]
+fn supplemental_trees_share_the_forests_species_and_keep_it_in_the_overlay() {
+    for class in [1, 8, 9, 13, 17] {
+        let generator = classed(7, 256, Some(class));
+        let (x, y) = forested(&generator);
+        for resource in scene(&generator, x, y).resources {
+            if resource.node.kind != ResourceKind::Wood {
+                continue;
+            }
+            let tree = generator
+                .starting_tree_at(resource.node.tile)
+                .unwrap()
+                .unwrap();
+            assert_eq!(tree.starting_visual_family(), resource.visual_family);
+            assert_eq!(ResourceNode::starting_from_id(tree.id), Some(tree));
+        }
+        let tile = (0..256)
+            .flat_map(|y| (0..256).map(move |x| TileCoord::new(x, y)))
+            .find(|t| {
+                generator.object_at(*t).is_none()
+                    && generator.tile_at(*t).is_some_and(|t| t.passable)
+            })
+            .unwrap();
+        let tree = generator.starting_tree_at(tile).unwrap().unwrap();
+        let mut overlay = ResourceOverlay::default();
+        overlay.insert_starting_resource(&generator, tree).unwrap();
+        assert_eq!(
+            overlay.starting_nodes_in(tile, tile).collect::<Vec<_>>(),
+            vec![tree]
+        );
+        let restored = ResourceOverlay::from_snapshot(
+            &overlay.snapshot([0; 32]),
+            [0; 32],
+            &generator,
+            &|| false,
+        )
+        .unwrap();
+        assert_eq!(restored.starting_nodes().collect::<Vec<_>>(), vec![tree]);
+    }
 }
 
 #[test]

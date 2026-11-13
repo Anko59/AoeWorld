@@ -1,11 +1,32 @@
-use crate::{ObjectKind, ResourceKind, ResourceNode};
+use crate::{ObjectKind, ResourceKind, ResourceNode, ResourceVisualFamily};
 use aoe_core::TileCoord;
 
 impl ResourceNode {
     /// The current resource identity reserves bit 37 for starting resources,
     /// bits 38..39 for kind, and retains the map's tile coordinate fields.
     pub fn starting(tile: TileCoord, kind: ResourceKind) -> Option<Self> {
-        Self::starting_from_id(Self::starting_id(tile, kind)?)
+        let family = if kind == ResourceKind::Wood { 1_u64 } else { 0 };
+        Self::starting_from_id(Self::starting_id(tile, kind)? | (family << 40))
+    }
+
+    /// Species is part of the current identity, including save/wire round trips.
+    pub fn starting_tree(tile: TileCoord, family: ResourceVisualFamily) -> Option<Self> {
+        if !(1..=4).contains(&(family as u8)) {
+            return None;
+        }
+        Self::starting_from_id(
+            Self::starting_id(tile, ResourceKind::Wood)? | ((family as u64) << 40),
+        )
+    }
+
+    pub fn starting_visual_family(self) -> ResourceVisualFamily {
+        match self.id >> 40 {
+            1 => ResourceVisualFamily::Broadleaf,
+            2 => ResourceVisualFamily::Conifer,
+            3 => ResourceVisualFamily::DryScrub,
+            4 => ResourceVisualFamily::Tropical,
+            _ => ResourceVisualFamily::Generic,
+        }
     }
 
     pub(crate) fn starting_id(tile: TileCoord, kind: ResourceKind) -> Option<u64> {
@@ -16,10 +37,19 @@ impl ResourceNode {
     }
 
     pub fn starting_from_id(id: u64) -> Option<Self> {
-        if id & (1 << 37) == 0 || id & 1 != 0 || id >> 40 != 0 {
+        let family = id >> 40;
+        let kind_bits = (id >> 38) & 3;
+        if id & (1 << 37) == 0
+            || id & 1 != 0
+            || if kind_bits == 1 {
+                !(1..=4).contains(&family)
+            } else {
+                family != 0
+            }
+        {
             return None;
         }
-        let (kind, object, initial_amount) = match id >> 38 {
+        let (kind, object, initial_amount) = match kind_bits {
             0 => (ResourceKind::Food, ObjectKind::ForageBush, 125),
             1 => (ResourceKind::Wood, ObjectKind::Tree, 100),
             2 => (ResourceKind::Gold, ObjectKind::GoldDeposit, 800),
@@ -35,7 +65,7 @@ impl ResourceNode {
             kind,
             object,
             initial_amount,
-            visual_variant: 0,
+            visual_variant: ((id >> 1) ^ (id >> 19).wrapping_mul(37)) as u8,
         })
     }
 }

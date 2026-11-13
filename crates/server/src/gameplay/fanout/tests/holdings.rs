@@ -13,6 +13,13 @@ async fn subscribe_and_resync_keep_land_scalars_and_send_independent_boundaries_
         .unwrap()
         .id;
     let service = super::super::super::GameplayService::from_scale_world(world, primary);
+    // With the natural start layout one rim tile of the village's first
+    // exploration (32, 25) joins the clipped holdings at the first one-second
+    // land refresh: a real clip change, not a stock-driven resend. Let the
+    // opening second pass so the test pins only unchanged-boundary behaviour.
+    for _ in 0..21 {
+        service.tick().await;
+    }
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     let (id, _) = service.register(None, tx).await;
     for revision in 1..=2 {

@@ -155,7 +155,10 @@ impl GameWorld {
             self.restore_resources(resources, content_hash, cancelled)
                 .map_err(|error| SnapshotError::Map(error.to_string()))?;
         }
-        self.set_fog_disabled(snapshot.fog_disabled);
+        // Sheltered units are briefly placed outside before re-entering their
+        // building. Those temporary positions must not explore the new layout.
+        // Rebuild sight once every entity has its final restored position.
+        self.set_fog_disabled(true);
         for player in &snapshot.players {
             self.economy.players.insert(player.player, *player);
         }
@@ -198,6 +201,7 @@ impl GameWorld {
             });
         }
         self.restore_general_recruits(&snapshot.buildings, &snapshot.units);
+        self.set_fog_disabled(snapshot.fog_disabled);
         self.resume_jobs(snapshot, &mut report);
         for player in &snapshot.players {
             if let Some(slot) = self.economy.players.get_mut(&player.player) {

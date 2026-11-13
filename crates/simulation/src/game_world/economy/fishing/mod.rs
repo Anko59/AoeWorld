@@ -111,21 +111,45 @@ impl GameWorld {
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError> {
-        if !kind.is_naval() {
-            return self
-                .terrain
-                .passable_with_cancel(tile, self.config, cancelled);
+        if matches!(self.terrain, Terrain::Uniform(_)) {
+            return if kind.is_naval() {
+                Ok(false)
+            } else {
+                self.terrain
+                    .passable_with_cancel(tile, self.config, cancelled)
+            };
         }
-        let Terrain::Map { generator, overlay } = &self.terrain else {
-            return Ok(false);
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        let cache = &self.economy.movement_ground[usize::from(kind.is_naval())];
+        if let Some(known) = cache.lock().unwrap_or_else(|e| e.into_inner()).get(tile) {
+            return Ok(known);
+        }
+        // Compute outside the lock: terrain reads can fail and parallel
+        // proposals may independently derive the same immutable answer.
+        let passable = if !kind.is_naval() {
+            self.terrain
+                .passable_with_cancel(tile, self.config, cancelled)?
+        } else {
+            let Terrain::Map { generator, overlay } = &self.terrain else {
+                return Ok(false);
+            };
+            match generator.tile_and_node_with_cancel(tile, cancelled)? {
+                Some((sample, node)) => {
+                    navigable(sample.water)
+                        && !overlay.blocks_tile(tile)
+                        && overlay.bridge_connections(tile).is_none()
+                        && node.is_none_or(|n| !overlay.blocks_node(n))
+                }
+                None => false,
+            }
         };
-        let Some((sample, node)) = generator.tile_and_node_with_cancel(tile, cancelled)? else {
-            return Ok(false);
-        };
-        Ok(navigable(sample.water)
-            && !overlay.blocks_tile(tile)
-            && overlay.bridge_connections(tile).is_none()
-            && node.is_none_or(|n| !overlay.blocks_node(n)))
+        cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(tile, passable);
+        Ok(passable)
     }
 
     pub(crate) fn gather_capacity(&self, unit: &crate::GameUnit, farmer: bool) -> u16 {
