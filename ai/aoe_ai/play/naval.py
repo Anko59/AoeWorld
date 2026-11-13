@@ -41,7 +41,12 @@ class NavalManager:
         if not fish:
             return
         self.fish(ctx, fish)
-        docks = [b for b in ctx.buildings if b.kind == BuildingKind.DOCK]
+        docks = sorted((b for b in ctx.buildings if b.kind == BuildingKind.DOCK), key=lambda b: b.id)
+        warships = (UnitKind.GALLEY, UnitKind.WAR_GALLEY, UnitKind.FIRE_SHIP, UnitKind.DEMOLITION_SHIP)
+        # Only the admitted producer needs a defensive fleet; do not scan an
+        # enemy-by-dock cross product as settlements grow.
+        threatened = any(e.kind in warships and dist(e.tile, b.center) <= ctx.config.fort_threat_radius
+                         for e in ctx.enemies for b in docks[:1])
         if not docks and self.constructor.total(ctx, BuildingKind.DOCK) == 0:
             target = nearest(fish, ctx.home)
             builder = self.constructor.builder_near(ctx, target.tile)
@@ -51,7 +56,7 @@ class NavalManager:
             return
         # Queue summaries omit unit kinds. One producer keeps the fleet cap
         # exact even when an accepted order has left the in-flight tracker.
-        for dock in sorted(docks, key=lambda b: b.id)[:1]:
+        for dock in docks[:1]:
             if not dock.idle or ctx.free_population() <= 0:
                 continue
             if any(order.name == "train" and order.args[0] == dock.id
@@ -61,7 +66,7 @@ class NavalManager:
             if ctx.board.cooling(f"naval-train:{dock.id}", ctx.tick):
                 continue
             for kind, wanted in ((UnitKind.FISHING_SHIP, ctx.config.fishing_ships),
-                                 (UnitKind.GALLEY, ctx.config.galleys if ctx.feudal else 0)):
+                                 (UnitKind.GALLEY, ctx.config.galleys if ctx.feudal and threatened else 0)):
                 family = (UnitKind.GALLEY, UnitKind.WAR_GALLEY) if kind == UnitKind.GALLEY else (kind,)
                 pending = sum(order.name == "train" and order.args[1] in family
                               and ctx.tick - order.tick < ctx.config.plan_timeout_seconds * ctx.world.tick_hz

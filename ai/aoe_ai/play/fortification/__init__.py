@@ -1,8 +1,9 @@
-"""Income-sized defences on public resource sites and known enemy approaches."""
+"""Threat-funded defences on public resource sites and known enemy approaches."""
 from aoeworld import BuildingKind, building_cost, building_size
 
 from ...blackboard import Plan
 from ...geometry import clamp_tile, dist
+from .threat import threatened
 
 
 def frontier(ctx):
@@ -73,12 +74,16 @@ class FortificationManager:
         board.cool('fortify', ctx.tick, cfg.fort_interval_seconds * ctx.world.tick_hz)
         towers = [b.center for b in ctx.buildings if b.kind == BuildingKind.WATCH_TOWER]
         towers += [p.tile for p in board.plans if p.kind == BuildingKind.WATCH_TOWER]
-        cap = max(1, len(ctx.villagers) // cfg.fort_workers_per_tower)
+        frontiers = [c for c in ctx.centers if threatened(ctx, c)]
+        if not frontiers:
+            return
+        cap = min(len(ctx.villagers) // cfg.fort_workers_per_tower,
+                  len(frontiers) * cfg.fort_towers_per_frontier)
         # Resource drop-offs are paid evidence of economic activity, including
         # remote mines and forests. Do not build speculative towers in fog.
-        targets = [(b.center, cfg.fort_site_radius) for b in ctx.buildings if b.complete and b.kind in (
+        targets = [(b.center, cfg.fort_site_radius) for b in ctx.buildings if b.complete and threatened(ctx, b.center) and b.kind in (
             BuildingKind.MINING_CAMP, BuildingKind.LUMBER_CAMP, BuildingKind.MILL)]
-        center = (ctx.centers or [ctx.home])[board.fort_cursor % max(1, len(ctx.centers))]
+        center = frontiers[board.fort_cursor % len(frontiers)]
         board.fort_cursor += 1
         # Retain a layout while it is being built; new scouting must not move
         # the gate between its two wings. Forget lost settlements.

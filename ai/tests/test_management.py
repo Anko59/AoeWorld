@@ -35,14 +35,15 @@ def test_a_seated_steward_is_not_sent_again_and_a_second_is_not_trained():
 
 def test_a_castle_is_raised_with_stone_and_hosts_a_vassal_then_a_general():
     units, buildings = castle_base()
+    enemies = [building(800, BuildingKind.BARRACKS, tile=(130, 80), mine=False)]
     config = replace(Config(), castles=1, vassals=1, generals=1)
-    _, client = play(FakeWorld(units, buildings, eco=rich()), config)
+    _, client = play(FakeWorld(units, buildings, eco=rich(), enemy_buildings=enemies), config)
     assert any(args[1] == BuildingKind.CASTLE for args in client.named("build"))
     buildings.append(building(700, BuildingKind.CASTLE, tile=(80, 60)))
-    _, client = play(FakeWorld(units, buildings, eco=rich()), config)
+    _, client = play(FakeWorld(units, buildings, eco=rich(), enemy_buildings=enemies), config)
     assert (700, UnitKind.VASSAL) in client.named("train")
     buildings[-1].garrison = [(901, UnitKind.VASSAL, 80, 60)]
-    _, client = play(FakeWorld(units, buildings, eco=rich()), config)
+    _, client = play(FakeWorld(units, buildings, eco=rich(), enemy_buildings=enemies), config)
     assert (700, UnitKind.GENERAL) in client.named("train")
 
 

@@ -49,7 +49,7 @@ The checked-in [France workload](../qa/ai-scaling.json) fixes four starts:
 Use the ignored map packages/geodata from the owner's play13 checkout, then run:
 
 ```sh
-make ai-benchmark AI_BENCHMARK_ARGS='--map-hash dc7e0d4b253af4e7e7106b69eba61169ef2f8f6b0fd7781fbe5a3ed6ccc60e68 --starts qa/ai-scaling.json --out .cache/ai-scaling/baseline.json'
+make ai-benchmark AI_BENCHMARK_ARGS='--map-hash fdc59853e2404cb5c7fb245f21768970aeb01febe20fd4f15dc96ff522fc9a49 --starts qa/ai-scaling.json --wall-minutes 100 --out .cache/ai-scaling/baseline.json'
 ```
 
 `--check-starts` validates the start cases without advancing the game. Output
@@ -65,6 +65,12 @@ slot credential and is removed on exit. It sends no orders and keeps fog on.
 Keep the recording outside Git and attach it with `SHIP_VIDEO` when shipping.
 
 ## Recorded baseline
+
+The historical measurements below used recipe 3 package
+`dc7e0d4b253af4e7e7106b69eba61169ef2f8f6b0fd7781fbe5a3ed6ccc60e68`.
+The reproduction workload now names regenerated recipe 4 France, with the same
+request, seed and anchors. Current code rejects recipe 3; compare AI changes on
+the current package before attributing differences to the planner.
 
 Measured 2026-11-13 from AI revision `a87da7b00b7ac2ae5edd62e13beaae0edd19c6e6`,
 with the measurement instrumentation introduced here. The unchanged Brain
@@ -135,7 +141,8 @@ radius. Castle and production counts grow with the settlement count.
 Stewards, Vassals and Generals are enabled by default. Ordinary SDK controls
 activate Steward training, pause management spending while research or another
 manager is being funded, and enable Vassal fortification using its native
-resource floor. A small local workforce is reserved for Vassal construction.
+resource floor when a local threat justifies development. A small local
+workforce is reserved for active Vassal construction.
 Research plans read the complete current technology tree from Rust, including
 age and technology prerequisites, and reserve late-game upgrade prices ahead
 of continuous military production. Markets trade one lot per eight game
@@ -244,10 +251,36 @@ can use any of the four footprint edges when forest blocks one approach. Native
 Vassal development remains active alongside this planner. Towers and walls do
 not wait for an expensive Vassal to train and garrison.
 
-Seated Vassals develop defences whenever fortifications are enabled, even while
-future Castles are being funded. Their native planner already preserves 200
-food, wood and stone and 100 gold. Requiring every wanted Castle first would
-postpone all walls as the Town Center count raises that target.
+Seated Vassals develop defences at threatened Castles, even while future Castles
+are being funded. Their native planner already preserves 200 food, wood and
+stone and 100 gold. Peaceful Castles neither recruit nor save for new Vassals;
+they can recruit Generals directly. When local danger passes, development is
+disabled and the host releases its reserved workers back to economic work.
+
+The host requires an enemy unit or recent damage/loss within 96 tiles, or a
+remembered enemy building within 192 tiles. Damage and own unit/building losses
+authorize spending locally for three game minutes; distant army losses do not
+fund home fortifications. Alert memory holds at most 64 eight-tile cells. A
+decision-local spatial index avoids a full enemy scan for every building, with
+no extra land/site queries. Towers require threatened resource sites and are
+capped by both workforce and two towers per threatened settlement. Income alone
+does not authorize construction. Existing foundations can still be completed.
+Castle stone is allocated only once Castle Age unlocks the building. The old
+Feudal allocation diverted fifteen percent of workers before the wood-starved
+land start could fund its army and Castle Age prerequisite buildings.
+Known, reachable timber can be harvested up to 256 tiles from a settlement;
+other resources retain the 70-tile radius. A remote cutter can fund a nearby
+Lumber Camp, including after starting timber is exhausted. The existing shared
+route/site budgets and rotating drop-off inspection still apply. Fishing
+continues normally, but defensive galleys require an enemy warship near the
+single admitted Dock producer. Quiet water no longer buys a war fleet.
+
+Unfunded optional Imperial research reserves only the portion of its price
+already owned. Reserving nonexistent gold previously made even food-only
+villagers fail the shared affordability check. Surplus food can now keep
+villagers growing while army spending yields to the upgrade. Town Centers
+drain for an optional upgrade only once its padded price is actually available;
+missing gold no longer pauses every settlement's villager queue.
 
 The current benchmark separates completed wall tiles from gates and retains
 every completed fortification's position. Each row also names its start case.
@@ -324,3 +357,74 @@ The 15.01-second narrated clip `.cache/showcase/ai-fortifications-current.webm`
 shows actual forest-slot gameplay at 55:33–55:47, including the resource towers.
 It was visually verified at the beginning, middle and end. Earlier white/loading
 takes and the three-second prototype clip are not the attachment.
+
+## Economy recovery measurement
+
+Same recipe 4 France package, seed 1 and four validated anchors for both runs.
+Before: `7c9ba8e49daf6f36b2b8922ea7aabc3f64f25b34` in a frozen checkout.
+After: defences follow local danger and economy reserves preserve growth; the JSON manifest identifies sources.
+The historical recipe 3 results above are a separate comparison, not this control.
+
+Open land reaches 876 population versus 29 in the current control and the original target 289.
+Every slot improves against the current control. The historical recipe 3 island result
+was 1,053 versus 945 here; that older result is not an identical-input comparison.
+
+Castle stone waits for Castle Age; known timber can receive camps out to 256 tiles.
+Quiet Vassals release builders, and galleys require a nearby enemy warship.
+Unfunded optional science reserves only owned resources and leaves surplus food for growth.
+
+| minute | source | slot / case | pop | TCs | cells | age | techs | food / wood / gold / stone | military | kills | castles / towers / walls / gates | Stewards / Vassals / Generals |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 30 | before | 0 / island | 64 | 1 | 2 | CASTLE | 4 | 376 / 45 / 30 / 158 | 29 | 0 | 1 / 1 / 0 / 0 | 0 / 0 / 0 |
+| 30 | before | 1 / forest | 56 | 1 | 1 | CASTLE | 5 | 470 / 60 / 645 / 215 | 19 | 0 | 1 / 0 / 0 / 0 | 0 / 0 / 0 |
+| 30 | before | 2 / forest | 52 | 1 | 1 | CASTLE | 7 | 270 / 7 / 651 / 130 | 19 | 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 |
+| 30 | before | 3 / land | 31 | 1 | 2 | FEUDAL | 2 | 3567 / 9 / 1841 / 1088 | 1 | 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 |
+| 30 | after | 0 / island | 80 | 2 | 3 | CASTLE | 4 | 21 / 203 / 235 / 449 | 32 | 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 |
+| 30 | after | 1 / forest | 78 | 1 | 2 | CASTLE | 5 | 69 / 150 / 181 / 627 | 34 | 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 |
+| 30 | after | 2 / forest | 85 | 2 | 2 | CASTLE | 11 | 3 / 170 / 66 / 395 | 42 | 0 | 0 / 1 / 0 / 0 | 0 / 0 / 0 |
+| 30 | after | 3 / land | 56 | 1 | 2 | CASTLE | 7 | 508 / 5 / 355 / 370 | 18 | 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 |
+| 60 | before | 0 / island | 253 | 4 | 4 | IMPERIAL | 5 | 325 / 66 / 25 / 526 | 150 | 0 | 2 / 3 / 0 / 0 | 0 / 0 / 0 |
+| 60 | before | 1 / forest | 217 | 3 | 4 | IMPERIAL | 6 | 291 / 5 / 145 / 195 | 143 | 0 | 2 / 2 / 0 / 0 | 1 / 1 / 0 |
+| 60 | before | 2 / forest | 179 | 2 | 3 | IMPERIAL | 8 | 1218 / 361 / 308 / 30 | 113 | 0 | 1 / 0 / 0 / 0 | 0 / 1 / 1 |
+| 60 | before | 3 / land | 31 | 1 | 2 | FEUDAL | 2 | 6641 / 9 / 5191 / 1938 | 1 | 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 |
+| 60 | after | 0 / island | 203 | 4 | 4 | IMPERIAL | 11 | 326 / 1004 / 1438 / 177 | 95 | 0 | 2 / 0 / 0 / 0 | 1 / 0 / 1 |
+| 60 | after | 1 / forest | 183 | 2 | 3 | IMPERIAL | 6 | 71 / 842 / 191 / 1293 | 124 | 1 | 1 / 0 / 0 / 0 | 1 / 0 / 0 |
+| 60 | after | 2 / forest | 242 | 4 | 4 | IMPERIAL | 21 | 1288 / 842 / 377 / 685 | 136 | 0 | 2 / 1 / 0 / 0 | 1 / 0 / 1 |
+| 60 | after | 3 / land | 196 | 3 | 4 | IMPERIAL | 8 | 31 / 60 / 57 / 359 | 112 | 0 | 2 / 0 / 0 / 0 | 0 / 0 / 2 |
+| 120 | before | 0 / island | 633 | 7 | 4 | IMPERIAL | 47 | 140112 / 9 / 1469 / 98 | 314 | 0 | 3 / 5 / 0 / 0 | 4 / 3 / 3 |
+| 120 | before | 1 / forest | 1112 | 12 | 9 | IMPERIAL | 53 | 47219 / 67294 / 1095 / 90 | 491 | 5 | 3 / 6 / 93 / 3 | 8 / 3 / 3 |
+| 120 | before | 2 / forest | 1040 | 10 | 9 | IMPERIAL | 53 | 14767 / 11616 / 147 / 4 | 635 | 6 | 4 / 16 / 284 / 8 | 4 / 4 / 3 |
+| 120 | before | 3 / land | 29 | 1 | 2 | FEUDAL | 2 | 13166 / 9 / 5601 / 1938 | 1 | 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 |
+| 120 | after | 0 / island | 945 | 7 | 4 | IMPERIAL | 53 | 94960 / 0 / 1453 / 103 | 444 | 0 | 3 / 5 / 14 / 1 | 6 / 3 / 3 |
+| 120 | after | 1 / forest | 1395 | 22 | 13 | IMPERIAL | 53 | 39354 / 102696 / 94 / 51 | 657 | 2 | 3 / 20 / 222 / 5 | 7 / 3 / 2 |
+| 120 | after | 2 / forest | 1667 | 16 | 11 | IMPERIAL | 53 | 82690 / 12313 / 777 / 87 | 988 | 0 | 5 / 15 / 299 / 7 | 8 / 4 / 5 |
+| 120 | after | 3 / land | 876 | 8 | 6 | IMPERIAL | 53 | 75741 / 2 / 55 / 38 | 322 | 0 | 2 / 4 / 0 / 0 | 7 / 2 / 2 |
+
+| source | wall seconds | timing records | tick p50 / p95 / max (us) | applied orders |
+| --- | --- | --- | --- | --- |
+| before | 2861.32 | 144001 | 4653 / 19565 / 1491201 | 35703 |
+| after | 3431.08 | 144000 | 6080 / 29805 / 1482843 | 60851 |
+
+| source | slot | CPU ms/decision | slowest CPU ms | slowest wall ms | max orders/decision | orders | SDK losses |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| before | 0 | 16.33 | 197.03 | 256.89 | 13 | 6367 | 0 |
+| before | 1 | 41.63 | 223.39 | 383.52 | 16 | 13510 | 2 |
+| before | 2 | 37.28 | 178.23 | 214.34 | 17 | 15281 | 41 |
+| before | 3 | 1.11 | 143.32 | 143.33 | 8 | 549 | 14 |
+| after | 0 | 16.74 | 97.32 | 129.19 | 14 | 9452 | 0 |
+| after | 1 | 29.21 | 242.26 | 243.86 | 17 | 20612 | 0 |
+| after | 2 | 31.18 | 185.50 | 186.81 | 21 | 20579 | 18 |
+| after | 3 | 32.53 | 239.54 | 259.75 | 18 | 10215 | 2 |
+
+Evidence: `.cache/ai-scaling/ai3-before.json`, `.cache/ai-scaling/ai3-growth.json` and
+their adjacent timing streams. The frozen baseline original is in the local
+`AoeWorld-ai3-before` checkout. Both source manifests and validated starts are retained.
+The intentionally interrupted threat-only prototype (`ai3-threat-budget.json`) is
+incomplete and excluded. The timber prototype (`ai3-timber.json`) retains its
+own measured results but predates the optional-research reserve correction.
+Setup failures before any game ticks are excluded.
+
+These shared-host lockstep runs do not qualify live tick rate, dedicated hardware,
+the scale ladder, defensive efficacy, transport attacks or force projection.
+Network delivery can change decisions; this is one paired workload, not an ablation.
+No qualifying attack video was captured. Full suites and CI were not run here.

@@ -95,11 +95,13 @@ class ResearchManager:
             if (ctx.imperial and len(ctx.villagers) >= ctx.config.imperial_villagers
                     and any(b.complete and b.kind == kind for b in ctx.buildings)
                     and not ctx.can_afford(padded)):
-                ctx.spend(cost)
+                have = (eco.food, eco.wood, eco.gold, eco.stone)
+                # An unfunded reserve must not make another resource's balance
+                # negative: food-only villagers can use the unreserved surplus.
+                ctx.spend(tuple(min(cost[i], max(0, have[i] - ctx.spent[i])) for i in range(4)))
                 ctx.saving_castle = True
-                # Growth continues while a shortfall accumulates. Once the
-                # food price is present, keep it until the remaining gold arrives.
-                ctx.hold_town_center = ctx.economy.food >= cost[0] and cost[0] > 0
+                # Reserve the price, but keep surplus food funding villagers.
+                # Missing gold for optional science must not freeze every TC.
                 ctx.draining.add(kind)
                 return
             if not builders:

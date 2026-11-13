@@ -136,6 +136,8 @@ class Brain:
 
     # ----- learning from the server's verdicts -----------------------------
     def absorb(self, ctx: Context) -> None:
+        from .play.fortification.threat import observe
+        observe(ctx)
         mem = ctx.board
         for event in ctx.events:
             if event.kind == "order_result":

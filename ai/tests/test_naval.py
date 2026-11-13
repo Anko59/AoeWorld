@@ -93,6 +93,7 @@ def test_fishing_ship_works_river_food_and_galleys_stop_at_two():
     galleys = [unit(201 + i, UnitKind.GALLEY, tile=(59, 50 + i)) for i in range(2)]
     dock = building(600, BuildingKind.DOCK, tile=(55, 50))
     ctx = context(river_world(units=[fishing], docks=[dock]))
+    ctx.enemies = [unit(999, UnitKind.GALLEY, tile=(65, 55), mine=False)]
     manager.step(ctx)
     assert ctx.client.named("gather"), "the Fishing Ship needs a river fishing order"
     assert ctx.client.named("gather")[0][0] == fishing.id
@@ -118,6 +119,7 @@ def test_castle_age_keeps_feudal_capabilities_and_galley_production():
                             cap=30, age=Age.CASTLE)
     ctx = context(world)
     assert ctx.feudal, "Castle Age retains access to Feudal military and research"
+    ctx.enemies = [unit(999, UnitKind.GALLEY, tile=(65, 55), mine=False)]
     naval().step(ctx)
     assert ctx.client.named("train") == [(600, UnitKind.GALLEY)]
 
