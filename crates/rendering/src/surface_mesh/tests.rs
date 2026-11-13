@@ -472,3 +472,6 @@ fn pretinted_canvas_atlases_match_webgpu_rgb_formulas_and_preserve_alpha() {
     }
     assert_eq!(tint_atlas_pixels(&[0_u8; 3], 0), None);
 }
+
+#[path = "tests/prepared/mod.rs"]
+mod prepared;

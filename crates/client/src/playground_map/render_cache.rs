@@ -244,13 +244,14 @@ pub(in super::super) fn render_if_changed(
     }
 
     let result = {
+        let terrain_plan = scene.terrain_plan(&mut client.art);
         let Client {
             renderer, art, fog, ..
         } = client;
         renderer.render_prepared_world_with_fog(
             art,
             &scene.terrain,
-            &scene.triangles,
+            &terrain_plan,
             resources,
             units,
             camera,

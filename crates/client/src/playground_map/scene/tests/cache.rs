@@ -8,6 +8,41 @@ thread_local! {
 }
 
 #[wasm_bindgen_test]
+async fn prepared_terrain_plan_survives_actor_updates_and_follows_view_replacement() {
+    let empty = PreparedScene::new(
+        Camera {
+            center: [8.0; 2],
+            zoom: 1.0,
+            viewport: [320.0; 2],
+            focus_elevation_meters: 0.0,
+        },
+        Vec::new(),
+    );
+    let mut client = review_tests::client(&empty).await;
+    let scene = prepare(&client);
+    let unplanned = scene.resident_bytes();
+    let plan = scene.terrain_plan(&mut client.art);
+    let identity = &*plan as *const aoe_rendering::PreparedTerrain;
+    drop(plan);
+    assert!(
+        scene.resident_bytes() > unplanned,
+        "retained geometry is accounted"
+    );
+    for _ in 0..16 {
+        client.units.values_mut().next().unwrap().hp -= 1;
+        assert!(Rc::ptr_eq(&scene, &prepare(&client)));
+        let current = scene.terrain_plan(&mut client.art);
+        assert!(std::ptr::eq(identity, &*current));
+    }
+    client.camera.center[0] += 32.0;
+    let moved = prepare(&client);
+    assert!(!Rc::ptr_eq(&scene, &moved));
+    let current = moved.terrain_plan(&mut client.art);
+    assert!(!std::ptr::eq(identity, &*current));
+    client.canvas.remove();
+}
+
+#[wasm_bindgen_test]
 async fn diagnostic_world_keeps_ground_when_fog_is_disabled_and_no_map_chunks_exist() {
     let scene = PreparedScene::new(
         Camera {
