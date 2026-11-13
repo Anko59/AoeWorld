@@ -14,6 +14,9 @@ const AI_PENDING_COMMANDS: usize = 256;
 
 #[path = "commands/apply.rs"]
 mod apply;
+#[path = "commands/tests/attack_move.rs"]
+#[cfg(test)]
+mod attack_move_tests;
 #[path = "commands/tests/auto_scout.rs"]
 #[cfg(test)]
 mod auto_scout_tests;
@@ -231,6 +234,18 @@ impl GameplayService {
         entity_id: EntityId,
         destination: WorldPosition,
     ) {
+        self.queue_move_order(session_id, sequence, entity_id, destination, false)
+            .await;
+    }
+    /// A replacing move; `attack_move` fights enemies met on the way.
+    pub async fn queue_move_order(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        entity_id: EntityId,
+        destination: WorldPosition,
+        attack_move: bool,
+    ) {
         self.queue_command(
             session_id,
             sequence,
@@ -238,7 +253,7 @@ impl GameplayService {
                 entity_id,
                 destination,
                 queued: false,
-                attack_move: false,
+                attack_move,
             },
         )
         .await;

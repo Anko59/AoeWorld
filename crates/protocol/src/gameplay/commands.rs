@@ -13,6 +13,8 @@ pub enum ClientMessage {
         sequence: u64,
         entity_id: EntityId,
         destination: WorldPosition,
+        /// Fight enemies met on the way, like a group attack-move.
+        attack_move: bool,
     },
     Resync {
         revision: u64,

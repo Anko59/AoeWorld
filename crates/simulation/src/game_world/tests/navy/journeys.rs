@@ -67,6 +67,21 @@ fn a_new_move_or_stop_cancels_pending_boarding() {
 }
 
 #[test]
+fn an_attack_move_cancels_pending_boarding() {
+    let mut world = river();
+    let (west, _, east_water, _) = banks(&world);
+    let inland = TileCoord::new(west.x - 4, west.y);
+    let boat = ship(&mut world, UnitKind::TransportShip, east_water, 0);
+    let passenger = world.spawn_militia(PlayerId(0), at(inland)).unwrap();
+    world.issue_load(PlayerId(0), &[passenger], boat).unwrap();
+    assert!(!world.economy.transport_journeys.is_empty());
+    world.issue_attack_move(passenger, at(inland)).unwrap();
+    assert!(world.economy.transport_journeys.is_empty());
+    advance(&mut world, 800);
+    assert!(world.transport_cargo(boat).is_empty());
+}
+
+#[test]
 fn unloading_on_arrival_reports_the_ship_and_landed_passenger_in_the_tick() {
     let mut world = river();
     let (west, water, _, east) = banks(&world);
