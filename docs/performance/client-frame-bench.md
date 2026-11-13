@@ -111,28 +111,49 @@ all client instructions, browser layout, GPU time or finished RTS performance.
 
 Use the same current server/packages for historical clients: the parent of
 round one predates the current map recipe. Build only their instrumented client
-artifacts in isolated checkouts, with private Cargo targets:
+artifacts in isolated checkouts, with private Cargo targets. The instrumentation
+is exactly the benchmark's own client/rendering diff: the commit that added
+`frame_bench.rs`, limited to those two crates. It contains no other client
+change, so a historical client differs from its revision only by counters and
+driver exports. Do not diff against a dev revision: that imports unrelated
+later client work.
 
 ```sh
-git diff dfad610ac7af HEAD --binary -- crates/client crates/rendering > .cache/metric-client-adapter.patch
+C=$(git log --diff-filter=A --format=%H -1 -- crates/client/src/playground_fixture/frame_bench.rs)
+git diff "$C^" "$C" --binary -- crates/client crates/rendering > .cache/metric-instrumentation.patch
 git worktree add --detach .cache/metric-revisions/parent cca6bbd9da2bafbc467316fe9d386d46f5cbd51b
 git worktree add --detach .cache/metric-revisions/round1 3e210b830a572258d660f4fd16152fb0e151881f
 git worktree add --detach .cache/metric-revisions/round2 9071ef4b2022358e128c70b4350d224fe5a61f83
+for r in parent round1 round2; do
+  git -C ".cache/metric-revisions/$r" apply --index "$PWD/.cache/metric-instrumentation.patch"
+done
+git -C .cache/metric-revisions/parent apply "$PWD/docs/performance/client-frame-bench-parent.patch"
+git -C .cache/metric-revisions/parent add crates
 ```
 
-Apply the adapter to each checkout and stage its client/rendering paths so its
-new files appear in the recorded source diff. In the parent adapter only, replace
-the probe's unavailable `with_game_atlas_updates` wrapper with the same sixteen
-direct `update_game_atlas` calls. Also expose its existing inline fence-drain
+The patch applies cleanly to all three revisions. The parent additionally needs
+the committed [parent delta](client-frame-bench-parent.patch): it replaces the
+probe's unavailable `with_game_atlas_updates` wrapper with the same sixteen
+direct `update_game_atlas` calls and exposes the existing inline fence-drain
 loop as a `poll()` method for the unscored completion barrier, leaving the
-original render loop unchanged. This is the pre-batching production boundary;
-retain the diff outside Git. There are no revision branches in the committed
-benchmark. For each checkout (example uses `round1`):
+original render loop unchanged. This is the pre-batching production boundary.
+Staging the paths makes new files appear in the recorded source diff. There are
+no revision branches in the committed benchmark. For each checkout (example
+uses `round1`):
 
 ```sh
 make client-frame-bench-client-build CLIENT_FRAME_SOURCE="$PWD/.cache/metric-revisions/round1"
 make client-frame-bench CLIENT_FRAME_BENCH_ARGS='--package-directory local-assets/map-packages --content-hash 4d9cb16c1c286a5b29ba1d94e70371af966ac7a130a1c3c0f6bcbe95f3b5b683 --asset-pack local-assets/packs/8f7abe8c330d7fd710daa076c8ef07de65f8973feed59b99f4d01f9cbc9c4530 --client-package-directory .cache/metric-revisions/round1/.cache/client-frame-bench/pkg --out .cache/client-frame-bench/round1.json'
 ```
+
+Verified 2026-11-13 on branch `perf/client-metric` for `cca6bbd9d` (parent) and
+`3e210b830` (round one): the commands above applied cleanly and the counters
+match the reported ones: the complete scored counter sets of both fresh runs
+equal the retained reports (parent: 32 probe checks, round one: 1, 4678.333333
+demand visits per frame, 0% spread). Only the report's source-diff digest differs
+from the earlier reports, because the committed driver is rustfmt-formatted;
+the code is the same.
+
 
 ## Measurements
 
@@ -170,7 +191,7 @@ The measured WASM SHA-256 is
 `9dcb68f9ed8c27e986843cc53dde1d8dfe849d7f7e1be97db37a67def6891cf5`;
 bridge SHA-256 is
 `23245cc1ba51b929f4e2942918ea0774b1ae731eb1ae37feaf9c072e53d1e3aa`.
-The report retains all input/source digests. The measured adapter is preserved
+The report retains all input/source digests. The measured instrumentation is preserved
 as `.cache/metric-final-source.patch` and `.cache/metric-final-measured-full.patch`.
 Its instrumented WASM is byte-identical before and after final formatting.
 
