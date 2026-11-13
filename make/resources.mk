@@ -1,7 +1,7 @@
 # Independent std-only observer: no workspace bootstrap or machine-wide build lock.
 RESOURCE_SOURCE := crates/harness/src/resources
 .PHONY: test-resources
-.cache/resource-runner: $(RESOURCE_SOURCE)/launcher.rs $(RESOURCE_SOURCE)/observer.rs $(RESOURCE_SOURCE)/policy.rs $(RESOURCE_SOURCE)/long.rs $(RESOURCE_SOURCE)/lock.rs gates/container.args
+.cache/resource-runner: $(RESOURCE_SOURCE)/launcher.rs $(RESOURCE_SOURCE)/cpu.rs $(RESOURCE_SOURCE)/observer.rs $(RESOURCE_SOURCE)/policy.rs $(RESOURCE_SOURCE)/long.rs $(RESOURCE_SOURCE)/lock.rs gates/container.args
 	@$(MAKE) --no-print-directory tools
 	@mkdir -p .cache
 	@docker run --rm --init --memory=256m --memory-swap=256m --cpu-shares=1024 --user $(UID):$(GID) $(call BIND_MOUNT,$(ROOT),$(ROOT)) -w $(call MOUNT_QUOTE,$(ROOT)) $(TOOL_IMAGE) rustc --edition=2024 $(RESOURCE_SOURCE)/launcher.rs -o .cache/resource-runner
@@ -36,6 +36,6 @@ ifneq ($(strip $(filter-out test-e2e,$(filter $(LONG_GOALS),$(MAKECMDGOALS)))$(i
 resource-bootstrap .cache/resource-runner: | long-precheck
 long-precheck: .EXTRA_PREREQS :=
 long-precheck:
-	@dir=$(call MOUNT_QUOTE,$(GIT_COMMON)/aoe-ship); n=$${AOE_LONG_SLOTS:-3}; case "$$n" in [1-8]) ;; *) echo "AOE_LONG_SLOTS must be 1..=8, got $$n" >&2; exit 1;; esac; i=0; msg=; while [ $$i -lt $$n ]; do lock="$$dir/long-$$i.lock"; [ -f "$$lock" ] || exit 0; flock -n -E 75 "$$lock" true; status=$$?; [ "$$status" = 0 ] && exit 0; [ "$$status" = 75 ] || exit "$$status"; { IFS= read -r proof; IFS= read -r holder || :; } < "$$lock"; if [ -n "$$AOE_LONG_JOB" ] && [ "$$proof" = "$$AOE_LONG_JOB" ] && [ "$$AOE_LONG_DIR/long-$${AOE_LONG_SLOT:-0}.lock" = "$$lock" ]; then exit 0; fi; msg="$$msg$${msg:+; }slot $$i: $${holder:-holder metadata is being recorded}"; i=$$((i+1)); done; echo "long job busy: $$msg, retry later" >&2; exit 75
+	@dir=$(call MOUNT_QUOTE,$(GIT_COMMON)/aoe-ship); n=$${AOE_LONG_SLOTS:-3}; case "$$n" in [1-8]) ;; *) echo "AOE_LONG_SLOTS must be 1..=8, got $$n" >&2; exit 1;; esac; i=0; msg=; while [ $$i -lt $$n ]; do lock="$$dir/long-$$i.lock"; [ -f "$$lock" ] || exit 0; flock -n -E 75 "$$lock" true; status=$$?; [ "$$status" = 0 ] && exit 0; [ "$$status" = 75 ] || exit "$$status"; { IFS= read -r proof; IFS= read -r holder || :; } < "$$lock"; if [ -n "$$AOE_LONG_JOB" ] && [ "$$proof" = "$$AOE_LONG_JOB" ] && [ "$$AOE_LONG_DIR/long-$${AOE_LONG_SLOT:-0}.lock" = "$$lock" ]; then exit 0; fi; msg="$$msg$${msg:+; }slot $$i: $${holder:-holder metadata is being recorded}"; i=$$((i+1)); done; [ ! -x '$(RESOURCE_BINARY)' ] || '$(RESOURCE_BINARY)' --long-refused '$(MAKECMDGOALS)' "$$msg" || :; echo "long job busy: $$msg, retry later" >&2; exit 75
 endif
 endif

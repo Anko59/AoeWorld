@@ -61,7 +61,9 @@ build. Qualification and authorization remain independent required planes.
 
 ## Resource admission and long jobs
 
-Short gates start without a lock or load wait; long jobs share three slots (`AOE_LONG_SLOTS`, 1..=8). Workload containers
+Every build container takes one of four build slots (`AOE_CPU_SLOTS`; at most 2 per worktree and 3 per
+`AOE_COORDINATOR`); it waits up to 90 s, then refuses with exit 75. On that refusal, do non-build
+work instead of retrying in a loop. Long jobs also share three slots (`AOE_LONG_SLOTS`, 1..=8). Workload containers
 share the memory/swap caps and CPU shares in `gates/container.args`; CPU quotas
 are not used. A host MemAvailable check refuses immediately below 3 GiB.
 `make load-status` shows available memory and every long-job slot with its holder.

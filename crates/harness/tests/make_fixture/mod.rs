@@ -21,6 +21,7 @@ pub fn workspace_named(prefix: &str) -> tempfile::TempDir {
         "Cargo.toml",
         "Cargo.lock",
         "crates/harness/src/resources/launcher.rs",
+        "crates/harness/src/resources/cpu.rs",
         "crates/harness/src/resources/observer.rs",
         "crates/harness/src/resources/policy.rs",
         "crates/harness/src/resources/long.rs",
