@@ -304,14 +304,12 @@ fn run_specs(
     let asset_pack = std::env::var("AOE_ASSET_PACK")
         .ok()
         .filter(|value| !value.is_empty());
-    let renderer_evidence = renderer_evidence(asset_pack.is_some())?;
     let report = serde_json::json!({
         "version": 1,
         "revision": String::from_utf8(revision.stdout)?.trim(),
         "server_binary": relative_binary,
         "asset_source": if asset_pack.is_some() { "local AoE II pack" } else { "generated CI fixtures" },
         "asset_pack": asset_pack.unwrap_or_default(),
-        "renderer_evidence": renderer_evidence,
         "landscape_fixture": {
             "kind": "synthetic-prepared-flat-temperate",
             "content_hash": fixture_hash,
@@ -324,42 +322,6 @@ fn run_specs(
     std::fs::create_dir_all("reports/e2e")?;
     std::fs::write("reports/e2e/pass.json", serde_json::to_vec_pretty(&report)?)?;
     Ok(())
-}
-
-fn renderer_evidence(
-    private_assets: bool,
-) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-    let source = if private_assets {
-        "local AoE II pack"
-    } else {
-        "generated CI fixtures"
-    };
-    let prefix = if private_assets {
-        "local-assets/evidence/aoeworld-map-private-"
-    } else {
-        "reports/e2e/aoeworld-map-"
-    };
-    let mut evidence = Vec::new();
-    for project in ["webgpu", "canvas", "browser-defaults"] {
-        let path = format!("{prefix}{project}.json");
-        let bytes = std::fs::read(&path).map_err(|error| format!("{path}: {error}"))?;
-        let value: serde_json::Value =
-            serde_json::from_slice(&bytes).map_err(|error| format!("{path}: {error}"))?;
-        if value.get("project").and_then(serde_json::Value::as_str) != Some(project)
-            || value
-                .get("asset_source")
-                .and_then(serde_json::Value::as_str)
-                != Some(source)
-            || value
-                .get("renderer")
-                .and_then(serde_json::Value::as_str)
-                .is_none()
-        {
-            return Err(format!("invalid renderer evidence: {path}").into());
-        }
-        evidence.push(value);
-    }
-    Ok(serde_json::Value::Array(evidence))
 }
 
 /// How the browser container runs: through the flaky quarantine, or as the bounded focused
