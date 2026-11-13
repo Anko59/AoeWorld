@@ -152,7 +152,18 @@ fn a_retreating_soldier_fights_an_enemy_in_its_reach_and_one_that_hits_it() {
             w.units[w.lookup[&enemy]].state.stance = aoe_core::CombatStance::NoAttack;
             let mut changed = Vec::new();
             w.retaliate(w.lookup[&ids[0]], enemy, &mut changed);
-            assert_eq!(w.unit(ids[0]).unwrap().attack_target, Some(enemy));
+            assert_eq!(
+                w.unit(ids[0]).unwrap().attack_target,
+                None,
+                "a moving member uses the ordinary formation look, not a General-only reaction"
+            );
+            for _ in 0..4 {
+                w.advance();
+            }
+            assert!(
+                w.unit(ids[0]).unwrap().attack_target == Some(enemy)
+                    || w.unit(enemy).is_none_or(|e| e.hp == 0)
+            );
         } else {
             for _ in 0..40 {
                 w.advance();

@@ -1,51 +1,36 @@
+//! Targets come from ordinary offensive movement, rather than a General focus table.
 use super::*;
 
 #[test]
-fn focus_orders_siege_monks_leaders_archers_then_wounded_by_distance_and_id() {
+fn offensive_squad_engages_the_near_enemy_before_a_distant_siege_unit() {
     let (mut w, _) = setup();
-    soldier(&mut w, UnitKind::Archer, 104, 100);
-    let g = soldier(&mut w, UnitKind::General, 103, 100);
-    // A large friendly army keeps each decision favourable.
-    for n in 0..20 {
-        soldier(&mut w, UnitKind::Knight, 100 + n % 5, 101 + n / 5);
+    for n in 0..8 {
+        soldier(&mut w, UnitKind::Archer, 100 + n % 4, 100 + n / 4);
     }
-    // Keep the distant siege visible through the ordinary friendly observer index.
-    soldier(&mut w, UnitKind::Scout, 114, 102);
-    let kinds = [
-        UnitKind::Mangonel,
-        UnitKind::BatteringRam,
-        UnitKind::Monk,
-        UnitKind::General,
-        UnitKind::Steward,
-        UnitKind::Archer,
-        UnitKind::Crossbowman,
-        UnitKind::Skirmisher,
-        UnitKind::EliteSkirmisher,
-        UnitKind::Militia,
-        UnitKind::Militia,
-    ];
-    let enemies: Vec<_> = kinds
-        .into_iter()
-        .enumerate()
-        .map(|(n, kind)| {
-            // Lower categories are closer; class priority must still win.
-            let x = if n == 0 { 114 } else { 113 - n as i32 / 2 };
-            w.spawn_kind(PlayerId(1), kind, at(x, 100)).unwrap()
-        })
-        .collect();
-    w.units[w.lookup[&enemies[9]]].state.hp = 1;
-    let order = [1, 0, 2, 4, 3, 8, 6, 7, 5, 9, 10];
-    // The test controls only the decision; the first fighting group's target
-    // is the focus. No movement or combat tick changes distances.
-    for n in order {
-        decide(&mut w);
-        assert_eq!(w.general_status(g).unwrap().state, GeneralState::Fighting);
-        assert_eq!(
-            w.general_fight_target(g, 0),
-            Some(enemies[n]),
-            "expected {:?}",
-            kinds[n]
-        );
-        w.kill_unit(w.lookup[&enemies[n]]);
+    let g = soldier(&mut w, UnitKind::General, 103, 103);
+    let near = w
+        .spawn_kind(PlayerId(1), UnitKind::Militia, at(106, 100))
+        .unwrap();
+    let far = w
+        .spawn_kind(PlayerId(1), UnitKind::BatteringRam, at(116, 100))
+        .unwrap();
+    w.issue_stance(
+        PlayerId(1),
+        &[near, far],
+        aoe_core::CombatStance::StandGround,
+    )
+    .unwrap();
+    w.issue_move(g, at(150, 103)).unwrap();
+    for _ in 0..80 {
+        w.advance();
+        if w.unit(near).unwrap().hp < w.unit(near).unwrap().max_hp {
+            assert_eq!(
+                w.unit(far).unwrap().hp,
+                w.unit(far).unwrap().max_hp,
+                "the first hit is on the near contact, not the distant siege"
+            );
+            return;
+        }
     }
+    panic!("the near contact was never engaged");
 }

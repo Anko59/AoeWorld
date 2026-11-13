@@ -49,8 +49,8 @@ impl GameWorld {
     }
 
     /// Move the General by himself. The army keeps its place and is not led,
-    /// until the next army march or Stop. Friendly followers yield to him in
-    /// collision (movement_step/collision.rs).
+    /// until the next army march or Stop. Movement and collision use the
+    /// ordinary one-member offensive group order.
     pub fn issue_general_move(
         &mut self,
         player: PlayerId,
@@ -64,8 +64,14 @@ impl GameWorld {
         if unit.kind != UnitKind::General || !self.economy.generals.armies.contains_key(&id) {
             return Err(EconomyError::WrongUnitKind);
         }
-        self.issue_move(id, destination)
-            .map_err(EconomyError::Movement)?;
+        self.issue_formation_move(
+            player,
+            &[id],
+            aoe_core::Formation::Line,
+            destination,
+            false,
+            true,
+        )?;
         self.hold_general_army(id);
         Ok(())
     }
@@ -124,6 +130,11 @@ impl GameWorld {
         a.destination = None;
         a.routed = None;
         a.layout = None;
+        a.commander_march = None;
+        for squad in &mut a.squads {
+            squad.march = None;
+            squad.final_leg = false;
+        }
         a.solo = true;
         a.retreat_until = 0;
         a.state = GeneralState::Idle;

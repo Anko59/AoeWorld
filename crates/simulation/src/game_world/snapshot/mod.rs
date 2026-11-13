@@ -417,6 +417,9 @@ impl GameWorld {
         let mut grouped = std::collections::BTreeSet::new();
         let mut failed_moves = std::collections::BTreeSet::new();
         for group in &snapshot.formations {
+            if group.pace_limit.is_some_and(|(n, d)| n == 0 || d == 0) {
+                continue;
+            }
             let members: Vec<EntityId> = group
                 .members
                 .iter()
@@ -442,6 +445,9 @@ impl GameWorld {
                     group.attack_move,
                 )
                 .is_ok();
+            if moved && let Some(pace) = group.pace_limit {
+                let _ = self.issue_formation_pace(player, members[0], Some(pace));
+            }
             // Each queued waypoint keeps its own attack-move flag.
             for &(at, attack_move) in &group.queue {
                 let _ =

@@ -35,6 +35,7 @@ pub struct FormationRecord {
     pub destination: WorldPosition,
     pub queue: Vec<(WorldPosition, bool)>,
     pub attack_move: bool,
+    pub pace_limit: Option<(u64, u64)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

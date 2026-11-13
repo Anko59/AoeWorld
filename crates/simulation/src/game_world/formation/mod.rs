@@ -101,6 +101,8 @@ pub(crate) struct Group {
     facing: Facing,
     speed: (u64, u64),
     pace: (u64, u64),
+    /// Optional order-owned pace for coordinating independent selections.
+    speed_limit: Option<(u64, u64)>,
     settled: bool,
     direct: bool,
     gap: i32,
@@ -126,6 +128,14 @@ pub(crate) struct Group {
 }
 
 impl Group {
+    pub(super) fn limited_speed(&self, own: (u64, u64)) -> (u64, u64) {
+        self.speed_limit
+            .filter(|pace| {
+                u128::from(pace.0) * u128::from(own.1) < u128::from(own.0) * u128::from(pace.1)
+            })
+            .unwrap_or(own)
+    }
+
     pub(super) fn static_covers(&self, at: WorldPosition, kind: UnitKind) -> bool {
         self.static_area
             .is_some_and(|area| area.covers(at, kind.collision_radius(), 513))
@@ -149,16 +159,6 @@ impl GameWorld {
             .map(|g| g.destination)
     }
 
-    /// An unchanged squad keeps its current shared route and final slots.
-    pub(crate) fn formation_keeps_march(&self, id: EntityId, goal: WorldPosition) -> bool {
-        self.lookup
-            .get(&id)
-            .and_then(|&index| self.units[index].formation)
-            .and_then(|leader| self.formations.get(&leader))
-            .is_some_and(|group| !group.attack_move && near_goal(group.destination, goal))
-    }
-
-    /// An unchanged squad keeps its current shared route and final slots.
     pub(crate) fn formation_matches(&self, ids: &[EntityId], goal: WorldPosition) -> bool {
         let Some(leader) = ids
             .first()
@@ -168,8 +168,11 @@ impl GameWorld {
             return false;
         };
         self.formations.get(&leader).is_some_and(|group| {
-            near_goal(group.destination, goal)
-                && group.members.iter().map(|m| m.id).eq(ids.iter().copied())
+            (if group.attack_move {
+                group.destination == goal
+            } else {
+                near_goal(group.destination, goal)
+            }) && group.members.iter().map(|m| m.id).eq(ids.iter().copied())
         })
     }
 
@@ -285,7 +288,7 @@ impl GameWorld {
             .unwrap_or_default()
     }
 
-    /// Released members stop; a General's automatic order retains his FIFO.
+    /// Released members stop through ordinary movement and queue handling.
     pub(crate) fn stop_member(&mut self, index: usize) {
         let id = self.units[index].state.id;
         self.stop_movement(index);

@@ -17,7 +17,6 @@ const HARD_OTHER: i64 = 100;
 
 #[derive(Clone, Copy)]
 struct SweepPolicy {
-    general_alone: bool,
     file: Option<aoe_core::EntityId>,
     soft: bool,
     work_squeeze: bool,
@@ -251,17 +250,12 @@ impl GameWorld {
                     return false;
                 }
                 let SweepPolicy {
-                    general_alone,
                     file,
                     soft,
                     work_squeeze,
                     narrow_water,
                     blocked,
                 } = *policy.get_or_insert_with(|| self.sweep_policy(index, from, unit));
-                // His own army yields to a General the player walks alone.
-                if general_alone && self.is_general_follower(other.id, unit.id) {
-                    return false;
-                }
                 if file.is_some() && other.player == unit.player {
                     return false;
                 }
@@ -375,7 +369,6 @@ impl GameWorld {
                                 })
                             || self.free_work_approach(index, o.goal))
                 }));
-        let general_alone = unit.kind == UnitKind::General && self.units[index].formation.is_none();
         let work_squeeze = unit.kind == UnitKind::Villager
             && obstruction.is_some()
             && self.crowded_resource_approach(unit.id);
@@ -396,7 +389,6 @@ impl GameWorld {
                     || (blocked >= 64 && self.static_clearance(unit.kind, from.tile_floor()) <= 1)
             });
         SweepPolicy {
-            general_alone,
             file,
             soft,
             work_squeeze,

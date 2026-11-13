@@ -108,21 +108,6 @@ impl GameWorld {
         Ok(())
     }
 
-    /// A free-standing fighter, or a General's soldier while its army fights
-    /// (not while it marches or falls back).
-    pub(super) fn free_to_pick_on(&self, id: EntityId) -> bool {
-        self.economy
-            .generals
-            .controlled
-            .get(&id)
-            .is_none_or(|g| self.general_fighting(*g))
-    }
-
-    /// Whether a General currently leads this soldier.
-    pub(crate) fn general_follower(&self, id: EntityId) -> bool {
-        self.economy.generals.controlled.contains_key(&id)
-    }
-
     pub(super) fn advance_acquisition(&mut self, changed: &mut Vec<EntityId>) {
         #[cfg(test)]
         self.assert_quiet_acquisition();
@@ -160,23 +145,15 @@ impl GameWorld {
                 .get(&id)
                 .copied()
                 .filter(|a| a.origin.is_some() && self.building(a.target).is_some());
-            // A General's soldier on the march still fights what is in reach.
-            let marching = self.general_follower(id)
-                && (u.moving || u.planning || matches!(u.task, UnitTask::Moving));
             if u.hp == 0
-                || ((u.moving || u.planning) && building_attack.is_none() && !marching)
-                || (!matches!(u.task, UnitTask::Idle) && building_attack.is_none() && !marching)
+                || ((u.moving || u.planning) && building_attack.is_none())
+                || (!matches!(u.task, UnitTask::Idle) && building_attack.is_none())
             {
                 continue;
             }
-            let Some(mut area) = self.acquisition_area(&u) else {
+            let Some(area) = self.acquisition_area(&u) else {
                 continue;
             };
-            if marching {
-                // Marching soldiers stop for an enemy in attack range only.
-                let range = super::super::navy::attack_range(&self.unit_state_stats(&u));
-                area.max = area.max.min(range);
-            }
             // A melee unit does not take on an enemy whose every spot is
             // taken: it would only stand and wait out of reach.
             let probe = self.acquire_target(&area, building_attack.is_none());
@@ -276,7 +253,12 @@ impl GameWorld {
         origin: WorldPosition,
     ) {
         // An attack-move member between fights keeps its way back to its slot.
-        let resume = self.combat.resuming.remove(&id).map(|r| r.slot);
+        let resume = self
+            .combat
+            .resuming
+            .remove(&id)
+            .map(|r| r.slot)
+            .or_else(|| self.offensive_destination_slot(id));
         self.leave_group(id);
         self.begin_attack(id, target);
         if let Some(a) = self.combat.attackers.get_mut(&id) {

@@ -45,7 +45,11 @@ fn death_restores_every_soldiers_original_stance_after_march_or_retreat() {
         }
         assert_eq!(
             w.unit(members[0].0).unwrap().stance,
-            CombatStance::Defensive
+            if fleeing {
+                CombatStance::Defensive
+            } else {
+                members[0].1
+            }
         );
         w.kill_unit(w.lookup[&g]);
         restored(&w, &members);
@@ -104,7 +108,7 @@ fn garrisoning_the_general_restores_every_soldier() {
     let g = soldier(&mut w, UnitKind::General, 94, 92);
     w.issue_move(g, at(145, 104)).unwrap();
     decide(&mut w);
-    assert_eq!(w.unit(id).unwrap().stance, CombatStance::Defensive);
+    assert_eq!(w.unit(id).unwrap().stance, CombatStance::StandGround);
     w.issue_garrison(PlayerId(0), g, castle).unwrap();
     w.advance_garrisons(&mut Vec::new());
     assert!(w.unit(g).is_none());
@@ -197,8 +201,7 @@ fn canonical_hash_includes_the_stance_to_restore() {
         let id = soldier(&mut w, UnitKind::Militia, 100, 100);
         w.issue_stance(PlayerId(0), &[id], original).unwrap();
         let g = soldier(&mut w, UnitKind::General, 102, 102);
-        w.issue_move(g, at(145, 103)).unwrap();
-        decide(&mut w);
+        retreat(&mut w, g);
         (w, id)
     }
     let (a, id) = run(CombatStance::Aggressive);

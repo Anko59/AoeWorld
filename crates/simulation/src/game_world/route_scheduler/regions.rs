@@ -243,7 +243,7 @@ impl GameWorld {
 
     /// Optional route certificates cannot traverse a continent synchronously.
     /// This bounds only the shortcut; unknown leaves ordinary planning intact.
-    fn land_reachable_bounded(
+    pub(crate) fn land_reachable_bounded(
         &self,
         player: PlayerId,
         bucket: LandBucket,

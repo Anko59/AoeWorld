@@ -31,7 +31,7 @@ impl GameWorld {
         let ordered: Vec<_> = army
             .iter()
             .copied()
-            .filter(|v| in_influence(u.position, v.position))
+            .filter(|v| in_influence(u.position, v.position) || self.formation(v.id).is_some())
             .collect();
         // The whole army counts, wherever its soldiers stand: a column strung
         // out along the road is as strong as it is when it gathers.
@@ -52,17 +52,16 @@ impl GameWorld {
                     }
                 })
                 .sum::<u64>();
-        let pace = army
-            .iter()
-            .map(|v| self.movement_speed(v.kind, v.player))
-            .min_by(|a, b| {
-                (u128::from(a.0) * u128::from(b.1)).cmp(&(u128::from(b.0) * u128::from(a.1)))
-            })
-            .unwrap_or((0, 1));
+        let completed = army.iter().all(|v| {
+            !v.moving
+                && !v.planning
+                && v.attack_target.is_none()
+                && !self.combat.resuming.contains_key(&v.id)
+                && self.movement_goal(v.id).is_none()
+        });
         let Some(a) = self.economy.generals.armies.get_mut(&u.id) else {
             return;
         };
-        a.pace = pace;
         let old_state = a.state;
         let hurt = u.hp * 3 < u.max_hp
             || army.iter().map(|v| u64::from(v.hp)).sum::<u64>() * 3
@@ -89,34 +88,55 @@ impl GameWorld {
             && state != GeneralState::Fighting
             && a.destination.is_none())
         .then_some(u.position);
+        // A finished ordinary click may have passed a visible contact. Only
+        // after every admitted march/fight finishes, make another offensive
+        // click; never replace an underway order with firing-position micro.
+        let engagement = if state == GeneralState::Fighting && completed {
+            survey.enemies.first().map(|enemy| enemy.position)
+        } else {
+            (old_state == GeneralState::Fighting && state == GeneralState::Fighting)
+                .then_some(a.layout)
+                .flatten()
+                .map(|(goal, _)| goal)
+        };
         let destination = if state == GeneralState::Retreating {
             Some(a.home)
         } else {
             a.destination.or(regroup)
         };
-        if old_state != state {
+        if (old_state == GeneralState::Retreating) != (state == GeneralState::Retreating) {
             a.routed = None;
+            a.layout = None;
+            a.commander_march = None;
+            for squad in &mut a.squads {
+                squad.march = None;
+            }
         }
-        if state != GeneralState::Fighting {
-            a.fight = [None; fight::FIGHT_GROUPS];
-        }
-        self.reconcile_general_stances(u.id, state, destination);
+        self.reconcile_general_stances(u.id, state);
         if ordered.is_empty() {
             return;
         }
-        if state != GeneralState::Fighting {
-            if let Some(to) = destination {
-                self.general_formation(
-                    u.id,
-                    &ordered,
-                    to,
-                    state == GeneralState::Retreating,
-                    changed,
-                    work,
-                );
-            }
-            return;
+        if let Some(to) = engagement
+            .filter(|_| state != GeneralState::Retreating)
+            .or(destination)
+            .or_else(|| survey.enemies.first().map(|v| v.position))
+        {
+            let healthy: Vec<_> = ordered
+                .iter()
+                .copied()
+                .filter(|v| state != GeneralState::Fighting || v.hp * 3 >= v.max_hp)
+                .collect();
+            self.march_squads(
+                u.id,
+                &healthy,
+                to,
+                state == GeneralState::Retreating,
+                changed,
+                work,
+            );
         }
-        self.general_fight(u, &ordered, &survey, changed, work);
+        if state == GeneralState::Fighting {
+            self.general_fight(u, &ordered, changed, work);
+        }
     }
 }

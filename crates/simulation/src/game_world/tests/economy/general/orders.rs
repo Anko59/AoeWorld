@@ -127,26 +127,57 @@ fn general_only_move_rejects_other_owners_and_other_units() {
         w.issue_general_move(PlayerId(0), ids[0], at(120, 104))
             .is_err()
     );
+    player_move(&mut w, g, at(150, 104));
+    decide(&mut w);
+    let before = w.canonical_hash();
+    assert!(
+        w.issue_general_move(PlayerId(0), g, WorldPosition::new(-1, -1))
+            .is_err()
+    );
+    assert_eq!(
+        w.canonical_hash(),
+        before,
+        "a refused solo order cannot stop the army"
+    );
 }
 
 #[test]
-fn general_walks_through_his_own_army_that_fills_a_corridor() {
-    let (mut w, _) = setup();
-    for x in 100..160 {
-        w.economy.blocked_tiles.insert(TileCoord::new(x, 59));
-        w.economy.blocked_tiles.insert(TileCoord::new(x, 61));
-    }
-    let wall: Vec<_> = (0..16)
-        .map(|n| soldier(&mut w, UnitKind::Militia, 110 + n, 60))
-        .collect();
-    let g = soldier(&mut w, UnitKind::General, 101, 60);
-    assert!(wall.iter().all(|&id| w.general_controller(id) == Some(g)));
-    advance(&mut w, 5);
-    w.issue_general_move(PlayerId(0), g, at(135, 60)).unwrap();
-    advance(&mut w, 900);
-    let p = w.unit(g).unwrap().position;
-    assert!(p.x > 130 * 1024, "General crossed his army: {p:?}");
-    assert!(wall.iter().all(|&id| w.unit(id).unwrap().hp > 0));
+fn solo_general_uses_the_same_collision_recovery_with_or_without_followers() {
+    let run = |detach: bool| {
+        let (mut w, _) = setup();
+        for x in 100..160 {
+            w.economy.blocked_tiles.insert(TileCoord::new(x, 59));
+            w.economy.blocked_tiles.insert(TileCoord::new(x, 61));
+        }
+        let wall: Vec<_> = (0..16)
+            .map(|n| soldier(&mut w, UnitKind::Militia, 110 + n, 60))
+            .collect();
+        let g = soldier(&mut w, UnitKind::General, 101, 60);
+        assert!(wall.iter().all(|&id| w.general_controller(id) == Some(g)));
+        advance(&mut w, 5);
+        if detach {
+            for &id in &wall {
+                w.forget_general(id);
+            }
+        }
+        w.issue_general_move(PlayerId(0), g, at(135, 60)).unwrap();
+        let mut positions = Vec::new();
+        for _ in 0..900 {
+            w.advance();
+            positions.push(w.unit(g).unwrap().position);
+        }
+        assert!(wall.iter().all(|&id| w.unit(id).unwrap().hp > 0));
+        assert!(
+            positions.last().unwrap().x > 110 * 1024,
+            "shared recovery makes progress"
+        );
+        positions
+    };
+    assert_eq!(
+        run(false),
+        run(true),
+        "army membership grants no collision exemption"
+    );
 }
 
 /// The owner could not rescue a stuck group: its General kept taking it back.

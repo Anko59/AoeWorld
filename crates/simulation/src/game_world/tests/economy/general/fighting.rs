@@ -84,7 +84,8 @@ fn an_enemy_camp_is_cleared_instead_of_idled_in() {
     assert!(camp.iter().all(|&id| w.unit_visible_to(PlayerId(0), id)));
     w.issue_move(g, at(148, 98)).unwrap();
     // Longest run of ticks an army member stood idle with a camp member
-    // within eight tiles: it must keep fighting.
+    // within its own sight: ordinary attack-move does not use the commander's
+    // or the outposts' sight to pick targets.
     let mut idle = vec![0_u32; army.len()];
     let mut worst = 0;
     let mut cleared = None;
@@ -100,15 +101,34 @@ fn an_enemy_camp_is_cleared_instead_of_idled_in() {
             let Some(u) = w.unit(id).filter(|u| u.hp > 0) else {
                 continue;
             };
-            let near = camp
-                .iter()
-                .filter_map(|&e| w.unit(e))
-                .any(|e| e.hp > 0 && tiles(e.position, u.position) <= 8);
+            let sight = i64::from(w.unit_observer(&u).unwrap().2) * 1024;
+            let near = camp.iter().filter_map(|&e| w.unit(e)).any(|e| {
+                e.hp > 0
+                    && i64::from(e.position.x - u.position.x).pow(2)
+                        + i64::from(e.position.y - u.position.y).pow(2)
+                        <= sight * sight
+            });
             idle[n] = if near && !u.moving && !u.planning && u.attack_target.is_none() {
                 idle[n] + 1
             } else {
                 0
             };
+            if idle[n] == 101 {
+                let nearest = camp
+                    .iter()
+                    .filter_map(|&e| w.unit(e))
+                    .filter(|e| e.hp > 0)
+                    .map(|e| (tiles(e.position, u.position), e.id))
+                    .min();
+                eprintln!(
+                    "camp idle: id={id:?} at={:?} los={:?} nearest={nearest:?} stance={:?} task={:?} formation={:?}",
+                    u.position,
+                    w.unit_observer(&u).map(|(_, _, los)| los),
+                    u.stance,
+                    u.task,
+                    w.formation(id)
+                );
+            }
             worst = worst.max(idle[n]);
         }
     }

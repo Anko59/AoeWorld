@@ -48,10 +48,10 @@ button and the soldier counts are authoritative server state
 
 ## Influence sphere
 
-A General's influence reaches 50 tiles (`GENERAL_INFLUENCE_TILES`). He gives no
-march, fight, retreat or regroup order to a soldier beyond it (the soldier keeps
-its slot and is commanded again once back inside), and he buys units only from
-production buildings whose footprint is within it.
+A General's influence reaches 50 tiles (`GENERAL_INFLUENCE_TILES`). New march
+orders reach soldiers inside it. An admitted march continues through its
+intermediate legs even if the commander and a trailing squad temporarily become
+farther apart. Production buildings must lie inside the influence sphere.
 
 ## Orders
 
@@ -59,23 +59,20 @@ Right-clicking ground leads the army (above). The **General only** button or
 Alt+right-click walks the General alone (`GeneralOrder::MoveAlone`; Rust SDK
 `Order::GeneralMove`): the army stops where it stands and is not led or retreated
 until the next army march or Stop, and the General is no longer in the shared
-block. His followers yield to him in collision (they never block a General the
-player walks alone), so he can cross a bridge or ford through his own army.
+block. He uses the same offensive movement and friendly collision recovery as any
+other single-unit group.
 
 ## March and combat
 
 Right-clicking ground with a General selected sends an ordinary move order.
 The server retains that destination as the army's march goal. Stop cancels the
-army march. Shared formation routes, obstruction handling, block movement,
-collision, path budgets and combat execution are the existing systems. The
-block follows a straightened corridor that keeps clear of banks and forest
-edges, with a proportional cohesion reserve ([real terrain](../movement/real-terrain.md)):
-100 followers cross a river ford within 1.3 times their slowest member's route.
-Role slots place infantry ahead of archers, siege behind archers, Knights on
-the flanks and scouts/light cavalry ahead of the infantry. Terrain can squeeze
-the block into narrow files. Role destinations use the block's ordinary body
-spacing, clearance validation and per-member arrival; no member pathfinds
-unless detached by the shared obstruction handling.
+army march. Each squad uses the ordinary formation routes, corridor following,
+obstruction handling, collision, path budgets and per-member arrival. Terrain
+can squeeze a squad into narrow files. At the objective, squad destinations
+place infantry ahead of archers, siege behind archers, Knights on the flanks and
+scouts/light cavalry ahead of the infantry. Shared formation assignment lays
+out each selection, including selections containing the General; army ownership
+does not select a different layout.
 
 Every decision compares nearby visible enemy HP/attack/cooldown strength with
 its whole army (every assigned member, wherever it stands). Defensive Castles and towers add a fixed threat allowance.
@@ -85,30 +82,42 @@ that trained it (nearest completed Castle for scenario-spawned Generals).
 The Castle's outside rendezvous survives destruction. Retreat lasts at least
 five seconds; once safe, the army regroups and resumes its retained destination.
 
-A march is a plain formation move. Soldiers keep their role slots until the
-army's next fight or retreat decision. The army counts an enemy as
-in sight when the General sees it (12 tiles) or any soldier does (8 tiles; at
-most 64 far candidates per decision). In sight of an enemy the army fights:
-the healthy non-siege soldiers split, in entity order, into groups of at most
-20 (`FIGHT_GROUP`); each group attack-moves, as one ordinary formation order,
-against its own target. A group's target is the best visible enemy for it:
-siege (including Mangonels and Battering Rams), then Monks, then leaders
-(Generals, Vassals and Stewards), then all archer kinds (including Skirmishers), then
-others; within a class the lowest remaining HP fraction wins, then the
-distance from that group, then entity ID. A group keeps its target while it
-stays visible and nothing of a higher class appears, and is re-ordered only
-when its target changes or half its soldiers stand idle, so it does not
-re-form every decision. When no enemy remains in sight, the army regroups:
-with a march order it resumes the march, without one it forms up around the
-General's position. Siege prefers visible buildings. Units below one-third HP
-withdraw toward home. A rotating 16-member micro window (wounded, siege, and a
-fight against buildings only) prevents a large army from monopolising orders.
-A marching or retreating soldier still fights back: one that is hit, or has an enemy within its attack range, engages it (stance Defensive during march and retreat, never NoAttack; only wounded withdrawal uses NoAttack).
-The General records each soldier's original stance before a march, retreat or
-wounded withdrawal overrides it. The original stance returns when that reason
-ends, including healing, arrival, fighting, regrouping without a destination,
-Stop, release, death or sheltering/transport of the commander. Restoration
-covers the whole army independently of the combat micro window.
+A march is an attack-move formation for each typed squad and for the General
+himself, through the same order API a player's group selection uses. Spotting an
+enemy changes the panel's state, not the admitted march: the ordinary formation
+engage look picks reachable enemies inside each soldier's own sight and resumes
+the soldier's march after combat. There is no separate General firing-position
+search or army-wide target priority. Siege uses the same acquisition as a
+player's attack-move group, including buildings.
+
+The slowest squad's ordinary route supplies a 64-tile intermediate destination
+for the other squads and the commander, followed by their final destinations
+in the ordinary offensive waypoint FIFO. The shared anchor continues through
+the waypoint without rebuilding a squad's physical centroid midway across a
+bridge. Squads already within 64 tiles finish their own approach, so a commander
+already across a river is not sent back toward the crossing. Destination
+projection and terrain recovery belong to the shared formation code.
+
+During intermediate legs squads coordinate at the slowest army member's pace
+through ordinary formation pace control, which can coordinate any player's
+groups. On final approaches they catch up at their own pace; a squad more than
+twelve tiles ahead of the commander uses the escort pace until he catches up.
+The commander keeps that escort pace. Movement has no collision exemption or
+General lookup. Front members respect that pace; only trailing members spend
+catch-up credit. Queued intermediate destinations are passing points, and their
+shared corridor remains available to the rear after the anchor turns.
+
+After every admitted march and fight has finished, a still-visible contact may
+receive another ordinary offensive click. This clears contacts passed by the
+first march without replacing an underway order or assigning individual targets.
+
+Marching preserves the player's stances. Retreat retains a temporary Defensive
+stance to limit autonomous pursuit while falling back. Units below one-third
+HP withdraw toward home with NoAttack; their retained movement goes through
+the ordinary move-goal API. A rotating 16-member window bounds wounded-unit
+commands. The original stance returns when its override ends, including
+healing, Stop, release, death or sheltering/transport of the commander.
+Restoration covers the whole army independently of that window.
 The estimator is deliberately simple, with no opponent-state or fog bypass.
 
 ## Determinism and work limits
@@ -122,7 +131,8 @@ No randomness, wall clock, network or client decisions.
 At 20 Hz, admission runs every ten ticks. At most eight Generals are admitted,
 rotating by entity ID. Each scans at most 1,024 spatial unit entries, 625 nearby
 building-occupancy tiles and 128 owner production buildings; each issues at
-most 16 combat commands, or one shared formation, plus one training order.
+most 16 withdrawal commands and 21 formation/waypoint commands,
+plus one training order.
 Partial spatial censuses resume on the next admission and conservatively
 refuse a fight. The global census bounds per admission pass are 8,192 unit
 entries and 6,024 building/tile visits. Formation membership is at most 101.
@@ -164,7 +174,7 @@ not visibility-based eviction. See [DE conversion](../assets/de-full.md) for
 measurement and remaining conversion work.
 
 Simulation tests cover takeover, production balance and reservations, role
-slots, siege building preference, wounded withdrawal, retreat, stop, death and
+slots, ordinary siege acquisition, wounded withdrawal, retreat, stop, death and
 replay. Protocol tests pin the current wire and privacy; SDK rules share the
 server tables. Browser tests use synthetic manifests. Instruction comparisons
 on smoke_ticks, distributed_ticks and late_game measure unchanged synthetic

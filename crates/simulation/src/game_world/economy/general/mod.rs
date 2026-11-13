@@ -4,7 +4,6 @@ use aoe_core::{EntityId, PlayerId, WorldPosition};
 use std::collections::{BTreeMap, BTreeSet};
 mod decisions;
 mod fight;
-mod formation;
 mod hash;
 mod orders;
 mod reinforcement;
@@ -43,28 +42,24 @@ pub(crate) struct Army {
     pub pending: BTreeMap<EntityId, UnitKind>,
     pub members: BTreeSet<EntityId>,
     pub squads: Vec<squads::Squad>,
-    /// Stable orientation for retries of the same army destination.
+    /// Stable facing across intermediate legs toward the retained destination.
     pub layout: Option<(WorldPosition, WorldPosition)>,
-    /// Shared march pace, refreshed once per admitted army decision.
-    pub pace: (u64, u64),
     pub destination: Option<WorldPosition>,
     pub state: GeneralState,
     pub micro_after: usize,
-    /// Next first fighting group, including the commander, for shared searches.
-    pub fight_after: usize,
     pub scan: (usize, usize),
     /// Next bounded slice of each production-kind index.
     pub production_scan: [usize; 5],
     pub retreat_until: u64,
+    /// Objective whose final commander leg is admitted. Squad changes do not invalidate it.
     pub routed: Option<WorldPosition>,
+    pub commander_march: Option<(WorldPosition, WorldPosition)>,
     /// The player is moving the General alone; the army holds and is not led.
     pub solo: bool,
     /// The player pressed Train: recruits are bought until the army is full.
     pub training: bool,
     /// Unit-mix sliders per role; a role at zero is never bought.
     pub mix: [u8; 5],
-    /// The enemy each fighting group of `fight::FIGHT_GROUP` soldiers is sent against.
-    pub fight: [Option<EntityId>; fight::FIGHT_GROUPS],
     stances: [Option<StanceOverride>; GENERAL_ARMY_LIMIT + 1],
 }
 #[derive(Debug, Default)]
@@ -137,19 +132,17 @@ impl GameWorld {
                 members: BTreeSet::new(),
                 squads: Vec::new(),
                 layout: None,
-                pace: (0, 1),
                 destination: None,
                 state: GeneralState::Idle,
                 micro_after: 0,
-                fight_after: 0,
                 scan: (0, 0),
                 production_scan: [0; 5],
                 retreat_until: 0,
                 routed: None,
+                commander_march: None,
                 solo: false,
                 training: false,
                 mix: DEFAULT_MIX,
-                fight: [None; fight::FIGHT_GROUPS],
                 stances: [None; GENERAL_ARMY_LIMIT + 1],
             },
         );
@@ -179,20 +172,8 @@ impl GameWorld {
             .min_by_key(|&p| (distance(p, fallback), p.x, p.y))
             .unwrap_or(fallback)
     }
-    pub(crate) fn general_fighting(&self, g: EntityId) -> bool {
-        self.economy
-            .generals
-            .armies
-            .get(&g)
-            .is_some_and(|a| a.state == GeneralState::Fighting)
-    }
-
     pub fn general_controller(&self, id: EntityId) -> Option<EntityId> {
         self.economy.generals.controlled.get(&id).copied()
-    }
-    #[inline]
-    pub(crate) fn is_general_follower(&self, unit: EntityId, general: EntityId) -> bool {
-        self.economy.generals.controlled.get(&unit) == Some(&general)
     }
     /// Soldiers currently detached from every army by a player order.
     pub fn general_detached_count(&self) -> usize {
@@ -224,7 +205,6 @@ impl GameWorld {
         {
             army.members.remove(&id);
             let promoted = army.remove_from_squads(id);
-            army.routed = None;
             if let Some(id) = promoted {
                 self.set_sergeant(id, true);
             }
@@ -238,6 +218,11 @@ impl GameWorld {
         a.destination = None;
         a.routed = None;
         a.layout = None;
+        a.commander_march = None;
+        for squad in &mut a.squads {
+            squad.march = None;
+            squad.final_leg = false;
+        }
         a.solo = false;
         a.state = GeneralState::Idle;
         a.retreat_until = 0;
@@ -263,6 +248,7 @@ impl GameWorld {
             a.destination = Some(destination);
             a.routed = None;
             a.layout = None;
+            a.commander_march = None;
             a.solo = false;
         }
     }
@@ -283,7 +269,6 @@ impl GameWorld {
         {
             promotion = a.assign_squad(u.id, u.kind);
             a.members.insert(u.id);
-            a.routed = None;
             self.economy.generals.controlled.insert(u.id, g);
         }
         if let Some((old, new)) = promotion {

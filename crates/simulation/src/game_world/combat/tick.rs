@@ -92,9 +92,9 @@ impl GameWorld {
         };
         let Some(goal) = goal else {
             self.end_attack(id, changed);
-            // An attack-move member's engage look and a General's orders
-            // decide what follows; only a free-standing fighter picks on.
-            if attacker.resume.is_none() && self.free_to_pick_on(id) {
+            // An attack-move member keeps its continuation; only a
+            // free-standing fighter picks on through ordinary acquisition.
+            if attacker.resume.is_none() {
                 self.next_target_after_kill(
                     id,
                     attacker.origin.unwrap_or(source.position),

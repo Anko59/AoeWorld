@@ -109,16 +109,10 @@ impl GameWorld {
     pub(super) fn assign_group_slots(&self, group: &mut Group) {
         group.long_files = false;
         let count = group.members.len();
-        let mut roles = self.general_role_slots(group.members.iter().map(|m| m.id), group.gap);
-        let mut slots = roles.as_ref().map_or_else(
-            || {
-                layout::slots(group.form, count)
-                    .into_iter()
-                    .map(|p| WorldPosition::new(p.x * group.gap / 1040, p.y * group.gap / 1040))
-                    .collect::<Vec<_>>()
-            },
-            |roles| roles.iter().map(|&(_, p)| p).collect(),
-        );
+        let mut slots = layout::slots(group.form, count)
+            .into_iter()
+            .map(|p| WorldPosition::new(p.x * group.gap / 1040, p.y * group.gap / 1040))
+            .collect::<Vec<_>>();
         let clearance = self.static_clearance(UnitKind::Militia, group.destination.tile_floor());
         let half_width = slots.iter().map(|p| p.x.abs()).max().unwrap_or(0) + group.gap / 2;
         let largest = group
@@ -140,27 +134,12 @@ impl GameWorld {
             })
         {
             let files = (i32::from(clearance) * 1024 / group.narrow_gap).max(1) as usize;
-            // A destination in a passage uses the same packed block as any
-            // other army. Retain role depth when assigning those narrow files.
-            if let Some(roles) = &mut roles {
-                roles.sort_unstable_by_key(|&(id, p)| (std::cmp::Reverse(p.y), p.x, id));
-            }
             slots = (0..count)
                 .map(|rank| packed(rank, count, files, group.narrow_gap))
                 .collect();
             slots.sort_unstable_by_key(|p| (std::cmp::Reverse(p.y), p.x));
-            if let Some(roles) = &mut roles {
-                for ((_, point), slot) in roles.iter_mut().zip(&slots) {
-                    *point = *slot;
-                }
-            }
         }
-        let assignments = if let Some(roles) = roles {
-            roles
-                .into_iter()
-                .filter_map(|(id, offset)| group.member_index(id).map(|at| (at, offset)))
-                .collect()
-        } else {
+        let assignments = {
             let mut members = (0..count).collect::<Vec<_>>();
             members.sort_unstable_by_key(|&at| {
                 let member = &group.members[at];

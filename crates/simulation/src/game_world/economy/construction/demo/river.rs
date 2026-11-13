@@ -56,6 +56,10 @@ impl GameWorld {
                         position(t).is_ok_and(|p| {
                             self.config.valid_ground_position(p)
                                 && self.body_position_clear(UnitKind::BatteringRam, p)
+                                && !self.economy.blocked_tiles.contains(&t)
+                                && self
+                                    .unit_tile_passable(UnitKind::BatteringRam, t, &|| false)
+                                    .unwrap_or(false)
                         })
                     };
                     if !clear(general) || !clear(goal) {
@@ -121,6 +125,29 @@ impl GameWorld {
             self.spawn_kind(PlayerId(0), kind, position(tile)?)?;
         }
         let g = self.spawn_kind(PlayerId(0), UnitKind::General, position(general)?)?;
+        // A far-bank picket makes the recording exercise the march-to-fight
+        // transition as well as the crossing. Placement never edits map pages.
+        let mut pickets: Vec<_> = (-8..=8)
+            .flat_map(|y| (-8..=8).map(move |x| TileCoord::new(goal.x + x, goal.y + y)))
+            .filter(|&tile| {
+                position(tile).is_ok_and(|p| {
+                    self.config.valid_ground_position(p)
+                        && self.body_position_clear(UnitKind::Militia, p)
+                        && !self.economy.blocked_tiles.contains(&tile)
+                        && self
+                            .unit_tile_passable(UnitKind::Militia, tile, &|| false)
+                            .unwrap_or(false)
+                })
+            })
+            .collect();
+        pickets.sort_unstable_by_key(|t| ((t.x - goal.x).pow(2) + (t.y - goal.y).pow(2), t.y, t.x));
+        if pickets.len() < 12 {
+            return Err(EconomyError::InvalidFootprint);
+        }
+        for tile in pickets.into_iter().take(12) {
+            let id = self.spawn_kind(PlayerId(1), UnitKind::Militia, position(tile)?)?;
+            self.issue_stance(PlayerId(1), &[id], aoe_core::CombatStance::StandGround)?;
+        }
         Ok((g, span, position(goal)?))
     }
 

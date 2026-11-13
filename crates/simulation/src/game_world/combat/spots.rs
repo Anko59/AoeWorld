@@ -89,6 +89,7 @@ impl GameWorld {
                     .unit_tile_passable(unit.kind, at.tile_floor(), &|| false)
                     .unwrap_or(false)
                 && self.body_position_clear(unit.kind, at)
+                && self.melee_point_reachable(unit, at)
         };
         points.retain(valid);
         // A target can stand inside newly blocked ground. Its contact ring
@@ -131,6 +132,7 @@ impl GameWorld {
                     .unit_tile_passable(unit.kind, at.tile_floor(), &|| false)
                     .unwrap_or(false)
                 && self.body_position_clear(unit.kind, at)
+                && self.melee_point_reachable(unit, at)
         };
         // Some(true): a free spot; Some(false): legal spots, all taken.
         let scan = |points: Vec<WorldPosition>| {
@@ -140,7 +142,7 @@ impl GameWorld {
                 // repeats every other legality test), so only a taken one
                 // needs the separate legality check.
                 if goal.distance_squared(at) <= range * range {
-                    if self.interaction_point_free(id, at) {
+                    if self.interaction_point_free(id, at) && self.melee_point_reachable(unit, at) {
                         return Some(true);
                     }
                     any_valid = any_valid || valid(at);
@@ -186,6 +188,31 @@ impl GameWorld {
                     let range = super::super::navy::attack_range(&stats);
                     goal.distance_squared(u.position) > range * range
                 })
+    }
+
+    /// A bounded shared region certificate rejects sealed melee endpoints
+    /// before they consume an attack-search slot. Unknown keeps ordinary
+    /// planning, including escape from a body newly overlapped by a wall.
+    fn melee_point_reachable(&self, unit: &crate::GameUnit, at: WorldPosition) -> bool {
+        let Some(bucket) = aoe_map::LandBucket::for_radius(unit.kind.collision_radius()) else {
+            return true;
+        };
+        if !self.has_route_navigation()
+            || !self
+                .unit_tile_passable(unit.kind, unit.position.tile_floor(), &|| false)
+                .unwrap_or(false)
+        {
+            return true;
+        }
+        !matches!(
+            self.land_reachable_bounded(
+                unit.player,
+                bucket,
+                unit.position.tile_floor(),
+                at.tile_floor()
+            ),
+            Ok(aoe_map::RegionReachability::Unreachable)
+        )
     }
 
     pub(crate) fn uses_melee_position(kind: UnitKind) -> bool {

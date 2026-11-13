@@ -15,6 +15,24 @@ pub(super) fn offered(f: &Fixture) -> Vec<Option<WorldPosition>> {
     f.ids
         .iter()
         .map(|&id| {
+            if let Some(army) = f.world.economy.generals.armies.get(&id)
+                && army.destination.is_some()
+                && army.routed != army.destination
+            {
+                return None;
+            }
+            // A completed checkpoint is not arrival at the retained objective.
+            // Continue measuring every unit from command issue, but only pin
+            // its destination slot once the final ordinary leg is admitted.
+            if let Some(g) = f.world.general_controller(id)
+                && let Some(army) = f.world.economy.generals.armies.get(&g)
+                && army
+                    .squads
+                    .iter()
+                    .any(|s| s.members.contains(&id) && !s.final_leg)
+            {
+                return None;
+            }
             f.world.formation_destination_slot(id).or_else(|| {
                 f.commands.iter().find_map(|command| match command {
                     Command::Move(actor, goal) if *actor == id => Some(*goal),
@@ -71,15 +89,15 @@ fn run(case: &str, count: usize, limit: u32) {
         "long" => {
             result.assert_arrival_and_work(count);
             assert!(result.max_tick_route_work <= 16_384, "{result:?}");
-            // 57: one arrived soldier steps aside and waits 56 ticks for the march to pass.
-            assert_eq!((result.max_stuck_ticks, result.oscillations), (32, 11));
-            // 12 of the 18 reversals are traffic contact; the other 6 have none
-            // of the recorded causes. Phase 2 takes the contact ones to 0.
-            assert_eq!(result.oscillation_causes, causes(8, 0, 0, 3));
-            // Region witnesses remove duplicate proof work; physical output pins stay fixed.
+            assert!(result.max_stuck_ticks <= 60, "{result:?}");
+            // Ordinary offensive squads and ownership-neutral selection slots
+            // intentionally change this current-output pin, within the same
+            // arrival, speed, membership, exact-slot and bounded-work limits.
+            assert_eq!((result.max_stuck_ticks, result.oscillations), (41, 10));
+            assert_eq!(result.oscillation_causes, causes(3, 1, 1, 5));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (35670, 314991, 91790460)
+                (35389, 372063, 98884061)
             );
         }
         _ => {
@@ -141,4 +159,55 @@ fn siege_routes_around_a_foundation_footprint() {
 #[test]
 fn two_villagers_meet_in_a_one_tile_gap() {
     run("gap", 2, 2_000);
+}
+
+#[test]
+fn a_players_queued_offensive_turn_keeps_the_rear_in_the_forest_corridor() {
+    let mut f = build("forest");
+    for id in std::mem::take(&mut f.ids) {
+        f.world.kill_unit(f.world.lookup[&id]);
+        f.world.remove_unit(id);
+    }
+    f.commands.clear();
+    f.ids = (0..100)
+        .map(|n| {
+            f.world
+                .spawn_militia(PlayerId(0), center(35 + n % 10, 38 + n / 10))
+                .unwrap()
+        })
+        .collect();
+    let waypoint = center(90, 48);
+    let finish = center(130, 90);
+    let mut tracker = Tracker::new(&f.world, &f.ids);
+    for (goal, queued) in [(waypoint, false), (finish, true)] {
+        f.world
+            .issue_formation_move(
+                PlayerId(0),
+                &f.ids,
+                aoe_core::Formation::Line,
+                goal,
+                queued,
+                true,
+            )
+            .unwrap();
+    }
+    f.world
+        .issue_formation_pace(PlayerId(0), f.ids[0], Some((31, 1)))
+        .unwrap();
+    for tick in 1..=8000 {
+        f.world.advance();
+        if f.world.movement_goal(f.ids[0]) == Some(finish) {
+            tracker.attach(&offered(&f));
+        }
+        if tracker.observe(&f.world, tick) {
+            break;
+        }
+    }
+    let result = tracker.finish(0);
+    eprintln!("queued-player-forest {result:?}");
+    assert_eq!(result.arrived, f.ids.len(), "{result:?}");
+    assert_eq!(result.max_slot_error, 0, "{result:?}");
+    assert!(result.max_stuck_ticks <= 60, "{result:?}");
+    assert_eq!(result.max_speed_excess, 0, "{result:?}");
+    assert_eq!(result.lost_group_ticks, 0, "{result:?}");
 }

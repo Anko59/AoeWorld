@@ -4,6 +4,8 @@ use super::packing::block_heading;
 use super::*;
 use crate::game_world::movement_step::settling::GIVE_UP_AFTER_TICKS;
 
+mod speed;
+
 impl GameWorld {
     #[inline(never)] // a symbol of its own for the Callgrind stage counters
     pub(crate) fn advance_formations(
@@ -179,6 +181,7 @@ impl GameWorld {
         let before = group.path.points[last.saturating_sub(1)];
         let final_heading = WorldPosition::new(end.x - before.x, end.y - before.y);
         let final_length = path::distance(before, end).max(1);
+        let static_area = group.static_area;
         for member in &mut group.members {
             self.group_work.members(1);
             let unit = self.units[self.lookup[&member.id]].state;
@@ -294,7 +297,9 @@ impl GameWorld {
             let goal_along = (i64::from(member.goal.x - end.x) * i64::from(final_heading.x)
                 + i64::from(member.goal.y - end.y) * i64::from(final_heading.y))
                 / final_length;
-            let final_approach = member.following_corridor
+            let continuing = !group.queue.is_empty();
+            let final_approach = !continuing
+                && member.following_corridor
                 && end == group.destination
                 && member.progress >= group.path.end() + goal_along.min(0) - 1024;
             let ideal = rotation.oriented(group.anchor, offset);
@@ -310,7 +315,7 @@ impl GameWorld {
             {
                 member.following_corridor = false;
             }
-            member.ideal = if !navigating || group.direct || final_approach {
+            member.ideal = if !continuing && (!navigating || group.direct || final_approach) {
                 member.goal
             } else {
                 rotation.oriented(group.anchor, offset)
@@ -329,7 +334,12 @@ impl GameWorld {
             // rather than repeatedly asking local avoidance to enter a tree.
             if !group.direct
                 && !member.arrived
-                && (member.following_corridor || member.blocked >= 16)
+                && (member.following_corridor
+                    || member.blocked >= 16
+                    || (group.attack_move
+                        && !static_area.is_some_and(|area| {
+                            area.covers(member.target, unit.kind.collision_radius(), 513)
+                        })))
                 && !self.near_deck(member.target)
                 && self.static_clearance(unit.kind, member.target.tile_floor()) <= 2
                 && !self.body_position_clear(unit.kind, member.target)
@@ -381,7 +391,7 @@ impl GameWorld {
                     member.target.x -= (x * dot / length) as i32;
                     member.target.y -= (y * dot / length) as i32;
                 }
-                if path::distance(member.target, unit.position) <= 1 && !group.attack_move {
+                if path::distance(member.target, unit.position) <= 1 {
                     // A long column leaves room for its following rows while
                     // stretching. Ordinary compact blocks keep their 3/4 pace.
                     // A single file keeps the full pace so the exit of a
@@ -418,79 +428,5 @@ impl GameWorld {
         );
         self.unit_position_step_clear(kind, from, next)
             .unwrap_or(false)
-    }
-
-    /// Every member's earned distance is at most ceil(1.5 * pace), capped
-    /// at 512. Integer direction rounding adds less than one subunit; two
-    /// extra subunits make the ordered-batch separation certificate strict.
-    pub(crate) fn formation_step_bound(&self) -> i32 {
-        self.formations
-            .values()
-            .filter(|group| !group.settled)
-            .map(|group| {
-                let mut bound =
-                    (u128::from(group.pace.0) * 3).div_ceil(u128::from(group.pace.1) * 2);
-                if let Some(first) = group.members.first() {
-                    let unit = self.units[self.lookup[&first.id]].state;
-                    if group.members.iter().all(|member| {
-                        let other = self.units[self.lookup[&member.id]].state;
-                        self.group_work.members(1);
-                        other.kind == unit.kind && other.player == unit.player
-                    }) {
-                        // Every member has this current physical cap, including
-                        // upgrades after anchor arrival. Mixed groups retain
-                        // the conservative 1.5x-pace bound.
-                        let (mut speed, denominator) = self.movement_speed(unit.kind, unit.player);
-                        // Members can stand on different tiles: cover the fastest
-                        // possible road step, even if the first member is on grass.
-                        if !self.economy.roads.is_empty() && !unit.kind.is_naval() {
-                            speed += speed / 4;
-                        }
-                        bound = bound.min(u128::from(speed.div_ceil(denominator)));
-                    }
-                }
-                bound.min(512) as i32 + 2
-            })
-            .max()
-            .unwrap_or(2)
-    }
-
-    pub(crate) fn formation_motion(&self, index: usize) -> Option<Motion> {
-        let unit = &self.units[index];
-        self.group_work.members(1);
-        let leader = unit.formation?;
-        let group = self.formations.get(&leader)?;
-        let member = &group.members[group.member_index(unit.state.id)?];
-        if member.detached {
-            return None;
-        }
-        let navigating = self.units[self.lookup[&leader]].order.is_some();
-        let credit = member.carry
-            + matched_speed(
-                group.pace,
-                self.road_speed(
-                    unit.state.kind,
-                    unit.state.position,
-                    self.movement_speed(unit.state.kind, unit.state.player),
-                ),
-            );
-        Some(Motion {
-            target: member.target,
-            center: member.center,
-            goal: member.goal,
-            budget: (credit / FRACTION).min(512) as i32,
-            carry: credit % FRACTION,
-            navigating,
-            final_leg: group.queue.is_empty(),
-            done: member.arrived || (!navigating && member.stalled >= GIVE_UP_AFTER_TICKS),
-            facing: group.facing,
-            obstructed: false,
-            path_progress: member.target_progress,
-            neighbor_radius: 512,
-            remaining: 0,
-            near_center: false,
-            certified: false,
-            static_clear: group.static_covers(unit.state.position, unit.state.kind),
-        })
     }
 }
