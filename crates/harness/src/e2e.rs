@@ -4,6 +4,7 @@ pub(crate) mod client_frame;
 mod command;
 mod country;
 mod discovery;
+pub(crate) mod evidence;
 mod filter;
 pub(crate) mod landscape;
 mod matrix;
@@ -62,8 +63,7 @@ struct BrowserContainer(String);
 /// (#434) was cut off again. The run now gets the gate registry's own budget for
 /// this suite, 2400 s, in both modes; sharding the suite and one server per
 /// Playwright worker are the speed fix (#388).
-/// Coverage runs the same suite against an instrumented debug server.
-fn browser_run_deadline(_coverage: Option<&str>) -> Duration {
+fn browser_run_deadline() -> Duration {
     Duration::from_secs(2400)
 }
 
@@ -129,14 +129,13 @@ pub fn run_visuals() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let coverage = std::env::var("AOE_E2E_COVERAGE").ok();
     let specs = filter::parse_specs(&std::env::var("AOE_E2E_SPECS").unwrap_or_default());
     filter::refuse_in_ci(
         &specs,
         std::env::var("GITHUB_ACTIONS").ok().as_deref(),
         std::env::var("CI").ok().as_deref(),
     )?;
-    let shard = shard::Shard::from_env(coverage.as_deref())?;
+    let shard = shard::Shard::from_env()?;
     if specs.is_empty() {
         return run_specs(&[], None, shard, true);
     }
@@ -178,10 +177,8 @@ fn run_specs(
     let root = std::env::current_dir()?.canonicalize()?;
     // The browser specs write their evidence here; the harness makes the directory first.
     std::fs::create_dir_all("reports/e2e")?;
-    let coverage = std::env::var("AOE_E2E_COVERAGE").ok();
-    let relative_binary = server_binary(coverage.as_deref())?;
-    let run_deadline = browser_run_deadline(coverage.as_deref());
-    let binary = root.join(relative_binary);
+    let run_deadline = browser_run_deadline();
+    let binary = root.join(SERVER_BINARY);
     if !binary.is_file() {
         return Err(format!("test server binary missing: {}", binary.display()).into());
     }
@@ -190,7 +187,7 @@ fn run_specs(
             Some(path) => std::path::PathBuf::from(path).canonicalize()?,
             None => root.join(aoe_server::Config::DEFAULT_MAP_PACKAGE_DIRECTORY),
         };
-    let workers = servers::worker_count(coverage.as_deref(), !specs.is_empty())?;
+    let workers = servers::worker_count(!specs.is_empty())?;
 
     let mut server = servers::Fleet::start(&root, &binary, &existing_maps, workers)?;
     let fixture_hash = server.hash.clone();
@@ -293,11 +290,19 @@ fn run_specs(
     if !specs.is_empty() {
         return Ok(());
     }
+    let report = release_report(&fixture_hash)?;
     if let Some(shard) = shard {
-        // One shard runs a part of the suite: the release evidence below needs
-        // the whole run, so the shard records its own passing result instead.
-        return shard.write_pass(&fixture_hash);
+        // A shard records the same report body under its own name; `e2e-evidence`
+        // joins all of them into `pass.json` once every shard passed.
+        return shard.write_pass(report);
     }
+    std::fs::create_dir_all("reports/e2e")?;
+    std::fs::write("reports/e2e/pass.json", serde_json::to_vec_pretty(&report)?)?;
+    Ok(())
+}
+
+/// The evidence one passing run records: what was run and against which fixture.
+fn release_report(fixture_hash: &str) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let revision = Command::new("git").args(["rev-parse", "HEAD"]).output()?;
     if !revision.status.success() {
         return Err("cannot identify E2E source revision".into());
@@ -305,10 +310,10 @@ fn run_specs(
     let asset_pack = std::env::var("AOE_ASSET_PACK")
         .ok()
         .filter(|value| !value.is_empty());
-    let report = serde_json::json!({
+    Ok(serde_json::json!({
         "version": 1,
         "revision": String::from_utf8(revision.stdout)?.trim(),
-        "server_binary": relative_binary,
+        "server_binary": SERVER_BINARY,
         "asset_source": if asset_pack.is_some() { "local AoE II pack" } else { "generated CI fixtures" },
         "asset_pack": asset_pack.unwrap_or_default(),
         "landscape_fixture": {
@@ -319,10 +324,7 @@ fn run_specs(
             "real_source_qualification": false
         },
         "result": "PASS"
-    });
-    std::fs::create_dir_all("reports/e2e")?;
-    std::fs::write("reports/e2e/pass.json", serde_json::to_vec_pretty(&report)?)?;
-    Ok(())
+    }))
 }
 
 /// How the browser container runs: through the flaky quarantine, or as the bounded focused
@@ -350,13 +352,7 @@ fn stderr_tail(stderr: &[u8]) -> String {
     lines.into_iter().rev().collect::<Vec<_>>().join("\n")
 }
 
-fn server_binary(coverage: Option<&str>) -> Result<&'static str, &'static str> {
-    match coverage {
-        None => Ok("target/release/aoe-server"),
-        Some("1") => Ok("target/llvm-cov-target/debug/aoe-server"),
-        Some(_) => Err("AOE_E2E_COVERAGE must be absent or 1"),
-    }
-}
+const SERVER_BINARY: &str = "target/release/aoe-server";
 
 #[cfg(test)]
 mod tests;

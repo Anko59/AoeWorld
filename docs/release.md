@@ -32,9 +32,9 @@ registry digests. Running CI workflows on `dev` and `main` finish before the
 newest pending run starts; superseded pending runs are replaced. Pull requests,
 including release PRs, still cancel superseded runs; release branch pushes do
 not trigger CI, and release branch dispatches retain cancellation. On a `dev`
-push, `dev-artifacts` waits for the same run's `required` check, then downloads
-`release-e2e-evidence` (the complete, revision-bound `pass.json` already produced
-by `make coverage` in `native-coverage`) and `performance-report` (including
+push, `dev-artifacts` waits for the same run's `required` check and `e2e-evidence`, then downloads
+`release-e2e-evidence` (the revision-bound `pass.json` that the `e2e-evidence` job
+joins from the four e2e shards) and `performance-report` (including
 `perf-ci`'s `ci.json`). It reuses those reports without repeating validation;
 `release-build` still rejects stale or failing evidence and dirty performance
 reports. Coverage remains uploaded by `native-coverage`; the artifact job's
