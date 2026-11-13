@@ -241,7 +241,7 @@ fn secondary_town_center_arrows_all_ignore_hills() {
     let g = w.spawn_villager(PlayerId(0), at(103, 100)).unwrap();
     w.issue_garrison(PlayerId(0), g, b).unwrap();
     advance(&mut w, 2);
-    assert_eq!(w.building_arrow_count(b), 1);
+    assert_eq!(w.building_arrow_count(b), 2); // Base arrow plus one for the garrisoned villager.
     let v = w
         .spawn_kind(PlayerId(1), UnitKind::Knight, at(100, 100))
         .unwrap();
