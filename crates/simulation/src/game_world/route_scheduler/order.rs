@@ -124,6 +124,7 @@ impl GameWorld {
         }
         // Keep the existing route, search frontier, deadline and queued waypoints.
         if self.moving_to_goal(id, destination, precision) {
+            self.demand_retained();
             return Ok(true);
         }
         let origin = self.units[index].state.position;

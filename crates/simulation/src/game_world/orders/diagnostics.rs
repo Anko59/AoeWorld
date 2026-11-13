@@ -24,6 +24,10 @@ pub struct OrderDemand {
     pub decisions: u64,
     /// Unit movement intents, including refused and redundant requests.
     pub orders: u64,
+    /// Movement requests that changed the unit's route (not refused, not retained).
+    pub accepted: u64,
+    /// Requests answered by keeping the unit's current route (goal within one tile).
+    pub retained: u64,
     pub near_reissues: u64,
     /// Accepted replacements within ten simulation seconds of the last order.
     pub reassigned_10s: u64,
@@ -43,6 +47,17 @@ pub struct OrderRedundancy {
     pub superseded_10s: u64,
 }
 
+/// Replay-only inclusive spans around the manager passes, by `OrderIssuer`.
+pub const ISSUER_SPANS: [&str; 7] = [
+    "issuer_player",
+    "issuer_python_ai",
+    "issuer_auto_scout",
+    "issuer_steward",
+    "issuer_vassal",
+    "issuer_general",
+    "issuer_automation",
+];
+
 type Site = (&'static str, u32);
 type Source = (usize, Option<Site>, Site, usize);
 
@@ -50,6 +65,11 @@ type Source = (usize, Option<Site>, Site, usize);
 pub(crate) struct OrderDiagnostics {
     pub issuer: OrderIssuer,
     pub demand: [OrderDemand; 7],
+    /// Route-planner work (issue, fair pass, planning ahead) by the issuer of
+    /// the unit's latest accepted order; the last row has no known issuer.
+    route_work: [[u64; 3]; 8],
+    /// Unit whose queued search is being served (the issuer is then the unit's, not the caller's).
+    work_unit: Option<EntityId>,
     last: BTreeMap<EntityId, (u64, OrderIssuer, Site)>,
     sources: BTreeMap<Source, OrderRedundancy>,
 }
@@ -62,7 +82,19 @@ impl GameWorld {
         decide: impl FnOnce(&mut Self) -> T,
     ) -> T {
         let previous = std::mem::replace(&mut self.order_diagnostics.issuer, issuer);
+        // Manager passes only: the span is absent unless a replay probe asks for it.
+        let span = match issuer {
+            OrderIssuer::AutoScout
+            | OrderIssuer::Vassal
+            | OrderIssuer::General
+            | OrderIssuer::Steward => self
+                .planning_probe
+                .clone()
+                .and_then(|probe| probe.movement_span(ISSUER_SPANS[issuer as usize])),
+            _ => None,
+        };
         let result = decide(self);
+        drop(span);
         self.order_diagnostics.issuer = previous;
         result
     }
@@ -75,6 +107,47 @@ impl GameWorld {
         if self.order_diagnostics.issuer == OrderIssuer::Vassal {
             self.record_order_decisions(1);
         }
+    }
+
+    /// Planner work by issuer (including a final unattributed row) for
+    /// issue-time, fair-pass and planning-ahead polls.
+    pub fn order_route_work(&self) -> &[[u64; 3]; 8] {
+        &self.order_diagnostics.route_work
+    }
+
+    /// Units with an unfinished movement goal, by the issuer of their latest
+    /// accepted order; the last entry has no known issuer. Read-only census.
+    pub fn order_mover_census(&self) -> [u64; 8] {
+        let mut census = [0; 8];
+        for unit in &self.units {
+            if self.movement_goal(unit.state.id).is_some() {
+                let row = self
+                    .order_diagnostics
+                    .last
+                    .get(&unit.state.id)
+                    .map_or(7, |p| p.1 as usize);
+                census[row] += 1;
+            }
+        }
+        census
+    }
+
+    pub(crate) fn set_work_unit(&mut self, id: Option<EntityId>) {
+        self.order_diagnostics.work_unit = id;
+    }
+
+    /// `phase`: 0 issue-time, 1 fair pass, 2 planning ahead.
+    pub(crate) fn demand_route_work(&mut self, id: Option<EntityId>, phase: usize, spent: u32) {
+        let row = match id.or(self.order_diagnostics.work_unit) {
+            Some(id) => self
+                .order_diagnostics
+                .last
+                .get(&id)
+                .map_or(7, |p| p.1 as usize),
+            None if self.order_diagnostics.issuer == OrderIssuer::Automation => 7,
+            None => self.order_diagnostics.issuer as usize,
+        };
+        self.order_diagnostics.route_work[row][phase] += u64::from(spent);
     }
 
     pub fn order_demand(&self) -> &[OrderDemand; 7] {
@@ -152,7 +225,13 @@ impl GameWorld {
     }
 
     #[track_caller]
+    pub(crate) fn demand_retained(&mut self) {
+        self.order_diagnostics.demand[self.order_diagnostics.issuer as usize].retained += 1;
+    }
+
+    #[track_caller]
     pub(crate) fn demand_accepted(&mut self, id: EntityId) {
+        self.order_diagnostics.demand[self.order_diagnostics.issuer as usize].accepted += 1;
         let unfinished = self.movement_goal(id).is_some();
         let issuer = self.order_diagnostics.issuer;
         let caller = std::panic::Location::caller();

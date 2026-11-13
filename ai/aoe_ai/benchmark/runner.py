@@ -141,7 +141,8 @@ def run(args):
                         cpu_ms_per_decision=1000 * brains[i].cpu / max(1, brains[i].calls),
                         cpu_ms_slowest=1000 * brains[i].slowest,
                         wall_ms_slowest=1000 * brains[i].wall_slowest,
-                        max_orders_per_decision=brains[i].max_orders)
+                        max_orders_per_decision=brains[i].max_orders,
+                        ai_stats=dict(brains[i].board.stats))
                     players.append(row)
                 checkpoints.record(tick, players)
                 write(args.out, document)
