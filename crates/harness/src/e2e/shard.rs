@@ -33,36 +33,21 @@ impl Shard {
         Ok(Self { index, count })
     }
 
-    /// The shard named by `AOE_E2E_SHARD`, absent or empty meaning the whole
-    /// suite. The coverage run is always the whole suite.
-    pub(crate) fn from_env(coverage: Option<&str>) -> Result<Option<Self>, String> {
-        let text = std::env::var("AOE_E2E_SHARD").unwrap_or_default();
-        Self::select(&text, coverage)
+    /// The shard named by `AOE_E2E_SHARD`, absent or empty meaning the whole suite.
+    pub(crate) fn from_env() -> Result<Option<Self>, String> {
+        match std::env::var("AOE_E2E_SHARD").unwrap_or_default().as_str() {
+            "" => Ok(None),
+            text => Self::parse(text).map(Some),
+        }
     }
 
-    fn select(text: &str, coverage: Option<&str>) -> Result<Option<Self>, String> {
-        if text.is_empty() {
-            return Ok(None);
-        }
-        let shard = Self::parse(text)?;
-        if coverage.is_some() {
-            return Err("AOE_E2E_COVERAGE runs the whole suite; unset AOE_E2E_SHARD".into());
-        }
-        Ok(Some(shard))
-    }
-
-    /// Records that this shard passed. The release evidence in `pass.json`
-    /// needs every test, so a shard never writes it.
+    /// Records that this shard passed: the run's evidence `report` plus the
+    /// shard's identity. A shard alone is not the release evidence.
     pub(crate) fn write_pass(
         &self,
-        landscape_hash: &str,
+        mut report: serde_json::Value,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let report = serde_json::json!({
-            "version": 1,
-            "shard": self.to_string(),
-            "landscape_hash": landscape_hash,
-            "result": "PASS"
-        });
+        report["shard"] = self.to_string().into();
         std::fs::create_dir_all("reports/e2e")?;
         let path = format!("reports/e2e/shard-{}-of-{}.json", self.index, self.count);
         std::fs::write(path, serde_json::to_vec_pretty(&report)?)?;

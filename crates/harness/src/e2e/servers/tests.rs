@@ -66,21 +66,18 @@ fn occupied_ports_are_skipped_without_leaving_the_range() {
 
 #[test]
 fn the_default_is_three_workers_and_the_count_is_bounded() {
-    assert_eq!(select("", None, false), Ok(3));
-    assert_eq!(select("1", None, false), Ok(1));
-    assert_eq!(select("8", None, false), Ok(8));
+    assert_eq!(select("", false), Ok(3));
+    assert_eq!(select("1", false), Ok(1));
+    assert_eq!(select("8", false), Ok(8));
     for invalid in ["0", "9", "-1", "+2", "two", " 2", "2 ", "1.5"] {
-        assert!(select(invalid, None, false).is_err(), "{invalid:?}");
+        assert!(select(invalid, false).is_err(), "{invalid:?}");
     }
 }
 
 #[test]
-fn coverage_and_focused_runs_keep_one_server() {
-    assert_eq!(select("", Some("1"), false), Ok(1));
-    assert_eq!(select("1", Some("1"), false), Ok(1));
-    assert!(select("3", Some("1"), false).is_err());
-    assert_eq!(select("", None, true), Ok(1));
-    assert_eq!(select("4", None, true), Ok(1));
+fn focused_runs_keep_one_server() {
+    assert_eq!(select("", true), Ok(1));
+    assert_eq!(select("4", true), Ok(1));
 }
 
 #[test]

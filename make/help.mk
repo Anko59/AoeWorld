@@ -44,6 +44,7 @@ help:
 	@echo '  make preflight-checks / preflight-unit  The two halves of preflight (CI runs them in parallel)'
 	@echo '  make ci-select       Emit revision-bound selected CI jobs'
 	@echo '  make ci-dispatch-status Report a dispatch aggregate as a commit status'
+	@echo '  make e2e-evidence    Join the e2e shards into reports/e2e/pass.json'
 	@echo '  make ci-check        Validate selection manifest and job outcomes'
 	@echo '  make build           Build workspace'
 	@echo '  make build-wasm      Build and bind the Rust/WebGPU client'

@@ -63,8 +63,7 @@ jobs:
       - uses: ./.github/actions/rust-cache-save
         with: { leg: '${{ matrix.part }}' }
 
-  # 120 min: the instrumented native suite takes ~25 and the unsharded,
-  # single-worker E2E run that writes the release evidence takes the rest.
+  # 120 min: the instrumented native suite takes ~25; the e2e shards produce the release evidence.
   native-coverage:
     needs: select
     if: ${{ needs.select.outputs.native_coverage == 'true' }}
@@ -77,9 +76,6 @@ jobs:
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with: { name: native-coverage-report, path: reports/coverage/, retention-days: 7, if-no-files-found: ignore }
-      - if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with: { name: release-e2e-evidence, path: reports/e2e/pass.json, retention-days: 7, if-no-files-found: error }
 
   browser:
     needs: select
@@ -106,9 +102,7 @@ jobs:
         with: { name: wasm-browser-report, path: reports/wasm/, retention-days: 7, if-no-files-found: ignore }
 
   e2e:
-    # The Playwright suite in four parallel shards (#388; three hit 2400 s): the
-    # same make test-e2e, with AOE_E2E_SHARD naming one part. The job's result is
-    # success only when every shard passed, and `required` checks that result.
+    # The Playwright suite in four shards (#388): make test-e2e with AOE_E2E_SHARD naming one part; `required` checks the matrix result.
     needs: select
     if: ${{ needs.select.outputs.e2e == 'true' }}
     strategy:
@@ -124,8 +118,7 @@ jobs:
       - run: make test-e2e
         env:
           AOE_E2E_SHARD: ${{ matrix.shard }}/4
-          # One worker on the 4-core runner: software (SwiftShader) rendering is
-          # CPU-bound, and three servers per shard timed out heavy specs (#457).
+          # One worker on the 4-core runner: SwiftShader rendering is CPU-bound (#457).
           AOE_E2E_WORKERS: '1'
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
@@ -137,6 +130,16 @@ jobs:
             reports/process/
           retention-days: 7
           if-no-files-found: ignore
+      - if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with: { name: e2e-evidence-${{ matrix.shard }}, path: 'reports/e2e/shard-*-of-*.json', retention-days: 7, if-no-files-found: error }
+
+  e2e-evidence:
+    needs: [select, e2e]
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' && needs.e2e.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps: [{uses: 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262'}, {uses: ./.github/actions/docker-setup}, {uses: 'actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333', with: {pattern: 'e2e-evidence-*', merge-multiple: true, path: reports/e2e/}}, {run: make e2e-evidence}, {uses: 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9', with: {name: release-e2e-evidence, path: reports/e2e/pass.json, retention-days: 7, if-no-files-found: error}}]
 
   target-performance:
     needs: select
@@ -156,9 +159,7 @@ jobs:
         with: { name: performance-report, path: reports/perf/, retention-days: 30, if-no-files-found: ignore }
 
   perf-comment:
-    # Item 12 of #388: the measured numbers reach the pull request as ONE
-    # informational comment, updated in place. It is never a gate: the
-    # failing checks stay the checks, and this job does not block the merge.
+    # Item 12 of #388: the measured numbers reach the PR as ONE informational comment, updated in place; never a gate.
     needs: [target-performance]
     if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.target-performance.result != 'skipped' }}
     runs-on: ubuntu-24.04
@@ -227,7 +228,7 @@ jobs:
 
   dev-artifacts:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
-    needs: required
+    needs: [required, e2e-evidence]
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     permissions:

@@ -79,6 +79,8 @@ enum Command {
     TestWasm,
     TestWasmFocused,
     TestE2e,
+    /// Join the shards' evidence into `reports/e2e/pass.json`.
+    E2eEvidence,
     TestCreatorSource,
     TestGeographicMatrix,
     TestGeographicVisuals,
