@@ -7,11 +7,13 @@ fn enabling_auto_scout_takes_a_generals_scout_out_of_his_army() {
     use aoe_simulation::{GameWorld, UnitKind};
     let mut world = GameWorld::new(aoe_core::WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
     let at = |x| WorldPosition::from_tile_center(TileCoord::new(x, 100)).unwrap();
-    let general = world
-        .spawn_kind(PlayerId(0), UnitKind::General, at(100))
-        .unwrap();
+    // Creation is the only moment a General recruits free soldiers, so the
+    // scout must already stand there when the General appears.
     let scout = world
         .spawn_kind(PlayerId(0), UnitKind::Scout, at(102))
+        .unwrap();
+    let general = world
+        .spawn_kind(PlayerId(0), UnitKind::General, at(100))
         .unwrap();
     for _ in 0..30 {
         world.advance();
