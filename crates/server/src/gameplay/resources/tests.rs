@@ -346,15 +346,20 @@ async fn resource_backpressure_keeps_the_session_and_publishes_once_there_is_roo
     service.subscribe(id, 1, region).await;
     service.tick().await;
     assert!(service.sessions.lock().await.get(&id).is_some());
-    while receiver.try_recv().is_ok() {}
-    service.tick().await;
-    let mut kinds = Vec::new();
-    while let Ok(message) = receiver.try_recv() {
-        kinds.push(message);
+    // The overflow is delivered by a background task, and resources wait for
+    // it: keep reading (yielding to that task) until a tick publishes them.
+    for _ in 0..64 {
+        while receiver.try_recv().is_ok() {}
+        tokio::task::yield_now().await;
+        service.tick().await;
+        while let Ok(message) = receiver.try_recv() {
+            if matches!(
+                message,
+                aoe_protocol::GameplayServerMessage::ResourceState(_)
+            ) {
+                return;
+            }
+        }
     }
-    assert!(
-        kinds
-            .iter()
-            .any(|m| matches!(m, aoe_protocol::GameplayServerMessage::ResourceState(_)))
-    );
+    panic!("resources were never published after the queue drained");
 }
