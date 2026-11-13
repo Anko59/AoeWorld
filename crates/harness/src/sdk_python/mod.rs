@@ -23,20 +23,47 @@ const TESTS: [(&str, &str); 2] = [
     ),
     ("ai/tests", "ai/pyproject.toml"),
 ];
-const LOGIC_TESTS: [&str; 12] = [
-    "ai/tests/test_geometry.py",
-    "ai/tests/test_logic.py",
-    "ai/tests/test_navigation.py",
-    "ai/tests/test_review.py",
-    "ai/tests/test_combat_orders.py",
-    "ai/tests/test_predator_defence.py",
-    "ai/tests/test_worker_recovery.py",
-    "ai/tests/test_naval.py",
-    "ai/tests/test_imperial.py",
-    "ai/tests/test_management.py",
-    "ai/tests/benchmark",
-    "ai/tests/scaling",
+/// The AI's own tests, all of which run against fakes, except these that need a
+/// live server (`make sdk-python-test` runs them). Discovering the rest means a
+/// new test file runs without anyone listing it: a hand-kept list once left
+/// `test_bridges.py` unrun.
+const LOGIC_ROOT: &str = "ai/tests";
+const SERVER_TESTS: [&str; 3] = [
+    "ai/tests/test_full_game.py",
+    "ai/tests/test_match.py",
+    "ai/tests/test_start_kit.py",
 ];
+
+/// Every `test_*.py` under `ai/tests` except the server tests, sorted. A server
+/// test that no longer exists is an error, so the exclusions cannot go stale.
+pub(super) fn logic_tests(root: &Path) -> Result<Vec<String>, Box<dyn Error>> {
+    for path in SERVER_TESTS {
+        if !root.join(path).is_file() {
+            return Err(
+                format!("{path} is excluded from the logic tests but does not exist").into(),
+            );
+        }
+    }
+    let mut found = Vec::new();
+    let mut pending = vec![std::path::PathBuf::from(LOGIC_ROOT)];
+    while let Some(directory) = pending.pop() {
+        for entry in std::fs::read_dir(root.join(&directory))? {
+            let entry = entry?;
+            let relative = directory.join(entry.file_name());
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if entry.file_type()?.is_dir() {
+                pending.push(relative);
+            } else if name.starts_with("test_") && name.ends_with(".py") {
+                let path = relative.to_string_lossy().into_owned();
+                if !SERVER_TESTS.contains(&path.as_str()) {
+                    found.push(path);
+                }
+            }
+        }
+    }
+    found.sort();
+    Ok(found)
+}
 const AI_SOURCE: &str = "ai";
 const BINDINGS_TARGET: &str = "target/sdk-python";
 const SITE: &str = "target/sdk-python/site";
@@ -128,7 +155,8 @@ fn logic_test(root: &Path) -> Result<(), Box<dyn Error>> {
         "-c",
         "ai/pyproject.toml",
     ];
-    args.extend(LOGIC_TESTS);
+    let tests = logic_tests(root)?;
+    args.extend(tests.iter().map(String::as_str));
     process::run_with_env(
         "python3",
         &args,

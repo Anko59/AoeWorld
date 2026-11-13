@@ -28,10 +28,37 @@ fn bindings_paths_match_the_repository_layout() {
     for (tests, project) in TESTS {
         paths.extend([tests, project]);
     }
-    paths.extend(LOGIC_TESTS);
     for path in paths {
         assert!(root.join(path).exists(), "{path} is missing");
     }
+}
+
+#[test]
+fn every_ai_test_without_a_server_runs_in_the_logic_suite() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let tests = logic_tests(&root).unwrap();
+    // Never listed by hand before discovery, so it had never run.
+    assert!(
+        tests.contains(&"ai/tests/test_bridges.py".to_owned()),
+        "{tests:?}"
+    );
+    assert!(
+        tests.contains(&"ai/tests/scaling/test_kingdom.py".to_owned()),
+        "{tests:?}"
+    );
+    assert!(
+        !tests
+            .iter()
+            .any(|test| SERVER_TESTS.contains(&test.as_str()))
+    );
+    assert!(tests.iter().all(|test| test.ends_with(".py")));
+}
+
+#[test]
+fn a_stale_server_exclusion_fails_loudly() {
+    let empty = tempfile::tempdir().unwrap();
+    let error = logic_tests(empty.path()).unwrap_err().to_string();
+    assert!(error.contains("does not exist"), "{error}");
 }
 
 #[test]
