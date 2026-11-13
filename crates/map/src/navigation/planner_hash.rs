@@ -149,14 +149,16 @@ fn hash_reconstruction(reconstruction: &ReconstructionState, hash: &mut blake3::
 
 fn hash_search(search: &SearchState, hash: &mut blake3::Hasher) {
     hash.update(&(search.open.len() as u64).to_le_bytes());
-    for node in &search.open {
+    for node in search.open.ordered() {
         hash.update(&node.total.to_le_bytes());
         hash.update(&node.cost.to_le_bytes());
         hash.update(&node.tile.x.to_le_bytes());
         hash.update(&node.tile.y.to_le_bytes());
     }
     hash.update(&(search.records.len() as u64).to_le_bytes());
-    for (tile, record) in &search.records {
+    let mut records = search.records.iter().collect::<Vec<_>>();
+    records.sort_unstable_by_key(|(tile, _)| **tile);
+    for (tile, record) in records {
         hash.update(&tile.x.to_le_bytes());
         hash.update(&tile.y.to_le_bytes());
         hash.update(&record.cost.to_le_bytes());

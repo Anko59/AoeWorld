@@ -1,5 +1,6 @@
 //! Repeat a fixed save workload with hardware instructions and thread CPU time.
 mod counts;
+mod progress;
 use super::stats::Series;
 use aoe_server::{GameplayService, replay::Recording};
 use clap::Args;
@@ -38,6 +39,8 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
         .map_err(|e| e.to_string())?;
     runtime.block_on(async {
         let initial = service.inspect_scale_world(|w| w.canonical_hash()).await;
+        let mut progress = progress::Progress::default();
+        service.inspect_scale_world(|w| progress.sample(w)).await;
         let mut divergence = (initial != recording.initial_hash).then(|| recording.ticks[0].tick);
         let mut total = Vec::<u64>::new();
         let mut cpu = Series::default();
@@ -55,6 +58,7 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
                 for (name, count) in &timing.phases_instructions { phases.entry(name).or_default().push(*count); }
                 raw.push(json!({"tick": tick.tick, "instructions": timing.instructions, "phases_instructions": timing.phases_instructions, "cpu_ns": timing.cpu_ns, "phases_cpu_ns": timing.phases_cpu_ns}));
             }).await.map_err(|e| e.to_string())?;
+            service.inspect_scale_world(|w| progress.sample(w)).await;
             if hash != tick.hash && divergence.is_none() { divergence = Some(tick.tick + 1); }
             hashes.push(json!({"tick": tick.tick + 1, "hash": hex(&hash)}));
         }
@@ -64,6 +68,7 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
         let phases_cpu_summary: BTreeMap<_, _> = phases_cpu.iter().map(|(name, series)| (*name, series.summary())).collect();
         Ok(json!({ "initial_hash": hex(&initial), "total_cpu_ms_per_tick": cpu.summary(), "phases_cpu_ms": phases_cpu_summary, "total_instructions_per_tick": counts::summary(&total), "phases_instructions": phase_summary,
             "first_divergence_tick": divergence, "final_hash": hashes.last().ok_or("empty replay")?["hash"],
+            "movement_progress": progress.summary(recording.ticks.last().ok_or("empty replay")?.tick + 1),
             "hashes": hashes, "raw": raw, "commands": commands, "restore": format!("{restored:?}") }))
     })
 }

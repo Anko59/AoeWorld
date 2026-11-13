@@ -1,13 +1,13 @@
 use super::{MAX_ROUTE_PLANNER_NODES, RouteTerrain, Terminal};
+use super::{frontier::Frontier, memo::Map};
 use crate::{EnvironmentPageError, ResourceOverlay};
 use aoe_core::TileCoord;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct SearchState {
-    pub(super) open: BTreeSet<OpenNode>,
-    pub(super) records: BTreeMap<TileCoord, SearchRecord>,
+    pub(super) open: Frontier,
+    pub(super) records: Map<TileCoord, SearchRecord>,
     pub(super) active: Option<ActiveExpansion>,
 }
 
@@ -56,21 +56,23 @@ impl PartialOrd for OpenNode {
 
 impl SearchState {
     pub(super) fn new(origin: TileCoord, destination: TileCoord) -> Self {
-        let mut open = BTreeSet::new();
+        let mut open = Frontier::default();
         open.insert(OpenNode::new(
             super::heuristic(origin, destination),
             super::super::priority_cost(0),
             origin,
         ));
+        let mut records = Map::default();
+        records.insert(
+            origin,
+            SearchRecord {
+                cost: 0,
+                parent: None,
+            },
+        );
         Self {
             open,
-            records: BTreeMap::from([(
-                origin,
-                SearchRecord {
-                    cost: 0,
-                    parent: None,
-                },
-            )]),
+            records,
             active: None,
         }
     }

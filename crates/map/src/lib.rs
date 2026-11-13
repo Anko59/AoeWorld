@@ -51,9 +51,9 @@ pub use navigation::{
     MapRegionGround, MovementOutcome, NAVIGATION_FORMAT_VERSION, NavigationChunk,
     NavigationSnapshot, NavigationStorage, Path, ROUTE_LEG_COMMIT_WORK, ROUTE_LEG_PROGRESS_TILES,
     RegionChunk, RegionGround, RegionReachability, RegionStats, RegionTile, Regions,
-    RouteOriginPocket, RoutePlanner, RoutePlannerPoll, RouteTerrain, WalkingField, find_path,
-    find_path_segment_with_overlay, find_path_with_overlay, hierarchical_route,
-    hierarchical_route_with_overlay, navigation_checksum, walking_field,
+    RouteGroundCache, RouteOriginPocket, RoutePlanner, RoutePlannerPoll, RouteTerrain,
+    WalkingField, find_path, find_path_segment_with_overlay, find_path_with_overlay,
+    hierarchical_route, hierarchical_route_with_overlay, navigation_checksum, walking_field,
 };
 pub use overlay::{
     Depletion, MAX_OBSTACLE_TILES, MAX_RESOURCE_OVERLAY_CHANGES, MAX_STARTING_NODES,

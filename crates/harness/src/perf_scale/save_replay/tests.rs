@@ -26,3 +26,23 @@ fn repeat_spreads_use_the_requested_metric_without_mixing_units() {
     assert!((super::spread(&runs, "instructions", "mean").unwrap() - 200.0 / 101.0).abs() < 1e-9);
     assert_eq!(super::spread(&runs, "cpu", "mean_ms").unwrap(), 100.0);
 }
+
+#[test]
+fn replay_progress_distinguishes_arrivals_motion_and_window_censoring() {
+    use super::progress::Progress;
+    let mut progress = Progress::default();
+    progress.observe(1, (0, 0), Some((2, 0)), 0);
+    progress.observe(2, (0, 1), Some((2, 1)), 0);
+    progress.observe(3, (0, 2), Some((2, 2)), 0);
+    progress.observe(4, (0, 3), Some((2, 3)), 0);
+    progress.observe(1, (2, 0), None, 1);
+    progress.observe(2, (1, 1), Some((2, 1)), 1);
+    progress.observe(3, (0, 2), Some((2, 2)), 1);
+    let report = progress.summary(1);
+    assert_eq!(report["ordered_units"], 4);
+    assert_eq!(report["arrived_units"], 1);
+    assert_eq!(report["never_arrived_units"], 3);
+    assert_eq!(report["zero_tile_movement_units"], 2);
+    assert_eq!(report["active_at_end_units"], 2);
+    assert_eq!(report["removed_units"], 1);
+}

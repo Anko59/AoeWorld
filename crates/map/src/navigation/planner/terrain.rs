@@ -6,6 +6,12 @@ use aoe_core::TileCoord;
 /// poll memoizes them), and a step's cost may depend only on its target tile
 /// and on whether the step is diagonal.
 pub trait RouteTerrain {
+    /// Adapters with cheap shared ground/edge answers can omit the temporary
+    /// per-poll maps. This changes neither search work charges nor outcomes.
+    fn memoize_route_queries(&self) -> bool {
+        true
+    }
+
     /// Static map guidance is optional for other movement domains.
     /// Reserve one logical chunk preparation, independently of physical cache hits.
     fn prepare_navigation_chunk(&self) -> bool {

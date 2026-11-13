@@ -133,6 +133,9 @@ impl RoutePlanner {
         let _span = terrain
             .route_generator()
             .and_then(|generator| generator.measure_navigation(crate::NavigationPhase::Search));
+        if !terrain.memoize_route_queries() {
+            return self.search_leg_with(terrain, overlay, budget, cancelled);
+        }
         let memo = super::memo::MemoTerrain::new(terrain, overlay);
         self.search_leg_with(&memo, overlay, budget, cancelled)
     }
