@@ -237,6 +237,20 @@ impl Registry {
         }
     }
 
+    /// Gates whose own suites `suites` select, without preflight's run-everything
+    /// rule or the requirement closure: what a change can affect, the same path
+    /// classification CI selects its pull-request gates by.
+    pub(crate) fn affected(&self, suites: &BTreeSet<String>) -> BTreeSet<String> {
+        let mut initial = suites.clone();
+        initial.insert("static".into());
+        let suites = self.expand(&initial);
+        self.gates
+            .iter()
+            .filter(|g| g.suites.iter().any(|s| suites.contains(s)))
+            .map(|g| g.id.clone())
+            .collect()
+    }
+
     fn expand(&self, initial: &BTreeSet<String>) -> BTreeSet<String> {
         let graph = self
             .suites

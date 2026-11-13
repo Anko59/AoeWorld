@@ -35,7 +35,11 @@ agent policy refuses `$` in agent-set Make values.
    The chosen commit is pinned for gates and review; tags cannot shadow it (see [stacked pull requests](#stacked-pull-requests)).
 3. **Runs** the registry's `preflight` gates at that exact commit, as written in
    `gates/registry.json`, with their budgets. Docker gates are UNAVAILABLE when
-   Docker is down, which makes the run INCOMPLETE, never PASS.
+   Docker is down, which makes the run INCOMPLETE, never PASS. After a review
+   fix, when an earlier commit of the branch has passing preflight evidence, only
+   the gates whose own suites the diff since that commit selects run again (the
+   path classification CI selects by); the others keep their passing result,
+   shown as `reused from <commit>` in the evidence. The static gates always run.
 4. **Checks** that HEAD, the tree and the branch did not move while the gates
    ran; otherwise it writes no evidence.
 5. **Writes evidence** whatever the verdict, keyed by the full commit id:
