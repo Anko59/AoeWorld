@@ -202,6 +202,13 @@ export class AoeWebGl {
         if (code !== this.gl.NO_ERROR) throw new Error('WebGL2 graphics error ' + code);
     }
 
+    // getError() is one shared, destructive flag: an error seen while a submitted
+    // frame is unfinished belongs to it, so latch it for health polling.
+    latchSubmittedError() {
+        const code = this.pendingFrames.length ? this.gl.getError() : 0;
+        if (code && !this.frameError) this.frameError = new Error('WebGL2 graphics error ' + code);
+    }
+
     poll() {
         if (this.frameError) throw this.frameError;
         if (this.restoreError) throw this.restoreError;
@@ -224,7 +231,7 @@ export class AoeWebGl {
     beginPatches() {
         if (this.patching) throw new Error('WebGL2 atlas batch already active');
         if (this.disposed) throw new Error('WebGL2 context lost');
-        this.patching = true; this.patchesPending = false;
+        this.latchSubmittedError(); this.patching = true; this.patchesPending = false;
     }
 
     finishPatches() {
@@ -276,8 +283,7 @@ export class AoeWebGl {
                 this.atlasPages = pages;
             }
             const gl = this.gl;
-            gl.activeTexture(gl.TEXTURE0);
-            gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
+            gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
             // Typed bytes preserve the WebGPU atlas row convention, without browser
             // image-source flipping, premultiplication, or colour-space conversion.
             gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
@@ -312,7 +318,7 @@ export class AoeWebGl {
         const gl = this.gl;
         try {
             if (this.disposed) throw new Error('WebGL2 context lost');
-            gl.activeTexture(gl.TEXTURE0);
+            if (!this.patching) this.latchSubmittedError(); gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
             gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
             gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);

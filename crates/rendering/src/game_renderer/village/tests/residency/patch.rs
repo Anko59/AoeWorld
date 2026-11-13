@@ -33,6 +33,11 @@ export function inject_completed_error(bridge) {
  gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, 1, 1, 1,
   gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
 }
+export function hold_fences(bridge) {
+ const gl = bridge.gl, wait = gl.clientWaitSync;
+ gl.clientWaitSync = () => gl.TIMEOUT_EXPIRED;
+ return () => { gl.clientWaitSync = wait; };
+}
 export function finish_patch_observation(bridge) {
  const state = observations.get(bridge), gl = bridge.gl;
  gl.getError = state.query; gl.texSubImage3D = state.patch;
@@ -41,6 +46,7 @@ export function finish_patch_observation(bridge) {
 ")]
 extern "C" {
     fn wait_submitted_frame(bridge: &wasm_bindgen::JsValue) -> js_sys::Promise;
+    fn hold_fences(bridge: &wasm_bindgen::JsValue) -> js_sys::Function;
     fn inject_completed_error(bridge: &wasm_bindgen::JsValue);
     fn observe_patch_errors(bridge: &wasm_bindgen::JsValue, fail: bool);
     fn finish_patch_observation(bridge: &wasm_bindgen::JsValue) -> Vec<u32>;
@@ -186,5 +192,41 @@ async fn webgl_submission_defers_driver_queries_until_completion_and_latches_err
         "a failed submitted frame stays failed"
     );
     assert_eq!(finish_patch_observation(&bridge), [1, 1282]);
+    canvas.remove();
+}
+
+#[wasm_bindgen_test]
+async fn pending_frame_error_stays_latched_through_atlas_patch() {
+    let (mut renderer, canvas) = renderer().await;
+    let crate::GameRenderer::WebGl(gl) = &renderer else {
+        panic!("expected WebGL2");
+    };
+    let bridge = gl.test_bridge().clone();
+    assert!(
+        renderer
+            .render_world(
+                &art(),
+                &[],
+                &[],
+                &[unit(SceneUnitKind::actor(0))],
+                SceneCamera {
+                    viewport: [128.0; 2],
+                    ..camera()
+                },
+                0,
+                false,
+            )
+            .unwrap()
+    );
+    let release = hold_fences(&bridge);
+    inject_completed_error(&bridge);
+    renderer
+        .update_game_atlas(8, [2, 2], [1, 1], &[100, 80, 20, 255])
+        .expect("an error from the unfinished frame is not an atlas failure");
+    assert!(
+        health(&renderer).is_err(),
+        "the frame error must stay latched"
+    );
+    release.call0(&wasm_bindgen::JsValue::NULL).unwrap();
     canvas.remove();
 }
