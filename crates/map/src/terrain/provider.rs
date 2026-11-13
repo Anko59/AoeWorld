@@ -85,9 +85,9 @@ pub(super) fn sample_base_tile_with_cliff(
         surface_kind.corner_game_height_levels = [piece.top_level; 4];
         game_height_level = piece.top_level;
     }
-    // Only the narrowest streams are crossings: wadeable shallows drawn with
-    // the Ford (light shallow) art. Every other generated water is impassable,
-    // and a ford too steep to walk stays blocking water.
+    // Narrow streams and periodic small/medium-river crossings share the
+    // Ford (DE Shallows) art. Main channels and non-river water stay blocking;
+    // a candidate too steep to walk never advertises a passable ford.
     let ford = water == WaterKind::River && sample.wadeable && surface_kind.walkable();
     let material = match water {
         WaterKind::None => material_for(biome.0, geographic_height_centimeters),

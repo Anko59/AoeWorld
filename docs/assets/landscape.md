@@ -59,8 +59,8 @@ frames of 97×49 in the same x-major, reversed-y layout as the land sheets.
 | Water 15015 (optional) | Dark blue | 11 | Open water beyond the medium reach |
 | Shallows 15014 (optional) | Green marsh with lilies | 12 | Walkable Ford crossings; AoK DAT terrain 4 (`g_sha`) |
 
-Generated river fords use the light shallow Water 15002 sheet where local
-slopes permit crossing; marsh flecks no longer obscure the crossing. A ford
+Generated river fords use the DE Shallows sheet (DAT terrain 4, `g_sha.dds`) where local
+slopes permit crossing; its marsh detail distinguishes it from blocking water. A ford
 draws that sheet at 85% coverage (shore share 150/255, capped in the shared mix
 assignment, thin-stream raises included) over dirt, the bank ground: an all-ford
 interior quad uses the same dirt substrate as the boundary quads, so there is no

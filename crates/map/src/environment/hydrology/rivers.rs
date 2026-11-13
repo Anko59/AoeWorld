@@ -14,6 +14,10 @@ pub const MIN_RIVER_WIDTH_UNITS: u16 = 256;
 /// stretches; discharge only grows downstream, so a stream stops being wadeable
 /// once, where it becomes a river.
 pub const MAX_WADEABLE_WIDTH_UNITS: u16 = 640;
+/// Small/medium rivers receive periodic crossings. Wider main channels stay
+/// blocking even where a tributary's ford overlaps them. Width is a gameplay
+/// proxy for depth; HydroRIVERS does not observe historical ford depths.
+pub const MAX_FORD_WIDTH_UNITS: u16 = 6 * 256;
 /// Widest drawn channel, kept for playability.
 pub const MAX_RIVER_WIDTH_UNITS: u16 = 10 * 256;
 

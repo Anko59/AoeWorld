@@ -1,4 +1,4 @@
-//! A one-tile stream is real water: narrow, drawn as river, and still blocking.
+//! Narrow streams are continuously wadeable; deep main channels stay blocking.
 use super::*;
 use crate::RiverSegment;
 
@@ -114,17 +114,17 @@ fn a_one_tile_stream_is_wadeable_shallows_that_units_path_through() {
 }
 
 #[test]
-fn a_river_wider_than_the_shallows_limit_still_blocks_straight_and_diagonal() {
+fn a_deep_river_still_blocks_straight_and_diagonal() {
     for (name, segments, from, to) in [
         (
             "straight",
-            channel(130, -1, 130, 258, 4 * 256),
+            channel(130, -1, 130, 258, 7 * 256),
             (100, 128),
             (160, 128),
         ),
         (
             "diagonal",
-            channel(-1, -1, 258, 258, 4 * 256),
+            channel(-1, -1, 258, 258, 7 * 256),
             (60, 200),
             (200, 60),
         ),
@@ -147,7 +147,7 @@ fn a_river_wider_than_the_shallows_limit_still_blocks_straight_and_diagonal() {
 
 #[test]
 fn a_stream_joining_a_wide_river_stops_being_shallows_inside_the_wide_channel() {
-    let mut segments = channel(130, -1, 130, 258, 5 * 256);
+    let mut segments = channel(130, -1, 130, 258, 7 * 256);
     segments.extend(channel(60, 128, 130, 128, 256));
     let generator = crossing_with_geometry(false, false, segments);
     let tiles = composed(&generator);

@@ -127,7 +127,7 @@ pub(in crate::terrain) struct WaterSample {
     pub modeled: Option<ModeledWater>,
     pub observation: Option<HydrologyObservation>,
     pub modern_land_cover_class: Option<u8>,
-    /// The tile is river water of a narrow stream: wadeable shallows.
+    /// River water in a narrow stream or a periodic ford band.
     pub wadeable: bool,
 }
 

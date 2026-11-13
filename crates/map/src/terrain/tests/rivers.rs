@@ -116,8 +116,12 @@ fn source_river_water_never_invents_invisible_crossings() {
     let tiles = composed(&generator);
     assert!(tiles.iter().any(|p| p.terrain.water == WaterKind::River));
     for point in tiles.iter().filter(|p| p.terrain.water != WaterKind::None) {
-        assert!(!point.terrain.passable, "water at {:?}", point.tile);
-        assert_ne!(point.terrain.material, GroundMaterial::Ford);
+        assert_eq!(
+            point.terrain.passable,
+            point.terrain.material == GroundMaterial::Ford,
+            "water at {:?}",
+            point.tile
+        );
     }
     let bank = |center_x: i32| {
         tiles
@@ -129,7 +133,7 @@ fn source_river_water_never_invents_invisible_crossings() {
     };
     let route = crate::find_path(&generator, bank(100), bank(160), (WIDTH * WIDTH) as u32);
     assert!(
-        matches!(route, crate::MovementOutcome::Unreachable),
+        matches!(route, crate::MovementOutcome::Path(_)),
         "{route:?}"
     );
 }
@@ -139,6 +143,8 @@ fn subcell_meandering_river_blocks_water_and_keeps_each_bank_connected() {
     let generator = crossing();
     let tiles = composed(&generator);
     let mut river_columns = std::collections::BTreeSet::new();
+    let mut fords = 0;
+    let mut blocking = 0;
     for y in 0..WIDTH {
         let river = (0..WIDTH)
             .filter(|x| at(&tiles, *x, y).unwrap().terrain.water == WaterKind::River)
@@ -150,13 +156,22 @@ fn subcell_meandering_river_blocks_water_and_keeps_each_bank_connected() {
         river_columns.insert(river[0]);
         for x in river {
             let point = at(&tiles, x, y).unwrap();
-            assert_ne!(point.terrain.material, GroundMaterial::Ford);
-            assert!(!point.terrain.passable);
+            if point.terrain.material == GroundMaterial::Ford {
+                fords += 1;
+                assert!(point.terrain.passable);
+            } else {
+                blocking += 1;
+                assert!(!point.terrain.passable);
+            }
         }
     }
     assert!(river_columns.len() >= 7, "river follows the source bends");
-    let mut seen = std::collections::BTreeSet::from([(0, 0), (WIDTH - 1, WIDTH - 1)]);
-    let mut queue = std::collections::VecDeque::from([(0, 0), (WIDTH - 1, WIDTH - 1)]);
+    assert!(
+        fords > 100 && blocking > 1000,
+        "fords={fords}, blocking={blocking}"
+    );
+    let mut seen = std::collections::BTreeSet::from([(0, 0)]);
+    let mut queue = std::collections::VecDeque::from([(0, 0)]);
     while let Some((x, y)) = queue.pop_front() {
         for (nx, ny) in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)] {
             if at(&tiles, nx, ny).is_some_and(|p| p.terrain.passable) && seen.insert((nx, ny)) {
@@ -355,3 +370,6 @@ mod cliffs;
 
 #[path = "rivers/narrow.rs"]
 mod narrow;
+
+#[path = "rivers/fords.rs"]
+mod fords;

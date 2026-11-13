@@ -7,7 +7,7 @@ coordinate hash, shares the shoreline memo, and never scans the world. River and
 including narrow channels. Fords and marsh shallows remain excluded. River
 channel fish require two wet tiles in each cardinal direction; lake and sea
 deep fish retain the deep-water classification and eleven-tile wet clearance.
-Package generation recipe 3 is the only current recipe; regenerate local
+Package generation recipe 4 is the only current recipe; regenerate local
 packages rather than keeping a reader for superseded recipes. Current-output map pins
 are regenerated when the recipe changes.
 

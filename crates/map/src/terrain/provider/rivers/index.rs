@@ -89,7 +89,7 @@ pub(super) struct Index {
 }
 
 /// Squared distance, ford phase and whether every channel covering the point
-/// is narrow enough to wade.
+/// is narrow enough to wade continuously or is in an eligible ford band.
 pub(super) type Hit = (i128, bool, bool);
 
 impl Index {
@@ -182,7 +182,10 @@ impl Index {
                         ) as u16;
                     }
                     if let Some(hit) = part.sample(point, radius) {
-                        wide |= self.segments[id].width_units > crate::MAX_WADEABLE_WIDTH_UNITS;
+                        let width = self.segments[id].width_units;
+                        let wadeable = width <= crate::MAX_WADEABLE_WIDTH_UNITS
+                            || (width <= crate::MAX_FORD_WIDTH_UNITS && hit.1);
+                        wide |= !wadeable;
                         if best.is_none_or(|(distance, _)| hit.0 < distance) {
                             best = Some(hit);
                         }

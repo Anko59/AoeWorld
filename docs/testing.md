@@ -141,7 +141,7 @@ still caught per PR. Measured under load (12 cores, load 11-16):
 | `overview::tests::field_axes_tests::offline_field_axes_prepare_independent_canonical_pyramids` | 95 s | `..._at_reduced_axes` (its 128/32/64/16 iteration) |
 | `overview::tests::field_axes_tests::landscape_water_and_vegetation_are_accepted_and_published_at_the_elevation_axis` | 95 s | `landscape_water_and_vegetation_axes_are_accepted_at_the_elevation_axis` (the axis acceptance asserts) |
 | `hyde::hyde_tests::production_archive_stream_prepares_the_independent_1024_axis` | 75 s | none: the 2 and 128 axis HYDE tests run the same path; only the 1024 streaming windows are tier-only |
-| `terrain::tests::rivers::source_river_water_never_invents_invisible_crossings` | 20 s | none: `subcell_meandering_river_blocks_water...` asserts impassable, non-ford river water per PR; the tier adds the exhaustive unreachable route search |
+| `terrain::tests::rivers::source_river_water_never_invents_invisible_crossings` | 20 s before periodic fords | `subcell_meandering_river_blocks_water...` checks blocking water and visible fords and flood-fills both banks from one seed; the tier also searches a bank-to-bank route |
 
 Tests above 20 s in the aoe-harness crate (QA source and
 gate review) stay in `test-unit`: they are the only guard of the gate machinery.

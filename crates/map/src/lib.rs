@@ -29,17 +29,17 @@ pub use environment::{
     HydrologyEvidenceIndex, HydrologyEvidenceMethod, HydrologyEvidencePage, HydrologyKind,
     HydrologyObservation, HydrologyWaterModelIndex, HydrologyWaterModelPage, HydrologyWaterPolicy,
     LANDSCAPE_OVERVIEW_SAMPLES_PER_AXIS, LANDSCAPE_OVERVIEW_SOURCE_LOCKS,
-    MAX_ENVIRONMENT_SAMPLES_PER_AXIS, MAX_HYDROLOGY_EVIDENCE_SAMPLES_PER_AXIS,
-    MAX_RIVER_SEGMENTS_PER_PAGE, MAX_RIVER_WIDTH_UNITS, MAX_WADEABLE_WIDTH_UNITS,
-    MAX_WATER_CORRECTION_BYTES, MAX_WATER_CORRECTIONS, MIN_RIVER_WIDTH_UNITS, MODELLING_GRID_LIMIT,
-    ModernLandCoverPage, OverviewFieldAxes, OverviewHydrologyMode, PotentialBiomePage,
-    PreparedEnvironment, PyramidLevel, RiverSegment, VECTOR_HYDROLOGY_SOURCE_LOCKS,
-    WATER_CORRECTION_SCHEMA_VERSION, WATER_CORRECTION_TARGET_YEAR_CE, WORLD_COVER_OBSERVATION_YEAR,
-    WaterCorrectionDocument, WaterCorrectionOperation, WaterCorrectionProjection,
-    WaterCorrectionVertex, WaterFlowDirection, WaterModelProvenance, WaterPage,
-    is_hydrorivers_lock, is_vector_hydrology_lock, ordered_biome_page_root,
-    ordered_hydrology_page_root, ordered_modern_land_cover_page_root, ordered_page_root,
-    ordered_water_page_root, overview_base_lock_count,
+    MAX_ENVIRONMENT_SAMPLES_PER_AXIS, MAX_FORD_WIDTH_UNITS,
+    MAX_HYDROLOGY_EVIDENCE_SAMPLES_PER_AXIS, MAX_RIVER_SEGMENTS_PER_PAGE, MAX_RIVER_WIDTH_UNITS,
+    MAX_WADEABLE_WIDTH_UNITS, MAX_WATER_CORRECTION_BYTES, MAX_WATER_CORRECTIONS,
+    MIN_RIVER_WIDTH_UNITS, MODELLING_GRID_LIMIT, ModernLandCoverPage, OverviewFieldAxes,
+    OverviewHydrologyMode, PotentialBiomePage, PreparedEnvironment, PyramidLevel, RiverSegment,
+    VECTOR_HYDROLOGY_SOURCE_LOCKS, WATER_CORRECTION_SCHEMA_VERSION,
+    WATER_CORRECTION_TARGET_YEAR_CE, WORLD_COVER_OBSERVATION_YEAR, WaterCorrectionDocument,
+    WaterCorrectionOperation, WaterCorrectionProjection, WaterCorrectionVertex, WaterFlowDirection,
+    WaterModelProvenance, WaterPage, is_hydrorivers_lock, is_vector_hydrology_lock,
+    ordered_biome_page_root, ordered_hydrology_page_root, ordered_modern_land_cover_page_root,
+    ordered_page_root, ordered_water_page_root, overview_base_lock_count,
 };
 pub use land_use::{
     HistoricalCoverage, HistoricalLandUseObservation, HistoricalLandUsePage,
@@ -86,4 +86,4 @@ pub const REFERENCE_WALK_METERS_PER_SECOND_DENOMINATOR: u32 = 6;
 pub const CAVALRY_METERS_PER_SECOND: u32 = 3;
 /// The only deterministic generation recipe: the composed landscape. It is part
 /// of canonical package identity; packages naming any other value are rejected.
-pub const GENERATION_RECIPE_VERSION: u16 = 3;
+pub const GENERATION_RECIPE_VERSION: u16 = 4;
