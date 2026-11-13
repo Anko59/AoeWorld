@@ -19,6 +19,8 @@ pub(crate) enum Severity {
 /// One finding as a reviewer reports it.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub(crate) struct Reported {
+    /// Empty when the reviewer named no file; the claim still stands.
+    #[serde(default)]
     pub(crate) file: String,
     #[serde(default)]
     pub(crate) line: Option<u32>,
@@ -56,10 +58,29 @@ pub(crate) struct Verdict {
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Answer {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "findings")]
     pub(crate) findings: Vec<Reported>,
     #[serde(default)]
     pub(crate) verdicts: Vec<Verdict>,
+}
+
+/// Findings, skipping entries without a claim. A closing review sometimes puts a
+/// vote or a note in `findings`; it states nothing to fix, and failing the whole
+/// answer over it made a graded review incomplete. Any other malformed entry
+/// still fails the answer.
+fn findings<'de, D: serde::Deserializer<'de>>(input: D) -> Result<Vec<Reported>, D::Error> {
+    let entries: Vec<serde_json::Value> = Deserialize::deserialize(input)?;
+    let mut findings = Vec::new();
+    for entry in entries {
+        let claim = entry.get("claim").and_then(serde_json::Value::as_str);
+        if claim.is_none_or(|claim| claim.trim().is_empty()) {
+            let text: String = entry.to_string().chars().take(160).collect();
+            eprintln!("review: ignored a findings entry without a claim: {text}");
+            continue;
+        }
+        findings.push(serde_json::from_value(entry).map_err(serde::de::Error::custom)?);
+    }
+    Ok(findings)
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
