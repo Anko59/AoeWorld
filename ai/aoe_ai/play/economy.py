@@ -104,7 +104,7 @@ class EconomyManager:
         ctx.board.wood_dropoff_cursor = (ctx.board.wood_dropoff_cursor + 1) % len(workers)
         node = nearest((n for n in ctx.resources(ResourceKind.WOOD) if n.remaining > 0), worker.tile)
         if (node is None or dist(node.tile, worker.tile) > ctx.config.wood_camp_contact_tiles
-                or ctx.settlement_distance(node.tile) > ctx.config.max_gather_distance
+                or ctx.settlement_distance(node.tile) > ctx.config.wood_gather_distance
                 or ctx.dropoff_distance(node) <= ctx.config.dropoff_distance
                 or self.constructor.camp_near(ctx, kind, node)):
             return
@@ -164,7 +164,9 @@ class EconomyManager:
             shares = {"FOOD": 0.45, "WOOD": 0.25, "GOLD": 0.30, "STONE": 0.0}
         elif ctx.castle and buildorder.wanted_centers(ctx) > 1:
             shares = {"FOOD": 0.42, "WOOD": 0.40, "GOLD": 0.10, "STONE": 0.08}
-        cfg_castles = cfg.castles and ctx.feudal and ctx.economy.stone < 700 and (
+        # A Castle cannot be placed in Feudal. Mining its stone now takes
+        # woodcutters away from the army and the buildings that unlock Castle Age.
+        cfg_castles = cfg.castles and ctx.castle and ctx.economy.stone < 700 and (
             ctx.count(BuildingKind.CASTLE) + sum(1 for p in ctx.board.plans if p.kind == BuildingKind.CASTLE) < buildorder.wanted_castles(ctx))
         if cfg_castles or (buildorder.wanted_centers(ctx) > ctx.count(BuildingKind.TOWN_CENTER) and ctx.castle and ctx.economy.stone < 150):
             take = cfg.castle_stone_share
@@ -312,8 +314,8 @@ class EconomyManager:
                 ctx.order("move", villager.id, *target)
 
     def best_node(self, ctx: Context, villager: Any, kind: ResourceKind) -> Optional[Any]:
-        home = ctx.home
-        reach = ctx.config.max_gather_distance
+        reach = (ctx.config.wood_gather_distance if kind == ResourceKind.WOOD
+                 else ctx.config.max_gather_distance)
         scored = []
         # The nearest few dozen to the villager are plenty to choose from.
         candidates = heapq.nsmallest(

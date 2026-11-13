@@ -76,7 +76,7 @@ identifies its controlling Steward. Both are optional entity IDs, visible only t
 the owner. The Rust getters return `Option<EntityId>`; Python returns `int | None`.
 Manual worker orders release management until the worker becomes idle.
 
-Vassals still train at Castles; their defensive and land development duties are coming.
+Vassals train at Castles; the example AI reserves their builders only while local threats justify development.
 
 ## Slots, tokens and what a slot sees
 

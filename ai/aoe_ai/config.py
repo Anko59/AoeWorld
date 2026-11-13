@@ -56,8 +56,10 @@ class Config:
     dropoff_distance: int = 9
     #: A proactive camp uses a tree beside its woodcutter, without routing.
     wood_camp_contact_tiles: int = 2
-    #: Never send a villager to a node farther than this from the Town Center.
+    #: Ordinary resources stay this close to a settlement; timber has its own reach.
     max_gather_distance: int = 70
+    #: Timber can run out on an open start; known reachable forests get camps.
+    wood_gather_distance: int = 256
     workers_per_center: int = 60
     expand_workers_per_center: int = 30
     settlement_spacing: int = 28
@@ -89,6 +91,12 @@ class Config:
 
     # --- settlement defences -----------------------------------------------
     fortifications: bool = True
+    fort_threat_radius: int = 96
+    fort_frontier_radius: int = 192
+    fort_threat_seconds: int = 180
+    fort_alert_cell: int = 8
+    fort_alert_limit: int = 64
+    fort_towers_per_frontier: int = 2
     fort_workers_per_tower: int = 30
     fort_wall_workers: int = 60
     fort_interval_seconds: int = 12

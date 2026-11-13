@@ -160,6 +160,7 @@ def test_large_armies_keep_commands_bounded_and_leave_the_economy_a_turn():
 
 def test_a_vassal_is_enabled_and_given_workers_for_ordinary_fortification():
     ctx = kingdom(villagers=60, centers=1)
+    ctx.world._enemy_buildings = [building(999, BuildingKind.BARRACKS, tile=(130, 80), mine=False)]
     ctx.buildings.append(building(950, BuildingKind.CASTLE, tile=(65, 65)))
     ctx.buildings[-1].garrison = [(951, UnitKind.VASSAL, 50, 50)]
     ManagementManager().step(ctx)
