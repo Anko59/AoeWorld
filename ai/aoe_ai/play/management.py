@@ -262,7 +262,7 @@ class ManagementManager:
         """Keep a small local workforce available for native Vassal fortification."""
         castles = [b for b in ctx.buildings if b.complete and b.kind == BuildingKind.CASTLE
                    and garrisoned(b, UnitKind.VASSAL)]
-        if not any(b.kind == BuildingKind.TOWN_CENTER for b in ctx.buildings):
+        if not any(b.kind == BuildingKind.TOWN_CENTER and b.complete for b in ctx.buildings):
             return  # recovery: workers stay free to rebuild the Town Center
         alive = {u.id for u in ctx.villagers}
         board = ctx.board

@@ -466,3 +466,20 @@ def test_vassal_reservations_are_released_while_no_town_center_stands():
     brain.board.vassal_workers = {700: {u.id for u in units}}
     _, client = play(FakeWorld(units, [castle], eco=economy(wood=800, food=800, population=12, cap=50)), brain=brain)
     assert any(args[1] == BuildingKind.TOWN_CENTER for args in client.named("build"))
+
+
+def test_reservations_stay_released_until_the_replacement_town_center_completes():
+    from aoeworld import UnitKind
+
+    units, _ = base(12)
+    castle = building(700, BuildingKind.CASTLE, tile=(80, 60))
+    castle.garrison = [(901, UnitKind.VASSAL, 80, 60)]
+    foundation = building(701, BuildingKind.TOWN_CENTER, tile=(50, 50), complete=False)
+    board = Blackboard()
+    board.home = (50, 50)
+    board.vassal_workers = {700: {u.id for u in units}}
+    ctx = Context(FakeClient(), decision(FakeWorld(units, [castle, foundation], eco=economy())), board, Config())
+    assert ctx.reserved_workers == set()
+    foundation.complete = True
+    ctx = Context(FakeClient(), decision(FakeWorld(units, [castle, foundation], eco=economy())), board, Config())
+    assert ctx.reserved_workers == {u.id for u in units}

@@ -90,8 +90,8 @@ class Context:
         board.seated = {i: target for i, target in board.seated.items() if i in managers and target in building_ids}
         board.manager_settings = {i: settings for i, settings in board.manager_settings.items() if i in managers}
         board.general_training = {i: training for i, training in board.general_training.items() if i in managers}
-        # Recovery: with no Town Center at all, Vassal reservations are released so the survivors can rebuild one.
-        recovering = not any(b.kind == BuildingKind.TOWN_CENTER for b in self.buildings)
+        # Recovery: until a Town Center is complete, Vassal reservations are released so the survivors can rebuild one.
+        recovering = not any(b.kind == BuildingKind.TOWN_CENTER and b.complete for b in self.buildings)
         self.reserved_workers = (set() if recovering or not board.vassal_workers
                                  else set().union(*board.vassal_workers.values()))
         army_ids = {unit.id for unit in self.army if unit.alive}
