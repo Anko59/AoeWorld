@@ -302,8 +302,8 @@ The value is a space- or comma-separated list of paths or globs under
 must select at least one `*.spec.ts`, or the run fails at once and names the
 pattern. The harness passes the resolved specs to Playwright on one worker and
 writes its JSON report to `reports/e2e/filtered.json` (recreated each run). A filtered run exits with Playwright's status, so a failing
-selected test fails it; it expects no release evidence (`pass.json`) and no
-renderer evidence, which only the whole suite writes. The harness creates
+selected test fails it; it expects no release evidence (`pass.json`), which
+only the whole suite writes. The harness creates
 `reports/e2e/` itself. `AOE_E2E_SPECS` is refused when `GITHUB_ACTIONS` or `CI`
 is set, so a filtered run can never count as the CI e2e, and it cannot be
 combined with `AOE_E2E_SHARD`.
