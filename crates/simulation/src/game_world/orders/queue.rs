@@ -3,6 +3,11 @@ use crate::{EconomyError, GameWorld, GameWorldError};
 use aoe_core::{EntityId, MAX_MOVE_DESTINATIONS, WorldPosition};
 
 impl GameWorld {
+    /// Live admission and save restoration share this command FIFO width.
+    pub(crate) const fn move_queue_width() -> usize {
+        MAX_MOVE_DESTINATIONS
+    }
+
     pub fn issue_queued_move(
         &mut self,
         id: EntityId,
@@ -30,7 +35,7 @@ impl GameWorld {
             }
             return Ok(moving);
         }
-        if self.move_queues.get(&id).map_or(1, |q| q.len() + 1) >= MAX_MOVE_DESTINATIONS {
+        if self.move_queues.get(&id).map_or(1, |q| q.len() + 1) >= Self::move_queue_width() {
             return Err(EconomyError::OrderTooLarge);
         }
         // An accepted manual waypoint takes ownership of the current route;

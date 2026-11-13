@@ -13,6 +13,8 @@
 //! kept, and restarted instead: in-flight route searches, fog memory of
 //! destroyed buildings, carcasses, and what a General was deciding.
 //! `RestoreReport` counts what a restore could not place.
+mod general;
+mod orders;
 mod records;
 use super::{BuildingKind, ConstructionState, GameUnit, GameWorld, GameWorldError};
 use aoe_core::{EntityId, TileCoord, TileRect, WorldPosition};
@@ -61,6 +63,8 @@ impl GameWorld {
                 hunt: self.hunting_target(stored.state.id),
                 garrison_order: self.economy.garrison_orders.get(&stored.state.id).copied(),
                 embarked_in: self.economy.embarked.get(&stored.state.id).copied(),
+                general_controller: self.general_controller(stored.state.id),
+                general_order_tick: self.economy.generals.manual.get(&stored.state.id).copied(),
                 management: self.management_of(stored.state.id, stored.state.kind),
             })
             .collect();
@@ -77,6 +81,8 @@ impl GameWorld {
                     hunt: None,
                     garrison_order: None,
                     embarked_in: None,
+                    general_controller: self.general_controller(held.unit.id),
+                    general_order_tick: self.economy.generals.manual.get(&held.unit.id).copied(),
                     management: self.management_of(held.unit.id, held.unit.kind),
                 });
             }
@@ -100,6 +106,7 @@ impl GameWorld {
                 complete: b.state == ConstructionState::Complete,
                 bridge_span: b.bridge_span,
                 training_queue: b.training_queue.iter().copied().collect(),
+                general_recruit: self.economy.generals.recruits.get(&b.id).copied(),
                 last_hit: b.last_hit,
                 work_done: b.work_done,
                 work_total: b.work_total,
@@ -168,6 +175,7 @@ impl GameWorld {
             self.expect_id(record.unit.id);
             self.restore_unit(record, &mut report);
         }
+        self.restore_general_ownership(&snapshot.units);
         for record in &snapshot.units {
             if let Some(transport) = record.embarked_in {
                 self.restore_embarked(record.unit.id, transport);
@@ -189,6 +197,7 @@ impl GameWorld {
                 buildings: report.buildings_lost,
             });
         }
+        self.restore_general_recruits(&snapshot.buildings, &snapshot.units);
         self.resume_jobs(snapshot, &mut report);
         for player in &snapshot.players {
             if let Some(slot) = self.economy.players.get_mut(&player.player) {
@@ -402,6 +411,7 @@ impl GameWorld {
     /// paths; a refused order leaves the unit idle.
     fn resume_jobs(&mut self, snapshot: &WorldSnapshot, report: &mut RestoreReport) {
         let mut grouped = std::collections::BTreeSet::new();
+        let mut failed_moves = std::collections::BTreeSet::new();
         for group in &snapshot.formations {
             let members: Vec<EntityId> = group
                 .members
@@ -463,8 +473,8 @@ impl GameWorld {
                     .issue_move(id, at)
                     .map(|_| ())
                     .map_err(crate::EconomyError::Movement);
-                for waypoint in &record.queue {
-                    let _ = self.issue_queued_move(id, *waypoint);
+                if result.is_err() {
+                    failed_moves.insert(id);
                 }
                 result
             } else {
@@ -475,5 +485,6 @@ impl GameWorld {
                 Err(_) => report.jobs_lost += 1,
             }
         }
+        self.restore_player_queues(&snapshot.units, &failed_moves);
     }
 }

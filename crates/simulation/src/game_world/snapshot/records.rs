@@ -8,7 +8,7 @@ use aoe_core::{EntityId, Formation, PlayerId, TileRect, WorldPosition};
 use aoe_map::ResourceOverlaySnapshot;
 use serde::{Deserialize, Serialize};
 
-pub const WORLD_SNAPSHOT_VERSION: u16 = 3;
+pub const WORLD_SNAPSHOT_VERSION: u16 = 4;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WorldSnapshot {
@@ -74,6 +74,8 @@ pub struct BuildingRecord {
     pub complete: bool,
     pub bridge_span: Option<aoe_core::BridgeSpan>,
     pub training_queue: Vec<TrainingEntry>,
+    /// The General that reserved the front training entry, and its bought kind.
+    pub general_recruit: Option<(EntityId, crate::UnitKind)>,
     pub last_hit: Option<HitRecord>,
     pub work_done: u64,
     pub work_total: u64,
@@ -106,6 +108,10 @@ pub struct UnitRecord {
     pub garrison_order: Option<EntityId>,
     /// The transport this unit was aboard.
     pub embarked_in: Option<EntityId>,
+    /// Exact army membership, independent of unit allocation/spawn order.
+    pub general_controller: Option<EntityId>,
+    /// Last owner order for a soldier excluded from automatic recruitment.
+    pub general_order_tick: Option<u64>,
     pub management: Option<Management>,
 }
 

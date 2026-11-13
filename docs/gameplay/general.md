@@ -11,7 +11,8 @@ rules apply. The Steward is the economy specialist.
 
 Creation adopts up to 100 living owned land soldiers within 24 tiles, in entity
 order, excluding civilians, monks, ships and other leaders. An existing
-General's soldiers are never stolen. Later bounded censuses fill vacancies.
+General's soldiers are never stolen. Later surveys only observe enemies;
+ordinary General orders never recruit free or owner-commanded soldiers.
 The limit includes prepaid reinforcements. Death releases command immediately;
 sheltered/transported soldiers retain their slots but receive no field orders.
 Adoption alone leaves soldiers in place; a march order, combat or retreat

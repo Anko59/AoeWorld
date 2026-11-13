@@ -1,6 +1,5 @@
-//! One rule for detached soldiers: any player order detaches and restarts the
-//! clock; only a player's order to his own General readmits idle, near,
-//! delayed soldiers. Each test pins one reviewer finding.
+//! Player orders detach soldiers permanently. Ordinary General orders cannot
+//! recruit them again, even when they have been idle nearby for a long time.
 use super::*;
 
 fn muster(w: &mut GameWorld) -> (Vec<EntityId>, EntityId) {
@@ -59,7 +58,7 @@ fn a_garrisoned_detached_soldier_keeps_its_protection() {
 }
 
 #[test]
-fn a_fresh_stop_on_the_general_readmits_eligible_soldiers() {
+fn a_fresh_stop_on_the_general_never_readmits_detached_soldiers() {
     let (mut w, _) = setup();
     let (ids, g) = muster(&mut w);
     advance(&mut w, 20);
@@ -68,14 +67,15 @@ fn a_fresh_stop_on_the_general_readmits_eligible_soldiers() {
     w.issue_stop(PlayerId(0), g).unwrap();
     w.general_player_order(PlayerId(0), &[g], None);
     advance(&mut w, 40);
-    assert_eq!(w.general_controller(ids[0]), Some(g));
+    assert_eq!(w.general_controller(ids[0]), None);
+    assert!(clock(&w, ids[0]).is_some());
 }
 
 #[test]
 fn an_active_auto_scout_is_never_readmitted() {
     let (mut w, _) = setup();
-    let (ids, g) = muster(&mut w);
     let scout = soldier(&mut w, UnitKind::Scout, 103, 104);
+    let (ids, g) = muster(&mut w);
     advance(&mut w, 20);
     assert_eq!(w.general_controller(scout), Some(g));
     w.issue_auto_scout(PlayerId(0), scout, true).unwrap();
@@ -114,16 +114,12 @@ fn an_automatic_march_never_readmits() {
 #[test]
 fn a_dead_detached_soldier_leaves_the_map() {
     let (mut w, _) = setup();
-    let (ids, g) = muster(&mut w);
+    let (ids, _) = muster(&mut w);
     advance(&mut w, 20);
     w.general_player_order(PlayerId(0), &ids[..2], None);
     assert!(clock(&w, ids[0]).is_some());
     let index = w.lookup[&ids[0]];
     w.kill_unit(index);
     assert_eq!(clock(&w, ids[0]), None, "killed: entry gone at once");
-    // An entry that outlived its soldier is swept at the next General order.
-    w.economy.generals.manual.insert(EntityId(9_999), 0);
-    w.general_player_order(PlayerId(0), &[g], None);
-    assert_eq!(clock(&w, EntityId(9_999)), None, "the stray entry is swept");
     assert!(clock(&w, ids[1]).is_some(), "a live, recent one stays");
 }
