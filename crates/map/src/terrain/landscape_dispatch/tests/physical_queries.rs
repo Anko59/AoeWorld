@@ -70,6 +70,34 @@ fn water_projection_does_not_need_elevation_or_landscape_composition() {
     );
 }
 
+#[test]
+fn wet_tiles_hold_no_blocking_resource_node() {
+    // Ship ground relies on this: only fish exist on water and fish never
+    // block, so ships need no composed node for a wet tile.
+    let (dense, source) = physical_sources();
+    let wide = MapChunkGenerator::new([5; 32], 3, 96);
+    let mut wet = 0;
+    for (generator, side) in [(&wide, 96), (&dense, 16), (&source, 16)] {
+        for y in 0..side {
+            for x in 0..side {
+                let at = TileCoord::new(x, y);
+                let Some((tile, node)) =
+                    generator.tile_and_node_with_cancel(at, &|| false).unwrap()
+                else {
+                    continue;
+                };
+                if tile.water != WaterKind::None {
+                    wet += 1;
+                    assert!(node.is_none_or(|n| {
+                        matches!(n.object, ObjectKind::ShoreFish | ObjectKind::DeepFish)
+                    }));
+                }
+            }
+        }
+    }
+    assert!(wet > 0);
+}
+
 fn expected_edge(from: Tile, to: Tile) -> EdgePassability {
     if !from.passable
         || !to.passable

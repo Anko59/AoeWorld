@@ -135,15 +135,15 @@ impl GameWorld {
             let Terrain::Map { generator, overlay } = &self.terrain else {
                 return Ok(false);
             };
-            // Ships need water and blockers, not composed ground appearance.
+            // Ships need water and mutable blockers only. Resources and trees
+            // are generated on dry land alone and fish never block, so no
+            // resource node can block a wet tile: no navigation snapshot,
+            // landscape composition or elevation page is consulted.
             match generator.water_at_with_cancel(tile, cancelled)? {
                 Some(water) => {
                     navigable(water)
                         && !overlay.blocks_tile(tile)
                         && overlay.bridge_connections(tile).is_none()
-                        && generator
-                            .object_at_with_cancel(tile, cancelled)?
-                            .is_none_or(|n| !overlay.blocks_node(n))
                 }
                 None => false,
             }
