@@ -57,7 +57,10 @@ class FortificationManager:
                 width = 2 * ctx.config.fort_wall_wing + 1
             if point in rejected:
                 continue
-            if ctx.land_route(center, point) is not None:
+            route = ctx.land_route(center, point)
+            if route is None and ctx.land_unanswered(center, point):
+                return None  # budget spent: choose on a later decision, never on partial answers
+            if route is not None:
                 candidates.append((width, abs(reach - ctx.config.fort_lane_distances[1]), point))
         return min(candidates)[2] if candidates else None
 
@@ -124,8 +127,12 @@ class FortificationManager:
         width, height = building_size(kind)
         x, y = site
         edges = ((x - 1, y), (x + width, y), (x, y - 1), (x, y + height))
-        if not any(ctx.land_route(builder.tile, edge) is not None
-                   for edge in sorted(edges, key=lambda tile: dist(builder.tile, tile))):
+        for edge in sorted(edges, key=lambda tile: dist(builder.tile, tile)):
+            if ctx.land_route(builder.tile, edge) is not None:
+                break
+            if ctx.land_unanswered(builder.tile, edge):
+                return False  # no answer yet: not a refusal
+        else:
             self.refused = True
             return False
         ctx.spend(cost)

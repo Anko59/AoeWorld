@@ -260,3 +260,57 @@ def test_castle_across_water_falls_back_to_a_reachable_settlement_site():
     castle = ctx.client.named('build')[0]
     assert castle[1] == BuildingKind.CASTLE
     assert castle[2] <= limit + 1 and castle[2] < far[0]
+
+
+def gate_ready(ctx):
+    enemy(ctx)
+    exact_sites(ctx)
+    manager = FortificationManager(Constructor())
+    lane = manager.lane(ctx, ctx.home)
+    ctx.buildings.append(building(900, BuildingKind.WATCH_TOWER, tile=lane))
+    ctx.board.fort_lanes[ctx.home] = lane
+    return manager, lane
+
+
+def test_exhausted_land_budget_is_not_an_unreachable_gate_and_keeps_the_lane():
+    ctx = kingdom(villagers=60, centers=1)
+    manager, lane = gate_ready(ctx)
+    ctx._land_queries = ctx.config.land_queries_per_decision
+    manager.step(ctx)
+    assert not ctx.client.named('build')
+    assert ctx.board.fort_lanes[ctx.home] == lane and not ctx.board.fort_rejected
+    ctx._land_queries = 0
+    ctx.tick += 1200
+    manager.step(ctx)
+    assert ctx.client.named('build')[0][1] == BuildingKind.STONE_GATE, 'retried once answerable'
+
+
+def test_answered_unreachable_gate_edges_do_reject_the_lane():
+    ctx = kingdom(villagers=60, centers=1)
+    manager, lane = gate_ready(ctx)
+    ctx.world.land_route = lambda *args: None
+    manager.step(ctx)
+    assert ctx.board.fort_rejected[ctx.home] == {lane}
+    assert ctx.board.fort_lanes.get(ctx.home) is None
+
+
+def test_lane_choice_waits_for_land_budget_instead_of_ranking_partial_answers():
+    ctx = kingdom(villagers=60, centers=1)
+    enemy(ctx)
+    ctx._land_queries = ctx.config.land_queries_per_decision
+    assert FortificationManager(Constructor()).lane(ctx, ctx.home) is None
+    ctx._land_queries = 0
+    assert FortificationManager(Constructor()).lane(ctx, ctx.home) is not None
+
+
+def test_castle_waits_for_land_budget_instead_of_falling_back_from_unanswered_frontier():
+    ctx = kingdom(villagers=120, centers=3)
+    enemy(ctx, (300, 50))
+    ctx.world.find_build_site = lambda kind, x, y, *a: (x, y)
+    ctx._land_queries = ctx.config.land_queries_per_decision
+    ManagementManager().castles(ctx)
+    assert not ctx.client.named('build')
+    ctx._land_queries = 0
+    ctx.tick += 10 * ctx.world.tick_hz + 1
+    ManagementManager().castles(ctx)
+    assert ctx.client.named('build')[0][2] > max(c[0] for c in ctx.centers)
