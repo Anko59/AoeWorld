@@ -284,7 +284,7 @@ fn garrison_destruction_releases_every_unit_even_with_only_one_open_ground_tile(
 }
 
 #[test]
-fn garrison_arrows_use_projectiles_and_only_villagers_and_foot_archers_add_firepower() {
+fn garrison_arrows_use_projectiles_and_castles_and_tcs_count_every_occupant() {
     for (kind, base) in [
         (BuildingKind::TownCenter, 0),
         (BuildingKind::Castle, 5),
@@ -306,7 +306,15 @@ fn garrison_arrows_use_projectiles_and_only_villagers_and_foot_archers_add_firep
         );
         advance(&mut world, 40);
         enter(&mut world, building, UnitKind::Militia);
-        assert_eq!(world.building_arrow_count(building), base as u8);
+        assert_eq!(
+            world.building_arrow_count(building),
+            base as u8
+                + if kind == BuildingKind::TownCenter {
+                    2
+                } else {
+                    u8::from(kind == BuildingKind::Castle)
+                }
+        );
         enter(&mut world, building, UnitKind::Villager);
         if kind == BuildingKind::Castle {
             enter(&mut world, building, UnitKind::Villager);
@@ -326,11 +334,11 @@ fn garrison_arrows_use_projectiles_and_only_villagers_and_foot_archers_add_firep
 }
 
 #[test]
-fn garrison_firepower_sums_before_flooring_and_respects_original_arrow_limits() {
+fn garrison_counts_one_arrow_per_occupant_with_dat_base_and_limits() {
     for (kind, expected) in [
-        (BuildingKind::TownCenter, 10),
+        (BuildingKind::TownCenter, 11),
         (BuildingKind::WatchTower, 5),
-        (BuildingKind::Castle, 14),
+        (BuildingKind::Castle, 21),
     ] {
         let (mut world, building) = shelter(kind);
         for _ in 0..kind.garrison_capacity() {
@@ -339,12 +347,12 @@ fn garrison_firepower_sums_before_flooring_and_respects_original_arrow_limits() 
         assert_eq!(world.building_arrow_count(building), expected);
     }
     let (mut world, building) = shelter(BuildingKind::Castle);
-    for expected in [5, 5, 6, 6, 6, 7] {
+    for expected in [6, 7, 8, 9, 10, 11] {
         enter(&mut world, building, UnitKind::Archer);
         assert_eq!(
             world.building_arrow_count(building),
             expected,
-            "floor(sum(archer DPS) / single Castle arrow DPS)"
+            "one arrow per occupant plus the DAT base count"
         );
     }
 }
@@ -352,9 +360,9 @@ fn garrison_firepower_sums_before_flooring_and_respects_original_arrow_limits() 
 #[test]
 fn garrison_volley_launches_the_scaled_arrow_count_and_ejection_removes_the_bonus() {
     for (kind, full, empty) in [
-        (BuildingKind::TownCenter, 10, 0),
+        (BuildingKind::TownCenter, 11, 0),
         (BuildingKind::WatchTower, 5, 1),
-        (BuildingKind::Castle, 14, 5),
+        (BuildingKind::Castle, 21, 5),
     ] {
         let (mut world, building) = shelter(kind);
         for _ in 0..kind.garrison_capacity() {
@@ -379,13 +387,13 @@ fn garrison_cycles_cannot_reset_town_center_reload() {
     world.spawn_militia(PlayerId(1), at(106, 101)).unwrap();
     let unit = enter(&mut world, building, UnitKind::Villager);
     let launched = world.combat.next_projectile;
-    assert_eq!(launched, 1);
+    assert_eq!(launched, 2);
     world.issue_ungarrison(PlayerId(0), building, None).unwrap();
     world.issue_garrison(PlayerId(0), unit, building).unwrap();
     world.advance();
     assert_eq!(world.combat.next_projectile, launched);
     advance(&mut world, 39);
-    assert_eq!(world.combat.next_projectile, launched + 1);
+    assert_eq!(world.combat.next_projectile, launched + 2);
 }
 
 #[test]
@@ -445,4 +453,27 @@ fn castle_shelters_never_admit_naval_units() {
     for kind in UnitKind::ALL.into_iter().filter(|k| k.is_naval()) {
         assert!(!BuildingKind::Castle.admits(kind), "{kind:?}");
     }
+}
+
+#[test]
+fn castle_volley_has_distinct_launches_and_spread_impacts() {
+    let (mut world, castle) = shelter(BuildingKind::Castle);
+    world.spawn_militia(PlayerId(1), at(106, 101)).unwrap();
+    world.advance();
+    let arrows: Vec<_> = world
+        .projectiles()
+        .filter(|p| p.attacker == castle)
+        .collect();
+    assert_eq!(arrows.len(), 5);
+    let launches: std::collections::BTreeSet<_> =
+        arrows.iter().map(|p| (p.from.x, p.from.y)).collect();
+    let aims: std::collections::BTreeSet<_> = arrows.iter().map(|p| (p.to.x, p.to.y)).collect();
+    assert_eq!(launches.len(), 5);
+    assert_eq!(aims.len(), 5);
+    let width = arrows.iter().map(|p| p.from.x).max().unwrap()
+        - arrows.iter().map(|p| p.from.x).min().unwrap();
+    assert!(
+        width >= aoe_core::FIXED_SUBUNITS_PER_TILE,
+        "fan spans at least a tile"
+    );
 }

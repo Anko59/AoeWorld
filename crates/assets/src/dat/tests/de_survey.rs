@@ -47,6 +47,12 @@ fn unit_with_delay(id: i16, language: i32, name: &str, frame_delay: i16) -> Vec<
     out.extend_from_slice(&1_u16.to_le_bytes());
     out.extend_from_slice(&17_i16.to_le_bytes());
     out.extend_from_slice(&[0; 7]);
+    out.extend_from_slice(&[0; 69]);
+    out.extend_from_slice(&5_f32.to_le_bytes());
+    out.push(21);
+    for value in [0.5_f32, 0.5, 4.0] {
+        out.extend_from_slice(&value.to_le_bytes());
+    }
     out
 }
 
@@ -266,4 +272,23 @@ fn moving_projectile_header_validates_identity_speed_and_every_truncation() {
     }
     bytes[speed..speed + 4].copy_from_slice(&f32::INFINITY.to_le_bytes());
     assert!(military::projectile_record(&bytes, 0, 363).is_err());
+}
+
+#[test]
+fn native_volley_counts_and_spawning_area_are_read_and_validated() {
+    let bytes = unit(82, 5142, "CSTL");
+    let row = serde_json::to_value(unit_record(&bytes, 0, 82, "CSTL").unwrap()).unwrap();
+    assert_eq!(row["total_projectiles"], 5.0);
+    assert_eq!(row["max_total_projectiles"], 21);
+    assert_eq!(
+        row["projectile_spawning_area"],
+        serde_json::json!([0.5, 0.5, 4.0])
+    );
+    for end in bytes.len() - 17..bytes.len() {
+        assert!(unit_record(&bytes[..end], 0, 82, "CSTL").is_err());
+    }
+    let mut invalid = bytes.clone();
+    let at = invalid.len() - 12;
+    invalid[at..at + 4].copy_from_slice(&f32::NAN.to_le_bytes());
+    assert!(unit_record(&invalid, 0, 82, "CSTL").is_err());
 }
