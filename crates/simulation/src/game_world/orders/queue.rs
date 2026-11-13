@@ -109,6 +109,10 @@ impl GameWorld {
                 )
                 .is_ok()
         {
+            // A repeated identical group order returns early, so the scalar
+            // move's replacement cleanup is done here for every outcome.
+            self.discard_move_queue_for_order(id);
+            self.cancel_transport_journey(id);
             return Ok(true);
         }
         Ok(self.issue_move(id, destination)?)

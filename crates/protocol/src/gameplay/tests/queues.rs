@@ -57,6 +57,19 @@ fn queued_move_and_authoritative_markers_have_current_golden_wire() {
 }
 
 #[test]
+fn move_order_has_current_golden_wire() {
+    let order = ClientMessage::MoveOrder {
+        sequence: 1,
+        entity_id: EntityId(2),
+        destination: WorldPosition::new(512, 1536),
+        attack_move: true,
+    };
+    let wire = [2, 1, 2, 128, 8, 128, 24, 1];
+    assert_eq!(encode_client(&order).unwrap(), wire);
+    assert_eq!(decode_client(&wire).unwrap(), order);
+}
+
+#[test]
 fn move_queue_decoding_and_encoding_enforce_bounds_order_and_positions() {
     let queue = |id, count| MoveQueue {
         entity_id: EntityId(id),

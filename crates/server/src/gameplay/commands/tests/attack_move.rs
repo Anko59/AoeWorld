@@ -57,3 +57,18 @@ fn a_single_units_plain_move_walks_past_the_same_enemy() {
     assert!(world.unit(enemy).is_some_and(|e| e.hp > 0));
     assert_eq!(world.unit(soldier).unwrap().position, at(130, 100));
 }
+
+#[test]
+fn repeating_a_single_units_attack_move_discards_its_queued_waypoints() {
+    let (mut world, soldier, _) = march(true);
+    world
+        .issue_queued_leg(soldier, at(100, 140), false)
+        .unwrap();
+    assert_eq!(world.move_destinations(soldier).len(), 2);
+    world.issue_attack_move(soldier, at(130, 100)).unwrap();
+    assert_eq!(world.move_destinations(soldier), vec![at(130, 100)]);
+    for _ in 0..3_000 {
+        world.advance();
+    }
+    assert_eq!(world.unit(soldier).unwrap().position, at(130, 100));
+}
