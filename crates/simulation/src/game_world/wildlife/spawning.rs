@@ -124,7 +124,10 @@ impl GameWorld {
 
     /// The terrain generator has no animal hooks. A bounded local kit is
     /// placed after the resource kit without changing terrain or collision.
-    pub(crate) fn initialize_wildlife(&mut self, center: TileCoord, root: TileCoord) {
+    /// Returns how many guaranteed boar/deer herds (food the village is owed)
+    /// could not be placed in full, so the caller can report a partial start.
+    pub(crate) fn initialize_wildlife(&mut self, center: TileCoord, root: TileCoord) -> usize {
+        let mut short_herds = 0;
         let region = self.animal_start_region(center, root);
         let mut used = std::collections::BTreeSet::new();
         let extra_boar = self.start_roll(center, 200).is_multiple_of(2);
@@ -156,12 +159,15 @@ impl GameWorld {
                 .collect();
             let salt = self.start_roll(center, 210 + slot as u64);
             candidates.sort_by_key(|tile| self.start_roll(*tile, salt));
+            let guaranteed = matches!(kind, AnimalKind::Boar | AnimalKind::Deer);
             let Some(anchor) = candidates.first().copied() else {
+                short_herds += usize::from(guaranteed);
                 continue;
             };
             candidates.sort_by_key(|tile| {
                 distance(*tile, anchor) * 8 + self.start_roll(*tile, salt) % 64
             });
+            let mut placed = 0;
             for tile in candidates
                 .into_iter()
                 .filter(|tile| !used.contains(tile))
@@ -172,8 +178,11 @@ impl GameWorld {
                     && self.spawn_animal(kind, at).is_ok()
                 {
                     used.insert(tile);
+                    placed += 1;
                 }
             }
+            short_herds += usize::from(guaranteed && placed < count);
         }
+        short_herds
     }
 }

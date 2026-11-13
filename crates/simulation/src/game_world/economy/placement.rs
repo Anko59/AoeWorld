@@ -231,10 +231,19 @@ impl GameWorld {
             Ok(()) | Err(EconomyError::InvalidFootprint) => {}
             Err(error) => return Err(error),
         }
-        self.initialize_wildlife(
+        let kit_was_partial = self.partial_kits;
+        let short_herds = self.initialize_wildlife(
             TileCoord::new(origin.x + side / 2, origin.y + side / 2),
             scout_tile,
         );
+        // A village short of its guaranteed boar/deer food is partial too, but
+        // is counted once even when its resource kit was already partial.
+        if short_herds > 0 && self.partial_kits == kit_was_partial {
+            self.partial_kits += 1;
+            eprintln!(
+                "village near {origin:?} is partial: {short_herds} guaranteed wildlife herds unplaced"
+            );
+        }
         self.remember_visible_resources();
         Ok(scout)
     }

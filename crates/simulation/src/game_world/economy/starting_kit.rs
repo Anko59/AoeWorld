@@ -97,91 +97,102 @@ impl GameWorld {
                 continue;
             }
             let salt = 10 + slot as u64;
-            let mut anchors: Vec<_> = initial
-                .iter()
-                .copied()
-                .filter(|tile| {
-                    let d = distance_squared(*tile, center);
-                    (minimum.pow(2)..=maximum.pow(2)).contains(&d)
-                })
-                .collect();
-            // Every player gets a different direction and distance, rather than
-            // rotating the same stamped kit. The bounded fallback stays local.
-            let anchor_salt = self.start_roll(center, salt);
-            let Some(preferred) = anchors
-                .iter()
-                .copied()
-                .min_by_key(|tile| self.start_roll(*tile, anchor_salt))
-            else {
-                incomplete = true;
-                continue;
+            // Straggler wood slots fall back to the wider woodline band when
+            // the close band has no access-safe tiles left.
+            let bands: &[(u64, u64)] = if kind == ResourceKind::Wood && slot >= 4 {
+                &[(minimum, maximum), (7, 15)]
+            } else {
+                &[(minimum, maximum)]
             };
-            anchors.sort_by_key(|tile| {
-                (
-                    distance_squared(*tile, preferred),
-                    self.start_roll(*tile, salt),
-                )
-            });
             let mut remaining = count;
-            while remaining > 0 {
-                let mut selected = None;
-                for cluster_size in (1..=remaining).rev() {
-                    for anchor in anchors.iter().copied().take(ANCHOR_BUDGET) {
-                        for attempt in 0..2 {
-                            let tiles =
-                                self.start_cluster(anchor, cluster_size, salt + attempt * 100);
-                            if tiles.iter().any(|tile| {
-                                !initial.contains(tile)
-                                    || blocked.contains(tile)
-                                    || !self.tile_free(*tile)
-                                    || !(minimum.pow(2)..=maximum.pow(2))
-                                        .contains(&distance_squared(*tile, center))
-                            }) {
-                                continue;
+            for &(minimum, maximum) in bands {
+                if remaining == 0 {
+                    break;
+                }
+                let mut anchors: Vec<_> = initial
+                    .iter()
+                    .copied()
+                    .filter(|tile| {
+                        let d = distance_squared(*tile, center);
+                        (minimum.pow(2)..=maximum.pow(2)).contains(&d)
+                    })
+                    .collect();
+                // Every player gets a different direction and distance, rather than
+                // rotating the same stamped kit. The bounded fallback stays local.
+                let anchor_salt = self.start_roll(center, salt);
+                let Some(preferred) = anchors
+                    .iter()
+                    .copied()
+                    .min_by_key(|tile| self.start_roll(*tile, anchor_salt))
+                else {
+                    continue;
+                };
+                anchors.sort_by_key(|tile| {
+                    (
+                        distance_squared(*tile, preferred),
+                        self.start_roll(*tile, salt),
+                    )
+                });
+                while remaining > 0 {
+                    let mut selected = None;
+                    for cluster_size in (1..=remaining).rev() {
+                        for anchor in anchors.iter().copied().take(ANCHOR_BUDGET) {
+                            for attempt in 0..2 {
+                                let tiles =
+                                    self.start_cluster(anchor, cluster_size, salt + attempt * 100);
+                                if tiles.iter().any(|tile| {
+                                    !initial.contains(tile)
+                                        || blocked.contains(tile)
+                                        || !self.tile_free(*tile)
+                                        || !(minimum.pow(2)..=maximum.pow(2))
+                                            .contains(&distance_squared(*tile, center))
+                                }) {
+                                    continue;
+                                }
+                                let mut trial = blocked.clone();
+                                trial.extend(&tiles);
+                                let reached = reachable(&graph, root, &trial);
+                                if !exits.iter().all(|tile| reached.contains(tile))
+                                    || !natural
+                                        .iter()
+                                        .chain(planned.iter())
+                                        .map(|n: &ResourceNode| n.tile)
+                                        .chain(tiles.iter().copied())
+                                        .all(|tile| accessible(tile, &reached))
+                                {
+                                    continue;
+                                }
+                                selected = Some((tiles, trial));
+                                break;
                             }
-                            let mut trial = blocked.clone();
-                            trial.extend(&tiles);
-                            let reached = reachable(&graph, root, &trial);
-                            if !exits.iter().all(|tile| reached.contains(tile))
-                                || !natural
-                                    .iter()
-                                    .chain(planned.iter())
-                                    .map(|n: &ResourceNode| n.tile)
-                                    .chain(tiles.iter().copied())
-                                    .all(|tile| accessible(tile, &reached))
-                            {
-                                continue;
+                            if selected.is_some() {
+                                break;
                             }
-                            selected = Some((tiles, trial));
-                            break;
                         }
                         if selected.is_some() {
                             break;
                         }
                     }
-                    if selected.is_some() {
+                    // Tiny valid valleys still start when a full cluster cannot fit.
+                    let Some((tiles, trial)) = selected else {
                         break;
+                    };
+                    remaining -= tiles.len();
+                    blocked = trial;
+                    for tile in tiles {
+                        let node = if kind == ResourceKind::Wood {
+                            generator
+                                .starting_tree_at(tile)
+                                .map_err(GameWorldError::Environment)?
+                        } else {
+                            ResourceNode::starting(tile, kind)
+                        }
+                        .ok_or(EconomyError::InvalidFootprint)?;
+                        planned.push(node);
                     }
-                }
-                // Tiny valid valleys still start when a full cluster cannot fit.
-                let Some((tiles, trial)) = selected else {
-                    incomplete = true;
-                    break;
-                };
-                remaining -= tiles.len();
-                blocked = trial;
-                for tile in tiles {
-                    let node = if kind == ResourceKind::Wood {
-                        generator
-                            .starting_tree_at(tile)
-                            .map_err(GameWorldError::Environment)?
-                    } else {
-                        ResourceNode::starting(tile, kind)
-                    }
-                    .ok_or(EconomyError::InvalidFootprint)?;
-                    planned.push(node);
                 }
             }
+            incomplete |= remaining > 0;
         }
         let Terrain::Map { generator, overlay } = &mut self.terrain else {
             unreachable!()
