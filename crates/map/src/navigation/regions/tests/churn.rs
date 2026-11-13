@@ -101,8 +101,12 @@ fn churn_flush_stays_within_two_milliseconds() {
     let evidence = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/regions");
     std::fs::create_dir_all(&evidence).unwrap();
     std::fs::write(evidence.join("churn.txt"), report).unwrap();
-    assert!(unions[unions.len() / 2].as_micros() <= 2_000);
-    assert!(median.as_micros() <= 2_000, "median flush {median:?}");
+    // Coverage instrumentation (cargo llvm-cov sets LLVM_PROFILE_FILE) runs
+    // several times slower; the uninstrumented unit run enforces the budget.
+    if std::env::var_os("LLVM_PROFILE_FILE").is_none() {
+        assert!(unions[unions.len() / 2].as_micros() <= 2_000);
+        assert!(median.as_micros() <= 2_000, "median flush {median:?}");
+    }
     // Spot-check the incremental answer against a fresh build.
     let mut fresh = Regions::new(SIDE, SIDE, LandBucket::Small);
     for _ in 0..200 {
