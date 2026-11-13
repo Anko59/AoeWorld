@@ -60,5 +60,32 @@ pub(crate) fn print_status(root: &Path, env: &JobEnv) -> Result<()> {
             None => println!("long job slot {slot}: free"),
         }
     }
+    use crate::resources::cpu;
+    let builds = cpu::slot_count(std::env::var(cpu::SLOTS_VAR).ok().as_deref())?;
+    println!(
+        "build slots: {builds} ({}, 1..={}); at most {} per worktree and {} per {}",
+        cpu::SLOTS_VAR,
+        cpu::MAX_SLOTS,
+        cpu::PER_WORKTREE,
+        cpu::PER_COORDINATOR,
+        cpu::COORDINATOR_VAR
+    );
+    for (slot, holder) in cpu::holders(&dir, builds)?.into_iter().enumerate() {
+        match holder {
+            Some(holder) => println!("build slot {slot}: {}", holder.display()),
+            None => println!("build slot {slot}: free"),
+        }
+    }
+    let ledger = std::fs::read_to_string(dir.join("ledger.jsonl")).unwrap_or_default();
+    let recent: Vec<&str> = ledger.lines().rev().take(5).collect();
+    if !recent.is_empty() {
+        println!(
+            "recent ledger entries ({}):",
+            dir.join("ledger.jsonl").display()
+        );
+        for line in recent.into_iter().rev() {
+            println!("  {line}");
+        }
+    }
     Ok(())
 }
