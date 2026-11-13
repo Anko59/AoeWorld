@@ -84,6 +84,8 @@ class ManagementManager:
             board.bump("saving_for_town_center")
             return
         centers = [b.center for b in ctx.buildings if b.kind == BuildingKind.TOWN_CENTER]
+        if not centers and not ctx.villagers:
+            return  # nobody left to build with; the rest of the decision continues
         origin = centers[board.expansion_cursor % len(centers)] if centers else ctx.villagers[0].tile
         board.expansion_cursor += 1
         toward = math.atan2(ctx.world.map_size[1] // 2 - origin[1], ctx.world.map_size[0] // 2 - origin[0])
@@ -260,6 +262,8 @@ class ManagementManager:
         """Keep a small local workforce available for native Vassal fortification."""
         castles = [b for b in ctx.buildings if b.complete and b.kind == BuildingKind.CASTLE
                    and garrisoned(b, UnitKind.VASSAL)]
+        if not any(b.kind == BuildingKind.TOWN_CENTER for b in ctx.buildings):
+            return  # recovery: workers stay free to rebuild the Town Center
         alive = {u.id for u in ctx.villagers}
         board = ctx.board
         board.vassal_workers = {b.id: board.vassal_workers.get(b.id, set()) & alive for b in castles}

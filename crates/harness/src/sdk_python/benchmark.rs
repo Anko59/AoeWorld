@@ -13,9 +13,20 @@ pub(crate) struct BenchmarkArgs {
     starts: PathBuf,
     #[arg(long)]
     out: PathBuf,
+    /// Wall-clock limit in minutes; the default is generous for the documented 120 game minutes.
+    #[arg(long, default_value_t = DEFAULT_WALL_MINUTES, value_parser = clap::value_parser!(u64).range(1..))]
+    wall_minutes: u64,
     /// Validate starting terrain without advancing the game or measuring performance.
     #[arg(long)]
     check_starts: bool,
+}
+
+/// The longest checkpoint is 120 game minutes; a measured run took about 2.4 wall minutes per game
+/// minute, so 8 hours leaves a wide margin instead of truncating a valid run.
+const DEFAULT_WALL_MINUTES: u64 = 8 * 60;
+
+pub(super) fn wall_deadline(args: &BenchmarkArgs) -> Duration {
+    Duration::from_secs(60 * args.wall_minutes)
 }
 
 fn package_hash(value: &str) -> Result<String, String> {
@@ -80,7 +91,14 @@ pub(super) fn run(root: &Path, args: &BenchmarkArgs) -> Result<(), Box<dyn Error
                 &root.join("local-assets/map-packages").to_string_lossy(),
             ),
         ],
-        Duration::from_secs(60 * 100),
-    )?;
+        wall_deadline(args),
+    )
+    .map_err(|error| {
+        format!(
+            "benchmark stopped early (wall limit {} minutes, raise --wall-minutes); the report at {} is incomplete (complete=false): {error}",
+            args.wall_minutes,
+            args.out.display()
+        )
+    })?;
     Ok(())
 }

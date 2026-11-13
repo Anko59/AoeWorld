@@ -441,3 +441,28 @@ def test_idle_recovery_does_not_wait_for_the_productive_worker_dwell():
     ctx = Context(FakeClient(), decision(world), board, Config())
     EconomyManager(Constructor()).work(ctx)
     assert any(args[0] == idle.id for args in ctx.client.named("gather")), "recover idle workers promptly"
+
+
+def test_losing_every_villager_and_town_center_does_not_abort_the_decision():
+    from dataclasses import replace
+    from test_imperial import army
+
+    castle = building(700, BuildingKind.CASTLE, tile=(80, 60))
+    world = FakeWorld(army(12), [castle], eco=economy(food=2000, wood=2000, gold=500, population=12, cap=50))
+    brain = Brain(replace(Config(), castles=1))
+    brain.board.home = (50, 50)  # remembered from the destroyed Town Center
+    _, client = play(world, brain=brain)
+    assert not client.named("build")
+
+
+def test_vassal_reservations_are_released_while_no_town_center_stands():
+    from aoeworld import UnitKind
+
+    units, _ = base(12)
+    castle = building(700, BuildingKind.CASTLE, tile=(80, 60))
+    castle.garrison = [(901, UnitKind.VASSAL, 80, 60)]
+    brain = Brain(Config())
+    brain.board.home = (50, 50)
+    brain.board.vassal_workers = {700: {u.id for u in units}}
+    _, client = play(FakeWorld(units, [castle], eco=economy(wood=800, food=800, population=12, cap=50)), brain=brain)
+    assert any(args[1] == BuildingKind.TOWN_CENTER for args in client.named("build"))

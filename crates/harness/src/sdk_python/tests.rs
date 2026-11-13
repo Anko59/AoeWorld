@@ -95,3 +95,46 @@ fn bindings_can_be_tested_without_launching_long_ai_games() {
         }
     ));
 }
+
+#[test]
+fn benchmark_deadline_covers_the_documented_120_minute_run_and_is_configurable() {
+    use clap::Parser;
+    #[derive(clap::Parser)]
+    struct Cli {
+        #[command(subcommand)]
+        action: Action,
+    }
+    let parse = |extra: &[&str]| {
+        let mut argv = vec![
+            "sdk",
+            "benchmark",
+            "--map-hash",
+            &"a".repeat(64),
+            "--out",
+            "x.json",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect::<Vec<_>>();
+        argv.extend(extra.iter().map(|value| value.to_string()));
+        match Cli::try_parse_from(argv).unwrap().action {
+            Action::Benchmark(args) => args,
+            _ => unreachable!(),
+        }
+    };
+    let default = benchmark::wall_deadline(&parse(&[]));
+    assert!(default >= Duration::from_secs(60 * 60 * 4), "{default:?}");
+    let short = benchmark::wall_deadline(&parse(&["--wall-minutes", "30"]));
+    assert_eq!(short, Duration::from_secs(60 * 30));
+    assert!(
+        Cli::try_parse_from([
+            "sdk",
+            "benchmark",
+            "--map-hash",
+            &"a".repeat(64),
+            "--wall-minutes",
+            "0"
+        ])
+        .is_err()
+    );
+}
