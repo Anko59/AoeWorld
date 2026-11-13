@@ -25,17 +25,15 @@ const MAX_WORKERS: u32 = 8;
 type Failure = Box<dyn std::error::Error>;
 
 /// The worker count named by `AOE_E2E_WORKERS`, absent or empty meaning three.
-/// The coverage run keeps one instrumented server and one worker, and the
-/// duel's focused specs run on one.
-pub(super) fn worker_count(coverage: Option<&str>, focused: bool) -> Result<u32, String> {
+/// The duel's focused specs run on one.
+pub(super) fn worker_count(focused: bool) -> Result<u32, String> {
     select(
         &std::env::var("AOE_E2E_WORKERS").unwrap_or_default(),
-        coverage,
         focused,
     )
 }
 
-fn select(text: &str, coverage: Option<&str>, focused: bool) -> Result<u32, String> {
+fn select(text: &str, focused: bool) -> Result<u32, String> {
     let count = if text.is_empty() {
         DEFAULT_WORKERS
     } else {
@@ -46,13 +44,6 @@ fn select(text: &str, coverage: Option<&str>, focused: bool) -> Result<u32, Stri
             .filter(|count| (1..=MAX_WORKERS).contains(count))
             .ok_or_else(|| format!("AOE_E2E_WORKERS must be 1..={MAX_WORKERS}, got {text:?}"))?
     };
-    if coverage.is_some() {
-        return if text.is_empty() || count == 1 {
-            Ok(1)
-        } else {
-            Err("AOE_E2E_COVERAGE runs one server and one worker; unset AOE_E2E_WORKERS".into())
-        };
-    }
     Ok(if focused { 1 } else { count })
 }
 

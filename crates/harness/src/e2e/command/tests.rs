@@ -54,20 +54,16 @@ fn every_option_keeps_its_own_value_and_the_image_follows_them() {
 }
 
 #[test]
-fn a_shard_reaches_playwright_after_the_npm_separator() {
-    let shard = Some(Shard { index: 2, count: 3 });
+fn a_shard_reaches_playwright_as_a_test_list_after_the_npm_separator() {
+    let args = args(&[], Some(Shard { index: 2, count: 3 }));
+    let selection = args.last().unwrap();
+    assert!(selection.starts_with("--test-list="), "{args:?}");
+    assert!(selection.ends_with("/reports/e2e/tests-shard-2-of-3.txt"));
     assert_eq!(
-        tail(&args(&[], shard), 7),
-        [
-            "npm",
-            "--silent",
-            "run",
-            "test:e2e",
-            "--",
-            "--reporter=./quarantine-reporter.ts,json",
-            "--shard=2/3"
-        ]
+        args[args.len() - 2],
+        "--reporter=./quarantine-reporter.ts,json"
     );
+    assert!(args.iter().all(|arg| !arg.starts_with("--shard")));
 }
 
 #[test]
@@ -87,7 +83,7 @@ fn the_whole_suite_and_focused_runs_carry_no_shard() {
         &["tests/a.spec.ts".into()],
         Some(Shard { index: 1, count: 3 }),
     );
-    assert!(focused.iter().all(|arg| !arg.starts_with("--shard")));
+    assert!(focused.iter().all(|arg| !arg.starts_with("--test-list")));
     assert_eq!(
         tail(&focused, 7),
         [

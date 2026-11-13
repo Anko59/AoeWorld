@@ -176,6 +176,7 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
             send(
                 client,
                 Message::MoveOrder {
+                    attack_move: false,
                     sequence,
                     entity_id: id,
                     destination,
@@ -261,6 +262,7 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
                 sequence,
                 entity_id: id,
                 destination,
+                attack_move: client.village.attack_move && unit.kind != UnitKind::General,
             },
         };
         send(client, message);

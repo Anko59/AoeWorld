@@ -106,20 +106,40 @@ pub(crate) fn judge(root: &Path, options: &super::Options) -> super::Result<Evid
     let registry = crate::gates::registry::Registry::load(root)?;
     let suites = registry.classify(&changed).suites;
     let plan = registry.plan(crate::gates::registry::Cadence::Preflight, &suites)?;
-    let gates: Vec<_> = plan
-        .gates
+    // After a review fix, rerun only what the fix can affect: the gates the diff
+    // since the newest passing evidence on this branch selects.
+    let prior = prior_pass(root, &merge_base, &options.base)?;
+    let (run, reused) = match &prior {
+        Some(prior) => {
+            let since = git::changed_between(root, &prior.head, "HEAD")?;
+            let rerun: Vec<String> = registry
+                .affected(&registry.classify(&since).suites)
+                .into_iter()
+                .collect();
+            split(&plan.gates, &rerun, prior)
+        }
+        None => (plan.gates.clone(), Vec::new()),
+    };
+    let gates: Vec<_> = run
         .iter()
         .filter_map(|id| registry.gates.iter().find(|gate| &gate.id == id))
         .collect();
     let started = super::now();
     eprintln!(
-        "ship: {} preflight gate(s) at {} on {}",
+        "ship: {} preflight gate(s) at {} on {}{}",
         gates.len(),
         &subject.head[..12],
-        subject.branch
+        subject.branch,
+        prior.as_ref().map_or_else(String::new, |prior| format!(
+            "; {} reused from passing evidence at {}",
+            reused.len(),
+            &prior.head[..12]
+        ))
     );
     crate::timeline::mark(root, "gates", "start", serde_json::json!({}));
-    let results = super::run::run_gates_selecting(root, &gates, &options.slots, &merge_base);
+    let mut results = super::run::run_gates_selecting(root, &gates, &options.slots, &merge_base);
+    results.extend(reused);
+    results.sort_by_key(|result| plan.gates.iter().position(|id| *id == result.gate));
     crate::timeline::mark(
         root,
         "gates",
@@ -150,3 +170,53 @@ pub(crate) fn judge(root: &Path, options: &super::Options) -> super::Result<Evid
     eprintln!("ship: evidence {}", path.display());
     Ok(evidence)
 }
+
+/// How far back on the branch to look for passing evidence.
+const REUSE_DEPTH: usize = 50;
+
+/// The newest passing preflight evidence for a strict ancestor of HEAD on this
+/// branch (first parents back to the merge base), against the same base branch.
+fn prior_pass(root: &Path, merge_base: &str, base_branch: &str) -> Result<Option<Evidence>> {
+    let range = format!("{merge_base}..HEAD~1");
+    let listed = git::git(root, &["rev-list", "--first-parent", &range]).unwrap_or_default();
+    for head in listed.lines().take(REUSE_DEPTH) {
+        if let Some(evidence) = read(root, head)?
+            && evidence.verdict == Verdict::Pass
+            && evidence.cadence == "preflight"
+            && evidence.base_branch == base_branch
+        {
+            return Ok(Some(evidence));
+        }
+    }
+    Ok(None)
+}
+
+/// Split the planned gates into those to run and results carried over from
+/// `prior`: a gate is reused only when the change since `prior` does not select
+/// it and `prior` passed it.
+pub(crate) fn split(
+    planned: &[String],
+    rerun: &[String],
+    prior: &Evidence,
+) -> (Vec<String>, Vec<GateResult>) {
+    let mut run = Vec::new();
+    let mut reused = Vec::new();
+    for id in planned {
+        let passed = prior
+            .gates
+            .iter()
+            .find(|result| &result.gate == id && result.verdict == GateVerdict::Pass);
+        match passed {
+            Some(result) if !rerun.contains(id) => reused.push(GateResult {
+                seconds: 0.0,
+                summary: format!("reused from {}: {}", &prior.head[..12], result.summary),
+                ..result.clone()
+            }),
+            _ => run.push(id.clone()),
+        }
+    }
+    (run, reused)
+}
+
+#[cfg(test)]
+mod tests;

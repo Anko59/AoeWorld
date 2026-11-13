@@ -65,6 +65,7 @@ pub async fn prepare(url: &str) -> Result<(), Box<dyn std::error::Error>> {
                     socket
                         .send(Message::Binary(
                             aoe_protocol::encode_gameplay_client(&Client::MoveOrder {
+                                attack_move: false,
                                 sequence,
                                 entity_id: unit.id,
                                 destination: aoe_core::WorldPosition::from_tile_center(
@@ -135,6 +136,7 @@ pub async fn prepare(url: &str) -> Result<(), Box<dyn std::error::Error>> {
             socket
                 .send(Message::Binary(
                     aoe_protocol::encode_gameplay_client(&Client::MoveOrder {
+                        attack_move: false,
                         sequence,
                         entity_id: scout.ok_or("scout missing")?,
                         destination: next,

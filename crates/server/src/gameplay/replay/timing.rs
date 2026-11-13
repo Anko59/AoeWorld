@@ -35,6 +35,8 @@ pub struct Timing {
     pub cpu_ns: u64,
     pub phases_cpu_ns: BTreeMap<&'static str, u64>,
     pub phases_instructions: BTreeMap<&'static str, u64>,
+    /// Completed composition/proof spans, keyed by their inclusive caller path.
+    pub navigation_calls: BTreeMap<String, u64>,
 }
 #[derive(Debug)]
 enum Source {
@@ -51,11 +53,17 @@ struct Accumulator {
     cpu_ns: AtomicU64,
 }
 type Phases = BTreeMap<&'static str, u64>;
+#[derive(Debug, Default)]
+struct Calls {
+    stack: Vec<&'static str>,
+    counts: BTreeMap<String, u64>,
+}
 #[derive(Debug)]
 struct State {
     source: Source,
     values: Box<[Accumulator]>,
     failed: AtomicBool,
+    calls: Mutex<Calls>,
 }
 #[derive(Clone, Debug)]
 pub(super) struct Probe(Arc<State>);
@@ -79,6 +87,7 @@ impl Probe {
             source,
             values: names().map(|_| Accumulator::default()).collect(),
             failed: AtomicBool::new(false),
+            calls: Mutex::default(),
         }))
     }
     pub(super) fn open() -> io::Result<Self> {
@@ -173,11 +182,41 @@ impl Probe {
         (instructions, cpu_ns)
     }
     fn span(&self, name: &'static str) -> Box<dyn aoe_map::NavigationSpan> {
+        if let Ok(mut calls) = self.0.calls.lock() {
+            calls.stack.push(name);
+        } else {
+            self.fail();
+        }
         Box::new(Span {
             probe: self.clone(),
             name,
             started: self.sample(),
         })
+    }
+
+    pub(super) fn navigation_calls(&self) -> BTreeMap<String, u64> {
+        self.0
+            .calls
+            .lock()
+            .map(|calls| calls.counts.clone())
+            .unwrap_or_else(|_| {
+                self.fail();
+                BTreeMap::new()
+            })
+    }
+
+    fn end_call(&self, name: &'static str) {
+        let Ok(mut calls) = self.0.calls.lock() else {
+            self.fail();
+            return;
+        };
+        if matches!(name, "terrain_point" | "pocket") {
+            let path = calls.stack.join("/");
+            *calls.counts.entry(path).or_default() += 1;
+        }
+        if calls.stack.pop() != Some(name) {
+            self.fail();
+        }
     }
 }
 struct Span {
@@ -192,6 +231,7 @@ impl Drop for Span {
             (Ok(started), Ok(now)) => self.probe.record(self.name, now - *started),
             _ => self.probe.fail(),
         }
+        self.probe.end_call(self.name);
     }
 }
 impl aoe_map::NavigationProbe for Probe {

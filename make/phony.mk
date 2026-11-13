@@ -22,3 +22,10 @@
 .PHONY: browser-format
 browser-format: browser-deps
 	@$(BROWSER_RUN) npm exec -- prettier --write .
+
+.PHONY: e2e-list e2e-durations
+e2e-list: browser-deps
+	@$(BROWSER_RUN) npm --silent run test:e2e -- --list --reporter=json > .cache/e2e-list.json
+
+e2e-durations: job-bootstrap
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- e2e-durations $(E2E_DURATION_ARGS)

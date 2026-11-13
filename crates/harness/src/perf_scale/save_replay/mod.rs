@@ -49,6 +49,7 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
         let mut hashes = Vec::new();
         let mut raw = Vec::new();
         let mut commands = 0;
+        let mut navigation_calls = BTreeMap::<String, u64>::new();
         for tick in &recording.ticks {
             commands += tick.commands.len();
             let hash = service.replay_step(tick, &mut |timing| {
@@ -56,7 +57,8 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
                 cpu.push_ms(timing.cpu_ns.into());
                 for (name, nanos) in &timing.phases_cpu_ns { phases_cpu.entry(name).or_default().push_ms((*nanos).into()); }
                 for (name, count) in &timing.phases_instructions { phases.entry(name).or_default().push(*count); }
-                raw.push(json!({"tick": tick.tick, "instructions": timing.instructions, "phases_instructions": timing.phases_instructions, "cpu_ns": timing.cpu_ns, "phases_cpu_ns": timing.phases_cpu_ns}));
+                for (path, calls) in &timing.navigation_calls { *navigation_calls.entry(path.clone()).or_default() += *calls; }
+                raw.push(json!({"tick": tick.tick, "instructions": timing.instructions, "phases_instructions": timing.phases_instructions, "cpu_ns": timing.cpu_ns, "phases_cpu_ns": timing.phases_cpu_ns, "navigation_calls": timing.navigation_calls}));
             }).await.map_err(|e| e.to_string())?;
             service.inspect_scale_world(|w| progress.sample(w)).await;
             if hash != tick.hash && divergence.is_none() { divergence = Some(tick.tick + 1); }
@@ -69,6 +71,7 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
         Ok(json!({ "initial_hash": hex(&initial), "total_cpu_ms_per_tick": cpu.summary(), "phases_cpu_ms": phases_cpu_summary, "total_instructions_per_tick": counts::summary(&total), "phases_instructions": phase_summary,
             "first_divergence_tick": divergence, "final_hash": hashes.last().ok_or("empty replay")?["hash"],
             "movement_progress": progress.summary(recording.ticks.last().ok_or("empty replay")?.tick + 1),
+            "navigation_calls": navigation_calls,
             "hashes": hashes, "raw": raw, "commands": commands, "restore": format!("{restored:?}") }))
     })
 }

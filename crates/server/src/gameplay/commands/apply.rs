@@ -152,6 +152,8 @@ pub(in crate::gameplay) fn apply(
                 world
                     .issue_queued_leg(entity_id, destination, attack_move)
                     .map(|_| ())
+            } else if attack_move {
+                world.issue_attack_move(entity_id, destination).map(|_| ())
             } else {
                 world
                     .issue_move(entity_id, destination)

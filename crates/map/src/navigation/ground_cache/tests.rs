@@ -21,16 +21,19 @@ fn cache_keeps_negative_answers_and_invalidates_only_changed_chunks() {
 }
 
 #[test]
-fn chunk_eviction_never_answers_for_another_coordinate() {
+fn visited_ground_survives_queries_in_more_than_4096_other_regions() {
     let mut cache = RouteGroundCache::default();
     for x in 0..20_000 {
         let tile = TileCoord::new(x * 32, -32);
         cache.insert(tile, x % 2 == 0);
+        cache.insert_edge(tile, TileCoord::new(tile.x + 1, tile.y), x % 2 == 0);
         assert_eq!(cache.get(tile), Some(x % 2 == 0));
     }
     for x in 0..20_000 {
-        if let Some(wet) = cache.get(TileCoord::new(x * 32, -32)) {
-            assert_eq!(wet, x % 2 == 0);
+        assert_eq!(cache.get(TileCoord::new(x * 32, -32)), Some(x % 2 == 0));
+        let from = TileCoord::new(x * 32, -32);
+        if let Some(clear) = cache.get_edge(from, TileCoord::new(from.x + 1, from.y)) {
+            assert_eq!(clear, x % 2 == 0);
         }
     }
     cache.invalidate(TileRect::from_xywh(

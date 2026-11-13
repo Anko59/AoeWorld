@@ -37,12 +37,9 @@ coverage-admitted: job-bootstrap
 	@$(MAKE) --no-print-directory coverage-check
 
 coverage-steps:
-	@$(MAKE) --no-print-directory coverage-tools browser-deps orchestrator-tools build-wasm
+	@$(MAKE) --no-print-directory coverage-tools build-wasm
 	@mkdir -p reports/coverage
 	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) -e CARGO_BUILD_JOBS=2 --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) $(RESOURCE_OBSERVER) cargo llvm-cov nextest --locked --workspace --lcov --output-path reports/coverage/native.lcov
-	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e AOE_E2E_COVERAGE=1 -e LLVM_PROFILE_FILE=$(ROOT)/target/llvm-cov-target/coverage-e2e-%p.profraw -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) target/llvm-cov-target/debug/aoe-harness test-e2e
-	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e LLVM_PROFILE_FILE=$(ROOT)/target/llvm-cov-target/coverage-wasm-%p.profraw -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) target/llvm-cov-target/debug/aoe-harness test-wasm
-	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) $(RESOURCE_OBSERVER) cargo llvm-cov report --lcov --output-path reports/coverage/native.lcov
 	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) $(RESOURCE_OBSERVER) cargo llvm-cov report --json --output-path reports/coverage/native.json
 
 perf-instructions: resource-bootstrap

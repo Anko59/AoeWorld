@@ -132,7 +132,7 @@ fn the_e2e_job_runs_each_shard_of_one_split_and_nothing_else_runs_the_suite_ther
     assert!(block.contains("name: e2e-${{ matrix.shard }}-diagnostics"));
     assert!(block.contains("fail-fast: false"));
     // The browser job keeps its checks but no longer runs the suite, and the
-    // coverage job runs it whole.
+    // coverage job runs it not at all: the shards are the release evidence.
     assert!(!workflow_job(&workflow, "browser").contains("test-e2e"));
     assert!(!workflow_job(&workflow, "native-coverage").contains("AOE_E2E_SHARD"));
 }
@@ -269,7 +269,7 @@ fn running_dev_builds_and_main_promotions_finish_while_prs_cancel() {
 fn dev_artifacts_reuses_required_evidence_and_only_builds_verifies_and_publishes() {
     let workflow = workflow();
     let dev = workflow_job(&workflow, "dev-artifacts");
-    assert!(dev.contains("needs: required"));
+    assert!(dev.contains("needs: [required, e2e-evidence]"));
     assert!(dev.contains("github.event_name == 'push' && github.ref == 'refs/heads/dev'"));
     let commands: Vec<_> = dev
         .lines()
@@ -292,13 +292,22 @@ fn dev_artifacts_reuses_required_evidence_and_only_builds_verifies_and_publishes
     let coverage = workflow_job(&workflow, "native-coverage");
     assert!(coverage.contains("run: make coverage"));
     assert!(coverage.contains("name: native-coverage-report, path: reports/coverage/"));
-    let upload = coverage
+    assert!(!coverage.contains("release-e2e-evidence"));
+    let combined = workflow_job(&workflow, "e2e-evidence");
+    assert!(combined.contains("run: make e2e-evidence"));
+    assert!(combined.contains("needs: [select, e2e]"));
+    assert!(combined.contains("github.event_name == 'push' && github.ref == 'refs/heads/dev'"));
+    let upload = combined
         .split_once("name: release-e2e-evidence,")
         .unwrap()
         .1;
     assert!(upload.contains("path: reports/e2e/pass.json"));
     assert!(upload.contains("if-no-files-found: error"));
-    assert!(coverage.contains("github.event_name == 'push' && github.ref == 'refs/heads/dev'"));
+    let shard_upload = workflow_job(&workflow, "e2e")
+        .split_once("name: 'e2e-evidence-${{ matrix.shard }}',")
+        .unwrap()
+        .1;
+    assert!(shard_upload.contains("path: 'reports/e2e/shard-*-of-*.json'"));
     let performance = workflow_job(&workflow, "target-performance");
     assert!(performance.contains("run: make perf-ci"));
     assert!(performance.contains("name: performance-report, path: reports/perf/"));

@@ -1,11 +1,15 @@
 //! Resumable reverse flood proving a small destination pocket is sealed.
 //! Every neighbour probe spends the caller's current allowance; no batch can
 //! run thousands of uncharged terrain reads inside a one-work poll.
+use super::super::tile_hash::TileHasher;
 use super::search::{checked_walkable, neighbor_offset};
 use super::{MAX_ROUTE_PLANNER_NODES, RoutePlanner, RouteTerrain, Terminal};
 use crate::{RegionReachability, ResourceOverlay};
 use aoe_core::TileCoord;
-use std::collections::{BTreeSet, VecDeque};
+use std::{
+    collections::{BTreeSet, HashSet, VecDeque},
+    hash::BuildHasherDefault,
+};
 
 pub(super) const POCKET_CHECK_WORK: u32 = 1_024;
 const POCKET_TILES: usize = 1_024;
@@ -55,7 +59,7 @@ fn step_allowed(
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct Proof {
-    seen: BTreeSet<TileCoord>,
+    seen: HashSet<TileCoord, BuildHasherDefault<TileHasher>>,
     queue: VecDeque<TileCoord>,
     active: Option<(TileCoord, u8)>,
     min: TileCoord,
@@ -65,7 +69,7 @@ pub(super) struct Proof {
 impl Proof {
     pub(super) fn new(destination: TileCoord) -> Self {
         Self {
-            seen: BTreeSet::from([destination]),
+            seen: [destination].into_iter().collect(),
             queue: VecDeque::from([destination]),
             active: None,
             min: destination,
@@ -76,10 +80,10 @@ impl Proof {
     pub(super) fn bounds(&self) -> [TileCoord; 2] {
         [self.min, self.max]
     }
-    /// Transfer a completed proof without copying its flood. The bounds stay
+    /// Transfer completed membership into the ordered resolution set. The bounds stay
     /// live so an opened entrance invalidates the resulting nearest-point trip.
     pub(super) fn take_sealed_tiles(&mut self) -> BTreeSet<TileCoord> {
-        std::mem::take(&mut self.seen)
+        std::mem::take(&mut self.seen).into_iter().collect()
     }
     pub(super) fn opening_touches(&self, area: aoe_core::TileRect) -> bool {
         self.min.x.saturating_sub(2) < area.max.x
@@ -159,8 +163,12 @@ impl Proof {
         tile(hash, self.max);
         hash.update(&(self.peak as u64).to_le_bytes());
         hash.update(&(self.seen.len() as u64).to_le_bytes());
-        for at in &self.seen {
-            tile(hash, *at);
+        // Membership never determines flood order. Sort only for canonical
+        // serialization, outside ordinary navigation polls.
+        let mut seen: Vec<_> = self.seen.iter().copied().collect();
+        seen.sort_unstable();
+        for at in seen {
+            tile(hash, at);
         }
         hash.update(&(self.queue.len() as u64).to_le_bytes());
         for at in &self.queue {

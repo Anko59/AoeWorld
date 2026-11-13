@@ -5,9 +5,14 @@ use super::{
 };
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 use std::collections::{BTreeMap, BTreeSet};
+mod blocked;
 mod census;
 mod income;
 mod query;
+use blocked::BlockedTiles;
+
+#[cfg(test)]
+mod blocked_tests;
 
 #[cfg(test)]
 #[derive(Debug, Default)]
@@ -25,7 +30,6 @@ pub(crate) struct TickWork {
 
 #[derive(Debug, Default)]
 pub(crate) struct Economy {
-    pub(crate) naval_ground: std::sync::Mutex<aoe_map::RouteGroundCache>,
     /// Physical tile/edge answers shared across movers, separately for land
     /// and water. Collision changes invalidate only affected chunks.
     pub(crate) movement_ground: [std::sync::Mutex<aoe_map::RouteGroundCache>; 2],
@@ -62,7 +66,7 @@ pub(crate) struct Economy {
     pub(crate) dropoffs: BTreeMap<(PlayerId, BuildingKind), Vec<EntityId>>,
     /// Derived complete road tiles; empty worlds skip all road lookups.
     pub(crate) roads: BTreeSet<TileCoord>,
-    pub(crate) blocked_tiles: BTreeSet<TileCoord>,
+    pub(crate) blocked_tiles: BlockedTiles,
     pub(crate) open_gates: BTreeSet<EntityId>,
     /// Every gate building, ascending by id, maintained as buildings are
     /// placed and removed: the gate tick visits gates, never every building.

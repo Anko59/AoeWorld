@@ -1,4 +1,7 @@
 //! Host-side container resource policy and qualification.
+// The launcher binary uses the admission half; the harness reads holders and the ledger.
+#[allow(dead_code)]
+pub(crate) mod cpu;
 pub(crate) mod lock;
 pub(crate) mod policy;
 pub(crate) fn docker_command<T: AsRef<str>>(args: &[T]) -> std::io::Result<std::process::Command> {

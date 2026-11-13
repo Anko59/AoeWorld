@@ -76,8 +76,10 @@ ignores it); they do not suspend a real machine, so the timing of a real resume 
 
 ## Container memory and long jobs
 
-`make load-status` shows MemAvailable and every long-job slot (three by default, `AOE_LONG_SLOTS` 1..=8) with its holder. Short jobs
-start without an exclusive lock. Each workload container uses the shared caps in
+`make load-status` shows MemAvailable, every long-job slot (three by default, `AOE_LONG_SLOTS` 1..=8)
+and every build slot (four by default, `AOE_CPU_SLOTS`) with its holder, plus the latest lines of
+`<git common dir>/aoe-ship/ledger.jsonl`. A build container refused with exit 75 found the pool,
+its worktree's 2 slots, or its coordinator's 3 slots held for 90 s. Each workload container uses the shared caps in
 `gates/container.args` (4 GiB memory and combined memory plus swap, CPU shares
 1024, four Cargo compiler jobs). There is no CPU quota. A lightweight std-only
 bootstrap has a 256 MiB cap. Before starting a workload container the host checks MemAvailable:

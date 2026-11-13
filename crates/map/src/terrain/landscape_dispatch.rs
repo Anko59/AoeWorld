@@ -126,6 +126,17 @@ impl MapChunkGenerator {
         self.memoized_point(tile, cancelled)
     }
 
+    /// The same physical water kind as a composed tile, without elevation,
+    /// biome, resource or appearance work. Mutable blockers remain a caller
+    /// concern; failed source reads propagate and are never memoized as land.
+    pub fn water_at_with_cancel(
+        &self,
+        tile: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<WaterKind>, EnvironmentPageError> {
+        self.base_water_with_cancel(tile, cancelled)
+    }
+
     /// The terrain and resource of one tile, memoized per generator. A hit
     /// still honours cancellation first; errors are never stored.
     pub(super) fn memoized_point(

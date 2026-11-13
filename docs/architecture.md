@@ -141,6 +141,21 @@ blocks. Walk and dynamic portal caches each retain at most 64 MiB.
 cache capacities; snapshot loading also logs its allocation progress. These
 logical capacities exclude allocator slack and do not replace RSS measurements.
 
+Ship movement and planning share a world-local ground layer: 256 bitmap bytes
+per visited 32×32 chunk, plus sparse index and allocation overhead. Ground
+survives queries in other regions; local collision edits invalidate affected
+chunks and their diagonal halo without scanning units. Directed edges have a
+separate 4,096-chunk cache and recompute from retained ground after eviction.
+Cold ship queries project physical water and immutable resource nodes without
+composing land appearance. This retention scales with visited terrain area;
+it is not a fixed total-memory bound or real-time scale qualification.
+Building occupancy uses a separate sparse chunk bitmap set, updated directly
+by insert/remove operations. Membership reads need no tree search or query-time
+refresh, and empty occupancy chunks are released. This index is never iterated.
+Reverse pocket floods use integer-key membership with a separate ordered FIFO
+frontier. Neighbour order and charged work remain deterministic; canonical
+hashing sorts membership only when serializing, outside navigation polls.
+
 `aoe-map` is the environment-independent boundary for frozen geographic map
 identity. It validates the 600 CE request, physical compression and bounded
 virtual dimensions, canonicalizes equivalent ratios and longitudes, and

@@ -97,6 +97,7 @@ fn wire_fixture(ack: GameplayCommandResult, arrive: bool) -> (tempfile::TempDir,
             buildings: Vec::new(),
         }),
         client_frame(GameplayClientMessage::MoveOrder {
+            attack_move: false,
             sequence: 1,
             entity_id: primary,
             destination: target,
@@ -242,6 +243,7 @@ fn live_wire_requires_ordered_motion_of_the_welcomed_primary() {
     let (directory, hash) = wire_fixture(GameplayCommandResult::Accepted, true);
     let mut capture = read_capture(&directory);
     capture.frames[2] = client_frame(GameplayClientMessage::MoveOrder {
+        attack_move: false,
         sequence: 1,
         entity_id: EntityId(8),
         destination: WorldPosition::from_tile_center(TileCoord::new(10, 12))

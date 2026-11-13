@@ -86,6 +86,7 @@ impl<'a> Neighborhood<'a> {
     }
 }
 
+#[inline]
 pub(super) fn blocked_cells<'a>(
     (at, reach): (WorldPosition, i32),
     window: BodyBox,

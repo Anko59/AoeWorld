@@ -285,15 +285,32 @@ parallel jobs, `AOE_E2E_SHARD=1/4` to `4/4`, beside the `browser` job
 (`browser-check`, `test-wasm`). The registry's `e2e` job holds `test-e2e`, so it
 is selected exactly when that gate is, and `required` takes the matrix result,
 which is success only when every shard passed. Each shard builds its own server
-and WASM bundle, then runs `make test-e2e`, which hands `--shard=i/n` to
-Playwright; its container is named `aoeworld-e2e-shard-i-of-n-…`, it writes
-`reports/e2e/shard-i-of-n.json` instead of the release evidence
-`reports/e2e/pass.json`, and CI uploads `e2e-i-diagnostics`. Playwright splits
-the tests, not the projects, so the shards together run every test once.
+and WASM bundle, then runs `make test-e2e`. The harness discovers the tests,
+assigns longest-duration tests first to the least-loaded shard (stable title
+and shard-index ties), and passes `--test-list` to Playwright. Unknown tests
+weigh the median committed duration. The filtered discovery and execution
+must both match the assignment exactly. Its container is named
+`aoeworld-e2e-shard-i-of-n-…`, it writes `reports/e2e/shard-i-of-n.json` (the
+release evidence's fields plus its shard) instead of `reports/e2e/pass.json`,
+and CI uploads `e2e-i-diagnostics`. On a `dev` push each shard also uploads
+`e2e-evidence-i`, and the `e2e-evidence` job runs `make e2e-evidence`, which
+refuses unless every shard 1..n is present, passed and names one revision, then
+writes `pass.json` and uploads `release-e2e-evidence`. The shards together run
+every discovered project/file/title identity once.
 `make test-e2e` without `AOE_E2E_SHARD` runs the whole suite and writes
-`pass.json` (`make coverage` produces it for reuse by the dev release job);
-a shard together with `AOE_E2E_COVERAGE` is refused. `AOE_E2E_SHARD` must be
+`pass.json`. `make coverage` is native-only and runs no browser suite.
+`AOE_E2E_SHARD` must be
 `i/n` with `1 <= i <= n <= 16`; it does not apply to the duel's focused specs.
+
+Regenerate `crates/harness/src/e2e/shard/durations.json` with
+`make e2e-durations E2E_DURATION_ARGS='path/to/shard-1.json path/to/shard-2.json path/to/shard-3.json path/to/shard-4.json'`
+using disjoint Playwright JSON reports from one complete run. Weights are
+summed attempt milliseconds rounded to seconds (minimum one); the command
+prints simulated shard minutes using the original measurements. To refresh
+the real discovery partition fixture too, run `make e2e-list` and append
+`--list .cache/e2e-list.json` to `E2E_DURATION_ARGS`. The list format
+`[project] › file › suite › test` follows Playwright 1.64.1's `loadTestList`;
+line numbers are deliberately omitted so source edits preserve weights.
 
 **Focused runs (`AOE_E2E_SPECS`).** To reproduce one spec through the
 slot-managed command, name it: `make test-e2e AOE_E2E_SPECS=tests/village/selection-density.play.spec.ts`.

@@ -8,6 +8,7 @@ mod ground_cache;
 mod hierarchy;
 mod planner;
 mod regions;
+mod tile_hash;
 pub use field::{WalkingField, walking_field};
 pub use ground_cache::RouteGroundCache;
 pub(crate) use hierarchy::PortalCache;
