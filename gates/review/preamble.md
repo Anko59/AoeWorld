@@ -52,6 +52,10 @@ output alive is a `major` finding; removing such code is never a regression
 in itself. A regression pin of the current output (a digest or snapshot that
 is regenerated when the output is changed on purpose) is not such a fixture:
 neither adding one nor regenerating one is a finding under this rule.
+Gameplay behaviour may change (AGENTS.md): regenerated replay hashes,
+checkpoints or goldens that follow a behaviour change the PR states and
+justifies are not a weakened test. Flag only an unexplained change, or one
+that makes play or performance worse.
 
 Severity:
 

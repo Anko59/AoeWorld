@@ -31,6 +31,16 @@ A regression pin of the current output, regenerated whenever that output is
 changed on purpose, is not such a fixture. Old requirements saying otherwise
 (for example in #200) are void.
 
+Track and justify behaviour changes; never block them for changing replays
+(the owner's rule, 2026-11-13). Current gameplay is not a reference to keep:
+pathfinding, movement, combat and unit management may change whenever the
+result is equal or better. The PR says what changed and why, and regenerates
+the affected hashes, checkpoints and goldens. Identical replay hashes are not
+a merge requirement; determinism (the same input gives the same output at any
+worker count) is. Performance is judged against the whole scale ladder (#748):
+100 players with 100k units, then 1,000 with 1M, then 1,000 with 10M, in real
+time at every rung. 20 ticks/s and 30 FPS on the owner's save is the first rung.
+
 Credentials (API keys, tokens) are in the keyring, never in the repository or
 the default environment: look them up with `secret-tool` before concluding you
 lack access ([credentials](docs/credentials.md)).
