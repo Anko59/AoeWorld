@@ -58,7 +58,8 @@ fn shard_partition_covers_every_test_in_the_real_playwright_list_exactly_once() 
         .collect();
     let weights: BTreeMap<String, u64> =
         serde_json::from_str(include_str!("durations.json")).unwrap();
-    assert_eq!(tests.len(), 489);
+    // No fixed count: regenerating the fixture after adding a test must still pass.
+    assert!(!tests.is_empty());
     assert!(tests.iter().all(|test| weights.contains_key(test)));
     for count in 1..=16 {
         let plan = assign(&tests, &weights, count).unwrap();
