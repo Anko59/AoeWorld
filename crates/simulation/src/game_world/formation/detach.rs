@@ -419,3 +419,15 @@ impl GameWorld {
         }
     }
 }
+
+impl GameWorld {
+    pub(in crate::game_world) fn quality_member_obstructed(&self, id: EntityId) -> bool {
+        let Some(unit) = self.lookup.get(&id).map(|&i| &self.units[i]) else {
+            return false;
+        };
+        unit.formation
+            .and_then(|g| self.formations.get(&g))
+            .and_then(|g| g.member_index(id).map(|i| &g.members[i]))
+            .is_some_and(|m| m.blocked > 0)
+    }
+}

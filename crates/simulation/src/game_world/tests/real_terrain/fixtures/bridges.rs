@@ -23,6 +23,11 @@ fn line(from: (i32, i32), to: (i32, i32), width: i32) -> RiverSegment {
 /// Typed rivers of the bridge fixtures, or `None` for other fixtures.
 pub(super) fn rivers(name: &str) -> Option<Vec<RiverSegment>> {
     Some(match name {
+        "quality-march" => vec![
+            line((150, -2), (150, 652), 4),
+            line((300, -2), (300, 652), 7),
+            line((450, -2), (450, 652), 7),
+        ],
         // East-west rivers 10 tiles apart: the army enters the strip
         // between them from the west, then turns south onto the bridge.
         "general-bridge" | "bridge-40" | "bridge-opposed" | "bridge-meet" => {
@@ -48,7 +53,8 @@ pub(super) fn rivers(name: &str) -> Option<Vec<RiverSegment>> {
 }
 
 pub(super) fn side_meters(name: &str) -> Option<u64> {
-    (name.starts_with("long-bridges") || name.starts_with("army-")).then_some(1300)
+    (name == "quality-march" || name.starts_with("long-bridges") || name.starts_with("army-"))
+        .then_some(1300)
 }
 
 fn water(f: &Fixture, tile: TileCoord) -> Option<bool> {
@@ -145,6 +151,19 @@ impl Fixture {
     /// Builds the bridge fixtures; false for any other name.
     pub(super) fn build_bridges(&mut self, name: &str) -> bool {
         match name {
+            "quality-march" => {
+                let span = self.bridge_across((300, 105), (1, 0));
+                self.wooded_mouths(span);
+                let span = self.bridge_across((450, 108), (1, 1));
+                self.wooded_mouths(span);
+                for (x, gap, width) in [(215, 80, 6), (380, 125, 6), (530, 95, 1)] {
+                    trees(&mut self.world, TileRect::from_xywh(x, 0, 3, gap));
+                    trees(
+                        &mut self.world,
+                        TileRect::from_xywh(x, gap + width, 3, 200 - gap - width),
+                    );
+                }
+            }
             "general-bridge" | "bridge-40" | "bridge-opposed" | "bridge-meet" => {
                 self.bridge(TileCoord::new(100, 75), TileCoord::new(100, 85));
             }
@@ -184,6 +203,7 @@ impl Fixture {
                 self.group(165, 175, 20, at(50, 50));
             }
             "long-bridges" => self.general_army((26, 103), (30, 98), at(610, 110)),
+            "quality-march" => self.group(35, 103, 40, at(610, 110)),
             "long-bridges-40" => self.group(35, 103, 40, at(610, 110)),
             _ => unreachable!(),
         }

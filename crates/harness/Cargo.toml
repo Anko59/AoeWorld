@@ -18,7 +18,7 @@ aoe-rendering = { path = "../rendering" }
 aoe-map.workspace = true
 aoe-scenario.workspace = true
 aoe-sdk = { path = "../sdk" }
-aoe-simulation.workspace = true
+aoe-simulation = { workspace = true, features = ["bench-fixtures"] }
 aoe-protocol.workspace = true
 aoe-server = { path = "../server" }
 clap = { version = "4.5", features = ["derive"] }

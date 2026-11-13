@@ -33,6 +33,7 @@ CI uses the same caps and immediate admission; each job has its own runner. `mak
 | perf-smoke | `make perf-smoke` | test-unit | native | [Pr, Ci, Nightly] | 600 | yes | versioned synthetic JSON report |
 | perf-ci | `make perf-ci` | perf-smoke, perf-instructions, perf-wasm-size | performance | [Pr, Ci, Nightly] | 1800 | yes | target counts and baseline comparisons |
 | perf-scale-smoke | `make perf-scale-smoke` | — | performance | [Nightly] | 900 | yes | 4-player, 2,000-unit, 50-tick run of the scale benchmark writing valid JSON |
+| quality-metrics | `make quality-metrics` | — | performance | [] | 3600 | yes | seeded integer gameplay quality reports; exact current-run repeatability under idle and compiling load |
 | client-frame-bench | `make client-frame-bench` | — | performance | [] | 3600 | yes | fixed camera script integer work counters; three idle and optional three compiling runs |
 | perf-scale | `make perf-scale` | — | performance | [] | 3600 | yes | per-phase tick times, memory and server fan-out for 100 players and 100k units, as JSON |
 | perf-groups | `make perf-groups` | — | performance | [] | 1800 | yes | movement phase times and movement span split for about 11,000 movers in 200 armies, as JSON |
