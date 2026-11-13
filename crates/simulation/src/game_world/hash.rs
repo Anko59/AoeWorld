@@ -203,9 +203,10 @@ impl GameWorld {
             for (id, queue) in &self.move_queues {
                 hash.update(&id.0.to_le_bytes());
                 hash.update(&(queue.len() as u64).to_le_bytes());
-                for point in queue {
+                for (point, attack_move) in queue {
                     hash.update(&point.x.to_le_bytes());
                     hash.update(&point.y.to_le_bytes());
+                    hash.update(&[u8::from(*attack_move)]);
                 }
             }
         }

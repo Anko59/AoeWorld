@@ -27,6 +27,16 @@ impl GameWorld {
         id: EntityId,
         destination: WorldPosition,
     ) -> Result<bool, EconomyError> {
+        self.issue_queued_leg(id, destination, false)
+    }
+
+    /// Append one player leg; an attack-move leg fights along its own route.
+    pub fn issue_queued_leg(
+        &mut self,
+        id: EntityId,
+        destination: WorldPosition,
+        attack_move: bool,
+    ) -> Result<bool, EconomyError> {
         let unit = self
             .unit(id)
             .filter(|u| u.hp > 0 && !self.embarked(u.id))
@@ -43,7 +53,7 @@ impl GameWorld {
             return Err(GameWorldError::InvalidPosition.into());
         }
         if !self.queued_move_active(id) {
-            let moving = self.issue_move(id, destination)?;
+            let moving = self.start_leg(id, destination, attack_move)?;
             if moving {
                 self.move_queues.entry(id).or_default();
             }
@@ -62,15 +72,43 @@ impl GameWorld {
         self.move_queues
             .entry(id)
             .or_default()
-            .push_back(destination);
+            .push_back((destination, attack_move));
         Ok(true)
+    }
+
+    /// Begin a player leg now. Attack-move runs as the unit's own one-member
+    /// formation, the route type that acquires targets on the way; Generals
+    /// keep their army march and ordinary moves stay scalar.
+    fn start_leg(
+        &mut self,
+        id: EntityId,
+        destination: WorldPosition,
+        attack_move: bool,
+    ) -> Result<bool, EconomyError> {
+        if attack_move
+            && !self.economy.generals.armies.contains_key(&id)
+            && let Some(player) = self.unit(id).map(|u| u.player)
+            && self
+                .issue_formation_move(
+                    player,
+                    &[id],
+                    aoe_core::Formation::Line,
+                    destination,
+                    false,
+                    true,
+                )
+                .is_ok()
+        {
+            return Ok(true);
+        }
+        Ok(self.issue_move(id, destination)?)
     }
 
     /// Authoritative marker list, combining formation and player-command legs.
     pub fn move_destinations(&self, id: EntityId) -> Vec<WorldPosition> {
         if let Some(mut destinations) = self.formation_destinations(id) {
             if let Some(queue) = self.move_queues.get(&id) {
-                destinations.extend(queue.iter().copied());
+                destinations.extend(queue.iter().map(|&(at, _)| at));
             }
             return destinations;
         }
@@ -80,7 +118,7 @@ impl GameWorld {
         self.movement_order(id)
             .map(|o| o.destination)
             .into_iter()
-            .chain(queue.iter().copied())
+            .chain(queue.iter().map(|&(at, _)| at))
             .collect()
     }
 
@@ -133,10 +171,13 @@ impl GameWorld {
             let Some(mut queue) = self.move_queues.remove(&id) else {
                 continue;
             };
-            while let Some(next) = queue.pop_front() {
+            while let Some((next, attack_move)) = queue.pop_front() {
                 // A building may have blocked a previously valid destination.
                 // Skip that failed leg; never discard the later commands.
-                if self.issue_move(id, next).is_ok_and(|moving| moving) {
+                if self
+                    .start_leg(id, next, attack_move)
+                    .is_ok_and(|moving| moving)
+                {
                     // An army march turns on this leg; a solo commander keeps
                     // his army holding throughout the automatic tick phases.
                     if self

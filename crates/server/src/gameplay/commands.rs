@@ -238,6 +238,7 @@ impl GameplayService {
                 entity_id,
                 destination,
                 queued: false,
+                attack_move: false,
             },
         )
         .await;
@@ -248,6 +249,7 @@ impl GameplayService {
         sequence: u64,
         entity_id: EntityId,
         destination: WorldPosition,
+        attack_move: bool,
     ) {
         self.queue_command(
             session_id,
@@ -256,6 +258,7 @@ impl GameplayService {
                 entity_id,
                 destination,
                 queued: true,
+                attack_move,
             },
         )
         .await;

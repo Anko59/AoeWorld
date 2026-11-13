@@ -127,6 +127,7 @@ pub(in crate::gameplay) fn apply(
             entity_id,
             destination,
             queued,
+            attack_move,
         } => {
             if world.animal(entity_id).is_some() {
                 if queued {
@@ -148,7 +149,9 @@ pub(in crate::gameplay) fn apply(
                 return CommandResult::RejectedInvalidDestination;
             }
             if queued {
-                world.issue_queued_move(entity_id, destination).map(|_| ())
+                world
+                    .issue_queued_leg(entity_id, destination, attack_move)
+                    .map(|_| ())
             } else {
                 world
                     .issue_move(entity_id, destination)

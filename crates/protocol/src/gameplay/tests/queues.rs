@@ -38,8 +38,9 @@ fn queued_move_and_authoritative_markers_have_current_golden_wire() {
         sequence: 1,
         entity_id: EntityId(2),
         destination: WorldPosition::new(512, 1536),
+        attack_move: true,
     };
-    let wire = [21, 1, 2, 128, 8, 128, 24];
+    let wire = [21, 1, 2, 128, 8, 128, 24, 1];
     assert_eq!(encode_client(&order).unwrap(), wire);
     assert_eq!(decode_client(&wire).unwrap(), order);
     let state = ServerMessage::MoveQueues {

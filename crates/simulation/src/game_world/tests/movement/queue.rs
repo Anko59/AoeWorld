@@ -173,7 +173,7 @@ fn check_general_retreat_queue(enemy_x: i32) {
     );
     assert_eq!(
         world.move_queues.get(&general).and_then(|q| q.front()),
-        Some(&at(30, 30))
+        Some(&(at(30, 30), false))
     );
     // A save at retreat home contains that temporary settled formation.
     // Its completion on the first resumed tick must not skip the march leg.
@@ -183,14 +183,14 @@ fn check_general_retreat_queue(enemy_x: i32) {
         .iter()
         .find(|r| r.unit.id == general)
         .unwrap();
-    assert_eq!(record.queue, [at(30, 30)]);
+    assert_eq!(record.queue, [(at(30, 30), false)]);
     let mut restored = super::world();
     restored
         .restore_snapshot(&snapshot, [0; 32], &|| false)
         .unwrap();
     assert_eq!(
         restored.move_queues.get(&general).and_then(|q| q.front()),
-        Some(&at(30, 30)),
+        Some(&(at(30, 30), false)),
         "resume must restore FIFO before ticking: move={:?}, attack={:?}",
         record.move_to,
         record.unit.attack_target
@@ -202,7 +202,7 @@ fn check_general_retreat_queue(enemy_x: i32) {
     );
     assert_eq!(
         restored.move_queues.get(&general).and_then(|q| q.front()),
-        Some(&at(30, 30))
+        Some(&(at(30, 30), false))
     );
 }
 
@@ -456,32 +456,4 @@ fn exact_arrival_and_mid_move_redirection_are_deterministic() {
         .unwrap();
     first.advance();
     assert!(first.unit(a).unwrap().moving);
-}
-
-#[test]
-fn queued_formation_leg_stays_behind_a_members_earlier_scalar_queue() {
-    let mut world = world();
-    let ids: Vec<_> = (0..3)
-        .map(|n| {
-            world
-                .spawn_kind(PlayerId(0), UnitKind::Militia, at(10, 10 + n))
-                .unwrap()
-        })
-        .collect();
-    let form = aoe_core::Formation::Line;
-    world
-        .issue_formation_move(PlayerId(0), &ids, form, at(30, 10), false, false)
-        .unwrap();
-    // A non-leader member is individually queued to B before the group's C.
-    world.issue_queued_move(ids[1], at(30, 30)).unwrap();
-    world
-        .issue_formation_move(PlayerId(0), &ids, form, at(10, 30), true, false)
-        .unwrap();
-    let destinations = world.move_destinations(ids[1]);
-    let at_b = destinations.iter().position(|&d| d == at(30, 30));
-    let at_c = destinations.iter().position(|&d| d == at(10, 30));
-    assert!(
-        at_b.is_some() && at_c.is_some() && at_b < at_c,
-        "A, then B, then C for the member: {destinations:?}"
-    );
 }

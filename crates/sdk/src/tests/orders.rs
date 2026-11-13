@@ -60,6 +60,7 @@ fn all_orders() -> Vec<Order> {
         Order::QueueMove {
             unit: id(1),
             to: tile,
+            attack_move: true,
         },
         Order::Gather {
             unit: id(2),

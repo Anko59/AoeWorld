@@ -83,11 +83,8 @@ impl GameWorld {
             && !group.settled
         {
             // A group leg would run before a member's earlier scalar legs.
-            // Keep every member's order by appending to the scalar FIFOs; a
-            // scalar leg has no attack-move flag, so that leg is refused.
-            if attack_move {
-                return Err(EconomyError::InvalidTarget);
-            }
+            // Keep every member's order by appending to the scalar FIFOs,
+            // which carry the attack-move flag of each leg.
             let pending = group.queue.len();
             let width = Self::move_queue_width();
             if ids.iter().any(|id| {
@@ -99,7 +96,7 @@ impl GameWorld {
                 self.move_queues
                     .entry(id)
                     .or_default()
-                    .push_back(destination);
+                    .push_back((destination, attack_move));
                 self.vassal_player_override(id);
             }
             return Ok(());

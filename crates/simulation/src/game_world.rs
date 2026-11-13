@@ -177,7 +177,7 @@ pub struct GameWorld {
     pub(crate) melee_traffic_clearance: Option<(EntityId, WorldPosition, bool)>,
     pub(crate) local_refinement_left: u32,
     pub(crate) formations: BTreeMap<EntityId, formation::Group>,
-    pub(crate) move_queues: BTreeMap<EntityId, VecDeque<WorldPosition>>,
+    pub(crate) move_queues: BTreeMap<EntityId, VecDeque<(WorldPosition, bool)>>,
     pub(crate) destinations: spacing::Destinations,
     pub(crate) terrain: Terrain,
     pub(crate) clearance: Mutex<clearance::Field>,

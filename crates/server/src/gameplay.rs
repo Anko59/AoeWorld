@@ -203,6 +203,7 @@ enum PendingAction {
         entity_id: EntityId,
         destination: WorldPosition,
         queued: bool,
+        attack_move: bool,
     },
     Gather {
         entity_id: EntityId,

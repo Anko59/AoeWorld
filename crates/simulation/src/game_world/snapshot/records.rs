@@ -8,7 +8,7 @@ use aoe_core::{EntityId, Formation, PlayerId, TileRect, WorldPosition};
 use aoe_map::ResourceOverlaySnapshot;
 use serde::{Deserialize, Serialize};
 
-pub const WORLD_SNAPSHOT_VERSION: u16 = 4;
+pub const WORLD_SNAPSHOT_VERSION: u16 = 5;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WorldSnapshot {
@@ -102,7 +102,7 @@ pub struct UnitRecord {
     pub garrison_in: Option<EntityId>,
     /// Where it was walking (units outside army groups), and the waypoints queued behind.
     pub move_to: Option<WorldPosition>,
-    pub queue: Vec<WorldPosition>,
+    pub queue: Vec<(WorldPosition, bool)>,
     pub hunt: Option<EntityId>,
     /// The building this unit was walking to shelter in.
     pub garrison_order: Option<EntityId>,

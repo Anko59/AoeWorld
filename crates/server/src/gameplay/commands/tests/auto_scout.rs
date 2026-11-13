@@ -31,6 +31,7 @@ fn enabling_auto_scout_takes_a_generals_scout_out_of_his_army() {
         entity_id: general,
         destination: at(140),
         queued: false,
+        attack_move: false,
     };
     assert_eq!(
         apply(&mut world, PlayerId(0), march),
