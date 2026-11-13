@@ -84,12 +84,14 @@ fn findings<'de, D: serde::Deserializer<'de>>(input: D) -> Result<Vec<Reported>,
             }
             Ok(_) => true,
             Err(error) => {
-                let probe: serde_json::Value =
-                    serde_json::from_str(entry.get()).map_err(D::Error::custom)?;
-                if probe.get("claim").is_some() {
-                    return Err(D::Error::custom(error));
+                // Every claim key, duplicates included: skip only an entry with
+                // none, or with exactly one blank claim.
+                let Claims(claims) = serde_json::from_str(entry.get()).map_err(D::Error::custom)?;
+                match claims.as_slice() {
+                    [] => true,
+                    [serde_json::Value::String(claim)] if claim.trim().is_empty() => true,
+                    _ => return Err(D::Error::custom(error)),
                 }
-                true
             }
         };
         if skip {
@@ -98,6 +100,37 @@ fn findings<'de, D: serde::Deserializer<'de>>(input: D) -> Result<Vec<Reported>,
         }
     }
     Ok(findings)
+}
+
+/// Every `claim` value of one findings entry, in order and with duplicates, which
+/// a `serde_json::Value` would collapse to the last one.
+struct Claims(Vec<serde_json::Value>);
+
+impl<'de> Deserialize<'de> for Claims {
+    fn deserialize<D: serde::Deserializer<'de>>(input: D) -> Result<Self, D::Error> {
+        struct Visitor;
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = Claims;
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a findings entry object")
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<Claims, A::Error> {
+                let mut claims = Vec::new();
+                while let Some(key) = map.next_key::<String>()? {
+                    if key == "claim" {
+                        claims.push(map.next_value()?);
+                    } else {
+                        map.next_value::<serde::de::IgnoredAny>()?;
+                    }
+                }
+                Ok(Claims(claims))
+            }
+        }
+        input.deserialize_map(Visitor)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]

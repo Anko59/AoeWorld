@@ -345,6 +345,9 @@ fn a_findings_entry_without_a_claim_is_skipped_not_fatal() {
     assert_eq!(claims, ["stale budget", "no file named"]);
     assert_eq!(answer.findings[1].file, "");
     assert_eq!(answer.verdicts.len(), 1);
+    // A blank claim alone is skipped even though other required fields are missing.
+    let blank: Answer = serde_json::from_str(r#"{"findings":[{"claim":""}]}"#).unwrap();
+    assert!(blank.findings.is_empty());
 }
 
 #[test]
