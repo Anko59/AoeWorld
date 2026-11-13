@@ -67,24 +67,28 @@ pub(crate) struct Answer {
 /// Findings, skipping entries without a claim. A closing review sometimes puts a
 /// vote or a note in `findings`; it states nothing to fix, and failing the whole
 /// answer over it made a graded review incomplete. Every other entry parses as
-/// before, so a malformed field still fails the answer.
+/// before from its own text, so a malformed or duplicated field still fails the
+/// answer (a `Value` would keep the last of two `severity` keys).
 fn findings<'de, D: serde::Deserializer<'de>>(input: D) -> Result<Vec<Reported>, D::Error> {
-    let entries: Vec<serde_json::Value> = Deserialize::deserialize(input)?;
+    use serde::de::Error;
+    let entries: Vec<Box<serde_json::value::RawValue>> = Deserialize::deserialize(input)?;
     let mut findings = Vec::new();
     for entry in entries {
+        let probe: serde_json::Value =
+            serde_json::from_str(entry.get()).map_err(D::Error::custom)?;
         // Only a missing or blank claim is skipped; a claim of the wrong type
         // fails the answer like any other malformed field.
-        let blank = match entry.get("claim") {
+        let blank = match probe.get("claim") {
             None => true,
             Some(serde_json::Value::String(claim)) => claim.trim().is_empty(),
             Some(_) => false,
         };
         if blank {
-            let text: String = entry.to_string().chars().take(160).collect();
+            let text: String = entry.get().chars().take(160).collect();
             eprintln!("review: ignored a findings entry without a claim: {text}");
             continue;
         }
-        findings.push(serde_json::from_value(entry).map_err(serde::de::Error::custom)?);
+        findings.push(serde_json::from_str(entry.get()).map_err(D::Error::custom)?);
     }
     Ok(findings)
 }
