@@ -79,6 +79,8 @@ enum Command {
     TestWasm,
     TestWasmFocused,
     TestE2e,
+    /// Regenerate duration-balanced E2E shard weights from Playwright JSON reports.
+    E2eDurations(e2e::shard::DurationsArgs),
     /// Deterministic frame work counters on a current map package.
     ClientFrameBench(e2e::client_frame::Options),
     TestCreatorSource,

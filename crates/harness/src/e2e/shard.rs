@@ -1,7 +1,11 @@
 //! One Playwright shard of the browser suite: `AOE_E2E_SHARD=i/n` (#388).
 use std::fmt;
+mod balance;
+mod data;
+mod plan;
+pub(crate) use data::{DurationsArgs, regenerate};
 
-/// The most shards one run may be split into; CI uses three.
+/// The most shards one run may be split into; CI uses four.
 const MAX_SHARDS: u32 = 16;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
