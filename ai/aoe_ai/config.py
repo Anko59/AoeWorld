@@ -87,6 +87,21 @@ class Config:
     #: Seconds an order kind waits after the server reports a world limit.
     world_limit_wait_seconds: int = 30
 
+    # --- settlement defences -----------------------------------------------
+    fortifications: bool = True
+    fort_workers_per_tower: int = 30
+    fort_wall_workers: int = 60
+    fort_interval_seconds: int = 12
+    fort_tower_coverage: int = 12
+    fort_wood_float: int = 50
+    fort_stone_float: int = 100
+    fort_site_radius: int = 6
+    fort_lane_tower_offset: int = 8
+    fort_lane_tower_radius: int = 2
+    fort_frontier_distance: int = 12
+    fort_lane_distances: tuple = (12, 18, 24)
+    fort_wall_wing: int = 5
+
     # --- age ---------------------------------------------------------------
     #: Research Loom once this many villagers work.
     loom_villagers: int = 10

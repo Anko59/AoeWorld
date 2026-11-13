@@ -74,6 +74,44 @@ movement-apply-census-steps:
 	@$(DOCKER_RUN) cargo test --locked -p aoe-harness late_game_apply_census -- --ignored
 
 # Replays local saved-game commands; all work runs in the pinned tool container.
+.PHONY: client-frame-bench client-frame-bench-build client-frame-bench-steps
+client-frame-bench: resource-bootstrap
+	@$(RESOURCE_LONG) client-frame-bench -- $(MAKE) --no-print-directory client-frame-bench-steps
+
+# Private WASM output does not replace the ordinary gameplay artifact.
+client-frame-bench-build: job-bootstrap
+	@$(MAKE) --no-print-directory browser-deps
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- assets browser-shaders
+	@$(DOCKER_RUN) cargo build --locked --profile wasm-release --target wasm32-unknown-unknown -p aoe-client --features frame-bench
+	@$(DOCKER_RUN) wasm-bindgen --target web --out-dir .cache/client-frame-bench/pkg --out-name aoe_client target/wasm32-unknown-unknown/wasm-release/aoe_client.wasm
+	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
+
+# Build only the instrumented historical client, with a private Cargo target.
+.PHONY: client-frame-bench-client-build
+client-frame-bench-client-build:
+	@$(DOCKER_RUN) cargo build --manifest-path '$(CLIENT_FRAME_SOURCE)/Cargo.toml' --locked --profile wasm-release --target wasm32-unknown-unknown -p aoe-client --features frame-bench --target-dir '$(CLIENT_FRAME_SOURCE)/target'
+	@$(DOCKER_RUN) wasm-bindgen --target web --out-dir '$(CLIENT_FRAME_SOURCE)/.cache/client-frame-bench/pkg' --out-name aoe_client '$(CLIENT_FRAME_SOURCE)/target/wasm32-unknown-unknown/wasm-release/aoe_client.wasm'
+
+client-frame-bench-steps: client-frame-bench-build
+	@'$(JOB_BINARY)' client-frame-bench $(CLIENT_FRAME_BENCH_ARGS)
+
+.PHONY: client-frame-bench-browser-test
+client-frame-bench-browser-test: browser-deps
+	@$(BROWSER_RUN) node --test bench/counters_tests.mjs
+
+.PHONY: client-frame-bench-format
+client-frame-bench-format: browser-deps
+	@$(BROWSER_RUN) npx prettier --write bench
+
+.PHONY: client-frame-bench-check
+client-frame-bench-check: job-bootstrap
+	@$(DOCKER_RUN) cargo check --locked --target wasm32-unknown-unknown -p aoe-client --features frame-bench
+
+.PHONY: client-frame-bench-compile-load
+CLIENT_FRAME_LOAD_TARGET ?= $(ROOT)/.cache/client-frame-bench/load-target
+client-frame-bench-compile-load:
+	@$(DOCKER_RUN) env $(call MOUNT_QUOTE,CARGO_TARGET_DIR=$(CLIENT_FRAME_LOAD_TARGET)) $(call MOUNT_QUOTE,RUSTFLAGS=$(CLIENT_FRAME_LOAD_RUSTFLAGS)) CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 CARGO_PROFILE_RELEASE_DEBUG=1 cargo build --locked --release -p aoe-server -p aoe-harness
+
 .PHONY: save-replay save-replay-admitted save-replay-steps
 save-replay: resource-bootstrap
 	@$(RESOURCE_LONG) save-replay -- $(MAKE) --no-print-directory save-replay-admitted

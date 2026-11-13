@@ -28,4 +28,4 @@ def test_development_report_counts_managers_and_completed_fortifications():
     row = measure(FakeWorld(units, buildings), kills=0, orders=0)
     assert row['management']['stewards'] == 1
     assert row['management']['generals'] == 1
-    assert row['fortifications'] == {'castles': 1, 'towers': 1, 'wall_segments': 0}
+    assert row['fortifications'] == {'castles': 1, 'towers': 1, 'wall_segments': 0, 'gates': 0}

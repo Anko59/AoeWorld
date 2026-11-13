@@ -114,6 +114,8 @@ pub fn scene_cliff_native_frames(art: &GameArt, faces: &[ProjectedSurfaceTriangl
     if !art.environment.iter().any(|c| c.unit_id == 264) {
         return Vec::new();
     }
+    #[cfg(feature = "frame-bench")]
+    crate::frame_cost::add(crate::frame_cost::Counter::CliffFaces, faces.len());
     let frames = &art.scenery.cliff_faces;
     let mut out = std::collections::BTreeSet::new();
     for face in faces.iter().filter(|f| f.skirt && f.tint == 13) {

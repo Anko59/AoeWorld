@@ -81,6 +81,8 @@ enum Command {
     TestE2e,
     /// Join the shards' evidence into `reports/e2e/pass.json`.
     E2eEvidence,
+    /// Deterministic frame work counters on a current map package.
+    ClientFrameBench(e2e::client_frame::Options),
     TestCreatorSource,
     TestGeographicMatrix,
     TestGeographicVisuals,

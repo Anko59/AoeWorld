@@ -48,6 +48,7 @@ help:
 	@echo '  make ci-check        Validate selection manifest and job outcomes'
 	@echo '  make build           Build workspace'
 	@echo '  make build-wasm      Build and bind the Rust/WebGPU client'
+	@echo '  make client-frame-bench CLIENT_FRAME_BENCH_ARGS="--package-directory DIR --content-hash HASH --asset-pack DIR"'
 	@echo '  make dev             Start checkout-scoped lab on localhost:8080 (DEV_PORT)'
 	@echo '  make down            Stop this checkout’s lab'
 	@echo '  make status          Show this checkout’s lab status'

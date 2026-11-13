@@ -84,3 +84,17 @@ def test_tick_stream_rejects_empty_missing_or_duplicate_timing_records():
         stream.add([[4, 100, 80, 0, 0, 4, 0, 0]], through_tick=4)
     with pytest.raises(ValueError, match='gap'):
         stream.add([[2, 90, 70, 0, 0, 4, 0, 0]], through_tick=2)
+
+
+def test_fortification_counts_separate_gates_and_retain_auditable_positions():
+    units, buildings = base(3)
+    buildings += [building(600, BuildingKind.WATCH_TOWER, tile=(60, 40)),
+                  building(601, BuildingKind.STONE_WALL, tile=(70, 40)),
+                  building(602, BuildingKind.STONE_GATE, tile=(71, 40)),
+                  building(603, BuildingKind.CASTLE, tile=(80, 40)),
+                  building(604, BuildingKind.WATCH_TOWER, tile=(90, 40), complete=False)]
+    eco = economy()
+    row = measure(FakeWorld(units, buildings, eco=eco), kills=0, orders=0)
+    assert row['fortifications'] == dict(castles=1, towers=1, wall_segments=1, gates=1)
+    assert {s['id'] for s in row['fortification_sites']} == {600, 601, 602, 603}
+    assert next(s['tile'] for s in row['fortification_sites'] if s['id'] == 602) == list(buildings[-3].center)

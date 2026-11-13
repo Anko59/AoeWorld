@@ -97,6 +97,7 @@ fn long_make_targets_acquire_before_workload_prerequisites_and_recipes() {
         "perf-late-game-instructions",
         "scale-match-smoke",
         "match-bench",
+        "client-frame-bench",
         "movement-apply-census",
         "save-replay",
     ];

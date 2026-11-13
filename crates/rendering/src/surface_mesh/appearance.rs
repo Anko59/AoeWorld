@@ -109,6 +109,11 @@ pub(super) fn texture_subdivisions(size: i32, cells: usize) -> i32 {
 }
 
 pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle], art: &GameArt) {
+    #[cfg(feature = "frame-bench")]
+    crate::frame_cost::add(
+        crate::frame_cost::Counter::TexturedTriangles,
+        triangles.len(),
+    );
     let planar = art
         .terrain_topology
         .iter()

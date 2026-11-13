@@ -22,6 +22,7 @@ from .play.scouting import ScoutManager
 from .play.bridges import BridgeManager
 from .play.management import ManagementManager
 from .play.market import MarketManager
+from .play.fortification import FortificationManager
 
 #: Refusals that mean "this target will never work for this unit".
 HOPELESS = (
@@ -53,6 +54,7 @@ class Brain:
         self.bridges = BridgeManager()
         self.management = ManagementManager()
         self.market = MarketManager()
+        self.fortifications = FortificationManager(self.constructor)
 
     def on_tick(self, client: Any, decision: Any) -> None:
         self.decide(client, decision)
@@ -91,6 +93,7 @@ class Brain:
         run(8, self.management.step)
         run(5, self.economy.produce)
         run(2, self.constructor.houses)
+        run(1, self.fortifications.step)
         run(1, self.economy.wood_dropoff)
         if ((ctx.center is not None and ctx.center.researching == Tech.FEUDAL_AGE)
                 or (ctx.feudal and not ctx.castle and buildorder.castle_requirement_kinds(ctx) < 2)):

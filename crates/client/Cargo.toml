@@ -8,6 +8,7 @@ rust-version.workspace = true
 [features]
 default = []
 diagnostics = []
+frame-bench = ["aoe-rendering/frame-bench"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]

@@ -128,6 +128,12 @@ impl PreparedScene {
     }
 
     pub(super) fn new(camera: Camera, terrain: Vec<SceneTerrain>) -> Self {
+        #[cfg(feature = "frame-bench")]
+        {
+            use aoe_rendering::frame_cost::{Counter, add};
+            add(Counter::SceneBuilds, 1);
+            add(Counter::ProjectedTiles, terrain.len());
+        }
         let triangles = aoe_rendering::projected_surface_triangles(
             &terrain,
             SceneCamera {

@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Any, Optional
 import math
 
-from aoeworld import BuildingKind, GeneralState, UnitKind, UnitTask, building_cost, train_seconds, unit_cost
+from aoeworld import BuildingKind, GeneralState, UnitKind, UnitTask, building_cost, building_size, train_seconds, unit_cost
 
 from . import buildorder
 from ..context import Context
@@ -50,6 +50,8 @@ def funding_reserve(ctx):
 
 
 class ManagementManager:
+    unanswered = False  # set by `place` when a reachability check had no budget to answer
+
     # ----- one decision ----------------------------------------------------
     def step(self, ctx: Context) -> None:
         cfg = ctx.config
@@ -117,9 +119,21 @@ class ManagementManager:
         if not ctx.can_afford(cost):
             return
         near = (ctx.centers or [ctx.home])[total % max(1, len(ctx.centers))]
-        builders = self.builders(ctx, near, 5)
-        if builders and self.place(ctx, BuildingKind.CASTLE, near, builders, 24, 2):
-            board.bump("castles_placed")
+        from .fortification import frontier
+        # The frontier may lie across water from every builder: require a land-reachable
+        # footprint there, else fall back to the settlement itself.
+        for tile in dict.fromkeys(t for t in (frontier(ctx), near) if t is not None):
+            builders = self.builders(ctx, tile, 5)
+            self.unanswered = False
+            if builders and ctx.land_route(builders[0].tile, tile) is None:
+                if ctx.land_unanswered(builders[0].tile, tile):
+                    break  # budget spent: retry later instead of treating it as unreachable
+                continue  # across water or walls: spend no site queries here
+            if builders and self.place(ctx, BuildingKind.CASTLE, tile, builders, 24, 2, reachable=True):
+                board.bump("castles_placed")
+                break
+            if self.unanswered:
+                break
         board.cool("castle", ctx.tick, 10 * ctx.world.tick_hz)
 
     def builders(self, ctx: Context, tile: Tile, count: int) -> list:
@@ -129,7 +143,8 @@ class ManagementManager:
                       key=lambda v: dist(v.tile, tile))
         return free[:count]
 
-    def place(self, ctx: Context, kind: BuildingKind, near: Tile, builders: list, radius: int, gap: int = 1) -> bool:
+    def place(self, ctx: Context, kind: BuildingKind, near: Tile, builders: list, radius: int, gap: int = 1,
+              reachable: bool = False) -> bool:
         from ..blackboard import Plan
 
         if ctx.board.cooling("world-limit:build", ctx.tick) or not ctx.try_spend(building_cost(kind)):
@@ -141,6 +156,13 @@ class ManagementManager:
                     and (kind != BuildingKind.TOWN_CENTER or all(
                         dist(found, b.center) >= ctx.config.settlement_spacing
                         for b in ctx.buildings if b.kind == kind))):
+                if reachable:
+                    reach = self.landlocked(ctx, kind, found, builders)
+                    if reach is None:
+                        self.unanswered = True
+                        break
+                    if not reach:
+                        continue
                 site = found
                 break
         if site is None:
@@ -153,6 +175,21 @@ class ManagementManager:
         for b in builders:
             ctx.board.builders[b.id] = (str(kind), site)
         return True
+
+    @staticmethod
+    def landlocked(ctx: Context, kind: BuildingKind, site: Tile, builders: list) -> Optional[bool]:
+        """True when the first builder can walk to some edge of the footprint.
+
+        None when the shared land-query budget left an edge unanswered."""
+        width, height = building_size(kind)
+        x, y = site
+        edges = ((x - 1, y), (x + width, y), (x, y - 1), (x, y + height))
+        for edge in sorted(edges, key=lambda tile: dist(builders[0].tile, tile)):
+            if ctx.land_route(builders[0].tile, edge) is not None:
+                return True
+            if ctx.land_unanswered(builders[0].tile, edge):
+                return None
+        return False
 
     # ----- Stewards and Vassals ----------------------------------------------
     def seat(self, ctx: Context, kind: UnitKind, house: BuildingKind) -> None:
@@ -298,7 +335,9 @@ class ManagementManager:
                         ctx.order("steward_settings", unit, list(weights), 100, training)
                         ctx.board.manager_settings[unit] = desired
                 elif kind == UnitKind.VASSAL:
-                    enabled = ctx.count(BuildingKind.CASTLE) >= buildorder.wanted_castles(ctx)
+                    # Native development already keeps its own resource floor.
+                    # A growing castle target must not postpone every wall.
+                    enabled = ctx.config.fortifications
                     desired = (enabled,)
                     if ctx.board.manager_settings.get(unit) != desired:
                         ctx.order("vassal_development", unit, enabled)

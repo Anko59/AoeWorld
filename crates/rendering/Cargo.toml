@@ -7,6 +7,7 @@ rust-version.workspace = true
 
 [features]
 shader-source = []
+frame-bench = []
 
 [dependencies]
 aoe-core.workspace = true
