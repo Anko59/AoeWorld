@@ -30,7 +30,6 @@ pub(crate) struct TickWork {
 
 #[derive(Debug, Default)]
 pub(crate) struct Economy {
-    pub(crate) naval_ground: std::sync::Mutex<aoe_map::RouteGroundCache>,
     /// Physical tile/edge answers shared across movers, separately for land
     /// and water. Collision changes invalidate only affected chunks.
     pub(crate) movement_ground: [std::sync::Mutex<aoe_map::RouteGroundCache>; 2],

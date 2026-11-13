@@ -51,28 +51,24 @@ impl RouteTerrain for NavalNavigation<'_> {
         if cancelled() {
             return Err(EnvironmentPageError::Cancelled);
         }
-        if let Some(clear) = self
-            .world
-            .economy
-            .naval_ground
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .get_edge(from, to)
+        // Reservations live in `blocked_tiles` and change without a collision
+        // notification, so they are tested here and never stored in the shared
+        // physical edge answer.
+        let blocked = |tile| self.world.economy.blocked_tiles.contains(&tile);
+        let diagonal = from.x != to.x && from.y != to.y;
+        if blocked(from)
+            || blocked(to)
+            || (diagonal
+                && (blocked(TileCoord::new(from.x, to.y)) || blocked(TileCoord::new(to.x, from.y))))
         {
-            return Ok(clear);
+            return Ok(false);
         }
-        let wet = |tile| self.wet(tile, cancelled);
-        let clear = wet(from)?
-            && wet(to)?
-            && (from.x == to.x
-                || from.y == to.y
-                || (wet(TileCoord::new(from.x, to.y))? && wet(TileCoord::new(to.x, from.y))?));
-        self.world
-            .economy
-            .naval_ground
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert_edge(from, to, clear);
+        let clear = self
+            .world
+            .unit_tile_passable(UnitKind::FishingShip, from, cancelled)?
+            && self
+                .world
+                .unit_step_clear(UnitKind::FishingShip, from, to)?;
         Ok(clear)
     }
     fn route_step_cost(
