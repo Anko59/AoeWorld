@@ -121,7 +121,7 @@ test("train Militia, attack a sheep, and hunt and butcher a deer through right-c
   page,
   request,
 }) => {
-  test.setTimeout(210_000);
+  test.setTimeout(300_000);
   expect((await request.post("/maps/reset")).status()).toBe(204);
   await gameAssets(page);
   await page.goto("/?play=1#zoom=.45");
@@ -182,20 +182,39 @@ test("train Militia, attack a sheep, and hunt and butcher a deer through right-c
   await expect
     .poll(async () => (await actors(page)).find((a) => a.id === sheep.id)?.task)
     .toBe("Carcass");
-  // The deer herd begins outside Town Center LOS. Keep the scout approaching
-  // while its first visible deer is selected for the villager's hunt order.
-  await click(page, "Scout");
-  await page.locator("#move-units").click();
-  await page.mouse.click(180, 360, { button: "right" });
-  await expect
-    .poll(
-      async () =>
-        (await actors(page)).some((a) => a.kind === "Deer" && a.hp > 0),
-      {
-        timeout: 25_000,
-      },
-    )
-    .toBe(true);
+  // The deer herd begins outside Town Center LOS, in a seeded direction. Zoom
+  // out so the whole herd band (9 to 15 tiles) stays clear of the bottom HUD
+  // panel, then queue the scout around the village until a deer is visible.
+  await page.evaluate(() => {
+    location.hash = "zoom=.15";
+  });
+  await centerVillage(page);
+  await freshHud(page);
+  const deerSeen = async () =>
+    (await actors(page)).some((a) => a.kind === "Deer" && a.hp > 0);
+  const legs = [
+    [830, 360],
+    [640, 250],
+    [450, 360],
+    [640, 470],
+  ] as const;
+  for (const [x, y] of legs) {
+    if (await deerSeen()) break;
+    const scout = await click(page, "Scout");
+    await page.locator("#move-units").click();
+    await page.mouse.click(x, y, { button: "right" });
+    await expect
+      .poll(
+        async () => {
+          if (await deerSeen()) return true;
+          const now = (await actors(page)).find((a) => a.id === scout.id);
+          return now ? Math.hypot(now.x - x, now.y - y) < 16 : false;
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(true);
+  }
+  expect(await deerSeen()).toBe(true);
   await click(page, "Villager");
   await expect(page.locator("#selection-name")).toHaveText("Villager");
   // Fleeing deer can leave the scout's line of sight, and fog then removes
