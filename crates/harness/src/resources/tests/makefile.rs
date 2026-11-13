@@ -98,6 +98,7 @@ fn long_make_targets_acquire_before_workload_prerequisites_and_recipes() {
         "scale-match-smoke",
         "match-bench",
         "movement-apply-census",
+        "save-replay",
     ];
     let files = files();
     let resources = fs::read_to_string(root().join("make/resources.mk")).unwrap();
@@ -157,5 +158,35 @@ fn browser_wrapper_observes_cgroup_events_before_container_removal() {
     assert!(
         wrapper.ends_with("$(BROWSER_IMAGE) $(RESOURCE_OBSERVER)"),
         "{wrapper}"
+    );
+}
+
+#[test]
+fn only_save_replay_counter_targets_request_perfmon() {
+    let text = fs::read_to_string(root().join("make/profiling.mk")).unwrap();
+    for target in ["save-replay-steps:", "save-replay-counter-check:"] {
+        let recipe = text
+            .lines()
+            .skip_while(|line| *line != target)
+            .nth(1)
+            .unwrap();
+        assert!(recipe.contains("--cap-add PERFMON"), "{target}: {recipe}");
+        assert!(!recipe.contains("seccomp=unconfined"));
+    }
+    let makefile = fs::read_to_string(root().join("Makefile")).unwrap();
+    assert!(!makefile.contains("--cap-add PERFMON"));
+}
+
+#[test]
+fn save_replay_isolates_cargo_artifacts_from_shared_worktree_targets() {
+    let text = fs::read_to_string(root().join("make/profiling.mk")).unwrap();
+    let recipe = text
+        .lines()
+        .skip_while(|line| *line != "save-replay-steps:")
+        .nth(1)
+        .unwrap();
+    assert!(
+        recipe.contains("CARGO_TARGET_DIR=$(ROOT)/.cache/save-replay/target"),
+        "{recipe}"
     );
 }

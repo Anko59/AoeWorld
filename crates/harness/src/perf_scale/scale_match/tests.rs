@@ -255,3 +255,23 @@ fn saved_phase_sample_retains_issuer_counters_for_wall_minute_deltas() {
     assert_eq!(row["routes"]["movers"], 12);
     assert_eq!(row["routes"]["units"], 25);
 }
+
+#[test]
+fn command_recording_requires_a_save_and_preserves_the_tick_limit() {
+    assert!(
+        Cli::try_parse_from(["scale-match", "--record-commands", ".cache/commands.jsonl"]).is_err()
+    );
+    let parsed = options(&[
+        "--save",
+        "owner.save",
+        "--record-commands",
+        ".cache/commands.jsonl",
+        "--record-ticks",
+        "7",
+    ]);
+    assert_eq!(parsed.record_ticks, 7);
+    assert_eq!(
+        parsed.record_commands.unwrap(),
+        std::path::PathBuf::from(".cache/commands.jsonl")
+    );
+}

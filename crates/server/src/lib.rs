@@ -13,6 +13,7 @@ mod page_residency;
 #[cfg(any(test, feature = "sampling-profiler"))]
 mod sampling;
 mod source_qualification;
+pub use gameplay::replay;
 mod terrain_cache;
 pub use config::{Config, SamplingProfile};
 pub use gameplay::{GameplayService, PersistedDepletion, ResourceLifecycleError, SlotInfo};

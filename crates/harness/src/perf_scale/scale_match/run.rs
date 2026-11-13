@@ -258,6 +258,14 @@ pub(super) fn run(options: &Options, saved: Option<Value>) -> Result<(), BoxErro
             failure = Some(error.to_string());
             break;
         }
+        if options
+            .record_commands
+            .as_ref()
+            .is_some_and(|path| aoe_server::replay::Recording::read(path).is_ok())
+        {
+            println!("recorded {} ticks", options.record_ticks);
+            break;
+        }
         let seconds = run_started.elapsed().as_secs_f64();
         if seconds >= 60.0 * (minutes.windows.len() + 1) as f64 && seconds < wall.as_secs_f64() {
             phase_minutes.push(save::sample(&server, seconds, saved.is_some())?);
@@ -307,6 +315,10 @@ pub(super) fn run(options: &Options, saved: Option<Value>) -> Result<(), BoxErro
             }
         }
         thread::sleep(Duration::from_millis(900));
+    }
+    if let Some(path) = &options.record_commands {
+        aoe_server::replay::Recording::read(path)
+            .map_err(|e| format!("command recording incomplete: {e}"))?;
     }
     let wall_seconds = run_started.elapsed().as_secs_f64();
     let _ = pull_ticks(&server, &mut cursor, &mut rows);

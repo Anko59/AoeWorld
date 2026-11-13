@@ -19,6 +19,21 @@ pub(super) fn server_build_args(options: &Options) -> Vec<&'static str> {
 
 /// The server's sampling-profiler environment for `--profile`.
 pub(super) fn profile_env(options: &Options, command: &mut Command) -> Result<(), BoxError> {
+    if let Some(path) = &options.record_commands {
+        let cache = std::env::current_dir()?.join(".cache");
+        fs::create_dir_all(&cache)?;
+        let parent = path.parent().ok_or("recording needs a parent directory")?;
+        fs::create_dir_all(parent)?;
+        if !fs::canonicalize(parent)?.starts_with(fs::canonicalize(cache)?) {
+            return Err("recordings must stay under this checkout's .cache".into());
+        }
+        if path.exists() {
+            return Err("recording already exists".into());
+        }
+        command
+            .env("AOE_RECORD_COMMANDS", path)
+            .env("AOE_RECORD_TICKS", options.record_ticks.to_string());
+    }
     if let Some(directory) = &options.profile {
         // The window counts from server start, before the measured minutes; a
         // window ending after the run would exit "successfully" with no profile.

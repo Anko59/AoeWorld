@@ -39,6 +39,7 @@ impl GameplayService {
             .filter(|s| s.human)
             .map(|s| s.player)
             .collect();
+        let recorded = self.record_inputs(&pending);
         // Attack-position and construction validation can be CPU work. Keep
         // it off the async runtime so one order cannot starve socket I/O.
         let applied = tokio::task::spawn_blocking(move || {
@@ -77,6 +78,12 @@ impl GameplayService {
             tracing::error!("gameplay tick worker failed");
             return;
         };
+        if let Some(commands) = recorded
+            && let Err(error) = self.record_finished(world.tick().0 - 1, commands, &world)
+        {
+            tracing::error!(%error, "command recording failed");
+            return;
+        }
         if world.tick().0.is_multiple_of(ROUTE_LOG_TICKS) {
             log_route_scheduler(&world);
         }

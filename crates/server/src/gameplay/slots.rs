@@ -131,6 +131,7 @@ impl GameplayService {
             fanout_probe: Arc::default(),
             preparation: Default::default(),
             paused: Arc::default(),
+            recording: Arc::default(),
         }
     }
 

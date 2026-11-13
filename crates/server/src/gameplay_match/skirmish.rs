@@ -36,7 +36,6 @@ const ABANDONED_AFTER: Duration = Duration::from_secs(5 * 60);
 
 /// What `GET /skirmish` reports when the AI hosts exit while the match runs.
 const LOST_HOSTS_MESSAGE: &str = "the AI opponents stopped unexpectedly and no longer play";
-
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Phase {
@@ -427,6 +426,7 @@ async fn watch(state: &AppState, id: u64) {
                     "skirmish AI connected"
                 );
                 skirmish.advance(id, Phase::Ready);
+                gameplay.recording_ai_ready();
             }
             Phase::ConnectingAi if finished => {
                 skirmish.fail(

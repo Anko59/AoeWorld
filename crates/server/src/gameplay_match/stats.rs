@@ -30,6 +30,10 @@ pub struct TickProbe {
 }
 
 impl TickProbe {
+    pub(crate) fn phase_names() -> &'static [&'static str] {
+        &phases::NAMES
+    }
+
     pub(crate) fn take_phase_micros(&self) -> std::collections::BTreeMap<&'static str, u64> {
         self.phases.drain().values().collect()
     }

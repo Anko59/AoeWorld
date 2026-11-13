@@ -23,6 +23,20 @@ pub struct SamplingProfile {
 }
 
 impl Config {
+    /// Local saved-match command recording; the benchmark owns these paths.
+    pub(crate) fn command_recording_from_env() -> Result<Option<(PathBuf, usize)>, String> {
+        let Some(path) = env::var_os("AOE_RECORD_COMMANDS") else {
+            return Ok(None);
+        };
+        let ticks = env::var("AOE_RECORD_TICKS")
+            .unwrap_or_else(|_| "1500".to_owned())
+            .parse::<usize>()
+            .map_err(|_| "AOE_RECORD_TICKS must be an integer")?;
+        if ticks == 0 || ticks > 1_000_000 {
+            return Err("AOE_RECORD_TICKS needs 1..1000000".to_owned());
+        }
+        Ok(Some((PathBuf::from(path), ticks)))
+    }
     /// Local scenario/debug switch, applied by the authority at world creation.
     pub(crate) fn fog_disabled_from_env() -> bool {
         env::var("AOE_FOG_DISABLED").is_ok_and(|value| value == "1")

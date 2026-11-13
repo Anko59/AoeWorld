@@ -10,7 +10,6 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::{Mutex, RwLock, mpsc};
-
 #[path = "gameplay/arena.rs"]
 pub(crate) mod arena;
 #[path = "gameplay/commands.rs"]
@@ -29,6 +28,8 @@ mod frame;
 mod preparation;
 #[path = "gameplay/probe.rs"]
 pub(crate) mod probe;
+#[path = "gameplay/replay/mod.rs"]
+pub mod replay;
 #[path = "gameplay/scenarios/mod.rs"]
 mod scenarios;
 #[path = "gameplay/slots.rs"]
@@ -62,8 +63,8 @@ pub struct GameplayService {
     pub(super) paused: Arc<std::sync::atomic::AtomicBool>,
     /// What the last tick spent where; read by `run_ticks`.
     probe: Arc<crate::gameplay_match::TickProbe>,
+    recording: Arc<std::sync::Mutex<Option<crate::replay::Recorder>>>,
 }
-
 pub(super) struct Session {
     /// Index of the match slot this session plays. Several sessions may share
     /// one slot; each has its own order sequence and rate limit.
@@ -103,7 +104,6 @@ pub(super) struct Session {
     resource_vision_revision: Option<u64>,
     resident_resources: Vec<aoe_protocol::ResourceAmount>,
 }
-
 #[derive(Clone, Copy)]
 struct Subscription {
     revision: u64,
@@ -125,7 +125,7 @@ impl PendingCommand {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 enum PendingAction {
     VassalDevelopment {
         vassal_id: EntityId,

@@ -77,6 +77,8 @@ help:
 	@echo '  make sdk-python-logic-test  Run AI fake-world decision regressions'
 	@echo '  make scale-match     Real server at scale: 1 human + 99 Python AIs on a France-sized map (docs/scale/match.md)'
 	@echo '  make scale-match-smoke  The same path with 4 players for one minute'
+	@echo '  make save-replay     Repeat local recorded save commands, thread instruction phases and hashes (AOE_SAVE_REPLAY_ARGS)'
+	@echo '  make save-replay-counter-check  Check Docker access to the thread instruction PMU'
 	@echo '  make match-bench     In-process closed-loop late-game match with Rust bots (docs/scale/match-bench.md)'
 	@echo '  make fuzz-smoke      Run bounded parser fuzzing with pinned nightly Rust'
 	@echo '  make fuzz-nightly    Run longer parser fuzzing campaigns'
