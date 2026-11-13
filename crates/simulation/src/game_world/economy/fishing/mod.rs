@@ -132,27 +132,36 @@ impl GameWorld {
             self.terrain
                 .passable_with_cancel(tile, self.config, cancelled)?
         } else {
-            let Terrain::Map { generator, overlay } = &self.terrain else {
-                return Ok(false);
-            };
-            // Ships need water and mutable blockers only. Resources and trees
-            // are generated on dry land alone and fish never block, so no
-            // resource node can block a wet tile: no navigation snapshot,
-            // landscape composition or elevation page is consulted.
-            match generator.water_at_with_cancel(tile, cancelled)? {
-                Some(water) => {
-                    navigable(water)
-                        && !overlay.blocks_tile(tile)
-                        && overlay.bridge_connections(tile).is_none()
-                }
-                None => false,
-            }
+            self.naval_tile_wet(tile, cancelled)?
         };
         cache
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .insert(tile, passable);
         Ok(passable)
+    }
+
+    /// Kept out of line so the land path, hot in movement sweeps, stays small.
+    ///
+    /// Ships need water and mutable blockers only. Resources and trees are
+    /// generated on dry land alone and fish never block, so no resource node
+    /// can block a wet tile: no navigation snapshot, landscape composition or
+    /// elevation page is consulted, cold or warm.
+    #[inline(never)]
+    fn naval_tile_wet(
+        &self,
+        tile: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<bool, EnvironmentPageError> {
+        let Terrain::Map { generator, overlay } = &self.terrain else {
+            return Ok(false);
+        };
+        match generator.water_at_with_cancel(tile, cancelled)? {
+            Some(water) => Ok(navigable(water)
+                && !overlay.blocks_tile(tile)
+                && overlay.bridge_connections(tile).is_none()),
+            None => Ok(false),
+        }
     }
 
     pub(crate) fn gather_capacity(&self, unit: &crate::GameUnit, farmer: bool) -> u16 {
