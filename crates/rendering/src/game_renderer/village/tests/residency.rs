@@ -3,6 +3,7 @@ use wasm_bindgen::JsCast;
 
 mod fallbacks;
 mod growth;
+mod patch;
 
 #[wasm_bindgen_test]
 fn native_lookahead_wraps_inside_the_current_facing_without_changing_the_display_cell() {

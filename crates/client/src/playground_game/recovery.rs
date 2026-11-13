@@ -16,6 +16,8 @@ pub(super) fn check(renderer: &GameRenderer) -> Result<(), String> {
             return Err("WebGPU document retired".into());
         }
         renderer.check_health()?;
+    } else if let GameRenderer::WebGl(renderer) = renderer {
+        renderer.check_health()?;
     }
     Ok(())
 }

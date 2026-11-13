@@ -41,6 +41,24 @@ pub(in crate::game_renderer) fn copy(
 }
 
 impl GameRenderer {
+    /// Validate a WebGL upload burst once before accepting its result. CPU
+    /// bounds checks and each backend's queue admission still run per patch.
+    /// Finish even after a closure error so the next burst starts cleanly.
+    pub fn with_game_atlas_updates<T, E: From<String>>(
+        &mut self,
+        update: impl FnOnce(&mut Self) -> Result<T, E>,
+    ) -> Result<T, E> {
+        if let Self::WebGl(renderer) = self {
+            renderer.begin_patches().map_err(E::from)?;
+        }
+        let result = update(self);
+        let finished = match self {
+            Self::WebGl(renderer) => renderer.finish_patches().map_err(E::from),
+            _ => Ok(()),
+        };
+        result.and_then(|value| finished.map(|()| value))
+    }
+
     /// Native uploads share the two-frame queue bound with rendering.
     pub fn atlas_updates_ready(&self) -> Result<bool, String> {
         match self {
