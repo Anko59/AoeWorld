@@ -77,7 +77,7 @@ pub(super) fn base(name: &str) -> Fixture {
         let segment = |x, from, to| RiverSegment {
             start: [x * 256, from * 256],
             end: [x * 256, to * 256],
-            width_units: 6 * 256,
+            width_units: 7 * 256,
             station_start: 0,
             station_end: i64::from(to - from) * 256,
             source_delta: [0, (to - from) * 256],

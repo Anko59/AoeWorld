@@ -3,7 +3,7 @@
 River and lake banks now receive deterministic shore fish, including narrow
 channels. Villagers work from a reachable adjacent bank. Channel fish require a
 two-tile wet cross and remain ship-only resources. Placement is generation
-recipe 3; regenerate local map packages instead of reading an older recipe.
+recipe 4; regenerate local map packages instead of reading an older recipe.
 
 A Dock needs a free 3×3 footprint crossing dry land and navigable river, lake or
 sea water. Its water perimeter trains Fishing Ships and Transport Ships in the

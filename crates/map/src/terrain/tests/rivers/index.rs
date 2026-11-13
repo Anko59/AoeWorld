@@ -2,6 +2,43 @@ use super::Index;
 use crate::RiverSegment;
 
 #[test]
+fn ford_phase_survives_page_clipping_and_deep_overlaps_in_either_order() {
+    let medium = RiverSegment {
+        start: [128 * 256, 0],
+        end: [128 * 256, 256 * 256],
+        width_units: 6 * 256,
+        station_start: 0,
+        station_end: 256 * 256,
+        source_delta: [0, 256 * 256],
+        source_station_delta: 256 * 256,
+    };
+    let clipped = RiverSegment {
+        start: [128 * 256, 123 * 256],
+        station_start: 123 * 256,
+        ..medium
+    };
+    let complete = Index::new(&[medium], [0, 0], 256 * 256);
+    let page = Index::new(&[clipped], [0, 128 * 256], 128 * 256);
+    for y in 128..250 {
+        let point = [128 * 256, y * 256];
+        let hit = complete.physical(point, 0, 0).unwrap();
+        assert_eq!(hit, page.physical(point, 0, 0).unwrap());
+        assert_eq!(
+            hit.2, hit.1,
+            "medium water wades only in the ford phase at {y}"
+        );
+    }
+    let deep = RiverSegment {
+        width_units: 7 * 256,
+        ..medium
+    };
+    for segments in [[medium, deep], [deep, medium]] {
+        let index = Index::new(&segments, [0, 0], 256 * 256);
+        assert!(!index.physical([128 * 256, 160 * 256], 0, 0).unwrap().2);
+    }
+}
+
+#[test]
 fn page_clipped_bend_matches_the_unwarped_complete_curve() {
     let incoming = RiverSegment {
         start: [448 * 256, 256 * 256],

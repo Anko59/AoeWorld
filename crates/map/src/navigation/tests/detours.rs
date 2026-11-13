@@ -44,9 +44,9 @@ fn river() -> MapChunkGenerator {
         method: vec![0; 4],
         water_model: None,
         river_segments: vec![
-            segment(-1, 56, 1024),
+            segment(-1, 56, 1664),
             segment(56, 72, 256),
-            segment(72, 1025, 1024),
+            segment(72, 1025, 1664),
         ],
     };
     let root = ordered_hydrology_page_root(std::slice::from_ref(&evidence)).unwrap();

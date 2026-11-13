@@ -28,7 +28,7 @@ pub(super) fn sample(
 /// The nearest physical channel at a tile.
 #[derive(Clone, Copy)]
 pub(super) struct Channel {
-    /// Every channel covering the tile is a narrow stream that can be waded.
+    /// Every covering channel is a narrow stream or an eligible ford band.
     pub wadeable: bool,
 }
 

@@ -96,9 +96,12 @@ discharge is the only rank. A real width (`10 * sqrt(discharge)` metres) would g
 Paris Large tile of 60 m nothing wider than three tiles, hiding the hierarchy.
 Streams up to 2.5 tiles wide (`MAX_WADEABLE_WIDTH_UNITS`, up to 1 m³/s, about 70%
 of the river length on Paris Large) are wadeable shallows: their tiles are `Ford`
-material, drawn with the light shallow sheet, and passable wherever the surface is
+material, drawn with the DE Shallows sheet, and passable wherever the surface is
 walkable (a steep ford stays blocking water). Where a wider channel also covers a
-tile, it stays blocking river water. Rivers wider than 2.5 tiles block movement. Source bends survive
+tile, that channel must also permit wading. Rivers wider than 2.5 and up to 6 tiles
+(`MAX_FORD_WIDTH_UNITS`) receive periodic fords; wider main channels always block,
+even under a tributary crossing. Width is a gameplay proxy for depth, not an
+observation of historical ford sites. Source bends survive
 sampling and tile/chunk boundaries. The narrowest river is a one-tile stream; the
 width bounds are `MIN_RIVER_WIDTH_UNITS` and `MAX_RIVER_WIDTH_UNITS`. Runtime queries round
 unambiguous connected vertices with quadratic cuts of at most six tiles or a
@@ -121,7 +124,8 @@ fixture flood-fills every passable tile from one bank through the fords.
 This proves that fixture's connectivity, not unrestricted real-terrain routes.
 
 Rivers grade from `Shore` at their edges to `Water` midstream, never deep.
-Ford material and passability remain explicit. Land banks use textured dirt
+Ford material and passability remain explicit. Fords use the native DE Shallows
+terrain (DAT 4, `g_sha.dds`), distinct from blocking water. Land banks use textured dirt
 in a noisy one-to-two-tile band, consumed by the existing shared ground mixer.
 Passable river banks keep Dirt above the snow line; bank composition takes
 precedence over snow cover as well as ground variety.

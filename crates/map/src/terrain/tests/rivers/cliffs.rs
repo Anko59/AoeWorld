@@ -56,7 +56,7 @@ fn provider_cliff_cells_spare_blocking_channels_and_textured_banks() {
         );
     }
     assert!(
-        rivers > 1000 && fords == 0 && banks > 400 && cliffs > 50,
+        rivers > 1000 && fords > 100 && banks > 400 && cliffs > 50,
         "rivers={rivers}, fords={fords}, banks={banks}, cliffs={cliffs}"
     );
 }

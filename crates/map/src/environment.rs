@@ -13,7 +13,7 @@ mod provider;
 pub use hydrology::{
     GeographicWaterPatch, HYDROLOGY_WATER_MODEL_VERSION, HydrologyEvidenceIndex,
     HydrologyEvidenceMethod, HydrologyEvidencePage, HydrologyKind, HydrologyObservation,
-    HydrologyWaterModelIndex, HydrologyWaterModelPage, HydrologyWaterPolicy,
+    HydrologyWaterModelIndex, HydrologyWaterModelPage, HydrologyWaterPolicy, MAX_FORD_WIDTH_UNITS,
     MAX_HYDROLOGY_EVIDENCE_SAMPLES_PER_AXIS, MAX_RIVER_SEGMENTS_PER_PAGE, MAX_RIVER_WIDTH_UNITS,
     MAX_WADEABLE_WIDTH_UNITS, MAX_WATER_CORRECTION_BYTES, MAX_WATER_CORRECTIONS,
     MIN_RIVER_WIDTH_UNITS, MODELLING_GRID_LIMIT, ModernLandCoverPage, RiverSegment,

@@ -59,27 +59,27 @@ fn run(case: &str, count: usize, limit: u32) {
         "river" => {
             result.assert_arrival_and_work(count);
             assert!(result.max_tick_route_work <= 24_576, "{result:?}");
-            assert_eq!((result.max_stuck_ticks, result.oscillations), (8, 3));
+            assert_eq!((result.max_stuck_ticks, result.oscillations), (31, 2));
             // Current-output split of the 3 reversals by cause.
-            assert_eq!(result.oscillation_causes, causes(0, 0, 0, 3));
+            assert_eq!(result.oscillation_causes, causes(2, 0, 0, 0));
             // Region witnesses remove duplicate proof work; physical output pins stay fixed.
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (5522, 55320, 3107314)
+                (5736, 54651, 4220453)
             );
         }
         "long" => {
             result.assert_arrival_and_work(count);
             assert!(result.max_tick_route_work <= 16_384, "{result:?}");
             // 57: one arrived soldier steps aside and waits 56 ticks for the march to pass.
-            assert_eq!((result.max_stuck_ticks, result.oscillations), (57, 18));
+            assert_eq!((result.max_stuck_ticks, result.oscillations), (32, 11));
             // 12 of the 18 reversals are traffic contact; the other 6 have none
             // of the recorded causes. Phase 2 takes the contact ones to 0.
-            assert_eq!(result.oscillation_causes, causes(12, 0, 0, 6));
+            assert_eq!(result.oscillation_causes, causes(8, 0, 0, 3));
             // Region witnesses remove duplicate proof work; physical output pins stay fixed.
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (36804, 313361, 102322464)
+                (35670, 314991, 91790460)
             );
         }
         _ => {

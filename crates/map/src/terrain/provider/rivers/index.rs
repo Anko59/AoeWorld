@@ -84,12 +84,14 @@ pub(super) struct Index {
     origin: [i64; 2],
     extent: i64,
     segments: Vec<RiverSegment>,
+    /// Connected source reaches share one id; ford phase is per river.
+    rivers: Vec<u16>,
     shaped: Vec<Vec<RiverSegment>>,
     bins: Vec<Vec<u16>>,
 }
 
 /// Squared distance, ford phase and whether every channel covering the point
-/// is narrow enough to wade.
+/// is narrow enough to wade continuously or is in an eligible ford band.
 pub(super) type Hit = (i128, bool, bool);
 
 impl Index {
@@ -98,6 +100,7 @@ impl Index {
             origin,
             extent: extent.max(1),
             segments: segments.to_vec(),
+            rivers: river_ids(segments),
             shaped: curves::shape(segments),
             bins: vec![Vec::new(); (BINS * BINS) as usize],
         };
@@ -150,6 +153,8 @@ impl Index {
         let high = [0, 1].map(|axis| self.bin(point[axis] + radius, axis));
         let mut best: Option<(i128, bool)> = None;
         let mut wide = false;
+        // Nearest ford-eligible piece per river decides that river's phase.
+        let mut crossings: Vec<(u16, i128, bool)> = Vec::new();
         // A segment may occupy several queried bins. Preserve source order
         // for equal distances (and therefore ford ties), testing it once.
         let mut seen = [0_u64; crate::MAX_RIVER_SEGMENTS_PER_PAGE.div_ceil(64)];
@@ -182,7 +187,18 @@ impl Index {
                         ) as u16;
                     }
                     if let Some(hit) = part.sample(point, radius) {
-                        wide |= self.segments[id].width_units > crate::MAX_WADEABLE_WIDTH_UNITS;
+                        let width = self.segments[id].width_units;
+                        if width <= crate::MAX_WADEABLE_WIDTH_UNITS {
+                        } else if width <= crate::MAX_FORD_WIDTH_UNITS {
+                            let river = self.rivers[id];
+                            match crossings.iter_mut().find(|c| c.0 == river) {
+                                Some(c) if hit.0 < c.1 => (c.1, c.2) = (hit.0, hit.1),
+                                Some(_) => {}
+                                None => crossings.push((river, hit.0, hit.1)),
+                            }
+                        } else {
+                            wide = true;
+                        }
                         if best.is_none_or(|(distance, _)| hit.0 < distance) {
                             best = Some(hit);
                         }
@@ -190,8 +206,32 @@ impl Index {
                 }
             }
         }
+        wide |= crossings.iter().any(|c| !c.2);
         best.map(|(distance, ford)| (distance, ford, !wide))
     }
+}
+
+/// Union reaches that share an endpoint position and station.
+fn river_ids(segments: &[RiverSegment]) -> Vec<u16> {
+    let mut parent = (0..segments.len() as u16).collect::<Vec<_>>();
+    fn root(parent: &mut [u16], mut at: u16) -> u16 {
+        while parent[usize::from(at)] != at {
+            parent[usize::from(at)] = parent[usize::from(parent[usize::from(at)])];
+            at = parent[usize::from(at)];
+        }
+        at
+    }
+    let mut seen = std::collections::BTreeMap::new();
+    for (id, s) in segments.iter().enumerate() {
+        for key in [(s.start, s.station_start), (s.end, s.station_end)] {
+            let other = *seen.entry(key).or_insert(id as u16);
+            let (a, b) = (root(&mut parent, other), root(&mut parent, id as u16));
+            parent[usize::from(a.max(b))] = a.min(b);
+        }
+    }
+    (0..segments.len() as u16)
+        .map(|i| root(&mut parent, i))
+        .collect()
 }
 
 #[cfg(test)]
