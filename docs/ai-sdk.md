@@ -385,7 +385,7 @@ several flat matches. These nodes are in no map chunk, so the SDK builds them
 from the resource feed's ids (`World.resources()`); before that fix bots never
 saw their berries and gold.
 
-### The AI arena
+### The AI arena ([long runs](ai-scaling.md))
 
 `make ai-arena` plays seeded matches as fast as the machine allows
 (`ARENA_SIZE`, `ARENA_BOTS`, `ARENA_MINUTES`, `ARENA_SEEDS`; defaults 300 tiles,

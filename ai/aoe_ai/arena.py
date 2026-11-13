@@ -37,6 +37,7 @@ SETTLE_SECONDS = 0.004
 #: Wall seconds a missing decision is waited for before one more tick is stepped.
 NUDGE_SECONDS = 1.0
 MAX_NUDGES_TICK = 10**7
+DECISION_TIMEOUT_SECONDS = 30.0
 
 
 class Stepper:
@@ -112,10 +113,12 @@ def _await_decisions(fleet: "aoeworld.Fleet", open_bots: set[int], stepper: Step
     for the tick (the server drops updates of the old window), so a decision
     that does not come within a moment is helped along by one more tick."""
     got: dict[int, Optional[aoeworld.Decision]] = {}
-    quiet = time.monotonic()
+    started = quiet = time.monotonic()
     while len(got) < len(open_bots):
         for index, decision in fleet.wait(timeout=0.05):
             got[index] = decision
+        if time.monotonic() - started > DECISION_TIMEOUT_SECONDS:
+            raise TimeoutError(f"missing bot decision: {sorted(open_bots - got.keys())}")
         if time.monotonic() - quiet > NUDGE_SECONDS and len(got) < len(open_bots):
             tick = stepper.step(1, 0)
             quiet = time.monotonic()
@@ -135,11 +138,13 @@ def play(
     before_step: Optional[Callable[[int, list[BotReport]], None]] = None,
     brain_factory: Optional[Callable[[int], object]] = None,
     map_hash: Optional[str] = None,
+    match_info=None,
+    observe=None,
 ) -> dict:
     """One seeded match against a running arena server; the report is JSON-able."""
     config = config or Config()
     started = time.monotonic()
-    info = aoeworld.start_match(url, SECRET, ["ai"] * bots, tiles_per_side=size, seed=seed, map_hash=map_hash)
+    info = match_info or aoeworld.start_match(url, SECRET, ["ai"] * bots, tiles_per_side=size, seed=seed, map_hash=map_hash)
     host = Host(url, [slot.token for slot in info.slots], config, brain_factory=brain_factory, orders_per_second=10**6)
     period = max(1, round(TICK_HZ / config.decision_hz))
     final = int(minutes * 60 * TICK_HZ)
@@ -170,6 +175,8 @@ def play(
             for index, client in enumerate(host.clients):
                 orders += client.orders_sent - sent[index]
                 sent[index] = client.orders_sent
+            if observe is not None:
+                observe(tick, host, info)
             if tick >= final or not host.open or (stop is not None and stop(host.reports)):
                 break
             if before_step is not None:

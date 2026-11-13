@@ -1,0 +1,34 @@
+{
+  "map_hash": "dc7e0d4b253af4e7e7106b69eba61169ef2f8f6b0fd7781fbe5a3ed6ccc60e68",
+  "seed": 1,
+  "slots": [
+    {
+      "anchor": [
+        66,
+        51
+      ],
+      "kind": "island"
+    },
+    {
+      "anchor": [
+        1200,
+        600
+      ],
+      "kind": "forest"
+    },
+    {
+      "anchor": [
+        1000,
+        1200
+      ],
+      "kind": "land"
+    },
+    {
+      "anchor": [
+        700,
+        850
+      ],
+      "kind": "land"
+    }
+  ]
+}

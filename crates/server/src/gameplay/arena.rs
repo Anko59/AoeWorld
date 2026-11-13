@@ -18,6 +18,10 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[path = "arena/tests.rs"]
+#[cfg(test)]
+mod tests;
+
 /// Orders the sessions have queued since the process started.
 static RECEIVED: AtomicU64 = AtomicU64::new(0);
 /// `RECEIVED` when the last step ended.
@@ -94,13 +98,21 @@ async fn step(
         }
     }
     let gameplay = state.gameplay.read().await.clone();
-    for _ in 0..request.ticks {
-        gameplay.tick().await;
-    }
+    advance_recorded(&state, &gameplay, request.ticks).await;
     let received = RECEIVED.load(Ordering::SeqCst);
     SETTLED.store(received, Ordering::SeqCst);
     Ok(Json(StepResponse {
         tick: gameplay.world.read().await.tick().0,
         orders_received: received,
     }))
+}
+
+/// Lockstep has no schedule lateness, but each tick must retain its measured
+/// work just like a clock-driven tick. Never include the driver's quiet wait.
+async fn advance_recorded(state: &AppState, gameplay: &crate::GameplayService, ticks: u32) {
+    for _ in 0..ticks {
+        let started = tokio::time::Instant::now();
+        gameplay.tick().await;
+        state.observe_tick(gameplay, started, started).await;
+    }
 }

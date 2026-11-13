@@ -33,3 +33,48 @@ fn bindings_paths_match_the_repository_layout() {
         assert!(root.join(path).exists(), "{path} is missing");
     }
 }
+
+#[test]
+fn benchmark_requires_a_real_package_and_has_bounded_player_and_time_arguments() {
+    use clap::Parser;
+    #[derive(clap::Parser)]
+    struct Cli {
+        #[command(subcommand)]
+        action: Action,
+    }
+    assert!(Cli::try_parse_from(["sdk", "benchmark"]).is_err());
+    assert!(
+        Cli::try_parse_from([
+            "sdk",
+            "benchmark",
+            "--map-hash",
+            &"a".repeat(64),
+            "--bots",
+            "0"
+        ])
+        .is_err()
+    );
+    assert!(
+        Cli::try_parse_from([
+            "sdk",
+            "benchmark",
+            "--map-hash",
+            &"a".repeat(64),
+            "--bots",
+            "101"
+        ])
+        .is_err()
+    );
+    assert!(Cli::try_parse_from(["sdk", "benchmark", "--map-hash", "bad"]).is_err());
+    assert!(
+        Cli::try_parse_from([
+            "sdk",
+            "benchmark",
+            "--map-hash",
+            &"a".repeat(64),
+            "--out",
+            ".cache/ai-scaling/baseline.json"
+        ])
+        .is_ok()
+    );
+}

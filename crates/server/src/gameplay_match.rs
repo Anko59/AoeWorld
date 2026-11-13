@@ -86,7 +86,12 @@ impl GameplayService {
             "map navigation prepared"
         );
         world.set_limits(rules.limits(humans.len()));
-        let starts = place_villages(&mut world, humans.len(), rules.seed, placed, cancelled)?;
+        let starts = match &rules.start_tiles {
+            Some(tiles) => {
+                seats::place_explicit(&mut world, humans.len(), tiles, placed, cancelled)?
+            }
+            None => place_villages(&mut world, humans.len(), rules.seed, placed, cancelled)?,
+        };
         let terrain = warmup::camera(&world, &starts, humans, &content_hash_hex, cancelled)?;
         warmup::prepare(&world, &starts, cancelled)?;
         let seeded = rules::seed_units(&mut world, &starts, rules, cancelled)?;
@@ -170,6 +175,8 @@ pub(crate) struct MatchRequest {
     /// Seeds the village layout (which slot starts where). Omitted: a fresh
     /// seed per match, reported back so the layout can be reproduced.
     seed: Option<u64>,
+    /// Explicit local anchors; invalid sites fail instead of moving to a continent.
+    start_tiles: Option<Vec<(i32, i32)>>,
 }
 
 #[derive(Serialize)]
@@ -181,6 +188,9 @@ pub(crate) struct MatchSlot {
     token: String,
     primary_unit_id: u32,
     start_tile: (i32, i32),
+    /// Coarse hydrology classification, absent for synthetic terrain.
+    main_land: Option<bool>,
+    natural_trees_nearby: Option<usize>,
 }
 
 #[derive(Serialize)]
@@ -240,7 +250,14 @@ async fn start_match(
     let rules = MatchRules::new(request.start_units)
         .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))?;
     let seed = request.seed.unwrap_or_else(fresh_seed);
-    let rules = rules.with_seed(seed);
+    let mut rules = rules.with_seed(seed);
+    let measure_start_environment = request.start_tiles.is_some();
+    rules.start_tiles = request.start_tiles.map(|tiles| {
+        tiles
+            .into_iter()
+            .map(|(x, y)| TileCoord::new(x, y))
+            .collect()
+    });
     let package = match (&request.map_hash, request.map, request.flat) {
         (None, None, Some(flat)) => {
             let directory = state.map_package_directory.clone().ok_or((
@@ -328,21 +345,41 @@ async fn start_match(
         .write()
         .await
         .insert(summary_hash.clone(), stored);
+    let world = service.world.read().await;
+    let land_masses = measure_start_environment
+        .then(|| world.terrain().land_masses(world.config()))
+        .flatten();
     let slots = service
         .slot_infos()
         .await
         .into_iter()
         .zip(request.slots.iter())
         .enumerate()
-        .map(|(slot, (info, kind))| MatchSlot {
-            slot,
-            player: info.player.0,
-            kind: *kind,
-            token: hex(info.token),
-            primary_unit_id: info.primary_unit_id.0,
-            start_tile: service.start_tile(info.primary_unit_id),
+        .map(|(slot, (info, kind))| {
+            let (x, y) = service.start_tile(info.primary_unit_id);
+            Ok(MatchSlot {
+                slot,
+                player: info.player.0,
+                kind: *kind,
+                token: hex(info.token),
+                primary_unit_id: info.primary_unit_id.0,
+                start_tile: service.start_tile(info.primary_unit_id),
+                main_land: land_masses.as_ref().map(|masses| {
+                    let (x, y) = service.start_tile(info.primary_unit_id);
+                    masses.is_main(TileCoord::new(x, y), aoe_map::CHUNK_TILES)
+                }),
+                natural_trees_nearby: if measure_start_environment {
+                    Some(
+                        seats::natural_wood_near(&world, TileCoord::new(x, y))
+                            .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))?,
+                    )
+                } else {
+                    None
+                },
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>, (StatusCode, String)>>()?;
+    drop(world);
     let partial_starting_kits = service.partial_starting_kits();
     let world_id = service.world_id();
     let previous = {

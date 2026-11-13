@@ -9,8 +9,8 @@ SDK_RUN = \
   $(RESOURCE_RUN) docker run --rm --init \
   $(JOB_ENV) \
   $(RESOURCE_CAP) \
-  --user $(UID):$(GID) \
-  -e HOME=/tmp \
+  --user $(UID):$(GID) $(SDK_NETWORK) \
+  -e HOME=/tmp -e AOE_ASSET_PACK \
   -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) \
   $(ROOT_MOUNTS) \
   -w $(ROOT) \
@@ -81,3 +81,16 @@ scale-match-smoke-admitted: job-bootstrap
 scale-match-smoke-steps: sdk-python-steps
 	@$(MAKE) --no-print-directory orchestrator-tools sdk-python-tools
 	@$(DEV_ORCH_RUN) cargo run --release --locked -p aoe-harness -- scale-match --players 4 --humans 1 --tiles 500 --map flat --start-villagers 20 --hosts 1 --minutes 1 --label smoke --out reports/scale/match/match-smoke.json --no-summary
+
+# Source-backed 30/60/120-minute AI development (docs/ai-scaling.md).
+export AI_BENCHMARK_ARGS
+.PHONY: ai-benchmark ai-benchmark-admitted ai-benchmark-steps
+ai-benchmark: resource-bootstrap
+	@$(RESOURCE_LONG) ai-benchmark -- $(MAKE) --no-print-directory ai-benchmark-admitted
+
+ai-benchmark-admitted: sdk-python-tools job-bootstrap
+	@$(MAKE) --no-print-directory ai-benchmark-steps
+
+ai-benchmark-steps: SDK_NETWORK = --network host
+ai-benchmark-steps:
+	@$(SDK_RUN) cargo run --locked -p aoe-harness -- sdk-python benchmark $(AI_BENCHMARK_ARGS)

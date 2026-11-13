@@ -11,6 +11,8 @@ use std::{
     time::Duration,
 };
 
+mod benchmark;
+
 const MANIFEST: &str = "crates/sdk-python/Cargo.toml";
 /// Test directories with the project file that configures pytest for each:
 /// the bindings themselves, then the example AI that is built on them.
@@ -21,7 +23,7 @@ const TESTS: [(&str, &str); 2] = [
     ),
     ("ai/tests", "ai/pyproject.toml"),
 ];
-const LOGIC_TESTS: [&str; 10] = [
+const LOGIC_TESTS: [&str; 11] = [
     "ai/tests/test_geometry.py",
     "ai/tests/test_logic.py",
     "ai/tests/test_navigation.py",
@@ -32,6 +34,7 @@ const LOGIC_TESTS: [&str; 10] = [
     "ai/tests/test_naval.py",
     "ai/tests/test_imperial.py",
     "ai/tests/test_management.py",
+    "ai/tests/benchmark",
 ];
 const AI_SOURCE: &str = "ai";
 const BINDINGS_TARGET: &str = "target/sdk-python";
@@ -51,6 +54,8 @@ pub(crate) enum Action {
     LogicTest,
     /// Play seeded lockstep AI matches against an arena server and print JSON (`make ai-arena`).
     Arena(ArenaArgs),
+    /// Measure 30/60/120-minute development on a source-backed map.
+    Benchmark(benchmark::BenchmarkArgs),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, clap::Args)]
@@ -79,6 +84,7 @@ pub(crate) fn run(action: Action) -> Result<(), Box<dyn Error>> {
         Action::Test => test(&root)?,
         Action::LogicTest => logic_test(&root)?,
         Action::Arena(args) => arena(&root, &args)?,
+        Action::Benchmark(args) => benchmark::run(&root, &args)?,
     }
     Ok(())
 }
@@ -206,9 +212,17 @@ fn prepare(root: &Path) -> Result<(PathBuf, String), Box<dyn Error>> {
     )?;
     let wheel = build_wheel(root, false, TEST_WHEELS)?;
     let site = root.join(SITE);
+    install(&wheel, &site)?;
+    let server = root.join(SERVER);
+    // The wheel under test plus the example AI's sources, never an installed copy.
+    let python_path = format!("{}:{}", site.display(), root.join(AI_SOURCE).display());
+    Ok((server, python_path))
+}
+
+fn install(wheel: &Path, site: &Path) -> Result<(), Box<dyn Error>> {
     // A fresh install directory: a stale native module must never be tested.
     if site.exists() {
-        std::fs::remove_dir_all(&site)?;
+        std::fs::remove_dir_all(site)?;
     }
     process::run(
         "python3",
@@ -224,10 +238,7 @@ fn prepare(root: &Path) -> Result<(PathBuf, String), Box<dyn Error>> {
         ],
         STEP_DEADLINE,
     )?;
-    let server = root.join(SERVER);
-    // The wheel under test plus the example AI's sources, never an installed copy.
-    let python_path = format!("{}:{}", site.display(), root.join(AI_SOURCE).display());
-    Ok((server, python_path))
+    Ok(())
 }
 
 /// The most recently written `aoeworld-*.whl` in `directory`.
