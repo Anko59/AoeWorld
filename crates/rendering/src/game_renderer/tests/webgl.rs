@@ -13,6 +13,8 @@ mod filter_pixels;
 mod floor_pixels;
 #[path = "effects/idle.rs"]
 mod idle;
+#[path = "effects/instance_upload.rs"]
+mod instance_upload;
 #[path = "species/webgl.rs"]
 mod species_pixels;
 #[path = "tiling/webgl.rs"]

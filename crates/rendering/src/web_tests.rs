@@ -11,6 +11,8 @@ mod draw_range_tests;
 mod frame_budget;
 #[path = "web/tests/grid.rs"]
 mod grid;
+#[path = "web/tests/instance_upload/mod.rs"]
+mod instance_upload;
 #[path = "web/tests/occlusion.rs"]
 mod occlusion;
 #[path = "web/tests/shader_cost.rs"]
