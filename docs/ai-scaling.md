@@ -134,8 +134,8 @@ radius. Castle and production counts grow with the settlement count.
 
 Stewards, Vassals and Generals are enabled by default. Ordinary SDK controls
 activate Steward training, pause management spending while research or another
-manager is being funded, and enable Vassal fortification once Castle reserves
-are satisfied. A small local workforce is reserved for Vassal construction.
+manager is being funded, and enable Vassal fortification using its native
+resource floor. A small local workforce is reserved for Vassal construction.
 Research plans read the complete current technology tree from Rust, including
 age and technology prerequisites, and reserve late-game upgrade prices ahead
 of continuous military production. Markets trade one lot per eight game
@@ -219,3 +219,108 @@ Validation passed: 188 AI decision tests, 23 binding/local-server tests,
 13 focused Rust SDK tests, 4 harness tests and all required static gates.
 The actual 59.88-second after video is `.cache/showcase/ai-kingdom.webm`.
 Full suites, CI, 100-player scale and dedicated hardware remain unqualified.
+
+## Settlement fortifications
+
+The Python planner builds Watch Towers at completed resource drop-offs and on
+reachable approaches from remembered enemy buildings. The tower allowance grows
+by one per thirty surviving villagers. The approach probe samples three local
+cross-sections, prefers narrower explored ground, and never treats unknown
+terrain as a natural wall. Castles prefer the enemy-facing edge of the nearest
+frontier settlement; without a known enemy they retain settlement placement.
+
+At sixty villagers, a known approach can receive a Stone Gate and two short
+wall wings. The gate is paid first and must finish before the wings start.
+The four-tile opening remains clear; east/west approaches use stepped wings
+around the ordinary horizontal gate. Exact wall sites cannot drift into the
+gate opening when a site search encounters an obstruction. Lost wall segments
+can be rebuilt, and paid foundations/plans count toward coverage.
+
+One construction order is allowed per twelve game seconds. Defences share the
+Brain's forty-order decision ceiling and public route/site query budgets, and
+leave fifty wood and a hundred stone for essential development. An expansion's
+existing reserve is respected without reserving its wood float twice. Builders
+can use any of the four footprint edges when forest blocks one approach. Native
+Vassal development remains active alongside this planner. Towers and walls do
+not wait for an expensive Vassal to train and garrison.
+
+Seated Vassals develop defences whenever fortifications are enabled, even while
+future Castles are being funded. Their native planner already preserves 200
+food, wood and stone and 100 gold. Requiring every wanted Castle first would
+postpone all walls as the Town Center count raises that target.
+
+The current benchmark separates completed wall tiles from gates and retains
+every completed fortification's position. Each row also names its start case.
+Slot 2 is classified as forest, matching its already-measured 752 natural
+trees; anchors, seed, package and actual village starts are unchanged.
+
+## Fortification measurement
+
+Measured 2026-11-13, same package, seed and village anchors as the baseline.
+Age ranks are Dark=0, Feudal=1, Castle=2, Imperial=3.
+
+| minute | source | median pop | median TCs | median age rank |
+| --- | --- | --- | --- | --- |
+| 30 | original baseline | 57 | 1 | 1.5 |
+| 30 | starting kingdom | 53 | 1 | 2 |
+| 30 | fortifications | 60.5 | 1.5 | 2 |
+| 60 | original baseline | 155 | 1 | 2 |
+| 60 | starting kingdom | 173 | 3 | 3 |
+| 60 | fortifications | 184.5 | 2.5 | 3 |
+| 120 | original baseline | 292 | 1 | 2 |
+| 120 | starting kingdom | not measured | not measured | not measured |
+| 120 | fortifications | 716 | 6.5 | 3 |
+
+| minute | slot / case | pop | TCs | age | castles | towers | walls | gates |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 30 | 0 / island | 59 | 1 | Castle | 1 | 0 | 0 | 0 |
+| 30 | 1 / forest | 62 | 2 | Castle | 1 | 0 | 0 | 0 |
+| 30 | 2 / forest | 62 | 2 | Castle | 1 | 1 | 0 | 0 |
+| 30 | 3 / land | 45 | 1 | Feudal | 0 | 0 | 0 | 0 |
+| 60 | 0 / island | 160 | 2 | Imperial | 1 | 1 | 0 | 0 |
+| 60 | 1 / forest | 221 | 3 | Imperial | 2 | 2 | 0 | 0 |
+| 60 | 2 / forest | 209 | 3 | Imperial | 2 | 2 | 0 | 0 |
+| 60 | 3 / land | 89 | 2 | Castle | 1 | 1 | 0 | 0 |
+| 120 | 0 / island | 1053 | 7 | Imperial | 2 | 10 | 33 | 3 |
+| 120 | 1 / forest | 657 | 6 | Imperial | 2 | 4 | 90 | 2 |
+| 120 | 2 / forest | 775 | 9 | Imperial | 4 | 15 | 322 | 8 |
+| 120 | 3 / land | 216 | 5 | Imperial | 1 | 3 | 62 | 6 |
+
+Complete run: 4085.39 wall seconds; 144002 timing records. Tick p50/p95/max:
+6491/44244/865739 microseconds; 60275 applied orders. Tick p95 is inside the 50-ms
+diagnostic budget. No reported bot errors, drops or host decision timeouts. Hard-start
+median TCs at 120 minutes: 7; ordinary slot's 60-minute TCs: 2.
+
+| slot | CPU ms/decision | slowest CPU ms | slowest wall ms | max orders/decision | orders |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 24.92 | 178.68 | 339.27 | 16 | 10026 |
+| 1 | 38.59 | 732.70 | 789.03 | 17 | 16780 |
+| 2 | 30.91 | 209.83 | 582.22 | 20 | 21456 |
+| 3 | 15.99 | 185.67 | 202.18 | 16 | 12021 |
+
+Evidence: `.cache/ai-scaling/fortifications-vassal.json` and adjacent `.ticks.jsonl`;
+the 1029-file source SHA-256 manifest was taken from tree
+`cef11537f56df6024eaa89d30320de692d9fcfd0` (cherry-picked onto dev as `426b3c4d5`), the
+only measured revision. The benchmark was not rerun after later commits (including the
+fortification lane, gate-fit and castle-reachability fixes), so those are not remeasured
+and the manifest does not describe the current tree. The JSON revision names the starting
+HEAD, not the later commit.
+The three prototype runs are incomplete and excluded. The funded prototype was
+deliberately interrupted at minute 96 after exposing the Vassal gate; its Make launcher
+had ended with exit 143 while the original Docker child remained live.
+
+One four-player source-backed France run on a shared host, with filming and client
+preparation during the run; network delivery changes decisions. Lockstep timings do not
+qualify live tick rate, instructions per unit, the 100/1000-player scale ladder or
+dedicated hardware. This is not a loss/re-boom qualification. Forest clearing policy,
+island transports and a mainland Town Center remain unfinished. Host known-enemy lane
+geometry and frontier placement have fake-world coverage; this benchmark qualifies
+counts, not defensive efficacy. Comparison against the original baseline includes the
+earlier kingdom increment and does not isolate fortification effects. The ordinary slot
+reached population 216 versus 289 in the original baseline, despite more Town Centers
+and defences; this run does not improve every case.
+
+The 15.01-second narrated clip `.cache/showcase/ai-fortifications-current.webm`
+shows actual forest-slot gameplay at 55:33–55:47, including the resource towers.
+It was visually verified at the beginning, middle and end. Earlier white/loading
+takes and the three-second prototype clip are not the attachment.

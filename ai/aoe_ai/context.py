@@ -113,6 +113,11 @@ class Context:
                 self.board.land_failures[key] = self.tick + self.config.land_retry_seconds * self.world.tick_hz
         return self._land_routes[key]
 
+    def land_unanswered(self, origin: Tile, target: Tile) -> bool:
+        """True when `land_route` returned None only because no query was made."""
+        key = (origin, target)
+        return key not in self._land_routes and key not in self.board.land_failures
+
     def land_hop(self, origin: Tile, target: Tile) -> Tile:
         """A short proven land hop, shared by marching and rallying soldiers."""
         path = self.land_route(origin, target)
