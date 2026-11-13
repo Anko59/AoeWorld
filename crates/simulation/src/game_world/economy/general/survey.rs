@@ -9,6 +9,33 @@ pub(super) struct Survey {
     pub buildings: Vec<EntityId>,
 }
 impl GameWorld {
+    /// Only creation recruits nearby free soldiers. Later surveys observe
+    /// enemies without taking over units the owner left outside this army.
+    pub(super) fn recruit_general_army(&mut self, id: EntityId) {
+        let Some(u) = self.unit(id) else { return };
+        let center = u.position.tile_floor();
+        let min = TileCoord::new((center.x - 24).max(0), (center.y - 24).max(0));
+        let max = TileCoord::new(
+            (center.x + 25).min(self.config.width_tiles),
+            (center.y + 25).min(self.config.height_tiles),
+        );
+        // This one-time spatial query completes the census even when unrelated
+        // units fill more than one enemy-survey slice. Query order is canonical.
+        let (units, _) = self.query(aoe_core::TileRect { min, max });
+        for v in units {
+            if v.player == u.player
+                && distance(u.position, v.position) <= (24 * 1024_i64).pow(2)
+                && !self.economy.generals.manual.contains_key(&v.id)
+                && !v.moving
+                && !v.planning
+                && v.attack_target.is_none()
+                && !v.auto_scout
+            {
+                self.claim_general_unit(id, v);
+            }
+        }
+    }
+
     pub(super) fn general_survey(
         &mut self,
         id: EntityId,
@@ -61,22 +88,6 @@ impl GameWorld {
             (chunk, offset)
         };
         units.sort_unstable_by_key(|v| v.id);
-        // Soldiers carrying out their own orders are not his to take.
-        let manual = &self.economy.generals.manual;
-        let free: Vec<_> = units
-            .iter()
-            .copied()
-            .filter(|v| {
-                v.player == u.player
-                    && distance(u.position, v.position) <= (24 * 1024_i64).pow(2)
-                    && !manual.contains_key(&v.id)
-                    && (self.economy.generals.controlled.contains_key(&v.id)
-                        || (!v.moving && !v.planning && v.attack_target.is_none()))
-            })
-            .collect();
-        for v in free {
-            self.claim_general_unit(id, v);
-        }
         // The army sees what its General sees (12 tiles) and what any soldier
         // sees (8 tiles); a camp wider than the General's sight is still found.
         let soldiers: Vec<WorldPosition> = self

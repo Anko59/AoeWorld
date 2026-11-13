@@ -83,12 +83,11 @@ in `general_player_order` (`economy/general/orders.rs`):
    given, and only the unnamed rest of the army follows his march.
 3. Detachment survives garrison (a sheltered soldier has no map record but
    keeps its entry).
-4. Only a player's order that names his own General (move, stop, move-alone,
-   anything)
-   readmits detached soldiers, and only those that are idle (not moving,
-   planning, attacking or auto-scouting), within 24 tiles and at least 300
-   ticks past their last order. Automatic marches (vassal defence recall) never
-   readmit.
+4. A General recruits nearby free soldiers once, when created. Later surveys
+   observe enemies without recruiting. Detachment has no expiry: ordinary
+   General orders (move, stop, move-alone) and automatic marches never readmit
+   soldiers. Recruits purchased with the General's Train control are assigned
+   to that army explicitly.
 5. A soldier under a live player order is never touched; another player's
    General never takes it.
 6. The detached set and its clocks are in the state hash.

@@ -15,7 +15,7 @@ bots; the target is one human and 99 AIs on one server.
  aoe-ai: Fleet → Client ×N (one Rust runtime)  └─────────────────────────────┘
 ```
 
-`Client.queue_move(unit, x, y)` appends a tile-center movement destination;
+`Client.queue_move(unit, x, y, attack_move=False)` appends a tile-center move;
 `World.move_queue(unit)` returns the authoritative list in fixed-point
 subunits (1,024 per tile), active destination first. The Rust counterparts are
 `Order::QueueMove` and `World::move_queue`. The queue holds at most sixteen

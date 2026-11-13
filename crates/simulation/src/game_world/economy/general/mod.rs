@@ -73,9 +73,8 @@ pub(crate) struct Manager {
     pub controlled: crate::game_world::changes::Reports<EntityId>,
     // Only an empty building queue can be reserved. Its front is the recruit.
     pub recruits: BTreeMap<EntityId, (EntityId, UnitKind)>,
-    /// Soldiers the player took out of an army by ordering them directly, with
-    /// the tick of that order. No census adopts them; only a fresh order of
-    /// their own player's General readmits them (see `general_player_order`).
+    /// Soldiers the player ordered directly, with the tick of that order.
+    /// Creation censuses exclude them; ordinary General orders never readmit them.
     pub manual: BTreeMap<EntityId, u64>,
     pub cursor: Option<EntityId>,
     pub work: GeneralWork,
@@ -154,8 +153,7 @@ impl GameWorld {
                 stances: [None; GENERAL_ARMY_LIMIT + 1],
             },
         );
-        let mut work = GeneralWork::default();
-        let _ = self.general_survey(id, &mut work);
+        self.recruit_general_army(id);
     }
     pub(crate) fn bind_general_castle(&mut self, id: EntityId, castle: EntityId) {
         let Some(u) = self.unit(id) else { return };
@@ -268,7 +266,7 @@ impl GameWorld {
             a.solo = false;
         }
     }
-    pub(super) fn claim_general_unit(&mut self, g: EntityId, u: GameUnit) {
+    pub(crate) fn claim_general_unit(&mut self, g: EntityId, u: GameUnit) {
         if self.vassal_controller(u.id).is_some()
             || role(u.kind).is_none()
             || u.hp == 0

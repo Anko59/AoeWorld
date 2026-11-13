@@ -52,7 +52,6 @@ impl GameWorld {
         let mut world = Self::new(config)?;
         world.terrain = flat_terrain(seed)?;
         world.set_fog_disabled(true);
-        let general = world.spawn_kind(PlayerId(0), UnitKind::General, at(128, 128)?)?;
         for n in 0..100 {
             let kind = match n % 10 {
                 0..=3 => UnitKind::Militia,
@@ -62,8 +61,9 @@ impl GameWorld {
             };
             world.spawn_kind(PlayerId(0), kind, at(108 + n % 10, 125 + n / 10)?)?;
         }
-        // Admit the followers through the ordinary General census before
-        // introducing the enemy; the primary is the first idle military unit.
+        // Creation is the only census: the General appears after the army so
+        // it adopts every follower, then ticks settle before the enemy arrives.
+        let general = world.spawn_kind(PlayerId(0), UnitKind::General, at(128, 128)?)?;
         for _ in 0..10 {
             world.advance();
         }

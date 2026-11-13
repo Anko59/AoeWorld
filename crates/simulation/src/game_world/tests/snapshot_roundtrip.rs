@@ -7,7 +7,10 @@ use crate::game_world::tests::economy::fixture::flat_fixture;
 use aoe_core::TileCoord;
 use aoe_map::ResourceKind;
 
-fn flat() -> (GameWorld, TileCoord) {
+#[path = "snapshot_roundtrip/general.rs"]
+mod general;
+
+pub(super) fn flat() -> (GameWorld, TileCoord) {
     let (package, pages, water) = flat_fixture(false);
     let generator = package
         .generator_with_environment(pages.clone(), water.clone(), Vec::new(), Vec::new())

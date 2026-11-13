@@ -136,10 +136,11 @@ fn general_walks_through_his_own_army_that_fills_a_corridor() {
         w.economy.blocked_tiles.insert(TileCoord::new(x, 59));
         w.economy.blocked_tiles.insert(TileCoord::new(x, 61));
     }
-    let g = soldier(&mut w, UnitKind::General, 101, 60);
     let wall: Vec<_> = (0..16)
         .map(|n| soldier(&mut w, UnitKind::Militia, 110 + n, 60))
         .collect();
+    let g = soldier(&mut w, UnitKind::General, 101, 60);
+    assert!(wall.iter().all(|&id| w.general_controller(id) == Some(g)));
     advance(&mut w, 5);
     w.issue_general_move(PlayerId(0), g, at(135, 60)).unwrap();
     advance(&mut w, 900);
@@ -204,7 +205,7 @@ fn a_general_takes_no_soldier_passing_under_a_players_order() {
 }
 
 #[test]
-fn ordering_the_general_readmits_the_soldiers_who_finished_nearby() {
+fn ordering_the_general_never_readmits_the_soldiers_who_finished_nearby() {
     let (mut w, _) = setup();
     let (ids, g) = muster(&mut w);
     advance(&mut w, 20);
@@ -227,9 +228,46 @@ fn ordering_the_general_readmits_the_soldiers_who_finished_nearby() {
     advance(&mut w, 40);
     assert_eq!(
         w.general_controller(ids[0]),
-        Some(g),
-        "idle long enough, a fresh General order takes it back"
+        None,
+        "an ordinary General order never takes back an owner-commanded soldier"
     );
+}
+
+#[test]
+fn a_general_only_recruits_nearby_free_soldiers_at_creation() {
+    for crowd in [0, 1100] {
+        let (mut w, _) = setup();
+        // Cross the survey's 1024-candidate slice boundary without filling
+        // the army: later slices must remain observation, not recruitment.
+        for _ in 0..crowd {
+            soldier(&mut w, UnitKind::Villager, 105, 105);
+        }
+        let original = soldier(&mut w, UnitKind::Militia, 101, 104);
+        let g = soldier(&mut w, UnitKind::General, 102, 104);
+        assert_eq!(w.general_controller(original), Some(g));
+        let newcomer = soldier(&mut w, UnitKind::Militia, 103, 104);
+        for _ in 0..4 {
+            decide(&mut w);
+            assert!(w.general_work().unit_visits <= 1024);
+        }
+        assert_eq!(
+            w.general_controller(newcomer),
+            None,
+            "the ongoing census cannot recruit a soldier created later"
+        );
+        player_move(&mut w, g, at(130, 104));
+        decide(&mut w);
+        w.issue_stop(PlayerId(0), g).unwrap();
+        w.general_player_order(PlayerId(0), &[g], None);
+        decide(&mut w);
+        assert_eq!(w.general_controller(original), Some(g));
+        assert_eq!(
+            w.general_controller(newcomer),
+            None,
+            "march and Stop are not explicit recruitment orders"
+        );
+        assert_eq!(w.general_status(g).unwrap().army_size, 1);
+    }
 }
 
 #[test]

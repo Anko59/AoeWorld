@@ -130,6 +130,8 @@ impl GameWorld {
         self.cancel_auto_scout(self.units[index].state.id);
         self.stop_movement(index);
         let id = self.units[index].state.id;
+        // Death cancels player destinations even during an automatic phase.
+        self.move_queues.remove(&id);
         let player = self.units[index].state.player;
         self.combat.hp_quarters[id.0 as usize] = 0;
         self.deactivate_vassal(id);

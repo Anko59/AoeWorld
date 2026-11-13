@@ -150,11 +150,27 @@ impl GameWorld {
         Some(recruit)
     }
     pub(crate) fn finish_general_recruit(&mut self, building: EntityId, unit: EntityId) {
-        if let Some((g, _)) = self.cancel_general_recruit(building)
-            && let (Some(u), Some(leader)) = (self.unit(unit), self.unit(g))
-            && u.player == leader.player
-            && leader.hp > 0
-        {
+        let Some((g, _)) = self.cancel_general_recruit(building) else {
+            return;
+        };
+        let Some(u) = self.unit(unit) else { return };
+        let owned = self.unit(g).map_or_else(
+            || {
+                // A sheltered commander has no map record. Only completion
+                // needs this indexed Castle lookup; ordinary ticks do not.
+                self.player_buildings_of(u.player, crate::BuildingKind::Castle)
+                    .any(|b| {
+                        b.garrison.iter().any(|held| {
+                            held.unit.id == g
+                                && held.unit.kind == UnitKind::General
+                                && held.unit.player == u.player
+                                && held.unit.hp > 0
+                        })
+                    })
+            },
+            |leader| leader.player == u.player && leader.kind == UnitKind::General && leader.hp > 0,
+        );
+        if owned {
             self.claim_general_unit(g, u);
         }
     }

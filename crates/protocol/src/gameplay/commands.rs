@@ -134,6 +134,8 @@ pub enum ClientMessage {
         sequence: u64,
         entity_id: EntityId,
         destination: WorldPosition,
+        /// The leg fights along its own route, like an attack-move formation.
+        attack_move: bool,
     },
     /// Prepay or cancel one farm reseed at a Mill.
     FarmReseedOrder {

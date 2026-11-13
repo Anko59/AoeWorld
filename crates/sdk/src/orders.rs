@@ -94,6 +94,8 @@ pub enum Order {
     QueueMove {
         unit: EntityId,
         to: TileCoord,
+        /// Fight along this leg instead of walking past enemies.
+        attack_move: bool,
     },
     Stop {
         unit: EntityId,
@@ -252,10 +254,15 @@ impl Order {
                 entity_id: unit,
                 destination: to,
             },
-            Order::QueueMove { unit, to } => M::QueueMoveOrder {
+            Order::QueueMove {
+                unit,
+                to,
+                attack_move,
+            } => M::QueueMoveOrder {
                 sequence,
                 entity_id: unit,
                 destination: WorldPosition::from_tile_center(to).ok()?,
+                attack_move,
             },
             Order::GeneralMove { unit, to } => M::GeneralOrder {
                 sequence,

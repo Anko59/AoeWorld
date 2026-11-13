@@ -254,10 +254,12 @@ impl Client {
             attack_move,
         })
     }
-    fn queue_move(&self, unit: u32, x: i32, y: i32) -> u64 {
+    #[pyo3(signature = (unit, x, y, *, attack_move=false))]
+    fn queue_move(&self, unit: u32, x: i32, y: i32, attack_move: bool) -> u64 {
         self.order(Order::QueueMove {
             unit: EntityId(unit),
             to: TileCoord::new(x, y),
+            attack_move,
         })
     }
     fn stop(&self, unit: u32) -> u64 {

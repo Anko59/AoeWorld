@@ -82,9 +82,9 @@ impl GameWorld {
         repeated: bool,
     ) -> Result<bool, GameWorldError> {
         let result = self.issue_move_goal(id, destination, precision)?;
-        // A kept route skips the goal's queue reset; a plain order still replaces queued waypoints.
+        // A kept route skips the goal's queue reset; a player's plain order still replaces it.
         if repeated {
-            self.move_queues.remove(&id);
+            self.discard_move_queue_for_order(id);
         }
         self.cancel_transport_journey(id);
         self.cancel_auto_scout(id);

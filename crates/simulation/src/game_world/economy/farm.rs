@@ -175,7 +175,7 @@ impl GameWorld {
         }
         self.player_override(id);
         self.cancel_garrison_order(id);
-        self.move_queues.remove(&id);
+        self.discard_move_queue_for_order(id);
         self.cancel_hunt(id);
         if let Some(task) = self.economy.gatherers.remove(&id)
             && let Some(farm) = task.farm

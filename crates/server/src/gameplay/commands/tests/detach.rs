@@ -47,13 +47,14 @@ fn a_villager_order_records_no_detachment() {
 }
 
 #[test]
-fn moving_a_general_alone_readmits_idle_detached_soldiers() {
+fn moving_a_general_alone_never_readmits_detached_soldiers() {
     let mut world = world();
-    let general = world
-        .spawn_kind(PlayerId(0), UnitKind::General, at(100))
-        .unwrap();
+    // Creation recruits only soldiers already standing nearby.
     let soldier = world
         .spawn_kind(PlayerId(0), UnitKind::Militia, at(102))
+        .unwrap();
+    let general = world
+        .spawn_kind(PlayerId(0), UnitKind::General, at(100))
         .unwrap();
     run(&mut world, 30);
     assert_eq!(world.general_controller(soldier), Some(general));
@@ -70,6 +71,10 @@ fn moving_a_general_alone_readmits_idle_detached_soldiers() {
         apply(&mut world, PlayerId(0), alone),
         CommandResult::Accepted
     );
-    run(&mut world, 100);
-    assert_eq!(world.general_controller(soldier), Some(general));
+    run(&mut world, 400);
+    assert_eq!(
+        world.general_controller(soldier),
+        None,
+        "a General's move must not take back a soldier the owner detached"
+    );
 }

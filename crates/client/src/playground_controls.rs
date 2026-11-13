@@ -161,10 +161,14 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             return;
         }
         if event.button() == 2 {
-            // Ctrl queues: Firefox opens its context menu on Shift+right-click.
+            // Ctrl also queues: Firefox opens its menu on Shift+right-click.
             // Alt moves a selected General alone, leaving his army in place.
             client.village.general_only = event.alt_key();
-            super::village::orders::at_pointer(&mut client, target, event.ctrl_key());
+            super::village::orders::at_pointer(
+                &mut client,
+                target,
+                event.shift_key() || event.ctrl_key(),
+            );
             return;
         }
         if event.button() == 0 && client.village.placement.is_some() {
@@ -173,7 +177,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             return;
         }
         if event.button() == 0 && client.village.move_cursor {
-            send_order(&mut client, target);
+            send_order(&mut client, target, event.shift_key() || event.ctrl_key());
             return;
         }
         if event.button() == 0 && super::village::production::here::click(&mut client, target) {

@@ -32,6 +32,37 @@ fn queued(w: &GameWorld, building: EntityId) -> Vec<UnitKind> {
 }
 
 #[test]
+fn general_training_completion_keeps_a_sheltered_commanders_recruit() {
+    let (mut w, castle) = setup();
+    let (barracks, _) = production(&mut w);
+    let general = soldier(&mut w, UnitKind::General, 95, 95);
+    w.issue_general_mix(PlayerId(0), general, [100, 0, 0, 0, 0])
+        .unwrap();
+    w.issue_general_training(PlayerId(0), general, true)
+        .unwrap();
+    for _ in 0..3 {
+        decide(&mut w);
+    }
+    assert!(w.economy.generals.recruits.contains_key(&barracks));
+    w.issue_general_training(PlayerId(0), general, false)
+        .unwrap();
+    w.issue_garrison(PlayerId(0), general, castle).unwrap();
+    advance(&mut w, 1000);
+    assert!(
+        w.building(castle)
+            .unwrap()
+            .garrison
+            .iter()
+            .any(|g| g.unit.id == general)
+    );
+    let recruit = w
+        .units()
+        .find(|u| u.kind == UnitKind::Militia)
+        .expect("paid recruit finishes");
+    assert_eq!(w.general_controller(recruit.id), Some(general));
+}
+
+#[test]
 fn distant_barracks_cannot_permanently_hide_nearby_training() {
     let (mut w, _) = setup();
     for n in 0..25 {

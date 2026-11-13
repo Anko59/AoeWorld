@@ -303,6 +303,7 @@ fn stop_command_applies_to_owned_sheep_and_preserves_typed_rejections() {
                 entity_id: sheep,
                 destination: at(110),
                 queued: false,
+                attack_move: false,
             }
         ),
         CommandResult::Accepted
@@ -454,8 +455,7 @@ fn an_attack_without_a_reachable_position_reports_an_unreachable_route() {
         CommandResult::RejectedUnreachable,
     );
     assert!(world.movement_order(attacker).is_none());
-    // A rejected search only spends the tick's hashed position-search budget,
-    // which the next tick refills: afterwards the world equals an unasked one.
+    // A rejected search spends the tick's hashed search budget; the next tick refills it.
     world.advance();
     control.advance();
     assert_eq!(world.canonical_hash(), control.canonical_hash());

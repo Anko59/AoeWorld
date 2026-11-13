@@ -454,6 +454,8 @@ mod pass_each_other;
 mod physical_movement;
 #[path = "tests/movement/queue.rs"]
 mod queue;
+#[path = "tests/movement/queue_legs.rs"]
+mod queue_legs;
 mod routes;
 mod scale_hooks;
 #[path = "tests/movement/stop.rs"]

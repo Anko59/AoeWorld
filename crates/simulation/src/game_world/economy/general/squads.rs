@@ -29,7 +29,7 @@ pub(super) fn arm(kind: UnitKind) -> Option<usize> {
 impl Army {
     /// Include prepaid soldiers before admitting another body. Reservations
     /// fill existing offices first, then consume one of the ten free offices.
-    pub(super) fn room_for(&self, kind: UnitKind) -> bool {
+    pub(crate) fn room_for(&self, kind: UnitKind) -> bool {
         let mut offices: Vec<_> = self
             .squads
             .iter()

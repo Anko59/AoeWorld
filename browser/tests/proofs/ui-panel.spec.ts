@@ -9,6 +9,7 @@ import { generalProof } from "./general.js";
 import { generalAppearanceProof } from "./general-appearance.js";
 import { siegeProof } from "./siege.js";
 import { regressFireProof } from "./regress/regress-fire.js";
+import { generalsControlProof } from "./regress/generals-control.js";
 import { regressPickingProof } from "./regress/regress-picking.js";
 import { regressFarmCursorProof } from "./regress/regress-farm-cursor.js";
 import { pressureProof } from "./pressure.js";
@@ -135,6 +136,10 @@ test("local original panel proof with real selection and training", async ({
   }
   if (config.phase === "general") {
     await generalProof(page, config.url, config.renderer ?? "canvas");
+    return;
+  }
+  if (config.phase === "generals-control") {
+    await generalsControlProof(page, config.url, config.side ?? "after");
     return;
   }
   if (config.phase === "general-appearance") {
