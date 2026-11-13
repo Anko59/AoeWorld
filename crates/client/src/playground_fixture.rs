@@ -13,6 +13,10 @@ pub(super) fn set_active(client: &Rc<RefCell<Client>>) {
     ACTIVE.with(|active| *active.borrow_mut() = Some(Rc::downgrade(client)));
 }
 
+#[cfg(feature = "frame-bench")]
+#[path = "playground_fixture/frame_bench.rs"]
+mod frame_bench;
+
 /// Test-only immutable terrain binding used by deterministic browser fixtures.
 /// It changes only client residency metadata; gameplay authority stays server-owned.
 #[wasm_bindgen]

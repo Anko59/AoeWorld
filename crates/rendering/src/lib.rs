@@ -4,6 +4,8 @@ mod ground_contact;
 #[cfg(any(not(target_arch = "wasm32"), test, feature = "shader-source"))]
 pub mod shader_data;
 
+#[cfg(any(feature = "frame-bench", test))]
+pub mod frame_cost;
 mod player;
 pub use player::{PLAYER_COLOURS, SceneUnitVisual, player_colour};
 

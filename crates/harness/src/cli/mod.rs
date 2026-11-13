@@ -79,6 +79,8 @@ enum Command {
     TestWasm,
     TestWasmFocused,
     TestE2e,
+    /// Deterministic frame work counters on a current map package.
+    ClientFrameBench(e2e::client_frame::Options),
     TestCreatorSource,
     TestGeographicMatrix,
     TestGeographicVisuals,

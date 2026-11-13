@@ -87,6 +87,7 @@ pub(super) fn run(
         Command::TestWasm => wasm_test::run()?,
         Command::TestWasmFocused => wasm_test::run_selected()?,
         Command::TestE2e => e2e::run()?,
+        Command::ClientFrameBench(options) => e2e::client_frame::run(options)?,
         Command::TestCreatorSource => e2e::run_source()?,
         Command::TestGeographicMatrix => e2e::run_matrix()?,
         Command::TestGeographicVisuals => e2e::run_visuals()?,

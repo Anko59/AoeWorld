@@ -1,0 +1,53 @@
+diff --git a/crates/client/src/playground_fixture/frame_bench.rs b/crates/client/src/playground_fixture/frame_bench.rs
+--- a/crates/client/src/playground_fixture/frame_bench.rs
++++ b/crates/client/src/playground_fixture/frame_bench.rs
+@@ -83,15 +83,13 @@ pub fn frame_bench_camera(x: f64, y: f64, zoom: f64, force: bool) -> Result<(),
+ #[wasm_bindgen]
+ pub fn frame_bench_upload_probe() -> Result<(), JsValue> {
+     with_client(|client| {
+-        client
+-            .renderer
+-            .with_game_atlas_updates::<_, String>(|renderer| {
+-                for _ in 0..16 {
+-                    renderer.update_game_atlas(7, [2047, 2047], [1, 1], &[0; 4])?;
+-                }
+-                Ok(())
+-            })
+-            .map_err(|e| JsValue::from_str(&e))
++        for _ in 0..16 {
++            client
++                .renderer
++                .update_game_atlas(7, [2047, 2047], [1, 1], &[0; 4])
++                .map_err(|e| JsValue::from_str(&e))?;
++        }
++        Ok(())
+     })
+ }
+ 
+diff --git a/crates/rendering/src/game_renderer/webgl/bridge.js b/crates/rendering/src/game_renderer/webgl/bridge.js
+--- a/crates/rendering/src/game_renderer/webgl/bridge.js
++++ b/crates/rendering/src/game_renderer/webgl/bridge.js
+@@ -200,6 +200,23 @@ export class AoeWebGl {
+         if (code !== this.gl.NO_ERROR) throw new Error('WebGL2 graphics error ' + code);
+     }
+ 
++    // Benchmark-only completion barrier, copied from render's existing loop.
++    // The driver calls it outside scored callbacks; render is unchanged.
++    poll() {
++        if (this.restoreError) throw this.restoreError;
++        this.check();
++        const gl = this.gl;
++        while (this.pendingFrames.length) {
++            const sync = this.pendingFrames[0];
++            const status = gl.clientWaitSync(sync, 0, 0);
++            if (status === gl.TIMEOUT_EXPIRED) break;
++            if (status === gl.WAIT_FAILED) throw new Error('WebGL2 frame completion failed');
++            gl.deleteSync(sync);
++            this.pendingFrames.shift();
++        }
++        return true;
++    }
++
+     validateSize(width, height) {
+         if (!Number.isInteger(width) || !Number.isInteger(height) || width < 0 || height < 0 ||
+             width > 4096 || height > 4096 ||
