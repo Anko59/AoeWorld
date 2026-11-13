@@ -73,3 +73,26 @@ fn final_wood_slots_fall_back_to_the_wider_woodline_band() {
     assert!((12..=13).contains(&wood), "wood {wood}");
     assert_eq!(world.partial_starting_kits(), 0);
 }
+
+#[test]
+fn a_village_short_of_both_nodes_and_herds_is_counted_partial_once() {
+    let mut world = super::barren();
+    let center = TileCoord::new(2051, 2051);
+    // Land ends 4 tiles out: neither the full resource kit nor the 9-15 tile
+    // boar and deer band fits, so both shortfalls describe one partial village.
+    wall_off(&mut world, center, |x, y| x * x + y * y >= 16);
+    world
+        .initialize_village(PlayerId(0), TileCoord::new(2048, 2048))
+        .unwrap();
+    assert!(kit_count(&world, ResourceKind::Wood) < 12, "kit is short");
+    assert!(
+        !world
+            .animals()
+            .any(|a| matches!(a.kind, crate::AnimalKind::Boar | crate::AnimalKind::Deer))
+    );
+    assert_eq!(
+        world.partial_starting_kits(),
+        1,
+        "one village counts once, not once per shortfall"
+    );
+}
