@@ -135,6 +135,11 @@ pub(super) fn emit_world_sprite_frames(
     animation: usize,
     mut emit: impl FnMut((Sprite, GameFrame, f64, u64)),
 ) {
+    #[cfg(feature = "frame-bench")]
+    crate::frame_cost::add(
+        crate::frame_cost::Counter::SpriteInputs,
+        resources.len() + units.len(),
+    );
     if terrain.is_empty() {
         // Keep the bounded diagnostic terrain-frame helper, without collecting another
         // object scene. Surfaces and selections have already been appended.

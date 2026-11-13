@@ -56,6 +56,8 @@ pub fn scene_terrain_frames(
         let mut required = BTreeSet::new();
         let mut bytes = 0;
         for tile in terrain {
+            #[cfg(feature = "frame-bench")]
+            crate::frame_cost::add(crate::frame_cost::Counter::TerrainDemandTiles, 1);
             let screen = projection.world_to_screen_at_height(tile.position, tile.elevation_meters);
             let margin = 128.0 * camera.zoom;
             if screen.x < -margin

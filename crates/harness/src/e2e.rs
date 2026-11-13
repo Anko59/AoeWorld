@@ -1,5 +1,6 @@
 //! Disposable browser stack, with an isolated port and cleanup on every return path.
 use crate::process;
+pub(crate) mod client_frame;
 mod command;
 mod country;
 mod discovery;

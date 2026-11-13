@@ -153,6 +153,10 @@ impl NativeFrames {
     pub(crate) fn ready(&self) -> bool {
         !self.failed && !self.directory_pending
     }
+    #[cfg(feature = "frame-bench")]
+    pub(crate) fn benchmark_settled(&self) -> bool {
+        self.ready() && self.inflight.is_empty() && self.completed.borrow().is_empty()
+    }
     /// Encoded payload, reserved network bytes, metadata payload and resident
     /// frame count. Reservations are a budget, not additional owned memory.
     pub(crate) fn memory_usage(&self, art: &GameArt) -> [usize; 4] {
