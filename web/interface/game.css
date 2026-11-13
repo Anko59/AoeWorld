@@ -1,6 +1,7 @@
 @import url('/navigation/cockpit/panel.css');
 @import url('/navigation/reveal.css');
 @import url('/navigation/landscape/map.css');
+@import url('/interface/activity/panel.css');
 :root { color-scheme: dark; --ink:#eee4ca; --muted:#b7b49e; --gold:#b39a63; --edge:#696756; --panel:#202620; --bottom:208px; }
 html.units-here-armed #scene { cursor:crosshair; }
 * { box-sizing:border-box; }

@@ -3,11 +3,11 @@ use super::{targeting::TargetArea, tick::Goal};
 use crate::{BuildingKind, EconomyError, GameWorld};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId};
 use std::ops::Bound::{Excluded, Unbounded};
+mod volley;
 
 impl GameWorld {
-    /// Garrison firepower / single-arrow firepower, floored after summing.
-    /// Villagers supply 5 damage / 2 s; foot archers use researched pierce DPS.
-    /// Original rules: TC 0..10, tower 1..5, Castle 5..21 arrows.
+    /// Castle/TC volleys count occupants, bounded by the licensed DAT maximum.
+    /// Towers retain their researched garrison-DPS rule.
     pub fn building_arrow_count(&self, id: EntityId) -> u8 {
         let Some(b) = self.building(id).filter(|b| b.is_complete() && b.hp > 0) else {
             return 0;
@@ -16,11 +16,17 @@ impl GameWorld {
             return 0;
         };
         let (base, maximum) = match b.kind {
-            BuildingKind::TownCenter => (0, 10),
+            BuildingKind::TownCenter => (1, 11),
             BuildingKind::WatchTower => (1, 5),
             BuildingKind::Castle => (5, 21),
             _ => return 0,
         };
+        if b.kind != BuildingKind::WatchTower {
+            if b.kind == BuildingKind::TownCenter && b.garrison.is_empty() {
+                return 0;
+            }
+            return (base as usize + b.garrison.len()).min(maximum as usize) as u8;
+        }
         let researched = self.player_economy(b.player).map_or(0, |p| p.researched);
         // All current eligible reload periods divide 600 centiseconds exactly.
         let power: u32 = b
@@ -166,6 +172,7 @@ impl GameWorld {
                 };
                 for index in 0..arrows {
                     let secondary = index > 0 || tower_kind == BuildingKind::TownCenter;
+                    let before = self.combat.next_projectile;
                     self.launch_projectile(
                         id,
                         target,
@@ -173,6 +180,9 @@ impl GameWorld {
                         super::ProjectileKind::Arrow,
                         secondary,
                     );
+                    if self.combat.next_projectile != before {
+                        self.spread_building_arrow(before, tower_kind, index, arrows);
+                    }
                 }
             }
         }

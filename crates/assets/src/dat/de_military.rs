@@ -2,6 +2,22 @@
 use super::{Building, Error, Reader, debug};
 use serde::Serialize;
 
+pub(super) fn volley(r: &mut Reader<'_>) -> Result<(f32, u8, [f32; 3]), Error> {
+    // VER 8.9 creatable tail: modifiers, graphics, charge and conversion fields.
+    r.skip(69)?;
+    let count = r.f32()?;
+    let maximum = r.u8()?;
+    let area = [r.f32()?, r.f32()?, r.f32()?];
+    if !count.is_finite()
+        || count < 0.0
+        || count > f32::from(maximum)
+        || area.iter().any(|v| !v.is_finite() || *v < 0.0)
+    {
+        return Err(r.fail("invalid projectile count or spawning area"));
+    }
+    Ok((count, maximum, area))
+}
+
 #[derive(Debug, Serialize)]
 pub struct ProjectileSource {
     pub id: i16,

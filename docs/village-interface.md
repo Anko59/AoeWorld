@@ -43,6 +43,16 @@ shows living population / building space. Up to fifteen units can be queued per
 building even at full space; training waits until more housing completes.
 There is no global maximum population.
 
+The top-left kingdom activity panel groups training queues and research from
+all owned buildings, including those outside the camera view. Each row uses
+the existing unit/technology art, a queued count and the furthest advanced
+active producer's progress. Waiting units count but do not advance the bar.
+Clicking a row selects and centres that producer; a tie prefers an active
+producer, then the lowest building ID. The panel disappears when no work is
+queued. It shows at most six types (fewer on short viewports), with "+N more"
+for the remaining types. Its input is a bounded summary of existing building
+snapshots; no new server stream or opponent information is sent.
+
 Maps are created only through Single Player Game Setup. Menu offers Resume,
 disabled Settings and Quit to Main Menu. Retained requests reuse their original
 idempotency key; definitive refusals are cleared. Skirmish loading keeps Cancel.

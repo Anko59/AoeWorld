@@ -11,6 +11,12 @@ pub(crate) async fn reset(
     Query(options): Query<ResetOptions>,
 ) -> StatusCode {
     let service = match options.scenario.as_deref() {
+        Some("defensive-volley") => {
+            match GameplayService::volley_demo(state.diagnostic_scenario.seed) {
+                Ok(service) => service,
+                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
+            }
+        }
         None => GameplayService::new(state.diagnostic_scenario.seed),
         Some(
             name @ ("behaviour-tc" | "behaviour-wolf" | "behaviour-deer" | "behaviour-hunt"

@@ -307,6 +307,19 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     let callback =
         Closure::<dyn FnMut(u32, u32, u32, u32)>::new(move |action, code, target, lots| {
             let mut client = shared.borrow_mut();
+            if action == 14 {
+                if let Some((id, position)) = client
+                    .village
+                    .buildings
+                    .iter()
+                    .find(|b| b.id.0 == target && b.player == owner(&client) && b.hp > 0)
+                    .map(|b| (b.id, super::building_center(b)))
+                {
+                    client.selected.building(id);
+                    map::center_on_world(&mut client, position);
+                }
+                return;
+            }
             if action == 11 {
                 construction::cancel(&mut client);
                 return;

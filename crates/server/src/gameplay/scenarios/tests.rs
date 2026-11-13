@@ -345,6 +345,20 @@ async fn river_recording_rejects_uniform_world_without_replacing_it() {
 }
 
 #[tokio::test]
+async fn volley_recording_waits_for_native_art_before_starting_combat() {
+    let service = GameplayService::volley_demo(Seed(7)).unwrap();
+    assert!(service.paused());
+    let world = service.world.read().await;
+    assert_eq!(world.projectiles().count(), 0);
+    assert_eq!(world.config().tick_hz, 20);
+    assert_eq!(
+        world.buildings().map(|b| b.garrison.len()).sum::<usize>(),
+        35
+    );
+    assert_eq!(world.units().filter(|u| u.player.0 == 1).count(), 96);
+}
+
+#[tokio::test]
 async fn movement_recovery_recording_contains_the_army() {
     for acquired in [false, true] {
         let service = GameplayService::movement_recovery_demo(Seed(1), acquired).unwrap();

@@ -116,6 +116,7 @@ pub struct Building {
     pub range: f32,
     pub blast_width: f32,
     pub min_range: f32,
+    pub accuracy_dispersion: f32,
     pub reload: f32,
     pub cost: Vec<(i16, i16, i16)>,
     pub resource_storage: Vec<(i16, f32, u8)>,
@@ -124,6 +125,9 @@ pub struct Building {
     pub build_location: i16,
     pub button: u8,
     pub hot_key: i32,
+    pub total_projectiles: f32,
+    pub max_total_projectiles: u8,
+    pub projectile_spawning_area: [f32; 3],
 }
 #[derive(Debug, Serialize)]
 pub struct Technology {
@@ -229,7 +233,11 @@ pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Resul
     let frame_delay = r.i16()?;
     r.skip(13)?; // projectile displacement and blast attack level
     let min_range = r.f32()?;
-    r.skip(38)?;
+    let accuracy_dispersion = r.f32()?;
+    if !accuracy_dispersion.is_finite() || accuracy_dispersion < 0.0 {
+        return Err(r.fail("invalid accuracy dispersion"));
+    }
+    r.skip(34)?;
     let cost = (0..3)
         .map(|_| Ok((r.i16()?, r.i16()?, r.i16()?)))
         .collect::<Result<Vec<_>, Error>>()?;
@@ -246,6 +254,8 @@ pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Resul
             (build_location, button, hot_key) = (location, slot, key);
         }
     }
+    let (total_projectiles, max_total_projectiles, projectile_spawning_area) =
+        military::volley(&mut r)?;
     // Profession variants are not trained directly and have no train location.
     if build_seconds < 0
         || (unit_type == 80 && build_seconds == 0)
@@ -273,6 +283,7 @@ pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Resul
         range,
         blast_width,
         min_range,
+        accuracy_dispersion,
         reload,
         cost,
         resource_storage,
@@ -280,6 +291,9 @@ pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Resul
         build_location,
         button,
         hot_key,
+        total_projectiles,
+        max_total_projectiles,
+        projectile_spawning_area,
     })
 }
 

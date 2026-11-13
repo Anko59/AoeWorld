@@ -27,6 +27,8 @@ mod recovery;
 mod river;
 #[path = "demo/vassal_river.rs"]
 mod vassal_river;
+#[path = "demo/volley.rs"]
+mod volley;
 #[path = "demo/walk.rs"]
 mod walk;
 

@@ -33,15 +33,24 @@ The local numeric survey confirms the healing rates and Castle's 4x4 footprint,
 4800 HP, 650 stone, 11 pierce attack and 8/11 armour. No source imagery is
 embedded in code or committed.
 
-Empty Town Centers fire zero arrows, towers one, and Castles five. Villagers
-contribute 5 attack per 2 seconds; Archers and Skirmishers contribute their
-researched pierce damage divided by reload time. Sum this firepower before
-dividing by one building arrow's firepower and flooring. Total volley limits
-are 10, 5 and 21, respectively. Fletching affects the unit/building firepower
-and villagers' effective garrison attack. Other infantry add no arrows.
-The [Siege Engineers knowledge base](https://siegeengineers.github.io/Aoe2Sheet/knowledge_base.html)
-describes the summed-DPS calculation. Existing indexed target queries, fog
-visibility, projectile flight, armour and death handling resolve the volley.
+Empty Town Centers fire zero arrows. An occupied Town Center fires its DAT
+base of one plus one per occupant, capped at eleven. Castles fire five plus
+one per occupant, capped at twenty-one. This deliberately replaces the old
+summed-DPS rule for these two buildings to make sheltered armies visibly add
+arrows (#745). All admitted occupants count, including infantry.
+
+Watch Towers retain one base arrow, plus summed villager/foot-archer DPS
+divided by one tower arrow's DPS, floored and capped at five.
+Villagers contribute 5 attack per 2 seconds, plus researched arrow equipment;
+foot archers contribute their researched pierce damage divided by reload.
+
+The VER 8.9 survey now exposes projectile counts, spawning area and accuracy
+dispersion. Castle/TC launch positions span the DAT's half-tile square;
+secondary aim points alternate across that same area for spread impacts.
+This deterministic fan is a presentation/gameplay choice, not random accuracy
+(their DAT dispersion is zero). Offsets are calculated once at launch; normal
+projectile flight, hit-distance checks, armour and death handling still apply.
+No extra targeting queries or per-tick fan calculations are added.
 Entry/ejection cycles preserve the building's reload timer.
 
 Right-click an eligible healthy shelter or use Garrison to enter a damaged
