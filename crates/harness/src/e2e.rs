@@ -10,7 +10,7 @@ pub(crate) mod landscape;
 mod matrix;
 mod quarantine;
 mod servers;
-mod shard;
+pub(crate) mod shard;
 mod source;
 pub(crate) mod stale;
 mod visual;
@@ -203,6 +203,9 @@ fn run_specs(
         shard,
     })?;
     let cancellation = process::Cancellation::default();
+    let assigned = shard
+        .map(|shard| shard.prepare(&args, &root, &cancellation))
+        .transpose()?;
     let browser_result = thread::scope(|scope| -> Result<(), Box<dyn std::error::Error>> {
         let worker_cancellation = cancellation.clone();
         let (sender, receiver) = mpsc::channel();
@@ -214,10 +217,7 @@ fn run_specs(
                 let report_path = match report {
                     Some(path) => path.to_path_buf(),
                     None => match shard {
-                        Some(shard) => std::path::PathBuf::from(format!(
-                            "reports/e2e/playwright-shard-{}-of-{}.json",
-                            shard.index, shard.count
-                        )),
+                        Some(shard) => shard.report_path(),
                         None => std::path::PathBuf::from("reports/e2e/playwright.json"),
                     },
                 };
@@ -266,6 +266,10 @@ fn run_specs(
                     }
                 })()
             };
+            let result = result.and_then(|()| match (shard, assigned) {
+                (Some(shard), Some(assigned)) => shard.verify(&assigned).map_err(|e| e.to_string()),
+                _ => Ok(()),
+            });
             let _ = sender.send(result);
         });
         loop {

@@ -87,6 +87,7 @@ pub(super) fn run(
         Command::TestWasm => wasm_test::run()?,
         Command::TestWasmFocused => wasm_test::run_selected()?,
         Command::TestE2e => e2e::run()?,
+        Command::E2eDurations(options) => e2e::shard::regenerate(&options)?,
         Command::E2eEvidence => e2e::evidence::combine(Path::new("reports/e2e"))?,
         Command::ClientFrameBench(options) => e2e::client_frame::run(options)?,
         Command::TestCreatorSource => e2e::run_source()?,

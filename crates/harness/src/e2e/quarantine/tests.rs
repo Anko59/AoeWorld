@@ -38,12 +38,12 @@ fn flaky_playwright_failure_selects_one_case_project_and_escaped_title() {
             "test:e2e".into(),
             "--".into(),
             REPORTER.into(),
-            "--shard=2/3".into(),
+            "--test-list=/reports/assigned.txt".into(),
         ],
         &failures[0],
     )
     .unwrap();
-    assert!(!args.iter().any(|arg| arg.starts_with("--shard")));
+    assert!(!args.iter().any(|arg| arg.starts_with("--test-list")));
     assert!(args.ends_with(&failures[0].selector()));
 }
 

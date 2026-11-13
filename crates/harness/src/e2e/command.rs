@@ -86,7 +86,7 @@ pub(super) fn docker_args(run: &Run) -> Result<Vec<String>, Box<dyn std::error::
     if !run.specs.is_empty() {
         args.extend(run.specs.iter().cloned());
     } else if let Some(shard) = run.shard {
-        args.push(format!("--shard={shard}"));
+        args.push(format!("--test-list={}", shard.list_path(root).display()));
     }
     Ok(args)
 }
