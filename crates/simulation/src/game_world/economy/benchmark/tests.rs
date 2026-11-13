@@ -71,7 +71,7 @@ fn late_game_workload_keeps_real_jobs_and_full_queues() {
 }
 
 #[test]
-fn late_game_full_population_replays_at_the_profile_checkpoint() {
+fn late_game_full_population_replays_identically_on_one_and_four_workers() {
     fn run(threads: usize) -> [u8; 32] {
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(threads)
@@ -104,49 +104,12 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
             world.canonical_hash()
         })
     }
-    // Radius collision, persistent work reservations and bounded position
-    // searches deliberately change this current checkpoint. Friendly
-    // squeeze-through, worksite-only gather redirects and the bounded obstruction
-    // give-up change it again, as do per-unit group exits, arrival and attack-move engagement. Preserve the
-    // exact workload, activity floors and complete 1/4-worker comparison.
+    // Behaviour may change this replay (AGENTS.md); it must stay deterministic.
     let single = run(1);
     assert_eq!(
         single,
         run(4),
         "late_game_one_and_four_worker_replay_matches"
-    );
-    // Regenerate with the focused late_game_full_population_replays test.
-    let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
-    assert_eq!(
-        checkpoint,
-        // Bounded detours around stationary work bodies and route searches
-        // that share work only among units able to spend it change this replay;
-        // the complete 1/4-worker comparison above still holds. The armies work (bounded replans,
-        // wide-body fit, one-lane passing) moves it once more, and so do
-        // renewed far-group waits, the far reserve and the ship route cache.
-        // Equal-cost local detours now keep right of the heading instead of
-        // always going north, which moves local routes in this crowded replay.
-        // Direct orders that need clear lines, stalled detours that rejoin and
-        // army orders that leave fallen members out move it again.
-        // A packed block holding its files until the pass is behind it moves it again.
-        // The state hash folds per-block digests of 1,024 units (hashed on
-        // worker threads) instead of one stream: same state, new value.
-        // Formations starting from their members' reachable region, and cold
-        // orders answered locally instead of by a whole-map region build,
-        // move it again.
-        // Preserving searches toward certified endpoints restores valid
-        // gathering approaches that the region check previously cancelled.
-        // Current region proofs discharge duplicate destination-pocket work,
-        // so planners spend their allowance on routes sooner. The full run
-        // preserved the activity floors and complete one/four-worker equality.
-        // Bounded region witnesses skip duplicate floods and straight-route guidance; worker equality holds.
-        // #745 changes wildlife movement/hunting and replaced-camp lifecycle.
-        // Repin the current output; workload, activity floors and the full
-        // one/four-worker replay equality above are unchanged.
-        // Retained active goals and exact contacts change this output on
-        // the region router. Clean dev passes its pin; this run preserves
-        // every activity floor and the complete one-/four-worker comparison.
-        "21b25c880ce6937001c72f41f9a591665e673c3908d8b6455d9ffa87891e331b"
     );
 }
 
