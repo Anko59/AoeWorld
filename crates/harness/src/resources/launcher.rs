@@ -30,6 +30,17 @@ fn main() {
         );
         std::process::exit(1);
     }
+    // Make's long-job probe refuses before any launcher runs; it records here.
+    if let [mode, goals, reason] = args.as_slice()
+        && mode == "--long-refused"
+    {
+        let recorded = ledger_dir().and_then(|dir| {
+            let me = holder(format!("`make {goals}`"))?;
+            cpu::ledger(&dir, "long", "refused", &me, &[("reason", reason.clone())]);
+            Ok(())
+        });
+        std::process::exit(i32::from(recorded.is_err()));
+    }
     if args.first().is_some_and(|arg| arg == "--run") {
         args.remove(0);
         std::process::exit(run(&args).unwrap_or_else(|error| {
@@ -87,15 +98,7 @@ fn run_build(program: &str, args: &[String]) -> Result<i32, Box<dyn std::error::
         cpu::Parent::Long => return Ok(plain(args)?),
         cpu::Parent::None => {}
     }
-    let dir = match std::env::var_os("AOE_LONG_DIR") {
-        Some(dir) => std::path::PathBuf::from(dir),
-        None => std::path::PathBuf::from(git(&[
-            "rev-parse",
-            "--path-format=absolute",
-            "--git-common-dir",
-        ])?)
-        .join("aoe-ship"),
-    };
+    let dir = ledger_dir()?;
     let me = holder(describe(args))?;
     let slots = (
         cpu::slot_count(std::env::var(cpu::SLOTS_VAR).ok().as_deref())?,
@@ -134,6 +137,19 @@ fn run_build(program: &str, args: &[String]) -> Result<i32, Box<dyn std::error::
         &[("exit", code.to_string()), ("seconds", seconds)],
     );
     Ok(code)
+}
+
+/// The shared `aoe-ship` directory: the parent long job's, else this repository's.
+fn ledger_dir() -> std::io::Result<std::path::PathBuf> {
+    Ok(match std::env::var_os("AOE_LONG_DIR") {
+        Some(dir) => std::path::PathBuf::from(dir),
+        None => std::path::PathBuf::from(git(&[
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-common-dir",
+        ])?)
+        .join("aoe-ship"),
+    })
 }
 
 /// This job's identity in the build pool and the ledger.
