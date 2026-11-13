@@ -1,8 +1,9 @@
-"""Income-sized defences on public resource sites and known enemy approaches."""
+"""Threat-funded defences on public resource sites and known enemy approaches."""
 from aoeworld import BuildingKind, building_cost, building_size
 
 from ...blackboard import Plan
 from ...geometry import clamp_tile, dist
+from .threat import threatened
 
 
 def frontier(ctx):
@@ -73,34 +74,64 @@ class FortificationManager:
         board.cool('fortify', ctx.tick, cfg.fort_interval_seconds * ctx.world.tick_hz)
         towers = [b.center for b in ctx.buildings if b.kind == BuildingKind.WATCH_TOWER]
         towers += [p.tile for p in board.plans if p.kind == BuildingKind.WATCH_TOWER]
-        cap = max(1, len(ctx.villagers) // cfg.fort_workers_per_tower)
+        frontiers = [c for c in ctx.centers if threatened(ctx, c)]
         # Resource drop-offs are paid evidence of economic activity, including
-        # remote mines and forests. Do not build speculative towers in fog.
-        targets = [(b.center, cfg.fort_site_radius) for b in ctx.buildings if b.complete and b.kind in (
-            BuildingKind.MINING_CAMP, BuildingKind.LUMBER_CAMP, BuildingKind.MILL)]
-        center = (ctx.centers or [ctx.home])[board.fort_cursor % max(1, len(ctx.centers))]
-        board.fort_cursor += 1
-        # Retain a layout while it is being built; new scouting must not move
-        # the gate between its two wings. Forget lost settlements.
-        board.fort_lanes = {c: lane for c, lane in board.fort_lanes.items() if c in ctx.centers}
-        board.fort_rejected = {c: r for c, r in board.fort_rejected.items() if c in ctx.centers}
-        lane = board.fort_lanes.get(center)
-        if lane is None:
-            lane = self.lane(ctx, center, board.fort_rejected.get(center, ()))
+        # remote mines and forests. Threat is judged per site, so a camp far
+        # from every Town Center can authorise its own tower. No speculative
+        # towers in fog and none at quiet sites.
+        camps = [b.center for b in ctx.buildings if b.complete and b.kind in (
+            BuildingKind.MINING_CAMP, BuildingKind.LUMBER_CAMP, BuildingKind.MILL)
+            and threatened(ctx, b.center)]
+        if not frontiers and not camps:
+            return
+        camp_reach = cfg.fort_tower_coverage + cfg.fort_site_radius
+        center_reach = max(cfg.fort_lane_distances) + cfg.fort_lane_tower_radius
+        sites = sorted([(tuple(c), center_reach) for c in frontiers]
+                       + [(tuple(c), camp_reach) for c in camps])
+        # Every tower belongs to exactly one site: the nearest threatened site
+        # whose reach contains it, ties broken by the site's position. Overlapping
+        # reaches can then neither starve a site nor let it exceed its cap.
+        def owner_of(point):
+            owners = [(dist(site[0], point), site[0], site) for site in sites
+                      if dist(site[0], point) <= site[1]]
+            return min(owners)[2] if owners else None
+        held = {site: 0 for site in sites}
+        for t in towers:
+            owner = owner_of(t)
+            if owner is not None:
+                held[owner] += 1
+        active = sum(held.values())
+        ceiling = len(ctx.villagers) // cfg.fort_workers_per_tower
+        targets = [(c, cfg.fort_site_radius) for c in camps]
+        lane = center = None
+        if frontiers:
+            center = frontiers[board.fort_cursor % len(frontiers)]
+            board.fort_cursor += 1
+            # Retain a layout while it is being built; new scouting must not move
+            # the gate between its two wings. Forget lost settlements.
+            board.fort_lanes = {c: lane for c, lane in board.fort_lanes.items() if c in ctx.centers}
+            board.fort_rejected = {c: r for c, r in board.fort_rejected.items() if c in ctx.centers}
+            lane = board.fort_lanes.get(center)
+            if lane is None:
+                lane = self.lane(ctx, center, board.fort_rejected.get(center, ()))
+                if lane is not None:
+                    board.fort_lanes[center] = lane
             if lane is not None:
-                board.fort_lanes[center] = lane
-        if lane is not None:
-            axis = 0 if abs(lane[0] - center[0]) > abs(lane[1] - center[1]) else 1
-            tower = list(lane)
-            tower[axis] -= cfg.fort_lane_tower_offset * (1 if lane[axis] > center[axis] else -1)
-            targets.insert(0, (tuple(tower), cfg.fort_lane_tower_radius))
-        if len(towers) < cap:
+                axis = 0 if abs(lane[0] - center[0]) > abs(lane[1] - center[1]) else 1
+                tower = list(lane)
+                tower[axis] -= cfg.fort_lane_tower_offset * (1 if lane[axis] > center[axis] else -1)
+                targets.insert(0, (tuple(tower), cfg.fort_lane_tower_radius))
+        if active < ceiling:
             for target, radius in targets:
                 if any(dist(target, tower) <= cfg.fort_tower_coverage for tower in towers):
                     continue
+                # Cap the site the nearest-site rule will credit once it stands.
+                owner = owner_of(target)
+                if owner is not None and held[owner] >= cfg.fort_towers_per_frontier:
+                    continue
                 if self.place(ctx, BuildingKind.WATCH_TOWER, target, radius=radius):
                     return
-        if lane is not None and len(ctx.villagers) >= cfg.fort_wall_workers:
+        if lane is not None and center is not None and len(ctx.villagers) >= cfg.fort_wall_workers:
             self.wall(ctx, center, lane)
 
     def place(self, ctx, kind, target, exact=False, radius=None):

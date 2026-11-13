@@ -4,11 +4,13 @@ from aoeworld import Age, BuildingKind, building_cost
 from aoe_ai.play.constructor import Constructor
 from aoe_ai.play.fortification import FortificationManager, frontier
 from aoe_ai.play.management import ManagementManager
-from fakes import building
+from fakes import building, unit
 from test_kingdom import kingdom
 
 
 def resource_site(ctx):
+    from aoeworld import UnitKind
+    ctx.enemies = [unit(998, UnitKind.MILITIA, tile=(85, 55), mine=False)]
     ctx.buildings.append(building(900, BuildingKind.LUMBER_CAMP, tile=(76, 52)))
     return ctx.buildings[-1]
 
@@ -38,10 +40,10 @@ def test_more_workers_fund_more_resource_towers():
     for workers, wanted in ((30, 1), (120, 4)):
         ctx = kingdom(villagers=workers, centers=4)
         for i in range(wanted):
-            ctx.buildings.append(building(900 + i, BuildingKind.WATCH_TOWER, tile=(20 + i * 30, 20)))
+            ctx.buildings.append(building(900 + i, BuildingKind.WATCH_TOWER, tile=(91, 52 + i)))
         resource_site(ctx)
         FortificationManager(Constructor()).step(ctx)
-        assert not ctx.client.named('build'), 'income-sized tower cap must include existing towers'
+        assert not ctx.client.named('build'), 'towers serving the threatened site count against its cap and the income ceiling'
 
 
 def enemy(ctx, tile=(220, 90)):
@@ -183,6 +185,7 @@ def test_vassal_defences_do_not_wait_for_every_future_castle():
     castle = building(950, BuildingKind.CASTLE, tile=(65, 65))
     castle.garrison = [(951, UnitKind.VASSAL, 50, 50)]
     ctx.buildings.append(castle)
+    enemy(ctx, (130, 80))
     # Native Vassals already preserve 200 food/wood/stone and 100 gold.
     # A growing castle target must not prevent all defensive development.
     ManagementManager().settings(ctx)

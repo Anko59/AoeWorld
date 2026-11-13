@@ -1,12 +1,13 @@
 """Arena diagnostics from the same fog-filtered observations as the player."""
 
 from collections import Counter
+import heapq
 import json
 import os
 from pathlib import Path
 import time
 
-from aoeworld import CommandResult, UnitKind
+from aoeworld import CommandResult, ResourceKind, UnitKind
 
 RUN_ID = f"{time.time_ns()}-{os.getpid()}"
 
@@ -47,6 +48,9 @@ def trace(host, tick, seed):
         world, board = client.world, host.brains[index].board
         units = world.my_units()
         eco = world.economy
+        home = world.town_center()
+        timber = heapq.nsmallest(8, (n for n in world.resources(ResourceKind.WOOD) if n.remaining > 0),
+                                key=lambda n: sum((a - b) ** 2 for a, b in zip(n.tile, home.center))) if home else []
         payload = {
             "seed": seed, "minute": round(tick / 1200, 2), "bot": index,
             "stock": [eco.food, eco.wood, eco.gold, eco.stone],
@@ -57,6 +61,8 @@ def trace(host, tick, seed):
             "population": eco.population,
             "population_space": eco.population_cap,
             "idle_workers": sum(u.kind == UnitKind.VILLAGER and u.idle for u in units),
+            "known_timber": [{"id": n.id, "tile": n.tile, "remaining": n.remaining,
+                              "refused": n.id in board.bad_resources} for n in timber],
             "buildings": [{"id": b.id, "kind": str(b.kind), "tile": b.center,
                            "complete": b.complete, "progress": b.progress}
                           for b in world.my_buildings()],

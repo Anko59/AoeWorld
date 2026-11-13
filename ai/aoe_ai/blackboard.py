@@ -108,6 +108,8 @@ class Blackboard:
     expansion_cursor: int = 0
     hold_villagers_tick: int = -10**9
     fort_cursor: int = 0
+    defence_alerts: dict[Tile, int] = field(default_factory=dict)
+    defence_buildings: dict[int, Tile] = field(default_factory=dict)
     fort_lanes: dict[Tile, Tile] = field(default_factory=dict)
     #: Sampled approach points whose gate footprint was refused, per settlement.
     fort_rejected: dict[Tile, set[Tile]] = field(default_factory=dict)

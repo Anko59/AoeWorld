@@ -21,10 +21,17 @@ from aoeworld import BuildingKind, GeneralState, UnitKind, UnitTask, building_co
 from . import buildorder
 from ..context import Context
 from ..geometry import Tile, clamp_tile, dist
+from .fortification.threat import threatened
 
 
 def garrisoned(building: Any, kind: UnitKind) -> bool:
     return any(entry[1] == kind for entry in building.garrison)
+
+
+def available_vassals(ctx):
+    """Roaming Vassals and occupied frontier seats; rear seats cannot defend here."""
+    return sum(u.kind == UnitKind.VASSAL for u in ctx.units) + sum(
+        garrisoned(b, UnitKind.VASSAL) and threatened(ctx, b.center) for b in ctx.buildings)
 
 
 def funding_reserve(ctx):
@@ -35,12 +42,15 @@ def funding_reserve(ctx):
         return tuple(result)
     kinds = [(cfg.stewards and len(ctx.villagers) >= cfg.steward_min_villagers,
               UnitKind.STEWARD, BuildingKind.TOWN_CENTER),
-             (cfg.vassals, UnitKind.VASSAL, BuildingKind.CASTLE),
+             (cfg.vassals and any(threatened(ctx, b.center) for b in ctx.buildings
+                                 if b.kind == BuildingKind.CASTLE), UnitKind.VASSAL, BuildingKind.CASTLE),
              (cfg.generals, UnitKind.GENERAL, BuildingKind.CASTLE)]
     for enabled, kind, house in kinds:
         if not enabled or not ctx.count(house, complete=True):
             continue
         present = any(u.kind == kind for u in ctx.units) or any(garrisoned(b, kind) for b in ctx.buildings)
+        if kind == UnitKind.VASSAL:
+            present = available_vassals(ctx) > 0
         pending = any(ctx.tick - tick < (train_seconds(kind) + 20) * ctx.world.tick_hz
                       for tick, _ in ctx.board.producing.get(str(kind), []))
         if not present and not pending:
@@ -197,6 +207,8 @@ class ManagementManager:
         board = ctx.board
         inside = {entry[0] for b in ctx.buildings for entry in b.garrison}
         seats = [b for b in ctx.buildings if b.kind == house and b.complete and not garrisoned(b, kind)]
+        if kind == UnitKind.VASSAL:
+            seats = [b for b in seats if threatened(ctx, b.center)]
         taken = {t for u, t in board.seated.items() if any(x.id == u for x in ctx.units)}
         for unit in ctx.units:
             if unit.kind != kind or not unit.alive or unit.id in ctx.busy or unit.id in inside or not unit.idle:
@@ -224,11 +236,13 @@ class ManagementManager:
         castles_ok = ctx.count(BuildingKind.CASTLE, complete=True) > 0
         if not castles_ok:
             return
-        vassals = sum(1 for u in ctx.units if u.kind == UnitKind.VASSAL) + sum(
-            1 for b in ctx.buildings if b.kind == BuildingKind.CASTLE and garrisoned(b, UnitKind.VASSAL))
+        vassals = available_vassals(ctx)
         queued = sum(1 for b in ctx.buildings if b.kind == BuildingKind.CASTLE and b.queue_length)
-        if vassals + queued < (max(cfg.vassals, ctx.count(BuildingKind.CASTLE, complete=True)) if cfg.vassals else 0):
-            self.train(ctx, BuildingKind.CASTLE, UnitKind.VASSAL, lambda b: not garrisoned(b, UnitKind.VASSAL))
+        frontier_castles = sum(b.kind == BuildingKind.CASTLE and b.complete and threatened(ctx, b.center)
+                              for b in ctx.buildings)
+        if cfg.vassals and vassals + queued < frontier_castles:
+            self.train(ctx, BuildingKind.CASTLE, UnitKind.VASSAL,
+                       lambda b: threatened(ctx, b.center) and not garrisoned(b, UnitKind.VASSAL))
         elif cfg.generals and sum(1 for u in ctx.units if u.kind == UnitKind.GENERAL) + queued < max(cfg.generals, ctx.count(BuildingKind.CASTLE, complete=True)):
             self.train(ctx, BuildingKind.CASTLE, UnitKind.GENERAL, lambda b: True)
 
@@ -298,11 +312,16 @@ class ManagementManager:
     def defenders(self, ctx):
         """Keep a small local workforce available for native Vassal fortification."""
         castles = [b for b in ctx.buildings if b.complete and b.kind == BuildingKind.CASTLE
-                   and garrisoned(b, UnitKind.VASSAL)]
+                   and garrisoned(b, UnitKind.VASSAL) and threatened(ctx, b.center)]
+        board = ctx.board
+        previous = set().union(*board.vassal_workers.values()) if board.vassal_workers else set()
+        active = {b.id for b in castles}
+        board.vassal_workers = {i: workers for i, workers in board.vassal_workers.items() if i in active}
+        retained = set().union(*board.vassal_workers.values()) if board.vassal_workers else set()
+        ctx.reserved_workers.difference_update(previous - retained)
         if not any(b.kind == BuildingKind.TOWN_CENTER and b.complete for b in ctx.buildings):
             return  # recovery: workers stay free to rebuild the Town Center
         alive = {u.id for u in ctx.villagers}
-        board = ctx.board
         board.vassal_workers = {b.id: board.vassal_workers.get(b.id, set()) & alive for b in castles}
         for castle in castles:
             workers = board.vassal_workers[castle.id]
@@ -335,9 +354,7 @@ class ManagementManager:
                         ctx.order("steward_settings", unit, list(weights), 100, training)
                         ctx.board.manager_settings[unit] = desired
                 elif kind == UnitKind.VASSAL:
-                    # Native development already keeps its own resource floor.
-                    # A growing castle target must not postpone every wall.
-                    enabled = ctx.config.fortifications
+                    enabled = threatened(ctx, b.center)
                     desired = (enabled,)
                     if ctx.board.manager_settings.get(unit) != desired:
                         ctx.order("vassal_development", unit, enabled)
