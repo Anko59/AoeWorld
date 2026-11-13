@@ -1,9 +1,10 @@
 # Saved-match command replay
 
 `make save-replay` measures recorded simulation work without Python execution,
-clients, networking or a scheduled tick clock. The current reference below was
-grown by the ordinary Python AIs on current-dev Mekong, then saved through the
-server. Saves, map packages, command streams, reports and footage stay in
+clients, networking or a scheduled tick clock. The reference below was grown by
+the ordinary Python AIs on a Mekong package of the current recipe, then saved
+through the server; it describes the one revision named with it, not whatever
+`dev` holds today. Saves, map packages, command streams, reports and footage stay in
 `.cache/`, never Git; original game assets stay in `local-assets/`.
 
 ## Prepare current inputs
@@ -125,11 +126,18 @@ Replay uses a private `.cache/save-replay/target` per worktree even when
 metadata from selecting a stale simulation library through the normalized source
 alias. The content-addressed compiler object cache can still be reused.
 
-## Measured current reference
+## Measured reference
 
-Measured 2026-11-13 at runtime revision
-`dfad610ac7af6e5b0266bfa800cb4d460dffc056`, with only the documentation warning
-dirty. The report's source-diff BLAKE3 is
+These figures describe runtime revision
+`dfad610ac7af6e5b0266bfa800cb4d460dffc056` (measured 2026-11-13, with only the
+documentation warning dirty). They are **not** a running baseline for whatever
+`dev` currently holds: merges after that revision, such as the route planner
+and the castle/Town Center combat changes, are not included, and each later
+merge moves the number. The save, packages and command stream stay valid
+across those merges, so re-run the command above on the revision you care
+about and compare against your own run rather than against this table.
+
+The report's source-diff BLAKE3 is
 `2f71987586a110f74a3ac14eaaeb6e51ff0f78c1e539d595dcfb9de09316177d`;
 the diff is retained in `.cache/dev-replay/measurement-source.diff`.
 No gameplay or measurement-tool code changed. Results were added afterward.
