@@ -137,7 +137,7 @@ def run(args):
                     if abs(tick - world.tick) > world.tick_hz:
                         raise RuntimeError(f'stale slot {i} observation at checkpoint')
                     row = measure(world, kills=kills[world.me], orders=client.orders_sent)
-                    row.update(slot=i, cpu_seconds=brains[i].cpu,
+                    row.update(slot=i, start_kind=workload['slots'][i]['kind'], cpu_seconds=brains[i].cpu,
                         cpu_ms_per_decision=1000 * brains[i].cpu / max(1, brains[i].calls),
                         cpu_ms_slowest=1000 * brains[i].slowest,
                         wall_ms_slowest=1000 * brains[i].wall_slowest,

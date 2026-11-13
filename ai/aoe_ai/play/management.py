@@ -117,6 +117,8 @@ class ManagementManager:
         if not ctx.can_afford(cost):
             return
         near = (ctx.centers or [ctx.home])[total % max(1, len(ctx.centers))]
+        from .fortification import frontier
+        near = frontier(ctx) or near
         builders = self.builders(ctx, near, 5)
         if builders and self.place(ctx, BuildingKind.CASTLE, near, builders, 24, 2):
             board.bump("castles_placed")
@@ -298,7 +300,9 @@ class ManagementManager:
                         ctx.order("steward_settings", unit, list(weights), 100, training)
                         ctx.board.manager_settings[unit] = desired
                 elif kind == UnitKind.VASSAL:
-                    enabled = ctx.count(BuildingKind.CASTLE) >= buildorder.wanted_castles(ctx)
+                    # Native development already keeps its own resource floor.
+                    # A growing castle target must not postpone every wall.
+                    enabled = ctx.config.fortifications
                     desired = (enabled,)
                     if ctx.board.manager_settings.get(unit) != desired:
                         ctx.order("vassal_development", unit, enabled)

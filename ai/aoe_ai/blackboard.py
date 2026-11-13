@@ -107,6 +107,8 @@ class Blackboard:
     production_cursor: int = 0
     expansion_cursor: int = 0
     hold_villagers_tick: int = -10**9
+    fort_cursor: int = 0
+    fort_lanes: dict[Tile, Tile] = field(default_factory=dict)
 
     def bump(self, name: str, amount: int = 1) -> None:
         self.stats[name] = self.stats.get(name, 0) + amount
