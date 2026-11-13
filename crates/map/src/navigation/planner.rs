@@ -2,6 +2,8 @@ use super::heuristic;
 use crate::{EnvironmentPageError, Path, ResourceOverlay};
 use aoe_core::TileCoord;
 
+#[path = "planner/frontier.rs"]
+mod frontier;
 #[path = "planner_hash.rs"]
 mod hash;
 #[path = "planner/legs.rs"]

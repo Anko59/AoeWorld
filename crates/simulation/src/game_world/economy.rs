@@ -14,6 +14,8 @@ mod dropoff;
 mod farm;
 #[path = "economy/fishing/mod.rs"]
 mod fishing;
+#[cfg(test)]
+pub(crate) use fishing::navigation::NavalNavigation;
 #[path = "economy/garrison/mod.rs"]
 mod garrison;
 #[path = "economy/construction/gates.rs"]

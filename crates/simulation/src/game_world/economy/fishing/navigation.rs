@@ -1,24 +1,16 @@
 use crate::{GameWorld, UnitKind};
 use aoe_core::TileCoord;
 use aoe_map::{EnvironmentPageError, ResourceOverlay, RouteTerrain};
-use std::cell::RefCell;
-use std::collections::HashMap;
 
-/// Water a ship's route search reads during one poll. Each edge test reads
-/// up to four tiles (both ends and, for a diagonal, both corners) and every
-/// tile is shared by up to eight edges; ground does not change during a
-/// poll, so each tile's answer is read once and reused (`RouteTerrain`).
+/// Water shared by every ship search, including later polls and orders.
+/// Collision notifications invalidate only changed chunks of derived ground.
 pub(crate) struct NavalNavigation<'a> {
     world: &'a GameWorld,
-    wet: RefCell<HashMap<TileCoord, bool>>,
 }
 
 impl<'a> NavalNavigation<'a> {
     pub(crate) fn new(world: &'a GameWorld) -> Self {
-        Self {
-            world,
-            wet: RefCell::default(),
-        }
+        Self { world }
     }
 
     fn wet(
@@ -26,19 +18,37 @@ impl<'a> NavalNavigation<'a> {
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError> {
-        if let Some(&known) = self.wet.borrow().get(&tile) {
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        if let Some(known) = self
+            .world
+            .economy
+            .naval_ground
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(tile)
+        {
             return Ok(known);
         }
         let wet = !self.world.economy.blocked_tiles.contains(&tile)
             && self
                 .world
                 .unit_tile_passable(UnitKind::FishingShip, tile, cancelled)?;
-        self.wet.borrow_mut().insert(tile, wet);
+        self.world
+            .economy
+            .naval_ground
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(tile, wet);
         Ok(wet)
     }
 }
 
 impl RouteTerrain for NavalNavigation<'_> {
+    fn memoize_route_queries(&self) -> bool {
+        false
+    }
     fn route_walkable(
         &self,
         _: &ResourceOverlay,
@@ -53,12 +63,32 @@ impl RouteTerrain for NavalNavigation<'_> {
         to: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError> {
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        if let Some(clear) = self
+            .world
+            .economy
+            .naval_ground
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_edge(from, to)
+        {
+            return Ok(clear);
+        }
         let wet = |tile| self.wet(tile, cancelled);
-        Ok(wet(from)?
+        let clear = wet(from)?
             && wet(to)?
             && (from.x == to.x
                 || from.y == to.y
-                || (wet(TileCoord::new(from.x, to.y))? && wet(TileCoord::new(to.x, from.y))?)))
+                || (wet(TileCoord::new(from.x, to.y))? && wet(TileCoord::new(to.x, from.y))?));
+        self.world
+            .economy
+            .naval_ground
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert_edge(from, to, clear);
+        Ok(clear)
     }
     fn route_step_cost(
         &self,

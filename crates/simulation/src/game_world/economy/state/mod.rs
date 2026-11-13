@@ -25,6 +25,7 @@ pub(crate) struct TickWork {
 
 #[derive(Debug, Default)]
 pub(crate) struct Economy {
+    pub(crate) naval_ground: std::sync::Mutex<aoe_map::RouteGroundCache>,
     pub(crate) land: std::sync::Mutex<super::land::Cache>,
     pub(crate) census: std::sync::Mutex<census::Cache>,
     pub(crate) vassals: super::vassal::Manager,

@@ -11,8 +11,8 @@ use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
 
 /// A multiply-rotate hasher for small integer keys (FxHash's mixing step).
-#[derive(Default)]
-struct TileHasher(u64);
+#[derive(Clone, Default)]
+pub(super) struct TileHasher(u64);
 
 impl Hasher for TileHasher {
     fn finish(&self) -> u64 {
@@ -38,7 +38,9 @@ impl Hasher for TileHasher {
     }
 }
 
-type Map<K, V> = HashMap<K, V, BuildHasherDefault<TileHasher>>;
+// The persistent search records also use point lookups, never iteration to
+// decide a route. Their canonical serialization sorts keys separately.
+pub(super) type Map<K, V> = HashMap<K, V, BuildHasherDefault<TileHasher>>;
 
 pub(super) struct MemoTerrain<'a> {
     inner: &'a dyn RouteTerrain,

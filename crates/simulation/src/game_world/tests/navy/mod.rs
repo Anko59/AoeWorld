@@ -8,6 +8,7 @@ mod crossing;
 mod healing;
 mod journeys;
 mod movement;
+mod navigation;
 mod research;
 mod stats;
 mod transport;

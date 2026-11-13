@@ -4,10 +4,12 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
 mod field;
+mod ground_cache;
 mod hierarchy;
 mod planner;
 mod regions;
 pub use field::{WalkingField, walking_field};
+pub use ground_cache::RouteGroundCache;
 pub(crate) use hierarchy::PortalCache;
 pub use hierarchy::{
     DEFAULT_HIERARCHY_EXPANSIONS, HierarchicalOutcome, hierarchical_route,
