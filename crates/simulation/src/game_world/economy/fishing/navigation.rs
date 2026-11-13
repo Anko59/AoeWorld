@@ -2,8 +2,8 @@ use crate::{GameWorld, UnitKind};
 use aoe_core::TileCoord;
 use aoe_map::{EnvironmentPageError, ResourceOverlay, RouteTerrain};
 
-/// Water shared by every ship search, including later polls and orders.
-/// Collision notifications invalidate only changed chunks of derived ground.
+/// Ship searches use movement's retained physical ground. Planner reservations
+/// remain separate; collision notifications invalidate ground and edge chunks.
 pub(crate) struct NavalNavigation<'a> {
     world: &'a GameWorld,
 }
@@ -18,30 +18,15 @@ impl<'a> NavalNavigation<'a> {
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError> {
-        if cancelled() {
-            return Err(EnvironmentPageError::Cancelled);
+        if self.world.economy.blocked_tiles.contains(&tile) {
+            return if cancelled() {
+                Err(EnvironmentPageError::Cancelled)
+            } else {
+                Ok(false)
+            };
         }
-        if let Some(known) = self
-            .world
-            .economy
-            .naval_ground
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .get(tile)
-        {
-            return Ok(known);
-        }
-        let wet = !self.world.economy.blocked_tiles.contains(&tile)
-            && self
-                .world
-                .unit_tile_passable(UnitKind::FishingShip, tile, cancelled)?;
         self.world
-            .economy
-            .naval_ground
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(tile, wet);
-        Ok(wet)
+            .unit_tile_passable(UnitKind::FishingShip, tile, cancelled)
     }
 }
 

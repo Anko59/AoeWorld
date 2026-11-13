@@ -5,9 +5,14 @@ use super::{
 };
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 use std::collections::{BTreeMap, BTreeSet};
+mod blocked;
 mod census;
 mod income;
 mod query;
+use blocked::BlockedTiles;
+
+#[cfg(test)]
+mod blocked_tests;
 
 #[cfg(test)]
 #[derive(Debug, Default)]
@@ -62,7 +67,7 @@ pub(crate) struct Economy {
     pub(crate) dropoffs: BTreeMap<(PlayerId, BuildingKind), Vec<EntityId>>,
     /// Derived complete road tiles; empty worlds skip all road lookups.
     pub(crate) roads: BTreeSet<TileCoord>,
-    pub(crate) blocked_tiles: BTreeSet<TileCoord>,
+    pub(crate) blocked_tiles: BlockedTiles,
     pub(crate) open_gates: BTreeSet<EntityId>,
     /// Every gate building, ascending by id, maintained as buildings are
     /// placed and removed: the gate tick visits gates, never every building.

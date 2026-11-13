@@ -135,12 +135,15 @@ impl GameWorld {
             let Terrain::Map { generator, overlay } = &self.terrain else {
                 return Ok(false);
             };
-            match generator.tile_and_node_with_cancel(tile, cancelled)? {
-                Some((sample, node)) => {
-                    navigable(sample.water)
+            // Ships need water and blockers, not composed ground appearance.
+            match generator.water_at_with_cancel(tile, cancelled)? {
+                Some(water) => {
+                    navigable(water)
                         && !overlay.blocks_tile(tile)
                         && overlay.bridge_connections(tile).is_none()
-                        && node.is_none_or(|n| !overlay.blocks_node(n))
+                        && generator
+                            .object_at_with_cancel(tile, cancelled)?
+                            .is_none_or(|n| !overlay.blocks_node(n))
                 }
                 None => false,
             }

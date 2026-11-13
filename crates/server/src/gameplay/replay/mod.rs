@@ -252,6 +252,7 @@ impl GameplayService {
             cpu_ns: total.cpu_ns,
             phases_instructions,
             phases_cpu_ns,
+            navigation_calls: probe.navigation_calls(),
         });
         let hash = world.canonical_hash();
         world.take_resource_changes();

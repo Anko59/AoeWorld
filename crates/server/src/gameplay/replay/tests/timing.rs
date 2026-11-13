@@ -1,6 +1,32 @@
 use super::*;
 
 #[test]
+fn navigation_call_counts_keep_the_callers_and_nested_spans_separate() {
+    let probe = Probe::fixture();
+    let search = probe.span("search");
+    drop(probe.span("terrain_point"));
+    {
+        let pocket = probe.span("pocket");
+        drop(probe.span("terrain_point"));
+        drop(probe.span("terrain_point"));
+        drop(pocket);
+    }
+    drop(probe.span("terrain_point"));
+    drop(search);
+    drop(probe.span("terrain_point"));
+    assert_eq!(
+        probe.navigation_calls(),
+        BTreeMap::from([
+            ("search/pocket".to_owned(), 1),
+            ("search/pocket/terrain_point".to_owned(), 2),
+            ("search/terrain_point".to_owned(), 2),
+            ("terrain_point".to_owned(), 1),
+        ])
+    );
+    assert!(probe.check().is_ok());
+}
+
+#[test]
 fn a_failed_nested_counter_read_invalidates_the_tick() {
     let probe = Probe::fixture();
     drop(Span {
