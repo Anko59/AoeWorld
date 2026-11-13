@@ -18,6 +18,12 @@ extern "C" {
     fn create(canvas: &HtmlCanvasElement, sources: &JsValue) -> Result<GlBridge, JsValue>;
     #[wasm_bindgen(method, catch)]
     fn upload(this: &GlBridge, pixels: &[u8], memory: &JsValue) -> Result<(), JsValue>;
+    #[wasm_bindgen(method, catch, js_name = beginPatches)]
+    fn begin_patches(this: &GlBridge) -> Result<(), JsValue>;
+    #[wasm_bindgen(method, catch, js_name = finishPatches)]
+    fn finish_patches(this: &GlBridge) -> Result<(), JsValue>;
+    #[wasm_bindgen(method, catch)]
+    fn poll(this: &GlBridge) -> Result<bool, JsValue>;
     #[wasm_bindgen(method, catch)]
     fn patch(
         this: &GlBridge,
@@ -68,6 +74,19 @@ pub struct WebGlRenderer {
 }
 
 impl WebGlRenderer {
+    /// Poll submitted work without waiting for an unfinished GPU fence.
+    pub fn check_health(&self) -> Result<(), String> {
+        self.bridge.poll().map(|_| ()).map_err(error)
+    }
+
+    pub(super) fn begin_patches(&self) -> Result<(), String> {
+        self.bridge.begin_patches().map_err(error)
+    }
+
+    pub(super) fn finish_patches(&self) -> Result<(), String> {
+        self.bridge.finish_patches().map_err(error)
+    }
+
     pub(super) fn contour_stats(&self) -> ContourStats {
         ContourStats {
             context_lost: self.bridge.context_lost_count(),

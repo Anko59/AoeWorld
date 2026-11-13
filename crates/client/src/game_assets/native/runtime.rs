@@ -41,7 +41,9 @@ impl NativeFrames {
         if self.failed {
             return Ok((false, Vec::new()));
         }
-        let result = self.update_ready(required, prefetch, keep, art, renderer);
+        let result = renderer.with_game_atlas_updates(|renderer| {
+            self.update_ready(required, prefetch, keep, art, renderer)
+        });
         if result.is_err() {
             self.failed = true;
         }

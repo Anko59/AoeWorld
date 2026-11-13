@@ -58,6 +58,8 @@ export class AoeWebGl {
         const gl = this.gl;
         // A restored context invalidates all sync objects from its lost lifetime.
         this.pendingFrames = [];
+        this.frameError = null;
+        this.patching = this.patchesPending = false;
         this.bufferBytes = 0;
         this.atlasReady = false;
         this.shaders = [];
@@ -200,6 +202,38 @@ export class AoeWebGl {
         if (code !== this.gl.NO_ERROR) throw new Error('WebGL2 graphics error ' + code);
     }
 
+    poll() {
+        if (this.frameError) throw this.frameError;
+        if (this.restoreError) throw this.restoreError;
+        if (this.disposed) throw new Error('WebGL2 context lost');
+        const gl = this.gl;
+        if (gl.isContextLost()) return false;
+        let completed = false;
+        try {
+            while (this.pendingFrames.length) {
+                const sync = this.pendingFrames[0], status = gl.clientWaitSync(sync, 0, 0);
+                if (status === gl.TIMEOUT_EXPIRED) break;
+                if (status === gl.WAIT_FAILED) throw new Error('WebGL2 frame completion failed');
+                gl.deleteSync(sync); this.pendingFrames.shift(); completed = true;
+            }
+            if (completed) this.check();
+        } catch (error) { this.frameError = error; throw error; }
+        return true;
+    }
+
+    beginPatches() {
+        if (this.patching) throw new Error('WebGL2 atlas batch already active');
+        if (this.disposed) throw new Error('WebGL2 context lost');
+        this.patching = true; this.patchesPending = false;
+    }
+
+    finishPatches() {
+        const pending = this.patchesPending;
+        this.patching = this.patchesPending = false;
+        try { if (pending) this.check(); }
+        catch (error) { if (this.disposed || !this.gl.isContextLost()) throw error; }
+    }
+
     validateSize(width, height) {
         if (!Number.isInteger(width) || !Number.isInteger(height) || width < 0 || height < 0 ||
             width > 4096 || height > 4096 ||
@@ -277,7 +311,7 @@ export class AoeWebGl {
             throw new Error('Invalid WebGL2 atlas patch');
         const gl = this.gl;
         try {
-            this.check();
+            if (this.disposed) throw new Error('WebGL2 context lost');
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
             gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
@@ -285,7 +319,8 @@ export class AoeWebGl {
             gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
             gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
             gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, x, y, page, width, height, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-            this.check();
+            if (this.patching) this.patchesPending = true;
+            else this.check();
         } catch (error) {
             // Rust already copied this plane into the restoration source.
             // Complete the other plane there, then restore the whole atlas.
@@ -294,9 +329,7 @@ export class AoeWebGl {
     }
 
     render(instances, black, effects) {
-        if (this.restoreError) throw this.restoreError;
-        if (!this.disposed && this.gl.isContextLost()) return false;
-        this.check();
+        if (!this.poll()) return false;
         if (!this.atlasReady) throw new Error('WebGL2 atlas not uploaded');
         if (instances.byteLength % STRIDE !== 0 || instances.byteLength > MAX_BYTES) {
             throw new Error('WebGL2 instance-buffer limit exceeded');
@@ -308,15 +341,6 @@ export class AoeWebGl {
             return false;
         }
         // Do not enqueue another packet behind a busy software or hardware GPU.
-        // Poll without blocking the page, before any instance-buffer upload.
-        while (this.pendingFrames.length) {
-            const sync = this.pendingFrames[0];
-            const status = gl.clientWaitSync(sync, 0, 0);
-            if (status === gl.TIMEOUT_EXPIRED) break;
-            if (status === gl.WAIT_FAILED) throw new Error('WebGL2 frame completion failed');
-            gl.deleteSync(sync);
-            this.pendingFrames.shift();
-        }
         if (this.pendingFrames.length >= 2) return false;
         const count = instances.byteLength / STRIDE;
         const words = new DataView(instances.buffer, instances.byteOffset, instances.byteLength);
@@ -384,7 +408,7 @@ export class AoeWebGl {
         if (!sync) throw new Error('WebGL2 frame completion unavailable');
         this.pendingFrames.push(sync);
         gl.flush();
-        this.check();
+        // poll() validates completed submissions without flushing this one.
         return true;
     }
 
