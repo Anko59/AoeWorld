@@ -431,7 +431,7 @@ test-economy-automation: disk-precheck job-bootstrap
 	@$(JOB_RUN) test-economy-automation -- make --no-print-directory test-economy-automation-steps
 
 test-economy-automation-steps: disk-precheck
-	@$(DOCKER_RUN) cargo nextest run --locked -p aoe-simulation -p aoe-protocol -p aoe-sdk -p aoe-server -p aoe-harness --no-fail-fast --no-tests fail --failure-output final -E 'package(aoe-protocol) | package(aoe-sdk) | test(gathering) | test(farming) | test(scouting) | test(garrison) | test(pinned) | test(per_session_messages_match_the_pinned_stream)'
+	@$(DOCKER_RUN) cargo nextest run --locked -p aoe-simulation -p aoe-protocol -p aoe-sdk -p aoe-server -p aoe-harness --no-fail-fast --no-tests fail --failure-output final -E 'package(aoe-protocol) | package(aoe-sdk) | test(gathering) | test(farming) | test(scouting) | test(garrison) | test(pinned) | test(per_session_streams_cross_views_without_leaking_unseen_state)'
 
 test-navigation: job-bootstrap
 	@$(JOB_RUN) test-navigation -- make --no-print-directory test-navigation-steps
