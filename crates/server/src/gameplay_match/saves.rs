@@ -80,6 +80,37 @@ fn valid_id(id: &str) -> bool {
 }
 
 impl GameplayService {
+    /// Restore through the ordinary save loader, including navigation and warmup,
+    /// without starting any AI processes, sockets or tick clock.
+    pub fn from_saved_replay(
+        save: &FsPath,
+        packages: &FsPath,
+    ) -> Result<(Self, aoe_simulation::RestoreReport), String> {
+        let id = save
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .ok_or("invalid save path")?;
+        let loaded =
+            read_save(save.parent().ok_or("save has no parent")?, id).map_err(|(_, e)| e)?;
+        let bytes = std::fs::read(packages.join(format!("{}.json", loaded.card.map_hash)))
+            .map_err(|e| e.to_string())?;
+        let package: MapPackage = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        package.validate().map_err(|e| e.to_string())?;
+        if package.content_hash_hex() != loaded.card.map_hash {
+            return Err("save map identity mismatch".to_owned());
+        }
+        let provider = if package.environment.samples_per_axis == 0 {
+            None
+        } else {
+            Some(
+                crate::map_store::PageResidency::open(packages, &package, &|| false)
+                    .map_err(|e| e.to_string())?
+                    as Arc<dyn EnvironmentPageProvider>,
+            )
+        };
+        resume_service(package, provider, &loaded, &|| false, Some(packages))
+            .map_err(|e| e.to_string())
+    }
     /// Writes this match to `directory` as `name`.
     pub(crate) async fn save_game(
         &self,
@@ -234,7 +265,12 @@ pub(super) async fn build(
     directory: Option<PathBuf>,
 ) -> Result<GameplayService, String> {
     use std::sync::atomic::Ordering;
-    tokio::task::spawn_blocking(move || {
+    let recording = if resume.is_some() {
+        crate::Config::command_recording_from_env()?
+    } else {
+        None
+    };
+    let service = tokio::task::spawn_blocking(move || {
         let cancelled = || cancelled.load(Ordering::Acquire);
         match resume {
             Some(loaded) => {
@@ -259,7 +295,14 @@ pub(super) async fn build(
     })
     .await
     .map_err(|_| "match task failed".to_owned())?
-    .map_err(|error| error.to_string())
+    .map_err(|error| error.to_string())?;
+    if let Some((path, ticks)) = recording {
+        service
+            .start_saved_recording(&path, ticks)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(service)
 }
 
 impl Loaded {

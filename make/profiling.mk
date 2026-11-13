@@ -72,3 +72,17 @@ movement-apply-census-admitted: job-bootstrap
 
 movement-apply-census-steps:
 	@$(DOCKER_RUN) cargo test --locked -p aoe-harness late_game_apply_census -- --ignored
+
+# Replays local saved-game commands; all work runs in the pinned tool container.
+.PHONY: save-replay save-replay-admitted save-replay-steps
+save-replay: resource-bootstrap
+	@$(RESOURCE_LONG) save-replay -- $(MAKE) --no-print-directory save-replay-admitted
+save-replay-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory save-replay-steps
+save-replay-steps:
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --cap-add PERFMON --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e $(call MOUNT_QUOTE,CARGO_TARGET_DIR=$(ROOT)/.cache/save-replay/target) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) $(RESOURCE_OBSERVER) cargo run --release --locked -p aoe-harness -- save-replay $(AOE_SAVE_REPLAY_ARGS)
+
+# Explicit PMU access check; ordinary unit tests do not require host counters.
+.PHONY: save-replay-counter-check
+save-replay-counter-check:
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --cap-add PERFMON --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) $(RESOURCE_OBSERVER) cargo test --locked -p aoe-server hardware_counter_is_user_only_thread_local_and_fully_scheduled -- --ignored

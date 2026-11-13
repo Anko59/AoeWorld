@@ -6,7 +6,7 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 
-const NAMES: [&str; 46] = [
+pub(super) const NAMES: [&str; 46] = [
     "sessions",
     "world_lock",
     "orders",

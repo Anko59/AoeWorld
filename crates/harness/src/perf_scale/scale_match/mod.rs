@@ -36,6 +36,11 @@ pub(crate) enum MapSource {
 
 #[derive(Args, Debug, Clone)]
 pub struct Options {
+    /// Record actual applied commands from the initial restored tick, then stop.
+    #[arg(long, requires = "save")]
+    pub record_commands: Option<PathBuf>,
+    #[arg(long, default_value_t = 1500, requires = "record_commands")]
+    pub record_ticks: usize,
     /// Resume a .save and its sibling JSON card; seats/map/AI hosts come from the save.
     #[arg(long, conflicts_with_all = ["players", "humans", "tiles", "map", "map_hash", "seed", "hosts", "start_villagers", "start_militia", "late_game", "march_probe", "browser"])]
     pub save: Option<PathBuf>,

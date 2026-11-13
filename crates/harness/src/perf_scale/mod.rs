@@ -6,6 +6,7 @@ pub(crate) mod groups;
 mod groups_workload;
 pub(crate) mod match_bench;
 mod movement;
+pub(crate) mod save_replay;
 pub(crate) mod scale_match;
 mod server;
 pub(crate) mod stages;
