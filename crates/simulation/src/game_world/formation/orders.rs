@@ -77,6 +77,34 @@ impl GameWorld {
             0
         };
         if queued
+            && member_pending > 0
+            && let Some(group) = self.formations.get(&existing)
+            && group.members.iter().map(|m| m.id).eq(ids.iter().copied())
+            && !group.settled
+        {
+            // A group leg would run before a member's earlier scalar legs.
+            // Keep every member's order by appending to the scalar FIFOs; a
+            // scalar leg has no attack-move flag, so that leg is refused.
+            if attack_move {
+                return Err(EconomyError::InvalidTarget);
+            }
+            let pending = group.queue.len();
+            let width = Self::move_queue_width();
+            if ids.iter().any(|id| {
+                self.move_queues.get(id).map_or(0, |queue| queue.len()) + 1 + pending >= width
+            }) {
+                return Err(EconomyError::OrderTooLarge);
+            }
+            for &id in &ids {
+                self.move_queues
+                    .entry(id)
+                    .or_default()
+                    .push_back(destination);
+                self.vassal_player_override(id);
+            }
+            return Ok(());
+        }
+        if queued
             && let Some(group) = self.formations.get_mut(&existing)
             && group.members.iter().map(|m| m.id).eq(ids.iter().copied())
             && !group.settled
