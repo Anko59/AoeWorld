@@ -204,8 +204,8 @@ pub(super) fn center_on_primary(client: &mut Client) {
     }
 }
 
-pub(super) fn send_order(client: &mut Client, point: ScreenPoint) {
-    village::orders::at_pointer(client, point, false);
+pub(super) fn send_order(client: &mut Client, point: ScreenPoint, queued: bool) {
+    village::orders::at_pointer(client, point, queued);
 }
 
 fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {

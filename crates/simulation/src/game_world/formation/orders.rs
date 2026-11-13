@@ -67,12 +67,21 @@ impl GameWorld {
         {
             return Ok(());
         }
+        let member_pending = if queued {
+            ids.iter()
+                .filter_map(|id| self.move_queues.get(id))
+                .map(|queue| queue.len())
+                .max()
+                .unwrap_or(0)
+        } else {
+            0
+        };
         if queued
             && let Some(group) = self.formations.get_mut(&existing)
             && group.members.iter().map(|m| m.id).eq(ids.iter().copied())
             && !group.settled
         {
-            if group.queue.len() + 1 >= MAX_MOVE_DESTINATIONS {
+            if group.queue.len() + 1 + member_pending >= MAX_MOVE_DESTINATIONS {
                 return Err(EconomyError::OrderTooLarge);
             }
             group.queue.push_back((destination, attack_move));
@@ -113,7 +122,7 @@ impl GameWorld {
             self.stop_gathering(id);
             self.cancel_attack(id);
             self.cancel_auto_scout(id);
-            self.move_queues.remove(&id);
+            self.discard_move_queue_for_order(id);
             self.economy.builders.remove(&id);
             self.units[i].formation = Some(leader);
             self.units[i].state.task = UnitTask::Moving;

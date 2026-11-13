@@ -1,4 +1,5 @@
 //! A bounded player-command FIFO, separate from a pathfinder's tile route.
+use super::orders::diagnostics::near_goal;
 use crate::{EconomyError, GameWorld, GameWorldError};
 use aoe_core::{EntityId, MAX_MOVE_DESTINATIONS, WorldPosition};
 
@@ -6,6 +7,19 @@ impl GameWorld {
     /// Live admission and save restoration share this command FIFO width.
     pub(crate) const fn move_queue_width() -> usize {
         MAX_MOVE_DESTINATIONS
+    }
+
+    /// Temporary automatic orders cannot replace a living commander's FIFO.
+    pub(crate) fn discard_move_queue_for_order(&mut self, id: EntityId) {
+        if !self.move_queues.contains_key(&id) {
+            return;
+        }
+        if !self.economy.stewards.automatic
+            || !self.economy.generals.armies.contains_key(&id)
+            || self.unit(id).is_none_or(|unit| unit.hp == 0)
+        {
+            self.move_queues.remove(&id);
+        }
     }
 
     pub fn issue_queued_move(
@@ -28,14 +42,17 @@ impl GameWorld {
         {
             return Err(GameWorldError::InvalidPosition.into());
         }
-        if self.movement_order(id).is_none() {
+        if !self.queued_move_active(id) {
             let moving = self.issue_move(id, destination)?;
             if moving {
                 self.move_queues.entry(id).or_default();
             }
             return Ok(moving);
         }
-        if self.move_queues.get(&id).map_or(1, |q| q.len() + 1) >= Self::move_queue_width() {
+        let formation_pending = self.formation_queue_summary(id).map_or(0, |(_, n)| n);
+        if self.move_queues.get(&id).map_or(1, |q| q.len() + 1) + formation_pending
+            >= Self::move_queue_width()
+        {
             return Err(EconomyError::OrderTooLarge);
         }
         // An accepted manual waypoint takes ownership of the current route;
@@ -49,9 +66,12 @@ impl GameWorld {
         Ok(true)
     }
 
-    /// Authoritative marker list; ordinary, unqueued movement has no markers.
+    /// Authoritative marker list, combining formation and player-command legs.
     pub fn move_destinations(&self, id: EntityId) -> Vec<WorldPosition> {
-        if let Some(destinations) = self.formation_destinations(id) {
+        if let Some(mut destinations) = self.formation_destinations(id) {
+            if let Some(queue) = self.move_queues.get(&id) {
+                destinations.extend(queue.iter().copied());
+            }
             return destinations;
         }
         let Some(queue) = self.move_queues.get(&id) else {
@@ -62,6 +82,36 @@ impl GameWorld {
             .into_iter()
             .chain(queue.iter().copied())
             .collect()
+    }
+
+    fn queued_move_active(&self, id: EntityId) -> bool {
+        self.movement_order(id).is_some()
+            || self
+                .lookup
+                .get(&id)
+                .and_then(|&index| self.units[index].formation)
+                .and_then(|leader| self.formation_movement_goal(id, leader))
+                .is_some()
+            || self.economy.generals.armies.get(&id).is_some_and(|army| {
+                !army.solo
+                    && (matches!(
+                        army.state,
+                        crate::GeneralState::Fighting | crate::GeneralState::Retreating
+                    ) || army.destination.is_some_and(|goal| {
+                        // A temporary or absent route after restore does not
+                        // complete the retained player march. Terminal route
+                        // failures can still skip to a later queued leg.
+                        match self.formation_queue_summary(id) {
+                            Some((current, _)) => !near_goal(current, goal),
+                            None => {
+                                self.movement_failure(id).is_none()
+                                    && self
+                                        .unit(id)
+                                        .is_some_and(|unit| !near_goal(unit.position, goal))
+                            }
+                        }
+                    }))
+            })
     }
 
     #[inline(never)] // a symbol of its own for the Callgrind stage counters
@@ -76,6 +126,10 @@ impl GameWorld {
             if self.movement_order(id).is_some() {
                 continue;
             }
+            // Only queued units need the formation/army completion check.
+            if !self.move_queues.contains_key(&id) || self.queued_move_active(id) {
+                continue;
+            }
             let Some(mut queue) = self.move_queues.remove(&id) else {
                 continue;
             };
@@ -83,6 +137,17 @@ impl GameWorld {
                 // A building may have blocked a previously valid destination.
                 // Skip that failed leg; never discard the later commands.
                 if self.issue_move(id, next).is_ok_and(|moving| moving) {
+                    // An army march turns on this leg; a solo commander keeps
+                    // his army holding throughout the automatic tick phases.
+                    if self
+                        .economy
+                        .generals
+                        .armies
+                        .get(&id)
+                        .is_some_and(|army| !army.solo)
+                    {
+                        self.general_march(id, next);
+                    }
                     self.move_queues.insert(id, queue);
                     break;
                 }

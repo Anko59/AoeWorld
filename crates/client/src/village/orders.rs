@@ -269,9 +269,11 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
     if client.village.attack_move {
         super::waypoints::ping(client, destination);
     }
-    client.village.move_cursor = false;
-    client.village.attack_move = false;
-    let _ = client.canvas.set_attribute("data-order-mode", "");
+    if !queued {
+        client.village.move_cursor = false;
+        client.village.attack_move = false;
+        let _ = client.canvas.set_attribute("data-order-mode", "");
+    }
 }
 
 /// Enemy clicks command defensive weapons; other clicks can still set rallies.

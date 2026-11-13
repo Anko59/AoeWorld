@@ -285,11 +285,11 @@ impl GameWorld {
             .unwrap_or_default()
     }
 
-    /// What every released member gets: no route, no queue, no task.
+    /// Released members stop; a General's automatic order retains his FIFO.
     pub(crate) fn stop_member(&mut self, index: usize) {
         let id = self.units[index].state.id;
         self.stop_movement(index);
-        self.move_queues.remove(&id);
+        self.discard_move_queue_for_order(id);
         self.units[index].state.task = UnitTask::Idle;
         self.active_movers.remove(id);
     }
@@ -304,6 +304,13 @@ impl GameWorld {
                 .chain(group.queue.iter().map(|&(point, _)| point))
                 .collect()
         })
+    }
+
+    /// The command endpoint and pending leg count, even after settling.
+    pub(crate) fn formation_queue_summary(&self, id: EntityId) -> Option<(WorldPosition, usize)> {
+        let leader = self.units[*self.lookup.get(&id)?].formation?;
+        let group = self.formations.get(&leader)?;
+        Some((group.destination, group.queue.len()))
     }
 }
 
