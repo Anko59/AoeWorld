@@ -115,6 +115,7 @@ fn region() -> TileRect {
 #[test]
 fn gameplay_messages_round_trip_independently_of_diagnostic_protocol() {
     let message = ClientMessage::MoveOrder {
+        attack_move: false,
         sequence: 9,
         entity_id: EntityId(3),
         destination: WorldPosition::new(42, 84),

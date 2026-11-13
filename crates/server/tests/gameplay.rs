@@ -231,6 +231,7 @@ async fn controller_owns_orders_and_reconnects_with_a_resume_token() {
     send(
         &mut second,
         GameplayClientMessage::MoveOrder {
+            attack_move: false,
             sequence: 1,
             entity_id: primary_unit_id,
             destination: WorldPosition::new(8_388_608, 8_388_608),
@@ -242,6 +243,7 @@ async fn controller_owns_orders_and_reconnects_with_a_resume_token() {
     send(
         &mut controller,
         GameplayClientMessage::MoveOrder {
+            attack_move: false,
             sequence: 1,
             entity_id: primary_unit_id,
             destination: WorldPosition::new(8_389_632, 8_388_608),
@@ -252,6 +254,7 @@ async fn controller_owns_orders_and_reconnects_with_a_resume_token() {
     send(
         &mut second,
         GameplayClientMessage::MoveOrder {
+            attack_move: false,
             sequence: 2,
             entity_id: primary_unit_id,
             destination: WorldPosition::new(-1, 0),
@@ -262,6 +265,7 @@ async fn controller_owns_orders_and_reconnects_with_a_resume_token() {
     send(
         &mut controller,
         GameplayClientMessage::MoveOrder {
+            attack_move: false,
             sequence: 2,
             entity_id: EntityId(999_999),
             destination: WorldPosition::new(8_389_632, 8_388_608),
@@ -272,6 +276,7 @@ async fn controller_owns_orders_and_reconnects_with_a_resume_token() {
     send(
         &mut controller,
         GameplayClientMessage::MoveOrder {
+            attack_move: false,
             sequence: 3,
             entity_id: primary_unit_id,
             destination: WorldPosition::new(-1, 0),

@@ -248,11 +248,13 @@ impl Order {
                 sequence,
                 entity_id: unit,
                 destination: WorldPosition::from_tile_center(to).ok()?,
+                attack_move: false,
             },
             Order::MoveTo { unit, to } => M::MoveOrder {
                 sequence,
                 entity_id: unit,
                 destination: to,
+                attack_move: false,
             },
             Order::QueueMove {
                 unit,

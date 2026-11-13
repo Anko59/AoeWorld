@@ -76,6 +76,16 @@ impl GameWorld {
         Ok(true)
     }
 
+    /// Replace the unit's order by an attack-move: the same one-member group a
+    /// multi-unit attack-move uses, so its engage look does the fighting.
+    pub fn issue_attack_move(
+        &mut self,
+        id: EntityId,
+        destination: WorldPosition,
+    ) -> Result<bool, EconomyError> {
+        self.start_leg(id, destination, true)
+    }
+
     /// Begin a player leg now. Attack-move runs as the unit's own one-member
     /// formation, the route type that acquires targets on the way; Generals
     /// keep their army march and ordinary moves stay scalar.

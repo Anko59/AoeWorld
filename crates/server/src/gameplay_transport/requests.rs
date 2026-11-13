@@ -56,9 +56,10 @@ pub(super) async fn read_requests(
                 sequence,
                 entity_id,
                 destination,
+                attack_move,
             }) => {
                 service
-                    .queue_move(session_id, sequence, entity_id, destination)
+                    .queue_move_order(session_id, sequence, entity_id, destination, attack_move)
                     .await
             }
             Ok(GameplayClientMessage::QueueMoveOrder {

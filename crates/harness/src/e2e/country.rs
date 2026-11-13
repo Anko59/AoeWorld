@@ -92,6 +92,7 @@ fn validate_live_wire(evidence: &Path, expected_hash: &str) -> Result<serde_json
                     sequence,
                     entity_id,
                     destination,
+                    ..
                 } => {
                     if order.replace((sequence, entity_id, destination)).is_some() {
                         return Err("browser issued more than one live candidate move".into());

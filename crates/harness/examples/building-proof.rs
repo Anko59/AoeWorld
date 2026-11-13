@@ -272,6 +272,7 @@ async fn village(url: &str, build: bool, full: bool) -> Result<(), Box<dyn std::
                     socket
                         .send(Message::Binary(
                             aoe_protocol::encode_gameplay_client(&Client::MoveOrder {
+                                attack_move: false,
                                 sequence: next_sequence,
                                 entity_id: *id,
                                 destination: aoe_core::WorldPosition::from_tile_center(

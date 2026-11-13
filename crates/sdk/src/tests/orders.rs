@@ -226,6 +226,7 @@ fn a_tile_move_targets_the_tile_centre_and_stop_keeps_its_unit() {
     assert_eq!(
         message,
         M::MoveOrder {
+            attack_move: false,
             sequence: 9,
             entity_id: id(1),
             destination: WorldPosition::from_tile_center(TileCoord::new(3, 4)).unwrap(),
