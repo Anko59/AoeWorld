@@ -304,7 +304,7 @@ fn dev_artifacts_reuses_required_evidence_and_only_builds_verifies_and_publishes
     assert!(upload.contains("path: reports/e2e/pass.json"));
     assert!(upload.contains("if-no-files-found: error"));
     let shard_upload = workflow_job(&workflow, "e2e")
-        .split_once("name: e2e-evidence-${{ matrix.shard }},")
+        .split_once("name: 'e2e-evidence-${{ matrix.shard }}',")
         .unwrap()
         .1;
     assert!(shard_upload.contains("path: 'reports/e2e/shard-*-of-*.json'"));
