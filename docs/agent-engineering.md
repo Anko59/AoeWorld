@@ -10,9 +10,12 @@ Rendering, assets, QA, and release adapters must consume these boundaries.
 
 Simulation and core code must avoid OS, browser, filesystem, network, and clock
 APIs. Keep transport types out of simulation storage. Add golden fixtures
-pinning the current wire format for protocol changes and deterministic replay
-checks for simulation changes.
-Performance-sensitive changes require scenario-specific counts and benchmarks.
+pinning the current wire format for protocol changes and determinism checks
+(the same input gives the same output) for simulation changes. When behaviour
+changes on purpose, regenerate the affected pins and justify the change in the
+PR; a changed replay is never a blocker by itself ([working agreement](../AGENTS.md)).
+Performance-sensitive changes require scenario-specific counts and benchmarks,
+measured against the scale ladder of #748.
 
 ## Workflow
 
