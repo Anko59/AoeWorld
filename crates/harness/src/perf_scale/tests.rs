@@ -114,14 +114,9 @@ fn scale_tail_movers_have_a_bounded_obstruction_budget() {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../reports/scale/settling-tail.json");
     fs::create_dir_all(out.parent().unwrap()).unwrap();
     fs::write(out, census(&built.world, &built.players).to_string()).unwrap();
-    // The bound is the engine's give-up limit (`GIVE_UP_AFTER_TICKS`, 240):
-    // a jammed mover must clear or give up by then. 128 was a sample of the old
-    // start layout; with natural starts one villager hugging a forest edge in
-    // the synthetic one-unit-per-tile idle lattice sits at 189 at tick 600 and
-    // is back to work 60 ticks later, so it is a bounded, self-clearing jam.
     for unit in built.world.units() {
         assert!(
-            built.world.movement_obstruction_ticks(unit.id).unwrap_or(0) <= 240,
+            built.world.movement_obstruction_ticks(unit.id).unwrap_or(0) <= 128,
             "blocked tail: {unit:?}, obstruction={:?}, formation={:?}, destination={:?}, gather={:?}",
             built.world.movement_obstruction_ticks(unit.id),
             built.world.formation(unit.id),

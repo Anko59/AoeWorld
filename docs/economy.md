@@ -28,7 +28,9 @@ and up to three supplemental stragglers 3–6. Existing reachable resources in
 the eligible band count toward these guarantees; additional natural resources
 are left intact. Stragglers top up the combined 3–15-tile wood budget.
 A cardinal graph certifies gathering access to every new and existing node and
-preserves every reachable center exit after each cluster. Each kind tries at most
+preserves every reachable center exit after each cluster. A cluster may not seal
+any free tile into a pocket, and a one-tile patch must touch a solid neighbour,
+so no villager is boxed in by a start kit. Each kind tries at most
 128 anchors and two noise shapes per patch. Constrained terrain splits a group
 into smaller patches until its quota is full or no legal tile remains.
 No resource or terrain is removed. Activation still requires reachable

@@ -60,6 +60,7 @@ impl GameWorld {
         }
         natural.sort_by_key(|n| n.id);
         natural.dedup_by_key(|n| n.id);
+        let natural_tiles: BTreeSet<TileCoord> = natural.iter().map(|n| n.tile).collect();
         let mut planned = Vec::new();
         let mut blocked = BTreeSet::new();
         let mut incomplete = false;
@@ -134,9 +135,27 @@ impl GameWorld {
                     )
                 });
                 while remaining > 0 {
+                    // Free ground the kit has not yet cut off: a cluster may not
+                    // seal any of it into a pocket, however small.
+                    let open_before = reachable(&graph, root, &blocked);
                     let mut selected = None;
                     for cluster_size in (1..=remaining).rev() {
-                        for anchor in anchors.iter().copied().take(ANCHOR_BUDGET) {
+                        // A one-tile cluster must lean on something solid, so only
+                        // anchors touching a blocker are tried for it.
+                        let candidates = anchors.iter().copied().filter(|tile| {
+                            cluster_size > 1
+                                || (-1..=1).any(|dy| {
+                                    (-1..=1).any(|dx| {
+                                        let next = TileCoord::new(tile.x + dx, tile.y + dy);
+                                        next != *tile
+                                            && (blocked.contains(&next)
+                                                || natural_tiles.contains(&next)
+                                                || !self.tile_passable(next)
+                                                || footprint.contains(next))
+                                    })
+                                })
+                        });
+                        for anchor in candidates.take(ANCHOR_BUDGET) {
                             for attempt in 0..2 {
                                 let tiles =
                                     self.start_cluster(anchor, cluster_size, salt + attempt * 100);
@@ -159,6 +178,29 @@ impl GameWorld {
                                         .map(|n: &ResourceNode| n.tile)
                                         .chain(tiles.iter().copied())
                                         .all(|tile| accessible(tile, &reached))
+                                {
+                                    continue;
+                                }
+                                // Enclosure: no free tile newly sealed off, and no
+                                // lone blocker in open ground (a boxed-in villager
+                                // is the playtests' most reported bug).
+                                if open_before
+                                    .iter()
+                                    .any(|t| !trial.contains(t) && !reached.contains(t))
+                                    || tiles.iter().any(|tile| {
+                                        !(-1..=1).any(|dy| {
+                                            (-1..=1).any(|dx| {
+                                                let next = TileCoord::new(tile.x + dx, tile.y + dy);
+                                                next != *tile
+                                                    && (tiles.contains(&next)
+                                                        || blocked.contains(&next)
+                                                        || natural_tiles.contains(&next)
+                                                        || (!initial.contains(&next)
+                                                            && (!self.tile_passable(next)
+                                                                || footprint.contains(next))))
+                                            })
+                                        })
+                                    })
                                 {
                                     continue;
                                 }

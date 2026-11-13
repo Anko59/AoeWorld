@@ -1,6 +1,7 @@
 use super::*;
 
 mod bands;
+mod enclosure;
 use aoe_map::{GroundMaterial, ResourceKind};
 use std::collections::{BTreeSet, VecDeque};
 
