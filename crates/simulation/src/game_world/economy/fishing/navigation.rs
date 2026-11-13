@@ -114,23 +114,36 @@ impl GameWorld {
         from: TileCoord,
         to: TileCoord,
     ) -> Result<bool, EnvironmentPageError> {
-        if !kind.is_naval() {
-            return self
-                .terrain
-                .passable_with_cancel(to, self.config, &|| false)
-                .and_then(|passable| {
-                    if passable && from != to {
-                        self.terrain
-                            .crossable_with_cancel(from, to, self.config, &|| false)
-                    } else {
-                        Ok(passable)
-                    }
-                });
+        if from == to {
+            return self.unit_tile_passable(kind, to, &|| false);
         }
-        let wet = |tile| self.unit_tile_passable(kind, tile, &|| false);
-        Ok(wet(to)?
-            && (from.x == to.x
-                || from.y == to.y
-                || (wet(TileCoord::new(from.x, to.y))? && wet(TileCoord::new(to.x, from.y))?)))
+        if matches!(self.terrain, crate::Terrain::Uniform(_)) {
+            return Ok(!kind.is_naval() && self.terrain.crossable(from, to, self.config));
+        }
+        let cache = &self.economy.movement_ground[usize::from(kind.is_naval())];
+        if let Some(clear) = cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_edge(from, to)
+        {
+            return Ok(clear);
+        }
+        let clear = if !kind.is_naval() {
+            self.unit_tile_passable(kind, to, &|| false)?
+                && self
+                    .terrain
+                    .crossable_with_cancel(from, to, self.config, &|| false)?
+        } else {
+            let wet = |tile| self.unit_tile_passable(kind, tile, &|| false);
+            wet(to)?
+                && (from.x == to.x
+                    || from.y == to.y
+                    || (wet(TileCoord::new(from.x, to.y))? && wet(TileCoord::new(to.x, from.y))?))
+        };
+        cache
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert_edge(from, to, clear);
+        Ok(clear)
     }
 }
