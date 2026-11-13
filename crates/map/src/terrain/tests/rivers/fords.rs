@@ -128,3 +128,67 @@ fn ocean_never_inherits_river_fords() {
         assert_ne!(tile.terrain.material, GroundMaterial::Ford);
     }
 }
+
+#[test]
+fn ford_phase_survives_closely_segmented_meander() {
+    // Vertices about one tile apart wiggle the six-tile river around its
+    // station-40 ford. Neighbouring pieces outside the ford band must not
+    // veto the crossing: the phase belongs to the river, not to a piece.
+    let mut segments = vec![[130 * 256, -256, 130 * 256, 20 * 256, 6 * 256, 0, 21 * 256]];
+    let wiggle = |y: i64| 130 * 256 + if y % 2 == 0 { 154 } else { -154 };
+    for y in 20..60 {
+        segments.push([
+            if y == 20 { 130 * 256 } else { wiggle(y) },
+            y * 256,
+            wiggle(y + 1),
+            (y + 1) * 256,
+            6 * 256,
+            (y + 1) * 256,
+            (y + 2) * 256,
+        ]);
+    }
+    segments.push([
+        wiggle(60),
+        60 * 256,
+        130 * 256,
+        258 * 256,
+        6 * 256,
+        61 * 256,
+        259 * 256,
+    ]);
+    let generator = crossing_with_geometry(false, false, segments);
+    let ford_rows = (37..=40)
+        .filter(|y| {
+            let wet = (120..140)
+                .map(|x| generator.tile_at(TileCoord::new(x, *y)).unwrap())
+                .filter(|t| t.water == WaterKind::River)
+                .collect::<Vec<_>>();
+            !wet.is_empty()
+                && wet
+                    .iter()
+                    .all(|t| t.material == GroundMaterial::Ford && t.passable)
+        })
+        .count();
+    assert!(ford_rows >= 2, "{ford_rows} walkable ford rows");
+    let bank = |xs: std::ops::Range<i32>| {
+        xs.map(|x| TileCoord::new(x, 100))
+            .find(|at| {
+                generator.tile_at(*at).unwrap().passable && generator.object_at(*at).is_none()
+            })
+            .expect("open bank beside the crossing")
+    };
+    let route = crate::find_path(
+        &generator,
+        bank(115..121),
+        bank(141..147),
+        (WIDTH * WIDTH) as u32,
+    );
+    let crate::MovementOutcome::Path(path) = route else {
+        panic!("{route:?}");
+    };
+    assert!(
+        path.tiles
+            .iter()
+            .any(|at| generator.tile_at(*at).unwrap().material == GroundMaterial::Ford)
+    );
+}
