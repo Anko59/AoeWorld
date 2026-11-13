@@ -40,10 +40,10 @@ def test_more_workers_fund_more_resource_towers():
     for workers, wanted in ((30, 1), (120, 4)):
         ctx = kingdom(villagers=workers, centers=4)
         for i in range(wanted):
-            ctx.buildings.append(building(900 + i, BuildingKind.WATCH_TOWER, tile=(20 + i * 30, 20)))
+            ctx.buildings.append(building(900 + i, BuildingKind.WATCH_TOWER, tile=(91, 52 + i)))
         resource_site(ctx)
         FortificationManager(Constructor()).step(ctx)
-        assert not ctx.client.named('build'), 'income-sized tower cap must include existing towers'
+        assert not ctx.client.named('build'), 'towers serving the threatened site count against its cap and the income ceiling'
 
 
 def enemy(ctx, tile=(220, 90)):

@@ -189,3 +189,34 @@ def test_damage_without_a_loss_funds_local_defences_and_alert_memory_is_bounded(
     assert len(ctx.board.defence_alerts) <= ctx.config.fort_alert_limit
     ManagementManager().settings(ctx)
     assert ctx.client.named('vassal_development') == [(951, True)]
+
+
+def test_remote_camp_under_attack_gets_its_own_tower_without_a_threatened_town_center():
+    ctx = kingdom(villagers=60, centers=1)
+    ctx.buildings.append(building(900, BuildingKind.LUMBER_CAMP, tile=(250, 52)))
+    ctx.enemies = [unit(999, UnitKind.MILITIA, tile=(255, 55), mine=False)]
+    FortificationManager(Constructor()).step(ctx)
+    towers = [a for a in ctx.client.named('build') if a[1] == BuildingKind.WATCH_TOWER]
+    assert towers and abs(towers[0][2] - 250) < 15, 'a threatened remote site authorises its own tower'
+
+
+def test_newly_threatened_settlement_builds_though_a_quiet_one_holds_towers():
+    ctx = kingdom(villagers=120, centers=3)
+    quiet = ctx.centers[0]
+    ctx.buildings += [building(800 + i, BuildingKind.WATCH_TOWER, tile=(quiet[0] + 6 + 2 * i, quiet[1]))
+                      for i in range(4)]
+    far = max(ctx.centers)
+    ctx.enemies = [unit(999, UnitKind.MILITIA, tile=(far[0] + 25, far[1] + 5), mine=False)]
+    ctx.world._enemy_buildings = [building(998, BuildingKind.BARRACKS, tile=(far[0] + 60, far[1]), mine=False)]
+    FortificationManager(Constructor()).step(ctx)
+    towers = [a for a in ctx.client.named('build') if a[1] == BuildingKind.WATCH_TOWER]
+    assert towers, 'towers at a quiet settlement must not consume the threatened one\'s allowance'
+
+
+def test_threatened_site_stops_at_its_own_cap():
+    ctx = kingdom(villagers=300, centers=1)
+    ctx.buildings.append(building(900, BuildingKind.LUMBER_CAMP, tile=(250, 52)))
+    ctx.buildings += [building(800 + i, BuildingKind.WATCH_TOWER, tile=(246 + 8 * i, 52)) for i in range(2)]
+    ctx.enemies = [unit(999, UnitKind.MILITIA, tile=(255, 55), mine=False)]
+    FortificationManager(Constructor()).step(ctx)
+    assert not ctx.client.named('build'), 'a site never exceeds its per-site tower cap'
