@@ -63,11 +63,13 @@ jobs:
       - uses: ./.github/actions/rust-cache-save
         with: { leg: '${{ matrix.part }}' }
 
+  # 120 min: the instrumented native suite takes ~25 and the unsharded,
+  # single-worker E2E run that writes the release evidence takes the rest.
   native-coverage:
     needs: select
     if: ${{ needs.select.outputs.native_coverage == 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: ./.github/actions/docker-setup
