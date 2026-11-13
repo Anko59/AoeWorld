@@ -122,3 +122,31 @@ fn continuation_reuses_the_pocket_proof_but_needs_its_own_straight_witness() {
     planner.pending_region_proof(&overlay);
     assert!(!planner.pocket_checked);
 }
+
+#[test]
+fn proof_hash_and_sealed_tiles_depend_on_membership_not_insertion_history() {
+    let tiles = [
+        TileCoord::new(-33, 32),
+        TileCoord::new(0, 0),
+        TileCoord::new(31, -1),
+        TileCoord::new(32, -32),
+    ];
+    let mut forward = Proof::new(tiles[0]);
+    forward.seen.extend(tiles);
+    let mut reverse = Proof::new(tiles[0]);
+    reverse.seen.extend(tiles.into_iter().rev());
+    let hash = |proof: &Proof| {
+        let mut hash = blake3::Hasher::new();
+        proof.update_hash(&mut hash);
+        hash.finalize()
+    };
+    assert_eq!(hash(&forward), hash(&reverse));
+    assert_eq!(forward, reverse);
+    reverse.active = Some((tiles[1], 3));
+    assert_ne!(hash(&forward), hash(&reverse));
+    assert!(forward.touches(aoe_core::TileRect::from_xywh(-33, 32, 1, 1)));
+    assert!(!forward.touches(aoe_core::TileRect::from_xywh(1, 1, 1, 1)));
+    assert_eq!(forward.take_sealed_tiles(), BTreeSet::from(tiles));
+    assert!(forward.seen.is_empty());
+    assert_eq!(forward.take_sealed_tiles(), BTreeSet::new());
+}

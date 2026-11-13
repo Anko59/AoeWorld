@@ -144,3 +144,25 @@ fn repeated_physical_water_queries_reuse_exact_tile_results() {
         Err(EnvironmentPageError::Cancelled)
     );
 }
+
+#[test]
+fn water_projection_propagates_page_errors_and_retries_before_caching_success() {
+    let (generator, provider) = counted();
+    let tile = TileCoord::new(133, 31);
+    provider.fail.store(true, Ordering::Relaxed);
+    for _ in 0..2 {
+        assert_eq!(
+            generator.water_at_with_cancel(tile, &|| false),
+            Err(EnvironmentPageError::Missing)
+        );
+    }
+    provider.fail.store(false, Ordering::Relaxed);
+    assert_eq!(
+        generator.water_at_with_cancel(tile, &|| false),
+        Ok(Some(WaterKind::River))
+    );
+    assert_eq!(
+        generator.water_at_with_cancel(tile, &|| true),
+        Err(EnvironmentPageError::Cancelled)
+    );
+}

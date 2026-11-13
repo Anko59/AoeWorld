@@ -14,7 +14,10 @@ fn separate_ship_searches_reuse_ground_until_a_local_change() {
     let mut world = coast();
     let (_, water) = bank(&world);
     assert!(query(&world, water));
-    let misses = world.economy.naval_ground.lock().unwrap().miss_count();
+    let misses = world.economy.movement_ground[1]
+        .lock()
+        .unwrap()
+        .miss_count();
     let before = world.canonical_hash();
     let checks = Cell::new(0);
     assert!(
@@ -31,7 +34,10 @@ fn separate_ship_searches_reuse_ground_until_a_local_change() {
         "a warm ground answer only checks cancellation"
     );
     assert_eq!(
-        world.economy.naval_ground.lock().unwrap().miss_count(),
+        world.economy.movement_ground[1]
+            .lock()
+            .unwrap()
+            .miss_count(),
         misses
     );
     assert_eq!(world.canonical_hash(), before, "cache is derived state");
@@ -74,9 +80,7 @@ fn cached_ship_edges_observe_obstacles_in_the_neighboring_chunk() {
     };
     assert!(query_edge(&world));
     assert_eq!(
-        world
-            .economy
-            .naval_ground
+        world.economy.movement_ground[1]
             .lock()
             .unwrap()
             .get_edge(from, to),
@@ -137,4 +141,113 @@ fn movement_ground_keeps_land_and_water_separate_when_bridges_change() {
             !bridged
         );
     }
+}
+
+#[test]
+fn movement_and_planning_share_one_ground_answer_for_all_ship_kinds() {
+    let mut world = coast();
+    let (_, water) = bank(&world);
+    world.economy.movement_ground[1].get_mut().unwrap().clear();
+    let misses = world.economy.movement_ground[1]
+        .lock()
+        .unwrap()
+        .miss_count();
+    let before = world.canonical_hash();
+    assert!(
+        world
+            .unit_tile_passable(UnitKind::Galley, water, &|| false)
+            .unwrap()
+    );
+    assert_eq!(
+        world.economy.movement_ground[1]
+            .lock()
+            .unwrap()
+            .miss_count(),
+        misses + 1
+    );
+    for _ in 0..3 {
+        for kind in [
+            UnitKind::FishingShip,
+            UnitKind::Galley,
+            UnitKind::TransportShip,
+        ] {
+            assert!(world.unit_tile_passable(kind, water, &|| false).unwrap());
+            assert_eq!(
+                world.unit_tile_passable(kind, water, &|| true),
+                Err(EnvironmentPageError::Cancelled)
+            );
+        }
+        assert!(query(&world, water));
+    }
+    assert_eq!(
+        world.economy.movement_ground[1]
+            .lock()
+            .unwrap()
+            .miss_count(),
+        misses + 1
+    );
+    assert_eq!(world.canonical_hash(), before);
+}
+
+#[test]
+fn shared_movement_ground_observes_footprints_and_bridge_edits() {
+    let mut world = coast();
+    let (_, water) = bank(&world);
+    let area = TileRect::from_xywh(water.x, water.y, 1, 1);
+    let wet = |world: &GameWorld| {
+        world
+            .unit_tile_passable(UnitKind::Galley, water, &|| false)
+            .unwrap()
+    };
+    assert!(wet(&world));
+    let Terrain::Map { overlay, .. } = &mut world.terrain else {
+        panic!("map");
+    };
+    overlay.add_footprint(area).unwrap();
+    world.collision_closed(area);
+    assert!(!wet(&world));
+    let Terrain::Map { overlay, .. } = &mut world.terrain else {
+        panic!("map");
+    };
+    overlay.remove_footprint(area);
+    world.collision_opened(area);
+    assert!(wet(&world));
+    let span = aoe_core::BridgeSpan::new(
+        TileCoord::new(water.x - 1, water.y),
+        TileCoord::new(water.x + 1, water.y),
+    )
+    .unwrap();
+    let Terrain::Map { overlay, .. } = &mut world.terrain else {
+        panic!("map");
+    };
+    overlay.add_bridge(span).unwrap();
+    world.collision_closed(span.footprint());
+    assert!(!wet(&world));
+    let Terrain::Map { overlay, .. } = &mut world.terrain else {
+        panic!("map");
+    };
+    overlay.remove_bridge(span);
+    world.collision_opened(span.footprint());
+    assert!(wet(&world));
+}
+
+#[test]
+fn planner_reservations_do_not_poison_shared_physical_ground() {
+    let mut world = coast();
+    let (_, water) = bank(&world);
+    world.economy.movement_ground[1].get_mut().unwrap().clear();
+    world.economy.blocked_tiles.insert(water);
+    assert!(!query(&world, water));
+    assert!(
+        world
+            .unit_tile_passable(UnitKind::Galley, water, &|| false)
+            .unwrap()
+    );
+    assert_eq!(
+        world.economy.movement_ground[1].lock().unwrap().get(water),
+        Some(true)
+    );
+    assert!(!query(&world, water));
+    world.economy.blocked_tiles.remove(&water);
+    assert!(query(&world, water));
 }

@@ -1,28 +1,36 @@
 //! Shared ship ground, computed once per visited tile and collision change.
-//! Direct-mapped chunks bound memory and make replacement constant time. A
-//! collision only evicts touched chunks; no unit or order is visited here.
+//! Compact ground bits survive queries in other regions. Only the larger edge
+//! tables evict; collisions invalidate local chunks without visiting units.
+use super::tile_hash::TileHasher;
 use aoe_core::{TileCoord, TileRect};
+use std::{collections::HashMap, hash::BuildHasherDefault};
 
 const SIDE: i32 = 32;
 const SLOTS: usize = 4096;
 
-#[derive(Debug)]
-struct Chunk {
-    key: (i32, i32),
+#[derive(Debug, Default)]
+struct GroundChunk {
     known: [u64; 16],
     wet: [u64; 16],
+}
+
+#[derive(Debug)]
+struct EdgeChunk {
+    key: (i32, i32),
     /// Low eight bits say which directed edges are known; high bits are clear.
     edges: [u16; 1024],
 }
 
 /// Derived ground/edge answers for one caller-owned movement domain.
-/// Eviction never refuses a query or consumes authoritative route work; the
-/// caller computes misses and invalidates changed ground.
+/// Ground retention scales with visited terrain, never units or orders:
+/// 256 bitmap bytes per visited 32-tile chunk, plus sparse index/allocation
+/// overhead. The caller computes misses and invalidates changed ground.
 #[derive(Debug, Default)]
 pub struct RouteGroundCache {
-    // Allocated lazily: at most 4096 * (2312-byte chunk + pointer), excluding
-    // allocator metadata, regardless of player, unit or order count.
-    chunks: Vec<Option<Box<Chunk>>>,
+    ground: HashMap<(i32, i32), Box<GroundChunk>, BuildHasherDefault<TileHasher>>,
+    // Only edges evict: at most 4096 * (2056-byte chunk + pointer), excluding
+    // allocator metadata. An evicted edge reuses the retained ground bits.
+    edges: Vec<Option<Box<EdgeChunk>>>,
     misses: usize,
 }
 
@@ -69,10 +77,8 @@ impl RouteGroundCache {
     pub fn get(&mut self, tile: TileCoord) -> Option<bool> {
         let key = key(tile);
         let (word, mask) = bit(tile);
-        let answer = self.chunks.get(slot(key)).and_then(|entry| {
-            let chunk = entry.as_ref()?;
-            (chunk.key == key && chunk.known[word] & mask != 0)
-                .then_some(chunk.wet[word] & mask != 0)
+        let answer = self.ground.get(&key).and_then(|chunk| {
+            (chunk.known[word] & mask != 0).then_some(chunk.wet[word] & mask != 0)
         });
         if answer.is_none() {
             self.misses = self.misses.saturating_add(1);
@@ -80,20 +86,18 @@ impl RouteGroundCache {
         answer
     }
 
-    fn chunk_mut(&mut self, tile: TileCoord) -> &mut Chunk {
-        if self.chunks.is_empty() {
-            self.chunks.resize_with(SLOTS, || None);
+    fn edge_chunk_mut(&mut self, tile: TileCoord) -> &mut EdgeChunk {
+        if self.edges.is_empty() {
+            self.edges.resize_with(SLOTS, || None);
         }
         let key = key(tile);
-        let entry = &mut self.chunks[slot(key)];
+        let entry = &mut self.edges[slot(key)];
         if entry.as_ref().is_some_and(|chunk| chunk.key != key) {
             *entry = None;
         }
         entry.get_or_insert_with(|| {
-            Box::new(Chunk {
+            Box::new(EdgeChunk {
                 key,
-                known: [0; 16],
-                wet: [0; 16],
                 edges: [0; 1024],
             })
         })
@@ -101,7 +105,7 @@ impl RouteGroundCache {
 
     #[inline]
     pub fn insert(&mut self, tile: TileCoord, wet: bool) {
-        let chunk = self.chunk_mut(tile);
+        let chunk = self.ground.entry(key(tile)).or_default();
         let (word, mask) = bit(tile);
         chunk.known[word] |= mask;
         if wet {
@@ -115,7 +119,7 @@ impl RouteGroundCache {
     pub fn get_edge(&self, from: TileCoord, to: TileCoord) -> Option<bool> {
         let mask = direction(from, to)?;
         let key = key(from);
-        let chunk = self.chunks.get(slot(key))?.as_ref()?;
+        let chunk = self.edges.get(slot(key))?.as_ref()?;
         if chunk.key != key {
             return None;
         }
@@ -130,7 +134,7 @@ impl RouteGroundCache {
         let Some(mask) = direction(from, to) else {
             return;
         };
-        let chunk = self.chunk_mut(from);
+        let chunk = self.edge_chunk_mut(from);
         let (word, bit) = bit(from);
         let edge = &mut chunk.edges[word * 64 + bit.trailing_zeros() as usize];
         *edge |= mask;
@@ -142,7 +146,7 @@ impl RouteGroundCache {
     }
 
     pub fn invalidate(&mut self, area: TileRect) {
-        if self.chunks.is_empty() || area.min.x >= area.max.x || area.min.y >= area.max.y {
+        if area.min.x >= area.max.x || area.min.y >= area.max.y {
             return;
         }
         // A directed diagonal also reads its two corners, at most one tile
@@ -154,8 +158,21 @@ impl RouteGroundCache {
         let max = key(TileCoord::new(area.max.x, area.max.y));
         let count =
             (i64::from(max.0) - i64::from(min.0) + 1) * (i64::from(max.1) - i64::from(min.1) + 1);
+        if count > self.ground.len() as i64 {
+            self.ground
+                .retain(|&(x, y), _| x < min.0 || x > max.0 || y < min.1 || y > max.1);
+        } else {
+            for y in min.1..=max.1 {
+                for x in min.0..=max.0 {
+                    self.ground.remove(&(x, y));
+                }
+            }
+        }
+        if self.edges.is_empty() {
+            return;
+        }
         if count > SLOTS as i64 {
-            for entry in &mut self.chunks {
+            for entry in &mut self.edges {
                 if entry.as_ref().is_some_and(|chunk| {
                     chunk.key.0 >= min.0
                         && chunk.key.0 <= max.0
@@ -168,7 +185,7 @@ impl RouteGroundCache {
         } else {
             for y in min.1..=max.1 {
                 for x in min.0..=max.0 {
-                    let entry = &mut self.chunks[slot((x, y))];
+                    let entry = &mut self.edges[slot((x, y))];
                     if entry.as_ref().is_some_and(|chunk| chunk.key == (x, y)) {
                         *entry = None;
                     }
@@ -178,7 +195,8 @@ impl RouteGroundCache {
     }
 
     pub fn clear(&mut self) {
-        self.chunks.clear();
+        self.ground.clear();
+        self.edges.clear();
     }
 }
 

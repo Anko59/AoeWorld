@@ -34,11 +34,13 @@ impl Default for Cells {
 }
 
 impl Cells {
+    #[inline]
     fn get(&self, tile: TileCoord) -> Option<&Vec<CellBody>> {
         let slot = self.grid.get(tile.x, tile.y);
         (slot != NO_CELL).then(|| &self.bodies[slot as usize])
     }
 
+    #[inline]
     fn get_mut(&mut self, tile: TileCoord) -> Option<&mut Vec<CellBody>> {
         let slot = self.grid.get(tile.x, tile.y);
         (slot != NO_CELL).then(|| &mut self.bodies[slot as usize])
@@ -423,6 +425,7 @@ impl CollisionIndex {
         }
     }
 
+    #[inline(always)]
     fn sample(&self, tile: TileCoord, naval: bool, salt: u64) -> Option<neighborhood::Sample<'_>> {
         self.cells[usize::from(naval)].get(tile).map(|cell| {
             neighborhood::Sample::new(

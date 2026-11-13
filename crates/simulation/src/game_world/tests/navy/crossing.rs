@@ -3,7 +3,7 @@ use aoe_map::*;
 use std::sync::Arc;
 
 #[derive(Debug)]
-struct Pages(Vec<Arc<EnvironmentPage>>);
+struct Pages(Vec<Arc<EnvironmentPage>>, bool);
 
 impl EnvironmentPageProvider for Pages {
     fn page(
@@ -13,6 +13,9 @@ impl EnvironmentPageProvider for Pages {
     ) -> Result<Arc<EnvironmentPage>, EnvironmentPageError> {
         if cancelled() {
             return Err(EnvironmentPageError::Cancelled);
+        }
+        if self.1 && key.layer == PageLayer::Elevation {
+            return Err(EnvironmentPageError::Missing);
         }
         self.0
             .iter()
@@ -31,6 +34,10 @@ fn river_width(width_units: u16) -> GameWorld {
 }
 
 pub(super) fn river_channels(width_units: u16, separate_stream: bool) -> GameWorld {
+    river_world(width_units, separate_stream, false)
+}
+
+fn river_world(width_units: u16, separate_stream: bool, hide_elevation: bool) -> GameWorld {
     let (package, elevation, mut water) = economy::fixture::flat_fixture(true);
     let mut environment = package.environment;
     for page in &mut water {
@@ -108,7 +115,7 @@ pub(super) fn river_channels(width_units: u16, separate_stream: bool) -> GameWor
         .with_page_provider(
             Ratio::new(1, 1).unwrap(),
             environment,
-            Arc::new(Pages(pages)),
+            Arc::new(Pages(pages, hide_elevation)),
         )
         .unwrap();
     let mut world = GameWorld::new(WorldConfig::new(257, 257, Seed(91)).unwrap()).unwrap();
@@ -269,4 +276,31 @@ fn passengers_stay_aboard_their_ship_through_a_save() {
     for id in army {
         assert_eq!(restored.unit(id).unwrap().position, at(east));
     }
+}
+
+#[test]
+fn cold_ship_ground_needs_no_elevation_page_or_composed_landscape() {
+    // A newly loaded world: no navigation snapshot, no resident or memoized
+    // point, and the elevation pages unavailable. Composition would fail.
+    let world = river_world(10 * 256, false, true);
+    let Terrain::Map { generator, .. } = world.terrain() else {
+        unreachable!()
+    };
+    assert!(!generator.has_static_navigation());
+    let water = TileCoord::new(128, 128);
+    let land = TileCoord::new(100, 128);
+    assert_eq!(
+        generator.tile_and_node_with_cancel(water, &|| false),
+        Err(EnvironmentPageError::Missing),
+        "the fixture must make composition fail"
+    );
+    assert_eq!(
+        world.unit_tile_passable(UnitKind::FishingShip, water, &|| false),
+        Ok(true)
+    );
+    assert_eq!(
+        world.unit_tile_passable(UnitKind::TransportShip, land, &|| false),
+        Ok(false)
+    );
+    assert_eq!(generator.walk_cache_usage(), (0, 0));
 }

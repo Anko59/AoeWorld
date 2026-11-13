@@ -1,6 +1,103 @@
 use super::*;
 use crate::{EdgePassability, ResourceOverlay};
 
+#[test]
+fn water_projection_matches_composed_water_on_fallback_dense_and_provider() {
+    let (dense, source) = physical_sources();
+    let fallback = MapChunkGenerator::new([17; 32], 1, 16);
+    let (mut saw_wet, mut saw_dry) = (false, false);
+    for generator in [&fallback, &dense, &source] {
+        for y in 0..16 {
+            for x in 0..16 {
+                let at = TileCoord::new(x, y);
+                let expected = generator
+                    .tile_at_with_cancel(at, &|| false)
+                    .unwrap()
+                    .unwrap()
+                    .water;
+                assert_eq!(
+                    generator.water_at_with_cancel(at, &|| false),
+                    Ok(Some(expected))
+                );
+                saw_wet |= expected != WaterKind::None;
+                saw_dry |= expected == WaterKind::None;
+            }
+        }
+        assert_eq!(
+            generator.water_at_with_cancel(TileCoord::new(-1, 0), &|| false),
+            Ok(None)
+        );
+        assert_eq!(
+            generator.water_at_with_cancel(TileCoord::new(16, 0), &|| false),
+            Ok(None)
+        );
+        assert_eq!(
+            generator.water_at_with_cancel(TileCoord::new(1, 1), &|| true),
+            Err(EnvironmentPageError::Cancelled)
+        );
+    }
+    assert!(saw_wet && saw_dry);
+}
+
+#[derive(Debug)]
+struct NoElevation(Arc<dyn crate::EnvironmentPageProvider>);
+impl crate::EnvironmentPageProvider for NoElevation {
+    fn page(
+        &self,
+        key: EnvironmentPageKey,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Arc<EnvironmentPage>, EnvironmentPageError> {
+        if key.layer == crate::PageLayer::Elevation {
+            Err(EnvironmentPageError::Missing)
+        } else {
+            self.0.page(key, cancelled)
+        }
+    }
+}
+
+#[test]
+fn water_projection_does_not_need_elevation_or_landscape_composition() {
+    let (_, mut source) = physical_sources();
+    source.provider = Some(Arc::new(NoElevation(source.provider.take().unwrap())));
+    let at = TileCoord::new(1, 1);
+    assert_eq!(
+        source.water_at_with_cancel(at, &|| false),
+        Ok(Some(WaterKind::Lake))
+    );
+    assert_eq!(
+        source.tile_and_node_with_cancel(at, &|| false),
+        Err(EnvironmentPageError::Missing)
+    );
+}
+
+#[test]
+fn wet_tiles_hold_no_blocking_resource_node() {
+    // Ship ground relies on this: only fish exist on water and fish never
+    // block, so ships need no composed node for a wet tile.
+    let (dense, source) = physical_sources();
+    let wide = MapChunkGenerator::new([5; 32], 3, 96);
+    let mut wet = 0;
+    for (generator, side) in [(&wide, 96), (&dense, 16), (&source, 16)] {
+        for y in 0..side {
+            for x in 0..side {
+                let at = TileCoord::new(x, y);
+                let Some((tile, node)) =
+                    generator.tile_and_node_with_cancel(at, &|| false).unwrap()
+                else {
+                    continue;
+                };
+                if tile.water != WaterKind::None {
+                    wet += 1;
+                    assert!(node.is_none_or(|n| {
+                        matches!(n.object, ObjectKind::ShoreFish | ObjectKind::DeepFish)
+                    }));
+                }
+            }
+        }
+    }
+    assert!(wet > 0);
+}
+
 fn expected_edge(from: Tile, to: Tile) -> EdgePassability {
     if !from.passable
         || !to.passable
