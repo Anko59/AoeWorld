@@ -18,6 +18,10 @@ pub struct Options {
     recording: PathBuf,
     #[arg(long, default_value_t = 3, value_parser = clap::value_parser!(u32).range(1..=10))]
     runs: u32,
+    /// Rayon workers. Above 1 the counter sees only the simulation thread's
+    /// share, so compare wall time and hashes, not instructions.
+    #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..=64))]
+    workers: u32,
     #[arg(long, default_value = ".cache/save-replay/report.json")]
     out: PathBuf,
 }
@@ -45,6 +49,7 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
         let mut divergence = (initial != recording.initial_hash).then(|| recording.ticks[0].tick);
         let mut total = Vec::<u64>::new();
         let mut cpu = Series::default();
+        let mut wall = Series::default();
         let mut phases_cpu = BTreeMap::<&str, Series>::new();
         let mut phases = BTreeMap::<&str, Vec<u64>>::new();
         let mut phases_parallel = BTreeMap::<&str, u64>::new();
@@ -64,6 +69,7 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
                 timing_commands = timing.commands.clone();
                 refused.extend(timing.refused.iter().cloned());
                 cpu.push_ms(timing.cpu_ns.into());
+                wall.push_ms(timing.wall_ns.into());
                 for (name, nanos) in &timing.phases_cpu_ns { phases_cpu.entry(name).or_default().push_ms((*nanos).into()); }
                 for (name, count) in &timing.phases_instructions { phases.entry(name).or_default().push(*count); }
                 for (name, count) in &timing.phases_parallel_instructions { *phases_parallel.entry(name).or_default() += *count; }
@@ -104,7 +110,7 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
                 routes
             })
             .await;
-        Ok(json!({ "parallel_phase_instructions_mean": parallel_phase_mean, "parallel_sites": parallel_sites, "order_attribution": attribution, "refused_commands": refused, "initial_hash": hex(&initial), "total_cpu_ms_per_tick": cpu.summary(), "phases_cpu_ms": phases_cpu_summary, "total_instructions_per_tick": counts::summary(&total), "phases_instructions": phase_summary,
+        Ok(json!({ "parallel_phase_instructions_mean": parallel_phase_mean, "parallel_sites": parallel_sites, "order_attribution": attribution, "refused_commands": refused, "initial_hash": hex(&initial), "total_cpu_ms_per_tick": cpu.summary(), "total_wall_ms_per_tick": wall.summary(), "phases_cpu_ms": phases_cpu_summary, "total_instructions_per_tick": counts::summary(&total), "phases_instructions": phase_summary,
             "first_divergence_tick": divergence, "final_hash": hashes.last().ok_or("empty replay")?["hash"],
             "movement_progress": progress.summary(recording.ticks.last().ok_or("empty replay")?.tick + 1),
             "navigation_calls": navigation_calls, "routes": routes,
@@ -124,15 +130,18 @@ pub fn run(options: Options) -> Result<(), Box<dyn std::error::Error>> {
     let recording = Recording::read(&options.recording).map_err(|e| e.to_string())?;
     // One worker executes both the tick and all Rayon proposals on its own thread.
     // The user-only per-thread PMU counter includes all simulation instruction work.
-    let pool = rayon::ThreadPoolBuilder::new().num_threads(1).build()?;
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(options.workers as usize)
+        .build()?;
     let mut runs = Vec::new();
     for index in 0..options.runs {
         let report = pool.install(|| once(&options, &recording))?;
         println!(
-            "save-replay run {}: {} instructions/tick; {} CPU ms/tick; divergence {}; final {}",
+            "save-replay run {}: {} instructions/tick; {} CPU ms/tick; {} wall ms/tick; divergence {}; final {}",
             index + 1,
             report["total_instructions_per_tick"]["mean"],
             report["total_cpu_ms_per_tick"]["mean_ms"],
+            report["total_wall_ms_per_tick"]["mean_ms"],
             report["first_divergence_tick"],
             report["final_hash"]
         );
@@ -143,7 +152,7 @@ pub fn run(options: Options) -> Result<(), Box<dyn std::error::Error>> {
     let repeat_hashes_agree = runs.iter().all(|run| run["hashes"] == runs[0]["hashes"]);
     let report = json!({"revision": git(&["rev-parse", "HEAD"]), "dirty": !git(&["status", "--porcelain"]).is_empty(),
         "cpu_clock": "CLOCK_THREAD_CPUTIME_ID", "counter": "PERF_COUNT_HW_INSTRUCTIONS", "exclude_kernel": true, "exclude_hv": true,
-        "inherit": false, "pinned_counter": true, "multiplexed": false, "rayon_workers": 1, "ticks": recording.ticks.len(),
+        "inherit": false, "pinned_counter": true, "multiplexed": false, "rayon_workers": options.workers, "ticks": recording.ticks.len(),
         "source_diff_blake3": blake3::hash(git(&["diff", "HEAD", "--binary"]).as_bytes()).to_hex().to_string(),
         "save_blake3": blake3::hash(&fs::read(&options.save)?).to_hex().to_string(),
         "map_hash": recording.map_hash.map(|h| hex(&h)),

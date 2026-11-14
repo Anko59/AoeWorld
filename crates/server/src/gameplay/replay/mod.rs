@@ -225,6 +225,7 @@ impl GameplayService {
             .map(|c| command_name(&c.action))
             .collect();
         let mut raw = Vec::with_capacity(tick.commands.len());
+        let wall = std::time::Instant::now();
         let started = probe.sample()?;
         for command in &tick.commands {
             let issuer = if self
@@ -265,6 +266,7 @@ impl GameplayService {
             },
         );
         let total = probe.sample()? - started;
+        let wall_ns = u64::try_from(wall.elapsed().as_nanos()).unwrap_or(u64::MAX);
         aoe_simulation::parallel_meter::uninstall();
         probe.finish()?;
         let (commands, refused) = attribute_commands(tick, &names, &raw);
@@ -272,6 +274,7 @@ impl GameplayService {
         measured(Timing {
             instructions: total.instructions,
             cpu_ns: total.cpu_ns,
+            wall_ns,
             phases_instructions,
             phases_parallel_instructions: probe.drain_parallel(),
             parallel_sites: aoe_simulation::parallel_meter::drain(),

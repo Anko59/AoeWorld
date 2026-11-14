@@ -33,6 +33,8 @@ pub(super) fn cpu() -> io::Result<u64> {
 pub struct Timing {
     pub instructions: u64,
     pub cpu_ns: u64,
+    /// Wall time of the orders and the tick, all workers included.
+    pub wall_ns: u64,
     pub phases_cpu_ns: BTreeMap<&'static str, u64>,
     pub phases_instructions: BTreeMap<&'static str, u64>,
     /// Of each phase's instructions, those spent inside fork-join regions.
@@ -209,6 +211,13 @@ impl Probe {
         (instructions, cpu_ns)
     }
     fn span(&self, name: &'static str) -> Box<dyn aoe_map::NavigationSpan> {
+        // A span opened on a pool worker (a replay with several workers) is
+        // not counted: the counter belongs to the simulation thread.
+        if let Source::Hardware { thread: owner, .. } = &self.0.source
+            && *owner != thread::current().id()
+        {
+            return Box::new(Detached);
+        }
         if let Ok(mut calls) = self.0.calls.lock() {
             calls.stack.push(name);
         } else {
@@ -254,6 +263,8 @@ struct Span {
     parallel_started: u64,
 }
 impl aoe_map::NavigationSpan for Span {}
+struct Detached;
+impl aoe_map::NavigationSpan for Detached {}
 impl Drop for Span {
     fn drop(&mut self) {
         match (&self.started, self.probe.sample()) {
