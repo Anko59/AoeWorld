@@ -58,8 +58,10 @@ async fn controller(state: &AppState) -> HeaderMap {
     headers
 }
 
+/// Waits up to a minute: a deadline for progress, not a speed bound. Ten
+/// seconds expired under coverage instrumentation on dev (run 43590504145).
 async fn until(state: &AppState, phase: Phase) -> Status {
-    for _ in 0..400 {
+    for _ in 0..2400 {
         let current = status(state).await;
         if current.phase == phase {
             return current;
