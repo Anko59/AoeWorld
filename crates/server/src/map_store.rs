@@ -11,7 +11,8 @@ use std::{
 use thiserror::Error;
 const MAX_PACKAGES: usize = 256;
 /// Matches the worker's directory manifest limit (up to 96 GLO-90 tile locks).
-const MAX_PACKAGE_BYTES: u64 = 128 * 1024;
+/// The largest manifest the store reads; E2E staging uses the same bound.
+pub const MAX_PACKAGE_BYTES: u64 = 128 * 1024;
 const MAX_PAGE_BYTES: u64 = 128 * 1024;
 
 pub(crate) mod navigation;

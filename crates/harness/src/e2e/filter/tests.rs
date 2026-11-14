@@ -113,3 +113,15 @@ fn a_report_must_exist_and_hold_something() {
     std::fs::write(&report, b"{}").expect("report");
     assert!(check_report(root.path(), FILTERED_REPORT).is_ok());
 }
+
+#[test]
+fn a_spec_named_from_browser_tests_resolves_and_a_miss_names_the_prefix() {
+    let candidates = candidates();
+    let first = candidates[0].clone();
+    let short = first
+        .strip_prefix("tests/")
+        .expect("candidates start with tests/");
+    assert_eq!(resolve(&candidates, &[short.into()]).unwrap(), vec![first]);
+    let error = resolve(&candidates, &["no/such.spec.ts".into()]).unwrap_err();
+    assert!(error.contains("tests/<path>.spec.ts"), "{error}");
+}
