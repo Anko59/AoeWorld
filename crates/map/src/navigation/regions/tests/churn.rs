@@ -1,5 +1,5 @@
-//! The phase-3 cost gate: a batched flush under churn (trees felled,
-//! buildings placed and razed every tick) stays within 2 ms.
+//! A batched flush under churn (trees felled, buildings placed and razed every
+//! tick) agrees with a fresh build; its timings are reported, not asserted.
 use super::*;
 use std::time::Instant;
 
