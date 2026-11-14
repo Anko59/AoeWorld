@@ -14,7 +14,7 @@ pub use game_world::browser_content;
 pub use game_world::terrain_fixtures;
 pub use game_world::{BrowserBuilding, BrowserContent, BrowserTech, BrowserUnit};
 pub use game_world::{HoldingSpan, LandControl};
-pub use game_world::{RestoreReport, SnapshotError, WorldSnapshot};
+pub use game_world::{RestoreReport, SnapshotError, WORLD_SNAPSHOT_VERSION, WorldSnapshot};
 mod movement_speed;
 mod navigation_cache;
 mod terrain;

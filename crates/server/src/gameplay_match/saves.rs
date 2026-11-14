@@ -21,7 +21,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-const SAVE_VERSION: u16 = 1;
+/// Read by `make check-fixtures` to explain a save that no longer loads.
+pub const SAVE_VERSION: u16 = 1;
 const MAX_NAME: usize = 60;
 const MAX_SAVE_BYTES: u64 = 2 << 30;
 

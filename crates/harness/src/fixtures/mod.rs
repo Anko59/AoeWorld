@@ -1,5 +1,5 @@
 //! Load the documented local inputs without running a match or measuring it.
-use aoe_map::{GENERATION_RECIPE_VERSION, MAP_SCHEMA_VERSION, MapPackage};
+use aoe_map::{GENERATION_RECIPE_VERSION, MAP_SCHEMA_VERSION};
 use std::{
     collections::BTreeSet,
     fs,
@@ -87,18 +87,9 @@ fn discover(root: &Path) -> Result<Vec<Fixture>, Box<dyn std::error::Error>> {
 fn load(root: &Path, fixture: &Fixture) -> Result<(), String> {
     let path = root.join(&fixture.path);
     match fixture.kind {
-        Kind::Package => {
-            let package: MapPackage =
-                serde_json::from_slice(&fs::read(&path).map_err(|e| e.to_string())?)
-                    .map_err(|e| e.to_string())?;
-            package.validate().map_err(|e| e.to_string())?;
-            if path.file_stem().and_then(|s| s.to_str())
-                != Some(package.content_hash_hex().as_str())
-            {
-                return Err("package content hash does not match filename".into());
-            }
-            Ok(())
-        }
+        // The game's map store check: manifest, canonical name, pages and
+        // navigation data, exactly as the server loads a package directory.
+        Kind::Package => aoe_server::verify_package(&path).map_err(|e| e.to_string()),
         Kind::Save => {
             let packages = path
                 .parent()
@@ -111,14 +102,49 @@ fn load(root: &Path, fixture: &Fixture) -> Result<(), String> {
     }
 }
 
-fn versions(kind: Kind) -> String {
-    let package = format!(
-        "crates/map/src/lib.rs: MAP_SCHEMA_VERSION={MAP_SCHEMA_VERSION}, GENERATION_RECIPE_VERSION={GENERATION_RECIPE_VERSION}"
-    );
-    match kind {
-        Kind::Package => package,
+/// What a failure means for the version constants: "expected X, found Y" for each
+/// package constant that differs, or a statement that the versions matched, so the
+/// format or content changed without a version bump.
+fn versions(root: &Path, fixture: &Fixture, error: &str) -> String {
+    match fixture.kind {
+        Kind::Package => {
+            let recorded: serde_json::Value = fs::read(root.join(&fixture.path))
+                .ok()
+                .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+                .unwrap_or_default();
+            let moved: Vec<String> = [
+                ("schema_version", "MAP_SCHEMA_VERSION", MAP_SCHEMA_VERSION),
+                (
+                    "generation_recipe_version",
+                    "GENERATION_RECIPE_VERSION",
+                    GENERATION_RECIPE_VERSION,
+                ),
+            ]
+            .into_iter()
+            .filter_map(|(field, constant, current)| {
+                let found = recorded.get(field)?.as_u64()?;
+                (found != u64::from(current)).then(|| {
+                    format!("crates/map/src/lib.rs {constant}: expected {current}, found {found}")
+                })
+            })
+            .collect();
+            if moved.is_empty() {
+                format!(
+                    "MAP_SCHEMA_VERSION={MAP_SCHEMA_VERSION} and GENERATION_RECIPE_VERSION={GENERATION_RECIPE_VERSION} match: the package content no longer validates"
+                )
+            } else {
+                moved.join("; ")
+            }
+        }
+        Kind::Save if error.contains("version") => format!(
+            "the save's version differs from SAVE_VERSION={save} or WORLD_SNAPSHOT_VERSION={snapshot}: re-record the save",
+            save = aoe_server::SAVE_VERSION,
+            snapshot = aoe_simulation::WORLD_SNAPSHOT_VERSION
+        ),
         Kind::Save => format!(
-            "crates/server/src/gameplay_match/saves.rs: SAVE_VERSION; crates/simulation/src/game_world/snapshot/records.rs: WORLD_SNAPSHOT_VERSION; {package}"
+            "SAVE_VERSION={save} and WORLD_SNAPSHOT_VERSION={snapshot} match the save, so the save format or the game content it refers to changed without a version bump: re-record the save",
+            save = aoe_server::SAVE_VERSION,
+            snapshot = aoe_simulation::WORLD_SNAPSHOT_VERSION
         ),
     }
 }
@@ -139,7 +165,11 @@ fn check(root: &Path, fixtures: &[Fixture], output: &mut impl Write) -> std::io:
             Ok(()) => writeln!(output, "OK {path}")?,
             Err(error) => {
                 passed = false;
-                writeln!(output, "FAIL {path}: {error} [{}]", versions(fixture.kind))?;
+                writeln!(
+                    output,
+                    "FAIL {path}: {error} [{}]",
+                    versions(root, fixture, &error)
+                )?;
             }
         }
     }
@@ -152,13 +182,16 @@ fn check(root: &Path, fixtures: &[Fixture], output: &mut impl Write) -> std::io:
 pub(crate) fn run(report: bool) -> Result<(), Box<dyn std::error::Error>> {
     let root = Path::new(".");
     let fixtures = discover(root)?;
-    if !check(root, &fixtures, &mut std::io::stdout().lock())? {
-        let message =
-            "documented fixtures failed to load; regenerate them (docs/scale/save-replay.md)";
-        if !report {
-            return Err(message.into());
-        }
-        println!("WARNING: {message}");
+    let passed = check(root, &fixtures, &mut std::io::stdout().lock())?;
+    // The last stderr line is the gate's summary in the ship evidence.
+    let message = "documented fixtures failed to load; regenerate them (docs/scale/save-replay.md)";
+    match (passed, report) {
+        (true, _) => eprintln!(
+            "fixtures: {} documented, all present ones load",
+            fixtures.len()
+        ),
+        (false, true) => eprintln!("WARNING: {message}"),
+        (false, false) => return Err(message.into()),
     }
     Ok(())
 }

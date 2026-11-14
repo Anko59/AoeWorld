@@ -123,7 +123,8 @@ fn fixtures_report_ok_fail_skipped_and_continue_after_failure() {
     let text = String::from_utf8(output).unwrap();
     assert!(text.contains(&format!("OK {good}")), "{text}");
     assert!(
-        text.contains(&format!("FAIL {bad}: expected value")),
+        text.contains(&format!("FAIL {bad}: invalid stored map package"))
+            && text.contains("expected value at line 1"),
         "{text}"
     );
     assert!(text.contains("GENERATION_RECIPE_VERSION"), "{text}");
@@ -235,7 +236,7 @@ fn fixtures_package_identity_must_match_its_filename() {
     assert!(
         String::from_utf8(output)
             .unwrap()
-            .contains("package content hash does not match filename")
+            .contains("package file name or identity is not canonical")
     );
 }
 

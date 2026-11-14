@@ -18,7 +18,8 @@ mod terrain_cache;
 pub use config::{Config, SamplingProfile};
 pub use gameplay::{GameplayService, PersistedDepletion, ResourceLifecycleError, SlotInfo};
 pub use gameplay_match::MAX_MATCH_SLOTS;
-pub use map_store::MapStoreError;
+pub use gameplay_match::SAVE_VERSION;
+pub use map_store::{MapStoreError, verify_package};
 pub(crate) use map_store::{PageResidency, load as load_map_packages};
 #[cfg(feature = "sampling-profiler")]
 pub use sampling::spawn as start_sampling_profile;

@@ -406,6 +406,7 @@ mod pause;
 pub(crate) mod routes;
 mod rules;
 mod saves;
+pub use saves::SAVE_VERSION;
 mod seats;
 mod skirmish;
 mod stats;
