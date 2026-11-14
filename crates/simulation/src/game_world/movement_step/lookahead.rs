@@ -53,6 +53,7 @@ impl GameWorld {
             }
             let spent = planner.work().saturating_sub(work_before);
             self.route_metrics.lookahead_work += u64::from(spent);
+            self.demand_route_work(Some(self.units[index].state.id), 2, spent);
             let (from, to) = (planner.origin(), planner.destination());
             self.route_metrics
                 .attribution

@@ -312,7 +312,9 @@ impl GameWorld {
         self.reuse_region_endpoint_proof(&mut planner, kind, player);
         let work_before = planner.work();
         let (result, spent) = if fast {
+            self.set_work_unit(Some(id));
             let (result, full) = self.poll_fast_route(&mut planner, kind, player);
+            self.set_work_unit(None);
             self.units[index].fast_route_tried = full;
             (result, 0)
         } else {
@@ -326,6 +328,7 @@ impl GameWorld {
                 self.route_metrics.searches_started += 1;
             }
             self.route_metrics.fair_work += u64::from(spent);
+            self.demand_route_work(Some(id), 1, spent);
             let (from, to) = (planner.origin(), planner.destination());
             self.route_metrics
                 .attribution

@@ -92,3 +92,43 @@ fn redundant_order_sources_distinguish_callers_without_changing_flat_counts_or_h
     assert_eq!(w.canonical_hash(), hash);
     assert!(w.order_redundancy_sources().is_empty());
 }
+
+#[test]
+fn retained_and_accepted_requests_are_counted_apart_and_route_work_follows_the_issuer() {
+    let mut w = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
+    let id = w.spawn_unit(PlayerId(0), at(20)).unwrap();
+    w.with_order_issuer(OrderIssuer::PythonAi, |w| w.issue_move(id, at(100)))
+        .unwrap();
+    w.with_order_issuer(OrderIssuer::PythonAi, |w| w.issue_move(id, at(100)))
+        .unwrap();
+    let row = &w.order_demand()[OrderIssuer::PythonAi as usize];
+    assert_eq!((row.orders, row.accepted, row.retained), (2, 1, 1));
+    assert_eq!(w.order_mover_census()[OrderIssuer::PythonAi as usize], 1);
+    let issue_work: u64 = w.order_route_work().iter().map(|r| r[0]).sum();
+    let python_issue = w.order_route_work()[OrderIssuer::PythonAi as usize][0];
+    assert_eq!(issue_work, python_issue, "issue-time work is the caller's");
+}
+
+#[test]
+fn engine_started_searches_are_charged_to_the_engine_and_only_unknown_history_is_unattributed() {
+    let mut w = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
+    let engine = OrderIssuer::Automation as usize;
+    // Issue-time work in the ambient engine context (a gather or combat trip).
+    w.demand_route_work(None, 0, 5);
+    w.with_order_issuer(OrderIssuer::Steward, |w| w.demand_route_work(None, 0, 7));
+    assert_eq!(w.order_route_work()[engine][0], 5);
+    assert_eq!(w.order_route_work()[OrderIssuer::Steward as usize][0], 7);
+    assert_eq!(
+        w.order_route_work()[7],
+        [0; 3],
+        "a known issuer is never unattributed"
+    );
+    // A queued search of a unit with no recorded order has no issuer to charge.
+    let id = w.spawn_unit(PlayerId(0), at(20)).unwrap();
+    w.demand_route_work(Some(id), 1, 3);
+    assert_eq!(w.order_route_work()[7][1], 3);
+    // After an engine-issued order the fair-pass work follows the engine.
+    w.issue_task_move(id, at(100)).unwrap();
+    w.demand_route_work(Some(id), 1, 4);
+    assert_eq!(w.order_route_work()[engine][1], 4);
+}

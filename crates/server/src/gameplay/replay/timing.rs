@@ -37,6 +37,10 @@ pub struct Timing {
     pub phases_instructions: BTreeMap<&'static str, u64>,
     /// Completed composition/proof spans, keyed by their inclusive caller path.
     pub navigation_calls: BTreeMap<String, u64>,
+    /// Applied commands and their instructions, keyed `issuer:kind:Result`.
+    pub commands: BTreeMap<String, (u64, u64)>,
+    /// Refused commands: tick, player, `issuer:kind:Result`, action, instructions.
+    pub refused: Vec<(u64, u16, String, String, u64)>,
 }
 #[derive(Debug)]
 enum Source {
@@ -72,6 +76,7 @@ fn names() -> impl Iterator<Item = &'static str> {
         .iter()
         .copied()
         .chain(["steward_economy"])
+        .chain(aoe_simulation::ISSUER_SPANS)
 }
 pub(super) fn validate(count: u64, enabled: u64, running: u64) -> io::Result<u64> {
     if running == 0 || enabled != running {

@@ -91,6 +91,7 @@ impl GameWorld {
         }
         self.charge_fast_route(player, spent);
         self.route_metrics.issue_work += u64::from(spent);
+        self.demand_route_work(None, 0, spent);
         let (from, to) = (planner.origin(), planner.destination());
         self.route_metrics
             .attribution

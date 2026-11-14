@@ -135,3 +135,74 @@ async fn replay_refuses_a_tick_gap_before_applying_commands() {
     );
     assert_eq!(replay.inspect_scale_world(|w| w.tick().0).await, 0);
 }
+
+fn vassal_commands(count: u32) -> Vec<super::RecordedCommand> {
+    (0..count)
+        .map(|i| super::RecordedCommand {
+            player: aoe_core::PlayerId(1),
+            action: super::PendingAction::VassalDevelopment {
+                vassal_id: aoe_core::EntityId(900 + i),
+                enabled: true,
+            },
+        })
+        .collect()
+}
+
+#[test]
+fn command_cost_keeps_issuers_apart_and_lists_refusals_with_their_action() {
+    use aoe_protocol::CommandResult::{Accepted, RejectedUnknownEntity};
+    use aoe_simulation::OrderIssuer::{Player, PythonAi};
+    let tick = super::RecordedTick {
+        tick: 7,
+        commands: vassal_commands(3),
+        hash: [0; 32],
+    };
+    let names = vec!["VassalDevelopment".to_owned(); 3];
+    let raw = [
+        (Player, Accepted, 10),
+        (PythonAi, Accepted, 20),
+        (PythonAi, RejectedUnknownEntity, 30),
+    ];
+    let (table, refused) = super::attribute_commands(&tick, &names, &raw);
+    assert_eq!(table["player:VassalDevelopment:Accepted"], (1, 10));
+    assert_eq!(table["python_ai:VassalDevelopment:Accepted"], (1, 20));
+    assert_eq!(
+        table["python_ai:VassalDevelopment:RejectedUnknownEntity"],
+        (1, 30)
+    );
+    assert_eq!(refused.len(), 1);
+    assert_eq!(
+        refused[0].2,
+        "python_ai:VassalDevelopment:RejectedUnknownEntity"
+    );
+    assert!(refused[0].3.contains("VassalDevelopment") && refused[0].4 == 30);
+}
+
+#[tokio::test]
+async fn attribution_adds_two_counter_reads_per_command_and_nothing_else_to_the_tick() {
+    // The fixture counter advances 100 per read, so the measured total counts reads:
+    // naming, serialization, table updates and refused-action copies must add none.
+    let total = |commands: Vec<super::RecordedCommand>| async move {
+        let service = GameplayService::new(Seed(5));
+        let tick = service.inspect_scale_world(|w| w.tick().0).await;
+        let tick = super::RecordedTick {
+            tick,
+            commands,
+            hash: [0; 32],
+        };
+        let mut seen = None;
+        service
+            .replay_step_using(&tick, &mut |t| seen = Some(t), || {
+                Ok(super::timing::Probe::fixture())
+            })
+            .await
+            .unwrap();
+        let timing = seen.unwrap();
+        (timing.instructions, timing.commands, timing.refused)
+    };
+    let (none, _, _) = total(Vec::new()).await;
+    let (three, table, refused) = total(vassal_commands(3)).await;
+    assert_eq!(three - none, 3 * 2 * 100);
+    assert_eq!(table.values().map(|v| v.0).sum::<u64>(), 3);
+    assert_eq!(refused.len(), 3, "unknown vassals are refused and listed");
+}
