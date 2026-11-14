@@ -236,11 +236,11 @@ impl Filter {
         let Some(lines) = &self.lines else {
             return reported;
         };
-        // A finding that names no file cannot be placed outside the increment,
-        // so it stays a finding that can block.
-        let (inside, outside): (Vec<_>, Vec<_>) = reported
-            .into_iter()
-            .partition(|r| r.file.is_empty() || lines.holds(r));
+        // The increment contract: only a finding that cites a line of the diff can
+        // block. One that names no file cites nothing, so it is a note; in a full
+        // review there is no filter and it stays a finding.
+        let (inside, outside): (Vec<_>, Vec<_>) =
+            reported.into_iter().partition(|r| lines.holds(r));
         self.outside.extend(outside);
         inside
     }

@@ -196,9 +196,15 @@ fn merging_dev_without_touching_the_branch_gives_an_empty_increment() {
 }
 
 #[test]
-fn a_finding_that_names_no_file_stays_a_finding_that_can_block() {
+fn a_finding_that_names_no_file_is_a_note_in_an_increment() {
+    // The reviewers are told a finding must cite a line of the diff to block.
     let mut filter = Filter::new(Some(Lines::of(DIFF)));
-    let inside = filter.admit(vec![reported("", None), reported("elsewhere", Some(1))]);
-    assert_eq!(inside, vec![reported("", None)]);
-    assert_eq!(filter.outside, vec![reported("elsewhere", Some(1))]);
+    let inside = filter.admit(vec![reported("", None), reported("x", Some(2))]);
+    assert_eq!(inside, vec![reported("x", Some(2))]);
+    assert_eq!(filter.outside, vec![reported("", None)]);
+    // A full review has no filter: the same finding stays a finding.
+    assert_eq!(
+        Filter::new(None).admit(vec![reported("", None)]),
+        vec![reported("", None)]
+    );
 }
