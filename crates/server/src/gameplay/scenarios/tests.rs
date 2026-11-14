@@ -446,3 +446,21 @@ async fn behaviour_recordings_pause_the_real_world_before_the_first_frame() {
         assert!(service.world.read().await.units().any(|u| u.hp > 0));
     }
 }
+
+#[test]
+fn the_trade_demo_has_markets_docks_and_an_imperial_player() {
+    let (world, builder) = aoe_simulation::GameWorld::trade_demo(Seed(1)).unwrap();
+    let count = |kind| {
+        world
+            .buildings()
+            .filter(|b| b.kind == kind && b.player == aoe_core::PlayerId(0))
+            .count()
+    };
+    assert_eq!(count(aoe_simulation::BuildingKind::Market), 2);
+    assert_eq!(count(aoe_simulation::BuildingKind::Dock), 2);
+    assert_eq!(
+        world.player_economy(aoe_core::PlayerId(0)).unwrap().age,
+        aoe_simulation::Age::Imperial
+    );
+    assert!(world.unit(builder).is_some());
+}

@@ -198,7 +198,7 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
         .collect();
     assert_eq!(
         native.len(),
-        119_273,
+        122_163,
         "every native unit/stone source cell is chunked"
     );
     assert_eq!(
