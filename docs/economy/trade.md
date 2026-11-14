@@ -19,7 +19,8 @@ Cog rate.
 - Gold per leg: `2 * w * (d / size + 0.3) * d + 0.5`, floored, where
   `d = sqrt(max(0, dx - 5)^2 + max(0, dy - 5)^2)` is the centre distance in
   tiles, `size` the shorter map edge and `w` 0.23 (Cart) or 0.299 (Cog). Centres
-  closer than 12 tiles are not a route.
+  closer than 12 tiles are not a route. A run first walks to the named
+  building (no pay) and is paid only for a leg it departed and then finished.
 - Any manual order (move, attack, stop, delete) ends the run. `TradeOrder`
   (right-click an own Market or Dock with traders selected; Python
   `client.trade(unit, building)`) starts it again from that building.

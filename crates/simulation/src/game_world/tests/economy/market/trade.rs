@@ -125,7 +125,7 @@ fn longer_routes_pay_more_and_a_manual_move_ends_the_run() {
 }
 
 #[test]
-fn a_lone_market_has_no_route_and_a_destroyed_partner_is_replaced() {
+fn a_destroyed_partner_is_replaced_by_the_surviving_market_and_a_lone_one_has_no_route() {
     let (mut world, a, b) = feudal_world_with_markets(60);
     let cart = train_cart(&mut world, a);
     let c = market(&mut world, 90, 80 + 30);
@@ -138,7 +138,66 @@ fn a_lone_market_has_no_route_and_a_destroyed_partner_is_replaced() {
         .get(&cart)
         .copied()
         .expect("still trading");
-    assert!(run.to == Some(c) || run.from == c || run.to.is_some());
+    assert_eq!(
+        (run.from, run.to),
+        (a, Some(c)),
+        "the run points at the survivor"
+    );
+    world.remove_building(c);
+    // The cart notices when its walk ends.
+    advance(&mut world, 1500);
+    let run = world
+        .economy
+        .trade
+        .get(&cart)
+        .copied()
+        .expect("still waiting");
+    assert_eq!(run.to, None, "a lone market is not a route");
+}
+
+#[test]
+fn partners_closer_than_twelve_tiles_are_not_a_route() {
+    let (mut world, a, _) = feudal_world_with_markets(8);
+    let cart = train_cart(&mut world, a);
+    set_stock(&mut world, 0, 0, 0, 0);
+    advance(&mut world, 400);
+    assert_eq!(world.economy.trade.get(&cart).and_then(|r| r.to), None);
+    assert_eq!(stock(&world).2, 0);
+    // Twelve tiles and a little is a route.
+    let (mut world, a, _) = feudal_world_with_markets(13);
+    let cart = train_cart(&mut world, a);
+    advance(&mut world, 400);
+    assert!(world.economy.trade.get(&cart).and_then(|r| r.to).is_some());
+}
+
+#[test]
+fn ordering_a_cart_parked_at_the_far_market_pays_only_after_it_walked_the_leg() {
+    let (mut world, a, b) = feudal_world_with_markets(60);
+    set_stock(&mut world, 0, 0, 0, 0);
+    // Parked beside B, ordered to trade at A, repeatedly.
+    let at = WorldPosition::from_tile_center(TileCoord::new(149, 82)).unwrap();
+    let cart = world
+        .spawn_kind(PlayerId(0), UnitKind::TradeCart, at)
+        .unwrap();
+    let footprint = world.building(a).unwrap().footprint;
+    let mut seen_at_a = false;
+    let mut paid = false;
+    for tick in 0..8000 {
+        if tick < 6 {
+            world.issue_trade(PlayerId(0), cart, a).unwrap();
+            assert_eq!(stock(&world).2, 0, "re-issuing the order earns nothing");
+        }
+        world.advance();
+        let tile = world.unit(cart).unwrap().position.tile_floor();
+        seen_at_a |= crate::game_world::economy::placement::adjacent(footprint, tile);
+        if stock(&world).2 > 0 {
+            assert!(seen_at_a, "paid before it ever reached A");
+            paid = true;
+            break;
+        }
+    }
+    assert!(paid, "the A to B leg pays once walked");
+    let _ = b;
 }
 
 #[test]

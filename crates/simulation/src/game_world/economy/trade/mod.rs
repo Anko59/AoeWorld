@@ -18,8 +18,11 @@ const RETRY_TICKS: u64 = 40;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct TradeRun {
-    /// The market or dock this leg set out from.
+    /// The market or dock this leg set out from, once `visited`.
     pub(crate) from: EntityId,
+    /// The trader has stood at `from`: a run walks to the named building first
+    /// and earns nothing until it then arrives at the other end.
+    visited: bool,
     /// Where the unit is heading; paid on arrival. `None` while no partner exists.
     pub(crate) to: Option<EntityId>,
     /// A partner whose approach was refused, skipped by the next search.
@@ -122,8 +125,8 @@ impl GameWorld {
                 u64::from(origin.1.abs_diff(at.1)),
             );
             let far = dx * dx + dy * dy;
-            // Buildings that touch pay nothing: not a route.
-            if far > 4 * 36 && best.is_none_or(|(f, _)| far > f) {
+            // Closer than 12 tiles (half-tile units, squared) is not a route.
+            if far > 4 * 144 && best.is_none_or(|(f, _)| far > f) {
                 best = Some((far, id));
             }
         }
@@ -136,6 +139,7 @@ impl GameWorld {
             unit,
             TradeRun {
                 from: home,
+                visited: false,
                 to: None,
                 refused: None,
             },
@@ -251,7 +255,10 @@ impl GameWorld {
                             .find(|&b| self.trade_usable(unit.player, building, b))
                     });
                 match nearest {
-                    Some(b) => run.from = b,
+                    Some(b) => {
+                        run.from = b;
+                        run.visited = false;
+                    }
                     None => {
                         self.cancel_trade(id);
                         continue;
@@ -265,6 +272,26 @@ impl GameWorld {
             {
                 run.to = None;
             }
+            let at = unit.position.tile_floor();
+            if !run.visited {
+                let home = self.economy.buildings.get(&run.from).map(|b| b.footprint);
+                let Some(footprint) = home else {
+                    self.cancel_trade(id);
+                    continue;
+                };
+                if super::placement::adjacent(footprint, at) {
+                    run.visited = true;
+                    changed.push(id);
+                } else if self.approach_garrison(id, footprint).is_ok() {
+                    self.units[index].state.task = crate::UnitTask::Moving;
+                    changed.push(id);
+                    self.economy.trade.insert(id, run);
+                    continue;
+                } else {
+                    self.cancel_trade(id);
+                    continue;
+                }
+            }
             if run.to.is_none() {
                 if !(self.tick.0 + u64::from(id.0)).is_multiple_of(RETRY_TICKS) {
                     self.economy.trade.insert(id, run);
@@ -276,7 +303,6 @@ impl GameWorld {
                 self.economy.trade.insert(id, run);
                 continue;
             };
-            let at = unit.position.tile_floor();
             let arrived = self
                 .economy
                 .buildings
@@ -291,6 +317,7 @@ impl GameWorld {
                 // the farthest partner if that building is gone.
                 run = TradeRun {
                     from: to,
+                    visited: true,
                     to: Some(run.from),
                     refused: None,
                 };
@@ -326,6 +353,7 @@ impl crate::game_world::economy::Economy {
         for (id, run) in &self.trade {
             hash.update(&id.0.to_le_bytes());
             hash.update(&run.from.0.to_le_bytes());
+            hash.update(&[u8::from(run.visited)]);
             hash.update(&run.to.map_or(u32::MAX, |e| e.0).to_le_bytes());
             hash.update(&run.refused.map_or(u32::MAX, |e| e.0).to_le_bytes());
         }
