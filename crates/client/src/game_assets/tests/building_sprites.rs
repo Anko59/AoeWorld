@@ -147,7 +147,7 @@ async fn native_army_overlay_accepts_the_bounded_complete_source_inventory() {
 #[wasm_bindgen_test::wasm_bindgen_test]
 async fn native_army_overlay_refuses_inventory_beyond_the_source_bound() {
     let value =
-        super::selection_tests::pack_fixture([("de/synthetic-army.sld".into(), 131_073, false)]);
+        super::selection_tests::pack_fixture([("de/synthetic-army.sld".into(), 262_145, false)]);
     let _fetch = super::selection_tests::FetchFixture::install(&value);
     let install =
         js_sys::Function::new_with_args("data", "window.fetch = async () => new Response(data);");
