@@ -71,14 +71,26 @@ fn every_make_workload_container_has_shared_caps_and_immediate_admission() {
 
 #[test]
 fn long_make_targets_acquire_before_workload_prerequisites_and_recipes() {
-    // Every recipe that takes a long slot is the list; the Make pre-check must
-    // name exactly those goals, so neither can drift from the other.
+    // Every rule whose recipe takes a long slot is the list; the Make pre-check
+    // must name exactly those goals, so neither can drift from the other. The
+    // owning rule counts, not the launcher's argument, which a copy could keep.
     let files = files();
-    let mut long: Vec<_> = files
-        .iter()
-        .flat_map(|(_, text)| text.split("$(RESOURCE_LONG) ").skip(1))
-        .filter_map(|rest| rest.split_once(" -- ").map(|(target, _)| target))
-        .collect();
+    let mut long = Vec::new();
+    for (_, text) in &files {
+        let mut rule = "";
+        for line in text.lines() {
+            if let Some(recipe) = line.strip_prefix('\t') {
+                if recipe.contains("$(RESOURCE_LONG)") {
+                    long.extend(rule.split_whitespace());
+                }
+            } else if let Some((targets, _)) = line.split_once(':')
+                && !line.contains('=')
+                && !line.starts_with('#')
+            {
+                rule = targets;
+            }
+        }
+    }
     long.sort_unstable();
     long.dedup();
     let resources = fs::read_to_string(root().join("make/resources.mk")).unwrap();
