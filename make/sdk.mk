@@ -31,6 +31,12 @@ sdk-python-test: sdk-python-tools job-bootstrap
 sdk-python-test-steps:
 	@$(SDK_RUN) cargo run --locked -p aoe-harness -- sdk-python test $(SDK_PYTHON_TEST_ARGS)
 
+# The binding tests alone (about 90 s after the build), run on pull requests: on
+# 2026-11-13 they failed after merge for seven dev runs before anyone saw it.
+.PHONY: sdk-python-bindings
+sdk-python-bindings: sdk-python-tools job-bootstrap
+	@$(JOB_RUN) sdk-python-bindings -- make --no-print-directory sdk-python-test-steps SDK_PYTHON_TEST_ARGS=--bindings-only
+
 # Fast fake-world regressions; sdk-python-test remains the full integration gate.
 .PHONY: sdk-python-logic-test sdk-python-logic-test-steps
 sdk-python-logic-test: sdk-python-tools job-bootstrap
