@@ -29,7 +29,7 @@ mod movement_step;
 mod navy;
 mod orders;
 pub use orders::{ISSUER_SPANS, OrderDemand, OrderIssuer, OrderRedundancy};
-mod parallel;
+pub mod parallel;
 mod research;
 mod resources;
 #[path = "game_world/snapshot/mod.rs"]

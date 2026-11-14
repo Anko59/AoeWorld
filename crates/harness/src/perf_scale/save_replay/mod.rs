@@ -47,6 +47,8 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
         let mut cpu = Series::default();
         let mut phases_cpu = BTreeMap::<&str, Series>::new();
         let mut phases = BTreeMap::<&str, Vec<u64>>::new();
+        let mut phases_parallel = BTreeMap::<&str, u64>::new();
+        let mut sites = BTreeMap::<String, aoe_simulation::parallel_meter::Site>::new();
         let mut hashes = Vec::new();
         let mut raw = Vec::new();
         let mut commands = 0;
@@ -64,6 +66,12 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
                 cpu.push_ms(timing.cpu_ns.into());
                 for (name, nanos) in &timing.phases_cpu_ns { phases_cpu.entry(name).or_default().push_ms((*nanos).into()); }
                 for (name, count) in &timing.phases_instructions { phases.entry(name).or_default().push(*count); }
+                for (name, count) in &timing.phases_parallel_instructions { *phases_parallel.entry(name).or_default() += *count; }
+                for (site, row) in &timing.parallel_sites {
+                    let total = sites.entry(site.clone()).or_default();
+                    total.calls += row.calls; total.below_threshold += row.below_threshold; total.items += row.items;
+                    total.instructions += row.instructions; total.largest_task += row.largest_task;
+                }
                 for (path, calls) in &timing.navigation_calls { *navigation_calls.entry(path.clone()).or_default() += *calls; }
                 raw.push(json!({"tick": tick.tick, "instructions": timing.instructions, "phases_instructions": timing.phases_instructions, "cpu_ns": timing.cpu_ns, "phases_cpu_ns": timing.phases_cpu_ns, "navigation_calls": timing.navigation_calls}));
             }).await.map_err(|e| e.to_string())?;
@@ -82,6 +90,9 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
         for series in phases.values_mut() { series.resize(recording.ticks.len(), 0); }
         let phase_summary: BTreeMap<_, _> = phases.iter().map(|(name, series)| (*name, counts::summary(series))).collect();
         let phases_cpu_summary: BTreeMap<_, _> = phases_cpu.iter().map(|(name, series)| (*name, series.summary())).collect();
+        let ticks = recording.ticks.len() as f64;
+        let parallel_phase_mean: BTreeMap<_, _> = phases_parallel.iter().map(|(name, total)| (*name, *total as f64 / ticks)).collect();
+        let parallel_sites: BTreeMap<_, _> = sites.iter().map(|(site, row)| (site.clone(), json!({"calls_per_tick": row.calls as f64 / ticks, "below_threshold_per_tick": row.below_threshold as f64 / ticks, "items_per_tick": row.items as f64 / ticks, "instructions_per_tick": row.instructions as f64 / ticks, "largest_task_instructions_per_tick": row.largest_task as f64 / ticks}))).collect();
         let attribution = service.inspect_scale_world(|w| orders::report(w, &kinds, &census, recording.ticks.len())).await;
         // Route-scheduler state at the end of the window, read off-tick like
         // the mover census: the same counters the live probe reports, on a
@@ -93,7 +104,7 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
                 routes
             })
             .await;
-        Ok(json!({ "order_attribution": attribution, "refused_commands": refused, "initial_hash": hex(&initial), "total_cpu_ms_per_tick": cpu.summary(), "phases_cpu_ms": phases_cpu_summary, "total_instructions_per_tick": counts::summary(&total), "phases_instructions": phase_summary,
+        Ok(json!({ "parallel_phase_instructions_mean": parallel_phase_mean, "parallel_sites": parallel_sites, "order_attribution": attribution, "refused_commands": refused, "initial_hash": hex(&initial), "total_cpu_ms_per_tick": cpu.summary(), "phases_cpu_ms": phases_cpu_summary, "total_instructions_per_tick": counts::summary(&total), "phases_instructions": phase_summary,
             "first_divergence_tick": divergence, "final_hash": hashes.last().ok_or("empty replay")?["hash"],
             "movement_progress": progress.summary(recording.ticks.last().ok_or("empty replay")?.tick + 1),
             "navigation_calls": navigation_calls, "routes": routes,

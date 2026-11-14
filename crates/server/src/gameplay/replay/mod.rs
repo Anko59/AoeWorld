@@ -245,17 +245,27 @@ impl GameplayService {
         }
         probe.record("orders", probe.sample()? - started);
         let mut last = probe.sample()?;
+        let mut last_parallel = aoe_simulation::parallel_meter::inside_total();
+        {
+            let counter = probe.clone();
+            aoe_simulation::parallel_meter::install(move || counter.read().unwrap_or(0));
+        }
+        let _ = aoe_simulation::parallel_meter::drain();
         world.advance_with_probe(
             &mut |_| true,
             &mut |phase: TickPhase| match probe.sample() {
                 Ok(now) => {
                     probe.record(timing::phase_name(phase), now - last);
+                    let inside = aoe_simulation::parallel_meter::inside_total();
+                    probe.record_parallel(timing::phase_name(phase), inside - last_parallel);
+                    last_parallel = inside;
                     last = now;
                 }
                 Err(_) => probe.fail(),
             },
         );
         let total = probe.sample()? - started;
+        aoe_simulation::parallel_meter::uninstall();
         probe.finish()?;
         let (commands, refused) = attribute_commands(tick, &names, &raw);
         let (phases_instructions, phases_cpu_ns) = probe.drain();
@@ -263,6 +273,8 @@ impl GameplayService {
             instructions: total.instructions,
             cpu_ns: total.cpu_ns,
             phases_instructions,
+            phases_parallel_instructions: probe.drain_parallel(),
+            parallel_sites: aoe_simulation::parallel_meter::drain(),
             phases_cpu_ns,
             navigation_calls: probe.navigation_calls(),
             commands,
