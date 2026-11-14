@@ -11,7 +11,7 @@
     "instructions::protocol::snapshot_encode": 206498,
     "instructions::simulation::advance": 721228,
     "instructions::simulation::distributed_ticks": 9780464,
-    "instructions::simulation::late_game": 1344317372,
+    "instructions::simulation::late_game": 1343891456,
     "instructions::simulation::smoke_ticks": 5268567,
     "instructions::simulation::viewport_query": 183030
   },
@@ -21,7 +21,7 @@
     "instructions::protocol::snapshot_encode": 206498,
     "instructions::simulation::advance": 721238,
     "instructions::simulation::distributed_ticks": 9780464,
-    "instructions::simulation::late_game": 1344317372,
+    "instructions::simulation::late_game": 1343891456,
     "instructions::simulation::smoke_ticks": 4986840,
     "instructions::simulation::viewport_query": 183030
   }
