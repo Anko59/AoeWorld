@@ -29,12 +29,17 @@ pub enum DevFile {
     Measured(DevReference),
 }
 
+/// Late-game ticks the instruction kernels count after the warm-up; part of
+/// the identity, since an eight-tick count is not comparable with one tick.
+pub const LATE_GAME_TICKS: usize = 8;
+
 /// The workload hashes the instruction kernels run, recorded in every
 /// `ci.json` so a later run can tell whether its counts are comparable.
 pub fn identity() -> BTreeMap<String, String> {
     [
         ("smoke", SMOKE.workload_hash()),
         ("late_game", LATE_GAME.workload_hash()),
+        ("late_game_ticks", LATE_GAME_TICKS.to_string()),
         ("target_distributed", TARGET_DISTRIBUTED.workload_hash()),
     ]
     .into_iter()
