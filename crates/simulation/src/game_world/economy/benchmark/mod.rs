@@ -13,6 +13,14 @@ impl GameWorld {
     pub fn late_game_workload() -> Result<Self, Box<dyn std::error::Error>> {
         build(100)
     }
+
+    /// The same construction at eight seats, for per-PR checks that need the
+    /// late-game state machines but not the full population: the 100-seat
+    /// workload costs minutes, which belongs in the post-merge tier.
+    #[cfg(test)]
+    pub(crate) fn small_late_game_workload() -> Result<Self, Box<dyn std::error::Error>> {
+        build(8)
+    }
 }
 
 fn position(tile: TileCoord) -> Result<WorldPosition, EconomyError> {

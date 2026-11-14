@@ -61,7 +61,7 @@ CI uses the same caps and immediate admission; each job has its own runner. `mak
 | perf-full | `make perf-full` | perf-instructions, perf-wasm-size, perf-smoke | performance | [Nightly] | 3600 | yes | population and sparse-world scaling counts and existing comparisons |
 | test-memory-source | `make test-memory-source` | build-wasm, browser-check | browser, assets | [Qualification] | 3600 | — | activated real-pack source map shared-surface browser route |
 | test-creator-source | `make test-creator-source` | build-wasm, browser-check, test-unit | browser | [Qualification] | 5400 | — | overview and detailed source maps across restart |
-| test-source-qualification | `make test-source-qualification` | test-unit | native | [Ci, Nightly, Qualification] | 1800 | — | slow offline source-qualification movement, replay and package tests that test-unit excludes |
+| test-source-qualification | `make test-source-qualification` | test-unit | native | [Ci, Nightly, Qualification] | 3600 | — | slow offline source-qualification movement and package tests, plus the full-scale navigation and economy measurements, that test-unit excludes |
 | test-exhaustive | `make test-exhaustive` | test-unit | native | [Ci, Nightly] | 1800 | — | 16-seed landscape sweeps and full-axis geodata round-trips that test-unit runs on two seeds or reduced axes |
 | sdk-python-test | `make sdk-python-test` | test-unit | native, ai | [Ci, Nightly] | 3600 | — | pytest results of the Python bindings, the example AI decision logic, the standard start and a seeded Dark-to-Feudal game between bots on the AI arena (five seeds) |
 | test-geographic-matrix | `make test-geographic-matrix` | test-unit | browser | [Qualification] | 5400 | — | prepared and verified fixed overview source regions |
