@@ -94,7 +94,7 @@ and this real available-source measurement are separate evidence.
 
 The [generated late-game workload](scale/late-game.md) adds 100 seats and
 14,000 units with gathering/drop-off trips, full production queues, research,
-idle and marching armies, and wildlife. It runs in `perf-smoke` and `perf-ci`;
+idle and marching armies, and wildlife. It runs in `perf-ci` and `perf-full`, not `perf-smoke`;
 `make perf-late-game` isolates its three repetitions. Reports include every
 simulation and fan-out phase's raw samples, p50/p95 and median run percentiles.
 Its instruction baseline was re-taken on 2026-10-26 at 143,767,781 (from the

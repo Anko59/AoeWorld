@@ -1,8 +1,8 @@
 # Generated late-game performance workload
 
 `make perf-late-game` profiles a generated economy without France packages,
-original game assets, a browser or a listening port. `perf-smoke`, `perf-ci`
-and `perf-full` include the identical workload. Shared-machine elapsed time
+original game assets, a browser or a listening port. `perf-ci` and `perf-full`
+include the identical workload; `perf-smoke` does not. Shared-machine elapsed time
 is informational; deterministic instructions and allocations gate CI.
 
 ## Recipe and activity
