@@ -84,3 +84,52 @@ fn save_ids_never_leave_the_save_directory() {
         assert!(read_save(&directory, id).is_err(), "{id:?}");
     }
 }
+
+/// A save whose body this build can no longer parse must still say it is from
+/// another version. #828 added `FormationRecord::pace_limit` without bumping a
+/// version, so every earlier save failed as a raw postcard decoding error.
+#[test]
+fn a_save_from_an_earlier_format_reports_its_version_not_a_decoding_error() {
+    #[derive(serde::Serialize)]
+    struct OldSaveFile {
+        version: u16,
+        seats: Vec<SaveSeat>,
+        // A body this build cannot parse as a `WorldSnapshot`.
+        world: u8,
+    }
+    let directory = std::env::temp_dir().join(format!("aoe-oldsave-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).expect("directory");
+    let id = "1700000000-old";
+    let bytes = postcard::to_allocvec(&OldSaveFile {
+        version: SAVE_VERSION - 1,
+        seats: Vec::new(),
+        world: 0,
+    })
+    .expect("encode");
+    std::fs::write(directory.join(format!("{id}.save")), bytes).expect("save");
+    std::fs::write(
+        directory.join(format!("{id}.json")),
+        serde_json::to_vec(&SaveCard {
+            id: id.to_owned(),
+            name: "old".to_owned(),
+            saved_at: 0,
+            tick: 0,
+            game_seconds: 0,
+            map_hash: String::new(),
+            opponents: 0,
+            units: 0,
+            buildings: 0,
+            bytes: 0,
+            save_ms: 0,
+        })
+        .expect("card"),
+    )
+    .expect("card");
+    let message = match read_save(&directory, id) {
+        Err((_, message)) => message,
+        Ok(_) => panic!("an earlier format must be refused"),
+    };
+    assert_eq!(message, "the saved game is from another version");
+    let _ = std::fs::remove_dir_all(&directory);
+}
