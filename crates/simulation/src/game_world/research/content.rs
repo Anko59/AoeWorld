@@ -77,7 +77,7 @@ fn optional(value: i32) -> Option<u8> {
 
 impl BrowserContent {
     pub fn decode(data: &[i32]) -> Result<Self, &'static str> {
-        let buildings = crate::BuildingKind::Road as usize + 1;
+        let buildings = crate::BUILDING_RULES.len();
         let techs = crate::TECH_RULES.len();
         let units = UnitKind::ALL.len();
         let length = 5 + buildings * BUILDING_WORDS + techs * TECH_WORDS + units * UNIT_WORDS;
@@ -119,7 +119,7 @@ impl BrowserContent {
             if r[0] != kind as i32
                 || !(1..=8).contains(&r[5])
                 || !(1..=8).contains(&r[6])
-                || r[7] > 2
+                || r[7] > 3
                 || r[8] > 1
                 || r[9] > buildings as i32
                 || r[11] >= 1 << (units - 32)
