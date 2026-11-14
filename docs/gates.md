@@ -55,7 +55,7 @@ CI uses the same caps and immediate admission; each job has its own runner. `mak
 | ci-select | `make ci-select` | — | everything | [] | 120 | — | revision-bound job selection manifest |
 | ci-check | `make ci-check` | ci-select | everything | [] | 120 | — | selected job results and manifest recomputation |
 | build-wasm | `make build-wasm` | — | browser | [Stop, Pr, Ci, Nightly, Preflight] | 900 | — | wasm-release client and wasm-bindgen web package |
-| perf-instructions | `make perf-instructions` | — | performance | [Pr, Ci, Nightly] | 1800 | yes | pinned Gungraun/Callgrind kernel NDJSON |
+| perf-instructions | `make perf-instructions` | — | performance | [Pr, Ci, Nightly] | 1800 | yes | pinned Gungraun/Callgrind kernel NDJSON; late_game counts the 8 ticks from 385, where one cold portal build can still be a third of a tick |
 | perf-wasm-size | `make perf-wasm-size` | build-wasm | performance | [Pr, Ci, Nightly] | 300 | — | optimized and deterministic gzip WASM artifacts |
 | perf-wasm-cap | `make perf-wasm-cap` | perf-wasm-size | performance | [Preflight] | 300 | — | optimized gzip WASM, measured in this gate's snapshot, reported against baselines/perf/wasm.json; blocks only a jump over +25% |
 | perf-full | `make perf-full` | perf-instructions, perf-wasm-size, perf-smoke | performance | [Nightly] | 3600 | yes | population and sparse-world scaling counts and existing comparisons |
