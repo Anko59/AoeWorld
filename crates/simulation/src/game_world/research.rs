@@ -8,6 +8,8 @@ use aoe_core::{EntityId, PlayerId};
 mod castle;
 mod content;
 mod effects;
+mod generic;
+mod generic_effects;
 mod imperial;
 mod table;
 mod upgrades;
@@ -18,7 +20,17 @@ pub use content::{BrowserBuilding, BrowserContent, BrowserTech, BrowserUnit};
 
 pub use effects::villager_capacity;
 pub(crate) use effects::{carry_capacity, villager_speed_percent};
-pub use table::{Age, FEUDAL_BUILDINGS, TECH_RULES, Tech, TechEffect, TechRequirement, TechRules};
+pub use generic_effects::{
+    build_speed_percent, building_max_hp, market_commission_permyriad, trade_speed_percent,
+    training_speed_percent, tribute_fee_permyriad,
+};
+pub(crate) use generic_effects::{
+    building_armour_bonus, tower_attack, unit_hp_bonus, unit_speed_percent,
+};
+pub use table::{
+    Age, FEUDAL_BUILDINGS, TECH_RULES, Tech, TechEffect, TechMask, TechRequirement, TechRules,
+    TechTarget,
+};
 
 /// The technology a building is researching, in game ticks.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -204,6 +216,10 @@ impl GameWorld {
     /// Maximum hit points a new unit of `kind` starts with for `player`.
     pub(crate) fn researched_hp_bonus(&self, player: PlayerId, kind: UnitKind) -> u16 {
         self.villager_bonus(player, kind).0
+            + unit_hp_bonus(
+                kind,
+                self.player_economy(player).map_or(0, |p| p.researched),
+            )
     }
 
     /// Melee and pierce armour of a living unit, technologies included.

@@ -341,7 +341,18 @@ impl GameWorld {
         let stats = self
             .unit_stats(attacker_id)
             .unwrap_or(*unit_combat(self.units[attacker_index].state.kind));
-        let bonus = self.unit_damage_bonus(stats.kind, target);
+        let class_bonus = self.unit_damage_bonus(stats.kind, target);
+        let bonus = class_bonus
+            + self.tech_attack_bonus(
+                stats.kind,
+                self.units[attacker_index].state.player,
+                target,
+                class_bonus,
+            );
+        if stats.kind == crate::UnitKind::Monk {
+            self.monk_strike(attacker_id, target, changed);
+            return;
+        }
         if stats.kind == crate::UnitKind::DemolitionShip {
             self.detonate(attacker_id, target, changed);
             return;

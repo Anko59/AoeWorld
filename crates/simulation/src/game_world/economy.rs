@@ -219,7 +219,7 @@ pub struct PlayerEconomy {
     pub population_cap: u32,
     pub age: super::Age,
     /// Bit `1 << tech as u8` is set once researched.
-    pub researched: u64,
+    pub researched: u128,
     /// The player's Market commodity prices, in gold per 100 units.
     pub market_prices: MarketPrices,
 }

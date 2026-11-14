@@ -218,6 +218,7 @@ impl GameWorld {
             kind,
             super::super::combat::unit_combat(kind).speed_hundredths,
             economy.is_some_and(|p| p.age >= crate::Age::Feudal),
+            researched,
         );
         if let Some(hundredths) = hundredths {
             (

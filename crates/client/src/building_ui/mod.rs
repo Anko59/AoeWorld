@@ -103,6 +103,7 @@ pub fn market_panel(
     market_owned_complete: bool,
     prices: aoe_protocol::MarketPrices,
     have: Stockpile,
+    researched: aoe_protocol::TechMask,
 ) -> [f64; 15] {
     let rules = aoe_simulation::MARKET_RULES;
     let mut panel = [0.0; 15];
@@ -114,8 +115,8 @@ pub fn market_panel(
     .into_iter()
     .enumerate()
     {
-        let buy_cost = rules.buy_cost(price);
-        let sell_proceeds = rules.sell_proceeds(price);
+        let buy_cost = rules.buy_cost_with(price, researched);
+        let sell_proceeds = rules.sell_proceeds_with(price, researched);
         let buy = have.gold >= buy_cost;
         let sell = resource >= rules.trade_amount;
         panel[i] = f64::from(price);

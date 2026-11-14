@@ -25,6 +25,10 @@ pub enum Age {
     Imperial,
 }
 
+/// Bit set of researched technologies: bit `tech as u8`. 128 bits hold the
+/// whole generic tree; a test pins that every `Tech` fits.
+pub type TechMask = u128;
+
 /// Canonical order; a technology's bit in `researched` is `1 << tech as u8`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
@@ -82,9 +86,54 @@ pub enum Tech {
     CropRotation,
     TwoManSaw,
     StoneShaftMining,
+    Squires,
+    Arson,
+    Gambesons,
+    ThumbRing,
+    ParthianTactics,
+    Bloodlines,
+    Husbandry,
+    Architecture,
+    SiegeEngineers,
+    HeatedShot,
+    Arrowslits,
+    FortifiedWall,
+    GuardTower,
+    Keep,
+    Devotion,
+    Faith,
+    Fervor,
+    Sanctity,
+    HerbalMedicine,
+    Theocracy,
+    Illumination,
+    BlockPrinting,
+    Atonement,
+    Redemption,
+    Heresy,
+    Conscription,
+    Hoardings,
+    Sappers,
+    Spies,
+    Caravan,
+    Guilds,
+    Banking,
+    Coinage,
+    TreadmillCrane,
 }
 
 /// What a finished technology changes.
+/// Which units a data-driven technology effect (`UnitSpeed`, `UnitHp`) reaches.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TechTarget {
+    Infantry,
+    Mounted,
+    /// Monastery units: Monks (and, later, other Monastery units).
+    Monk,
+    /// Trade units (Cart, Cog); none exist yet, so this only records the effect.
+    Trade,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TechEffect {
     Military,
@@ -113,6 +162,23 @@ pub enum TechEffect {
         capacity_permyriad: u32,
         speed_percent: u16,
     },
+    /// Walking speed of `target` units, in percent of the base speed.
+    UnitSpeed {
+        target: TechTarget,
+        percent: u16,
+    },
+    /// Extra hit points of every `target` unit, existing and future.
+    UnitHp {
+        target: TechTarget,
+        hp: u16,
+    },
+    /// Changes building hit points, armour or attack through
+    /// `research::building_max_hp` and friends; existing buildings are
+    /// refreshed on completion.
+    BuildingStats,
+    /// No stored change: the rule reads `has_researched` where it applies
+    /// (combat, conversion, market, training). See docs/economy/generic-techs.md.
+    Passive,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -159,7 +225,7 @@ pub const FEUDAL_BUILDINGS: &[BuildingKind] = &[
 ];
 
 /// Indexed by `Tech as usize`; a test pins the order.
-pub const TECH_RULES: [TechRules; 53] = [
+pub const TECH_RULES: [TechRules; 87] = [
     TechRules {
         age: Age::Dark,
         tech: Tech::Loom,
@@ -312,6 +378,40 @@ pub const TECH_RULES: [TechRules; 53] = [
     super::imperial::RULES[16],
     super::imperial::RULES[17],
     super::imperial::RULES[18],
+    super::generic::RULES[0],
+    super::generic::RULES[1],
+    super::generic::RULES[2],
+    super::generic::RULES[3],
+    super::generic::RULES[4],
+    super::generic::RULES[5],
+    super::generic::RULES[6],
+    super::generic::RULES[7],
+    super::generic::RULES[8],
+    super::generic::RULES[9],
+    super::generic::RULES[10],
+    super::generic::RULES[11],
+    super::generic::RULES[12],
+    super::generic::RULES[13],
+    super::generic::RULES[14],
+    super::generic::RULES[15],
+    super::generic::RULES[16],
+    super::generic::RULES[17],
+    super::generic::RULES[18],
+    super::generic::RULES[19],
+    super::generic::RULES[20],
+    super::generic::RULES[21],
+    super::generic::RULES[22],
+    super::generic::RULES[23],
+    super::generic::RULES[24],
+    super::generic::RULES[25],
+    super::generic::RULES[26],
+    super::generic::RULES[27],
+    super::generic::RULES[28],
+    super::generic::RULES[29],
+    super::generic::RULES[30],
+    super::generic::RULES[31],
+    super::generic::RULES[32],
+    super::generic::RULES[33],
 ];
 
 const fn military(tech: Tech, food: u32, gold: u32, seconds: u32) -> TechRules {
@@ -330,7 +430,7 @@ impl Tech {
     pub const fn rules(self) -> &'static TechRules {
         &TECH_RULES[self as usize]
     }
-    pub const fn bit(self) -> u64 {
+    pub const fn bit(self) -> TechMask {
         1 << self as u8
     }
 }

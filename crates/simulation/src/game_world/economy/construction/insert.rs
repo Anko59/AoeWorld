@@ -47,13 +47,9 @@ impl GameWorld {
         let age = self
             .player_economy(player)
             .map_or(crate::Age::Dark, |p| p.age);
-        let (mut max_hp, los) = kind.age_stats(age);
-        if kind != BuildingKind::Farm
-            && !kind.is_barrier()
-            && self.has_researched(player, crate::Tech::Masonry)
-        {
-            max_hp += max_hp / 10;
-        }
+        let researched = self.player_economy(player).map_or(0, |p| p.researched);
+        let los = kind.age_stats(age).1;
+        let max_hp = crate::building_max_hp(kind, age, researched);
         let collision = kind.collision_rect(footprint, complete);
         if let Some(rect) = collision
             && let Terrain::Map { overlay, .. } = &mut self.terrain
@@ -101,7 +97,9 @@ impl GameWorld {
                 (footprint.width().max(footprint.height()) - 2) as u64
             } else {
                 1
-            };
+            }
+            * 100
+            / crate::build_speed_percent(researched);
         self.economy.buildings.insert(
             id,
             GameBuilding {

@@ -19,7 +19,7 @@ pub(crate) struct GatherSleep {
     until: u64,
     /// Credits each skipped tick would have added.
     rate: u64,
-    researched: u64,
+    researched: u128,
     unit: GameUnit,
 }
 

@@ -367,6 +367,9 @@ local deterministic splash, healing and Ballistics.
 The [Imperial Age](economy/imperial.md) completes the generic tech tree with
 Champion, Halberdier, Arbalester, Paladin, Hussar, Siege Ram and Onager lines,
 the third Blacksmith tier and three economy upgrades.
+[Generic technologies](economy/generic-techs.md) add the remaining Barracks,
+Archery Range, Stable, University, Monastery, Castle and Market research, and
+Monk conversion.
 
 The [Steward](economy/steward.md) is trained at a Town Center and has a fixed
 100-tile home radius. It builds Houses before its population space runs out.

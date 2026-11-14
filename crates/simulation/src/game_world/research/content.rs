@@ -4,7 +4,7 @@ use crate::{Stockpile, UnitCombat, UnitCost, UnitKind, UnitTraining};
 const MAGIC: i32 = 0x414f4543;
 const BUILDING_WORDS: usize = 15;
 const TECH_WORDS: usize = 12;
-const UNIT_WORDS: usize = 20;
+const UNIT_WORDS: usize = 22;
 
 #[derive(Debug)]
 pub struct BrowserBuilding {
@@ -44,10 +44,10 @@ pub struct BrowserUnit {
     pub combat: UnitCombat,
     pub age: u8,
     pub requires_tech: Option<u8>,
-    upgrades: u64,
+    upgrades: u128,
 }
 impl BrowserUnit {
-    pub fn superseded(&self, researched: u64) -> bool {
+    pub fn superseded(&self, researched: u128) -> bool {
         self.upgrades & researched != 0
     }
 }
@@ -88,10 +88,11 @@ impl BrowserContent {
             return Err("invalid game content header");
         }
         // All words are bounded before constructing records. Only melee armour
-        // and the low upgrade mask are signed. No attacker-selected allocation.
+        // and the upgrade words are signed. No attacker-selected allocation.
         for (index, &word) in data[5..].iter().enumerate() {
             let unit_start = buildings * BUILDING_WORDS + techs * TECH_WORDS;
-            let signed = index >= unit_start && matches!((index - unit_start) % UNIT_WORDS, 4 | 18);
+            let signed =
+                index >= unit_start && matches!((index - unit_start) % UNIT_WORDS, 4 | 18..=21);
             let building = index < buildings * BUILDING_WORDS;
             let training_low = building && index % BUILDING_WORDS == 10;
             let training_high = building && index % BUILDING_WORDS == 11;
@@ -181,7 +182,7 @@ impl BrowserContent {
                 || r[10] > 255
                 || r[16] > 3
                 || r[17] > techs as i32
-                || r[19] >= 1 << (techs - 32)
+                || r[21] >= 1 << techs.saturating_sub(96).min(30)
             {
                 return Err("invalid game content unit");
             }
@@ -215,13 +216,16 @@ impl BrowserContent {
                 },
                 age: r[16] as u8,
                 requires_tech: optional(r[17]),
-                upgrades: u64::from(r[18] as u32) | (u64::from(r[19] as u32) << 32),
+                upgrades: u128::from(r[18] as u32)
+                    | (u128::from(r[19] as u32) << 32)
+                    | (u128::from(r[20] as u32) << 64)
+                    | (u128::from(r[21] as u32) << 96),
             });
         }
         Ok(result)
     }
 
-    pub fn villager_capacity(&self, researched: u64) -> u16 {
+    pub fn villager_capacity(&self, researched: u128) -> u16 {
         self.techs
             .iter()
             .filter(|r| researched & (1 << r.tech) != 0 && r.capacity_permyriad > 0)
