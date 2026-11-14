@@ -2,6 +2,7 @@ mod barracks;
 mod castle;
 mod feudal;
 mod gates;
+mod generic_techs;
 mod imperial;
 mod research;
 use super::*;

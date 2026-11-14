@@ -58,7 +58,7 @@ pub fn browser_content() -> Vec<i32> {
         let upgrades = crate::TECH_RULES
             .iter()
             .filter(|t| r.kind.upgraded(t.tech.bit()) != r.kind)
-            .fold(0_u64, |m, t| m | t.tech.bit());
+            .fold(0_u128, |m, t| m | t.tech.bit());
         data.extend([
             r.kind as i32,
             i32::from(r.hp),
@@ -80,6 +80,8 @@ pub fn browser_content() -> Vec<i32> {
             r.kind.required_tech().map_or(0, |t| t as i32 + 1),
             upgrades as i32,
             (upgrades >> 32) as i32,
+            (upgrades >> 64) as i32,
+            (upgrades >> 96) as i32,
         ]);
     }
     data

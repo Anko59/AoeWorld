@@ -13,6 +13,7 @@ mod approach;
 mod castle;
 #[path = "combat/classes/mod.rs"]
 mod classes;
+mod conversion;
 mod cost;
 #[path = "combat/damage/mod.rs"]
 mod damage;
@@ -32,6 +33,7 @@ mod towers;
 #[cfg(test)]
 pub(crate) use approach::FarAttack;
 pub(crate) use approach::{MAX_POSITION_SEARCHES_PER_TICK, SearchWait};
+pub use conversion::{conversion_chance, convertible_building, convertible_unit};
 pub(crate) use hash::hash_hit;
 pub use military::{apply_research_stats, researched_stats};
 pub use projectiles::{Projectile, ProjectileKind};
@@ -191,7 +193,7 @@ impl GameWorld {
         if unit.player != player {
             return Err(EconomyError::NotOwner);
         }
-        if unit_combat(unit.kind).attack == 0 {
+        if unit_combat(unit.kind).attack == 0 && unit.kind != crate::UnitKind::Monk {
             return Err(EconomyError::WrongUnitKind);
         }
         let goal = self
@@ -344,7 +346,13 @@ impl GameWorld {
     }
 
     pub(crate) fn attack_period_ticks(&self, unit: &GameUnit) -> u32 {
-        let centiseconds = unit_combat(unit.kind).attack_period_centiseconds;
+        let mut centiseconds = unit_combat(unit.kind).attack_period_centiseconds;
+        let researched = self.player_economy(unit.player).map_or(0, |p| p.researched);
+        if researched & crate::Tech::ThumbRing.bit() != 0
+            && (unit.kind.is_archery() || unit.kind.is_mounted_archer())
+        {
+            centiseconds = centiseconds * 100 / 115;
+        }
         (self.config.tick_hz.saturating_mul(centiseconds) / 100).max(1)
     }
 }

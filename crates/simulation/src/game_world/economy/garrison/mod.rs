@@ -57,6 +57,17 @@ impl BuildingKind {
 }
 
 impl GameWorld {
+    /// Ticks per hit point healed inside `kind`; Herbal Medicine heals six
+    /// times as fast (+500%).
+    pub(crate) fn garrison_heal_ticks(&self, player: PlayerId, kind: BuildingKind) -> u64 {
+        let ticks = kind.heal_seconds() * u64::from(self.config.tick_hz);
+        if self.has_researched(player, crate::Tech::HerbalMedicine) {
+            (ticks / 6).max(1)
+        } else {
+            ticks
+        }
+    }
+
     pub(super) fn steward_reserved(&self, b: &GameBuilding, except: Option<EntityId>) -> bool {
         b.training_queue.iter().any(|e| e.kind == UnitKind::Steward)
             || b.garrison.iter().any(|g| g.unit.kind == UnitKind::Steward)
@@ -202,8 +213,7 @@ impl GameWorld {
                 continue;
             }
             let dropoff = shelter.kind;
-            let heal_at =
-                self.tick.0 + shelter.kind.heal_seconds() * u64::from(self.config.tick_hz);
+            let heal_at = self.tick.0 + self.garrison_heal_ticks(shelter.player, shelter.kind);
             let index = self.lookup[&id];
             let next_hit_tick = self.units[index].next_hit_tick;
             if self.issue_stop(unit.player, id).is_err() {
@@ -283,7 +293,8 @@ impl GameWorld {
         let Some(&index) = self.lookup.get(&id) else {
             return false;
         };
-        let heal_at = self.tick.0 + kind.heal_seconds() * u64::from(self.config.tick_hz);
+        let owner = self.building(building).map_or(PlayerId(0), |b| b.player);
+        let heal_at = self.tick.0 + self.garrison_heal_ticks(owner, kind);
         let next_hit_tick = self.units[index].next_hit_tick;
         let mut unit = self.units[index].state;
         unit.position = aoe_core::WorldPosition::new(0, 0);

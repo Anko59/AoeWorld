@@ -1,4 +1,4 @@
-use crate::{BuildingKind, GameWorld, Tech, UnitKind};
+use crate::{GameWorld, Tech, UnitKind};
 use aoe_core::{EntityId, PlayerId};
 
 impl UnitKind {
@@ -40,7 +40,7 @@ impl UnitKind {
         Self::Steward,
     ];
     /// The single current identity of each production line.
-    pub fn upgraded(self, researched: u64) -> Self {
+    pub fn upgraded(self, researched: u128) -> Self {
         let has = |t: Tech| researched & t.bit() != 0;
         match self {
             Self::Galley if has(Tech::WarGalley) => Self::WarGalley,
@@ -124,6 +124,7 @@ impl GameWorld {
             .hp
             .saturating_sub(crate::unit_combat(from).hp);
         let mut vision = Vec::new();
+        let researched = self.player_economy(player).map_or(0, |p| p.researched);
         for u in &mut self.units {
             let s = &mut u.state;
             if s.player == player && s.kind == from && s.hp > 0 {
@@ -147,7 +148,9 @@ impl GameWorld {
                 if e.kind == from {
                     e.kind = to;
                     if let Some(training) = crate::unit_combat(to).training {
-                        let total = u64::from(training.seconds) * u64::from(self.config.tick_hz);
+                        let total =
+                            u64::from(training.seconds) * u64::from(self.config.tick_hz) * 100
+                                / crate::training_speed_percent(b.kind, researched);
                         e.progress_ticks = e.progress_ticks * total / e.total_ticks.max(1);
                         e.total_ticks = total;
                     }
@@ -156,22 +159,6 @@ impl GameWorld {
         }
         for id in vision {
             self.update_unit_vision(id);
-        }
-    }
-    pub(super) fn apply_masonry(&mut self, player: PlayerId) {
-        for b in
-            self.economy.buildings.values_mut().filter(|b| {
-                b.player == player && b.kind != BuildingKind::Farm && !b.kind.is_barrier()
-            })
-        {
-            let bonus = b.kind.age_stats(b.age).0 / 10;
-            self.vision.dirty_buildings.insert(b.id);
-            b.max_hp += bonus;
-            b.hp += if b.is_complete() {
-                bonus
-            } else {
-                (u64::from(bonus) * b.work_done / b.work_total.max(1)) as u16
-            };
         }
     }
 }

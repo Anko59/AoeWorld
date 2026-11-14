@@ -193,18 +193,18 @@ fn axis_paths_and_adjusted_distance_spans_keep_exact_projection() {
 fn movement_speed_projection_preserves_custom_base_and_age_effects() {
     use crate::game_world::combat::military::apply_movement_speed;
     assert_eq!(
-        apply_movement_speed(UnitKind::Scout, Some(111), false),
+        apply_movement_speed(UnitKind::Scout, Some(111), false, 0),
         Some(111)
     );
     assert_eq!(
-        apply_movement_speed(UnitKind::Scout, Some(111), true),
+        apply_movement_speed(UnitKind::Scout, Some(111), true, 0),
         Some(155)
     );
     assert_eq!(
-        apply_movement_speed(UnitKind::Militia, Some(111), true),
+        apply_movement_speed(UnitKind::Militia, Some(111), true, 0),
         Some(111)
     );
-    assert_eq!(apply_movement_speed(UnitKind::Monk, None, true), None);
+    assert_eq!(apply_movement_speed(UnitKind::Monk, None, true, 0), None);
 }
 
 #[test]

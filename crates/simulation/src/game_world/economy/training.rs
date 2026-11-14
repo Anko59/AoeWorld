@@ -68,14 +68,17 @@ impl GameWorld {
             self.pay_unit_cost(player, kind)?;
             training.seconds
         };
+        let researched = self.player_economy(player).map_or(0, |p| p.researched);
         // No fallible work follows these mutations.
         self.wake_queues(center);
         self.mark_building_changed(center);
         if let Some(building) = self.economy.buildings.get_mut(&center) {
+            let percent = crate::training_speed_percent(building.kind, researched);
             building.training_queue.push_back(TrainingEntry {
                 kind,
                 progress_ticks: 0,
-                total_ticks: u64::from(self.config.tick_hz) * u64::from(seconds),
+                total_ticks: (u64::from(self.config.tick_hz) * u64::from(seconds) * 100 / percent)
+                    .max(1),
             });
             self.economy.active_training.insert(center);
             self.economy.queues.training.awake.insert(center);

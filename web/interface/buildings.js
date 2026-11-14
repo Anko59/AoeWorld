@@ -3,6 +3,7 @@ import { transportLoads } from '/interface/navy/indicators.js';
 import { initGarrison } from '/interface/garrison/panel.js';
 import { castleKinds, castleNames, castleCommands, castleTechs, castleTraining, castleUnitNames } from '/interface/castle.js';
 import { imperialTechs, imperialTraining, imperialLines, imperialUnitNames } from '/interface/imperial.js';
+import { genericTechs, genericLines } from '/interface/generic.js';
 import { icon, entityIcon, setEntityIcon, techIds, trainingKinds } from '/interface/ui-art.js';
 // DOM presentation for authoritative Rust building state and footprint previews.
 const byId = id => document.getElementById(id);
@@ -48,10 +49,10 @@ export function initBuildings() {
     button.title=`${name} · ${cost} · ${key}`; button.setAttribute('aria-label',button.title);
     button.innerHTML=`${entityIcon(buildingKinds[(i+1)%buildingKinds.length])}<span class="command-label">${name}</span><kbd>${key}</kbd><small>${cost}</small>`; grid.append(button); return button;
   });
-  const research=['Loom · 50 gold','Town Watch · 75 food','Feudal Age · 500 food','Double-Bit Axe · 100 food · 50 wood','Horse Collar · 75 food · 75 wood','Gold Mining · 100 food · 75 wood','Stone Mining · 100 food · 75 wood','Wheelbarrow · 175 food · 50 wood','Man-at-Arms · 100 food · 40 gold','Forging · 150 food','Scale Mail Armor · 100 food','Scale Barding Armor · 150 food','Fletching · 100 food · 50 gold','Padded Archer Armor · 100 food',...castleTechs.map(t=>t[1]),'War Galley · 230 food · 100 gold',...imperialTechs.map(t=>t[1])];
-  const sites=[0,0,0,2,4,3,3,0,6,12,12,12,12,12,...castleTechs.map(t=>t[2]),9,...imperialTechs.map(t=>t[2])];
+  const research=['Loom · 50 gold','Town Watch · 75 food','Feudal Age · 500 food','Double-Bit Axe · 100 food · 50 wood','Horse Collar · 75 food · 75 wood','Gold Mining · 100 food · 75 wood','Stone Mining · 100 food · 75 wood','Wheelbarrow · 175 food · 50 wood','Man-at-Arms · 100 food · 40 gold','Forging · 150 food','Scale Mail Armor · 100 food','Scale Barding Armor · 150 food','Fletching · 100 food · 50 gold','Padded Archer Armor · 100 food',...castleTechs.map(t=>t[1]),'War Galley · 230 food · 100 gold',...imperialTechs.map(t=>t[1]),...genericTechs.map(t=>t[1])];
+  const sites=[0,0,0,2,4,3,3,0,6,12,12,12,12,12,...castleTechs.map(t=>t[2]),9,...imperialTechs.map(t=>t[2]),...genericTechs.map(t=>t[2])];
   const buildStart=8+research.length, trainKind=buildStart+commands.length, trainEnabled=trainKind+1, foundationCount=trainKind+2;
-  const techs=['loom','town-watch','feudal-age','double-bit-axe','horse-collar','gold-mining','stone-mining','wheelbarrow','man-at-arms','forging','scale-mail-armor','scale-barding-armor','fletching','padded-archer-armor',...castleTechs.map(t=>t[0]),'war-galley',...imperialTechs.map(t=>t[0])].map((id,i)=>{
+  const techs=['loom','town-watch','feudal-age','double-bit-axe','horse-collar','gold-mining','stone-mining','wheelbarrow','man-at-arms','forging','scale-mail-armor','scale-barding-armor','fletching','padded-archer-armor',...castleTechs.map(t=>t[0]),'war-galley',...imperialTechs.map(t=>t[0]),...genericTechs.map(t=>t[0])].map((id,i)=>{
     const button=document.createElement('button'); button.id=`research-${id}`;button.className="research-command";button.hidden=true;button.innerHTML=icon('technologies',techIds[i],'technology')+`<span class="command-label">${i===8?'Research Man-at-Arms':research[i]}</span>`;grid.append(button);return button;
   });
   const militaryTrain=[['archer','Archer','25 wood · 45 gold',10,4],['skirmisher','Skirmisher','25 food · 35 wood',10,5],['spearman','Spearman','35 food · 25 wood',6,6],['scout','Scout Cavalry','80 food',11,1],...castleTraining.filter(t=>t[0]!=='long-swordsman'),...imperialTraining].map(([id,name,cost,site,kind])=>{
@@ -73,7 +74,7 @@ export function initBuildings() {
       ['horse-collar','heavy-plow'],['gold-mining','gold-shaft-mining'],['wheelbarrow','hand-cart'],
       ['man-at-arms','long-swordsman'],['forging','iron-casting'],['scale-mail-armor','chain-mail-armor'],
       ['scale-barding-armor','chain-barding-armor'],['fletching','bodkin-arrow'],
-      ['padded-archer-armor','leather-archer-armor'],...imperialLines].map(([from,to])=>[`research-${from}`,`research-${to}`]),
+      ['padded-archer-armor','leather-archer-armor'],...imperialLines,...genericLines].map(([from,to])=>[`research-${from}`,`research-${to}`]),
   ])roots.set(to,roots.get(from)??from);
   const slots=(entries,row,reserved=new Map())=>{
     const groups=new Map();
@@ -88,7 +89,7 @@ export function initBuildings() {
   };
   slots([{button:byId('train-villager'),site:0}],()=>1);
   slots([...militaryTrain,...navalTrain.map(entry=>({...entry,site:9}))],()=>1,new Map([[0,1],[6,1],[9,1]]));
-  slots(techs.map((button,i)=>({button,site:sites[i]})),site=>[0,6,9,10,11,19].includes(site)?2:1);
+  slots(techs.map((button,i)=>({button,site:sites[i]})),site=>[0,6,9,10,11,16,17,19].includes(site)?2:1);
   const panel=document.createElement('div');panel.id='building-panel';panel.hidden=true;
   panel.innerHTML='<b id="building-hp"></b><div id="building-status"></div><progress id="construction-progress" max="1000"></progress><div id="research-status"><span id="research-icon"></span><span id="research-label"></span><progress id="research-progress" max="100" aria-label="Research progress" hidden></progress></div><div id="market-prices"></div><button id="cancel-construction" hidden>Cancel construction</button><button id="cancel-research" hidden>Cancel research</button>';
   byId('selection-content').insertBefore(panel,byId('training'));

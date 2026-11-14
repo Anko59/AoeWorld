@@ -169,11 +169,17 @@ impl GameWorld {
         } else if let Some(building) = self.building(target) {
             let armour = super::table::age_armour(building.kind, building.age);
             let masonry = self.building_has_masonry(&building);
+            let (research_melee, research_pierce) =
+                crate::game_world::research::building_armour_bonus(
+                    building.kind,
+                    self.player_economy(building.player)
+                        .map_or(0, |p| p.researched),
+                );
             let raw = super::table::damage_components(
                 attack,
                 kind,
-                armour.melee_armour + i16::from(masonry),
-                armour.pierce_armour + u16::from(masonry),
+                armour.melee_armour + i16::from(masonry) + research_melee,
+                armour.pierce_armour + u16::from(masonry) + research_pierce,
                 bonus,
             );
             let hp =

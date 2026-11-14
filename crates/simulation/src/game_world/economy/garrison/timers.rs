@@ -96,7 +96,15 @@ impl GameWorld {
                 self.economy.garrison_timers.remove(id);
                 continue;
             };
-            let period = b.kind.heal_seconds() * u64::from(self.config.tick_hz);
+            let mut period = b.kind.heal_seconds() * u64::from(self.config.tick_hz);
+            if self
+                .economy
+                .players
+                .get(&b.player)
+                .is_some_and(|p| p.researched & crate::Tech::HerbalMedicine.bit() != 0)
+            {
+                period = (period / 6).max(1);
+            }
             for unit in units {
                 let Ok(at) = b.garrison.binary_search_by_key(&unit, |g| g.unit.id) else {
                     self.economy.garrison_timers.wake(id);
