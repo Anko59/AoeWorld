@@ -99,3 +99,18 @@ fn the_tiers_are_disjoint_and_each_list_has_no_duplicates() {
         SOURCE_QUALIFICATION.len()
     );
 }
+
+#[test]
+fn coverage_runs_what_test_unit_runs_minus_benchmark_and_timing_tests() {
+    let coverage = super::coverage();
+    // Every post-merge tier test is excluded, as in `make test-unit`.
+    assert!(coverage.contains(&super::include()), "{coverage}");
+    assert!(
+        coverage.contains(&super::include_exhaustive()),
+        "{coverage}"
+    );
+    assert!(
+        coverage.contains("test(/::benchmark::/)") && coverage.contains("test(/::performance::/)")
+    );
+    assert!(coverage.starts_with("not ("), "{coverage}");
+}

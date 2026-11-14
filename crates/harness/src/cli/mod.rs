@@ -73,6 +73,8 @@ enum Command {
     TestSourceQualification,
     /// The seed sweeps and full-axis geodata round-trips that `test-unit` excludes.
     TestExhaustive,
+    /// Print the nextest filter the coverage run uses (the test-unit tiers).
+    CoverageFilter,
     LoadStatus,
     /// Lend one whole suite to agents and launched sessions for a while.
     Lease {
