@@ -12,7 +12,10 @@
 //!   break decoding (an enum variant reordered elsewhere can still slip past both).
 //!
 //! After a bump the test records both files for the new version, removes the old
-//! ones (no legacy before v1), and fails once until they are committed.
+//! ones (no legacy before v1), and fails once until they are committed. A
+//! wire-neutral edit (a rename, a derive, formatting) re-records only the schema
+//! at the same version, since every bump makes existing saves unreadable; the
+//! committed snapshot must still restore.
 use super::*;
 use crate::game_world::snapshot::WORLD_SNAPSHOT_VERSION;
 use aoe_core::Formation;
@@ -82,7 +85,8 @@ fn the_snapshot_layout_cannot_change_without_a_version_bump() {
     let version = WORLD_SNAPSHOT_VERSION;
     let schema_path = fixtures().join(format!("v{version}.schema"));
     let bytes_path = fixtures().join(format!("v{version}.postcard"));
-    if !schema_path.exists() || !bytes_path.exists() {
+    if !bytes_path.exists() {
+        // A new version: record both files and drop the old ones.
         std::fs::create_dir_all(fixtures()).unwrap();
         for entry in std::fs::read_dir(fixtures()).unwrap() {
             std::fs::remove_file(entry.unwrap().path()).unwrap();
@@ -96,18 +100,31 @@ fn the_snapshot_layout_cannot_change_without_a_version_bump() {
             shown(&bytes_path)
         );
     }
+    if !schema_path.exists() {
+        // A wire-neutral edit at the same version: the committed snapshot below
+        // must still restore, which is what proves the bytes did not move.
+        std::fs::write(&schema_path, schema()).unwrap();
+        panic!(
+            "re-recorded {} at version {version}: commit it if the snapshot below still restores",
+            shown(&schema_path)
+        );
+    }
     let recorded = std::fs::read_to_string(&schema_path).unwrap();
     assert_eq!(
         recorded,
         schema(),
-        "snapshot/records.rs changed without a WORLD_SNAPSHOT_VERSION bump: bump it, then \
-         run this test to record the new fixtures and commit them"
+        "snapshot/records.rs changed at version {version}. If the encoding changed (a field \
+         added, removed, moved or retyped), bump WORLD_SNAPSHOT_VERSION and rerun to record \
+         both fixtures. If it was only a rename, a derive or formatting, with no field moved \
+         or changing meaning, delete {} and rerun: the committed snapshot must still restore. \
+         A bump makes every existing save unreadable",
+        shown(&schema_path)
     );
     let bytes = std::fs::read(&bytes_path).unwrap();
     let decoded = postcard::from_bytes::<WorldSnapshot>(&bytes).unwrap_or_else(|error| {
         panic!(
-            "{}: the snapshot no longer decodes ({error}) although records.rs is unchanged: a \
-             type it uses changed elsewhere; bump WORLD_SNAPSHOT_VERSION and record again",
+            "{}: the snapshot no longer decodes ({error}), so the encoding changed: bump \
+             WORLD_SNAPSHOT_VERSION and rerun to record both fixtures",
             shown(&bytes_path)
         )
     });
