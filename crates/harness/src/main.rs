@@ -11,6 +11,7 @@ mod dev;
 mod devserver;
 mod disk;
 mod e2e;
+mod fixtures;
 mod fuzz;
 mod gates;
 mod hooks;

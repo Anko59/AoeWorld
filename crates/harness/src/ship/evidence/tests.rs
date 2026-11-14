@@ -76,9 +76,17 @@ fn preflight(paths: &[&str]) -> Vec<String> {
 }
 
 #[test]
-fn a_python_ai_fix_reruns_only_the_static_gates() {
+fn a_python_ai_fix_reruns_static_gates_and_documented_fixtures() {
     let gates = preflight(&["ai/aoe_ai/play/management.py"]);
-    assert_eq!(gates, ids(&["docs-check", "fmt-check", "structure-check"]));
+    assert_eq!(
+        gates,
+        ids(&[
+            "check-fixtures",
+            "docs-check",
+            "fmt-check",
+            "structure-check"
+        ])
+    );
 }
 
 #[test]

@@ -17,6 +17,7 @@ CI uses the same caps and immediate admission; each job has its own runner. `mak
 
 | Gate | Command | Depends on | Suites | Cadences | Budget (s) | Long job | Evidence |
 |---|---|---|---|---|---|---|---|
+| check-fixtures | `make check-fixtures` | — | static | [Preflight] | 120 | — | documented local packages and saves load; missing inputs are skipped |
 | fmt-check | `make fmt-check` | — | static | [Edit, Stop, Commit, Pr, Ci, Nightly, Preflight] | 120 | — | rustfmt exit status |
 | structure-check | `make structure-check` | — | static | [Edit, Stop, Commit, Pr, Ci, Nightly, Preflight] | 120 | — | tracked file and directory audit |
 | architecture-check | `make architecture-check` | — | native | [Stop, Commit, Pr, Ci, Nightly, Preflight] | 180 | — | Cargo metadata and source boundary audit |

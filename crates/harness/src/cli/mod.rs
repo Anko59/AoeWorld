@@ -35,6 +35,8 @@ enum Command {
     StructureCheck,
     ArchitectureCheck,
     DocsCheck,
+    /// Load documented local map packages and saves without running a match.
+    CheckFixtures,
     GatesDocs,
     ScopeCheck {
         #[arg(long)]
