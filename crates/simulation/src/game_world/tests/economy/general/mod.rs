@@ -205,7 +205,7 @@ fn march_uses_shared_formation_with_role_ordering() {
     );
 }
 #[test]
-fn siege_uses_offensive_movement_and_wounded_units_pull_back() {
+fn siege_prefers_visible_buildings_and_wounded_units_pull_back() {
     let (mut w, _) = setup();
     let ram = soldier(&mut w, UnitKind::BatteringRam, 104, 100);
     let wounded = soldier(&mut w, UnitKind::Knight, 105, 101);
@@ -214,7 +214,7 @@ fn siege_uses_offensive_movement_and_wounded_units_pull_back() {
     let enemy = w
         .spawn_kind(PlayerId(1), UnitKind::Militia, at(109, 100))
         .unwrap();
-    let _building = w
+    let building = w
         .insert_building(
             PlayerId(1),
             BuildingKind::House,
@@ -233,6 +233,17 @@ fn siege_uses_offensive_movement_and_wounded_units_pull_back() {
     );
     assert_ne!(w.unit(wounded).unwrap().attack_target, Some(enemy));
     assert!(w.unit(wounded).unwrap().moving || w.unit(wounded).unwrap().planning);
+    // The ordinary offensive path walks the ram in, then it acquires the house.
+    let mut tick = 0;
+    while w.unit(ram).unwrap().attack_target != Some(building) && tick < 600 {
+        w.advance();
+        tick += 1;
+    }
+    assert_eq!(
+        w.unit(ram).unwrap().attack_target,
+        Some(building),
+        "the ram attacks the visible building (after {tick} ticks)"
+    );
 }
 #[test]
 fn outmatched_army_retreats_toward_castle_and_regroups() {

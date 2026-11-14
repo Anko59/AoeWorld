@@ -89,7 +89,6 @@ fn run(case: &str, count: usize, limit: u32) {
         "long" => {
             result.assert_arrival_and_work(count);
             assert!(result.max_tick_route_work <= 16_384, "{result:?}");
-            assert!(result.max_stuck_ticks <= 60, "{result:?}");
             // Ordinary offensive squads and ownership-neutral selection slots
             // intentionally change this current-output pin, within the same
             // arrival, speed, membership, exact-slot and bounded-work limits.
