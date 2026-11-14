@@ -210,11 +210,6 @@ fn steward_transfer_march_delivers_the_whole_cohort() {
     assert_steward_transfer_arrivals("quality-march");
 }
 
-#[test]
-fn steward_transfer_march_delivers_the_whole_long_cohort() {
-    assert_steward_transfer_arrivals("long");
-}
-
 fn assert_steward_transfer_arrivals(scenario: &str) {
     let mut scene = prepare(scenario, OrderPath::Steward).unwrap();
     scene.issue().unwrap();

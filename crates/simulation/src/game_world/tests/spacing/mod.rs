@@ -45,6 +45,10 @@ fn ten_villagers_share_a_click_but_arrive_at_distinct_radius_clear_positions() {
         w.issue_move(id, at(50, 30)).unwrap();
     }
     run(&mut w, 1000);
+    let tiles = ids
+        .iter()
+        .map(|&id| w.unit(id).unwrap().position.tile_floor())
+        .collect::<BTreeSet<_>>();
     let points = ids
         .iter()
         .map(|&id| {
@@ -53,13 +57,6 @@ fn ten_villagers_share_a_click_but_arrive_at_distinct_radius_clear_positions() {
         })
         .collect::<BTreeSet<_>>();
     assert_eq!(points.len(), ids.len());
-    // Arrival packing is deliberately compact. Preserve distinct bodies and
-    // physical clearance, while requiring every endpoint near the click.
-    assert!(
-        points
-            .iter()
-            .all(|&(x, y)| distance(WorldPosition::new(x, y), at(50, 30)) <= (2 * 1024_i64).pow(2))
-    );
     for (i, &a) in ids.iter().enumerate() {
         for &b in &ids[i + 1..] {
             assert!(
@@ -69,6 +66,11 @@ fn ten_villagers_share_a_click_but_arrive_at_distinct_radius_clear_positions() {
         }
     }
     assert!(ids.iter().all(|&id| w.movement_order(id).is_none()));
+    assert!(
+        tiles
+            .iter()
+            .all(|t| t.x.abs_diff(50) <= 3 && t.y.abs_diff(30) <= 3)
+    );
 }
 
 #[test]

@@ -4,10 +4,6 @@ use crate::game_world::movement_step::{CellHasher, tile_key};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::hash::BuildHasherDefault;
 
-// Thirteen thirty-seconds of a tile leaves six subunits beyond two villager radii.
-// Every kind still passes its own exact reservation and body-clearance checks.
-const ARRIVAL_STEP: i32 = 416;
-
 #[derive(Debug, Default)]
 pub(crate) struct Destinations {
     /// Probed for every nearby tile of every reservation query. Only
@@ -126,9 +122,8 @@ impl GameWorld {
         self.destination_slot(id, click, true)
     }
 
-    /// A regular sub-tile lattice packs arrivals without losing body clearance.
-    /// A bounded flood certifies connectivity to the click, so slots cannot
-    /// jump across a wall.
+    /// Half-tile slots allow several infantry to share a tile. A bounded flood
+    /// certifies connectivity to the click, so slots cannot jump across a wall.
     fn destination_slot(
         &self,
         id: EntityId,
@@ -155,23 +150,9 @@ impl GameWorld {
         let mut queue = std::collections::VecDeque::from([target]);
         let mut best = None;
         while let Some(tile) = queue.pop_front() {
-            let minimum = WorldPosition::new(tile.x * 1024, tile.y * 1024);
-            let first = WorldPosition::new(
-                click.x
-                    + (minimum.x - click.x + ARRIVAL_STEP - 1).div_euclid(ARRIVAL_STEP)
-                        * ARRIVAL_STEP,
-                click.y
-                    + (minimum.y - click.y + ARRIVAL_STEP - 1).div_euclid(ARRIVAL_STEP)
-                        * ARRIVAL_STEP,
-            );
-            for n in 0..9 {
-                let at = WorldPosition::new(
-                    first.x + n % 3 * ARRIVAL_STEP,
-                    first.y + n / 3 * ARRIVAL_STEP,
-                );
-                if at.x >= minimum.x + 1024 || at.y >= minimum.y + 1024 {
-                    continue;
-                }
+            let center = WorldPosition::from_tile_center(tile)?;
+            for (dx, dy) in [(0, 0), (-256, -256), (256, -256), (-256, 256), (256, 256)] {
+                let at = WorldPosition::new(center.x + dx, center.y + dy);
                 if !busy(at) && self.body_position_clear(unit.kind, at) {
                     let key = (
                         super::super::movement_step::slots::squared(at, click),
@@ -199,11 +180,9 @@ impl GameWorld {
                     continue;
                 };
                 if best.is_some_and(|(key, _)| {
-                    let nearest = WorldPosition::new(
-                        click.x.clamp(next.x * 1024, next.x * 1024 + 1023),
-                        click.y.clamp(next.y * 1024, next.y * 1024 + 1023),
-                    );
-                    super::super::movement_step::slots::squared(nearest, click) > key.0
+                    super::super::movement_step::slots::squared(next_position, click)
+                        .saturating_sub(1024 * 1024)
+                        > key.0
                 }) {
                     continue;
                 }
