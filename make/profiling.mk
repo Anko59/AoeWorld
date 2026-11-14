@@ -124,3 +124,15 @@ save-replay-steps:
 .PHONY: save-replay-counter-check
 save-replay-counter-check:
 	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --cap-add PERFMON --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) $(RESOURCE_OBSERVER) cargo test --locked -p aoe-server hardware_counter_is_user_only_thread_local_and_fully_scheduled -- --ignored
+
+# Integer simulation metrics, without browser, PMU access or wall-clock scores.
+.PHONY: quality-metrics quality-metrics-steps quality-video
+quality-metrics: resource-bootstrap
+	@$(RESOURCE_LONG) quality-metrics -- $(MAKE) --no-print-directory quality-metrics-steps
+quality-metrics-steps:
+	@$(DOCKER_RUN) cargo run --locked --profile test -p aoe-harness -- quality-metrics $(QUALITY_METRICS_ARGS)
+
+# Diagnostic frames and recordings remain outside Git.
+QUALITY_VIDEO_FILTER ?= null
+quality-video: ship-tools
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) $(ROOT_MOUNTS) -w $(ROOT) $(SHIP_TOOLS_IMAGE) ffmpeg -y -framerate 12 -pattern_type glob -i '.cache/quality-video/*/frame-*.png' -vf $(call MOUNT_QUOTE,$(QUALITY_VIDEO_FILTER)) -c:v libvpx-vp9 -threads 2 -pix_fmt yuv420p .cache/quality-video.webm

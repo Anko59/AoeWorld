@@ -20,6 +20,7 @@ fn only_benchmarks_full_e2e_coverage_and_their_aggregates_are_long() {
     let registry = registry();
     let expected: BTreeSet<_> = [
         "client-frame-bench",
+        "quality-metrics",
         "coverage",
         "test-e2e",
         "perf-smoke",

@@ -100,9 +100,12 @@ impl GameWorld {
         };
         let damage = (u32::from(raw) * factor).max(4);
         let quarter = &mut self.combat.hp_quarters[target.0 as usize];
-        let left = (u32::from(hp) * 4 + u32::from(*quarter)).saturating_sub(damage);
+        let before = u32::from(hp) * 4 + u32::from(*quarter);
+        let left = before.saturating_sub(damage);
         let hp = (left / 4) as u16;
         *quarter = if hp == 0 { 0 } else { (left % 4) as u8 };
+        let after = u32::from(hp) * 4 + u32::from(*quarter);
+        self.observe_damage(attacker, target, before - after);
         hp
     }
 
