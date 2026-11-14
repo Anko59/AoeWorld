@@ -5,6 +5,7 @@
 use super::far_route;
 use crate::GameWorld;
 use aoe_core::PlayerId;
+use aoe_map::RoutePlanner;
 use std::collections::BTreeMap;
 
 /// What asked for the route, in the report's order.
@@ -26,6 +27,16 @@ pub const ROUTE_REACH: [&str; 3] = ["near", "far", "unplanned"];
 pub struct RouteQueueCell {
     pub waits: Vec<u64>,
     pub active: usize,
+    /// Units of this class that hold a retained search frontier, and so one of
+    /// their player's `MAX_ROUTE_SEARCHES_PER_PLAYER` slots of that reach
+    /// class: waiting or already walking. Who holds the cap, not who wants it.
+    pub searches: usize,
+    /// Waiting units whose one fast attempt per leg is already spent, so only
+    /// a search slot can still answer them.
+    pub fast_tried: usize,
+    /// Waiting units that queue in their player's *far* slot class. `reach`
+    /// cannot say this for a unit with no planner, and that is most of them.
+    pub far_waits: usize,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -82,9 +93,18 @@ impl GameWorld {
                 .cells
                 .entry((unit.state.player, self.route_requester(index), reach))
                 .or_default();
+            if unit
+                .planner
+                .as_ref()
+                .is_some_and(RoutePlanner::requires_search_slot)
+            {
+                cell.searches += 1;
+            }
             if waiting {
                 cell.waits
                     .push(self.tick.0.saturating_sub(unit.planning_since));
+                cell.fast_tried += usize::from(unit.fast_route_tried);
+                cell.far_waits += usize::from(self.waits_for_far_route(index));
             } else {
                 cell.active += 1;
             }

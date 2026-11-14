@@ -3,7 +3,7 @@ mod counts;
 mod orders;
 mod progress;
 use super::stats::Series;
-use aoe_server::{GameplayService, replay::Recording};
+use aoe_server::{GameplayService, queue_json, replay::Recording, scheduler_json};
 use clap::Args;
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, fs, path::PathBuf, process::Command};
@@ -83,10 +83,20 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
         let phase_summary: BTreeMap<_, _> = phases.iter().map(|(name, series)| (*name, counts::summary(series))).collect();
         let phases_cpu_summary: BTreeMap<_, _> = phases_cpu.iter().map(|(name, series)| (*name, series.summary())).collect();
         let attribution = service.inspect_scale_world(|w| orders::report(w, &kinds, &census, recording.ticks.len())).await;
+        // Route-scheduler state at the end of the window, read off-tick like
+        // the mover census: the same counters the live probe reports, on a
+        // window that repeats. No human seat sends orders in this recording.
+        let routes = service
+            .inspect_scale_world(|w| {
+                let mut routes = scheduler_json(&w.route_scheduler_stats(), w.tick().0);
+                routes["queue"] = queue_json(&w.route_queue_breakdown(), &[]);
+                routes
+            })
+            .await;
         Ok(json!({ "order_attribution": attribution, "refused_commands": refused, "initial_hash": hex(&initial), "total_cpu_ms_per_tick": cpu.summary(), "phases_cpu_ms": phases_cpu_summary, "total_instructions_per_tick": counts::summary(&total), "phases_instructions": phase_summary,
             "first_divergence_tick": divergence, "final_hash": hashes.last().ok_or("empty replay")?["hash"],
             "movement_progress": progress.summary(recording.ticks.last().ok_or("empty replay")?.tick + 1),
-            "navigation_calls": navigation_calls,
+            "navigation_calls": navigation_calls, "routes": routes,
             "hashes": hashes, "raw": raw, "commands": commands, "restore": format!("{restored:?}") }))
     })
 }

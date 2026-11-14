@@ -369,6 +369,7 @@ fn scheduling_budget_is_part_of_canonical_state() {
 mod detours;
 #[path = "routes/fairness.rs"]
 mod fairness;
+mod fights;
 mod freeze;
 mod long_run;
 mod movement_ground;
