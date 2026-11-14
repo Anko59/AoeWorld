@@ -184,12 +184,12 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with: { name: parser-fuzz-smoke, path: "reports/fuzz/\nfuzz/artifacts/", retention-days: 7, if-no-files-found: ignore }
 
-  # Post-merge tier: runs on pushes to dev/main and nightly; PRs and feature-branch dispatches select like PRs and skip it.
+  # Post-merge tier (75 min covers test-source-qualification's 60 budgeted): the slow offline source-qualification tests plus the full-scale navigation and economy measurements that test-unit excludes. PRs and feature-branch dispatches select like PRs and skip it.
   qualification:
     needs: select
     if: ${{ needs.select.outputs.qualification == 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 75
     steps: [{uses: 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262'}, {uses: ./.github/actions/docker-setup}, {run: make test-source-qualification}]
 
   # Post-merge tier (100 min covers test-exhaustive's 30 and sdk-python-test's 60 budgeted): the 16-seed sweeps and full-axis geodata round-trips that test-unit runs on two seeds or reduced axes, and the Python SDK with a live bot game.

@@ -1,6 +1,5 @@
 use super::*;
 use std::time::Duration;
-mod determinism;
 mod fixture;
 mod mapped;
 mod performance;

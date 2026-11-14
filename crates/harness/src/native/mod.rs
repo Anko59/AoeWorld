@@ -57,8 +57,12 @@ fn capped_jobs(inherited: Option<&str>) -> usize {
     })
 }
 
-/// Budget of the source-qualification tier, which `test_unit` excludes.
-const SOURCE_BUDGET: Duration = Duration::from_secs(1800);
+/// Budget of the source-qualification tier, which `test_unit` excludes. The
+/// tier also holds the full-scale benchmark and timing measurements: the
+/// navigation static measurement alone was observed at 20 m 44 s, so 1800 s no
+/// longer covers the list. 3600 s leaves headroom over the roughly 40 minutes
+/// of serial work the members add up to, and the CI job's timeout matches.
+const SOURCE_BUDGET: Duration = Duration::from_secs(3600);
 
 /// Run exactly the tests of [`tiers::SOURCE_QUALIFICATION`]; fail when none match.
 pub(crate) fn test_source_qualification() -> Result<(), ProcessError> {

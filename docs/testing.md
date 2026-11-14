@@ -102,17 +102,37 @@ registry and `target/` cache that the last push to `dev` saved (key: leg,
 pull requests only read it, so they cannot evict it from the repository's 10 GB.
 
 **Source-qualification tier (#388).** `make test-unit` excludes, and
-`make test-source-qualification` runs exactly, the slow offline source
-qualification tests listed in `SOURCE_QUALIFICATION` in
-`crates/harness/src/native/tiers.rs` (one list builds both nextest filtersets, so
-a test is in exactly one run; the new target fails when no test matches, and a
-harness test checks every listed name is a real test function):
+`make test-source-qualification` runs exactly, the tests listed in
+`SOURCE_QUALIFICATION` in `crates/harness/src/native/tiers.rs` (one list builds
+both nextest filtersets, so a test is in exactly one run; the new target fails
+when no test matches, and a harness test resolves every listed name's module
+path to a real test function in some workspace crate). The list's name is
+historical: its criterion is runtime over 20 s, not subject, so the full-scale
+benchmark and timing measurements live here too.
 
-| Test (aoe-server) | Quiet-machine time |
-| --- | --- |
-| `source_qualification::tests::orchestration::synthetic_flat_sahara_geographic_movement_exercises_full_routes_and_replay` | 74-90 s |
-| `source_qualification::tests::orchestration::synthetic_flat_sahara_package_exercises_full_offline_qualification_contract` | 24-72 s |
-| `source_qualification::movement::tests::continuous_source_free_run_completes_all_repeated_waypoints` | about 51 s |
+| Test | Crate | Quiet-machine time |
+| --- | --- | --- |
+| `source_qualification::tests::orchestration::synthetic_flat_sahara_geographic_movement_exercises_full_routes_and_replay` | aoe-server | 74-90 s |
+| `source_qualification::tests::orchestration::synthetic_flat_sahara_package_exercises_full_offline_qualification_contract` | aoe-server | 24-72 s |
+| `source_qualification::movement::tests::continuous_source_free_run_completes_all_repeated_waypoints` | aoe-server | about 51 s |
+| `map_store::navigation::tests::performance::large_navigation_lazy_tick_measurement` | aoe-server | about 158 s |
+| `map_store::navigation::tests::performance::large_navigation_static_tick_measurement` | aoe-server | about 20 m 44 s |
+| `game_world::economy::benchmark::tests::late_game_full_population_replays_identically_on_one_and_four_workers` | aoe-simulation | minutes |
+| `game_world::economy::benchmark::tests::sleep::work_sleep_replays_the_full_late_game_workload` | aoe-simulation | about 260 s |
+
+The budget is 3600 s (`SOURCE_BUDGET`, and `budget_s` in `gates/registry.json`),
+with the CI job at 75 minutes, sized for that load rather than the three
+original tests.
+
+The late-game replay keeps a per-PR variant,
+`game_world::tests::scale_hooks::determinism::the_late_game_replay_agrees_across_one_and_four_workers`,
+at eight seats; it asserts it holds more than `2 * parallel::SHARD` simultaneous
+movers, because below that threshold `par_map_into` runs sequentially and
+agreement across worker counts would prove nothing. The two navigation
+measurements have no per-PR variant: route-planning admission caps simultaneous
+movers near 209 on a small world whatever the unit count or seat count, so a
+cheap navigation test cannot reach that threshold, and their cross-worker
+property is checked post-merge only.
 
 The tier is a `qualification` gate (`gates/registry.json`), so it must run
 post-merge or nightly; a PR that changes walkability, pathing or source

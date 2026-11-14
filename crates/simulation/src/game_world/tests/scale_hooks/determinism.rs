@@ -35,7 +35,12 @@ fn the_late_game_replay_agrees_across_one_and_four_workers() {
                         .count()
                         >= 32
                 );
-                assert!(world.units().filter(|u| u.moving).count() >= 32);
+                let moving = world.units().filter(|u| u.moving).count();
+                assert!(
+                    moving >= 2 * crate::game_world::parallel::SHARD,
+                    "only {moving} simultaneous movers; below 2 * SHARD the \
+                     proposal pass runs sequentially and worker counts cannot differ"
+                );
                 world.canonical_hash()
             })
     }

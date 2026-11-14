@@ -16,9 +16,12 @@ pub(crate) const SOURCE_QUALIFICATION: &[&str] = &[
     "source_qualification::movement::tests::continuous_source_free_run_completes_all_repeated_waypoints",
     "source_qualification::tests::orchestration::synthetic_flat_sahara_geographic_movement_exercises_full_routes_and_replay",
     "source_qualification::tests::orchestration::synthetic_flat_sahara_package_exercises_full_offline_qualification_contract",
-    // 7,000 units over 160 ticks, twice, plus a timing report. The cross-worker
-    // agreement is kept per-PR by
-    // `map_store::navigation::tests::determinism::*_navigation_replay_agrees_across_workers`.
+    // 7,000 units over 160 ticks, twice, plus a timing report. These have no
+    // per-PR variant: route-planning admission caps simultaneous movers near
+    // 209 on a small world whatever the unit or seat count, so a cheap test
+    // cannot reach the 2 * SHARD movers below which `par_map_into` is
+    // sequential and worker counts cannot differ. Their cross-worker agreement
+    // is therefore checked post-merge only.
     "map_store::navigation::tests::performance::large_navigation_lazy_tick_measurement",
     "map_store::navigation::tests::performance::large_navigation_static_tick_measurement",
     // 14,000 units. The cross-worker agreement is kept per-PR by
