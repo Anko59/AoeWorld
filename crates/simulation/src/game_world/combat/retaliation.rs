@@ -11,10 +11,13 @@ impl GameWorld {
         changed: &mut Vec<EntityId>,
     ) {
         let unit = self.units[index].state;
+        // An attack-move member hit on the march fights back instead of
+        // walking on; the same rule for one unit, a formation and an army.
+        let marching = self.offensive_destination_slot(unit.id).is_some()
+            && (unit.moving || unit.planning || matches!(unit.task, UnitTask::Moving));
         if unit.hp == 0
-            || unit.moving
-            || unit.planning
-            || !matches!(unit.task, UnitTask::Idle | UnitTask::Carrying)
+            || ((unit.moving || unit.planning) && !marching)
+            || !(marching || matches!(unit.task, UnitTask::Idle | UnitTask::Carrying))
             || self.combat.attackers.contains_key(&unit.id)
             || self.economy.gatherers.contains_key(&unit.id)
             || self.economy.builders.contains_key(&unit.id)
@@ -37,6 +40,13 @@ impl GameWorld {
         let flee = stats.attack == 0
             || (unit.kind == UnitKind::Villager && ranged)
             || (unit.kind.is_ram() && !ram_target);
+        // A marching member that cannot fight back keeps marching. Fleeing would
+        // detach it from its group with no slot to resume, stranding a ram, a
+        // monk or a villager three tiles from the army; before an attack-move
+        // member reacted at all, every moving unit returned above.
+        if marching && flee {
+            return;
+        }
         if unit.stance == CombatStance::StandGround {
             let range = super::super::navy::attack_range(&stats);
             if flee || goal.distance_squared(unit.position) > range * range {

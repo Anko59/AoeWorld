@@ -153,19 +153,12 @@ impl Scene {
         let p = PlayerId(0);
         match self.path {
             OrderPath::Single => {
+                let id = *self.ids.first().ok_or("quality cohort is empty")?;
                 if self.attack_move {
-                    for &id in &self.ids {
-                        self.world.issue_formation_move(
-                            p,
-                            &[id],
-                            Formation::Line,
-                            self.goal,
-                            true,
-                            false,
-                        )?;
-                    }
+                    // The player's own entry point, which arms the one-member
+                    // group whose engage look does the fighting.
+                    self.world.issue_attack_move(id, self.goal)?;
                 } else {
-                    let id = *self.ids.first().ok_or("quality cohort is empty")?;
                     self.world.issue_move(id, self.goal)?;
                 }
             }
@@ -175,8 +168,8 @@ impl Scene {
                     &self.ids,
                     Formation::Line,
                     self.goal,
-                    self.attack_move,
                     false,
+                    self.attack_move,
                 )?;
             }
             OrderPath::General => {

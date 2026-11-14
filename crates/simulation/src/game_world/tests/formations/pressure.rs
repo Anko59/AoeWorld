@@ -87,8 +87,9 @@ fn formations_attack_move_does_not_hide_an_enemy_behind_a_dense_own_army() {
     }
     // Enemy discovery is not starved by the own units around it: within 16
     // ticks the group's looks sent eight melee members to it, the spots around
-    // one man, counted over every attacker so a second look adds none; the
-    // other 192 still march. (Before each member broke off for
+    // one man, counted over every attacker so a second look adds none, and two
+    // more marchers struck it because it stood inside their own reach; the
+    // other 190 still march. (Before each member broke off for
     // any enemy in a 13x13-tile window: 88 stood around the one enemy, most of
     // them unable to reach it.)
     let fighters = ids
@@ -96,7 +97,7 @@ fn formations_attack_move_does_not_hide_an_enemy_behind_a_dense_own_army() {
         .filter(|&&id| w.unit(id).unwrap().attack_target == Some(enemy))
         .count();
     let left = ids.iter().filter(|&&id| w.formation(id).is_none()).count();
-    assert_eq!((fighters, left), (8, 8));
+    assert_eq!((fighters, left), (10, 10));
 }
 
 #[test]

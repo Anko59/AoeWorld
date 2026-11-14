@@ -171,3 +171,36 @@ fn straight_line_time_bound_stops_at_the_two_tile_arrival_boundary() {
     assert_eq!(report["straight_line_lower_bound_ticks_min"], expected);
     assert!(report["movement"]["ratio_ppm_p50"].as_u64().unwrap() >= 1_000_000);
 }
+
+/// A cohort under an ordinary march neither acquires nor retaliates while it
+/// is moving, so a combat case that forgets the attack-move flag measures a
+/// fight nobody ordered. Both ordered paths must fight an enemy in their way.
+#[test]
+fn combat_cases_issue_an_attack_move_that_fights_on_the_way() {
+    use aoe_core::PlayerId;
+    use aoe_simulation::UnitKind;
+    for path in [OrderPath::Single, OrderPath::Group] {
+        let mut scene = crate::quality_metrics::combat::scene("melee", path).unwrap();
+        // An enemy standing in the cohort's own path, a few tiles ahead.
+        scene
+            .world
+            .spawn_kind(PlayerId(1), UnitKind::Militia, march::at(42, 102).unwrap())
+            .unwrap();
+        scene.world.set_damage_observation(true);
+        scene.issue().unwrap();
+        let mut dealt = 0_u64;
+        for _ in 0..400 {
+            scene.world.advance();
+            for hit in scene.world.take_damage_observations() {
+                if scene.ids.contains(&hit.attacker) {
+                    dealt += u64::from(hit.amount_quarters);
+                }
+            }
+        }
+        assert!(
+            dealt > 0,
+            "the {} combat case must order a fight, not a march past the enemy",
+            path.name()
+        );
+    }
+}

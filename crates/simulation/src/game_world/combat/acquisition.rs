@@ -145,15 +145,27 @@ impl GameWorld {
                 .get(&id)
                 .copied()
                 .filter(|a| a.origin.is_some() && self.building(a.target).is_some());
+            // Offensive movement is ordinary movement plus aggression: a
+            // marching attack-move member — a lone unit, a formation member or
+            // a General's soldier — strikes what is already in its weapon's
+            // reach instead of walking past it. The group's bounded engage
+            // look still decides who leaves the march to chase.
+            let marching = self.offensive_destination_slot(id).is_some()
+                && (u.moving || u.planning || matches!(u.task, UnitTask::Moving));
             if u.hp == 0
-                || ((u.moving || u.planning) && building_attack.is_none())
-                || (!matches!(u.task, UnitTask::Idle) && building_attack.is_none())
+                || ((u.moving || u.planning) && building_attack.is_none() && !marching)
+                || (!matches!(u.task, UnitTask::Idle) && building_attack.is_none() && !marching)
             {
                 continue;
             }
-            let Some(area) = self.acquisition_area(&u) else {
+            let Some(mut area) = self.acquisition_area(&u) else {
                 continue;
             };
+            if marching {
+                // Marching members stop for an enemy in attack range only.
+                let range = super::super::navy::attack_range(&self.unit_state_stats(&u));
+                area.max = area.max.min(range);
+            }
             // A melee unit does not take on an enemy whose every spot is
             // taken: it would only stand and wait out of reach.
             let probe = self.acquire_target(&area, building_attack.is_none());
