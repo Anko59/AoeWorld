@@ -92,15 +92,16 @@ Its SHA-256 is
 Mekong package manifest's
 `36494a063c0f62d3c8d0bcbdf54dc3ccef8966c5cf40a8af6c9d634dc46d876e`, so
 `make check-fixtures` has a current list to read.
-The adjacent admin observation at tick 72,381 has 7,069 cumulative player
-kills and `combat_per_minute` counters of 344 deaths, 6,967 melee hits and
-10,083 ranged hits. Sixty-one players were Imperial, 17 Castle, 20 Feudal
-and two Dark. The idle human and two AIs were eliminated; all 100 seats remain
-in the save, and defeated AI seats still connect normally.
+No admin observation was taken beside this save, so there is no kill, combat
+or age-split figure for this window; the previous reference's observation
+described a different, now unreadable save and is not carried over. What the
+restore reports is recorded under "Measured reference": 9,667 units, 5,381
+buildings, 453 animals, 501 formations and 55 managers, with nothing lost. All
+100 seats remain in the save, and defeated AI seats still connect normally.
 
-The growth server was deliberately stopped after saving and filming. Its
-`growth.json.failure` records that stop; it is not a completed 150-minute
-performance baseline. The save was sealed before fog was disabled for footage.
+The growth server was deliberately stopped once the save was written, so its
+report is not a completed 150-minute performance baseline. No footage was taken
+of this window.
 Preserve growth logs before the saved capture reuses the scratch path:
 
 ```sh
@@ -115,10 +116,11 @@ make scale-match SCALE_MATCH_ARGS='--save .cache/dev-replay/packages/saves/17946
 make save-replay AOE_SAVE_REPLAY_ARGS='--save .cache/dev-replay/packages/saves/1794634126-mekong-dev-late-v6.save --package-directory .cache/dev-replay/packages --recording .cache/dev-replay/commands.jsonl --runs 3 --out .cache/dev-replay/replay.json'
 ```
 
-The capture succeeded with all **99 AIs ready across eight hosts** in 5.855
-seconds before the saved clock resumed. It contains **10,055 commands** over
-exactly **1,500 contiguous input ticks, 72,380–73,879**; the final resulting
-state is tick 73,880. The 30-minute value is a safety deadline: capture stops
+The capture succeeded with all **99 AIs ready across eight hosts** before the
+saved clock resumed. It contains **9,644 commands** over exactly **1,500
+contiguous input ticks, 72,451–73,950**; the final resulting state is tick
+73,951. The recording's header states the same `start_tick` and tick count, and
+each replay run applied all 9,644. The 30-minute value is a safety deadline: capture stops
 when the requested ticks are complete. Output recordings refuse overwrite and
 partial streams fail. Select the stored save directly under `packages/saves/`
 when reusing a package directory; importing a different copy refuses overwrite.
