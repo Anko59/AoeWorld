@@ -19,6 +19,8 @@ pub(crate) enum Severity {
 /// One finding as a reviewer reports it.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub(crate) struct Reported {
+    /// Empty when the reviewer named no file; the claim still stands.
+    #[serde(default)]
     pub(crate) file: String,
     #[serde(default)]
     pub(crate) line: Option<u32>,
@@ -56,10 +58,79 @@ pub(crate) struct Verdict {
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Answer {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "findings")]
     pub(crate) findings: Vec<Reported>,
     #[serde(default)]
     pub(crate) verdicts: Vec<Verdict>,
+}
+
+/// Findings, skipping entries without a claim. A closing review sometimes puts a
+/// vote or a note in `findings`; it states nothing to fix, and failing the whole
+/// answer over it made a graded review incomplete. Every other entry parses as
+/// before from its own text, so a malformed or duplicated field still fails the
+/// answer (a `Value` would keep the last of two `severity` keys).
+fn findings<'de, D: serde::Deserializer<'de>>(input: D) -> Result<Vec<Reported>, D::Error> {
+    use serde::de::Error;
+    let entries: Vec<Box<serde_json::value::RawValue>> = Deserialize::deserialize(input)?;
+    let mut findings = Vec::new();
+    for entry in entries {
+        // Parse strictly first, so a duplicated or malformed field still fails.
+        // Only an entry that has no claim at all (a stray vote or note), or one
+        // that parses with a blank claim, is skipped.
+        let skip = match serde_json::from_str::<Reported>(entry.get()) {
+            Ok(finding) if !finding.claim.trim().is_empty() => {
+                findings.push(finding);
+                continue;
+            }
+            Ok(_) => true,
+            Err(error) => {
+                // Every claim key, duplicates included: skip only an entry with
+                // none, or with exactly one blank claim.
+                let Claims(claims) = serde_json::from_str(entry.get()).map_err(D::Error::custom)?;
+                match claims.as_slice() {
+                    [] => true,
+                    [serde_json::Value::String(claim)] if claim.trim().is_empty() => true,
+                    _ => return Err(D::Error::custom(error)),
+                }
+            }
+        };
+        if skip {
+            let text: String = entry.get().chars().take(160).collect();
+            eprintln!("review: ignored a findings entry without a claim: {text}");
+        }
+    }
+    Ok(findings)
+}
+
+/// Every `claim` value of one findings entry, in order and with duplicates, which
+/// a `serde_json::Value` would collapse to the last one.
+struct Claims(Vec<serde_json::Value>);
+
+impl<'de> Deserialize<'de> for Claims {
+    fn deserialize<D: serde::Deserializer<'de>>(input: D) -> Result<Self, D::Error> {
+        struct Visitor;
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = Claims;
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a findings entry object")
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<Claims, A::Error> {
+                let mut claims = Vec::new();
+                while let Some(key) = map.next_key::<String>()? {
+                    if key == "claim" {
+                        claims.push(map.next_value()?);
+                    } else {
+                        map.next_value::<serde::de::IgnoredAny>()?;
+                    }
+                }
+                Ok(Claims(claims))
+            }
+        }
+        input.deserialize_map(Visitor)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
