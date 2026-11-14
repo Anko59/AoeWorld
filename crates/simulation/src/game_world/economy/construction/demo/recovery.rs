@@ -72,8 +72,14 @@ impl GameWorld {
         world.issue_stance(PlayerId(1), &[enemy], CombatStance::NoAttack)?;
         if acquired {
             world.issue_move(general, at(213, 135)?)?;
-            for _ in 0..10 {
+            for _ in 0..100 {
                 world.advance();
+                if world
+                    .units()
+                    .any(|u| u.player == PlayerId(0) && u.attack_target == Some(enemy))
+                {
+                    break;
+                }
             }
         }
         for y in 35..=47 {

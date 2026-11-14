@@ -1,7 +1,7 @@
 use super::*;
 
 impl GameWorld {
-    pub(super) fn formation_members(
+    pub(crate) fn formation_members(
         &self,
         player: PlayerId,
         ids: &[EntityId],
@@ -45,7 +45,7 @@ impl GameWorld {
         Ok((ids, centroid))
     }
 
-    pub(super) fn formation_origin(
+    pub(crate) fn formation_origin(
         &self,
         ids: &[EntityId],
         centroid: WorldPosition,
@@ -172,7 +172,7 @@ impl GameWorld {
     /// Lay the army out around the nearest reachable frontier. The whole
     /// front must fit outside a wall: centring the block on its nearest tile
     /// would squeeze front rows against the wall and leave them pressing.
-    pub(super) fn formation_goal(
+    pub(crate) fn formation_goal(
         &self,
         player: PlayerId,
         origin: WorldPosition,
@@ -203,17 +203,10 @@ impl GameWorld {
         let frontier = WorldPosition::from_tile_center(tile).unwrap_or(destination);
         let heading = WorldPosition::new(frontier.x - origin.x, frontier.y - origin.y);
         let (gap, _) = self.formation_gaps(ids);
-        let slots: Vec<_> = self
-            .general_role_slots(ids.iter().copied(), gap)
-            .map_or_else(
-                || {
-                    layout::slots(form, ids.len())
-                        .into_iter()
-                        .map(|p| WorldPosition::new(p.x * gap / 1040, p.y * gap / 1040))
-                        .collect()
-                },
-                |roles| roles.into_iter().map(|(_, point)| point).collect(),
-            );
+        let slots: Vec<_> = layout::slots(form, ids.len())
+            .into_iter()
+            .map(|p| WorldPosition::new(p.x * gap / 1040, p.y * gap / 1040))
+            .collect();
         let largest = ids
             .iter()
             .map(|id| self.units[self.lookup[id]].state.kind)
@@ -361,5 +354,45 @@ impl GameWorld {
             slowest,
             extent,
         })
+    }
+}
+
+impl GameWorld {
+    /// Coordinate any ordinary player formation at a common pace (subunits
+    /// per tick, as a ratio). This does not replace its route, slots or FIFO.
+    pub fn issue_formation_pace(
+        &mut self,
+        player: PlayerId,
+        id: EntityId,
+        pace: Option<(u64, u64)>,
+    ) -> Result<(), EconomyError> {
+        let unit = self.unit(id).ok_or(EconomyError::UnknownEntity)?;
+        if unit.player != player {
+            return Err(EconomyError::NotOwner);
+        }
+        let leader = self.units[self.lookup[&id]]
+            .formation
+            .ok_or(EconomyError::InvalidTarget)?;
+        let group = self
+            .formations
+            .get_mut(&leader)
+            .ok_or(EconomyError::InvalidTarget)?;
+        // Q32 is the ordinary formation speed representation. None releases
+        // the coordination without replacing the route, slots or FIFO.
+        let normalized = if let Some((n, d)) = pace {
+            if n == 0 || d == 0 {
+                return Err(EconomyError::InvalidTarget);
+            }
+            let fixed = (u128::from(n) * u128::from(FRACTION) / u128::from(d))
+                .min(u128::from(u64::MAX)) as u64;
+            if fixed == 0 {
+                return Err(EconomyError::InvalidTarget);
+            }
+            Some((fixed, FRACTION))
+        } else {
+            None
+        };
+        group.speed_limit = normalized;
+        Ok(())
     }
 }

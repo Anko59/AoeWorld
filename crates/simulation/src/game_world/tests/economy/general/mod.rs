@@ -190,7 +190,7 @@ fn march_uses_shared_formation_with_role_ordering() {
         .collect();
     let g = soldier(&mut w, UnitKind::General, 103, 103);
     w.issue_move(g, at(145, 103)).unwrap();
-    decide(&mut w);
+    advance(&mut w, 3000);
     assert_eq!(w.general_status(g).unwrap().state, GeneralState::Marching);
     let slots: Vec<_> = ids
         .iter()
@@ -224,9 +224,26 @@ fn siege_prefers_visible_buildings_and_wounded_units_pull_back() {
         .unwrap();
     decide(&mut w);
     assert_eq!(w.general_status(g).unwrap().state, GeneralState::Fighting);
-    assert_eq!(w.unit(ram).unwrap().attack_target, Some(building));
+    let groups = w.formation_records();
+    assert!(
+        groups
+            .iter()
+            .any(|group| group.members.contains(&ram) && group.attack_move),
+        "siege uses the same offensive group order as a player"
+    );
     assert_ne!(w.unit(wounded).unwrap().attack_target, Some(enemy));
     assert!(w.unit(wounded).unwrap().moving || w.unit(wounded).unwrap().planning);
+    // The ordinary offensive path walks the ram in, then it acquires the house.
+    let mut tick = 0;
+    while w.unit(ram).unwrap().attack_target != Some(building) && tick < 600 {
+        w.advance();
+        tick += 1;
+    }
+    assert_eq!(
+        w.unit(ram).unwrap().attack_target,
+        Some(building),
+        "the ram attacks the visible building (after {tick} ticks)"
+    );
 }
 #[test]
 fn outmatched_army_retreats_toward_castle_and_regroups() {
@@ -398,25 +415,6 @@ fn the_whole_army_counts_towards_fight_strength_wherever_it_stands() {
     decide(&mut w);
     decide(&mut w);
     assert_eq!(w.general_status(g).unwrap().state, GeneralState::Retreating);
-}
-
-#[test]
-fn army_focuses_wounded_high_value_targets_before_nearby_low_value_units() {
-    let (mut w, _) = setup();
-    soldier(&mut w, UnitKind::Archer, 104, 100);
-    let g = soldier(&mut w, UnitKind::General, 103, 100);
-    let militia = w
-        .spawn_kind(PlayerId(1), UnitKind::Militia, at(105, 100))
-        .unwrap();
-    w.units[w.lookup[&militia]].state.hp = 1;
-    w.spawn_kind(PlayerId(1), UnitKind::Archer, at(107, 100))
-        .unwrap();
-    let weak = w
-        .spawn_kind(PlayerId(1), UnitKind::Archer, at(107, 101))
-        .unwrap();
-    w.units[w.lookup[&weak]].state.hp = 10;
-    decide(&mut w);
-    assert_eq!(w.general_fight_target(g, 0), Some(weak));
 }
 
 #[test]

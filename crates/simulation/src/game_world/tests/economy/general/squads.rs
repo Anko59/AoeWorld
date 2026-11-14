@@ -207,10 +207,15 @@ fn unreachable_early_archer_squads_do_not_starve_a_reachable_later_squad() {
         .unwrap();
     assert!(w.unit_visible_to(PlayerId(0), enemy));
     for _ in 0..6 {
-        decide(&mut w);
-        assert_eq!(w.general_status(g).unwrap().state, GeneralState::Fighting);
+        advance(&mut w, 40);
         assert!(w.general_work().orders <= 32, "bounded decision work");
-        if w.general_fight_target(g, 4) == Some(enemy) {
+        if w.unit(enemy).is_none_or(|u| u.hp < u.max_hp) {
+            return;
+        }
+        assert_eq!(w.general_status(g).unwrap().state, GeneralState::Fighting);
+        if w.units().any(|u| {
+            u.player == PlayerId(0) && u.position.x > 116 * 1024 && u.attack_target == Some(enemy)
+        }) {
             return;
         }
     }
@@ -218,21 +223,22 @@ fn unreachable_early_archer_squads_do_not_starve_a_reachable_later_squad() {
 }
 
 #[test]
-fn fight_rotation_is_part_of_the_canonical_state() {
+fn squad_checkpoint_is_part_of_the_canonical_state() {
     let (mut w, _) = setup();
+    soldier(&mut w, UnitKind::Militia, 100, 100);
     let g = soldier(&mut w, UnitKind::General, 104, 108);
     let before = w.canonical_hash();
-    w.economy.generals.armies.get_mut(&g).unwrap().fight_after = 1;
+    w.economy.generals.armies.get_mut(&g).unwrap().squads[0].march =
+        Some((at(140, 100), at(120, 100)));
     assert_ne!(before, w.canonical_hash());
-    w.economy.generals.armies.get_mut(&g).unwrap().fight_after = 0;
+    w.economy.generals.armies.get_mut(&g).unwrap().squads[0].march = None;
     assert_eq!(before, w.canonical_hash());
 }
 
-/// A squad sealed in by blocked ground is refused its march. A refusal is not
-/// completion: when the ground opens the General orders the squad again, yet
-/// while it stays sealed the refused order is not reissued at every decision.
+/// A sealed squad uses the same reachable frontier as a player's selection.
+/// When ground opens, its next ordinary leg can reach the retained objective.
 #[test]
-fn a_squad_refused_while_sealed_in_marches_once_the_ground_opens() {
+fn a_sealed_squad_uses_a_shared_frontier_and_marches_after_ground_opens() {
     let (mut w, _) = setup();
     let ids: Vec<_> = (0..3)
         .map(|n| soldier(&mut w, UnitKind::Militia, 100 + n, 100))
@@ -249,20 +255,25 @@ fn a_squad_refused_while_sealed_in_marches_once_the_ground_opens() {
         decide(&mut w);
         orders += w.general_work().orders;
     }
-    assert!(ids.iter().all(|&id| w.formation(id).is_none()), "sealed in");
+    for &id in &ids {
+        let goal = w
+            .formation_destination_slot(id)
+            .expect("ordinary frontier formation");
+        assert!(goal.tile_floor().x > 97 && goal.tile_floor().x < 105);
+        assert!(goal.tile_floor().y > 97 && goal.tile_floor().y < 103);
+    }
     assert!(
         orders < 10,
-        "a refusal is retried on a bounded interval, not at every decision: {orders}"
+        "the admitted frontier is retained without retry churn: {orders}"
     );
     for tile in &ring {
         w.economy.blocked_tiles.remove(tile);
     }
     w.collision_opened(TileRect::from_xywh(96, 96, 11, 9));
-    for _ in 0..60 {
-        decide(&mut w);
-    }
+    advance(&mut w, 1500);
     assert!(
-        ids.iter().all(|&id| w.formation(id).is_some()),
-        "the General orders the squad once its ground opens"
+        ids.iter()
+            .all(|&id| w.unit(id).unwrap().position.x > 105 * 1024),
+        "the frontier leg completes and the next leg uses the opening"
     );
 }

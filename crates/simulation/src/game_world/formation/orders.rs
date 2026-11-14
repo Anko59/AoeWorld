@@ -110,6 +110,7 @@ impl GameWorld {
                 return Err(EconomyError::OrderTooLarge);
             }
             group.queue.push_back((destination, attack_move));
+            group.direct = false;
             for &id in &ids {
                 self.vassal_player_override(id);
             }
@@ -199,6 +200,7 @@ impl GameWorld {
             facing,
             speed: (0, 1),
             pace: (0, 1),
+            speed_limit: None,
             settled: false,
             direct: false,
             gap,
@@ -292,13 +294,7 @@ impl GameWorld {
                 front_near_end |= member.following_corridor
                     && path::squared(u.position, end) <= (4 * 1024_i64).pow(2);
                 let own = self.movement_speed(u.kind, u.player);
-                let pace = self
-                    .general_squad_pace(u.id)
-                    .filter(|pace| {
-                        u128::from(pace.0) * u128::from(own.1)
-                            < u128::from(own.0) * u128::from(pace.1)
-                    })
-                    .unwrap_or(own);
+                let pace = group.limited_speed(own);
                 self.road_speed(u.kind, u.position, pace)
             })
             .min_by(|a, b| {
@@ -370,22 +366,35 @@ impl GameWorld {
                     i64::from(group.heading.y),
                     group.facing,
                 );
-                group.path = path::Path::new(
-                    std::iter::once(group.anchor)
-                        .chain(std::iter::once(waypoint))
-                        .chain(
-                            route
-                                .iter()
-                                .filter_map(|&tile| WorldPosition::from_tile_center(tile).ok()),
-                        ),
-                    self.group_work.clone(),
+                // Rear members still need the bends behind this waypoint.
+                // Extend the common distance frame instead of extrapolating
+                // a new first edge backwards through the old wall or river.
+                let cursors: Vec<_> = group.members.iter().map(|m| (m.cursor, m.carry)).collect();
+                self.group_work.members(group.members.len() as u64);
+                group.path.continue_from(
+                    group.progress,
+                    group.anchor,
+                    std::iter::once(waypoint).chain(
+                        route
+                            .iter()
+                            .filter_map(|&tile| WorldPosition::from_tile_center(tile).ok()),
+                    ),
                 );
-                group.progress = 0;
-                group.path_cursor = 0;
+                group.path_cursor = group.path.cursor_at(group.progress);
                 group.taut_end = None;
                 self.reset_group_detours(group);
                 self.assign_group_slots(group);
-                group.direct = self.direct_order(group.anchor, destination, group);
+                for (member, (cursor, carry)) in group.members.iter_mut().zip(cursors) {
+                    self.group_work.members(1);
+                    member.cursor = cursor;
+                    let position = self.units[self.lookup[&member.id]].state.position;
+                    member.progress = group.path.relocate(position, &mut member.cursor);
+                    member.detour_progress = member.progress;
+                    member.carry = carry;
+                    member.following_corridor = true;
+                }
+                group.direct =
+                    group.queue.is_empty() && self.direct_order(group.anchor, destination, group);
                 group.settled = false;
                 self.install_formation_route(
                     index,

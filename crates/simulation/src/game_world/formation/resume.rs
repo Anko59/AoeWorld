@@ -85,7 +85,59 @@ impl GameWorld {
                 destination: group.destination,
                 queue: group.queue.iter().copied().collect(),
                 attack_move: group.attack_move,
+                pace_limit: group.speed_limit,
             })
             .collect()
+    }
+}
+
+impl GameWorld {
+    /// Contact reactions share an offensive group's ordinary continuation.
+    pub(crate) fn offensive_destination_slot(&self, id: EntityId) -> Option<WorldPosition> {
+        let unit = &self.units[*self.lookup.get(&id)?];
+        let group = self.formations.get(&unit.formation?)?;
+        if !group.attack_move {
+            return None;
+        }
+        let at = group.members.binary_search_by_key(&id, |m| m.id).ok()?;
+        Some(group.members[at].goal)
+    }
+
+    /// A bounded look-ahead point on an admitted movement route. Controllers
+    /// can issue ordinary intermediate orders without a second pathfinder.
+    pub(crate) fn movement_checkpoint(
+        &self,
+        id: EntityId,
+        ahead: i32,
+    ) -> Option<(WorldPosition, WorldPosition)> {
+        let unit = &self.units[*self.lookup.get(&id)?];
+        if let Some(group) = unit
+            .formation
+            .and_then(|leader| self.formations.get(&leader))
+        {
+            let progress = (group.progress + i64::from(ahead)).min(group.path.end());
+            if progress > group.progress {
+                return Some(group.path.point(progress, &mut { group.path_cursor }));
+            }
+            return (group.path.points.last() == Some(&group.destination))
+                .then_some((group.destination, group.travel_heading));
+        }
+        let order = unit.order?;
+        if unit.state.planning {
+            return None;
+        }
+        let mut from = unit.state.position;
+        let mut left = i64::from(ahead);
+        let mut heading = WorldPosition::new(order.waypoint.x - from.x, order.waypoint.y - from.y);
+        for to in std::iter::once(order.waypoint).chain(unit.route.iter().copied()) {
+            let length = path::distance(from, to);
+            heading = WorldPosition::new(to.x - from.x, to.y - from.y);
+            if length >= left {
+                return Some((path::step(from, to, left as i32), heading));
+            }
+            left -= length;
+            from = to;
+        }
+        Some((from, heading))
     }
 }

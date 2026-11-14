@@ -3,7 +3,6 @@ use aoe_core::CombatStance;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Reason {
-    March,
     Retreat,
     Wounded,
 }
@@ -77,12 +76,7 @@ impl GameWorld {
         }
     }
 
-    pub(super) fn reconcile_general_stances(
-        &mut self,
-        g: EntityId,
-        state: GeneralState,
-        destination: Option<WorldPosition>,
-    ) {
+    pub(super) fn reconcile_general_stances(&mut self, g: EntityId, state: GeneralState) {
         // Fixed stack snapshot permits restoration without allocating or borrowing the army.
         let saved = self.economy.generals.armies[&g].stances;
         for (slot, saved) in saved.into_iter().enumerate() {
@@ -91,11 +85,6 @@ impl GameWorld {
                 u.hp > 0
                     && !self.embarked(u.id)
                     && match saved.reason {
-                        Reason::March => {
-                            state == GeneralState::Marching
-                                && destination.is_some()
-                                && (u.moving || u.planning)
-                        }
                         Reason::Retreat => state == GeneralState::Retreating,
                         Reason::Wounded => state == GeneralState::Fighting && u.hp * 3 < u.max_hp,
                     }

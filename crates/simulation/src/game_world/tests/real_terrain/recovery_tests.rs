@@ -16,7 +16,7 @@ fn enclosure(world: &mut GameWorld) {
 fn recovery(enclose_after_acquisition: bool) {
     let mut f = build("general-forest");
     let g = f.primary;
-    // The commander sees the enemy on the very first army decision.
+    // The commander approaches into his own sight before the target is sealed.
     let index = f.world.lookup[&g];
     let old = f.world.units[index].state.position;
     f.world.idle_spacing.remove(g, old.tile_floor());
@@ -43,7 +43,11 @@ fn recovery(enclose_after_acquisition: bool) {
         let mut acquired = false;
         for _ in 0..100 {
             f.world.advance();
-            acquired = (0..11).any(|group| f.world.general_fight_target(g, group) == Some(enemy));
+            acquired = f.ids.iter().any(|&id| {
+                f.world
+                    .unit(id)
+                    .is_some_and(|u| u.attack_target == Some(enemy))
+            });
             if acquired {
                 break;
             }
@@ -144,7 +148,9 @@ fn recovery_recording_has_a_full_army_and_a_sealed_enemy() {
         );
         if acquired {
             assert!(
-                (0..11).any(|group| world.general_fight_target(general, group) == Some(enemy.id))
+                world
+                    .units()
+                    .any(|u| u.player == PlayerId(0) && u.attack_target == Some(enemy.id))
             );
         } else {
             world.issue_move(general, center(213, 135)).unwrap();
@@ -161,4 +167,63 @@ fn recovery_recording_has_a_full_army_and_a_sealed_enemy() {
         );
         assert_eq!(world.unit(enemy.id).unwrap().hp, enemy.max_hp);
     }
+}
+
+#[test]
+fn an_ordinary_offensive_selection_skips_a_sealed_melee_target() {
+    let mut f = build("general-forest");
+    for id in std::mem::take(&mut f.ids) {
+        f.world.kill_unit(f.world.lookup[&id]);
+        f.world.remove_unit(id);
+    }
+    f.world
+        .initialize_village(PlayerId(0), TileCoord::new(10, 10))
+        .unwrap();
+    f.world
+        .economy
+        .players
+        .get_mut(&PlayerId(0))
+        .unwrap()
+        .researched |= crate::Tech::CastleAge.bit();
+    let ids: Vec<_> = (0..10)
+        .map(|n| {
+            f.world
+                .spawn_kind(PlayerId(0), UnitKind::Scout, center(52, 37 + n))
+                .unwrap()
+        })
+        .collect();
+    let enemy = f.world.spawn_militia(PlayerId(1), center(59, 41)).unwrap();
+    f.world
+        .issue_stance(PlayerId(1), &[enemy], aoe_core::CombatStance::NoAttack)
+        .unwrap();
+    enclosure(&mut f.world);
+    f.world
+        .issue_formation_move(
+            PlayerId(0),
+            &ids,
+            aoe_core::Formation::Line,
+            center(100, 41),
+            false,
+            true,
+        )
+        .unwrap();
+    let starts: Vec<_> = ids
+        .iter()
+        .map(|&id| f.world.unit(id).unwrap().position)
+        .collect();
+    for _ in 0..100 {
+        f.world.advance();
+        for &id in &ids {
+            assert_eq!(
+                f.world.unit(id).unwrap().attack_target,
+                None,
+                "ordinary melee acquisition must reject the sealed target"
+            );
+        }
+    }
+    assert!(
+        ids.iter()
+            .zip(starts)
+            .any(|(&id, start)| f.world.unit(id).unwrap().position != start)
+    );
 }

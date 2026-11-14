@@ -38,6 +38,11 @@ impl GameWorld {
             ] {
                 hash.update(&value.to_le_bytes());
             }
+            hash.update(&[u8::from(group.speed_limit.is_some())]);
+            if let Some((n, d)) = group.speed_limit {
+                hash.update(&n.to_le_bytes());
+                hash.update(&d.to_le_bytes());
+            }
             hash.update(&group.progress.to_le_bytes());
             hash.update(&group.gap.to_le_bytes());
             hash.update(&group.narrow_gap.to_le_bytes());

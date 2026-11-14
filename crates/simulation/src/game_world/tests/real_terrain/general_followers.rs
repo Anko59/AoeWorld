@@ -29,7 +29,55 @@ fn march(case: &str, limit: u32) {
             break;
         }
     }
+    if offered(&fixture).iter().any(Option::is_none) {
+        let army = &fixture.world.economy.generals.armies[&fixture.primary];
+        eprintln!(
+            "unfinished {case}: commander={:?} final={:?} destination={:?}",
+            army.commander_march, army.routed, army.destination
+        );
+        for squad in &army.squads {
+            let leader = squad.members[0];
+            eprintln!(
+                "squad final={} march={:?} leader={:?} at={:?} moving={:?} actual_goal={:?}",
+                squad.final_leg,
+                squad.march,
+                leader,
+                fixture.world.unit(leader).map(|u| u.position),
+                fixture.world.unit(leader).map(|u| (u.moving, u.planning)),
+                fixture.world.movement_goal(leader)
+            );
+        }
+    }
     let goals = tracker.goals();
+    for &(id, goal) in goals
+        .iter()
+        .filter(|(id, goal)| fixture.world.unit(*id).unwrap().position != *goal)
+        .take(4)
+    {
+        let u = fixture.world.unit(id).unwrap();
+        let near: Vec<_> = fixture
+            .world
+            .units()
+            .filter(|other| {
+                i64::from(other.position.x - goal.x).pow(2)
+                    + i64::from(other.position.y - goal.y).pow(2)
+                    < 1536_i64.pow(2)
+            })
+            .map(|v| {
+                (
+                    v.id,
+                    v.kind,
+                    v.position,
+                    fixture.world.formation_destination_slot(v.id),
+                )
+            })
+            .collect();
+        eprintln!(
+            "unfinished-final {case} actor={u:?} expected={goal:?} nearby={near:?} status={} density={}",
+            fixture.world.formation_member_status(id),
+            fixture.world.group_density_probe(id)
+        );
+    }
     let starts = tracker.starts.clone();
     let mut result = tracker.finish(0);
     // Oracle work stays outside the measured movement and collision counters.
@@ -75,7 +123,11 @@ fn river_recording_setup_preserves_map_water_and_adopts_one_hundred() {
         (span.to.y - span.from.y).abs()
     );
     assert_eq!(f.world.general_status(g).unwrap().army_size, 100);
-    assert_eq!(f.world.unit_count(), 101);
+    assert_eq!(f.world.unit_count(), 113);
+    assert_eq!(
+        f.world.units().filter(|u| u.player == PlayerId(1)).count(),
+        12
+    );
     assert_eq!(
         f.world.player_economy(PlayerId(0)).unwrap().population_used,
         101
@@ -103,17 +155,47 @@ fn river_recording_setup_preserves_map_water_and_adopts_one_hundred() {
             || goal.y != f.world.unit(g).unwrap().position.y
     );
     f.world.issue_move(g, goal).unwrap();
-    for _ in 0..5_000 {
-        f.world.advance();
-    }
-    assert_eq!(f.world.unit(g).unwrap().position, goal);
     let end = WorldPosition::from_tile_center(span.to).unwrap();
     let dx = i64::from(span.to.x - span.from.x);
     let dy = i64::from(span.to.y - span.from.y);
-    let across = f
+    let mut crossed = std::collections::BTreeSet::new();
+    for _ in 0..5_000 {
+        f.world.advance();
+        crossed.extend(
+            f.world
+                .units()
+                .filter(|u| {
+                    u.player == PlayerId(0)
+                        && i64::from(u.position.x - end.x) * dx
+                            + i64::from(u.position.y - end.y) * dy
+                            > 0
+                })
+                .map(|u| u.id),
+        );
+    }
+    assert_eq!(f.world.unit(g).unwrap().position, goal);
+    for u in f
         .world
         .units()
-        .filter(|u| i64::from(u.position.x - end.x) * dx + i64::from(u.position.y - end.y) * dy > 0)
-        .count();
-    assert_eq!(across, 101, "the whole recording army reaches the far bank");
+        .filter(|u| u.player == PlayerId(0) && !crossed.contains(&u.id))
+    {
+        let army = &f.world.economy.generals.armies[&g];
+        eprintln!(
+            "not-crossed span={span:?} objective={goal:?} actor={u:?} move={:?} squad={:?}",
+            f.world.movement_goal(u.id),
+            army.squads.iter().find(|s| s.members.contains(&u.id))
+        );
+        eprintln!(
+            "member {} motion={:?} density={}",
+            f.world.formation_member_status(u.id),
+            f.world.formation_motion(f.world.lookup[&u.id]),
+            f.world.group_density_probe(u.id)
+        );
+    }
+    // Wounded soldiers may withdraw after crossing into the far-bank fight.
+    assert_eq!(
+        crossed.len(),
+        101,
+        "the whole recording army crosses the river"
+    );
 }

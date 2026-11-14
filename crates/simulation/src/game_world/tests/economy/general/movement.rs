@@ -1,13 +1,13 @@
 use super::*;
 
 #[test]
-fn gameplay_guide_describes_plain_formation_marching() {
+fn gameplay_guide_describes_offensive_formation_marching() {
     let guide = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../docs/gameplay/general.md"
     ));
-    assert!(!guide.contains("A march is an attack-move formation"));
-    assert!(guide.contains("A march is a plain formation move"));
+    assert!(guide.contains("A march is an attack-move formation"));
+    assert!(!guide.contains("A march is a plain formation move"));
 }
 
 #[test]
@@ -60,7 +60,7 @@ fn role_destinations_rotate_and_keep_hard_bodies_separate() {
             center.y - positions.iter().map(|p| p.y).sum::<i32>() / positions.len() as i32,
         );
         w.issue_move(g, center).unwrap();
-        decide(&mut w);
+        advance(&mut w, 3000);
         let slots: Vec<_> = ids
             .iter()
             .map(|&id| w.formation_destination_slot(id).unwrap())
@@ -132,8 +132,22 @@ fn role_block_reaches_its_validated_destinations_after_a_partial_stop() {
     // retain their destination slots and the shared route carrier changes.
     w.issue_stop(PlayerId(0), ids[0]).unwrap();
     advance(&mut w, 2800);
-    for &(id, goal) in &goals[1..] {
-        assert_eq!(w.formation_destination_slot(id), Some(goal));
+    for &(id, _) in &goals[1..] {
+        let goal = w
+            .formation_destination_slot(id)
+            .expect("validated final slot");
+        if id != g {
+            let army = &w.economy.generals.armies[&g];
+            assert!(
+                army.squads
+                    .iter()
+                    .find(|s| s.members.contains(&id))
+                    .unwrap()
+                    .final_leg,
+                "an intermediate destination cannot satisfy this test"
+            );
+        }
+        assert!(distance_squared(goal, at(150, 108)) < (32_i64 * 1024).pow(2));
         assert_eq!(w.unit(id).unwrap().position, goal, "member {id:?}");
         assert!(!w.unit(id).unwrap().moving);
     }
@@ -202,5 +216,46 @@ fn a_squad_whose_route_wait_expires_is_ordered_again_by_its_general() {
     assert!(
         ids.iter().all(|&id| w.formation(id).is_some()),
         "the General re-issues the squad's march"
+    );
+}
+
+#[test]
+fn army_membership_does_not_change_a_players_selection_layout() {
+    let run = |detach: bool| {
+        let (mut w, _) = setup();
+        let mut ids: Vec<_> = [
+            UnitKind::Militia,
+            UnitKind::Archer,
+            UnitKind::Knight,
+            UnitKind::BatteringRam,
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(n, kind)| soldier(&mut w, kind, 100 + n as i32 * 2, 100))
+        .collect();
+        let g = soldier(&mut w, UnitKind::General, 104, 104);
+        if detach {
+            for &id in &ids {
+                w.forget_general(id);
+            }
+        }
+        ids.push(g);
+        w.issue_formation_move(
+            PlayerId(0),
+            &ids,
+            aoe_core::Formation::Line,
+            at(145, 110),
+            false,
+            true,
+        )
+        .unwrap();
+        ids.iter()
+            .map(|&id| w.formation_destination_slot(id).unwrap())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        run(false),
+        run(true),
+        "the shared layout has no army-ownership hook"
     );
 }

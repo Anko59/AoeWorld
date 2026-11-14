@@ -31,7 +31,7 @@ impl GameWorld {
         let ordered: Vec<_> = army
             .iter()
             .copied()
-            .filter(|v| in_influence(u.position, v.position))
+            .filter(|v| in_influence(u.position, v.position) || self.formation(v.id).is_some())
             .collect();
         // The whole army counts, wherever its soldiers stand: a column strung
         // out along the road is as strong as it is when it gathers.
@@ -52,17 +52,57 @@ impl GameWorld {
                     }
                 })
                 .sum::<u64>();
-        let pace = army
+        let completed = army.iter().all(|v| {
+            !v.moving
+                && !v.planning
+                && v.attack_target.is_none()
+                && !self.combat.resuming.contains_key(&v.id)
+                && self.movement_goal(v.id).is_none()
+        });
+        // The nearest visible contact: an enemy unit, else an enemy building.
+        let contact = |from: WorldPosition| {
+            let near = |p: &WorldPosition| distance(from, *p);
+            survey
+                .enemies
+                .iter()
+                .map(|e| e.position)
+                .min_by_key(near)
+                .or_else(|| {
+                    survey
+                        .buildings
+                        .iter()
+                        .filter_map(|&id| self.building(id))
+                        .filter_map(|b| super::super::placement::position(b.footprint.min).ok())
+                        .min_by_key(near)
+                })
+        };
+        // A soldier who finished its click beside a contact it cannot see
+        // would otherwise wait for the rest of the army: ordinary attack-move
+        // only engages what the soldier itself sees.
+        // A soldier still far from the army's objective keeps marching past a
+        // contact; only one that has arrived near it is sent at the contact.
+        let objective = self.economy.generals.armies[&u.id].destination;
+        let idle_near: Vec<EntityId> = ordered
             .iter()
-            .map(|v| self.movement_speed(v.kind, v.player))
-            .min_by(|a, b| {
-                (u128::from(a.0) * u128::from(b.1)).cmp(&(u128::from(b.0) * u128::from(a.1)))
+            .filter(|v| {
+                !v.moving
+                    && !v.planning
+                    && v.attack_target.is_none()
+                    && objective
+                        .is_none_or(|goal| distance(v.position, goal) <= (24 * 1024_i64).pow(2))
+                    && contact(v.position)
+                        .is_some_and(|p| distance(v.position, p) <= (8 * 1024_i64).pow(2))
             })
-            .unwrap_or((0, 1));
+            .map(|v| v.id)
+            .collect();
+        let idle_contact = idle_near
+            .first()
+            .and_then(|&id| self.unit(id))
+            .and_then(|v| contact(v.position));
+        let army_contact = contact(u.position);
         let Some(a) = self.economy.generals.armies.get_mut(&u.id) else {
             return;
         };
-        a.pace = pace;
         let old_state = a.state;
         let hurt = u.hp * 3 < u.max_hp
             || army.iter().map(|v| u64::from(v.hp)).sum::<u64>() * 3
@@ -89,34 +129,76 @@ impl GameWorld {
             && state != GeneralState::Fighting
             && a.destination.is_none())
         .then_some(u.position);
+        // A finished ordinary click may have passed a visible contact. Only
+        // after every admitted march/fight finishes, make another offensive
+        // click; never replace an underway order with firing-position micro.
+        let engagement = if state == GeneralState::Fighting && completed {
+            army_contact
+        } else {
+            (old_state == GeneralState::Fighting && state == GeneralState::Fighting)
+                .then_some(a.layout)
+                .flatten()
+                .map(|(goal, _)| goal)
+        };
         let destination = if state == GeneralState::Retreating {
             Some(a.home)
         } else {
             a.destination.or(regroup)
         };
-        if old_state != state {
+        if (old_state == GeneralState::Retreating) != (state == GeneralState::Retreating) {
             a.routed = None;
+            a.layout = None;
+            a.commander_march = None;
+            for squad in &mut a.squads {
+                squad.march = None;
+            }
         }
-        if state != GeneralState::Fighting {
-            a.fight = [None; fight::FIGHT_GROUPS];
-        }
-        self.reconcile_general_stances(u.id, state, destination);
+        self.reconcile_general_stances(u.id, state);
         if ordered.is_empty() {
             return;
         }
-        if state != GeneralState::Fighting {
-            if let Some(to) = destination {
-                self.general_formation(
-                    u.id,
-                    &ordered,
-                    to,
-                    state == GeneralState::Retreating,
-                    changed,
-                    work,
-                );
-            }
-            return;
+        if let Some(to) = engagement
+            .filter(|_| state != GeneralState::Retreating)
+            .or(destination)
+            .or(army_contact)
+        {
+            let healthy: Vec<_> = ordered
+                .iter()
+                .copied()
+                .filter(|v| state != GeneralState::Fighting || v.hp * 3 >= v.max_hp)
+                .collect();
+            self.march_squads(
+                u.id,
+                &healthy,
+                to,
+                state == GeneralState::Retreating,
+                changed,
+                work,
+            );
         }
-        self.general_fight(u, &ordered, &survey, changed, work);
+        // The ordinary player attack-move for soldiers that finished their
+        // click short of a contact they cannot see; the rest keep marching.
+        if state == GeneralState::Fighting
+            && let Some(goal) = idle_contact
+        {
+            work.orders += 1;
+            let goal = self.config.snap_ground_position(goal);
+            if self
+                .issue_formation_move(
+                    u.player,
+                    &idle_near,
+                    aoe_core::Formation::Line,
+                    goal,
+                    false,
+                    true,
+                )
+                .is_ok()
+            {
+                changed.extend(idle_near.iter().copied());
+            }
+        }
+        if state == GeneralState::Fighting {
+            self.general_fight(u, &ordered, changed, work);
+        }
     }
 }

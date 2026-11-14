@@ -176,3 +176,41 @@ fn the_army_regroups_around_its_general_when_no_enemy_remains() {
         "the regroup has settled"
     );
 }
+
+#[test]
+fn an_idle_general_sends_its_army_at_a_visible_enemy_building() {
+    let (mut w, _) = setup();
+    w.set_fog_disabled(true);
+    let army = muster(&mut w, 8, 100, 100);
+    let g = soldier(&mut w, UnitKind::General, 104, 104);
+    // Within the General's twelve-tile building survey, but far outside the
+    // followers' own sight: no enemy unit is present and nothing is retained.
+    w.insert_building(
+        PlayerId(1),
+        BuildingKind::House,
+        TileRect::from_xywh(116, 104, 2, 2),
+        true,
+    )
+    .unwrap();
+    let start: Vec<_> = army
+        .iter()
+        .map(|&id| w.unit(id).unwrap().position)
+        .collect();
+    for _ in 0..40 {
+        decide(&mut w);
+        w.advance();
+    }
+    assert_eq!(w.general_status(g).unwrap().state, GeneralState::Fighting);
+    assert!(
+        w.formation_records()
+            .iter()
+            .any(|group| group.attack_move && army.iter().any(|id| group.members.contains(id))),
+        "the army receives the ordinary offensive order"
+    );
+    assert!(
+        army.iter()
+            .zip(&start)
+            .any(|(&id, &from)| w.unit(id).unwrap().position != from),
+        "the followers move toward the building"
+    );
+}

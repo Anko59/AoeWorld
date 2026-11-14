@@ -145,6 +145,9 @@ fn restored_game_matches_the_saved_one_and_plays_on() {
             true,
         )
         .unwrap();
+    saved
+        .issue_formation_pace(PlayerId(0), soldiers[0], Some((10, 1)))
+        .unwrap();
     for _ in 0..600 {
         saved.advance();
     }
@@ -190,6 +193,7 @@ fn restored_game_matches_the_saved_one_and_plays_on() {
             .map(|f| {
                 (
                     f.attack_move,
+                    f.pace_limit,
                     f.queue.iter().map(|w| w.1).collect::<Vec<_>>(),
                 )
             })
@@ -199,7 +203,7 @@ fn restored_game_matches_the_saved_one_and_plays_on() {
     };
     assert_eq!(queues(&again), queues(&snapshot));
     assert!(
-        queues(&snapshot).iter().any(|(_, q)| q.contains(&true)),
+        queues(&snapshot).iter().any(|(_, _, q)| q.contains(&true)),
         "the queued attack-move is in the save"
     );
 

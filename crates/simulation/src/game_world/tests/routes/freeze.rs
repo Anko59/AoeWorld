@@ -156,12 +156,24 @@ fn refused_orders_to_sealed_off_explorers_never_freeze_a_players_army() {
 /// a second never moved.
 #[test]
 fn a_chase_does_not_restart_the_route_search_it_waits_for() {
-    let mut world = sealed_ring_world(1_024, 500, 500);
+    // Melee endpoints proven sealed by the bounded region certificate are
+    // refused up front, so the target sits in a sealed box too large for that
+    // 64-node proof: the answer stays unknown and ordinary planning searches.
+    let mut world =
+        GameWorld::new(WorldConfig::new(1_024, 1_024, Seed(0)).expect("config")).expect("world");
+    for d in -200..=200 {
+        for tile in [(d, -200), (d, 200), (-200, d), (200, d)] {
+            world
+                .economy
+                .blocked_tiles
+                .insert(TileCoord::new(500 + tile.0, 500 + tile.1));
+        }
+    }
     let target = world
         .spawn_unit(PlayerId(2), tile_position(500, 500))
         .expect("target");
     let attacker = world
-        .spawn_unit(PlayerId(1), beside_ring(500, 500, 0))
+        .spawn_unit(PlayerId(1), tile_position(500, 500 - 201))
         .expect("attacker");
     world.planning_budget = FAIR_ROUTE_WORK_RESERVE;
     world

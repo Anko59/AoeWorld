@@ -117,7 +117,10 @@ fn cohesion_brake_follows_the_rear_tenths_lag_and_tightens_on_arrival() {
 
 impl GameWorld {
     pub(crate) fn group_density_probe(&self, id: EntityId) -> String {
-        let group = &self.formations[&self.units[self.lookup[&id]].formation.unwrap()];
+        let Some(leader) = self.units[self.lookup[&id]].formation else {
+            return "not admitted".to_owned();
+        };
+        let group = &self.formations[&leader];
         let member = &group.members[group.member_index(id).unwrap()];
         format!(
             "files={} anchor={:?} progress={} width={} member={member:?}",
@@ -427,3 +430,45 @@ impl GameWorld {
         )
     }
 }
+
+#[test]
+fn an_ahead_member_keeps_advancing_on_an_offensive_click() {
+    for attack_move in [false, true] {
+        let mut w = GameWorld::new(WorldConfig::new(256, 256, aoe_core::Seed(1)).unwrap()).unwrap();
+        let start = WorldPosition::new(100 * 1024 + 512, 100 * 1024 + 512);
+        let id = w.spawn_kind(PlayerId(0), UnitKind::Militia, start).unwrap();
+        w.issue_formation_move(
+            PlayerId(0),
+            &[id],
+            Formation::Line,
+            WorldPosition::new(150 * 1024 + 512, start.y),
+            false,
+            attack_move,
+        )
+        .unwrap();
+        // Traffic can leave a body ahead of its group's forming slot. The
+        // offensive posture must not make it stand waiting for that slot.
+        for _ in 0..10 {
+            w.advance();
+        }
+        let old = w.unit(id).unwrap().position;
+        let ahead = WorldPosition::new(old.x + 4 * 1024, old.y);
+        let index = w.lookup[&id];
+        w.collisions.relocate(id, old.tile_floor(), ahead, false);
+        w.units[index].state.position = ahead;
+        let group = w.formations.get_mut(&id).unwrap();
+        group.direct = false;
+        group.form_distance = 0;
+        group.members[0].following_corridor = false;
+        group.members[0].progress = group.progress + 4 * 1024;
+        w.advance_formations(&mut Vec::new(), &mut Default::default());
+        let motion = w.formation_motion(index).unwrap();
+        assert!(
+            motion.target.x > ahead.x,
+            "attack_move={attack_move} {motion:?} {}",
+            w.group_density_probe(id)
+        );
+    }
+}
+
+mod queued;
