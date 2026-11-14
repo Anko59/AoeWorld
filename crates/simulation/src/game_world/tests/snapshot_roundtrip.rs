@@ -7,6 +7,8 @@ use crate::game_world::tests::economy::fixture::flat_fixture;
 use aoe_core::TileCoord;
 use aoe_map::ResourceKind;
 
+#[path = "snapshot_roundtrip/compat.rs"]
+mod compat;
 #[path = "snapshot_roundtrip/general.rs"]
 mod general;
 
