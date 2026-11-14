@@ -38,8 +38,9 @@ fn every_ai_test_without_a_server_runs_in_the_logic_suite() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let tests = logic_tests(&root).unwrap();
     // Never listed by hand before discovery, so it had never run.
+    // Wherever it lives under ai/tests: the point is that discovery finds it.
     assert!(
-        tests.contains(&"ai/tests/test_bridges.py".to_owned()),
+        tests.iter().any(|test| test.ends_with("/test_bridges.py")),
         "{tests:?}"
     );
     assert!(
