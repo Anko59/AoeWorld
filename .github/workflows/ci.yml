@@ -179,7 +179,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: ./.github/actions/docker-setup
-      - run: make fuzz-smoke
+      - run: make fuzz-smoke sdk-python-bindings
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with: { name: parser-fuzz-smoke, path: "reports/fuzz/\nfuzz/artifacts/", retention-days: 7, if-no-files-found: ignore }

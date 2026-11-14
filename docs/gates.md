@@ -64,6 +64,7 @@ CI uses the same caps and immediate admission; each job has its own runner. `mak
 | test-source-qualification | `make test-source-qualification` | test-unit | native | [Ci, Nightly, Qualification] | 3600 | — | slow offline source-qualification movement and package tests, plus the full-scale navigation and economy measurements, that test-unit excludes |
 | test-exhaustive | `make test-exhaustive` | test-unit | native | [Ci, Nightly] | 1800 | — | 16-seed landscape sweeps and full-axis geodata round-trips that test-unit runs on two seeds or reduced axes |
 | sdk-python-test | `make sdk-python-test` | test-unit | native, ai | [Ci, Nightly] | 3600 | — | pytest results of the Python bindings, the example AI decision logic, the standard start and a seeded Dark-to-Feudal game between bots on the AI arena (five seeds) |
+| sdk-python-bindings | `make sdk-python-bindings` | test-unit | native | [Pr, Ci] | 1200 | — | pytest results of the Python bindings against a local server, without the AI games |
 | test-geographic-matrix | `make test-geographic-matrix` | test-unit | browser | [Qualification] | 5400 | — | prepared and verified fixed overview source regions |
 | test-geographic-visuals | `make test-geographic-visuals` | build-wasm, browser-check, test-unit | browser | [Qualification] | 5400 | — | water and Alpine source packages on WebGPU and Canvas |
 | preflight | `make preflight` | — | performance | [] | 3600 | yes | local checks, unit tests and smoke benchmark |
