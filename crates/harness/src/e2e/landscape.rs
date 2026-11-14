@@ -205,7 +205,12 @@ fn include_existing(source: &Path, target: &Path) -> Result<()> {
             continue;
         }
         count += 1;
-        if count >= 256 || !entry.file_type()?.is_file() || entry.metadata()?.len() > 65_536 {
+        // The store's own manifest bound: a package the server loads must stage
+        // (a Mekong manifest is 69,879 bytes, over the old 65,536).
+        if count >= 256
+            || !entry.file_type()?.is_file()
+            || entry.metadata()?.len() > aoe_server::MAX_PACKAGE_BYTES
+        {
             return Err("existing map manifests exceed isolated E2E staging bounds".into());
         }
         let package: MapPackage = serde_json::from_slice(&fs::read(&path)?)?;

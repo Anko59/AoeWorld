@@ -39,13 +39,21 @@ pub(super) fn refuse_in_ci(
 pub(super) fn resolve(candidates: &[String], patterns: &[String]) -> Result<Vec<String>, String> {
     let mut found: Vec<String> = Vec::new();
     for pattern in patterns {
-        let matched: Vec<&String> = candidates
-            .iter()
-            .filter(|candidate| glob_matches(pattern, candidate))
-            .collect();
+        let matching = |pattern: &str| -> Vec<&String> {
+            candidates
+                .iter()
+                .filter(|candidate| glob_matches(pattern, candidate))
+                .collect()
+        };
+        // Specs are named from browser/ (`tests/...`); a path from browser/tests
+        // means the same spec.
+        let mut matched = matching(pattern);
+        if matched.is_empty() && !pattern.starts_with("tests/") {
+            matched = matching(&format!("tests/{pattern}"));
+        }
         if matched.is_empty() {
             return Err(format!(
-                "AOE_E2E_SPECS {pattern:?} matches no spec under browser/tests"
+                "AOE_E2E_SPECS {pattern:?} matches no spec under browser/tests (name specs as tests/<path>.spec.ts)"
             ));
         }
         for spec in matched {
