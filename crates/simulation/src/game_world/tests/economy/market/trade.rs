@@ -244,3 +244,27 @@ fn the_wonder_needs_imperial_age_and_its_dat_price_and_has_a_5x5_footprint() {
         (5, 5, 4800)
     );
 }
+
+#[test]
+fn caravan_speeds_trade_carts_and_cogs_by_a_fifth() {
+    // DE help text: "Trade Units move +20% faster".
+    let caravan = Tech::Caravan.bit();
+    for kind in [UnitKind::TradeCart, UnitKind::TradeCog] {
+        let base =
+            crate::game_world::combat::military::apply_movement_speed(kind, Some(100), true, 0);
+        let fast = crate::game_world::combat::military::apply_movement_speed(
+            kind,
+            Some(100),
+            true,
+            caravan,
+        );
+        assert_eq!((base, fast), (Some(100), Some(120)), "{kind:?}");
+    }
+    let villager = crate::game_world::combat::military::apply_movement_speed(
+        UnitKind::Villager,
+        Some(100),
+        true,
+        caravan,
+    );
+    assert_eq!(villager, Some(100));
+}

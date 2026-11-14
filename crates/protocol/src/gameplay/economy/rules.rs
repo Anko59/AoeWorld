@@ -16,10 +16,9 @@ fn valid_research(player: &GameplayPlayerState) -> bool {
         && (player.age >= Age::Feudal) == (player.researched & Tech::FeudalAge.bit() != 0)
         && (player.age >= Age::Castle) == (player.researched & Tech::CastleAge.bit() != 0)
         && (player.age == Age::Imperial) == (player.researched & Tech::ImperialAge.bit() != 0)
-        && (player.age >= Age::Castle
-            || player.researched & Tech::ALL[15..].iter().fold(0, |bits, t| bits | t.bit()) == 0)
-        && (player.age == Age::Imperial
-            || player.researched & Tech::ALL[34..].iter().fold(0, |bits, t| bits | t.bit()) == 0)
+        && Tech::ALL
+            .iter()
+            .all(|tech| player.researched & tech.bit() == 0 || player.age >= tech.min_age())
 }
 
 /// The first rule `player` breaks.

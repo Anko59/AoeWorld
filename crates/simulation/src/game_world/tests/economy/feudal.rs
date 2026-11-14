@@ -347,7 +347,7 @@ fn age_up_updates_existing_damaged_new_and_unfinished_building_stats() {
     assert_eq!(world.building(later).unwrap().max_hp, 750);
 }
 
-fn worker_player(world: &mut GameWorld, researched: u64) {
+fn worker_player(world: &mut GameWorld, researched: u128) {
     world.economy.players.insert(
         PlayerId(0),
         crate::PlayerEconomy {

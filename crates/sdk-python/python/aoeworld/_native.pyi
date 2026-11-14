@@ -123,6 +123,59 @@ class Tech:
     BALLISTICS: Tech
     MURDER_HOLES: Tech
     WAR_GALLEY: Tech
+    IMPERIAL_AGE: Tech
+    TWO_HANDED_SWORDSMAN: Tech
+    CHAMPION: Tech
+    HALBERDIER: Tech
+    ARBALESTER: Tech
+    CAVALIER: Tech
+    PALADIN: Tech
+    HUSSAR: Tech
+    CAPPED_RAM: Tech
+    SIEGE_RAM: Tech
+    ONAGER: Tech
+    BLAST_FURNACE: Tech
+    PLATE_MAIL_ARMOR: Tech
+    PLATE_BARDING_ARMOR: Tech
+    BRACER: Tech
+    RING_ARCHER_ARMOR: Tech
+    CROP_ROTATION: Tech
+    TWO_MAN_SAW: Tech
+    STONE_SHAFT_MINING: Tech
+    SQUIRES: Tech
+    ARSON: Tech
+    GAMBESONS: Tech
+    THUMB_RING: Tech
+    PARTHIAN_TACTICS: Tech
+    BLOODLINES: Tech
+    HUSBANDRY: Tech
+    ARCHITECTURE: Tech
+    SIEGE_ENGINEERS: Tech
+    HEATED_SHOT: Tech
+    ARROWSLITS: Tech
+    FORTIFIED_WALL: Tech
+    GUARD_TOWER: Tech
+    KEEP: Tech
+    DEVOTION: Tech
+    FAITH: Tech
+    FERVOR: Tech
+    SANCTITY: Tech
+    HERBAL_MEDICINE: Tech
+    THEOCRACY: Tech
+    ILLUMINATION: Tech
+    BLOCK_PRINTING: Tech
+    ATONEMENT: Tech
+    REDEMPTION: Tech
+    HERESY: Tech
+    CONSCRIPTION: Tech
+    HOARDINGS: Tech
+    SAPPERS: Tech
+    SPIES: Tech
+    CARAVAN: Tech
+    GUILDS: Tech
+    BANKING: Tech
+    COINAGE: Tech
+    TREADMILL_CRANE: Tech
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
 class Age:

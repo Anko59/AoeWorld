@@ -133,7 +133,7 @@ pub(super) fn update(client: &Client, scale: f64) {
             && b.construction == ConstructionState::Complete
     });
     v.extend(match player {
-        Some(p) => building_ui::market_panel(market, p.market_prices, p.stockpile),
+        Some(p) => building_ui::market_panel(market, p.market_prices, p.stockpile, p.researched),
         None => [0.0; 15],
     });
     let reseeds = b.map_or(0, |b| b.farm_reseeds);

@@ -64,7 +64,7 @@ impl Default for MarketPrices {
 }
 
 mod kinds;
-pub use kinds::{Age, BuildingKind, Tech, UnitKind};
+pub use kinds::{Age, BuildingKind, Tech, TechMask, UnitKind};
 
 /// A foundation is built by villagers; only a complete building works.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -123,7 +123,7 @@ pub struct GameplayPlayerState {
     pub population_cap: u32,
     pub age: Age,
     /// Bit `1 << tech as u8` is set once researched.
-    pub researched: u64,
+    pub researched: u128,
     /// The player's Market commodity prices, in gold per 100 units.
     pub market_prices: MarketPrices,
     /// Credited Food/Wood/Gold/Stone deliveries in twelve live five-second

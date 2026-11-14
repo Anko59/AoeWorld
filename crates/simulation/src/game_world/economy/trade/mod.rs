@@ -51,12 +51,6 @@ impl UnitKind {
     }
 }
 
-/// HOOK for Caravan (track B, +50% Trade Cart speed): `apply_movement_speed` in
-/// `combat/military.rs` multiplies the Cart's DAT speed by this (permille) once
-/// `Tech::Caravan` exists on dev. Unused until then.
-#[allow(dead_code)]
-pub(crate) const CARAVAN_CART_SPEED_PERMILLE: u32 = 1500;
-
 /// Gold one leg pays. `dx2`/`dy2` are the centre offsets in half tiles.
 pub(crate) fn leg_gold(kind: UnitKind, dx2: u32, dy2: u32, map_edge: i32) -> u32 {
     let reach = |half: u32| (f64::from(half) / 2.0 - 5.0).max(0.0);

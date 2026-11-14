@@ -117,7 +117,7 @@ fn building(id: u32, player: PlayerId, state: ConstructionState) -> GameplayBuil
     }
 }
 
-fn player(researched: u64, age: aoe_protocol::Age) -> GameplayPlayerState {
+fn player(researched: u128, age: aoe_protocol::Age) -> GameplayPlayerState {
     GameplayPlayerState {
         player: ME,
         stockpile: Stockpile {

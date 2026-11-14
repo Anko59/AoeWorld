@@ -142,7 +142,7 @@ impl GameWorld {
             let Some(area) = self.building_target_area(id, arrow) else {
                 continue;
             };
-            let tower_kind = tower.kind;
+            let (tower_kind, tower_player) = (tower.kind, tower.player);
             let manual = self
                 .combat
                 .tower_targets
@@ -164,9 +164,10 @@ impl GameWorld {
                         + (u64::from(arrow.period_centiseconds) * u64::from(self.config.tick_hz))
                             .div_ceil(100),
                 );
-                let bonus = self.building_damage_bonus(tower_kind, target);
+                let shot = self.heated_shot_bonus(tower_player, tower_kind, arrow.attack, target);
+                let bonus = self.building_damage_bonus(tower_kind, target) + shot;
                 let extra_bonus = if arrows > 1 {
-                    self.secondary_damage_bonus(tower_kind, target)
+                    self.secondary_damage_bonus(tower_kind, target) + shot
                 } else {
                     bonus
                 };

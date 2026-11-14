@@ -190,6 +190,8 @@ pub enum Age {
     Castle,
     Imperial,
 }
+/// Bit set of researched technologies: bit `tech as u8`.
+pub type TechMask = u128;
 /// A technology; bit `1 << tech as u8` of `GameplayPlayerState::researched`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Tech {
@@ -246,9 +248,43 @@ pub enum Tech {
     CropRotation,
     TwoManSaw,
     StoneShaftMining,
+    Squires,
+    Arson,
+    Gambesons,
+    ThumbRing,
+    ParthianTactics,
+    Bloodlines,
+    Husbandry,
+    Architecture,
+    SiegeEngineers,
+    HeatedShot,
+    Arrowslits,
+    FortifiedWall,
+    GuardTower,
+    Keep,
+    Devotion,
+    Faith,
+    Fervor,
+    Sanctity,
+    HerbalMedicine,
+    Theocracy,
+    Illumination,
+    BlockPrinting,
+    Atonement,
+    Redemption,
+    Heresy,
+    Conscription,
+    Hoardings,
+    Sappers,
+    Spies,
+    Caravan,
+    Guilds,
+    Banking,
+    Coinage,
+    TreadmillCrane,
 }
 impl Tech {
-    pub const ALL: [Tech; 53] = [
+    pub const ALL: [Tech; 87] = [
         Tech::Loom,
         Tech::TownWatch,
         Tech::FeudalAge,
@@ -302,6 +338,40 @@ impl Tech {
         Tech::CropRotation,
         Tech::TwoManSaw,
         Tech::StoneShaftMining,
+        Tech::Squires,
+        Tech::Arson,
+        Tech::Gambesons,
+        Tech::ThumbRing,
+        Tech::ParthianTactics,
+        Tech::Bloodlines,
+        Tech::Husbandry,
+        Tech::Architecture,
+        Tech::SiegeEngineers,
+        Tech::HeatedShot,
+        Tech::Arrowslits,
+        Tech::FortifiedWall,
+        Tech::GuardTower,
+        Tech::Keep,
+        Tech::Devotion,
+        Tech::Faith,
+        Tech::Fervor,
+        Tech::Sanctity,
+        Tech::HerbalMedicine,
+        Tech::Theocracy,
+        Tech::Illumination,
+        Tech::BlockPrinting,
+        Tech::Atonement,
+        Tech::Redemption,
+        Tech::Heresy,
+        Tech::Conscription,
+        Tech::Hoardings,
+        Tech::Sappers,
+        Tech::Spies,
+        Tech::Caravan,
+        Tech::Guilds,
+        Tech::Banking,
+        Tech::Coinage,
+        Tech::TreadmillCrane,
     ];
     pub const fn building(self) -> BuildingKind {
         match self {
@@ -339,6 +409,32 @@ impl Tech {
             Self::HorseCollar => BuildingKind::Mill,
             Self::GoldMining | Self::StoneMining => BuildingKind::MiningCamp,
             Self::ManAtArms => BuildingKind::Barracks,
+            Self::Squires | Self::Arson | Self::Gambesons => BuildingKind::Barracks,
+            Self::ThumbRing | Self::ParthianTactics => BuildingKind::ArcheryRange,
+            Self::Bloodlines | Self::Husbandry => BuildingKind::Stable,
+            Self::Architecture
+            | Self::SiegeEngineers
+            | Self::HeatedShot
+            | Self::Arrowslits
+            | Self::FortifiedWall
+            | Self::GuardTower
+            | Self::Keep
+            | Self::TreadmillCrane => BuildingKind::University,
+            Self::Devotion
+            | Self::Faith
+            | Self::Fervor
+            | Self::Sanctity
+            | Self::HerbalMedicine
+            | Self::Theocracy
+            | Self::Illumination
+            | Self::BlockPrinting
+            | Self::Atonement
+            | Self::Redemption
+            | Self::Heresy => BuildingKind::Monastery,
+            Self::Conscription | Self::Hoardings | Self::Sappers | Self::Spies => {
+                BuildingKind::Castle
+            }
+            Self::Caravan | Self::Guilds | Self::Banking | Self::Coinage => BuildingKind::Market,
             Self::Forging
             | Self::ScaleMailArmor
             | Self::ScaleBardingArmor
@@ -346,7 +442,50 @@ impl Tech {
             | Self::PaddedArcherArmor => BuildingKind::Blacksmith,
         }
     }
-    pub const fn bit(self) -> u64 {
+    /// The Age a technology needs, for wire validation. Original techs keep
+    /// their index bands; later ones are listed.
+    pub const fn min_age(self) -> Age {
+        match self {
+            Self::Arson | Self::Bloodlines => Age::Feudal,
+            Self::Squires
+            | Self::Gambesons
+            | Self::ThumbRing
+            | Self::Husbandry
+            | Self::HeatedShot
+            | Self::FortifiedWall
+            | Self::GuardTower
+            | Self::Devotion
+            | Self::Fervor
+            | Self::Sanctity
+            | Self::HerbalMedicine
+            | Self::Atonement
+            | Self::Redemption
+            | Self::Heresy
+            | Self::Caravan
+            | Self::Coinage
+            | Self::TreadmillCrane => Age::Castle,
+            Self::ParthianTactics
+            | Self::Architecture
+            | Self::SiegeEngineers
+            | Self::Arrowslits
+            | Self::Keep
+            | Self::Faith
+            | Self::Theocracy
+            | Self::Illumination
+            | Self::BlockPrinting
+            | Self::Conscription
+            | Self::Hoardings
+            | Self::Sappers
+            | Self::Spies
+            | Self::Guilds
+            | Self::Banking => Age::Imperial,
+            Self::Loom => Age::Dark,
+            _ if (self as u8) >= Self::ImperialAge as u8 && (self as u8) < 53 => Age::Imperial,
+            _ if (self as u8) >= Self::LongSwordsman as u8 && (self as u8) < 53 => Age::Castle,
+            _ => Age::Feudal,
+        }
+    }
+    pub const fn bit(self) -> TechMask {
         1 << self as u8
     }
 }

@@ -26,8 +26,8 @@ Cog rate.
   `client.trade(unit, building)`) starts it again from that building.
 - A run is not saved: a restored world restarts every trader from its nearest
   own building (`rebind_trade_units`).
-- Caravan (+50% Cart speed) belongs to the technology track; the hook is
-  `CARAVAN_CART_SPEED_PERMILLE` in `economy/trade/mod.rs`.
+- Caravan makes Trade Carts and Trade Cogs move 20% faster (DE help text: "Trade Units move +20% faster"),
+  through the technology speed rows (`TechTarget::Trade` in `research/generic_effects.rs`).
 
 ## Wonder
 

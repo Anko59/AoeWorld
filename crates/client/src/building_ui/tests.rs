@@ -267,7 +267,7 @@ fn market_panel_enables_only_affordable_trades_at_a_completed_owned_market() {
     // (90 * 1.3) are judged against 130 gold: only food is not. Sell pays
     // price minus 30%: 70, 72 (103 * 0.7 floored) and 63.
     assert_eq!(
-        market_panel(true, prices, have),
+        market_panel(true, prices, have, 0),
         [
             100.0, 103.0, 90.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 130.0, 133.0, 117.0, 70.0, 72.0, 63.0
         ]
@@ -275,7 +275,7 @@ fn market_panel_enables_only_affordable_trades_at_a_completed_owned_market() {
     // Not a completed owned Market: prices and amounts stay visible, every
     // button is off.
     assert_eq!(
-        market_panel(false, prices, have),
+        market_panel(false, prices, have, 0),
         [
             100.0, 103.0, 90.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 130.0, 133.0, 117.0, 70.0, 72.0, 63.0
         ]

@@ -5,26 +5,38 @@ use aoe_core::{EntityId, PlayerId};
 
 /// The movement projection of the same research rules, without constructing
 /// and adjusting unrelated attack/armour fields for every moving body.
-pub(crate) fn apply_movement_speed(kind: UnitKind, base: Option<u32>, feudal: bool) -> Option<u32> {
-    if kind == UnitKind::Scout && feudal {
+pub(crate) fn apply_movement_speed(
+    kind: UnitKind,
+    base: Option<u32>,
+    feudal: bool,
+    researched: u128,
+) -> Option<u32> {
+    let base = if kind == UnitKind::Scout && feudal {
         Some(155)
     } else {
         base
+    };
+    if researched == 0 {
+        return base;
     }
+    let percent = u32::from(crate::game_world::research::unit_speed_percent(
+        kind, researched,
+    ));
+    base.map(|speed| speed * percent / 100)
 }
 
-pub fn researched_stats(kind: UnitKind, feudal: bool, researched: u64) -> UnitCombat {
+pub fn researched_stats(kind: UnitKind, feudal: bool, researched: u128) -> UnitCombat {
     apply_research_stats(*unit_combat(kind), feudal, researched)
 }
 
 /// Apply effects to supplied base data, including the browser's runtime asset.
-pub fn apply_research_stats(mut s: UnitCombat, feudal: bool, researched: u64) -> UnitCombat {
+pub fn apply_research_stats(mut s: UnitCombat, feudal: bool, researched: u128) -> UnitCombat {
     // Only scouts have an age effect without research.
     if researched == 0 && (!feudal || s.kind != UnitKind::Scout) {
         return s;
     }
     let kind = s.kind;
-    s.speed_hundredths = apply_movement_speed(kind, s.speed_hundredths, feudal);
+    s.speed_hundredths = apply_movement_speed(kind, s.speed_hundredths, feudal, researched);
     let has = |t: Tech| researched & t.bit() != 0;
     let infantry = matches!(
         kind,
@@ -88,6 +100,29 @@ pub fn apply_research_stats(mut s: UnitCombat, feudal: bool, researched: u64) ->
         s.melee_armour += 1;
         s.pierce_armour += 2;
     }
+    // Gambesons: militia line +1 pierce armour (Fire Lancers and Varangian
+    // Guards join with their units).
+    if kind.is_militia_line() && has(Tech::Gambesons) {
+        s.pierce_armour += 1;
+    }
+    // Thumb Ring: Archery Units and Skirmishers attack 15% faster. Accuracy
+    // is already 100%: projectiles have no accuracy dice (projectiles.rs).
+    if (kind.is_archery() || kind.is_mounted_archer()) && has(Tech::ThumbRing) {
+        s.attack_period_centiseconds = s.attack_period_centiseconds * 100 / 115;
+    }
+    // Parthian Tactics: Mounted Archers +1 melee / +2 pierce armour.
+    if kind.is_mounted_archer() && has(Tech::ParthianTactics) {
+        s.melee_armour += 1;
+        s.pierce_armour += 2;
+    }
+    // Siege Engineers: artillery +1 range.
+    if kind.is_artillery() && has(Tech::SiegeEngineers) {
+        s.range += 1;
+    }
+    // Block Printing: Monks convert from 3 tiles farther.
+    if kind == UnitKind::Monk && has(Tech::BlockPrinting) {
+        s.range += 3;
+    }
     if archer && has(Tech::Bracer) {
         s.attack += 1;
         s.range += 1;
@@ -137,6 +172,8 @@ impl GameWorld {
         } else {
             building_combat(kind).attack?
         };
+        let researched = self.player_economy(player).map_or(0, |p| p.researched);
+        s.attack = crate::game_world::research::tower_attack(kind, s.attack, researched);
         for tech in [Tech::Fletching, Tech::BodkinArrow, Tech::Bracer] {
             if self.has_researched(player, tech) {
                 s.attack += 1;

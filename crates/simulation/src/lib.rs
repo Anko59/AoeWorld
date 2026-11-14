@@ -46,10 +46,13 @@ pub use game_world::{
     ResearchEntry, RouteAttribution, RouteCaller, RouteClass, RouteQueueBreakdown, RouteQueueCell,
     RouteSchedulerStats, STEWARD_RULES, STEWARD_STALL_SECONDS, SquadKind, SquadStatus,
     StewardRules, StewardSettings, StewardStatus, StewardWait, StewardWork, Stockpile, TECH_RULES,
-    Tech, TechEffect, TechRequirement, TechRules, TickPhase, TrainingEntry, UNIT_COMBAT,
-    UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining, VASSAL_LIMIT, VASSAL_RADIUS,
-    VILLAGE_RULES, VassalStatus, VassalWait, VillageRules, WorldLimits, building_combat,
-    damage_dealt, researched_stats, trainable_units, unit_combat, villager_capacity,
+    Tech, TechEffect, TechMask, TechRequirement, TechRules, TechTarget, TickPhase, TrainingEntry,
+    UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining, VASSAL_LIMIT,
+    VASSAL_RADIUS, VILLAGE_RULES, VassalStatus, VassalWait, VillageRules, WorldLimits,
+    build_speed_percent, building_combat, building_max_hp, conversion_chance, convertible_building,
+    convertible_unit, damage_dealt, market_commission_permyriad, researched_stats,
+    trade_speed_percent, trainable_units, training_speed_percent, tribute_fee_permyriad,
+    unit_combat, villager_capacity,
 };
 pub use navigation_cache::NavigationCacheUsage;
 use std::collections::BTreeMap;

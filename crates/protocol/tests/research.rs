@@ -9,7 +9,7 @@ use aoe_protocol::{
     decode_gameplay_server, encode_gameplay_client, encode_gameplay_server,
 };
 
-fn player(age: Age, researched: u64) -> GameplayPlayerState {
+fn player(age: Age, researched: u128) -> GameplayPlayerState {
     GameplayPlayerState {
         player: PlayerId(0),
         stockpile: Stockpile::default(),
@@ -111,7 +111,7 @@ fn research_orders_have_current_golden_wire_and_round_trip() {
         assert_eq!(decode_gameplay_client(&bytes).unwrap(), message);
     }
     // An unknown technology is not a message.
-    assert!(decode_gameplay_client(&[13, 7, 1, 53]).is_err());
+    assert!(decode_gameplay_client(&[13, 7, 1, 87]).is_err());
 }
 
 #[test]

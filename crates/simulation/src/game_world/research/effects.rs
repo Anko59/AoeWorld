@@ -4,23 +4,23 @@ use crate::{GameWorld, UnitKind};
 use aoe_core::{EntityId, PlayerId};
 
 /// Shared simulation/client presentation of the effects' integer carry limit.
-pub fn villager_capacity(researched: u64) -> u16 {
+pub fn villager_capacity(researched: u128) -> u16 {
     carry_capacity(researched, crate::VILLAGE_RULES.villager_capacity)
 }
 
-pub(crate) fn carry_capacity(researched: u64, base: u16) -> u16 {
+pub(crate) fn carry_capacity(researched: u128, base: u16) -> u16 {
     (u32::from(base) * villager_economy_modifiers(researched).0).div_ceil(10_000) as u16
 }
 
 /// Walking speed percent of villagers with these technologies.
-pub(crate) fn villager_speed_percent(researched: u64) -> u16 {
+pub(crate) fn villager_speed_percent(researched: u128) -> u16 {
     villager_economy_modifiers(researched).1
 }
 
 /// Asked once per walking villager per tick, so only the few technologies with
 /// this effect are visited, in `TECH_RULES` order.
-fn villager_economy_modifiers(researched: u64) -> (u32, u16) {
-    static RULES: std::sync::OnceLock<Vec<(u64, u32, u16)>> = std::sync::OnceLock::new();
+fn villager_economy_modifiers(researched: u128) -> (u32, u16) {
+    static RULES: std::sync::OnceLock<Vec<(u128, u32, u16)>> = std::sync::OnceLock::new();
     RULES
         .get_or_init(|| {
             TECH_RULES
@@ -163,8 +163,19 @@ impl GameWorld {
                     }
                 }
             }
-            TechEffect::Masonry => {
-                self.apply_masonry(player);
+            TechEffect::Masonry | TechEffect::BuildingStats => {
+                self.refresh_building_hp(player);
+            }
+            TechEffect::UnitSpeed { .. } | TechEffect::Passive => {}
+            TechEffect::UnitHp { target, hp } => {
+                for stored in &mut self.units {
+                    let unit = &mut stored.state;
+                    if unit.player == player && target.includes(unit.kind) && unit.hp > 0 {
+                        unit.max_hp = unit.max_hp.saturating_add(hp);
+                        unit.hp = unit.hp.saturating_add(hp);
+                        changed.push(unit.id);
+                    }
+                }
             }
             TechEffect::UpgradeUnit { from, to } => {
                 self.upgrade_units(player, from, to, changed);
@@ -185,15 +196,8 @@ impl GameWorld {
                 {
                     building.age = age;
                     self.vision.dirty_buildings.insert(building.id);
-                    let (hp, los) = building.kind.age_stats(age);
-                    let hp = if state.researched & Tech::Masonry.bit() != 0
-                        && building.kind != crate::BuildingKind::Farm
-                        && !building.kind.is_barrier()
-                    {
-                        hp * 11 / 10
-                    } else {
-                        hp
-                    };
+                    let los = building.kind.age_stats(age).1;
+                    let hp = super::building_max_hp(building.kind, age, state.researched);
                     let (_, old_los) = building.kind.age_stats(match age {
                         super::Age::Imperial => super::Age::Castle,
                         super::Age::Castle => super::Age::Feudal,
@@ -229,6 +233,11 @@ impl GameWorld {
                     }
                 }
             }
+        }
+        match tech {
+            Tech::Conscription => self.speed_up_training(player),
+            Tech::TreadmillCrane => self.speed_up_construction(player),
+            _ => {}
         }
         self.upgrade_garrisoned_units(player, tech);
         if matches!(

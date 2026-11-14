@@ -108,7 +108,7 @@ pub(crate) fn research(
     let Some(p) = player else {
         return Availability::NotOwner;
     };
-    if p.researched & (1_u64 << r.tech) != 0 {
+    if p.researched & (1_u128 << r.tech) != 0 {
         return Availability::Researched;
     }
     // A line exposes only its next technology; a completed step disappears.
@@ -116,7 +116,7 @@ pub(crate) fn research(
     if ((r.tech == Tech::CastleAge as u8 || r.tech == Tech::ImperialAge as u8)
         && (p.age as u8) < r.age)
         || r.requires_tech
-            .is_some_and(|tech| p.researched & (1_u64 << tech) == 0)
+            .is_some_and(|tech| p.researched & (1_u128 << tech) == 0)
     {
         return Availability::Unavailable;
     }
@@ -160,7 +160,7 @@ pub(crate) fn training(
     if unit.superseded(p.researched)
         || unit
             .requires_tech
-            .is_some_and(|t| p.researched & (1_u64 << t) == 0)
+            .is_some_and(|t| p.researched & (1_u128 << t) == 0)
     {
         return Availability::Unavailable;
     }

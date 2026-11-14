@@ -24,14 +24,14 @@ pub(super) fn report(
     completed: u32,
 ) -> Vec<f64> {
     let mut market = None;
-    let mut researching = 0_u64;
+    let mut researching: aoe_protocol::TechMask = 0;
     let mut candidate: [Option<&GameplayBuildingState>; 32] = [None; 32];
     for b in buildings {
         if b.player != owner || b.hp == 0 {
             continue;
         }
         if let Some(r) = &b.research {
-            researching |= 1_u64 << (r.tech as u8);
+            researching |= r.tech.bit();
         }
         if b.construction != ConstructionState::Complete {
             continue;
@@ -53,7 +53,7 @@ pub(super) fn report(
         f64::from(prices.stone),
     ];
     for r in building_ui::content::rules().techs.iter() {
-        let duplicate = researching & (1_u64 << r.tech) != 0;
+        let duplicate = researching & (1 << r.tech) != 0;
         match candidate[(r.building as usize) & 31] {
             Some(b) => {
                 v.push(availability::research(b, player, owner, completed, duplicate, r).number());

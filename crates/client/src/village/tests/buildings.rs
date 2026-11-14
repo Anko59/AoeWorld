@@ -60,7 +60,7 @@ fn retained_buildings_can_span_multiple_bounded_messages() {
     assert_eq!(merged.len(), MAX_ECONOMY_BUILDINGS + 1);
 }
 
-fn rich_player(researched: u64) -> aoe_protocol::GameplayPlayerState {
+fn rich_player(researched: u128) -> aoe_protocol::GameplayPlayerState {
     aoe_protocol::GameplayPlayerState {
         player: PlayerId(0),
         age: aoe_protocol::Age::Castle,

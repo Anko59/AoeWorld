@@ -47,6 +47,16 @@ impl MarketRules {
     pub fn sell_proceeds(&self, price: u16) -> u32 {
         u32::from(price) * u32::from(10_000 - self.commission_permyriad) / 10_000
     }
+    /// `buy_cost` for a player with these technologies (Guilds halve the fee).
+    pub fn buy_cost_with(&self, price: u16, researched: crate::TechMask) -> u32 {
+        let fee = crate::market_commission_permyriad(self.commission_permyriad, researched);
+        u32::from(price) * u32::from(10_000 + fee) / 10_000
+    }
+    /// `sell_proceeds` for a player with these technologies.
+    pub fn sell_proceeds_with(&self, price: u16, researched: crate::TechMask) -> u32 {
+        let fee = crate::market_commission_permyriad(self.commission_permyriad, researched);
+        u32::from(price) * u32::from(10_000 - fee) / 10_000
+    }
     pub fn raise(&self, price: u16) -> u16 {
         price.saturating_add(self.price_step).min(self.max_price)
     }
@@ -159,7 +169,8 @@ impl GameWorld {
             .get(&player)
             .and_then(|state| state.market_prices.price(kind))
             .ok_or(EconomyError::InvalidResource)?;
-        let cost = MARKET_RULES.buy_cost(price);
+        let researched = self.player_economy(player).map_or(0, |p| p.researched);
+        let cost = MARKET_RULES.buy_cost_with(price, researched);
         let Some(state) = self.economy.players.get_mut(&player) else {
             return Err(EconomyError::NotOwner);
         };
@@ -191,7 +202,8 @@ impl GameWorld {
             .get(&player)
             .and_then(|state| state.market_prices.price(kind))
             .ok_or(EconomyError::InvalidResource)?;
-        let proceeds = MARKET_RULES.sell_proceeds(price);
+        let researched = self.player_economy(player).map_or(0, |p| p.researched);
+        let proceeds = MARKET_RULES.sell_proceeds_with(price, researched);
         let Some(state) = self.economy.players.get_mut(&player) else {
             return Err(EconomyError::NotOwner);
         };
@@ -221,6 +233,7 @@ impl GameWorld {
         if market_kind != BuildingKind::Market {
             return Err(EconomyError::NoMarket);
         }
+        let researched = self.player_economy(player).map_or(0, |p| p.researched);
         let Some(state) = self.economy.players.get_mut(&player) else {
             return Err(EconomyError::NotOwner);
         };
@@ -231,7 +244,7 @@ impl GameWorld {
         let mut done = 0;
         while done < lots {
             if buy {
-                let cost = MARKET_RULES.buy_cost(price);
+                let cost = MARKET_RULES.buy_cost_with(price, researched);
                 if state.stockpile.gold < cost {
                     break;
                 }
@@ -242,7 +255,7 @@ impl GameWorld {
                 if !state.stockpile.market_take(kind, MARKET_RULES.trade_amount) {
                     break;
                 }
-                let proceeds = MARKET_RULES.sell_proceeds(price);
+                let proceeds = MARKET_RULES.sell_proceeds_with(price, researched);
                 state.stockpile.gold = state.stockpile.gold.saturating_add(proceeds);
                 price = MARKET_RULES.lower(price);
             }
