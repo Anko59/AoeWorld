@@ -40,6 +40,13 @@ impl GameWorld {
         let flee = stats.attack == 0
             || (unit.kind == UnitKind::Villager && ranged)
             || (unit.kind.is_ram() && !ram_target);
+        // A marching member that cannot fight back keeps marching. Fleeing would
+        // detach it from its group with no slot to resume, stranding a ram, a
+        // monk or a villager three tiles from the army; before an attack-move
+        // member reacted at all, every moving unit returned above.
+        if marching && flee {
+            return;
+        }
         if unit.stance == CombatStance::StandGround {
             let range = super::super::navy::attack_range(&stats);
             if flee || goal.distance_squared(unit.position) > range * range {

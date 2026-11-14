@@ -178,3 +178,52 @@ fn ordinary_player_groups_can_share_a_pace_without_a_general() {
         "the coordinated group keeps advancing"
     );
 }
+
+/// A member that cannot fight back must keep marching with its attack-move
+/// group. Fleeing would detach it with no slot to resume, stranding a ram or a
+/// monk away from the army.
+#[test]
+fn an_attack_move_member_that_cannot_fight_back_keeps_marching_when_hit() {
+    // A formation refuses villagers, Vassals, Stewards and ships
+    // (`formation/selection.rs`), so the non-fighters that can actually march
+    // under an attack-move are the ram and the monk.
+    for kind in [UnitKind::BatteringRam, UnitKind::Monk] {
+        let mut w = wide_world();
+        w.set_fog_disabled(true);
+        let mut ids = (0..4)
+            .map(|n| {
+                w.spawn_kind(PlayerId(0), UnitKind::Militia, center(40 + n, 40))
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        let carried = w.spawn_kind(PlayerId(0), kind, center(44, 40)).unwrap();
+        ids.push(carried);
+        w.issue_formation_move(
+            PlayerId(0),
+            &ids,
+            Formation::Box,
+            center(180, 40),
+            false,
+            true,
+        )
+        .unwrap();
+        w.advance();
+        let at = w.unit(carried).unwrap().position.tile_floor();
+        // An enemy militia is not a ram's target, and a monk cannot attack.
+        let enemy = w
+            .spawn_kind(PlayerId(1), UnitKind::Militia, center(at.x + 1, at.y))
+            .unwrap();
+        w.units[w.lookup[&enemy]].state.stance = aoe_core::CombatStance::NoAttack;
+        let mut changed = Vec::new();
+        w.retaliate(w.lookup[&carried], enemy, &mut changed);
+        assert!(
+            w.formation(carried).is_some(),
+            "{kind:?} left its attack-move group after being hit"
+        );
+        assert_eq!(
+            w.unit(carried).unwrap().attack_target,
+            None,
+            "{kind:?} cannot fight back and must not acquire a target"
+        );
+    }
+}
