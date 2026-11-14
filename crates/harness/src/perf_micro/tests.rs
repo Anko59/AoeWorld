@@ -331,3 +331,13 @@ fn missing_or_unusable_dev_reference_falls_back_with_a_reason() {
     .unwrap();
     assert_eq!(dev::load(&path).expect("usable").run, 42);
 }
+
+#[test]
+fn both_late_game_kernels_count_the_ticks_the_identity_records() {
+    let benches = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../simulation/benches");
+    let window = format!("for _ in 0..{} {{", dev::LATE_GAME_TICKS);
+    for bench in ["instructions.rs", "late_game_instructions.rs"] {
+        let text = std::fs::read_to_string(benches.join(bench)).unwrap();
+        assert_eq!(text.matches(&window).count(), 1, "{bench}: {window}");
+    }
+}

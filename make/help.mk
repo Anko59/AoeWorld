@@ -89,7 +89,7 @@ help:
 	@echo '  make fuzz-smoke      Run bounded parser fuzzing with pinned nightly Rust'
 	@echo '  make fuzz-nightly    Run longer parser fuzzing campaigns'
 	@echo '  make perf-smoke      Run synthetic smoke workload with real protocol clients'
-	@echo '  make perf-late-game-instructions  Count one complete late-game tick (Callgrind)'
+	@echo '  make perf-late-game-instructions  Count eight complete late-game ticks (Callgrind)'
 	@echo '  make perf-late-game Run three generated 100-seat/14k-unit phase profiles'
 	@echo '  make perf-ci         Run target workloads and required comparisons'
 	@echo '  make perf-full       Add population and sparse-world scaling workloads'
