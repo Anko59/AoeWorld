@@ -267,7 +267,10 @@ fn fixtures_load_a_small_save_and_reject_its_snapshot_version() {
     let version = u8::try_from(world.snapshot([0; 32]).unwrap().version).unwrap();
     // Minimal current postcard save: save header, zero seats, empty snapshot.
     // This is a synthetic current-format pin, never a compatibility reader.
-    let mut bytes = [1, 0, version, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    // Both versions come from their constants: a literal here would fail the
+    // next time either is bumped, which is a save-format change, not a defect.
+    let save_version = u8::try_from(aoe_server::SAVE_VERSION).unwrap();
+    let mut bytes = [save_version, 0, version, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     let fixture = Fixture {
         path: ".cache/dev-replay/packages/saves/empty.save".into(),
         kind: Kind::Save,

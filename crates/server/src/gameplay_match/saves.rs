@@ -22,7 +22,9 @@ use std::{
 };
 
 /// Read by `make check-fixtures` to explain a save that no longer loads.
-pub const SAVE_VERSION: u16 = 1;
+/// Bumped to 2 when #828 added `FormationRecord::pace_limit`, which made every
+/// earlier save's `WorldSnapshot` unreadable.
+pub const SAVE_VERSION: u16 = 2;
 const MAX_NAME: usize = 60;
 const MAX_SAVE_BYTES: u64 = 2 << 30;
 
@@ -37,6 +39,15 @@ struct SaveFile {
     version: u16,
     seats: Vec<SaveSeat>,
     world: WorldSnapshot,
+}
+
+/// `SaveFile`'s leading field alone. Postcard encodes a struct's fields in
+/// order, so the version reads back from a save whose body this build can no
+/// longer parse; without it an older save fails as a raw decoding error
+/// instead of saying it is from another version.
+#[derive(Deserialize)]
+struct SaveVersion {
+    version: u16,
 }
 
 /// The listing card of one save.
@@ -222,19 +233,27 @@ fn read_save(directory: &FsPath, id: &str) -> Result<Loaded, Error> {
             "the saved game is too large".to_owned(),
         ));
     }
-    let file: SaveFile = postcard::from_bytes(&std::fs::read(&path).map_err(|_| missing())?)
-        .map_err(|error| {
-            (
-                StatusCode::BAD_REQUEST,
-                format!("the saved game is unreadable: {error}"),
-            )
-        })?;
-    if file.version != SAVE_VERSION {
+    let bytes = std::fs::read(&path).map_err(|_| missing())?;
+    // The version gate runs before the body, so a save this build cannot parse
+    // is reported as another version rather than as a decoding failure.
+    let (header, _) = postcard::take_from_bytes::<SaveVersion>(&bytes).map_err(|error| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("the saved game is unreadable: {error}"),
+        )
+    })?;
+    if header.version != SAVE_VERSION {
         return Err((
             StatusCode::BAD_REQUEST,
             "the saved game is from another version".to_owned(),
         ));
     }
+    let file: SaveFile = postcard::from_bytes(&bytes).map_err(|error| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("the saved game is unreadable: {error}"),
+        )
+    })?;
     Ok(Loaded { file, card })
 }
 
