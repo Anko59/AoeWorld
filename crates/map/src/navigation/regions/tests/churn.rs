@@ -33,7 +33,7 @@ fn forest_map(rng: &mut Lcg) -> Grid {
 }
 
 #[test]
-fn churn_flush_stays_within_two_milliseconds() {
+fn churn_flush_matches_a_fresh_build_and_reports_its_time() {
     let mut rng = Lcg(2026);
     let mut grid = forest_map(&mut rng);
     let mut regions = Regions::new(SIDE, SIDE, LandBucket::Small);
@@ -101,12 +101,10 @@ fn churn_flush_stays_within_two_milliseconds() {
     let evidence = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/regions");
     std::fs::create_dir_all(&evidence).unwrap();
     std::fs::write(evidence.join("churn.txt"), report).unwrap();
-    // Coverage instrumentation (cargo llvm-cov sets LLVM_PROFILE_FILE) runs
-    // several times slower; the uninstrumented unit run enforces the budget.
-    if std::env::var_os("LLVM_PROFILE_FILE").is_none() {
-        assert!(unions[unions.len() / 2].as_micros() <= 2_000);
-        assert!(median.as_micros() <= 2_000, "median flush {median:?}");
-    }
+    // The timings are a report, not a bound: a 2 ms assertion passed on a quiet
+    // machine and failed whenever anything else ran (2.37 ms median under load
+    // on 2026-11-14, on a branch that never touched navigation), blaming
+    // unrelated pull requests. The performance jobs measure work by instructions.
     // Spot-check the incremental answer against a fresh build.
     let mut fresh = Regions::new(SIDE, SIDE, LandBucket::Small);
     for _ in 0..200 {
