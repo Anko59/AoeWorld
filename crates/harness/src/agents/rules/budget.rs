@@ -141,11 +141,12 @@ fn unbounded(target: &str, assignments: &[(&str, &str)]) -> Option<String> {
     match target {
         "test-native-focused" => {
             let filter = last(assignments, "AOE_NATIVE_TEST_FILTER").unwrap_or_default();
-            (!positive_union(filter)).then(|| {
+            (!positive_union(leading(filter))).then(|| {
                 format!(
-                    "AOE_NATIVE_TEST_FILTER={filter:?}: a focused filter is test(...) predicates of at \
-                     least {SHORTEST_FILTER} characters joined by `|`; negation, difference, \
-                     intersection and other predicates can select a whole package"
+                    "AOE_NATIVE_TEST_FILTER={filter:?}: a focused filter starts with test(...) \
+                     predicates of at least {SHORTEST_FILTER} characters joined by `|`, then may \
+                     subtract (`-`) or intersect (`&`); a negation or other predicate up front can \
+                     select a whole package"
                 )
             })
         }
@@ -179,9 +180,25 @@ fn unbounded(target: &str, assignments: &[(&str, &str)]) -> Option<String> {
     }
 }
 
+/// The part of a nextest expression before its first top-level difference or
+/// intersection (`-`, `&`, `and`): what follows can only remove tests.
+fn leading(filter: &str) -> &str {
+    let mut depth = 0_i32;
+    for (index, ch) in filter.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            '-' | '&' if depth == 0 => return &filter[..index],
+            _ if depth == 0 && filter[index..].starts_with(" and ") => return &filter[..index],
+            _ => {}
+        }
+    }
+    filter
+}
+
 /// A nextest expression that only adds named tests: one or more `test(...)`
 /// predicates of at least three characters, joined by `|`, `+` or `or`. An
-/// allowlist, so `not`, `-`, `&`, `all()`, `kind()` and anything new need a lease.
+/// allowlist, so `not`, `all()`, `kind()` and anything new need a lease.
 fn positive_union(filter: &str) -> bool {
     let mut rest = filter;
     let mut joiners = String::new();

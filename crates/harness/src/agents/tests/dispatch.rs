@@ -250,8 +250,9 @@ fn the_budget_has_no_way_around_it() {
         );
         for filter in [
             "not test(slow)",
-            "test(regions) - test(slow)",
-            "test(regions) & kind(lib)",
+            "test(regions) | not test(slow)",
+            "kind(lib) - test(slow)",
+            "all() & test(regions)",
         ] {
             denied(
                 &fixture,
@@ -266,6 +267,20 @@ fn the_budget_has_no_way_around_it() {
             role,
             "make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-map 'AOE_NATIVE_TEST_FILTER=test(regions) | test(=churn::flush)'",
         );
+        // Subtracting from or intersecting a named set can only shrink it.
+        for filter in [
+            "test(gameplay) - test(slow)",
+            "test(gameplay) & kind(lib)",
+            "test(foo-bar)",
+        ] {
+            allowed(
+                &fixture,
+                role,
+                &format!(
+                    "make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-server 'AOE_NATIVE_TEST_FILTER={filter}'"
+                ),
+            );
+        }
     }
     // Reviewers use the focused checks that replace preflight for them.
     allowed(
