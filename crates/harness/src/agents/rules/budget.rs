@@ -141,26 +141,13 @@ fn unbounded(target: &str, assignments: &[(&str, &str)]) -> Option<String> {
     match target {
         "test-native-focused" => {
             let filter = last(assignments, "AOE_NATIVE_TEST_FILTER").unwrap_or_default();
-            let filter: String = filter.split_whitespace().collect();
-            if filter.contains("all()") {
-                return Some("AOE_NATIVE_TEST_FILTER=all()".into());
-            }
-            let predicates: Vec<&str> = filter
-                .split("test(")
-                .skip(1)
-                .map(|rest| rest.split(')').next().unwrap_or_default())
-                .map(|inner| {
-                    inner
-                        .trim_start_matches(['=', '~', '/'])
-                        .trim_end_matches('/')
-                })
-                .collect();
-            if predicates.is_empty() || predicates.iter().any(|p| p.len() < SHORTEST_FILTER) {
-                return Some(format!(
-                    "AOE_NATIVE_TEST_FILTER={filter:?}, which needs a test(...) predicate of at least {SHORTEST_FILTER} characters"
-                ));
-            }
-            None
+            (!positive_union(filter)).then(|| {
+                format!(
+                    "AOE_NATIVE_TEST_FILTER={filter:?}: a focused filter is test(...) predicates of at \
+                     least {SHORTEST_FILTER} characters joined by `|`; negation, difference, \
+                     intersection and other predicates can select a whole package"
+                )
+            })
         }
         "test-harness-focused" | "test-wasm-focused" => {
             let variable = if target == "test-harness-focused" {
@@ -178,7 +165,7 @@ fn unbounded(target: &str, assignments: &[(&str, &str)]) -> Option<String> {
         "test-e2e" => {
             let specs: Vec<&str> = last(assignments, "AOE_E2E_SPECS")
                 .unwrap_or_default()
-                .split([',', ' '])
+                .split(|c: char| c.is_whitespace() || c == ',')
                 .filter(|spec| !spec.is_empty())
                 .collect();
             let concrete = specs.iter().all(|spec| {
@@ -190,4 +177,34 @@ fn unbounded(target: &str, assignments: &[(&str, &str)]) -> Option<String> {
         }
         _ => None,
     }
+}
+
+/// A nextest expression that only adds named tests: one or more `test(...)`
+/// predicates of at least three characters, joined by `|`, `+` or `or`. An
+/// allowlist, so `not`, `-`, `&`, `all()`, `kind()` and anything new need a lease.
+fn positive_union(filter: &str) -> bool {
+    let mut rest = filter;
+    let mut joiners = String::new();
+    let mut predicates = 0;
+    while let Some(start) = rest.find("test(") {
+        joiners.push_str(&rest[..start]);
+        let inner_start = start + "test(".len();
+        let Some(length) = rest[inner_start..].find(')') else {
+            return false;
+        };
+        let inner = rest[inner_start..inner_start + length]
+            .trim()
+            .trim_start_matches(['=', '~', '/'])
+            .trim_end_matches('/');
+        if inner.len() < SHORTEST_FILTER {
+            return false;
+        }
+        predicates += 1;
+        rest = &rest[inner_start + length + 1..];
+    }
+    joiners.push_str(rest);
+    predicates > 0
+        && joiners
+            .split(|c: char| c.is_whitespace() || c == '|' || c == '+')
+            .all(|word| word.is_empty() || word == "or")
 }

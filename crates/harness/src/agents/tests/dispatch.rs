@@ -242,6 +242,30 @@ fn the_budget_has_no_way_around_it() {
             role,
             "make test-client-memory AOE_E2E_SPECS=tests/memory/fog.spec.ts",
         );
+        // Closing review: tab-separated specs and a negated filter.
+        denied(
+            &fixture,
+            role,
+            "make test-e2e 'AOE_E2E_SPECS=a.spec.ts\tb.spec.ts\tc.spec.ts\td.spec.ts\te.spec.ts\tf.spec.ts'",
+        );
+        for filter in [
+            "not test(slow)",
+            "test(regions) - test(slow)",
+            "test(regions) & kind(lib)",
+        ] {
+            denied(
+                &fixture,
+                role,
+                &format!(
+                    "make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-map 'AOE_NATIVE_TEST_FILTER={filter}'"
+                ),
+            );
+        }
+        allowed(
+            &fixture,
+            role,
+            "make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-map 'AOE_NATIVE_TEST_FILTER=test(regions) | test(=churn::flush)'",
+        );
     }
     // Reviewers use the focused checks that replace preflight for them.
     allowed(
