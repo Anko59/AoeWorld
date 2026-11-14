@@ -33,6 +33,7 @@ use crate::jobs::JobEnv;
 use context::{Access, Context};
 use role::Role;
 pub(crate) use role::{is_test as is_test_path, protected as protected_path};
+pub(crate) use rules::budget::grant as grant_lease;
 use runtime::Call;
 pub(crate) use runtime::Runtime;
 
@@ -188,13 +189,17 @@ pub(crate) fn respond(
         });
     };
     let role = Role::resolve(launched_role, input.agent_type.as_deref());
-    let context = match Context::new(root, role, input.scratchpad_dir.as_deref()) {
+    let mut context = match Context::new(root, role, input.scratchpad_dir.as_deref()) {
         Ok(context) => context,
         Err(error) if event == Event::PreToolUse => return Some(deny(error)),
         Err(error) => {
             return Some(json!({ "systemMessage": format!("AoeWorld harness: {error}") }));
         }
     };
+    // A Claude subagent is already an agent by its agent type, and a Claude main
+    // session that exports AOE_COORDINATOR for its subagents is the coordinator.
+    // Other runtimes report no agent type, so the variable marks a launched session.
+    context.coordinated &= runtime != Runtime::Claude;
     let cwd = input.cwd.as_deref();
     match event {
         Event::PreToolUse => pre_tool(&context, runtime, &input, cwd).err().map(deny),

@@ -79,6 +79,18 @@ pub(super) fn run(
         Command::TestSourceQualification => native::test_source_qualification()?,
         Command::TestExhaustive => native::test_exhaustive()?,
         Command::Timeline => timeline::run(Path::new("."))?,
+        Command::Lease { target, minutes } => {
+            let common = crate::ship::git::git(
+                Path::new("."),
+                &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+            )?;
+            let by = std::env::var("AOE_COORDINATOR").unwrap_or_else(|_| "main session".into());
+            let path = crate::agents::grant_lease(Path::new(&common), &target, minutes, &by)?;
+            println!(
+                "lease: launched sessions may run `make {target}` for {minutes} min ({})",
+                path.display()
+            );
+        }
         Command::LoadStatus => {
             ship::lock::print_status(Path::new("."))?;
             jobs::print_status(Path::new("."), slots)?

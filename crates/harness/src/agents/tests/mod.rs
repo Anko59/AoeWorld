@@ -53,7 +53,10 @@ impl Fixture {
     }
 
     pub(super) fn context(&self, role: Role) -> Context {
-        Context::new(self.root(), role, None).expect("context")
+        let mut context = Context::new(self.root(), role, None).expect("context");
+        // Independent of whether the test itself runs in a launched session.
+        context.coordinated = false;
+        context
     }
 }
 

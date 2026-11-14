@@ -18,6 +18,11 @@ agent-smoke:
 	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
 	@'$(HARNESS_TARGET_CACHE)/debug/aoe-harness' agent-smoke --runtime '$(RUNTIME)'
 
+# A coordinator lends one whole suite to its agents and launched sessions.
+.PHONY: lease
+lease:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- lease '$(AOE_LEASE_TARGET)' $(or $(AOE_LEASE_MINUTES),60)
+
 hooks-install:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- hooks-install
 
