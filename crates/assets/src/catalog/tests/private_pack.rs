@@ -335,7 +335,7 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
     let mut manifest = synthetic_manifest();
     assert_eq!(
         actor_frames(),
-        121555,
+        124446,
         // Complete current DAT unit cells, including neutral colour semantics.
         // +480 over the previous pin: only the new farmer seed sheet (203364); the
         // four carry and hunter-carry poses reuse already-selected graphics.

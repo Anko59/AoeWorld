@@ -142,6 +142,7 @@ enum PendingAction {
         building_id: EntityId,
         entity_id: Option<EntityId>,
     },
+    Trade(EntityId, EntityId),
     Load {
         unit_ids: Vec<EntityId>,
         transport_id: EntityId,
@@ -264,7 +265,6 @@ enum PendingAction {
         lots: u32,
     },
 }
-
 impl GameplayService {
     /// Server-side scenario setup, never a gameplay client command.
     pub async fn set_fog_disabled(&self, disabled: bool) {

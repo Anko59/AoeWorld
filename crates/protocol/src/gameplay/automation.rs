@@ -9,7 +9,11 @@ impl super::UnitKind {
                 | Self::DemolitionShip
                 | Self::TransportShip
                 | Self::WarGalley
+                | Self::TradeCog
         )
+    }
+    pub const fn is_trader(self) -> bool {
+        matches!(self, Self::TradeCart | Self::TradeCog)
     }
     /// Units the player may put on automatic exploration: cavalry on land,
     /// warships and transports on water.

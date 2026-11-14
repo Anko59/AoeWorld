@@ -89,6 +89,7 @@ fn feudal_buildings_are_age_gated_atomically_then_build_with_de_stats() {
                     UnitKind::Paladin,
                     UnitKind::Hussar
                 ][..],
+                Market => &[UnitKind::TradeCart][..],
                 _ => &[][..],
             }
         );

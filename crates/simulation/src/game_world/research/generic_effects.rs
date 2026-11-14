@@ -59,8 +59,7 @@ impl TechTarget {
             Self::Infantry => kind.is_infantry(),
             Self::Mounted => kind.is_mounted(),
             Self::Monk => kind == UnitKind::Monk,
-            // Cart and Cog arrive with the trade track.
-            Self::Trade => false,
+            Self::Trade => matches!(kind, UnitKind::TradeCart | UnitKind::TradeCog),
         }
     }
 }

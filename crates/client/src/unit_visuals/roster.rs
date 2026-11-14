@@ -90,6 +90,8 @@ pub(super) fn military_poses(kind: UnitKind) -> Option<[Pose; 4]> {
         UnitKind::CappedRam => [CappedRamStand, CappedRamWalk, CappedRamAttack, CappedRamDie],
         UnitKind::SiegeRam => [SiegeRamStand, SiegeRamWalk, SiegeRamAttack, SiegeRamDie],
         UnitKind::Onager => [OnagerStand, OnagerWalk, OnagerAttack, OnagerDie],
+        UnitKind::TradeCart => [TradeCartStand, TradeCartWalk, TradeCartStand, TradeCartDie],
+        UnitKind::TradeCog => [TradeCogStand, TradeCogWalk, TradeCogStand, TradeCogDie],
         _ => return None,
     })
 }

@@ -185,6 +185,16 @@ pub fn sprite_slot(kind: BuildingKind, progress: u16, rubble: bool) -> usize {
     if let Some(slot) = stone_slot(kind, progress, rubble) {
         return slot;
     }
+    // The Wonder has one DE architecture for every age: standing, rubble, foundation.
+    if kind == BuildingKind::Wonder {
+        return if rubble {
+            89
+        } else if progress < 1000 {
+            90
+        } else {
+            88
+        };
+    }
     if kind == BuildingKind::Road {
         return 9;
     }
@@ -331,7 +341,7 @@ pub fn age_sprite_slot(
     if kind == BuildingKind::Road {
         return 9;
     }
-    if kind == BuildingKind::Bridge {
+    if matches!(kind, BuildingKind::Bridge | BuildingKind::Wonder) {
         return sprite_slot(kind, progress, rubble);
     }
     if let Some(slot) = stone_slot(kind, progress, rubble) {

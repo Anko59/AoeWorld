@@ -113,3 +113,50 @@ pub(in super::super) fn commerce(client: &Client) -> Vec<f64> {
         construction::completed(client),
     )
 }
+
+/// Right-clicking an own, complete Market or Dock with Trade Carts or Cogs
+/// selected sends them shuttling between it and the farthest other one.
+pub(super) fn trade_interact(client: &mut Client, point: aoe_core::ScreenPoint) -> bool {
+    let Some(b) = construction::target(client, point) else {
+        return false;
+    };
+    let (building_id, kind) = (b.id, b.kind);
+    if b.player != owner(client)
+        || b.construction != aoe_protocol::ConstructionState::Complete
+        || !matches!(
+            kind,
+            aoe_protocol::BuildingKind::Market | aoe_protocol::BuildingKind::Dock
+        )
+    {
+        return false;
+    }
+    let ids: Vec<_> = client
+        .selected
+        .units
+        .iter()
+        .copied()
+        .filter(|id| {
+            client.units.get(id).is_some_and(|u| {
+                u.player == owner(client)
+                    && u.hp > 0
+                    && match u.kind {
+                        UnitKind::TradeCart => kind == aoe_protocol::BuildingKind::Market,
+                        UnitKind::TradeCog => kind == aoe_protocol::BuildingKind::Dock,
+                        _ => false,
+                    }
+            })
+        })
+        .collect();
+    for &entity_id in &ids {
+        let sequence = client.next_sequence;
+        super::orders::send(
+            client,
+            aoe_protocol::GameplayClientMessage::TradeOrder {
+                sequence,
+                entity_id,
+                building_id,
+            },
+        );
+    }
+    !ids.is_empty()
+}

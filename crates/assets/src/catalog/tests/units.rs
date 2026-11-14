@@ -217,3 +217,9 @@ fn general_uses_distinct_full_paladin_animations() {
         }
     }
 }
+
+#[test]
+fn a_pose_index_is_wider_than_a_byte() {
+    assert_eq!(std::mem::size_of::<Pose>(), 2);
+    assert!(Pose::TradeCogDecay as u16 > 223);
+}

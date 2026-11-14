@@ -27,15 +27,15 @@ pub const TRIAL_BUILDING_IDS: [i32; 49] = [
     498, 133, 82, 104, 209, 49, 141, 464, 564, 586, 130, 132, 47, 10, 86, 18, 116, 31, 605, 606,
     607, 608, 609, 610, 117, 487, 490, 796,
 ];
-pub const IMPERIAL_BUILDING_IDS: [i32; 14] = [
-    142, 465, 565, 587, 131, 20, 51, 14, 153, 19, 137, 32, 210, 150,
+pub const IMPERIAL_BUILDING_IDS: [i32; 15] = [
+    142, 465, 565, 587, 131, 20, 51, 14, 153, 19, 137, 32, 210, 150, 276,
 ];
 
 /// All current gameplay recipes, imported from their authoritative edition.
-pub const GAMEPLAY_BUILDING_IDS: [i32; 63] = {
-    let mut ids = [0; 63];
+pub const GAMEPLAY_BUILDING_IDS: [i32; 64] = {
+    let mut ids = [0; 64];
     let mut i = 0;
-    while i < 63 {
+    while i < 64 {
         ids[i] = if i < 49 {
             TRIAL_BUILDING_IDS[i]
         } else {

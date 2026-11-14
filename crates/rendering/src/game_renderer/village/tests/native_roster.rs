@@ -135,7 +135,7 @@ fn rebased_stone_barriers_keep_dat_identity_and_do_not_alias_native_actors() {
         assert_eq!(kind.building_slot(), Some(slot));
         assert_eq!(kind.actor_slot(), None);
     }
-    for slot in 0..167 {
+    for slot in 0..167_u16 {
         assert!(SceneUnitKind::actor(slot).actor_slot().is_some());
         assert_eq!(SceneUnitKind::actor(slot).building_slot(), None);
     }
@@ -180,8 +180,8 @@ fn current_building_slots_round_trip_without_claiming_actor_tags() {
 #[wasm_bindgen_test]
 fn imperial_actor_tags_round_trip_all_current_poses_in_a_compact_scene() {
     assert_eq!(std::mem::size_of::<SceneUnit>(), 32);
-    for slot in 167..217 {
-        let kind = SceneUnitKind::actor(slot);
+    for slot in 167..217_u8 {
+        let kind = SceneUnitKind::actor(u16::from(slot));
         assert_eq!(kind.actor_slot(), Some(usize::from(slot)));
         assert_eq!(kind.building_slot(), None);
     }
@@ -202,5 +202,14 @@ fn galley_bolt_uses_the_five_projectile_rows_and_mirrors_eastward_flights() {
     ] {
         let u = unit(SceneUnitKind::Bolt).with_actor_frame(facing);
         assert_eq!(unit_direction(u, 5), (row, mirrored), "facing {facing}");
+    }
+}
+
+#[wasm_bindgen_test]
+fn pose_indices_above_255_are_not_truncated_to_a_byte() {
+    // An index of 256 + n once wrapped to n; it must stay distinct (it falls
+    // back to the scout tag while the table is shorter than 256 poses).
+    for n in [0_u16, 5, 100] {
+        assert_ne!(SceneUnitKind::actor(256 + n), SceneUnitKind::actor(n));
     }
 }

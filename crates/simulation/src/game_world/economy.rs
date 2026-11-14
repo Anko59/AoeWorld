@@ -34,6 +34,9 @@ pub(crate) use limits::MAX_ECONOMY_PLAYERS;
 pub use limits::{BUILDINGS_PER_PLAYER, WorldLimits};
 mod movement;
 mod navigation;
+mod trade;
+#[cfg(test)]
+pub(crate) use trade::leg_gold;
 pub(crate) mod placement;
 mod scouting;
 mod start_site;
@@ -105,6 +108,8 @@ pub enum UnitKind {
     SiegeRam,
     Onager,
     Steward,
+    TradeCart,
+    TradeCog,
 }
 impl UnitKind {
     /// Battering Ram and its two upgrades.
@@ -127,6 +132,7 @@ impl UnitKind {
                 | Self::DemolitionShip
                 | Self::TransportShip
                 | Self::WarGalley
+                | Self::TradeCog
         )
     }
 }
@@ -159,6 +165,7 @@ pub enum BuildingKind {
     StoneWall,
     StoneGate,
     Road,
+    Wonder,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]

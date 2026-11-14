@@ -370,6 +370,9 @@ impl Client {
     fn garrison(&self, unit: u32, building: u32) -> u64 {
         self.order(Order::Garrison { unit: EntityId(unit), building: EntityId(building) })
     }
+    fn trade(&self, unit: u32, building: u32) -> u64 {
+        self.order(Order::Trade { unit: EntityId(unit), building: EntityId(building) })
+    }
     #[pyo3(signature = (building, unit=None))]
     fn ungarrison(&self, building: u32, unit: Option<u32>) -> u64 {
         self.order(Order::Ungarrison { building: EntityId(building), unit: unit.map(EntityId) })

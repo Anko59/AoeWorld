@@ -37,9 +37,11 @@ pub enum UnitKind {
     SiegeRam,
     Onager,
     Steward,
+    TradeCart,
+    TradeCog,
 }
 impl UnitKind {
-    pub const ALL: [Self; 35] = [
+    pub const ALL: [Self; 37] = [
         Self::Villager,
         Self::Scout,
         Self::Militia,
@@ -75,6 +77,8 @@ impl UnitKind {
         Self::SiegeRam,
         Self::Onager,
         Self::Steward,
+        Self::TradeCart,
+        Self::TradeCog,
     ];
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -103,9 +107,10 @@ pub enum BuildingKind {
     StoneWall,
     StoneGate,
     Road,
+    Wonder,
 }
 impl BuildingKind {
-    pub const ALL: [Self; 24] = [
+    pub const ALL: [Self; 25] = [
         Self::TownCenter,
         Self::House,
         Self::LumberCamp,
@@ -130,10 +135,12 @@ impl BuildingKind {
         Self::StoneWall,
         Self::StoneGate,
         Self::Road,
+        Self::Wonder,
     ];
     /// Footprint side in tiles; the single wire-level size table.
     pub const fn side(self) -> i32 {
         match self {
+            Self::Wonder => 5,
             Self::TownCenter
             | Self::Market
             | Self::PalisadeGate

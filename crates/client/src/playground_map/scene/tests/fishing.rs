@@ -339,7 +339,7 @@ async fn fishing_tasks_share_native_actor_poses_phases_and_gather_orders() {
         assert_eq!(unit_pose(ship, None), pose);
         assert_eq!(
             units(&client, &prepare(&client))[0].kind,
-            aoe_rendering::SceneUnitKind::actor(pose as u8)
+            aoe_rendering::SceneUnitKind::actor(pose as u16)
         );
     }
     let fisher = client.units.get_mut(&EntityId(1)).unwrap();
@@ -347,7 +347,7 @@ async fn fishing_tasks_share_native_actor_poses_phases_and_gather_orders() {
     assert_eq!(unit_pose(fisher, None), Pose::FisherWork);
     assert_eq!(
         units(&client, &prepare(&client))[0].kind,
-        aoe_rendering::SceneUnitKind::actor(Pose::FisherWork as u8)
+        aoe_rendering::SceneUnitKind::actor(Pose::FisherWork as u16)
     );
     for facing in 0..8 {
         let heading = (20 - u16::from(facing) * 2) % 16;
@@ -461,7 +461,7 @@ async fn dead_naval_units_render_native_death_and_terminal_decay_graphics() {
         let ship = drawn.iter().find(|u| u.id == EntityId(1)).unwrap();
         assert_eq!(
             ship.kind,
-            aoe_rendering::SceneUnitKind::actor(death as u8),
+            aoe_rendering::SceneUnitKind::actor(death as u16),
             "{kind:?} death"
         );
         client.village.tick = died + 1000;
@@ -469,7 +469,7 @@ async fn dead_naval_units_render_native_death_and_terminal_decay_graphics() {
         let ship = drawn.iter().find(|u| u.id == EntityId(1)).unwrap();
         assert_eq!(
             ship.kind,
-            aoe_rendering::SceneUnitKind::actor(decay as u8),
+            aoe_rendering::SceneUnitKind::actor(decay as u16),
             "{kind:?} decay"
         );
     }

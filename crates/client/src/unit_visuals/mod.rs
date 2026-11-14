@@ -295,6 +295,8 @@ fn decay_pair(pose: Pose) -> Option<(Pose, Pose)> {
         (CappedRamDie, CappedRamDecay),
         (SiegeRamDie, SiegeRamDecay),
         (OnagerDie, OnagerDecay),
+        (TradeCartDie, TradeCartDecay),
+        (TradeCogDie, TradeCogDecay),
         (VillagerDie, VillagerDecay),
         (SheepDie, SheepDecay),
         (DeerDie, DeerDecay),

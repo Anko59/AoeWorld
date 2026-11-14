@@ -133,6 +133,8 @@ impl GameWorld {
     }
 
     pub(crate) fn cancel_auto_scout(&mut self, id: EntityId) {
+        // Every manual order, attack and death also ends a trade run.
+        self.cancel_trade(id);
         self.economy.scouts.remove(&id);
         self.economy.scout_searches.remove(&id);
         if self.economy.scouts.is_empty() {

@@ -63,6 +63,7 @@ impl BuildingKind {
     pub const fn admits(self, kind: UnitKind) -> bool {
         (!matches!(kind, UnitKind::Steward) || matches!(self, Self::TownCenter))
             && !kind.is_naval()
+            && !kind.is_trader()
             && self.garrison_capacity() > 0
             && (matches!(self, Self::Castle)
                 || matches!(

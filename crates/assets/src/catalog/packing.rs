@@ -16,7 +16,7 @@ pub const PAGE_BYTES: usize = PAGE_SIDE as usize * PAGE_SIDE as usize * 4;
 pub const ATLAS_BYTES: usize = PAGE_COUNT * PAGE_BYTES; // 83,886,080 bytes.
 pub const MAX_SELECTED_FRAMES: usize = 5120;
 /// Logical indices are u16, allowing indices 0 through 65535.
-pub const MAX_LOGICAL_FRAMES: usize = 131_072;
+pub const MAX_LOGICAL_FRAMES: usize = 262_144;
 /// Bound logical placement metadata independently of resident GPU storage.
 pub const MAX_LOGICAL_PAGES: usize = 256;
 pub const MAX_FRAME_EXTENT: u16 = PAGE_SIDE - 4;

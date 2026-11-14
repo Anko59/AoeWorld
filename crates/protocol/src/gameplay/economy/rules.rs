@@ -55,6 +55,7 @@ fn rally_rule(building: &GameplayBuildingState) -> Option<&'static str> {
             | BuildingKind::Market
             | BuildingKind::WatchTower
             | BuildingKind::University
+            | BuildingKind::Wonder
     );
     let ground_differs = matches!(r.target, RallyTarget::Ground(p) if p != r.position);
     (r.position.x < 0 || r.position.y < 0 || rejects || ground_differs)
@@ -107,6 +108,7 @@ fn trains(building: BuildingKind, unit: UnitKind) -> bool {
                     | UnitKind::SiegeRam
                     | UnitKind::Onager
             )
+            | (BuildingKind::Market, UnitKind::TradeCart)
             | (
                 BuildingKind::Dock,
                 UnitKind::FishingShip
@@ -115,6 +117,7 @@ fn trains(building: BuildingKind, unit: UnitKind) -> bool {
                     | UnitKind::DemolitionShip
                     | UnitKind::TransportShip
                     | UnitKind::WarGalley
+                    | UnitKind::TradeCog
             )
     )
 }

@@ -50,6 +50,7 @@ impl Economy {
             hash.update(&id.0.to_le_bytes());
             hash.update(&ship.0.to_le_bytes());
         }
+        self.hash_trade(hash);
         hash.update(&self.scout_cursor.map_or(u32::MAX, |id| id.0).to_le_bytes());
         hash.update(&(self.scout_searches.len() as u64).to_le_bytes());
         for id in &self.scout_searches {

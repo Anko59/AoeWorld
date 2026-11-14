@@ -9,10 +9,9 @@
 //! entity identities (which AI processes hold) are preserved.
 //!
 //! Kept beyond that: Steward, General and Vassal settings, army groups and
-//! their waypoints, queued moves, hunts, animals and fog exploration. Not
-//! kept, and restarted instead: in-flight route searches, fog memory of
-//! destroyed buildings, carcasses, and what a General was deciding.
-//! `RestoreReport` counts what a restore could not place.
+//! their waypoints, queued moves, hunts, animals and fog exploration. Not kept,
+//! and restarted: route searches, trade runs, fog memory of destroyed buildings,
+//! carcasses, and what a General was deciding. `RestoreReport` counts misses.
 mod general;
 mod orders;
 mod records;
@@ -203,6 +202,7 @@ impl GameWorld {
         self.restore_general_recruits(&snapshot.buildings, &snapshot.units);
         self.set_fog_disabled(snapshot.fog_disabled);
         self.resume_jobs(snapshot, &mut report);
+        self.rebind_trade_units();
         for player in &snapshot.players {
             if let Some(slot) = self.economy.players.get_mut(&player.player) {
                 *slot = *player;

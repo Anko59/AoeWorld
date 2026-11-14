@@ -39,6 +39,7 @@ fn native_building(kind: BuildingKind) -> sim::BuildingKind {
         BuildingKind::StoneWall => N::StoneWall,
         BuildingKind::StoneGate => N::StoneGate,
         BuildingKind::Road => N::Road,
+        BuildingKind::Wonder => N::Wonder,
     }
 }
 
@@ -68,6 +69,8 @@ fn native_unit(kind: UnitKind) -> sim::UnitKind {
         UnitKind::WarGalley => sim::UnitKind::WarGalley,
         UnitKind::Vassal => sim::UnitKind::Vassal,
         UnitKind::Steward => sim::UnitKind::Steward,
+        UnitKind::TradeCart => sim::UnitKind::TradeCart,
+        UnitKind::TradeCog => sim::UnitKind::TradeCog,
         UnitKind::General => sim::UnitKind::General,
         UnitKind::TwoHandedSwordsman => sim::UnitKind::TwoHandedSwordsman,
         UnitKind::Champion => sim::UnitKind::Champion,

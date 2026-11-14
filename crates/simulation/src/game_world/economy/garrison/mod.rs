@@ -30,6 +30,7 @@ impl BuildingKind {
     pub const fn admits(self, unit: UnitKind) -> bool {
         (!matches!(unit, UnitKind::Steward) || matches!(self, Self::TownCenter))
             && !unit.is_naval()
+            && !unit.is_trader()
             && self.garrison_capacity() > 0
             && (matches!(self, Self::Castle)
                 || matches!(
@@ -152,7 +153,7 @@ impl GameWorld {
         }
     }
 
-    fn approach_garrison(
+    pub(in crate::game_world) fn approach_garrison(
         &mut self,
         id: EntityId,
         footprint: TileRect,

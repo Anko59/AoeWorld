@@ -62,6 +62,8 @@ impl Unit {
                 | UnitKind::TransportShip
                 | UnitKind::Steward
                 | UnitKind::Vassal
+                | UnitKind::TradeCart
+                | UnitKind::TradeCog
         )
     }
     /// Hit points as a fraction of the maximum, in `0.0..=1.0`.

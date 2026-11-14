@@ -230,7 +230,9 @@ impl GameWorld {
                     }
                 }
                 self.finish_general_recruit(id, unit);
-                if let Some(rally) = rally {
+                if kind.is_trader() {
+                    self.begin_trade(unit, id);
+                } else if let Some(rally) = rally {
                     self.apply_rally(unit, rally);
                 }
                 changed.push(unit);

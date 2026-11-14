@@ -373,8 +373,8 @@ fn feudal_building_roles_and_actor_groups_do_not_overlap() {
         assert_eq!(kind.building_slot(), Some(slot));
         assert_eq!(kind.actor_slot(), None);
     }
-    for slot in 0..50 {
-        let kind = SceneUnitKind::actor(slot);
+    for slot in 0..50_u8 {
+        let kind = SceneUnitKind::actor(u16::from(slot));
         assert_eq!(kind.actor_slot(), Some(usize::from(slot)));
         assert_eq!(kind.building_slot(), None);
     }

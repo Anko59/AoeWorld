@@ -16,6 +16,8 @@ mod kingdom;
 mod late_depletion;
 #[path = "demo/late_game.rs"]
 mod late_game;
+#[path = "demo/trade.rs"]
+mod trade;
 pub use late_game::{LateGameSeat, LateGameSeeded};
 #[path = "demo/late_game_seats.rs"]
 mod late_game_seats;

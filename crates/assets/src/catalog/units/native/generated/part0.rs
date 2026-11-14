@@ -167,6 +167,17 @@ pub(super) const GRAPHICS: &[(u32, Graphic)] = &[
         },
     ),
     (
+        200735,
+        Graphic {
+            stem: "dat_735",
+            cells: 10,
+            seconds: f32::from_bits(1055286886),
+            replay_delay: f32::from_bits(0),
+            angles: 1,
+            stride: 10,
+        },
+    ),
+    (
         200761,
         Graphic {
             stem: "dat_761",
@@ -252,17 +263,6 @@ pub(super) const GRAPHICS: &[(u32, Graphic)] = &[
             replay_delay: f32::from_bits(0),
             angles: 1,
             stride: 10,
-        },
-    ),
-    (
-        200875,
-        Graphic {
-            stem: "dat_875",
-            cells: 720,
-            seconds: f32::from_bits(1020949518),
-            replay_delay: f32::from_bits(0),
-            angles: 16,
-            stride: 45,
         },
     ),
 ];

@@ -69,7 +69,7 @@ fn general_tags_draw_native_hero_cells_including_phases_above_31() {
                 anchor: [10.0, 40.0],
             })
             .collect();
-        let kind = SceneUnitKind::actor(slot as u8);
+        let kind = SceneUnitKind::actor(slot as u16);
         assert_eq!(kind.actor_slot(), Some(slot));
         let phase = stride - 1;
         for row in 0..16 {

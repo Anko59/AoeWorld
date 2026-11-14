@@ -6,6 +6,8 @@ mod age;
 mod barriers;
 #[path = "buildings/lines.rs"]
 mod lines;
+#[path = "buildings/wonder.rs"]
+mod wonder;
 use super::{BuildingKind, Stockpile, UnitKind};
 use crate::Age;
 use aoe_map::ResourceKind;
@@ -55,7 +57,7 @@ const NO_UNITS: &[UnitKind] = &[];
 const VILLAGERS: &[UnitKind] = &[UnitKind::Villager, UnitKind::Steward];
 
 /// Canonical order of `BuildingKind`.
-pub const BUILDING_RULES: [BuildingRules; 24] = [
+pub const BUILDING_RULES: [BuildingRules; 25] = [
     BuildingRules {
         kind: BuildingKind::TownCenter,
         cost: cost(0, 275, 0, 100),
@@ -226,6 +228,7 @@ pub const BUILDING_RULES: [BuildingRules; 24] = [
             UnitKind::DemolitionShip,
             UnitKind::TransportShip,
             UnitKind::WarGalley,
+            UnitKind::TradeCog,
         ],
         requires: None,
         buildable: true,
@@ -294,7 +297,7 @@ pub const BUILDING_RULES: [BuildingRules; 24] = [
         los: 6,
         population_support: 0,
         accepts: NONE,
-        trainable: NO_UNITS,
+        trainable: &[UnitKind::TradeCart],
         requires: Some(BuildingKind::Mill),
         buildable: true,
         blocks: true,
@@ -407,6 +410,7 @@ pub const BUILDING_RULES: [BuildingRules; 24] = [
         food: 0,
         age: Age::Dark,
     },
+    wonder::WONDER,
 ];
 
 const fn castle(
