@@ -44,7 +44,7 @@ pub(in super::super::super) fn units(
             }
             let (shown, pose) = actors::shown_pose(client, unit);
             let unit = &shown;
-            let kind = aoe_rendering::SceneUnitKind::actor(pose as u8);
+            let kind = aoe_rendering::SceneUnitKind::actor(pose as u16);
             let facing = actors::animation_frame(client, unit, pose, travelled);
             Some(
                 aoe_rendering::SceneUnit {
@@ -90,7 +90,7 @@ pub(in super::super::super) fn units(
             client.config.tick_hz,
         );
         let unit = aoe_rendering::SceneUnit {
-            kind: aoe_rendering::SceneUnitKind::actor(pose as u8),
+            kind: aoe_rendering::SceneUnitKind::actor(pose as u16),
             id: animal.id,
             position,
             visual: aoe_rendering::SceneUnitVisual::new(animal.moving)

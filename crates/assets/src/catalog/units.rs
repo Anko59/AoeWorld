@@ -6,7 +6,7 @@ mod native;
 mod projectile;
 pub use projectile::{BOLT_SPRITE, PROJECTILE_PHASES, projectile_facing, release_frame};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(u8)]
+#[repr(u16)]
 pub enum Pose {
     MilitiaStand,
     MilitiaWalk,

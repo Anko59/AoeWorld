@@ -204,8 +204,8 @@ fn actor_and_building_tags_keep_their_selections_disjoint() {
     for slot in (0..45).filter(|slot| *slot != 22) {
         assert_eq!(SceneUnitKind::building(slot).building_slot(), Some(slot));
     }
-    for slot in 0..50 {
-        let actor = SceneUnitKind::actor(slot);
+    for slot in 0..50_u8 {
+        let actor = SceneUnitKind::actor(u16::from(slot));
         assert_eq!(actor.actor_slot(), Some(usize::from(slot)));
         assert_eq!(actor.building_slot(), None);
         assert_eq!(actor.building_id(), None);
