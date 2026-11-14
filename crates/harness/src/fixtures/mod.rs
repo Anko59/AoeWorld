@@ -146,11 +146,19 @@ fn check(root: &Path, fixtures: &[Fixture], output: &mut impl Write) -> std::io:
     Ok(passed)
 }
 
-pub(crate) fn run() -> Result<(), Box<dyn std::error::Error>> {
+/// `report` (the ship's preflight form) warns instead of failing: a fixture an
+/// earlier merge broke must not block every later, unrelated ship. The warning is
+/// the gate's last line, so it is the summary the evidence and reviewers see.
+pub(crate) fn run(report: bool) -> Result<(), Box<dyn std::error::Error>> {
     let root = Path::new(".");
     let fixtures = discover(root)?;
     if !check(root, &fixtures, &mut std::io::stdout().lock())? {
-        return Err("present documented fixtures failed to load".into());
+        let message =
+            "documented fixtures failed to load; regenerate them (docs/scale/save-replay.md)";
+        if !report {
+            return Err(message.into());
+        }
+        println!("WARNING: {message}");
     }
     Ok(())
 }

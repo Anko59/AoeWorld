@@ -3,24 +3,24 @@ use aoe_map::{MAP_SCHEMA_VERSION, MapPackage, MapRequest};
 use std::{fs, path::Path};
 
 #[test]
-fn fixtures_are_a_blocking_ship_preflight_gate() {
+fn a_ship_runs_the_report_form_for_map_and_gameplay_changes() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let registry = crate::gates::registry::Registry::load(&root).unwrap();
     let gate = registry
         .gates
         .iter()
-        .find(|gate| gate.id == "check-fixtures")
+        .find(|gate| gate.id == "check-fixtures-report")
         .unwrap();
-    assert_eq!(gate.command, "make check-fixtures");
+    assert_eq!(gate.command, "make check-fixtures-report");
     assert!(
         gate.cadences
             .contains(&crate::gates::registry::Cadence::Preflight)
     );
-    assert!(
-        gate.blocks
-            .contains(&crate::gates::registry::Cadence::Preflight)
-    );
     assert!(!gate.long);
+    // Only the code that can change a package or save format reruns it.
+    let mut suites = gate.suites.clone();
+    suites.sort();
+    assert_eq!(suites, ["gameplay", "map"]);
 }
 
 fn sources(root: &Path, replay: &str, ai: &str, config: &str) {

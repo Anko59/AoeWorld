@@ -8,10 +8,10 @@ through the server; it describes the one revision named with it, not whatever
 `.cache/`, never Git; original game assets stay in `local-assets/`.
 
 Run `make check-fixtures` after any save-format, snapshot-version or generation-recipe
-change to load the fixtures named here and in the AI scaling workload without running
-a match or benchmark. It prints OK, FAIL with the loader error and relevant version
-constants, or SKIPPED with the expected local path; only present fixtures that fail
-to load make the check fail.
+change, and before measuring: it loads each documented package and save present in
+`.cache/` and fails on one that no longer loads. `make ship` runs its report form for
+map and gameplay changes, so a broken fixture shows as a warning in the evidence
+without blocking unrelated work.
 
 ## Prepare current inputs
 

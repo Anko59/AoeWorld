@@ -11,9 +11,10 @@ map-estimate:
 
 # Resolve the ignored link on the host so local fixtures are visible in Docker.
 FIXTURES_REPLAY := $(realpath $(ROOT)/.cache/dev-replay)
-.PHONY: check-fixtures
-check-fixtures: job-bootstrap
-	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) $(if $(FIXTURES_REPLAY),$(call BIND_MOUNT,$(FIXTURES_REPLAY),$(FIXTURES_REPLAY))) -w $(ROOT) $(TOOL_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- check-fixtures
+.PHONY: check-fixtures check-fixtures-report
+# check-fixtures fails on a fixture that does not load; the ship's report form only warns.
+check-fixtures check-fixtures-report: job-bootstrap
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) $(if $(FIXTURES_REPLAY),$(call BIND_MOUNT,$(FIXTURES_REPLAY),$(FIXTURES_REPLAY))) -w $(ROOT) $(TOOL_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- check-fixtures $(if $(filter check-fixtures-report,$@),--report)
 
 map-generate: orchestrator-tools job-bootstrap
 	@$(JOB_RUN) map-generate -- make --no-print-directory map-generate-steps
