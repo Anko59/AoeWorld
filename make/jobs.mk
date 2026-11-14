@@ -39,7 +39,8 @@ coverage-admitted: job-bootstrap
 coverage-steps:
 	@$(MAKE) --no-print-directory coverage-tools build-wasm
 	@mkdir -p reports/coverage
-	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) -e CARGO_BUILD_JOBS=2 --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) $(RESOURCE_OBSERVER) cargo llvm-cov nextest --locked --workspace --lcov --output-path reports/coverage/native.lcov
+	@$(DOCKER_RUN) cargo run --quiet --locked -p aoe-harness -- coverage-filter > reports/coverage/filter.txt
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) -e CARGO_BUILD_JOBS=2 --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) $(RESOURCE_OBSERVER) cargo llvm-cov nextest --locked --workspace -E "$$(cat reports/coverage/filter.txt)" --lcov --output-path reports/coverage/native.lcov
 	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) $(RESOURCE_OBSERVER) cargo llvm-cov report --json --output-path reports/coverage/native.json
 
 perf-instructions: resource-bootstrap

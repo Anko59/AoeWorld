@@ -53,5 +53,15 @@ pub(crate) fn exclude() -> String {
     format!("not ({} | {})", include(), include_exhaustive())
 }
 
+/// The coverage run's selection: the same tests `make test-unit` runs, without the
+/// benchmark and timing tests, whose timings mean nothing under instrumentation.
+pub(crate) fn coverage() -> String {
+    format!(
+        "not ({} | {} | test(/::benchmark::/) | test(/::performance::/))",
+        include(),
+        include_exhaustive()
+    )
+}
+
 #[cfg(test)]
 mod tests;

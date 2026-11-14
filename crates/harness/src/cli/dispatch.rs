@@ -92,6 +92,7 @@ pub(super) fn run(
                 path.display()
             );
         }
+        Command::CoverageFilter => println!("{}", crate::native::tiers::coverage()),
         Command::LoadStatus => {
             ship::lock::print_status(Path::new("."))?;
             jobs::print_status(Path::new("."), slots)?
