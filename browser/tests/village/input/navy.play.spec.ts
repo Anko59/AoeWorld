@@ -24,6 +24,7 @@ test("river Dock offers Feudal ships and Castle research requirements", async ({
     "fire-ship",
     "demolition-ship",
     "transport-ship",
+    "trade-cog",
   ]) {
     await expect(page.locator(`#train-${kind}`)).toBeEnabled();
   }

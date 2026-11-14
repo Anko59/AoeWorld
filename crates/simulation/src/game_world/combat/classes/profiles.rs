@@ -25,7 +25,7 @@ type Classes = &'static [(Class, i16)];
 
 pub(super) const fn unit_armour(kind: UnitKind) -> Classes {
     match kind {
-        UnitKind::Villager | UnitKind::Vassal | UnitKind::Steward => &[],
+        UnitKind::Villager | UnitKind::Vassal | UnitKind::Steward | UnitKind::TradeCart => &[],
         // The mounted General takes cavalry bonuses, so spears and pikes counter it.
         UnitKind::Scout
         | UnitKind::Knight
@@ -50,7 +50,9 @@ pub(super) const fn unit_armour(kind: UnitKind) -> Classes {
         UnitKind::BatteringRam | UnitKind::CappedRam | UnitKind::SiegeRam => {
             &[(Siege, 0), (Ram, 0)]
         }
-        UnitKind::Galley | UnitKind::WarGalley | UnitKind::TransportShip => &[(Ship, 0)],
+        UnitKind::Galley | UnitKind::WarGalley | UnitKind::TransportShip | UnitKind::TradeCog => {
+            &[(Ship, 0)]
+        }
         UnitKind::FireShip => &[(Ship, 6)],
         UnitKind::DemolitionShip => &[(Ship, 3)],
     }
@@ -104,6 +106,8 @@ pub(super) const fn unit_attacks(kind: UnitKind) -> Classes {
         | UnitKind::TransportShip
         | UnitKind::Vassal
         | UnitKind::Steward
+        | UnitKind::TradeCart
+        | UnitKind::TradeCog
         | UnitKind::General => &[],
     }
 }
@@ -111,6 +115,7 @@ pub(super) const fn unit_attacks(kind: UnitKind) -> Classes {
 pub(super) const fn building_armour(kind: BuildingKind) -> Classes {
     match kind {
         BuildingKind::Castle => &[(Building, 8), (StandardBuilding, 0), (Castle, 0)],
+        BuildingKind::Wonder => &[(Building, 0)],
         BuildingKind::WatchTower => &[(Building, 0), (StandardBuilding, 0), (StoneDefense, 0)],
         BuildingKind::PalisadeWall
         | BuildingKind::PalisadeGate

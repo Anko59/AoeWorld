@@ -73,6 +73,9 @@ impl GameWorld {
         self.with_order_issuer(crate::OrderIssuer::AutoScout, |w| {
             w.advance_auto_scout(&mut changed)
         });
+        self.with_order_issuer(crate::OrderIssuer::Automation, |w| {
+            w.advance_trade(&mut changed)
+        });
         probe(TickPhase::Movement);
         self.advance_transports(&mut changed);
         self.advance_spacing(&mut changed);

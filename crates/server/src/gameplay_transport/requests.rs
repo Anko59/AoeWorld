@@ -124,6 +124,15 @@ pub(super) async fn read_requests(
                     .queue_cancel_training(session_id, sequence, building_id)
                     .await
             }
+            Ok(GameplayClientMessage::TradeOrder {
+                sequence,
+                entity_id,
+                building_id,
+            }) => {
+                service
+                    .queue_trade(session_id, sequence, entity_id, building_id)
+                    .await
+            }
             Ok(GameplayClientMessage::GarrisonOrder {
                 sequence,
                 entity_id,

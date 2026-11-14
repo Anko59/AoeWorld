@@ -19,7 +19,7 @@ pub mod frame_chunks;
 const PAGE: usize = 2_048;
 const MAX_INPUT: u64 = 512 * 1024 * 1024;
 /// Source metadata is independent of the bounded runtime GPU working set.
-pub const MAX_FRAMES: usize = 131_072;
+pub const MAX_FRAMES: usize = 262_144;
 const MAX_PAGES: usize = 256;
 
 #[derive(Clone, Debug, Serialize)]

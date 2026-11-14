@@ -3,7 +3,7 @@ use super::SceneUnitKind;
 #[path = "scene_types/actor_map.rs"]
 mod mapping;
 impl SceneUnitKind {
-    pub fn actor(index: u8) -> Self {
+    pub fn actor(index: u16) -> Self {
         mapping::ACTORS
             .get(usize::from(index))
             .copied()

@@ -6,7 +6,7 @@ mod native;
 mod projectile;
 pub use projectile::{BOLT_SPRITE, PROJECTILE_PHASES, projectile_facing, release_frame};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(u8)]
+#[repr(u16)]
 pub enum Pose {
     MilitiaStand,
     MilitiaWalk,
@@ -234,6 +234,15 @@ pub enum Pose {
     HunterCarryIdle,
     /// The galley line's DE bolt, drawn like the arrow from five cells.
     Bolt,
+    // Appended after Bolt: scene tag 223 is Bolt's fixed slot.
+    TradeCartStand,
+    TradeCartWalk,
+    TradeCartDie,
+    TradeCartDecay,
+    TradeCogStand,
+    TradeCogWalk,
+    TradeCogDie,
+    TradeCogDecay,
 }
 
 #[derive(Clone, Copy)]

@@ -11,6 +11,7 @@ mod movement;
 mod navigation;
 mod research;
 mod stats;
+mod trade;
 mod transport;
 
 fn at(tile: TileCoord) -> WorldPosition {

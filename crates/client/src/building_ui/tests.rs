@@ -129,6 +129,15 @@ fn preview_checks_every_footprint_tile_and_map_bounds() {
 fn art_selection_distinguishes_every_kind_and_construction_stage() {
     for rule in aoe_simulation::BUILDING_RULES {
         let kind = B::ALL[rule.kind as usize];
+        if kind == B::Wonder {
+            // One DE architecture for every age: standing, foundation, rubble.
+            for age in [aoe_protocol::Age::Dark, aoe_protocol::Age::Imperial] {
+                assert_eq!(age_sprite_slot(kind, 1000, false, age), 88);
+            }
+            assert_eq!(sprite_slot(kind, 999, false), 90);
+            assert_eq!(sprite_slot(kind, 1000, true), 89);
+            continue;
+        }
         if kind == B::Road {
             assert_eq!(
                 sprite_slot(kind, 1000, false),

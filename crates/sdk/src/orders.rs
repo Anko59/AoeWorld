@@ -17,6 +17,11 @@ pub enum Order {
         building: EntityId,
         unit: Option<EntityId>,
     },
+    /// Trade Cart or Cog: shuttle between this Market or Dock and the farthest other own one.
+    Trade {
+        unit: EntityId,
+        building: EntityId,
+    },
     Load {
         units: Vec<EntityId>,
         transport: EntityId,
@@ -188,6 +193,11 @@ impl Order {
                 stance,
             },
             Order::Garrison { unit, building } => M::GarrisonOrder {
+                sequence,
+                entity_id: unit,
+                building_id: building,
+            },
+            Order::Trade { unit, building } => M::TradeOrder {
                 sequence,
                 entity_id: unit,
                 building_id: building,

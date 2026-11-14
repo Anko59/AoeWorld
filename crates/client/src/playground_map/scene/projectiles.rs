@@ -100,7 +100,7 @@ pub(super) fn append(client: &Client, scene: &PreparedScene, units: &mut Vec<Sce
         units.push(
             SceneUnit {
                 id: aoe_core::EntityId(u32::MAX.saturating_sub(shot.id as u32)),
-                kind: SceneUnitKind::actor(pose as u8),
+                kind: SceneUnitKind::actor(pose as u16),
                 position,
                 visual: aoe_rendering::SceneUnitVisual::new(true).with_selected(false),
                 facing: 0,

@@ -112,6 +112,10 @@ impl GameplayService {
         let (world, primary) = GameWorld::general_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))
     }
+    pub fn trade_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::trade_demo(seed)?;
+        Ok(Self::from_world(world, primary, None, None))
+    }
     pub fn imperial_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
         let (world, primary) = GameWorld::imperial_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))

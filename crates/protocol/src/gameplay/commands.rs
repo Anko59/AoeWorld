@@ -238,6 +238,13 @@ pub enum ClientMessage {
         buy: bool,
         lots: u32,
     },
+    /// Send a Trade Cart (or Cog) to shuttle between the named own, completed
+    /// Market (or Dock) and the farthest other one; manual orders end the run.
+    TradeOrder {
+        sequence: u64,
+        entity_id: EntityId,
+        building_id: EntityId,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
