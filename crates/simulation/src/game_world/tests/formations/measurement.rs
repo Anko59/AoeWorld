@@ -55,8 +55,19 @@ fn formations_measure_warm_army_movement_and_route_searches() {
         // well. Four were, while units past the player's 64th continuation
         // could not keep their planners; now the player borrows them.
         // A shared route must perform exactly one search, including retries.
+        //
+        // The ungrouped arm expects exactly one restart (201 searches for 200
+        // orders). A local traffic detour can move a mover's terminal tile
+        // while its planner's next segment still starts at the old one;
+        // discarding that stale continuation costs a replan, and keeping it
+        // stranded the unit instead. Exactly one mover in this fixture hits
+        // that case, verified by running this test on the commit that
+        // introduced the reset alone. If this number grows, continuations are
+        // being discarded more eagerly than the stale case requires -- that is
+        // the regression this pin exists to catch, so widen it only with a
+        // reason, never to make a run pass.
         assert_eq!(metrics.orders, if grouped { 1 } else { 200 });
-        assert_eq!(metrics.searches_started, if grouped { 1 } else { 200 });
+        assert_eq!(metrics.searches_started, if grouped { 1 } else { 201 });
         if let Some(from) = from {
             let to = w.formation_anchor(ids[0]).unwrap();
             assert!(

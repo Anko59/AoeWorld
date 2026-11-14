@@ -204,3 +204,51 @@ fn combat_cases_issue_an_attack_move_that_fights_on_the_way() {
         );
     }
 }
+
+#[test]
+fn steward_transfer_march_delivers_the_whole_cohort() {
+    assert_steward_transfer_arrivals("quality-march");
+}
+
+fn assert_steward_transfer_arrivals(scenario: &str) {
+    let mut scene = prepare(scenario, OrderPath::Steward).unwrap();
+    scene.issue().unwrap();
+    let mut arrivals = vec![false; scene.ids.len()];
+    let mut failures = vec![None; scene.ids.len()];
+    for _ in 0..scene.limit {
+        scene.world.advance();
+        for (n, &id) in scene.ids.iter().enumerate() {
+            if let Some(error) = scene.world.movement_failure(id) {
+                failures[n].get_or_insert(error);
+            }
+            if let Some(unit) = scene.world.unit(id) {
+                arrivals[n] |=
+                    unit.hp > 0 && march::distance(unit.position, scene.goal) <= 2 * 1024;
+            }
+        }
+        if arrivals.iter().all(|v| *v) {
+            break;
+        }
+    }
+    let missing = scene
+        .ids
+        .iter()
+        .enumerate()
+        .filter(|(n, _)| !arrivals[*n])
+        .map(|(n, &id)| {
+            format!(
+                "{} first_failure={:?} unit={:?} goal={:?}",
+                scene.world.formation_member_status(id),
+                failures[n],
+                scene.world.unit(id),
+                scene.goal
+            )
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        missing.is_empty(),
+        "{} never arrived:\n{}",
+        missing.len(),
+        missing.join("\n")
+    );
+}

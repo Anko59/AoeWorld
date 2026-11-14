@@ -138,6 +138,12 @@ impl GameWorld {
         {
             return false;
         }
+        let continuation_from = self.units[index]
+            .route
+            .back()
+            .copied()
+            .unwrap_or(order.waypoint)
+            .tile_floor();
         for _ in 0..pops {
             self.units[index].route.pop_front();
         }
@@ -145,6 +151,16 @@ impl GameWorld {
             path.push_back(order.waypoint);
         }
         path.append(&mut self.units[index].route);
+        // A free local endpoint can bypass the last occupied waypoint. The
+        // retained planner still emits its next segment from that old tile;
+        // consuming it from the detour would falsely end a reachable order
+        // with InvalidPosition. Replan from the new join through the ordinary
+        // fair scheduler. Detours that rejoin the same tail keep their search.
+        if path.back().copied().unwrap_or(waypoint).tile_floor() != continuation_from {
+            self.clear_planner(index);
+            self.units[index].fast_route_tried = false;
+            self.units[index].planning_since = self.tick.0;
+        }
         self.units[index].route = path;
         order.origin = from;
         order.waypoint = waypoint;

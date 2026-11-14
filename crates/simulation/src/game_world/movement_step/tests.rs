@@ -2,6 +2,68 @@ use super::*;
 use aoe_core::{Seed, TileCoord, WorldConfig};
 
 #[test]
+fn a_scalar_mover_recovers_a_refined_chord_at_a_diagonal_bridge() {
+    let mut w = crate::game_world::terrain_fixtures::build("quality-march").world;
+    for id in w.units().map(|u| u.id).collect::<Vec<_>>() {
+        w.remove_unit(id);
+    }
+    w.config.tick_hz = 20;
+    w.set_fog_disabled(true);
+    let from = WorldPosition::new(458240, 109056);
+    let id = w.spawn_villager(PlayerId(0), from).unwrap();
+    let destination = WorldPosition::from_tile_center(TileCoord::new(610, 110)).unwrap();
+    w.issue_move(id, destination).unwrap();
+    let index = w.lookup[&id];
+    // Observed after local traffic refinement on the quality march: the
+    // endpoint is near the deck, but this chord cuts its raster staircase.
+    let mut order = w.units[index].order.unwrap();
+    order.origin = from;
+    order.waypoint = WorldPosition::new(460288, 110080);
+    order.segment_length = crate::game_path::segment_length(2048, 1024);
+    order.travelled = 0;
+    w.clear_planner(index);
+    w.units[index].route.clear();
+    w.units[index].state.moving = true;
+    w.units[index].state.planning = false;
+    w.units[index].order = Some(order);
+    let (speed, denominator) = w.movement_speed(crate::UnitKind::Villager, PlayerId(0));
+    let bound = speed.div_ceil(denominator) as i64 + 2;
+    let mut previous = from;
+    let mut max_x = from.x;
+    let mut saw_replan = false;
+    for _ in 0..800 {
+        w.advance();
+        assert_eq!(
+            w.movement_failure(id),
+            None,
+            "{}",
+            w.formation_member_status(id)
+        );
+        let at = w.unit(id).unwrap().position;
+        assert!(
+            i64::from(at.x - previous.x).pow(2) + i64::from(at.y - previous.y).pow(2)
+                <= bound.pow(2)
+        );
+        if !saw_replan && w.unit(id).unwrap().planning {
+            saw_replan = true;
+            assert_eq!(
+                (at.x.rem_euclid(1024), at.y.rem_euclid(1024)),
+                (512, 512),
+                "restore a legal graph centre before replanning: {at:?}"
+            );
+        }
+        max_x = max_x.max(at.x);
+        previous = at;
+    }
+    assert!(saw_replan, "exercise a refused chord and graph recovery");
+    assert!(
+        max_x > 455 * 1024,
+        "mover cycles at the bridge: {}",
+        w.formation_member_status(id)
+    );
+}
+
+#[test]
 fn a_motion_commit_without_displacement_wakes_idle_acquisition() {
     let build = |sleep| {
         let mut w = GameWorld::new(WorldConfig::new(256, 256, Seed(1)).unwrap()).unwrap();
