@@ -26,7 +26,7 @@ mod table;
 mod targeting;
 mod telemetry;
 pub(super) mod tick;
-pub use telemetry::CombatTelemetry;
+pub use telemetry::{CombatTelemetry, DamageObservation};
 mod towers;
 
 #[cfg(test)]

@@ -6,7 +6,13 @@ use aoe_core::{
 };
 use aoe_map::*;
 use std::sync::Arc;
+#[cfg(feature = "bench-fixtures")]
+mod measurement;
 mod pages;
+#[cfg(feature = "bench-fixtures")]
+pub use measurement::{
+    measurement_starting_kit, measurement_tower, measurement_world, reset_measurement_actors,
+};
 pub(crate) use pages::flat_fixture;
 
 mod bridges;

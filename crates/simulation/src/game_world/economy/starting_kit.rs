@@ -19,7 +19,7 @@ impl GameWorld {
         }
     }
 
-    pub(super) fn initialize_starting_kit(
+    pub(in crate::game_world) fn initialize_starting_kit(
         &mut self,
         footprint: TileRect,
         root: TileCoord,

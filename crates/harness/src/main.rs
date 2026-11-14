@@ -31,6 +31,7 @@ mod policy;
 mod process;
 mod qa;
 mod qa_mcp;
+mod quality_metrics;
 mod release;
 mod release_promotion;
 mod release_publish;

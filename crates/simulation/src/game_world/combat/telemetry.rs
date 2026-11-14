@@ -1,7 +1,9 @@
 //! Observational counters: no clock, entity history, or idle-tick work.
 //! Excluded from the gameplay hash: these never influence future simulation.
+mod observation;
 use crate::GameWorld;
 use aoe_core::PlayerId;
+pub use observation::DamageObservation;
 use std::collections::{BTreeMap, VecDeque};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -13,6 +15,7 @@ pub struct CombatTelemetry {
 
 #[derive(Debug, Default)]
 pub(super) struct Telemetry {
+    observed: Option<Vec<DamageObservation>>,
     events: VecDeque<(u64, CombatTelemetry)>,
     totals: BTreeMap<PlayerId, (u64, u64)>,
 }
@@ -79,3 +82,7 @@ impl GameWorld {
         }
     }
 }
+
+#[path = "telemetry/tests.rs"]
+#[cfg(test)]
+mod tests;

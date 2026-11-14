@@ -100,6 +100,7 @@ fn long_make_targets_acquire_before_workload_prerequisites_and_recipes() {
         "client-frame-bench",
         "movement-apply-census",
         "save-replay",
+        "quality-metrics",
     ];
     let files = files();
     let resources = fs::read_to_string(root().join("make/resources.mk")).unwrap();
