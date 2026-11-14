@@ -74,6 +74,15 @@ fn far_planner(planner: &RoutePlanner) -> bool {
 /// so among the units of a player that still wait for a slot it is served
 /// before a gather trip. This reorders a player's own queue; it adds no work
 /// and raises no cap, so another player's share is untouched.
+///
+/// Deliberately broader than the queue report's `attack_approach` bucket: that
+/// classifier tests naval and gatherer membership before `attack_target`
+/// (`route_scheduler/queue.rs:50-58`), so a war galley ordered to attack is
+/// reported under `ship` and a gathering villager ordered to attack under
+/// `gather_trip`, while both are fights here. Preferring them is the point --
+/// a galley told to attack is a fight a player is watching -- so the report
+/// undercounts what this ordering prefers rather than the ordering missing a
+/// fight. Narrowing this to match the bucket would drop naval attackers.
 fn fight_order(unit: &super::StoredUnit) -> bool {
     unit.state.attack_target.is_some()
 }
