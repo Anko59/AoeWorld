@@ -175,21 +175,66 @@ fn logic_test(root: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Lexically normalises a pytest target (`./a/../b.py::case`, an absolute path
+/// under `root`) into a repo-relative path plus its optional `::node` suffix.
+fn normalise_target(root: &Path, target: &str) -> Option<(PathBuf, String)> {
+    let (path, node) = target
+        .find("::")
+        .map_or((target, ""), |at| target.split_at(at));
+    let path = Path::new(path);
+    let path = path.strip_prefix(root).unwrap_or(path);
+    let mut out = PathBuf::new();
+    for part in path.components() {
+        match part {
+            std::path::Component::CurDir => {}
+            std::path::Component::Normal(name) => out.push(name),
+            std::path::Component::ParentDir if out.pop() => {}
+            _ => return None,
+        }
+    }
+    (!out.as_os_str().is_empty()).then(|| (out, node.to_string()))
+}
+
+/// Assigns every requested target to the test directory that contains it. A
+/// target that matches no searched directory is an error, never a skipped run.
+fn select_targets(
+    root: &Path,
+    searched: &[(&str, &str)],
+    only: &[String],
+) -> Result<Vec<Vec<String>>, Box<dyn Error>> {
+    let mut chosen = vec![Vec::new(); searched.len()];
+    for target in only {
+        let owner = normalise_target(root, target).and_then(|(path, node)| {
+            let at = searched.iter().position(|(dir, _)| path.starts_with(dir))?;
+            Some((at, format!("{}{node}", path.display())))
+        });
+        let Some((at, path)) = owner else {
+            let dirs: Vec<_> = searched.iter().map(|(dir, _)| *dir).collect();
+            return Err(format!(
+                "--only target `{target}` is not inside any searched test directory ({}); nothing was run",
+                dirs.join(", ")
+            )
+            .into());
+        };
+        if !root.join(path.split("::").next().unwrap_or(&path)).exists() {
+            return Err(format!("--only target `{target}` does not exist ({path})").into());
+        }
+        chosen[at].push(path);
+    }
+    Ok(chosen)
+}
+
 fn test(root: &Path, bindings_only: bool, only: &[String]) -> Result<(), Box<dyn Error>> {
+    let searched = &TESTS[..if bindings_only { 1 } else { TESTS.len() }];
+    let chosen = select_targets(root, searched, only)?;
     let (server, python_path) = prepare(root)?;
-    for &(tests, project) in &TESTS[..if bindings_only { 1 } else { TESTS.len() }] {
+    for (&(tests, project), picked) in searched.iter().zip(&chosen) {
         let selected: Vec<&str> = if only.is_empty() {
             vec![tests]
+        } else if picked.is_empty() {
+            continue;
         } else {
-            let own: Vec<&str> = only
-                .iter()
-                .map(String::as_str)
-                .filter(|path| path.starts_with(tests))
-                .collect();
-            if own.is_empty() {
-                continue;
-            }
-            own
+            picked.iter().map(String::as_str).collect()
         };
         let rootdir = Path::new(project)
             .parent()
