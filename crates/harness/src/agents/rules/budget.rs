@@ -41,6 +41,16 @@ pub(crate) fn check(context: &Context, target: &str, assignments: &[(&str, &str)
     if !context.budgeted() {
         return Ok(());
     }
+    if let Some(reason) = unbounded(target, assignments) {
+        if leased(&context.common, target, now()) {
+            return Ok(());
+        }
+        return Err(format!(
+            "`make {target}` with {reason} runs a whole suite under a focused name: name a \
+             package and a module or test filter, or take a lease with `make lease \
+             AOE_LEASE_TARGET={target}`"
+        ));
+    }
     if target == "test-e2e" {
         let specs = assignments
             .iter()
@@ -105,4 +115,33 @@ pub(crate) fn grant(
         .map_err(|e| e.to_string())?;
     fs::write(&path, format!("{}\n{by}\n", now() + minutes * 60)).map_err(|e| e.to_string())?;
     Ok(path)
+}
+
+/// The shortest substring filter that still names a module or test.
+const SHORTEST_FILTER: usize = 3;
+
+/// A focused target whose filter selects everything: `all()` anywhere in a nextest
+/// expression, or a substring too short to name anything (2026-11-13: an agent ran
+/// `test-native-focused` with `all()` and held a slot through the out-of-memory
+/// crash).
+fn unbounded(target: &str, assignments: &[(&str, &str)]) -> Option<String> {
+    let variable = match target {
+        "test-native-focused" => "AOE_NATIVE_TEST_FILTER",
+        "test-harness-focused" => "HARNESS_TEST_FILTER",
+        "test-wasm-focused" => "AOE_WASM_TEST_FILTER",
+        _ => return None,
+    };
+    let filter = assignments
+        .iter()
+        .rev()
+        .find(|(name, _)| *name == variable)
+        .map(|(_, value)| value.split_whitespace().collect::<String>());
+    match filter.as_deref() {
+        None | Some("") => Some(format!("no {variable}")),
+        Some(filter) if filter.contains("all()") => Some(format!("{variable}=all()")),
+        Some(filter) if filter.len() < SHORTEST_FILTER => Some(format!(
+            "{variable}={filter:?}, which matches nearly every test"
+        )),
+        Some(_) => None,
+    }
 }

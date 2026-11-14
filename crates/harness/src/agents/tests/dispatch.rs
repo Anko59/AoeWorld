@@ -144,8 +144,25 @@ fn agents_run_focused_checks_and_need_a_lease_for_whole_suites() {
         allowed(
             &fixture,
             role,
+            "make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-map 'AOE_NATIVE_TEST_FILTER=test(regions)'",
+        );
+        // A focused name with a filter that selects everything is a whole suite.
+        denied(
+            &fixture,
+            role,
+            "make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation 'AOE_NATIVE_TEST_FILTER=all()'",
+        );
+        denied(
+            &fixture,
+            role,
             "make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-map",
         );
+        denied(
+            &fixture,
+            role,
+            "make test-harness-focused HARNESS_TEST_FILTER=s",
+        );
+        denied(&fixture, role, "make test-wasm-focused");
         allowed(
             &fixture,
             role,
