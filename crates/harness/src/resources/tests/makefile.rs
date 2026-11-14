@@ -71,48 +71,41 @@ fn every_make_workload_container_has_shared_caps_and_immediate_admission() {
 
 #[test]
 fn long_make_targets_acquire_before_workload_prerequisites_and_recipes() {
-    let long = [
-        "perf-census-instructions",
-        "coverage",
-        "test-e2e",
-        "perf-smoke",
-        "perf-ci",
-        "perf-full",
-        "perf-instructions",
-        "perf-groups",
-        "perf-pressure",
-        "perf-scale",
-        "perf-scale-smoke",
-        "perf-soak-10",
-        "perf-soak-30",
-        "perf-stress",
-        "perf-late-game",
-        "scale-match",
-        "preflight",
-        "preflight-unit",
-        "perf-baseline-propose",
-        "release-build",
-        "perf-groups-instructions",
-        "perf-groups-profile",
-        "perf-late-game-instructions",
-        "scale-match-smoke",
-        "match-bench",
-        "client-frame-bench",
-        "movement-apply-census",
-        "save-replay",
-        "quality-metrics",
-    ];
+    // Every rule whose recipe takes a long slot is the list; the Make pre-check
+    // must name exactly those goals, so neither can drift from the other. The
+    // owning rule counts, not the launcher's argument, which a copy could keep.
     let files = files();
+    let mut long = Vec::new();
+    for (_, text) in &files {
+        let mut rule = "";
+        for line in text.lines() {
+            if let Some(recipe) = line.strip_prefix('\t') {
+                if recipe.contains("$(RESOURCE_LONG)") {
+                    long.extend(rule.split_whitespace());
+                }
+            } else if let Some((targets, _)) = line.split_once(':')
+                && !line.contains('=')
+                && !line.starts_with('#')
+            {
+                rule = targets;
+            }
+        }
+    }
+    long.sort_unstable();
+    long.dedup();
     let resources = fs::read_to_string(root().join("make/resources.mk")).unwrap();
-    let guarded: Vec<_> = resources
+    let mut guarded: Vec<_> = resources
         .lines()
         .find_map(|line| line.strip_prefix("LONG_GOALS := "))
         .unwrap()
         .split_whitespace()
         .collect();
-    assert_eq!(guarded.len(), long.len());
+    guarded.sort_unstable();
+    assert_eq!(
+        guarded, long,
+        "LONG_GOALS must name every $(RESOURCE_LONG) recipe"
+    );
     for target in long {
-        assert!(guarded.contains(&target), "missing pre-check for {target}");
         let prefix = format!("{target}:");
         let (_, text) = files
             .iter()
