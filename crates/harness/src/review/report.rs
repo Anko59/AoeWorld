@@ -437,9 +437,15 @@ impl Report {
                     f.votes.iter().filter(|v| v.reviewer != ARBITER).map(|v| format!("{:?}", v.vote)).collect::<Vec<_>>().join(", ")
                 ));
                 for m in &f.members {
+                    // A finding carried from an earlier round has no reviewer index.
+                    let by = if m.reporter == super::closing::CARRIED {
+                        "carried".to_owned()
+                    } else {
+                        format!("reviewer {}", m.reporter)
+                    };
                     out.push_str(&format!(
-                        "  - also reported as **{}** (reviewer {}, `{:?}`) — {}\n",
-                        m.id, m.reporter, m.reported.severity, m.reported.claim
+                        "  - also reported as **{}** ({by}, `{:?}`) — {}\n",
+                        m.id, m.reported.severity, m.reported.claim
                     ));
                 }
                 if let Some(ruling) = ruling(f) {
