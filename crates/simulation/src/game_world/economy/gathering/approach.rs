@@ -212,15 +212,15 @@ impl GameWorld {
             return false;
         }
         task.retry_tick = self.tick.0 + u64::from(self.config.tick_hz);
+        // Every retry counts, accepted or not: the order it issues may only be
+        // waiting for its route, which can still fail. Contact with the fish
+        // resets the count, not an accepted order.
+        task.approach_failures += 1;
         if self.approach_resource(id, task.tile).is_ok() {
             task.work_position = self.movement_order(id).map(|o| o.destination);
-            task.approach_failures = 0;
-            task.retry_tick = 0;
             if let Some(&index) = self.lookup.get(&id) {
                 self.units[index].state.task = UnitTask::Moving;
             }
-        } else {
-            task.approach_failures += 1;
         }
         true
     }
