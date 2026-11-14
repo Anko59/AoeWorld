@@ -19,6 +19,7 @@ pub use config::{Config, SamplingProfile};
 pub use gameplay::{GameplayService, PersistedDepletion, ResourceLifecycleError, SlotInfo};
 pub use gameplay_match::MAX_MATCH_SLOTS;
 pub use gameplay_match::SAVE_VERSION;
+pub use gameplay_match::routes::{queue_json, scheduler_json};
 pub use map_store::{MAX_PACKAGE_BYTES, MapStoreError, verify_package};
 pub(crate) use map_store::{PageResidency, load as load_map_packages};
 #[cfg(feature = "sampling-profiler")]

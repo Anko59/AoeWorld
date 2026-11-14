@@ -22,6 +22,15 @@ use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
+/// Straight-distance buckets of `RouteMetrics::deferred_by_distance`, which
+/// are finer than `ROUTE_DISTANCES`.
+const DEFERRED_DISTANCES: [&str; 5] = [
+    "tiles_4",
+    "tiles_16",
+    "tiles_64",
+    "tiles_256",
+    "tiles_over_256",
+];
 /// Work per read-locked poll: the tick writer gets the lock between polls.
 const PROBE_POLL_WORK: u32 = 32_768;
 const PROBE_DEADLINE: Duration = Duration::from_secs(90);
@@ -134,7 +143,7 @@ pub(crate) fn passes_json(
     Value::Object(out)
 }
 
-pub(crate) fn scheduler_json(stats: &RouteSchedulerStats, tick: u64) -> Value {
+pub fn scheduler_json(stats: &RouteSchedulerStats, tick: u64) -> Value {
     let m = &stats.metrics;
     json!({
         "tick": tick,
@@ -149,6 +158,10 @@ pub(crate) fn scheduler_json(stats: &RouteSchedulerStats, tick: u64) -> Value {
         "orders": m.orders, "fast_work": m.issue_work, "fair_work": m.fair_work,
         "lookahead_work": m.lookahead_work, "found": m.found, "failed": m.failed,
         "expired": m.expired, "stuck": m.stuck, "slot_refusals": m.slot_refusals,
+        "deferred_without_slot": m.deferred_without_slot,
+        "deferred_by_distance": DEFERRED_DISTANCES.iter().zip(m.deferred_by_distance)
+            .map(|(name, n)| ((*name).to_owned(), json!(n)))
+            .collect::<serde_json::Map<String, Value>>(),
         "attribution": attribution_json(&m.attribution),
     })
 }
@@ -185,7 +198,7 @@ async fn scheduler(
 
 /// The queue breakdown: by requester side (human or AI seat), by kind and
 /// reach, wait percentiles in ticks per kind, and the busiest players.
-pub(crate) fn queue_json(queue: &RouteQueueBreakdown, humans: &[PlayerId]) -> Value {
+pub fn queue_json(queue: &RouteQueueBreakdown, humans: &[PlayerId]) -> Value {
     let pick = |waits: &[u64], percent: usize| {
         waits
             .get((waits.len() * percent).div_ceil(100).saturating_sub(1))
@@ -196,6 +209,7 @@ pub(crate) fn queue_json(queue: &RouteQueueBreakdown, humans: &[PlayerId]) -> Va
     for (k, kind) in ROUTE_REQUESTERS.iter().enumerate() {
         let mut waits = Vec::new();
         let (mut active, mut reach) = (0, [0usize; 3]);
+        let (mut searches, mut fast_tried, mut far_waits) = (0, 0, 0);
         for ((player, requester, r), cell) in &queue.cells {
             if *requester != k {
                 continue;
@@ -206,6 +220,9 @@ pub(crate) fn queue_json(queue: &RouteQueueBreakdown, humans: &[PlayerId]) -> Va
             *players.entry(player.0).or_insert(0usize) += cell.waits.len();
             waits.extend_from_slice(&cell.waits);
             active += cell.active;
+            searches += cell.searches;
+            fast_tried += cell.fast_tried;
+            far_waits += cell.far_waits;
             reach[*r] += cell.waits.len();
             let key = format!("{}/{kind}/{}", ["human", "ai"][side], ROUTE_REACH[*r]);
             let entry = cells
@@ -220,6 +237,8 @@ pub(crate) fn queue_json(queue: &RouteQueueBreakdown, humans: &[PlayerId]) -> Va
             kind.to_string(),
             json!({
                 "waiting": waits.len(), "active": active,
+                "searches": searches, "waiting_fast_tried": fast_tried,
+                "waiting_far_class": far_waits,
                 "near": reach[0], "far": reach[1], "unplanned": reach[2],
                 "wait_p50": pick(&waits, 50), "wait_p90": pick(&waits, 90),
                 "wait_p99": pick(&waits, 99), "wait_max": waits.last(),
