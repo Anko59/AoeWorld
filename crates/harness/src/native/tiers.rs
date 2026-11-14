@@ -7,11 +7,27 @@
 //! nextest test names (module path inside the crate, no binary id).
 
 /// Tests taking over 20 s on a quiet machine. Add a test here only with its
-/// exact name; removing one returns it to `make test-unit`.
+/// exact name; removing one returns it to `make test-unit`. The name is
+/// historical: the criterion is the runtime, not the subject, so the full-scale
+/// benchmark and timing measurements live here too. Each one that asserts a
+/// property, rather than only writing a report, keeps a small per-PR variant
+/// elsewhere; the comment beside it names which.
 pub(crate) const SOURCE_QUALIFICATION: &[&str] = &[
     "source_qualification::movement::tests::continuous_source_free_run_completes_all_repeated_waypoints",
     "source_qualification::tests::orchestration::synthetic_flat_sahara_geographic_movement_exercises_full_routes_and_replay",
     "source_qualification::tests::orchestration::synthetic_flat_sahara_package_exercises_full_offline_qualification_contract",
+    // 7,000 units over 160 ticks, twice, plus a timing report. The cross-worker
+    // agreement is kept per-PR by
+    // `map_store::navigation::tests::determinism::*_navigation_replay_agrees_across_workers`.
+    "map_store::navigation::tests::performance::large_navigation_lazy_tick_measurement",
+    "map_store::navigation::tests::performance::large_navigation_static_tick_measurement",
+    // 14,000 units. The cross-worker agreement is kept per-PR by
+    // `game_world::tests::scale_hooks::determinism::the_late_game_replay_agrees_across_one_and_four_workers`.
+    "game_world::economy::benchmark::tests::late_game_full_population_replays_identically_on_one_and_four_workers",
+    // 14,000 units over 512 ticks with a hash comparison every 16, plus a
+    // timing report. The sleep-on/off identity is kept per-PR by
+    // `game_world::economy::benchmark::tests::sleep::work_sleep_replays_hash_for_hash_over_two_game_minutes`.
+    "game_world::economy::benchmark::tests::sleep::work_sleep_replays_the_full_late_game_workload",
 ];
 
 /// Tests that sweep all 16 seeds or prepare and round-trip the full 1024-axis

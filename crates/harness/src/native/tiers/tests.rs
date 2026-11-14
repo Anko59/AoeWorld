@@ -1,26 +1,31 @@
 use super::*;
 use std::{fs, path::Path};
 
-/// Every listed name is a real `#[test]` function in the server crate, so a
-/// rename or deletion cannot silently drop a test from both runs.
+/// Every listed name resolves, as a module path, to a real `#[test]` function
+/// in some workspace crate, so a rename or deletion cannot silently drop a test
+/// from both runs. The path is checked, not just the function name: a member
+/// whose module moved is as broken as one that was renamed.
 #[test]
-fn every_tier_member_names_a_test_function_in_the_server_crate() {
-    let server = Path::new(env!("CARGO_MANIFEST_DIR")).join("../server/src");
+fn every_tier_member_names_a_test_function_at_its_module_path() {
+    let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
     for name in SOURCE_QUALIFICATION {
         let (module, function) = name.rsplit_once("::").unwrap();
-        let mut path = server.join(module.replace("::", "/"));
-        let file = if path.with_extension("rs").is_file() {
-            path.with_extension("rs")
-        } else {
-            path.push("mod.rs");
-            path
-        };
-        let source = fs::read_to_string(&file)
-            .unwrap_or_else(|error| panic!("{name}: cannot read {}: {error}", file.display()));
+        let mut tried = Vec::new();
+        let found = fs::read_dir(&crates).unwrap().flatten().any(|entry| {
+            let base = entry.path().join("src").join(module.replace("::", "/"));
+            for file in [base.with_extension("rs"), base.join("mod.rs")] {
+                if let Ok(source) = fs::read_to_string(&file) {
+                    tried.push(file.clone());
+                    if source.contains(&format!("fn {function}(")) {
+                        return true;
+                    }
+                }
+            }
+            false
+        });
         assert!(
-            source.contains(&format!("fn {function}(")),
-            "{name}: no `fn {function}` in {}",
-            file.display()
+            found,
+            "{name}: no `fn {function}` at that module path; read {tried:?}"
         );
     }
 }
