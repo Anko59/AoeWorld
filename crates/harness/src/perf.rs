@@ -293,8 +293,12 @@ pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
         .enable_all()
         .build()?;
     let mut workloads = Vec::new();
-    let late = late_game::measure()?;
-    workloads.push(late);
+    // The late-game workload takes three runs of about nine minutes each. CI
+    // measures it in target-performance (`ci`); the smoke gate checks the
+    // network smoke scenario only, so it no longer repeats those 28 minutes.
+    if mode != "smoke" {
+        workloads.push(late_game::measure()?);
+    }
     let mut comparisons = Vec::new();
     let mut notes = Vec::new();
     for scenario in scenarios {
