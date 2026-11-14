@@ -144,7 +144,6 @@ impl GameWorld {
                 .last
                 .get(&id)
                 .map_or(7, |p| p.1 as usize),
-            None if self.order_diagnostics.issuer == OrderIssuer::Automation => 7,
             None => self.order_diagnostics.issuer as usize,
         };
         self.order_diagnostics.route_work[row][phase] += u64::from(spent);

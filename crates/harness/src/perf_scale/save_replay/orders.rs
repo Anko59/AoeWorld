@@ -18,7 +18,6 @@ const NAMES: [&str; 8] = [
 pub(super) fn report(
     world: &GameWorld,
     kinds: &BTreeMap<String, (u64, u64)>,
-    results: &BTreeMap<String, u64>,
     census: &[u64; 8],
     ticks: usize,
 ) -> Value {
@@ -45,7 +44,7 @@ pub(super) fn report(
         .collect();
     json!({
         "ticks": ticks, "issuers": issuers, "redundancy_sources": redundancy,
-        "recorded_commands_by_kind": commands, "command_results": results,
+        "commands_by_issuer_kind_result": commands,
         "issuer_spans": ISSUER_SPANS,
         "note": "recorded commands replay as python_ai (the human seat sent none); route_work is planner work units charged to the issuer of the unit's latest accepted order; mover census is units with an unfinished goal per tick by that issuer",
     })

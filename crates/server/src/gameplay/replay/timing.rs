@@ -37,12 +37,10 @@ pub struct Timing {
     pub phases_instructions: BTreeMap<&'static str, u64>,
     /// Completed composition/proof spans, keyed by their inclusive caller path.
     pub navigation_calls: BTreeMap<String, u64>,
-    /// Applied commands and their instructions, by command kind.
+    /// Applied commands and their instructions, keyed `issuer:kind:Result`.
     pub commands: BTreeMap<String, (u64, u64)>,
-    /// Command results, keyed `kind:result`.
-    pub results: BTreeMap<String, u64>,
-    /// Refused commands: tick, player, kind:result, action, instructions.
-    pub expensive: Vec<(u64, u16, String, String, u64)>,
+    /// Refused commands: tick, player, `issuer:kind:Result`, action, instructions.
+    pub refused: Vec<(u64, u16, String, String, u64)>,
 }
 #[derive(Debug)]
 enum Source {

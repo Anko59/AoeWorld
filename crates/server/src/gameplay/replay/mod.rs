@@ -217,22 +217,16 @@ impl GameplayService {
         if let aoe_simulation::Terrain::Map { generator, .. } = world.terrain() {
             generator.set_navigation_probe(probe.clone());
         }
+        // The report's names are built before the counters start and its tables
+        // after they stop; inside the measured tick only raw integers are kept.
+        let names: Vec<String> = tick
+            .commands
+            .iter()
+            .map(|c| command_name(&c.action))
+            .collect();
+        let mut raw = Vec::with_capacity(tick.commands.len());
         let started = probe.sample()?;
-        let mut kinds = BTreeMap::<String, (u64, u64)>::new();
-        let mut results = BTreeMap::<String, u64>::new();
-        let mut expensive = Vec::new();
         for command in &tick.commands {
-            // Names are built outside the sampled span; one extra counter read
-            // per command is the attribution's only measured overhead.
-            let name = serde_json::to_value(&command.action)
-                .ok()
-                .and_then(|v| match v {
-                    serde_json::Value::Object(o) => o.keys().next().cloned(),
-                    serde_json::Value::String(s) => Some(s),
-                    _ => None,
-                })
-                .unwrap_or_default();
-            let before = probe.sample()?;
             let issuer = if self
                 .slots
                 .iter()
@@ -242,20 +236,12 @@ impl GameplayService {
             } else {
                 aoe_simulation::OrderIssuer::PythonAi
             };
+            let before = probe.read()?;
             let result = world.with_order_issuer(issuer, |w| {
                 w.record_order_decisions(1);
                 commands::apply(w, command.player, command.action.clone())
             });
-            let spent = (probe.sample()? - before).instructions;
-            let key = format!("{name}:{result:?}");
-            let row = kinds.entry(key.clone()).or_default();
-            row.0 += 1;
-            row.1 += spent;
-            if result != aoe_protocol::CommandResult::Accepted {
-                let action = serde_json::to_string(&command.action).unwrap_or_default();
-                expensive.push((tick.tick, command.player.0, key.clone(), action, spent));
-            }
-            *results.entry(key).or_default() += 1;
+            raw.push((issuer, result, probe.read()?.saturating_sub(before)));
         }
         probe.record("orders", probe.sample()? - started);
         let mut last = probe.sample()?;
@@ -271,6 +257,7 @@ impl GameplayService {
         );
         let total = probe.sample()? - started;
         probe.finish()?;
+        let (commands, refused) = attribute_commands(tick, &names, &raw);
         let (phases_instructions, phases_cpu_ns) = probe.drain();
         measured(Timing {
             instructions: total.instructions,
@@ -278,9 +265,8 @@ impl GameplayService {
             phases_instructions,
             phases_cpu_ns,
             navigation_calls: probe.navigation_calls(),
-            commands: kinds,
-            results,
-            expensive,
+            commands,
+            refused,
         });
         let hash = world.canonical_hash();
         world.take_resource_changes();
@@ -291,3 +277,44 @@ impl GameplayService {
 
 #[cfg(test)]
 mod tests;
+
+fn command_name(action: &PendingAction) -> String {
+    match serde_json::to_value(action) {
+        Ok(serde_json::Value::Object(o)) => o.keys().next().cloned().unwrap_or_default(),
+        Ok(serde_json::Value::String(s)) => s,
+        _ => String::new(),
+    }
+}
+
+type Raw = (
+    aoe_simulation::OrderIssuer,
+    aoe_protocol::CommandResult,
+    u64,
+);
+type Attribution = (
+    BTreeMap<String, (u64, u64)>,
+    Vec<(u64, u16, String, String, u64)>,
+);
+
+/// Per-command instructions keyed `issuer:kind:Result`, plus every refused command's
+/// action. Runs after the counters stop, so none of its work is in a tick's total.
+fn attribute_commands(tick: &RecordedTick, names: &[String], raw: &[Raw]) -> Attribution {
+    let mut table = BTreeMap::<String, (u64, u64)>::new();
+    let mut refused = Vec::new();
+    for ((command, name), (issuer, result, spent)) in tick.commands.iter().zip(names).zip(raw) {
+        let who = if *issuer == aoe_simulation::OrderIssuer::Player {
+            "player"
+        } else {
+            "python_ai"
+        };
+        let key = format!("{who}:{name}:{result:?}");
+        let row = table.entry(key.clone()).or_default();
+        row.0 += 1;
+        row.1 += spent;
+        if *result != aoe_protocol::CommandResult::Accepted {
+            let action = serde_json::to_string(&command.action).unwrap_or_default();
+            refused.push((tick.tick, command.player.0, key, action, *spent));
+        }
+    }
+    (table, refused)
+}
