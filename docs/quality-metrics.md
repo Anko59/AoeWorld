@@ -142,6 +142,13 @@ ranking, and no gameplay was changed to obtain it.
 
 Exact aggregate values: [baseline JSON](../reports/quality/252bf878ecd76550fbc33f7119c70691eeeb99d5/idle-1-001/report.json).
 
+**The combat rows below never armed attack-move.** The `single` and `formation`
+cases of this collection passed the flag as the queued-leg argument, so both
+cohorts marched ordinarily into the enemy. A marching unit neither acquires nor
+retaliates, which is why their engagement and damage read zero: those rows
+measure a march, not a fight. The orders are fixed; recollect the matrix before
+quoting a combat row.
+
 Tables display ratios, means and tile deviations to three decimals; the JSON keeps exact integer values. Times are simulation ticks, 20 ticks/s. An em dash means no denominator or observation.
 
 | Scenario | Path | Units | Arrived / never | Arrival | Time p50 / p95 | Time / lower bound p50 / p95 | Obstructed mean / worst ticks | Zero tiles | Observed / deadline |

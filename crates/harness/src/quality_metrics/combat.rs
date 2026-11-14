@@ -11,6 +11,11 @@ pub(super) fn measure(
     path: OrderPath,
     video: Option<&std::path::Path>,
 ) -> Result<Value> {
+    scene(name, path)?.measure(name, video)
+}
+
+/// The arranged combat case, before its orders are issued.
+pub(super) fn scene(name: &str, path: OrderPath) -> Result<march::Scene> {
     let world = GameWorld::new(WorldConfig::new(256, 256, Seed(0))?)?;
     let kind = if name == "ranged" {
         UnitKind::Archer
@@ -30,5 +35,5 @@ pub(super) fn measure(
             aoe_core::TileCoord::new(130, 95),
         );
     }
-    scene.measure(name, video)
+    Ok(scene)
 }

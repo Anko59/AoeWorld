@@ -154,8 +154,9 @@ fn a_retreating_soldier_fights_an_enemy_in_its_reach_and_one_that_hits_it() {
             w.retaliate(w.lookup[&ids[0]], enemy, &mut changed);
             assert_eq!(
                 w.unit(ids[0]).unwrap().attack_target,
-                None,
-                "a moving member uses the ordinary formation look, not a General-only reaction"
+                Some(enemy),
+                "a member hit under an offensive order fights back at once, \
+                 without waiting for its group's next look"
             );
             for _ in 0..4 {
                 w.advance();
