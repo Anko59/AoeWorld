@@ -6,7 +6,7 @@ Cost, research time, Age, building and prerequisite come from the owner's
 licensed DE DAT (research records read with a local scan, never committed; ids
 below are DAT research ids). Effect text comes from the DE help strings of the
 same install. Rust owns every number: `research/generic.rs` (table),
-`research/generic_effects.rs` (effects), `combat/conversion.rs` (Monks).
+`research/generic_effects.rs` (effects), `combat/conversion/mod.rs` (Monks).
 
 `researched` is now a 128-bit mask (`TechMask`); a test pins that every
 `Tech` fits. Replay hashes and saves change with it.

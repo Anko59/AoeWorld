@@ -293,6 +293,23 @@ fn guilds_halve_the_market_commission() {
 }
 
 #[test]
+fn guilds_apply_to_multi_lot_trades_too() {
+    // The server executes market orders through `issue_market_trade`, not the
+    // single-lot calls, so the commission must follow Guilds there as well.
+    let (mut w, _) = castle_player();
+    let market = place(&mut w, BuildingKind::Market, 0);
+    learn(&mut w, Tech::Guilds);
+    let price = w.player_economy(PlayerId(0)).unwrap().market_prices.food;
+    let before = w.player_economy(PlayerId(0)).unwrap().stockpile.gold;
+    let done = w
+        .issue_market_trade(PlayerId(0), market, aoe_map::ResourceKind::Food, true, 1)
+        .unwrap();
+    assert_eq!(done, 1);
+    let spent = before - w.player_economy(PlayerId(0)).unwrap().stockpile.gold;
+    assert_eq!(spent, u32::from(price) * 115 / 100);
+}
+
+#[test]
 fn banking_and_coinage_set_the_tribute_fee() {
     let (mut w, _) = castle_player();
     assert_eq!(crate::tribute_fee_permyriad(researched(&w)), 3000);
