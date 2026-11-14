@@ -71,48 +71,29 @@ fn every_make_workload_container_has_shared_caps_and_immediate_admission() {
 
 #[test]
 fn long_make_targets_acquire_before_workload_prerequisites_and_recipes() {
-    let long = [
-        "perf-census-instructions",
-        "coverage",
-        "test-e2e",
-        "perf-smoke",
-        "perf-ci",
-        "perf-full",
-        "perf-instructions",
-        "perf-groups",
-        "perf-pressure",
-        "perf-scale",
-        "perf-scale-smoke",
-        "perf-soak-10",
-        "perf-soak-30",
-        "perf-stress",
-        "perf-late-game",
-        "scale-match",
-        "preflight",
-        "preflight-unit",
-        "perf-baseline-propose",
-        "release-build",
-        "perf-groups-instructions",
-        "perf-groups-profile",
-        "perf-late-game-instructions",
-        "scale-match-smoke",
-        "match-bench",
-        "client-frame-bench",
-        "movement-apply-census",
-        "save-replay",
-        "quality-metrics",
-    ];
+    // Every recipe that takes a long slot is the list; the Make pre-check must
+    // name exactly those goals, so neither can drift from the other.
     let files = files();
+    let mut long: Vec<_> = files
+        .iter()
+        .flat_map(|(_, text)| text.split("$(RESOURCE_LONG) ").skip(1))
+        .filter_map(|rest| rest.split_once(" -- ").map(|(target, _)| target))
+        .collect();
+    long.sort_unstable();
+    long.dedup();
     let resources = fs::read_to_string(root().join("make/resources.mk")).unwrap();
-    let guarded: Vec<_> = resources
+    let mut guarded: Vec<_> = resources
         .lines()
         .find_map(|line| line.strip_prefix("LONG_GOALS := "))
         .unwrap()
         .split_whitespace()
         .collect();
-    assert_eq!(guarded.len(), long.len());
+    guarded.sort_unstable();
+    assert_eq!(
+        guarded, long,
+        "LONG_GOALS must name every $(RESOURCE_LONG) recipe"
+    );
     for target in long {
-        assert!(guarded.contains(&target), "missing pre-check for {target}");
         let prefix = format!("{target}:");
         let (_, text) = files
             .iter()
