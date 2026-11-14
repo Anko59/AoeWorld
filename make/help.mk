@@ -83,6 +83,7 @@ help:
 	@echo '  make save-replay     Repeat local recorded save commands, thread instruction phases and hashes (AOE_SAVE_REPLAY_ARGS)'
 	@echo '  make quality-metrics Seeded gameplay quality numbers and revision-keyed reports (QUALITY_METRICS_ARGS)'
 	@echo '  make save-replay-counter-check  Check Docker access to the thread instruction PMU'
+	@echo '  make check-fixtures  Load documented local packages/saves; missing inputs are skipped'
 	@echo '  make match-bench     In-process closed-loop late-game match with Rust bots (docs/scale/match-bench.md)'
 	@echo '  make fuzz-smoke      Run bounded parser fuzzing with pinned nightly Rust'
 	@echo '  make fuzz-nightly    Run longer parser fuzzing campaigns'

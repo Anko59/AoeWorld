@@ -74,6 +74,21 @@ pub(crate) fn load(
     Ok(packages)
 }
 
+/// One package exactly as `load` accepts it: readable, canonically named, and with
+/// the pages and navigation data the game needs. Used by `make check-fixtures`.
+pub fn verify_package(path: &Path) -> Result<(), MapStoreError> {
+    let directory = path.parent().unwrap_or(Path::new("."));
+    let package = read_package(path)?;
+    verify_environment(directory, &package)?;
+    if path != package_path(directory, &package.content_hash_hex()) {
+        return Err(MapStoreError::InvalidPackage {
+            path: path.to_path_buf(),
+            reason: "package file name or identity is not canonical".to_owned(),
+        });
+    }
+    Ok(())
+}
+
 pub(crate) fn persist(directory: Option<&Path>, package: &MapPackage) -> Result<(), MapStoreError> {
     if package.environment.samples_per_axis != 0 {
         return persist_prepared(directory, package, &[], &[], &[], &[]);

@@ -290,7 +290,8 @@ fn run_once(
     let last = output
         .lines()
         .rev()
-        .find(|l| !l.trim().is_empty())
+        // The resource observer reports after every container: never the summary.
+        .find(|l| !l.trim().is_empty() && !l.trim_start().starts_with("resource: "))
         .unwrap_or_default()
         .trim();
     let passed = matches!(captured.exit, CaptureExit::Success);

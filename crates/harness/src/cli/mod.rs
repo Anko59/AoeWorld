@@ -35,6 +35,12 @@ enum Command {
     StructureCheck,
     ArchitectureCheck,
     DocsCheck,
+    /// Load documented local map packages and saves without running a match.
+    CheckFixtures {
+        /// Report a fixture that fails to load as a warning instead of failing.
+        #[arg(long)]
+        report: bool,
+    },
     GatesDocs,
     ScopeCheck {
         #[arg(long)]

@@ -55,6 +55,7 @@ pub(super) fn run(
         Command::StructureCheck => policy::structure(Path::new("."))?,
         Command::ArchitectureCheck => architecture::check(Path::new("."))?,
         Command::DocsCheck => gates::docs_check(Path::new("."))?,
+        Command::CheckFixtures { report } => crate::fixtures::run(report)?,
         Command::GatesDocs => gates::docs_generate(Path::new("."))?,
         Command::ScopeCheck { revision } => {
             gates::scopes::inspect(Path::new("."), revision.as_deref())?

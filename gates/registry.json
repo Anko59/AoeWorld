@@ -14,6 +14,7 @@
     {"id":"ai","paths":["ai/**"],"implies":["static"],"review":true}
   ],
   "gates": [
+    {"id":"check-fixtures-report","command":"make check-fixtures-report","requires":[],"select":"code","evidence":"documented local packages and saves load; a failure is reported as a warning, missing inputs are skipped","suites":["map","gameplay"],"cadences":["preflight"],"budget_s":120,"static":false,"capabilities":["docker"],"blocks":["preflight"]},
     {"id":"fmt-check","command":"make fmt-check","requires":[],"select":"all","evidence":"rustfmt exit status","suites":["static"],"cadences":["edit","stop","commit","pr","ci","nightly","preflight"],"budget_s":120,"static":true,"capabilities":["docker"],"blocks":["stop","commit","pr","ci","nightly","preflight"]},
     {"id":"structure-check","command":"make structure-check","requires":[],"select":"all","evidence":"tracked file and directory audit","suites":["static"],"cadences":["edit","stop","commit","pr","ci","nightly","preflight"],"budget_s":120,"static":true,"capabilities":["docker"],"blocks":["stop","commit","pr","ci","nightly","preflight"]},
     {"id":"architecture-check","command":"make architecture-check","requires":[],"select":"code","evidence":"Cargo metadata and source boundary audit","suites":["native"],"cadences":["stop","commit","pr","ci","nightly","preflight"],"budget_s":180,"static":true,"capabilities":["docker"],"blocks":["stop","commit","pr","ci","nightly","preflight"]},

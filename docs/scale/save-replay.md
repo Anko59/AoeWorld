@@ -7,6 +7,12 @@ through the server; it describes the one revision named with it, not whatever
 `dev` holds today. Saves, map packages, command streams, reports and footage stay in
 `.cache/`, never Git; original game assets stay in `local-assets/`.
 
+Run `make check-fixtures` after any save-format, snapshot-version or generation-recipe
+change, and before measuring: it loads each documented package and save present in
+`.cache/` and fails on one that no longer loads. `make ship` runs its report form for
+map and gameplay changes, so a broken fixture shows as a warning in the evidence
+without blocking unrelated work.
+
 ## Prepare current inputs
 
 Use the [map-package workflow](../geodata/workflow.md) and the geodata already
