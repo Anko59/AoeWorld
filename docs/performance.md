@@ -109,6 +109,8 @@ blocked gatherers re-planned whole approaches under avoidance (8,531 route searc
 per 64 ticks against 906). The radius-movement change that follows cut the tick
 to about 260M instructions. The −40.2% above therefore holds only for dev before
 #573; this batch's net late-game claim is the 431M measured on top of it.
+On 2026-11-14 the late game was re-taken at 140,826,786 and target-distributed at 9,780,464, baseline and `instruction_reference` both (from 240,557,748 and 10,330,744; workload hashes unchanged):
+a tightening: the old reference sat 71% above the tick, so the +10% creep guard let it grow 88% before firing and only the +3% comparison with dev, which stopped #846's +33.7%, was live.
 
 The same radius movement made the small workloads' ticks slower: smoke +63%
 instructions (4.93M to 8.03M for the four ticks `perf-smoke` times) and

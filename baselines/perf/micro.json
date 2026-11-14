@@ -9,10 +9,10 @@
   "instructions": {
     "instructions::assets::palette_decode": 243938,
     "instructions::protocol::snapshot_encode": 206498,
-    "instructions::simulation::advance": 721238,
-    "instructions::simulation::distributed_ticks": 10330744,
-    "instructions::simulation::late_game": 240557748,
-    "instructions::simulation::smoke_ticks": 5275671,
+    "instructions::simulation::advance": 721228,
+    "instructions::simulation::distributed_ticks": 9780464,
+    "instructions::simulation::late_game": 140826786,
+    "instructions::simulation::smoke_ticks": 5268567,
     "instructions::simulation::viewport_query": 183030
   },
   "target_distributed_workload_hash": "68a0166d5342976e059eb2c5c0ab97ce2dfad5f3c6aeacef207c8d7618ee6d9c",
@@ -20,8 +20,8 @@
     "instructions::assets::palette_decode": 243938,
     "instructions::protocol::snapshot_encode": 206498,
     "instructions::simulation::advance": 721238,
-    "instructions::simulation::distributed_ticks": 10330744,
-    "instructions::simulation::late_game": 240557748,
+    "instructions::simulation::distributed_ticks": 9780464,
+    "instructions::simulation::late_game": 140826786,
     "instructions::simulation::smoke_ticks": 4986840,
     "instructions::simulation::viewport_query": 183030
   }
