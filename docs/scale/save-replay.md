@@ -66,7 +66,7 @@ mkdir -p .cache/dev-replay/work target
 ln -s ../.cache/dev-replay/work target/scale-match
 make build-wasm
 make save-replay-counter-check
-make scale-match SCALE_MATCH_ARGS='--players 100 --humans 1 --tiles 2000 --map package --map-hash 4d9cb16c1c286a5b29ba1d94e70371af966ac7a130a1c3c0f6bcbe95f3b5b683 --package-directory .cache/dev-replay/packages --asset-pack local-assets/packs/8f7abe8c330d7fd710daa076c8ef07de65f8973feed59b99f4d01f9cbc9c4530 --hosts 8 --minutes 150 --port 9288 --label current-mekong --no-summary --out .cache/dev-replay/growth.json'
+make scale-match SCALE_MATCH_ARGS='--players 100 --humans 1 --tiles 2000 --map package --map-hash 4d9cb16c1c286a5b29ba1d94e70371af966ac7a130a1c3c0f6bcbe95f3b5b683 --package-directory .cache/dev-replay/packages --asset-pack local-assets/packs/8f7abe8c330d7fd710daa076c8ef07de65f8973feed59b99f4d01f9cbc9c4530 --hosts 8 --minutes 150 --port 9288 --label rerecord-mekong --no-summary --out .cache/dev-replay/growth.json'
 ```
 
 Do not replace an existing scratch directory or symlink. The 150-minute value
@@ -74,27 +74,34 @@ is a wall-clock safety ceiling. No extra units were seeded: 400 starting units
 grew through ordinary play by 99 Python AIs and one idle human seat. All AIs
 connected in 3.5 seconds. Save after reaching the desired game-time and war
 state, using the game menu or `POST /saves` with the human's
-`X-AoeWorld-Controller-Token` and `{"name":"Mekong dev late"}`.
+`X-AoeWorld-Controller-Token` and `{"name":"Mekong dev late v6"}`.
 The local adapter used for that API call is retained with its SHA-256 in
 `.cache/rec-inputs.md`:
 
 ```sh
-python3 .cache/dev-replay/control.py 'Mekong dev late'
+python3 .cache/dev-replay/control.py 'Mekong dev late v6'
 ```
 
 The chosen save is
-`.cache/dev-replay/packages/saves/1794572640-mekong-dev-late.save`, with its
-sibling JSON card. It contains snapshot 5 at tick **72,380**, **60.32 game
-minutes**, **10,761 units**, **5,765 buildings**, and **99 opponent seats**.
-The adjacent admin observation at tick 72,381 has 7,069 cumulative player
-kills and `combat_per_minute` counters of 344 deaths, 6,967 melee hits and
-10,083 ranged hits. Sixty-one players were Imperial, 17 Castle, 20 Feudal
-and two Dark. The idle human and two AIs were eliminated; all 100 seats remain
-in the save, and defeated AI seats still connect normally.
+`.cache/dev-replay/packages/saves/1794634126-mekong-dev-late-v6.save`, with its
+sibling JSON card. It contains snapshot 6 at tick **72,451**, **60.37 game
+minutes**, **9,667 units**, **5,381 buildings**, and **99 opponent seats**.
+Its SHA-256 is
+`c9577a096975b60de094f41ea674f04e6325d855256283ff918c4986bd3afba8`, the card's
+`8de4f3f5062a7979e26163e99e89d3add0edd6b81ce4e2bf2e9ebab15eff855c`, and the
+Mekong package manifest's
+`36494a063c0f62d3c8d0bcbdf54dc3ccef8966c5cf40a8af6c9d634dc46d876e`, so
+`make check-fixtures` has a current list to read.
+No admin observation was taken beside this save, so there is no kill, combat
+or age-split figure for this window; the previous reference's observation
+described a different, now unreadable save and is not carried over. What the
+restore reports is recorded under "Measured reference": 9,667 units, 5,381
+buildings, 453 animals, 501 formations and 55 managers, with nothing lost. All
+100 seats remain in the save, and defeated AI seats still connect normally.
 
-The growth server was deliberately stopped after saving and filming. Its
-`growth.json.failure` records that stop; it is not a completed 150-minute
-performance baseline. The save was sealed before fog was disabled for footage.
+The growth server was deliberately stopped once the save was written, so its
+report is not a completed 150-minute performance baseline. No footage was taken
+of this window.
 Preserve growth logs before the saved capture reuses the scratch path:
 
 ```sh
@@ -105,14 +112,15 @@ mkdir .cache/dev-replay/work
 ## Capture and replay the reference
 
 ```sh
-make scale-match SCALE_MATCH_ARGS='--save .cache/dev-replay/packages/saves/1794572640-mekong-dev-late.save --package-directory .cache/dev-replay/packages --asset-pack local-assets/packs/8f7abe8c330d7fd710daa076c8ef07de65f8973feed59b99f4d01f9cbc9c4530 --record-commands .cache/dev-replay/commands.jsonl --record-ticks 1500 --minutes 30 --port 9288 --no-summary --out .cache/dev-replay/record.json'
-make save-replay AOE_SAVE_REPLAY_ARGS='--save .cache/dev-replay/packages/saves/1794572640-mekong-dev-late.save --package-directory .cache/dev-replay/packages --recording .cache/dev-replay/commands.jsonl --runs 3 --out .cache/dev-replay/replay.json'
+make scale-match SCALE_MATCH_ARGS='--save .cache/dev-replay/packages/saves/1794634126-mekong-dev-late-v6.save --package-directory .cache/dev-replay/packages --asset-pack local-assets/packs/8f7abe8c330d7fd710daa076c8ef07de65f8973feed59b99f4d01f9cbc9c4530 --record-commands .cache/dev-replay/commands.jsonl --record-ticks 1500 --minutes 30 --port 9288 --no-summary --out .cache/dev-replay/record.json'
+make save-replay AOE_SAVE_REPLAY_ARGS='--save .cache/dev-replay/packages/saves/1794634126-mekong-dev-late-v6.save --package-directory .cache/dev-replay/packages --recording .cache/dev-replay/commands.jsonl --runs 3 --out .cache/dev-replay/replay.json'
 ```
 
-The capture succeeded with all **99 AIs ready across eight hosts** in 5.855
-seconds before the saved clock resumed. It contains **10,055 commands** over
-exactly **1,500 contiguous input ticks, 72,380–73,879**; the final resulting
-state is tick 73,880. The 30-minute value is a safety deadline: capture stops
+The capture succeeded with all **99 AIs ready across eight hosts** before the
+saved clock resumed. It contains **9,644 commands** over exactly **1,500
+contiguous input ticks, 72,451–73,950**; the final resulting state is tick
+73,951. The recording's header states the same `start_tick` and tick count, and
+each replay run applied all 9,644. The 30-minute value is a safety deadline: capture stops
 when the requested ticks are complete. Output recordings refuse overwrite and
 partial streams fail. Select the stored save directly under `packages/saves/`
 when reusing a package directory; importing a different copy refuses overwrite.
@@ -135,94 +143,98 @@ alias. The content-addressed compiler object cache can still be reused.
 ## Measured reference
 
 These figures describe runtime revision
-`dfad610ac7af6e5b0266bfa800cb4d460dffc056` (measured 2026-11-13, with only the
-documentation warning dirty). They are **not** a running baseline for whatever
-`dev` currently holds: merges after that revision, such as the route planner
-and the castle/Town Center combat changes, are not included, and each later
-merge moves the number. The save, packages and command stream stay valid
-across those merges, so re-run the command above on the revision you care
+`269c69d6fde4b75d8697ec86fd3cfe952e4e3c65`, measured 2026-11-14 on a clean
+tree. They are **not** a running baseline for whatever `dev` currently holds:
+each later merge moves the number. The save, packages and command stream stay
+valid across merges, so re-run the command above on the revision you care
 about and compare against your own run rather than against this table.
 
+**This reference starts a new series.** The previous one
+(`1794572640-mekong-dev-late.save`, 391.5M down to 251.3M instructions/tick
+across 2026-11-13) became unreadable when #828 added
+`FormationRecord::pace_limit` without bumping `WORLD_SNAPSHOT_VERSION`; see
+#839, which bumped the snapshot to 6 and the save to 2 and made the failure
+say so. That save cannot be re-measured, and this one is a different world
+state with 9,667 units against 10,761, different building and army
+composition. **Do not subtract the two.** The earlier improvements were valid
+comparisons on identical inputs at the time they were taken; nothing about
+them can be confirmed or denied from the table below.
+
 The report's source-diff BLAKE3 is
-`2f71987586a110f74a3ac14eaaeb6e51ff0f78c1e539d595dcfb9de09316177d`;
-the diff is retained in `.cache/dev-replay/measurement-source.diff`.
-No gameplay or measurement-tool code changed. Results were added afterward.
-There was one measurement invocation, three independent restores and
-1,500-tick replays. The raw report retains every paired instruction/CPU sample,
-per-phase percentile, resulting canonical hash and first-divergence tick.
+`af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262` (an empty
+diff: the tree was clean). The save's BLAKE3 is
+`aa555443c84d44e59ddb91723093f79e7fc3655ff3b741aabad2c20c2a493d20` and the
+recording's `7096491314985242a2669f1d63f4f66491b59d07bf74853912d29746ebeaa90e`.
+One measurement invocation, three independent restores and 1,500-tick replays.
+All three produced the same final canonical hash
+`e816c9e6475a398ec5289b4daa71811320a2639356a642a29f5c326556973a14` with no
+divergence tick, and the recording applied 9,644 commands in each run.
 
 | Run | Mean instructions/tick | p50 | p95 | Mean thread CPU ms/tick | Instructions/tick/restored unit |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 1 | 391,450,081.31 | 339,850,631 | 705,039,504 | 179.876 | 36,376.74 |
-| 2 | 391,461,182.03 | 339,877,030 | 705,000,374 | 161.216 | 36,377.77 |
-| 3 | 391,490,955.67 | 339,831,370 | 704,897,736 | 143.132 | 36,380.54 |
-| Mean of run means | 391,467,406.34 | — | — | 161.408 | 36,378.35 |
+| 1 | 241,749,297.46 | 222,037,665 | 364,585,398 | 140.713 | 25,007.69 |
+| 2 | 241,752,335.66 | 222,047,113 | 364,488,511 | 129.386 | 25,008.00 |
+| 3 | 241,759,285.32 | 221,988,424 | 364,490,445 | 154.933 | 25,008.72 |
+| Mean of run means | 241,753,639.48 | — | — | 141.677 | 25,008.13 |
 
-Instruction spread: **0.0104%**. Thread CPU-time spread:
-**22.7647%**. Spread is `(max run mean - min run mean) / average run mean * 100`.
-Normalization uses the **10,761 initially restored units**, with
-**5,765 buildings** retained alongside that count. Population can
-change during the window; this is not normalization by each tick's live count.
+Instruction spread: **0.0041%**. Thread CPU-time spread: **18.0318%**. Spread
+is `(max run mean - min run mean) / average run mean * 100`. Normalization uses
+the **9,667 initially restored units**, with **5,381 buildings** retained
+alongside that count. Population can change during the window; this is not
+normalization by each tick's live count.
+
+Phase instructions per tick, mean of the three runs. Phases nest, so they do
+not sum to the total: the planning and search phases run inside movement's
+span, and `late` covers work after the unit frame.
 
 | Phase | Mean instructions/tick | Three-run spread |
 | --- | ---: | ---: |
-| `apply_loop` | 43,874,821.92 | 0.0017% |
-| `attack_position_search` | 13,872,887.48 | 0.0042% |
-| `building_memory` | 664,107.66 | 0.0344% |
-| `changed` | 656,550.32 | 3.0885% |
-| `combat` | 23,032,766.64 | 0.0019% |
-| `components` | 2,067,752.04 | 0.0305% |
-| `construction` | 3,314,392.98 | 0.0052% |
-| `gathering` | 26,990,639.08 | 0.0075% |
-| `group_apply` | 19,889,313.73 | 0.0016% |
-| `group_prepare` | 9,488,938.85 | 0.0004% |
-| `group_propose` | 22,082,081.75 | 0.0001% |
-| `hierarchy` | 10,553,488.06 | 0.0140% |
-| `index_chunks` | 25,765.21 | 0.0142% |
-| `index_collision` | 2,793,313.79 | 0.0005% |
-| `local_refinement` | 910,804.98 | 0.0083% |
-| `movement` | 294,974,041.92 | 0.0048% |
-| `orders` | 15,505,362.24 | 0.0053% |
-| `plan_ahead` | 6,773,963.58 | 0.0121% |
-| `plan_fair` | 87,952,395.89 | 0.0079% |
-| `plan_fast` | 75,084,411.60 | 0.0040% |
-| `plan_serve` | 141,066,113.45 | 0.0069% |
-| `pocket` | 6,790,814.76 | 0.0015% |
-| `portal_costs` | 2,164,567.89 | 0.0033% |
-| `portals` | 5,917,412.05 | 0.0073% |
-| `propose` | 45,724,775.29 | 0.0059% |
-| `research_training` | 1,361,309.49 | 0.0162% |
-| `route_cache` | 419,134.88 | 0.0047% |
-| `search` | 37,306,569.29 | 0.0017% |
-| `sidestep` | 22,085,897.35 | 0.0004% |
-| `spacing` | 1,383,842.18 | 0.0101% |
-| `steward_economy` | 21,570,804.59 | 0.0188% |
-| `terrain_point` | 151,871,868.14 | 0.0123% |
-| `vision_flush` | 3,197,024.61 | 0.0028% |
-| `wildlife` | 1,119,315.24 | 0.0090% |
+| `movement` | 149,905,533 | 0.0007% |
+| `plan_serve` | 47,726,763 | 0.0019% |
+| `combat` | 38,348,723 | 0.0046% |
+| `plan_fast` | 36,089,455 | 0.0016% |
+| `apply_loop` | 36,003,229 | 0.0003% |
+| `search` | 33,255,504 | 0.0018% |
+| `steward_economy` | 22,184,589 | 0.0040% |
+| `propose` | 19,999,517 | 0.0003% |
+| `plan_fair` | 18,929,827 | 0.0015% |
+| `terrain_point` | 15,785,010 | 0.0081% |
+| `group_propose` | 14,855,869 | 0.0005% |
+| `sidestep` | 14,789,814 | 0.0002% |
+| `group_apply` | 14,705,543 | 0.0004% |
+| `gathering` | 14,410,490 | 0.0011% |
+| `hierarchy` | 13,470,284 | 0.0036% |
+| `issuer_vassal` | 12,504,219 | 0.0073% |
+| `attack_position_search` | 11,780,924 | 0.0042% |
+| `orders` | 8,933,251 | 0.0020% |
 
-Phases zero in all three runs: `delivery`, `fanout_wait`, `frame`, `observation_lock`, `prefetch`, `resource_journal`, `resources`, `session_views`, `sessions`, `terrain`, `viewers`, `walk_cache`, `world_lock`.
-Inclusive spans overlap; these rows must not be summed.
-
-Initial hash, all three runs and capture:
-`f7eb96449f4de09c82bb29fe8f8e79d63816eb93ca192f2ade7e1fca1482724d`.
-Final hash, all three runs and capture:
-`807ae7ff6a8491cb51009c415adc0cd1b346f251c655f77fb43a232c8c153b14`.
-Every per-tick hash agrees across all three replays and the capture; first
-divergence: none in every run. Hash agreement is observed evidence, not a
-requirement to preserve superseded gameplay.
-
-Save BLAKE3: `2c35ae4d2f711a3bad545cb020acc69b5461d63119173f345ed92cdeba896a78`.
-Recording BLAKE3: `3b7cd6836ff9f2b8632237b45e4fd9bfdbe4ab2c69b0966eef689694a80b39e6`.
+Movement remains the dominant phase at 62% of the tick.
 
 All three restores report:
 
 ```text
-RestoreReport { buildings: 5765, units: 10761, buildings_lost: 0, units_lost: 0, jobs_resumed: 7096, jobs_lost: 170, animals: 478, animals_lost: 0, formations: 531, managers: 52 }
+RestoreReport { buildings: 5381, units: 9667, buildings_lost: 0, units_lost: 0, jobs_resumed: 6456, jobs_lost: 118, animals: 453, animals_lost: 0, formations: 501, managers: 55 }
 ```
 
-All units, buildings and animals restored. The ordinary loader dropped 170
+All units, buildings and animals restored. The ordinary loader dropped 118
 jobs before timing; those losses are retained here rather than hidden.
+
+### Live tick rate of the source match
+
+The capture run that produced the command stream reported, from the live server
+with all 99 Python AI hosts on the same machine, **7.57 ticks/s** at 9,730
+units: total tick 120.6 ms p50 and 216.9 ms p95, with `movement` 48.8 ms p50 of
+that and `late` 98.3 ms p50. This is a shared-host wall-clock observation
+alongside the bot hosts, not a counter measurement, and it is **indicative
+only**; the instruction table above is the repeatable figure. It is recorded
+because it is the closest thing here to what a player experiences at this
+population.
+
+The same capture reported route-planning starvation worth reading before
+optimizing anything else: 66 of 72 `attack_approach` requests were `unplanned`
+with waits up to 700 ticks, `oldest_wait_ticks` 1,308, `players_at_search_cap`
+34, `slot_refusals` 53,654, and all 179 detour requests declined
+(`detours_at_capacity` 179). Armies ordered to attack were waiting for routes.
 
 ## Counter and qualification limits
 
@@ -243,10 +255,10 @@ transport and save/recording I/O are outside the measured tick; lazy terrain
 work remains counted.
 
 Instructions describe user-space work, not latency, live tick rate, parallel
-speedup or finished RTS performance. The 0.0104% instruction spread is well
-under the repeatability aim of 1%; the 22.7647% CPU-time spread also records
+speedup or finished RTS performance. The 0.0041% instruction spread is well
+under the repeatability aim of 1%; the 18.0318% CPU-time spread also records
 shared-host frequency/cache/runtime variation. Neither metric nor this
-10,761-unit workload qualifies real time at 100 players/100k units,
+9,667-unit workload qualifies real time at 100 players/100k units,
 1000 players/1M units or 1000 players/10M units, or dedicated hardware.
 
 ## Local evidence and historical inputs
@@ -256,7 +268,9 @@ full page/asset inventory for other sessions to hard-link. Keep the save/card,
 package pages/navigation and relative pack links together. Reports and inputs
 remain private ignored artifacts.
 
-Local footage is `.cache/showcase/current-dev-war.webm`: 39.64 seconds,
+No footage was taken of this reference. The previous window's local clip
+`.cache/showcase/current-dev-war.webm` described below belongs to the obsolete
+save and is kept only as a record: 39.64 seconds,
 1280×720 VP9, decoded and visually inspected. It shows the source match after
 the reference save with fog disabled for observation; the 0/0 Dark Age HUD
 belongs to the eliminated human. It is outside the captured command window and
@@ -265,9 +279,10 @@ instruction measurement. It was recorded with `make showcase` using
 `make video-probe` verified the final encoding and duration. Attach the final
 clip later with `SHIP_VIDEO`; never commit footage or original game assets.
 
-The old mid (`1794451672-mekong.save`) and late
-(`1794535945-mekong-2.save`) windows require a **pre-#800 checkout**, also before
-#801: they use snapshot 3, recipe 3 and command streams without
-`Move.attack_move`. They are not current-dev inputs. Regenerate inputs instead
+Every earlier window is obsolete and none can be read by current code. The old
+mid (`1794451672-mekong.save`) and late (`1794535945-mekong-2.save`) windows use
+snapshot 3 and recipe 3; `1794572640-mekong-dev-late.save` uses snapshot 5,
+which #828 made unreadable before #839 named the break. They are not
+current-dev inputs and there is no reader for them. Regenerate inputs instead
 of adding compatibility readers. The fresh window is a different workload;
 its cost is not an optimization speedup against those obsolete windows.
