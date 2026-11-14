@@ -20,12 +20,17 @@ pub(super) fn observe_tiles(
 ) {
     for tile in tiles {
         let base = (tile.y as u64) << 19 | (tile.x as u64) << 1;
+        // Starting trees carry their species in bits 40..: every family is a
+        // separate identity for the same tile.
         for prefix in [
             0,
             1 << 37,
-            (1 << 37) | (1 << 38),
             (1 << 37) | (2 << 38),
             (1 << 37) | (3 << 38),
+            (1 << 37) | (1 << 38) | (1 << 40),
+            (1 << 37) | (1 << 38) | (2 << 40),
+            (1 << 37) | (1 << 38) | (3 << 40),
+            (1 << 37) | (1 << 38) | (4 << 40),
         ] {
             let id = base | prefix;
             if let Some(remaining) = overlay.changed_amount(id) {

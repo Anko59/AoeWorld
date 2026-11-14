@@ -81,6 +81,9 @@ pub(crate) enum Action {
         /// Exercise bindings against the local server without the long AI games.
         #[arg(long)]
         bindings_only: bool,
+        /// Run only these pytest targets (for example `ai/tests/test_start_kit.py`).
+        #[arg(long, num_args = 1..)]
+        only: Vec<String>,
     },
     /// Run only the example AI's fake-world decision regressions.
     LogicTest,
@@ -113,7 +116,10 @@ pub(crate) fn run(action: Action) -> Result<(), Box<dyn Error>> {
             let wheel = build_wheel(&root, true, RELEASE_WHEELS)?;
             println!("built {}", wheel.display());
         }
-        Action::Test { bindings_only } => test(&root, bindings_only)?,
+        Action::Test {
+            bindings_only,
+            only,
+        } => test(&root, bindings_only, &only)?,
         Action::LogicTest => logic_test(&root)?,
         Action::Arena(args) => arena(&root, &args)?,
         Action::Benchmark(args) => benchmark::run(&root, &args)?,
@@ -169,25 +175,84 @@ fn logic_test(root: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn test(root: &Path, bindings_only: bool) -> Result<(), Box<dyn Error>> {
+/// Lexically normalises a pytest target (`./a/../b.py::case`, an absolute path
+/// under `root`) into a repo-relative path plus its optional `::node` suffix.
+fn normalise_target(root: &Path, target: &str) -> Option<(PathBuf, String)> {
+    let (path, node) = target
+        .find("::")
+        .map_or((target, ""), |at| target.split_at(at));
+    let path = Path::new(path);
+    let path = path.strip_prefix(root).unwrap_or(path);
+    let mut out = PathBuf::new();
+    for part in path.components() {
+        match part {
+            std::path::Component::CurDir => {}
+            std::path::Component::Normal(name) => out.push(name),
+            std::path::Component::ParentDir if out.pop() => {}
+            _ => return None,
+        }
+    }
+    (!out.as_os_str().is_empty()).then(|| (out, node.to_string()))
+}
+
+/// Assigns every requested target to the test directory that contains it. A
+/// target that matches no searched directory is an error, never a skipped run.
+fn select_targets(
+    root: &Path,
+    searched: &[(&str, &str)],
+    only: &[String],
+) -> Result<Vec<Vec<String>>, Box<dyn Error>> {
+    let mut chosen = vec![Vec::new(); searched.len()];
+    for target in only {
+        let owner = normalise_target(root, target).and_then(|(path, node)| {
+            let at = searched.iter().position(|(dir, _)| path.starts_with(dir))?;
+            Some((at, format!("{}{node}", path.display())))
+        });
+        let Some((at, path)) = owner else {
+            let dirs: Vec<_> = searched.iter().map(|(dir, _)| *dir).collect();
+            return Err(format!(
+                "--only target `{target}` is not inside any searched test directory ({}); nothing was run",
+                dirs.join(", ")
+            )
+            .into());
+        };
+        if !root.join(path.split("::").next().unwrap_or(&path)).exists() {
+            return Err(format!("--only target `{target}` does not exist ({path})").into());
+        }
+        chosen[at].push(path);
+    }
+    Ok(chosen)
+}
+
+fn test(root: &Path, bindings_only: bool, only: &[String]) -> Result<(), Box<dyn Error>> {
+    let searched = &TESTS[..if bindings_only { 1 } else { TESTS.len() }];
+    let chosen = select_targets(root, searched, only)?;
     let (server, python_path) = prepare(root)?;
-    for &(tests, project) in &TESTS[..if bindings_only { 1 } else { TESTS.len() }] {
+    for (&(tests, project), picked) in searched.iter().zip(&chosen) {
+        let selected: Vec<&str> = if only.is_empty() {
+            vec![tests]
+        } else if picked.is_empty() {
+            continue;
+        } else {
+            picked.iter().map(String::as_str).collect()
+        };
         let rootdir = Path::new(project)
             .parent()
             .map_or(".".into(), |p| p.to_string_lossy());
+        let mut args = vec![
+            "-m",
+            "pytest",
+            "-p",
+            "no:cacheprovider",
+            "--rootdir",
+            &rootdir,
+            "-c",
+            project,
+        ];
+        args.extend(&selected);
         process::run_with_env(
             "python3",
-            &[
-                "-m",
-                "pytest",
-                "-p",
-                "no:cacheprovider",
-                "--rootdir",
-                &rootdir,
-                "-c",
-                project,
-                tests,
-            ],
+            &args,
             &[
                 ("PYTHONPATH", &python_path),
                 ("AOE_SERVER_BIN", &server.to_string_lossy()),

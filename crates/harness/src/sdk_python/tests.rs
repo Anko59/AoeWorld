@@ -118,9 +118,13 @@ fn bindings_can_be_tested_without_launching_long_ai_games() {
     assert!(matches!(
         parsed.action,
         Action::Test {
-            bindings_only: true
+            bindings_only: true,
+            ..
         }
     ));
+    let parsed =
+        Cli::try_parse_from(["sdk", "test", "--only", "ai/tests/a.py", "ai/tests/b.py"]).unwrap();
+    assert!(matches!(parsed.action, Action::Test { only, .. } if only.len() == 2));
 }
 
 #[test]
@@ -162,6 +166,68 @@ fn benchmark_deadline_covers_the_documented_120_minute_run_and_is_configurable()
             "--wall-minutes",
             "0"
         ])
+        .is_err()
+    );
+}
+
+fn scratch_repo() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join("ai/tests")).unwrap();
+    std::fs::write(dir.path().join("ai/tests/test_start_kit.py"), "").unwrap();
+    dir
+}
+
+#[test]
+fn only_normalises_spellings_to_the_same_selection() {
+    let repo = scratch_repo();
+    let root = repo.path();
+    let wanted = vec![vec![], vec!["ai/tests/test_start_kit.py".to_string()]];
+    let absolute = format!("{}/ai/tests/test_start_kit.py", root.display());
+    for spelling in [
+        "ai/tests/test_start_kit.py",
+        "./ai/tests/test_start_kit.py",
+        "ai/tests/../tests/test_start_kit.py",
+        absolute.as_str(),
+    ] {
+        let got = select_targets(root, &TESTS, &[spelling.to_string()]).unwrap();
+        assert_eq!(got, wanted, "{spelling}");
+    }
+    let node = select_targets(
+        root,
+        &TESTS,
+        &["./ai/tests/test_start_kit.py::test_a".into()],
+    );
+    assert_eq!(node.unwrap()[1], ["ai/tests/test_start_kit.py::test_a"]);
+}
+
+#[test]
+fn only_target_matching_nothing_is_an_error_naming_the_directories() {
+    let repo = scratch_repo();
+    for target in [
+        "docs/readme.md",
+        "../ai/tests/test_start_kit.py",
+        "ai/tests_other/x.py",
+        "ai/tests/missing_file.py",
+    ] {
+        let error = select_targets(repo.path(), &TESTS, &[target.to_string()])
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(target), "{error}");
+    }
+    let error = select_targets(repo.path(), &TESTS, &["docs/a.py".into()])
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("crates/sdk-python/tests") && error.contains("ai/tests"),
+        "{error}"
+    );
+    // With --bindings-only the AI directory is not searched, so it is a miss too.
+    assert!(
+        select_targets(
+            repo.path(),
+            &TESTS[..1],
+            &["ai/tests/test_start_kit.py".into()]
+        )
         .is_err()
     );
 }
