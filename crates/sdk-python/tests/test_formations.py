@@ -9,9 +9,9 @@ def test_formation_order_and_waypoint_are_authoritative(server, secret):
         first = client.wait_decision(timeout=10)
         scout = first.world.my_units(aoeworld.UnitKind.SCOUT)[0]
         x, y = scout.tile
-        # Same land as the existing queued-move integration fixture.
+        # Same land as the queued-move fixture; (x+12, y+8) is blocked on this seed.
         sequence = client.formation_move([scout.id], x + 12, y, aoeworld.Formation.BOX)
-        client.formation_move([scout.id], x + 12, y + 8, aoeworld.Formation.BOX, queued=True)
+        client.formation_move([scout.id], x + 12, y - 8, aoeworld.Formation.BOX, queued=True)
         accepted = False
         deadline = time.time() + 10
         while time.time() < deadline:

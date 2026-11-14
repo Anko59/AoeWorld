@@ -328,3 +328,43 @@ printf 'AOE-REVIEW-BEGIN\n%s\nAOE-REVIEW-END\n' "$answer"
     );
     println!("{}", String::from_utf8_lossy(&output.stdout));
 }
+
+/// PR #820, 2026-11-13: in three closing reviews one reviewer each time put an
+/// entry without a claim in `findings`; the answer failed, and three graded
+/// reviews counted as "no answer" and blocked the ship for an hour.
+#[test]
+fn a_findings_entry_without_a_claim_is_skipped_not_fatal() {
+    use super::super::protocol::Answer;
+    let text = r#"{"findings":[
+        {"file":"ai/x.py","line":3,"severity":"major","claim":"stale budget"},
+        {"id":"F1","severity":"minor","verdict":"refuted"},
+        {"severity":"nit","claim":"no file named"}],
+      "verdicts":[{"id":"F1","verdict":"refuted"}]}"#;
+    let answer: Answer = serde_json::from_str(text).unwrap();
+    let claims: Vec<_> = answer.findings.iter().map(|f| f.claim.as_str()).collect();
+    assert_eq!(claims, ["stale budget", "no file named"]);
+    assert_eq!(answer.findings[1].file, "");
+    assert_eq!(answer.verdicts.len(), 1);
+    // A blank claim alone is skipped even though other required fields are missing.
+    let blank: Answer = serde_json::from_str(r#"{"findings":[{"claim":""}]}"#).unwrap();
+    assert!(blank.findings.is_empty());
+}
+
+#[test]
+fn other_malformed_findings_still_fail_the_answer() {
+    use super::super::protocol::Answer;
+    let bad_severity = r#"{"findings":[{"file":"a.rs","severity":"huge","claim":"x"}]}"#;
+    assert!(serde_json::from_str::<Answer>(bad_severity).is_err());
+    // Two severities: the answer fails rather than keeping the last (minor) one.
+    let duplicated =
+        r#"{"findings":[{"file":"a.rs","severity":"major","severity":"minor","claim":"x"}]}"#;
+    assert!(serde_json::from_str::<Answer>(duplicated).is_err());
+    // A real claim followed by a blank one must not make the finding disappear.
+    let two_claims =
+        r#"{"findings":[{"file":"a.rs","severity":"major","claim":"real","claim":""}]}"#;
+    assert!(serde_json::from_str::<Answer>(two_claims).is_err());
+    let numeric_claim = r#"{"findings":[{"file":"a.rs","severity":"major","claim":7}]}"#;
+    assert!(serde_json::from_str::<Answer>(numeric_claim).is_err());
+    let unknown_key = r#"{"findings":[],"verdict":[]}"#;
+    assert!(serde_json::from_str::<Answer>(unknown_key).is_err());
+}

@@ -163,7 +163,7 @@ def test_queued_moves_expose_authoritative_destinations_and_stop_clears_them(ser
         scout = first.world.my_units(UnitKind.SCOUT)[0]
         x, y = scout.tile
         client.move(scout.id, x + 12, y)
-        client.queue_move(scout.id, x + 12, y + 8)
+        client.queue_move(scout.id, x + 12, y - 8)
         deadline = time.time() + 10
         observed = []
         while time.time() < deadline:
@@ -173,7 +173,7 @@ def test_queued_moves_expose_authoritative_destinations_and_stop_clears_them(ser
                 if len(observed) == 2:
                     break
         assert observed == [((x + 12) * 1024 + 512, y * 1024 + 512),
-                            ((x + 12) * 1024 + 512, (y + 8) * 1024 + 512)]
+                            ((x + 12) * 1024 + 512, (y - 8) * 1024 + 512)]
         client.stop(scout.id)
         while time.time() < deadline:
             decision = client.wait_decision(timeout=2)

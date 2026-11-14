@@ -194,3 +194,11 @@ fn merging_dev_without_touching_the_branch_gives_an_empty_increment() {
     assert_eq!(since_diff(root, &merge_base, &approved).unwrap(), "");
     assert_eq!(stat(root, &approved, &[]).unwrap(), "");
 }
+
+#[test]
+fn a_finding_that_names_no_file_stays_a_finding_that_can_block() {
+    let mut filter = Filter::new(Some(Lines::of(DIFF)));
+    let inside = filter.admit(vec![reported("", None), reported("elsewhere", Some(1))]);
+    assert_eq!(inside, vec![reported("", None)]);
+    assert_eq!(filter.outside, vec![reported("elsewhere", Some(1))]);
+}

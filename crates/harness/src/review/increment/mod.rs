@@ -236,8 +236,11 @@ impl Filter {
         let Some(lines) = &self.lines else {
             return reported;
         };
-        let (inside, outside): (Vec<_>, Vec<_>) =
-            reported.into_iter().partition(|r| lines.holds(r));
+        // A finding that names no file cannot be placed outside the increment,
+        // so it stays a finding that can block.
+        let (inside, outside): (Vec<_>, Vec<_>) = reported
+            .into_iter()
+            .partition(|r| r.file.is_empty() || lines.holds(r));
         self.outside.extend(outside);
         inside
     }
