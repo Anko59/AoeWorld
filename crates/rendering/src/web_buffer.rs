@@ -1,4 +1,4 @@
-use super::Sprite;
+use super::{InstanceUpload, Sprite};
 use crate::surface_mesh::ProjectedSurfaceTriangle;
 use wgpu::{BindGroup, BindGroupLayout, Buffer, Device, Queue, Sampler, TextureView};
 
@@ -16,6 +16,7 @@ pub(crate) struct InstanceBuffer {
     buffer: Buffer,
     bind_group: BindGroup,
     capacity: usize,
+    upload: InstanceUpload,
 }
 
 impl InstanceBuffer {
@@ -31,6 +32,7 @@ impl InstanceBuffer {
             buffer,
             bind_group,
             capacity: INITIAL_CAPACITY,
+            upload: InstanceUpload::default(),
         }
     }
 
@@ -47,14 +49,22 @@ impl InstanceBuffer {
         self.buffer.destroy();
         self.buffer = buffer;
         self.capacity = required;
+        self.upload.invalidate();
         Ok(())
     }
 
-    pub(crate) fn write(&self, queue: &Queue, instances: &[Sprite]) {
+    pub(crate) fn write(&mut self, queue: &Queue, instances: &[Sprite]) {
         debug_assert!(instances.len() <= self.capacity);
-        if !instances.is_empty() {
-            queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(instances));
+        let bytes = bytemuck::cast_slice(instances);
+        let changed = self.upload.changed(bytes);
+        if !changed.is_empty() {
+            queue.write_buffer(&self.buffer, changed.start as u64, &bytes[changed.clone()]);
         }
+        self.upload.commit(bytes, changed);
+    }
+
+    pub(crate) fn retained_bytes(&self) -> usize {
+        self.upload.resident_bytes()
     }
 
     pub(crate) fn rebind_resources(

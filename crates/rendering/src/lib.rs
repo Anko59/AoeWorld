@@ -51,9 +51,10 @@ pub use game_renderer::{
 };
 #[cfg(target_arch = "wasm32")]
 pub use surface_mesh::{
-    ProjectedSurfaceTriangle, cliff_face_in_front, pick_surface_point, projected_surface_triangles,
-    sample_surface_height, scene_cliff_native_frames, scene_terrain_frames, surface_depth_at,
-    surface_hit_at, terrain_directory_rows, write_terrain_directory, write_terrain_directory_page,
+    PreparedTerrain, ProjectedSurfaceTriangle, cliff_face_in_front, pick_surface_point,
+    projected_surface_triangles, sample_surface_height, scene_cliff_native_frames,
+    scene_terrain_frames, surface_depth_at, surface_hit_at, terrain_directory_rows,
+    write_terrain_directory, write_terrain_directory_page,
 };
 #[cfg(target_arch = "wasm32")]
 pub use world_key_index::WorldKeyIndex;

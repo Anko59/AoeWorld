@@ -1,10 +1,12 @@
 //! WebGPU-first game rendering with WebGL2 acceleration and Canvas compatibility.
+#[cfg(test)]
+use crate::surface_mesh::apply_terrain_textures;
 use crate::{
     GAME_ATLAS_SIDE, GameArt, GameFrame, Renderer, game_grid,
     playground::game_sprites,
     surface_mesh::{
-        ProjectedSurfaceTriangle, apply_terrain_textures, projected_surface_triangles,
-        surface_depth, surface_render_depth,
+        PreparedTerrain, ProjectedSurfaceTriangle, projected_surface_triangles, surface_depth,
+        surface_render_depth,
     },
     web::Sprite,
 };
@@ -328,10 +330,11 @@ impl GameRenderer {
         animation: usize,
         grid: bool,
     ) -> Result<bool, String> {
+        let surfaces = PreparedTerrain::textured(art, surfaces);
         self.render_prepared_world_with_fog(
             art,
             terrain,
-            surfaces,
+            &surfaces,
             resources,
             units,
             camera,
@@ -346,7 +349,7 @@ impl GameRenderer {
         &mut self,
         art: &GameArt,
         terrain: &[SceneTerrain],
-        surfaces: &[ProjectedSurfaceTriangle],
+        surfaces: &PreparedTerrain,
         resources: &[SceneResource],
         units: &[SceneUnit],
         camera: SceneCamera,
@@ -355,10 +358,7 @@ impl GameRenderer {
         fog_active: bool,
         light: &dyn Fn([f64; 2]) -> f32,
     ) -> Result<bool, String> {
-        let surfaces = surfaces.iter().copied().map(|mut triangle| {
-            apply_terrain_textures(std::slice::from_mut(&mut triangle), art);
-            triangle
-        });
+        let surfaces = surfaces.surfaces(art);
         let mut layers =
             direct_world_layers(surfaces, art, terrain, resources, units, camera, animation);
         let fog_span = perf::Stage::new(6);

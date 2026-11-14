@@ -275,20 +275,12 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             let resources = map::scene_resources(&client);
             let mut required =
                 aoe_rendering::scene_native_frames(&client.art, &units, camera, time as usize);
-            required.extend(aoe_rendering::scene_terrain_frames(
-                &mut client.art,
-                &scene.terrain,
-                camera,
-            ));
+            required.extend(scene.terrain_plan(&mut client.art).required());
             required.extend(aoe_rendering::scene_resource_native_frames(
                 &client.art,
                 &resources,
                 camera,
                 time as usize,
-            ));
-            required.extend(aoe_rendering::scene_cliff_native_frames(
-                &client.art,
-                &scene.triangles,
             ));
             let substitutes = aoe_rendering::scene_native_substitutes(
                 &client.art,

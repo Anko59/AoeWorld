@@ -336,7 +336,7 @@ export function lose_and_restore_context(bridge) {
 export function restore_error(bridge) { return String(bridge.restoreError ?? ''); }
 ")]
 extern "C" {
-    fn lose_and_restore_context(bridge: &JsValue) -> js_sys::Promise;
+    pub(super) fn lose_and_restore_context(bridge: &JsValue) -> js_sys::Promise;
     fn restore_error(bridge: &JsValue) -> String;
 }
 

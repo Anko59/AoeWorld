@@ -72,14 +72,14 @@ only graphics API calls; scene construction and depth normalization stay in Rust
 A failed GPU context may bind the original canvas, so replace that element
 before attempting the next tier and before installing input handlers.
 
-WebGL2 requires a 24-bit depth buffer and preserves the existing 64 MiB instance
-and 4,194,304-pixel backing limits. Instance uploads borrow a bounded WASM memory
-view for a synchronous graphics call; never retain the packet or await while
-using it. WebGL copies it into its instance buffer before the borrow ends,
-without another retained CPU packet. Atlas upload completes each 16 MiB page
-before submitting the next: page-sized calls alone can still queue the full
-128 MiB atlas in driver transfer staging. This startup/restoration boundary
-uses a synchronous completion; ordinary frames do not wait on the GPU.
+WebGL2 retains the 24-bit depth, 64 MiB instance and 4,194,304-pixel backing limits.
+JS borrows a bounded WASM packet view synchronously and never retains it or awaits.
+Both GPU backends retain one Rust packet (at most 64 MiB, counted as frame staging)
+to compare exact bytes and upload one contiguous changed span; equal packets
+need no buffer write. Growth/restoration rewrites storage; refused frames keep
+the previous snapshot. This adds CPU storage, not a GPU allocation saving.
+Atlas pages upload one at a time with synchronous completion to bound driver
+transfer staging; ordinary frames do not wait on the GPU.
 The renderer retains its source atlas in
 WASM for context restoration without a second JS allocation. The shared depth
 normalizer requests coverage only for hover or a unit/occluder pair.

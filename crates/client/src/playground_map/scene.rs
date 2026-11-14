@@ -37,6 +37,7 @@ pub(crate) struct PreparedScene {
     pub terrain: Vec<SceneTerrain>,
     pub decorations: Vec<SceneDecoration>,
     pub triangles: Vec<ProjectedSurfaceTriangle>,
+    terrain_plan: RefCell<Option<aoe_rendering::PreparedTerrain>>,
     bucket_keys: WorldKeyIndex,
     buckets: Vec<Vec<usize>>,
     bucket_width: f64,
@@ -111,6 +112,29 @@ pub(in super::super) fn replace_buildings(
 }
 
 impl PreparedScene {
+    pub(in super::super) fn terrain_plan(
+        &self,
+        art: &mut aoe_rendering::GameArt,
+    ) -> std::cell::Ref<'_, aoe_rendering::PreparedTerrain> {
+        if self.terrain_plan.borrow().is_none() {
+            let plan = aoe_rendering::PreparedTerrain::new(
+                art,
+                &self.terrain,
+                &self.triangles,
+                SceneCamera {
+                    center: self.camera.center,
+                    zoom: self.camera.zoom,
+                    viewport: self.camera.viewport,
+                    focus_elevation_meters: self.camera.focus_elevation_meters,
+                },
+            );
+            *self.terrain_plan.borrow_mut() = Some(plan);
+        }
+        std::cell::Ref::map(self.terrain_plan.borrow(), |plan| {
+            plan.as_ref().expect("prepared terrain plan")
+        })
+    }
+
     pub(crate) fn resident_bytes(&self) -> usize {
         std::mem::size_of_val(&self.actor_extents)
             + std::mem::size_of_val(&self.foundation_view)
@@ -118,6 +142,11 @@ impl PreparedScene {
             + self.terrain.capacity() * size_of::<SceneTerrain>()
             + self.decorations.capacity() * size_of::<SceneDecoration>()
             + self.triangles.capacity() * size_of::<ProjectedSurfaceTriangle>()
+            + self
+                .terrain_plan
+                .borrow()
+                .as_ref()
+                .map_or(0, |p| p.resident_bytes())
             + self.foundations.capacity() * size_of::<FoundationKey>()
             + self.buckets.capacity() * size_of::<Vec<usize>>()
             + self
@@ -178,6 +207,7 @@ impl PreparedScene {
             terrain,
             decorations: Vec::new(),
             triangles,
+            terrain_plan: RefCell::new(None),
             bucket_keys,
             buckets,
             bucket_width,

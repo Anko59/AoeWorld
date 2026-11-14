@@ -1,6 +1,6 @@
 //! WebGL2 middle tier sharing the WebGPU sprite ABI and depth normalization.
 //! The parent must replace a context-bound canvas before Canvas 2D recovery.
-use crate::web::{ContourStats, Sprite, normalize_depths_with_stats};
+use crate::web::{ContourStats, InstanceUpload, Sprite, normalize_depths_with_stats};
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
@@ -42,6 +42,8 @@ extern "C" {
         instances: &[u8],
         black: bool,
         effects: bool,
+        start: usize,
+        end: usize,
     ) -> Result<bool, JsValue>;
     #[wasm_bindgen(method)]
     fn dispose(this: &GlBridge);
@@ -71,6 +73,7 @@ pub struct WebGlRenderer {
     bridge: GlBridge,
     source_atlas: Vec<u8>,
     stats: ContourStats,
+    upload: InstanceUpload,
 }
 
 impl WebGlRenderer {
@@ -131,12 +134,17 @@ impl WebGlRenderer {
         self.source_atlas.capacity()
     }
 
+    pub(super) fn staging_bytes(&self) -> usize {
+        self.upload.resident_bytes()
+    }
+
     pub(super) fn new(canvas: &HtmlCanvasElement) -> Result<Self, String> {
         Ok(Self {
             bridge: GlBridge::create(canvas, &coverage_shaders(&terrain_shaders()))
                 .map_err(error)?,
             source_atlas: Vec::new(),
             stats: ContourStats::default(),
+            upload: InstanceUpload::default(),
         })
     }
 
@@ -186,14 +194,16 @@ impl WebGlRenderer {
             .ok_or_else(|| "WebGL2 instance buffer exceeds 64 MiB".to_owned())?;
         let depth = normalize_depths_with_stats(sprites);
         // wasm-bindgen borrows a memory view for this synchronous import.
-        // The bridge uploads immediately and never retains the packet or awaits.
-        // The bridge independently rejects oversized packets before allocating
-        // exactly their byte length; no extra capacity or retained CPU packet.
+        // JS uploads the changed range synchronously and never retains its view.
+        // The bounded Rust snapshot advances only when a frame is accepted.
+        let bytes = bytemuck::cast_slice(sprites);
+        let changed = self.upload.changed(bytes);
         let presented = self
             .bridge
-            .render(bytemuck::cast_slice(sprites), black, depth.effects())
+            .render(bytes, black, depth.effects(), changed.start, changed.end)
             .map_err(error)?;
         if presented {
+            self.upload.commit(bytes, changed);
             self.stats.record(depth);
         }
         Ok(presented)

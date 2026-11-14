@@ -334,19 +334,19 @@ export class AoeWebGl {
         }
     }
 
-    render(instances, black, effects) {
+    render(instances, black, effects, start, end) {
         if (!this.poll()) return false;
         if (!this.atlasReady) throw new Error('WebGL2 atlas not uploaded');
         if (instances.byteLength % STRIDE !== 0 || instances.byteLength > MAX_BYTES) {
             throw new Error('WebGL2 instance-buffer limit exceeded');
         }
+        if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || end > instances.byteLength || start % STRIDE || end % STRIDE) throw new Error('WebGL2 upload range invalid');
         const gl = this.gl;
         this.validateSize(this.canvas.width, this.canvas.height);
         if (!this.canvas.width || !this.canvas.height) {
             this.releaseCoverage();
             return false;
         }
-        // Do not enqueue another packet behind a busy software or hardware GPU.
         if (this.pendingFrames.length >= 2) return false;
         const count = instances.byteLength / STRIDE;
         const words = new DataView(instances.buffer, instances.byteOffset, instances.byteLength);
@@ -368,8 +368,9 @@ export class AoeWebGl {
             gl.bufferData(gl.ARRAY_BUFFER, instances.byteLength, gl.DYNAMIC_DRAW);
             this.check();
             this.bufferBytes = instances.byteLength;
+            start = 0; end = instances.byteLength; // Growth/restoration invalidates every byte.
         }
-        if (instances.byteLength) gl.bufferSubData(gl.ARRAY_BUFFER, 0, instances);
+        if (end > start) gl.bufferSubData(gl.ARRAY_BUFFER, start, instances.subarray(start, end));
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
         gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);

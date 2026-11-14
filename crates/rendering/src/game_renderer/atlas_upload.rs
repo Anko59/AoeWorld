@@ -127,6 +127,7 @@ impl GameRenderer {
     pub fn frame_staging_bytes(&self) -> usize {
         match self {
             Self::WebGpu(renderer) => renderer.staging_bytes(),
+            Self::WebGl(renderer) => renderer.staging_bytes(),
             _ => 0,
         }
     }

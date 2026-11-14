@@ -11,6 +11,9 @@ const ATLAS_BYTES: usize = (ATLAS_SIDE * ATLAS_SIDE * 4) as usize;
 mod instance_buffer;
 pub(crate) use instance_buffer::surface_instance;
 use instance_buffer::{InstanceBuffer, required_capacity};
+#[path = "web/instance_upload/mod.rs"]
+mod instance_upload;
+pub(crate) use instance_upload::InstanceUpload;
 #[path = "web/contour_stats.rs"]
 mod contour_stats;
 pub use contour_stats::ContourStats;

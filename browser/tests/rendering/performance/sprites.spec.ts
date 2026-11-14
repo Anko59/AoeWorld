@@ -74,8 +74,11 @@ for (const backend of ["webgpu", "webgl2"] as const) {
         ]) {
           expect(spriteFrame[operation] ?? 0, operation).toBe(0);
         }
-        expect(spriteFrame["GPUQueue.writeBuffer"]).toBe(
-          spriteFrame["GPUQueue.submit"],
+        // A retained packet whose bytes did not change uploads nothing, so a
+        // submission may write zero times. More than one write per submission
+        // would mean per-object upload churn is back.
+        expect(spriteFrame["GPUQueue.writeBuffer"] ?? 0).toBeLessThanOrEqual(
+          spriteFrame["GPUQueue.submit"] ?? 0,
         );
         expect(spriteFrame.contourInstances ?? 0).toBeLessThan(
           (spriteFrame.worldInstances ?? 0) / 100,
