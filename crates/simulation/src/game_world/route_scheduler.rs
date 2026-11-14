@@ -61,6 +61,23 @@ fn far_planner(planner: &RoutePlanner) -> bool {
     far_route(planner.origin(), planner.destination())
 }
 
+/// True when this unit's route is an approach to something it is attacking:
+/// the `attack_approach` class of the queue report (`queue::route_requester`).
+///
+/// A player's slots went to whoever asked first, and economy orders ask far
+/// more often. In the measured 1,500-tick window of the 99-AI Mekong save a
+/// player's search slots were held 79 (gather trips) and 32 (single moves) to
+/// 8 (attack approaches), while 75 attack approaches waited with a median of
+/// 178 ticks and up to 688 — every one of them with its one slot-free fast
+/// attempt already spent (`StoredUnit::fast_route_tried`), so only a slot
+/// could still answer them. A fight order is the one a player is watching,
+/// so among the units of a player that still wait for a slot it is served
+/// before a gather trip. This reorders a player's own queue; it adds no work
+/// and raises no cap, so another player's share is untouched.
+fn fight_order(unit: &super::StoredUnit) -> bool {
+    unit.state.attack_target.is_some()
+}
+
 /// One player's share of the route planners alive in the world.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct RouteSlots {
@@ -185,15 +202,16 @@ impl GameWorld {
         // A unit that already holds a search keeps its frontier; it is served
         // before the player's units that still wait for a slot.
         for ids in waiting.values_mut() {
-            // Then the longest-waiting first: by id, a busy player's newest
-            // units were never reached and their wait grew without bound.
+            // Then a fight before an economy trip, and then the longest
+            // waiting first: by id, a busy player's newest units were never
+            // reached and their wait grew without bound.
             ids.sort_by_key(|id| {
                 let held = self
                     .lookup
                     .get(id)
                     .is_some_and(|&index| self.units[index].planner.is_some());
                 let unit = &self.units[self.lookup[id]];
-                (!held, unit.planning_since, *id)
+                (!held, !fight_order(unit), unit.planning_since, *id)
             });
         }
         // Fast work is its own budget. Offer it to near orders before a
