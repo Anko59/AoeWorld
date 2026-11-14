@@ -18,6 +18,20 @@ impl GameplayService {
         )
         .await;
     }
+    pub async fn queue_trade(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        entity_id: EntityId,
+        building_id: EntityId,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::Trade(entity_id, building_id),
+        )
+        .await;
+    }
     pub async fn queue_ungarrison(
         &self,
         session_id: u64,

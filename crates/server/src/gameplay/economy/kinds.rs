@@ -21,6 +21,8 @@ pub(in crate::gameplay) fn native_kind(kind: UnitKind) -> aoe_simulation::UnitKi
         UnitKind::WarGalley => aoe_simulation::UnitKind::WarGalley,
         UnitKind::Vassal => aoe_simulation::UnitKind::Vassal,
         UnitKind::Steward => aoe_simulation::UnitKind::Steward,
+        UnitKind::TradeCart => aoe_simulation::UnitKind::TradeCart,
+        UnitKind::TradeCog => aoe_simulation::UnitKind::TradeCog,
         UnitKind::General => aoe_simulation::UnitKind::General,
         UnitKind::TransportShip => aoe_simulation::UnitKind::TransportShip,
         UnitKind::TwoHandedSwordsman => aoe_simulation::UnitKind::TwoHandedSwordsman,
@@ -179,6 +181,7 @@ pub(in crate::gameplay) fn native_building(kind: BuildingKind) -> aoe_simulation
         BuildingKind::StoneWall => N::StoneWall,
         BuildingKind::StoneGate => N::StoneGate,
         BuildingKind::Road => N::Road,
+        BuildingKind::Wonder => N::Wonder,
     }
 }
 pub(super) fn wire_building(kind: aoe_simulation::BuildingKind) -> BuildingKind {
@@ -208,6 +211,7 @@ pub(super) fn wire_building(kind: aoe_simulation::BuildingKind) -> BuildingKind 
         N::StoneWall => BuildingKind::StoneWall,
         N::StoneGate => BuildingKind::StoneGate,
         N::Road => BuildingKind::Road,
+        N::Wonder => BuildingKind::Wonder,
     }
 }
 pub(super) fn wire_kind(kind: aoe_simulation::UnitKind) -> UnitKind {
@@ -232,6 +236,8 @@ pub(super) fn wire_kind(kind: aoe_simulation::UnitKind) -> UnitKind {
         aoe_simulation::UnitKind::WarGalley => UnitKind::WarGalley,
         aoe_simulation::UnitKind::Vassal => UnitKind::Vassal,
         aoe_simulation::UnitKind::Steward => UnitKind::Steward,
+        aoe_simulation::UnitKind::TradeCart => UnitKind::TradeCart,
+        aoe_simulation::UnitKind::TradeCog => UnitKind::TradeCog,
         aoe_simulation::UnitKind::General => UnitKind::General,
         aoe_simulation::UnitKind::TransportShip => UnitKind::TransportShip,
         aoe_simulation::UnitKind::DemolitionShip => UnitKind::DemolitionShip,

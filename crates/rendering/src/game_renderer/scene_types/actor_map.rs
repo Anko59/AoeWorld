@@ -1,6 +1,6 @@
 //! Generated pose/tag projection; canonical slots share identical art.
 use super::SceneUnitKind;
-pub(super) const ACTORS: [SceneUnitKind; 224] = [
+pub(super) const ACTORS: [SceneUnitKind; 232] = [
     SceneUnitKind::Actor0,
     SceneUnitKind::Actor1,
     SceneUnitKind::Actor2,
@@ -225,8 +225,16 @@ pub(super) const ACTORS: [SceneUnitKind; 224] = [
     SceneUnitKind::Actor207,
     SceneUnitKind::Actor10,
     SceneUnitKind::Actor208,
+    SceneUnitKind::Actor209,
+    SceneUnitKind::Actor210,
+    SceneUnitKind::Actor211,
+    SceneUnitKind::Actor212,
+    SceneUnitKind::Actor213,
+    SceneUnitKind::Actor213,
+    SceneUnitKind::Actor214,
+    SceneUnitKind::Actor215,
 ];
-pub(super) const BASE: usize = 138;
+pub(super) const BASE: usize = 141;
 pub(super) const SLOTS: &[usize] = &[
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
     26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
@@ -237,5 +245,6 @@ pub(super) const SLOTS: &[usize] = &[
     136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 149, 150, 151, 153, 154, 160, 161, 162,
     165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183,
     184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202,
-    203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 221, 223,
+    203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 221, 223, 224, 225, 226,
+    227, 228, 230, 231,
 ];

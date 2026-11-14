@@ -71,6 +71,8 @@ mirror!(
         SiegeRam,
         Onager,
         Steward,
+        TradeCart,
+        TradeCog,
     ]
 );
 mirror!(
@@ -101,6 +103,7 @@ mirror!(
         StoneWall,
         StoneGate,
         Road,
+        Wonder,
     ]
 );
 mirror!(

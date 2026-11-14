@@ -37,6 +37,8 @@ impl UnitKind {
             table[UnitKind::DemolitionShip as usize] = 512;
             table[UnitKind::TransportShip as usize] = 512;
             table[UnitKind::WarGalley as usize] = 512;
+            table[UnitKind::TradeCog as usize] = 512;
+            table[UnitKind::TradeCart as usize] = 256;
             table[UnitKind::Mangonel as usize] = 461;
             table[UnitKind::Onager as usize] = 461;
             table

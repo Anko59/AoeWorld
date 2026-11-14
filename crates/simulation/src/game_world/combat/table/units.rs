@@ -1,6 +1,6 @@
 use super::{DamageKind, UnitCombat, UnitCost, UnitKind, UnitTraining};
 /// Indexed by `UnitKind as usize`; a test pins the order.
-pub const UNIT_COMBAT: [UnitCombat; 35] = [
+pub const UNIT_COMBAT: [UnitCombat; 37] = [
     UnitCombat {
         kind: UnitKind::Villager,
         hp: 25,
@@ -350,6 +350,25 @@ pub const UNIT_COMBAT: [UnitCombat; 35] = [
         (0, 0, 6),
         (1_000, 0, 1_000),
         60,
+    ),
+    // Trade Cart 128 and Trade Cog 17, DE DAT via aoe2techtree data.json
+    // (update 188329): 70/80 hp, 0/0 and 0/6 armour, speed 1.25/1.65, LOS 7/6,
+    // 100 wood + 50 gold, 51 s / 36 s. They carry no weapon.
+    troop(
+        UnitKind::TradeCart,
+        (70, 0, 0, 0),
+        (200, 125),
+        (0, 0, 7),
+        (0, 100, 50),
+        51,
+    ),
+    troop(
+        UnitKind::TradeCog,
+        (80, 0, 0, 6),
+        (200, 165),
+        (0, 0, 6),
+        (0, 100, 50),
+        36,
     ),
 ];
 

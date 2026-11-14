@@ -47,6 +47,7 @@ pub(in crate::gameplay) fn apply(
             building_id,
             entity_id,
         } => world.issue_ungarrison(player, building_id, entity_id),
+        PendingAction::Trade(unit, building) => world.issue_trade(player, unit, building),
         PendingAction::Load {
             unit_ids,
             transport_id,

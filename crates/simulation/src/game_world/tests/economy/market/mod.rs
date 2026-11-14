@@ -2,6 +2,7 @@
 use super::buildings::{set_stock, stock};
 use super::*;
 use crate::{MARKET_RULES, MarketPrices};
+mod trade;
 
 fn market(world: &mut GameWorld, x: i32) -> EntityId {
     let rect = TileRect::new(

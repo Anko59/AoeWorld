@@ -2,7 +2,7 @@ use crate::{BuildingKind, GameWorld, Tech, UnitKind};
 use aoe_core::{EntityId, PlayerId};
 
 impl UnitKind {
-    pub const ALL: [Self; 35] = [
+    pub const ALL: [Self; 37] = [
         Self::Villager,
         Self::Scout,
         Self::Militia,
@@ -38,6 +38,8 @@ impl UnitKind {
         Self::SiegeRam,
         Self::Onager,
         Self::Steward,
+        Self::TradeCart,
+        Self::TradeCog,
     ];
     /// The single current identity of each production line.
     pub fn upgraded(self, researched: u64) -> Self {
@@ -94,7 +96,10 @@ impl UnitKind {
         }
     }
     pub fn required_age(self) -> crate::Age {
-        if self == Self::Steward {
+        if matches!(self, Self::TradeCart | Self::TradeCog) {
+            // Market and Dock trade units open in the Feudal Age.
+            crate::Age::Feudal
+        } else if self == Self::Steward {
             crate::Age::Castle
         } else if matches!(self, Self::Galley | Self::FireShip | Self::DemolitionShip) {
             crate::Age::Feudal

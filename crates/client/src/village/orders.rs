@@ -116,7 +116,8 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
         && actor.is_none()
         && resource.is_none()
         && enemy.is_none()
-        && (super::garrison::interact(client, point)
+        && (super::commerce::trade_interact(client, point)
+            || super::garrison::interact(client, point)
             || super::construction::interact(client, point))
     {
         return;

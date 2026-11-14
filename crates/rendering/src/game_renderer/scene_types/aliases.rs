@@ -226,6 +226,14 @@ impl SceneUnitKind {
     pub const FarmerSeed: Self = Self::Actor207;
     pub const HunterCarryIdle: Self = Self::Actor10;
     pub const Bolt: Self = Self::Actor208;
+    pub const TradeCartStand: Self = Self::Actor209;
+    pub const TradeCartWalk: Self = Self::Actor210;
+    pub const TradeCartDie: Self = Self::Actor211;
+    pub const TradeCartDecay: Self = Self::Actor212;
+    pub const TradeCogStand: Self = Self::Actor213;
+    pub const TradeCogWalk: Self = Self::Actor213;
+    pub const TradeCogDie: Self = Self::Actor214;
+    pub const TradeCogDecay: Self = Self::Actor215;
     pub const Scout: Self = Self::ScoutStand;
     pub const Villager: Self = Self::VillagerStand;
     pub const VillagerChopping: Self = Self::ChopperWork;

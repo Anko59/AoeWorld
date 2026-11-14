@@ -60,7 +60,7 @@ fn militia_timelines_use_fractional_native_dat_durations() {
 
 #[test]
 fn every_spawned_unit_pose_uses_all_native_cells_and_dat_timing() {
-    assert_eq!(SPRITES.len(), 224);
+    assert_eq!(SPRITES.len(), 232);
     for (pose, source) in SPRITES.iter().copied().enumerate() {
         if matches!(pose, 72 | 73 | 120 | 223) {
             continue;
