@@ -63,11 +63,12 @@ build. Qualification and authorization remain independent required planes.
 
 CI runs whole suites on every pull request, so agents and launched sessions (a
 Codex, pi or DeepSeek session started with `AOE_COORDINATOR`) run focused checks:
-`test-native-focused`, `test-harness-focused`, `test-wasm-focused`, and `test-e2e`
-with 1 to 5 `AOE_E2E_SPECS`. The agent hook refuses whole suites and sweeps
+`test-native-focused` with a `test(...)` filter of at least three characters,
+`test-harness-focused` and `test-wasm-focused` with a real filter, and `test-e2e`
+with 1 to 5 concrete `.spec.ts` files in `AOE_E2E_SPECS`. The agent hook refuses whole suites and sweeps
 (`preflight`, `test-unit`, `test-harness`, `coverage`, fuzz, and the perf soaks;
 the list is in `crates/harness/src/agents/rules/budget.rs`) unless a coordinator
-lends one with `make lease AOE_LEASE_TARGET=<suite>` (60 minutes by default, at
+lends one with `make lease AOE_LEASE_TARGET=<target>` (launched sessions cannot) (60 minutes by default, at
 most 240).
 
 ## Resource admission and long jobs

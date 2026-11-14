@@ -208,6 +208,55 @@ fn launched_sessions_are_budgeted_like_agents_until_a_lease() {
         "test-unit",
         budget::now() + 31 * 60
     ));
-    assert!(budget::grant(&context.common, "test-native-focused", 30, "x").is_err());
+    assert!(
+        budget::grant(&context.common, "fmt", 30, "x").is_err(),
+        "fmt needs no lease"
+    );
     assert!(budget::grant(&context.common, "test-unit", 0, "x").is_err());
+}
+
+/// Review of #836: each way around the budget that the first version allowed.
+#[test]
+fn the_budget_has_no_way_around_it() {
+    use crate::agents::rules::budget;
+    let fixture = Fixture::new();
+    for role in [Role::Tester, Role::Other] {
+        denied(&fixture, role, "make test-e2e 'AOE_E2E_SPECS=**/*.spec.ts'");
+        denied(
+            &fixture,
+            role,
+            "make test-e2e AOE_E2E_SPECS=one.spec.ts AOE_E2E_SPECS=",
+        );
+        denied(
+            &fixture,
+            role,
+            "make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation 'AOE_NATIVE_TEST_FILTER=test(a)'",
+        );
+        denied(
+            &fixture,
+            role,
+            "make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-map 'AOE_NATIVE_TEST_FILTER=kind(lib)'",
+        );
+        denied(
+            &fixture,
+            role,
+            "make test-client-memory AOE_E2E_SPECS=tests/memory/fog.spec.ts",
+        );
+    }
+    // Reviewers use the focused checks that replace preflight for them.
+    allowed(
+        &fixture,
+        Role::Reviewer,
+        "make test-harness-focused HARNESS_TEST_FILTER=agents::",
+    );
+    // A launched session can neither grant itself a lease nor be refused one by name.
+    let mut context = fixture.context(Role::Main);
+    context.coordinated = true;
+    assert!(budget::check(&context, "lease", &[]).is_err());
+    assert!(budget::grant(&context.common, "test-native-focused", 30, "harness").is_ok());
+    let all = [("AOE_NATIVE_TEST_FILTER", "all()")];
+    assert!(
+        budget::check(&context, "test-native-focused", &all).is_ok(),
+        "leased"
+    );
 }
