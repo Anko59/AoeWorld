@@ -52,6 +52,16 @@ fn one_defect_reported_by_two_personas_is_one_finding_in_the_stored_report() {
     assert_eq!(cluster.votes[0].reviewer, 2);
     assert_eq!(report.grade, 4, "the critical cluster caps the grade");
     let text = report.markdown();
-    assert!(text.contains("also reported as **F2**"), "{text}");
+    assert!(
+        text.contains("also reported as **F2** (reviewer "),
+        "{text}"
+    );
     assert!(text.contains("2 confirmed"), "{}", report.headline());
+    let mut report = report;
+    report.findings[0].members[0].reporter = super::super::closing::CARRIED;
+    let text = report.markdown();
+    assert!(
+        text.contains("also reported as **F2** (carried, "),
+        "{text}"
+    );
 }
