@@ -1,30 +1,50 @@
-//! A committed snapshot per format version: a change to the snapshot's layout
-//! without a `WORLD_SNAPSHOT_VERSION` bump fails here, in every pull request, not
-//! later on someone's save (2026-11-14: #828 added a formation field at version 5
-//! and every existing save stopped loading).
+//! A change to the snapshot layout without a `WORLD_SNAPSHOT_VERSION` bump fails
+//! here, in every pull request, instead of on someone's save later (2026-11-14:
+//! #828 added a formation field at version 5 and every existing save stopped
+//! loading; nothing noticed).
 //!
-//! The fixture for the current version must still decode and restore. One for an
-//! older version must be refused. With no fixture for the current version (right
-//! after a bump), the test records one and fails until it is committed.
+//! Two checks for the current version, kept in `compat/`:
+//! - `v<N>.schema`: a hash of the record definitions in `snapshot/records.rs`
+//!   (names, order and types; comments ignored). It catches a layout change even
+//!   when old bytes still decode, such as two swapped `u64` fields.
+//! - `v<N>.postcard`: a snapshot of a small busy game, which must still decode and
+//!   restore. It also catches changes in types defined outside `records.rs` that
+//!   break decoding (an enum variant reordered elsewhere can still slip past both).
+//!
+//! After a bump the test records both files for the new version, removes the old
+//! ones (no legacy before v1), and fails once until they are committed.
 use super::*;
 use crate::game_world::snapshot::WORLD_SNAPSHOT_VERSION;
 use aoe_core::Formation;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+const RECORDS: &str = include_str!("../../snapshot/records.rs");
 
 fn fixtures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/game_world/tests/snapshot_roundtrip/compat")
 }
 
-fn fixture(version: u16) -> PathBuf {
-    fixtures().join(format!("v{version}.postcard"))
-}
-
 /// The fixture's path from the repository root, as a person runs the test.
-fn shown(path: &std::path::Path) -> String {
+fn shown(path: &Path) -> String {
     path.strip_prefix(env!("CARGO_MANIFEST_DIR")).map_or_else(
         |_| path.display().to_string(),
         |p| format!("crates/simulation/{}", p.display()),
     )
+}
+
+/// FNV-1a over the record definitions with comments and spacing removed: stable
+/// across Rust releases, unlike `DefaultHasher`.
+fn schema() -> String {
+    let text: String = RECORDS
+        .lines()
+        .map(|line| line.split("//").next().unwrap_or_default())
+        .flat_map(str::split_whitespace)
+        .collect::<Vec<_>>()
+        .join(" ");
+    let hash = text.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+    });
+    format!("{hash:016x}\n")
 }
 
 /// A small game with the records a save carries: a village at work, buildings,
@@ -58,52 +78,41 @@ fn busy() -> GameWorld {
 }
 
 #[test]
-fn every_snapshot_format_has_a_fixture_and_old_ones_are_refused() {
-    let current = fixture(WORLD_SNAPSHOT_VERSION);
-    if !current.exists() {
-        let snapshot = busy().snapshot([0; 32]).expect("snapshot");
+fn the_snapshot_layout_cannot_change_without_a_version_bump() {
+    let version = WORLD_SNAPSHOT_VERSION;
+    let schema_path = fixtures().join(format!("v{version}.schema"));
+    let bytes_path = fixtures().join(format!("v{version}.postcard"));
+    if !schema_path.exists() || !bytes_path.exists() {
         std::fs::create_dir_all(fixtures()).unwrap();
-        std::fs::write(&current, postcard::to_allocvec(&snapshot).unwrap()).unwrap();
+        for entry in std::fs::read_dir(fixtures()).unwrap() {
+            std::fs::remove_file(entry.unwrap().path()).unwrap();
+        }
+        let snapshot = busy().snapshot([0; 32]).expect("snapshot");
+        std::fs::write(&bytes_path, postcard::to_allocvec(&snapshot).unwrap()).unwrap();
+        std::fs::write(&schema_path, schema()).unwrap();
         panic!(
-            "recorded {}: commit it with the WORLD_SNAPSHOT_VERSION bump",
-            shown(&current)
+            "recorded {} and {} for version {version} and removed older fixtures: commit them",
+            shown(&schema_path),
+            shown(&bytes_path)
         );
     }
-    for entry in std::fs::read_dir(fixtures()).unwrap() {
-        let path = entry.unwrap().path();
-        let bytes = std::fs::read(&path).unwrap();
-        // The version is the snapshot's first field, so it reads before the body.
-        let (version, _) = postcard::take_from_bytes::<u16>(&bytes).unwrap();
-        let decoded = postcard::from_bytes::<WorldSnapshot>(&bytes);
-        if version == WORLD_SNAPSHOT_VERSION {
-            let decoded = decoded.unwrap_or_else(|error| {
-                panic!(
-                    "{}: the snapshot format changed without a version bump ({error}); \
-                     bump WORLD_SNAPSHOT_VERSION, run this test to record the new fixture, \
-                     and commit it",
-                    shown(&path)
-                )
-            });
-            flat()
-                .0
-                .restore_snapshot(&decoded, [0; 32], &|| false)
-                .unwrap_or_else(|error| panic!("{}: does not restore: {error:?}", shown(&path)));
-        } else {
-            assert!(
-                version < WORLD_SNAPSHOT_VERSION,
-                "{}: from a newer build",
-                shown(&path)
-            );
-            // An older format either fails to decode or is refused by its version;
-            // it must never restore as if it were current.
-            if let Ok(decoded) = decoded {
-                let refused = flat().0.restore_snapshot(&decoded, [0; 32], &|| false);
-                assert!(
-                    matches!(refused, Err(SnapshotError::Version)),
-                    "{}: an old snapshot was not refused: {refused:?}",
-                    shown(&path)
-                );
-            }
-        }
-    }
+    let recorded = std::fs::read_to_string(&schema_path).unwrap();
+    assert_eq!(
+        recorded,
+        schema(),
+        "snapshot/records.rs changed without a WORLD_SNAPSHOT_VERSION bump: bump it, then \
+         run this test to record the new fixtures and commit them"
+    );
+    let bytes = std::fs::read(&bytes_path).unwrap();
+    let decoded = postcard::from_bytes::<WorldSnapshot>(&bytes).unwrap_or_else(|error| {
+        panic!(
+            "{}: the snapshot no longer decodes ({error}) although records.rs is unchanged: a \
+             type it uses changed elsewhere; bump WORLD_SNAPSHOT_VERSION and record again",
+            shown(&bytes_path)
+        )
+    });
+    flat()
+        .0
+        .restore_snapshot(&decoded, [0; 32], &|| false)
+        .unwrap_or_else(|error| panic!("{}: does not restore: {error:?}", shown(&bytes_path)));
 }
