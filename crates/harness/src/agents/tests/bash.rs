@@ -221,7 +221,9 @@ fn duties_are_separated_by_file() {
     denied(&fixture, Role::Implementer, "rm -r crates/map");
     denied(&fixture, Role::Reviewer, "echo x >> crates/map/src/lib.rs");
     denied(&fixture, Role::Reviewer, "make fmt");
-    allowed(&fixture, Role::Reviewer, "make preflight");
+    // Reviewers check with focused targets; a whole suite needs a lease.
+    denied(&fixture, Role::Reviewer, "make preflight");
+    allowed(&fixture, Role::Reviewer, "make lint");
     allowed(&fixture, Role::Other, "echo x >> crates/map/src/lib.rs");
 }
 

@@ -35,6 +35,8 @@ const PERSON_TARGETS: &[&str] = &[
     // takes the OpenRouter key from the keyring): the main session only.
     "ledger",
     "usage",
+    // It lends a whole suite to launched sessions: the coordinator's decision.
+    "lease",
 ];
 pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
     let spec = Spec {
@@ -100,6 +102,7 @@ pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
         );
     }
     let mut targets = Vec::new();
+    let mut assignments = Vec::new();
     for word in &parsed.positionals {
         if !word.plain() && agent {
             return Err(format!(
@@ -129,7 +132,7 @@ pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
                     "the value of `{name}` contains `$`, which Make would expand; pass a plain value"
                 ));
             }
-            Some(_) => {}
+            Some((name, value)) => assignments.push((name, value)),
             None => targets.push(word.text.as_str()),
         }
     }
@@ -147,6 +150,7 @@ pub(crate) fn make(context: &Context, rest: &[Word]) -> Verdict {
         );
     }
     for target in targets {
+        super::budget::check(context, target, &assignments)?;
         if agent && PERSON_TARGETS.contains(&target) {
             return Err(format!(
                 "`make {target}` belongs to the main session or a person"
@@ -207,6 +211,10 @@ fn reviewer_target(target: &str) -> bool {
                 | "level-floor"
                 | "lint"
                 | "deny"
+                | "test-native-focused"
+                | "test-harness-focused"
+                | "test-wasm-focused"
+                | "test-e2e"
                 | "test-unit"
                 | "test-harness"
                 | "test-wasm"

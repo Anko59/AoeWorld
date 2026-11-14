@@ -74,6 +74,12 @@ enum Command {
     /// The seed sweeps and full-axis geodata round-trips that `test-unit` excludes.
     TestExhaustive,
     LoadStatus,
+    /// Lend one whole suite to agents and launched sessions for a while.
+    Lease {
+        target: String,
+        #[arg(default_value_t = 60)]
+        minutes: u64,
+    },
     /// Report delivery stages over the last TIMELINE_DAYS (default seven).
     Timeline,
     /// Run a Make job, refusing immediately if another long job holds its lock.

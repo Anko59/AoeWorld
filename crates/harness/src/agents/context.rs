@@ -34,6 +34,9 @@ pub(crate) struct Context {
     pub(crate) role: Role,
     pub(crate) home: Option<PathBuf>,
     pub(crate) temp: Vec<PathBuf>,
+    /// A non-Claude session launched by a coordinator (`AOE_COORDINATOR` set), as
+    /// every Codex session is: whole suites need a lease, like an agent's.
+    pub(crate) coordinated: bool,
 }
 
 impl Context {
@@ -61,13 +64,20 @@ impl Context {
             .filter(|path| path.is_absolute())
             .filter_map(|path| paths::land(&paths::lexical(path)))
             .collect();
+        let coordinated = env::var_os("AOE_COORDINATOR").is_some_and(|name| !name.is_empty());
         Ok(Self {
             root,
             common,
             role,
             home,
             temp,
+            coordinated,
         })
+    }
+
+    /// Whole suites and sweeps need a coordinator's lease (rules/budget.rs).
+    pub(crate) fn budgeted(&self) -> bool {
+        self.role.is_agent() || self.coordinated
     }
 
     fn agent(&self) -> bool {

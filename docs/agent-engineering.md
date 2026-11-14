@@ -59,6 +59,18 @@ hashes, modes, coding/Docker UID, nor fixture mocks authenticate a restricted
 worker, controller, publisher, hidden verdict, approval, runtime QA, or served
 build. Qualification and authorization remain independent required planes.
 
+## Whole suites need a lease
+
+CI runs whole suites on every pull request, so agents and launched sessions (a
+Codex, pi or DeepSeek session started with `AOE_COORDINATOR`) run focused checks:
+`test-native-focused` with a `test(...)` filter of at least three characters,
+`test-harness-focused` and `test-wasm-focused` with a real filter, and `test-e2e`
+with 1 to 5 concrete `.spec.ts` files in `AOE_E2E_SPECS`. The agent hook refuses whole suites and sweeps
+(`preflight`, `test-unit`, `test-harness`, `coverage`, fuzz, and the perf soaks;
+the list is in `crates/harness/src/agents/rules/budget.rs`) unless a coordinator
+lends one with `make lease AOE_LEASE_TARGET=<target>` (launched sessions cannot) (60 minutes by default, at
+most 240).
+
 ## Resource admission and long jobs
 
 Every build container takes one of four build slots (`AOE_CPU_SLOTS`; at most 2 per worktree and 3 per

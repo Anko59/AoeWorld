@@ -1,4 +1,5 @@
 //! Per-command rules the Bash judge applies after flattening a line.
+pub(crate) mod budget;
 pub(crate) mod dispatch;
 pub(crate) mod git;
 pub(crate) mod github;
