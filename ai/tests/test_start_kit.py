@@ -4,7 +4,9 @@ The official Arabia guide lists, per player, 8 herdables, 3 forests, 6 fruit
 bushes, 2 aggressive and 4 wild hunt, 7 tiles of gold and 5 of stone
 (https://ageofempires.com/learn-to-play/defending-your-empires-aoe2). The
 resources lie in fog at the start, so each scout walks rings round its base
-first; only what a human could see is counted. Starting-kit nodes are not in
+first; only what a human could see is counted. Herds sit in a seeded direction
+9-15 tiles out, so the scout is given time to finish both rings (seed 3 slot 1
+keeps its boar on the far side of the sweep). Starting-kit nodes are not in
 any map chunk: the SDK must build them from the resource feed.
 """
 
@@ -67,7 +69,7 @@ def test_every_slot_gets_the_full_standard_start(server, secret):
         [slot.token for slot in info.slots],
         brain_factory=lambda slot: Surveyor(),
     )
-    host.run(until_tick=20 * 100, max_seconds=200)
+    host.run(until_tick=40 * 100, max_seconds=200)
     # The exact counts are pinned on the server (gameplay_match tests); here
     # the bots must *see* every part of the kit through the SDK.
     wanted = (

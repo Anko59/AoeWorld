@@ -81,6 +81,9 @@ pub(crate) enum Action {
         /// Exercise bindings against the local server without the long AI games.
         #[arg(long)]
         bindings_only: bool,
+        /// Run only these pytest targets (for example `ai/tests/test_start_kit.py`).
+        #[arg(long, num_args = 1..)]
+        only: Vec<String>,
     },
     /// Run only the example AI's fake-world decision regressions.
     LogicTest,
@@ -113,7 +116,10 @@ pub(crate) fn run(action: Action) -> Result<(), Box<dyn Error>> {
             let wheel = build_wheel(&root, true, RELEASE_WHEELS)?;
             println!("built {}", wheel.display());
         }
-        Action::Test { bindings_only } => test(&root, bindings_only)?,
+        Action::Test {
+            bindings_only,
+            only,
+        } => test(&root, bindings_only, &only)?,
         Action::LogicTest => logic_test(&root)?,
         Action::Arena(args) => arena(&root, &args)?,
         Action::Benchmark(args) => benchmark::run(&root, &args)?,
@@ -169,25 +175,39 @@ fn logic_test(root: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn test(root: &Path, bindings_only: bool) -> Result<(), Box<dyn Error>> {
+fn test(root: &Path, bindings_only: bool, only: &[String]) -> Result<(), Box<dyn Error>> {
     let (server, python_path) = prepare(root)?;
     for &(tests, project) in &TESTS[..if bindings_only { 1 } else { TESTS.len() }] {
+        let selected: Vec<&str> = if only.is_empty() {
+            vec![tests]
+        } else {
+            let own: Vec<&str> = only
+                .iter()
+                .map(String::as_str)
+                .filter(|path| path.starts_with(tests))
+                .collect();
+            if own.is_empty() {
+                continue;
+            }
+            own
+        };
         let rootdir = Path::new(project)
             .parent()
             .map_or(".".into(), |p| p.to_string_lossy());
+        let mut args = vec![
+            "-m",
+            "pytest",
+            "-p",
+            "no:cacheprovider",
+            "--rootdir",
+            &rootdir,
+            "-c",
+            project,
+        ];
+        args.extend(&selected);
         process::run_with_env(
             "python3",
-            &[
-                "-m",
-                "pytest",
-                "-p",
-                "no:cacheprovider",
-                "--rootdir",
-                &rootdir,
-                "-c",
-                project,
-                tests,
-            ],
+            &args,
             &[
                 ("PYTHONPATH", &python_path),
                 ("AOE_SERVER_BIN", &server.to_string_lossy()),

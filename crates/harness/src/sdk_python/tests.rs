@@ -118,9 +118,13 @@ fn bindings_can_be_tested_without_launching_long_ai_games() {
     assert!(matches!(
         parsed.action,
         Action::Test {
-            bindings_only: true
+            bindings_only: true,
+            ..
         }
     ));
+    let parsed =
+        Cli::try_parse_from(["sdk", "test", "--only", "ai/tests/a.py", "ai/tests/b.py"]).unwrap();
+    assert!(matches!(parsed.action, Action::Test { only, .. } if only.len() == 2));
 }
 
 #[test]

@@ -439,3 +439,48 @@ fn a_hundred_villages_each_get_the_complete_natural_kit() {
         );
     }
 }
+
+#[test]
+fn newly_seen_starting_trees_of_every_species_enter_the_owners_resource_memory() {
+    // A fogged player learns a node's amount when its tile is first seen. Species
+    // is part of a starting tree's identity, so that probe must try every family
+    // or bots (and humans) never learn the village wood they walk up to.
+    let mut checked = 0;
+    for seed in 0..6 {
+        let mut world = GameWorld::new(WorldConfig::new(4096, 4096, Seed(seed)).unwrap()).unwrap();
+        world.terrain = super::far_orders::prepared_terrain(vec![0; 4], vec![28; 4]);
+        world
+            .initialize_village(PlayerId(0), TileCoord::new(2048, 2048))
+            .unwrap();
+        let unseen: Vec<_> = world
+            .starting_resources()
+            .into_iter()
+            .filter(|n| n.kind == ResourceKind::Wood)
+            .filter(|n| world.visibility(PlayerId(0), n.tile) != TileVisibility::Visible)
+            .collect();
+        for node in unseen {
+            let near = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+                .iter()
+                .find_map(|(dx, dy)| {
+                    let tile = TileCoord::new(node.tile.x + dx, node.tile.y + dy);
+                    world.tile_passable(tile).then_some(tile)
+                });
+            let at = WorldPosition::from_tile_center(near.unwrap()).unwrap();
+            world.spawn_villager(PlayerId(0), at).unwrap();
+            let known: BTreeSet<u64> = world
+                .known_resource_amounts(PlayerId(0))
+                .into_iter()
+                .map(|(id, _)| id)
+                .collect();
+            assert!(
+                known.contains(&node.id),
+                "seed {seed}: {node:?} not remembered"
+            );
+            checked += 1;
+        }
+    }
+    assert!(
+        checked > 0,
+        "no starting tree was out of sight at the start"
+    );
+}
