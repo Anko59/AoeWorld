@@ -8,6 +8,7 @@ use tokio::sync::{OwnedMutexGuard, oneshot};
 
 type Intake = Vec<(u64, PlayerId, PendingCommand)>;
 type Acks = BTreeMap<u64, Vec<GameplayServerMessage>>;
+type Resources = (Vec<super::resources::ResourceUpdate>, Vec<u64>);
 
 /// The next tick's commands, taken by an overlapped delivery before it
 /// started, so that tick need not wait for the session lock.
@@ -155,9 +156,10 @@ impl GameplayService {
         let mut sessions = self.sessions.clone().lock_owned().await;
         if overlap {
             // Resources read the world this tick stepped to, so they are
-            // published before the next tick may take the world.
+            // built before the next tick may take the world, and sent after
+            // the views as on an ordinary tick.
             let started = std::time::Instant::now();
-            let closed = self.publish_resources_to(&world, &mut sessions);
+            let resources = self.resource_updates(&world, &mut sessions);
             drop(world);
             self.probe.phase("resources", started.elapsed());
             let (send, taken) = oneshot::channel();
@@ -169,7 +171,7 @@ impl GameplayService {
             let service = self.clone();
             tokio::spawn(async move {
                 service
-                    .finish(sessions, built, acknowledgements, Some((send, closed)))
+                    .finish(sessions, built, acknowledgements, Some((send, resources)))
                     .await;
             });
         } else {
@@ -188,18 +190,22 @@ impl GameplayService {
         mut sessions: OwnedMutexGuard<BTreeMap<u64, Session>>,
         built: Built,
         acknowledgements: Acks,
-        next: Option<(oneshot::Sender<Intake>, Vec<u64>)>,
+        next: Option<(oneshot::Sender<Intake>, Resources)>,
     ) {
         let overlapped = next.is_some();
-        let mut closed = Vec::new();
-        if let Some((next, published)) = next {
+        let mut resources = None;
+        if let Some((next, built_resources)) = next {
             let _ = next.send(self.intake(&mut sessions));
-            closed = published;
+            resources = Some(built_resources);
         }
         let delivery_started = std::time::Instant::now();
-        let failed = deliver_on(&mut sessions, &built, acknowledgements, !overlapped);
+        let mut failed = deliver_on(&mut sessions, &built, acknowledgements, !overlapped);
+        if let Some((ready, closed)) = resources {
+            failed.extend(closed);
+            failed.extend(super::resources::send_resources(&mut sessions, ready));
+        }
         drop(sessions);
-        for id in failed.into_iter().chain(closed) {
+        for id in failed {
             self.disconnect(id).await;
         }
         let [viewers, frame, sessions] = built.phases;

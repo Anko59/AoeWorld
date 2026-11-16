@@ -7,6 +7,7 @@ mod feed;
 #[path = "resources/store.rs"]
 mod store;
 pub(super) use feed::Journal;
+pub(super) use feed::{ResourceUpdate, send_resources};
 pub(super) use store::save as save_gathering;
 
 #[derive(Debug, thiserror::Error)]

@@ -67,12 +67,26 @@ impl GameplayService {
         world: &aoe_simulation::GameWorld,
         sessions: &mut BTreeMap<u64, super::super::Session>,
     ) -> Vec<u64> {
+        let (ready, mut failed) = self.resource_updates(world, sessions);
+        failed.extend(send_resources(sessions, ready));
+        failed
+    }
+
+    /// Each session's resource frames as of `world`, not yet sent: a tick
+    /// whose delivery overlaps the next one builds them while it still reads
+    /// its own world and sends them after its views, as an ordinary tick does.
+    pub(in crate::gameplay) fn resource_updates(
+        &self,
+        world: &aoe_simulation::GameWorld,
+        sessions: &mut BTreeMap<u64, super::super::Session>,
+    ) -> (Vec<ResourceUpdate>, Vec<u64>) {
         let Some(hash) = self.map_content_hash else {
-            return Vec::new();
+            return (Vec::new(), Vec::new());
         };
         let Some(revision) = world.resource_revision() else {
-            return Vec::new();
+            return (Vec::new(), Vec::new());
         };
+        let mut ready = Vec::new();
         let mut known_by = BTreeMap::<aoe_core::PlayerId, Vec<ResourceAmount>>::new();
         {
             let journal = self
@@ -180,27 +194,57 @@ impl GameplayService {
                             .collect(),
                     }
                 };
-                // A full queue skips this publication: the next one is computed
-                // against what the session last received. Only a closed queue ends it.
-                let frames = snapshot_frames(state);
-                // Reserve all pages before publishing any: queue pressure never
-                // leaves a client with an incomplete snapshot followed by deltas.
-                match session.sender.try_reserve_many(frames.len()) {
-                    Ok(permits) => {
-                        for (permit, state) in permits.zip(frames) {
-                            permit.send(GameplayServerMessage::ResourceState(state));
-                        }
-                        session.resource_revision = Some(revision);
-                        session.resource_vision_revision = Some(vision_revision);
-                        session.resident_resources = known.clone();
-                    }
-                    Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {}
-                    Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => failed.push(*id),
-                }
+                ready.push(ResourceUpdate {
+                    session: *id,
+                    frames: snapshot_frames(state),
+                    revision,
+                    vision_revision,
+                    known: known.clone(),
+                });
             }
-            failed
+            (ready, failed)
         }
     }
+}
+
+/// One session's resource frames waiting to be sent, and the baseline they
+/// bring it to.
+pub(in crate::gameplay) struct ResourceUpdate {
+    session: u64,
+    frames: Vec<ResourceState>,
+    revision: u64,
+    vision_revision: u64,
+    known: Vec<ResourceAmount>,
+}
+
+/// Sends built resource frames; returns the sessions whose queue closed.
+pub(in crate::gameplay) fn send_resources(
+    sessions: &mut BTreeMap<u64, super::super::Session>,
+    ready: Vec<ResourceUpdate>,
+) -> Vec<u64> {
+    let mut failed = Vec::new();
+    for update in ready {
+        let Some(session) = sessions.get_mut(&update.session) else {
+            continue;
+        };
+        // A full queue skips this publication: the next one is computed
+        // against what the session last received. Only a closed queue ends it.
+        // Reserve all pages before publishing any: queue pressure never
+        // leaves a client with an incomplete snapshot followed by deltas.
+        match session.sender.try_reserve_many(update.frames.len()) {
+            Ok(permits) => {
+                for (permit, state) in permits.zip(update.frames) {
+                    permit.send(GameplayServerMessage::ResourceState(state));
+                }
+                session.resource_revision = Some(update.revision);
+                session.resource_vision_revision = Some(update.vision_revision);
+                session.resident_resources = update.known;
+            }
+            Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {}
+            Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => failed.push(update.session),
+        }
+    }
+    failed
 }
 
 /// A complete overlay is retained data, not a single wire frame. Keep the
