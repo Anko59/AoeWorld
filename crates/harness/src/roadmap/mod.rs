@@ -13,11 +13,12 @@ use table::{Row, Status};
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 /// Area files in priority order; anything else in the directory follows alphabetically.
+// Owner, 2026-11-16: "the real issue is the tick rate" — scale comes first.
 const AREAS: [&str; 8] = [
-    "gameplay",
-    "movement",
-    "ai",
     "scale",
+    "movement",
+    "gameplay",
+    "ai",
     "hierarchy",
     "ui",
     "map",
