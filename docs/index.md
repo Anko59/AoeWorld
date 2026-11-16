@@ -8,6 +8,7 @@
 - [Credentials (keyring)](credentials.md)
 - [Issues](issues.md)
 - [Model ledger and usage](models.md)
+- [Roadmap](roadmap.md): status-tracked open items, `make roadmap`
 - [Showcase videos](showcase.md)
 - [Shared dev server](dev-server.md)
 - [Architecture](architecture.md)

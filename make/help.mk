@@ -82,6 +82,8 @@ help:
 	@echo '  make scale-match     Real server at scale: 1 human + 99 Python AIs on a France-sized map (docs/scale/match.md)'
 	@echo '  make scale-match-smoke  The same path with 4 players for one minute'
 	@echo '  make save-replay     Repeat local recorded save commands, thread instruction phases and hashes (AOE_SAVE_REPLAY_ARGS)'
+	@echo '  make roadmap         Open roadmap items by priority and status counts (docs/roadmap.md)'
+	@echo '  make roadmap-check   Fail when a DONE roadmap row names no merged pull request (needs gh)'
 	@echo '  make quality-metrics Seeded gameplay quality numbers and revision-keyed reports (QUALITY_METRICS_ARGS)'
 	@echo '  make save-replay-counter-check  Check Docker access to the thread instruction PMU'
 	@echo '  make check-fixtures  Load documented local packages/saves; missing inputs are skipped'

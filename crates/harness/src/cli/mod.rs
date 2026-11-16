@@ -129,6 +129,10 @@ enum Command {
     ScaleMatch(perf_scale::scale_match::Options),
     /// Replay recorded owner-save commands without AIs, measuring instructions and thread CPU time.
     SaveReplay(perf_scale::save_replay::Options),
+    /// Open roadmap items by priority with status counts (docs/roadmap.md).
+    Roadmap,
+    /// Fail when a DONE roadmap row names no merged pull request.
+    RoadmapCheck,
     /// Seeded gameplay quality metrics and revision-keyed history.
     QualityMetrics(crate::quality_metrics::Options),
     /// Closed-loop in-process late-game match with Rust bots: ticks/s, hashes per worker count, Callgrind stages.

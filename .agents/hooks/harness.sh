@@ -5,7 +5,7 @@
 # judge it. Until origin/dev has this adapter, it is built from this checkout and
 # labelled a non-authoritative bootstrap.
 #   harness.sh <claude|codex|dsh|pi> <session-start|pre-tool-use|post-tool-use|stop|pre-compact>
-#   harness.sh exec duel|ship|ship-status|describe-check|review|review-floor|level-floor|level-stats|review-pr|issue|next|ledger|usage|compare|dev-server|dev-server-status|dev-server-stop|showcase|showcase-check|showcase-narrate|showcase-session|nightly-triage|carry-review|update-prs|metrics
+#   harness.sh exec duel|ship|ship-status|describe-check|review|review-floor|level-floor|level-stats|review-pr|issue|next|ledger|usage|roadmap|roadmap-check|compare|dev-server|dev-server-status|dev-server-stop|showcase|showcase-check|showcase-narrate|showcase-session|nightly-triage|carry-review|update-prs|metrics
 #   harness.sh build
 set -u
 probe=crates/harness/src/agents/runtime.rs
@@ -31,7 +31,8 @@ case ${1:-} in
       update-prs) probe=crates/harness/src/ship/postpush/update.rs ;;
       metrics) probe=crates/harness/src/ship/metrics/snapshot.rs ;;
       ledger|usage) probe=crates/harness/src/ledger/mod.rs ;;
-      *) echo "harness.sh exec: duel, ship, ship-status, describe-check, review, review-floor, level-floor, level-stats, review-pr, issue, next, ledger, usage, compare, dev-server, dev-server-status, dev-server-stop, showcase, showcase-check, showcase-narrate, showcase-session, nightly-triage, carry-review, update-prs or metrics only" >&2; exit 2 ;;
+      roadmap|roadmap-check) probe=crates/harness/src/roadmap/mod.rs ;;
+      *) echo "harness.sh exec: duel, ship, ship-status, describe-check, review, review-floor, level-floor, level-stats, review-pr, issue, next, ledger, usage, roadmap, roadmap-check, compare, dev-server, dev-server-status, dev-server-stop, showcase, showcase-check, showcase-narrate, showcase-session, nightly-triage, carry-review, update-prs or metrics only" >&2; exit 2 ;;
     esac
     runtime=claude event=exec ;;
   *) echo "usage: harness.sh <claude|codex|dsh|pi> <event> | exec ship | build" >&2; exit 2 ;;
