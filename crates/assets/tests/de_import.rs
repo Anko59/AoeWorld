@@ -198,7 +198,7 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
         .collect();
     assert_eq!(
         native.len(),
-        122_163,
+        172_945,
         "every native unit/stone source cell is chunked"
     );
     assert_eq!(
@@ -246,7 +246,11 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
         .find(|f| f.source == "de/terrain/g_fm1.dds")
         .expect("farm");
     assert_eq!((farm.width, farm.height), (32, 32));
-    assert_eq!(report.entries.len(), 203, "+1: the galley bolt");
+    assert_eq!(
+        report.entries.len(),
+        272,
+        "+1: the galley bolt; +69: the naval and Castle/Imperial land-unit sources"
+    );
     assert_eq!(
         manifest
             .frames
