@@ -65,6 +65,9 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
         let mut kinds = BTreeMap::<String, (u64, u64)>::new();
         let mut refused = Vec::new();
         let mut census = [0u64; 8];
+        let kills = |w: &aoe_simulation::GameWorld| (0..200).map(|p| w.player_combat_totals(aoe_core::PlayerId(p))).fold((0, 0), |a, b| (a.0 + b.0, a.1 + b.1));
+        let first_kills = service.inspect_scale_world(|w| kills(w)).await;
+        let mut fight = [0u64; 3];
         let mut timing_commands = BTreeMap::<String, (u64, u64)>::new();
         for tick in &recording.ticks {
             commands += tick.commands.len();
@@ -91,7 +94,7 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
                 row.1 += instructions;
             }
             timing_commands.clear();
-            let movers = service.inspect_scale_world(|w| { progress.sample(w); w.order_mover_census() }).await;
+            let movers = service.inspect_scale_world(|w| { progress.sample(w); let c = w.combat_stats(); fight[0] += u64::from(c.attackers); fight[1] += u64::from(c.hits); fight[2] += u64::from(c.attack_searches); w.order_mover_census() }).await;
             for (total, now) in census.iter_mut().zip(movers) { *total += now; }
             if hash != tick.hash && divergence.is_none() { divergence = Some(tick.tick + 1); }
             hashes.push(json!({"tick": tick.tick + 1, "hash": hex(&hash)}));
@@ -114,7 +117,9 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
                 routes
             })
             .await;
-        Ok(json!({ "parallel_phase_instructions_mean": parallel_phase_mean, "parallel_sites": parallel_sites, "order_attribution": attribution, "refused_commands": refused, "initial_hash": hex(&initial), "total_cpu_ms_per_tick": cpu.summary(), "total_wall_ms_per_tick": wall.summary(), "phases_cpu_ms": phases_cpu_summary, "total_instructions_per_tick": counts::summary(&total), "phases_instructions": phase_summary,
+        let last_kills = service.inspect_scale_world(|w| kills(w)).await;
+        let combat_quality = json!({"attacker_ticks": fight[0], "hits": fight[1], "attack_searches": fight[2], "kills_in_window": last_kills.0 - first_kills.0, "losses_in_window": last_kills.1 - first_kills.1});
+        Ok(json!({ "combat_quality": combat_quality, "parallel_phase_instructions_mean": parallel_phase_mean, "parallel_sites": parallel_sites, "order_attribution": attribution, "refused_commands": refused, "initial_hash": hex(&initial), "total_cpu_ms_per_tick": cpu.summary(), "total_wall_ms_per_tick": wall.summary(), "phases_cpu_ms": phases_cpu_summary, "total_instructions_per_tick": counts::summary(&total), "phases_instructions": phase_summary,
             "first_divergence_tick": divergence, "final_hash": hashes.last().ok_or("empty replay")?["hash"],
             "movement_progress": progress.summary(recording.ticks.last().ok_or("empty replay")?.tick + 1),
             "navigation_calls": navigation_calls, "routes": routes,

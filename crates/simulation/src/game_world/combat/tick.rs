@@ -7,7 +7,7 @@ use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, TileRect, WorldPosition};
 mod tests;
 
 /// What an attacker is walking to and hitting.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Goal {
     Unit(WorldPosition, i32),
     Building(TileRect),
@@ -57,6 +57,7 @@ impl GameWorld {
         let ids = self.combat.attackers.keys().copied().collect::<Vec<_>>();
         self.combat.pursuit_floor = self.combat.pursuit_cursor;
         self.combat.pursuit_cursor = None;
+        self.prefetch_attack_searches(&ids, now);
         for id in ids {
             self.step_attacker(id, now, changed);
         }
@@ -66,6 +67,7 @@ impl GameWorld {
             self.combat.pursuit_cursor = None;
         }
         self.combat.pursuit_floor = None;
+        self.combat.prefetched.clear();
         self.advance_towers(changed);
         self.advance_healing(changed);
     }
