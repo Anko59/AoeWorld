@@ -57,6 +57,7 @@ pub struct GameplayService {
     resource_journal: Arc<std::sync::Mutex<resources::Journal>>,
     resource_directory: Option<std::path::PathBuf>,
     fanout_probe: Arc<probe::FanoutProbe>,
+    overlap: Arc<tick::Overlap>,
     preparation: preparation::Preparation,
     /// Set by the person's Pause: `run_ticks` stops stepping this match.
     pub(super) paused: Arc<std::sync::atomic::AtomicBool>,
@@ -329,7 +330,6 @@ impl GameplayService {
         let world = self.world.read().await;
         (world.tick().0, world.unit_count())
     }
-
     pub(crate) fn probe(&self) -> Arc<crate::gameplay_match::TickProbe> {
         self.probe.clone()
     }

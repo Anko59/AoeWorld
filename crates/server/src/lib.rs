@@ -163,6 +163,8 @@ impl AppState {
     pub async fn run_ticks(self) {
         let mut interval = tokio::time::interval(self.tick_period);
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        // Behind the clock, a tick's delivery overlaps the next tick.
+        let mut behind = false;
         loop {
             let scheduled = interval.tick().await;
             let started = tokio::time::Instant::now();
@@ -173,7 +175,8 @@ impl AppState {
             if gameplay.paused() {
                 continue;
             }
-            gameplay.tick().await;
+            gameplay.tick_overlapped(behind).await;
+            behind = started.elapsed() >= self.tick_period;
             self.observe_tick(&gameplay, scheduled, started).await;
         }
     }

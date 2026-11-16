@@ -4,8 +4,12 @@ use super::Session;
 use super::fanout::{AI_HEARTBEAT_TICKS, Buildings, Built, SessionBuild, ViewerState};
 use aoe_core::{EntityId, PlayerId};
 use aoe_protocol::{FogState, GameplayServerMessage, GameplayUnitState};
+use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use tokio::sync::mpsc::error::TrySendError;
+
+/// Sessions one worker task delivers at least.
+const SESSIONS_PER_TASK: usize = 2;
 
 /// The units a client holds, sorted by id, and the frame they were last
 /// brought up to date from (`None` after a snapshot), so the next tick can
@@ -304,119 +308,168 @@ fn deliver_tick(
     true
 }
 
+/// One session's messages for the tick: whether it took the tick's building
+/// changes into its baseline, and whether its queue closed.
+fn deliver_session(
+    session: &mut Session,
+    build: &SessionBuild,
+    built: &Built,
+    new_acks: Vec<GameplayServerMessage>,
+) -> (bool, BTreeSet<u64>) {
+    let id = build.session_id;
+    let mut failed = BTreeSet::new();
+    let mut applied = false;
+    let current = session
+        .subscription
+        .is_some_and(|s| s.revision == build.revision)
+        // Every revision-scoped frame must follow its initial snapshot.
+        // Leave skipped baselines untouched so an unchanged final view
+        // remains eligible for delivery after the worker drains.
+        && !session
+            .subscription_delivery
+            .as_ref()
+            .is_some_and(|delivery| delivery.pending());
+    if let Some((fog, vision)) = &build.fog
+        && current
+    {
+        let held = session
+            .resident_fog
+            .as_ref()
+            .is_some_and(|held| same_fog(held, fog));
+        if held {
+            session.vision_revision = Some(*vision);
+        } else if send(
+            session,
+            GameplayServerMessage::FogState(fog.clone()),
+            &mut failed,
+            id,
+        ) {
+            session.resident_fog = Some(fog.clone());
+            session.vision_revision = Some(*vision);
+        }
+    }
+    flush_acks(session, new_acks, &mut failed, id);
+    if failed.contains(&id) {
+        return (applied, failed);
+    }
+    if let Some(viewer) = built.viewers.get(&build.viewer)
+        && deliver_tick(session, build, viewer, built, &mut failed)
+    {
+        applied = true;
+    }
+    if failed.contains(&id) || !current {
+        return (applied, failed);
+    }
+    if let Some(land) = built
+        .viewers
+        .get(&build.viewer)
+        .and_then(|v| v.land.as_ref())
+        && session
+            .resident_land
+            .as_ref()
+            .is_none_or(|old| !std::sync::Arc::ptr_eq(old, land) && old.shapes != land.shapes)
+    {
+        if !send(
+            session,
+            super::economy::holdings::message(land, build.revision, built.tick),
+            &mut failed,
+            id,
+        ) {
+            return (applied, failed);
+        }
+        session.resident_land = Some(land.clone());
+    }
+    if session.resident_move_queues != build.move_queues {
+        let message = GameplayServerMessage::MoveQueues {
+            revision: build.revision,
+            tick: built.tick,
+            queues: build.move_queues.clone(),
+        };
+        if send(session, message, &mut failed, id) {
+            session.resident_move_queues = build.move_queues.clone();
+        } else {
+            return (applied, failed);
+        }
+    }
+    // A concurrent subscription supersedes work collected for an old
+    // revision; never overwrite its fresh residents with an old set.
+    if session.resident_animals != build.animals {
+        let message = GameplayServerMessage::WildlifeState {
+            revision: build.revision,
+            tick: built.tick,
+            animals: build.animals.clone(),
+        };
+        if send(session, message, &mut failed, id) {
+            session.resident_animals = build.animals.clone();
+        } else {
+            return (applied, failed);
+        }
+    }
+    if session.resident_projectiles != build.projectiles {
+        let message = GameplayServerMessage::Projectiles {
+            revision: build.revision,
+            tick: built.tick,
+            projectiles: build.projectiles.clone(),
+        };
+        if send(session, message, &mut failed, id) {
+            session.resident_projectiles = build.projectiles.clone();
+        }
+    }
+    (applied, failed)
+}
+
 /// Sends every session its messages for the tick, in the order a client has
 /// always seen them: fog, command acknowledgements, units, wildlife,
 /// projectiles. Returns the sessions whose queue was full.
+#[cfg(test)]
 pub(super) fn deliver(
     sessions: &mut BTreeMap<u64, Session>,
     built: &Built,
+    acknowledgements: BTreeMap<u64, Vec<GameplayServerMessage>>,
+) -> BTreeSet<u64> {
+    deliver_on(sessions, built, acknowledgements, true)
+}
+
+/// `deliver`, on the worker pool when `parallel`; a delivery overlapping
+/// the next tick runs serially so it never takes the simulation's workers.
+pub(super) fn deliver_on(
+    sessions: &mut BTreeMap<u64, Session>,
+    built: &Built,
     mut acknowledgements: BTreeMap<u64, Vec<GameplayServerMessage>>,
+    parallel: bool,
 ) -> BTreeSet<u64> {
     let mut failed = BTreeSet::new();
     // Sessions that took this tick's building changes into their baseline.
     let mut applied = BTreeSet::new();
-    for build in &built.sessions {
-        let id = build.session_id;
-        let Some(session) = sessions.get_mut(&id) else {
-            continue;
-        };
-        let current = session
-            .subscription
-            .is_some_and(|s| s.revision == build.revision)
-            // Every revision-scoped frame must follow its initial snapshot.
-            // Leave skipped baselines untouched so an unchanged final view
-            // remains eligible for delivery after the worker drains.
-            && !session
-                .subscription_delivery
-                .as_ref()
-                .is_some_and(|delivery| delivery.pending());
-        if let Some((fog, vision)) = &build.fog
-            && current
-        {
-            let held = session
-                .resident_fog
-                .as_ref()
-                .is_some_and(|held| same_fog(held, fog));
-            if held {
-                session.vision_revision = Some(*vision);
-            } else if send(
-                session,
-                GameplayServerMessage::FogState(fog.clone()),
-                &mut failed,
-                id,
-            ) {
-                session.resident_fog = Some(fog.clone());
-                session.vision_revision = Some(*vision);
-            }
+    // Each session's delivery touches only that session, so they are diffed
+    // and sent on the pool; the views and the sessions are both in id order.
+    let mut builds = built.sessions.iter().collect::<Vec<_>>();
+    builds.sort_by_key(|build| build.session_id);
+    let mut work = Vec::with_capacity(builds.len());
+    let mut builds = builds.into_iter().peekable();
+    for (id, session) in sessions.iter_mut() {
+        while builds.next_if(|build| build.session_id < *id).is_some() {}
+        if let Some(build) = builds.next_if(|build| build.session_id == *id) {
+            let acks = acknowledgements.remove(id).unwrap_or_default();
+            work.push((build, session, acks));
         }
-        let new_acks = acknowledgements.remove(&id).unwrap_or_default();
-        flush_acks(session, new_acks, &mut failed, id);
-        if failed.contains(&id) {
-            continue;
+    }
+    let one = |(build, session, acks): &mut (&SessionBuild, &mut Session, Vec<_>)| {
+        deliver_session(session, build, built, std::mem::take(acks))
+    };
+    let results = if !parallel || work.len() < 2 * SESSIONS_PER_TASK {
+        work.iter_mut().map(one).collect::<Vec<_>>()
+    } else {
+        work.par_iter_mut()
+            .with_min_len(SESSIONS_PER_TASK)
+            .map(one)
+            .collect()
+    };
+    for ((build, _, _), (took, lost)) in work.iter().zip(results) {
+        if took {
+            applied.insert(build.session_id);
         }
-        if let Some(viewer) = built.viewers.get(&build.viewer)
-            && deliver_tick(session, build, viewer, built, &mut failed)
-        {
-            applied.insert(id);
-        }
-        if failed.contains(&id) || !current {
-            continue;
-        }
-        if let Some(land) = built
-            .viewers
-            .get(&build.viewer)
-            .and_then(|v| v.land.as_ref())
-            && session
-                .resident_land
-                .as_ref()
-                .is_none_or(|old| !std::sync::Arc::ptr_eq(old, land) && old.shapes != land.shapes)
-        {
-            if !send(
-                session,
-                super::economy::holdings::message(land, build.revision, built.tick),
-                &mut failed,
-                id,
-            ) {
-                continue;
-            }
-            session.resident_land = Some(land.clone());
-        }
-        if session.resident_move_queues != build.move_queues {
-            let message = GameplayServerMessage::MoveQueues {
-                revision: build.revision,
-                tick: built.tick,
-                queues: build.move_queues.clone(),
-            };
-            if send(session, message, &mut failed, id) {
-                session.resident_move_queues = build.move_queues.clone();
-            } else {
-                continue;
-            }
-        }
-        // A concurrent subscription supersedes work collected for an old
-        // revision; never overwrite its fresh residents with an old set.
-        if session.resident_animals != build.animals {
-            let message = GameplayServerMessage::WildlifeState {
-                revision: build.revision,
-                tick: built.tick,
-                animals: build.animals.clone(),
-            };
-            if send(session, message, &mut failed, id) {
-                session.resident_animals = build.animals.clone();
-            } else {
-                continue;
-            }
-        }
-        if session.resident_projectiles != build.projectiles {
-            let message = GameplayServerMessage::Projectiles {
-                revision: build.revision,
-                tick: built.tick,
-                projectiles: build.projectiles.clone(),
-            };
-            if send(session, message, &mut failed, id) {
-                session.resident_projectiles = build.projectiles.clone();
-            }
-        }
+        failed.extend(lost);
     }
     // The tick's building changes were taken from the world once. A session
     // that did not apply them (skipped, superseded by a subscription that

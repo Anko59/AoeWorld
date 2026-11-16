@@ -129,6 +129,7 @@ impl GameplayService {
             probe,
             resource_journal: Arc::new(std::sync::Mutex::new(resources::Journal::default())),
             fanout_probe: Arc::default(),
+            overlap: Arc::default(),
             preparation: Default::default(),
             paused: Arc::default(),
             recording: Arc::default(),

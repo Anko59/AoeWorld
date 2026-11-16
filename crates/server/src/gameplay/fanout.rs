@@ -112,6 +112,8 @@ fn viewer_states(
 /// Viewers one worker task builds at least; a tick usually has few rebuilds,
 /// so small tasks would cost more to schedule than to run.
 const VIEWERS_PER_TASK: usize = 4;
+/// Sessions one worker task builds at least.
+const SESSIONS_PER_TASK: usize = 2;
 
 fn viewer_state(
     world: &GameWorld,
@@ -184,10 +186,15 @@ fn build_session(
         region,
     };
     let slots = frame.current(world, &lens, scratch);
-    let move_queues = move_queues(
+    // The frame already holds each unit's owner and health this tick, so
+    // only the viewer's living units are looked up in the world.
+    let move_queues = destinations(
         world,
-        view.viewer,
-        slots.iter().map(|slot| frame.state(*slot).id),
+        slots
+            .iter()
+            .map(|slot| frame.state(*slot))
+            .filter(|state| state.player == view.viewer && state.hp > 0)
+            .map(|state| state.id),
     );
     Some(SessionBuild {
         session_id: view.session_id,
@@ -206,12 +213,22 @@ pub(super) fn move_queues(
     viewer: PlayerId,
     ids: impl Iterator<Item = EntityId>,
 ) -> Vec<aoe_protocol::MoveQueue> {
-    ids.filter(|id| {
-        world
-            .unit(*id)
-            .is_some_and(|u| u.player == viewer && u.hp > 0)
-    })
-    .filter_map(|entity_id| {
+    destinations(
+        world,
+        ids.filter(|id| {
+            world
+                .unit(*id)
+                .is_some_and(|u| u.player == viewer && u.hp > 0)
+        }),
+    )
+}
+
+/// The queued destinations of units already known to belong to the viewer.
+fn destinations(
+    world: &GameWorld,
+    ids: impl Iterator<Item = EntityId>,
+) -> Vec<aoe_protocol::MoveQueue> {
+    ids.filter_map(|entity_id| {
         let destinations = world.move_destinations(entity_id);
         (!destinations.is_empty()).then_some(aoe_protocol::MoveQueue {
             entity_id,
@@ -238,26 +255,31 @@ pub(super) fn build(
     #[cfg(test)]
     frame.assert_matches_world(world);
     let frame_done = started.elapsed();
-    let threads = threads.min(views.len() / 8 + 1);
     #[cfg(test)]
     let workers = std::sync::Mutex::new(Vec::new());
-    let work = |part: &[View]| {
+    let scratch = || {
         #[cfg(test)]
         workers.lock().unwrap().push(std::thread::current().id());
-        let mut scratch = Scratch::default();
-        part.iter()
-            .filter_map(|view| build_session(world, &frame, &viewers, view, &mut scratch))
-            .collect::<Vec<_>>()
+        Scratch::default()
     };
-    let sessions = if threads <= 1 {
-        work(views)
-    } else {
-        let size = views.len().div_ceil(threads);
+    let one =
+        |scratch: &mut Scratch, view: &View| build_session(world, &frame, &viewers, view, scratch);
+    // Sessions differ widely in cost (a crowded camera against an idle AI),
+    // so they are stolen a few at a time rather than split into fixed parts.
+    let sessions = if threads <= 1 || views.len() < 2 * SESSIONS_PER_TASK {
+        let mut scratch = scratch();
         views
-            .par_chunks(size)
-            .map(|part| {
-                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work(part)))
-                    .unwrap_or_default()
+            .iter()
+            .filter_map(|view| one(&mut scratch, view))
+            .collect()
+    } else {
+        views
+            .par_iter()
+            .with_min_len(SESSIONS_PER_TASK)
+            .map_init(scratch, |scratch, view| {
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| one(scratch, view)))
+                    .ok()
+                    .flatten()
             })
             .collect::<Vec<_>>()
             .into_iter()
