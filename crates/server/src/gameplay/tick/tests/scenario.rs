@@ -205,6 +205,16 @@ pub(super) async fn run(
     ticks: u32,
     observe: &mut dyn FnMut(&GameWorld, PlayerId, &[GameplayServerMessage]),
 ) -> Vec<SessionLog> {
+    run_with(ticks, false, observe).await
+}
+
+/// `run`, with each tick's delivery overlapping the next tick when
+/// `overlap`; a final ordinary tick then settles the last delivery.
+pub(super) async fn run_with(
+    ticks: u32,
+    overlap: bool,
+    observe: &mut dyn FnMut(&GameWorld, PlayerId, &[GameplayServerMessage]),
+) -> Vec<SessionLog> {
     let Fixture {
         service,
         ids,
@@ -219,7 +229,7 @@ pub(super) async fn run(
             messages: Vec::new(),
         })
         .collect::<Vec<_>>();
-    for tick in 0..ticks {
+    for tick in 0..ticks + u32::from(overlap) {
         {
             let mut world = service.world.write().await;
             orders(&mut world, tick, &placed);
@@ -231,7 +241,7 @@ pub(super) async fn run(
                 .await;
             service.resync(ids[3], 3).await;
         }
-        service.tick().await;
+        service.tick_overlapped(overlap && tick < ticks).await;
         let world = service.world.read().await;
         for (log, receiver) in logs.iter_mut().zip(&mut receivers) {
             let from = log.messages.len();

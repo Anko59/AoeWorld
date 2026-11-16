@@ -50,16 +50,31 @@ impl GameplayService {
     /// Called after releasing the tick world lock. Snapshot and journal reads
     /// share the world read lock with depletion's exclusive publication.
     pub(in crate::gameplay) async fn publish_resources(&self) {
-        let Some(hash) = self.map_content_hash else {
-            return;
-        };
         let world = self.world.read().await;
+        let mut sessions = self.sessions.lock().await;
+        let failed = self.publish_resources_to(&world, &mut sessions);
+        drop(sessions);
+        drop(world);
+        for id in failed {
+            self.disconnect(id).await;
+        }
+    }
+
+    /// Publishes under locks the caller already holds; returns the sessions
+    /// whose queue closed, for the caller to disconnect once it unlocks.
+    pub(in crate::gameplay) fn publish_resources_to(
+        &self,
+        world: &aoe_simulation::GameWorld,
+        sessions: &mut BTreeMap<u64, super::super::Session>,
+    ) -> Vec<u64> {
+        let Some(hash) = self.map_content_hash else {
+            return Vec::new();
+        };
         let Some(revision) = world.resource_revision() else {
-            return;
+            return Vec::new();
         };
         let mut known_by = BTreeMap::<aoe_core::PlayerId, Vec<ResourceAmount>>::new();
-        let mut sessions = self.sessions.lock().await;
-        let failed = {
+        {
             let journal = self
                 .resource_journal
                 .lock()
@@ -184,11 +199,6 @@ impl GameplayService {
                 }
             }
             failed
-        };
-        drop(sessions);
-        drop(world);
-        for id in failed {
-            self.disconnect(id).await;
         }
     }
 }

@@ -132,12 +132,14 @@ impl GameplayService {
         self.probe.phase("sessions", started.elapsed());
         let fanout_started = std::time::Instant::now();
         let last = self.fanout_probe.take_last_frame();
-        let built =
-            tokio::task::spawn_blocking(move || fanout::build(&world, &views, &changes, last))
-                .await
-                .ok()
-                .flatten();
-        let Some(built) = built else {
+        let built = tokio::task::spawn_blocking(move || {
+            let built = fanout::build(&world, &views, &changes, last);
+            built.map(|built| (world, built))
+        })
+        .await
+        .ok()
+        .flatten();
+        let Some((world, built)) = built else {
             tracing::error!("gameplay fan-out worker failed");
             // The tick's building changes were taken and are lost: every
             // session rebuilds its building baseline.
@@ -150,8 +152,14 @@ impl GameplayService {
         self.fanout_probe
             .record_unit_frame(built.frame.visited(), built.frame.work());
         self.fanout_probe.keep_frame(built.frame.clone());
-        let sessions = self.sessions.clone().lock_owned().await;
+        let mut sessions = self.sessions.clone().lock_owned().await;
         if overlap {
+            // Resources read the world this tick stepped to, so they are
+            // published before the next tick may take the world.
+            let started = std::time::Instant::now();
+            let closed = self.publish_resources_to(&world, &mut sessions);
+            drop(world);
+            self.probe.phase("resources", started.elapsed());
             let (send, taken) = oneshot::channel();
             *self
                 .overlap
@@ -161,10 +169,11 @@ impl GameplayService {
             let service = self.clone();
             tokio::spawn(async move {
                 service
-                    .finish(sessions, built, acknowledgements, Some(send))
+                    .finish(sessions, built, acknowledgements, Some((send, closed)))
                     .await;
             });
         } else {
+            drop(world);
             self.finish(sessions, built, acknowledgements, None).await;
         }
         let started = std::time::Instant::now();
@@ -179,15 +188,18 @@ impl GameplayService {
         mut sessions: OwnedMutexGuard<BTreeMap<u64, Session>>,
         built: Built,
         acknowledgements: Acks,
-        next: Option<oneshot::Sender<Intake>>,
+        next: Option<(oneshot::Sender<Intake>, Vec<u64>)>,
     ) {
-        if let Some(next) = next {
+        let overlapped = next.is_some();
+        let mut closed = Vec::new();
+        if let Some((next, published)) = next {
             let _ = next.send(self.intake(&mut sessions));
+            closed = published;
         }
         let delivery_started = std::time::Instant::now();
         let failed = deliver(&mut sessions, &built, acknowledgements);
         drop(sessions);
-        for id in failed {
+        for id in failed.into_iter().chain(closed) {
             self.disconnect(id).await;
         }
         let [viewers, frame, sessions] = built.phases;
@@ -197,9 +209,11 @@ impl GameplayService {
         self.probe.phase("delivery", delivery_started.elapsed());
         self.fanout_probe
             .record([viewers, frame, sessions, delivery_started.elapsed()]);
-        let started = std::time::Instant::now();
-        self.publish_resources().await;
-        self.probe.phase("resources", started.elapsed());
+        if !overlapped {
+            let started = std::time::Instant::now();
+            self.publish_resources().await;
+            self.probe.phase("resources", started.elapsed());
+        }
     }
 }
 

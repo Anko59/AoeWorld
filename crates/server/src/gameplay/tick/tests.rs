@@ -1,6 +1,6 @@
 //! The state stream each session receives: boundaries follow snapshots and
 //! nothing a viewer cannot see is sent.
-use super::scenario::{SessionLog, run};
+use super::scenario::{SessionLog, run, run_with};
 use aoe_core::PlayerId;
 use aoe_protocol::{FogState, GameplayServerMessage, encode_gameplay_server};
 use aoe_simulation::{GameWorld, TileVisibility};
@@ -148,4 +148,14 @@ async fn a_session_is_never_sent_what_its_player_cannot_see() {
     })
     .await;
     assert!(checked > 1_000, "the scenario sent {checked} messages");
+}
+
+/// Delivering a tick while the next one advances changes when messages
+/// leave, not what any session is sent or in which order.
+#[tokio::test(flavor = "multi_thread")]
+async fn overlapped_delivery_sends_every_session_the_same_stream() {
+    let serial = run(201, &mut |_, _, _| {}).await;
+    let overlapped = run_with(200, true, &mut |_, _, _| {}).await;
+    assert_eq!(digests(&serial), digests(&overlapped));
+    assert!(serial.iter().all(|log| !log.messages.is_empty()));
 }
