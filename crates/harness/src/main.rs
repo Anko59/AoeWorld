@@ -40,6 +40,7 @@ mod release_stack;
 mod repo_policy;
 mod resources;
 mod review;
+mod roadmap;
 mod sdk_python;
 mod ship;
 mod timeline;

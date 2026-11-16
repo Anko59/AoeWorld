@@ -124,6 +124,8 @@ pub(super) fn run(
         Command::PerfStageCounters(options) => perf_scale::stages::run(options)?,
         Command::ScaleMatch(options) => perf_scale::scale_match::run(options)?,
         Command::SaveReplay(options) => perf_scale::save_replay::run(options)?,
+        Command::Roadmap => crate::roadmap::print()?,
+        Command::RoadmapCheck => crate::roadmap::check()?,
         Command::QualityMetrics(options) => crate::quality_metrics::run(options)?,
         Command::MatchBench(options) => perf_scale::match_bench::run(options)?,
         Command::PerfSoak10 => perf_soak::run(600, "soak-10")?,

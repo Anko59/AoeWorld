@@ -32,6 +32,8 @@ export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE
   next \
   nightly-triage \
   ledger \
+  roadmap \
+  roadmap-check \
   usage \
   carry-review \
   update-prs \
@@ -91,6 +93,12 @@ nightly-triage:
 # Which model did what, with measured results (docs/models.md); cached in .cache/ledger.
 ledger:
 	@.agents/hooks/harness.sh exec ledger
+
+# Open roadmap items by priority (docs/roadmap.md); roadmap-check needs gh and fails on a dishonest DONE row.
+roadmap:
+	@.agents/hooks/harness.sh exec roadmap
+roadmap-check:
+	@.agents/hooks/harness.sh exec roadmap-check
 
 # What is left of each provider's allowance, then the last 7 days of the ledger.
 usage:
