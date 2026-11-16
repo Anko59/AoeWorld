@@ -8,9 +8,23 @@ pub(super) fn projectiles(
     region: TileRect,
     player: aoe_core::PlayerId,
 ) -> Vec<aoe_protocol::ProjectileState> {
-    world
-        .visible_projectiles(player)
+    projectiles_from(world, world.projectiles(), region, player)
+}
+
+/// `projectiles`, choosing from `candidates` (in id order, a superset of
+/// those in `region`) rather than from every projectile in flight.
+pub(super) fn projectiles_from<'a>(
+    world: &GameWorld,
+    candidates: impl Iterator<Item = &'a aoe_simulation::Projectile>,
+    region: TileRect,
+    player: aoe_core::PlayerId,
+) -> Vec<aoe_protocol::ProjectileState> {
+    candidates
         .filter(|p| region.contains(p.position(world.tick()).tile_floor()))
+        .filter(|p| {
+            world.visibility(player, p.position(world.tick()).tile_floor())
+                == aoe_simulation::TileVisibility::Visible
+        })
         .map(|p| {
             // Reveal only the visible remainder: endpoints in black/fog must not
             // disclose an unseen firing position or target. A visible firing
@@ -53,8 +67,18 @@ pub(super) fn animals(
     region: TileRect,
     player: aoe_core::PlayerId,
 ) -> Vec<AnimalState> {
-    world
-        .animals()
+    animals_from(world, world.animals(), region, player)
+}
+
+/// `animals`, choosing from `candidates` (in id order: every animal in
+/// `region` and every one `player` owns, possibly more).
+pub(super) fn animals_from<'a>(
+    world: &GameWorld,
+    candidates: impl Iterator<Item = &'a aoe_simulation::GameAnimal>,
+    region: TileRect,
+    player: aoe_core::PlayerId,
+) -> Vec<AnimalState> {
+    candidates
         .filter(|a| a.owner == Some(player) || region.contains(a.position.tile_floor()))
         .filter(|a| {
             a.owner == Some(player)

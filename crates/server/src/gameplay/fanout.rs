@@ -9,6 +9,7 @@ use aoe_protocol::{
     AnimalState, FogState, GameplayBuildingState, GameplayPlayerState, ProjectileState,
 };
 use aoe_simulation::GameWorld;
+use nearby::Nearby;
 use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -86,10 +87,13 @@ fn viewer_states(
     // Shared by every viewer when fog is disabled, so built once up front.
     let first = rebuild.keys().next().filter(|_| disabled);
     let everything = first.map(|first| Arc::new(economy::buildings(world, *first)));
-    let land_tick = world.tick().0.is_multiple_of(20);
+    // Each viewer's land report is rastered once a second as before, but
+    // viewers take turns: a hundred rasters no longer land on one tick.
+    let tick = world.tick().0;
+    let land_tick = |viewer: PlayerId| (tick + u64::from(viewer.0)).is_multiple_of(LAND_TICKS);
     let rebuild = rebuild.into_iter().collect::<Vec<_>>();
     // Each viewer's state reads only the world, so viewers are built in
-    // parallel: once a second every viewer's land report is rastered.
+    // parallel.
     rebuild
         .par_iter()
         .with_min_len(VIEWERS_PER_TASK)
@@ -100,7 +104,7 @@ fn viewer_states(
                 rebuild,
                 changes,
                 everything.as_ref(),
-                land_tick,
+                land_tick(viewer),
             );
             (viewer, state)
         })
@@ -109,6 +113,8 @@ fn viewer_states(
         .collect()
 }
 
+/// Ticks between two land reports of one viewer.
+const LAND_TICKS: u64 = 20;
 /// Viewers one worker task builds at least; a tick usually has few rebuilds,
 /// so small tasks would cost more to schedule than to run.
 const VIEWERS_PER_TASK: usize = 4;
@@ -159,7 +165,8 @@ fn build_session(
     frame: &UnitFrame,
     viewers: &BTreeMap<PlayerId, ViewerState>,
     view: &View,
-    scratch: &mut Scratch,
+    nearby: &Nearby,
+    (scratch, near): &mut (Scratch, Vec<u32>),
 ) -> Option<SessionBuild> {
     let Subscription { revision, region } = view.subscription;
     let vision = viewers.get(&view.viewer)?.vision;
@@ -202,8 +209,16 @@ fn build_session(
         viewer: view.viewer,
         units: (slots.len() <= aoe_protocol::MAX_SUBSCRIBED_UNITS).then_some(slots),
         fog,
-        animals: super::wildlife::animals(world, region, view.viewer),
-        projectiles: super::wildlife::projectiles(world, region, view.viewer),
+        animals: super::wildlife::animals_from(
+            world,
+            nearby.animals(region, view.viewer, near),
+            region,
+            view.viewer,
+        ),
+        projectiles: {
+            let candidates = nearby.projectiles(region, near);
+            super::wildlife::projectiles_from(world, candidates, region, view.viewer)
+        },
         move_queues,
     })
 }
@@ -254,16 +269,18 @@ pub(super) fn build(
     let frame = UnitFrame::build(world, threads, generation, previous)?;
     #[cfg(test)]
     frame.assert_matches_world(world);
+    let nearby = Nearby::new(world);
     let frame_done = started.elapsed();
     #[cfg(test)]
     let workers = std::sync::Mutex::new(Vec::new());
     let scratch = || {
         #[cfg(test)]
         workers.lock().unwrap().push(std::thread::current().id());
-        Scratch::default()
+        (Scratch::default(), Vec::new())
     };
-    let one =
-        |scratch: &mut Scratch, view: &View| build_session(world, &frame, &viewers, view, scratch);
+    let one = |scratch: &mut (Scratch, Vec<u32>), view: &View| {
+        build_session(world, &frame, &viewers, view, &nearby, scratch)
+    };
     // Sessions differ widely in cost (a crowded camera against an idle AI),
     // so they are stolen a few at a time rather than split into fixed parts.
     let sessions = if threads <= 1 || views.len() < 2 * SESSIONS_PER_TASK {
@@ -299,6 +316,8 @@ pub(super) fn build(
     })
 }
 
+#[path = "fanout/nearby.rs"]
+mod nearby;
 #[path = "fanout/subscription.rs"]
 pub(super) mod subscription;
 #[path = "fanout/tests.rs"]
