@@ -20,3 +20,5 @@
 | Kill a branch after two failed attempts; ship or cut rewrite branches within hours; bigger PRs | 11-11, 11-12 | owner |
 | Codex first for implementation; Sonnet or Haiku subagents otherwise; at most 4 Codex sessions | 11-09, 10-28 | owner |
 | Never end a turn with nothing running when the owner gave the machine | 11-05 | owner |
+| Scale work follows the queue in [scale](scale.md) in order, judged on one frozen scoreboard (Anatolia save, live ticks/s and replay instructions); every speed number comes with work numbers; skip work whose best case is under 5%; every experiment ends with ten lines on issue #865; one line a day for the owner | 11-16 | owner agreed to issue #865 plus additions |
+| Experiment lane: `exp/...` branches with hooks on but no review, video or docs; two days to a first number; never merged as is; only a winner is redone as ordinary PRs | 11-16 | issue #865 rule 4, hooks kept on |

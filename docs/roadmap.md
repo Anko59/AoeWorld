@@ -19,16 +19,16 @@ night and day briefs) and checked against `origin/dev` at `ec5bf2e15` (#857, 202
 
 ## Ten highest-priority open items
 
-1. Server lag in big late games: 6.9 ticks/s at 16.7k units (11-15), 3.14 at game minute 153; target 20 ([scale](roadmap/scale.md)).
-2. Long routes "100% dead", units shuffling while waiting for a route; fights-first route slots merged in #849 but long routes still die in play ([movement](roadmap/movement.md)).
-3. Armies near enemies not engaging ([gameplay](roadmap/gameplay.md)).
+1. Server lag in big late games: 2.6 ticks/s at 45k to 62k units (11-16), 6.9 at 16.7k (11-15); target 20, or 10 with interpolation. Worked through the scale queue Q1 to Q6 of [scale](roadmap/scale.md), recorded on issue #865.
+2. Long routes "100% dead": 9,000 to 10,000 units waiting on 11-16, oldest at expiry; scale queue Q2 ([movement](roadmap/movement.md)).
+3. Armies near enemies not engaging: scale queue Q3, engagement as assignment ([gameplay](roadmap/gameplay.md)).
 4. Generals and armies cannot path through the owner's own gates; Generals look-capped ([movement](roadmap/movement.md)).
 5. New content (navy, land units, gunpowder) merged and playable end to end; HUD name/icon bugs ([gameplay](roadmap/gameplay.md)).
 6. Formation coherence on real terrain and Steward arrival 80-82% ([movement](roadmap/movement.md)).
 7. Much stronger scaling AIs that upgrade and use new content ([AI](roadmap/ai.md)).
 8. Client frame rate in big games (53 ms median frame at 16.7k units) ([scale](roadmap/scale.md)).
 9. Vassal redesign: staffing, sliders, trunk roads and bridges first, General-call radius, walking zones ([hierarchy](roadmap/hierarchy.md)).
-10. Decide the future of the movement rewrite (phase 4 and 5 parked, S1 killed) and rung 2 ([scale](roadmap/scale.md)).
+10. Future of the movement rewrite and rung 2: decided by scale queue Q6 ([scale](roadmap/scale.md)).
 
 ## Source conflicts resolved in this roadmap
 
