@@ -114,16 +114,23 @@ impl GameWorld {
     ) -> Result<AttackSearch, GameWorldError> {
         // A search the tick prefetched on the phase snapshot is used as is;
         // otherwise it runs here. Either way the shared budget is charged
-        // here, in canonical attacker order.
+        // here, in canonical attacker order. One computed as if the budget
+        // were spent is dropped while the real budget is still open: its
+        // wait would hold the attacker back for nothing.
+        let closed = self.position_searches_closed();
         let cached = self
             .combat
             .prefetched
             .remove(&id)
-            .filter(|(at, _)| at == goal)
-            .map(|(_, outcome)| outcome);
+            .filter(|(at, open, _)| at == goal && (*open || closed))
+            .map(|(_, _, outcome)| outcome);
+        #[cfg(test)]
+        if cached.is_some() {
+            self.combat.prefetch_used += 1;
+        }
         let outcome = match cached {
             Some(outcome) => outcome,
-            None => self.attack_search_core(id, goal, !self.position_searches_closed())?,
+            None => self.attack_search_core(id, goal, !closed)?,
         };
         let search = if outcome.spends && self.position_searches_closed() {
             AttackSearch {

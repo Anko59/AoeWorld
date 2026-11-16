@@ -65,7 +65,7 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
         let mut kinds = BTreeMap::<String, (u64, u64)>::new();
         let mut refused = Vec::new();
         let mut census = [0u64; 8];
-        let kills = |w: &aoe_simulation::GameWorld| (0..200).map(|p| w.player_combat_totals(aoe_core::PlayerId(p))).fold((0, 0), |a, b| (a.0 + b.0, a.1 + b.1));
+        let kills = |w: &aoe_simulation::GameWorld| w.players().map(|p| w.player_combat_totals(p.player)).fold((0, 0), |a, b| (a.0 + b.0, a.1 + b.1));
         let first_kills = service.inspect_scale_world(|w| kills(w)).await;
         let mut fight = [0u64; 3];
         let mut timing_commands = BTreeMap::<String, (u64, u64)>::new();

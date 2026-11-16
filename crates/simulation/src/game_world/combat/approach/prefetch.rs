@@ -64,7 +64,7 @@ impl GameWorld {
             for (&(id, goal), outcome) in picked[at..at + wave].iter().zip(found) {
                 if let Ok(outcome) = outcome {
                     remaining -= usize::from(outcome.spends);
-                    self.combat.prefetched.insert(id, (goal, outcome));
+                    self.combat.prefetched.insert(id, (goal, open, outcome));
                 }
             }
             at += wave;

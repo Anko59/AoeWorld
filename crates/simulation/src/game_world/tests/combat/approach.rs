@@ -238,6 +238,10 @@ fn a_fight_over_far_orders_replays_identically_at_every_worker_count() {
             searches > 0,
             "the scenario must search for firing positions"
         );
+        assert!(
+            w.combat.prefetch_used > 0,
+            "the scenario must use prefetched searches"
+        );
         runs.push(hashes);
     }
     for run in &runs[1..] {
