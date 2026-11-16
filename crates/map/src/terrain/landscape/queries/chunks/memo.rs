@@ -14,6 +14,9 @@ type CliffCell = ((i32, i32), Option<crate::terrain::relief::CliffPiece>);
 
 type CellWildness = ((i64, i64), u16);
 
+/// A water kind, with its dense provenance when no provider produced it.
+type MemoWater = (crate::WaterKind, Option<crate::terrain::Provenance>);
+
 pub(super) type PointMemo<'a> = Memo<'a, 25, 361>;
 pub(super) type ChunkMemo<'a> = Memo<'a, 1296, 2500>;
 
@@ -29,7 +32,8 @@ pub(super) struct Memo<'a, const N: usize, const W: usize> {
     entries: RefCell<[Entry; N]>,
     cells: RefCell<[Option<CellWildness>; 16]>,
     cliffs: RefCell<[Option<CliffCell>; 169]>,
-    water: RefCell<[Option<crate::WaterKind>; W]>,
+    /// Water kinds; the dense provenance spares a base tile a second sample.
+    water: RefCell<[Option<MemoWater>; W]>,
     shores: RefCell<[Option<Shore>; N]>,
     /// A point query asks the source whether any water is in reach before
     /// sampling its neighbors; a chunk shares those samples between tiles.
@@ -117,14 +121,30 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         {
             return Ok(Some(base));
         }
+        let in_bounds = self.generator.landscape_in_bounds(position);
         let result =
-            if self.generator.provider.is_some() && self.generator.landscape_in_bounds(position) {
+            if self.generator.provider.is_some() && in_bounds {
                 Some(provider::sample_base_tile_with_cliff(
                     self.generator,
                     position,
                     self.cancelled,
                     &|tile| self.cliff(tile),
                 )?)
+            } else if in_bounds {
+                let water = self.dense_water(position);
+                // The memo's cliff cell, as the provider path uses; a cancelled
+                // read falls back to the uncancellable sample the base takes.
+                Some(
+                    self.generator
+                        .sample_base_tile_with(position, water, &|tile| match self.cliff(tile) {
+                            Ok(piece) => piece,
+                            Err(_) => self
+                                .generator
+                                .cliff_piece_with_cancel(tile, &|| false)
+                                .ok()
+                                .flatten(),
+                        }),
+                )
             } else {
                 self.generator.landscape_base_at(position, self.cancelled)?
             };

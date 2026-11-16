@@ -78,26 +78,54 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         }
         let index = self.water_index(position);
         if let Some(index) = index
-            && let Some(kind) = self.water.borrow()[index]
+            && let Some((kind, _)) = self.water.borrow()[index]
         {
             return Ok(Some(kind));
         }
         let known = self
             .index(position)
             .and_then(|index| self.entries.borrow()[index].base)
-            .map(|base| base.water);
-        let kind = match known {
-            Some(kind) => Some(kind),
+            .map(|base| (base.water, None));
+        let water = match known {
+            Some(water) => Some(water),
+            None if self.generator.provider.is_none()
+                && self.generator.landscape_in_bounds(position) =>
+            {
+                // `base_water_with_cancel` without a provider, keeping the
+                // provenance for this tile's base sample.
+                let (kind, provenance) = self.generator.dense_water(position);
+                Some((kind, Some(provenance)))
+            }
             None => self
                 .generator
-                .base_water_with_cancel(position, self.cancelled)?,
+                .base_water_with_cancel(position, self.cancelled)?
+                .map(|kind| (kind, None)),
         };
         if let Some(index) = index
-            && let Some(kind) = kind
+            && let Some(water) = water
         {
-            self.water.borrow_mut()[index] = Some(kind);
+            self.water.borrow_mut()[index] = Some(water);
         }
-        Ok(kind)
+        Ok(water.map(|(kind, _)| kind))
+    }
+
+    /// The tile's `dense_water` (no provider, in bounds), shared with the
+    /// shore scans of its neighbours.
+    pub(super) fn dense_water(
+        &self,
+        position: TileCoord,
+    ) -> (WaterKind, crate::terrain::Provenance) {
+        let index = self.water_index(position);
+        if let Some(index) = index
+            && let Some((kind, Some(provenance))) = self.water.borrow()[index]
+        {
+            return (kind, provenance);
+        }
+        let water = self.generator.dense_water(position);
+        if let Some(index) = index {
+            self.water.borrow_mut()[index] = Some((water.0, Some(water.1)));
+        }
+        water
     }
 
     pub(in super::super) fn shore(

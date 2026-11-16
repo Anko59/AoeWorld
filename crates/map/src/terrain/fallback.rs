@@ -75,6 +75,20 @@ impl MapChunkGenerator {
     /// Undecorated terrain for neighbor queries; never samples landscape or
     /// objects. Fallback noise is evaluated only for fields without a source.
     pub(super) fn sample_base_tile(&self, tile: TileCoord) -> Tile {
+        self.sample_base_tile_with(tile, self.dense_water(tile), &|tile| {
+            self.cliff_piece_with_cancel(tile, &|| false).ok().flatten()
+        })
+    }
+
+    /// `sample_base_tile` with the tile's `dense_water` and its cliff cell,
+    /// which a query memo may already hold: a neighbour's shore scan sampled
+    /// the water, and the eight other tiles of a cliff cell share its piece.
+    pub(super) fn sample_base_tile_with(
+        &self,
+        tile: TileCoord,
+        dense_water: (WaterKind, Provenance),
+        cliff: &dyn Fn(TileCoord) -> Option<super::relief::CliffPiece>,
+    ) -> Tile {
         let (biome, vegetation_provenance) = self.sample_biome_with_provenance(tile);
         let elevation = self.elevation.as_ref().and_then(|elevation| {
             let height = elevation.height_at(tile, self.width_tiles)?;
@@ -107,9 +121,9 @@ impl MapChunkGenerator {
         };
         // Elevation cannot identify water: inland depressions can be dry, while
         // coastlines require independent, coherent water geometry.
-        let (water, water_provenance) = self.dense_water(tile);
+        let (water, water_provenance) = dense_water;
         if water == WaterKind::None
-            && let Ok(Some(piece)) = self.cliff_piece_with_cancel(tile, &|| false)
+            && let Some(piece) = cliff(tile)
         {
             surface.kind = surface::SurfaceKind::CliffLedge;
             surface.corner_game_height_levels = [piece.top_level; 4];
