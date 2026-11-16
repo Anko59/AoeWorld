@@ -119,6 +119,30 @@ impl GameWorld {
         }
     }
 
+    /// Whether a plain mover blocked for 16 or more ticks tries its sidesteps
+    /// this tick. A long block retries every 2, 4, 8, then 16 ticks, staggered by
+    /// id, instead of sweeping every candidate every tick; its own straight
+    /// step is still tried every tick, so a gap that opens is taken at once.
+    pub(crate) fn sidestep_due(&self, index: usize) -> bool {
+        let blocked = self.units[index].obstruction.map_or(0, |o| o.blocked);
+        // Work approaches fan out by continuous small steps, a group's
+        // detached member rejoins its files and an attacker closes on its
+        // target: all keep every round. Backing attackers off left more
+        // attack approaches waiting for routes at the end of the war replay.
+        if blocked < 16
+            || self.units[index].formation.is_some()
+            || self.has_work_task(self.units[index].state.id)
+            || self.units[index].state.attack_target.is_some()
+        {
+            return true;
+        }
+        let period = 1u64 << (u32::from(blocked / 16).ilog2() + 1).min(4);
+        self.tick
+            .0
+            .wrapping_add(u64::from(self.units[index].state.id.0))
+            .is_multiple_of(period)
+    }
+
     pub(crate) fn take_local_retry(&mut self, index: usize) -> bool {
         let unit = self.units[index].state;
         // A mover can alternate a clear step and a blocked sidestep. An
