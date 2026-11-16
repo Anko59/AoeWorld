@@ -122,9 +122,16 @@ pub(crate) struct Combat {
     telemetry: telemetry::Telemetry,
     /// Expensive firing-position searches still allowed this tick.
     pub(crate) position_searches: u32,
+    /// Searches the attacker phase computed side by side on its starting
+    /// state, consumed in attacker order and always empty between ticks:
+    /// their goal, whether the position budget was open, and the outcome.
+    pub(crate) prefetched: BTreeMap<EntityId, (tick::Goal, bool, approach::SearchOutcome)>,
     /// Deferred approaches since the world began: (crowded, budget).
     #[cfg(test)]
     pub(crate) waits: (u64, u64),
+    /// Prefetched searches the attacker loop used since the world began.
+    #[cfg(test)]
+    pub(crate) prefetch_used: u64,
 }
 
 impl Default for Combat {
@@ -152,8 +159,11 @@ impl Default for Combat {
             stats: Default::default(),
             telemetry: Default::default(),
             position_searches: MAX_POSITION_SEARCHES_PER_TICK,
+            prefetched: Default::default(),
             #[cfg(test)]
             waits: (0, 0),
+            #[cfg(test)]
+            prefetch_used: 0,
         }
     }
 }

@@ -190,3 +190,61 @@ fn a_trapped_archer_rejects_an_attack_outside_its_range() {
         "rejection leaves the order state intact"
     );
 }
+
+// Prefetched position searches never depend on the worker count.
+
+fn fight() -> (GameWorld, u64) {
+    let mut w = world();
+    w.set_fog_disabled(true);
+    let mut ours = Vec::new();
+    let mut theirs = Vec::new();
+    for n in 0..150 {
+        let (x, y) = (20 + n % 15 * 2, 20 + n / 15 * 2);
+        let kind = if n % 3 == 0 {
+            crate::UnitKind::Archer
+        } else {
+            crate::UnitKind::Militia
+        };
+        ours.push(w.spawn_kind(PlayerId(0), kind, at(x, y)).unwrap());
+        theirs.push(w.spawn_kind(PlayerId(1), kind, at(x + 90, y + 40)).unwrap());
+    }
+    for (n, (&a, &b)) in ours.iter().zip(&theirs).enumerate() {
+        w.issue_attack(PlayerId(0), a, theirs[(n + 5) % 150])
+            .unwrap();
+        w.issue_attack(PlayerId(1), b, ours[(n + 7) % 150]).unwrap();
+    }
+    (w, 0)
+}
+
+#[test]
+fn a_fight_over_far_orders_replays_identically_at_every_worker_count() {
+    let mut runs = Vec::new();
+    for workers in [1, 2, 4, 12] {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(workers)
+            .build()
+            .unwrap();
+        let (mut w, _) = fight();
+        let mut hashes = Vec::new();
+        let mut searches = 0;
+        pool.install(|| {
+            for _ in 0..400 {
+                w.advance();
+                searches += w.combat_stats().attack_searches;
+                hashes.push(w.canonical_hash());
+            }
+        });
+        assert!(
+            searches > 0,
+            "the scenario must search for firing positions"
+        );
+        assert!(
+            w.combat.prefetch_used > 0,
+            "the scenario must use prefetched searches"
+        );
+        runs.push(hashes);
+    }
+    for run in &runs[1..] {
+        assert_eq!(*run, runs[0]);
+    }
+}
