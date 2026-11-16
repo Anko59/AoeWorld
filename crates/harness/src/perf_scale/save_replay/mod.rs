@@ -22,6 +22,10 @@ pub struct Options {
     /// share, so compare wall time and hashes, not instructions.
     #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..=64))]
     workers: u32,
+    /// Skip the one-worker parallel census, whose per-task counter reads slow
+    /// that run; use it when comparing wall time across worker counts.
+    #[arg(long)]
+    no_parallel_census: bool,
     #[arg(long, default_value = ".cache/save-replay/report.json")]
     out: PathBuf,
 }
@@ -133,6 +137,7 @@ pub fn run(options: Options) -> Result<(), Box<dyn std::error::Error>> {
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(options.workers as usize)
         .build()?;
+    aoe_simulation::parallel_meter::suppress(options.no_parallel_census);
     let mut runs = Vec::new();
     for index in 0..options.runs {
         let report = pool.install(|| once(&options, &recording))?;
@@ -152,7 +157,7 @@ pub fn run(options: Options) -> Result<(), Box<dyn std::error::Error>> {
     let repeat_hashes_agree = runs.iter().all(|run| run["hashes"] == runs[0]["hashes"]);
     let report = json!({"revision": git(&["rev-parse", "HEAD"]), "dirty": !git(&["status", "--porcelain"]).is_empty(),
         "cpu_clock": "CLOCK_THREAD_CPUTIME_ID", "counter": "PERF_COUNT_HW_INSTRUCTIONS", "exclude_kernel": true, "exclude_hv": true,
-        "inherit": false, "pinned_counter": true, "multiplexed": false, "rayon_workers": options.workers, "ticks": recording.ticks.len(),
+        "inherit": false, "pinned_counter": true, "multiplexed": false, "rayon_workers": options.workers, "parallel_census": options.workers == 1 && !options.no_parallel_census, "ticks": recording.ticks.len(),
         "source_diff_blake3": blake3::hash(git(&["diff", "HEAD", "--binary"]).as_bytes()).to_hex().to_string(),
         "save_blake3": blake3::hash(&fs::read(&options.save)?).to_hex().to_string(),
         "map_hash": recording.map_hash.map(|h| hex(&h)),

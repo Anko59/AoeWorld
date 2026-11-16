@@ -15,6 +15,7 @@ use std::{
 type Reader = Arc<dyn Fn() -> u64 + Send + Sync>;
 static READER: RwLock<Option<Reader>> = RwLock::new(None);
 static ENABLED: AtomicBool = AtomicBool::new(false);
+static SUPPRESSED: AtomicBool = AtomicBool::new(false);
 static INSIDE: AtomicU64 = AtomicU64::new(0);
 static SITES: Mutex<BTreeMap<String, Site>> = Mutex::new(BTreeMap::new());
 
@@ -34,6 +35,11 @@ pub fn install(reader: impl Fn() -> u64 + Send + Sync + 'static) {
     *READER.write().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(reader));
     ENABLED.store(true, Ordering::Release);
 }
+/// Turns the census off for a whole replay, so a one-worker run's wall time
+/// carries no per-task counter reads and compares fairly with wider pools.
+pub fn suppress(off: bool) {
+    SUPPRESSED.store(off, Ordering::Release);
+}
 pub fn uninstall() {
     ENABLED.store(false, Ordering::Release);
     *READER.write().unwrap_or_else(|e| e.into_inner()) = None;
@@ -47,7 +53,10 @@ pub fn drain() -> BTreeMap<String, Site> {
 }
 
 pub(super) fn reader() -> Option<Reader> {
-    if ENABLED.load(Ordering::Acquire) && rayon::current_num_threads() == 1 {
+    if ENABLED.load(Ordering::Acquire)
+        && !SUPPRESSED.load(Ordering::Acquire)
+        && rayon::current_num_threads() == 1
+    {
         READER.read().unwrap_or_else(|e| e.into_inner()).clone()
     } else {
         None
