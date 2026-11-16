@@ -5,18 +5,33 @@ minimum 1000p/1M, real time at every rung, no queue (units never silently wait),
 sharding later and never required. Near target 11-08: about 2M units for the management hierarchy.
 Rungs: 0 measurement, 1 100k units, 2 500k, 3 2M, 4 clients (see issue 748).
 
+## Scale queue (issue #865, agreed 11-16)
+
+Worked in this order, one item at a time, by one session that records every result as a comment on issue #865.
+Each item ends with the scoreboard before and after plus its work numbers; a speed gain that does less work is a loss.
+
 | item | asked | status | evidence | next step |
 | --- | --- | --- | --- | --- |
-| Rung 1: owner Mekong save at 20 ticks/s and 30 FPS, then whole 100p/100k game | 10-22, 11-09, 11-12, 11-13 x12+ | PARTIAL | Owner save 7.4 (11-09) to 18.7 ticks/s (quiet, 11-10). Live game 11-15 Anatolia: 6.9 ticks/s at 16.7k units, 3.14 at game min 153 with one AI at 5k pop. War replay 391.5M to 251.3M instr/tick (#802 reference, #814 re-record, through #817); serial share 80.2%, Amdahl cap 1.25x | Cut work, not parallelise: plan_serve 48M, apply_loop 42M + group_apply 17M, combat 38M instr per tick; judge by `make save-replay` instructions AND the gated late_game counter |
+| Q1 Scoreboard: owner Anatolia save `1794783742` (45.4k units, tick 185,423, copy of `/home/anko/Work/evidence/game-2026-11-15`) live via `make scale-match --save` with 99 AIs (ticks/s, p95 tick, phase split) and `make save-replay` instructions per tick; work numbers: units moving, waiting for a route, refused orders, hits, resources banked | 11-16 | PLANNED | Owner game 11-16 on this save: 2.6 ticks/s average over 3h32, tick p50 340-450 ms at 45.6k to 61.8k units; slow tick: movement 208 ms, combat 77, fan-out wait 50, gathering 33. A save-replay needs a recorded command stream for this save | Record a command stream on the save, take the baseline, freeze it; no new benchmark beyond one day |
+| Q2 Route starvation, quick levers: charge actual work on a route-cache hit (#865 A1(b)); per-player route slots that follow waiting demand under the world caps (A1(c)); the match-wide limit of 32 commands per tick shared by 99 AIs (A8) | 11-05 to 11-16 x6 | PLANNED | 11-16 game: 9,000-10,000 units waiting, about 9,500 without a planner, oldest wait always at the 3,600-tick expiry, 25-29 players at their search cap. See [movement](movement.md) | Each lever measured by wait counts and percentiles on Q1, not only by speed |
+| Q3 Experiment 1, engagement as assignment: engaged members stay in their group, spots per target assigned by rank, straight walk from slot to spot, reassignment on deaths | 11-16 | PLANNED | #865 section 0 and second comment; combat 77 ms of the 11-16 slow tick; owner "units stand near enemies and don't engage" | `exp/` branch; kill under 3x cheaper per unit in the fight or fewer units striking |
+| Q4 Experiment 2, step unseen units every 2nd, 4th and 8th tick | 11-16 | PLANNED | #865 section 0; prices a cheaper tier before building one | `exp/` branch; kill under 1.5x at every 4th tick or work numbers fall |
+| Q5 Port and measure the friend's work on Q1: fog packed view and deltas (#862); TCP_NODELAY and one flush per tick, client compile during the intro, CI static legs (#860); route planner boxed out of unit records, no discarded changed-unit list, gzip once (#861) | 11-16 | PLANNED | PRs 860-863 by Smirkey, based on dev `ec5bf2e1` or older; #860 pushed with `--no-verify`, no ship evidence | Port piece by piece as ordinary PRs; skip any under 5% on Q1 |
+| Q6 Experiment 3, a squad as one body on hard ground, plus post-mortems of phase 4 (+43M instr) and S1 (28,500 instr per mover) | 11-16 | PLANNED | #865 section 0 and M3; decides the movement rewrite (see Rung 2 and [movement](movement.md)) | `exp/` branch; kill above 30% fallback to individual units or worse arrivals |
+
+## Other scale items
+
+| item | asked | status | evidence | next step |
+| --- | --- | --- | --- | --- |
+| Rung 1: owner Mekong save at 20 ticks/s and 30 FPS, then whole 100p/100k game | 10-22, 11-09, 11-12, 11-13 x12+ | PARTIAL | Owner save 7.4 (11-09) to 18.7 ticks/s (quiet, 11-10). Live game 11-15 Anatolia: 6.9 ticks/s at 16.7k units, 3.14 at game min 153 with one AI at 5k pop. Live game 11-16 on the same save: 2.6 ticks/s at 45.6k to 61.8k units. War replay 391.5M to 251.3M instr/tick (#802 reference, #814 re-record, through #817); serial share 80.2%, Amdahl cap 1.25x | Work the scale queue above, in order |
 | Client frame rate on large games | 11-09, 11-12, 11-15 | PARTIAL | #754 (2.8 to 16 FPS), #758 (14 to 43), #789, #792, #804, #816, #811 bench. Live 11-15: WebGL2 frame p50/p95/max 53/132/208 ms at 16.7k units | Profile the 11-15 save frame, `make client-frame-bench` |
-| Rung 2: 500k units (movement rewrite core) | 11-07 | PLANNED | S1 kernel spike killed 11-14: 28,500 instr per mover vs gate 2,000; the plan's 1M at 20 Hz is not reachable with that design. Phase 4 and 5 parked (see [movement](movement.md)) | Owner decision: new design brief after current lag is fixed |
-| Rung 1 bookkeeping leftovers: vision edge counters, event-driven transports, fog deltas on the wire, AI query API, ordered maps off the mover path, RSS per unit -30% | 11-09 | PLANNED | #744 #746 #747 #749 landed the main parts; none of these named leftovers found in the merge log | Pick by profile of the 11-15 save |
+| Rung 2: 500k units (movement rewrite core) | 11-07 | PLANNED | S1 kernel spike killed 11-14: 28,500 instr per mover vs gate 2,000; the plan's 1M at 20 Hz is not reachable with that design. Phase 4 and 5 parked (see [movement](movement.md)) | Decided by Q6 |
+| Rung 1 bookkeeping leftovers: vision edge counters, event-driven transports, fog deltas on the wire, AI query API, ordered maps off the mover path, RSS per unit -30% | 11-09 | PLANNED | #744 #746 #747 #749 landed the main parts; none of these named leftovers found in the merge log | Fog deltas: Q5 (#862); the rest by the Q1 profile |
 | Phase 7b rest: combat/training on timers, generational ids, gathering spikes | 11-09 | PARTIAL | #746, #773 (construction, queues, walking gatherers, idle units on timers); combat timers and ids not found in the log | After the lag profile |
 | Phase 7a exact level of detail (analytic movers); rung 3 2M via hierarchy | 11-08 | PLANNED | No PR; needs the office engine ([hierarchy](hierarchy.md)) | Later |
 | Phase 7c wire segments, 1,000 sessions, 128-seat cap lifted | 11-09 | PLANNED | No PR | Later |
 | Phase 8 shards | 11-07 | PLANNED | Design must not block it | Later |
 | Phase 0 leftovers: command recorder, Steward/General/Vassal bots in the closed loop, 30-minute 100-seat runs, France census with heights | 11-09 | PARTIAL | `make save-replay` (#802) replays recorded owner-save commands; match-bench #740; recorder for live matches not found | A live-match recorder lets every lag report be replayed |
-| Tick-rate day 11-16: parallel movement apply, parallel combat, cheaper cold route-chunk builds | 11-16 | IN FLIGHT | Combat prefetch: 6-worker main-thread instructions 194.7M to 178.5M but +1.1% total, trimming. Sidestep backoff for blocked movers: #864. Movement slow path: write-buffer split then parallel decide. Cold portal-chunk build costs about 18M instr each | Ship each when main-thread instructions fall and gated counters stay within +1% |
 | Tick cost of 99 Python AIs (about 3.5 ticks/s cost, 3.4 cores) | 11-04 | UNVERIFIED | Measured once 11-05, never profiled separately | Profile in match-bench |
 
 ## Done or dropped
@@ -32,4 +47,7 @@ Rungs: 0 measurement, 1 100k units, 2 500k, 3 2M, 4 clients (see issue 748).
 | Fan-out off the tick's path: overlapped delivery, cheaper frame | 11-16 | DONE | #858: live v6 save with 99 bots 9.69 to 11.75 ticks/s (single run, loaded machine), fanout_wait p50 12.4 to 5.3 ms |
 | Parallel route serving (fair pass), rounds 2 to 4 | 11-16 | DROPPED | Main thread −9M instr/tick at 6 workers but late_game +8% to +23% from extra cold chunk builds; variant H parked on `park/plan-serve-h`, work moved to cheaper chunk builds |
 | Formation-aware sidestep backoff for group members | 11-16 | DROPPED | Four rules tried; every one that backs off marching members broke real-terrain crowd recovery tests |
+| Tick-rate day 11-16: sidestep backoff, fan-out round 2, cheaper cold chunk builds, parallel combat searches | 11-16 | DONE | #864 (−0.76% war-replay instr), #868, #866 (late_game −1.2%), #869 (tick-thread combat 37.6M to 20.5M instr). Gains invisible at the owner's 60k units the same evening |
+| Parallel decisions for slow movers (write-buffer split, stage 2) | 11-16 | DROPPED | late_game +7.95%, smoke +1.14%, distributed +1.41%; parked on `perf/apply-write-buffer` and `perf/apply-write-buffer-stage2`. Included in the 11-16 owner build by mistake; leave it out of later builds |
+| Parallel fast-route pass (plan_fast) and combat round 3 | 11-16 | DROPPED | plan_fast: about one player per tick reaches it, +2.4% instr; combat: no serial piece over 2.3M left |
 | Sleep, timers etc. "never built" claim | 11-12 | SUPERSEDED | Owner caught it: #746 and #773 shipped; see rework ledger in memory |
