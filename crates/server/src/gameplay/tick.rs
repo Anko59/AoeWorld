@@ -1,4 +1,4 @@
-use super::deliver::deliver;
+use super::deliver::deliver_on;
 use super::fanout::{self, Built, View};
 use super::{GameplayService, PendingCommand, Session};
 use aoe_core::PlayerId;
@@ -197,7 +197,7 @@ impl GameplayService {
             closed = published;
         }
         let delivery_started = std::time::Instant::now();
-        let failed = deliver(&mut sessions, &built, acknowledgements);
+        let failed = deliver_on(&mut sessions, &built, acknowledgements, !overlapped);
         drop(sessions);
         for id in failed.into_iter().chain(closed) {
             self.disconnect(id).await;

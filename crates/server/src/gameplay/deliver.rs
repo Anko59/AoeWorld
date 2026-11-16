@@ -421,10 +421,22 @@ fn deliver_session(
 /// Sends every session its messages for the tick, in the order a client has
 /// always seen them: fog, command acknowledgements, units, wildlife,
 /// projectiles. Returns the sessions whose queue was full.
+#[cfg(test)]
 pub(super) fn deliver(
     sessions: &mut BTreeMap<u64, Session>,
     built: &Built,
+    acknowledgements: BTreeMap<u64, Vec<GameplayServerMessage>>,
+) -> BTreeSet<u64> {
+    deliver_on(sessions, built, acknowledgements, true)
+}
+
+/// `deliver`, on the worker pool when `parallel`; a delivery overlapping
+/// the next tick runs serially so it never takes the simulation's workers.
+pub(super) fn deliver_on(
+    sessions: &mut BTreeMap<u64, Session>,
+    built: &Built,
     mut acknowledgements: BTreeMap<u64, Vec<GameplayServerMessage>>,
+    parallel: bool,
 ) -> BTreeSet<u64> {
     let mut failed = BTreeSet::new();
     // Sessions that took this tick's building changes into their baseline.
@@ -445,7 +457,7 @@ pub(super) fn deliver(
     let one = |(build, session, acks): &mut (&SessionBuild, &mut Session, Vec<_>)| {
         deliver_session(session, build, built, std::mem::take(acks))
     };
-    let results = if work.len() < 2 * SESSIONS_PER_TASK {
+    let results = if !parallel || work.len() < 2 * SESSIONS_PER_TASK {
         work.iter_mut().map(one).collect::<Vec<_>>()
     } else {
         work.par_iter_mut()
