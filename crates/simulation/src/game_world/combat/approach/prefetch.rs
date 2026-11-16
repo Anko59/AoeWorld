@@ -11,42 +11,57 @@ use crate::GameWorld;
 use crate::game_world::combat::{MELEE_RANGE_SUBUNITS, tick::Goal};
 use aoe_core::EntityId;
 
+/// A smaller fight spends more on looking for searches to prefetch than the
+/// few it has would save, so it runs inline.
+const MIN_ATTACKERS: usize = 256;
+
+/// Fewer predicted searches than this run inline: a fork-join and a second
+/// look at each attacker would cost more than the searches save.
+const MIN_PREFETCH: usize = 4;
+
 impl GameWorld {
     pub(in crate::game_world::combat) fn prefetch_attack_searches(
         &mut self,
-        ids: &[EntityId],
+        fighters: &[EntityId],
         now: u64,
     ) {
+        // Fewer than `MIN_ATTACKERS` fighters: no entry at the last index.
+        if fighters.get(MIN_ATTACKERS - 1).is_none() {
+            return;
+        }
         let room = self.attack_search_room() as usize;
-        let mut jobs = Vec::with_capacity(room);
-        for &id in ids {
-            if jobs.len() == room {
+        let mut picked = Vec::with_capacity(room);
+        for &id in fighters {
+            if picked.len() == room {
                 break;
             }
             if self.combat.pursuit_floor.is_some_and(|floor| id <= floor) {
                 continue;
             }
             if let Some(goal) = self.search_goal(id, now) {
-                jobs.push((id, goal));
+                picked.push((id, goal));
             }
+        }
+        if picked.get(MIN_PREFETCH - 1).is_none() {
+            return;
         }
         // Waves of at most the remaining position budget, so a search whose
         // turn would come after the budget is spent is never run in vain.
         let mut remaining = self.combat.position_searches as usize;
         let mut at = 0;
-        while at < jobs.len() {
+        while at < picked.len() {
             let open = remaining > 0;
             let wave = if open {
-                remaining.min(jobs.len() - at)
+                remaining.min(picked.len() - at)
             } else {
-                jobs.len() - at
+                picked.len() - at
             };
             let world = &*self;
             let found =
-                crate::game_world::parallel::par_map_each(&jobs[at..at + wave], |(id, goal)| {
+                crate::game_world::parallel::par_map_each(&picked[at..at + wave], |(id, goal)| {
                     world.attack_search_core(*id, goal, open)
                 });
-            for (&(id, goal), outcome) in jobs[at..at + wave].iter().zip(found) {
+            for (&(id, goal), outcome) in picked[at..at + wave].iter().zip(found) {
                 if let Ok(outcome) = outcome {
                     remaining -= usize::from(outcome.spends);
                     self.combat.prefetched.insert(id, (goal, outcome));

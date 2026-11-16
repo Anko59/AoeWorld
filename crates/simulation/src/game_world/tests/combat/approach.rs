@@ -198,8 +198,8 @@ fn fight() -> (GameWorld, u64) {
     w.set_fog_disabled(true);
     let mut ours = Vec::new();
     let mut theirs = Vec::new();
-    for n in 0..48 {
-        let (x, y) = (20 + n % 8 * 2, 20 + n / 8 * 2);
+    for n in 0..150 {
+        let (x, y) = (20 + n % 15 * 2, 20 + n / 15 * 2);
         let kind = if n % 3 == 0 {
             crate::UnitKind::Archer
         } else {
@@ -209,9 +209,9 @@ fn fight() -> (GameWorld, u64) {
         theirs.push(w.spawn_kind(PlayerId(1), kind, at(x + 90, y + 40)).unwrap());
     }
     for (n, (&a, &b)) in ours.iter().zip(&theirs).enumerate() {
-        w.issue_attack(PlayerId(0), a, theirs[(n + 5) % 48])
+        w.issue_attack(PlayerId(0), a, theirs[(n + 5) % 150])
             .unwrap();
-        w.issue_attack(PlayerId(1), b, ours[(n + 7) % 48]).unwrap();
+        w.issue_attack(PlayerId(1), b, ours[(n + 7) % 150]).unwrap();
     }
     (w, 0)
 }
