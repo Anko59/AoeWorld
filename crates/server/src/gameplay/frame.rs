@@ -8,6 +8,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 const ABSENT: u32 = u32::MAX;
 const PART: usize = 1 << 12;
+/// Changed units one pool task converts at least.
+const CONVERT_TASK: usize = 256;
 
 #[derive(Default)]
 struct Owned {
@@ -45,6 +47,43 @@ impl Owned {
     }
 }
 
+/// Slots changed this tick: a bit per slot for constant-time lookups from
+/// every session's diff, and the list of set slots to clear next tick.
+#[derive(Default)]
+struct Marks {
+    bits: Vec<u64>,
+    set: Vec<u32>,
+}
+impl Marks {
+    fn all(count: usize) -> Self {
+        let mut marks = Self::default();
+        for slot in 0..count as u32 {
+            marks.insert(slot);
+        }
+        marks
+    }
+    fn insert(&mut self, slot: u32) {
+        let (word, bit) = (slot as usize / 64, 1u64 << (slot % 64));
+        if word >= self.bits.len() {
+            self.bits.resize(word + 1, 0);
+        }
+        if self.bits[word] & bit == 0 {
+            self.bits[word] |= bit;
+            self.set.push(slot);
+        }
+    }
+    fn contains(&self, slot: u32) -> bool {
+        self.bits
+            .get(slot as usize / 64)
+            .is_some_and(|word| word & (1u64 << (slot % 64)) != 0)
+    }
+    fn clear(&mut self) {
+        for slot in self.set.drain(..) {
+            self.bits[slot as usize / 64] = 0;
+        }
+    }
+}
+
 pub(super) struct UnitFrame {
     parts: Vec<Vec<GameplayUnitState>>,
     owner: Vec<u16>,
@@ -55,7 +94,7 @@ pub(super) struct UnitFrame {
     tick: Tick,
     generation: u64,
     base: Option<u64>,
-    changed: BTreeSet<u32>,
+    changed: Marks,
     visited: usize,
     converted: usize,
 }
@@ -107,11 +146,29 @@ impl UnitFrame {
                 }
             }
         }
-        for id in world.unit_changes() {
-            let Some(unit) = world.unit(*id) else {
+        // Converting a changed unit only reads the world, so the states are
+        // built on the pool; the lists below are updated in change order.
+        let convert = |id: &EntityId| {
+            world.unit(*id).map(|unit| {
+                let state = super::economy::unit_state(world, &unit);
+                let rank = world.unit_storage_slot(*id);
+                (state, rank, world.unit_visible_to(unit.player, *id))
+            })
+        };
+        let changes = world.unit_changes();
+        let converted = if threads <= 1 || changes.len() < 2 * CONVERT_TASK {
+            changes.iter().map(convert).collect::<Vec<_>>()
+        } else {
+            changes
+                .par_iter()
+                .with_min_len(CONVERT_TASK)
+                .map(convert)
+                .collect()
+        };
+        for (id, converted) in changes.iter().zip(converted) {
+            let Some((state, rank, visible)) = converted else {
                 continue;
             };
-            let state = super::economy::unit_state(world, &unit);
             frame.converted += 1;
             let slot = if let Some(&slot) = frame.index.get(id) {
                 if *frame.state(slot) != state {
@@ -124,13 +181,13 @@ impl UnitFrame {
                 frame.changed.insert(slot);
                 slot
             };
-            let rank = world.unit_storage_slot(*id)?;
-            frame.owner[slot as usize] = unit.player.0;
+            let rank = rank?;
+            frame.owner[slot as usize] = state.player.0;
             frame.rank[slot as usize] = rank;
-            if world.unit_visible_to(unit.player, *id) {
+            if visible {
                 frame
                     .own
-                    .entry(unit.player)
+                    .entry(state.player)
                     .or_default()
                     .insert(rank, key(*id, slot));
             }
@@ -166,7 +223,7 @@ impl UnitFrame {
             tick: world.tick(),
             generation,
             base: None,
-            changed: (0..count as u32).collect(),
+            changed: Marks::all(count),
             visited: count,
             converted: count,
         };
@@ -206,13 +263,13 @@ impl UnitFrame {
         self.visited
     }
     pub(super) fn work(&self) -> (usize, usize) {
-        (self.converted, self.changed.len())
+        (self.converted, self.changed.set.len())
     }
     pub(super) fn generation(&self) -> u64 {
         self.generation
     }
     pub(super) fn unchanged_since(&self, held: Option<u64>, slot: u32) -> bool {
-        held.is_some() && held == self.base && !self.changed.contains(&slot)
+        held.is_some() && held == self.base && !self.changed.contains(slot)
     }
     pub(super) fn state(&self, slot: u32) -> &GameplayUnitState {
         &self.parts[slot as usize / PART][slot as usize % PART]

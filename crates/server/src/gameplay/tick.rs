@@ -1,31 +1,58 @@
 use super::deliver::deliver;
-use super::fanout::{self, View};
-use super::{GameplayService, Session};
+use super::fanout::{self, Built, View};
+use super::{GameplayService, PendingCommand, Session};
+use aoe_core::PlayerId;
 use aoe_protocol::GameplayServerMessage;
 use std::collections::BTreeMap;
+use tokio::sync::{OwnedMutexGuard, oneshot};
+
+type Intake = Vec<(u64, PlayerId, PendingCommand)>;
+type Acks = BTreeMap<u64, Vec<GameplayServerMessage>>;
+
+/// The next tick's commands, taken by an overlapped delivery before it
+/// started, so that tick need not wait for the session lock.
+#[derive(Default)]
+pub(super) struct Overlap(std::sync::Mutex<Option<oneshot::Receiver<Intake>>>);
 
 impl GameplayService {
     pub async fn tick(&self) {
+        self.step(false).await;
+    }
+
+    /// One scheduled tick. With `overlap` (the server is behind its clock)
+    /// this tick's views are delivered while the next tick applies its
+    /// orders and advances: delivery needs the sessions, not the world.
+    pub async fn tick_overlapped(&self, overlap: bool) {
+        self.step(overlap).await;
+    }
+
+    fn intake(&self, sessions: &mut BTreeMap<u64, Session>) -> Intake {
+        let start = self.command_cursor.fetch_add(
+            MAX_COMMANDS_PER_TICK as u64,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        let mut commands = take_pending(sessions, start as usize);
+        commands.sort_by_key(|(session_id, command)| (*session_id, command.sequence));
+        commands
+            .into_iter()
+            .map(|(id, command)| (id, sessions[&id].viewer, command))
+            .collect()
+    }
+
+    async fn step(&self, overlap: bool) {
         let started = std::time::Instant::now();
-        let (pending, views) = {
-            let mut sessions = self.sessions.lock().await;
-            let start = self.command_cursor.fetch_add(
-                MAX_COMMANDS_PER_TICK as u64,
-                std::sync::atomic::Ordering::Relaxed,
-            );
-            let mut commands = take_pending(&mut sessions, start as usize);
-            commands.sort_by_key(|(session_id, command)| (*session_id, command.sequence));
-            let views = sessions
-                .iter()
-                .filter_map(|(id, session)| view(*id, session))
-                .collect::<Vec<_>>();
-            (
-                commands
-                    .into_iter()
-                    .map(|(id, command)| (id, sessions[&id].viewer, command))
-                    .collect::<Vec<_>>(),
-                views,
-            )
+        let stashed = self
+            .overlap
+            .0
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .take();
+        let pending = match stashed {
+            Some(taken) => taken.await.unwrap_or_else(|_| {
+                tracing::error!("overlapped delivery lost the next tick's commands");
+                Vec::new()
+            }),
+            None => self.intake(&mut *self.sessions.lock().await),
         };
         self.probe.phase("sessions", started.elapsed());
         let started = std::time::Instant::now();
@@ -92,6 +119,17 @@ impl GameplayService {
         // commands and map work may queue for the write lock while the views
         // are built on worker threads.
         let world = world.downgrade();
+        // Views are read once the previous delivery has settled each
+        // session's baselines (it holds the lock until then).
+        let started = std::time::Instant::now();
+        let views = {
+            let sessions = self.sessions.lock().await;
+            sessions
+                .iter()
+                .filter_map(|(id, session)| view(*id, session))
+                .collect::<Vec<_>>()
+        };
+        self.probe.phase("sessions", started.elapsed());
         let fanout_started = std::time::Instant::now();
         let last = self.fanout_probe.take_last_frame();
         let built =
@@ -112,11 +150,43 @@ impl GameplayService {
         self.fanout_probe
             .record_unit_frame(built.frame.visited(), built.frame.work());
         self.fanout_probe.keep_frame(built.frame.clone());
+        let sessions = self.sessions.clone().lock_owned().await;
+        if overlap {
+            let (send, taken) = oneshot::channel();
+            *self
+                .overlap
+                .0
+                .lock()
+                .unwrap_or_else(|error| error.into_inner()) = Some(taken);
+            let service = self.clone();
+            tokio::spawn(async move {
+                service
+                    .finish(sessions, built, acknowledgements, Some(send))
+                    .await;
+            });
+        } else {
+            self.finish(sessions, built, acknowledgements, None).await;
+        }
+        let started = std::time::Instant::now();
+        self.prefetch_routes().await;
+        self.probe.phase("prefetch", started.elapsed());
+    }
+
+    /// Delivers a tick's views and resources. An overlapped delivery first
+    /// takes the next tick's commands, so that tick can start at once.
+    async fn finish(
+        &self,
+        mut sessions: OwnedMutexGuard<BTreeMap<u64, Session>>,
+        built: Built,
+        acknowledgements: Acks,
+        next: Option<oneshot::Sender<Intake>>,
+    ) {
+        if let Some(next) = next {
+            let _ = next.send(self.intake(&mut sessions));
+        }
         let delivery_started = std::time::Instant::now();
-        let failed = {
-            let mut sessions = self.sessions.lock().await;
-            deliver(&mut sessions, &built, acknowledgements)
-        };
+        let failed = deliver(&mut sessions, &built, acknowledgements);
+        drop(sessions);
         for id in failed {
             self.disconnect(id).await;
         }
@@ -130,9 +200,6 @@ impl GameplayService {
         let started = std::time::Instant::now();
         self.publish_resources().await;
         self.probe.phase("resources", started.elapsed());
-        let started = std::time::Instant::now();
-        self.prefetch_routes().await;
-        self.probe.phase("prefetch", started.elapsed());
     }
 }
 
