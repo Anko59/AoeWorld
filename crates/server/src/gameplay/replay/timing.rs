@@ -33,8 +33,14 @@ pub(super) fn cpu() -> io::Result<u64> {
 pub struct Timing {
     pub instructions: u64,
     pub cpu_ns: u64,
+    /// Wall time of the orders and the tick, all workers included.
+    pub wall_ns: u64,
     pub phases_cpu_ns: BTreeMap<&'static str, u64>,
     pub phases_instructions: BTreeMap<&'static str, u64>,
+    /// Of each phase's instructions, those spent inside fork-join regions.
+    pub phases_parallel_instructions: BTreeMap<&'static str, u64>,
+    /// Per fork-join call site: calls, below-threshold calls, items, instructions, largest tasks.
+    pub parallel_sites: BTreeMap<String, aoe_simulation::parallel_meter::Site>,
     /// Completed composition/proof spans, keyed by their inclusive caller path.
     pub navigation_calls: BTreeMap<String, u64>,
     /// Applied commands and their instructions, keyed `issuer:kind:Result`.
@@ -55,6 +61,7 @@ enum Source {
 struct Accumulator {
     instructions: AtomicU64,
     cpu_ns: AtomicU64,
+    parallel: AtomicU64,
 }
 type Phases = BTreeMap<&'static str, u64>;
 #[derive(Debug, Default)]
@@ -167,6 +174,23 @@ impl Probe {
                 .fetch_add(count.cpu_ns, Ordering::Relaxed);
         }
     }
+    pub(super) fn record_parallel(&self, name: &'static str, instructions: u64) {
+        if let Some(at) = names().position(|n| n == name) {
+            self.0.values[at]
+                .parallel
+                .fetch_add(instructions, Ordering::Relaxed);
+        }
+    }
+    pub(super) fn drain_parallel(&self) -> Phases {
+        names()
+            .zip(
+                self.0
+                    .values
+                    .iter()
+                    .map(|c| c.parallel.swap(0, Ordering::Relaxed)),
+            )
+            .collect()
+    }
     pub(super) fn drain(&self) -> (Phases, Phases) {
         let instructions = names()
             .zip(
@@ -187,6 +211,13 @@ impl Probe {
         (instructions, cpu_ns)
     }
     fn span(&self, name: &'static str) -> Box<dyn aoe_map::NavigationSpan> {
+        // A span opened on a pool worker (a replay with several workers) is
+        // not counted: the counter belongs to the simulation thread.
+        if let Source::Hardware { thread: owner, .. } = &self.0.source
+            && *owner != thread::current().id()
+        {
+            return Box::new(Detached);
+        }
         if let Ok(mut calls) = self.0.calls.lock() {
             calls.stack.push(name);
         } else {
@@ -196,6 +227,7 @@ impl Probe {
             probe: self.clone(),
             name,
             started: self.sample(),
+            parallel_started: aoe_simulation::parallel_meter::inside_total(),
         })
     }
 
@@ -228,14 +260,21 @@ struct Span {
     probe: Probe,
     name: &'static str,
     started: io::Result<Sample>,
+    parallel_started: u64,
 }
 impl aoe_map::NavigationSpan for Span {}
+struct Detached;
+impl aoe_map::NavigationSpan for Detached {}
 impl Drop for Span {
     fn drop(&mut self) {
         match (&self.started, self.probe.sample()) {
             (Ok(started), Ok(now)) => self.probe.record(self.name, now - *started),
             _ => self.probe.fail(),
         }
+        self.probe.record_parallel(
+            self.name,
+            aoe_simulation::parallel_meter::inside_total() - self.parallel_started,
+        );
         self.probe.end_call(self.name);
     }
 }

@@ -92,8 +92,13 @@ impl GameWorld {
         }
         // Work approaches and overlapping spawns need continuous small steps
         // to fan out. Their blocked-tick budget still bounds these attempts;
-        // separated ordinary traffic gets one sidestep per retry.
-        let position = self.avoid_unit_step(index, proposed);
+        // separated ordinary traffic gets one sidestep per retry. A long
+        // block backs off between sidestep rounds and waits in place.
+        let position = if self.sidestep_due(index) {
+            self.avoid_unit_step(index, proposed)
+        } else {
+            unit.position
+        };
         order.origin = position;
         let (dx, dy) = delta(order.waypoint, position);
         order.segment_length = crate::game_path::segment_length(dx, dy);

@@ -10,16 +10,19 @@ use super::*;
 /// up is scale, not a code path, so a divergence that needs 14,000 units to
 /// appear is left to the post-merge tier.
 #[test]
-fn the_late_game_replay_agrees_across_one_and_four_workers() {
-    fn run(threads: usize) -> [u8; 32] {
+fn the_late_game_replay_agrees_across_one_two_four_and_twelve_workers() {
+    fn run(threads: usize) -> Vec<[u8; 32]> {
         rayon::ThreadPoolBuilder::new()
             .num_threads(threads)
             .build()
             .unwrap()
             .install(|| {
                 let mut world = GameWorld::small_late_game_workload().unwrap();
+                // Every tick's hash, so a divergence names its first tick.
+                let mut hashes = Vec::new();
                 for _ in 0..96 {
                     world.advance();
+                    hashes.push(world.canonical_hash());
                 }
                 // The parallel passes must have real work in them, or agreement
                 // would prove nothing.
@@ -41,12 +44,15 @@ fn the_late_game_replay_agrees_across_one_and_four_workers() {
                     "only {moving} simultaneous movers; below 2 * SHARD the \
                      proposal pass runs sequentially and worker counts cannot differ"
                 );
-                world.canonical_hash()
+                hashes
             })
     }
-    assert_eq!(
-        run(1),
-        run(4),
-        "the eight-seat late-game replay diverged between one and four workers"
-    );
+    let one = run(1);
+    for threads in [2, 4, 12] {
+        let tick = run(threads).iter().zip(&one).position(|(a, b)| a != b);
+        assert_eq!(
+            tick, None,
+            "the eight-seat late-game replay diverged between one and {threads} workers"
+        );
+    }
 }

@@ -25,7 +25,7 @@ pub(crate) const SOURCE_QUALIFICATION: &[&str] = &[
     "map_store::navigation::tests::performance::large_navigation_lazy_tick_measurement",
     "map_store::navigation::tests::performance::large_navigation_static_tick_measurement",
     // 14,000 units. The cross-worker agreement is kept per-PR by
-    // `game_world::tests::scale_hooks::determinism::the_late_game_replay_agrees_across_one_and_four_workers`.
+    // `game_world::tests::scale_hooks::determinism::the_late_game_replay_agrees_across_one_two_four_and_twelve_workers`.
     "game_world::economy::benchmark::tests::late_game_full_population_replays_identically_on_one_and_four_workers",
     // 14,000 units over 512 ticks with a hash comparison every 16, plus a
     // timing report. The sleep-on/off identity is kept per-PR by

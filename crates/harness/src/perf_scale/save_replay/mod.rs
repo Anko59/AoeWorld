@@ -18,6 +18,14 @@ pub struct Options {
     recording: PathBuf,
     #[arg(long, default_value_t = 3, value_parser = clap::value_parser!(u32).range(1..=10))]
     runs: u32,
+    /// Rayon workers. Above 1 the counter sees only the simulation thread's
+    /// share, so compare wall time and hashes, not instructions.
+    #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..=64))]
+    workers: u32,
+    /// Skip the one-worker parallel census, whose per-task counter reads slow
+    /// that run; use it when comparing wall time across worker counts.
+    #[arg(long)]
+    no_parallel_census: bool,
     #[arg(long, default_value = ".cache/save-replay/report.json")]
     out: PathBuf,
 }
@@ -45,8 +53,11 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
         let mut divergence = (initial != recording.initial_hash).then(|| recording.ticks[0].tick);
         let mut total = Vec::<u64>::new();
         let mut cpu = Series::default();
+        let mut wall = Series::default();
         let mut phases_cpu = BTreeMap::<&str, Series>::new();
         let mut phases = BTreeMap::<&str, Vec<u64>>::new();
+        let mut phases_parallel = BTreeMap::<&str, u64>::new();
+        let mut sites = BTreeMap::<String, aoe_simulation::parallel_meter::Site>::new();
         let mut hashes = Vec::new();
         let mut raw = Vec::new();
         let mut commands = 0;
@@ -62,8 +73,15 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
                 timing_commands = timing.commands.clone();
                 refused.extend(timing.refused.iter().cloned());
                 cpu.push_ms(timing.cpu_ns.into());
+                wall.push_ms(timing.wall_ns.into());
                 for (name, nanos) in &timing.phases_cpu_ns { phases_cpu.entry(name).or_default().push_ms((*nanos).into()); }
                 for (name, count) in &timing.phases_instructions { phases.entry(name).or_default().push(*count); }
+                for (name, count) in &timing.phases_parallel_instructions { *phases_parallel.entry(name).or_default() += *count; }
+                for (site, row) in &timing.parallel_sites {
+                    let total = sites.entry(site.clone()).or_default();
+                    total.calls += row.calls; total.below_threshold += row.below_threshold; total.items += row.items;
+                    total.instructions += row.instructions; total.largest_task += row.largest_task;
+                }
                 for (path, calls) in &timing.navigation_calls { *navigation_calls.entry(path.clone()).or_default() += *calls; }
                 raw.push(json!({"tick": tick.tick, "instructions": timing.instructions, "phases_instructions": timing.phases_instructions, "cpu_ns": timing.cpu_ns, "phases_cpu_ns": timing.phases_cpu_ns, "navigation_calls": timing.navigation_calls}));
             }).await.map_err(|e| e.to_string())?;
@@ -82,6 +100,9 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
         for series in phases.values_mut() { series.resize(recording.ticks.len(), 0); }
         let phase_summary: BTreeMap<_, _> = phases.iter().map(|(name, series)| (*name, counts::summary(series))).collect();
         let phases_cpu_summary: BTreeMap<_, _> = phases_cpu.iter().map(|(name, series)| (*name, series.summary())).collect();
+        let ticks = recording.ticks.len() as f64;
+        let parallel_phase_mean: BTreeMap<_, _> = phases_parallel.iter().map(|(name, total)| (*name, *total as f64 / ticks)).collect();
+        let parallel_sites: BTreeMap<_, _> = sites.iter().map(|(site, row)| (site.clone(), json!({"calls_per_tick": row.calls as f64 / ticks, "below_threshold_per_tick": row.below_threshold as f64 / ticks, "items_per_tick": row.items as f64 / ticks, "instructions_per_tick": row.instructions as f64 / ticks, "largest_task_instructions_per_tick": row.largest_task as f64 / ticks}))).collect();
         let attribution = service.inspect_scale_world(|w| orders::report(w, &kinds, &census, recording.ticks.len())).await;
         // Route-scheduler state at the end of the window, read off-tick like
         // the mover census: the same counters the live probe reports, on a
@@ -93,7 +114,7 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
                 routes
             })
             .await;
-        Ok(json!({ "order_attribution": attribution, "refused_commands": refused, "initial_hash": hex(&initial), "total_cpu_ms_per_tick": cpu.summary(), "phases_cpu_ms": phases_cpu_summary, "total_instructions_per_tick": counts::summary(&total), "phases_instructions": phase_summary,
+        Ok(json!({ "parallel_phase_instructions_mean": parallel_phase_mean, "parallel_sites": parallel_sites, "order_attribution": attribution, "refused_commands": refused, "initial_hash": hex(&initial), "total_cpu_ms_per_tick": cpu.summary(), "total_wall_ms_per_tick": wall.summary(), "phases_cpu_ms": phases_cpu_summary, "total_instructions_per_tick": counts::summary(&total), "phases_instructions": phase_summary,
             "first_divergence_tick": divergence, "final_hash": hashes.last().ok_or("empty replay")?["hash"],
             "movement_progress": progress.summary(recording.ticks.last().ok_or("empty replay")?.tick + 1),
             "navigation_calls": navigation_calls, "routes": routes,
@@ -113,15 +134,19 @@ pub fn run(options: Options) -> Result<(), Box<dyn std::error::Error>> {
     let recording = Recording::read(&options.recording).map_err(|e| e.to_string())?;
     // One worker executes both the tick and all Rayon proposals on its own thread.
     // The user-only per-thread PMU counter includes all simulation instruction work.
-    let pool = rayon::ThreadPoolBuilder::new().num_threads(1).build()?;
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(options.workers as usize)
+        .build()?;
+    aoe_simulation::parallel_meter::suppress(options.no_parallel_census);
     let mut runs = Vec::new();
     for index in 0..options.runs {
         let report = pool.install(|| once(&options, &recording))?;
         println!(
-            "save-replay run {}: {} instructions/tick; {} CPU ms/tick; divergence {}; final {}",
+            "save-replay run {}: {} instructions/tick; {} CPU ms/tick; {} wall ms/tick; divergence {}; final {}",
             index + 1,
             report["total_instructions_per_tick"]["mean"],
             report["total_cpu_ms_per_tick"]["mean_ms"],
+            report["total_wall_ms_per_tick"]["mean_ms"],
             report["first_divergence_tick"],
             report["final_hash"]
         );
@@ -132,7 +157,7 @@ pub fn run(options: Options) -> Result<(), Box<dyn std::error::Error>> {
     let repeat_hashes_agree = runs.iter().all(|run| run["hashes"] == runs[0]["hashes"]);
     let report = json!({"revision": git(&["rev-parse", "HEAD"]), "dirty": !git(&["status", "--porcelain"]).is_empty(),
         "cpu_clock": "CLOCK_THREAD_CPUTIME_ID", "counter": "PERF_COUNT_HW_INSTRUCTIONS", "exclude_kernel": true, "exclude_hv": true,
-        "inherit": false, "pinned_counter": true, "multiplexed": false, "rayon_workers": 1, "ticks": recording.ticks.len(),
+        "inherit": false, "pinned_counter": true, "multiplexed": false, "rayon_workers": options.workers, "parallel_census": options.workers == 1 && !options.no_parallel_census, "ticks": recording.ticks.len(),
         "source_diff_blake3": blake3::hash(git(&["diff", "HEAD", "--binary"]).as_bytes()).to_hex().to_string(),
         "save_blake3": blake3::hash(&fs::read(&options.save)?).to_hex().to_string(),
         "map_hash": recording.map_hash.map(|h| hex(&h)),

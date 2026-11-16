@@ -3,6 +3,9 @@
 //! (`par_map`) or own disjoint data (`par_each_mut`). WebAssembly has no
 //! threads and runs the same code in order.
 
+#[cfg(not(target_arch = "wasm32"))]
+pub mod meter;
+
 /// Movers (or other items) per work unit. A fixed constant: it only sets the
 /// task granularity, never a result.
 #[cfg(not(target_arch = "wasm32"))]
@@ -10,12 +13,27 @@ pub(crate) const SHARD: usize = 128;
 
 /// `f(0..count)` collected in index order.
 #[cfg(not(target_arch = "wasm32"))]
+#[track_caller]
 pub(crate) fn par_map_into<T: Send>(
     count: usize,
     out: &mut Vec<T>,
     f: impl Fn(usize) -> T + Sync + Send,
 ) {
     use rayon::prelude::*;
+    if let Some(read) = meter::reader() {
+        let mut region = meter::Region::begin(
+            read,
+            std::panic::Location::caller(),
+            count,
+            count < 2 * SHARD,
+        );
+        out.clear();
+        for low in (0..count).step_by(SHARD) {
+            region.task(|| out.extend((low..(low + SHARD).min(count)).map(&f)));
+        }
+        region.end();
+        return;
+    }
     if count < 2 * SHARD || rayon::current_num_threads() == 1 {
         out.clear();
         out.extend((0..count).map(f));
@@ -40,8 +58,20 @@ pub(crate) fn par_map_into<T: Send>(
 
 /// Runs `f` on every item, each on its own task.
 #[cfg(not(target_arch = "wasm32"))]
+#[track_caller]
 pub(crate) fn par_each_mut<T: Send>(items: &mut [T], f: impl Fn(&mut T) + Sync + Send) {
     use rayon::prelude::*;
+    if let Some(read) = meter::reader() {
+        let mut region = meter::Region::begin(
+            read,
+            std::panic::Location::caller(),
+            items.len(),
+            items.len() < 2,
+        );
+        items.iter_mut().for_each(|item| region.task(|| f(item)));
+        region.end();
+        return;
+    }
     if rayon::current_num_threads() == 1 {
         items.iter_mut().for_each(f);
     } else {
@@ -56,11 +86,23 @@ pub(crate) fn par_each_mut<T: Send>(items: &mut [T], f: impl Fn(&mut T) + Sync +
 
 /// `f` of every item, collected in item order.
 #[cfg(not(target_arch = "wasm32"))]
+#[track_caller]
 pub(crate) fn par_map_each<T: Sync, R: Send>(
     items: &[T],
     f: impl Fn(&T) -> R + Sync + Send,
 ) -> Vec<R> {
     use rayon::prelude::*;
+    if let Some(read) = meter::reader() {
+        let mut region = meter::Region::begin(
+            read,
+            std::panic::Location::caller(),
+            items.len(),
+            items.len() < 2,
+        );
+        let out = items.iter().map(|item| region.task(|| f(item))).collect();
+        region.end();
+        return out;
+    }
     if rayon::current_num_threads() == 1 {
         return items.iter().map(f).collect();
     }

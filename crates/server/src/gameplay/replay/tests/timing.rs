@@ -33,6 +33,7 @@ fn a_failed_nested_counter_read_invalidates_the_tick() {
         probe: probe.clone(),
         name: "sidestep",
         started: Err(std::io::Error::other("counter failed")),
+        parallel_started: 0,
     });
     assert!(probe.check().is_err());
 }
@@ -92,4 +93,14 @@ fn thread_cpu_clock_does_not_charge_sleep() {
     let before = cpu().unwrap();
     std::thread::sleep(std::time::Duration::from_millis(40));
     assert!(cpu().unwrap() - before < 20_000_000);
+}
+
+#[test]
+fn parallel_instructions_are_kept_apart_from_a_phase_total() {
+    let probe = Probe::fixture();
+    probe.record_parallel("propose", 400);
+    probe.record_parallel("propose", 100);
+    let parallel = probe.drain_parallel();
+    assert_eq!(parallel["propose"], 500);
+    assert_eq!(probe.drain_parallel()["propose"], 0);
 }

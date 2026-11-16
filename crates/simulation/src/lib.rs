@@ -10,6 +10,8 @@ pub use game_world::TileVisibility;
 pub use game_world::apply_research_stats;
 #[cfg(any(not(target_arch = "wasm32"), feature = "content-source"))]
 pub use game_world::browser_content;
+#[cfg(not(target_arch = "wasm32"))]
+pub use game_world::parallel::meter as parallel_meter;
 #[cfg(feature = "bench-fixtures")]
 pub use game_world::terrain_fixtures;
 pub use game_world::{BrowserBuilding, BrowserContent, BrowserTech, BrowserUnit};
