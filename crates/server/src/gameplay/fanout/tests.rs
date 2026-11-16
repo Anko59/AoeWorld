@@ -430,18 +430,21 @@ fn session_views_reuse_the_same_bounded_worker_pool_across_ticks() {
             rebuild: false,
         })
         .collect::<Vec<_>>();
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(2)
-        .build()
-        .unwrap();
-    let mut workers = std::collections::HashSet::new();
+    // Every pool size builds the same views: work stealing only moves them.
     let mut baseline = None;
-    for _ in 0..4 {
+    for threads in [2, 2, 1, 4, 12] {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .unwrap();
         let built = pool.install(|| build(&world, &views, &BTreeMap::new(), (None, 1)).unwrap());
         assert_eq!(built.sessions.len(), 100);
-        workers.extend(built.workers.iter().copied());
+        let workers = built
+            .workers
+            .iter()
+            .collect::<std::collections::HashSet<_>>();
         assert!(
-            workers.len() <= 2,
+            workers.len() <= threads,
             "per-tick OS threads escaped the shared pool: {} workers",
             workers.len()
         );
