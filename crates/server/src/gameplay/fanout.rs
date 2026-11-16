@@ -69,7 +69,7 @@ pub(super) struct Built {
     pub frame: Arc<UnitFrame>,
     pub viewers: BTreeMap<PlayerId, ViewerState>,
     pub sessions: Vec<SessionBuild>,
-    /// Time spent on viewers, the frame and the sessions.
+    /// Time spent on viewers and the frame (side by side), then the sessions.
     pub phases: [std::time::Duration; 3],
 }
 
@@ -262,14 +262,29 @@ pub(super) fn build(
     (previous, generation): (Option<Arc<UnitFrame>>, u64),
 ) -> Option<Built> {
     let started = std::time::Instant::now();
-    let viewers = viewer_states(world, views, changes);
-    let viewers_done = started.elapsed();
     let threads = rayon::current_num_threads().min(8);
     let previous = previous.and_then(|frame| Arc::try_unwrap(frame).ok());
-    let frame = UnitFrame::build(world, threads, generation, previous)?;
+    // Viewer states, the unit frame and the wildlife buckets each only read
+    // the world, so they are built side by side.
+    let ((viewers, viewers_took), ((frame, frame_took), nearby)) = rayon::join(
+        || {
+            let started = std::time::Instant::now();
+            (viewer_states(world, views, changes), started.elapsed())
+        },
+        || {
+            rayon::join(
+                || {
+                    let started = std::time::Instant::now();
+                    let frame = UnitFrame::build(world, threads, generation, previous);
+                    (frame, started.elapsed())
+                },
+                || Nearby::new(world),
+            )
+        },
+    );
+    let frame = frame?;
     #[cfg(test)]
     frame.assert_matches_world(world);
-    let nearby = Nearby::new(world);
     let frame_done = started.elapsed();
     #[cfg(test)]
     let workers = std::sync::Mutex::new(Vec::new());
@@ -312,7 +327,7 @@ pub(super) fn build(
         frame: Arc::new(frame),
         viewers,
         sessions,
-        phases: [viewers_done, frame_done - viewers_done, done - frame_done],
+        phases: [viewers_took, frame_took, done - frame_done],
     })
 }
 
