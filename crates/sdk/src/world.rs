@@ -183,8 +183,11 @@ impl World {
             } if revision == self.subscription => self.projectiles = projectiles,
             M::FogState(fog) if fog.revision == self.subscription => {
                 let size = (self.width, self.height);
-                Arc::make_mut(&mut self.fog).apply(&fog, size);
+                Arc::make_mut(&mut self.fog).apply(fog, size);
                 self.fog_dirty = true;
+            }
+            M::FogDelta(delta) if delta.revision == self.subscription => {
+                self.fog_dirty |= Arc::make_mut(&mut self.fog).apply_delta(&delta);
             }
             M::ResourceState(state) if state.subscription_revision == self.subscription => {
                 let amounts = Arc::make_mut(&mut self.amounts);

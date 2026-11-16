@@ -76,14 +76,43 @@ fn patch_units(
     }
 }
 
-/// Same fog as the client already holds? The tick it was built at does not
-/// matter, so a rebuilt but unchanged view is not sent again.
-fn same_fog(held: &FogState, fresh: &FogState) -> bool {
-    held.revision == fresh.revision
-        && held.region == fresh.region
-        && held.disabled == fresh.disabled
-        && held.tiles == fresh.tiles
-        && held.overview == fresh.overview
+/// Brings the fog the client holds to `fresh` and returns whether it holds it
+/// now. Only what changed is sent, and nothing when a rebuilt view is the one
+/// held (the tick it was built at does not matter); the whole view goes out
+/// when the held one is of another fog mode. The held view is patched with
+/// the very changes sent, and only once the queue has taken them: after a
+/// full queue the next tick's changes are again against what the client has.
+fn deliver_fog(
+    session: &mut Session,
+    fresh: &FogState,
+    failed: &mut BTreeSet<u64>,
+    id: u64,
+) -> bool {
+    let held = session.resident_fog.as_ref();
+    let changes = held.and_then(|held| held.delta_to(fresh));
+    if changes.as_ref().is_some_and(|changes| changes.is_empty()) {
+        return true;
+    }
+    let room = match session.sender.try_reserve() {
+        Ok(room) => room,
+        Err(TrySendError::Full(())) => return false,
+        Err(TrySendError::Closed(())) => {
+            failed.insert(id);
+            return false;
+        }
+    };
+    let patched = match (&changes, session.resident_fog.as_mut()) {
+        (Some(changes), Some(held)) => held.apply(changes).is_ok(),
+        _ => false,
+    };
+    match changes {
+        Some(changes) if patched => room.send(GameplayServerMessage::FogDelta(changes)),
+        _ => {
+            session.resident_fog = Some(fresh.clone());
+            room.send(GameplayServerMessage::FogState(fresh.clone()));
+        }
+    }
+    true
 }
 
 /// Acks a session may have waiting for room before it counts as lost.
@@ -304,22 +333,9 @@ pub(super) fn deliver(
                 .is_some_and(|delivery| delivery.pending());
         if let Some((fog, vision)) = &build.fog
             && current
+            && deliver_fog(session, fog, &mut failed, id)
         {
-            let held = session
-                .resident_fog
-                .as_ref()
-                .is_some_and(|held| same_fog(held, fog));
-            if held {
-                session.vision_revision = Some(*vision);
-            } else if send(
-                session,
-                GameplayServerMessage::FogState(fog.clone()),
-                &mut failed,
-                id,
-            ) {
-                session.resident_fog = Some(fog.clone());
-                session.vision_revision = Some(*vision);
-            }
+            session.vision_revision = Some(*vision);
         }
         let new_acks = acknowledgements.remove(&id).unwrap_or_default();
         flush_acks(session, new_acks, &mut failed, id);

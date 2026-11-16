@@ -8,26 +8,36 @@ use aoe_simulation::{GameWorld, TileVisibility};
 
 /// FNV-1a over every encoded message, in order; `(messages, digest)` per session.
 /// A fog view with the same content the client already holds is not a
-/// different experience for it, so a repeat of one is left out.
+/// different experience for it, so a repeat of one is left out. What the
+/// client holds is the last whole view with every later `FogDelta` laid over
+/// it, as the client does; a delta that this view refuses fails the test.
 fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
     logs.iter()
         .map(|log| {
             let mut hash = 0xcbf2_9ce4_8422_2325_u64;
-            let mut held: Option<&FogState> = None;
+            let mut held: Option<FogState> = None;
             let mut count = 0;
             for message in &log.messages {
-                if let GameplayServerMessage::FogState(fog) = message {
-                    let repeat = held.is_some_and(|held| {
-                        held.revision == fog.revision
-                            && held.region == fog.region
-                            && held.disabled == fog.disabled
-                            && held.tiles == fog.tiles
-                            && held.overview == fog.overview
-                    });
-                    held = Some(fog);
-                    if repeat {
-                        continue;
+                match message {
+                    GameplayServerMessage::FogState(fog) => {
+                        let repeat = held.as_ref().is_some_and(|held| {
+                            held.revision == fog.revision
+                                && held.region == fog.region
+                                && held.disabled == fog.disabled
+                                && held.tiles == fog.tiles
+                                && held.overview == fog.overview
+                        });
+                        held = Some(fog.clone());
+                        if repeat {
+                            continue;
+                        }
                     }
+                    GameplayServerMessage::FogDelta(delta) => held
+                        .as_mut()
+                        .expect("fog changes follow the whole view they change")
+                        .apply(delta)
+                        .expect("fog changes are for the view the client holds"),
+                    _ => {}
                 }
                 count += 1;
                 for byte in encode_gameplay_server(message).unwrap() {
@@ -73,13 +83,17 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
 /// Sergeant identity adds one byte per unit; all six session message counts are unchanged.
 // Holdings adds 2/4/3/3/9/2 frames; filtering it restores all six pre-boundary counts.
 // Armies work (e9b3fde5c: a body beside a deck lane returns to its tile centre first) moved only the fifth session.
+// Fog wire: tiles travel four to a byte and a changed view goes out as a FogDelta (20 of the 28
+// fog messages; the 8 whole views are the subscribes and the resync). All six digests changed, no
+// count did. Each fog message rebuilt as the whole one-byte-per-tile view its client then holds
+// gave back the six digests pinned before, so every other message is byte for byte what it was.
 const PINNED: [(usize, u64); SEATS + 1] = [
-    (409, 16881762939065787622),
-    (191, 6076329610167181038),
-    (63, 2859331523750769443),
-    (179, 15129836462772536355),
-    (429, 578956678800935479),
-    (409, 7665489075394365115),
+    (409, 4082566366760882769),
+    (191, 9109141676822751341),
+    (63, 745593812419105850),
+    (179, 6814606850996733505),
+    (429, 18330457379969791302),
+    (409, 7531601718578129894),
 ];
 
 #[tokio::test(flavor = "multi_thread")]
@@ -132,9 +146,10 @@ async fn per_session_messages_match_the_pinned_stream() {
             .count()
     };
     println!(
-        "ticks {} fog {} wildlife {} projectiles {}",
+        "ticks {} fog views {} fog deltas {} wildlife {} projectiles {}",
         kinds(|m| matches!(m, GameplayServerMessage::Tick { .. })),
         kinds(|m| matches!(m, GameplayServerMessage::FogState(_))),
+        kinds(|m| matches!(m, GameplayServerMessage::FogDelta(_))),
         kinds(|m| matches!(m, GameplayServerMessage::WildlifeState { .. })),
         kinds(|m| matches!(m, GameplayServerMessage::Projectiles { .. })),
     );

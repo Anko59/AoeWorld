@@ -4,6 +4,9 @@ use aoe_core::{Seed, WorldConfig, WorldPosition};
 use aoe_protocol::{GameplayServerMessage, MAX_SUBSCRIPTION_TILES};
 use std::cell::Cell;
 
+#[path = "tests/wire.rs"]
+mod wire;
+
 thread_local! {
     static WORK: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
 }

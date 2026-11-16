@@ -214,6 +214,9 @@ fn walk<S: Sink>(message: &ServerMessage, sink: &mut S) {
         ServerMessage::FogState(state) if !state.valid() => {
             whole(sink, "FogState", "fog.state", Class::Economy);
         }
+        ServerMessage::FogDelta(delta) if !delta.valid() => {
+            whole(sink, "FogDelta", "fog.delta", Class::Economy);
+        }
         ServerMessage::ResourceState(state) if !state.valid() => {
             whole(sink, "ResourceState", "resources.state", Class::Resource);
         }

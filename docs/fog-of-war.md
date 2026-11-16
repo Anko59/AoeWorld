@@ -38,19 +38,36 @@ delivery revisions and instrumentation counters do not enter the replay hash.
 
 Each connection receives its slot player's view. Simulation knowledge is independent per player, and each player has its
 own vision revision, so a viewer rebuilds its fog view only when its own sight
-changes. A rebuilt view whose region, tiles and overview equal what the client
-already holds is not sent again (the client ignores the tick it was built at).
+changes. The server keeps the view each session's client holds and sends only
+what differs from it: nothing when a rebuilt view equals it (the client ignores
+the tick it was built at), otherwise the changed tiles and strategic pixels.
 Snapshots, ticks, reconnects and wildlife replacements exclude unseen opponents
 and neutral animals. Owned units remain known offscreen. Buildings in fog use
 the simulation's remembered snapshots; resource amounts never advance unseen.
 Immutable geographic terrain remains accessible through the map service.
 
-`FogState` is appended at server enum index 9, preserving every existing enum index. Building state appends its observed age; current goldens pin
-the complete layout. It contains a complete row-major view of the subscription
-(at most 512x512 bytes) and at most 65,536 sparse strategic pixels. Both decode
-bounds and tile values are validated. Subscription revisions reject stale views;
-failed delivery disconnects. The browser encoder and Rust pin the same
-`browser/tests/wire/fog.hex` fixture.
+`FogState` (server enum index 8) is the whole view of one subscription, sent on
+subscribe and resync and when fog is switched on or off. Its row-major tiles
+travel at two bits each, four to a byte with the first tile in the low bits (at
+most 65,536 bytes for 512x512 tiles), followed by at most 65,536 sparse
+strategic pixels. `FogDelta` (index 12, appended last) carries the later changes
+of the same subscription revision: runs of rewritten tile bytes, each named by
+the unchanged bytes before it and its length, then the bytes of all runs with
+the tiles' new states, then the strategic pixels whose state changed (0 is black
+again). A run goes on across one unchanged byte, so the tile part of a delta
+stays within the packed size of the window plus about 2% however much changed;
+tests pin one observer moving one tile under 200 bytes, and that strategic
+pixels which did not change add no bytes.
+
+Both messages decode with bounded lengths and validated contents: the window,
+the three tile states, no bits past the last tile, run extents and ascending
+pixels. A client lays a delta only over the view of that subscription revision
+and refuses any other, keeping its view as it was. The server patches its copy
+of the client's view with the very changes it sends, and only when the session's
+queue has room for them, so a send skipped on a full queue is folded into the next.
+Subscription revisions reject stale views; failed delivery disconnects. The
+browser encoder and Rust pin the same `browser/tests/wire/fog.hex` fixture.
+Building state appends its observed age; current goldens pin the complete layout.
 
 Ground illumination uses the existing surface mesh and interpolates shared
 vertex levels for soft edges. GPU fog uses the spare high atlas-page byte in

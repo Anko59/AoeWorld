@@ -1,6 +1,7 @@
-use aoe_protocol::FogState;
+use aoe_protocol::{FogDelta, FogState};
 
 /// One bounded, authoritative subscription view. Terrain residency is separate.
+/// The server sends the view whole, then what changes in it.
 #[derive(Default)]
 pub struct Fog {
     state: Option<FogState>,
@@ -22,6 +23,17 @@ impl Fog {
         });
         self.state = Some(state);
         changed
+    }
+    /// Lays the server's changes over the held view. False, with the view as
+    /// it was, when the view they were made for is not the one held.
+    pub fn apply_delta(&mut self, delta: &FogDelta) -> bool {
+        self.state
+            .as_mut()
+            .is_some_and(|state| state.apply(delta).is_ok())
+    }
+    /// The held view, whole.
+    pub fn view(&self) -> Option<&FogState> {
+        self.state.as_ref()
     }
     pub fn clear(&mut self) {
         self.state = None;
