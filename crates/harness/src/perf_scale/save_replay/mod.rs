@@ -106,6 +106,11 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
                     let mut routes = scheduler_json(&w.route_scheduler_stats(), w.tick().0);
                     routes["queue"] = queue_json(&w.route_queue_breakdown(), &[]);
                     routes.as_object_mut().map(|o| o.remove("attribution"));
+                    // Work beside the queue: units with a movement goal, and
+                    // resources delivered in the last minute (income is not
+                    // saved, so it starts empty at the restore).
+                    routes["movers"] = json!(w.order_mover_census().iter().sum::<u64>());
+                    routes["delivered_last_minute"] = json!(w.players().map(|p| w.recent_deliveries(p.player).iter().sum::<u64>()).sum::<u64>());
                     routes
                 }).await);
             }
