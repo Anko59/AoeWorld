@@ -87,6 +87,8 @@ impl Marks {
 pub(super) struct UnitFrame {
     parts: Vec<Vec<GameplayUnitState>>,
     owner: Vec<u16>,
+    /// Whether the slot's unit is in its owner's lists.
+    listed: Vec<bool>,
     rank: Vec<usize>,
     index: HashMap<EntityId, u32>,
     own: BTreeMap<PlayerId, Owned>,
@@ -132,20 +134,6 @@ impl UnitFrame {
         frame.changed.clear();
         frame.visited = world.unit_changes().len();
         frame.converted = 0;
-        // Remove old list entries first: swap-removal may assign their ranks
-        // to another changed id in this same batch.
-        for id in world.unit_changes() {
-            if let Some(&slot) = frame.index.get(id) {
-                let owner = PlayerId(frame.owner[slot as usize]);
-                if let Some(own) = frame.own.get_mut(&owner) {
-                    own.remove(frame.rank[slot as usize]);
-                }
-                if world.unit(*id).is_none() {
-                    frame.index.remove(id);
-                    frame.free.push(slot);
-                }
-            }
-        }
         // Converting a changed unit only reads the world, so the states are
         // built on the pool; the lists below are updated in change order.
         let convert = |id: &EntityId| {
@@ -165,7 +153,42 @@ impl UnitFrame {
                 .map(convert)
                 .collect()
         };
-        for (id, converted) in changes.iter().zip(converted) {
+        // A unit listed under the same owner at the same rank, and still
+        // visible, keeps its list entry: removing and reinserting it would
+        // leave the lists as they are.
+        let kept = changes
+            .iter()
+            .zip(&converted)
+            .map(|(id, converted)| {
+                let (Some(&slot), Some((state, Some(rank), true))) =
+                    (frame.index.get(id), converted)
+                else {
+                    return false;
+                };
+                let slot = slot as usize;
+                frame.listed[slot]
+                    && frame.owner[slot] == state.player.0
+                    && frame.rank[slot] == *rank
+            })
+            .collect::<Vec<_>>();
+        // Remove old list entries first: swap-removal may assign their ranks
+        // to another changed id in this same batch.
+        for (id, kept) in changes.iter().zip(&kept) {
+            if let Some(&slot) = frame.index.get(id) {
+                if !kept {
+                    let owner = PlayerId(frame.owner[slot as usize]);
+                    if let Some(own) = frame.own.get_mut(&owner) {
+                        own.remove(frame.rank[slot as usize]);
+                    }
+                    frame.listed[slot as usize] = false;
+                }
+                if world.unit(*id).is_none() {
+                    frame.index.remove(id);
+                    frame.free.push(slot);
+                }
+            }
+        }
+        for ((id, converted), kept) in changes.iter().zip(converted).zip(kept) {
             let Some((state, rank, visible)) = converted else {
                 continue;
             };
@@ -184,12 +207,13 @@ impl UnitFrame {
             let rank = rank?;
             frame.owner[slot as usize] = state.player.0;
             frame.rank[slot as usize] = rank;
-            if visible {
+            if visible && !kept {
                 frame
                     .own
                     .entry(state.player)
                     .or_default()
                     .insert(rank, key(*id, slot));
+                frame.listed[slot as usize] = true;
             }
         }
         Some(frame)
@@ -216,6 +240,7 @@ impl UnitFrame {
         let mut frame = Self {
             parts,
             owner: Vec::with_capacity(count),
+            listed: vec![false; count],
             rank: (0..count).collect(),
             index: HashMap::with_capacity(count),
             own: BTreeMap::new(),
@@ -231,6 +256,7 @@ impl UnitFrame {
             frame.index.insert(state.id, slot as u32);
             frame.owner.push(state.player.0);
             if world.unit_visible_to(state.player, state.id) {
+                frame.listed[slot] = true;
                 frame
                     .own
                     .entry(state.player)
@@ -252,6 +278,7 @@ impl UnitFrame {
             }
             self.parts[slot as usize / PART].push(state);
             self.owner.push(state.player.0);
+            self.listed.push(false);
             self.rank.push(0);
             slot
         };
