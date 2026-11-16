@@ -111,7 +111,7 @@ fn research_orders_have_current_golden_wire_and_round_trip() {
         assert_eq!(decode_gameplay_client(&bytes).unwrap(), message);
     }
     // An unknown technology is not a message.
-    assert!(decode_gameplay_client(&[13, 7, 1, 87]).is_err());
+    assert!(decode_gameplay_client(&[13, 7, 1, 105]).is_err());
 }
 
 #[test]

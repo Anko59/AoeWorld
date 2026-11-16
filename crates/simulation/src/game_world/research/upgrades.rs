@@ -2,7 +2,7 @@ use crate::{GameWorld, Tech, UnitKind};
 use aoe_core::{EntityId, PlayerId};
 
 impl UnitKind {
-    pub const ALL: [Self; 37] = [
+    pub const ALL: [Self; 60] = [
         Self::Villager,
         Self::Scout,
         Self::Militia,
@@ -40,12 +40,45 @@ impl UnitKind {
         Self::Steward,
         Self::TradeCart,
         Self::TradeCog,
+        Self::FireGalley,
+        Self::FastFireShip,
+        Self::DemolitionRaft,
+        Self::HeavyDemolitionShip,
+        Self::Galleon,
+        Self::CannonGalleon,
+        Self::EliteCannonGalleon,
+        Self::Hulk,
+        Self::WarHulk,
+        Self::Carrack,
+        Self::CatapultGalleon,
+        Self::CavalryArcher,
+        Self::HeavyCavalryArcher,
+        Self::CamelRider,
+        Self::HeavyCamelRider,
+        Self::Scorpion,
+        Self::HeavyScorpion,
+        Self::HandCannoneer,
+        Self::BombardCannon,
+        Self::Trebuchet,
+        Self::TrebuchetUnpacked,
+        Self::Petard,
+        Self::SiegeOnager,
     ];
     /// The single current identity of each production line.
     pub fn upgraded(self, researched: u128) -> Self {
         let has = |t: Tech| researched & t.bit() != 0;
         match self {
+            Self::Galley | Self::WarGalley if has(Tech::HeavyWarships) => Self::Galleon,
             Self::Galley if has(Tech::WarGalley) => Self::WarGalley,
+            Self::FireGalley | Self::FireShip if has(Tech::HeavyWarships) => Self::FastFireShip,
+            Self::FireGalley if has(Tech::WarGalley) => Self::FireShip,
+            Self::Hulk | Self::WarHulk if has(Tech::HeavyWarships) => Self::Carrack,
+            Self::Hulk if has(Tech::WarGalley) => Self::WarHulk,
+            Self::DemolitionRaft | Self::DemolitionShip if has(Tech::HeavyDemolitionShip) => {
+                Self::HeavyDemolitionShip
+            }
+            Self::DemolitionRaft if has(Tech::DemolitionShip) => Self::DemolitionShip,
+            Self::CannonGalleon if has(Tech::EliteCannonGalleon) => Self::EliteCannonGalleon,
             Self::Militia | Self::ManAtArms | Self::LongSwordsman | Self::TwoHandedSwordsman
                 if has(Tech::Champion) =>
             {
@@ -69,13 +102,21 @@ impl UnitKind {
             Self::Scout if has(Tech::LightCavalry) => Self::LightCavalry,
             Self::BatteringRam | Self::CappedRam if has(Tech::SiegeRam) => Self::SiegeRam,
             Self::BatteringRam if has(Tech::CappedRam) => Self::CappedRam,
+            Self::Mangonel | Self::Onager if has(Tech::SiegeOnager) => Self::SiegeOnager,
             Self::Mangonel if has(Tech::Onager) => Self::Onager,
+            Self::CavalryArcher if has(Tech::HeavyCavalryArcher) => Self::HeavyCavalryArcher,
+            Self::CamelRider if has(Tech::HeavyCamelRider) => Self::HeavyCamelRider,
+            Self::Scorpion if has(Tech::HeavyScorpion) => Self::HeavyScorpion,
             _ => self,
         }
     }
     pub fn required_tech(self) -> Option<Tech> {
         match self {
-            Self::WarGalley => Some(Tech::WarGalley),
+            Self::WarGalley | Self::FireShip | Self::WarHulk => Some(Tech::WarGalley),
+            Self::Galleon | Self::FastFireShip | Self::Carrack => Some(Tech::HeavyWarships),
+            Self::DemolitionShip => Some(Tech::DemolitionShip),
+            Self::HeavyDemolitionShip => Some(Tech::HeavyDemolitionShip),
+            Self::EliteCannonGalleon => Some(Tech::EliteCannonGalleon),
             Self::ManAtArms => Some(Tech::ManAtArms),
             Self::LongSwordsman => Some(Tech::LongSwordsman),
             Self::Pikeman => Some(Tech::Pikeman),
@@ -92,19 +133,42 @@ impl UnitKind {
             Self::CappedRam => Some(Tech::CappedRam),
             Self::SiegeRam => Some(Tech::SiegeRam),
             Self::Onager => Some(Tech::Onager),
+            Self::SiegeOnager => Some(Tech::SiegeOnager),
+            Self::HeavyCavalryArcher => Some(Tech::HeavyCavalryArcher),
+            Self::HeavyCamelRider => Some(Tech::HeavyCamelRider),
+            Self::HeavyScorpion => Some(Tech::HeavyScorpion),
+            Self::HandCannoneer | Self::BombardCannon => Some(Tech::Chemistry),
             _ => None,
         }
     }
     pub fn required_age(self) -> crate::Age {
         if matches!(self, Self::TradeCart | Self::TradeCog) {
             // Market and Dock trade units open in the Feudal Age.
-            crate::Age::Feudal
-        } else if self == Self::Steward {
+            return crate::Age::Feudal;
+        }
+        if self.is_naval() && self != Self::FishingShip {
+            return match self {
+                Self::TransportShip => crate::Age::Dark,
+                Self::Galley | Self::FireGalley | Self::DemolitionRaft | Self::Hulk => {
+                    crate::Age::Feudal
+                }
+                Self::WarGalley | Self::FireShip | Self::WarHulk | Self::DemolitionShip => {
+                    crate::Age::Castle
+                }
+                _ => crate::Age::Imperial,
+            };
+        }
+        if matches!(
+            self,
+            Self::Steward
+                | Self::CavalryArcher
+                | Self::CamelRider
+                | Self::Scorpion
+                | Self::Trebuchet
+                | Self::TrebuchetUnpacked
+                | Self::Petard
+        ) {
             crate::Age::Castle
-        } else if matches!(self, Self::Galley | Self::FireShip | Self::DemolitionShip) {
-            crate::Age::Feudal
-        } else if self == Self::TransportShip {
-            crate::Age::Dark
         } else if self as u8 >= Self::TwoHandedSwordsman as u8 {
             crate::Age::Imperial
         } else if self as u8 >= Self::LongSwordsman as u8 {

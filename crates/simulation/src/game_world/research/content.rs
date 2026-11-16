@@ -96,7 +96,11 @@ impl BrowserContent {
             let building = index < buildings * BUILDING_WORDS;
             let training_low = building && index % BUILDING_WORDS == 10;
             let training_high = building && index % BUILDING_WORDS == 11;
-            let valid = if training_high {
+            // The high upgrade-mask word carries technology bits 32..63.
+            let upgrades_high = index >= unit_start && (index - unit_start) % UNIT_WORDS == 19;
+            let valid = if upgrades_high {
+                word >= 0
+            } else if training_high {
                 word >= 0 && word < (1 << (units - 32))
             } else if training_low {
                 true
@@ -182,8 +186,12 @@ impl BrowserContent {
                 || r[10] > 255
                 || r[16] > 3
                 || r[17] > techs as i32
-                || r[21] >= 1 << techs.saturating_sub(96).min(30)
+                || techs > 128
             {
+                return Err("invalid game content unit");
+            }
+            let upgrades = (0..4).fold(0_u128, |m, i| m | u128::from(r[18 + i] as u32) << (32 * i));
+            if techs < 128 && upgrades >> techs != 0 {
                 return Err("invalid game content unit");
             }
             let c = cost(&r[11..15]);
@@ -216,10 +224,7 @@ impl BrowserContent {
                 },
                 age: r[16] as u8,
                 requires_tech: optional(r[17]),
-                upgrades: u128::from(r[18] as u32)
-                    | (u128::from(r[19] as u32) << 32)
-                    | (u128::from(r[20] as u32) << 64)
-                    | (u128::from(r[21] as u32) << 96),
+                upgrades,
             });
         }
         Ok(result)

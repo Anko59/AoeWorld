@@ -45,6 +45,29 @@ class UnitKind:
     VASSAL: UnitKind
     STEWARD: UnitKind
     GENERAL: UnitKind
+    FIRE_GALLEY: UnitKind
+    FAST_FIRE_SHIP: UnitKind
+    DEMOLITION_RAFT: UnitKind
+    HEAVY_DEMOLITION_SHIP: UnitKind
+    GALLEON: UnitKind
+    CANNON_GALLEON: UnitKind
+    ELITE_CANNON_GALLEON: UnitKind
+    HULK: UnitKind
+    WAR_HULK: UnitKind
+    CARRACK: UnitKind
+    CATAPULT_GALLEON: UnitKind
+    CAVALRY_ARCHER: UnitKind
+    HEAVY_CAVALRY_ARCHER: UnitKind
+    CAMEL_RIDER: UnitKind
+    HEAVY_CAMEL_RIDER: UnitKind
+    SCORPION: UnitKind
+    HEAVY_SCORPION: UnitKind
+    HAND_CANNONEER: UnitKind
+    BOMBARD_CANNON: UnitKind
+    TREBUCHET: UnitKind
+    TREBUCHET_UNPACKED: UnitKind
+    PETARD: UnitKind
+    SIEGE_ONAGER: UnitKind
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
 class BuildingKind:
@@ -73,6 +96,7 @@ class BuildingKind:
     STONE_WALL: BuildingKind
     STONE_GATE: BuildingKind
     ROAD: BuildingKind
+    FISH_TRAP: BuildingKind
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
 class ResourceKind:
@@ -176,6 +200,24 @@ class Tech:
     BANKING: Tech
     COINAGE: Tech
     TREADMILL_CRANE: Tech
+    FISHING_LINES: Tech
+    GILLNETS: Tech
+    CAREENING: Tech
+    DRY_DOCK: Tech
+    SHIPWRIGHT: Tech
+    CLINKER_CONSTRUCTION: Tech
+    CARVEL_HULL: Tech
+    SIPHONS: Tech
+    INCENDIARIES: Tech
+    HEAVY_WARSHIPS: Tech
+    DEMOLITION_SHIP: Tech
+    HEAVY_DEMOLITION_SHIP: Tech
+    ELITE_CANNON_GALLEON: Tech
+    CHEMISTRY: Tech
+    HEAVY_CAVALRY_ARCHER: Tech
+    HEAVY_CAMEL_RIDER: Tech
+    HEAVY_SCORPION: Tech
+    SIEGE_ONAGER: Tech
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
 class Age:

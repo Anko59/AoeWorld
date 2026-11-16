@@ -10,7 +10,9 @@ mod content;
 mod effects;
 mod generic;
 mod generic_effects;
+mod gunpowder;
 mod imperial;
+mod navy;
 mod table;
 mod upgrades;
 

@@ -41,6 +41,7 @@ fn rally_rule(building: &GameplayBuildingState) -> Option<&'static str> {
         building.kind,
         BuildingKind::House
             | BuildingKind::Farm
+            | BuildingKind::FishTrap
             | BuildingKind::Mill
             | BuildingKind::LumberCamp
             | BuildingKind::MiningCamp
@@ -66,12 +67,13 @@ fn rally_rule(building: &GameplayBuildingState) -> Option<&'static str> {
 fn trains(building: BuildingKind, unit: UnitKind) -> bool {
     matches!(
         (building, unit),
-        (BuildingKind::Castle, UnitKind::Vassal | UnitKind::General)
-            | (
-                BuildingKind::TownCenter,
-                UnitKind::Villager | UnitKind::Steward
-            )
-            | (BuildingKind::Barracks, UnitKind::Militia)
+        (
+            BuildingKind::Castle,
+            UnitKind::Vassal | UnitKind::General | UnitKind::Trebuchet | UnitKind::Petard
+        ) | (
+            BuildingKind::TownCenter,
+            UnitKind::Villager | UnitKind::Steward
+        ) | (BuildingKind::Barracks, UnitKind::Militia)
             | (
                 BuildingKind::Barracks,
                 UnitKind::Spearman
@@ -89,6 +91,9 @@ fn trains(building: BuildingKind, unit: UnitKind) -> bool {
                     | UnitKind::Crossbowman
                     | UnitKind::EliteSkirmisher
                     | UnitKind::Arbalester
+                    | UnitKind::CavalryArcher
+                    | UnitKind::HeavyCavalryArcher
+                    | UnitKind::HandCannoneer
             )
             | (
                 BuildingKind::Stable,
@@ -98,6 +103,8 @@ fn trains(building: BuildingKind, unit: UnitKind) -> bool {
                     | UnitKind::Cavalier
                     | UnitKind::Paladin
                     | UnitKind::Hussar
+                    | UnitKind::CamelRider
+                    | UnitKind::HeavyCamelRider
             )
             | (BuildingKind::Monastery, UnitKind::Monk)
             | (
@@ -107,6 +114,10 @@ fn trains(building: BuildingKind, unit: UnitKind) -> bool {
                     | UnitKind::CappedRam
                     | UnitKind::SiegeRam
                     | UnitKind::Onager
+                    | UnitKind::Scorpion
+                    | UnitKind::HeavyScorpion
+                    | UnitKind::BombardCannon
+                    | UnitKind::SiegeOnager
             )
             | (BuildingKind::Market, UnitKind::TradeCart)
             | (
@@ -118,6 +129,17 @@ fn trains(building: BuildingKind, unit: UnitKind) -> bool {
                     | UnitKind::TransportShip
                     | UnitKind::WarGalley
                     | UnitKind::TradeCog
+                    | UnitKind::FireGalley
+                    | UnitKind::FastFireShip
+                    | UnitKind::DemolitionRaft
+                    | UnitKind::HeavyDemolitionShip
+                    | UnitKind::Galleon
+                    | UnitKind::CannonGalleon
+                    | UnitKind::EliteCannonGalleon
+                    | UnitKind::Hulk
+                    | UnitKind::WarHulk
+                    | UnitKind::Carrack
+                    | UnitKind::CatapultGalleon
             )
     )
 }
@@ -172,7 +194,9 @@ pub(crate) fn building_rule(building: &GameplayBuildingState) -> Option<&'static
     if building.hp > building.max_hp {
         return Some("building.hp_at_most_max_hp");
     }
-    if (building.kind == BuildingKind::Farm) != building.food_remaining.is_some() {
+    if matches!(building.kind, BuildingKind::Farm | BuildingKind::FishTrap)
+        != building.food_remaining.is_some()
+    {
         return Some("building.food_remaining_farm_only");
     }
     if !complete && !building.training_queue.is_empty() {

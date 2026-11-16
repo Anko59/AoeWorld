@@ -21,8 +21,9 @@ test("river Dock offers Feudal ships and Castle research requirements", async ({
   await expect(page.locator("#selection-name")).toHaveText("Dock");
   for (const kind of [
     "galley",
-    "fire-ship",
-    "demolition-ship",
+    "fire-galley",
+    "hulk",
+    "demolition-raft",
     "transport-ship",
     "trade-cog",
   ]) {

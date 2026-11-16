@@ -4,6 +4,8 @@
 mod age;
 #[path = "buildings/barriers.rs"]
 mod barriers;
+#[path = "buildings/fishing.rs"]
+mod fishing;
 #[path = "buildings/lines.rs"]
 mod lines;
 #[path = "buildings/wonder.rs"]
@@ -57,7 +59,7 @@ const NO_UNITS: &[UnitKind] = &[];
 const VILLAGERS: &[UnitKind] = &[UnitKind::Villager, UnitKind::Steward];
 
 /// Canonical order of `BuildingKind`.
-pub const BUILDING_RULES: [BuildingRules; 25] = [
+pub const BUILDING_RULES: [BuildingRules; 26] = [
     BuildingRules {
         kind: BuildingKind::TownCenter,
         cost: cost(0, 275, 0, 100),
@@ -221,15 +223,7 @@ pub const BUILDING_RULES: [BuildingRules; 25] = [
         los: 8,
         population_support: 0,
         accepts: [true, false, false, false],
-        trainable: &[
-            UnitKind::FishingShip,
-            UnitKind::Galley,
-            UnitKind::FireShip,
-            UnitKind::DemolitionShip,
-            UnitKind::TransportShip,
-            UnitKind::WarGalley,
-            UnitKind::TradeCog,
-        ],
+        trainable: lines::DOCK,
         requires: None,
         buildable: true,
         blocks: true,
@@ -344,7 +338,12 @@ pub const BUILDING_RULES: [BuildingRules; 25] = [
         200,
         4800,
         (4, 11),
-        &[UnitKind::Vassal, UnitKind::General],
+        &[
+            UnitKind::Vassal,
+            UnitKind::General,
+            UnitKind::Trebuchet,
+            UnitKind::Petard,
+        ],
         None,
     ),
     castle(
@@ -411,6 +410,7 @@ pub const BUILDING_RULES: [BuildingRules; 25] = [
         age: Age::Dark,
     },
     wonder::WONDER,
+    fishing::FISH_TRAP,
 ];
 
 const fn castle(

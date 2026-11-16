@@ -60,7 +60,7 @@ fn militia_timelines_use_fractional_native_dat_durations() {
 
 #[test]
 fn every_spawned_unit_pose_uses_all_native_cells_and_dat_timing() {
-    assert_eq!(SPRITES.len(), 232);
+    assert_eq!(SPRITES.len(), 287);
     for (pose, source) in SPRITES.iter().copied().enumerate() {
         if matches!(pose, 72 | 73 | 120 | 223) {
             continue;
@@ -75,13 +75,18 @@ fn every_spawned_unit_pose_uses_all_native_cells_and_dat_timing() {
         assert!(source.frame_millis().is_finite() && source.frame_millis() >= 0.0);
         for row in 0..source.rows() {
             for phase in 0..usize::from(source.stride) {
-                let native_stride = source.frames() as usize / source.rows();
+                // A sheet may hold more cells than the DAT's declared frames
+                // (the Heavy Demolition Ship's sinking has ten for seven).
+                let native_stride = source.native.map_or_else(
+                    || source.frames() as usize / source.rows(),
+                    |g| usize::from(g.stride),
+                );
                 let expected = if source.stride == 1 && native_stride > 1 {
                     row * native_stride + native_stride - 1
                 } else {
                     row * usize::from(source.stride) + phase
                 };
-                assert_eq!(source.source_frame(row, phase), expected);
+                assert_eq!(source.source_frame(row, phase), expected, "pose {pose}");
             }
         }
     }
@@ -108,6 +113,18 @@ fn imperial_unit_bindings_select_each_dat_identity_for_all_actions() {
         ("CappedRam", 422),
         ("SiegeRam", 548),
         ("Onager", 550),
+        ("CavalryArcher", 39),
+        ("HeavyCavalryArcher", 474),
+        ("CamelRider", 329),
+        ("HeavyCamelRider", 330),
+        ("Scorpion", 279),
+        ("HeavyScorpion", 542),
+        ("HandCannoneer", 5),
+        ("BombardCannon", 36),
+        ("Trebuchet", 331),
+        ("TrebuchetUnpacked", 42),
+        ("Petard", 440),
+        ("SiegeOnager", 588),
     ] {
         for (suffix, action) in [
             ("Stand", Action::Idle),
@@ -155,4 +172,32 @@ fn imperial_buildings_are_imported_from_de_without_unshipped_trial_recipes() {
             .iter()
             .all(|id| crate::catalog::GAMEPLAY_BUILDING_IDS.contains(id))
     );
+}
+
+#[test]
+fn naval_overhaul_bindings_select_each_dat_identity_with_native_art() {
+    use crate::de::unit_catalog::BINDINGS;
+    for (name, id) in [
+        ("FireGalley", 1103),
+        ("FastFireShip", 532),
+        ("DemolitionRaft", 1104),
+        ("HeavyDemolitionShip", 528),
+        ("Galleon", 442),
+        ("CannonGalleon", 420),
+        ("EliteCannonGalleon", 691),
+        ("Hulk", 2626),
+        ("WarHulk", 2627),
+        ("Carrack", 2628),
+        ("CatapultGalleon", 2633),
+    ] {
+        for suffix in ["", "Walk", "Attack", "Die", "Decay"] {
+            let pose = format!("{name}{suffix}");
+            let binding = BINDINGS
+                .iter()
+                .find(|b| format!("{:?}", b.pose) == pose)
+                .unwrap_or_else(|| panic!("missing {pose}"));
+            assert_eq!(binding.unit, id, "{pose}");
+            assert!(SPRITES[binding.pose as usize].is_native(), "{pose}");
+        }
+    }
 }

@@ -44,7 +44,7 @@ impl GameWorld {
         if !(kind.is_wall() || kind == BuildingKind::Road) {
             return Err(EconomyError::NotBuildable);
         }
-        let builders = self.validate_builders(player, builders)?;
+        let builders = self.validate_builders(player, builders, false)?;
         let tiles = line_tiles(from, to);
         if tiles.len() > MAX_WALL_SEGMENTS {
             return Err(EconomyError::OrderTooLarge);

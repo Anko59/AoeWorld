@@ -199,10 +199,13 @@ fn melee_fight_audit_measures_each_kind_without_changing_combat_rules() {
          is distance_squared < (radius_a+radius_b)^2; depth uses floor sqrt.\n\
          Generals use the ordinary MoveAlone order before their attack orders.\n",
     );
-    for stats in UNIT_COMBAT
-        .iter()
-        .filter(|s| s.attack_kind == DamageKind::Melee && s.range == 1 && s.attack > 0)
-    {
+    for stats in UNIT_COMBAT.iter().filter(|s| {
+        s.attack_kind == DamageKind::Melee
+            && s.range == 1
+            && s.attack > 0
+            && !s.kind.is_naval()
+            && s.kind != crate::UnitKind::Petard
+    }) {
         let kind = stats.kind;
         let (hits, hash) = measured_duel(kind);
         assert_eq!((hits.clone(), hash), measured_duel(kind), "{kind:?}");

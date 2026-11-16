@@ -1,6 +1,6 @@
 //! FARM produces food independently of the farmer's work rate. Accrue lazily
 //! on harvest attempts, including time spent carrying or without a farmer.
-use crate::GameWorld;
+use crate::{BuildingKind, GameWorld};
 use aoe_core::EntityId;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -32,12 +32,19 @@ impl GameWorld {
 
     /// Take one produced food; None means not yet produced or no live farm.
     pub(crate) fn deplete_farm(&mut self, farm: EntityId) -> Option<u16> {
-        let remaining = self
-            .building(farm)
-            .filter(|b| b.is_complete())?
-            .food_remaining?;
+        let building = self.building(farm).filter(|b| b.is_complete())?;
+        let (trap, remaining) = (
+            building.kind == BuildingKind::FishTrap,
+            building.food_remaining?,
+        );
         if remaining == 0 {
             return None;
+        }
+        if trap {
+            // Fish Traps hold their food ready: the ship's own rate limits the catch.
+            let food = self.building_mut(farm)?.food_remaining.as_mut()?;
+            *food -= 1;
+            return Some(*food);
         }
         let threshold = u64::from(self.config.tick_hz) * 1_000_000;
         let production = self.economy.farm_production.get_mut(&farm)?;

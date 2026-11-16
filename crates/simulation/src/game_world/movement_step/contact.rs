@@ -39,8 +39,29 @@ impl UnitKind {
             table[UnitKind::WarGalley as usize] = 512;
             table[UnitKind::TradeCog as usize] = 512;
             table[UnitKind::TradeCart as usize] = 256;
+            table[UnitKind::FireGalley as usize] = 512;
+            table[UnitKind::FastFireShip as usize] = 512;
+            table[UnitKind::DemolitionRaft as usize] = 512;
+            table[UnitKind::HeavyDemolitionShip as usize] = 512;
+            table[UnitKind::Galleon as usize] = 512;
+            table[UnitKind::CannonGalleon as usize] = 512;
+            table[UnitKind::EliteCannonGalleon as usize] = 512;
+            table[UnitKind::Hulk as usize] = 512;
+            table[UnitKind::WarHulk as usize] = 512;
+            table[UnitKind::Carrack as usize] = 512;
+            table[UnitKind::CatapultGalleon as usize] = 512;
             table[UnitKind::Mangonel as usize] = 461;
             table[UnitKind::Onager as usize] = 461;
+            table[UnitKind::SiegeOnager as usize] = 461;
+            table[UnitKind::CavalryArcher as usize] = 256;
+            table[UnitKind::HeavyCavalryArcher as usize] = 256;
+            table[UnitKind::CamelRider as usize] = 256;
+            table[UnitKind::HeavyCamelRider as usize] = 256;
+            table[UnitKind::Scorpion as usize] = 461;
+            table[UnitKind::HeavyScorpion as usize] = 461;
+            table[UnitKind::BombardCannon as usize] = 461;
+            table[UnitKind::Trebuchet as usize] = 512;
+            table[UnitKind::TrebuchetUnpacked as usize] = 512;
             table
         };
         // One load: this runs for every body tested in a collision scan.

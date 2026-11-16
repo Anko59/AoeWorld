@@ -187,6 +187,16 @@ fn imperial_actor_tags_round_trip_all_current_poses_in_a_compact_scene() {
     }
 }
 #[wasm_bindgen_test]
+fn gunpowder_cavalry_and_siege_actor_tags_exceed_one_byte_slots() {
+    // Poses past 255 must not wrap onto older actors.
+    for slot in 224..284 {
+        let kind = SceneUnitKind::actor(slot);
+        // Identical animations share a canonical slot inside the new range.
+        assert!(kind.actor_slot().is_some_and(|canonical| canonical >= 224));
+        assert_eq!(kind.building_slot(), None);
+    }
+}
+#[wasm_bindgen_test]
 fn galley_bolt_uses_the_five_projectile_rows_and_mirrors_eastward_flights() {
     // Packed facings run south, then south-west to north-west, then back via
     // the mirrored east side, exactly like the arrow.

@@ -25,6 +25,17 @@ pub(crate) fn apply_movement_speed(
     base.map(|speed| speed * percent / 100)
 }
 
+/// Carvel Hull and Clinker Construction: ships move 10% faster each. Fishing
+/// Ships keep their own speed.
+pub(crate) fn naval_speed(kind: UnitKind, speed: u32, researched: u128) -> u32 {
+    if kind == UnitKind::FishingShip {
+        return speed;
+    }
+    let steps = u32::from(researched & Tech::ClinkerConstruction.bit() != 0)
+        + u32::from(researched & Tech::CarvelHull.bit() != 0);
+    speed * (100 + 10 * steps) / 100
+}
+
 pub fn researched_stats(kind: UnitKind, feudal: bool, researched: u128) -> UnitCombat {
     apply_research_stats(*unit_combat(kind), feudal, researched)
 }
@@ -49,14 +60,20 @@ pub fn apply_research_stats(mut s: UnitCombat, feudal: bool, researched: u128) -
             | UnitKind::Champion
             | UnitKind::Halberdier
     );
-    let archer = matches!(
+    // Foot archers and mounted archers take the archer armour line; the
+    // Hand Cannoneer takes only the armour (no Fletching line, no Chemistry).
+    let missile = matches!(
         kind,
         UnitKind::Archer
             | UnitKind::Skirmisher
             | UnitKind::Crossbowman
             | UnitKind::EliteSkirmisher
             | UnitKind::Arbalester
+            | UnitKind::CavalryArcher
+            | UnitKind::HeavyCavalryArcher
     );
+    let archer = missile || kind == UnitKind::HandCannoneer;
+    let ranged_ship = kind.is_galley_line();
     let cavalry = matches!(
         kind,
         UnitKind::Scout
@@ -65,7 +82,26 @@ pub fn apply_research_stats(mut s: UnitCombat, feudal: bool, researched: u128) -
             | UnitKind::Cavalier
             | UnitKind::Paladin
             | UnitKind::Hussar
+            | UnitKind::CamelRider
+            | UnitKind::HeavyCamelRider
     );
+    if kind.is_naval() {
+        // Careening and Dry Dock: +1 pierce armour each for every ship.
+        s.pierce_armour += u16::from(has(Tech::Careening)) + u16::from(has(Tech::DryDock));
+        s.speed_hundredths = s
+            .speed_hundredths
+            .map(|speed| naval_speed(kind, speed, researched));
+        if kind.is_hulk_line() {
+            // Forging +1, Iron Casting +1, Blast Furnace +2 for the Hulk line
+            // (help strings 28067, 28068 and 28075).
+            s.attack += u16::from(has(Tech::Forging))
+                + u16::from(has(Tech::IronCasting))
+                + 2 * u16::from(has(Tech::BlastFurnace));
+        }
+        if kind.is_fire_line() && has(Tech::Siphons) {
+            s.attack += 1;
+        }
+    }
     if kind == UnitKind::Scout && feudal {
         s.attack += 2;
         s.los = if has(Tech::CastleAge) { 8 } else { 6 };
@@ -123,18 +159,20 @@ pub fn apply_research_stats(mut s: UnitCombat, feudal: bool, researched: u128) -
     if kind == UnitKind::Monk && has(Tech::BlockPrinting) {
         s.range += 3;
     }
-    if archer && has(Tech::Bracer) {
+    if (missile || ranged_ship) && has(Tech::Chemistry) {
+        s.attack += 1;
+    }
+    if missile && has(Tech::Bracer) {
         s.attack += 1;
         s.range += 1;
         s.los += 1;
     }
-    if (archer || matches!(kind, UnitKind::Galley | UnitKind::WarGalley)) && has(Tech::BodkinArrow)
-    {
+    if (missile || ranged_ship) && has(Tech::BodkinArrow) {
         s.attack += 1;
         s.range += 1;
         s.los += 1;
     }
-    if (archer || matches!(kind, UnitKind::Galley | UnitKind::WarGalley)) && has(Tech::Fletching) {
+    if (missile || ranged_ship) && has(Tech::Fletching) {
         s.attack += 1;
         s.range += 1;
         s.los += 1;
@@ -181,6 +219,10 @@ impl GameWorld {
                     s.range += 1;
                 }
             }
+        }
+        // Chemistry: ranged fortifications +1 attack, no range.
+        if self.has_researched(player, Tech::Chemistry) {
+            s.attack += 1;
         }
         if self.has_researched(player, Tech::MurderHoles) && kind != BuildingKind::TownCenter {
             s.min_range = 0;

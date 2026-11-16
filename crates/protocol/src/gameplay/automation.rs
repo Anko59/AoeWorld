@@ -10,6 +10,17 @@ impl super::UnitKind {
                 | Self::TransportShip
                 | Self::WarGalley
                 | Self::TradeCog
+                | Self::FireGalley
+                | Self::FastFireShip
+                | Self::DemolitionRaft
+                | Self::HeavyDemolitionShip
+                | Self::Galleon
+                | Self::CannonGalleon
+                | Self::EliteCannonGalleon
+                | Self::Hulk
+                | Self::WarHulk
+                | Self::Carrack
+                | Self::CatapultGalleon
         )
     }
     pub const fn is_trader(self) -> bool {
@@ -21,7 +32,13 @@ impl super::UnitKind {
         self.is_cavalry()
             || matches!(
                 self,
-                Self::Galley | Self::WarGalley | Self::FireShip | Self::TransportShip
+                Self::Galley
+                    | Self::WarGalley
+                    | Self::Galleon
+                    | Self::FireGalley
+                    | Self::FireShip
+                    | Self::FastFireShip
+                    | Self::TransportShip
             )
     }
     pub fn is_cavalry(self) -> bool {
@@ -33,6 +50,10 @@ impl super::UnitKind {
                 | Self::Cavalier
                 | Self::Paladin
                 | Self::Hussar
+                | Self::CamelRider
+                | Self::HeavyCamelRider
+                | Self::CavalryArcher
+                | Self::HeavyCavalryArcher
         )
     }
 }

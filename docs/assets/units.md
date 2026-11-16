@@ -39,12 +39,23 @@ The remaining trial dependencies belong to buildings, terrain, resources,
 projectiles, effects and icons. Arrow and javelin conversion is in the subsequent
 projectile pass; Mangonel stones already retain their complete native timeline.
 
+## Naval overhaul identities
+
+Fire Galley (1103), Fast Fire Ship (532), Demolition Raft (1104), Heavy
+Demolition Ship (528), Galleon (442), Cannon Galleon (420), Elite Cannon
+Galleon (691), Hulk (2626), War Hulk (2627), Carrack (2628) and Catapult
+Galleon (2633) bind idle, walk, attack, death and corpse poses to their own DAT
+graphics; equivalent graphics (for instance the shared sinking animations) share
+render tags. The Fire Galley's moving and the Catapult Galleon's firing graphics
+carry delta parts with incommensurate timelines, which the importer rejects, so
+those two poses use the idle graphic.
+
 ## Imperial identities
 
 Two-Handed Swordsman (473), Champion (567), Halberdier (359), Arbalester (492),
 Cavalier (283), Paladin (569), Hussar (441), Capped Ram (422), Siege Ram (548)
 and Onager (550) each bind their own DAT idle, walk, attack, death and corpse
-references. The generated catalog contains 223 semantic poses. General retains
+references. The generated catalog contains 278 semantic poses (`Pose` is 16 bits wide). General retains
 DAT hero 632 and Vassal and Steward use Western King 434; their HUD icons use those
 same identities. The DE overlay exports native DDS icons selected by DAT index,
 without substituting an earlier unit tier's icon. Arbalester releases at DAT
@@ -52,8 +63,8 @@ frame 20, independently of Crossbowman's frame 15.
 
 Identical resolved native recipes share source storage without changing their
 semantic unit/pose bindings. Filename, part order, offsets, native cell counts and
-timings must all agree. The current unit inventory uses 119,208 cells;
-no native cells are sampled away and the 131,072-frame cap is unchanged.
+timings must all agree. No native cells are sampled away and the source-frame
+cap is 262,144 (raised from 131,072 for the naval overhaul and land-unit sheets).
 
 The DE overlay has two required bounded components: world art at the overlay
 root and unit art below `actors/`. The importer retains every native cell in

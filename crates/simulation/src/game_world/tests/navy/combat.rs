@@ -3,10 +3,10 @@ use super::*;
 #[test]
 fn secondary_castle_arrows_carry_their_own_anti_ship_bonus() {
     for (victim, expected) in [
-        (UnitKind::Galley, 931),         // 5 primary + four (5 + 11 Ships).
-        (UnitKind::FishingShip, 906),    // 10 primary + four (10 + 11 Fishing Ships).
-        (UnitKind::FireShip, 955),       // Ship armour 6 reduces only the secondary bonus.
-        (UnitKind::DemolitionShip, 928), // Ship armour 3, pierce armour 3.
+        (UnitKind::Galley, 916), // 8 primary + four (8 + 11 Ships): pierce armour 3.
+        (UnitKind::FishingShip, 906), // 10 primary + four (10 + 11 Fishing Ships).
+        (UnitKind::FireShip, 921), // Pierce armour 4: 7 + four (7 + 11).
+        (UnitKind::DemolitionShip, 901), // Pierce armour 0: 11 + four (11 + 11).
     ] {
         let mut w = coast();
         let (land, water) = bank(&w);
@@ -33,29 +33,39 @@ fn secondary_castle_arrows_carry_their_own_anti_ship_bonus() {
 }
 
 #[test]
-fn hidden_naval_class_damage_includes_ship_armour_and_separate_fire_melee() {
-    for (victim, galley, war_galley, fire) in [
-        (UnitKind::FishingShip, 8, 9, 3),
-        (UnitKind::Galley, 8, 9, 4),
-        (UnitKind::WarGalley, 8, 9, 4),
-        (UnitKind::FireShip, 2, 3, 1),
-        (UnitKind::DemolitionShip, 5, 6, 1),
-        (UnitKind::TransportShip, 8, 9, 3),
+fn naval_class_bonuses_follow_the_overhaul_single_warship_class() {
+    use UnitKind::*;
+    // After update 169123 galleys, galleons and cannon ships share one armour
+    // class (Long Ranged Ship); fire ships and the Hulk line have their own
+    // bonus; nothing else carries a bonus against other ships.
+    for (attacker, victim, expected) in [
+        (Galley, Galley, 5),
+        (WarGalley, WarGalley, 5),
+        (Galleon, Galleon, 9),
+        (Galley, FishingShip, 0),
+        (Galley, FireShip, 0),
+        (Galley, DemolitionShip, 0),
+        (Galley, TransportShip, 0),
+        (Galley, Hulk, 0),
+        (FireGalley, Galleon, 1),
+        (FireShip, WarGalley, 1),
+        (FastFireShip, Galley, 1),
+        (FireShip, FishingShip, 0),
+        (FireShip, Hulk, 0),
+        (Hulk, FireShip, 1),
+        (WarHulk, FastFireShip, 1),
+        (Carrack, FireGalley, 1),
+        (Hulk, Galley, 0),
+        (CannonGalleon, CatapultGalleon, 0),
     ] {
         let mut w = coast();
         let (_, water) = bank(&w);
         let target = ship(&mut w, victim, water, 1);
-        for (attacker, expected) in [
-            (UnitKind::Galley, galley),
-            (UnitKind::WarGalley, war_galley),
-            (UnitKind::FireShip, fire),
-        ] {
-            assert_eq!(
-                w.unit_damage_bonus(attacker, target),
-                expected,
-                "{attacker:?} -> {victim:?}"
-            );
-        }
+        assert_eq!(
+            w.unit_damage_bonus(attacker, target),
+            expected,
+            "{attacker:?} -> {victim:?}"
+        );
     }
 }
 
@@ -158,8 +168,8 @@ fn transport_has_no_attack_and_enemy_naval_orders_require_ownership() {
 }
 
 #[test]
-fn fire_ship_uses_the_original_fractional_range_of_two_point_four_nine_tiles() {
-    for (distance, in_range) in [(2549, true), (2560, false)] {
+fn fire_ship_uses_the_dat_range_of_two_and_a_half_tiles() {
+    for (distance, in_range) in [(2560, true), (2561, false)] {
         let mut world = coast();
         let (_, water) = bank(&world);
         let origin = at(TileCoord::new(water.x + 3, water.y));
@@ -183,7 +193,7 @@ fn fire_ship_uses_the_original_fractional_range_of_two_point_four_nine_tiles() {
 }
 
 #[test]
-fn demolition_blast_reaches_two_point_five_tiles_but_not_beyond() {
+fn demolition_ship_blast_reaches_three_tiles_but_not_beyond() {
     let mut world = coast();
     let (_, water) = bank(&world);
     let origin = at(TileCoord::new(water.x + 3, water.y));
@@ -201,14 +211,14 @@ fn demolition_blast_reaches_two_point_five_tiles_but_not_beyond() {
         .spawn_kind(
             PlayerId(1),
             UnitKind::Galley,
-            WorldPosition::new(origin.x + 2560, origin.y),
+            WorldPosition::new(origin.x + 3072, origin.y),
         )
         .unwrap();
     let outside = world
         .spawn_kind(
             PlayerId(1),
             UnitKind::Galley,
-            WorldPosition::new(origin.x + 2561, origin.y),
+            WorldPosition::new(origin.x + 3073, origin.y),
         )
         .unwrap();
     let hp = world.unit(edge).unwrap().hp;

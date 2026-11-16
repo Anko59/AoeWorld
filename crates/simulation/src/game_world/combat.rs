@@ -22,6 +22,9 @@ mod lifecycle;
 pub(crate) mod military;
 mod projectiles;
 mod retaliation;
+#[path = "combat/siege/mod.rs"]
+mod siege;
+pub use siege::TREBUCHET_UNPACK_SECONDS;
 mod spots;
 mod table;
 mod targeting;
@@ -37,7 +40,6 @@ pub use conversion::{conversion_chance, convertible_building, convertible_unit};
 pub(crate) use hash::hash_hit;
 pub use military::{apply_research_stats, researched_stats};
 pub use projectiles::{Projectile, ProjectileKind};
-pub(super) use table::age_armour;
 pub use table::{
     BUILDING_COMBAT, BuildingAttack, BuildingCombat, DamageKind, FISHING_SHIP_SPEED_HUNDREDTHS,
     UNIT_COMBAT, UnitCombat, UnitCost, UnitTraining, building_combat, damage_dealt, unit_combat,
@@ -118,6 +120,9 @@ pub(crate) struct Combat {
     pub(crate) resuming: BTreeMap<EntityId, super::formation::Resume>,
     /// `(tick at which the body is removed, unit)` in death order.
     pub(crate) dying: BTreeSet<(u64, EntityId)>,
+    /// Sunk Fire Ships of players with Incendiaries, blasting at the end of the
+    /// combat step: `(ship, owner, position)`.
+    pub(crate) blasts: Vec<(EntityId, aoe_core::PlayerId, aoe_core::WorldPosition)>,
     pub(crate) stats: CombatStats,
     telemetry: telemetry::Telemetry,
     /// Expensive firing-position searches still allowed this tick.
@@ -156,6 +161,7 @@ impl Default for Combat {
             attackers: Default::default(),
             resuming: Default::default(),
             dying: Default::default(),
+            blasts: Vec::new(),
             stats: Default::default(),
             telemetry: Default::default(),
             position_searches: MAX_POSITION_SEARCHES_PER_TICK,

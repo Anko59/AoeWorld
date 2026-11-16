@@ -11,7 +11,7 @@ use crate::pack::Manifest;
 use selection::actor_frames;
 use std::io::Read;
 
-const MAX_MANIFEST_BYTES: u64 = 32 * 1024 * 1024;
+const MAX_MANIFEST_BYTES: u64 = 64 * 1024 * 1024;
 
 #[path = "private_castle.rs"]
 mod castle;
@@ -313,7 +313,7 @@ fn original_manifest_all_reviewed_frames_fit_bounded_atlas()
     let mut bytes = Vec::new();
     file.take(MAX_MANIFEST_BYTES + 1).read_to_end(&mut bytes)?;
     if bytes.len() as u64 > MAX_MANIFEST_BYTES {
-        return Err("manifest exceeds 32MiB".into());
+        return Err("manifest exceeds 64MiB".into());
     }
     let mut manifest: Manifest = serde_json::from_slice(&bytes)?;
     selection::overlay(&path, &mut manifest)?;
@@ -335,11 +335,13 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
     let mut manifest = synthetic_manifest();
     assert_eq!(
         actor_frames(),
-        124446,
+        129910,
         // Complete current DAT unit cells, including neutral colour semantics.
         // +480 over the previous pin: only the new farmer seed sheet (203364); the
         // four carry and hunter-carry poses reuse already-selected graphics.
         // +5 for the galley bolt's five mirrored direction rows.
+        // +5464 for the naval overhaul's eleven ship lines (new DAT graphics only;
+        // sinking and corpse animations shared with older ships add nothing).
         // Pin the complete current selection independently of runtime residency.
         "military, Castle, projectile and farmer cells included"
     );

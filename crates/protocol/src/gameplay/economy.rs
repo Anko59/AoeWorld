@@ -64,6 +64,7 @@ impl Default for MarketPrices {
 }
 
 mod kinds;
+mod tech_rules;
 pub use kinds::{Age, BuildingKind, Tech, TechMask, UnitKind};
 
 /// A foundation is built by villagers; only a complete building works.

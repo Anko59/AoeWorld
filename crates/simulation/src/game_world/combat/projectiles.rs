@@ -25,6 +25,9 @@ pub struct Projectile {
     pub(crate) attack: u16,
     pub(crate) bonus: u16,
     pub(crate) secondary: bool,
+    /// The launching unit's kind (`None` for buildings): blast, accuracy,
+    /// pass-through and secondary-victim bonuses follow it.
+    pub(crate) source: Option<crate::UnitKind>,
 }
 impl Projectile {
     pub fn position(&self, tick: Tick) -> WorldPosition {
@@ -58,6 +61,7 @@ impl GameWorld {
         if self.combat.projectiles.len() >= self.economy.limits.projectiles {
             return;
         }
+        let source = self.unit(attacker).map(|u| u.kind);
         let Some((player, from)) =
             self.unit(attacker)
                 .map(|u| (u.player, u.position))
@@ -134,6 +138,7 @@ impl GameWorld {
                 attack: damage.0,
                 bonus: damage.1,
                 secondary,
+                source,
             },
         );
     }
@@ -149,6 +154,10 @@ impl GameWorld {
             if let Some(p) = self.combat.projectiles.remove(&id) {
                 if p.kind == ProjectileKind::Stone {
                     self.resolve_splash(p, changed);
+                } else if p.source.is_some_and(crate::UnitKind::is_scorpion) {
+                    self.resolve_pass_through(p, changed);
+                } else if self.projectile_misses(&p) {
+                    // A miss lands harmlessly; DE's stray-hit rule is not modelled.
                 } else if self.unit(p.target).is_none_or(|u| {
                     let dx = i64::from(u.position.x) - i64::from(p.to.x);
                     let dy = i64::from(u.position.y) - i64::from(p.to.y);

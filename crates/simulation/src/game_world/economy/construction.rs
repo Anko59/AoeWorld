@@ -52,6 +52,7 @@ impl GameWorld {
         &self,
         player: PlayerId,
         builders: &[EntityId],
+        trap: bool,
     ) -> Result<Vec<EntityId>, EconomyError> {
         let mut ids = builders.to_vec();
         ids.sort_unstable();
@@ -67,7 +68,13 @@ impl GameWorld {
             if unit.player != player {
                 return Err(EconomyError::NotOwner);
             }
-            if unit.kind != UnitKind::Villager {
+            // Only Fishing Ships build Fish Traps; only villagers build the rest.
+            let expected = if trap {
+                UnitKind::FishingShip
+            } else {
+                UnitKind::Villager
+            };
+            if unit.kind != expected {
                 return Err(EconomyError::WrongUnitKind);
             }
         }
@@ -147,7 +154,7 @@ impl GameWorld {
         if kind == BuildingKind::Bridge {
             return Err(EconomyError::InvalidFootprint);
         }
-        let builders = self.validate_builders(player, builders)?;
+        let builders = self.validate_builders(player, builders, kind == BuildingKind::FishTrap)?;
         self.validate_build_queue(&builders, 1, queued)?;
         let cost = self.check_buildable(player, kind, 1)?;
         let side = kind.rules().side;
@@ -178,7 +185,10 @@ impl GameWorld {
         builders: &[EntityId],
         building: EntityId,
     ) -> Result<(), EconomyError> {
-        let builders = self.validate_builders(player, builders)?;
+        let trap = self
+            .building(building)
+            .is_some_and(|b| b.kind == BuildingKind::FishTrap);
+        let builders = self.validate_builders(player, builders, trap)?;
         let state = self
             .economy
             .buildings
@@ -289,7 +299,17 @@ impl GameWorld {
             .position
             .tile_floor();
         let mut candidates = perimeter(footprint);
-        candidates.retain(|tile| self.tile_passable(*tile));
+        let ship = self
+            .unit(id)
+            .is_some_and(|u| u.kind == UnitKind::FishingShip);
+        candidates.retain(|tile| {
+            if ship {
+                self.unit_tile_passable(UnitKind::FishingShip, *tile, &|| false)
+                    .unwrap_or(false)
+            } else {
+                self.tile_passable(*tile)
+            }
+        });
         candidates.sort_by_key(|tile| {
             (
                 self.work_spot_busy(*tile, id),

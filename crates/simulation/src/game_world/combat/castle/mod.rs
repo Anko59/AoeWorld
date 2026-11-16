@@ -10,9 +10,34 @@ impl GameWorld {
         p: Projectile,
         changed: &mut Vec<EntityId>,
     ) {
-        // Aim remains fixed at launch. A one-tile circle includes friendly fire;
-        // integer distance bands give full then half damage.
-        let radius = i64::from(FIXED_SUBUNITS_PER_TILE);
+        // Aim remains fixed at launch. The blast circle includes friendly fire;
+        // the inner half of the radius takes full damage, the rest half.
+        let source = p.source.unwrap_or(UnitKind::Mangonel);
+        let kind = Self::artillery_damage_kind(p.source);
+        let hundredths = i64::from(super::siege::blast_hundredths(source));
+        if hundredths == 0 {
+            // A Trebuchet boulder hits only what stands at its aim point.
+            let hit = self
+                .unit(p.target)
+                .map_or(self.building(p.target).is_some(), |u| {
+                    let dx = i64::from(u.position.x) - i64::from(p.to.x);
+                    let dy = i64::from(u.position.y) - i64::from(p.to.y);
+                    dx * dx + dy * dy <= i64::from(FIXED_SUBUNITS_PER_TILE / 2).pow(2)
+                        && !self.projectile_misses(&p)
+                });
+            if hit {
+                self.resolve_hit(
+                    (p.attacker, p.player),
+                    p.target,
+                    p.attack,
+                    p.bonus,
+                    kind,
+                    changed,
+                );
+            }
+            return;
+        }
+        let radius = i64::from(FIXED_SUBUNITS_PER_TILE) * hundredths / 100;
         let tile = p.to.tile_floor();
         let bounds = TileRect::new(
             TileCoord::new((tile.x - 2).max(0), (tile.y - 2).max(0)),
@@ -33,19 +58,18 @@ impl GameWorld {
             })
             .collect();
         for (id, d) in hits {
-            let unit = i64::from(FIXED_SUBUNITS_PER_TILE);
-            let divisor = if d <= unit * unit / 4 { 1 } else { 2 };
+            let divisor = if d <= radius * radius / 4 { 1 } else { 2 };
             let bonus = if id == p.target {
                 p.bonus
             } else {
-                self.unit_damage_bonus(UnitKind::Mangonel, id)
+                self.unit_damage_bonus(source, id)
             };
             self.resolve_hit(
                 (p.attacker, p.player),
                 id,
                 p.attack / divisor,
                 bonus / divisor,
-                crate::DamageKind::Melee,
+                kind,
                 changed,
             );
         }
@@ -70,9 +94,9 @@ impl GameWorld {
                     if id == p.target {
                         p.bonus
                     } else {
-                        self.unit_damage_bonus(UnitKind::Mangonel, id)
+                        self.unit_damage_bonus(source, id)
                     },
-                    crate::DamageKind::Melee,
+                    kind,
                     changed,
                 );
             }

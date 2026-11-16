@@ -13,6 +13,8 @@ pub(crate) struct BuildMenu {
     player: Option<(Stockpile, Age)>,
     completed: u32,
     builders: bool,
+    /// Fishing Ships are selected: they alone build Fish Traps.
+    ships: bool,
 }
 
 impl BuildMenu {
@@ -20,16 +22,23 @@ impl BuildMenu {
         player: Option<&GameplayPlayerState>,
         completed: u32,
         builders: bool,
+        ships: bool,
     ) -> Self {
         Self {
             player: player.map(|p| (p.stockpile, p.age)),
             completed,
             builders,
+            ships,
         }
     }
 
     pub(crate) fn enabled(&self, kind: BuildingKind, count: u32) -> bool {
-        let Some((stockpile, age)) = self.player.filter(|_| self.builders) else {
+        let capable = if kind == BuildingKind::FishTrap {
+            self.ships
+        } else {
+            self.builders
+        };
+        let Some((stockpile, age)) = self.player.filter(|_| capable) else {
             return false;
         };
         let mut cost = stock(rules(kind).cost);

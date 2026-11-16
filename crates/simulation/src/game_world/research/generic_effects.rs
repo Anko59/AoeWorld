@@ -45,11 +45,7 @@ impl UnitKind {
     }
     /// Mounted archers (Parthian Tactics). Content track A appends them here.
     pub const fn is_mounted_archer(self) -> bool {
-        false
-    }
-    /// Cavalry and mounted archers: Husbandry, Bloodlines.
-    pub fn is_mounted(self) -> bool {
-        self.is_cavalry() || self.is_mounted_archer()
+        matches!(self, Self::CavalryArcher | Self::HeavyCavalryArcher)
     }
 }
 

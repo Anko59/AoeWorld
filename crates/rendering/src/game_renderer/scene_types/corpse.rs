@@ -3,6 +3,8 @@ use super::SceneUnitKind;
 
 impl SceneUnitKind {
     /// A corpse is a ground decal, never an occluder of standing actors.
+    // Generated aliases can fold several ships onto one shared wreck slot.
+    #[allow(unreachable_patterns)]
     pub(in crate::game_renderer) fn is_corpse(self) -> bool {
         matches!(
             self,
@@ -86,8 +88,54 @@ impl SceneUnitKind {
                 | Self::SiegeRamDecay
                 | Self::OnagerDie
                 | Self::OnagerDecay
+                | Self::CavalryArcherDie
+                | Self::CavalryArcherDecay
+                | Self::HeavyCavalryArcherDie
+                | Self::HeavyCavalryArcherDecay
+                | Self::CamelRiderDie
+                | Self::CamelRiderDecay
+                | Self::HeavyCamelRiderDie
+                | Self::HeavyCamelRiderDecay
+                | Self::ScorpionDie
+                | Self::ScorpionDecay
+                | Self::HeavyScorpionDie
+                | Self::HeavyScorpionDecay
+                | Self::HandCannoneerDie
+                | Self::HandCannoneerDecay
+                | Self::BombardCannonDie
+                | Self::BombardCannonDecay
+                | Self::TrebuchetDie
+                | Self::TrebuchetDecay
+                | Self::TrebuchetUnpackedDie
+                | Self::TrebuchetUnpackedDecay
+                | Self::PetardDie
+                | Self::PetardDecay
+                | Self::SiegeOnagerDie
+                | Self::SiegeOnagerDecay
                 | Self::FireShipDie
                 | Self::FireShipDecay
+                | Self::FireGalleyDie
+                | Self::FireGalleyDecay
+                | Self::FastFireShipDie
+                | Self::FastFireShipDecay
+                | Self::DemolitionRaftDie
+                | Self::DemolitionRaftDecay
+                | Self::HeavyDemolitionShipDie
+                | Self::HeavyDemolitionShipDecay
+                | Self::GalleonDie
+                | Self::GalleonDecay
+                | Self::CannonGalleonDie
+                | Self::CannonGalleonDecay
+                | Self::EliteCannonGalleonDie
+                | Self::EliteCannonGalleonDecay
+                | Self::HulkDie
+                | Self::HulkDecay
+                | Self::WarHulkDie
+                | Self::WarHulkDecay
+                | Self::CarrackDie
+                | Self::CarrackDecay
+                | Self::CatapultGalleonDie
+                | Self::CatapultGalleonDecay
         )
     }
 }

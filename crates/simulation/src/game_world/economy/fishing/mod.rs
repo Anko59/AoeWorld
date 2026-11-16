@@ -57,6 +57,9 @@ impl GameWorld {
         if kind == BuildingKind::Bridge {
             return Err(EconomyError::InvalidFootprint);
         }
+        if kind == BuildingKind::FishTrap {
+            return self.validate_fish_trap_placement(footprint);
+        }
         if kind != BuildingKind::Dock {
             return self.validate_footprint_ground(footprint);
         }
@@ -103,6 +106,35 @@ impl GameWorld {
         } else {
             Err(EconomyError::InvalidFootprint)
         }
+    }
+
+    /// A Fish Trap stands entirely on navigable water, clear of buildings and
+    /// other deck blockers. Ships may be inside it: they are its builders.
+    fn validate_fish_trap_placement(&self, footprint: TileRect) -> Result<(), EconomyError> {
+        let Terrain::Map { generator, overlay } = &self.terrain else {
+            return Err(EconomyError::InvalidFootprint);
+        };
+        if !footprint.valid(self.config.width_tiles, self.config.height_tiles) {
+            return Err(EconomyError::InvalidFootprint);
+        }
+        for y in footprint.min.y..footprint.max.y {
+            for x in footprint.min.x..footprint.max.x {
+                let tile = TileCoord::new(x, y);
+                let sample = generator
+                    .tile_at_with_cancel(tile, &|| false)
+                    .map_err(GameWorldError::Environment)?
+                    .ok_or(EconomyError::InvalidFootprint)?;
+                if !navigable(sample.water)
+                    || self.building_at(tile).is_some()
+                    || self.economy.blocked_tiles.contains(&tile)
+                    || overlay.blocks_tile(tile)
+                    || overlay.bridge_connections(tile).is_some()
+                {
+                    return Err(EconomyError::InvalidFootprint);
+                }
+            }
+        }
+        Ok(())
     }
 
     pub(crate) fn unit_tile_passable(
@@ -166,7 +198,7 @@ impl GameWorld {
 
     pub(crate) fn gather_capacity(&self, unit: &crate::GameUnit, farmer: bool) -> u16 {
         if unit.kind == UnitKind::FishingShip {
-            15
+            15 + 5 * self.fishing_ship_upgrades(unit.player)
         } else {
             self.villager_capacity(unit.player)
                 + u16::from(farmer && self.has_researched(unit.player, crate::Tech::HeavyPlow))
@@ -188,6 +220,16 @@ impl GameWorld {
         } else {
             self.gather_capacity(unit, task.farm.is_some())
         }
+    }
+
+    /// Fishing Lines and Gillnets: +10% gather rate and +5 carried each.
+    fn fishing_ship_upgrades(&self, player: aoe_core::PlayerId) -> u16 {
+        u16::from(self.has_researched(player, crate::Tech::FishingLines))
+            + u16::from(self.has_researched(player, crate::Tech::Gillnets))
+    }
+
+    pub(crate) fn fishing_ship_percent(&self, player: aoe_core::PlayerId) -> u64 {
+        100 + 10 * u64::from(self.fishing_ship_upgrades(player))
     }
 
     pub(crate) fn fish_object(&self, id: u64) -> Option<ObjectKind> {

@@ -61,9 +61,18 @@ impl GameWorld {
     pub(super) fn gather_tick_rate(&self, index: usize, task: &GatherTask) -> u64 {
         // Fish rates use current DE naval balance, independent of land technologies.
         match (task.fish, self.units[index].state.kind) {
-            (Some(aoe_map::ObjectKind::DeepFish), UnitKind::FishingShip) => 416500,
-            (Some(aoe_map::ObjectKind::ShoreFish), UnitKind::FishingShip) => 238000,
+            (Some(aoe_map::ObjectKind::DeepFish), UnitKind::FishingShip) => {
+                416500 * self.fishing_ship_percent(self.units[index].state.player) / 100
+            }
+            (Some(aoe_map::ObjectKind::ShoreFish), UnitKind::FishingShip) => {
+                238000 * self.fishing_ship_percent(self.units[index].state.player) / 100
+            }
             (Some(_), _) => 430000,
+            // The Fish Trap rate is the Fishing Ship's DE 0.35 food/s, raised by
+            // Fishing Lines and Gillnets like fish.
+            _ if task.farm.is_some() && self.units[index].state.kind == UnitKind::FishingShip => {
+                350000 * self.fishing_ship_percent(self.units[index].state.player) / 100
+            }
             _ if task.farm.is_some() => {
                 u64::from(super::super::farm::FARMER_WORK_HUNDREDTHS) * 10_000
             }

@@ -4,6 +4,10 @@ use super::Graphic;
 mod part0;
 #[path = "generated/part1.rs"]
 mod part1;
+#[path = "generated/part10.rs"]
+mod part10;
+#[path = "generated/part11.rs"]
+mod part11;
 #[path = "generated/part2.rs"]
 mod part2;
 #[path = "generated/part3.rs"]
@@ -18,33 +22,44 @@ mod part6;
 mod part7;
 #[path = "generated/part8.rs"]
 mod part8;
+#[path = "generated/part9.rs"]
+mod part9;
 pub(super) const fn get(id: u32) -> Option<Graphic> {
-    if id <= 200813 {
+    if id <= 200751 {
         return super::lookup(part0::GRAPHICS, id);
     }
-    if id <= 201051 {
+    if id <= 200934 {
         return super::lookup(part1::GRAPHICS, id);
     }
-    if id <= 201158 {
+    if id <= 201063 {
         return super::lookup(part2::GRAPHICS, id);
     }
-    if id <= 201601 {
+    if id <= 201155 {
         return super::lookup(part3::GRAPHICS, id);
     }
-    if id <= 202449 {
+    if id <= 201402 {
         return super::lookup(part4::GRAPHICS, id);
     }
-    if id <= 202650 {
+    if id <= 201969 {
         return super::lookup(part5::GRAPHICS, id);
     }
-    if id <= 202902 {
+    if id <= 202620 {
         return super::lookup(part6::GRAPHICS, id);
     }
-    if id <= 204173 {
+    if id <= 202808 {
         return super::lookup(part7::GRAPHICS, id);
     }
-    if id <= 206010 {
+    if id <= 203166 {
         return super::lookup(part8::GRAPHICS, id);
+    }
+    if id <= 203975 {
+        return super::lookup(part9::GRAPHICS, id);
+    }
+    if id <= 209302 {
+        return super::lookup(part10::GRAPHICS, id);
+    }
+    if id <= 211311 {
+        return super::lookup(part11::GRAPHICS, id);
     }
     None
 }

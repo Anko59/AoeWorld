@@ -62,6 +62,37 @@ fn imperial_promotions_use_their_own_pose_and_corpse() {
 }
 
 #[wasm_bindgen_test]
+fn gunpowder_cavalry_and_siege_kinds_draw_distinct_native_poses() {
+    use super::{decay_pair, military_poses};
+    use aoe_protocol::UnitKind::*;
+    let kinds = [
+        CavalryArcher,
+        HeavyCavalryArcher,
+        CamelRider,
+        HeavyCamelRider,
+        Scorpion,
+        HeavyScorpion,
+        HandCannoneer,
+        BombardCannon,
+        Trebuchet,
+        TrebuchetUnpacked,
+        Petard,
+        SiegeOnager,
+    ];
+    let mut stands = Vec::new();
+    for kind in kinds {
+        let poses = military_poses(kind).expect("a native pose group");
+        let (die, decay) = decay_pair(poses[3]).expect("native corpse lifecycle");
+        assert_eq!(die, poses[3], "{kind:?}");
+        assert_ne!(die, decay, "{kind:?}");
+        stands.push(poses[0] as usize);
+    }
+    stands.sort_unstable();
+    stands.dedup();
+    assert_eq!(stands.len(), kinds.len());
+}
+
+#[wasm_bindgen_test]
 fn steward_uses_the_imported_native_de_king_for_every_pose() {
     use aoe_assets::catalog::units::{Pose, SPRITES};
     use aoe_protocol::UnitKind;

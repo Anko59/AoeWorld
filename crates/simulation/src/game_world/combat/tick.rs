@@ -69,6 +69,7 @@ impl GameWorld {
         self.combat.pursuit_floor = None;
         self.combat.prefetched.clear();
         self.advance_towers(changed);
+        self.run_incendiary_blasts(changed);
         self.advance_healing(changed);
     }
 
@@ -109,7 +110,8 @@ impl GameWorld {
             return;
         }
         if (unit_combat(before.kind).attack_kind == super::DamageKind::Pierce
-            || before.kind.is_artillery())
+            || before.kind.is_artillery()
+            || before.kind.is_cannon_ship())
             && !self.target_visible_to(before.player, attacker.target)
         {
             self.end_attack(id, changed);
@@ -143,6 +145,12 @@ impl GameWorld {
             Goal::Building(footprint) => state.face_footprint(footprint),
         }
         state.task = UnitTask::Attacking;
+        if before.kind == crate::UnitKind::Trebuchet {
+            // A packed Trebuchet must unpack in place before its first shot.
+            self.set_trebuchet_packed(index, false);
+            changed.push(id);
+            return;
+        }
         if now >= self.units[index].next_hit_tick {
             self.units[index].next_hit_tick = now + u64::from(self.attack_period_ticks(&before));
             self.strike(id, attacker.target, changed);
@@ -355,22 +363,15 @@ impl GameWorld {
             self.monk_strike(attacker_id, target, changed);
             return;
         }
-        if stats.kind == crate::UnitKind::DemolitionShip {
+        if stats.kind.is_demolition() {
             self.detonate(attacker_id, target, changed);
             return;
         }
-        if stats.kind == crate::UnitKind::FireShip {
-            self.resolve_hit(
-                (attacker_id, self.units[attacker_index].state.player),
-                target,
-                stats.attack,
-                bonus,
-                stats.attack_kind,
-                changed,
-            );
+        if stats.kind == crate::UnitKind::Petard {
+            self.detonate_petard(attacker_id, target, stats.attack, changed);
             return;
         }
-        if stats.kind.is_artillery() {
+        if stats.kind.is_artillery() || stats.kind.is_cannon_ship() {
             self.launch_projectile(
                 attacker_id,
                 target,
@@ -388,7 +389,11 @@ impl GameWorld {
                 super::ProjectileKind::Javelin
             } else if matches!(
                 stats.kind,
-                crate::UnitKind::Galley | crate::UnitKind::WarGalley
+                crate::UnitKind::Galley
+                    | crate::UnitKind::WarGalley
+                    | crate::UnitKind::Galleon
+                    | crate::UnitKind::Scorpion
+                    | crate::UnitKind::HeavyScorpion
             ) {
                 super::ProjectileKind::Bolt
             } else {
