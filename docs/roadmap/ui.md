@@ -8,12 +8,12 @@
 | Farm foundation sunk while under construction; castle on sloped terrain; carcass art | 11-09 | UNVERIFIED | #751, #764; 11-14 check: finished farm flat, carcass never reproduced, foundation and slopes not caught on camera | Record a build on a hilly map |
 | WebGPU black world in Firefox | 11-02, 11-03 | UNVERIFIED | Never explained in any source; 11-15 game ran WebGL2 | Test WebGPU path before the next owner build |
 | Tech icons and unit icons for new content | 11-15 | PLANNED | Missing for #855 techs | With content integration |
-| Dark Age Town Center side, units-behind-buildings and other 11-09 visuals | 11-09 | DONE | Item 1 does not reproduce (11-14, flat ground, default camera): #661 | Re-open only if seen |
 
 ## Done or dropped
 
 | item | asked | status | evidence |
 | --- | --- | --- | --- |
+| Dark Age Town Center side (11-09 visuals item 1) | 11-09 | DONE | #661 Town Center slice origin; does not reproduce (11-14, flat ground, default camera) |
 | DE art for every unit, building, terrain object; no flicker | 10-26, 10-31 x3 | DONE | #644 |
 | Far-zoom cockpit: stats, build, jump keys, units here, layers, charts, bulk trade, readable style | 10-30, 11-02, 11-03, 11-05 | DONE | #671, #679, #684, #687, #692, #712 |
 | Bottom menu on DE art without scrolling (x2) | 11-05 | DONE | #706, #714 |
