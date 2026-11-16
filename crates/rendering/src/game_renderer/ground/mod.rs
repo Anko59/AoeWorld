@@ -1,6 +1,9 @@
 //! Footprint wear and Farm textures share ground triangles across backends.
 use super::*;
 
+/// Everything the ground takes from the units: equal values wear and plough
+/// equal triangles alike, so kept ground packets are compared by it.
+#[derive(PartialEq)]
 pub(super) struct BuildingGround {
     centers: Vec<[f64; 2]>,
     farms: Vec<[f64; 2]>,
@@ -162,6 +165,10 @@ impl BuildingGround {
             .map(|u| u.position)
             .collect();
         Self { centers, farms }
+    }
+
+    pub(super) fn resident_bytes(&self) -> usize {
+        (self.centers.capacity() + self.farms.capacity()) * size_of::<[f64; 2]>()
     }
 
     pub(super) fn compatibility_farms(&self, camera: SceneCamera) -> Vec<ProjectedSurfaceTriangle> {

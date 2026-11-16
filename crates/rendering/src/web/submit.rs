@@ -41,6 +41,18 @@ impl Renderer {
         instances: &mut [Sprite],
         clear: [f64; 4],
     ) -> Result<Counters, String> {
+        self.submit_instances(instances, None, clear)
+    }
+
+    /// One upload of `instances`. `effects` is `None` for fresh world depths,
+    /// normalized here; a scene that normalized its own packets passes
+    /// whether they hold hidden units to outline.
+    pub(crate) fn submit_instances(
+        &mut self,
+        instances: &mut [Sprite],
+        effects: Option<bool>,
+        clear: [f64; 4],
+    ) -> Result<Counters, String> {
         let required = instance_buffer::required_instance_count(0, instances.len())?;
         if !self.health.ready()? {
             return Ok(self.counters(instances.len(), false));
@@ -63,7 +75,10 @@ impl Renderer {
             }
         };
         self.instances.ensure_capacity(required, &self.device)?;
-        self.has_occlusion = normalize_depths(instances);
+        self.has_occlusion = match effects {
+            Some(effects) => effects,
+            None => normalize_depths(instances),
+        };
         self.contour_draws.clear();
         if self.has_occlusion {
             draw::write_contour_ranges(instances, &mut self.contour_draws);

@@ -1,7 +1,7 @@
 //! Backend-neutral scene data; no map transport or simulation ownership.
 use aoe_core::EntityId;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct SceneCamera {
     pub center: [f64; 2],
     pub zoom: f64,

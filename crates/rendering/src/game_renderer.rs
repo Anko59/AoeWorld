@@ -17,6 +17,9 @@ pub(crate) mod fog;
 #[path = "game_renderer/ground/mod.rs"]
 mod ground;
 pub use ground::apply_building_foundations;
+#[path = "game_renderer/terrain_cache.rs"]
+mod terrain_cache;
+pub use terrain_cache::{TerrainCache, TerrainKey};
 #[path = "game_renderer/world_layers.rs"]
 mod world_layers;
 #[path = "game_renderer/world_sprites.rs"]
@@ -353,94 +356,22 @@ impl GameRenderer {
         fog_active: bool,
         light: &dyn Fn([f64; 2]) -> f32,
     ) -> Result<bool, String> {
-        let surfaces = surfaces.iter().copied().map(|mut triangle| {
-            apply_terrain_textures(std::slice::from_mut(&mut triangle), art);
-            triangle
-        });
-        let mut layers =
-            direct_world_layers(surfaces, art, terrain, resources, units, camera, animation);
-        fog::shade_objects(&mut layers, art, resources, units, animation, light);
-        if matches!(self, Self::WebGpu(_) | Self::WebGl(_)) {
-            let depth_origin = surface_depth([
-                camera.center[0],
-                camera.center[1],
-                camera.focus_elevation_meters,
-            ]);
-            let mut instances = match self {
-                Self::WebGpu(renderer) => std::mem::take(&mut renderer.staging),
-                _ => Vec::new(),
-            };
-            instances.clear();
-            instances.extend(layers.iter().map(|layer| match layer {
-                WorldLayer::Surface(triangle) => {
-                    let mut packet =
-                        crate::web::surface_instance(triangle, camera.viewport, depth_origin);
-                    fog::surface_packet(&mut packet, fog::vertices(triangle, light));
-                    packet
-                }
-                WorldLayer::Selection(sprite, depth) => {
-                    let mut sprite = *sprite;
-                    sprite.depths =
-                        game_grid::selection_instance_depths(&sprite, *depth, depth_origin);
-                    sprite
-                }
-                WorldLayer::Sprite(sprite, _, depth, _) => {
-                    let mut sprite = *sprite;
-                    sprite.depths = [(*depth - depth_origin) as f32; 4];
-                    sprite
-                }
-            }));
-            if grid {
-                instances.extend(game_grid::grid_sprites(
-                    &fog::grid_segments(&layers, camera, light),
-                    camera.viewport,
-                ));
-            }
-            return match self {
-                Self::WebGpu(renderer) => {
-                    let result = renderer
-                        .render_instances(
-                            &mut instances,
-                            if fog_active {
-                                [0.0, 0.0, 0.0, 1.0]
-                            } else {
-                                [0.16, 0.29, 0.14, 1.0]
-                            },
-                        )
-                        .map(|counters| counters.did_present);
-                    renderer.staging = instances;
-                    result
-                }
-                Self::WebGl(renderer) => renderer.render_with_clear(&mut instances, fog_active),
-                _ => unreachable!(),
-            };
-        }
-        match self {
-            Self::Canvas {
-                canvas,
-                context,
-                source_atlas,
-                presentation,
-                ..
-            } => {
-                if canvas.width() == 0 || canvas.height() == 0 {
-                    return Ok(false);
-                }
-                render_canvas_world_with_fog(
-                    canvas,
-                    context,
-                    source_atlas,
-                    presentation,
-                    &layers,
-                    camera,
-                    grid,
-                    fog_active,
-                    light,
-                )?;
-                Ok(true)
-            }
-            _ => unreachable!(),
-        }
+        // One picture, nothing kept: a caller that draws a scene again keeps
+        // its own cache and calls `render_cached_world`.
+        self.render_cached_world(
+            &mut TerrainCache::default(),
+            TerrainKey::default(),
+            art,
+            terrain,
+            surfaces,
+            resources,
+            units,
+            camera,
+            animation,
+            grid,
+            fog_active,
+            light,
+        )
     }
 }
 

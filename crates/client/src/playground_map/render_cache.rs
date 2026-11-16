@@ -1,6 +1,6 @@
 use super::{Client, scene::PreparedScene};
-use aoe_rendering::{SceneCamera, SceneResource, SceneUnit};
-use std::rc::Rc;
+use aoe_rendering::{SceneCamera, SceneResource, SceneUnit, TerrainCache, TerrainKey};
+use std::rc::{Rc, Weak};
 
 /// Pixels that can represent each requested native layer during this turn.
 pub(crate) struct NativeCoverage<'a> {
@@ -72,10 +72,18 @@ struct RenderedFrame<S> {
     animation: Option<usize>,
 }
 
-/// Remembers only the last successfully rendered, currently visible frame.
+/// Remembers only the last successfully rendered, currently visible frame,
+/// and the draw-ready ground of the scene last handed to the renderer.
 pub(crate) struct RenderFrameCache<S> {
     previous: Option<RenderedFrame<S>>,
     invalidated: bool,
+    terrain: TerrainCache,
+    /// The scene `terrain` was built from. A weak handle keeps its address
+    /// from being given to another scene, so equal addresses are one scene.
+    terrain_scene: Weak<S>,
+    /// Counts the scenes seen and the changes of the art's residency; the
+    /// fog counts its own changes.
+    terrain_key: TerrainKey,
 }
 
 impl<S> Default for RenderFrameCache<S> {
@@ -83,6 +91,9 @@ impl<S> Default for RenderFrameCache<S> {
         Self {
             previous: None,
             invalidated: false,
+            terrain: TerrainCache::default(),
+            terrain_scene: Weak::new(),
+            terrain_key: TerrainKey::default(),
         }
     }
 }
@@ -95,11 +106,13 @@ impl<S> RenderFrameCache<S> {
     }
 
     pub(crate) fn resident_bytes(&self, scene_bytes: impl FnOnce(&S) -> usize) -> usize {
-        self.previous.as_ref().map_or(0, |frame| {
-            scene_bytes(&frame.scene)
-                + frame.units.capacity() * std::mem::size_of::<SceneUnit>()
-                + frame.resources.capacity() * std::mem::size_of::<(SceneResource, Option<usize>)>()
-        })
+        self.terrain.resident_bytes()
+            + self.previous.as_ref().map_or(0, |frame| {
+                scene_bytes(&frame.scene)
+                    + frame.units.capacity() * std::mem::size_of::<SceneUnit>()
+                    + frame.resources.capacity()
+                        * std::mem::size_of::<(SceneResource, Option<usize>)>()
+            })
     }
 
     pub(crate) fn position(&self, id: aoe_core::EntityId) -> Option<[f64; 2]> {
@@ -118,8 +131,28 @@ impl<S> RenderFrameCache<S> {
         self.invalidated = false;
     }
 
+    /// The art's residency changed: the presented frame and the kept ground,
+    /// whose packets hold atlas addresses, are both out of date.
     pub(crate) fn invalidate(&mut self) {
         self.invalidated = true;
+        self.terrain_key.art += 1;
+    }
+
+    /// Other art took the place of the one every kept thing was drawn from.
+    pub(crate) fn art_replaced(&mut self) {
+        self.clear();
+        self.terrain_key.art += 1;
+    }
+
+    /// The kept ground and the key of `scene` under the fog's `fog` generation.
+    fn terrain(&mut self, scene: &Rc<S>, fog: u64) -> (&mut TerrainCache, TerrainKey) {
+        let current = Rc::downgrade(scene);
+        if !self.terrain_scene.ptr_eq(&current) {
+            self.terrain_scene = current;
+            self.terrain_key.scene += 1;
+        }
+        self.terrain_key.fog = fog;
+        (&mut self.terrain, self.terrain_key)
     }
 
     fn needs_render(
@@ -223,9 +256,16 @@ pub(in super::super) fn render_if_changed(
 
     let result = {
         let Client {
-            renderer, art, fog, ..
+            renderer,
+            art,
+            fog,
+            rendered_frame,
+            ..
         } = client;
-        renderer.render_prepared_world_with_fog(
+        let (terrain, key) = rendered_frame.terrain(scene, fog.generation());
+        let result = renderer.render_cached_world(
+            terrain,
+            key,
             art,
             &scene.terrain,
             &scene.triangles,
@@ -236,7 +276,11 @@ pub(in super::super) fn render_if_changed(
             grid,
             !fog.disabled(),
             &|point| fog.brightness(point),
-        )
+        );
+        if terrain.built() != 0 {
+            super::super::perf::perf_terrain(terrain.built() as u32);
+        }
+        result
     };
     if !result? {
         return Ok(false);

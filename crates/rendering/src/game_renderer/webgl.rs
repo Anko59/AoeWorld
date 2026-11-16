@@ -138,20 +138,27 @@ impl WebGlRenderer {
     /// Pass fresh world depths, not instances normalized by an earlier call.
     /// False means no frame was submitted (zero backing size or lost context).
     pub(super) fn render(&mut self, sprites: &mut [Sprite]) -> Result<bool, String> {
-        self.render_with_clear(sprites, false)
+        self.submit(sprites, false, None)
     }
 
-    pub(super) fn render_with_clear(
+    /// One upload of `sprites`. `effects` is `None` for fresh world depths,
+    /// normalized here; a scene that normalized its own packets passes
+    /// whether they hold hidden units to outline.
+    pub(super) fn submit(
         &mut self,
         sprites: &mut [Sprite],
         black: bool,
+        effects: Option<bool>,
     ) -> Result<bool, String> {
         sprites
             .len()
             .checked_mul(INSTANCE_BYTES)
             .filter(|bytes| *bytes <= MAX_INSTANCE_BYTES)
             .ok_or_else(|| "WebGL2 instance buffer exceeds 64 MiB".to_owned())?;
-        let effects = normalize_depths(sprites);
+        let effects = match effects {
+            Some(effects) => effects,
+            None => normalize_depths(sprites),
+        };
         // wasm-bindgen borrows a memory view for this synchronous import.
         // The bridge uploads immediately and never retains the packet or awaits.
         // The bridge independently rejects oversized packets before allocating
