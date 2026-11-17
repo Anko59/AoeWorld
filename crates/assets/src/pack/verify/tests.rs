@@ -34,5 +34,5 @@ fn manifest_parser_checks_counts_paths_and_frame_bounds_before_file_access() {
     assert!(parse(&value).is_err());
     value["version"] = 2.into();
     assert!(parse(&value).is_err());
-    assert!(parse_manifest(&vec![0u8; 32 * 1024 * 1024 + 1]).is_err());
+    assert!(parse_manifest(&vec![0u8; 64 * 1024 * 1024 + 1]).is_err());
 }

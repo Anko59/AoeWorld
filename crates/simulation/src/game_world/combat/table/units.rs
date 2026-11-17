@@ -1,6 +1,8 @@
 use super::{DamageKind, UnitCombat, UnitCost, UnitKind, UnitTraining};
 /// Indexed by `UnitKind as usize`; a test pins the order.
-pub const UNIT_COMBAT: [UnitCombat; 37] = [
+/// Rows after Steward: aoe2techtree data.json (DE update 188329), DAT ids 39, 474,
+/// 329, 330, 279, 542, 5, 36, 331 (packed), 42 (unpacked), 440 and 588.
+pub const UNIT_COMBAT: [UnitCombat; 60] = [
     UnitCombat {
         kind: UnitKind::Villager,
         hp: 25,
@@ -370,9 +372,32 @@ pub const UNIT_COMBAT: [UnitCombat; 37] = [
         (0, 100, 50),
         36,
     ),
+    super::super::super::navy::NAVAL[5],
+    super::super::super::navy::NAVAL[6],
+    super::super::super::navy::NAVAL[7],
+    super::super::super::navy::NAVAL[8],
+    super::super::super::navy::NAVAL[9],
+    super::super::super::navy::NAVAL[10],
+    super::super::super::navy::NAVAL[11],
+    super::super::super::navy::NAVAL[12],
+    super::super::super::navy::NAVAL[13],
+    super::super::super::navy::NAVAL[14],
+    super::super::super::navy::NAVAL[15],
+    super::land::LAND[0],
+    super::land::LAND[1],
+    super::land::LAND[2],
+    super::land::LAND[3],
+    super::land::LAND[4],
+    super::land::LAND[5],
+    super::land::LAND[6],
+    super::land::LAND[7],
+    super::land::LAND[8],
+    super::land::LAND[9],
+    super::land::LAND[10],
+    super::land::LAND[11],
 ];
 
-const fn troop(
+pub(super) const fn troop(
     kind: UnitKind,
     stats: (u16, u16, i16, u16),
     movement: (u32, u32),
@@ -388,7 +413,16 @@ const fn troop(
         pierce_armour: stats.3,
         attack_kind: if matches!(
             kind,
-            UnitKind::Crossbowman | UnitKind::EliteSkirmisher | UnitKind::Arbalester
+            UnitKind::Crossbowman
+                | UnitKind::EliteSkirmisher
+                | UnitKind::Arbalester
+                | UnitKind::CavalryArcher
+                | UnitKind::HeavyCavalryArcher
+                | UnitKind::Scorpion
+                | UnitKind::HeavyScorpion
+                | UnitKind::HandCannoneer
+                | UnitKind::Trebuchet
+                | UnitKind::TrebuchetUnpacked
         ) {
             DamageKind::Pierce
         } else {

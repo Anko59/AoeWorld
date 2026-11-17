@@ -71,7 +71,7 @@ export function playerState(
     0,
     0,
     0, // Actual deliveries in the current player schema.
-    ...Array<number>(37).fill(0), // Current authoritative census (UnitKind::ALL).
+    ...Array<number>(60).fill(0), // Current authoritative census (UnitKind::ALL).
     0, // Held tiles.
     0, // Held map share, in millionths.
   ];

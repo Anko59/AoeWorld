@@ -109,7 +109,7 @@ test("General controls and the kingdom cockpit remain usable together at far zoo
     const cockpit = initCockpit();
     cockpit.update(
       [1000, 1000, 1000, 1000, 20, 100, 0, 0, 0, 0, 40],
-      Array(37).fill(1),
+      Array(60).fill(1),
     );
     cockpit.building.ready(Array(21).fill(1));
     cockpit.show(true);

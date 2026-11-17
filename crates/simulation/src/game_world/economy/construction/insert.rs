@@ -138,7 +138,11 @@ impl GameWorld {
                 gate_open: false,
                 gate_locked: false,
                 rally_point: None,
-                food_remaining: (kind == BuildingKind::Farm).then(|| self.farm_food(player)),
+                food_remaining: match kind {
+                    BuildingKind::Farm => Some(self.farm_food(player)),
+                    BuildingKind::FishTrap => Some(rules.food),
+                    _ => None,
+                },
                 farm_reseeds: 0,
                 garrison: Vec::new(),
                 bridge_span,

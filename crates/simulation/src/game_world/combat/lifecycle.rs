@@ -126,6 +126,13 @@ impl GameWorld {
         let unit = self.units[index].state;
         if unit.death_tick.is_none() {
             self.change_unit_census(unit.player, Some(unit.kind), None, 1);
+            if unit.kind.is_fire_line()
+                && self.has_researched(unit.player, crate::Tech::Incendiaries)
+            {
+                self.combat
+                    .blasts
+                    .push((unit.id, unit.player, unit.position));
+            }
         }
         self.cancel_auto_scout(self.units[index].state.id);
         self.stop_movement(index);
@@ -173,17 +180,16 @@ impl GameWorld {
             crate::UnitKind::Archer | crate::UnitKind::Skirmisher | crate::UnitKind::Spearman => {
                 1000
             }
-            crate::UnitKind::FishingShip
-            | crate::UnitKind::Galley
-            | crate::UnitKind::FireShip
-            | crate::UnitKind::DemolitionShip
-            | crate::UnitKind::TransportShip
-            | crate::UnitKind::WarGalley => 0,
+            kind if kind.is_naval() => 0,
             crate::UnitKind::Knight
             | crate::UnitKind::LightCavalry
             | crate::UnitKind::Cavalier
             | crate::UnitKind::Paladin
-            | crate::UnitKind::Hussar => 1850,
+            | crate::UnitKind::Hussar
+            | crate::UnitKind::CamelRider
+            | crate::UnitKind::HeavyCamelRider
+            | crate::UnitKind::CavalryArcher
+            | crate::UnitKind::HeavyCavalryArcher => 1850,
             crate::UnitKind::BatteringRam
             | crate::UnitKind::CappedRam
             | crate::UnitKind::SiegeRam => 1200,

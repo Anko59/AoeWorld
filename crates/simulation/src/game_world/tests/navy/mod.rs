@@ -9,6 +9,7 @@ mod healing;
 mod journeys;
 mod movement;
 mod navigation;
+mod overhaul;
 mod research;
 mod stats;
 mod trade;

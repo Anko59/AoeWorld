@@ -1,5 +1,5 @@
 //! Shore rendezvous and boarding; carried units retain their identity.
-use crate::{EconomyError, GameWorld, UnitKind, UnitTask, unit_combat};
+use crate::{EconomyError, GameWorld, UnitKind, UnitTask};
 use aoe_core::{ChunkCoord, EntityId, PlayerId, TileCoord, WorldPosition};
 use std::collections::BTreeSet;
 
@@ -190,48 +190,6 @@ impl GameWorld {
             if let Some(&index) = self.lookup.get(&id) {
                 self.kill_unit(index);
             }
-        }
-    }
-
-    pub(crate) fn upgrade_galleys(&mut self, player: PlayerId, changed: &mut Vec<EntityId>) {
-        let mut upgraded = 0;
-        for unit in &mut self.units {
-            let u = &mut unit.state;
-            if u.player == player && u.kind == UnitKind::Galley && u.hp > 0 {
-                let bonus = unit_combat(UnitKind::WarGalley).hp - unit_combat(UnitKind::Galley).hp;
-                u.kind = UnitKind::WarGalley;
-                upgraded += 1;
-                u.hp += bonus;
-                u.max_hp += bonus;
-                changed.push(u.id);
-            }
-        }
-        self.change_unit_census(
-            player,
-            Some(UnitKind::Galley),
-            Some(UnitKind::WarGalley),
-            upgraded,
-        );
-        for building in self
-            .economy
-            .buildings
-            .values_mut()
-            .filter(|b| b.player == player)
-        {
-            self.vision.dirty_buildings.insert(building.id);
-            for entry in &mut building.training_queue {
-                if entry.kind == UnitKind::Galley {
-                    entry.kind = UnitKind::WarGalley;
-                }
-            }
-        }
-        let ids = self
-            .units()
-            .filter(|u| u.player == player && u.kind == UnitKind::WarGalley)
-            .map(|u| u.id)
-            .collect::<Vec<_>>();
-        for id in ids {
-            self.update_unit_vision(id);
         }
     }
 }

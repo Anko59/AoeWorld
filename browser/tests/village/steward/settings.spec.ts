@@ -89,7 +89,9 @@ test("training portraits retain wire slots and append the Steward's real King ic
     const { trainingKinds, entityIcon } = await import(source);
     return { names: trainingKinds, steward: entityIcon(trainingKinds[34]) };
   });
-  expect(art.names).toHaveLength(37);
+  expect(art.names).toHaveLength(60);
+  expect(art.names[37]).toBe("FireGalley");
+  expect(art.names[48]).toBe("CavalryArcher");
   expect(art.names[22]).toBe("Vassal");
   expect(art.names[23]).toBe("General");
   expect(art.names[33]).toBe("Onager");

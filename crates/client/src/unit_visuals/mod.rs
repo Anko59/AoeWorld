@@ -8,7 +8,7 @@ use aoe_protocol::{
     AnimalKind, AnimalState, AnimalTask, GameplayUnitState, ResourceKind, UnitKind, UnitTask,
 };
 pub(crate) use rest::{is_stalled, rest_pose, stall_window_ticks};
-use roster::military_poses;
+use roster::{decay_pair, military_poses};
 
 pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> Pose {
     use Pose::*;
@@ -260,56 +260,6 @@ pub(crate) fn animal_pose(a: &AnimalState) -> Pose {
     }
 }
 
-fn decay_pair(pose: Pose) -> Option<(Pose, Pose)> {
-    use Pose::*;
-    [
-        (FishingShipDie, FishingShipDecay),
-        (GalleyDie, GalleyDecay),
-        (WarGalleyDie, WarGalleyDecay),
-        (FireShipDie, FireShipDecay),
-        (DemolitionShipDie, DemolitionShipDecay),
-        (TransportShipDie, TransportShipDecay),
-        (KingDie, KingDecay),
-        (GeneralDie, GeneralDecay),
-        (MilitiaDie, MilitiaDecay),
-        (ArcherDie, ArcherDecay),
-        (SkirmisherDie, SkirmisherDecay),
-        (SpearmanDie, SpearmanDecay),
-        (ManAtArmsDie, ManAtArmsDecay),
-        (LongSwordsmanDie, LongSwordsmanDecay),
-        (PikemanDie, PikemanDecay),
-        (CrossbowmanDie, CrossbowmanDecay),
-        (EliteSkirmisherDie, EliteSkirmisherDecay),
-        (KnightDie, KnightDecay),
-        (LightCavalryDie, LightCavalryDecay),
-        (MonkDie, MonkDecay),
-        (MangonelDie, MangonelDecay),
-        (BatteringRamDie, BatteringRamDecay),
-        (TwoHandedSwordsmanDie, TwoHandedSwordsmanDecay),
-        (ChampionDie, ChampionDecay),
-        (HalberdierDie, HalberdierDecay),
-        (ArbalesterDie, ArbalesterDecay),
-        (CavalierDie, CavalierDecay),
-        (PaladinDie, PaladinDecay),
-        (HussarDie, HussarDecay),
-        (CappedRamDie, CappedRamDecay),
-        (SiegeRamDie, SiegeRamDecay),
-        (OnagerDie, OnagerDecay),
-        (TradeCartDie, TradeCartDecay),
-        (TradeCogDie, TradeCogDecay),
-        (VillagerDie, VillagerDecay),
-        (SheepDie, SheepDecay),
-        (DeerDie, DeerDecay),
-        (BoarDie, BoarDecay),
-        (WolfDie, WolfDecay),
-        (ScoutDie, ScoutDecay),
-        (HunterDie, HunterDecay),
-        (ShepherdDie, ShepherdDecay),
-        (NeutralSheepDie, NeutralSheepDecay),
-    ]
-    .into_iter()
-    .find(|(die, decay)| pose == *die || pose == *decay)
-}
 pub(crate) fn lifecycle_pose(pose: Pose, died: Option<aoe_core::Tick>, tick: u64, hz: u32) -> Pose {
     let Some((die, decay)) = decay_pair(pose) else {
         return pose;

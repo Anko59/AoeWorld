@@ -140,7 +140,7 @@ impl GameWorld {
         if !kind.is_gate() || !vertical {
             return self.issue_build(player, builders, kind, origin, queued);
         }
-        let builders = self.validate_builders(player, builders)?;
+        let builders = self.validate_builders(player, builders, false)?;
         self.validate_build_queue(&builders, 1, queued)?;
         let cost = self.check_buildable(player, kind, 1)?;
         let r = kind.rules();

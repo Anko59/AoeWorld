@@ -120,6 +120,24 @@ pub enum Tech {
     Banking,
     Coinage,
     TreadmillCrane,
+    FishingLines,
+    Gillnets,
+    Careening,
+    DryDock,
+    Shipwright,
+    ClinkerConstruction,
+    CarvelHull,
+    Siphons,
+    Incendiaries,
+    HeavyWarships,
+    DemolitionShip,
+    HeavyDemolitionShip,
+    EliteCannonGalleon,
+    Chemistry,
+    HeavyCavalryArcher,
+    HeavyCamelRider,
+    HeavyScorpion,
+    SiegeOnager,
 }
 
 /// What a finished technology changes.
@@ -130,7 +148,7 @@ pub enum TechTarget {
     Mounted,
     /// Monastery units: Monks (and, later, other Monastery units).
     Monk,
-    /// Trade units (Cart, Cog); none exist yet, so this only records the effect.
+    /// Trade units (Cart, Cog).
     Trade,
 }
 
@@ -143,7 +161,8 @@ pub enum TechEffect {
         to: super::super::UnitKind,
     },
     Masonry,
-    UpgradeGalley,
+    /// Upgrade every listed `(from, to)` ship pair, existing and queued.
+    UpgradeShips(&'static [(super::super::UnitKind, super::super::UnitKind)]),
     /// Every villager of the player, existing and future.
     VillagerBonus {
         hp: u16,
@@ -225,7 +244,7 @@ pub const FEUDAL_BUILDINGS: &[BuildingKind] = &[
 ];
 
 /// Indexed by `Tech as usize`; a test pins the order.
-pub const TECH_RULES: [TechRules; 87] = [
+pub const TECH_RULES: [TechRules; 105] = [
     TechRules {
         age: Age::Dark,
         tech: Tech::Loom,
@@ -350,14 +369,15 @@ pub const TECH_RULES: [TechRules; 87] = [
     super::castle::RULES[16],
     super::castle::RULES[17],
     super::castle::RULES[18],
+    // Medium Warships (DAT tech 34), after the Naval Warfare Overhaul.
     TechRules {
         age: Age::Castle,
         tech: Tech::WarGalley,
         building: BuildingKind::Dock,
-        cost: cost(230, 0, 100, 0),
+        cost: cost(0, 150, 100, 0),
         seconds: 50,
         requires: TechRequirement::Age(Age::Castle),
-        effect: TechEffect::UpgradeGalley,
+        effect: TechEffect::UpgradeShips(super::navy::MEDIUM),
     },
     super::imperial::RULES[0],
     super::imperial::RULES[1],
@@ -412,6 +432,24 @@ pub const TECH_RULES: [TechRules; 87] = [
     super::generic::RULES[31],
     super::generic::RULES[32],
     super::generic::RULES[33],
+    super::navy::RULES[0],
+    super::navy::RULES[1],
+    super::navy::RULES[2],
+    super::navy::RULES[3],
+    super::navy::RULES[4],
+    super::navy::RULES[5],
+    super::navy::RULES[6],
+    super::navy::RULES[7],
+    super::navy::RULES[8],
+    super::navy::RULES[9],
+    super::navy::RULES[10],
+    super::navy::RULES[11],
+    super::navy::RULES[12],
+    super::gunpowder::RULES[0],
+    super::gunpowder::RULES[1],
+    super::gunpowder::RULES[2],
+    super::gunpowder::RULES[3],
+    super::gunpowder::RULES[4],
 ];
 
 const fn military(tech: Tech, food: u32, gold: u32, seconds: u32) -> TechRules {

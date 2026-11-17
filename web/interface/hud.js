@@ -2,6 +2,8 @@ import { actorLabels } from '/interface/dom/actors.js';
 import { set, attribute } from '/interface/dom/update.js';
 import { castleUnits, castleUnitNames, castleKinds } from '/interface/castle.js';
 import { imperialUnits, imperialUnitNames } from '/interface/imperial.js';
+import { navyUnits, navyUnitNames } from '/interface/navy.js';
+import { gunpowderUnits, gunpowderUnitNames } from '/interface/gunpowder.js';
 import { initBuildings, buildingKinds, buildingNames } from '/interface/buildings.js';
 import { initArt, icon as packIcon, entityIcon, setEntityIcon, playerTint } from '/interface/ui-art.js';
 import { initVassal } from '/interface/steward/vassal.js';
@@ -89,12 +91,13 @@ export function initInterface() {
     attribute(byId('selection'),'data-kind',first?.kind ?? '');
     attribute(byId('selection'),'data-owned',String(owned));
     attribute(byId('selection'),'data-villagers',String(owned && selected.some(unit=>unit.kind==='Villager')));
+    attribute(byId('selection'),'data-ships',String(owned && selected.some(unit=>unit.kind==='FishingShip')));
     show('selection-empty',count===0); show('selection-content',count>0);
     show('train-villager',building && owned); show('move-units',units); show('stop-units',units);
     show('delete-units',owned && count>0);
     // The building menu sets placeholder visibility after all commands update.
     text('command-context',count>1?`${count} ${building?'buildings':'units'}`:first?.name ?? 'Select a unit');
-    text('command-hint',!owned && first?'You cannot command this player’s units or buildings':building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: work or move · Ctrl+right-click: queue move · Ctrl+0–9: group':first.kind==='FishingShip'?'Right-click: fish or move':first.kind==='General'?'Right-click ground: march with your army · Alt+right-click: General only':first.kind==='Steward'?'Garrison in any owned Town Center without a Steward':first.kind==='Monk'?'Right-click: move · heals nearby injured units automatically':['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,...imperialUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley'].includes(first.kind)?'Right-click: attack or move · Ctrl+0–9: group':first.kind==='TransportShip'?'Load at the bank · sail · unload passengers':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag: group · arrows: camera · 0–9: recall group');
+    text('command-hint',!owned && first?'You cannot command this player’s units or buildings':building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: work or move · Ctrl+right-click: queue move · Ctrl+0–9: group':first.kind==='FishingShip'?'Right-click: fish or move':first.kind==='General'?'Right-click ground: march with your army · Alt+right-click: General only':first.kind==='Steward'?'Garrison in any owned Town Center without a Steward':first.kind==='Monk'?'Right-click: move · heals nearby injured units automatically':['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,...imperialUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley',...navyUnits].includes(first.kind)?'Right-click: attack or move · Ctrl+0–9: group':first.kind==='TransportShip'?'Load at the bank · sail · unload passengers':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag: group · arrows: camera · 0–9: recall group');
     show('selection-health',count===1);
     show('unit-hp',count===1 && !building); show('unit-combat',count===1 && !building);
     if (first) {
@@ -124,7 +127,7 @@ export function initInterface() {
     labels.loads(state.actors.filter(a=>onMap(a) && a.load));
   };
   window.aoeInterface = { details: updateDetails, numeric(values,status) {
-    const kinds=['Scout','Villager',...buildingKinds,'Militia','FishingShip','Sheep','Deer','Boar','Wolf','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley','Vassal','General',...imperialUnits,'Steward'], names=['Scout Cavalry','Villager',...buildingNames,'Militia','Fishing Ship','Sheep','Deer','Boar','Wolf','Archer','Skirmisher','Spearman','Man-at-Arms',...castleUnitNames,'Galley','Fire Ship','Demolition Ship','Transport Ship','War Galley','Vassal','General',...imperialUnitNames,'Steward'];
+    const kinds=['Scout','Villager',...buildingKinds,'Militia','FishingShip','Sheep','Deer','Boar','Wolf','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley','Vassal','General',...imperialUnits,'Steward',...navyUnits,...gunpowderUnits], names=['Scout Cavalry','Villager',...buildingNames,'Militia','Fishing Ship','Sheep','Deer','Boar','Wolf','Archer','Skirmisher','Spearman','Man-at-Arms',...castleUnitNames,'Galley','Fire Ship','Demolition Ship','Transport Ship','War Galley','Vassal','General',...imperialUnitNames,'Steward',...navyUnitNames,...gunpowderUnitNames];
     const tasks=['Idle','Moving','Gathering','Carrying','Returning to drop-off','Attacking','Dying','Building','Farming','Hunting','Shepherding','Fishing','Seeding','Idle','Fleeing','Attacking','Dying','Carcass'];
     const resources=['food','wood','gold','stone',''];
     const state={stockpile:values.slice(0,4),population:values.slice(4,6),workers:values.slice(6,10),seconds:values[10],art:values[11]===1,status,actors:[],selected:[],queue:[],resources:[]};

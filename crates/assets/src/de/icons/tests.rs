@@ -71,3 +71,20 @@ fn de_icon_dimensions_are_bounded_before_texture_decode() {
     let error = decode(&bytes).err().expect("oversized icon must fail");
     assert!(error.to_string().contains("icon dimensions"));
 }
+
+/// Needs the owner's DE install (`AOE_DE_DIR`); skipped without it.
+#[test]
+fn real_naval_research_and_unit_icons_resolve() {
+    let Some(root) = std::env::var_os("AOE_DE_DIR") else {
+        return;
+    };
+    let root = std::path::Path::new(&root);
+    let dat = read_bounded(&root.join("resources/_common/dat/empires2_x2_p1.dat")).unwrap();
+    let dat = crate::dat::de_survey::inflate(&dat).unwrap();
+    let techs = crate::dat::de_survey::technology_icons(&dat).unwrap();
+    for id in [906, 65, 374, 375, 373, 908, 907, 909, 910] {
+        assert!(techs.iter().any(|&(tech, _)| tech == id), "tech {id}");
+    }
+    let selected = unit_catalog::resolve(root).unwrap();
+    resolve(root, &selected, &mut blake3::Hasher::new()).unwrap();
+}

@@ -86,7 +86,13 @@ impl UnitKind {
         self.is_cavalry()
             || matches!(
                 self,
-                Self::Galley | Self::WarGalley | Self::FireShip | Self::TransportShip
+                Self::Galley
+                    | Self::WarGalley
+                    | Self::Galleon
+                    | Self::FireGalley
+                    | Self::FireShip
+                    | Self::FastFireShip
+                    | Self::TransportShip
             )
     }
     pub fn is_cavalry(self) -> bool {
@@ -98,6 +104,10 @@ impl UnitKind {
                 | Self::Cavalier
                 | Self::Paladin
                 | Self::Hussar
+                | Self::CamelRider
+                | Self::HeavyCamelRider
+                | Self::CavalryArcher
+                | Self::HeavyCavalryArcher
         )
     }
 }

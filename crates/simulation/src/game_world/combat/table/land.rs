@@ -1,0 +1,103 @@
+//! Castle and Imperial land units (Cavalry Archer to Siege Onager), in
+//! `UnitKind` order: aoe2techtree data.json (DE update 188329).
+use super::units::troop;
+use super::{UnitCombat, UnitKind};
+
+pub(super) const LAND: [UnitCombat; 12] = [
+    troop(
+        UnitKind::CavalryArcher,
+        (50, 6, 0, 0),
+        (200, 140),
+        (4, 0, 5),
+        (0, 40, 60),
+        37,
+    ),
+    troop(
+        UnitKind::HeavyCavalryArcher,
+        (60, 7, 1, 0),
+        (200, 140),
+        (4, 0, 6),
+        (0, 40, 60),
+        30,
+    ),
+    troop(
+        UnitKind::CamelRider,
+        (100, 6, 0, 0),
+        (200, 145),
+        (1, 0, 5),
+        (55, 0, 60),
+        22,
+    ),
+    troop(
+        UnitKind::HeavyCamelRider,
+        (120, 7, 0, 0),
+        (200, 145),
+        (1, 0, 5),
+        (55, 0, 60),
+        22,
+    ),
+    troop(
+        UnitKind::Scorpion,
+        (40, 11, 0, 7),
+        (360, 65),
+        (7, 2, 9),
+        (0, 75, 75),
+        30,
+    ),
+    troop(
+        UnitKind::HeavyScorpion,
+        (60, 14, 1, 8),
+        (360, 65),
+        (7, 2, 9),
+        (0, 75, 75),
+        30,
+    ),
+    troop(
+        UnitKind::HandCannoneer,
+        (40, 17, 1, 0),
+        (345, 96),
+        (7, 0, 9),
+        (45, 0, 50),
+        34,
+    ),
+    troop(
+        UnitKind::BombardCannon,
+        (80, 40, 2, 5),
+        (650, 70),
+        (12, 5, 14),
+        (0, 225, 225),
+        56,
+    ),
+    troop(
+        UnitKind::Trebuchet,
+        (150, 200, 2, 8),
+        (1_000, 80),
+        (16, 4, 19),
+        (0, 200, 200),
+        50,
+    ),
+    troop(
+        UnitKind::TrebuchetUnpacked,
+        (150, 200, 1, 150),
+        (1_000, 80),
+        (16, 4, 19),
+        (0, 200, 200),
+        50,
+    ),
+    troop(
+        UnitKind::Petard,
+        (50, 25, 0, 2),
+        (200, 80),
+        (1, 0, 4),
+        (65, 0, 20),
+        25,
+    ),
+    troop(
+        UnitKind::SiegeOnager,
+        (70, 75, 0, 8),
+        (600, 60),
+        (8, 3, 10),
+        (0, 160, 135),
+        46,
+    ),
+];

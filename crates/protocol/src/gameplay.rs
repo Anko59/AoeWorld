@@ -140,9 +140,12 @@ impl SquadKind {
         Some(match kind {
             Militia | ManAtArms | LongSwordsman | Spearman | Pikeman | TwoHandedSwordsman
             | Champion | Halberdier => Self::Infantry,
-            Archer | Crossbowman | Arbalester | Skirmisher | EliteSkirmisher => Self::Archers,
-            Knight | Cavalier | Paladin | Scout | LightCavalry | Hussar => Self::Cavalry,
-            Mangonel | Onager | BatteringRam | CappedRam | SiegeRam => Self::Siege,
+            Archer | Crossbowman | Arbalester | Skirmisher | EliteSkirmisher | HandCannoneer
+            | CavalryArcher | HeavyCavalryArcher => Self::Archers,
+            Knight | Cavalier | Paladin | Scout | LightCavalry | Hussar | CamelRider
+            | HeavyCamelRider => Self::Cavalry,
+            Mangonel | Onager | SiegeOnager | BatteringRam | CappedRam | SiegeRam | Scorpion
+            | HeavyScorpion | BombardCannon | Trebuchet | TrebuchetUnpacked | Petard => Self::Siege,
             _ => return None,
         })
     }

@@ -110,31 +110,29 @@ pub enum UnitKind {
     Steward,
     TradeCart,
     TradeCog,
-}
-impl UnitKind {
-    /// Battering Ram and its two upgrades.
-    pub const fn is_ram(self) -> bool {
-        matches!(self, Self::BatteringRam | Self::CappedRam | Self::SiegeRam)
-    }
-    /// Mangonel and its upgrade, which throw splash projectiles.
-    pub const fn is_artillery(self) -> bool {
-        matches!(self, Self::Mangonel | Self::Onager)
-    }
-    pub const fn is_siege(self) -> bool {
-        self.is_ram() || self.is_artillery()
-    }
-    pub const fn is_naval(self) -> bool {
-        matches!(
-            self,
-            Self::FishingShip
-                | Self::Galley
-                | Self::FireShip
-                | Self::DemolitionShip
-                | Self::TransportShip
-                | Self::WarGalley
-                | Self::TradeCog
-        )
-    }
+    FireGalley,
+    FastFireShip,
+    DemolitionRaft,
+    HeavyDemolitionShip,
+    Galleon,
+    CannonGalleon,
+    EliteCannonGalleon,
+    Hulk,
+    WarHulk,
+    Carrack,
+    CatapultGalleon,
+    CavalryArcher,
+    HeavyCavalryArcher,
+    CamelRider,
+    HeavyCamelRider,
+    Scorpion,
+    HeavyScorpion,
+    HandCannoneer,
+    BombardCannon,
+    Trebuchet,
+    TrebuchetUnpacked,
+    Petard,
+    SiegeOnager,
 }
 #[derive(
     Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
@@ -166,6 +164,7 @@ pub enum BuildingKind {
     StoneGate,
     Road,
     Wonder,
+    FishTrap,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]

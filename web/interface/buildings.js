@@ -4,11 +4,13 @@ import { initGarrison } from '/interface/garrison/panel.js';
 import { castleKinds, castleNames, castleCommands, castleTechs, castleTraining, castleUnitNames } from '/interface/castle.js';
 import { imperialTechs, imperialTraining, imperialLines, imperialUnitNames } from '/interface/imperial.js';
 import { genericTechs, genericLines } from '/interface/generic.js';
+import { navyTechs, navyLines, navyTraining, navyTrainLines, navyUnitNames, dockUnitCells } from '/interface/navy.js';
+import { gunpowderTechs, gunpowderTraining, gunpowderLines, gunpowderTrainLines, gunpowderUnitNames } from '/interface/gunpowder.js';
 import { icon, entityIcon, setEntityIcon, techIds, trainingKinds } from '/interface/ui-art.js';
 // DOM presentation for authoritative Rust building state and footprint previews.
 const byId = id => document.getElementById(id);
-export const buildingKinds = ['TownCenter','House','LumberCamp','MiningCamp','Mill','Farm','Barracks','PalisadeWall','Outpost','Dock','ArcheryRange','Stable','Blacksmith','Market','WatchTower','PalisadeGate',...castleKinds,'Bridge','StoneWall','StoneGate','Road','Wonder'];
-export const buildingNames = ['Town Center','House','Lumber Camp','Mining Camp','Mill','Farm','Barracks','Palisade Wall','Outpost','Dock','Archery Range','Stable','Blacksmith','Market','Watch Tower','Palisade Gate',...castleNames,'Bridge','Stone Wall','Stone Gate','Road','Wonder'];
+export const buildingKinds = ['TownCenter','House','LumberCamp','MiningCamp','Mill','Farm','Barracks','PalisadeWall','Outpost','Dock','ArcheryRange','Stable','Blacksmith','Market','WatchTower','PalisadeGate',...castleKinds,'Bridge','StoneWall','StoneGate','Road','Wonder','FishTrap'];
+export const buildingNames = ['Town Center','House','Lumber Camp','Mining Camp','Mill','Farm','Barracks','Palisade Wall','Outpost','Dock','Archery Range','Stable','Blacksmith','Market','Watch Tower','Palisade Gate',...castleNames,'Bridge','Stone Wall','Stone Gate','Road','Wonder','FishTrap'];
 // Codes are emitted by Rust building_ui::availability, where the rules live.
 const disabledReasons=['Unavailable','','requires Feudal Age','Already researched','Research in progress','Wait for the training queue to finish','Not enough food','Not enough wood','Not enough gold','Not enough stone','Training queue is full','Building is under construction','Requires prerequisite buildings or technology','Select your own building','requires Castle Age','A Steward is queued or garrisoned in this Town Center','requires Imperial Age'];
 const action=(button,label,code)=>{const reason=disabledReasons[code]??disabledReasons[0];set(button, 'disabled', code!==1);set(button, 'title', label+(reason?` · ${reason}`:''));attribute(button, 'aria-label', button.title);};
@@ -25,6 +27,7 @@ const commands = [
   ['stone-wall','Stone Wall','Z','5 stone / tile'], ['stone-gate','Stone Gate','G','30 stone'],
   ['road','Road','Y','1 wood / tile · +25% land speed'],
   ['wonder','Wonder','N','1000 wood · 1000 stone · 1000 gold · Imperial Age'],
+  ['fish-trap','Fish Trap','F','100 wood · select Fishing Ships · open water'],
   ['town-center','Town Center','C','275 wood · 100 stone'],
 ];
 export function initBuildings() {
@@ -50,16 +53,16 @@ export function initBuildings() {
     button.title=`${name} · ${cost} · ${key}`; button.setAttribute('aria-label',button.title);
     button.innerHTML=`${entityIcon(buildingKinds[(i+1)%buildingKinds.length])}<span class="command-label">${name}</span><kbd>${key}</kbd><small>${cost}</small>`; grid.append(button); return button;
   });
-  const research=['Loom · 50 gold','Town Watch · 75 food','Feudal Age · 500 food','Double-Bit Axe · 100 food · 50 wood','Horse Collar · 75 food · 75 wood','Gold Mining · 100 food · 75 wood','Stone Mining · 100 food · 75 wood','Wheelbarrow · 175 food · 50 wood','Man-at-Arms · 100 food · 40 gold','Forging · 150 food','Scale Mail Armor · 100 food','Scale Barding Armor · 150 food','Fletching · 100 food · 50 gold','Padded Archer Armor · 100 food',...castleTechs.map(t=>t[1]),'War Galley · 230 food · 100 gold',...imperialTechs.map(t=>t[1]),...genericTechs.map(t=>t[1])];
-  const sites=[0,0,0,2,4,3,3,0,6,12,12,12,12,12,...castleTechs.map(t=>t[2]),9,...imperialTechs.map(t=>t[2]),...genericTechs.map(t=>t[2])];
+  const research=['Loom · 50 gold','Town Watch · 75 food','Feudal Age · 500 food','Double-Bit Axe · 100 food · 50 wood','Horse Collar · 75 food · 75 wood','Gold Mining · 100 food · 75 wood','Stone Mining · 100 food · 75 wood','Wheelbarrow · 175 food · 50 wood','Man-at-Arms · 100 food · 40 gold','Forging · 150 food','Scale Mail Armor · 100 food','Scale Barding Armor · 150 food','Fletching · 100 food · 50 gold','Padded Archer Armor · 100 food',...castleTechs.map(t=>t[1]),'Medium Warships · 150 wood · 100 gold',...imperialTechs.map(t=>t[1]),...genericTechs.map(t=>t[1]),...navyTechs.map(t=>t[1]),...gunpowderTechs.map(t=>t[1])];
+  const sites=[0,0,0,2,4,3,3,0,6,12,12,12,12,12,...castleTechs.map(t=>t[2]),9,...imperialTechs.map(t=>t[2]),...genericTechs.map(t=>t[2]),...navyTechs.map(t=>t[2]),...gunpowderTechs.map(t=>t[2])];
   const buildStart=8+research.length, trainKind=buildStart+commands.length, trainEnabled=trainKind+1, foundationCount=trainKind+2;
-  const techs=['loom','town-watch','feudal-age','double-bit-axe','horse-collar','gold-mining','stone-mining','wheelbarrow','man-at-arms','forging','scale-mail-armor','scale-barding-armor','fletching','padded-archer-armor',...castleTechs.map(t=>t[0]),'war-galley',...imperialTechs.map(t=>t[0]),...genericTechs.map(t=>t[0])].map((id,i)=>{
+  const techs=['loom','town-watch','feudal-age','double-bit-axe','horse-collar','gold-mining','stone-mining','wheelbarrow','man-at-arms','forging','scale-mail-armor','scale-barding-armor','fletching','padded-archer-armor',...castleTechs.map(t=>t[0]),'war-galley',...imperialTechs.map(t=>t[0]),...genericTechs.map(t=>t[0]),...navyTechs.map(t=>t[0]),...gunpowderTechs.map(t=>t[0])].map((id,i)=>{
     const button=document.createElement('button'); button.id=`research-${id}`;button.className="research-command";button.hidden=true;button.innerHTML=icon('technologies',techIds[i],'technology')+`<span class="command-label">${i===8?'Research Man-at-Arms':research[i]}</span>`;grid.append(button);return button;
   });
-  const militaryTrain=[['archer','Archer','25 wood · 45 gold',10,4],['skirmisher','Skirmisher','25 food · 35 wood',10,5],['spearman','Spearman','35 food · 25 wood',6,6],['scout','Scout Cavalry','80 food',11,1],...castleTraining.filter(t=>t[0]!=='long-swordsman'),...imperialTraining,['trade-cart','Trade Cart','100 wood · 50 gold',13,35]].map(([id,name,cost,site,kind])=>{
+  const militaryTrain=[['archer','Archer','25 wood · 45 gold',10,4],['skirmisher','Skirmisher','25 food · 35 wood',10,5],['spearman','Spearman','35 food · 25 wood',6,6],['scout','Scout Cavalry','80 food',11,1],...castleTraining.filter(t=>t[0]!=='long-swordsman'),...imperialTraining,['trade-cart','Trade Cart','100 wood · 50 gold',13,35],...gunpowderTraining].map(([id,name,cost,site,kind])=>{
     const button=document.createElement('button');button.id=`train-${id}`;button.hidden=true;button.innerHTML=entityIcon(trainingKinds[kind])+`<span class="command-label">${name} · ${cost}</span>`;button.title=`Train ${name} · ${cost}`;button.setAttribute('aria-label',button.title);grid.append(button);return {button,site,kind};
   });
-  const navalTrain=[['galley','Galley',17,'90 wood · 30 gold'],['fire-ship','Fire Ship',18,'75 wood · 45 gold'],['demolition-ship','Demolition Ship',19,'70 wood · 50 gold'],['transport-ship','Transport Ship',20,'125 wood'],['war-galley','War Galley',21,'90 wood · 30 gold'],['trade-cog','Trade Cog',36,'100 wood · 50 gold']].map(([id,name,kind,cost])=>{const button=document.createElement('button');button.id=`train-${id}`;button.hidden=true;button.innerHTML=entityIcon(trainingKinds[kind])+`<span class="command-label">${name}</span><small>${cost}</small>`;grid.append(button);return {button,kind,name,cost};});
+  const navalTrain=navyTraining.map(([id,name,unit,cost])=>{const kind=trainingKinds.indexOf(unit);const button=document.createElement('button');button.id=`train-${id}`;button.hidden=true;button.innerHTML=entityIcon(unit)+`<span class="command-label">${name}</span><small>${cost}</small>`;grid.append(button);return {button,kind,name,cost};});
   const unload=document.createElement('button');unload.id='unload-transport';unload.hidden=true;unload.innerHTML=entityIcon('TransportShip')+'<span class="command-label">Unload passengers</span>';grid.append(unload);
   const trades=['wood','food','stone'];
   const tradeButtons=['buy','sell'].flatMap(side=>trades.map(res=>{const button=document.createElement('button');button.id=`market-${side}-${res}`;button.className='build-command market-command';button.hidden=true;grid.append(button);return {button,side,res};}));
@@ -67,15 +70,15 @@ export function initBuildings() {
   const roots=new Map();
   for(const [from,to] of [
     ['train-archer','train-crossbowman'],['train-skirmisher','train-elite-skirmisher'],
-    ['train-spearman','train-pikeman'],['train-scout','train-light-cavalry'],['train-galley','train-war-galley'],
+    ['train-spearman','train-pikeman'],['train-scout','train-light-cavalry'],...navyTrainLines.map(([from,to])=>[`train-${from}`,`train-${to}`]),
     ['train-pikeman','train-halberdier'],['train-crossbowman','train-arbalester'],['train-knight','train-cavalier'],
     ['train-cavalier','train-paladin'],['train-light-cavalry','train-hussar'],['train-battering-ram','train-capped-ram'],
-    ['train-capped-ram','train-siege-ram'],['train-mangonel','train-onager'],
+    ['train-capped-ram','train-siege-ram'],['train-mangonel','train-onager'],...gunpowderTrainLines,
     ...[['town-watch','town-patrol'],['feudal-age','castle-age'],['double-bit-axe','bow-saw'],
       ['horse-collar','heavy-plow'],['gold-mining','gold-shaft-mining'],['wheelbarrow','hand-cart'],
       ['man-at-arms','long-swordsman'],['forging','iron-casting'],['scale-mail-armor','chain-mail-armor'],
       ['scale-barding-armor','chain-barding-armor'],['fletching','bodkin-arrow'],
-      ['padded-archer-armor','leather-archer-armor'],...imperialLines,...genericLines].map(([from,to])=>[`research-${from}`,`research-${to}`]),
+      ['padded-archer-armor','leather-archer-armor'],...imperialLines,...genericLines,...navyLines,...gunpowderLines].map(([from,to])=>[`research-${from}`,`research-${to}`]),
   ])roots.set(to,roots.get(from)??from);
   const slots=(entries,row,reserved=new Map())=>{
     const groups=new Map();
@@ -90,7 +93,7 @@ export function initBuildings() {
   };
   slots([{button:byId('train-villager'),site:0}],()=>1);
   slots([...militaryTrain,...navalTrain.map(entry=>({...entry,site:9}))],()=>1,new Map([[0,1],[6,1],[9,1]]));
-  slots(techs.map((button,i)=>({button,site:sites[i]})),site=>[0,6,9,10,11,16,17,19].includes(site)?2:1);
+  slots(techs.map((button,i)=>({button,site:sites[i]})),site=>[0,6,10,11,16,17,19].includes(site)?2:1,new Map([[9,dockUnitCells]]));
   const panel=document.createElement('div');panel.id='building-panel';panel.hidden=true;
   panel.innerHTML='<b id="building-hp"></b><div id="building-status"></div><progress id="construction-progress" max="1000"></progress><div id="research-status"><span id="research-icon"></span><span id="research-label"></span><progress id="research-progress" max="100" aria-label="Research progress" hidden></progress></div><div id="market-prices"></div><button id="cancel-construction" hidden>Cancel construction</button><button id="cancel-research" hidden>Cancel research</button>';
   byId('selection-content').insertBefore(panel,byId('training'));
@@ -98,9 +101,9 @@ export function initBuildings() {
   const progressLabels=document.createElement('div');progressLabels.id='construction-labels';document.body.append(progressLabels);
   let open=false, state=[], lastPreview='', queue=[], previousQueue='', previousResearch=-1, previousLabels='';
   const menu=()=>{
-    const villager=byId('selection').dataset.villagers==='true';
+    const villager=byId('selection').dataset.villagers==='true', ships=byId('selection').dataset.ships==='true';
     set(build, 'hidden', !villager);set(military, 'hidden', !villager);if(!villager)open=false;
-    buttons.forEach((b,i)=>{set(b, 'hidden', !villager||open!==category(i));set(b, 'disabled', state[buildStart+i]!==1);const [id,name,key,cost]=commands[i];set(b, 'title', `${name} · ${cost} · ${category(i)==='military'?'V':'B'} ${key}${id==='wonder'&&state[0]<3?' · requires Imperial Age':(i>=15&&i<=18||id==='town-center')&&state[0]<2?' · requires Castle Age':state[0]===0&&(i>=9&&i<=13||i>=19&&i<=21)?' · requires Feudal Age':''}`);attribute(b, 'aria-label', b.title);});
+    buttons.forEach((b,i)=>{set(b, 'hidden', commands[i][0]==='fish-trap'?!ships:!villager||open!==category(i));set(b, 'disabled', state[buildStart+i]!==1);const [id,name,key,cost]=commands[i];set(b, 'title', `${name} · ${cost} · ${category(i)==='military'?'V':'B'} ${key}${id==='wonder'&&state[0]<3?' · requires Imperial Age':(i>=15&&i<=18||id==='town-center')&&state[0]<2?' · requires Castle Age':state[0]===0&&(i>=9&&i<=13||i>=19&&i<=21)?' · requires Feudal Age':''}`);attribute(b, 'aria-label', b.title);});
     if(open){for(const id of ['move-units','stop-units','delete-units'])set(byId(id), 'hidden', true);set(byId('command-context'), 'textContent', open==='military'?'Military buildings':'Economic buildings');set(byId('command-hint'), 'textContent', byId('scene').dataset.orderMode==='build'?(byId('scene').title||'Left-click a green footprint · drag walls or bridges bank to bank · Esc cancels'):'Choose a building · Esc closes the menu');}
     grid.classList.toggle('building-menu-open',Boolean(open));
     attribute(build, 'aria-expanded', String(open==='economy'));attribute(military, 'aria-expanded', String(open==='military'));
@@ -162,7 +165,7 @@ export function initBuildings() {
       byId('market-prices')&&(set(byId('market-prices'), 'textContent', kind===13&&v[4]>=1000?`Prices per 100: wood ${v[market]} · food ${v[market+1]} · stone ${v[market+2]} gold`:''));
       techs.forEach((b,i)=>{set(b, 'hidden', !owned||kind!==sites[i]||v[8+i]===0||v[8+i]===3);action(b,`Research ${research[i]}${i===8?' · Upgrades existing and future Militia':''}`,v[8+i]);});
       const train=byId('train-villager');
-      const unitNames=['Villager','Scout Cavalry','Militia','Fishing Ship','Archer','Skirmisher','Spearman','Man-at-Arms',...castleUnitNames,'Galley','Fire Ship','Demolition Ship','Transport Ship','War Galley','Vassal','General',...imperialUnitNames,'Steward','Trade Cart','Trade Cog'];
+      const unitNames=['Villager','Scout Cavalry','Militia','Fishing Ship','Archer','Skirmisher','Spearman','Man-at-Arms',...castleUnitNames,'Galley','Fire Ship','Demolition Ship','Transport Ship','War Galley','Vassal','General',...imperialUnitNames,'Steward','Trade Cart','Trade Cog',...navyUnitNames,...gunpowderUnitNames];
       const infantry=unitNames[v[availability+trainingKinds.length]]??'Militia';
       if(selected){set(train, 'hidden', !owned||![0,6,9].includes(kind)||v[4]<1000);action(train,kind===9?'Train Fishing Ship, 75 wood, Q':kind===6?`Train ${infantry}, 50 food, 20 gold, Q`:'Train Villager, 50 food, Q',v[trainEnabled]);set(trainingName, 'hidden', kind!==6);set(trainingName, 'textContent', infantry);setEntityIcon(trainIcon,kind===9?'FishingShip':kind===6?trainingKinds[v[availability+trainingKinds.length]]:'Villager');set(train.querySelector('.cost'), 'textContent', kind===9?'75 W':kind===6?'50 F · 20 G':'50');}
       const labels=Array.from({length:v[foundationCount]??0},(_,i)=>{const at=foundationCount+1+i*3;return `<span style="left:${v[at]}px;top:${v[at+1]}px">${Math.floor(v[at+2]/10)}%<progress max="1000" value="${v[at+2]}"></progress></span>`;}).join('');

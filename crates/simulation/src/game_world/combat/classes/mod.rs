@@ -5,6 +5,7 @@ use crate::{BuildingKind, GameWorld, Tech, UnitKind};
 use aoe_core::EntityId;
 
 mod profiles;
+mod unit_kinds;
 use profiles::{Class, building_armour, building_attacks, unit_armour, unit_attacks};
 
 const UNITS: usize = super::UNIT_COMBAT.len();
@@ -77,22 +78,10 @@ pub(super) const fn masonry_kind(kind: BuildingKind) -> bool {
 
 impl GameWorld {
     pub(in crate::game_world) fn unit_damage_bonus(&self, kind: UnitKind, target: EntityId) -> u16 {
-        let bonus = self.unit(target).map_or_else(
+        self.unit(target).map_or_else(
             || self.building_class_bonus(kind as usize, target),
             |v| super::military::class_bonus(kind, v.kind),
-        );
-        if kind != UnitKind::FireShip {
-            return bonus;
-        }
-        // Fire Ships have both pierce and melee attack components. The extra
-        // melee component must see researched armour, independently of pierce.
-        let melee = self.unit_armour(target).map(|a| a.0).or_else(|| {
-            self.building(target).map(|b| {
-                super::age_armour(b.kind, b.age).melee_armour
-                    + i16::from(self.building_has_masonry(&b))
-            })
-        });
-        bonus + melee.map_or(0, |a| (1_i32 - i32::from(a)).max(0) as u16)
+        )
     }
 
     pub(super) fn building_damage_bonus(&self, kind: BuildingKind, target: EntityId) -> u16 {

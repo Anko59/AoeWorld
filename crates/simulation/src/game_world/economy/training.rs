@@ -64,7 +64,9 @@ impl GameWorld {
             VILLAGE_RULES.villager_training_seconds
         } else {
             // Combat units pay the combat table's cost, all or nothing.
-            let training = Self::unit_training(kind).ok_or(EconomyError::WrongUnitKind)?;
+            let training = self
+                .player_unit_training(player, kind)
+                .ok_or(EconomyError::WrongUnitKind)?;
             self.pay_unit_cost(player, kind)?;
             training.seconds
         };

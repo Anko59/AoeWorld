@@ -15,7 +15,7 @@ pub use bindings::BINDINGS;
 mod canonical;
 mod inventory;
 mod scene;
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Action {
     Idle,
     Walk,
@@ -178,7 +178,10 @@ pub fn resolve(install: &Path) -> Result<Vec<Selected>, Error> {
                 return Err(invalid(
                     "DE unit",
                     0,
-                    format!("incommensurate delta timeline for graphic {graphic}"),
+                    format!(
+                        "incommensurate delta timeline for graphic {graphic} (unit {}, {:?} of {:?})",
+                        u.id, binding.action, binding.pose
+                    ),
                 ));
             }
             if a.angles != angles && a.angles != 1 {

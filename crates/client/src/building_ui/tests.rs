@@ -161,6 +161,16 @@ fn art_selection_distinguishes_every_kind_and_construction_stage() {
             assert_eq!(sprite_slot(kind, 1000, true), 20);
             continue;
         }
+        if kind == B::FishTrap {
+            // No DE Fish Trap art yet: it draws as a Farm.
+            for (progress, rubble) in [(1000, false), (0, false), (1000, true)] {
+                assert_eq!(
+                    sprite_slot(kind, progress, rubble),
+                    sprite_slot(B::Farm, progress, rubble)
+                );
+            }
+            continue;
+        }
         if kind == B::Dock {
             assert_eq!(sprite_slot(kind, 1000, false), 23);
             assert_eq!(sprite_slot(kind, 0, false), 24);

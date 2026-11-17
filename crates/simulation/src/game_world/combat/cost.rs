@@ -10,9 +10,21 @@ impl GameWorld {
         unit_combat(kind).training
     }
 
+    /// What `player` pays and waits for `kind`: Shipwright takes 20% off the
+    /// wood of every ship and builds it 50% faster (help string 28377).
+    pub fn player_unit_training(&self, player: PlayerId, kind: UnitKind) -> Option<UnitTraining> {
+        let mut training = Self::unit_training(kind)?;
+        if kind.is_naval() && self.has_researched(player, crate::Tech::Shipwright) {
+            training.cost.wood = training.cost.wood * 4 / 5;
+            training.seconds = (training.seconds * 2).div_ceil(3);
+        }
+        Some(training)
+    }
+
     /// Pay the full cost of `kind` or change nothing. Call when queueing.
     pub fn pay_unit_cost(&mut self, player: PlayerId, kind: UnitKind) -> Result<(), EconomyError> {
-        let cost = Self::unit_training(kind)
+        let cost = self
+            .player_unit_training(player, kind)
             .ok_or(EconomyError::WrongUnitKind)?
             .cost;
         let state = self
@@ -41,7 +53,9 @@ impl GameWorld {
             wood,
             gold,
             stone,
-        } = Self::unit_training(kind).map_or_else(UnitCost::default, |training| training.cost);
+        } = self
+            .player_unit_training(player, kind)
+            .map_or_else(UnitCost::default, |training| training.cost);
         if let Some(state) = self.economy.players.get_mut(&player) {
             let stock = &mut state.stockpile;
             stock.food = stock.food.saturating_add(food);

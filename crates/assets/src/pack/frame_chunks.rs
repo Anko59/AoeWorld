@@ -10,8 +10,8 @@ use std::{
 };
 
 pub const TARGET_CHUNK_BYTES: usize = 1024 * 1024;
-pub const MAX_CHUNKS: usize = 2048;
-pub const MAX_TOTAL_BYTES: usize = 2 * 1024 * 1024 * 1024;
+pub const MAX_CHUNKS: usize = 4096;
+pub const MAX_TOTAL_BYTES: usize = 3 * 1024 * 1024 * 1024;
 
 fn frame_error(detail: impl Into<String>) -> NativeFrameError {
     NativeFrameError::new("frame chunk", detail)

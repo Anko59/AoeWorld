@@ -47,6 +47,8 @@ pub struct UnitCombat {
     pub training: Option<UnitTraining>,
 }
 
+#[path = "table/land.rs"]
+mod land;
 #[path = "table/units.rs"]
 mod units;
 pub use units::UNIT_COMBAT;
@@ -86,7 +88,7 @@ const fn armour(kind: BuildingKind, melee_armour: i16, pierce_armour: u16) -> Bu
 /// House -2 melee: official AoE II DE update 56005:
 /// https://www.ageofempires.com/news/aoeii_de_update_56005/
 /// Farm and Outpost really have 0/0; these are not placeholders.
-pub const BUILDING_COMBAT: [BuildingCombat; 25] = [
+pub const BUILDING_COMBAT: [BuildingCombat; 26] = [
     armour(BuildingKind::TownCenter, 3, 5),
     armour(BuildingKind::House, -2, 7),
     armour(BuildingKind::LumberCamp, 0, 7),
@@ -131,6 +133,7 @@ pub const BUILDING_COMBAT: [BuildingCombat; 25] = [
     armour(BuildingKind::Road, 0, 0),
     // Wonder 276: DE DAT armour 3 melee / 10 pierce.
     armour(BuildingKind::Wonder, 3, 10),
+    armour(BuildingKind::FishTrap, 1, 1),
 ];
 
 pub(crate) fn age_armour(kind: BuildingKind, age: crate::Age) -> BuildingCombat {

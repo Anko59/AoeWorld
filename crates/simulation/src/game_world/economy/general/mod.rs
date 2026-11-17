@@ -89,8 +89,15 @@ pub(super) fn role(kind: UnitKind) -> Option<usize> {
         | UnitKind::Crossbowman
         | UnitKind::Arbalester
         | UnitKind::Skirmisher
-        | UnitKind::EliteSkirmisher => 1,
-        UnitKind::Knight | UnitKind::Cavalier | UnitKind::Paladin => 2,
+        | UnitKind::EliteSkirmisher
+        | UnitKind::HandCannoneer
+        | UnitKind::CavalryArcher
+        | UnitKind::HeavyCavalryArcher => 1,
+        UnitKind::Knight
+        | UnitKind::Cavalier
+        | UnitKind::Paladin
+        | UnitKind::CamelRider
+        | UnitKind::HeavyCamelRider => 2,
         kind if kind.is_siege() => 3,
         UnitKind::Scout | UnitKind::LightCavalry | UnitKind::Hussar => 4,
         _ => return None,

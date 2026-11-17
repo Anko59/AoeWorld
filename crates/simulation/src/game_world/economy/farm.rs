@@ -74,6 +74,10 @@ impl GameWorld {
         let Some(old) = self.building(farm).map(|b| b.into_owned()) else {
             return false;
         };
+        // Fish Traps collapse when spent; they are rebuilt, not reseeded.
+        if old.kind != BuildingKind::Farm {
+            return false;
+        }
         let center = TileCoord::new(old.footprint.min.x + 1, old.footprint.min.y + 1);
         let mill = self
             .player_buildings_of(old.player, BuildingKind::Mill)
@@ -129,14 +133,20 @@ impl GameWorld {
         if unit.player != player {
             return Err(EconomyError::NotOwner);
         }
-        if unit.kind != UnitKind::Villager {
+        let building = self.building(farm).ok_or(EconomyError::UnknownEntity)?;
+        // A Fish Trap is worked by Fishing Ships, a Farm by villagers.
+        let (worker, field) = if building.kind == BuildingKind::FishTrap {
+            (UnitKind::FishingShip, BuildingKind::FishTrap)
+        } else {
+            (UnitKind::Villager, BuildingKind::Farm)
+        };
+        if unit.kind != worker {
             return Err(EconomyError::WrongUnitKind);
         }
-        let building = self.building(farm).ok_or(EconomyError::UnknownEntity)?;
         if building.player != player {
             return Err(EconomyError::NotOwner);
         }
-        if building.kind != BuildingKind::Farm {
+        if building.kind != field {
             return Err(EconomyError::FarmUnavailable);
         }
         if !building.is_complete() {

@@ -4,7 +4,12 @@ import aoeworld
 
 def test_steward_town_center_cost_and_training_rules():
     assert aoeworld.trainable(aoeworld.BuildingKind.TOWN_CENTER) == [aoeworld.UnitKind.VILLAGER, aoeworld.UnitKind.STEWARD]
-    assert aoeworld.trainable(aoeworld.BuildingKind.CASTLE) == [aoeworld.UnitKind.VASSAL, aoeworld.UnitKind.GENERAL]
+    assert aoeworld.trainable(aoeworld.BuildingKind.CASTLE) == [
+        aoeworld.UnitKind.VASSAL,
+        aoeworld.UnitKind.GENERAL,
+        aoeworld.UnitKind.TREBUCHET,
+        aoeworld.UnitKind.PETARD,
+    ]
     cost = aoeworld.unit_cost(aoeworld.UnitKind.STEWARD)
     assert cost == (1000, 0, 1000, 0)
     assert aoeworld.train_seconds(aoeworld.UnitKind.STEWARD) == 60

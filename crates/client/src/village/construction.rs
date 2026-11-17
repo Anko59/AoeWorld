@@ -8,15 +8,26 @@ use aoe_protocol::{BuildingKind, ConstructionState, GameplayClientMessage as Mes
 
 #[inline(never)]
 pub(super) fn builders(client: &Client) -> Vec<EntityId> {
+    selected_of(client, UnitKind::Villager)
+}
+
+/// Selected own Fishing Ships, the builders of Fish Traps.
+#[inline(never)]
+pub(super) fn ship_builders(client: &Client) -> Vec<EntityId> {
+    selected_of(client, UnitKind::FishingShip)
+}
+
+fn selected_of(client: &Client, kind: UnitKind) -> Vec<EntityId> {
     client
         .selected
         .units
         .iter()
         .copied()
         .filter(|id| {
-            client.units.get(id).is_some_and(|u| {
-                u.player == owner(client) && u.hp > 0 && u.kind == UnitKind::Villager
-            })
+            client
+                .units
+                .get(id)
+                .is_some_and(|u| u.player == owner(client) && u.hp > 0 && u.kind == kind)
         })
         .take(aoe_protocol::MAX_BUILD_GROUP)
         .collect()
@@ -59,11 +70,16 @@ pub(super) fn enabled(client: &Client, kind: BuildingKind, count: u32) -> bool {
     else {
         return false;
     };
-    if !has_builders(client) {
+    if !has_builders(client) && ship_builders(client).is_empty() {
         return false;
     }
-    building_ui::availability::BuildMenu::new(Some(player), completed(client), true)
-        .enabled(kind, count)
+    building_ui::availability::BuildMenu::new(
+        Some(player),
+        completed(client),
+        has_builders(client),
+        !ship_builders(client).is_empty(),
+    )
+    .enabled(kind, count)
 }
 
 #[inline(never)]
@@ -111,12 +127,21 @@ pub(super) fn valid(client: &Client, kind: BuildingKind, origin: TileCoord) -> b
             }
             let ground = map::terrain_tile(client, tile.x, tile.y).map_or(
                 client.map_content_hash.is_none()
-                    && !matches!(kind, BuildingKind::Dock | BuildingKind::Bridge),
+                    && !matches!(
+                        kind,
+                        BuildingKind::Dock | BuildingKind::Bridge | BuildingKind::FishTrap
+                    ),
                 |t| {
                     let wet = t.water != aoe_map::WaterKind::None;
                     water |= wet;
                     land |= t.passable && t.water == aoe_map::WaterKind::None;
-                    t.passable || (matches!(kind, BuildingKind::Dock | BuildingKind::Bridge) && wet)
+                    // A Fish Trap stands on open water only.
+                    if kind == BuildingKind::FishTrap {
+                        wet
+                    } else {
+                        t.passable
+                            || (matches!(kind, BuildingKind::Dock | BuildingKind::Bridge) && wet)
+                    }
                 },
             );
             ground
@@ -243,6 +268,8 @@ pub(in super::super) fn place(client: &mut Client, point: ScreenPoint, release: 
     let sequence = client.next_sequence;
     let builder_ids = if far {
         strategic::choose(client.units.values(), owner(client), at)
+    } else if kind == BuildingKind::FishTrap {
+        ship_builders(client)
     } else {
         builders(client)
     };
@@ -304,17 +331,29 @@ pub(super) fn target(
 
 #[inline(never)]
 pub(super) fn interact(client: &mut Client, point: ScreenPoint) -> bool {
-    let ids = builders(client);
+    let mut ids = builders(client);
+    if ids.is_empty() {
+        // Fishing Ships build and work Fish Traps the way villagers do farms.
+        ids = ship_builders(client);
+    }
     if ids.is_empty() || client.village.move_cursor {
         return false;
     }
     let Some(b) = target(client, point) else {
         return false;
     };
+    let worker = if b.kind == BuildingKind::FishTrap {
+        UnitKind::FishingShip
+    } else {
+        UnitKind::Villager
+    };
+    if client.units.get(&ids[0]).is_none_or(|u| u.kind != worker) {
+        return false;
+    }
     let (id, unfinished, farm) = (
         b.id,
         b.construction == ConstructionState::UnderConstruction || b.hp < b.max_hp,
-        b.kind == BuildingKind::Farm,
+        matches!(b.kind, BuildingKind::Farm | BuildingKind::FishTrap),
     );
     if unfinished {
         let sequence = client.next_sequence;

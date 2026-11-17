@@ -86,7 +86,8 @@ pub(super) fn update(client: &Client, scale: f64) {
         }
     }
     let builders = player.is_some() && construction::has_builders(client);
-    let build_menu = availability::BuildMenu::new(player, completed, builders);
+    let ships = player.is_some() && !construction::ship_builders(client).is_empty();
+    let build_menu = availability::BuildMenu::new(player, completed, builders, ships);
     for kind in KINDS.into_iter().skip(1).chain(std::iter::once(KINDS[0])) {
         v.push(f64::from(u8::from(build_menu.enabled(kind, 1))));
     }
@@ -207,7 +208,7 @@ fn far_commerce_order(client: &mut Client, action: u32, code: usize, target: u32
     send(client, message);
 }
 
-pub(super) const KINDS: [aoe_protocol::BuildingKind; 25] = aoe_protocol::BuildingKind::ALL;
+pub(super) const KINDS: [aoe_protocol::BuildingKind; 26] = aoe_protocol::BuildingKind::ALL;
 
 #[inline(never)]
 pub(in super::super) fn preview(client: &Client, units: &mut Vec<aoe_rendering::SceneUnit>) {

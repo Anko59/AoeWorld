@@ -29,14 +29,7 @@ fn category(kind: UnitKind) -> usize {
         UnitKind::Villager | UnitKind::Vassal | UnitKind::Steward
     ) {
         0
-    } else if matches!(
-        kind,
-        UnitKind::BatteringRam
-            | UnitKind::CappedRam
-            | UnitKind::SiegeRam
-            | UnitKind::Mangonel
-            | UnitKind::Onager
-    ) {
+    } else if kind.is_siege() {
         2
     } else {
         1

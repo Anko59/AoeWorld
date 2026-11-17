@@ -23,6 +23,16 @@ const ADDITIONAL: &[(i16, i32)] = &[
     (12, 7012),
     (221, 7231),
     (279, 7277),
+    // Naval Warfare Overhaul research: language name ids from the DE data.
+    (906, 507005),
+    (65, 7314),
+    (374, 7372),
+    (375, 7373),
+    (373, 7377),
+    (908, 507003),
+    (907, 507004),
+    (909, 507006),
+    (910, 507007),
     // Generic technologies of content track B (DAT ids, language name ids).
     (215, 7210),
     (602, 7258),

@@ -71,28 +71,27 @@ fn feudal_buildings_are_age_gated_atomically_then_build_with_de_stats() {
         );
         let c = building_combat(kind);
         assert_eq!((c.melee_armour, c.pierce_armour), armour);
-        assert_eq!(
-            r.trainable,
-            match kind {
-                ArcheryRange => &[
-                    UnitKind::Archer,
-                    UnitKind::Skirmisher,
-                    UnitKind::Crossbowman,
-                    UnitKind::EliteSkirmisher,
-                    UnitKind::Arbalester
-                ][..],
-                Stable => &[
-                    UnitKind::Scout,
-                    UnitKind::Knight,
-                    UnitKind::LightCavalry,
-                    UnitKind::Cavalier,
-                    UnitKind::Paladin,
-                    UnitKind::Hussar
-                ][..],
-                Market => &[UnitKind::TradeCart][..],
-                _ => &[][..],
-            }
-        );
+        // Later lines append after these (pinned in combat::siege::tests).
+        let expected = match kind {
+            ArcheryRange => &[
+                UnitKind::Archer,
+                UnitKind::Skirmisher,
+                UnitKind::Crossbowman,
+                UnitKind::EliteSkirmisher,
+                UnitKind::Arbalester,
+            ][..],
+            Stable => &[
+                UnitKind::Scout,
+                UnitKind::Knight,
+                UnitKind::LightCavalry,
+                UnitKind::Cavalier,
+                UnitKind::Paladin,
+                UnitKind::Hussar,
+            ][..],
+            Market => &[UnitKind::TradeCart][..],
+            _ => &[][..],
+        };
+        assert_eq!(&r.trainable[..expected.len()], expected);
         let x = 130 + 10 * i as i32;
         let worker = villager_at(&mut world, x - 1, 100);
         fixture::survey(&mut world, PlayerId(0), at(x + 1, 101), 3);

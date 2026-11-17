@@ -109,6 +109,7 @@ impl GameWorld {
         if self.units[index].state.hp == 0 || self.embarked(id) {
             return Err(GameWorldError::UnknownEntity);
         }
+        self.pack_for_move(index);
         // Snap into the legal edge band (as on dev), keeping the exact point:
         // radius movement honours positions inside a tile.
         let destination = self.config.clamp_ground_position(destination);

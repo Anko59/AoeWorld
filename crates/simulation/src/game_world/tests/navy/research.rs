@@ -182,7 +182,7 @@ fn castle_age_enables_war_galley_and_upgrades_existing_queued_and_future_ships()
     let upgraded = world.unit(damaged).unwrap();
     assert_eq!(
         (upgraded.kind, upgraded.hp, upgraded.max_hp),
-        (UnitKind::WarGalley, 105, 135)
+        (UnitKind::WarGalley, 105, 125)
     );
     assert_eq!(world.unit(enemy).unwrap().kind, UnitKind::Galley);
     assert_eq!(world.unit(fishing).unwrap().kind, UnitKind::FishingShip);
@@ -195,7 +195,7 @@ fn castle_age_enables_war_galley_and_upgrades_existing_queued_and_future_ships()
             .filter(|unit| unit.player == PlayerId(0))
             .all(|unit| unit.kind != UnitKind::Galley)
     );
-    advance(&mut world, 23 * 20);
+    advance(&mut world, 25 * 20);
     assert!(
         world
             .building(training_dock)
@@ -217,7 +217,7 @@ fn castle_age_enables_war_galley_and_upgrades_existing_queued_and_future_ships()
         world.building(training_dock).unwrap().training_queue[0].kind,
         UnitKind::WarGalley
     );
-    advance(&mut world, 36 * 20);
+    advance(&mut world, 28 * 20);
     assert_eq!(
         world
             .units()

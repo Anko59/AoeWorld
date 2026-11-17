@@ -29,14 +29,27 @@ impl Decoder {
         })
     }
     pub fn new(install: &Path, source: &Selected) -> Result<Self, Error> {
+        // One-part sources stream (the unpacked Trebuchet's attack alone
+        // exceeds the whole-file decode bound).
+        if let [part] = source.parts.as_slice() {
+            let path = install
+                .join(GRAPHICS)
+                .join(format!("{}.sld", part.animation.file));
+            return Ok(Self {
+                source: Some(source.clone()),
+                parts: Vec::new(),
+                stream: Some(sld::Stream::new(read_bounded(&path)?)?),
+            });
+        }
         let mut parts = Vec::new();
         let mut bytes = 0usize;
         for part in &source.parts {
-            let frames = sld::parse(&read_bounded(
-                &install
-                    .join(GRAPHICS)
-                    .join(format!("{}.sld", part.animation.file)),
-            )?)?;
+            let path = install
+                .join(GRAPHICS)
+                .join(format!("{}.sld", part.animation.file));
+            let frames = sld::parse(&read_bounded(&path)?).inspect_err(|_| {
+                eprintln!("SLD decode failed: {}", path.display());
+            })?;
             bytes += frames
                 .iter()
                 .map(|f| {
@@ -59,12 +72,14 @@ impl Decoder {
         })
     }
     pub fn len(&self) -> usize {
-        if let Some(stream) = &self.stream {
+        if let Some(stream) = &self.stream
+            && self.source.is_none()
+        {
             return stream.len();
         }
         self.source
             .as_ref()
-            .map_or(self.parts[0].len(), |s| usize::from(s.cells))
+            .map_or_else(|| self.parts[0].len(), |s| usize::from(s.cells))
     }
     pub fn frame(&mut self, index: usize) -> Result<Planes, Error> {
         if let Some(stream) = &mut self.stream {

@@ -146,7 +146,11 @@ impl GameWorld {
         };
         state.researched |= tech.bit();
         match tech.rules().effect {
-            TechEffect::UpgradeGalley => self.upgrade_galleys(player, changed),
+            TechEffect::UpgradeShips(pairs) => {
+                for &(from, to) in pairs {
+                    self.upgrade_units(player, from, to, changed);
+                }
+            }
             TechEffect::Military => {
                 if matches!(tech, Tech::Fletching | Tech::BodkinArrow | Tech::Bracer) {
                     for b in self.economy.buildings.values_mut().filter(|b| {

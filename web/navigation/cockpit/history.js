@@ -5,9 +5,9 @@ const CAP = 240, STEP_MS = 5000;
 export const resourceColours = { wood: '#c28a4b', food: '#d65c6a', gold: '#f0c63e', stone: '#aeb4c0' };
 export const armyClasses = [
   ['Infantry', '#d9c39b', ['Militia', 'ManAtArms', 'Spearman', 'LongSwordsman', 'Pikeman', 'TwoHandedSwordsman', 'Champion', 'Halberdier']],
-  ['Ranged', '#79cf91', ['Archer', 'Skirmisher', 'Crossbowman', 'EliteSkirmisher', 'Arbalester']],
-  ['Cavalry', '#7fb4ee', ['Scout', 'Knight', 'LightCavalry', 'Cavalier', 'Paladin', 'Hussar']],
-  ['Siege', '#e8a071', ['Mangonel', 'BatteringRam', 'CappedRam', 'SiegeRam', 'Onager']],
+  ['Ranged', '#79cf91', ['Archer', 'Skirmisher', 'Crossbowman', 'EliteSkirmisher', 'Arbalester', 'CavalryArcher', 'HeavyCavalryArcher', 'HandCannoneer']],
+  ['Cavalry', '#7fb4ee', ['Scout', 'Knight', 'LightCavalry', 'Cavalier', 'Paladin', 'Hussar', 'CamelRider', 'HeavyCamelRider']],
+  ['Siege', '#e8a071', ['Mangonel', 'BatteringRam', 'CappedRam', 'SiegeRam', 'Onager', 'SiegeOnager', 'Scorpion', 'HeavyScorpion', 'BombardCannon', 'Trebuchet', 'TrebuchetUnpacked', 'Petard']],
   ['Other', '#c9a1e6', []],
 ];
 export function armyClassOf(kind) {

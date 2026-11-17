@@ -23,6 +23,10 @@ MILITARY = (
     UnitKind.TWO_HANDED_SWORDSMAN, UnitKind.CHAMPION, UnitKind.HALBERDIER, UnitKind.ARBALESTER,
     UnitKind.CAVALIER, UnitKind.PALADIN, UnitKind.HUSSAR,
     UnitKind.CAPPED_RAM, UnitKind.SIEGE_RAM, UnitKind.ONAGER,
+    UnitKind.CAVALRY_ARCHER, UnitKind.HEAVY_CAVALRY_ARCHER, UnitKind.CAMEL_RIDER,
+    UnitKind.HEAVY_CAMEL_RIDER, UnitKind.SCORPION, UnitKind.HEAVY_SCORPION,
+    UnitKind.HAND_CANNONEER, UnitKind.BOMBARD_CANNON, UnitKind.TREBUCHET,
+    UnitKind.TREBUCHET_UNPACKED, UnitKind.PETARD, UnitKind.SIEGE_ONAGER,
 )
 
 #: Buildings that accept each resource as a drop-off.

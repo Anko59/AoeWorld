@@ -2,10 +2,13 @@ use super::{MAX_FRAMES, MAX_PAGES, Manifest, PAGE, compressed, frame_chunks};
 use crate::{Error, invalid};
 use std::{collections::BTreeSet, fs, io::Cursor, path::Path};
 
+/// The complete native inventory (hundreds of thousands of cells) plus buildings.
+const MAX_MANIFEST_BYTES: u64 = 64 * 1024 * 1024;
+
 pub fn verify(pack: &Path) -> Result<Manifest, Error> {
     let manifest_path = pack.join("manifest.json");
-    if fs::metadata(&manifest_path)?.len() > 32 * 1024 * 1024 {
-        return Err(invalid("manifest", 0, "manifest exceeds 32 MiB"));
+    if fs::metadata(&manifest_path)?.len() > MAX_MANIFEST_BYTES {
+        return Err(invalid("manifest", 0, "manifest exceeds 64 MiB"));
     }
     let manifest = parse_manifest(&fs::read(manifest_path)?)?;
     for page in &manifest.pages {
@@ -79,8 +82,8 @@ fn verify_chunks(pack: &Path, manifest: &Manifest) -> Result<(), Error> {
 }
 
 pub fn parse_manifest(bytes: &[u8]) -> Result<Manifest, Error> {
-    if bytes.len() > 32 * 1024 * 1024 {
-        return Err(invalid("manifest", 0, "manifest exceeds 32 MiB"));
+    if bytes.len() as u64 > MAX_MANIFEST_BYTES {
+        return Err(invalid("manifest", 0, "manifest exceeds 64 MiB"));
     }
     let manifest: Manifest = serde_json::from_slice(bytes)?;
     if manifest.version != 1

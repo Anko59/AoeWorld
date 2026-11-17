@@ -42,7 +42,7 @@ impl GameWorld {
         to: TileCoord,
         queued: bool,
     ) -> Result<EntityId, EconomyError> {
-        let builders = self.validate_builders(player, builders)?;
+        let builders = self.validate_builders(player, builders, false)?;
         self.validate_build_queue(&builders, 1, queued)?;
         let snapped = aoe_core::snap_bridge_start(
             from,

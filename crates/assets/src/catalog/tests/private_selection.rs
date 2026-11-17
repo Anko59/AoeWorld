@@ -102,7 +102,7 @@ pub(super) fn overlay(
     let mut bytes = Vec::new();
     file.take(MAX_MANIFEST_BYTES + 1).read_to_end(&mut bytes)?;
     if bytes.len() as u64 > MAX_MANIFEST_BYTES {
-        return Err("overlay manifest exceeds 32MiB".into());
+        return Err("overlay manifest exceeds 64MiB".into());
     }
     let mut extra: Manifest = serde_json::from_slice(&bytes)?;
     let offset = u16::try_from(manifest.pages.len())?;

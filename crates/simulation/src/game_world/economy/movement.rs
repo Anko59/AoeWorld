@@ -220,6 +220,13 @@ impl GameWorld {
             economy.is_some_and(|p| p.age >= crate::Age::Feudal),
             researched,
         );
+        let hundredths = hundredths.map(|speed| {
+            if kind.is_naval() {
+                super::super::combat::military::naval_speed(kind, speed, researched)
+            } else {
+                speed
+            }
+        });
         if let Some(hundredths) = hundredths {
             (
                 u64::from(hundredths) * FIXED_SUBUNITS_PER_TILE as u64,
