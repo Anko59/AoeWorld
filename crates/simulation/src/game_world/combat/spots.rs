@@ -67,6 +67,8 @@ impl GameWorld {
         goal: &Goal,
     ) -> Vec<WorldPosition> {
         let id = unit.id;
+        let probe = self.planning_probe.clone();
+        let span = |name| probe.as_ref().and_then(|p| p.movement_span(name));
         let mut points = match goal {
             Goal::Building(rect) => perimeter_positions(*rect, unit.kind),
             Goal::Unit(at, target_radius) => {
@@ -74,7 +76,10 @@ impl GameWorld {
                 let mut points = circle_positions(*at, contact);
                 // Contact points guide the final approach, but a free point
                 // anywhere in actual reach also admits a crowded fighter.
-                if contact < range as i32 && self.crowded_melee_contact(id, goal) {
+                let part = span("melee_crowded");
+                let crowded = contact < range as i32 && self.crowded_melee_contact(id, goal);
+                drop(part);
+                if crowded {
                     points.extend(circle_positions(*at, range as i32));
                 }
                 points
@@ -92,7 +97,9 @@ impl GameWorld {
                 && self.body_position_clear(unit.kind, at)
                 && self.ring_point_reachable(unit, goal, at, &ring)
         };
+        let part = span("melee_valid");
         points.retain(valid);
+        drop(part);
         // A target can stand inside newly blocked ground. Its contact ring
         // is then obstructed too; use the nearest legal firing reach instead.
         if points.is_empty()
@@ -205,10 +212,20 @@ impl GameWorld {
         ring: &std::cell::OnceCell<bool>,
     ) -> bool {
         match goal {
-            Goal::Unit(target, _) => {
-                *ring.get_or_init(|| self.melee_point_reachable(unit, *target))
+            Goal::Unit(target, _) => *ring.get_or_init(|| {
+                let _part = self
+                    .planning_probe
+                    .as_ref()
+                    .and_then(|p| p.movement_span("melee_reachable"));
+                self.melee_point_reachable(unit, *target)
+            }),
+            Goal::Building(_) => {
+                let _part = self
+                    .planning_probe
+                    .as_ref()
+                    .and_then(|p| p.movement_span("melee_reachable"));
+                self.melee_point_reachable(unit, at)
             }
-            Goal::Building(_) => self.melee_point_reachable(unit, at),
         }
     }
 
