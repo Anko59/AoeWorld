@@ -464,6 +464,34 @@ impl Regions {
         let goal = self.closure_root(player, self.global.root(goal));
         self.reachable_roots(player, from).contains(&goal)
     }
+
+    /// `reachable` from one origin to each of `to`, with the same answers.
+    /// The origin's reachable closure, which visits every gated link, is
+    /// built once rather than once per goal.
+    pub fn reachable_each(
+        &mut self,
+        ground: &dyn RegionGround,
+        player: u32,
+        from: TileCoord,
+        to: &[TileCoord],
+    ) -> Vec<bool> {
+        if self.chunks.is_empty() {
+            return to
+                .iter()
+                .map(|&tile| self.reachable(ground, player, from, tile))
+                .collect();
+        }
+        self.flush(ground);
+        let roots = self.reachable_roots(player, from);
+        to.iter()
+            .map(|&tile| {
+                self.node(tile).is_some_and(|goal| {
+                    let goal = self.global.root(goal);
+                    roots.contains(&self.closure_root(player, goal))
+                })
+            })
+            .collect()
+    }
 }
 
 #[path = "regions/tests.rs"]
