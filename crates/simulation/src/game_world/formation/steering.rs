@@ -4,6 +4,7 @@ use super::packing::block_heading;
 use super::*;
 use crate::game_world::movement_step::settling::GIVE_UP_AFTER_TICKS;
 
+mod body;
 mod speed;
 
 impl GameWorld {
@@ -49,6 +50,7 @@ impl GameWorld {
                 );
             }
         }
+        self.census_bodies(&movers);
         scratch.group_phase = true;
         {
             let _span = self
