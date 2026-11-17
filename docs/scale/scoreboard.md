@@ -31,13 +31,14 @@ one on the base revision before comparing, and say so.
 ## Baseline, 2026-11-17, revision `5c34c215a`
 
 `dev` `b27321d21` plus the owner build's content (#872) and the replay work
-numbers of this change.
+numbers of this change. Live figures come from plain runs (the command above):
+a run that records commands is about 28% slower and is only for the stream.
 
 | Measure | Value |
 | --- | ---: |
-| Live ticks/s, 99 AIs, 285 s (load 3.3 at start) | 2.63 |
-| Live tick p50 / p95 | 368 / 511 ms |
-| Live advance p50 | 250 ms |
+| Live ticks/s, 99 AIs, 5 min, plain run (load 3.6 at start) | 3.66 |
+| Live tick p50 / p95, plain run | 258 / 399 ms |
+| Live ticks/s while recording commands (p50 / p95 368 / 511 ms) | 2.63 |
 | Replay instructions/tick, 1 worker (p50, p95) | 1,106.1M (1,061M, 1,524M) |
 | Instructions/tick per restored unit | 24.3k |
 | Main-thread instructions/tick, 6 workers | 839.2M |
@@ -46,8 +47,8 @@ Replay phases, 1 worker, millions of instructions per tick (they nest):
 movement 758.5, group_apply 242.6, sidestep 183.0, combat 181.8, plan_serve
 133.5, group_propose 118.2, apply_loop 114.4, search 83.5, plan_fast 75.4,
 steward_economy 61.2, group_prepare 51.5, propose 42.0, gathering 35.1.
-Live phases, p50 ms: movement 157, combat 54, group_apply 52, apply_loop 38,
-plan_serve 22, index_collision 18, fanout_wait 16.
+Live phases of the recording run, p50 ms: movement 157, combat 54,
+group_apply 52, apply_loop 38, plan_serve 22, index_collision 18, fanout_wait 16.
 
 Work in the replay window: 12,103 commands, 2,340 refused; 23,136 hits, 363
 kills; 17.8k–19.4k units with a movement goal; units waiting for a route
@@ -58,4 +59,6 @@ group carriers that wait at the end of the window have waited all of it.
 
 The report's `queue_series` carries these every 100 ticks, with `movers` and
 `delivered_last_minute` (income is not saved, so it starts empty at the
-restore).
+restore). Saves do not keep route searches, so the first ~400 ticks of the
+window are a restore transient: waiting falls from 6.4k to a plateau of ~3.7k.
+Route-cache hits were 3,733 of 46,732 orders.
