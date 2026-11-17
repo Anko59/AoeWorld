@@ -297,6 +297,15 @@ impl GameWorld {
             .planning_probe
             .as_ref()
             .and_then(|p| p.movement_span("sidestep"));
+        let _attacker = self
+            .planning_probe
+            .as_ref()
+            .filter(|_| {
+                self.combat
+                    .attackers
+                    .contains_key(&self.units[index].state.id)
+            })
+            .and_then(|p| p.movement_span("sidestep_attacker"));
         let unit = self.units[index].state;
         let from = unit.position;
         if self.config.valid_ground_position(proposed)

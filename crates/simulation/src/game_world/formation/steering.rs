@@ -62,8 +62,13 @@ impl GameWorld {
             .as_ref()
             .and_then(|p| p.movement_span("group_apply"));
         let mut unused = Vec::new();
-        for turn in 0..movers.len() {
+        for (turn, id) in movers.iter().enumerate() {
             if let Some(step) = scratch.take_step(turn) {
+                let _attacker = self
+                    .planning_probe
+                    .clone()
+                    .filter(|_| self.combat.attackers.contains_key(id))
+                    .and_then(|p| p.movement_span("group_apply_attacker"));
                 self.apply_step(step, &mut unused, changed);
             }
         }
