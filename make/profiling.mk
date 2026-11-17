@@ -58,9 +58,11 @@ match-bench: resource-bootstrap
 match-bench-admitted: job-bootstrap
 	@$(MAKE) --no-print-directory match-bench-steps
 
+# Its own target: valgrind-requests builds stubs where Valgrind headers are
+# missing, and a release build from the ordinary image would be reused here.
 match-bench-steps:
 	@$(MAKE) --no-print-directory analysis-tools
-	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo run --release --locked -p aoe-harness -- match-bench $(MATCH_BENCH_ARGS)
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e $(call MOUNT_QUOTE,CARGO_TARGET_DIR=$(ROOT)/.cache/match-bench/target) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo run --release --locked -p aoe-harness -- match-bench $(MATCH_BENCH_ARGS)
 
 # Movement apply census: the ignored 100-seat profiling test, under the long-job lock.
 .PHONY: movement-apply-census movement-apply-census-admitted movement-apply-census-steps
