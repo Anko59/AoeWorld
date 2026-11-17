@@ -69,7 +69,8 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
         let first_kills = service.inspect_scale_world(|w| kills(w)).await;
         let mut fight = [0u64; 3];
         let mut timing_commands = BTreeMap::<String, (u64, u64)>::new();
-        for tick in &recording.ticks {
+        let mut queue_series = Vec::new();
+        for (index, tick) in recording.ticks.iter().enumerate() {
             commands += tick.commands.len();
             let hash = service.replay_step(tick, &mut |timing| {
                 total.push(timing.instructions);
@@ -98,6 +99,21 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
             for (total, now) in census.iter_mut().zip(movers) { *total += now; }
             if hash != tick.hash && divergence.is_none() { divergence = Some(tick.tick + 1); }
             hashes.push(json!({"tick": tick.tick + 1, "hash": hex(&hash)}));
+            // The queue every 100 ticks: one end-of-window snapshot is too
+            // noisy to compare scheduler changes by.
+            if (index + 1) % 100 == 0 {
+                queue_series.push(service.inspect_scale_world(|w| {
+                    let mut routes = scheduler_json(&w.route_scheduler_stats(), w.tick().0);
+                    routes["queue"] = queue_json(&w.route_queue_breakdown(), &[]);
+                    routes.as_object_mut().map(|o| o.remove("attribution"));
+                    // Work beside the queue: units with a movement goal, and
+                    // resources delivered in the last minute (income is not
+                    // saved, so it starts empty at the restore).
+                    routes["movers"] = json!(w.order_mover_census().iter().sum::<u64>());
+                    routes["delivered_last_minute"] = json!(w.players().map(|p| w.recent_deliveries(p.player).iter().sum::<u64>()).sum::<u64>());
+                    routes
+                }).await);
+            }
         }
         // Include zeros for phases absent from individual ticks in percentile summaries.
         for series in phases.values_mut() { series.resize(recording.ticks.len(), 0); }
@@ -122,7 +138,7 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
         Ok(json!({ "combat_quality": combat_quality, "parallel_phase_instructions_mean": parallel_phase_mean, "parallel_sites": parallel_sites, "order_attribution": attribution, "refused_commands": refused, "initial_hash": hex(&initial), "total_cpu_ms_per_tick": cpu.summary(), "total_wall_ms_per_tick": wall.summary(), "phases_cpu_ms": phases_cpu_summary, "total_instructions_per_tick": counts::summary(&total), "phases_instructions": phase_summary,
             "first_divergence_tick": divergence, "final_hash": hashes.last().ok_or("empty replay")?["hash"],
             "movement_progress": progress.summary(recording.ticks.last().ok_or("empty replay")?.tick + 1),
-            "navigation_calls": navigation_calls, "routes": routes,
+            "navigation_calls": navigation_calls, "routes": routes, "queue_series": queue_series,
             "hashes": hashes, "raw": raw, "commands": commands, "restore": format!("{restored:?}") }))
     })
 }
