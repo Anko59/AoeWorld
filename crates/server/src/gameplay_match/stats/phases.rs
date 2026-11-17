@@ -6,7 +6,7 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 
-pub(super) const NAMES: [&str; 58] = [
+pub(super) const NAMES: [&str; 60] = [
     "sessions",
     "world_lock",
     "orders",
@@ -65,6 +65,8 @@ pub(super) const NAMES: [&str; 58] = [
     "attacker_goal",
     "attacker_reach",
     "attacker_prefetch",
+    "attack_melee_points",
+    "attack_far_destination",
 ];
 type Counters = Arc<[AtomicU64; NAMES.len()]>;
 

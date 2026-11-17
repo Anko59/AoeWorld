@@ -179,6 +179,10 @@ impl GameWorld {
         let range = super::super::navy::attack_range(&stats);
         let min = i64::from(stats.min_range) * MELEE_RANGE_SUBUNITS;
         let origin = unit.position.tile_floor();
+        let probe = self.planning_probe.clone();
+        let points_span = probe
+            .as_ref()
+            .and_then(|p| p.movement_span("attack_melee_points"));
         let mut melee =
             Self::uses_melee_position(unit.kind).then(|| self.melee_positions(&unit, range, goal));
         // Candidates are nearest first. Only the first four free ones get the
@@ -226,6 +230,7 @@ impl GameWorld {
                 });
             }
         }
+        drop(points_span);
         if !budget_open {
             return done(AttackSearch {
                 destination: None,
@@ -345,6 +350,9 @@ impl GameWorld {
         if capped {
             // The bounded local search ran out before it met the target: a
             // far target. Pick the firing tile at the target instead.
+            let _far = probe
+                .as_ref()
+                .and_then(|p| p.movement_span("attack_far_destination"));
             return spent(AttackSearch {
                 destination: self.far_attack_destination(unit.kind, origin, goal, range, min)?,
                 far: true,
