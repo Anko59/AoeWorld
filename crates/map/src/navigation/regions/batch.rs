@@ -68,4 +68,21 @@ impl Regions {
         }
         true
     }
+
+    /// `player_component` of each tile, with one flush for all of them.
+    pub fn player_component_each(
+        &mut self,
+        ground: &dyn RegionGround,
+        player: u32,
+        tiles: &[TileCoord],
+    ) -> Vec<Option<u32>> {
+        self.flush(ground);
+        tiles
+            .iter()
+            .map(|&tile| {
+                let root = self.global.root(self.node(tile)?);
+                Some(self.closure_root(player, root))
+            })
+            .collect()
+    }
 }
