@@ -257,13 +257,37 @@ pub(super) fn host_names(options: &Options) -> Result<Vec<String>, BoxError> {
 pub(super) fn sample(server: &Server, seconds: f64, strict: bool) -> Result<Value, BoxError> {
     let perf = server.get("/admin/perf");
     let routes = server.get("/admin/match/routes");
-    let row = if strict {
+    let mut row = if strict {
         report::phase_minute(Some(perf?), Some(routes?), seconds)
     } else {
         report::phase_minute(perf.ok(), routes.ok(), seconds)
     };
+    // Work beside the speed numbers (#865 rule 2): kills and losses so far,
+    // and the hits and deaths of the last game minute.
+    if let Ok(state) = server.get("/admin/match") {
+        row["work"] = work(&state);
+    }
     println!("  phases (p50, p95 ms) {row}");
     Ok(row)
+}
+
+fn work(state: &Value) -> Value {
+    let total = |key: &str| {
+        state["players"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|player| player[key].as_u64())
+            .sum::<u64>()
+    };
+    let minute = &state["combat_per_minute"];
+    serde_json::json!({
+        "kills": total("kills"),
+        "losses": total("losses"),
+        "melee_hits_per_minute": minute["melee_hits"],
+        "ranged_hits_per_minute": minute["ranged_hits"],
+        "deaths_per_minute": minute["deaths"],
+    })
 }
 
 #[cfg(test)]
