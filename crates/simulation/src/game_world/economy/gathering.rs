@@ -166,7 +166,11 @@ impl GameWorld {
         sink: &mut impl FnMut(&PreparedResourceDepletion<'_>) -> bool,
         changed: &mut Vec<EntityId>,
     ) {
+        let probe = self.planning_probe.clone();
+        let span = |name| probe.as_ref().and_then(|p| p.movement_span(name));
+        let part = span("g_wake");
         self.wake_before_gathering(changed);
+        drop(part);
         self.economy.gatherers.begin_loop();
         let mut cursor = None;
         loop {
@@ -175,9 +179,16 @@ impl GameWorld {
                 break;
             };
             cursor = Some(id);
+            let part = span("g_crowd");
             self.economy.gatherers.observe_crowd(id);
+            drop(part);
+            let part = span("g_refine");
             self.refine_gather_approach(id);
-            if self.gather_visit_skips(id) {
+            drop(part);
+            let part = span("g_skips");
+            let skips = self.gather_visit_skips(id);
+            drop(part);
+            if skips {
                 continue;
             }
             let Some(mut task) = self.economy.gatherers.remove(&id) else {
@@ -190,8 +201,11 @@ impl GameWorld {
             let work_position = task.work_position;
             let phase = task.phase;
             self.count_gather(Count::Steps, 1);
+            let part = span("g_step");
             let keep = self.gather_step(id, &mut task, sink);
+            drop(part);
             if keep {
+                let _part = span("g_sleep");
                 self.try_sleep_gatherer(id, &mut task);
                 let dozes = task.sleep.is_some();
                 self.economy.gatherers.insert(id, task);

@@ -6,7 +6,16 @@ use std::sync::{
 };
 use std::time::Instant;
 
-pub(super) const NAMES: [&str; 2] = ["index_collision", "index_chunks"];
+pub(super) const NAMES: [&str; 8] = [
+    "index_collision",
+    "index_chunks",
+    "g_wake",
+    "g_crowd",
+    "g_refine",
+    "g_skips",
+    "g_step",
+    "g_sleep",
+];
 
 #[derive(Debug, Default)]
 pub(super) struct IndexProbe(Arc<[AtomicU64; NAMES.len()]>);
