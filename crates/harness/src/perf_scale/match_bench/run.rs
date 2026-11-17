@@ -177,6 +177,7 @@ fn run_in_pool(plan: &Plan) -> Result<Outcome, BoxError> {
         "passes": passes,
         "gather_work": gather_work(world),
         "walker_wakes": GameWorld::walker_wakes(),
+        "resource_cache": world.resource_cache_usage(),
         "memory": memory(),
         "final_hash": hashes.last().map(|(_, h)| h.clone()),
     });
