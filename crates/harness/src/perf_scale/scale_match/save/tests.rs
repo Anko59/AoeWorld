@@ -218,3 +218,16 @@ fn dangling_save_destination_is_a_collision() {
         missing
     );
 }
+
+#[test]
+fn work_sums_kills_and_losses_and_keeps_the_minute_counts() {
+    let state = serde_json::json!({
+        "players": [{"kills": 3, "losses": 1}, {"kills": 2, "losses": 4}, {}],
+        "combat_per_minute": {"melee_hits": 7, "ranged_hits": 5, "deaths": 2},
+    });
+    assert_eq!(
+        super::work(&state),
+        serde_json::json!({"kills": 5, "losses": 5, "melee_hits_per_minute": 7,
+            "ranged_hits_per_minute": 5, "deaths_per_minute": 2})
+    );
+}
