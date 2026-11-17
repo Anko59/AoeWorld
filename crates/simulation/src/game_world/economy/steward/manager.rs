@@ -26,7 +26,16 @@ fn dist2(a: WorldPosition, b: WorldPosition) -> i64 {
 impl GameWorld {
     pub(crate) fn advance_stewards(&mut self, changed: &mut Vec<EntityId>) {
         let mut work = StewardWork::default();
-        if !self.tick.0.is_multiple_of(STEWARD_RULES.period_ticks) {
+        // The pass's domains spread over its period, one tick at a time,
+        // instead of all on one tick in twenty: the same throughput without
+        // a tick that carries every domain (#865 A2).
+        let (period, per_pass) = (
+            STEWARD_RULES.period_ticks,
+            STEWARD_RULES.domains_per_pass as u64,
+        );
+        let phase = self.tick.0 % period;
+        let take = ((phase + 1) * per_pass / period - phase * per_pass / period) as usize;
+        if take == 0 {
             self.economy.stewards.work = work;
             return;
         }
@@ -35,15 +44,11 @@ impl GameWorld {
             active
                 .range((Excluded(cursor), Unbounded))
                 .chain(active.range(..=cursor))
-                .take(STEWARD_RULES.domains_per_pass)
+                .take(take)
                 .copied()
                 .collect()
         } else {
-            active
-                .iter()
-                .take(STEWARD_RULES.domains_per_pass)
-                .copied()
-                .collect()
+            active.iter().take(take).copied().collect()
         };
         // A departure reserves its slot until arrival, even when the destination
         // is not among this pass's admitted domains.
