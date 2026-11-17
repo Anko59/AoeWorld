@@ -183,8 +183,11 @@ impl GameWorld {
         let points_span = probe
             .as_ref()
             .and_then(|p| p.movement_span("attack_melee_points"));
+        let span = |name| probe.as_ref().and_then(|p| p.movement_span(name));
+        let part = span("attack_positions");
         let mut melee =
             Self::uses_melee_position(unit.kind).then(|| self.melee_positions(&unit, range, goal));
+        drop(part);
         // Candidates are nearest first. Only the first four free ones get the
         // cheap straight-line proof, so test them lazily: the rest are needed
         // only by the bounded search below, after its budget check.
@@ -201,11 +204,17 @@ impl GameWorld {
             while untested < points.len() && free.len() < 4 {
                 let at = points[untested];
                 untested += 1;
-                if !self.interaction_point_free(id, at) {
+                let part = span("attack_point_free");
+                let open = self.interaction_point_free(id, at);
+                drop(part);
+                if !open {
                     continue;
                 }
                 free.push(at);
-                if self.interaction_line_clear(unit.kind, unit.position, at) {
+                let part = span("attack_line_clear");
+                let clear = self.interaction_line_clear(unit.kind, unit.position, at);
+                drop(part);
+                if clear {
                     return done(AttackSearch {
                         destination: Some(at),
                         far: false,
