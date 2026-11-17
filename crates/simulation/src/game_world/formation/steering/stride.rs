@@ -4,7 +4,7 @@
 use super::*;
 
 /// Ticks between two steps of an unseen mover; 1 disables the experiment.
-pub(crate) const STRIDE: u64 = 4;
+pub(crate) const STRIDE: u64 = 8;
 /// The one human seat of the scoreboard save.
 const HUMAN: aoe_core::PlayerId = aoe_core::PlayerId(0);
 
