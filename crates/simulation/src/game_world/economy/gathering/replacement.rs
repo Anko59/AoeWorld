@@ -65,12 +65,17 @@ impl GameWorld {
         let from = unit.position.tile_floor();
         let reserved = self.economy.gatherers.reserved_target(&id);
         let slots = jobs::slot_capacity(unit.kind);
+        let probe = self.planning_probe.clone();
+        let span = |name| probe.as_ref().and_then(|p| p.movement_span(name));
+        let part = span("g_dropoff");
         let dropoff = task
             .dropoff
             .or_else(|| self.nearest_dropoff(unit.player, from, task.kind))
             .and_then(|id| self.building(id))
             .filter(|b| b.player == unit.player && b.is_complete() && b.kind.accepts(task.kind))
             .map(|b| b.footprint);
+        drop(part);
+        let part = span("g_cands");
         let radius = VILLAGE_RULES.replacement_radius_tiles;
         // Stay in the old work area, even when the drop-off is far away. At
         // most (2r+1)^2 tiles and their cached resource blocks are inspected.
@@ -109,6 +114,7 @@ impl GameWorld {
         // Automatic retargeting spreads cutters: trees that already carry
         // `AUTO_TREE_CUTTERS` gatherers rank after every freer tree in the
         // radius. Manual orders are not routed through here and may stack.
+        drop(part);
         self.count_gather(Count::Replacements, 1);
         self.count_gather(Count::ReplacementCandidates, candidates.len() as u64);
         let crowded = |n: &ResourceNode| self.tree_is_crowded(n, reserved);

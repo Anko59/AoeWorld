@@ -303,7 +303,11 @@ impl GameWorld {
             if task.animal.is_some() {
                 return self.replacement_animal(id, task);
             }
-            if self.replacement_resource(id, task) {
+            let part = self.planning_probe.clone();
+            let part = part.as_ref().and_then(|p| p.movement_span("g_repl"));
+            let replaced = self.replacement_resource(id, task);
+            drop(part);
+            if replaced {
                 return true;
             }
             return self.gather_traffic_blocked(id) && self.queue_resource_approach(id, task.tile);
@@ -314,6 +318,8 @@ impl GameWorld {
                 if let Some(tile) = task.return_target.take() {
                     task.failed_dropoffs.insert(tile);
                 }
+                let _part = self.planning_probe.clone();
+                let _part = _part.as_ref().and_then(|p| p.movement_span("g_return"));
                 return self.begin_return(id, task);
             }
             // Contact with any side finishes the trip, including a route whose
@@ -332,6 +338,8 @@ impl GameWorld {
                 self.units[index].state.carried = None;
                 task.failed_dropoffs.clear();
             }
+            let _part = self.planning_probe.clone();
+            let _part = _part.as_ref().and_then(|p| p.movement_span("g_resume"));
             return self.resume_resource(id, task);
         }
         let tile = self.units[index].state.position.tile_floor();
