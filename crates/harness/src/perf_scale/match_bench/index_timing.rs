@@ -6,7 +6,7 @@ use std::sync::{
 };
 use std::time::Instant;
 
-pub(super) const NAMES: [&str; 8] = [
+pub(super) const NAMES: [&str; 13] = [
     "index_collision",
     "index_chunks",
     "g_wake",
@@ -15,6 +15,11 @@ pub(super) const NAMES: [&str; 8] = [
     "g_skips",
     "g_step",
     "g_sleep",
+    "g_repl",
+    "g_dropoff",
+    "g_cands",
+    "g_return",
+    "g_resume",
 ];
 
 #[derive(Debug, Default)]
