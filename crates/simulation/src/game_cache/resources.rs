@@ -3,8 +3,12 @@
 use crate::game_world::ChunkNodes;
 use std::collections::{BTreeMap, BTreeSet};
 
+/// Bytes, entry overhead included, so empty blocks are bounded too (about
+/// 220,000 of them). There is deliberately no separate entry count: a fixed
+/// 8,192-block cap was smaller than the villages' working set from 50k units
+/// up (14,890 blocks at 48k, 20,721 at 96k, 4.4 and 6.6 MB), so every
+/// replacement search rebuilt evicted blocks from the map generator.
 const MAX_BYTES: usize = 32 << 20;
-const MAX_ENTRIES: usize = 8_192;
 type Key = (i32, i32);
 
 #[derive(Debug)]
@@ -64,7 +68,7 @@ impl ResourceCache {
             self.bytes -= old.bytes;
             self.order.remove(&(old.touched, key));
         }
-        while self.bytes + bytes > self.limit || self.entries.len() >= MAX_ENTRIES {
+        while self.bytes + bytes > self.limit {
             let Some((_, key)) = self.order.pop_first() else {
                 break;
             };
