@@ -234,24 +234,25 @@ impl GameWorld {
                 origin,
                 (retreat * 512).min(distance).min(i64::from(i32::MAX)) as i32,
             );
-            let mut fits = true;
-            for &offset in &slots {
-                let point = layout::oriented(anchor, offset, heading);
-                if !self.config.valid_map_position(point)
-                    || !self.body_position_clear(largest, point)
-                    || !self.land_reachable(
-                        player,
-                        bucket,
-                        origin.tile_floor(),
-                        point.tile_floor(),
-                    )?
+            let points: Vec<_> = slots
+                .iter()
+                .map(|&offset| layout::oriented(anchor, offset, heading))
+                .collect();
+            // Open ground first, then every slot's reachability from one
+            // closure of the origin: one closure per slot made a 500-soldier
+            // order take two minutes on a 100k-unit map (#865 ladder).
+            let open = points.iter().all(|&point| {
+                self.config.valid_map_position(point) && self.body_position_clear(largest, point)
+            });
+            if open {
+                let tiles: Vec<_> = points.iter().map(|point| point.tile_floor()).collect();
+                if self
+                    .land_reachable_each(player, bucket, origin.tile_floor(), &tiles)?
+                    .into_iter()
+                    .all(|reached| reached)
                 {
-                    fits = false;
-                    break;
+                    return Ok(anchor);
                 }
-            }
-            if fits {
-                return Ok(anchor);
             }
         }
         Ok(frontier)
