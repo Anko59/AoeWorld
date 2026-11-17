@@ -105,7 +105,13 @@ impl GameWorld {
         let region = if shared {
             None
         } else {
-            self.formation_region(player, bucket, ids)?
+            {
+                let _part = self
+                    .planning_probe
+                    .as_ref()
+                    .and_then(|p| p.movement_span("f_region"));
+                self.formation_region(player, bucket, ids)?
+            }
         };
         if !shared
             && walkable

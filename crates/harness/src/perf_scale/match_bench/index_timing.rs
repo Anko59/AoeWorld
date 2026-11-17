@@ -6,7 +6,7 @@ use std::sync::{
 };
 use std::time::Instant;
 
-pub(super) const NAMES: [&str; 23] = [
+pub(super) const NAMES: [&str; 25] = [
     "index_collision",
     "index_chunks",
     "g_wake",
@@ -30,6 +30,8 @@ pub(super) const NAMES: [&str; 23] = [
     "f_loop",
     "f_assign",
     "f_install",
+    "f_region",
+    "r_build",
 ];
 
 #[derive(Debug, Default)]

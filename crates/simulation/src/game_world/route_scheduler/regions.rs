@@ -173,6 +173,14 @@ impl GameWorld {
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         let slot = &mut cache[bucket as usize];
+        let built = slot.as_ref().is_some_and(|r| r.stats().builds > 0);
+        let _build = (!built)
+            .then(|| {
+                self.planning_probe
+                    .as_ref()
+                    .and_then(|p| p.movement_span("r_build"))
+            })
+            .flatten();
         let regions = slot.get_or_insert_with(|| {
             Regions::new(self.config.width_tiles, self.config.height_tiles, bucket)
         });
