@@ -89,11 +89,14 @@ impl GameWorld {
             .position
             .tile_floor();
         let shared = self.land_reachable(player, bucket, first, first)? && mutual(first)?;
-        let region = if shared {
+        // Every member's region from one lock and flush: one call per member
+        // cost 125 s for one order on a 100k map (#865 ladder).
+        let member_regions = if shared || !self.has_route_navigation() {
             None
         } else {
-            self.formation_region(player, bucket, ids)?
+            Some(self.land_player_regions(player, bucket, &tiles)?)
         };
+        let region = member_regions.as_deref().and_then(majority_region);
         if !shared
             && walkable
             && (region.is_none()
@@ -102,11 +105,9 @@ impl GameWorld {
             return Ok(centroid);
         }
         let mut nearest = None;
-        for &id in ids {
+        for (n, &id) in ids.iter().enumerate() {
             let unit = self.unit(id).ok_or(EconomyError::UnknownEntity)?;
-            if region.is_some()
-                && self.land_player_region(player, bucket, unit.position.tile_floor())? != region
-            {
+            if region.is_some() && member_regions.as_ref().map(|r| r[n]) != Some(region) {
                 continue;
             }
             let dx = i64::from(unit.position.x) - i64::from(centroid.x);
@@ -129,31 +130,6 @@ impl GameWorld {
                     .map(|u| u.position)
             })
             .ok_or(EconomyError::UnknownEntity)
-    }
-
-    /// The land region holding most members (ties: the lowest region), or
-    /// `None` on ground without obstacles, where every point is reachable.
-    fn formation_region(
-        &self,
-        player: PlayerId,
-        bucket: aoe_map::LandBucket,
-        ids: &[EntityId],
-    ) -> Result<Option<u32>, EconomyError> {
-        if !self.has_route_navigation() {
-            return Ok(None);
-        }
-        let mut counts = BTreeMap::<u32, usize>::new();
-        for unit in ids.iter().filter_map(|&id| self.unit(id)) {
-            if let Some(region) =
-                self.land_player_region(player, bucket, unit.position.tile_floor())?
-            {
-                *counts.entry(region).or_default() += 1;
-            }
-        }
-        Ok(counts
-            .into_iter()
-            .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))
-            .map(|(region, _)| region))
     }
 
     /// Lay the army out around the nearest reachable frontier. The whole
@@ -383,4 +359,17 @@ impl GameWorld {
         group.speed_limit = normalized;
         Ok(())
     }
+}
+
+/// The region holding most members (ties: the lowest region), or `None` when
+/// no member stands in one.
+fn majority_region(regions: &[Option<u32>]) -> Option<u32> {
+    let mut counts = BTreeMap::<u32, usize>::new();
+    for region in regions.iter().flatten() {
+        *counts.entry(*region).or_default() += 1;
+    }
+    counts
+        .into_iter()
+        .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))
+        .map(|(region, _)| region)
 }

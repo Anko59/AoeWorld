@@ -228,6 +228,18 @@ impl GameWorld {
         })
     }
 
+    /// `land_player_region` of each tile, from one lock and one flush.
+    pub(crate) fn land_player_regions(
+        &self,
+        player: PlayerId,
+        bucket: LandBucket,
+        tiles: &[TileCoord],
+    ) -> Result<Vec<Option<u32>>, GameWorldError> {
+        self.with_regions(bucket, |regions, ground| {
+            regions.player_component_each(ground, u32::from(player.0), tiles)
+        })
+    }
+
     /// True when `player`'s land units can walk from `from` to `to`.
     pub(crate) fn land_reachable(
         &self,
