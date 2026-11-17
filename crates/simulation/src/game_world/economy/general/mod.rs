@@ -293,7 +293,12 @@ impl GameWorld {
             return;
         }
         let mut work = GeneralWork::default();
-        if self.tick.0.is_multiple_of(GENERAL_CADENCE) {
+        // The cadence's admissions spread over its ticks rather than all on
+        // one tick in ten (#865 A2): the same Generals per second.
+        let (cadence, admissions) = (GENERAL_CADENCE, GENERAL_ADMISSIONS as u64);
+        let phase = self.tick.0 % cadence;
+        let take = ((phase + 1) * admissions / cadence - phase * admissions / cadence) as usize;
+        if take > 0 {
             use std::ops::Bound::{Excluded, Unbounded};
             let cursor = self.economy.generals.cursor.unwrap_or(EntityId(0));
             let ids: Vec<_> = self
@@ -303,7 +308,7 @@ impl GameWorld {
                 .range((Excluded(cursor), Unbounded))
                 .chain(self.economy.generals.armies.range(..=cursor))
                 .map(|(&id, _)| id)
-                .take(GENERAL_ADMISSIONS)
+                .take(take)
                 .collect();
             for id in ids {
                 self.economy.generals.cursor = Some(id);
