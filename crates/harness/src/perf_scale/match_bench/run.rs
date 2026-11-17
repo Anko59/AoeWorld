@@ -95,13 +95,16 @@ fn run_in_pool(plan: &Plan) -> Result<Outcome, BoxError> {
     let mut bots_ms = Series::default();
     let mut phases = vec![Series::default(); PHASES.len()];
     let mut index_phases = vec![Series::default(); INDEX_PHASES.len()];
+    let mut bot_spans = vec![0u128; INDEX_PHASES.len()];
     let mut samples = vec![sample(world)];
     let mut hashes = vec![(world.tick().0, start_hash.clone())];
     let mut hash_ms = Series::default();
     let begin = Instant::now();
     for n in 1..=plan.ticks {
         // Orders issued by the bots between ticks are outside this window.
-        indexes.drain();
+        for (total, nanos) in bot_spans.iter_mut().zip(indexes.drain()) {
+            *total += nanos;
+        }
         let started = Instant::now();
         let mut last = started;
         let mut spent = [0u128; PHASES.len()];
@@ -177,6 +180,7 @@ fn run_in_pool(plan: &Plan) -> Result<Outcome, BoxError> {
         "passes": passes,
         "gather_work": gather_work(world),
         "walker_wakes": GameWorld::walker_wakes(),
+        "bot_spans_s": INDEX_PHASES.iter().zip(&bot_spans).map(|(n, t)| (n.to_string(), *t as f64 / 1e9)).collect::<std::collections::BTreeMap<_, _>>(),
         "resource_cache": world.resource_cache_usage(),
         "memory": memory(),
         "final_hash": hashes.last().map(|(_, h)| h.clone()),
