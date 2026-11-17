@@ -66,7 +66,7 @@ impl Options {
 
 type Window = (Series, Series, Series, [Series; PHASES.len()]);
 
-fn window(world: &mut GameWorld, ticks: u32) -> Window {
+fn window(world: &mut GameWorld, ticks: u32, rows: &mut Vec<serde_json::Value>) -> Window {
     let (mut tick, mut movement, mut rest) =
         (Series::default(), Series::default(), Series::default());
     let mut phases = std::array::from_fn(|_| Series::default());
@@ -87,6 +87,19 @@ fn window(world: &mut GameWorld, ticks: u32) -> Window {
         for (series, nanos) in phases.iter_mut().zip(spent) {
             series.push_ms(nanos);
         }
+        // Per tick: wall µs of tick, movement and combat; then the fight's work.
+        let c = world.combat_stats();
+        rows.push(json!([
+            world.tick().0,
+            (end - begin).as_micros() as u64,
+            (spent[0] / 1000) as u64,
+            (spent[3] / 1000) as u64,
+            c.attackers,
+            c.hits,
+            c.attack_searches,
+            world.unit_count(),
+            world.units().filter(|u| u.moving).count()
+        ]));
     }
     (tick, movement, rest, phases)
 }
@@ -101,8 +114,9 @@ pub fn run(o: Options) -> Result<(), BoxError> {
         armies.ids.len(),
         armies.orders_ok
     );
-    window(&mut world, o.warmup_ticks);
-    let plain = window(&mut world, o.ticks);
+    let mut rows = Vec::new();
+    window(&mut world, o.warmup_ticks, &mut rows);
+    let plain = window(&mut world, o.ticks, &mut rows);
     let census = |world: &GameWorld| {
         let mut failures = std::collections::BTreeMap::<String, u32>::new();
         for ids in &armies.ids {
@@ -126,7 +140,7 @@ pub fn run(o: Options) -> Result<(), BoxError> {
         MovementProbe::default()
     });
     world.set_planning_probe(probe.clone());
-    let profiled = window(&mut world, o.ticks);
+    let profiled = window(&mut world, o.ticks, &mut rows);
     let spans = probe.drain();
     let summarize = |w: &Window| {
         json!({ "tick": w.0.summary(), "movement": w.1.summary(),
@@ -155,6 +169,7 @@ pub fn run(o: Options) -> Result<(), BoxError> {
         "profiled_window": summarize(&profiled),
         "movement_spans_profiled_window": spans,
         "coarse_groups": o.coarse_groups,
+        "fight_rows": rows,
         "memory": memory(),
         "note": "spans are inclusive and overlap; the profiled window adds clock and atomic cost",
     });
