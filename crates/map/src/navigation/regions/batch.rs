@@ -69,19 +69,36 @@ impl Regions {
         true
     }
 
-    /// `player_component` of each tile, with one flush for all of them.
-    pub fn player_component_each(
+    /// `reachable` from each of `from` to one destination, with the same
+    /// answers. Starts in one region share one closure: it depends only on
+    /// the start's region and its gate.
+    pub fn reachable_from_each(
         &mut self,
         ground: &dyn RegionGround,
         player: u32,
-        tiles: &[TileCoord],
-    ) -> Vec<Option<u32>> {
+        from: &[TileCoord],
+        to: TileCoord,
+    ) -> Vec<bool> {
+        if self.chunks.is_empty() {
+            return from
+                .iter()
+                .map(|&tile| self.reachable(ground, player, tile, to))
+                .collect();
+        }
         self.flush(ground);
-        tiles
-            .iter()
+        let Some(goal) = self.node(to) else {
+            return vec![false; from.len()];
+        };
+        let goal = self.closure_root(player, self.global.root(goal));
+        let mut known = BTreeMap::<(u32, u16), bool>::new();
+        from.iter()
             .map(|&tile| {
-                let root = self.global.root(self.node(tile)?);
-                Some(self.closure_root(player, root))
+                let Some(region) = self.region_at(tile) else {
+                    return false;
+                };
+                *known
+                    .entry(region)
+                    .or_insert_with(|| self.reachable_roots(player, tile).contains(&goal))
             })
             .collect()
     }
