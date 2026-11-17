@@ -44,6 +44,9 @@ pub struct Options {
     /// Time coarse prepare/propose/apply stages instead of individual queries.
     #[arg(long)]
     coarse_groups: bool,
+    /// Rayon workers (0: the default pool).
+    #[arg(long, default_value_t = 0)]
+    workers: usize,
     #[arg(long, default_value = "reports/perf/perf-groups.json")]
     out: PathBuf,
 }
@@ -105,6 +108,11 @@ fn window(world: &mut GameWorld, ticks: u32, rows: &mut Vec<serde_json::Value>) 
 }
 
 pub fn run(o: Options) -> Result<(), BoxError> {
+    if o.workers > 0 {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(o.workers)
+            .build_global()?;
+    }
     let started = Instant::now();
     let (mut world, armies) = super::groups_workload::build(&o.parameters())?;
     let build_s = started.elapsed().as_secs_f64();
@@ -233,6 +241,7 @@ mod tests {
             fog_off: false,
             attack_move: true,
             coarse_groups: false,
+            workers: 0,
             out: out.clone(),
         })
         .unwrap();
