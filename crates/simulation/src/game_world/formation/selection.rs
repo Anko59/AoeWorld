@@ -63,28 +63,22 @@ impl GameWorld {
             )
             .map_err(GameWorldError::Environment)?
             && self.building_step_clear(centroid.tile_floor(), centroid.tile_floor());
-        if walkable {
-            let mut common = true;
-            for &id in ids {
-                let unit = self.unit(id).ok_or(EconomyError::UnknownEntity)?;
-                if !self.land_reachable(
-                    player,
-                    bucket,
-                    unit.position.tile_floor(),
-                    centroid.tile_floor(),
-                )? || !self.land_reachable(
-                    player,
-                    bucket,
-                    centroid.tile_floor(),
-                    unit.position.tile_floor(),
-                )? {
-                    common = false;
-                    break;
-                }
-            }
-            if common {
-                return Ok(centroid);
-            }
+        let tiles = ids
+            .iter()
+            .map(|&id| self.unit(id).map(|unit| unit.position.tile_floor()))
+            .collect::<Option<Vec<_>>>()
+            .ok_or(EconomyError::UnknownEntity)?;
+        // Each direction from one closure per start region, not per member:
+        // per-member closures cost 150 s for one order on a 100k map (#865).
+        let mutual = |at: aoe_core::TileCoord| -> Result<bool, EconomyError> {
+            Ok(self
+                .land_reachable_each(player, bucket, at, &tiles)?
+                .into_iter()
+                .all(|back| back)
+                && self.land_reachable_from_all(player, bucket, &tiles, at)?)
+        };
+        if walkable && mutual(centroid.tile_floor())? {
+            return Ok(centroid);
         }
         // When the centroid is blocked or isolated but all members share
         // reachable ground, their nearest member is the same answer as a
@@ -94,14 +88,7 @@ impl GameWorld {
             .ok_or(EconomyError::UnknownEntity)?
             .position
             .tile_floor();
-        let mut shared = self.land_reachable(player, bucket, first, first)?;
-        for unit in ids.iter().filter_map(|&id| self.unit(id)) {
-            if !shared {
-                break;
-            }
-            shared = self.land_reachable(player, bucket, first, unit.position.tile_floor())?
-                && self.land_reachable(player, bucket, unit.position.tile_floor(), first)?;
-        }
+        let shared = self.land_reachable(player, bucket, first, first)? && mutual(first)?;
         let region = if shared {
             None
         } else {

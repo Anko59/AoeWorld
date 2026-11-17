@@ -255,6 +255,20 @@ impl GameWorld {
         })
     }
 
+    /// Whether every one of `from` reaches `to` by `land_reachable`, sharing
+    /// a closure between starts in one region.
+    pub(crate) fn land_reachable_from_all(
+        &self,
+        player: PlayerId,
+        bucket: LandBucket,
+        from: &[TileCoord],
+        to: TileCoord,
+    ) -> Result<bool, GameWorldError> {
+        self.with_regions(bucket, |regions, ground| {
+            regions.reachable_from_all(ground, u32::from(player.0), from, to)
+        })
+    }
+
     /// Optional route certificates cannot traverse a continent synchronously.
     /// This bounds only the shortcut; unknown leaves ordinary planning intact.
     pub(crate) fn land_reachable_bounded(
