@@ -8,6 +8,10 @@ use std::hash::BuildHasherDefault;
 #[cfg(test)]
 mod tests;
 
+/// Experiment counters (ladder, #865): walker wake-ups by cause.
+pub static NOTIFIED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static EVENTS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct Walk {
     until: u64,
@@ -123,6 +127,12 @@ impl Gatherers {
 }
 
 impl GameWorld {
+    /// Experiment: (contact notifications, gatherer wake events) so far.
+    pub fn walker_wakes() -> (u64, u64) {
+        use std::sync::atomic::Ordering::Relaxed;
+        (NOTIFIED.load(Relaxed), EVENTS.load(Relaxed))
+    }
+
     fn walker_refines_nearby(&self, index: usize, task: &GatherTask) -> bool {
         let at = self.units[index].state.position.tile_floor();
         task.phase == GatherPhase::Approaching
@@ -170,6 +180,7 @@ impl GameWorld {
         if !self.economy.gatherers.contains_key(&id) {
             return;
         }
+        EVENTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if !self.economy.gatherers.walking(id) {
             self.economy.gatherers.wake(id);
             return;
@@ -191,6 +202,10 @@ impl GameWorld {
 
     pub(super) fn wake_walker_contacts(&mut self) {
         self.economy.gatherers.dozes.walking.notified_tiles.clear();
+        NOTIFIED.fetch_add(
+            self.economy.gatherers.dozes.walking.notified.len() as u64,
+            std::sync::atomic::Ordering::Relaxed,
+        );
         for id in std::mem::take(&mut self.economy.gatherers.dozes.walking.notified) {
             self.wake_gatherer_event(id);
         }
