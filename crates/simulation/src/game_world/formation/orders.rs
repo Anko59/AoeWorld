@@ -122,7 +122,10 @@ impl GameWorld {
         let index = self.lookup[&leader];
         let previous = self.take_planner(index);
         self.route_metrics.attribution.group_orders += 1;
+        let route_span = self.planning_probe.clone();
+        let route_span = route_span.as_ref().and_then(|p| p.movement_span("f_route"));
         let planned = self.order_route(index, origin, destination);
+        drop(route_span);
         let (waypoint, route, planner, planning, fast_tried) = match planned {
             Ok(plan) => plan,
             Err(error) => {

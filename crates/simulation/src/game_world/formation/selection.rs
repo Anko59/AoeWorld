@@ -181,6 +181,9 @@ impl GameWorld {
         ids: &[EntityId],
     ) -> Result<WorldPosition, EconomyError> {
         let bucket = self.formation_bucket(ids);
+        let probe = self.planning_probe.clone();
+        let span = |name| probe.as_ref().and_then(|p| p.movement_span(name));
+        let part = span("f_reach");
         if !self.has_route_navigation()
             || self.land_reachable(
                 player,
@@ -191,6 +194,8 @@ impl GameWorld {
         {
             return Ok(destination);
         }
+        drop(part);
+        let part = span("f_frontier");
         let Some(tile) = self.land_frontier(
             player,
             bucket,
@@ -200,6 +205,8 @@ impl GameWorld {
         else {
             return Ok(destination);
         };
+        drop(part);
+        let _slots = span("f_slots");
         let frontier = WorldPosition::from_tile_center(tile).unwrap_or(destination);
         let heading = WorldPosition::new(frontier.x - origin.x, frontier.y - origin.y);
         let (gap, _) = self.formation_gaps(ids);
