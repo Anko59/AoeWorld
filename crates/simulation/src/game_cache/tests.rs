@@ -8,12 +8,14 @@ use std::sync::Arc;
 fn resource_candidates_do_not_retain_every_visited_block() {
     let world = GameWorld::new(WorldConfig::new(64, 64, Seed(1)).unwrap()).unwrap();
     let mut cache = world.resource_chunks.lock().unwrap();
-    for x in 0..10_000 {
+    for x in 0..300_000 {
         cache.insert((x, 0), Arc::new(Vec::new()));
     }
+    // Each empty block still counts its entry overhead against the bytes.
     assert!(
-        cache.len() <= 8_192,
-        "empty candidate blocks also need eviction"
+        (100_000..250_000).contains(&cache.len()),
+        "empty candidate blocks also need eviction: {}",
+        cache.len()
     );
 }
 

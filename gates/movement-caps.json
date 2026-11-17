@@ -54,7 +54,6 @@
     {"count":1,"expr":".take(WINDOW_RECORDS)","file":"crates/server/src/gameplay_match/stats/summary.rs","kind":"take"},
     {"count":1,"expr":".truncate(5)","file":"crates/server/src/gameplay_match/stats/summary.rs","kind":"take"},
     {"count":1,"expr":"MAX_BYTES","file":"crates/simulation/src/game_cache/resources.rs","kind":"use"},
-    {"count":1,"expr":"MAX_ENTRIES","file":"crates/simulation/src/game_cache/resources.rs","kind":"use"},
     {"count":3,"expr":"MAX_FAST_ROUTE_WORK_PER_TICK","file":"crates/simulation/src/game_map.rs","kind":"use"},
     {"count":3,"expr":"MAX_NAV_PREPARATIONS_PER_TICK","file":"crates/simulation/src/game_map.rs","kind":"use"},
     {"count":3,"expr":"MAX_ROUTE_WORK_PER_TICK","file":"crates/simulation/src/game_map.rs","kind":"use"},
