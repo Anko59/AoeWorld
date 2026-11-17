@@ -94,17 +94,30 @@ pub(crate) struct RouteSlots {
     pub(crate) searches: usize,
     /// The searches among `searches` that are far routes.
     pub(crate) far_searches: usize,
+    /// Extra search slots during this player's turn of the fair pass.
+    pub(crate) bonus: usize,
 }
 
 impl RouteSlots {
-    /// Searches held in the slots of the class `far` names.
+    /// Searches held in the slots of the class `far` names, less the pass's
+    /// bonus slots: a class with a bonus counts as that much less full.
     pub(crate) fn class_searches(&self, far: bool) -> usize {
-        if far {
+        let held = if far {
             self.far_searches
         } else {
             self.searches - self.far_searches
-        }
+        };
+        held.saturating_sub(self.bonus)
     }
+
+    fn idle(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// One bonus slot per 32 waiting units, at most six; the world bound still holds.
+fn slot_bonus(waiting: usize) -> usize {
+    (waiting / 32).min(6)
 }
 
 impl GameWorld {
@@ -153,7 +166,15 @@ impl GameWorld {
             slots.searches = slots.searches.saturating_sub(search);
             slots.far_searches = slots.far_searches.saturating_sub(far);
         }
-        if *slots == RouteSlots::default() {
+        if slots.idle() {
+            self.route_slots.remove(&player);
+        }
+    }
+
+    fn set_slot_bonus(&mut self, player: PlayerId, bonus: usize) {
+        let slots = self.route_slots.entry(player).or_default();
+        slots.bonus = bonus;
+        if slots.idle() {
             self.route_slots.remove(&player);
         }
     }
@@ -252,8 +273,11 @@ impl GameWorld {
             // Reserve inside this player's fair share. A global near/far
             // split would let another player's near flood shrink this share.
             let reserve = if far.is_empty() { 0 } else { share / 4 };
+            self.set_slot_bonus(*player, slot_bonus(near.len()));
             share = self.serve_route_class(*player, &near, false, share - reserve, changed);
+            self.set_slot_bonus(*player, slot_bonus(far.len()));
             share = self.serve_route_class(*player, &far, true, share + reserve, changed);
+            self.set_slot_bonus(*player, 0);
             budget += share;
         }
         budget

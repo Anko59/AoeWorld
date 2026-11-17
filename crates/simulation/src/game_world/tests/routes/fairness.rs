@@ -288,6 +288,7 @@ fn a_player_over_its_planner_share_borrows_while_the_world_has_room() {
         planners: MAX_ROUTE_PLANNERS_PER_PLAYER + 90,
         searches: 0,
         far_searches: 0,
+        bonus: 0,
     };
     world.route_slots.insert(PlayerId(0), busy);
     world.active_planner_count = 1_000;
