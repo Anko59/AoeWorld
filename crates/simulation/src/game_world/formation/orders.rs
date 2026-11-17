@@ -29,7 +29,11 @@ impl GameWorld {
         attack_move: bool,
     ) -> Result<(), EconomyError> {
         let named = ids.len();
+        let probe = self.planning_probe.clone();
+        let span = |name| probe.as_ref().and_then(|p| p.movement_span(name));
+        let part = span("f_members");
         let (ids, centroid) = self.formation_members(player, ids)?;
+        drop(part);
         self.route_metrics.attribution.group_members_left_out += (named - ids.len()) as u64;
         if !self.config.valid_map_position(destination) {
             return Err(GameWorldError::InvalidPosition.into());
@@ -116,7 +120,9 @@ impl GameWorld {
             }
             return Ok(());
         }
+        let part = span("f_origin");
         let origin = self.formation_origin(&ids, centroid)?;
+        drop(part);
         let requested_destination = destination;
         let destination = self.formation_goal(player, origin, destination, form, &ids)?;
         let index = self.lookup[&leader];
@@ -144,7 +150,10 @@ impl GameWorld {
         for &id in &ids {
             self.demand_accepted(id);
         }
+        let part = span("f_leave");
         self.leave_groups(&ids);
+        drop(part);
+        let part = span("f_loop");
         for &id in &ids {
             let i = self.lookup[&id];
             self.stop_movement(i);
@@ -160,6 +169,7 @@ impl GameWorld {
             self.active_movers.remove(id);
             self.refresh_spacing_order(id);
         }
+        drop(part);
         let heading = WorldPosition::new(destination.x - origin.x, destination.y - origin.y);
         let heading = if heading == WorldPosition::new(0, 0) {
             WorldPosition::new(1024, 0)
@@ -234,9 +244,12 @@ impl GameWorld {
         };
         group.speed = self.group_speed(&group).0;
         group.pace = group.speed;
+        let part = span("f_assign");
         self.assign_group_slots(&mut group);
+        drop(part);
         group.direct = self.direct_order(origin, destination, &group);
         self.formations.insert(leader, group);
+        let _part = span("f_install");
         self.install_formation_route(
             index,
             origin,
