@@ -263,6 +263,38 @@ fn reachable_each_answers_as_reachable_does() {
 }
 
 #[test]
+fn reachable_from_all_answers_as_reachable_does() {
+    let grid = walled_base();
+    let starts: Vec<_> = (0..110)
+        .step_by(7)
+        .flat_map(|y| (0..120).step_by(9).map(move |x| TileCoord::new(x, y)))
+        .chain([TileCoord::new(49, 59)])
+        .collect();
+    let mut answers = Vec::new();
+    for (player, to) in [
+        (1, TileCoord::new(50, 45)),
+        (2, TileCoord::new(50, 45)),
+        (2, TileCoord::new(50, 80)),
+    ] {
+        let mut regions = Regions::new(120, 110, LandBucket::Small);
+        let one: Vec<_> = starts
+            .iter()
+            .map(|&tile| regions.reachable(&grid, player, tile, to))
+            .collect();
+        for (n, answer) in one.iter().enumerate() {
+            let all = regions.reachable_from_all(&grid, player, &starts[..=n], to);
+            assert_eq!(
+                all,
+                one[..=n].iter().all(|&a| a),
+                "player {player} to {to:?}"
+            );
+            answers.push(*answer);
+        }
+    }
+    assert!(answers.contains(&true) && answers.contains(&false));
+}
+
+#[test]
 fn a_thousand_gate_toggles_relabel_nothing() {
     let mut grid = walled_base();
     let mut regions = Regions::new(120, 110, LandBucket::Small);
