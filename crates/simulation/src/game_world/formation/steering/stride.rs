@@ -31,7 +31,12 @@ impl GameWorld {
         let Some(&index) = self.lookup.get(&id) else {
             return false;
         };
-        if self.unit_visible_to(HUMAN, id) {
+        // Fighters keep every tick: an attacker that moves in jumps strikes
+        // less often (attempt 1 lost 5-7% of kills per game tick).
+        if self.unit_visible_to(HUMAN, id)
+            || self.combat.attackers.contains_key(&id)
+            || self.units[index].state.attack_target.is_some()
+        {
             return false;
         }
         // A formation member has no order of its own: it banks the credit
