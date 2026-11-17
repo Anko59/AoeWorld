@@ -244,6 +244,15 @@ impl GameWorld {
         tiles: &[TileCoord],
     ) -> Result<Vec<Option<u32>>, GameWorldError> {
         self.with_regions(bucket, |regions, ground| {
+            let span = |name| {
+                self.planning_probe
+                    .as_ref()
+                    .and_then(|p| p.movement_span(name))
+            };
+            let part = span("r_flush");
+            regions.flush(ground);
+            drop(part);
+            let _part = span("r_comp");
             regions.player_component_each(ground, u32::from(player.0), tiles)
         })
     }
