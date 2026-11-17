@@ -28,11 +28,12 @@ impl GameplayService {
     }
 
     fn intake(&self, sessions: &mut BTreeMap<u64, Session>) -> Intake {
-        let start = self.command_cursor.fetch_add(
-            MAX_COMMANDS_PER_TICK as u64,
-            std::sync::atomic::Ordering::Relaxed,
-        );
-        let mut commands = take_pending(sessions, start as usize);
+        // At least one command per session a tick: 99 AIs shared 32.
+        let limit = MAX_COMMANDS_PER_TICK.max(sessions.len());
+        let start = self
+            .command_cursor
+            .fetch_add(limit as u64, std::sync::atomic::Ordering::Relaxed);
+        let mut commands = take_pending(sessions, start as usize, limit);
         commands.sort_by_key(|(session_id, command)| (*session_id, command.sequence));
         commands
             .into_iter()
@@ -228,6 +229,7 @@ const MAX_COMMANDS_PER_TICK: usize = 32;
 fn take_pending(
     sessions: &mut BTreeMap<u64, Session>,
     start: usize,
+    limit: usize,
 ) -> Vec<(u64, super::PendingCommand)> {
     let ids = sessions.keys().copied().collect::<Vec<_>>();
     let mut commands = Vec::new();
@@ -237,7 +239,7 @@ fn take_pending(
     loop {
         let before = commands.len();
         for turn in 0..ids.len() {
-            if commands.len() == MAX_COMMANDS_PER_TICK {
+            if commands.len() == limit {
                 return commands;
             }
             let id = ids[(start + turn) % ids.len()];
