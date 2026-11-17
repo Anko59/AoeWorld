@@ -45,6 +45,30 @@ impl GameWorld {
         Ok((ids, centroid))
     }
 
+    /// Each member's group: members mutually reachable with the group's first
+    /// member, in member order. One batched closure per group, and an army
+    /// split by a wall or a river forms only a few groups.
+    fn reach_groups(
+        &self,
+        player: PlayerId,
+        bucket: aoe_map::LandBucket,
+        tiles: &[aoe_core::TileCoord],
+    ) -> Result<Vec<Option<u32>>, EconomyError> {
+        let mut groups = vec![None; tiles.len()];
+        let mut group = 0;
+        while let Some(rep) = groups.iter().position(Option::is_none) {
+            let back = self.land_reachable_each(player, bucket, tiles[rep], tiles)?;
+            let there = self.land_reachable_from_each(player, bucket, tiles, tiles[rep])?;
+            for (n, slot) in groups.iter_mut().enumerate() {
+                if slot.is_none() && (n == rep || (back[n] && there[n])) {
+                    *slot = Some(group);
+                }
+            }
+            group += 1;
+        }
+        Ok(groups)
+    }
+
     pub(crate) fn formation_origin(
         &self,
         ids: &[EntityId],
@@ -63,28 +87,22 @@ impl GameWorld {
             )
             .map_err(GameWorldError::Environment)?
             && self.building_step_clear(centroid.tile_floor(), centroid.tile_floor());
-        if walkable {
-            let mut common = true;
-            for &id in ids {
-                let unit = self.unit(id).ok_or(EconomyError::UnknownEntity)?;
-                if !self.land_reachable(
-                    player,
-                    bucket,
-                    unit.position.tile_floor(),
-                    centroid.tile_floor(),
-                )? || !self.land_reachable(
-                    player,
-                    bucket,
-                    centroid.tile_floor(),
-                    unit.position.tile_floor(),
-                )? {
-                    common = false;
-                    break;
-                }
-            }
-            if common {
-                return Ok(centroid);
-            }
+        let tiles = ids
+            .iter()
+            .map(|&id| self.unit(id).map(|unit| unit.position.tile_floor()))
+            .collect::<Option<Vec<_>>>()
+            .ok_or(EconomyError::UnknownEntity)?;
+        // Each direction from one closure per start region, not per member:
+        // per-member closures cost 150 s for one order on a 100k map (#865).
+        let mutual = |at: aoe_core::TileCoord| -> Result<bool, EconomyError> {
+            Ok(self
+                .land_reachable_each(player, bucket, at, &tiles)?
+                .into_iter()
+                .all(|back| back)
+                && self.land_reachable_from_all(player, bucket, &tiles, at)?)
+        };
+        if walkable && mutual(centroid.tile_floor())? {
+            return Ok(centroid);
         }
         // When the centroid is blocked or isolated but all members share
         // reachable ground, their nearest member is the same answer as a
@@ -94,32 +112,32 @@ impl GameWorld {
             .ok_or(EconomyError::UnknownEntity)?
             .position
             .tile_floor();
-        let mut shared = self.land_reachable(player, bucket, first, first)?;
-        for unit in ids.iter().filter_map(|&id| self.unit(id)) {
-            if !shared {
-                break;
-            }
-            shared = self.land_reachable(player, bucket, first, unit.position.tile_floor())?
-                && self.land_reachable(player, bucket, unit.position.tile_floor(), first)?;
-        }
-        let region = if shared {
+        let shared = self.land_reachable(player, bucket, first, first)? && mutual(first)?;
+        // Members grouped by mutual reachability, not by component ids:
+        // asking for a component id builds the whole map's region layer,
+        // 125 s on the first such order of a 100k-unit map (#865 ladder).
+        let member_regions = if shared || !self.has_route_navigation() {
             None
         } else {
-            self.formation_region(player, bucket, ids)?
+            Some(self.reach_groups(player, bucket, &tiles)?)
         };
-        if !shared
-            && walkable
-            && (region.is_none()
-                || self.land_player_region(player, bucket, centroid.tile_floor())? == region)
-        {
+        let region = member_regions.as_deref().and_then(majority_region);
+        let centroid_in = |region: u32| -> Result<bool, EconomyError> {
+            let groups = member_regions.as_deref().unwrap_or_default();
+            let Some(rep) = groups.iter().position(|&g| g == Some(region)) else {
+                return Ok(false);
+            };
+            let c = centroid.tile_floor();
+            Ok(self.land_reachable(player, bucket, tiles[rep], c)?
+                && self.land_reachable(player, bucket, c, tiles[rep])?)
+        };
+        if !shared && walkable && region.map_or(Ok(true), centroid_in)? {
             return Ok(centroid);
         }
         let mut nearest = None;
-        for &id in ids {
+        for (n, &id) in ids.iter().enumerate() {
             let unit = self.unit(id).ok_or(EconomyError::UnknownEntity)?;
-            if region.is_some()
-                && self.land_player_region(player, bucket, unit.position.tile_floor())? != region
-            {
+            if region.is_some() && member_regions.as_ref().map(|r| r[n]) != Some(region) {
                 continue;
             }
             let dx = i64::from(unit.position.x) - i64::from(centroid.x);
@@ -142,31 +160,6 @@ impl GameWorld {
                     .map(|u| u.position)
             })
             .ok_or(EconomyError::UnknownEntity)
-    }
-
-    /// The land region holding most members (ties: the lowest region), or
-    /// `None` on ground without obstacles, where every point is reachable.
-    fn formation_region(
-        &self,
-        player: PlayerId,
-        bucket: aoe_map::LandBucket,
-        ids: &[EntityId],
-    ) -> Result<Option<u32>, EconomyError> {
-        if !self.has_route_navigation() {
-            return Ok(None);
-        }
-        let mut counts = BTreeMap::<u32, usize>::new();
-        for unit in ids.iter().filter_map(|&id| self.unit(id)) {
-            if let Some(region) =
-                self.land_player_region(player, bucket, unit.position.tile_floor())?
-            {
-                *counts.entry(region).or_default() += 1;
-            }
-        }
-        Ok(counts
-            .into_iter()
-            .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))
-            .map(|(region, _)| region))
     }
 
     /// Lay the army out around the nearest reachable frontier. The whole
@@ -396,4 +389,17 @@ impl GameWorld {
         group.speed_limit = normalized;
         Ok(())
     }
+}
+
+/// The group holding most members (ties: the earliest group), or `None` when
+/// no member belongs to one.
+fn majority_region(regions: &[Option<u32>]) -> Option<u32> {
+    let mut counts = BTreeMap::<u32, usize>::new();
+    for region in regions.iter().flatten() {
+        *counts.entry(*region).or_default() += 1;
+    }
+    counts
+        .into_iter()
+        .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))
+        .map(|(region, _)| region)
 }

@@ -216,7 +216,23 @@ impl GameWorld {
         }
     }
 
+    /// `land_reachable` from each of `from` to one destination, sharing a
+    /// closure between starts in one region.
+    pub(crate) fn land_reachable_from_each(
+        &self,
+        player: PlayerId,
+        bucket: LandBucket,
+        from: &[TileCoord],
+        to: TileCoord,
+    ) -> Result<Vec<bool>, GameWorldError> {
+        self.with_regions(bucket, |regions, ground| {
+            regions.reachable_from_each(ground, u32::from(player.0), from, to)
+        })
+    }
+
     /// The land region `player` sees, owned gates and all open gates joined.
+    /// Asking builds the whole map's region layer, so only tests ask.
+    #[cfg(test)]
     pub(crate) fn land_player_region(
         &self,
         player: PlayerId,
@@ -252,6 +268,20 @@ impl GameWorld {
     ) -> Result<Vec<bool>, GameWorldError> {
         self.with_regions(bucket, |regions, ground| {
             regions.reachable_each(ground, u32::from(player.0), from, to)
+        })
+    }
+
+    /// Whether every one of `from` reaches `to` by `land_reachable`, sharing
+    /// a closure between starts in one region.
+    pub(crate) fn land_reachable_from_all(
+        &self,
+        player: PlayerId,
+        bucket: LandBucket,
+        from: &[TileCoord],
+        to: TileCoord,
+    ) -> Result<bool, GameWorldError> {
+        self.with_regions(bucket, |regions, ground| {
+            regions.reachable_from_all(ground, u32::from(player.0), from, to)
         })
     }
 
