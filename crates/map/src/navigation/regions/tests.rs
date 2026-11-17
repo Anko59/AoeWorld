@@ -237,6 +237,32 @@ fn a_closed_gate_admits_its_owner_only_and_others_get_the_frontier() {
 }
 
 #[test]
+fn reachable_each_answers_as_reachable_does() {
+    let grid = walled_base();
+    let tiles: Vec<_> = (0..110)
+        .step_by(7)
+        .flat_map(|y| (0..120).step_by(9).map(move |x| TileCoord::new(x, y)))
+        .collect();
+    let mut answers = Vec::new();
+    for (player, from) in [
+        (1, TileCoord::new(50, 80)),
+        (2, TileCoord::new(50, 80)),
+        (2, TileCoord::new(49, 59)),
+    ] {
+        let mut regions = Regions::new(120, 110, LandBucket::Small);
+        let each = regions.reachable_each(&grid, player, from, &tiles);
+        let one: Vec<_> = tiles
+            .iter()
+            .map(|&tile| regions.reachable(&grid, player, from, tile))
+            .collect();
+        assert_eq!(each, one, "player {player} from {from:?}");
+        answers.extend(each);
+    }
+    // The cases cover both answers: the enemy cannot enter the walled base.
+    assert!(answers.contains(&true) && answers.contains(&false));
+}
+
+#[test]
 fn a_thousand_gate_toggles_relabel_nothing() {
     let mut grid = walled_base();
     let mut regions = Regions::new(120, 110, LandBucket::Small);

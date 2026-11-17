@@ -241,6 +241,20 @@ impl GameWorld {
         })
     }
 
+    /// `land_reachable` from one origin to each of `to`, sharing the origin's
+    /// closure.
+    pub(crate) fn land_reachable_each(
+        &self,
+        player: PlayerId,
+        bucket: LandBucket,
+        from: TileCoord,
+        to: &[TileCoord],
+    ) -> Result<Vec<bool>, GameWorldError> {
+        self.with_regions(bucket, |regions, ground| {
+            regions.reachable_each(ground, u32::from(player.0), from, to)
+        })
+    }
+
     /// Optional route certificates cannot traverse a continent synchronously.
     /// This bounds only the shortcut; unknown leaves ordinary planning intact.
     pub(crate) fn land_reachable_bounded(
