@@ -96,7 +96,11 @@ impl GameWorld {
         let original_goal = self.attack_goal(attacker.target, source.player);
         let stats = self.unit_state_stats(&source);
         let original_target = attacker.target;
+        let probe = self.planning_probe.clone();
+        let span = |name| probe.as_ref().and_then(|p| p.movement_span(name));
+        let part = span("attacker_refresh");
         let attacker = self.refresh_contact_target(index, attacker, original_goal, &stats, changed);
+        drop(part);
         let before = self.units[index].state;
         self.combat.stats.attackers += 1;
         let goal = if attacker.target == original_target {
@@ -117,9 +121,12 @@ impl GameWorld {
             }
             return;
         };
+        let part = span("attacker_pursuit");
         if !self.pursuit_allowed(id, goal, changed) {
             return;
         }
+        drop(part);
+        let part = span("attacker_visible");
         if (unit_combat(before.kind).attack_kind == super::DamageKind::Pierce
             || before.kind.is_artillery()
             || before.kind.is_cannon_ship())
@@ -128,12 +135,15 @@ impl GameWorld {
             self.end_attack(id, changed);
             return;
         }
+        drop(part);
         let range = super::super::navy::attack_range(&stats);
         let distance = goal.distance_squared(before.position);
         // Outside reach this branch must approach regardless of endpoint space.
         let approaching_slot = distance <= range * range && self.approaching_melee_slot(index);
         if distance > range * range || approaching_slot {
+            let part = span("attacker_approach");
             self.approach(id, index, attacker, goal, now, changed);
+            drop(part);
             if !self.can_strike_on_approach(id, &goal, distance, range) {
                 return;
             }
