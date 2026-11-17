@@ -22,6 +22,7 @@ Each item ends with the scoreboard before and after plus its work numbers; a spe
 | Track A by the scoreboard profile (#865 section 3): one-time whole-map region build | 11-17 | DONE | #880: formation origins grouped by mutual reachability, never component ids; 100k worst order 127 s to 9.5 s; scoreboard +1.0% instr with kills +2.2% | |
 | Track A: formation members do not block their own formation (sidestep 183M) | 11-17 | DROPPED | `exp/member-sweep`: scoreboard -7.3% instr, quality-march formation obstructed member-ticks 206,179 to 313; members can overlap (chokepoint stacking tests) against hard bodies | Owner decision: allow soft overlap inside one formation |
 | Track A2: spread Steward domains and General admissions over their period (tick tail) | 11-17 | DROPPED | `exp/steward-spread`: p95 -7.2% (bar 10%), p99 -23%, mean unchanged, work up slightly | Owner decision: judge the tail by p99 |
+| Track A7: compiler, fat LTO and one codegen unit for the server players run | 11-18 | PARTIAL | `perf/production-lto`: scoreboard replay 993.6M to 898.2M instr/tick (-9.6%), same hash; thin LTO -2.1%. Dev/compare servers, artifacts image and `make save-replay` only; release build of the harness about 4.5 min and 3.3 GB peak | Mark DONE with this PR's number; scale-match's server still builds without it |
 
 ## Other scale items
 
