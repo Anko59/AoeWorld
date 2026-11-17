@@ -80,6 +80,7 @@ impl GameWorld {
                 points
             }
         };
+        let vouched = std::cell::Cell::new(false);
         let valid = |at: &WorldPosition| {
             let at = *at;
             goal.distance_squared(at) <= range * range
@@ -89,8 +90,10 @@ impl GameWorld {
                     .unit_tile_passable(unit.kind, at.tile_floor(), &|| false)
                     .unwrap_or(false)
                 && self.body_position_clear(unit.kind, at)
-                && self.melee_point_reachable(unit, at)
+                && self.ring_point_reachable(unit, at, &vouched)
         };
+        // Nearest first, so a perimeter's certificate is the nearest point's.
+        points.sort_unstable_by_key(|&at| (squared(unit.position, at), at.y, at.x));
         points.retain(valid);
         // A target can stand inside newly blocked ground. Its contact ring
         // is then obstructed too; use the nearest legal firing reach instead.
@@ -124,6 +127,7 @@ impl GameWorld {
     /// building or sorting the list: the first free legal spot ends the scan.
     fn melee_position_free(&self, unit: &crate::GameUnit, range: i64, goal: &Goal) -> bool {
         let id = unit.id;
+        let vouched = std::cell::Cell::new(false);
         let valid = |at: WorldPosition| {
             goal.distance_squared(at) <= range * range
                 && self.config.valid_ground_position(at)
@@ -132,7 +136,7 @@ impl GameWorld {
                     .unit_tile_passable(unit.kind, at.tile_floor(), &|| false)
                     .unwrap_or(false)
                 && self.body_position_clear(unit.kind, at)
-                && self.melee_point_reachable(unit, at)
+                && self.ring_point_reachable(unit, at, &vouched)
         };
         // Some(true): a free spot; Some(false): legal spots, all taken.
         let scan = |points: Vec<WorldPosition>| {
@@ -142,7 +146,9 @@ impl GameWorld {
                 // repeats every other legality test), so only a taken one
                 // needs the separate legality check.
                 if goal.distance_squared(at) <= range * range {
-                    if self.interaction_point_free(id, at) && self.melee_point_reachable(unit, at) {
+                    if self.interaction_point_free(id, at)
+                        && self.ring_point_reachable(unit, at, &vouched)
+                    {
                         return Some(true);
                     }
                     any_valid = any_valid || valid(at);
@@ -188,6 +194,24 @@ impl GameWorld {
                     let range = super::super::navy::attack_range(&stats);
                     goal.distance_squared(u.position) > range * range
                 })
+    }
+
+    /// Points of one contact ring or perimeter are proven in turn until one
+    /// is reachable; that one vouches for the rest, whose routes still prove
+    /// every step. One certificate per point cost 132M instructions a tick on
+    /// the Anatolia scoreboard (`docs/scale/scoreboard.md`).
+    fn ring_point_reachable(
+        &self,
+        unit: &crate::GameUnit,
+        at: WorldPosition,
+        vouched: &std::cell::Cell<bool>,
+    ) -> bool {
+        if vouched.get() {
+            return true;
+        }
+        let reachable = self.melee_point_reachable(unit, at);
+        vouched.set(reachable);
+        reachable
     }
 
     /// A bounded shared region certificate rejects sealed melee endpoints
