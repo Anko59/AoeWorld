@@ -37,6 +37,14 @@ pub(super) struct BotCounts {
     pub waves_refused: u64,
     pub wave_units: u64,
     pub general_orders: u64,
+    /// Experiment: seconds spent per bot action, and the slowest single call.
+    pub scan_s: f64,
+    pub gather_s: f64,
+    pub train_s: f64,
+    pub wave_s: f64,
+    pub human_s: f64,
+    pub slowest_wave_s: f64,
+    pub slowest_human_s: f64,
 }
 
 fn land_soldier(kind: UnitKind) -> bool {
@@ -88,6 +96,7 @@ pub(super) fn step(
         slot[id] = Some(index);
     }
     let index_of = |player: PlayerId| slot.get(usize::from(player.0)).copied().flatten();
+    let clock = std::time::Instant::now();
     let mut units: Vec<_> = world.units().filter(|u| u.hp > 0).collect();
     units.sort_unstable_by_key(|u| u.id);
     for unit in &units {
@@ -105,16 +114,25 @@ pub(super) fn step(
             }
         }
     }
+    counts.scan_s += clock.elapsed().as_secs_f64();
     let columns = (seats.len() as f64).sqrt().ceil() as usize;
     for (index, (seat, view)) in seats.iter().zip(&views).enumerate() {
+        let clock = std::time::Instant::now();
         gather(world, seat.id, &view.idle_villagers, tick, counts);
+        counts.gather_s += clock.elapsed().as_secs_f64();
+        let clock = std::time::Instant::now();
         if (tick / THINK + index as u64).is_multiple_of(TRAIN / THINK) && view.living < seat.target
         {
             train(world, seat, counts);
         }
+        counts.train_s += clock.elapsed().as_secs_f64();
         if index == 0 {
             if tick.is_multiple_of(HUMAN_WAVE) {
+                let clock = std::time::Instant::now();
                 human_wave(world, seat, &view.soldiers, generals, tick, counts);
+                let spent = clock.elapsed().as_secs_f64();
+                counts.human_s += spent;
+                counts.slowest_human_s = counts.slowest_human_s.max(spent);
             }
             continue;
         }
@@ -133,7 +151,11 @@ pub(super) fn step(
             let Some(target) = target.and_then(|t| seats.get(t)) else {
                 continue;
             };
+            let clock = std::time::Instant::now();
             wave(world, seat.id, &view.idle_soldiers, target.center, counts);
+            let spent = clock.elapsed().as_secs_f64();
+            counts.wave_s += spent;
+            counts.slowest_wave_s = counts.slowest_wave_s.max(spent);
         }
     }
 }
