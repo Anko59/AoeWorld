@@ -9,6 +9,19 @@ pub(crate) const STRIDE: u64 = 4;
 const HUMAN: aoe_core::PlayerId = aoe_core::PlayerId(0);
 
 impl GameWorld {
+    /// Removes the movers that sit out this tick and returns them.
+    pub(crate) fn park_unseen_movers(&mut self, movers: &mut Vec<EntityId>) -> Vec<EntityId> {
+        let mut parked = Vec::new();
+        movers.retain(|&id| {
+            let park = self.park_unseen(id);
+            if park {
+                parked.push(id);
+            }
+            !park
+        });
+        parked
+    }
+
     /// True when `id` sits out this tick: it is ordered to move, no human
     /// sees it and its turn is not due. Its skipped movement is banked.
     pub(crate) fn park_unseen(&mut self, id: EntityId) -> bool {
@@ -28,8 +41,12 @@ impl GameWorld {
         let banked = match self.formations.get(&id) {
             Some(group) => group.pace.0,
             None => {
-                self.road_speed(unit.kind, unit.position, self.movement_speed(unit.kind, unit.player))
-                    .0
+                self.road_speed(
+                    unit.kind,
+                    unit.position,
+                    self.movement_speed(unit.kind, unit.player),
+                )
+                .0
             }
         };
         order.speed_carry = order.speed_carry.saturating_add(banked);
