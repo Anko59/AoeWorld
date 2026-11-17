@@ -97,6 +97,8 @@ impl GameWorld {
                 && self.body_position_clear(unit.kind, at)
                 && self.ring_point_reachable(unit, goal, at, &ring)
         };
+        // Nearest first, so a perimeter's certificate is the nearest point's.
+        points.sort_unstable_by_key(|&at| (squared(unit.position, at), at.y, at.x));
         let part = span("melee_valid");
         points.retain(valid);
         drop(part);
@@ -202,8 +204,10 @@ impl GameWorld {
     }
 
     /// Every point of a unit's contact ring lies within a tile of the target,
-    /// so one certificate to the target's tile answers the whole ring; a
-    /// building's perimeter is long enough to need one per point.
+    /// so one certificate to the target's tile answers the whole ring. Along
+    /// a building's perimeter, points are proven in turn until one is
+    /// reachable; that one vouches for the rest, whose routes still prove
+    /// every step.
     fn ring_point_reachable(
         &self,
         unit: &crate::GameUnit,
@@ -220,11 +224,18 @@ impl GameWorld {
                 self.melee_point_reachable(unit, *target)
             }),
             Goal::Building(_) => {
+                if ring.get() == Some(&true) {
+                    return true;
+                }
                 let _part = self
                     .planning_probe
                     .as_ref()
                     .and_then(|p| p.movement_span("melee_reachable"));
-                self.melee_point_reachable(unit, at)
+                let reachable = self.melee_point_reachable(unit, at);
+                if reachable {
+                    let _ = ring.set(true);
+                }
+                reachable
             }
         }
     }
