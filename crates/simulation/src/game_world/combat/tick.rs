@@ -42,7 +42,11 @@ impl Goal {
 impl GameWorld {
     pub(crate) fn advance_combat(&mut self, changed: &mut Vec<EntityId>) {
         self.combat.stats = Default::default();
+        let probe = self.planning_probe.clone();
+        let span = |name| probe.as_ref().and_then(|p| p.movement_span(name));
+        let part = span("combat_projectiles");
         self.advance_projectiles(changed);
+        drop(part);
         let now = self.tick.0;
         while let Some(&(due, id)) = self.combat.dying.first() {
             if due > now {
@@ -51,7 +55,10 @@ impl GameWorld {
             self.combat.dying.pop_first();
             self.remove_unit(id);
         }
+        let part = span("combat_acquisition");
         self.advance_acquisition(changed);
+        drop(part);
+        let part = span("combat_attackers");
         // Melee retaliation created during this loop acts next tick;
         // projectile reactions and acquisition already join this snapshot.
         let ids = self.combat.attackers.keys().copied().collect::<Vec<_>>();
@@ -68,8 +75,12 @@ impl GameWorld {
         }
         self.combat.pursuit_floor = None;
         self.combat.prefetched.clear();
+        drop(part);
+        let part = span("combat_towers");
         self.advance_towers(changed);
         self.run_incendiary_blasts(changed);
+        drop(part);
+        let _part = span("combat_healing");
         self.advance_healing(changed);
     }
 
