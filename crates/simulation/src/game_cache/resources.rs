@@ -3,8 +3,8 @@
 use crate::game_world::ChunkNodes;
 use std::collections::{BTreeMap, BTreeSet};
 
-const MAX_BYTES: usize = 32 << 20;
-const MAX_ENTRIES: usize = 8_192;
+const MAX_BYTES: usize = 256 << 20;
+const MAX_ENTRIES: usize = 65_536;
 type Key = (i32, i32);
 
 #[derive(Debug)]
