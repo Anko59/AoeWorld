@@ -297,8 +297,19 @@ impl GameWorld {
             .planning_probe
             .as_ref()
             .and_then(|p| p.movement_span("sidestep"));
+        let _who = self.planning_probe.as_ref().and_then(|p| {
+            p.movement_span(if self.units[index].formation.is_some() {
+                "sidestep_member"
+            } else {
+                "sidestep_mover"
+            })
+        });
         let unit = self.units[index].state;
         let from = unit.position;
+        let fast = self
+            .planning_probe
+            .as_ref()
+            .and_then(|p| p.movement_span("sidestep_fast"));
         if self.config.valid_ground_position(proposed)
             && self.local_unit_step_clear(index, from, proposed)
             && self
@@ -308,6 +319,11 @@ impl GameWorld {
         {
             return proposed;
         }
+        drop(fast);
+        let _search = self
+            .planning_probe
+            .as_ref()
+            .and_then(|p| p.movement_span("sidestep_search"));
         let (dx, dy) = delta(proposed, from);
         let budget = (dx * dx + dy * dy).isqrt();
         if budget == 0 {
