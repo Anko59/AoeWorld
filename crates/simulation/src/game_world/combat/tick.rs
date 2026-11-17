@@ -64,7 +64,9 @@ impl GameWorld {
         let ids = self.combat.attackers.keys().copied().collect::<Vec<_>>();
         self.combat.pursuit_floor = self.combat.pursuit_cursor;
         self.combat.pursuit_cursor = None;
+        let prefetch = span("attacker_prefetch");
         self.prefetch_attack_searches(&ids, now);
+        drop(prefetch);
         for id in ids {
             self.step_attacker(id, now, changed);
         }
@@ -92,12 +94,14 @@ impl GameWorld {
             self.combat.attackers.remove(&id);
             return;
         };
+        let probe = self.planning_probe.clone();
+        let span = |name| probe.as_ref().and_then(|p| p.movement_span(name));
+        let part = span("attacker_goal");
         let source = self.units[index].state;
         let original_goal = self.attack_goal(attacker.target, source.player);
         let stats = self.unit_state_stats(&source);
         let original_target = attacker.target;
-        let probe = self.planning_probe.clone();
-        let span = |name| probe.as_ref().and_then(|p| p.movement_span(name));
+        drop(part);
         let part = span("attacker_refresh");
         let attacker = self.refresh_contact_target(index, attacker, original_goal, &stats, changed);
         drop(part);
@@ -136,6 +140,7 @@ impl GameWorld {
             return;
         }
         drop(part);
+        let _reach = span("attacker_reach");
         let range = super::super::navy::attack_range(&stats);
         let distance = goal.distance_squared(before.position);
         // Outside reach this branch must approach regardless of endpoint space.
