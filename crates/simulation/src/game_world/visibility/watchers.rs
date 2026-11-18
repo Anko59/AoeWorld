@@ -112,9 +112,14 @@ impl GameWorld {
                 if span.is_some_and(|span| !span.contains(TileCoord::new(x, y))) {
                     continue;
                 }
-                self.vision
-                    .building_at_tile
-                    .insert(TileCoord::new(x, y), id);
+                let tile = TileCoord::new(x, y);
+                if self.vision.building_at_tile.insert(tile, id).is_none() {
+                    *self
+                        .vision
+                        .building_chunks
+                        .entry(super::building_chunk(tile))
+                        .or_default() += 1;
+                }
             }
         }
         if self.vision.disabled {
@@ -142,6 +147,7 @@ impl GameWorld {
     /// Buildings destroyed while fog was off stay queued for the flush.
     pub(crate) fn rebuild_building_sight_index(&mut self) {
         self.vision.building_at_tile.clear();
+        self.vision.building_chunks.clear();
         self.vision.building_watchers.clear();
         let buildings = self
             .buildings()
@@ -161,6 +167,13 @@ impl GameWorld {
                 let tile = TileCoord::new(x, y);
                 if self.vision.building_at_tile.get(&tile) == Some(&id) {
                     self.vision.building_at_tile.remove(&tile);
+                    let chunk = super::building_chunk(tile);
+                    if let Some(count) = self.vision.building_chunks.get_mut(&chunk) {
+                        *count -= 1;
+                        if *count == 0 {
+                            self.vision.building_chunks.remove(&chunk);
+                        }
+                    }
                 }
             }
         }

@@ -27,6 +27,13 @@ impl std::hash::Hasher for TileHasher {
 }
 
 /// Point lookups and edits only; never iterated, so its order decides nothing.
+fn building_chunk(tile: TileCoord) -> TileCoord {
+    TileCoord::new(
+        tile.x.div_euclid(aoe_core::SPATIAL_CHUNK_TILES),
+        tile.y.div_euclid(aoe_core::SPATIAL_CHUNK_TILES),
+    )
+}
+
 pub(super) type TileBuildings =
     HashMap<TileCoord, EntityId, std::hash::BuildHasherDefault<TileHasher>>;
 
@@ -52,6 +59,9 @@ pub(crate) struct Vision {
     observers: observers::Observers,
     /// Building footprint tiles, for sight-gain and sight-loss events.
     building_at_tile: TileBuildings,
+    /// Tiles of `building_at_tile` per 32-tile chunk: a scan over an area
+    /// skips the chunks that hold no building. Derived, never hashed.
+    building_chunks: HashMap<TileCoord, u32, std::hash::BuildHasherDefault<TileHasher>>,
     building_watchers: BTreeMap<EntityId, Watched>,
     /// Buildings changed or newly watched since the last memory refresh
     /// (`memory.rs`). Derived, never hashed.
@@ -191,6 +201,13 @@ impl GameWorld {
     }
 
     /// Local footprint lookup shared by visibility and area damage.
+    /// Whether any building tile of the sight index lies in `tile`'s chunk.
+    pub(crate) fn chunk_has_buildings(&self, tile: TileCoord) -> bool {
+        self.vision
+            .building_chunks
+            .contains_key(&building_chunk(tile))
+    }
+
     pub(crate) fn building_at(&self, tile: TileCoord) -> Option<EntityId> {
         self.vision.building_at_tile.get(&tile).copied()
     }

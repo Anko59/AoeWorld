@@ -204,10 +204,21 @@ impl GameWorld {
         let rows = (ENGAGE_BUILDING_TILES / width).clamp(1, height);
         let first = ((self.tick.0 / ENGAGE_CADENCE) as i32 * rows) % height;
         let mut out = Vec::<(EntityId, Goal)>::new();
+        let mut skip_to = i32::MIN;
         for row in 0..rows {
             let y = area.min.y + (first + row) % height;
             for x in area.min.x..area.max.x {
                 let tile = TileCoord::new(x, y);
+                // A chunk without buildings answers its whole stretch of
+                // the row at once.
+                if (x == area.min.x || x.rem_euclid(SPATIAL_CHUNK_TILES) == 0)
+                    && !self.chunk_has_buildings(tile)
+                {
+                    skip_to = (x.div_euclid(SPATIAL_CHUNK_TILES) + 1) * SPATIAL_CHUNK_TILES;
+                }
+                if x < skip_to {
+                    continue;
+                }
                 let Some(id) = self.building_at_tile(tile) else {
                     continue;
                 };

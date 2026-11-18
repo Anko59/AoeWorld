@@ -253,3 +253,50 @@ fn a_fog_view_reported_unchanged_equals_the_view_held() {
         "{skipped} skipped, {rebuilt} rebuilt"
     );
 }
+
+#[test]
+fn building_chunk_counts_follow_the_sight_index() {
+    let mut world = GameWorld::new(WorldConfig::new(128, 128, Seed(3)).unwrap()).unwrap();
+    // A footprint across a chunk corner and one inside a single chunk.
+    let corner = world
+        .insert_building(
+            PlayerId(0),
+            crate::BuildingKind::House,
+            TileRect::from_xywh(31, 31, 2, 2),
+            true,
+        )
+        .unwrap();
+    let inner = world
+        .insert_building(
+            PlayerId(1),
+            crate::BuildingKind::House,
+            TileRect::from_xywh(70, 70, 2, 2),
+            true,
+        )
+        .unwrap();
+    let occupied = |w: &GameWorld| {
+        (0..4)
+            .flat_map(|y| (0..4).map(move |x| TileCoord::new(x * 32, y * 32)))
+            .filter(|&chunk| w.chunk_has_buildings(chunk))
+            .collect::<Vec<_>>()
+    };
+    let expected = |w: &GameWorld| {
+        (0..4)
+            .flat_map(|y| (0..4).map(move |x| TileCoord::new(x * 32, y * 32)))
+            .filter(|&chunk| {
+                (0..32).any(|y| {
+                    (0..32).any(|x| {
+                        w.building_at(TileCoord::new(chunk.x + x, chunk.y + y))
+                            .is_some()
+                    })
+                })
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(occupied(&world).len(), 5);
+    assert_eq!(occupied(&world), expected(&world));
+    world.remove_building(corner);
+    assert_eq!(occupied(&world), vec![TileCoord::new(64, 64)]);
+    world.remove_building(inner);
+    assert!(occupied(&world).is_empty());
+}
