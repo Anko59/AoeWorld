@@ -144,6 +144,9 @@ struct ChunkRegions {
     comp: Vec<u16>,
 }
 
+/// A node's label, the direction asked (reverse or not) and its neighbours.
+type CachedAdjacency = (u16, bool, Vec<(u32, u16)>);
+
 #[derive(Debug)]
 pub struct Regions {
     bucket: LandBucket,
@@ -161,6 +164,9 @@ pub struct Regions {
     gate_access: BTreeMap<u32, (u32, bool, bool)>,
     /// Per player: gated edges admitted, folded into a small union-find.
     closures: BTreeMap<u32, BTreeMap<u32, u32>>,
+    /// Per chunk: its nodes' neighbours before the per-player gate filter,
+    /// as `lazy::adjacent` found them. Dropped with the chunk or a neighbour.
+    adjacency: std::collections::HashMap<u32, Vec<CachedAdjacency>>,
     stats: RegionStats,
 }
 
@@ -182,6 +188,7 @@ impl Regions {
             global: Global::default(),
             gate_access: BTreeMap::new(),
             closures: BTreeMap::new(),
+            adjacency: Default::default(),
             stats: RegionStats::default(),
         }
     }
@@ -199,6 +206,7 @@ impl Regions {
         for cy in y0..=y1.min(self.chunks_y - 1) {
             for cx in x0..=x1.min(self.chunks_x - 1) {
                 let chunk = (cy * self.chunks_x + cx) as u32;
+                self.forget_adjacency(chunk);
                 if self.pending.contains_key(&chunk) || !self.chunks.is_empty() {
                     self.dirty.insert(chunk);
                 }
@@ -211,6 +219,7 @@ impl Regions {
 
     /// Everything may have changed.
     pub fn invalidate_all(&mut self) {
+        self.adjacency.clear();
         self.pending_dirty.extend(self.pending.keys().copied());
         self.dirty.extend(self.pending.keys().copied());
         self.dirty.extend(0..self.chunks.len() as u32);
@@ -240,6 +249,7 @@ impl Regions {
     /// Apply batched changes: relabel changed chunks, then rebuild only the
     /// union-find levels they touch.
     pub fn flush(&mut self, ground: &dyn RegionGround) {
+        self.adjacency.clear();
         if self.chunks.is_empty() {
             self.build(ground);
             return;

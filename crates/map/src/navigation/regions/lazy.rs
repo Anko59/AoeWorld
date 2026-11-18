@@ -31,6 +31,7 @@ impl Regions {
         if !self.chunks.is_empty() && !self.dirty.contains(&chunk) {
             self.pending
                 .insert(chunk, self.chunks[chunk as usize].clone());
+            self.forget_adjacency(chunk);
             return;
         }
         self.stats.builds = self.stats.builds.max(1);
@@ -45,6 +46,22 @@ impl Regions {
         }
         let done = self.labelled(ground, input);
         self.pending.insert(chunk, done);
+        self.forget_adjacency(chunk);
+    }
+
+    /// Drops the cached neighbours of `chunk`'s nodes and of its neighbours'.
+    pub(super) fn forget_adjacency(&mut self, chunk: u32) {
+        if self.adjacency.is_empty() {
+            return;
+        }
+        let (cx, cy) = self.key(chunk);
+        for y in cy - 1..=cy + 1 {
+            for x in cx - 1..=cx + 1 {
+                if x >= 0 && y >= 0 && x < self.chunks_x && y < self.chunks_y {
+                    self.adjacency.remove(&((y * self.chunks_x + x) as u32));
+                }
+            }
+        }
     }
 
     fn lazy_node(&mut self, ground: &dyn RegionGround, tile: TileCoord) -> Option<Node> {
@@ -72,6 +89,18 @@ impl Regions {
         reverse: bool,
     ) -> BTreeSet<Node> {
         let (chunk, own) = node;
+        let cached = self.adjacency.get(&chunk).and_then(|nodes| {
+            nodes
+                .iter()
+                .find(|(label, back, _)| *label == own && *back == reverse)
+                .map(|(_, _, next)| next.clone())
+        });
+        if let Some(next) = cached {
+            return next
+                .into_iter()
+                .filter(|&next| self.allowed_node(player, next, start))
+                .collect();
+        }
         let mut out = BTreeSet::new();
         for &(a, b, both) in &self.pending[&chunk].local {
             if (a == own && !reverse) || (b == own && reverse) {
@@ -138,6 +167,11 @@ impl Regions {
                 out.insert((other, label));
             }
         }
+        self.adjacency.entry(chunk).or_default().push((
+            own,
+            reverse,
+            out.iter().copied().collect(),
+        ));
         out.retain(|&next| self.allowed_node(player, next, start));
         out
     }
