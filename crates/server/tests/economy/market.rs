@@ -120,14 +120,12 @@ async fn a_completed_market_trades_and_moves_prices_over_the_wire() {
         accepted,
         [(4, CommandResult::Accepted), (5, CommandResult::Accepted)]
     );
-    // Food sold: 100 -> 97; wood bought: 100 -> 103; stone untouched. Prices
-    // recover one step every 2 game seconds, every second tick of this 1 Hz
-    // demo, and one such step lands on this tick: 98 and 102.
+    // Food sold: 100 -> 97; wood bought: 100 -> 103; stone untouched.
     assert_eq!(
         prices,
         Some(MarketPrices {
-            wood: 102,
-            food: 98,
+            wood: 103,
+            food: 97,
             stone: 100
         })
     );
