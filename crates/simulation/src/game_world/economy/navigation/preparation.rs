@@ -31,8 +31,17 @@ impl RouteTerrain for LimitedMap<'_> {
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError> {
-        Ok(self.world.gate_tile_admitted(self.player, tile)
-            && self.generator.route_walkable(overlay, tile, cancelled)?)
+        if !self.world.gate_tile_admitted(self.player, tile) {
+            return Ok(false);
+        }
+        // On the live overlay this is movement's land passability, which the
+        // world keeps per tile across ticks; a proof snapshot reads directly.
+        match &self.world.terrain {
+            crate::Terrain::Map { overlay: live, .. } if std::ptr::eq(overlay, live) => self
+                .world
+                .unit_tile_passable(crate::UnitKind::Villager, tile, cancelled),
+            _ => self.generator.route_walkable(overlay, tile, cancelled),
+        }
     }
     fn route_edge_clear(
         &self,
