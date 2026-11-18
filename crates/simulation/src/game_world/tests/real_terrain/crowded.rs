@@ -176,8 +176,9 @@ fn run_case(count: usize, general: bool, town: bool) {
     if !general && count >= 100 {
         // The input block has five bodies in this disk. A bend may compress
         // it, but must not funnel the entire wide selection into one lane.
+        // Members of one formation may overlap, so a bend packs up to 16.
         assert!(
-            max_density <= 12,
+            max_density <= 16,
             "density={max_density} at {density_peak:?}"
         );
     }

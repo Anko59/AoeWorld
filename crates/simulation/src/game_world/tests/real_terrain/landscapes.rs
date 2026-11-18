@@ -77,13 +77,13 @@ fn run(case: &str, count: usize, limit: u32) {
         "river" => {
             result.assert_arrival_and_work(count);
             assert!(result.max_tick_route_work <= 24_576, "{result:?}");
-            assert_eq!((result.max_stuck_ticks, result.oscillations), (31, 2));
+            assert_eq!((result.max_stuck_ticks, result.oscillations), (0, 1));
             // Current-output split of the 3 reversals by cause.
-            assert_eq!(result.oscillation_causes, causes(2, 0, 0, 0));
+            assert_eq!(result.oscillation_causes, causes(0, 0, 0, 1));
             // Region witnesses remove duplicate proof work; physical output pins stay fixed.
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (5736, 54651, 4220453)
+                (5707, 54775, 2993228)
             );
         }
         "long" => {
@@ -92,20 +92,20 @@ fn run(case: &str, count: usize, limit: u32) {
             // Ordinary offensive squads and ownership-neutral selection slots
             // intentionally change this current-output pin, within the same
             // arrival, speed, membership, exact-slot and bounded-work limits.
-            assert_eq!((result.max_stuck_ticks, result.oscillations), (41, 10));
-            assert_eq!(result.oscillation_causes, causes(3, 1, 1, 5));
+            assert_eq!((result.max_stuck_ticks, result.oscillations), (29, 12));
+            assert_eq!(result.oscillation_causes, causes(4, 1, 1, 6));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (35389, 372063, 98884061)
+                (35393, 372074, 108277701)
             );
         }
         _ => {
             result.assert_works(count);
             // Current-output pins also retain work for the complete report.
             let expected = match case {
-                "forest" => (3288, 1027, 2198882),
-                "town" => (3740, 1193, 2510772),
-                "crossing" => (3278, 1933, 3051342),
+                "forest" => (3282, 1027, 2061471),
+                "town" => (3740, 1193, 2350263),
+                "crossing" => (3278, 1933, 2842040),
                 "bridge" => (479, 354, 12365),
                 "siege" => (1556, 867, 33972),
                 "gap" => (580, 512, 8908),

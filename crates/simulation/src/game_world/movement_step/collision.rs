@@ -259,6 +259,14 @@ impl GameWorld {
                 if file.is_some() && other.player == unit.player {
                     return false;
                 }
+                // Members of one formation stand a slot apart by construction
+                // and may brush through each other; strangers stay hard.
+                if self.units[index].formation.is_some()
+                    && self.units[self.collisions.unit_index(id)].formation
+                        == self.units[index].formation
+                {
+                    return false;
+                }
                 let r = if !soft && !work_squeeze && !unit.kind.is_naval() {
                     i64::from(own_radius + other.kind.collision_radius())
                 } else {
