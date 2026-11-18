@@ -328,34 +328,28 @@ fn hundred_thousand_population_manager_work_stays_inside_its_world_budget() {
         w.unit_count() + w.buildings().map(|b| b.garrison.len()).sum::<usize>(),
         100_000
     );
-    w.tick = aoe_core::Tick(STEWARD_RULES.period_ticks);
+    // One period serves `domains_per_pass` domains, spread over its ticks;
+    // every tick stays inside the budget of the domains it serves.
     let started = std::time::Instant::now();
-    w.advance_stewards(&mut Vec::new());
-    let cost = w.steward_work();
+    let mut served = 0;
+    for tick in 0..STEWARD_RULES.period_ticks {
+        w.tick = aoe_core::Tick(STEWARD_RULES.period_ticks + tick);
+        w.advance_stewards(&mut Vec::new());
+        let cost = w.steward_work();
+        let n = cost.domains;
+        served += n;
+        assert!(n <= STEWARD_RULES.domains_per_pass.div_ceil(2), "{cost:?}");
+        assert!(cost.unit_visits <= n * STEWARD_RULES.unit_visits_per_domain);
+        assert!(cost.building_visits <= n * STEWARD_RULES.building_visits_per_domain);
+        assert!(cost.orders <= n * STEWARD_RULES.orders_per_domain);
+        assert!(cost.resource_searches <= n * STEWARD_RULES.resource_searches_per_domain);
+        assert!(cost.site_checks <= n * STEWARD_RULES.site_checks_per_domain);
+    }
     eprintln!(
-        "100 players, 100000 population, 100 Stewards: manager {:?}, {:?}",
-        cost,
+        "100 players, 100000 population, 100 Stewards: {served} domains in {:?}",
         started.elapsed()
     );
-    assert_eq!(cost.domains, STEWARD_RULES.domains_per_pass);
-    assert!(
-        cost.unit_visits <= STEWARD_RULES.domains_per_pass * STEWARD_RULES.unit_visits_per_domain
-    );
-    assert!(
-        cost.building_visits
-            <= STEWARD_RULES.domains_per_pass * STEWARD_RULES.building_visits_per_domain
-    );
-    assert!(cost.orders <= STEWARD_RULES.domains_per_pass * STEWARD_RULES.orders_per_domain);
-    assert!(
-        cost.resource_searches
-            <= STEWARD_RULES.domains_per_pass * STEWARD_RULES.resource_searches_per_domain
-    );
-    assert!(
-        cost.site_checks <= STEWARD_RULES.domains_per_pass * STEWARD_RULES.site_checks_per_domain
-    );
-    w.tick.0 += 1;
-    w.advance_stewards(&mut Vec::new());
-    assert_eq!(w.steward_work().domains, 0, "not an every-tick AI");
+    assert_eq!(served, STEWARD_RULES.domains_per_pass);
 }
 
 #[test]
