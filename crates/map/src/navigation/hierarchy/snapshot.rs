@@ -81,6 +81,7 @@ impl NavigationSnapshot {
         (key.0 >= 0 && key.1 >= 0 && key.0 < self.side && key.1 < self.side)
             .then_some((key.1 as i64 * self.side as i64 + key.0 as i64) as usize)
     }
+    #[inline(always)]
     fn cell(&self, tile: TileCoord) -> Option<Option<WalkCell>> {
         let at = self.index(chunk_of(tile))?;
         Some(match &self.chunks {
@@ -141,6 +142,9 @@ impl MapChunkGenerator {
     pub(crate) fn static_navigation_graph(&self, key: Key) -> Option<Arc<ChunkPortals>> {
         self.static_navigation().get()?.graph(key)
     }
+    // Inlined into every walk lookup: the cell is returned through registers
+    // instead of being stored and reloaded at each layer.
+    #[inline(always)]
     pub(crate) fn static_navigation_cell(&self, tile: TileCoord) -> Option<Option<WalkCell>> {
         self.static_navigation().get()?.cell(tile)
     }
