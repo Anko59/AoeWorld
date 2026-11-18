@@ -16,6 +16,8 @@ pub struct NavigationSnapshot {
     side: i32,
     chunks: Chunks,
     bytes: usize,
+    /// Packed chunks decoded once they are read often.
+    decoded: super::decoded::Decoded,
 }
 impl NavigationSnapshot {
     pub fn retained_bytes(&self) -> usize {
@@ -29,6 +31,7 @@ impl NavigationSnapshot {
                     storage.heap_bytes() + records.capacity() * size_of::<Range<usize>>()
                 }
             }
+            + self.decoded.heap_bytes()
     }
     pub fn chunk_count(&self) -> usize {
         match &self.chunks {
@@ -69,6 +72,7 @@ impl NavigationSnapshot {
             + records.capacity() * size_of::<Range<usize>>();
         Ok(Self {
             side,
+            decoded: super::decoded::Decoded::new(records.len()),
             chunks: Chunks::Packed { storage, records },
             bytes,
         })
@@ -81,9 +85,11 @@ impl NavigationSnapshot {
         let at = self.index(chunk_of(tile))?;
         Some(match &self.chunks {
             Chunks::Owned(chunks) => chunks[at].cell(grid::index(tile)),
-            Chunks::Packed { storage, records } => {
-                View::new(&storage.bytes()[records[at].clone()]).cell(grid::index(tile))
-            }
+            Chunks::Packed { storage, records } => self.decoded.cell(
+                at,
+                || View::new(&storage.bytes()[records[at].clone()]),
+                grid::index(tile),
+            ),
         })
     }
     fn graph(&self, key: Key) -> Option<Arc<ChunkPortals>> {
@@ -162,6 +168,7 @@ impl MapChunkGenerator {
             side,
             chunks: Chunks::Owned(chunks),
             bytes,
+            decoded: super::decoded::Decoded::new(0),
         }))
     }
 }

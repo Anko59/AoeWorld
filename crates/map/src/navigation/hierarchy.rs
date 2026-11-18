@@ -16,6 +16,7 @@ use std::cell::RefCell;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BinaryHeap, HashMap};
 use std::sync::{Arc, OnceLock};
+mod decoded;
 mod grid;
 mod snapshot;
 mod static_data;
