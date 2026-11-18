@@ -19,11 +19,17 @@ impl WorldSnapshot {
             record.next_hit_tick = at(record.next_hit_tick);
             record.general_order_tick = record.general_order_tick.map(at);
             record.unit.death_tick = record.unit.death_tick.map(|t| aoe_core::Tick(at(t.0)));
+            if let Some(hit) = &mut record.unit.last_hit {
+                hit.tick = aoe_core::Tick(at(hit.tick.0));
+            }
         }
         for record in &mut self.buildings {
             if let Some(hit) = &mut record.last_hit {
                 hit.tick = aoe_core::Tick(at(hit.tick.0));
             }
+            // Construction and repair work is priced in the world's ticks.
+            record.work_done = at(record.work_done);
+            record.work_total = at(record.work_total).max(1);
             for entry in &mut record.training_queue {
                 entry.progress_ticks = at(entry.progress_ticks);
                 entry.total_ticks = at(entry.total_ticks).max(1);

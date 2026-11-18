@@ -142,14 +142,13 @@ impl GameplayService {
             })
             .collect();
         let guard = self.world.clone().read_owned().await;
-        let hz = guard.config().tick_hz.max(1);
         tokio::task::spawn_blocking(move || {
             let started = std::time::Instant::now();
             let world = guard
                 .snapshot(hash)
                 .ok_or("this game's terrain cannot be saved")?;
             drop(guard);
-            let (tick, hz) = (world.tick, u64::from(hz));
+            let tick = world.tick;
             let (units, buildings) = (world.units.len(), world.buildings.len());
             let opponents = seats.iter().filter(|seat| !seat.human).count();
             let bytes = postcard::to_allocvec(&SaveFile {
@@ -173,8 +172,9 @@ impl GameplayService {
                 id: id.clone(),
                 name,
                 saved_at,
+                // A snapshot counts reference ticks, whatever the world's rate.
                 tick,
-                game_seconds: tick / hz,
+                game_seconds: tick / u64::from(aoe_core::REFERENCE_HZ),
                 map_hash: hash.iter().map(|byte| format!("{byte:02x}")).collect(),
                 opponents,
                 units,
