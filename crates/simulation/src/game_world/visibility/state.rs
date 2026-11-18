@@ -4,6 +4,8 @@ use super::TileVisibility;
 use aoe_core::{EntityId, TileCoord, TileRect};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
+type Tiles = std::hash::BuildHasherDefault<super::TileHasher>;
+
 #[derive(Debug, Default)]
 pub(super) struct PlayerVision {
     // 32x32 bits, allocated only after a tile in the chunk was observed.
@@ -11,7 +13,9 @@ pub(super) struct PlayerVision {
     // Only currently visible tiles carry reference counts, as dense 32x32
     // counters per chunk. Overlapping LOS cannot turn a tile fogged when just
     // one observer leaves.
-    pub(super) visible: BTreeMap<(i32, i32), VisibleChunk>,
+    // Point lookups and edits only, never iterated: a tile hash instead of
+    // an ordered tree on every sight change and query.
+    pub(super) visible: HashMap<(i32, i32), VisibleChunk, Tiles>,
     pub(super) visible_tiles: usize,
     pub(super) remembered: BTreeMap<aoe_core::EntityId, crate::GameBuilding>,
     /// Buildings whose entry in `remembered` was added, changed or dropped
@@ -31,7 +35,7 @@ pub(super) struct PlayerVision {
     /// explored or visible state last changed, at which the overview was last
     /// touched, and at which everything was reset. A fog view of a region
     /// whose chunks and overview are older than the view equals it.
-    pub(super) fog_stamps: HashMap<(i32, i32), u64>,
+    pub(super) fog_stamps: HashMap<(i32, i32), u64, Tiles>,
     pub(super) overview_stamp: u64,
     pub(super) reset_stamp: u64,
 }
