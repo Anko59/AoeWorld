@@ -12,7 +12,10 @@ fn delta(a: WorldPosition, b: WorldPosition) -> (i64, i64) {
 
 impl GameWorld {
     pub(crate) fn local_retry(&self, id: aoe_core::EntityId) -> bool {
-        self.tick.0.wrapping_add(u64::from(id.0)).is_multiple_of(8)
+        self.tick
+            .0
+            .wrapping_add(u64::from(id.0))
+            .is_multiple_of(self.config.ticks(8))
     }
 
     pub(crate) fn refine_occupied_step(

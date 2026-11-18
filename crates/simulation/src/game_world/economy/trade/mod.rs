@@ -287,7 +287,7 @@ impl GameWorld {
                 }
             }
             if run.to.is_none() {
-                if !(self.tick.0 + u64::from(id.0)).is_multiple_of(RETRY_TICKS) {
+                if !(self.tick.0 + u64::from(id.0)).is_multiple_of(self.config.ticks(RETRY_TICKS)) {
                     self.economy.trade.insert(id, run);
                     continue;
                 }

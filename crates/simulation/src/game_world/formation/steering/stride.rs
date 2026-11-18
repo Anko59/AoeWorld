@@ -5,7 +5,7 @@
 //! block, and its targets are prepared, on one tick in four.
 use super::*;
 
-/// Ticks between two steps of an unseen mover.
+/// Reference ticks between two steps of an unseen mover (`WorldConfig::ticks`).
 pub(crate) const STRIDE: u64 = 4;
 
 impl GameWorld {
@@ -40,7 +40,7 @@ impl GameWorld {
         let id = self.units[index].state.id;
         let phase = self.units[index].formation.unwrap_or(id);
         !self.vision.human_seats.is_empty()
-            && !(self.tick.0 + u64::from(phase.0)).is_multiple_of(STRIDE)
+            && !(self.tick.0 + u64::from(phase.0)).is_multiple_of(self.config.ticks(STRIDE))
             // Fighters keep every tick: an attacker that moves in jumps strikes
             // less often (the first experiment lost 5-7% of kills per tick).
             && !self.combat.attackers.contains_key(&id)
@@ -53,7 +53,7 @@ impl GameWorld {
     /// members fight or walk on their own and never read those targets.
     pub(crate) fn group_sits_out(&self, leader: EntityId, group: &Group) -> bool {
         !self.vision.human_seats.is_empty()
-            && !(self.tick.0 + u64::from(leader.0)).is_multiple_of(STRIDE)
+            && !(self.tick.0 + u64::from(leader.0)).is_multiple_of(self.config.ticks(STRIDE))
             && group.members.iter().filter(|m| !m.detached).all(|m| {
                 self.lookup
                     .get(&m.id)
@@ -93,7 +93,10 @@ impl GameWorld {
             let Some(&index) = self.lookup.get(&member.id) else {
                 continue;
             };
-            if member.id == leader || self.units[index].formation != Some(leader) {
+            // A leader with an order of its own carries the group and banks
+            // against that order; one without walks a slot like the rest.
+            let carrier = member.id == leader && self.units[index].order.is_some();
+            if carrier || self.units[index].formation != Some(leader) {
                 others.push((index, member.id));
                 continue;
             }
@@ -128,9 +131,10 @@ impl GameWorld {
     pub(crate) fn bank_rest(&mut self, index: usize, id: EntityId) -> bool {
         let unit = self.units[index].state;
         // A formation member has no order of its own: it banks the credit
-        // `formation_motion` would give it this tick.
+        // `formation_motion` would give it this tick. So does a leader that
+        // walks its own slot without an order.
         if let Some(leader) = self.units[index].formation
-            && leader != id
+            && (leader != id || self.units[index].order.is_none())
         {
             let own = self.movement_speed(unit.kind, unit.player);
             let road = self.road_speed(unit.kind, unit.position, own);

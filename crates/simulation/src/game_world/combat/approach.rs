@@ -80,7 +80,9 @@ impl GameWorld {
         } else {
             0
         };
-        MAX_ATTACK_SEARCHES_PER_TICK.saturating_sub(spent)
+        self.config
+            .scaled_budget(MAX_ATTACK_SEARCHES_PER_TICK)
+            .saturating_sub(spent)
     }
 
     /// Whether the tick has spent its bounded position searches.

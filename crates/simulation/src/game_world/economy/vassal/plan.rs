@@ -41,6 +41,9 @@ pub(super) const TIER_ROAD: u8 = 2;
 pub(super) const TIER_PRODUCTION: u8 = 2;
 pub(super) const TIER_WORK_TOWER: u8 = 3;
 /// One minute at 20 Hz: newly explored ground and new camps join the plan.
+/// Every Vassal timer (this, its cadence, refused sites) counts world ticks,
+/// not game time: on game time the low-rate demos re-plan four times as
+/// often and lay parallel bridges (#894). A slower rate thinks less often.
 pub(super) const REPLAN_TICKS: u64 = 1_200;
 /// A refused site is re-planned around within ten seconds.
 pub(super) const REFUSED_REPLAN_TICKS: u64 = 200;

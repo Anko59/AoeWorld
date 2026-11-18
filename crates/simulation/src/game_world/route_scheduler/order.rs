@@ -217,7 +217,7 @@ impl GameWorld {
             .is_some_and(|(at, to, tick)| {
                 at == from
                     && to == target
-                    && self.tick.0.saturating_sub(tick) < UNREACHABLE_MEMO_TICKS
+                    && self.tick.0.saturating_sub(tick) < self.config.ticks(UNREACHABLE_MEMO_TICKS)
             })
     }
 

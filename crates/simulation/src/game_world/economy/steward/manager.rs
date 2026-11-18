@@ -29,7 +29,7 @@ impl GameWorld {
         // A pass's domains spread over its period instead of all landing on
         // one tick in twenty: each domain still runs once per period, the
         // first on the period's first tick, without one tick carrying them all.
-        let period = STEWARD_RULES.period_ticks;
+        let period = self.config.ticks(STEWARD_RULES.period_ticks);
         let due = STEWARD_RULES
             .domains_per_pass
             .min(self.economy.stewards.active.len()) as u64;

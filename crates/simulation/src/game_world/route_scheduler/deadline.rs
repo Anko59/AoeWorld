@@ -56,7 +56,7 @@ impl GameWorld {
         } else {
             NEAR_ROUTE_ANSWER_TICKS
         };
-        self.tick.0.saturating_sub(self.units[index].planning_since) >= limit
+        self.tick.0.saturating_sub(self.units[index].planning_since) >= self.config.ticks(limit)
     }
 
     /// Ends the order of each unit in `ids`, whose wait has expired.

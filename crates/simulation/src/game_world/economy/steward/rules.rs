@@ -3,6 +3,7 @@
 pub struct StewardRules {
     pub radius_tiles: i32,
     pub max_villagers: usize,
+    /// Reference ticks per pass (`WorldConfig::ticks`): one second.
     pub period_ticks: u64,
     /// Minimum productive job tenure before a shortage rebalance.
     pub worker_dwell_seconds: u64,

@@ -59,7 +59,10 @@ fn stability_showcase_preserves_working_farms_after_the_owner_activates_manageme
     );
     let plots: Vec<_> = workers.iter().map(|id| (*id, w.gather_tile(*id))).collect();
     let food = w.player_economy(PlayerId(0)).unwrap().stockpile.food;
-    for _ in 0..200 {
+    // Within the worker dwell no farmer is moved; after it the Steward may
+    // rebalance towards its weights, at one pass per game second.
+    let dwell = crate::STEWARD_RULES.worker_dwell_seconds * u64::from(w.config().tick_hz);
+    for _ in 0..dwell {
         w.advance();
         for (worker, plot) in &plots {
             assert_eq!(w.gathering_kind(*worker), Some(ResourceKind::Food));

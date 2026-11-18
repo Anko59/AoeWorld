@@ -63,7 +63,10 @@ impl GameWorld {
         if carriers.is_empty() {
             return 0;
         }
-        let reserved = GROUP_FAR_ROUTE_WORK_PER_TICK.min(budget / 2);
+        let reserved = self
+            .config
+            .scaled_budget(GROUP_FAR_ROUTE_WORK_PER_TICK)
+            .min(budget / 2);
         let mut budget = reserved;
         let start = (self.tick.0 % carriers.len() as u64) as usize;
         for turn in 0..carriers.len() {

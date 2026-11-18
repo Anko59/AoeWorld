@@ -254,7 +254,8 @@ impl GameWorld {
         if candidates.is_empty() {
             return;
         }
-        let index = (self.tick.0 / STEWARD_RULES.period_ticks) as usize % candidates.len();
+        let index = (self.tick.0 / self.config.ticks(STEWARD_RULES.period_ticks)) as usize
+            % candidates.len();
         let old = candidates[index];
         if !budget.search(work) {
             return;

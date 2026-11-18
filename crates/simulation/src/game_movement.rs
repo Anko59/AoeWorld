@@ -458,7 +458,7 @@ impl GameWorld {
         self.planning_budget = self
             .planning_budget
             .saturating_add(budget.saturating_sub(spent))
-            .min(MAX_ROUTE_WORK_PER_TICK);
+            .min(self.config.scaled_budget(MAX_ROUTE_WORK_PER_TICK));
     }
 
     pub(crate) fn clear_planner(&mut self, index: usize) {

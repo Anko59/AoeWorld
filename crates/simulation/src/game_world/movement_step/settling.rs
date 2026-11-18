@@ -103,16 +103,20 @@ impl GameWorld {
             // Formation avoidance remembers the side actually taken and
             // already tries the other side when blocked. A timer flip alone
             // sends queued bodies back across their still-open passing lane.
+            // `blocked` counts reference ticks, so its limits are times: the
+            // side flips each time the count reaches a multiple of 48.
+            let step = self.config.reference_ticks_per_tick();
+            let next = obstruction.blocked.saturating_add(step);
             if unit.formation.is_none()
                 && obstruction.blocked > 0
-                && obstruction.blocked.is_multiple_of(48)
+                && obstruction.blocked.saturating_sub(step) / 48 != obstruction.blocked / 48
             {
                 obstruction.side = -obstruction.side;
             }
-            obstruction.blocked = obstruction.blocked.saturating_add(1);
+            obstruction.blocked = next;
             obstruction.last_tick = self.tick.0;
             if obstruction.blocked >= PASS_AFTER_TICKS {
-                obstruction.pass_until = self.tick.0 + PASS_TICKS;
+                obstruction.pass_until = self.tick.0 + self.config.ticks(PASS_TICKS);
             }
             let blocked = obstruction.blocked;
             self.note_blocked_for_yield(index, blocked);

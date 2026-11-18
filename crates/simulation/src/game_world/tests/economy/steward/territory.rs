@@ -296,11 +296,19 @@ fn the_territory_demo_shows_adoption_then_a_split_when_the_second_steward_shelte
         .map(|b| b.id)
         .collect();
     let home = town_centers[0];
+    // Adopted farmers, whatever the Steward has since given them to do: at
+    // one pass per game second it puts some to building within the window.
+    let farm_workers: Vec<_> = w
+        .units()
+        .filter(|u| w.gathering_kind(u.id) == Some(aoe_map::ResourceKind::Food))
+        .map(|u| u.id)
+        .collect();
     w.issue_garrison(PlayerId(0), first, home).unwrap();
     advance(&mut w, 80);
     let farmers = |w: &GameWorld, v| {
-        w.units()
-            .filter(|u| w.gathering_kind(u.id).is_some() && w.steward_controller(u.id) == Some(v))
+        farm_workers
+            .iter()
+            .filter(|id| w.steward_controller(**id) == Some(v))
             .count()
     };
     assert_eq!(

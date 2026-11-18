@@ -159,21 +159,17 @@ impl GameWorld {
     }
 
     pub(super) fn advance_auto_scout(&mut self, changed: &mut Vec<EntityId>) {
+        let jobs = self.config.scaled_budget(JOBS_PER_TICK as u32) as usize;
         let ids: Vec<_> = if let Some(cursor) = self.economy.scout_cursor {
             self.economy
                 .scouts
                 .range((Excluded(cursor), Unbounded))
                 .chain(self.economy.scouts.range(..=cursor))
-                .take(JOBS_PER_TICK)
+                .take(jobs)
                 .map(|(&id, _)| id)
                 .collect()
         } else {
-            self.economy
-                .scouts
-                .keys()
-                .take(JOBS_PER_TICK)
-                .copied()
-                .collect()
+            self.economy.scouts.keys().take(jobs).copied().collect()
         };
         // A retained cursor provides fair O(log n + 8) admission over active
         // jobs, with at most 1024 frontier heap pops per world tick.

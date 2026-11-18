@@ -40,7 +40,7 @@ impl GameWorld {
                 self.combat.resuming.remove(&id);
                 continue;
             };
-            if !(self.tick.0 + u64::from(id.0)).is_multiple_of(4) {
+            if !(self.tick.0 + u64::from(id.0)).is_multiple_of(self.config.ticks(4)) {
                 continue;
             }
             // An enemy whose every melee spot is taken is not a fight to

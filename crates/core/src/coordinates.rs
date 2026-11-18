@@ -8,6 +8,8 @@ pub const DEFAULT_WORLD_HEIGHT_TILES: i32 = 16_384;
 pub const MAX_WORLD_DIMENSION_TILES: i32 = 1_048_576;
 pub const SPATIAL_CHUNK_TILES: i32 = 32;
 pub const DEFAULT_SIMULATION_HZ: u32 = 20;
+/// The rate tick-count constants and per-tick work budgets are written at.
+pub const REFERENCE_HZ: u32 = 20;
 pub const DEFAULT_MOVE_SPEED_SUBUNITS_PER_TICK: i32 = 128;
 
 fn default_move_speed_subunits_per_tick_denominator() -> u64 {
@@ -216,6 +218,28 @@ impl WorldConfig {
         Ok(config)
     }
 
+    /// Ticks at this rate lasting as long as `reference` ticks at
+    /// [`REFERENCE_HZ`], and at least one.
+    pub fn ticks(&self, reference: u64) -> u64 {
+        (reference * u64::from(self.tick_hz))
+            .div_ceil(u64::from(REFERENCE_HZ))
+            .max(1)
+    }
+
+    /// Reference ticks one tick at this rate lasts: what a counter of
+    /// reference ticks adds per tick.
+    pub fn reference_ticks_per_tick(&self) -> u16 {
+        u16::try_from(REFERENCE_HZ.div_ceil(self.tick_hz.max(1))).unwrap_or(u16::MAX)
+    }
+
+    /// A per-tick work budget written at [`REFERENCE_HZ`], rescaled so the
+    /// work done per second of game time is the same at this rate.
+    pub fn scaled_budget(&self, per_tick: u32) -> u32 {
+        let scaled = (u64::from(per_tick) * u64::from(REFERENCE_HZ))
+            .div_ceil(u64::from(self.tick_hz.max(1)));
+        u32::try_from(scaled).unwrap_or(u32::MAX)
+    }
+
     pub fn validate(self) -> Result<(), CoordinateError> {
         if !(1..=MAX_WORLD_DIMENSION_TILES).contains(&self.width_tiles)
             || !(1..=MAX_WORLD_DIMENSION_TILES).contains(&self.height_tiles)
@@ -309,6 +333,22 @@ pub enum CoordinateError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reference_ticks_keep_their_game_time_at_any_rate() {
+        let at = |tick_hz| WorldConfig {
+            tick_hz,
+            ..WorldConfig::default()
+        };
+        assert_eq!(at(20).ticks(40), 40);
+        assert_eq!(at(10).ticks(40), 20);
+        assert_eq!(at(10).ticks(1), 1, "never zero ticks");
+        assert_eq!(at(30).ticks(40), 60);
+        assert_eq!(at(20).reference_ticks_per_tick(), 1);
+        assert_eq!(at(10).reference_ticks_per_tick(), 2);
+        assert_eq!(at(20).scaled_budget(16_384), 16_384);
+        assert_eq!(at(10).scaled_budget(16_384), 32_768);
+    }
 
     #[test]
     fn fixed_point_conversion_is_checked_and_flooring_handles_negative_intermediates() {

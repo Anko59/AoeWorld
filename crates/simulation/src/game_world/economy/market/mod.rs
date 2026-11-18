@@ -26,7 +26,8 @@ pub struct MarketRules {
     pub commission_permyriad: u16,
     /// Gold the price moves on every trade.
     pub price_step: u16,
-    /// Ticks between recovery steps (two seconds at the default 20 Hz).
+    /// World ticks between recovery steps: two seconds at 20 Hz. Not game
+    /// time: the accelerated demos would recover too fast to watch.
     pub recovery_ticks: u64,
 }
 pub const MARKET_RULES: MarketRules = MarketRules {
