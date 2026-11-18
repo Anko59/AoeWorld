@@ -73,6 +73,57 @@ impl GameWorld {
         self.sits_out(index) && self.bank_rest(index, id)
     }
 
+    /// `bank_rest` for every steered member of the resting group led by
+    /// `leader`: one group lookup, and a member's credit computed once per
+    /// kind, owner and road state.
+    pub(crate) fn bank_group_rest(&mut self, leader: EntityId) {
+        let Some(group) = self.formations.get(&leader) else {
+            return;
+        };
+        let pace = group.pace;
+        let mut credits = Vec::<((UnitKind, aoe_core::PlayerId, bool), u64)>::new();
+        let mut members = Vec::with_capacity(group.members.len());
+        let mut others = Vec::new();
+        for (at, member) in group
+            .members
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| !m.detached)
+        {
+            let Some(&index) = self.lookup.get(&member.id) else {
+                continue;
+            };
+            if member.id == leader || self.units[index].formation != Some(leader) {
+                others.push((index, member.id));
+                continue;
+            }
+            let unit = &self.units[index].state;
+            let on_road = !self.economy.roads.is_empty()
+                && !unit.kind.is_naval()
+                && self.economy.roads.contains(&unit.position.tile_floor());
+            let key = (unit.kind, unit.player, on_road);
+            let credit = match credits.iter().find(|(k, _)| *k == key) {
+                Some(&(_, credit)) => credit,
+                None => {
+                    let own = self.movement_speed(unit.kind, unit.player);
+                    let road = self.road_speed(unit.kind, unit.position, own);
+                    let credit = super::super::matched_speed(pace, road);
+                    credits.push((key, credit));
+                    credit
+                }
+            };
+            members.push((at, credit));
+        }
+        if let Some(group) = self.formations.get_mut(&leader) {
+            for (at, credit) in members {
+                group.members[at].carry = group.members[at].carry.saturating_add(credit);
+            }
+        }
+        for (index, id) in others {
+            self.bank_rest(index, id);
+        }
+    }
+
     /// Banks the movement the unit at `index` skips this tick.
     pub(crate) fn bank_rest(&mut self, index: usize, id: EntityId) -> bool {
         let unit = self.units[index].state;
