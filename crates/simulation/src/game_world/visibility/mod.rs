@@ -61,6 +61,9 @@ pub(crate) struct Vision {
     /// While a movement tick runs, observer changes queue here and apply per
     /// player in parallel afterwards (see `batch.rs`).
     batch: Option<Vec<change::Change>>,
+    /// Players a person plays: a mover none of them sees may step less often
+    /// (`formation/steering/stride.rs`). Set by the host, never hashed.
+    pub(crate) human_seats: Vec<PlayerId>,
 }
 
 mod batch;
@@ -97,6 +100,12 @@ impl GameWorld {
     }
 
     /// Scenario switch; clients cannot grant themselves knowledge with a URL.
+    /// Names the players people play; an empty list (tests, benches, all-AI
+    /// hosts) keeps every mover stepping every tick.
+    pub fn set_human_seats(&mut self, players: &[PlayerId]) {
+        self.vision.human_seats = players.to_vec();
+    }
+
     pub fn set_fog_disabled(&mut self, disabled: bool) {
         let was_disabled = self.vision.disabled;
         self.vision.disabled = disabled;

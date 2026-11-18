@@ -99,6 +99,12 @@ impl GameplayService {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos() as u64;
+        let humans: Vec<PlayerId> = setups
+            .iter()
+            .filter(|setup| setup.human)
+            .map(|setup| setup.player)
+            .collect();
+        world.set_human_seats(&humans);
         let slots = setups
             .into_iter()
             .zip(1..)

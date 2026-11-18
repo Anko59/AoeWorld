@@ -21,7 +21,7 @@ impl Group {
 
     /// Members always stay in canonical id order. Dense armies need one
     /// indexed read; sparse selections and departures use binary search.
-    pub(super) fn member_index(&self, id: EntityId) -> Option<usize> {
+    pub(crate) fn member_index(&self, id: EntityId) -> Option<usize> {
         let first = self.members.first()?.id.0;
         if let Some(at) = id.0.checked_sub(first).map(|n| n as usize)
             && self.members.get(at).is_some_and(|member| member.id == id)

@@ -5,6 +5,7 @@ use super::*;
 use crate::game_world::movement_step::settling::GIVE_UP_AFTER_TICKS;
 
 mod speed;
+mod stride;
 
 impl GameWorld {
     #[inline(never)] // a symbol of its own for the Callgrind stage counters
@@ -49,6 +50,7 @@ impl GameWorld {
                 );
             }
         }
+        movers.retain(|&id| !self.park_unseen(id));
         scratch.group_phase = true;
         {
             let _span = self

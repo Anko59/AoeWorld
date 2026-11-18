@@ -54,6 +54,7 @@ impl GameWorld {
         movers.clear();
         self.active_movers.extend_into(&mut movers);
         self.active_movers.clear();
+        let mut parked = self.park_unseen_movers(&mut movers);
         let mover_count = movers.len();
         let start = if mover_count == 0 {
             0
@@ -67,6 +68,7 @@ impl GameWorld {
         };
         let mut still_moving = std::mem::take(&mut scratch.still_moving);
         still_moving.clear();
+        still_moving.append(&mut parked);
         still_moving.reserve(movers.len());
         changed.reserve(movers.len());
         // Pure proposals in parallel, then the shared writes in rotation
