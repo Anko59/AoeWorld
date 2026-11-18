@@ -52,7 +52,10 @@ obstruction policy is unpublished.
 * Static terrain and building footprints govern passability; movable units use
   their collision dimensions, with a spatial index for nearby candidates.
   Same-domain units normally maintain the sum of their radii, with swept
-  checks preventing tunnelling. Units already overlapping may move apart;
+  checks preventing tunnelling. Members of one formation are the exception:
+  they stand a slot apart by construction and may brush through each other
+  (DE's own overlapping melee groups), while every other body stays hard to
+  them. Units already overlapping may move apart;
   movement must not freeze them or forcibly displace stationary workers.
   Land and water passability remain distinct, including ships' own sizes.
 * Long-distance routes use the existing bounded static planner. At short

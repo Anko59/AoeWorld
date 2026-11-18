@@ -16,7 +16,22 @@ pub(crate) fn next_waypoint(
 }
 
 pub(crate) fn segment_length(dx: i64, dy: i64) -> u32 {
-    let squared = (dx.unsigned_abs() as u128).pow(2) + (dy.unsigned_abs() as u128).pow(2);
+    let (x, y) = (dx.unsigned_abs(), dy.unsigned_abs());
+    if x < 1 << 31 && y < 1 << 31 {
+        // Map distances: the float root lands within one of the floor, and
+        // integer steps make it exact.
+        let squared = x * x + y * y;
+        let mut floor = (squared as f64).sqrt() as u64;
+        while floor * floor > squared {
+            floor -= 1;
+        }
+        while (floor + 1) * (floor + 1) <= squared {
+            floor += 1;
+        }
+        let ceil = floor + u64::from(floor * floor != squared);
+        return u32::try_from(ceil).unwrap_or(u32::MAX).max(1);
+    }
+    let squared = (x as u128).pow(2) + (y as u128).pow(2);
     let floor = squared.isqrt();
     u32::try_from(if floor * floor == squared {
         floor
@@ -42,3 +57,7 @@ pub(crate) fn route_waypoint(
         .unwrap_or(destination);
     Ok((waypoint, route))
 }
+
+#[path = "game_path/tests.rs"]
+#[cfg(test)]
+mod tests;
