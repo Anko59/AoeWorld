@@ -85,7 +85,7 @@ impl Home {
 }
 #[derive(Debug, Default)]
 pub(crate) struct Manager {
-    pub(super) active: BTreeSet<EntityId>,
+    pub(crate) active: BTreeSet<EntityId>,
     /// Active domains per player with their centres; derived from `active`.
     pub(super) by_player: BTreeMap<PlayerId, BTreeMap<EntityId, WorldPosition>>,
     pub(crate) controlled: crate::game_world::changes::Reports<(EntityId, ResourceKind)>,

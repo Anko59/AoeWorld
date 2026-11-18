@@ -236,7 +236,11 @@ fn run(threads: usize, domains: usize, unfinished_mills: bool) -> Observation {
                 assert!(work.resource_nodes <= 1_608 * work.resource_searches);
                 assert!(work.resource_blocks <= 25 * work.resource_searches);
                 if tick % (hz * 60) == 0 {
-                    assert_eq!(work.domains, domains, "both Stewards must remain active");
+                    assert_eq!(
+                        w.economy.stewards.active.len(),
+                        domains,
+                        "both Stewards must remain active"
+                    );
                     let seen = components(&w);
                     let mut unreachable = 0;
                     let mut poaching = 0;
@@ -388,8 +392,10 @@ fn ten_minute_four_river_stewards_finish_mills_without_helper_swarms() {
     // (2,508 worker-ticks). Natural starts leave a different kit there; the
     // run now idles 4,022 of 960,000 worker-ticks (0.4%) while walking falls
     // 57% and income more than doubles, and no worker is idle at any minute.
+    // Domains spread over the Steward period wait up to 19 ticks for their
+    // pass: 4,668 idle worker-ticks (0.5%).
     assert!(
-        one.walking < 628_919 && one.idle_ticks <= 4_100,
+        one.walking < 628_919 && one.idle_ticks <= 4_700,
         "walking and mean idle must not rise: {report}"
     );
     assert_eq!(one.idle_minutes.last(), Some(&0), "{report}");
