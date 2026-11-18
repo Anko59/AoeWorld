@@ -121,7 +121,8 @@ pub(crate) struct CollisionIndex {
     cells: [Cells; 2],
     slots: Vec<usize>,
     indices: Vec<usize>,
-    overfull_cells: usize,
+    /// Cells holding more than `CELL_LIMIT` bodies, as (naval, y, x).
+    overfull: std::collections::BTreeSet<(bool, i32, i32)>,
     maximum_radii: [i32; 2],
     /// Land bodies per 2×2-tile cell.
     land_counts: LandCounts,
@@ -190,7 +191,9 @@ impl CollisionIndex {
         let cell = self.cells[usize::from(naval)].entry(tile);
         self.slots[at] = cell.len();
         cell.push(CellBody { id, at: position });
-        self.overfull_cells += usize::from(cell.len() == CELL_LIMIT + 1);
+        if cell.len() == CELL_LIMIT + 1 {
+            self.overfull.insert((naval, tile.y, tile.x));
+        }
         if !naval {
             let (x, y) = coarse(tile);
             let count = self.land_counts.0.get(x, y);
@@ -218,7 +221,9 @@ impl CollisionIndex {
             let count = self.land_counts.0.get(x, y);
             self.land_counts.0.set(x, y, count.saturating_sub(1));
         }
-        self.overfull_cells -= usize::from(cell.len() == CELL_LIMIT + 1);
+        if cell.len() == CELL_LIMIT + 1 {
+            self.overfull.remove(&(naval, tile.y, tile.x));
+        }
         cell.swap_remove(slot);
         self.slots[id.0 as usize] = usize::MAX;
         if let Some(displaced) = cell.get(slot) {
@@ -291,8 +296,21 @@ impl CollisionIndex {
         }
     }
 
-    pub(crate) fn has_overfull_cells(&self) -> bool {
-        self.overfull_cells != 0
+    /// Whether a cell a query of `reach` around `at` scans holds more than
+    /// `CELL_LIMIT` bodies, whose sample then omits some of them.
+    pub(crate) fn overfull_within(&self, at: WorldPosition, reach: i32, naval: bool) -> bool {
+        if self.overfull.is_empty() {
+            return false;
+        }
+        let min = WorldPosition::new(at.x.saturating_sub(reach), at.y.saturating_sub(reach));
+        let max = WorldPosition::new(at.x.saturating_add(reach), at.y.saturating_add(reach));
+        let (min, max) = (min.tile_floor(), max.tile_floor());
+        (min.y..=max.y).any(|y| {
+            self.overfull
+                .range((naval, y, min.x)..=(naval, y, max.x))
+                .next()
+                .is_some()
+        })
     }
 
     /// Uncapped observer census, including every body in overfull cells.

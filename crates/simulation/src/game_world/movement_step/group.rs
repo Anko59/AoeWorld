@@ -56,6 +56,34 @@ impl GameWorld {
             && self.building_step_clear(from.tile_floor(), to.tile_floor())
     }
 
+    /// Whether an overfull cell lies where a sweep of this step with `padding`
+    /// could look: its sample omits bodies, so no certificate holds there.
+    fn crowded_step(
+        &self,
+        index: usize,
+        from: WorldPosition,
+        to: WorldPosition,
+        padding: i32,
+    ) -> bool {
+        let kind = self.units[index].state.kind;
+        let naval = kind.is_naval();
+        let half = ((i64::from(to.x) - i64::from(from.x))
+            .abs()
+            .max((i64::from(to.y) - i64::from(from.y)).abs())
+            + 1)
+            / 2;
+        let reach = kind.collision_radius()
+            + self.collisions.maximum_radii()[usize::from(naval)]
+            + 768
+            + 2 * padding.max(0)
+            + half as i32;
+        let midpoint = WorldPosition::new(
+            ((i64::from(from.x) + i64::from(to.x)) / 2) as i32,
+            ((i64::from(from.y) + i64::from(to.y)) / 2) as i32,
+        );
+        self.collisions.overfull_within(midpoint, reach, naval)
+    }
+
     fn group_sweep_clear(
         &self,
         index: usize,
@@ -113,7 +141,7 @@ impl GameWorld {
             // Overflow samples only 32 bodies. Even if an earlier ordered
             // step later removes the overflow, that snapshot proves nothing
             // about the omitted bodies: retain the ordinary ordered recheck.
-            motion.certified = !self.collisions.has_overfull_cells()
+            motion.certified = !self.crowded_step(index, from, position, tables.group_step_bound)
                 && self.group_sweep_clear(
                     index,
                     from,
@@ -147,7 +175,8 @@ impl GameWorld {
         let from = self.units[index].state.position;
         if !motion.done
             && ((step.state.position == from && from != motion.target)
-                || ((!motion.certified || self.collisions.has_overfull_cells())
+                || ((!motion.certified
+                    || self.crowded_step(index, from, step.state.position, motion.budget))
                     && !self.group_sweep_clear(
                         index,
                         from,

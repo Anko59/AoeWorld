@@ -204,8 +204,13 @@ impl GameWorld {
         });
         // Overflow keeps whole-tile bounds; otherwise use the half-step swept AABB.
         let swept = maximum_radius + padding + ((dx.abs().max(dy.abs()) + 1) / 2) as i32;
+        // Only an overfull cell this query could scan changes its bounds.
         let reach = own_radius
-            + if self.collisions.has_overfull_cells() {
+            + if self.collisions.overfull_within(
+                midpoint,
+                own_radius + swept.max(768 + padding),
+                unit.kind.is_naval(),
+            ) {
                 768 + padding
             } else if bounds.is_some() {
                 swept

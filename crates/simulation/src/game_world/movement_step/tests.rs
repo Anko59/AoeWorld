@@ -119,43 +119,73 @@ fn group_neighbor_radius_bound_grows_at_spawn_and_stays_conservative_after_remov
     assert_eq!(tables.neighbor_radius, [461, 0]);
 }
 
-#[test]
-fn a_snapshot_with_overfull_cells_cannot_certify_an_ordered_group_step() {
+/// A world whose formation mover at (20, 20) heads east past a crowd of 33
+/// bodies, one more than a cell samples, standing on `crowd_at`.
+fn crowd_beside_a_march(crowd_at: TileCoord) -> (GameWorld, EntityId, Vec<EntityId>) {
     let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(0)).unwrap()).unwrap();
-    let center = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
+    let center = |tile| WorldPosition::from_tile_center(tile).unwrap();
     let mover = world
-        .spawn_kind(PlayerId(0), crate::UnitKind::Militia, center(20, 20))
+        .spawn_kind(
+            PlayerId(0),
+            crate::UnitKind::Militia,
+            center(TileCoord::new(20, 20)),
+        )
         .unwrap();
-    let mut crowd = Vec::new();
-    for _ in 0..33 {
-        crowd.push(
+    let crowd = (0..33)
+        .map(|_| {
             world
-                .spawn_kind(PlayerId(1), crate::UnitKind::Militia, center(100, 100))
-                .unwrap(),
-        );
-    }
+                .spawn_kind(PlayerId(0), crate::UnitKind::Militia, center(crowd_at))
+                .unwrap()
+        })
+        .collect();
     world
         .issue_formation_move(
             PlayerId(0),
             &[mover],
             aoe_core::Formation::Line,
-            center(80, 20),
+            center(TileCoord::new(80, 20)),
             false,
             false,
         )
         .unwrap();
     world.advance();
+    (world, mover, crowd)
+}
+
+#[test]
+fn a_snapshot_with_an_overfull_cell_nearby_cannot_certify_an_ordered_group_step() {
+    let crowd_at = TileCoord::new(21, 21);
+    let (mut world, mover, mut crowd) = crowd_beside_a_march(crowd_at);
+    let crowded = |world: &GameWorld| {
+        let at = WorldPosition::from_tile_center(crowd_at).unwrap();
+        world.collisions.overfull_within(at, 0, false)
+    };
     let mut tables = Tables::default();
     tables.refresh(&world, true);
     let index = world.lookup[&mover];
     let proposal = world.propose_group_step(index, &tables).unwrap();
-    assert!(world.collisions.has_overfull_cells());
+    assert!(crowded(&world));
     assert!(!proposal.member.unwrap().certified);
     // A preceding ordered write can remove overflow. The old proposal must
     // still recheck: its snapshot sampled only 32 members of the overfull cell.
     world.remove_unit(crowd.pop().unwrap());
-    assert!(!world.collisions.has_overfull_cells());
+    assert!(!crowded(&world));
     assert!(!proposal.member.unwrap().certified);
+    tables.refresh(&world, true);
+    let proposal = world
+        .propose_group_step(world.lookup[&mover], &tables)
+        .unwrap();
+    assert!(proposal.member.unwrap().certified);
+}
+
+/// An overfull cell far from the step proves nothing about it either way:
+/// the step is certified as in an uncrowded world.
+#[test]
+fn an_overfull_cell_far_away_leaves_a_group_step_certified() {
+    let (world, mover, _) = crowd_beside_a_march(TileCoord::new(100, 100));
+    let at = WorldPosition::from_tile_center(TileCoord::new(100, 100)).unwrap();
+    assert!(world.collisions.overfull_within(at, 0, false));
+    let mut tables = Tables::default();
     tables.refresh(&world, true);
     let proposal = world
         .propose_group_step(world.lookup[&mover], &tables)
