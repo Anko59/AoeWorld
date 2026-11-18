@@ -389,9 +389,13 @@ impl GameWorld {
         let steps = dx.abs().max(dy.abs());
         (1..steps).any(|i| {
             let tile = TileCoord::new(from.x + dx * i / steps, from.y + dy * i / steps);
+            // The water kind alone: a whole composed tile costs a cold
+            // landscape evaluation per tile of the line.
             generator
-                .tile_at(tile)
-                .is_some_and(|t| t.water != aoe_map::WaterKind::None)
+                .water_at_with_cancel(tile, &|| false)
+                .ok()
+                .flatten()
+                .is_some_and(|water| water != aoe_map::WaterKind::None)
         })
     }
 }
