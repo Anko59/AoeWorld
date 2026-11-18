@@ -25,11 +25,13 @@ impl GameWorld {
         parked
     }
 
-    fn seen_by_a_person(&self, id: EntityId) -> bool {
-        self.vision
-            .human_seats
-            .iter()
-            .any(|&player| self.unit_visible_to(player, id))
+    /// `unit_visible_to` for any human seat, read from the stored record.
+    fn seen_by_a_person(&self, index: usize) -> bool {
+        let unit = &self.units[index].state;
+        let tile = unit.position.tile_floor();
+        self.vision.human_seats.iter().any(|&player| {
+            unit.player == player || self.visibility(player, tile) == TileVisibility::Visible
+        }) && !self.embarked(unit.id)
     }
 
     /// Whether the unit at `index` sits out this tick: no person sees it, it
@@ -43,7 +45,7 @@ impl GameWorld {
             // less often (the first experiment lost 5-7% of kills per tick).
             && !self.combat.attackers.contains_key(&id)
             && self.units[index].state.attack_target.is_none()
-            && !self.seen_by_a_person(id)
+            && !self.seen_by_a_person(index)
     }
 
     /// Whether every member the group steers sits out this tick; its targets

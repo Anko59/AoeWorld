@@ -159,9 +159,19 @@ impl GameWorld {
         let steps = dx.abs().max(dy.abs()).min(2 * STEWARD_RULES.radius_tiles);
         for i in 1..=steps {
             let tile = TileCoord::new(fish.x + dx * i / steps, fish.y + dy * i / steps);
-            if generator
-                .tile_at(tile)
-                .is_some_and(|t| t.water == WaterKind::None && t.passable)
+            // Water kind and walk passability equal the composed tile's,
+            // without composing it.
+            let dry = generator
+                .water_at_with_cancel(tile, &|| false)
+                .ok()
+                .flatten()
+                .is_some_and(|water| water == WaterKind::None);
+            if dry
+                && generator
+                    .walk_at_with_cancel(tile, &|| false)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|cell| cell.passable)
             {
                 return Some(tile);
             }
