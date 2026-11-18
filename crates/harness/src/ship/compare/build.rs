@@ -148,6 +148,12 @@ pub(crate) fn build_app(tree: &Path, target: &Path, cargo_home: &Path) -> Result
     )
     .into_iter()
     .chain([vec![
+        // The server players run links as one unit: fat LTO with one codegen
+        // unit costs 9.6% fewer instructions per tick on the scale scoreboard
+        // (#865) for a longer build. Ordinary release builds stay fast.
+        "env",
+        "CARGO_PROFILE_RELEASE_LTO=fat",
+        "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1",
         "cargo",
         "build",
         "--locked",

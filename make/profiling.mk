@@ -120,7 +120,7 @@ save-replay: resource-bootstrap
 save-replay-admitted: job-bootstrap
 	@$(MAKE) --no-print-directory save-replay-steps
 save-replay-steps:
-	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --cap-add PERFMON --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e $(call MOUNT_QUOTE,CARGO_TARGET_DIR=$(ROOT)/.cache/save-replay/target) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) $(RESOURCE_OBSERVER) cargo run --release --locked -p aoe-harness -- save-replay $(AOE_SAVE_REPLAY_ARGS)
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --cap-add PERFMON --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e $(call MOUNT_QUOTE,CARGO_TARGET_DIR=$(ROOT)/.cache/save-replay/target) -e CARGO_PROFILE_RELEASE_LTO=fat -e CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) $(RESOURCE_OBSERVER) cargo run --release --locked -p aoe-harness -- save-replay $(AOE_SAVE_REPLAY_ARGS)
 
 # Explicit PMU access check; ordinary unit tests do not require host counters.
 .PHONY: save-replay-counter-check
