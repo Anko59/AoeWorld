@@ -156,8 +156,9 @@ impl GameWorld {
     }
 
     fn is_gate_tile(&self, tile: TileCoord) -> bool {
+        // The kind alone: no timer projection can change it.
         self.building_at_tile(tile)
-            .and_then(|id| self.building(id))
+            .and_then(|id| self.economy.buildings.get(&id))
             .is_some_and(|b| b.kind.is_gate())
     }
 
