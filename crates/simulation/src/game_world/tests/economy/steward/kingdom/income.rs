@@ -325,10 +325,14 @@ fn remote_income_world(kind: ResourceKind, stalled: bool) -> RemoteIncome {
 }
 
 fn first_joint_pass(a: &mut RemoteIncome, b: &mut RemoteIncome) {
+    // A period's domains spread over its ticks: count them as they run.
+    let mut served = (0, 0);
     for _ in 0..20 {
         a.w.advance();
         b.w.advance();
-        if a.w.steward_work().domains == 2 && b.w.steward_work().domains == 2 {
+        served.0 += a.w.steward_work().domains;
+        served.1 += b.w.steward_work().domains;
+        if served.0 >= 2 && served.1 >= 2 {
             return;
         }
     }
