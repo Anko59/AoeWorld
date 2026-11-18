@@ -156,13 +156,16 @@ fn refused_orders_to_sealed_off_explorers_never_freeze_a_players_army() {
 /// a second never moved.
 #[test]
 fn a_chase_does_not_restart_the_route_search_it_waits_for() {
-    // Melee endpoints proven sealed by the bounded region certificate are
-    // refused up front, so the target sits in a sealed box too large for that
-    // 64-node proof: the answer stays unknown and ordinary planning searches.
+    // A sealed target is refused up front by the attacker's region proof,
+    // so the target's box opens on its far side: the route goes all the way
+    // round and its search needs several repath intervals.
     let mut world =
         GameWorld::new(WorldConfig::new(1_024, 1_024, Seed(0)).expect("config")).expect("world");
     for d in -200..=200 {
         for tile in [(d, -200), (d, 200), (-200, d), (200, d)] {
+            if tile == (0, 200) {
+                continue;
+            }
             world
                 .economy
                 .blocked_tiles
