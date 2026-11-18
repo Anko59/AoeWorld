@@ -181,9 +181,8 @@ pub struct GameWorld {
     pub(crate) destinations: spacing::Destinations,
     pub(crate) terrain: Terrain,
     pub(crate) clearance: Mutex<clearance::Field>,
-    /// Candidate resource nodes per generator chunk, built on the first
-    /// replacement search that touches the chunk and reused by later ones.
-    /// See `GameWorld::chunk_resource_nodes`.
+    /// Candidate resource nodes per generator chunk, built on the first replacement
+    /// search touching it and reused (`GameWorld::chunk_resource_nodes`).
     pub(crate) resource_chunks: Mutex<crate::game_cache::ResourceCache>,
     pub(crate) planning_budget: u32,
     pub(crate) navigation_preparation_budget: Mutex<u32>,
@@ -469,7 +468,8 @@ impl GameWorld {
         if let Some(displaced_index) = displaced.and_then(|id| self.lookup.get(&id).copied()) {
             self.units[displaced_index].bucket_slot = slot;
         }
-        let new_slot = self.chunks.push(bucket, self.units[index].state.id);
+        let state = &self.units[index].state;
+        let new_slot = self.chunks.push(bucket, state.id, state.player);
         self.units[index].bucket = bucket;
         self.units[index].bucket_slot = new_slot;
     }

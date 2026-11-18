@@ -167,17 +167,22 @@ impl GameWorld {
         let mut budget = ENGAGE_INSPECTIONS;
         for y in area.min.y / SPATIAL_CHUNK_TILES..=(area.max.y - 1) / SPATIAL_CHUNK_TILES {
             for x in area.min.x / SPATIAL_CHUNK_TILES..=(area.max.x - 1) / SPATIAL_CHUNK_TILES {
-                let Some(ids) = self.chunks.get(&ChunkCoord { x, y }) else {
+                let Some((ids, owners)) = self.chunks.get_owned(&ChunkCoord { x, y }) else {
                     continue;
                 };
-                let start = ((look * ENGAGE_BUCKET_WINDOW as u64 + u64::from(leader.0))
-                    % ids.len() as u64) as usize;
-                for n in 0..ids.len().min(ENGAGE_BUCKET_WINDOW).min(budget) {
+                let len = ids.len();
+                let mut at = ((look * ENGAGE_BUCKET_WINDOW as u64 + u64::from(leader.0))
+                    % len as u64) as usize;
+                for _ in 0..len.min(ENGAGE_BUCKET_WINDOW).min(budget) {
                     budget -= 1;
-                    let id = ids[(start + n) % ids.len()];
-                    let unit = self.units[self.lookup[&id]].state;
+                    let (id, owner) = (ids[at], owners[at]);
+                    at = if at + 1 == len { 0 } else { at + 1 };
+                    // Allies are rejected from the bucket's owners alone.
+                    if owner == player {
+                        continue;
+                    }
+                    let unit = &self.units[self.lookup[&id]].state;
                     if unit.hp > 0
-                        && unit.player != player
                         && area.contains(unit.position.tile_floor())
                         && !self.embarked(id)
                         && self.unit_visible_to(player, id)

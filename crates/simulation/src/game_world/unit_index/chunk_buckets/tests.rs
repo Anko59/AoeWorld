@@ -4,10 +4,10 @@ use super::*;
 fn keeps_swap_removal_slots_and_counts_occupied_chunks_across_widening() {
     let mut chunks = ChunkBuckets::default();
     let (a, b) = (ChunkCoord { x: 1, y: 2 }, ChunkCoord { x: 40, y: 0 });
-    assert_eq!(chunks.push(a, EntityId(1)), 0);
-    assert_eq!(chunks.push(a, EntityId(2)), 1);
-    assert_eq!(chunks.push(a, EntityId(3)), 2);
-    assert_eq!(chunks.push(b, EntityId(4)), 0);
+    assert_eq!(chunks.push(a, EntityId(1), PlayerId(0)), 0);
+    assert_eq!(chunks.push(a, EntityId(2), PlayerId(0)), 1);
+    assert_eq!(chunks.push(a, EntityId(3), PlayerId(0)), 2);
+    assert_eq!(chunks.push(b, EntityId(4), PlayerId(0)), 0);
     assert_eq!(chunks.len(), 2);
     assert_eq!(
         chunks.get(&a).unwrap(),
@@ -29,24 +29,28 @@ fn far_corner_presence_memory_is_bounded_on_a_16384_tile_map() {
     let mut chunks = ChunkBuckets::default();
     let far = ChunkCoord { x: 511, y: 511 };
     for id in 0..32 {
-        chunks.push(far, EntityId(id));
+        chunks.push(far, EntityId(id), PlayerId(0));
     }
     let bytes = std::mem::size_of_val(&chunks)
-        + chunks.buckets.capacity() * std::mem::size_of::<Vec<EntityId>>()
+        + chunks.buckets.capacity() * std::mem::size_of::<Bucket>()
         + chunks
             .buckets
             .iter()
-            .map(|ids| ids.capacity() * std::mem::size_of::<EntityId>())
+            .map(|b| {
+                b.ids.capacity() * std::mem::size_of::<EntityId>()
+                    + b.owners.capacity() * std::mem::size_of::<PlayerId>()
+            })
             .sum::<usize>();
     eprintln!("far-corner presence allocation: {bytes} bytes");
-    assert_eq!(bytes, 280, "presence allocation regression (64-bit target)");
+    // Owners beside ids: one more vector per bucket and two bytes per unit.
+    assert_eq!(bytes, 440, "presence allocation regression (64-bit target)");
     assert_eq!(chunks.get(&far).unwrap().len(), 32);
     // Grow in every direction and retain slot order and empty reads.
     for (id, (x, y)) in [(510, 511), (511, 510), (512, 511), (511, 512)]
         .into_iter()
         .enumerate()
     {
-        chunks.push(ChunkCoord { x, y }, EntityId(32 + id as u32));
+        chunks.push(ChunkCoord { x, y }, EntityId(32 + id as u32), PlayerId(0));
         assert_eq!(
             chunks.get(&far).unwrap(),
             &(0..32).map(EntityId).collect::<Vec<_>>()
@@ -66,6 +70,7 @@ fn successive_left_and_up_steps_use_geometric_slack() {
                 y: 511 - step,
             },
             EntityId(step as u32),
+            PlayerId(0),
         );
     }
     assert!(chunks.buckets.capacity() <= 32 * 32);

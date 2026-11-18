@@ -1,8 +1,17 @@
 //! The all-unit presence index: the ids of the units in each 32-tile chunk,
 //! in an occupied-bounds row-major array instead of an ordered map. A bucket's
 //! order is its insertion order with swap removals, exactly as before; only
-//! keyed reads ever happened, so nothing observes the storage order.
-use aoe_core::{ChunkCoord, EntityId};
+//! keyed reads ever happened, so nothing observes the storage order. Each
+//! id's owner sits beside it, so a scan for enemies skips allies without
+//! reading their unit records. Conversion replaces a unit, so an id's owner
+//! never changes.
+use aoe_core::{ChunkCoord, EntityId, PlayerId};
+
+#[derive(Debug, Default)]
+struct Bucket {
+    ids: Vec<EntityId>,
+    owners: Vec<PlayerId>,
+}
 
 #[derive(Debug, Default)]
 pub(crate) struct ChunkBuckets {
@@ -10,7 +19,7 @@ pub(crate) struct ChunkBuckets {
     /// between the map origin and the first occupied chunk costs nothing.
     origin: (usize, usize),
     width: usize,
-    buckets: Vec<Vec<EntityId>>,
+    buckets: Vec<Bucket>,
     occupied: usize,
 }
 
@@ -28,7 +37,16 @@ impl ChunkBuckets {
     pub(crate) fn get(&self, chunk: &ChunkCoord) -> Option<&Vec<EntityId>> {
         self.at(*chunk)
             .and_then(|at| self.buckets.get(at))
+            .map(|bucket| &bucket.ids)
             .filter(|ids| !ids.is_empty())
+    }
+
+    /// The bucket's ids with their owners, slot by slot; `None` when empty.
+    pub(crate) fn get_owned(&self, chunk: &ChunkCoord) -> Option<(&[EntityId], &[PlayerId])> {
+        self.at(*chunk)
+            .and_then(|at| self.buckets.get(at))
+            .filter(|bucket| !bucket.ids.is_empty())
+            .map(|bucket| (&bucket.ids[..], &bucket.owners[..]))
     }
 
     /// Chunks holding at least one unit.
@@ -37,26 +55,28 @@ impl ChunkBuckets {
     }
 
     /// Appends `id` to the chunk's bucket and returns its slot there.
-    pub(crate) fn push(&mut self, chunk: ChunkCoord, id: EntityId) -> usize {
+    pub(crate) fn push(&mut self, chunk: ChunkCoord, id: EntityId, owner: PlayerId) -> usize {
         // Unit positions are on the map, so their chunks are never negative.
         debug_assert!(chunk.x >= 0 && chunk.y >= 0, "{chunk:?}");
         let (x, y) = (chunk.x.max(0) as usize, chunk.y.max(0) as usize);
         self.grow_to(x, y);
         let at = (y - self.origin.1) * self.width + (x - self.origin.0);
-        let ids = &mut self.buckets[at];
-        self.occupied += usize::from(ids.is_empty());
-        ids.push(id);
-        ids.len() - 1
+        let bucket = &mut self.buckets[at];
+        self.occupied += usize::from(bucket.ids.is_empty());
+        bucket.ids.push(id);
+        bucket.owners.push(owner);
+        bucket.ids.len() - 1
     }
 
     /// Removes the id at `slot`; returns the id the removal moved into that
     /// slot (the bucket's last), if any.
     pub(crate) fn swap_remove(&mut self, chunk: ChunkCoord, slot: usize) -> Option<EntityId> {
         let at = self.at(chunk)?;
-        let ids = self.buckets.get_mut(at).filter(|ids| slot < ids.len())?;
-        ids.swap_remove(slot);
-        self.occupied -= usize::from(ids.is_empty());
-        ids.get(slot).copied()
+        let bucket = self.buckets.get_mut(at).filter(|b| slot < b.ids.len())?;
+        bucket.ids.swap_remove(slot);
+        bucket.owners.swap_remove(slot);
+        self.occupied -= usize::from(bucket.ids.is_empty());
+        bucket.ids.get(slot).copied()
     }
 
     /// Grow geometrically around occupied bounds, including left/up growth.
@@ -65,7 +85,7 @@ impl ChunkBuckets {
         if self.buckets.is_empty() {
             self.origin = (x, y);
             self.width = 1;
-            self.buckets.push(Vec::new());
+            self.buckets.push(Bucket::default());
             return;
         }
         let rows = self.buckets.len() / self.width;
@@ -95,11 +115,11 @@ impl ChunkBuckets {
             origin.1 = origin.1.saturating_sub(height - required.1);
         }
         let mut buckets = Vec::new();
-        buckets.resize_with(width * height, Vec::new);
+        buckets.resize_with(width * height, Bucket::default);
         let dx = self.origin.0 - origin.0;
         let dy = self.origin.1 - origin.1;
-        for (at, ids) in self.buckets.drain(..).enumerate() {
-            buckets[(at / self.width + dy) * width + at % self.width + dx] = ids;
+        for (at, bucket) in self.buckets.drain(..).enumerate() {
+            buckets[(at / self.width + dy) * width + at % self.width + dx] = bucket;
         }
         self.buckets = buckets;
         self.origin = origin;
