@@ -47,25 +47,26 @@ impl GameWorld {
                 });
             }
             self.formations = groups;
-            let mut resting_members = Vec::new();
-            for (leader, group) in self.formations.iter().filter(|(_, group)| !group.settled) {
-                let steered = group
-                    .members
-                    .iter()
-                    .inspect(|_| self.group_work.members(1))
-                    .filter(|m| !m.detached)
-                    .map(|m| m.id);
-                if resting.contains(leader) {
-                    resting_members.extend(steered);
-                } else {
-                    movers.extend(steered);
-                }
+            for (_, group) in self
+                .formations
+                .iter()
+                .filter(|(leader, group)| !group.settled && !resting.contains(*leader))
+            {
+                movers.extend(
+                    group
+                        .members
+                        .iter()
+                        .inspect(|_| self.group_work.members(1))
+                        .filter(|m| !m.detached)
+                        .map(|m| m.id),
+                );
             }
             // Already known to sit out: banked without asking again.
-            for id in resting_members {
-                if let Some(&index) = self.lookup.get(&id) {
-                    self.bank_rest(index, id);
+            for &leader in &resting {
+                if let Some(group) = self.formations.get(&leader) {
+                    self.group_work.members(group.members.len() as u64);
                 }
+                self.bank_group_rest(leader);
             }
         }
         movers.retain(|&id| !self.park_unseen(id));
