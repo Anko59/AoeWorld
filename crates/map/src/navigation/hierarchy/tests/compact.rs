@@ -95,3 +95,51 @@ fn chunk(
         packed: None,
     }
 }
+
+#[test]
+fn decoded_static_chunks_answer_every_tile_as_the_packed_view() {
+    let nodes: Vec<_> = (0..grid::CELLS)
+        .step_by(3)
+        .map(|at| {
+            let node = crate::ResourceNode {
+                id: at as u64 * 31,
+                tile: grid::tile((0, 0), at),
+                kind: crate::ResourceKind::Wood,
+                object: crate::ObjectKind::Tree,
+                initial_amount: at as u16,
+                visual_variant: (at % 5) as u8,
+            };
+            (at as u16, node)
+        })
+        .collect();
+    let mut stored = chunk(nodes, vec![(grid::CELLS as u16, 1)], 1);
+    // Absent cells, every flag combination and negative heights.
+    stored.runs = (0..16u16)
+        .map(|n| WalkRun {
+            end: (n + 1) * 64,
+            flags: if n % 5 == 0 {
+                0
+            } else {
+                1 | (n as u8 % 8) << 1
+            },
+            height: n as i16 - 8,
+        })
+        .collect();
+    let bytes = stored.encode().unwrap();
+    let decoded = super::decoded::Decoded::new(1);
+    let packed = |at| packed::View::new(&bytes).cell(at);
+    // The first passes read packed bytes until the chunk is decoded.
+    for _ in 0..3 {
+        for at in 0..grid::CELLS {
+            assert_eq!(
+                decoded.cell(0, || packed::View::new(&bytes), at),
+                packed(at),
+                "{at}"
+            );
+        }
+    }
+    assert!(
+        decoded.heap_bytes() > 4 * grid::CELLS,
+        "the chunk was decoded"
+    );
+}
