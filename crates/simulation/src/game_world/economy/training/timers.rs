@@ -90,6 +90,10 @@ impl QueueTimers {
     }
 
     pub(crate) fn project<'a>(&self, mut b: Cow<'a, GameBuilding>) -> Cow<'a, GameBuilding> {
+        // Nothing queued or researched: nothing to bring up to date.
+        if b.training_queue.is_empty() && b.research.is_none() {
+            return b;
+        }
         let train = self.training.elapsed(b.id, self.training.tick);
         let research = self.research.elapsed(b.id, self.research.tick);
         if train > 0
