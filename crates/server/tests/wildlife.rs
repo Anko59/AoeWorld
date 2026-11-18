@@ -221,7 +221,10 @@ async fn a_military_hit_publishes_a_valid_retaliating_predator_in_the_same_tick(
     for kind in [AnimalKind::Wolf, AnimalKind::Boar] {
         let service = GameplayService::new(Seed(1));
         let (tx, mut rx) = mpsc::channel(256);
-        let (session, _) = service.register(None, tx).await;
+        let (session, welcome) = service.register(None, tx).await;
+        let GameplayServerMessage::Welcome { tick_hz, .. } = welcome else {
+            panic!("welcome");
+        };
         let region = TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384));
         service.subscribe(session, 1, region).await;
         let initial = drain(&mut rx);
@@ -273,7 +276,9 @@ async fn a_military_hit_publishes_a_valid_retaliating_predator_in_the_same_tick(
                     .unwrap(),
                 )
                 .await;
-            for _ in 0..250 {
+            // 12.5 game seconds a leg, so the scout cuts the same corners at
+            // any rate: one predator stands just inside the ring's corner.
+            for _ in 0..25 * tick_hz / 2 {
                 if target.is_some() {
                     break 'sweep;
                 }

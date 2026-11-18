@@ -105,6 +105,7 @@ fn start_server(options: &Options, root: &Path, work: &Path) -> Result<Server, B
             fs::canonicalize(&options.package_directory)?,
         )
         .env("AOE_BUILD_SHA", git(&["rev-parse", "HEAD"]))
+        .env("AOE_TICK_HZ", options.tick_hz().to_string())
         .stdout(Stdio::from(log.try_clone()?))
         .stderr(Stdio::from(log));
     procs::profile_env(options, &mut command)?;
@@ -242,7 +243,7 @@ pub(super) fn run(options: &Options, saved: Option<Value>) -> Result<(), BoxErro
     let mut last_sample = Instant::now();
     let mut failure = None;
     let mut phase_minutes = vec![save::sample(&server, 0.0, saved.is_some())?];
-    let mut minutes = report::Minutes::default();
+    let mut minutes = report::Minutes::at(options.tick_hz());
     while run_started.elapsed() < wall {
         if let Some(reason) = server.exited() {
             failure = Some(reason);
@@ -391,10 +392,10 @@ pub(super) fn run(options: &Options, saved: Option<Value>) -> Result<(), BoxErro
         }, "run": {
             "wall_seconds": crate::perf_scale::stats::round(wall_seconds),
             "units_gained_by_play": rows.iter().map(|r| r.units).max().unwrap_or(0).saturating_sub(first_units),
-            "window_note": "tick_ms is the whole tick (orders, advance, per-session views); late_start counts a tick that began over 50 ms after its schedule",
+            "window_note": "tick_ms is the whole tick (orders, advance, per-session views); late_start counts a tick that began over one tick period after its schedule",
             "ticks_total": rows.len(),
             "missed_total": rows.iter().filter(|r| r.missed).count(),
-            "window": report::window(&rows, wall_seconds),
+            "window": report::window(&rows, wall_seconds, f64::from(options.tick_hz())),
         },
         "machine": {
             "server_cpu_mean_cores": server_mean, "server_cpu_max_cores": server_max,

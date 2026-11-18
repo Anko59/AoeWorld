@@ -106,7 +106,7 @@ fn live_match_report_retains_combat_orders_and_hierarchy_phase_timings() {
         ]))
         .unwrap()
     });
-    let window = report::window(&rows, 0.1);
+    let window = report::window(&rows, 0.1, 20.0);
     assert_eq!(window["phases_ms"]["orders"]["p95_ms"], 2.0);
     assert_eq!(window["phases_ms"]["combat"]["p95_ms"], 3.0);
     assert_eq!(window["phases_ms"]["hierarchy"]["p95_ms"], 1.5);
@@ -132,10 +132,10 @@ fn tick_rows_parse_and_summarise() {
             )
         })
         .collect();
-    let window = report::window(&rows, 5.0);
+    let window = report::window(&rows, 5.0, 20.0);
     assert_eq!(window["ticks"], 100);
     assert_eq!(window["missed_ticks"], 10);
-    assert_eq!(window["over_50ms"], 49);
+    assert_eq!(window["over_budget"], 49);
     assert_eq!(window["ticks_per_second"], 20.0);
     assert_eq!(window["realtime_factor"], 1.0);
     assert_eq!(window["units_first"], 1_000);
@@ -172,9 +172,9 @@ fn finished_report() -> serde_json::Value {
         row(1, 40_000, 30_000, 1_000, false),
         row(2, 60_000, 50_000, 1_100, true),
     ];
-    let mut run = report::window(&rows, 0.1);
+    let mut run = report::window(&rows, 0.1, 20.0);
     run["wall_seconds"] = json!(60.0);
-    let mut minutes = report::Minutes::default();
+    let mut minutes = report::Minutes::at(20);
     minutes.record(&rows, 60.0);
     json!({
         "label": "smoke", "revision": "abc", "dirty": false,

@@ -103,7 +103,7 @@ fn phase_sampling_retains_every_exposed_phase() {
 
 #[test]
 fn minute_windows_use_observed_time_and_keep_every_tick_once() {
-    let mut minutes = super::super::report::Minutes::default();
+    let mut minutes = super::super::report::Minutes::at(20);
     let mut rows: Vec<_> = (0..600)
         .map(|tick| super::super::tests::row(tick, 40_000, 30_000, 100, false))
         .collect();

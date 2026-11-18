@@ -75,6 +75,7 @@ impl GameplayService {
             None if package.environment.samples_per_axis == 0 => GameWorld::from_map(package)?,
             None => return Err(GameWorldError::InvalidTerrain.into()),
         };
+        world.set_tick_hz(crate::Config::tick_hz_from_env());
         map_store::navigation::prepare_world(&world, content_hash, directory, cancelled)
             .map_err(MatchError::Navigation)?;
         let navigation_started = std::time::Instant::now();

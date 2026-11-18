@@ -21,6 +21,21 @@ pub(crate) fn physical_speed_config(
     config
 }
 
+/// `config` stepping at `tick_hz`, its configured speed per second unchanged.
+pub(crate) fn at_tick_hz(mut config: WorldConfig, tick_hz: u32) -> WorldConfig {
+    if tick_hz == config.tick_hz || tick_hz == 0 {
+        return config;
+    }
+    let numerator = u64::try_from(config.move_speed_subunits_per_tick).unwrap_or_default()
+        * u64::from(config.tick_hz);
+    let denominator = config.move_speed_subunits_per_tick_denominator * u64::from(tick_hz);
+    let divisor = gcd(numerator, denominator).max(1);
+    config.tick_hz = tick_hz;
+    config.move_speed_subunits_per_tick = i32::try_from(numerator / divisor).unwrap_or(i32::MAX);
+    config.move_speed_subunits_per_tick_denominator = denominator / divisor;
+    config
+}
+
 fn gcd(mut left: u64, mut right: u64) -> u64 {
     while right != 0 {
         let remainder = left % right;

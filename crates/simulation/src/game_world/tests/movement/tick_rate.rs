@@ -71,3 +71,16 @@ fn a_march_lasts_the_same_game_time_at_10_and_20_hz() {
         "{slow_spread} {fast_spread}"
     );
 }
+
+#[test]
+fn setting_the_rate_keeps_speed_per_second() {
+    let mut world = GameWorld::new(WorldConfig::new(64, 64, Seed(1)).unwrap()).unwrap();
+    let per_second = |c: WorldConfig| {
+        f64::from(c.move_speed_subunits_per_tick) * f64::from(c.tick_hz)
+            / c.move_speed_subunits_per_tick_denominator as f64
+    };
+    let before = per_second(world.config());
+    world.set_tick_hz(10);
+    assert_eq!(world.config().tick_hz, 10);
+    assert!((per_second(world.config()) - before).abs() < 1e-9);
+}

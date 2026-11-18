@@ -120,7 +120,9 @@ impl GameplayService {
                     as Arc<dyn EnvironmentPageProvider>,
             )
         };
-        resume_service(package, provider, &loaded, &|| false, Some(packages))
+        // The recording's commands are numbered in 20 Hz ticks.
+        let hz = aoe_core::REFERENCE_HZ;
+        resume_service(package, provider, &loaded, &|| false, Some(packages), hz)
             .map_err(|e| e.to_string())
     }
     /// Writes this match to `directory` as `name`.
@@ -294,12 +296,19 @@ pub(super) async fn build(
         let cancelled = || cancelled.load(Ordering::Acquire);
         match resume {
             Some(loaded) => {
-                resume_service(package, provider, &loaded, &cancelled, directory.as_deref()).map(
-                    |(service, report)| {
-                        tracing::info!(?report, "saved game restored");
-                        service
-                    },
+                let hz = crate::Config::tick_hz_from_env();
+                resume_service(
+                    package,
+                    provider,
+                    &loaded,
+                    &cancelled,
+                    directory.as_deref(),
+                    hz,
                 )
+                .map(|(service, report)| {
+                    tracing::info!(?report, "saved game restored");
+                    service
+                })
             }
             None => GameplayService::from_match_rules_stored(
                 package,
@@ -339,6 +348,7 @@ fn resume_service(
     loaded: &Loaded,
     cancelled: &dyn Fn() -> bool,
     directory: Option<&FsPath>,
+    tick_hz: u32,
 ) -> Result<(GameplayService, aoe_simulation::RestoreReport), MatchError> {
     let content_hash = package.content_hash;
     let content_hash_hex = package.content_hash_hex();
@@ -355,6 +365,8 @@ fn resume_service(
         .map_err(GameWorldError::Environment)?;
     let seats = &loaded.file.seats;
     world.set_limits(MatchRules::default().limits(seats.len()));
+    // A save holds reference ticks; it resumes at `tick_hz`.
+    world.set_tick_hz(tick_hz);
     let report = world
         .restore_snapshot(&loaded.file.world, content_hash, cancelled)
         .map_err(|error| {
