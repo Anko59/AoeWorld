@@ -41,6 +41,9 @@ pub(super) const TIER_ROAD: u8 = 2;
 pub(super) const TIER_PRODUCTION: u8 = 2;
 pub(super) const TIER_WORK_TOWER: u8 = 3;
 /// One minute at 20 Hz: newly explored ground and new camps join the plan.
+/// Counted in world ticks, not converted to game time: re-planning every game
+/// minute lays parallel bridges, so a slower rate
+/// re-plans less often (#894).
 pub(super) const REPLAN_TICKS: u64 = 1_200;
 /// A refused site is re-planned around within ten seconds.
 pub(super) const REFUSED_REPLAN_TICKS: u64 = 200;
@@ -59,7 +62,7 @@ impl GameWorld {
             && (d.pending.is_some()
                 || (!d.plan.is_empty()
                     && d.plan_age == age
-                    && self.tick.0.saturating_sub(d.planned) < self.config.ticks(REPLAN_TICKS)))
+                    && self.tick.0.saturating_sub(d.planned) < REPLAN_TICKS))
         {
             return d.plan.clone();
         }
