@@ -5,8 +5,6 @@
 use crate::{GameWorld, GameWorldError, Terrain};
 use aoe_core::{PlayerId, TileCoord, TileRect};
 use aoe_map::{LandBucket, MapRegionGround, RegionChunk, RegionGround, RegionTile, Regions};
-use std::cell::OnceCell;
-use std::collections::BTreeMap;
 
 /// A bounded optional witness can cover a modest detour around a chunk wall.
 /// Longer questions remain with the ordinary resumable route planner.
@@ -14,39 +12,33 @@ const REGION_PROOF_NODES: u32 = 64;
 
 struct Ground<'a> {
     world: &'a GameWorld,
-    /// Completed gates' tiles, read only when a chunk is relabelled.
-    gates: OnceCell<BTreeMap<TileCoord, (u32, u32)>>,
     terrain: Option<MapRegionGround<'a>>,
 }
 
 impl Ground<'_> {
-    // Navigation reads stable gate metadata, without projecting construction
-    // progress or training queues for unrelated buildings.
-    fn gates(&self) -> &BTreeMap<TileCoord, (u32, u32)> {
-        self.gates.get_or_init(|| {
-            let mut gates = BTreeMap::new();
-            for gate in self
-                .world
-                .economy
-                .gates
-                .iter()
-                .filter_map(|id| self.world.economy.buildings.get(id))
-                .inspect(|_| {
-                    if let Some(probe) = &self.world.planning_probe {
-                        probe.movement_count("region_gate_candidates", 1);
-                    }
-                })
-                .filter(|b| b.kind.is_gate() && b.is_complete())
-            {
-                let rect = gate.footprint;
-                for y in rect.min.y..rect.max.y {
-                    for x in rect.min.x..rect.max.x {
-                        gates.insert(TileCoord::new(x, y), (gate.id.0, u32::from(gate.player.0)));
-                    }
-                }
-            }
-            gates
-        })
+    /// `id` if it is a completed gate. Navigation reads stable
+    /// gate metadata, without projecting construction progress or training
+    /// queues for unrelated buildings.
+    fn complete_gate(&self, id: aoe_core::EntityId) -> Option<u32> {
+        if let Some(probe) = &self.world.planning_probe {
+            probe.movement_count("region_gate_candidates", 1);
+        }
+        self.world
+            .economy
+            .buildings
+            .get(&id)
+            .filter(|b| b.kind.is_gate() && b.is_complete())
+            .map(|b| b.id.0)
+    }
+
+    /// Whether a completed gate stands in `[min, max)`.
+    fn gate_within(&self, min: TileCoord, max: TileCoord) -> bool {
+        self.world
+            .economy
+            .gate_tiles
+            .range(TileCoord::new(min.x, i32::MIN)..TileCoord::new(max.x, i32::MIN))
+            .filter(|(tile, _)| tile.y >= min.y && tile.y < max.y)
+            .any(|(_, &id)| self.complete_gate(id).is_some())
     }
 }
 
@@ -63,11 +55,7 @@ impl RegionGround for Ground<'_> {
             min.x + aoe_map::CHUNK_TILES + 2,
             min.y + aoe_map::CHUNK_TILES + 2,
         );
-        if self
-            .gates()
-            .keys()
-            .any(|tile| tile.x >= min.x && tile.y >= min.y && tile.x < max.x && tile.y < max.y)
-        {
+        if self.gate_within(min, max) {
             return None;
         }
         self.terrain
@@ -75,7 +63,13 @@ impl RegionGround for Ground<'_> {
             .and_then(|ground| ground.chunk(key, size))
     }
     fn tile(&self, tile: TileCoord) -> RegionTile {
-        if let Some(&(gate, _)) = self.gates().get(&tile) {
+        if let Some(gate) = self
+            .world
+            .economy
+            .gate_tiles
+            .get(&tile)
+            .and_then(|&id| self.complete_gate(id))
+        {
             return RegionTile::Gate(gate);
         }
         let config = self.world.config;
@@ -178,7 +172,6 @@ impl GameWorld {
         });
         let ground = Ground {
             world: self,
-            gates: OnceCell::new(),
             terrain: match &self.terrain {
                 Terrain::Map { generator, overlay } => {
                     Some(MapRegionGround::new(generator, overlay, &|| false))
