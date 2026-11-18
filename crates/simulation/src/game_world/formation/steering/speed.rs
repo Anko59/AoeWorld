@@ -76,6 +76,7 @@ impl GameWorld {
             remaining: 0,
             near_center: false,
             certified: false,
+            unseen: false,
             static_clear: group.static_covers(unit.state.position, unit.state.kind),
         })
     }

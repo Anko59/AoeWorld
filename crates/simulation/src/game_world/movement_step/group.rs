@@ -102,9 +102,14 @@ impl GameWorld {
             motion.obstructed = true;
             position = group_step(from, motion.center, motion.budget);
         }
+        // An unseen bystander's squad moves as one body: terrain and
+        // buildings stop it (checked above), other bodies do not.
+        motion.unseen = primary_static && self.unseen_bystander(index);
         // Static terrain/buildings do not mutate during the movement phase.
         // The primary sweep already checked the body; only a fallback needs it.
-        if !primary_static
+        if motion.unseen {
+            motion.certified = true;
+        } else if !primary_static
             && !motion.static_clear
             && !self.body_step_clear(state.kind, from, position)
         {
@@ -146,6 +151,7 @@ impl GameWorld {
         self.group_work.members(1);
         let from = self.units[index].state.position;
         if !motion.done
+            && !motion.unseen
             && ((step.state.position == from && from != motion.target)
                 || ((!motion.certified || self.collisions.has_overfull_cells())
                     && !self.group_sweep_clear(

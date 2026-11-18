@@ -37,6 +37,10 @@ pub(crate) struct Motion {
     pub(crate) path_progress: i64,
     pub(crate) neighbor_radius: i32,
     pub(crate) certified: bool,
+    /// No person sees the member and it is not fighting: it steps as part of
+    /// its squad's body, through other bodies, only terrain and buildings
+    /// stopping it (`GameWorld::unseen_bystander`).
+    pub(crate) unseen: bool,
     pub(crate) static_clear: bool,
     pub(crate) remaining: i64,
     pub(crate) near_center: bool,
