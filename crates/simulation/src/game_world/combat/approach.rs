@@ -3,7 +3,6 @@ use super::{MELEE_RANGE_SUBUNITS, tick::Goal};
 use crate::game_world::movement_step::{CellHasher, tile_key};
 use crate::{GameWorld, GameWorldError};
 use aoe_core::{EntityId, TileCoord, WorldPosition};
-use aoe_map::HierarchicalOutcome;
 use std::{
     cmp::Reverse,
     collections::{BTreeSet, BinaryHeap, HashMap},
@@ -12,13 +11,11 @@ use std::{
 
 /// Bounds both search work and retained frontier entries, independent of map size.
 const MAX_ATTACK_SEARCH_TILES: usize = 1_024;
-/// Targets within this many tiles are checked for reachability over chunk portals.
-const HIERARCHY_PROOF_TILES: i64 = 400;
-/// Candidate tiles proven over the portal graph per search, so a target in a
-/// sealed pocket costs a bounded number of abstract searches.
+/// Targets within this many tiles are checked for reachability on the region layer.
+const REGION_PROOF_TILES: i64 = 400;
+/// Candidate tiles proven on the region layer per search, so a target in a
+/// sealed pocket costs a bounded number of proofs.
 const MAX_HIERARCHY_PROOFS: u32 = 4;
-/// Combat only proves a candidate; the route scheduler owns full route work.
-const ATTACK_HIERARCHY_EXPANSIONS: u32 = 1_024;
 pub(super) const MAX_ATTACK_SEARCHES_PER_TICK: u32 = 16;
 const NEIGHBOURS: [(i32, i32); 8] = [
     (0, -1),
@@ -346,7 +343,14 @@ impl GameWorld {
             // The bounded local search ran out before it met the target: a
             // far target. Pick the firing tile at the target instead.
             return spent(AttackSearch {
-                destination: self.far_attack_destination(unit.kind, origin, goal, range, min)?,
+                destination: self.far_attack_destination(
+                    unit.kind,
+                    unit.player,
+                    origin,
+                    goal,
+                    range,
+                    min,
+                )?,
                 far: true,
                 wait: None,
             });
@@ -360,14 +364,15 @@ impl GameWorld {
 
     /// Firing tile for a target beyond the local search: the nearest open tile
     /// to the goal that is in range, canonical order (distance, y, x). Within
-    /// `HIERARCHY_PROOF_TILES` the chunk-portal graph also proves that the
-    /// attacker can reach its chunk; farther away the walk itself plans legs
+    /// `REGION_PROOF_TILES` the attacker's region layer (its gates included)
+    /// also proves that it can reach the tile; farther away the walk itself plans legs
     /// as it goes, like any far move order, and a hopeless chase ends at the
     /// next repath. Work per call is bounded by the candidate window and the
     /// abstract-node cap, never by the distance.
     fn far_attack_destination(
         &self,
         kind: crate::UnitKind,
+        player: aoe_core::PlayerId,
         origin: TileCoord,
         goal: &Goal,
         range: i64,
@@ -399,11 +404,12 @@ impl GameWorld {
         let near = (i64::from(origin.x) - i64::from(centre.x))
             .abs()
             .max((i64::from(origin.y) - i64::from(centre.y)).abs())
-            <= HIERARCHY_PROOF_TILES;
-        let prove = near && !kind.is_naval();
+            <= REGION_PROOF_TILES;
+        let bucket = aoe_map::LandBucket::for_radius(kind.collision_radius())
+            .filter(|_| near && !kind.is_naval());
         pick_firing_tile(
             candidates,
-            prove,
+            bucket.is_some(),
             |tile| {
                 Ok(!self.economy.blocked_tiles.contains(&tile)
                     && self
@@ -415,11 +421,9 @@ impl GameWorld {
                     && self.unit_step_clear(kind, to, from).unwrap_or(false))
             },
             |tile| {
-                !matches!(
-                    self.terrain
-                        .hierarchical_route(origin, tile, ATTACK_HIERARCHY_EXPANSIONS),
-                    Some(HierarchicalOutcome::Unreachable)
-                )
+                bucket.is_none_or(|bucket| {
+                    !matches!(self.land_reachable(player, bucket, origin, tile), Ok(false))
+                })
             },
         )
     }
@@ -430,7 +434,7 @@ impl GameWorld {
 /// by clear steps through the candidate window without another proof, so an
 /// islet with dozens of firing tiles costs one proof, not dozens. Only
 /// `MAX_HIERARCHY_PROOFS` separate groups are proven per search; past that the
-/// next open candidate is taken unproven, as beyond `HIERARCHY_PROOF_TILES`:
+/// next open candidate is taken unproven, as beyond `REGION_PROOF_TILES`:
 /// the walk plans its legs and a hopeless chase ends at the next repath, so
 /// the cap never rejects an order that has a reachable firing tile.
 fn pick_firing_tile(
