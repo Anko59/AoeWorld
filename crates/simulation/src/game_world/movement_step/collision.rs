@@ -245,7 +245,8 @@ impl GameWorld {
                 if id == unit.id {
                     return false;
                 }
-                let other = &self.units[self.collisions.unit_index(id)].state;
+                let record = &self.units[self.collisions.unit_index(id)];
+                let other = &record.state;
                 if other.hp == 0 || (stationary && other.moving) {
                     return false;
                 }
@@ -261,10 +262,7 @@ impl GameWorld {
                 }
                 // Members of one formation stand a slot apart by construction
                 // and may brush through each other; strangers stay hard.
-                if self.units[index].formation.is_some()
-                    && self.units[self.collisions.unit_index(id)].formation
-                        == self.units[index].formation
-                {
+                if record.formation.is_some() && record.formation == self.units[index].formation {
                     return false;
                 }
                 let r = if !soft && !work_squeeze && !unit.kind.is_naval() {

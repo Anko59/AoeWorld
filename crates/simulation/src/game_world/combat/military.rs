@@ -40,6 +40,40 @@ pub fn researched_stats(kind: UnitKind, feudal: bool, researched: u128) -> UnitC
     apply_research_stats(*unit_combat(kind), feudal, researched)
 }
 
+/// Foot and mounted archers: the archer armour line and the Fletching line.
+fn is_missile(kind: UnitKind) -> bool {
+    matches!(
+        kind,
+        UnitKind::Archer
+            | UnitKind::Skirmisher
+            | UnitKind::Crossbowman
+            | UnitKind::EliteSkirmisher
+            | UnitKind::Arbalester
+            | UnitKind::CavalryArcher
+            | UnitKind::HeavyCavalryArcher
+    )
+}
+
+/// `researched_stats(..).los` alone: fog asks it for every body that moves.
+pub(crate) fn researched_los(kind: UnitKind, feudal: bool, researched: u128) -> u8 {
+    let has = |t: Tech| u8::from(researched & t.bit() != 0);
+    if kind == UnitKind::Scout && feudal {
+        return if has(Tech::CastleAge) == 1 { 8 } else { 6 };
+    }
+    let base = unit_combat(kind).los;
+    if researched == 0 {
+        return base;
+    }
+    let lines = has(Tech::BodkinArrow) + has(Tech::Fletching);
+    if is_missile(kind) {
+        base + has(Tech::Bracer) + lines
+    } else if kind.is_galley_line() {
+        base + lines
+    } else {
+        base
+    }
+}
+
 /// Apply effects to supplied base data, including the browser's runtime asset.
 pub fn apply_research_stats(mut s: UnitCombat, feudal: bool, researched: u128) -> UnitCombat {
     // Only scouts have an age effect without research.
@@ -62,16 +96,7 @@ pub fn apply_research_stats(mut s: UnitCombat, feudal: bool, researched: u128) -
     );
     // Foot archers and mounted archers take the archer armour line; the
     // Hand Cannoneer takes only the armour (no Fletching line, no Chemistry).
-    let missile = matches!(
-        kind,
-        UnitKind::Archer
-            | UnitKind::Skirmisher
-            | UnitKind::Crossbowman
-            | UnitKind::EliteSkirmisher
-            | UnitKind::Arbalester
-            | UnitKind::CavalryArcher
-            | UnitKind::HeavyCavalryArcher
-    );
+    let missile = is_missile(kind);
     let archer = missile || kind == UnitKind::HandCannoneer;
     let ranged_ship = kind.is_galley_line();
     let cavalry = matches!(
@@ -247,3 +272,7 @@ impl GameWorld {
         })
     }
 }
+
+#[path = "military/tests.rs"]
+#[cfg(test)]
+mod tests;

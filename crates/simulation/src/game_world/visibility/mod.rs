@@ -299,14 +299,11 @@ impl GameWorld {
                     4
                 }
             }
-            _ => {
-                super::combat::military::researched_stats(
-                    u.kind,
-                    economy.is_some_and(|p| p.age >= super::Age::Feudal),
-                    researched,
-                )
-                .los
-            }
+            _ => super::combat::military::researched_los(
+                u.kind,
+                economy.is_some_and(|p| p.age >= super::Age::Feudal),
+                researched,
+            ),
         };
         Some((u.player, u.position.tile_floor(), los))
     }
