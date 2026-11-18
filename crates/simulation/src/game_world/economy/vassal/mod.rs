@@ -206,7 +206,7 @@ impl GameWorld {
     pub(crate) fn advance_vassals(&mut self, changed: &mut Vec<EntityId>) {
         self.advance_vassal_plans();
         if (self.economy.vassals.domains.is_empty() && self.economy.vassals.returns.is_empty())
-            || !self.tick.0.is_multiple_of(self.config.ticks(20))
+            || !self.tick.0.is_multiple_of(20)
         {
             return;
         }
