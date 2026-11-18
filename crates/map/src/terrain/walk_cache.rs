@@ -11,6 +11,7 @@ use aoe_core::TileCoord;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+mod edge;
 mod page_memo;
 mod probe;
 use page_memo::PageMemo;
@@ -401,33 +402,6 @@ impl MapChunkGenerator {
                     node,
                 })),
         }
-    }
-
-    /// Edge rule between two adjacent tiles from cached chunk data.
-    pub(super) fn cached_edge(
-        &self,
-        from: TileCoord,
-        to: TileCoord,
-        cancelled: &dyn Fn() -> bool,
-    ) -> Result<Option<EdgePassability>, EnvironmentPageError> {
-        let (Lookup::Cell(a), Lookup::Cell(b)) = (
-            self.walk_lookup(from, cancelled)?,
-            self.walk_lookup(to, cancelled)?,
-        ) else {
-            return Ok(None);
-        };
-        Ok(Some(
-            if !a.passable
-                || !b.passable
-                || !a.walkable_surface
-                || !b.walkable_surface
-                || (i32::from(a.game_height_level) - i32::from(b.game_height_level)).abs() > 1
-            {
-                EdgePassability::Blocked
-            } else {
-                EdgePassability::Passable
-            },
-        ))
     }
 
     pub(crate) fn navigation_cells(

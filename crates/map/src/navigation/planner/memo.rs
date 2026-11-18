@@ -15,6 +15,9 @@ use std::hash::BuildHasherDefault;
 // decide a route. Their canonical serialization sorts keys separately.
 pub(super) type Map<K, V> = HashMap<K, V, BuildHasherDefault<TileHasher>>;
 
+/// Tiles a memo map holds before its first growth.
+const MEMO_START: usize = 256;
+
 pub(super) struct MemoTerrain<'a> {
     inner: &'a dyn RouteTerrain,
     /// Walkability is memoized for this overlay only. A search also asks
@@ -32,9 +35,20 @@ impl<'a> MemoTerrain<'a> {
         Self {
             inner,
             overlay,
-            walkable: RefCell::default(),
-            edges: RefCell::default(),
-            costs: RefCell::default(),
+            // A leg search probes a few hundred tiles: start the maps at that
+            // size instead of rehashing through every power of two.
+            walkable: RefCell::new(Map::with_capacity_and_hasher(
+                MEMO_START,
+                Default::default(),
+            )),
+            edges: RefCell::new(Map::with_capacity_and_hasher(
+                4 * MEMO_START,
+                Default::default(),
+            )),
+            costs: RefCell::new(Map::with_capacity_and_hasher(
+                MEMO_START,
+                Default::default(),
+            )),
         }
     }
 }
