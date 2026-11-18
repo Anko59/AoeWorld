@@ -177,7 +177,8 @@ impl GameWorld {
                 }
                 if member.stalled >= GIVE_UP_AFTER_TICKS {
                     return self.retry_pending(member)
-                        && (tick + u64::from(member.id.0)).is_multiple_of(RETRY_EVERY);
+                        && (tick + u64::from(member.id.0))
+                            .is_multiple_of(self.config.ticks(RETRY_EVERY));
                 }
                 if member.blocked >= DETACH_AFTER {
                     return true;
@@ -313,6 +314,7 @@ impl GameWorld {
         // obstruction: one was seen rocking at a deck mouth for 5,000 ticks.
         // Count those ticks in `blocked`, unused by a detached member, against
         // its best distance in `remaining`; at the give-up it rejoins.
+        let step = self.config.reference_ticks_per_tick();
         let mut still = Vec::new();
         for (&leader, group) in self.formations.iter().filter(|(_, g)| !g.settled) {
             for (at, member) in group.members.iter().enumerate() {
@@ -338,7 +340,7 @@ impl GameWorld {
                     member.remaining = left;
                     member.blocked = 0;
                 } else {
-                    member.blocked = member.blocked.saturating_add(1);
+                    member.blocked = member.blocked.saturating_add(step);
                 }
             }
         }
@@ -371,7 +373,7 @@ impl GameWorld {
                     // deck has one way on: stop asking and take the corridor.
                     || (unit.planning
                         && self.tick.0.saturating_sub(self.units[index].planning_since)
-                            >= u64::from(GIVE_UP_AFTER_TICKS)
+                            >= self.config.ticks(u64::from(GIVE_UP_AFTER_TICKS))
                         && self.near_deck(unit.position));
                 let near = self.units[index].order.is_some_and(|order| {
                     navigating && path::squared(unit.position, order.destination) <= 512_i64.pow(2)

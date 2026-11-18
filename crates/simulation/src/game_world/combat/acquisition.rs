@@ -29,7 +29,7 @@ impl GameWorld {
             // First contact reacts immediately; repeat probes keep the bounded
             // four-tick acquisition cadence after a fighter has struck.
             || (self.units[index].next_hit_tick != 0
-                && !(self.tick.0 + u64::from(id.0)).is_multiple_of(4))
+                && !(self.tick.0 + u64::from(id.0)).is_multiple_of(self.config.ticks(4)))
             || self.combat.stats.targeting_scanned >= super::targeting::MAX_TARGET_INSPECTIONS / 2
             || u.kind.is_naval()
             || !Self::uses_melee_position(u.kind)

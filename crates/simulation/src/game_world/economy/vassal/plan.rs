@@ -59,7 +59,7 @@ impl GameWorld {
             && (d.pending.is_some()
                 || (!d.plan.is_empty()
                     && d.plan_age == age
-                    && self.tick.0.saturating_sub(d.planned) < REPLAN_TICKS))
+                    && self.tick.0.saturating_sub(d.planned) < self.config.ticks(REPLAN_TICKS)))
         {
             return d.plan.clone();
         }

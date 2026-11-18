@@ -460,6 +460,8 @@ mod routes;
 mod scale_hooks;
 #[path = "tests/movement/stop.rs"]
 mod stop;
+#[path = "tests/movement/tick_rate.rs"]
+mod tick_rate;
 mod wildlife;
 
 pub(crate) mod economy;

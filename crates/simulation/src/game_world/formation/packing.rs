@@ -31,11 +31,13 @@ impl GameWorld {
         member.arrived |= arrived;
         let remaining = motion.remaining;
         let progress = remaining <= member.remaining.saturating_sub(512);
+        // Both counters count reference ticks, so their limits are times.
+        let step = self.config.reference_ticks_per_tick();
         member.stalled = if motion.navigating || arrived || progress {
             member.remaining = remaining;
             0
         } else {
-            member.stalled.saturating_add(1)
+            member.stalled.saturating_add(step)
         };
         let forward = member.progress >= member.detour_progress + 512;
         if forward {
@@ -46,7 +48,7 @@ impl GameWorld {
         }
         member.following_corridor |= motion.obstructed;
         member.blocked = if motion.obstructed && !forward && from != motion.target {
-            member.blocked.saturating_add(1)
+            member.blocked.saturating_add(step)
         } else {
             0
         };

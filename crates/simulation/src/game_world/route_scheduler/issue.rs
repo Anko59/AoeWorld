@@ -28,16 +28,20 @@ pub(crate) enum MapRoutePlan {
 }
 
 impl GameWorld {
-    /// Both route budgets are refilled at the end of every tick.
+    /// Both route budgets are refilled at the end of every tick, sized so
+    /// the work per second of game time does not depend on the tick rate.
     pub(crate) fn refill_route_budgets(&mut self) {
-        self.planning_budget = crate::MAX_ROUTE_WORK_PER_TICK;
-        self.local_refinement_left = 4;
-        self.combat.position_searches = super::super::combat::MAX_POSITION_SEARCHES_PER_TICK;
+        let config = self.config;
+        self.planning_budget = config.scaled_budget(crate::MAX_ROUTE_WORK_PER_TICK);
+        self.local_refinement_left = config.scaled_budget(4);
+        self.combat.position_searches =
+            config.scaled_budget(super::super::combat::MAX_POSITION_SEARCHES_PER_TICK);
         *self
             .navigation_preparation_budget
             .get_mut()
-            .unwrap_or_else(|error| error.into_inner()) = crate::MAX_NAV_PREPARATIONS_PER_TICK;
-        self.fast_route_budget = MAX_FAST_ROUTE_WORK_PER_TICK;
+            .unwrap_or_else(|error| error.into_inner()) =
+            config.scaled_budget(crate::MAX_NAV_PREPARATIONS_PER_TICK);
+        self.fast_route_budget = config.scaled_budget(MAX_FAST_ROUTE_WORK_PER_TICK);
         self.fast_route_spent.clear();
     }
 

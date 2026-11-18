@@ -8,6 +8,7 @@ use aoe_core::{EntityId, WorldPosition};
 use std::collections::BTreeMap;
 
 /// Blocked ticks before a mover asks, and how often it asks after that.
+/// Every count here is in reference ticks (`WorldConfig::ticks`).
 const ASK_AFTER: u16 = 120;
 const ASK_EVERY: u64 = 8;
 const ASKS_PER_TICK: usize = 8;
@@ -74,7 +75,7 @@ impl GameWorld {
         let id = self.units[index].state.id;
         if blocked >= ASK_AFTER
             && self.units[index].formation.is_some()
-            && (self.tick.0 + u64::from(id.0)).is_multiple_of(ASK_EVERY)
+            && (self.tick.0 + u64::from(id.0)).is_multiple_of(self.config.ticks(ASK_EVERY))
         {
             self.yields.asks.push(id);
         }
@@ -189,7 +190,8 @@ impl GameWorld {
         asks.sort_unstable();
         asks.dedup();
         let start = (self.tick.0 % asks.len().max(1) as u64) as usize;
-        for turn in 0..asks.len().min(ASKS_PER_TICK) {
+        let room = self.config.scaled_budget(ASKS_PER_TICK as u32) as usize;
+        for turn in 0..asks.len().min(room) {
             let Some(&index) = self.lookup.get(&asks[(start + turn) % asks.len()]) else {
                 continue;
             };
@@ -210,7 +212,7 @@ impl GameWorld {
                         phase: Phase::Aside,
                         to,
                         home: self.units[at].state.position,
-                        until: self.tick.0 + ASIDE_TICKS,
+                        until: self.tick.0 + self.config.ticks(ASIDE_TICKS),
                         asked: self.tick.0,
                     },
                 );
@@ -285,7 +287,7 @@ impl GameWorld {
             let Some(&index) = self
                 .lookup
                 .get(&id)
-                .filter(|_| tick < entry.asked + COOLDOWN)
+                .filter(|_| tick < entry.asked + self.config.ticks(COOLDOWN))
             else {
                 self.yields.active.remove(&id);
                 continue;
@@ -300,7 +302,7 @@ impl GameWorld {
                         || !self.yield_step(index, entry.to, changed)
                     {
                         entry.phase = Phase::Hold;
-                        entry.until = tick + HOLD_TICKS;
+                        entry.until = tick + self.config.ticks(HOLD_TICKS);
                         let stored = &mut self.units[index].state;
                         stored.previous_position = stored.position;
                     }
@@ -309,7 +311,7 @@ impl GameWorld {
                     if let Some(to) = self.yield_return_point(index, entry.home) {
                         entry.phase = Phase::Return;
                         entry.to = to;
-                        entry.until = tick + RETURN_TICKS;
+                        entry.until = tick + self.config.ticks(RETURN_TICKS);
                     } else {
                         entry.phase = Phase::Rest;
                     }

@@ -43,7 +43,8 @@ impl GameWorld {
             .filter(|(id, g)| {
                 g.attack_move
                     && !g.settled
-                    && (u64::from(id.0) + self.tick.0).is_multiple_of(ENGAGE_CADENCE)
+                    && (u64::from(id.0) + self.tick.0)
+                        .is_multiple_of(self.config.ticks(ENGAGE_CADENCE))
             })
             .map(|(&id, _)| id)
             .collect::<Vec<_>>();
@@ -62,8 +63,9 @@ impl GameWorld {
             let Some((player, lookers, enemies)) = self.formation_look(leader) else {
                 continue;
             };
-            let start =
-                (self.tick.0 / ENGAGE_CADENCE) as usize * ENGAGE_MEMBERS_PER_LOOK % lookers.len();
+            let start = (self.tick.0 / self.config.ticks(ENGAGE_CADENCE)) as usize
+                * ENGAGE_MEMBERS_PER_LOOK
+                % lookers.len();
             let mut engaged = 0;
             for n in 0..lookers.len().min(ENGAGE_MEMBERS_PER_LOOK) {
                 if engaged == ENGAGE_PER_LOOK {
@@ -162,7 +164,7 @@ impl GameWorld {
         player: PlayerId,
         area: TileRect,
     ) -> Vec<(EntityId, Goal)> {
-        let look = self.tick.0 / ENGAGE_CADENCE;
+        let look = self.tick.0 / self.config.ticks(ENGAGE_CADENCE);
         let mut out = Vec::new();
         let mut budget = ENGAGE_INSPECTIONS;
         for y in area.min.y / SPATIAL_CHUNK_TILES..=(area.max.y - 1) / SPATIAL_CHUNK_TILES {
@@ -202,7 +204,7 @@ impl GameWorld {
             return Vec::new();
         }
         let rows = (ENGAGE_BUILDING_TILES / width).clamp(1, height);
-        let first = ((self.tick.0 / ENGAGE_CADENCE) as i32 * rows) % height;
+        let first = ((self.tick.0 / self.config.ticks(ENGAGE_CADENCE)) as i32 * rows) % height;
         let mut out = Vec::<(EntityId, Goal)>::new();
         for row in 0..rows {
             let y = area.min.y + (first + row) % height;

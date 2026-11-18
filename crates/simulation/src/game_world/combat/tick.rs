@@ -61,9 +61,7 @@ impl GameWorld {
         for id in ids {
             self.step_attacker(id, now, changed);
         }
-        if self.combat.searches_used < super::approach::MAX_ATTACK_SEARCHES_PER_TICK
-            && self.combat.position_searches > 0
-        {
+        if self.attack_search_room() > 0 && self.combat.position_searches > 0 {
             self.combat.pursuit_cursor = None;
         }
         self.combat.pursuit_floor = None;

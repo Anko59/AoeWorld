@@ -204,8 +204,8 @@ impl GameWorld {
                 if domain.progress.is_some_and(|(site, work, since)| {
                     site == building && work == done && tick.saturating_sub(since) >= stall
                 }) {
-                    domain.refused.insert(*tile, tick + 600);
-                    domain.request_replan(tick + plan::REFUSED_REPLAN_TICKS);
+                    domain.refused.insert(*tile, tick + self.config.ticks(600));
+                    domain.request_replan(tick + self.config.ticks(plan::REFUSED_REPLAN_TICKS));
                     domain.progress = None;
                     for worker in &workers {
                         if self
@@ -386,8 +386,10 @@ impl GameWorld {
                     ) {
                         wait = VassalWait::Age;
                     } else if let Some(d) = self.economy.vassals.domains.get_mut(&id) {
-                        d.refused.insert(tile, self.tick.0 + 600);
-                        d.request_replan(self.tick.0 + plan::REFUSED_REPLAN_TICKS);
+                        d.refused.insert(tile, self.tick.0 + self.config.ticks(600));
+                        d.request_replan(
+                            self.tick.0 + self.config.ticks(plan::REFUSED_REPLAN_TICKS),
+                        );
                     }
                 }
             }

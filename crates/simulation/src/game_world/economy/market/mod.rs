@@ -26,7 +26,7 @@ pub struct MarketRules {
     pub commission_permyriad: u16,
     /// Gold the price moves on every trade.
     pub price_step: u16,
-    /// Ticks between recovery steps (two seconds at the default 20 Hz).
+    /// Reference ticks between recovery steps (`WorldConfig::ticks`): two seconds.
     pub recovery_ticks: u64,
 }
 pub const MARKET_RULES: MarketRules = MarketRules {
@@ -140,7 +140,11 @@ impl GameWorld {
     /// Called once per tick: prices step toward the base price every
     /// `recovery_ticks`, independently per player and commodity.
     pub(crate) fn recover_market_prices(&mut self) {
-        if !self.tick.0.is_multiple_of(MARKET_RULES.recovery_ticks) {
+        if !self
+            .tick
+            .0
+            .is_multiple_of(self.config.ticks(MARKET_RULES.recovery_ticks))
+        {
             return;
         }
         for state in self.economy.players.values_mut() {
