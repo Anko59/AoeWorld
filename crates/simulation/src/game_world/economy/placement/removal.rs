@@ -57,7 +57,17 @@ impl GameWorld {
         }
         self.release_destroyed_garrison(id, building.footprint, building.garrison, &mut Vec::new());
         self.economy.open_gates.remove(&id);
-        self.economy.gates.remove(&id);
+        if self.economy.gates.remove(&id) {
+            let rect = building.footprint;
+            for y in rect.min.y..rect.max.y {
+                for x in rect.min.x..rect.max.x {
+                    let tile = TileCoord::new(x, y);
+                    if self.economy.gate_tiles.get(&tile) == Some(&id) {
+                        self.economy.gate_tiles.remove(&tile);
+                    }
+                }
+            }
+        }
         self.combat.tower_ready.remove(&id);
         self.combat.tower_targets.remove(&id);
         self.combat.target_rounds.remove(&id);

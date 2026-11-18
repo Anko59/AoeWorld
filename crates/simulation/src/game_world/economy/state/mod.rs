@@ -71,6 +71,9 @@ pub(crate) struct Economy {
     /// Every gate building, ascending by id, maintained as buildings are
     /// placed and removed: the gate tick visits gates, never every building.
     pub(crate) gates: BTreeSet<EntityId>,
+    /// Footprint tiles of every gate in `gates`, complete or not: region
+    /// ground reads the gates near a chunk instead of rebuilding them all.
+    pub(crate) gate_tiles: BTreeMap<TileCoord, EntityId>,
     /// Automatic Trade Cart and Cog runs; not saved (see `trade`).
     pub(crate) trade: BTreeMap<EntityId, super::trade::TradeRun>,
     pub(crate) scouts: BTreeMap<EntityId, scouting::AutoScout>,

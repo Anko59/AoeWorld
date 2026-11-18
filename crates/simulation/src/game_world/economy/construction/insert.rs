@@ -159,6 +159,11 @@ impl GameWorld {
         bucket.insert(at, id);
         if kind.is_gate() {
             self.economy.gates.insert(id);
+            for y in footprint.min.y..footprint.max.y {
+                for x in footprint.min.x..footprint.max.x {
+                    self.economy.gate_tiles.insert(TileCoord::new(x, y), id);
+                }
+            }
         }
         if complete && matches!(kind, BuildingKind::Castle | BuildingKind::WatchTower) {
             self.combat.tower_ready.insert(id, 0);

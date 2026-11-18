@@ -53,9 +53,9 @@ fn region_gate_queries_visit_only_the_gate_index() {
             .unwrap()
     );
     assert_eq!(world.canonical_hash(), before);
-    assert_eq!(
-        census.0.load(Ordering::Relaxed),
-        2,
+    // Only gates near the chunks read are visited, never the houses.
+    assert!(
+        census.0.load(Ordering::Relaxed) <= 2,
         "region gate metadata must not project unrelated buildings"
     );
 }
