@@ -1,6 +1,8 @@
 //! A mover no human seat sees steps on every `STRIDE`-th tick only and banks
 //! each skipped tick's movement in its carry, so it covers the same ground in
 //! fewer, longer steps. Fighters and anything a person can see step every tick.
+//! A formation strides on its leader's phase, so an unseen group steps as one
+//! block, and its targets are prepared, on one tick in four.
 use super::*;
 
 /// Ticks between two steps of an unseen mover.
@@ -30,25 +32,47 @@ impl GameWorld {
             .any(|&player| self.unit_visible_to(player, id))
     }
 
-    /// True when `id` sits out this tick: no person sees it, it is not
-    /// fighting and its turn is not due. Its skipped movement is banked.
+    /// Whether the unit at `index` sits out this tick: no person sees it, it
+    /// is not fighting and its turn (its leader's, in a formation) is not due.
+    fn sits_out(&self, index: usize) -> bool {
+        let id = self.units[index].state.id;
+        let phase = self.units[index].formation.unwrap_or(id);
+        !self.vision.human_seats.is_empty()
+            && !(self.tick.0 + u64::from(phase.0)).is_multiple_of(STRIDE)
+            // Fighters keep every tick: an attacker that moves in jumps strikes
+            // less often (the first experiment lost 5-7% of kills per tick).
+            && !self.combat.attackers.contains_key(&id)
+            && self.units[index].state.attack_target.is_none()
+            && !self.seen_by_a_person(id)
+    }
+
+    /// Whether every member the group steers sits out this tick; its targets
+    /// then stay as they are, since its progress cannot move. Detached
+    /// members fight or walk on their own and never read those targets.
+    pub(crate) fn group_sits_out(&self, leader: EntityId, group: &Group) -> bool {
+        !self.vision.human_seats.is_empty()
+            && !(self.tick.0 + u64::from(leader.0)).is_multiple_of(STRIDE)
+            && group.members.iter().filter(|m| !m.detached).all(|m| {
+                self.lookup
+                    .get(&m.id)
+                    .is_some_and(|&index| self.sits_out(index))
+            })
+    }
+
+    /// True when `id` sits out this tick (see `sits_out`). Its skipped
+    /// movement is banked.
     pub(crate) fn park_unseen(&mut self, id: EntityId) -> bool {
-        if self.vision.human_seats.is_empty()
-            || (self.tick.0 + u64::from(id.0)).is_multiple_of(STRIDE)
-        {
+        if self.vision.human_seats.is_empty() {
             return false;
         }
         let Some(&index) = self.lookup.get(&id) else {
             return false;
         };
-        // Fighters keep every tick: an attacker that moves in jumps strikes
-        // less often (the first experiment lost 5-7% of kills per tick).
-        if self.combat.attackers.contains_key(&id)
-            || self.units[index].state.attack_target.is_some()
-            || self.seen_by_a_person(id)
-        {
-            return false;
-        }
+        self.sits_out(index) && self.bank_rest(index, id)
+    }
+
+    /// Banks the movement the unit at `index` skips this tick.
+    pub(crate) fn bank_rest(&mut self, index: usize, id: EntityId) -> bool {
         let unit = self.units[index].state;
         // A formation member has no order of its own: it banks the credit
         // `formation_motion` would give it this tick.

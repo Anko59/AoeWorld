@@ -26,10 +26,18 @@ impl GameWorld {
                 .planning_probe
                 .as_ref()
                 .and_then(|p| p.movement_span("group_prepare"));
+            // An unseen group that sits out this tick keeps its targets.
+            let resting = self
+                .formations
+                .iter()
+                .filter(|(leader, group)| !group.settled && self.group_sits_out(**leader, group))
+                .map(|(&leader, _)| leader)
+                .collect::<std::collections::BTreeSet<_>>();
             let mut groups = std::mem::take(&mut self.formations);
             {
                 let mut jobs = groups
                     .iter_mut()
+                    .filter(|(id, _)| !resting.contains(id))
                     .map(|(&id, group)| (id, group))
                     .collect::<Vec<_>>();
                 crate::game_world::parallel::par_each_mut(&mut jobs, |(leader, group)| {
@@ -39,15 +47,25 @@ impl GameWorld {
                 });
             }
             self.formations = groups;
-            for group in self.formations.values().filter(|group| !group.settled) {
-                movers.extend(
-                    group
-                        .members
-                        .iter()
-                        .inspect(|_| self.group_work.members(1))
-                        .filter(|m| !m.detached)
-                        .map(|m| m.id),
-                );
+            let mut resting_members = Vec::new();
+            for (leader, group) in self.formations.iter().filter(|(_, group)| !group.settled) {
+                let steered = group
+                    .members
+                    .iter()
+                    .inspect(|_| self.group_work.members(1))
+                    .filter(|m| !m.detached)
+                    .map(|m| m.id);
+                if resting.contains(leader) {
+                    resting_members.extend(steered);
+                } else {
+                    movers.extend(steered);
+                }
+            }
+            // Already known to sit out: banked without asking again.
+            for id in resting_members {
+                if let Some(&index) = self.lookup.get(&id) {
+                    self.bank_rest(index, id);
+                }
             }
         }
         movers.retain(|&id| !self.park_unseen(id));
