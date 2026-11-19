@@ -68,3 +68,36 @@ test("scout auto-explore toggles authoritative state and Stop cancels it", async
   );
   await expect(page.locator("#selection-task")).toHaveText("Idle");
 });
+
+test("one order scouts and stops thirty selected cavalry", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(90_000);
+  const base = await automationBase();
+  expect(
+    (
+      await request.post(`${base}maps/reset?scenario=selection-orders`)
+    ).status(),
+  ).toBe(204);
+  await gameAssets(page);
+  await page.goto(`${base}?play=1#x=64&y=71&zoom=.5`);
+  await expect(page.locator("#connection")).toHaveText("connected", {
+    timeout: 60_000,
+  });
+  await expect(page.locator("#minimap")).toHaveAttribute("data-camera-y", "71");
+  await freshHud(page);
+  const actors = JSON.parse(
+    (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
+  ) as { kind: string; x: number; y: number }[];
+  const cavalry = actors.find((actor) => actor.kind === "LightCavalry");
+  if (!cavalry) throw new Error("Starting cavalry missing");
+  await page.mouse.dblclick(cavalry.x, cavalry.y);
+  await expect(page.locator("#selection")).toHaveAttribute("data-count", "30");
+  const autoScout = page.locator("#auto-scout");
+  await expect(autoScout).toHaveAttribute("aria-pressed", "false");
+  await autoScout.click();
+  await expect(autoScout).toHaveAttribute("aria-pressed", "true");
+  await page.locator("#stop-units").click();
+  await expect(autoScout).toHaveAttribute("aria-pressed", "false");
+});

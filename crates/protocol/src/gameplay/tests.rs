@@ -45,14 +45,14 @@ fn auto_scout_orders_have_current_golden_wire() {
     for enabled in [false, true] {
         let order = ClientMessage::AutoScoutOrder {
             sequence: 3,
-            entity_id: EntityId(7),
+            unit_ids: vec![EntityId(7)],
             enabled,
         };
         let bytes = encode_client(&order).unwrap();
-        assert_eq!(bytes, [23, 3, 7, u8::from(enabled)]);
+        assert_eq!(bytes, [23, 3, 1, 7, u8::from(enabled)]);
         assert_eq!(decode_client(&bytes).unwrap(), order);
     }
-    assert!(decode_client(&[23, 3, 7, 2]).is_err());
+    assert!(decode_client(&[23, 3, 1, 7, 2]).is_err());
 }
 
 #[test]
@@ -219,4 +219,50 @@ fn rally_order_has_one_current_golden_wire_format() {
     let bytes = encode_client(&message).unwrap();
     assert_eq!(bytes, [20, 9, 3, 1, 77]);
     assert_eq!(decode_client(&bytes).unwrap(), message);
+}
+
+#[test]
+fn selection_orders_have_current_wire_and_bounded_unique_ids() {
+    for (order, expected) in [
+        (
+            ClientMessage::StopOrder {
+                sequence: 3,
+                unit_ids: vec![EntityId(7), EntityId(9)],
+            },
+            vec![16, 3, 2, 7, 9],
+        ),
+        (
+            ClientMessage::AutoScoutOrder {
+                sequence: 3,
+                unit_ids: vec![EntityId(7), EntityId(9)],
+                enabled: true,
+            },
+            vec![23, 3, 2, 7, 9, 1],
+        ),
+    ] {
+        assert_eq!(encode_client(&order).unwrap(), expected);
+        assert_eq!(decode_client(&expected).unwrap(), order);
+    }
+    for unit_ids in [
+        vec![],
+        vec![EntityId(7), EntityId(7)],
+        (0..=aoe_core::MAX_FORMATION_MEMBERS as u32)
+            .map(EntityId)
+            .collect(),
+    ] {
+        for order in [
+            ClientMessage::StopOrder {
+                sequence: 3,
+                unit_ids: unit_ids.clone(),
+            },
+            ClientMessage::AutoScoutOrder {
+                sequence: 3,
+                unit_ids,
+                enabled: true,
+            },
+        ] {
+            assert!(encode_client(&order).is_err());
+            assert!(decode_client(&postcard::to_allocvec(&order).unwrap()).is_err());
+        }
+    }
 }

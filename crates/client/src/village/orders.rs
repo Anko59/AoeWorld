@@ -70,27 +70,33 @@ pub(in super::super) fn stop(client: &mut Client) {
     client.village.attack_move = false;
     client.village.general_only = false;
     let _ = client.canvas.set_attribute("data-order-mode", "");
-    for id in client.selected.units.clone() {
-        let owned = client
-            .units
-            .get(&id)
-            .is_some_and(|u| u.player == owner(client) && u.hp > 0)
-            || client.village.animals.iter().any(|a| {
-                a.id == id
-                    && a.kind == aoe_protocol::AnimalKind::Sheep
-                    && a.hp > 0
-                    && a.owner == Some(owner(client))
-            });
-        if owned {
-            let sequence = client.next_sequence;
-            send(
-                client,
-                Message::StopOrder {
-                    sequence,
-                    entity_id: id,
-                },
-            );
-        }
+    let owned = client
+        .selected
+        .units
+        .iter()
+        .copied()
+        .filter(|id| {
+            client
+                .units
+                .get(id)
+                .is_some_and(|u| u.player == owner(client) && u.hp > 0)
+                || client.village.animals.iter().any(|a| {
+                    a.id == *id
+                        && a.kind == aoe_protocol::AnimalKind::Sheep
+                        && a.hp > 0
+                        && a.owner == Some(owner(client))
+                })
+        })
+        .collect::<Vec<_>>();
+    for unit_ids in owned.chunks(aoe_core::MAX_FORMATION_MEMBERS) {
+        let sequence = client.next_sequence;
+        send(
+            client,
+            Message::StopOrder {
+                sequence,
+                unit_ids: unit_ids.to_vec(),
+            },
+        );
     }
 }
 

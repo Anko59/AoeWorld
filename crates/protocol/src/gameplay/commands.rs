@@ -99,10 +99,11 @@ pub enum ClientMessage {
         unit_ids: Vec<EntityId>,
         animal_id: EntityId,
     },
-    /// Halt an owned unit or sheep at its authoritative position.
+    /// Halt owned units and sheep at their authoritative positions.
     StopOrder {
         sequence: u64,
-        entity_id: EntityId,
+        #[serde(deserialize_with = "bounded_members")]
+        unit_ids: Vec<EntityId>,
     },
     /// Buy 100 units of a commodity for gold at a completed, owned Market;
     /// the cost is the current price plus DE's 30% commission.
@@ -145,9 +146,11 @@ pub enum ClientMessage {
         building_id: EntityId,
         add: bool,
     },
+    /// Toggle automatic exploration for the selected eligible units.
     AutoScoutOrder {
         sequence: u64,
-        entity_id: EntityId,
+        #[serde(deserialize_with = "bounded_members")]
+        unit_ids: Vec<EntityId>,
         enabled: bool,
     },
     BuildBridgeOrder {
@@ -286,7 +289,9 @@ pub(super) fn validate(message: &ClientMessage) -> Result<(), Error> {
     {
         return Err(Error::InvalidEconomyState);
     }
-    if let ClientMessage::StanceOrder { unit_ids, .. } = message
+    if let ClientMessage::StanceOrder { unit_ids, .. }
+    | ClientMessage::StopOrder { unit_ids, .. }
+    | ClientMessage::AutoScoutOrder { unit_ids, .. } = message
         && (unit_ids.is_empty()
             || unit_ids.len() > aoe_core::MAX_FORMATION_MEMBERS
             || unit_ids

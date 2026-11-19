@@ -39,6 +39,7 @@ pub(crate) use slots::{Access, Slot};
 pub use slots::{SlotInfo, SlotSetup};
 #[path = "gameplay/wildlife.rs"]
 mod wildlife;
+use commands::queue::{PendingCommand, QueuedCommand};
 use economy::unit_state;
 #[path = "gameplay/resources.rs"]
 mod resources;
@@ -84,7 +85,7 @@ pub(super) struct Session {
     command_tokens: f64,
     last_command_refill: Instant,
     subscription_times: VecDeque<Instant>,
-    pending: VecDeque<PendingCommand>,
+    pending: VecDeque<QueuedCommand>,
     /// Units the client holds, sorted by id.
     resident: deliver::Resident,
     resource_revision: Option<u64>,
@@ -107,21 +108,6 @@ pub(super) struct Session {
 struct Subscription {
     revision: u64,
     region: TileRect,
-}
-
-#[derive(Clone)]
-struct PendingCommand {
-    sequence: u64,
-    action: PendingAction,
-    prepared: Vec<preparation::Ready>,
-}
-
-impl PendingCommand {
-    fn ready(&self) -> bool {
-        self.prepared
-            .iter()
-            .all(|flag| flag.load(std::sync::atomic::Ordering::Acquire))
-    }
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
