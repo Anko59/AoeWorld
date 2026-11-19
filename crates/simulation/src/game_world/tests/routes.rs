@@ -310,7 +310,12 @@ fn planner_slot_exhaustion_defers_a_new_order_without_rejecting_it() {
 #[test]
 fn resumed_provider_failure_is_a_typed_stopped_reason() {
     let config = WorldConfig::new(64, 64, Seed(0)).expect("config");
-    let (terrain, fail) = toggle_provider_terrain();
+    let (mut terrain, fail) = toggle_provider_terrain();
+    // Depleting the fixture's resources queried every tile. Resume the route
+    // with fresh query caches so the provider outage reaches the planner.
+    if let Terrain::Map { generator, .. } = &mut terrain {
+        *generator = generator.fork_queries();
+    }
     let mut world = GameWorld::new(config).expect("world");
     world.terrain = terrain;
     let origin = TileCoord::new(1, 1);

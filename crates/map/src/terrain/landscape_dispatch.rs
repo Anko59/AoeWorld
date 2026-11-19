@@ -13,9 +13,8 @@ pub struct LandscapePoint {
 }
 
 impl MapChunkGenerator {
-    /// Physical terrain only. Composition changes material and marks the
-    /// shallow rim, never water kind, passability, surface or height;
-    /// overlays remain a caller concern.
+    /// Undecorated terrain for source constraints and placement.
+    /// Walk queries use composed terrain, including loose rock footprints.
     pub(super) fn base_physical_tile_with_cancel(
         &self,
         tile: TileCoord,

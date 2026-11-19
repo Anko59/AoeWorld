@@ -148,8 +148,10 @@ Boreal and tundra lowlands below the line are summer grass and heath, where
 they used to be snow in vegetation-cell squares; southern Finland at sea
 level is green. Polar ice stays impassable `Ice`.
 
-Loose rocks are `Stone` decorations: visual only, never blocking, never a
-resource (gameplay stone keeps its own patch rules). An open tile without
+Loose rocks block every tile under the [measured ground extent](../../assets/landscape.md#loose-rocks)
+of the native pile, including tiles in adjacent chunks. They yield no resource,
+and the composed tiles carry their passability. The entire footprint must
+clear starting reservations, resource approaches, shores and water. An open tile without
 canopy or water carries one with a chance of 4.5% on bare rock, 28% within two
 tiles downhill of a cliff piece (scree), 0.8% on snow, 1% in steppe, savanna and dry woodland
 grass and 0.6% in desert sand, multiplied by a continuous 14-tile cluster

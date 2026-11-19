@@ -25,7 +25,7 @@ struct Tally {
 }
 
 #[test]
-fn rocks_lie_on_bare_rock_and_as_scree_below_cliffs_and_never_block() {
+fn rocks_block_their_own_tiles_on_bare_rock_and_as_scree_below_cliffs() {
     let generator = alpine(1).with_latitude(459_000_000, 60_000);
     let scenes = chunks(&generator, 6..18);
     let mut tally = Tally::default();
@@ -38,13 +38,15 @@ fn rocks_lie_on_bare_rock_and_as_scree_below_cliffs_and_never_block() {
                 .iter()
                 .any(|d| d.tile == at && d.family as u8 == 2);
             if stone {
-                // A rock is dressing on open ground: nothing else stands there.
-                assert!(tile.terrain.passable && !is_cliff(tile.terrain));
+                // A pile blocks movement without changing the ground's shape.
+                assert!(!tile.terrain.passable && tile.terrain.surface.walkable());
                 assert_eq!(tile.terrain.water, crate::WaterKind::None);
                 assert!(!scene.resources.iter().any(|r| r.node.tile == at));
                 assert_eq!(tile.appearance.canopy_strength, 0);
             }
-            if !tile.terrain.passable || tile.appearance.canopy_strength > 0 {
+            // Count eligible ground under the entire pile in the density
+            // denominator, including blocked tiles without a sprite anchor.
+            if !generator.sample_base_tile(at).passable || tile.appearance.canopy_strength > 0 {
                 continue;
             }
             let reach = [-2, 0, 2];
@@ -130,6 +132,90 @@ fn rocks_lie_on_bare_rock_and_as_scree_below_cliffs_and_never_block() {
         crowded >= 10 && occupied * 10 <= blocks.len() * 9,
         "{occupied} {crowded}"
     );
+}
+
+#[test]
+fn loose_rock_blocks_its_ground_extent_in_chunks_and_routes() {
+    use crate::{CompactChunk, DecorationFamily, EdgePassability, MovementOutcome, find_path};
+
+    let generator = relief(1, 20, |_, _| 300);
+    let scenes = chunks(&generator, 2..5);
+    let (scene, rock, left, right) = scenes
+        .iter()
+        .flat_map(|scene| {
+            scene
+                .decorations
+                .iter()
+                .filter(|d| d.family == DecorationFamily::Stone)
+                .map(move |d| (scene, d.tile))
+        })
+        .find_map(|(scene, at)| {
+            let left = TileCoord::new(at.x - 2, at.y);
+            let right = TileCoord::new(at.x + 2, at.y);
+            [left, right]
+                .into_iter()
+                .all(|side| {
+                    scene
+                        .tiles
+                        .iter()
+                        .any(|tile| tile.tile == side && tile.terrain.passable)
+                        && !scene.resources.iter().any(|r| r.node.tile == side)
+                })
+                .then_some((scene, at, left, right))
+        })
+        .expect("a loose rock with clear ground on both sides");
+
+    let mut footprint = Vec::new();
+    for dy in -1..=1 {
+        for dx in -1..=1 {
+            let at = TileCoord::new(rock.x + dx, rock.y + dy);
+            footprint.push(at);
+            let visual = generator
+                .landscape_point_with_cancel(at, &|| false)
+                .unwrap()
+                .unwrap();
+            let surface = generator
+                .landscape_surface_with_cancel(at, &|| false)
+                .unwrap()
+                .unwrap();
+            let (physical, node) = generator
+                .tile_and_node_with_cancel(at, &|| false)
+                .unwrap()
+                .unwrap();
+            assert!(
+                !physical.passable,
+                "rock at {rock:?} leaves {at:?} walkable"
+            );
+            assert!(node.is_none() && physical.surface.walkable());
+            assert_eq!(visual.tile.terrain, physical);
+            assert_eq!(surface.tile, visual.tile);
+            assert_eq!(
+                find_path(&generator, left, at, 64),
+                MovementOutcome::InvalidDestination
+            );
+        }
+    }
+    assert_eq!(
+        generator.edge_between(left, TileCoord::new(rock.x - 1, rock.y)),
+        EdgePassability::Blocked
+    );
+    let physical_chunk = generator
+        .physical_chunk_with_cancel(scene.x, scene.y, &|| false)
+        .unwrap();
+    assert_eq!(physical_chunk.tiles, scene.tiles);
+    assert_eq!(
+        CompactChunk::encode(scene).unwrap().decode().unwrap(),
+        *scene
+    );
+
+    assert_eq!(
+        find_path(&generator, left, rock, 64),
+        MovementOutcome::InvalidDestination
+    );
+    let MovementOutcome::Path(path) = find_path(&generator, left, right, 64) else {
+        panic!("clear ground is reachable past the pile");
+    };
+    assert!(path.tiles.iter().all(|tile| !footprint.contains(tile)));
 }
 
 #[test]

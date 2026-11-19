@@ -182,21 +182,25 @@ impl MapChunkGenerator {
             );
             Ok(reservations)
         };
-        let Some((sample, base)) = self.evaluate_landscape_inner_with_base(
-            position,
-            &effective_policy,
-            &shared_reservations,
-            cancelled,
-            &|position| memo.base(position)?.ok_or(EnvironmentPageError::Invalid),
-            &|cx, cy| memo.wildness(cx, cy),
-        )?
-        else {
+        let composed = |at| {
+            memo.landscape(at, || {
+                self.evaluate_landscape_inner_with_base(
+                    at,
+                    &effective_policy,
+                    &shared_reservations,
+                    cancelled,
+                    &|at| memo.base(at)?.ok_or(EnvironmentPageError::Invalid),
+                    &|cx, cy| memo.wildness(cx, cy),
+                )
+            })
+        };
+        let Some((sample, base)) = composed(position)? else {
             return Ok(None);
         };
         let appearance = appearance(base, sample.density);
         let mut terrain = base;
         let cover = self.ground_cover(position, base.geographic_height_centimeters, base.biome);
-        terrain.material = material(base, appearance, cover);
+        terrain.material = material(base, appearance.floor_strength, cover);
         // Shore band: appearance on land, a shallow rim in open water. It
         // never changes water kind, passability, heights or the shaped outline.
         let shore = memo.shore(position)?;
@@ -221,6 +225,24 @@ impl MapChunkGenerator {
                 sample.historical_land_use,
             );
         }
+        let rock_anchor = |at| {
+            memo.rock(at, || {
+                dressing::rock_anchor(self, memo, at, &composed, &shared_reservations)
+            })
+        };
+        let mut rock = false;
+        if base.passable && base.water == crate::WaterKind::None {
+            rock = rock_anchor(position)?;
+            terrain.passable = !rock;
+            if !rock {
+                for at in dressing::rock_footprint(position).filter(|at| *at != position) {
+                    if rock_anchor(at)? {
+                        terrain.passable = false;
+                        break;
+                    }
+                }
+            }
+        }
         let tile = LandscapeTile {
             tile: position,
             terrain,
@@ -234,15 +256,11 @@ impl MapChunkGenerator {
                 decoration: None,
             }));
         }
-        let reserved = shared_reservations(position)?;
-        // Large-forest glades and trails stay free of blocking resources.
         let open = sample.density.opening != crate::landscape_patches::Opening::None;
-        let fish = memo.fish(position, terrain)?;
-        let node = if fish.is_some() {
-            fish
+        let reserved = shared_reservations(position)?;
+        let node = if let Some(fish) = memo.fish(position, terrain)? {
+            Some(fish)
         } else if !reserved.route && !reserved.start && !open {
-            // Resource candidates use the source/base biome. Forage also
-            // needs the final ground after snow-line and shore composition.
             memo.resource(position, base)?.filter(|node| {
                 node.object != ObjectKind::ForageBush || soft_ground(terrain.material)
             })
@@ -283,7 +301,6 @@ impl MapChunkGenerator {
             None
         };
         if PHYSICAL {
-            // Decorations never feed back into terrain or resources.
             return Ok(Some(super::LandscapePoint {
                 tile,
                 historical_land_use: sample.historical_land_use,
@@ -304,58 +321,19 @@ impl MapChunkGenerator {
             });
         }
         if resource.is_none()
+            && (rock || terrain.passable)
             && base.passable
             && base.water == crate::WaterKind::None
-            && !matches!(
-                sample.historical_land_use,
-                LandUse::Crop | LandUse::Grazing | LandUse::Nonland
-            )
-            && !reserved.route
-            && !reserved.start
-            && !reserved.resource_approach
-            && !reserved.shore
+            && dressing::uncultivated(sample.historical_land_use)
+            && dressing::allows_dressing(reserved)
         {
-            let roll = unsigned_noise(
-                self.geography_key,
-                b"landscape-dressing-v9",
-                position.x,
-                position.y,
-            ) ^ self.procedural_seed.rotate_left(29);
-            // Loose rocks: bare rock, scree beside cliffs, a few elsewhere.
-            let rock_roll = (roll >> 24) % 1000;
-            if base.water == crate::WaterKind::None
-                && rock_roll < crate::terrain::relief::MAX_ROCK_PER_THOUSAND
-                && sample.density.canopy_per_thousand == 0
-            {
-                let mut beside_cliff = false;
-                for (dx, dy) in crate::terrain::relief::SCREE_REACH {
-                    let near = TileCoord::new(
-                        position.x.saturating_add(dx),
-                        position.y.saturating_add(dy),
-                    );
-                    if memo.base(near)?.is_some_and(|tile| {
-                        tile.surface.is_cliff()
-                            && tile.geographic_height_centimeters
-                                > base.geographic_height_centimeters
-                    }) {
-                        beside_cliff = true;
-                        break;
-                    }
-                }
-                if rock_roll
-                    < self.rock_per_thousand(position, terrain.material, base.biome, beside_cliff)
-                {
-                    decoration = Some(LandscapeDecoration {
-                        tile: position,
-                        family: DecorationFamily::Stone,
-                        variant: (roll >> 8) as u8,
-                        orientation: ((roll >> 16) & 7) as u8,
-                    });
-                }
-            }
-            if decoration.is_none()
-                && let Some(family) = dressing::family(self, position, terrain, appearance, roll)
-            {
+            let roll = memo.dressing_roll(position);
+            let family = if rock {
+                Some(DecorationFamily::Stone)
+            } else {
+                dressing::family(self, position, terrain, appearance, roll)
+            };
+            if let Some(family) = family {
                 decoration = Some(LandscapeDecoration {
                     tile: position,
                     family,
