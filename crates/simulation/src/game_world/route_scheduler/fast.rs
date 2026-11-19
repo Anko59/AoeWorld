@@ -15,6 +15,8 @@ impl GameWorld {
     ) {
         let players = waiting.keys().copied().collect::<Vec<_>>();
         let start = (self.tick.0 % players.len() as u64) as usize;
+        let mut batch = Vec::new();
+        let mut reserved = super::batch::Reserved::default();
         for turn in 0..players.len() {
             if self.fast_route_budget == 0 {
                 break;
@@ -33,11 +35,15 @@ impl GameWorld {
                     },
                     far_planner,
                 );
-                if !far && !unit.fast_route_tried {
-                    self.search_waiting_route(player, id, 0, changed);
+                if !far
+                    && !unit.fast_route_tried
+                    && let Some(search) = self.prepare_search(player, id, 0, &mut reserved)
+                {
+                    batch.push(search);
                 }
             }
         }
+        self.run_searches(batch, reserved, changed);
     }
 
     /// Far formation routes get a reserved part of `budget` before the fair

@@ -112,3 +112,67 @@ fn eight_villagers_on_one_tree_berry_bush_or_gold_patch() {
         "{twelve:?}"
     );
 }
+
+#[test]
+fn a_gold_mine_tile_is_a_pocket_its_frontier_touches() {
+    // Twelve villagers on one mine lost one: its unfinished search toward the
+    // mine's own tile was ended as "disconnected" before refinement could
+    // certify the tile beside it.
+    let (world, node, first) = resource_world(ResourceKind::Gold);
+    let bucket = aoe_map::LandBucket::for_radius(UnitKind::Villager.collision_radius()).unwrap();
+    let from = world.unit(first).unwrap().position.tile_floor();
+    let player = PlayerId(0);
+    assert_eq!(
+        world.land_reachable(player, bucket, from, node.tile),
+        Ok(false),
+        "the mine's tile is blocked land"
+    );
+    assert!(world.pocket_beside_frontier(player, bucket, from, node.tile));
+    let far = TileCoord::new(node.tile.x + 40, node.tile.y + 40);
+    assert!(
+        !world.pocket_beside_frontier(player, bucket, from, far)
+            || world.land_reachable(player, bucket, from, far) == Ok(true),
+        "only a tile next to the reachable land counts as a pocket"
+    );
+}
+
+#[test]
+fn a_crowd_on_one_mine_replays_identically_at_every_worker_count() {
+    // Waiting route searches are polled together on the workers.
+    let mut runs = Vec::new();
+    for workers in [1, 2, 4] {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(workers)
+            .build()
+            .unwrap();
+        let (mut world, node, first) = resource_world(ResourceKind::Gold);
+        let mut ids = vec![first];
+        for n in 0..11 {
+            let tile = TileCoord::new(
+                node.tile.x - 9 + 2 * (n % 10),
+                node.tile.y + 9 - 18 * (n / 10),
+            );
+            if world.tile_passable(tile) {
+                ids.push(
+                    world
+                        .spawn_villager(PlayerId(0), WorldPosition::from_tile_center(tile).unwrap())
+                        .unwrap(),
+                );
+            }
+        }
+        for &id in &ids {
+            world.issue_gather(PlayerId(0), id, node.id).unwrap();
+        }
+        let hashes = pool.install(|| {
+            (0..300)
+                .map(|_| {
+                    world.advance();
+                    world.canonical_hash()
+                })
+                .collect::<Vec<_>>()
+        });
+        assert!(world.route_scheduler_stats().metrics.searches_started > 0);
+        runs.push(hashes);
+    }
+    assert!(runs.windows(2).all(|pair| pair[0] == pair[1]));
+}
