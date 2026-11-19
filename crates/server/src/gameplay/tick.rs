@@ -238,10 +238,13 @@ fn take_pending(
     if ids.is_empty() {
         return commands;
     }
+    // A selection order is one admitted command: it takes one slot of the
+    // tick's capacity and applies to all its units at once, like a single order.
+    let mut used = 0;
     loop {
-        let before = commands.len();
+        let before = used;
         for turn in 0..ids.len() {
-            if commands.len() == capacity {
+            if used == capacity {
                 return commands;
             }
             let id = ids[(start + turn) % ids.len()];
@@ -257,16 +260,14 @@ fn take_pending(
                 .is_some_and(super::QueuedCommand::ready)
                 && let Some(command) = session.pending.pop_front()
             {
-                // Give each selection at most half a tick's capacity so
-                // another session can still dispatch orders this tick.
-                let budget = (capacity - commands.len()).min(capacity / 2);
-                if let Some(remaining) = command.take(id, budget, &mut commands) {
+                used += 1;
+                if let Some(remaining) = command.take(id, usize::MAX, &mut commands) {
                     session.pending.push_front(remaining);
                     deferred.insert(id);
                 }
             }
         }
-        if commands.len() == before {
+        if used == before {
             return commands;
         }
     }

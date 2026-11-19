@@ -247,7 +247,7 @@ fn vassal_development_cannot_be_changed_by_another_owner() {
 }
 
 #[tokio::test]
-async fn stop_and_auto_scout_apply_large_selections_over_multiple_ticks() {
+async fn stop_and_auto_scout_apply_a_large_selection_in_one_tick() {
     let service = GameplayService::selection_orders_demo(Seed(7)).unwrap();
     let (sender, mut receiver) = mpsc::channel(32);
     let (session, _) = service.register(None, sender).await;
@@ -272,15 +272,11 @@ async fn stop_and_auto_scout_apply_large_selections_over_multiple_ticks() {
         .queue_auto_scout_selection(session, 1, scouts.clone(), true)
         .await;
     service.tick().await;
-    assert!((1..scouts.len()).contains(&count_scouting().await));
-    service.tick().await;
     assert_eq!(count_scouting().await, scouts.len());
 
     service
         .queue_stop_selection(session, 2, scouts.clone())
         .await;
-    service.tick().await;
-    assert!((1..scouts.len()).contains(&count_scouting().await));
     service.tick().await;
     assert_eq!(count_scouting().await, 0);
 
