@@ -1,5 +1,8 @@
 //! Defensive buildings share indexed targeting and the existing arrow system.
-use super::{targeting::TargetArea, tick::Goal};
+use super::{
+    targeting::{BuildingTargets, TargetArea},
+    tick::Goal,
+};
 use crate::{BuildingKind, EconomyError, GameWorld};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId};
 use std::ops::Bound::{Excluded, Unbounded};
@@ -100,6 +103,7 @@ impl GameWorld {
             source: Goal::Building(footprint),
             min: i64::from(arrow.min_range) * i64::from(FIXED_SUBUNITS_PER_TILE),
             max: i64::from(arrow.range) * i64::from(FIXED_SUBUNITS_PER_TILE),
+            sight: 0,
             actor: id,
             ram: false,
         })
@@ -156,7 +160,8 @@ impl GameWorld {
             if manual.is_none() {
                 self.combat.tower_targets.remove(&id);
             }
-            let target = manual.or_else(|| self.acquire_target(&area, true).target);
+            let target =
+                manual.or_else(|| self.acquire_target(&area, BuildingTargets::Tower).target);
             if let Some(target) = target {
                 self.combat.tower_ready.insert(
                     id,

@@ -6,6 +6,7 @@ use aoe_core::{
     WorldPosition,
 };
 
+mod obstacles;
 #[cfg(test)]
 mod tests;
 
@@ -18,8 +19,18 @@ pub(super) struct TargetArea {
     pub source: Goal,
     pub min: i64,
     pub max: i64,
+    pub sight: i64,
     pub actor: EntityId,
     pub ram: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum BuildingTargets {
+    None,
+    Tower,
+    Unit,
+    Marching,
+    RecheckObstacle,
 }
 
 #[derive(Default)]
@@ -28,6 +39,7 @@ pub(super) struct TargetProbe {
     /// A sampled living enemy rules out quietness. False is not an empty proof:
     /// unseen entries of a dense bucket still require the full region check.
     pub sampled_hostile: bool,
+    pub preferred_in_sight: bool,
 }
 
 impl TargetArea {
@@ -66,6 +78,11 @@ impl TargetArea {
 }
 
 impl GameWorld {
+    /// Leave the defensive half of the targeting work for buildings.
+    fn troop_inspections_available(&self) -> u32 {
+        (MAX_TARGET_INSPECTIONS / 2).saturating_sub(self.combat.stats.targeting_scanned)
+    }
+
     /// One admission and sampling clock for full and sleeping target queries.
     pub(in crate::game_world::combat) fn start_target_probe(
         &mut self,
@@ -114,10 +131,7 @@ impl GameWorld {
             * (i64::from(max.y) - i64::from(min.y) + 1)
             * 32
             * if naval { 2 } else { 1 };
-        if i64::from(
-            (MAX_TARGET_INSPECTIONS / 2).saturating_sub(self.combat.stats.targeting_scanned),
-        ) < needed
-        {
+        if i64::from(self.troop_inspections_available()) < needed {
             return None;
         }
         // Rotate on actual probes; global tick phases can hide crowded bodies.
@@ -162,7 +176,11 @@ impl GameWorld {
 
     /// Units precede structures. Stable (class, distance, id) ordering within
     /// a rotating bounded sample; no sort/allocation proportional to a crowd.
-    pub(super) fn acquire_target(&mut self, area: &TargetArea, buildings: bool) -> TargetProbe {
+    pub(super) fn acquire_target(
+        &mut self,
+        area: &TargetArea,
+        buildings: BuildingTargets,
+    ) -> TargetProbe {
         let bounds = area.bounds(self);
         let chunks_x = (bounds.max.x - 1).div_euclid(SPATIAL_CHUNK_TILES)
             - bounds.min.x.div_euclid(SPATIAL_CHUNK_TILES)
@@ -177,6 +195,7 @@ impl GameWorld {
         let mut result = TargetProbe::default();
         let mut best = None;
         let mut complete = true;
+        let mut fully_sampled = true;
         for y in bounds.min.y.div_euclid(SPATIAL_CHUNK_TILES)
             ..=(bounds.max.y - 1).div_euclid(SPATIAL_CHUNK_TILES)
         {
@@ -188,6 +207,7 @@ impl GameWorld {
                 };
                 let count = bucket.len().min(BUCKET_WINDOW);
                 complete &= offset.saturating_add(count as u64) >= bucket.len() as u64;
+                fully_sampled &= count == bucket.len();
                 if count == 0 {
                     continue;
                 }
@@ -226,17 +246,31 @@ impl GameWorld {
         }
         if let Some((_, _, id)) = best {
             result.target = Some(id);
+            result.preferred_in_sight = true;
             return result;
         }
         // In a dense crowd, give units one complete rotation before falling
         // back to buildings. The actor continues probing while attacking one.
-        if !buildings || !complete || self.economy.buildings.is_empty() {
+        if buildings == BuildingTargets::None || !complete || self.economy.buildings.is_empty() {
             return result;
         }
+        let obstacle_area = TargetArea {
+            max: if buildings == BuildingTargets::Marching {
+                area.sight
+            } else {
+                area.max
+            },
+            ..*area
+        };
+        let building_bounds = if buildings == BuildingTargets::Marching {
+            obstacle_area.bounds(self)
+        } else {
+            bounds
+        };
         let mut seen = std::collections::BTreeSet::new();
         let mut best = None;
-        for y in bounds.min.y..bounds.max.y {
-            for x in bounds.min.x..bounds.max.x {
+        for y in building_bounds.min.y..building_bounds.max.y {
+            for x in building_bounds.min.x..building_bounds.max.x {
                 let Some(id) = self.building_at_tile(aoe_core::TileCoord::new(x, y)) else {
                     continue;
                 };
@@ -249,22 +283,43 @@ impl GameWorld {
                 else {
                     continue;
                 };
-                if b.kind.is_barrier()
-                    || matches!(b.kind, BuildingKind::Bridge | BuildingKind::Road)
-                    || !area.accepts(Goal::Building(b.footprint))
+                let obstacle = b.kind.is_obstacle_target();
+                let goal = Goal::Building(b.footprint);
+                let target_area = if obstacle { &obstacle_area } else { area };
+                if b.kind == BuildingKind::Bridge
+                    || (obstacle
+                        && !matches!(buildings, BuildingTargets::Unit | BuildingTargets::Marching))
+                    || !target_area.accepts(goal)
                     || !self.building_visible_to(area.player, b.footprint)
                 {
                     continue;
                 }
                 let key = (
-                    u8::from(self.building_arrow_count(id) == 0),
-                    area.distance(Goal::Building(b.footprint)),
+                    obstacle,
+                    !obstacle && self.building_arrow_count(id) == 0,
+                    area.distance(goal),
                     id,
                 );
                 best = Some(best.map_or(key, |old| std::cmp::min(old, key)));
             }
         }
-        result.target = best.map(|(_, _, id)| id);
+        if let Some((false, _, _, id)) = best {
+            result.target = Some(id);
+            result.preferred_in_sight = true;
+            return result;
+        }
+        let needs_sight_proof = !fully_sampled || area.min > 0 || area.max < area.sight;
+        if best.is_some() || buildings == BuildingTargets::RecheckObstacle {
+            let occupied = if needs_sight_proof {
+                self.preferred_target_in_sight(area)
+            } else {
+                Some(false)
+            };
+            result.preferred_in_sight = occupied == Some(true);
+            if occupied == Some(false) {
+                result.target = best.map(|(_, _, _, id)| id);
+            }
+        }
         result
     }
 }
