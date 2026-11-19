@@ -9,10 +9,9 @@ Dates are 2026 (MM-DD); "xN" is how many separate times the owner asked.
 | Units near enemies do not engage; many watch from afar | 11-06, 11-09, 11-15, 11-19 x4 | PARTIAL | Fixes: #719, #822, #840 (attack-move fights), #828 (Generals lead with ordinary orders). Quality metrics melee exchange 2.38-2.73 after fix. Owner 11-15 min 115: "many units stand close to enemies but don't engage". 11-19: "takes too long to engage", up to 2/3 of units stand still in a typical fight | Scale queue Q3 (engagement as assignment, [scale](scale.md)); then share sightings across a formation; melee that cannot engage still closes in; six General soldiers in melee never hit (undiagnosed) |
 | Hand Cannoneer attack animation too fast; Trebuchet unlike DE | 11-15 x1 | PLANNED | Owner report 11-15; no PR | Fix with the content integration above |
 | Units auto-target walls and roads; DE attacks them only when nothing else is in sight or when ordered | 11-19 x1 | PLANNED | Owner playtest 11-19 (Anatolia 2, 10 Hz build, 61.5k units, 4.0 ticks/s) | Exclude walls, gates and roads from automatic target acquisition unless no other target is in sight |
-| Shift-click trains 5 at once, as in DE | 11-19 x1 | PLANNED | Owner playtest 11-19 (Anatolia 2, 10 Hz build, 61.5k units, 4.0 ticks/s) | Batch train on shift in the bottom menu and hotkeys |
-| Garrison button icon wrong; add Back to Work and the Town Bell, as in DE | 11-19 x1 | DONE | Owner playtest 11-19 (Anatolia 2, 10 Hz build, 61.5k units, 4.0 ticks/s) | Native DE garrison art, a 25-tile Town Bell, and Back to Work |
+| Garrison button icon wrong; add Back to Work and the Town Bell, as in DE | 11-19 x1 | DONE | Owner playtest 11-19 (Anatolia 2, 10 Hz build, 61.5k units, 4.0 ticks/s) #912 | Native DE garrison art, a 25-tile Town Bell, and Back to Work |
 | "Too many orders at once" when stopping a whole army or sending 30 cavalry to scout | 11-19 x1 | PLANNED | Owner playtest 11-19 (Anatolia 2, 10 Hz build, 61.5k units, 4.0 ticks/s); a player-facing refusal of a large selection | Split large selections over ticks server-side instead of refusing |
-| Save and load: scouted enemy buildings in fog vanish | 11-19 x1 | DONE | Owner playtest 11-19 (Anatolia 2, 10 Hz build, 61.5k units, 4.0 ticks/s) | Save per-player last sightings and cover hidden damage and destruction in a round-trip test |
+| Save and load: scouted enemy buildings in fog vanish | 11-19 x1 | DONE | Owner playtest 11-19 (Anatolia 2, 10 Hz build, 61.5k units, 4.0 ticks/s) #924 | Save per-player last sightings and cover hidden damage and destruction in a round-trip test |
 | Rock tiles are walkable | 11-19 x1 | PLANNED | Owner playtest 11-19 (Anatolia 2, 10 Hz build, 61.5k units, 4.0 ticks/s); DE rocks are large | Make rock footprints block walking, matching the DE art size |
 | Civilisations and unique units | 10-24 (deferred), 10-30 | PLANNED | Owner 11-14 asked for one complete generic civ first; none started | After generic content lands: pick one civ, brief a track |
 | Bigger maps and map size independent of player count | 10-26, 10-30 | PARTIAL | #787 (Mekong, Asia rivers), #810 (natural fair starts); owner 11-15 played a new Anatolia map (960 km, 240:1) | Scale work in [scale](scale.md) decides how big maps can go |
@@ -22,8 +21,8 @@ Dates are 2026 (MM-DD); "xN" is how many separate times the owner asked.
 
 | item | asked | status | evidence |
 | --- | --- | --- | --- |
-| Auto-scout turns off after loading a save | 11-19 | DONE | Active scouts resume exploration from the saved position. The snapshot round-trip verifies active and idle scouts. |
-| Shift-click and Shift+Q train five units | 11-19 | DONE | Uses ordinary train orders and fills up to the affordable queue slots. |
+| Auto-scout turns off after loading a save | 11-19 | DONE | Active scouts resume exploration from the saved position. The snapshot round-trip verifies active and idle scouts (#918) |
+| Shift-click and Shift+Q train five units | 11-19 | DONE | Uses ordinary train orders and fills up to the affordable queue slots (#909). |
 | Castle Age, garrisons, bridges (directional, any direction), navy base, river fish, formations, placement ghosts | 10-24 | DONE | #570 |
 | Hidden attack bonuses, DE elevation (hill) rules, the General army leader | 10-29 x1 | DONE | #630, #631, #633 |
 | Imperial Age with units, techs, art; no placeholders | 10-30, 11-03 | DONE | #653, #673; owner confirmed 11-11 |
