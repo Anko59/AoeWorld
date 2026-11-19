@@ -19,8 +19,21 @@ fn stacked_pairs(w: &GameWorld, ids: &[EntityId]) -> usize {
 
 #[test]
 fn a_hundred_members_sent_against_a_forest_come_to_rest_apart() {
+    rest_against_a_forest(None);
+}
+
+/// An unseen squad steps as one body (no body sweeps) but still rests apart.
+#[test]
+fn an_unseen_hundred_sent_against_a_forest_come_to_rest_apart() {
+    rest_against_a_forest(Some(PlayerId(1)));
+}
+
+fn rest_against_a_forest(watcher: Option<PlayerId>) {
     let mut w = wide_world();
-    w.set_fog_disabled(true);
+    match watcher {
+        Some(seat) => w.set_human_seats(&[seat]),
+        None => w.set_fog_disabled(true),
+    }
     let origin = center(30, 50);
     let ids = crate::game_world::formation::layout::slots(Formation::Box, 100)
         .into_iter()
@@ -51,12 +64,23 @@ fn a_hundred_members_sent_against_a_forest_come_to_rest_apart() {
         false,
     )
     .unwrap();
-    for _ in 0..3000 {
+    for tick in 0..3000 {
         w.advance_movement();
         w.refill_route_budgets();
+        if tick == 100 {
+            let unseen = w.unseen_bystander(w.lookup[&ids[0]]);
+            assert_eq!(
+                unseen,
+                watcher.is_some(),
+                "the march is unseen exactly when watched from afar"
+            );
+        }
     }
     let moving = ids.iter().filter(|id| w.unit(**id).unwrap().moving).count();
     let stacked = stacked_pairs(&w, &ids);
-    assert_eq!(moving, 0);
-    assert_eq!(stacked, 0, "members settled on members at rest");
+    assert_eq!(moving, 0, "{watcher:?}");
+    assert_eq!(
+        stacked, 0,
+        "members settled on members at rest ({watcher:?})"
+    );
 }
