@@ -29,7 +29,7 @@ building and technology sheet indices never share the wrong image.
 | Unit icons | DAT icon indices in `widgetui/textures/ingame/units`; includes the spawned army, workers, wildlife and resource selection portraits |
 | Building icons | All 55 gameplay building records, excluding the six bridge segments, select DAT icon indices in the separate `buildings` directory |
 | Technologies | All 53 current technologies select DAT research icon indices in the separate `tech` directory |
-| Commands | Native `actions/NNN_.png`: cancel 0, delete 1, ungarrison 2, stop 3, garrison 4, repair 28, economic build 30, military build 31, move 32, line 35, attack 41, box 43, staggered 62, flank 63, auto-scout 74 and attack-move 84 |
+| Commands | Native `actions/NNN_.png`: cancel 0, delete 1, ungarrison 2, stop 3, garrison 69, Back to Work 64, Town Bell 49, repair 28, economic build 30, military build 31, move 32, line 35, attack 41, box 43, staggered 62, flank 63, auto-scout 74 and attack-move 84 |
 | Counters | `icons/resource_{food,wood,gold,stone}.png` and `icons/pop.png` |
 | Bottom compartments | `panels/WEST/command-panel_extended.png`, `single-selection-panel.png`, `map-panel.png` and `topbar.png` |
 | Button and portrait frames | `panels/blank_icon.png` and `panels/frame_regular.png` |

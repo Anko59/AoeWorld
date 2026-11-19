@@ -198,6 +198,7 @@ fn real_de_building_icons_and_interface_sources_decode() {
     let mut hash = blake3::Hasher::new();
     let sources = resolve(std::path::Path::new(&root), &mut hash).unwrap();
     let mut groups = [false; 5];
+    let mut shelter_actions = BTreeMap::new();
     for source in &sources {
         let bytes = read_bounded(&source.path).unwrap();
         assert_eq!(blake3::hash(&bytes).to_hex().as_str(), source.hash);
@@ -213,6 +214,9 @@ fn real_de_building_icons_and_interface_sources_decode() {
             match role {
                 Role::Unit(109) => groups[0] = true,
                 Role::Command("stop") => groups[1] = true,
+                Role::Command(name @ ("garrison" | "back-to-work" | "town-bell")) => {
+                    assert!(shelter_actions.insert(*name, source.id.as_str()).is_none());
+                }
                 Role::Resource("food") => groups[2] = true,
                 Role::Panel("western-commands") => groups[3] = true,
                 Role::Panel("menu-background") => groups[4] = true,
@@ -221,4 +225,12 @@ fn real_de_building_icons_and_interface_sources_decode() {
         }
     }
     assert_eq!(groups, [true; 5], "real DE UI inventory is incomplete");
+    assert_eq!(
+        shelter_actions,
+        BTreeMap::from([
+            ("garrison", "de/interface/actions/069_.png"),
+            ("back-to-work", "de/interface/actions/064_.png"),
+            ("town-bell", "de/interface/actions/049_.png"),
+        ])
+    );
 }

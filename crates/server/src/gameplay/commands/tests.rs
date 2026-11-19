@@ -5,78 +5,8 @@ use tokio::sync::mpsc;
 
 #[path = "tests/admission.rs"]
 mod admission;
-
-#[test]
-fn garrison_orders_and_occupant_views_share_ownership_and_fog_rules() {
-    use aoe_core::PlayerId;
-    let (mut world, _) = aoe_simulation::GameWorld::default_with_village(Seed(7));
-    let center = world.buildings().next().unwrap().id;
-    let worker = world
-        .units()
-        .find(|u| u.kind == aoe_simulation::UnitKind::Villager)
-        .unwrap()
-        .id;
-    assert_eq!(
-        apply(
-            &mut world,
-            PlayerId(1),
-            PendingAction::Garrison {
-                entity_id: worker,
-                building_id: center
-            }
-        ),
-        CommandResult::RejectedNotOwner
-    );
-    assert_eq!(
-        apply(
-            &mut world,
-            PlayerId(0),
-            PendingAction::Garrison {
-                entity_id: worker,
-                building_id: center
-            }
-        ),
-        CommandResult::Accepted
-    );
-    for _ in 0..400 {
-        world.advance();
-        if world.unit(worker).is_none() {
-            break;
-        }
-    }
-    assert!(world.unit(worker).is_none());
-    let native = world.building(center).unwrap();
-    let own = crate::gameplay::economy::wire_building_state(&native, Some(PlayerId(0)));
-    let enemy = crate::gameplay::economy::wire_building_state(&native, Some(PlayerId(1)));
-    assert_eq!(own.garrison[0].id, worker);
-    assert!(
-        enemy.garrison.is_empty(),
-        "enemy memory never discloses occupants"
-    );
-    assert_eq!(
-        apply(
-            &mut world,
-            PlayerId(1),
-            PendingAction::Ungarrison {
-                building_id: center,
-                entity_id: None
-            }
-        ),
-        CommandResult::RejectedNotOwner
-    );
-    assert_eq!(
-        apply(
-            &mut world,
-            PlayerId(0),
-            PendingAction::Ungarrison {
-                building_id: center,
-                entity_id: Some(worker)
-            }
-        ),
-        CommandResult::Accepted
-    );
-    assert!(world.unit(worker).is_some());
-}
+#[path = "tests/garrison_controls.rs"]
+mod garrison_controls;
 
 #[test]
 fn queued_build_actions_keep_the_first_foundation_active_and_charge_each_one() {

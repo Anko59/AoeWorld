@@ -125,3 +125,37 @@ test("villagers garrison through the cursor and eject individually or together",
       path: `../.cache/garrison/ejected-${test.info().project.name}.png`,
     });
 });
+
+test("the Town Bell shelters nearby villagers and rings again to release them", async ({
+  page,
+  request,
+}) => {
+  expect((await request.post("/maps/reset")).status()).toBe(204);
+  await gameAssets(page, true);
+  await page.goto("/?play=1");
+  await expect(page.locator("#connection")).toHaveText("connected", {
+    timeout: 60_000,
+  });
+  await centerVillage(page, true);
+  await expect(page.locator("#selection-name")).toHaveText("Town Center");
+  const bell = page.getByRole("button", { name: "Town Bell", exact: true });
+  const backToWork = page.getByRole("button", {
+    name: "Back to Work",
+    exact: true,
+  });
+  await expect(backToWork).toBeDisabled();
+  await bell.click();
+  await expect(page.locator("#garrison-count")).toHaveText("3 / 15", {
+    timeout: 20_000,
+  });
+  await expect(backToWork).toBeEnabled();
+  await bell.click();
+  await expect(page.locator("#garrison-count")).toHaveText("0 / 15");
+  await expect(backToWork).toBeDisabled();
+  await bell.click();
+  await expect(page.locator("#garrison-count")).toHaveText("3 / 15", {
+    timeout: 20_000,
+  });
+  await backToWork.click();
+  await expect(page.locator("#garrison-count")).toHaveText("0 / 15");
+});

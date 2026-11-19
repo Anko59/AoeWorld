@@ -1,5 +1,6 @@
 use super::*;
 use crate::{BuildingKind, CarriedResource, UnitKind};
+mod controls;
 mod timers;
 mod volley_scene;
 

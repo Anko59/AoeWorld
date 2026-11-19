@@ -49,4 +49,18 @@ impl GameplayService {
         )
         .await;
     }
+    pub async fn queue_garrison_control(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        building_id: EntityId,
+        bell: bool,
+    ) {
+        let action = if bell {
+            PendingAction::TownBell(building_id)
+        } else {
+            PendingAction::BackToWork(building_id)
+        };
+        self.queue_command(session_id, sequence, action).await;
+    }
 }

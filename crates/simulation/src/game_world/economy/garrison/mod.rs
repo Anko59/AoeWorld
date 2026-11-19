@@ -3,6 +3,7 @@ use super::placement::{adjacent, distance_squared, perimeter, position};
 use crate::{BuildingKind, EconomyError, GameBuilding, GameUnit, GameWorld, UnitKind, UnitTask};
 use aoe_core::{EntityId, PlayerId, TileRect};
 
+pub(crate) mod controls;
 mod hash;
 mod release;
 mod research;
@@ -16,6 +17,7 @@ pub struct GarrisonedUnit {
     /// Telemetry of an active Steward's economy; outside the canonical hash.
     pub steward: Option<crate::StewardStatus>,
     pub vassal: Option<crate::VassalStatus>,
+    pub(crate) intent: controls::ShelterIntent,
 }
 
 impl BuildingKind {
@@ -113,6 +115,13 @@ impl GameWorld {
             return Err(EconomyError::GarrisonFull);
         }
         let is_steward = actor.kind == UnitKind::Steward;
+        let mut intent = self
+            .economy
+            .shelter_intents
+            .get(&unit)
+            .copied()
+            .unwrap_or_else(|| self.shelter_intent(actor.kind, unit));
+        intent.bell = None;
         let footprint = shelter.footprint;
         if !adjacent(footprint, actor.position.tile_floor())
             && !footprint.contains(actor.position.tile_floor())
@@ -128,6 +137,9 @@ impl GameWorld {
         self.units[self.lookup[&unit]].state.task = UnitTask::Moving;
         self.cancel_garrison_order(unit);
         self.economy.garrison_orders.insert(unit, building);
+        if intent != controls::ShelterIntent::default() {
+            self.economy.shelter_intents.insert(unit, intent);
+        }
         if is_steward {
             self.economy.garrison_stewards.insert(building, unit);
         }
@@ -140,9 +152,11 @@ impl GameWorld {
     }
 
     pub(crate) fn cancel_garrison_order(&mut self, id: EntityId) {
-        if let Some(building) = self.economy.garrison_orders.remove(&id)
-            && let Some(count) = self.economy.garrison_reservations.get_mut(&building)
-        {
+        let Some(building) = self.economy.garrison_orders.remove(&id) else {
+            return;
+        };
+        self.economy.shelter_intents.remove(&id);
+        if let Some(count) = self.economy.garrison_reservations.get_mut(&building) {
             if self.economy.garrison_stewards.get(&building) == Some(&id) {
                 self.economy.garrison_stewards.remove(&building);
             }
@@ -217,6 +231,7 @@ impl GameWorld {
             let heal_at = self.tick.0 + self.garrison_heal_ticks(shelter.player, shelter.kind);
             let index = self.lookup[&id];
             let next_hit_tick = self.units[index].next_hit_tick;
+            let intent = self.economy.shelter_intents.remove(&id).unwrap_or_default();
             if self.issue_stop(unit.player, id).is_err() {
                 self.cancel_garrison_order(id);
                 continue;
@@ -264,6 +279,7 @@ impl GameWorld {
                     heal_at,
                     steward: None,
                     vassal: None,
+                    intent,
                 },
             );
             if unit.kind == UnitKind::Vassal {
@@ -287,7 +303,12 @@ impl GameWorld {
     }
     /// A save puts a sheltered unit back inside `building`: the steps of an
     /// arrival, without the walk.
-    pub(crate) fn shelter_restored(&mut self, id: EntityId, building: EntityId) -> bool {
+    pub(crate) fn shelter_restored(
+        &mut self,
+        id: EntityId,
+        building: EntityId,
+        intent: controls::ShelterIntent,
+    ) -> bool {
         let Some(kind) = self.building(building).map(|b| b.kind) else {
             return false;
         };
@@ -320,6 +341,7 @@ impl GameWorld {
                 heal_at,
                 steward: None,
                 vassal: None,
+                intent,
             },
         );
         if unit.kind == UnitKind::Vassal {

@@ -19,17 +19,31 @@ impl GameWorld {
         if unit.is_some_and(|id| !shelter.garrison.iter().any(|g| g.unit.id == id)) {
             return Err(EconomyError::InvalidTarget);
         }
-        let footprint = shelter.footprint;
+        self.release_matching(
+            building,
+            |occupant| unit.is_none_or(|id| id == occupant.unit.id),
+            false,
+        );
+        Ok(())
+    }
+
+    pub(super) fn release_matching(
+        &mut self,
+        building: EntityId,
+        mut matches: impl FnMut(&GarrisonedUnit) -> bool,
+        resume: bool,
+    ) {
         let Some(shelter) = self.building_mut(building) else {
-            return Err(EconomyError::UnknownEntity);
+            return;
         };
+        let footprint = shelter.footprint;
         let occupants = std::mem::take(&mut shelter.garrison);
         let mut retained = Vec::new();
         for occupant in occupants {
-            if unit.is_some_and(|id| id != occupant.unit.id)
-                || !self.eject_occupant(footprint, occupant, false)
-            {
+            if !matches(&occupant) || !self.eject_occupant(footprint, occupant, false) {
                 retained.push(occupant);
+            } else if resume {
+                self.resume_sheltered_work(occupant.unit.player, occupant.unit.id, occupant.intent);
             }
         }
         if let Some(shelter) = self.building_mut(building) {
@@ -39,7 +53,6 @@ impl GameWorld {
         }
         self.refresh_garrison_fire(building);
         self.remember_visible_buildings();
-        Ok(())
     }
 
     fn eject_occupant(
