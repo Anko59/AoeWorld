@@ -12,7 +12,7 @@ server-repair = []
 
 [dependencies]
 aoe-core.workspace = true
-postcard = { version = "1.1", features = ["alloc"] }
+postcard = { version = "1.1", default-features = false, features = ["alloc"] }
 serde.workspace = true
 thiserror.workspace = true
 
