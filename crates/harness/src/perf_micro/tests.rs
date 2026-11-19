@@ -23,8 +23,8 @@ fn missing_samples_cannot_pass() {
     assert!(
         sample(&line("kernel", 100).replace("\"version\":\"6\"", "\"version\":\"5\"")).is_err()
     );
-    let (name, instructions) = sample(&line("kernel", 100)).expect("sample");
-    assert_eq!((name.as_str(), instructions), ("kernel", 100));
+    let rows = sample(&line("kernel", 100)).expect("sample");
+    assert_eq!(rows, vec![("kernel".to_owned(), 100)]);
 
     let temp = tempfile::NamedTempFile::new().expect("file");
     assert!(samples(temp.path()).is_err());
@@ -39,7 +39,7 @@ fn missing_samples_cannot_pass() {
 #[test]
 fn baseline_identity_case_set_and_regressions_are_checked() {
     let mut observed = BTreeMap::new();
-    for name in ["a", "b", "c", "d", "e", "f", "g"] {
+    for name in ["a", "b", "c", "d", "e", "f", "g", "h"] {
         observed.insert(name.to_owned(), 100);
     }
     assert!(proposal(&BTreeMap::new(), &BTreeMap::new()).is_err());
@@ -53,7 +53,7 @@ fn baseline_identity_case_set_and_regressions_are_checked() {
     let baseline = proposal(&observed, &BTreeMap::new()).expect("proposal");
     observed.insert("a".to_owned(), 104);
     let results = compare_observed(baseline, observed).expect("comparison");
-    assert_eq!(results.len(), 7);
+    assert_eq!(results.len(), 8);
     assert_eq!(results[0].verdict, Verdict::Regression);
     assert!(
         results[1..]
@@ -73,12 +73,13 @@ fn proposal_reads_both_suite_files_without_changing_baseline() {
     fs::write(
         &simulation,
         format!(
-            "{}\n{}\n{}\n{}\n{}\n",
+            "{}\n{}\n{}\n{}\n{}\n{}\n",
             line("a", 100),
             line("b", 100),
             line("e", 100),
             line("f", 100),
-            line("g", 100)
+            line("g", 100),
+            line("h", 100)
         ),
     )
     .expect("simulation samples");
@@ -88,7 +89,7 @@ fn proposal_reads_both_suite_files_without_changing_baseline() {
         observed_samples_at(&simulation, &protocol, &assets)
             .expect("samples")
             .len(),
-        7
+        8
     );
     let original = proposal(
         &observed_samples_at(&simulation, &protocol, &assets).expect("samples"),
@@ -110,7 +111,7 @@ fn proposal_reads_both_suite_files_without_changing_baseline() {
         .expect("comparison")
         .0
         .len(),
-        7
+        8
     );
     assert!(proposed.is_file());
     fs::write(&protocol, format!("{}\n", line("a", 100))).expect("duplicate");
@@ -119,7 +120,7 @@ fn proposal_reads_both_suite_files_without_changing_baseline() {
 
 #[test]
 fn late_game_identity_and_complete_case_set_are_required() {
-    let observed: BTreeMap<_, _> = ["a", "b", "c", "d", "e", "f", "g"]
+    let observed: BTreeMap<_, _> = ["a", "b", "c", "d", "e", "f", "g", "h"]
         .into_iter()
         .map(|name| (name.to_owned(), 100))
         .collect();
@@ -144,7 +145,14 @@ fn judged_with(
     reference: u64,
     latest: Option<(u64, u64)>,
 ) -> (Verdict, Option<String>) {
-    let row = judge("instructions::k", observed, baseline, reference, latest);
+    let row = judge(
+        "instructions::k",
+        observed,
+        baseline,
+        reference,
+        latest,
+        FAIL_PERCENT,
+    );
     (row.verdict, row.note)
 }
 
@@ -193,7 +201,7 @@ fn proposal_keeps_the_committed_reference_and_starts_new_cases_at_observed() {
     // Seven cases are required; the two-case map is rejected, so check the
     // anchoring through the same helper with the full set.
     assert!(proposal(&observed, &reference).is_err());
-    let mut full: BTreeMap<_, _> = ["a", "b", "c", "d", "e", "f", "g"]
+    let mut full: BTreeMap<_, _> = ["a", "b", "c", "d", "e", "f", "g", "h"]
         .into_iter()
         .map(|name| (name.to_owned(), 50))
         .collect();
@@ -262,6 +270,7 @@ fn dev_counts_gate_each_kernel_and_unlisted_kernels_use_the_baseline_only() {
         "instructions::e",
         "instructions::f",
         "instructions::g",
+        "instructions::h",
     ]
     .into_iter()
     .map(|name| (name.to_owned(), 100))
@@ -340,4 +349,66 @@ fn both_late_game_kernels_count_the_ticks_the_identity_records() {
         let text = std::fs::read_to_string(benches.join(bench)).unwrap();
         assert_eq!(text.matches(&window).count(), 1, "{bench}: {window}");
     }
+}
+
+/// A run split by thread: the total and one part per thread.
+fn split_line(name: &str, threads: &[(u64, u64)]) -> String {
+    let total: u64 = threads.iter().map(|(_, count)| count).sum();
+    let parts: Vec<_> = threads
+        .iter()
+        .map(|&(thread, count)| {
+            serde_json::json!({
+                "details": {"Left": {"thread": thread, "pid": 1, "command": "k", "path": "k.out"}},
+                "metrics_summary": {"Callgrind": {"Ir": {"metrics": {"Left": {"Int": count}}}}}
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "version": "6",
+        "module_path": name,
+        "profiles": [{
+            "tool": "Callgrind",
+            "summaries": {
+                "parts": parts,
+                "total": {"summary": {"Callgrind": {"Ir": {"metrics": {"Left": {"Int": total}}}}}}
+            }
+        }]
+    })
+    .to_string()
+}
+
+#[test]
+fn a_run_split_by_thread_reports_its_main_thread_beside_the_total() {
+    let rows = sample(&split_line("late", &[(1, 70), (2, 20), (3, 10)])).expect("sample");
+    assert_eq!(
+        rows,
+        vec![("late".to_owned(), 100), ("late_main".to_owned(), 70)]
+    );
+    assert!(sample(&split_line("late", &[(2, 20), (3, 10)])).is_err());
+    let one = sample(&split_line("late", &[(1, 70)])).expect("one thread");
+    assert_eq!(one, vec![("late".to_owned(), 70)]);
+}
+
+#[test]
+fn the_main_thread_carries_the_tight_gate_and_the_total_a_looser_one() {
+    let names = ["a", "b", "c", "d", "e", "f", "late", "late_main"];
+    let observed: BTreeMap<_, _> = names.iter().map(|n| (n.to_string(), 100)).collect();
+    let baseline = proposal(&observed, &BTreeMap::new()).expect("proposal");
+    let mut grown = observed.clone();
+    grown.insert("late".to_owned(), 106);
+    let rows = compare_observed(baseline, grown).expect("comparison");
+    let late = rows
+        .iter()
+        .find(|r| r.metric == "instructions::late")
+        .unwrap();
+    assert_eq!(late.verdict, Verdict::Pass, "{late:?}");
+    let baseline = proposal(&observed, &BTreeMap::new()).expect("proposal");
+    let mut slower = observed;
+    slower.insert("late_main".to_owned(), 104);
+    let rows = compare_observed(baseline, slower).expect("comparison");
+    let main = rows
+        .iter()
+        .find(|r| r.metric == "instructions::late_main")
+        .unwrap();
+    assert_eq!(main.verdict, Verdict::Regression, "{main:?}");
 }

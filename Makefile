@@ -7,6 +7,11 @@ TOOL_IMAGE := aoeworld/rust-tools:1.99.1-sccache0.19.0
 BROWSER_IMAGE := aoeworld/browser-tools:1.64.0
 ORCH_IMAGE := aoeworld/orchestrator:1.99.1-sccache0.19.0
 ANALYSIS_IMAGE := aoeworld/analysis:0.19.4-sccache0.19.0
+# Callgrind benches: the client requests must find the image's Valgrind
+# headers. A `valgrind-requests` build reused from a container without them
+# silently compiled stubs, and the bench then aborted at its first request
+# (#930); these variables, which its build script watches, force a strict rebuild.
+CALLGRIND_ENV := -e GUNGRAUN_ALLOW_ASLR=yes -e VALGRIND_REQUESTS_VALGRIND_INCLUDE=/usr/include -e VALGRIND_REQUESTS_STRATEGY=strict
 POLICY_IMAGE := aoeworld/policy:0.20.2-sccache0.19.0
 COVERAGE_IMAGE := aoeworld/coverage:0.9.1-sccache0.19.0
 FUZZ_IMAGE := aoeworld/fuzz:nightly-2026-09-01-0.13.2-sccache0.19.0

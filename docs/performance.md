@@ -283,11 +283,11 @@ until 2026-10-27) is a `REGRESSION`.
 
 ### Instruction gate
 
-CI runners are noisy, so performance is gated on Callgrind instruction counts
-(deterministic) and never on elapsed time. The pinned Gungraun/Callgrind analysis
-image counts seven kernels (simulation, protocol, palette decoding;
-`crates/harness/src/perf_micro.rs`). Each row is compared with its committed
-`instructions` baseline in `baselines/perf/micro.json`:
+CI runners are noisy, so performance is gated on Callgrind instruction counts (deterministic), never elapsed time. The
+pinned analysis image counts seven kernels (simulation, protocol, palette decoding; `crates/harness/src/perf_micro.rs`)
+in eight rows: late_game runs on 4 workers with `--separate-threads=yes`, and its main thread (`late_game_main`, the
+serial path a tick waits on) is gated as below, while its total over all threads fails only above +10% (owner 11-19:
+the gates must see parallel work). Each row is compared with its `instructions` baseline in `baselines/perf/micro.json`:
 
 | Row against its baseline | Result |
 |---|---|

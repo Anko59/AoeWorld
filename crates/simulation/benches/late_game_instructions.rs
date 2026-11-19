@@ -9,7 +9,7 @@ use support::setup_late_game;
 #[library_benchmark(
     setup = setup_late_game,
     config = LibraryBenchmarkConfig::default().tool(
-        Callgrind::with_args(["--instr-atstart=no"])
+        Callgrind::with_args(["--instr-atstart=no", "--separate-threads=yes"])
             .entry_point(EntryPoint::None)
     )
 )]

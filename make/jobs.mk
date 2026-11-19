@@ -53,9 +53,9 @@ perf-instructions-admitted: job-bootstrap
 perf-instructions-steps:
 	@$(MAKE) --no-print-directory analysis-tools
 	@mkdir -p reports/perf
-	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GUNGRAUN_ALLOW_ASLR=yes $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo bench --locked -p aoe-simulation --bench instructions -- --output-format=json > reports/perf/simulation.ndjson
-	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GUNGRAUN_ALLOW_ASLR=yes $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo bench --locked -p aoe-protocol --bench instructions -- --output-format=json > reports/perf/protocol.ndjson
-	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GUNGRAUN_ALLOW_ASLR=yes $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo bench --locked -p aoe-assets --bench instructions -- --output-format=json > reports/perf/assets.ndjson
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(CALLGRIND_ENV) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo bench --locked -p aoe-simulation --bench instructions -- --output-format=json > reports/perf/simulation.ndjson
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(CALLGRIND_ENV) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo bench --locked -p aoe-protocol --bench instructions -- --output-format=json > reports/perf/protocol.ndjson
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(CALLGRIND_ENV) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo bench --locked -p aoe-assets --bench instructions -- --output-format=json > reports/perf/assets.ndjson
 
 # Headless 100-player, 100,000-unit tick benchmark; PERF_SCALE_ARGS passes harness flags
 # (for example `PERF_SCALE_ARGS="--players 8 --ticks 100" make perf-scale`).
@@ -490,4 +490,4 @@ perf-late-game-instructions-admitted: job-bootstrap
 perf-late-game-instructions-steps:
 	@$(MAKE) --no-print-directory analysis-tools
 	@mkdir -p reports/perf
-	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GUNGRAUN_ALLOW_ASLR=yes $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo bench --locked -p aoe-simulation --bench late_game_instructions -- --output-format=json > reports/perf/late-game-instructions.ndjson
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(CALLGRIND_ENV) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo bench --locked -p aoe-simulation --bench late_game_instructions -- --output-format=json > reports/perf/late-game-instructions.ndjson
