@@ -63,7 +63,7 @@ pub(super) fn start(
     saved: Option<&Value>,
 ) -> Result<(Value, Option<save::Human>, Option<Value>), BoxError> {
     let result = if let Some(card) = saved {
-        let (human, status) = save::resume(server, card)?;
+        let (human, status) = save::resume(server, card, options.human_view)?;
         (
             json!({"slots":[], "content_hash":card["map_hash"], "seeded_units":0, "partial_starting_kits":0}),
             Some(human),

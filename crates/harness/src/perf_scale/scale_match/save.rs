@@ -1,5 +1,6 @@
 //! Saved worlds use the server's skirmish restore and its ordinary AI fleet.
 use super::{BoxError, MapSource, Options, http, report, run::Server};
+use aoe_core::TileRect;
 use aoe_protocol::{
     GAMEPLAY_VERSION, GameplayClientMessage, GameplayServerMessage, decode_gameplay_server,
     encode_gameplay_client,
@@ -131,7 +132,7 @@ pub(super) struct Human {
 }
 
 impl Human {
-    fn connect(address: &str) -> Result<Self, BoxError> {
+    fn connect(address: &str, view: Option<i32>) -> Result<Self, BoxError> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(1)
             .enable_all()
@@ -152,17 +153,45 @@ impl Human {
                     .next()
                     .await
                     .ok_or("human socket closed before welcome")??;
-                let GameplayServerMessage::Welcome { resume_token, .. } =
-                    decode_gameplay_server(&frame.into_data())?
+                let GameplayServerMessage::Welcome {
+                    resume_token,
+                    primary_unit_id,
+                    ..
+                } = decode_gameplay_server(&frame.into_data())?
                 else {
                     return Err::<_, BoxError>("human socket was not welcomed".into());
                 };
                 let token = resume_token.0.iter().map(|b| format!("{b:02x}")).collect();
                 let task = tokio::spawn(async move {
+                    let mut view = view;
                     while let Some(Ok(frame)) = socket.next().await {
                         if frame.is_close() {
                             break;
                         }
+                        // Watch the region around the primary unit once it is seen.
+                        let Some(side) = view else { continue };
+                        let units = match decode_gameplay_server(&frame.into_data()) {
+                            Ok(GameplayServerMessage::Snapshot { units, .. }) => units,
+                            Ok(GameplayServerMessage::Tick { changed_units, .. }) => changed_units,
+                            _ => continue,
+                        };
+                        let Some(unit) = units.iter().find(|u| u.id == primary_unit_id) else {
+                            continue;
+                        };
+                        let tile = unit.position.tile_floor();
+                        let region =
+                            TileRect::from_xywh(tile.x - side / 2, tile.y - side / 2, side, side);
+                        let message = GameplayClientMessage::Subscribe {
+                            revision: 1,
+                            region,
+                        };
+                        let Ok(bytes) = encode_gameplay_client(&message) else {
+                            break;
+                        };
+                        if socket.send(Message::Binary(bytes.into())).await.is_err() {
+                            break;
+                        }
+                        view = None;
                     }
                 });
                 Ok((token, task))
@@ -177,8 +206,12 @@ impl Human {
     }
 }
 
-pub(super) fn resume(server: &Server, card: &Value) -> Result<(Human, Value), BoxError> {
-    let bootstrap = Human::connect(&server.address)?;
+pub(super) fn resume(
+    server: &Server,
+    card: &Value,
+    view: Option<i32>,
+) -> Result<(Human, Value), BoxError> {
+    let bootstrap = Human::connect(&server.address, None)?;
     let response = http::request(
         &server.address,
         "POST",
@@ -205,12 +238,12 @@ pub(super) fn resume(server: &Server, card: &Value) -> Result<(Human, Value), Bo
                 return Ok((
                     human
                         .map(Ok)
-                        .unwrap_or_else(|| Human::connect(&server.address))?,
+                        .unwrap_or_else(|| Human::connect(&server.address, view))?,
                     status,
                 ));
             }
             Some("connecting_ai") if human.is_none() => {
-                human = Some(Human::connect(&server.address)?);
+                human = Some(Human::connect(&server.address, view)?);
             }
             Some("failed" | "cancelled" | "stopped") => {
                 return Err(format!("saved skirmish failed: {status}").into());
