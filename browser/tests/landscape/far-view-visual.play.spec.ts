@@ -134,19 +134,33 @@ test("the dominant kind's art reaches the token pixels inside the owner rim", as
         x < 32 ? [235, 75, 95, 255] : [235, 215, 95, 255],
         (y * 64 + x) * 4,
       );
-  await page.route("**/asset-pack/unit-color.png", (route) =>
+  await page.route("**/asset-pack/portraits.png", (route) =>
     route.fulfill({ contentType: "image/png", body: PNG.sync.write(atlas) }),
   );
-  await page.route("**/asset-pack/unit-player.png", (route) =>
+  await page.route("**/asset-pack/interface.json", (route) =>
     route.fulfill({
-      contentType: "image/png",
-      body: PNG.sync.write(new PNG({ width: 64, height: 32 })),
+      json: {
+        units: Object.fromEntries(
+          [74, 4].map((id, i) => [
+            id,
+            {
+              page: "portraits.png",
+              page_width: 64,
+              page_height: 32,
+              x: i * 32,
+              y: 0,
+              width: 32,
+              height: 32,
+            },
+          ]),
+        ),
+      },
     }),
   );
   await page.route("**/landscape-test", (route) =>
     route.fulfill({
       contentType: "text/html",
-      body: '<canvas id="scene" style="width:1280px;height:720px"></canvas>',
+      body: '<canvas id="scene" style="width:1280px;height:720px"></canvas><div id="selection-portrait"></div>',
     }),
   );
   await page.goto("/landscape-test");
@@ -162,19 +176,20 @@ test("the dominant kind's art reaches the token pixels inside the owner rim", as
       { disabled: true, canvas: document.createElement("canvas"), revision: 0 },
       { records: () => records, revision: () => 1 },
     );
-    const art = Array.from({ length: 5 }, (_, i) =>
-      i === 2 || i === 4
-        ? [32, 32, i === 2 ? 0 : 32, 0, "unit-color.png", "unit-player.png"]
-        : null,
-    );
-    s.unitMiniatures(art);
-    const draw = () => {
-      s.frame(frame);
-      requestAnimationFrame(draw);
-    };
-    draw();
+    // @ts-expect-error Served browser module.
+    const uiArt = await import("/interface/ui-art.js");
+    const portrait = document.getElementById("selection-portrait");
+    if (!portrait) throw Error("Selection portrait missing");
+    portrait.innerHTML = uiArt.entityIcon("Archer");
+    uiArt.initArt();
+    s.frame(frame);
+    await uiArt.artReady;
   }, state);
   const canvas = page.locator("#strategic-scene");
+  await expect(page.locator("#selection-portrait .art-icon")).toHaveAttribute(
+    "data-ui-id",
+    "4",
+  );
   await expect(canvas).toHaveAttribute("data-picks", /"kind":4.*"art":true/);
   const colours = await canvas.evaluate((node: HTMLCanvasElement) => {
     const { x, y } = JSON.parse(node.dataset.picks ?? "[]")[0];
@@ -186,5 +201,65 @@ test("the dominant kind's art reaches the token pixels inside the owner rim", as
   expect(colours).toEqual([
     [235, 215, 95],
     [65, 145, 245],
+  ]);
+});
+
+test("fish cluster separately from forage and explored forests get wood markers", async ({
+  page,
+}) => {
+  await page.route("**/landscape-test", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<svg id="fog-test"><g id="minimap-terrain"></g></svg><canvas id="scene" style="width:1280px;height:720px"></canvas>',
+    }),
+  );
+  await page.goto("/landscape-test");
+  const result = await page.evaluate(async () => {
+    // @ts-expect-error Served browser module.
+    const { initStrategic } = await import("/navigation/strategic.js");
+    // @ts-expect-error Served browser module.
+    const { initFogMap } = await import("/navigation/fog.js");
+    const fog = initFogMap(document.getElementById("fog-test"));
+    fog(false, [102 * 256 + 102 + (1 << 16), 102 * 256 + 106 + (2 << 16)]);
+    const strategic = initStrategic(fog, {
+      records: () => [],
+      revision: () => 0,
+    });
+    const cells = new Uint8Array(64 * 64).fill(0x80);
+    cells[25 * 64 + 25] = cells[25 * 64 + 26] = cells[40 * 64 + 40] = 0x82;
+    strategic.terrain(null, { samples: 64, cells });
+    strategic.resources([
+      4, 119, 130, 10, 0, 5, 123, 133, 11, 0, 5, 184, 130, 12, 0, 0, 121, 130,
+      13, 0,
+    ]);
+    const state = [256, 256, 128, 128, 1280, 720, 0.04, 1];
+    const canvas =
+      document.querySelector<HTMLCanvasElement>("#strategic-scene");
+    if (!canvas) throw Error("Strategic canvas missing");
+    const counts = () => [
+      canvas.dataset.resources,
+      canvas.dataset.shoals,
+      canvas.dataset.forests,
+    ];
+    strategic.frame(state);
+    const initial = counts();
+    strategic.depleted([10, 0, 11, 0], true, true);
+    strategic.frame(state);
+    const depleted = counts();
+    fog(true, []);
+    strategic.frame(state);
+    const revealed = counts();
+    const button = document.querySelector<HTMLButtonElement>(
+      '[data-layer="resources"]',
+    );
+    if (!button) throw Error("Resource layer button missing");
+    button.click();
+    return [initial, depleted, revealed, counts()];
+  });
+  expect(result).toEqual([
+    ["4", "2", "1"],
+    ["2", "1", "1"],
+    ["2", "1", "2"],
+    ["2", "0", "0"],
   ]);
 });

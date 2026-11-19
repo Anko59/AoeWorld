@@ -1,4 +1,4 @@
-import { drawMiniature } from '/navigation/landscape/units.js';
+import { drawPortraitToken } from '/navigation/landscape/units.js';
 import { actorColour } from '/minimap.js';
 
 // Small plaques count buildings and the unit groups folded into each place.
@@ -22,7 +22,7 @@ export function drawChips(context, placed, scale, artFor) {
     x += 4 * u;
     items.forEach(({ type, kind }, i) => {
       const cx = x + cell / 2;
-      if (type !== undefined) drawMiniature(context, cx, y, 16 * u, type, actorColour(p.colour), artFor(kind));
+      if (type !== undefined) drawPortraitToken(context, cx, y, 16 * u, type, actorColour(p.colour), artFor(kind));
       else { context.fillStyle = '#d8c594'; context.beginPath(); context.moveTo(cx - 5 * u, y); context.lineTo(cx, y - 5 * u); context.lineTo(cx + 5 * u, y); context.lineTo(cx + 4 * u, y + 5 * u); context.lineTo(cx - 4 * u, y + 5 * u); context.closePath(); context.fill(); }
       context.fillStyle = '#fff6d8'; context.fillText(texts[i], x + cell + 2 * u, y + .5 * u);
       x += widths[i] + gap;

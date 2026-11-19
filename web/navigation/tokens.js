@@ -1,8 +1,9 @@
 import { entityIcon } from '/interface/ui-art.js';
 import { actorColour } from '/minimap.js';
-import { drawMiniature } from '/navigation/landscape/units.js';
+import { drawPortraitToken } from '/navigation/landscape/units.js';
 
-export const ARMY_FIELDS = 17;
+export const ARMY_LAYOUT_FIELDS = 15;
+export const ARMY_FIELDS = ARMY_LAYOUT_FIELDS + 2;
 const states = ['idle', 'marching', 'fighting', 'retreating'];
 const stances = ['Aggressive', 'Defensive', 'Stand ground', 'No attack'];
 const roles = ['Infantry', 'Archers', 'Cavalry', 'Siege', 'Scouts'];
@@ -16,7 +17,7 @@ export function initTokens() {
   layer.id = 'strategic-tokens'; layer.hidden = true;
   document.body.append(layer);
   const nodes = new Map();
-  let armies = [], economy = [], bridges = [], hits = [], domainSignature = '';
+  let armies = [], economy = [], bridges = [], portraits = new Map(), hits = [], domainSignature = '';
   let hudRects = null, hudRectsAt = 0, hudRectsFor = '';
   const domains = new Map();
   function button(key, className) {
@@ -63,8 +64,9 @@ export function initTokens() {
       if (layer.hidden === !value) return;
       layer.hidden = !value; if (!value) hits = [];
     },
-    update(a, e, b) {
-      armies = rows(a, ARMY_FIELDS, 256); economy = rows(e, 13, 64); bridges = rows(b, 5, 2048);
+    update(a, e, b, art = []) {
+      portraits = new Map(rows(art, 3, 256).map(([id, kind, rgb]) => [id, [kind, rgb]]));
+      armies = rows(a, ARMY_LAYOUT_FIELDS, 256); economy = rows(e, 13, 64); bridges = rows(b, 5, 2048);
       const next = economy.map(r => [r[0], r[2], r[3], r[7] === -1]).flat().join(',');
       if (next !== domainSignature) {
         domainSignature = next; domains.clear();
@@ -192,7 +194,9 @@ export function initTokens() {
         place(node, ...position, visible, dense ? 40 : 118, dense ? 38 : 34, -id - 1, scale);
       }
       for (const r of armies) {
-        const [id, wx, wy, owned, selected, size, state, stance, tx, ty, infantry, archers, cavalry, siege, scouts, kind, rgb] = r;
+        const [id, wx, wy, owned, selected, size, state, stance, tx, ty, infantry, archers, cavalry, siege, scouts] = r;
+        const [kind, rgb] = portraits.get(id) ?? [-1, null];
+        const colour = rgb === null ? holdingColour : actorColour(rgb);
         const counts = [infantry, archers, cavalry, siege, scouts];
         const node = button(`a${id}`, 'army-token');
         const [x, y] = project([wx, wy]);
@@ -208,8 +212,8 @@ export function initTokens() {
           const mode = document.createElement('small'); mode.textContent = owned ? (stances[stance] ?? '') : 'enemy';
           const portrait = document.createElement('canvas'); portrait.width = portrait.height = 64;
           portrait.className = 'army-portrait';
-          drawMiniature(portrait.getContext('2d'), 32, 31, 56, 0, actorColour(rgb), art);
-          node.style.borderColor = actorColour(rgb);
+          drawPortraitToken(portrait.getContext('2d'), 32, 31, 56, 0, colour, art);
+          node.style.borderColor = colour;
           const bar = document.createElement('span'); bar.className = 'army-mix';
           counts.forEach((count, i) => {
             const part = document.createElement('i');

@@ -9,7 +9,8 @@ html[data-lod=map] #minimap,html[data-lod=markers] #minimap { height:208px; widt
 #strategic-map-key { position:fixed; left:50%; bottom:16px; translate:-50% 0; z-index:2; pointer-events:none; color:#eee2bb; text-shadow:0 1px 2px #101d20; background:#192725d9; border:1px solid #9c906455; padding:7px 12px; font:11px Georgia,serif; }
 #strategic-map-key>div { display:flex; align-items:center; justify-content:center; gap:12px; }
 #strategic-map-key span:before { content:''; display:inline-block; width:8px; height:8px; margin-right:4px; border:1px solid #ddd5ac66; }
-#strategic-map-key .forest:before { background:#305739; }
+#strategic-map-key .forest:before { background:#b7d389; }
+#strategic-map-key .shoal:before { background:#a0def6; }
 #strategic-map-key .fields:before { background:#bea45d; }
 #strategic-map-key .water:before { background:#36748e; }
 #strategic-map-key .holdings:before { background:var(--player-colour,#4191f5); border-color:#fff8d6; border-radius:50%; }

@@ -86,7 +86,7 @@ fn report_hit(hit: Option<aoe_protocol::HitState>, position: [f64; 2], newest: &
 }
 
 // [id, world x/y, owned, selected, size (-1 unknown), state, stance,
-//  first authoritative order x/y (NaN absent), actual counts * 5, miniature, RGB].
+//  first authoritative order x/y (NaN absent), actual counts * 5, portrait kind, RGB].
 pub(in super::super) fn army_record(
     u: &GameplayUnitState,
     owner: PlayerId,

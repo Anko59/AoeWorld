@@ -205,3 +205,15 @@ test("only one actor scan is needed across camera animation frames", async ({
   }, state);
   expect(scans).toBe(1);
 });
+
+test("crowded friendly cells preserve the population in the displayed counts", async ({
+  page,
+}) => {
+  const units = Array.from({ length: 28 * 16 }, (_, cell) =>
+    group(22 + (cell % 28) * 44, 22 + Math.floor(cell / 28) * 44, 2, MINE),
+  ).flat();
+  const picks = await far(page, 1280, units);
+  expect((await picks()).reduce((sum, pick) => sum + pick.count, 0)).toBe(
+    units.length,
+  );
+});

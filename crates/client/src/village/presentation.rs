@@ -89,12 +89,7 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
                 continue;
             }
             values[7] += 1.0;
-            resource_marker(
-                &mut values,
-                node.kind as u8 as f64,
-                [f64::from(node.tile.x) + 0.5, f64::from(node.tile.y) + 0.5],
-                node.id,
-            );
+            resource_marker(&mut values, node);
         }
         return values;
     }
@@ -248,7 +243,7 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
         // deposits only, bounded by resident chunks and the viewport.
         if node.kind as u8 != 1 && visible && values[7] < 2048.0 {
             values[7] += 1.0;
-            resource_marker(&mut values, node.kind as u8 as f64, world, node.id);
+            resource_marker(&mut values, *node);
         }
     }
     for (kind, target) in targets.into_iter().enumerate() {
@@ -357,10 +352,14 @@ fn marker(values: &mut Vec<f64>, kind: f64, position: [f64; 2]) {
     values.extend_from_slice(&[kind, position[0], position[1]]);
 }
 
-fn resource_marker(values: &mut Vec<f64>, kind: f64, position: [f64; 2], id: u64) {
-    marker(values, kind, position);
+pub(super) fn resource_marker(values: &mut Vec<f64>, node: aoe_map::ResourceNode) {
+    marker(
+        values,
+        resource_selection_kind(node.object, node.kind),
+        [f64::from(node.tile.x) + 0.5, f64::from(node.tile.y) + 0.5],
+    );
     // Preserve the u64 identity as two exact u32 limbs across the HUD boundary.
-    values.extend_from_slice(&[f64::from(id as u32), f64::from((id >> 32) as u32)]);
+    values.extend_from_slice(&[f64::from(node.id as u32), f64::from((node.id >> 32) as u32)]);
 }
 
 fn actor_marker(

@@ -12,7 +12,6 @@ use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 mod far;
-pub(super) use far::publish_miniatures;
 mod pixels;
 mod prepare;
 mod retry;

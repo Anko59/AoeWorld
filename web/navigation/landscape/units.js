@@ -1,7 +1,7 @@
 import { actorColour } from '/minimap.js';
 import { CELL, emptyGroup, tally } from '/navigation/landscape/groups.js';
 
-export function drawMiniature(context, x, y, size, type, colour, art) {
+export function drawPortraitToken(context, x, y, size, type, colour, art) {
   const sea = type & 4, economy = type & 2;
   const w = size * .5, h = size * (sea ? .4 : .44);
   const rim = new Path2D();
@@ -30,9 +30,13 @@ export function drawMiniature(context, x, y, size, type, colour, art) {
   if (art) {
     const draw = Math.min(w * (sea ? 1.82 : 1.72) / art.width, h * 1.8 / art.height);
     const wide = art.width * draw, high = art.height * draw;
+    context.save();
+    context.clip(rim);
+    context.fillStyle = colour; context.fill(rim);
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = 'high';
     context.drawImage(art, x - wide / 2, y - high / 2, wide, high);
+    context.restore();
   } else {
     // Readable category silhouettes while the pack loads or when art is absent.
     const s = size * .22;
@@ -93,18 +97,18 @@ export function drawUnits(context, groups, project, width, height, scale, space,
       continue;
     }
     // Keep friendly and hostile tokens separate even when they share a cell.
-    const cx = (Math.floor(px / CELL) + .5) * CELL;
-    const cy = (Math.floor(py / CELL) + .5) * CELL;
+    const cx = Math.min(width * scale - 1, (Math.floor(px / CELL) + .5) * CELL);
+    const cy = Math.min(height * scale - 1, (Math.floor(py / CELL) + .5) * CELL);
     const sea = group.type & 4;
     const size = (group.friendly ? 35 : sea ? 32 : 29) / scale;
     const rect = ([dx, dy]) => [cx + dx - 19, cy + dy - 18, cx + dx + 19, cy + dy + 24];
-    const step = steps.find(s => space.free(...rect(s))) ?? (group.friendly ? null : steps[0]);
-    if (!step) continue;
+    const step = steps.find(([dx, dy]) => cx + dx >= 0 && cx + dx < width * scale
+      && cy + dy >= 0 && cy + dy < height * scale && space.free(...rect([dx, dy]))) ?? steps[0];
     space.take(...rect(step), -2);
     const sx = (cx + step[0]) / scale, sy = (cy + step[1]) / scale;
     const art = artFor(group.kind);
     context.globalAlpha = group.friendly ? 1 : sea ? .94 : .85;
-    drawMiniature(context, sx, sy, size, group.type, actorColour(group.colour), art);
+    drawPortraitToken(context, sx, sy, size, group.type, actorColour(group.colour), art);
     if (group.count > 1) drawCount(context, sx, sy + size * (sea ? .63 : .68), String(group.count), size);
     context.globalAlpha = 1;
     picks.push({ x: sx, y: sy, count: group.count, kind: group.kind, class: group.type, art: !!art, hostile: !group.friendly, world: group.world });

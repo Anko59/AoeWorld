@@ -43,7 +43,7 @@ export function loadSprites() {
 async function image(path) {
   const value = new Image(); value.src = path; await value.decode(); return value;
 }
-export async function spritePixels(assets, frame, colour) {
+async function spritePixels(assets, frame, colour) {
   const { wasm, chunks, pages } = assets;
   if (frame.bytes) {
     const [file, offset, length] = frame.bytes;

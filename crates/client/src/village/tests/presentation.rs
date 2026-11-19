@@ -46,3 +46,37 @@ fn a_selected_starting_resource_reports_zero_when_exhausted_instead_of_vanishing
     assert_eq!(starting_selection(gold.id, &cache), Some((2.0, 0.0)));
     assert_eq!(starting_selection(7, &cache), None);
 }
+
+#[wasm_bindgen_test]
+fn strategic_resource_records_preserve_fish_type_and_full_node_identity() {
+    use super::super::presentation::resource_marker;
+    use aoe_map::ObjectKind;
+
+    let node = ResourceNode {
+        id: 0x1234_5678_9abc_def0,
+        tile: TileCoord::new(30, 40),
+        kind: ResourceKind::Food,
+        object: ObjectKind::DeepFish,
+        initial_amount: 225,
+        visual_variant: 0,
+    };
+    let mut records = Vec::new();
+    resource_marker(&mut records, node);
+    resource_marker(
+        &mut records,
+        ResourceNode {
+            object: ObjectKind::ForageBush,
+            ..node
+        },
+    );
+    let position_and_id = [
+        30.5,
+        40.5,
+        f64::from(0x9abc_def0_u32),
+        f64::from(0x1234_5678_u32),
+    ];
+    assert_eq!(records[0], 5.0);
+    assert_eq!(records[5], 0.0);
+    assert_eq!(records[1..5], position_and_id);
+    assert_eq!(records[6..], position_and_id);
+}

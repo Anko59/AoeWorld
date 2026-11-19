@@ -137,15 +137,18 @@ a neighbourhood: a Town Center outranks a Castle, which outranks the rest, and a
 overlap folds into a plaque of counts (buildings, villagers, soldiers) under it. A single
 screen grid (`landscape/space.js`) arbitrates the HUD, places, General/Steward tokens and unit
 groups. Each cell groups land troops, land workers, warships and fishing or
-trade ships separately by owner. The most numerous kind supplies the DE idle
-miniature, with ties going to the lowest kind ordinal. Owner-coloured rims,
+trade ships separately by owner. The most numerous kind supplies the same DE
+portrait used by the selection card, with ties going to the lowest kind ordinal. Owner-coloured rims,
 worker circles and ship-shaped plates distinguish the groups. A place only
 folds groups with the same owner into its plaque. The HUD stream refreshes
 group composition at most four times per second. Camera animation reprojects
 the cached groups. Owned General tokens use their dominant kind when the
 authorized stream contains their complete reported army, and other General
-tokens show the General's own miniature. Steward plaques fold above 12 towns,
-and the General panel can fold.
+tokens show the General's own portrait. Steward plaques fold above 12 towns,
+and the General panel can fold. Nearby known fish nodes share a shoal marker
+with a node count. Explored woodland from the overview raster gets forest
+markers sized by the canopy sampled in each patch. The Resources layer
+controls both sets of markers.
 
 ## Market from the far view
 

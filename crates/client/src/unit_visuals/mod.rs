@@ -10,16 +10,6 @@ use aoe_protocol::{
 pub(crate) use rest::{is_stalled, rest_pose, stall_window_ticks};
 use roster::{decay_pair, military_poses};
 
-/// Resolve the ordinary idle art for a far-view miniature.
-pub(crate) fn idle_pose(kind: UnitKind) -> Option<Pose> {
-    Some(match kind {
-        UnitKind::Villager => Pose::VillagerStand,
-        UnitKind::Militia => Pose::MilitiaStand,
-        UnitKind::FishingShip => Pose::FishingShipStand,
-        kind => military_poses(kind)?[0],
-    })
-}
-
 pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> Pose {
     use Pose::*;
     if let Some(poses) = military_poses(u.kind) {
