@@ -8,7 +8,7 @@
 //! job. Neither depends on the planner's work surviving a restart.
 use super::{GameWorld, far_planner, far_route};
 use crate::GameWorldError;
-use aoe_core::EntityId;
+use aoe_core::{EntityId, PlayerId, TileCoord};
 use aoe_map::RoutePlanner;
 
 /// Work a near route may spend while other units queue for its slot. An
@@ -95,6 +95,21 @@ impl GameWorld {
 
     /// Answer a disconnected land search from regions, independently of
     /// work already spent or the fair share available this tick.
+    /// True when `to` is cut off from `from` only as a pocket: the nearest
+    /// tile `player` reaches is next to it, so refinement serves the order.
+    pub(crate) fn pocket_beside_frontier(
+        &self,
+        player: PlayerId,
+        bucket: aoe_map::LandBucket,
+        from: TileCoord,
+        to: TileCoord,
+    ) -> bool {
+        self.land_frontier(player, bucket, from, to)
+            .ok()
+            .flatten()
+            .is_some_and(|near| (near.x - to.x).abs().max((near.y - to.y).abs()) <= 1)
+    }
+
     pub(super) fn end_disconnected_near_route(
         &mut self,
         id: EntityId,
@@ -132,13 +147,7 @@ impl GameWorld {
             // served from next to it, once refinement certifies that tile.
             Ok(false)
                 if planner.certified_destination().is_none()
-                    && self
-                        .land_frontier(unit.state.player, bucket, from, to)
-                        .ok()
-                        .flatten()
-                        .is_some_and(|near| {
-                            (near.x - to.x).abs().max((near.y - to.y).abs()) <= 1
-                        }) =>
+                    && self.pocket_beside_frontier(unit.state.player, bucket, from, to) =>
             {
                 return;
             }

@@ -68,8 +68,6 @@ pub(crate) struct OrderDiagnostics {
     /// Route-planner work (issue, fair pass, planning ahead) by the issuer of
     /// the unit's latest accepted order; the last row has no known issuer.
     route_work: [[u64; 3]; 8],
-    /// Unit whose queued search is being served (the issuer is then the unit's, not the caller's).
-    work_unit: Option<EntityId>,
     last: BTreeMap<EntityId, (u64, OrderIssuer, Site)>,
     sources: BTreeMap<Source, OrderRedundancy>,
 }
@@ -134,7 +132,7 @@ impl GameWorld {
 
     /// `phase`: 0 issue-time, 1 fair pass, 2 planning ahead.
     pub(crate) fn demand_route_work(&mut self, id: Option<EntityId>, phase: usize, spent: u32) {
-        let row = match id.or(self.order_diagnostics.work_unit) {
+        let row = match id {
             Some(id) => self
                 .order_diagnostics
                 .last
