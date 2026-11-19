@@ -4,7 +4,6 @@
 | --- | --- | --- | --- | --- |
 | Occlusion: units hidden by buildings they stand in front of and the opposite; destroyed-building animation, ruins and the large DE rocks always draw on top | 11-19 x1 | PLANNED | Owner playtest 11-19 (Anatolia 2, 10 Hz build, 61.5k units, 4.0 ticks/s) | Sort by footprint base, not sprite anchor; check ruins, rubble and rocks with `make compare` |
 | Multi-building selection: training queues overlap in the bottom menu | 11-19 x1 | PLANNED | Owner playtest 11-19 (Anatolia 2, 10 Hz build, 61.5k units, 4.0 ticks/s) | Lay out one queue row per building, or merge identical buildings as DE does |
-| Selected unit does not show whether auto-scout is on | 11-19 x1 | PLANNED | Owner playtest 11-19 (Anatolia 2, 10 Hz build, 61.5k units, 4.0 ticks/s) | Toggle state on the button |
 | Offensive (attack-move) queue looks the same as a move queue; right click should send, left click deselect; no way to end an attack-move queue | 11-19 x1 | PLANNED | Owner playtest 11-19 (Anatolia 2, 10 Hz build, 61.5k units, 4.0 ticks/s); #800 added shift-queued attack-move | Distinct waypoint marker; DE mouse bindings |
 | Kingdom activity panel not in the medieval DE style; hidden behind other menus in the far view | 11-19 x1 | PLANNED | Owner playtest 11-19 (Anatolia 2, 10 Hz build, 61.5k units, 4.0 ticks/s); panel from #805 | Restyle on DE art, raise it above the far-view menus |
 | Far view: armies drawn as militia; show each group's most common unit as its miniature; tell villagers and fishing ships apart | 11-19 x1 | PLANNED | Owner playtest 11-19 (Anatolia 2, 10 Hz build, 61.5k units, 4.0 ticks/s) | Token per group from its dominant kind |
@@ -21,6 +20,7 @@
 | item | asked | status | evidence |
 | --- | --- | --- | --- |
 | Garrison button uses the native DE doorway icon | 11-19 | DONE | Imported action 069, with native icons for Back to Work and the Town Bell. |
+| Selected unit does not show whether auto-scout is on | 11-19 | DONE | The auto-scout button shows a solid gold outline for active scouts and a dashed one for mixed selections. |
 | Multi-building training queues overlap | 11-19 | DONE | Each selected producer has its own readable queue row in the bottom menu. |
 | Dark Age Town Center side (11-09 visuals item 1) | 11-09 | DONE | #661 Town Center slice origin; does not reproduce (11-14, flat ground, default camera) |
 | DE art for every unit, building, terrain object; no flicker | 10-26, 10-31 x3 | DONE | #644 |

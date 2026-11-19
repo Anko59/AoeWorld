@@ -36,6 +36,7 @@ test("scout auto-explore toggles authoritative state and Stop cancels it", async
     "aria-pressed",
     "true",
   );
+  await expect(page.locator("#auto-scout")).toHaveCSS("outline-width", "2px");
   await captureAutomation(page, base, `auto-scout-${test.info().project.name}`);
   await expect
     .poll(

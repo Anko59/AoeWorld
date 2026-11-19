@@ -13,7 +13,6 @@ Dates are 2026 (MM-DD); "xN" is how many separate times the owner asked.
 | Garrison button icon wrong; add Back to Work and the Town Bell, as in DE | 11-19 x1 | DONE | Owner playtest 11-19 (Anatolia 2, 10 Hz build, 61.5k units, 4.0 ticks/s) | Native DE garrison art, a 25-tile Town Bell, and Back to Work |
 | "Too many orders at once" when stopping a whole army or sending 30 cavalry to scout | 11-19 x1 | PLANNED | Owner playtest 11-19 (Anatolia 2, 10 Hz build, 61.5k units, 4.0 ticks/s); a player-facing refusal of a large selection | Split large selections over ticks server-side instead of refusing |
 | Save and load: scouted enemy buildings in fog vanish | 11-19 x1 | DONE | Owner playtest 11-19 (Anatolia 2, 10 Hz build, 61.5k units, 4.0 ticks/s) | Save per-player last sightings and cover hidden damage and destruction in a round-trip test |
-| Save and load: auto-scout turns off for every unit | 11-19 x1 | PLANNED | Owner playtest 11-19 (Anatolia 2, 10 Hz build, 61.5k units, 4.0 ticks/s) | Restore active scouts and verify save round-trip |
 | Rock tiles are walkable | 11-19 x1 | PLANNED | Owner playtest 11-19 (Anatolia 2, 10 Hz build, 61.5k units, 4.0 ticks/s); DE rocks are large | Make rock footprints block walking, matching the DE art size |
 | Civilisations and unique units | 10-24 (deferred), 10-30 | PLANNED | Owner 11-14 asked for one complete generic civ first; none started | After generic content lands: pick one civ, brief a track |
 | Bigger maps and map size independent of player count | 10-26, 10-30 | PARTIAL | #787 (Mekong, Asia rivers), #810 (natural fair starts); owner 11-15 played a new Anatolia map (960 km, 240:1) | Scale work in [scale](scale.md) decides how big maps can go |
@@ -23,6 +22,7 @@ Dates are 2026 (MM-DD); "xN" is how many separate times the owner asked.
 
 | item | asked | status | evidence |
 | --- | --- | --- | --- |
+| Auto-scout turns off after loading a save | 11-19 | DONE | Active scouts resume exploration from the saved position. The snapshot round-trip verifies active and idle scouts. |
 | Shift-click and Shift+Q train five units | 11-19 | DONE | Uses ordinary train orders and fills up to the affordable queue slots. |
 | Castle Age, garrisons, bridges (directional, any direction), navy base, river fish, formations, placement ghosts | 10-24 | DONE | #570 |
 | Hidden attack bonuses, DE elevation (hill) rules, the General army leader | 10-29 x1 | DONE | #630, #631, #633 |
