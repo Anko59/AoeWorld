@@ -96,6 +96,14 @@ export function initBuildings() {
   slots(techs.map((button,i)=>({button,site:sites[i]})),site=>[0,6,10,11,16,17,19].includes(site)?2:1,new Map([[9,dockUnitCells]]));
   const panel=document.createElement('div');panel.id='building-panel';panel.hidden=true;
   panel.innerHTML='<b id="building-hp"></b><div id="building-status"></div><progress id="construction-progress" max="1000"></progress><div id="research-status"><span id="research-icon"></span><span id="research-label"></span><progress id="research-progress" max="100" aria-label="Research progress" hidden></progress></div><div id="market-prices"></div><button id="cancel-construction" hidden>Cancel construction</button><button id="cancel-research" hidden>Cancel research</button>';
+  const multiQueue=document.createElement('div');
+  multiQueue.id='training-multi';
+  multiQueue.hidden=true;
+  multiQueue.tabIndex=0;
+  multiQueue.setAttribute('role','region');
+  multiQueue.setAttribute('aria-label','Building training queues');
+  byId('training').after(multiQueue);
+  let previousRows='';
   byId('selection-content').insertBefore(panel,byId('training'));
   const reseedQueue=document.createElement('div');reseedQueue.id='farm-reseed-queue';reseedQueue.hidden=true;reseedQueue.innerHTML='Farm reseeds queued: <span id="farm-reseed-count">0</span>';panel.append(reseedQueue);
   const progressLabels=document.createElement('div');progressLabels.id='construction-labels';document.body.append(progressLabels);
@@ -118,17 +126,30 @@ export function initBuildings() {
     bind(callback) {
       window.aoeBuildings.command=callback;
       [...buttons,...techs,byId('cancel-construction'),byId('cancel-research'),...reseedButtons,autoScout].forEach((button,i)=>button.addEventListener('click',()=>callback(0,i)));
-      militaryTrain.forEach(({button,kind})=>button.addEventListener('click',()=>callback(1,kind)));
+      militaryTrain.forEach(({button,kind})=>button.addEventListener('click',event=>callback(1,kind,0,event.shiftKey?5:1)));
       tradeButtons.forEach(({button},i)=>button.addEventListener('click',()=>callback(2,i)));
-      ['train-villager','stop-units','move-units','cancel-training','delete-units'].forEach((id,i)=>byId(id).addEventListener('click',()=>callback(3,i)));
-      navalTrain.forEach(({button,kind})=>button.addEventListener('click',()=>callback(1,kind)));
+      ['train-villager','stop-units','move-units','cancel-training','delete-units'].forEach((id,i)=>byId(id).addEventListener('click',event=>callback(3,i,0,event.shiftKey?5:1)));
+      navalTrain.forEach(({button,kind})=>button.addEventListener('click',event=>callback(1,kind,0,event.shiftKey?5:1)));
       unload.addEventListener('click',()=>callback(4,0));
       formations.forEach((button,i)=>button.addEventListener('click',()=>callback(5,i)));
       attackMove.addEventListener('click',()=>callback(6,0));
       generalMove.addEventListener('click',()=>callback(8,0));
       byId('combat-stance').addEventListener('change',event=>{ if(event.target.value!=='') callback(7,Number(event.target.value)); set(event.target, 'value', ''); });
     },
-    queue(values,visible) { queue=values; set(byId('training'), 'hidden', !visible||!queue.length); },
+    queue(values,visible,rows) {
+      const grouped=visible && rows.length>0;
+      queue=grouped?[]:values;
+      set(byId('training'), 'hidden', !visible||!queue.length);
+      set(multiQueue,'hidden',!grouped);
+      const signature=grouped?JSON.stringify(rows):'';
+      if(signature===previousRows)return;
+      previousRows=signature;
+      multiQueue.innerHTML=grouped?rows.map(([id,kind,units],index)=>`
+        <div class="training-row">
+          <span class="training-site" title="${buildingNames[kind]} · ${id}">${buildingNames[kind]} ${index+1}</span>
+          <span class="training-tokens">${units.length?units.map(unit=>`<span class="unit-token" title="${trainingKinds[unit].replace(/([a-z])([A-Z])/g,'$1 $2')} queued">${entityIcon(trainingKinds[unit])}</span>`).join(''):'Empty'}</span>
+        </div>`).join(''):'';
+    },
     key(event) {
       const key=event.key.toUpperCase();
       if(key==='B'&&!build.hidden){build.click();event.preventDefault();return true;}

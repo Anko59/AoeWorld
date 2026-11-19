@@ -20,6 +20,7 @@
 
 | item | asked | status | evidence |
 | --- | --- | --- | --- |
+| Multi-building training queues overlap | 11-19 | DONE | Each selected producer has its own readable queue row in the bottom menu. |
 | Dark Age Town Center side (11-09 visuals item 1) | 11-09 | DONE | #661 Town Center slice origin; does not reproduce (11-14, flat ground, default camera) |
 | DE art for every unit, building, terrain object; no flicker | 10-26, 10-31 x3 | DONE | #644 |
 | Far-zoom cockpit: stats, build, jump keys, units here, layers, charts, bulk trade, readable style | 10-30, 11-02, 11-03, 11-05 | DONE | #671, #679, #684, #687, #692, #712 |

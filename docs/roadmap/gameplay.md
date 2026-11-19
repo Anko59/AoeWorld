@@ -22,6 +22,7 @@ Dates are 2026 (MM-DD); "xN" is how many separate times the owner asked.
 
 | item | asked | status | evidence |
 | --- | --- | --- | --- |
+| Shift-click and Shift+Q train five units | 11-19 | DONE | Uses ordinary train orders and fills up to the affordable queue slots. |
 | Castle Age, garrisons, bridges (directional, any direction), navy base, river fish, formations, placement ghosts | 10-24 | DONE | #570 |
 | Hidden attack bonuses, DE elevation (hill) rules, the General army leader | 10-29 x1 | DONE | #630, #631, #633 |
 | Imperial Age with units, techs, art; no placeholders | 10-30, 11-03 | DONE | #653, #673; owner confirmed 11-11 |

@@ -18,7 +18,7 @@ pub(super) fn send(client: &mut Client, message: Message) {
     }
 }
 
-pub(in super::super) fn train(client: &mut Client, cancel: bool) {
+pub(in super::super) fn train(client: &mut Client, cancel: bool, batch: bool) {
     let Some(id) = super::production::selected(client).map(|building| building.id) else {
         return;
     };
@@ -47,7 +47,7 @@ pub(in super::super) fn train(client: &mut Client, cancel: bool) {
                 )
             })
             .unwrap_or(UnitKind::Villager);
-        super::production::train(client, kind);
+        super::production::train(client, kind, batch);
         return;
     }
     let sequence = client.next_sequence;
@@ -60,8 +60,8 @@ pub(in super::super) fn train(client: &mut Client, cancel: bool) {
     );
 }
 
-pub(super) fn train_kind(client: &mut Client, kind: UnitKind) {
-    super::production::train(client, kind);
+pub(super) fn train_kind(client: &mut Client, kind: UnitKind, batch: bool) {
+    super::production::train(client, kind, batch);
 }
 
 pub(in super::super) fn stop(client: &mut Client) {

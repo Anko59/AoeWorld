@@ -116,7 +116,7 @@ export function initInterface() {
         previousSelection=signature;
       }
     } else previousSelection='';
-    window.aoeBuildings?.queue(state.queue,building && owned);
+    window.aoeBuildings?.queue(state.queue,building && owned,count>1?state.trainingRows:[]);
     attribute(scene(),'data-actors',JSON.stringify(state.actors));
     attribute(scene(),'data-resource-targets',JSON.stringify(state.resources));
     attribute(scene(),'data-village-art',state.art?'native':'markers');
@@ -141,6 +141,13 @@ export function initInterface() {
     }
     for (let index=0;index<values[13];index++,at+=3) state.queue.push([values[at],values[at+1],values[at+2]]);
     for (let index=0;index<values[14];index++,at+=4) state.resources.push({kind:values[at],x:values[at+1],y:values[at+2],distance:values[at+3]});
+    state.trainingRows=[];
+    while(at<values.length) {
+      const [id,kind,length]=values.subarray(at,at+3);
+      at+=3;
+      state.trainingRows.push([id,kind,Array.from(values.subarray(at,at+length))]);
+      at+=length;
+    }
     update(state);
     window.aoeBuildings?.refresh();
   }};

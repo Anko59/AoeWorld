@@ -2,7 +2,9 @@
 use super::{Client, owner, selection::Selection};
 use crate::building_ui::availability::{self, Availability};
 use aoe_core::{EntityId, PlayerId};
-use aoe_protocol::{CommandResult, GameplayBuildingState, GameplayPlayerState, UnitKind};
+use aoe_protocol::{
+    CommandResult, GameplayBuildingState, GameplayPlayerState, Stockpile, UnitKind,
+};
 
 pub(in crate::playground::game) mod here;
 
@@ -48,6 +50,18 @@ impl PendingTraining {
         self.entries
             .retain(|entry| entry.2.is_none_or(|applied| applied >= tick));
     }
+    fn unspent(&self, mut stockpile: Stockpile) -> Stockpile {
+        for entry in &self.entries {
+            if entry.2.is_none_or(|tick| tick > self.observed) {
+                subtract(
+                    &mut stockpile,
+                    availability::training_cost(entry.3).unwrap_or_default(),
+                );
+            }
+        }
+        stockpile
+    }
+
     pub fn resident_bytes(&self) -> usize {
         self.entries.capacity() * std::mem::size_of::<(u64, EntityId, Option<u64>, UnitKind)>()
     }
@@ -169,23 +183,48 @@ pub(super) fn availability(client: &Client, kind: UnitKind) -> Availability {
     )
 }
 
-pub(super) fn train(client: &mut Client, kind: UnitKind) {
-    let Some(building_id) = target(client, kind).map(|b| b.id) else {
+fn subtract(stockpile: &mut Stockpile, cost: Stockpile) {
+    stockpile.food = stockpile.food.saturating_sub(cost.food);
+    stockpile.wood = stockpile.wood.saturating_sub(cost.wood);
+    stockpile.gold = stockpile.gold.saturating_sub(cost.gold);
+    stockpile.stone = stockpile.stone.saturating_sub(cost.stone);
+}
+
+pub(super) fn train(client: &mut Client, kind: UnitKind, batch: bool) {
+    let Some(player) = client
+        .village
+        .players
+        .iter()
+        .find(|p| p.player == owner(client))
+    else {
         return;
     };
-    let sequence = client.next_sequence;
-    super::orders::send(
-        client,
-        aoe_protocol::GameplayClientMessage::TrainOrder {
-            sequence,
-            building_id,
-            kind,
-        },
-    );
-    client
-        .village
-        .pending_training
-        .record(sequence, building_id, kind);
+    let Some(cost) = availability::training_cost(kind) else {
+        return;
+    };
+    let mut stockpile = client.village.pending_training.unspent(player.stockpile);
+    for _ in 0..if batch { 5 } else { 1 } {
+        if !matches!(availability::cost(stockpile, cost), Availability::Ready) {
+            break;
+        }
+        let Some(building_id) = target(client, kind).map(|b| b.id) else {
+            break;
+        };
+        let sequence = client.next_sequence;
+        super::orders::send(
+            client,
+            aoe_protocol::GameplayClientMessage::TrainOrder {
+                sequence,
+                building_id,
+                kind,
+            },
+        );
+        client
+            .village
+            .pending_training
+            .record(sequence, building_id, kind);
+        subtract(&mut stockpile, cost);
+    }
 }
 
 #[cfg(test)]
