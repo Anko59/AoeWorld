@@ -334,14 +334,21 @@ def test_production_is_built_beside_a_settlement_that_needs_it():
     assert placed and placed[0][2] > 100, 'the original core already has its Stable'
 
 
-def test_optional_imperial_research_can_save_gold_ahead_of_continuous_army_training():
+def test_unaffordable_imperial_research_reserves_gold_and_leaves_other_production_open():
+    from aoeworld import tech_cost, technologies
+    from aoe_ai.play.military import MilitaryManager
     from aoe_ai.play.research import ResearchManager
-    ctx = kingdom(villagers=60, centers=1, age=Age.IMPERIAL, food=5000, gold=0,
-                  researched=CASTLE + [Tech.IMPERIAL_AGE, Tech.CROSSBOWMAN, Tech.PIKEMAN])
-    ctx.buildings[0].garrison = [(990, UnitKind.STEWARD, 50, 50)]
+
+    tech = Tech.BRACER
+    gold = tech_cost(tech)[2] - 1
+    ctx = kingdom(villagers=60, centers=1, age=Age.IMPERIAL, food=5000, gold=gold,
+                  researched=[row.tech for row in technologies() if row.tech != tech])
+    ctx.config.save_for_management = False
     ResearchManager().step(ctx)
-    assert ctx.saving_castle and ctx.draining
-    assert not ctx.client.named('research')
+    MilitaryManager().train(ctx)
+    assert ctx.spent[2] == gold
+    assert not ctx.draining and not ctx.client.named('research')
+    assert any(kind == UnitKind.HALBERDIER for _, kind in ctx.client.named('train'))
 
 
 def test_town_center_queue_does_not_drain_for_an_unfunded_optional_upgrade():

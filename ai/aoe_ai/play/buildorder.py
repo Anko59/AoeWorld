@@ -175,22 +175,3 @@ def wanted_buildings(ctx: Context) -> list[tuple[BuildingKind, int]]:
 #: A building that must be finished before another can be placed.
 PREREQUISITE = {BuildingKind.ARCHERY_RANGE: BuildingKind.BARRACKS, BuildingKind.STABLE: BuildingKind.BARRACKS,
                 BuildingKind.SIEGE_WORKSHOP: BuildingKind.BLACKSMITH}
-
-
-# ----- technologies -------------------------------------------------------
-def wanted_upgrades(ctx):
-    from aoeworld import Age, technologies
-    rank = {Age.DARK: 0, Age.FEUDAL: 1, Age.CASTLE: 2, Age.IMPERIAL: 3}
-    ages = (Tech.FEUDAL_AGE, Tech.CASTLE_AGE, Tech.IMPERIAL_AGE)
-    all_rules = technologies()
-    priority = (Tech.CROSSBOWMAN, Tech.PIKEMAN, Tech.DOUBLE_BIT_AXE, Tech.HORSE_COLLAR)
-    if ctx.imperial:
-        priority = (Tech.ARBALESTER, Tech.HALBERDIER, Tech.CAVALIER, Tech.BRACER,
-                    Tech.BLAST_FURNACE, Tech.PLATE_MAIL_ARMOR, Tech.RING_ARCHER_ARMOR,
-                    Tech.PLATE_BARDING_ARMOR, Tech.PALADIN, Tech.CROP_ROTATION,
-                    Tech.TWO_MAN_SAW) + priority
-    all_rules.sort(key=lambda row: (priority.index(row.tech) if row.tech in priority else len(priority)))
-    return [(row.tech, row.building) for row in all_rules
-            if row.tech not in ages and rank[ctx.economy.age] >= rank[row.age]
-            and (row.prerequisite is None or ctx.economy.has_researched(row.prerequisite))
-            and len({b.kind for b in ctx.buildings if b.complete and b.kind in row.building_kinds}) >= row.building_count]

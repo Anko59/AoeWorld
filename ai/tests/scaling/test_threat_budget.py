@@ -60,7 +60,7 @@ def test_optional_imperial_gold_shortage_does_not_freeze_all_town_center_growth(
                   researched=[t for t in technologies if t != Tech.BRACER])
     ctx.config.save_for_management = False
     ResearchManager().step(ctx)
-    assert ctx.saving_castle and ctx.draining, 'army spending still yields to the gold reserve'
+    assert not ctx.draining and not ctx.client.named('research')
     assert not ctx.hold_town_center, 'an unfunded optional upgrade must not freeze every settlement'
     EconomyManager(Constructor()).train_villagers(ctx)
     assert any(a[1] == UnitKind.VILLAGER for a in ctx.client.named('train'))

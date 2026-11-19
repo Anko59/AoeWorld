@@ -3,17 +3,20 @@
 import ast
 from pathlib import Path
 
+import pytest
+
 import aoeworld
 from aoeworld import _native
 
 STUB = Path(aoeworld.__file__).with_name("_native.pyi")
+ENUMS = STUB.with_name("_native_enums.pyi")
 
 
 def test_every_stubbed_name_exists_and_every_export_is_stubbed():
-    tree = ast.parse(STUB.read_text())
     stubbed = {
         node.name: node
-        for node in tree.body
+        for path in (STUB, ENUMS)
+        for node in ast.parse(path.read_text()).body
         if isinstance(node, (ast.ClassDef, ast.FunctionDef))
     }
     exported = {name for name in dir(_native) if not name.startswith("_")}
@@ -36,7 +39,7 @@ def test_package_reexports_the_native_api():
 
 
 def test_seeding_task_is_exported_and_declared_in_the_stub():
-    tree = ast.parse(STUB.read_text())
+    tree = ast.parse(ENUMS.read_text())
     task = next(
         node for node in tree.body
         if isinstance(node, ast.ClassDef) and node.name == "UnitTask"
@@ -53,7 +56,7 @@ def test_seeding_task_is_exported_and_declared_in_the_stub():
 
 
 def test_command_result_stub_contains_every_native_member():
-    tree = ast.parse(STUB.read_text())
+    tree = ast.parse(ENUMS.read_text())
     command_result = next(
         node for node in tree.body
         if isinstance(node, ast.ClassDef) and node.name == "CommandResult"
@@ -65,4 +68,13 @@ def test_command_result_stub_contains_every_native_member():
     exported = {
         name for name in dir(_native.CommandResult) if name.isupper()
     }
+    assert declared == exported, declared ^ exported
+
+
+@pytest.mark.parametrize("name", ["UnitKind", "BuildingKind", "Tech"])
+def test_production_enum_stubs_include_the_current_roster(name):
+    tree = ast.parse(ENUMS.read_text())
+    enum = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == name)
+    declared = {node.target.id for node in enum.body if isinstance(node, ast.AnnAssign)}
+    exported = {value for value in dir(getattr(_native, name)) if value.isupper()}
     assert declared == exported, declared ^ exported

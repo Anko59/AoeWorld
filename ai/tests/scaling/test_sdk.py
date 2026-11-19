@@ -4,7 +4,9 @@ import aoeworld
 
 def test_complete_technology_tree_and_market_quotes_are_public():
     rows = aoeworld.technologies()
-    assert len(rows) == 53
+    published = {getattr(aoeworld.Tech, name) for name in dir(aoeworld.Tech) if name.isupper()}
+    assert len(rows) == len(published)
+    assert {row.tech for row in rows} == published
     champion = next(row for row in rows if row.tech == aoeworld.Tech.CHAMPION)
     assert champion.prerequisite == aoeworld.Tech.TWO_HANDED_SWORDSMAN
     assert aoeworld.market_quote(100, True) == 130

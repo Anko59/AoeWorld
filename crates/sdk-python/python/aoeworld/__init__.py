@@ -63,6 +63,11 @@ from ._native import (
     market_quote,
     train_seconds,
     trainable,
+    training_options,
+    UnitProfile,
+    unit_profile,
+    unit_counter_bonus,
+    unit_building_bonus,
     unit_cost,
     villager_capacity,
 )
@@ -117,6 +122,11 @@ __all__ = [
     "tech_cost",
     "train_seconds",
     "trainable",
+    "training_options",
+    "UnitProfile",
+    "unit_profile",
+    "unit_counter_bonus",
+    "unit_building_bonus",
     "unit_cost",
     "villager_capacity",
 ]

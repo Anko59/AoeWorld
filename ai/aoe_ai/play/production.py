@@ -22,7 +22,7 @@ def train_villagers(ctx):
     start = ctx.board.production_cursor % len(centers)
     ctx.board.production_cursor = (start + 1) % len(centers)
     for center in centers[start:] + centers[:start]:
-        if center.researching is not None:
+        if center.researching is not None or center.id in ctx.draining:
             continue
         # Each domain gets its own nearby rally. Managed domains choose jobs
         # themselves; a remote first-TC rally must not drag their workers home.

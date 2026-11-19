@@ -1,0 +1,320 @@
+"""Enum types exported by the native module."""
+
+class CombatStance:
+    AGGRESSIVE: CombatStance
+    DEFENSIVE: CombatStance
+    STAND_GROUND: CombatStance
+    NO_ATTACK: CombatStance
+    def __int__(self) -> int: ...
+    def __hash__(self) -> int: ...
+class Formation:
+    LINE: Formation
+    BOX: Formation
+    STAGGERED: Formation
+    FLANK: Formation
+    def __int__(self) -> int: ...
+    def __hash__(self) -> int: ...
+class GeneralState:
+    IDLE: GeneralState
+    MARCHING: GeneralState
+    FIGHTING: GeneralState
+    RETREATING: GeneralState
+class UnitKind:
+    VILLAGER: UnitKind
+    SCOUT: UnitKind
+    MILITIA: UnitKind
+    FISHING_SHIP: UnitKind
+    ARCHER: UnitKind
+    SKIRMISHER: UnitKind
+    SPEARMAN: UnitKind
+    MAN_AT_ARMS: UnitKind
+    LONG_SWORDSMAN: UnitKind
+    PIKEMAN: UnitKind
+    CROSSBOWMAN: UnitKind
+    ELITE_SKIRMISHER: UnitKind
+    KNIGHT: UnitKind
+    LIGHT_CAVALRY: UnitKind
+    MONK: UnitKind
+    MANGONEL: UnitKind
+    BATTERING_RAM: UnitKind
+    GALLEY: UnitKind
+    FIRE_SHIP: UnitKind
+    DEMOLITION_SHIP: UnitKind
+    TRANSPORT_SHIP: UnitKind
+    WAR_GALLEY: UnitKind
+    VASSAL: UnitKind
+    GENERAL: UnitKind
+    TWO_HANDED_SWORDSMAN: UnitKind
+    CHAMPION: UnitKind
+    HALBERDIER: UnitKind
+    ARBALESTER: UnitKind
+    CAVALIER: UnitKind
+    PALADIN: UnitKind
+    HUSSAR: UnitKind
+    CAPPED_RAM: UnitKind
+    SIEGE_RAM: UnitKind
+    ONAGER: UnitKind
+    STEWARD: UnitKind
+    TRADE_CART: UnitKind
+    TRADE_COG: UnitKind
+    FIRE_GALLEY: UnitKind
+    FAST_FIRE_SHIP: UnitKind
+    DEMOLITION_RAFT: UnitKind
+    HEAVY_DEMOLITION_SHIP: UnitKind
+    GALLEON: UnitKind
+    CANNON_GALLEON: UnitKind
+    ELITE_CANNON_GALLEON: UnitKind
+    HULK: UnitKind
+    WAR_HULK: UnitKind
+    CARRACK: UnitKind
+    CATAPULT_GALLEON: UnitKind
+    CAVALRY_ARCHER: UnitKind
+    HEAVY_CAVALRY_ARCHER: UnitKind
+    CAMEL_RIDER: UnitKind
+    HEAVY_CAMEL_RIDER: UnitKind
+    SCORPION: UnitKind
+    HEAVY_SCORPION: UnitKind
+    HAND_CANNONEER: UnitKind
+    BOMBARD_CANNON: UnitKind
+    TREBUCHET: UnitKind
+    TREBUCHET_UNPACKED: UnitKind
+    PETARD: UnitKind
+    SIEGE_ONAGER: UnitKind
+    def __int__(self) -> int: ...
+    def __hash__(self) -> int: ...
+class BuildingKind:
+    TOWN_CENTER: BuildingKind
+    HOUSE: BuildingKind
+    LUMBER_CAMP: BuildingKind
+    MINING_CAMP: BuildingKind
+    MILL: BuildingKind
+    FARM: BuildingKind
+    BARRACKS: BuildingKind
+    PALISADE_WALL: BuildingKind
+    OUTPOST: BuildingKind
+    DOCK: BuildingKind
+    ARCHERY_RANGE: BuildingKind
+    STABLE: BuildingKind
+    BLACKSMITH: BuildingKind
+    MARKET: BuildingKind
+    WATCH_TOWER: BuildingKind
+    PALISADE_GATE: BuildingKind
+    CASTLE: BuildingKind
+    MONASTERY: BuildingKind
+    UNIVERSITY: BuildingKind
+    SIEGE_WORKSHOP: BuildingKind
+    BRIDGE: BuildingKind
+    STONE_WALL: BuildingKind
+    STONE_GATE: BuildingKind
+    ROAD: BuildingKind
+    WONDER: BuildingKind
+    FISH_TRAP: BuildingKind
+    def __int__(self) -> int: ...
+    def __hash__(self) -> int: ...
+class ResourceKind:
+    FOOD: ResourceKind
+    WOOD: ResourceKind
+    GOLD: ResourceKind
+    STONE: ResourceKind
+    def __int__(self) -> int: ...
+    def __hash__(self) -> int: ...
+class TradeResource:
+    WOOD: TradeResource
+    FOOD: TradeResource
+    STONE: TradeResource
+    def __int__(self) -> int: ...
+    def __hash__(self) -> int: ...
+class Tech:
+    LOOM: Tech
+    TOWN_WATCH: Tech
+    FEUDAL_AGE: Tech
+    DOUBLE_BIT_AXE: Tech
+    HORSE_COLLAR: Tech
+    GOLD_MINING: Tech
+    STONE_MINING: Tech
+    WHEELBARROW: Tech
+    MAN_AT_ARMS: Tech
+    FORGING: Tech
+    SCALE_MAIL_ARMOR: Tech
+    SCALE_BARDING_ARMOR: Tech
+    FLETCHING: Tech
+    PADDED_ARCHER_ARMOR: Tech
+    CASTLE_AGE: Tech
+    LONG_SWORDSMAN: Tech
+    PIKEMAN: Tech
+    CROSSBOWMAN: Tech
+    ELITE_SKIRMISHER: Tech
+    LIGHT_CAVALRY: Tech
+    HAND_CART: Tech
+    TOWN_PATROL: Tech
+    IRON_CASTING: Tech
+    CHAIN_MAIL_ARMOR: Tech
+    CHAIN_BARDING_ARMOR: Tech
+    BODKIN_ARROW: Tech
+    LEATHER_ARCHER_ARMOR: Tech
+    HEAVY_PLOW: Tech
+    BOW_SAW: Tech
+    GOLD_SHAFT_MINING: Tech
+    MASONRY: Tech
+    BALLISTICS: Tech
+    MURDER_HOLES: Tech
+    IMPERIAL_AGE: Tech
+    TWO_HANDED_SWORDSMAN: Tech
+    CHAMPION: Tech
+    HALBERDIER: Tech
+    ARBALESTER: Tech
+    CAVALIER: Tech
+    PALADIN: Tech
+    HUSSAR: Tech
+    CAPPED_RAM: Tech
+    SIEGE_RAM: Tech
+    ONAGER: Tech
+    BLAST_FURNACE: Tech
+    PLATE_MAIL_ARMOR: Tech
+    PLATE_BARDING_ARMOR: Tech
+    BRACER: Tech
+    RING_ARCHER_ARMOR: Tech
+    CROP_ROTATION: Tech
+    TWO_MAN_SAW: Tech
+    STONE_SHAFT_MINING: Tech
+    CHEMISTRY: Tech
+    HEAVY_CAVALRY_ARCHER: Tech
+    HEAVY_CAMEL_RIDER: Tech
+    HEAVY_SCORPION: Tech
+    SIEGE_ONAGER: Tech
+    WAR_GALLEY: Tech
+    SQUIRES: Tech
+    ARSON: Tech
+    GAMBESONS: Tech
+    THUMB_RING: Tech
+    PARTHIAN_TACTICS: Tech
+    BLOODLINES: Tech
+    HUSBANDRY: Tech
+    ARCHITECTURE: Tech
+    SIEGE_ENGINEERS: Tech
+    HEATED_SHOT: Tech
+    ARROWSLITS: Tech
+    FORTIFIED_WALL: Tech
+    GUARD_TOWER: Tech
+    KEEP: Tech
+    DEVOTION: Tech
+    FAITH: Tech
+    FERVOR: Tech
+    SANCTITY: Tech
+    HERBAL_MEDICINE: Tech
+    THEOCRACY: Tech
+    ILLUMINATION: Tech
+    BLOCK_PRINTING: Tech
+    ATONEMENT: Tech
+    REDEMPTION: Tech
+    HERESY: Tech
+    CONSCRIPTION: Tech
+    HOARDINGS: Tech
+    SAPPERS: Tech
+    SPIES: Tech
+    CARAVAN: Tech
+    GUILDS: Tech
+    BANKING: Tech
+    COINAGE: Tech
+    TREADMILL_CRANE: Tech
+    FISHING_LINES: Tech
+    GILLNETS: Tech
+    CAREENING: Tech
+    DRY_DOCK: Tech
+    SHIPWRIGHT: Tech
+    CLINKER_CONSTRUCTION: Tech
+    CARVEL_HULL: Tech
+    SIPHONS: Tech
+    INCENDIARIES: Tech
+    HEAVY_WARSHIPS: Tech
+    DEMOLITION_SHIP: Tech
+    HEAVY_DEMOLITION_SHIP: Tech
+    ELITE_CANNON_GALLEON: Tech
+    def __int__(self) -> int: ...
+    def __hash__(self) -> int: ...
+class Age:
+    DARK: Age
+    FEUDAL: Age
+    CASTLE: Age
+    def __int__(self) -> int: ...
+    def __hash__(self) -> int: ...
+class UnitTask:
+    IDLE: UnitTask
+    MOVING: UnitTask
+    GATHERING: UnitTask
+    CARRYING: UnitTask
+    RETURNING: UnitTask
+    ATTACKING: UnitTask
+    DYING: UnitTask
+    BUILDING: UnitTask
+    FARMING: UnitTask
+    HUNTING: UnitTask
+    SHEPHERDING: UnitTask
+    FISHING: UnitTask
+    SEEDING: UnitTask
+    def __int__(self) -> int: ...
+    def __hash__(self) -> int: ...
+class AnimalKind:
+    SHEEP: AnimalKind
+    DEER: AnimalKind
+    BOAR: AnimalKind
+    WOLF: AnimalKind
+    def __int__(self) -> int: ...
+    def __hash__(self) -> int: ...
+class AnimalTask:
+    IDLE: AnimalTask
+    FLEEING: AnimalTask
+    ATTACKING: AnimalTask
+    DEAD: AnimalTask
+    CARCASS: AnimalTask
+    def __int__(self) -> int: ...
+    def __hash__(self) -> int: ...
+class Visibility:
+    UNEXPLORED: Visibility
+    EXPLORED: Visibility
+    VISIBLE: Visibility
+    def __int__(self) -> int: ...
+    def __hash__(self) -> int: ...
+class CommandResult:
+    ACCEPTED: CommandResult
+    REJECTED_DISCONNECTED: CommandResult
+    REJECTED_UNKNOWN_ENTITY: CommandResult
+    REJECTED_SEQUENCE: CommandResult
+    REJECTED_RATE_LIMITED: CommandResult
+    REJECTED_QUEUE_FULL: CommandResult
+    REJECTED_INVALID_DESTINATION: CommandResult
+    REJECTED_UNREACHABLE: CommandResult
+    REJECTED_PATH_BUDGET_EXCEEDED: CommandResult
+    REJECTED_NOT_OWNER: CommandResult
+    REJECTED_WRONG_UNIT_KIND: CommandResult
+    REJECTED_INVALID_RESOURCE: CommandResult
+    REJECTED_INSUFFICIENT_FOOD: CommandResult
+    REJECTED_POPULATION_CAP: CommandResult
+    REJECTED_TRAINING_QUEUE_FULL: CommandResult
+    REJECTED_RESOURCE_UNAVAILABLE: CommandResult
+    REJECTED_INVALID_TARGET: CommandResult
+    REJECTED_INSUFFICIENT_RESOURCES: CommandResult
+    REJECTED_NOT_BUILDABLE: CommandResult
+    REJECTED_REQUIREMENT_MISSING: CommandResult
+    REJECTED_INVALID_PLACEMENT: CommandResult
+    REJECTED_UNDER_CONSTRUCTION: CommandResult
+    REJECTED_ALREADY_COMPLETE: CommandResult
+    REJECTED_FARM_UNAVAILABLE: CommandResult
+    REJECTED_NOT_RESEARCHABLE: CommandResult
+    REJECTED_ALREADY_RESEARCHED: CommandResult
+    REJECTED_RESEARCH_BUSY: CommandResult
+    REJECTED_TECH_REQUIREMENT: CommandResult
+    REJECTED_REQUIRES_FEUDAL_AGE: CommandResult
+    REJECTED_NO_MARKET: CommandResult
+    REJECTED_WORLD_LIMIT: CommandResult
+    REJECTED_ORDER_TOO_LARGE: CommandResult
+    REJECTED_GARRISON_FULL: CommandResult
+    REJECTED_STEWARD_EXISTS: CommandResult
+    REJECTED_STEWARD_LEASH: CommandResult
+    REJECTED_STEWARD_HOME: CommandResult
+    REJECTED_INVALID_STEWARD_SETTINGS: CommandResult
+    REJECTED_UNEXPLORED_PLACEMENT: CommandResult
+    REJECTED_REQUIRES_CASTLE_AGE: CommandResult
+    REJECTED_REQUIRES_IMPERIAL_AGE: CommandResult
+    def __int__(self) -> int: ...
+    def __hash__(self) -> int: ...

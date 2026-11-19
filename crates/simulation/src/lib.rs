@@ -51,10 +51,11 @@ pub use game_world::{
     TREBUCHET_UNPACK_SECONDS, Tech, TechEffect, TechMask, TechRequirement, TechRules, TechTarget,
     TickPhase, TrainingEntry, UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining,
     VASSAL_LIMIT, VASSAL_RADIUS, VILLAGE_RULES, VassalStatus, VassalWait, VillageRules,
-    WorldLimits, build_speed_percent, building_combat, building_max_hp, conversion_chance,
-    convertible_building, convertible_unit, damage_dealt, market_commission_permyriad,
-    researched_stats, trade_speed_percent, trainable_units, training_speed_percent,
-    tribute_fee_permyriad, unit_combat, villager_capacity,
+    WorldLimits, build_speed_percent, building_combat, building_max_hp, class_bonus,
+    conversion_chance, convertible_building, convertible_unit, damage_dealt,
+    market_commission_permyriad, researched_stats, trade_speed_percent, trainable_units,
+    training_speed_percent, tribute_fee_permyriad, unit_building_bonus, unit_combat,
+    villager_capacity,
 };
 pub use navigation_cache::NavigationCacheUsage;
 use std::collections::BTreeMap;

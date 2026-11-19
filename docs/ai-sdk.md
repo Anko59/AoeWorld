@@ -240,9 +240,11 @@ reserve and waiting for the server's count before adding another entry.
   and buildings so a bot pays only for what it can act on. When their spread
   exceeds the window, it centers on the living army's mean position: centering
   halfway between home and a distant army would hide the army's opponents.
-* **Rules tables.** `aoeworld.building_cost`, `unit_cost`, `tech_cost`,
-  `trainable`, `build_seconds`, `building_size`, `building_requires` expose the
-  numbers the server charges from.
+* **Rules tables.** `trainable(building)` lists the roster. `training_options(building, age, researched)`
+  applies current age, prerequisites and unit-line upgrades. `unit_profile(kind)` gives the
+  base line, age and combat roles. `unit_counter_bonus` and `unit_building_bonus` give
+  base class bonuses. `technologies()` includes prerequisites, line upgrades, unit unlocks
+  and scoped stat improvements. `building_cost`, `unit_cost` and `tech_cost` give base costs.
 
 `world.land_route(x, y, tx, ty)` searches explored terrain and ignores temporary occupancy.
 `None` means unknown, disconnected or beyond the query bound. Rivers, cliff edges and blocked
@@ -285,10 +287,8 @@ until_tick=None, max_decisions=None) -> RunSummary`, `world`, `closed`, `close_r
 
 `Unit`, `Building`, `ResourceNode`, `Animal`, `Economy` (stockpile, population,
 `age`, `researched`, market prices, `can_afford`) and `Event` are read-only
-objects; enumerations are `UnitKind`, `BuildingKind`, `ResourceKind`, `Tech`,
-`Age`, `UnitTask`, `TradeResource`, `AnimalKind`, `AnimalTask`, `Visibility`,
-`CommandResult` (`UnitKind.VILLAGER`, `Tech.FEUDAL_AGE`, ...). Types are in
-`python/aoeworld/_native.pyi`, checked against the module by the test suite.
+objects. `Building.queued_units` lists the training identities visible in the slot's
+building view, in queue order. Types and enums are in the `python/aoeworld/` stubs.
 
 ## Rust SDK reference
 
@@ -311,10 +311,10 @@ attack state, counters):
 | Module | Job |
 | --- | --- |
 | `play/buildorder.py` | the plan: stage (Dark, advance, Feudal), when to Loom and click Feudal Age, which buildings and upgrades come next |
-| `play/research.py` | executes it: Loom, saving 500 food and Feudal Age (the Town Center queue drains first), then the upgrades |
+| `play/research.py` | advances ages, then schedules affordable research from the SDK technology tree |
 | `play/economy.py` | villagers without pause, shares of food, wood, gold and stone, sheep then berries then deer and boar, farms when the land runs dry |
 | `play/constructor.py` | Lumber Camp and Mill, camps beside far resources, Barracks, Archery Range, Blacksmith |
-| `play/military.py` | spearman : archer : skirmisher = 4 : 3 : 3 from Feudal Age on, rally point |
+| `play/military.py` | trains a mixed army, reinforced by counters and siege, and rallies it |
 | `play/scouting.py` | the starting area, then the circle round the map centre through home (far side first), then wider rings |
 | `play/combat.py` | defend the base (villagers next to raiders walk home when outnumbered), attack the nearest known enemy building at 12 units, retreat below 40% |
 
@@ -340,14 +340,13 @@ the target shares. Rally orders and resource changes can otherwise leave every
 worker busy while a wood shortage prevents army production.
 Villager queues drain and optional upgrades wait during this preparation;
 military production is funded before extra farms until the configured Feudal
-army minimum is met, then the age receives the food reserve. After reaching
-Castle Age, Crossbowman and Pikeman upgrades precede optional Feudal upgrades.
-At 34 villagers in Castle Age it raises a University and a Siege Workshop. With 40
-villagers and 24 soldiers it holds villagers and soldiers, shifts workers toward
-gold and clicks Imperial Age; soldiers resume while it researches. In Imperial Age
-`Context.castle` stays true, so Castle behaviour continues; it trains each line's
-newest identity and researches Arbalester, Halberdier, Cavalier, Paladin, the
-tier-three Blacksmith techs, Crop Rotation and Two-Man Saw as predecessors allow.
+army minimum is met, then the age receives the food reserve. At 34 workers it
+raises a University and Siege Workshop. With 40 workers and 24 soldiers it saves
+for Imperial Age. Research favours upgrades to fielded lines and new unit unlocks.
+It lets one busy producer drain for funded research and keeps other queues working.
+Training counts living and queued units by line, favours counters to visible armies
+and boosts siege that can damage known targets. A threatened Dock draws from the
+same rules, with a separate fleet cap.
 
 Robustness: every order is remembered until its verdict arrives; a refused
 node, animal or site is never tried again, a refused unit kind is substituted

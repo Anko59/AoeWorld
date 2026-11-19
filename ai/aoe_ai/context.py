@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import Counter
+from functools import cached_property
 from typing import Any, Optional
 
 import aoeworld
@@ -11,23 +13,7 @@ from .config import Config
 from .geometry import Tile, clamp_tile, dist
 from .blackboard import Blackboard, Tracked
 
-MILITARY = (
-    UnitKind.MILITIA,
-    UnitKind.SPEARMAN,
-    UnitKind.ARCHER,
-    UnitKind.SKIRMISHER,
-    UnitKind.MAN_AT_ARMS,
-    UnitKind.LONG_SWORDSMAN, UnitKind.PIKEMAN, UnitKind.CROSSBOWMAN,
-    UnitKind.ELITE_SKIRMISHER, UnitKind.KNIGHT, UnitKind.LIGHT_CAVALRY,
-    UnitKind.MANGONEL, UnitKind.BATTERING_RAM,
-    UnitKind.TWO_HANDED_SWORDSMAN, UnitKind.CHAMPION, UnitKind.HALBERDIER, UnitKind.ARBALESTER,
-    UnitKind.CAVALIER, UnitKind.PALADIN, UnitKind.HUSSAR,
-    UnitKind.CAPPED_RAM, UnitKind.SIEGE_RAM, UnitKind.ONAGER,
-    UnitKind.CAVALRY_ARCHER, UnitKind.HEAVY_CAVALRY_ARCHER, UnitKind.CAMEL_RIDER,
-    UnitKind.HEAVY_CAMEL_RIDER, UnitKind.SCORPION, UnitKind.HEAVY_SCORPION,
-    UnitKind.HAND_CANNONEER, UnitKind.BOMBARD_CANNON, UnitKind.TREBUCHET,
-    UnitKind.TREBUCHET_UNPACKED, UnitKind.PETARD, UnitKind.SIEGE_ONAGER,
-)
+from .roster import land_soldier, profile, warship
 
 #: Buildings that accept each resource as a drop-off.
 #: Orders whose first argument names the unit(s) given work.
@@ -60,7 +46,7 @@ class Context:
         self.villagers = [u for u in self.units if u.kind == UnitKind.VILLAGER]
         self.late_economy = self.castle and len(self.villagers) >= config.late_economy_min_villagers
         self.scouts = [u for u in self.units if u.kind == UnitKind.SCOUT]
-        military = [u for u in self.units if u.kind in MILITARY]
+        military = [u for u in self.units if land_soldier(u.kind)]
         #: Soldiers a General leads take his orders, not ours.
         self.led = [u for u in military if u.commanded_by is not None]
         self.army = [u for u in military if u.commanded_by is None] if self.led else military
@@ -77,8 +63,9 @@ class Context:
         #: Set by a manager that needs the Town Center's queue to drain.
         self.hold_town_center = False
         self.saving_castle = False
-        #: Production kinds that must not start new training this decision.
-        self.draining: set = set()
+        #: Producer IDs held for research this decision.
+        self.draining: set[int] = set()
+        self.production_drain = False
         #: Units that already got an order this decision.
         self.busy: set[int] = set()
         self._resources: dict[Any, list] = {}
@@ -213,6 +200,20 @@ class Context:
         return tile
 
     # ----- budget ----------------------------------------------------------
+    @cached_property
+    def combat_lines(self) -> Counter:
+        kinds = Counter(unit.kind for unit in self.army if unit.alive)
+        kinds.update(unit.kind for unit in self.led if unit.alive)
+        kinds.update(unit.kind for unit in self.units if unit.alive and warship(unit.kind))
+        for building in self.buildings:
+            if building.queue_length:
+                kinds.update(kind for kind in building.queued_units if land_soldier(kind) or warship(kind))
+            kinds.update(kind for _, kind, hp, _ in building.garrison if hp and land_soldier(kind))
+        lines = Counter()
+        for kind, count in kinds.items():
+            lines[profile(kind).line] += count
+        return lines
+
     def can_afford(self, cost: tuple[int, int, int, int]) -> bool:
         if self.economy is None:
             return False
