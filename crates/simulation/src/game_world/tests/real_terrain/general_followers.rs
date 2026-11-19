@@ -173,7 +173,11 @@ fn river_recording_setup_preserves_map_water_and_adopts_one_hundred() {
                 .map(|u| u.id),
         );
     }
-    assert_eq!(f.world.unit(g).unwrap().position, goal);
+    // A follower already at rest is a hard body, so the General stops
+    // beside it rather than on it: within a tile of its goal.
+    let at = f.world.unit(g).unwrap().position;
+    let (gx, gy) = (i64::from(at.x - goal.x), i64::from(at.y - goal.y));
+    assert!(gx * gx + gy * gy <= 1024 * 1024, "{at:?} vs {goal:?}");
     for u in f
         .world
         .units()

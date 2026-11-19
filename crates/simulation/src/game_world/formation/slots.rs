@@ -137,6 +137,26 @@ impl GameWorld {
             slots = (0..count)
                 .map(|rank| packed(rank, count, files, group.narrow_gap))
                 .collect();
+            // Rows past an obstacle ahead of the goal (a forest edge) would
+            // collapse onto the goal tile: move the block back, a row at a
+            // time, until every row ahead of the goal stands on open ground.
+            let ahead = slots.iter().map(|p| p.y).max().unwrap_or(0);
+            let mut back = 0;
+            while back < ahead
+                && slots.iter().any(|&offset| {
+                    let offset = WorldPosition::new(offset.x, offset.y - back);
+                    offset.y > 0
+                        && !self.body_position_clear(
+                            largest,
+                            layout::oriented(group.destination, offset, group.heading),
+                        )
+                })
+            {
+                back += group.narrow_gap;
+            }
+            for slot in &mut slots {
+                slot.y -= back;
+            }
             slots.sort_unstable_by_key(|p| (std::cmp::Reverse(p.y), p.x));
         }
         let assignments = {

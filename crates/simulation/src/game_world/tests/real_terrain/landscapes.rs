@@ -83,7 +83,7 @@ fn run(case: &str, count: usize, limit: u32) {
             // Region witnesses remove duplicate proof work; physical output pins stay fixed.
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (5707, 54775, 2993228)
+                (5707, 54775, 2997392)
             );
         }
         "long" => {
@@ -96,7 +96,7 @@ fn run(case: &str, count: usize, limit: u32) {
             assert_eq!(result.oscillation_causes, causes(4, 1, 1, 6));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (35393, 372074, 108277701)
+                (35398, 372074, 108278475)
             );
         }
         _ => {
@@ -105,7 +105,7 @@ fn run(case: &str, count: usize, limit: u32) {
             let expected = match case {
                 "forest" => (3282, 1027, 2061471),
                 "town" => (3740, 1193, 2350263),
-                "crossing" => (3278, 1933, 2842040),
+                "crossing" => (3278, 1933, 2842097),
                 "bridge" => (479, 354, 12365),
                 "siege" => (1556, 867, 33972),
                 "gap" => (580, 512, 8908),
