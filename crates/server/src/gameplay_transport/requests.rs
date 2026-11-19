@@ -151,6 +151,22 @@ pub(super) async fn read_requests(
                     .queue_ungarrison(session_id, sequence, building_id, entity_id)
                     .await
             }
+            Ok(GameplayClientMessage::BackToWorkOrder {
+                sequence,
+                building_id,
+            }) => {
+                service
+                    .queue_garrison_control(session_id, sequence, building_id, false)
+                    .await
+            }
+            Ok(GameplayClientMessage::TownBellOrder {
+                sequence,
+                building_id,
+            }) => {
+                service
+                    .queue_garrison_control(session_id, sequence, building_id, true)
+                    .await
+            }
             Ok(GameplayClientMessage::AutoScoutOrder {
                 sequence,
                 entity_id,

@@ -28,6 +28,20 @@ fn garrison_and_selective_or_all_ungarrison_have_current_golden_wire() {
             },
             vec![26, 5, 9, 1, 7],
         ),
+        (
+            ClientMessage::BackToWorkOrder {
+                sequence: 6,
+                building_id: EntityId(9),
+            },
+            vec![38, 6, 9],
+        ),
+        (
+            ClientMessage::TownBellOrder {
+                sequence: 7,
+                building_id: EntityId(9),
+            },
+            vec![39, 7, 9],
+        ),
     ] {
         let bytes = encode_client(&order).unwrap();
         assert_eq!(bytes, golden);

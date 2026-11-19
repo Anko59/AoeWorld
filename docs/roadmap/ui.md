@@ -20,6 +20,7 @@
 
 | item | asked | status | evidence |
 | --- | --- | --- | --- |
+| Garrison button uses the native DE doorway icon | 11-19 | DONE | Imported action 069, with native icons for Back to Work and the Town Bell. |
 | Multi-building training queues overlap | 11-19 | DONE | Each selected producer has its own readable queue row in the bottom menu. |
 | Dark Age Town Center side (11-09 visuals item 1) | 11-09 | DONE | #661 Town Center slice origin; does not reproduce (11-14, flat ground, default camera) |
 | DE art for every unit, building, terrain object; no flicker | 10-26, 10-31 x3 | DONE | #644 |

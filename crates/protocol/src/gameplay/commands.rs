@@ -245,6 +245,14 @@ pub enum ClientMessage {
         entity_id: EntityId,
         building_id: EntityId,
     },
+    BackToWorkOrder {
+        sequence: u64,
+        building_id: EntityId,
+    },
+    TownBellOrder {
+        sequence: u64,
+        building_id: EntityId,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

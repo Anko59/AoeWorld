@@ -160,7 +160,9 @@ fn native_interface(install: &Path) {
         fs::write(path, bytes).unwrap();
     };
     write(ingame.join("buildings/0_test.dds"), &super::dds());
-    for index in [0, 1, 2, 3, 28, 30, 31, 32, 41, 4, 35, 43, 62, 63, 84, 74] {
+    for index in [
+        0, 1, 2, 3, 28, 30, 31, 32, 35, 41, 43, 49, 62, 63, 64, 69, 74, 84,
+    ] {
         write(ingame.join(format!("actions/{index:03}_.png")), &png);
     }
     for name in [

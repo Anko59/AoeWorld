@@ -43,7 +43,6 @@ use economy::unit_state;
 #[path = "gameplay/resources.rs"]
 mod resources;
 pub use resources::{PersistedDepletion, ResourceLifecycleError};
-
 #[derive(Clone)]
 pub struct GameplayService {
     pub(super) world: Arc<RwLock<GameWorld>>,
@@ -139,6 +138,8 @@ enum PendingAction {
         entity_id: EntityId,
         building_id: EntityId,
     },
+    BackToWork(EntityId),
+    TownBell(EntityId),
     Ungarrison {
         building_id: EntityId,
         entity_id: Option<EntityId>,
@@ -279,7 +280,6 @@ impl GameplayService {
         let (world, primary_unit_id) = GameWorld::default_with_village(seed);
         Self::from_world(world, primary_unit_id, None, None)
     }
-
     pub fn with_population(
         config: WorldConfig,
         count: u32,

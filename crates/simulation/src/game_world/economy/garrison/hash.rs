@@ -1,5 +1,28 @@
 use super::*;
 
+fn hash_intent(hash: &mut blake3::Hasher, intent: controls::ShelterIntent) {
+    use controls::Work;
+    if intent == Default::default() {
+        return;
+    }
+    let (kind, target) = match intent.work {
+        None => (0, 0),
+        Some(Work::Gather(id)) => (1, id),
+        Some(Work::Farm(id)) => (2, u64::from(id.0)),
+        Some(Work::Hunt(id)) => (3, u64::from(id.0)),
+        Some(Work::Build(id)) => (4, u64::from(id.0)),
+    };
+    hash.update(b"shelter intent");
+    hash.update(&[kind]);
+    hash.update(&target.to_le_bytes());
+    hash.update(
+        &intent
+            .bell
+            .map_or(u64::MAX, |id| u64::from(id.0))
+            .to_le_bytes(),
+    );
+}
+
 fn occupants(hash: &mut blake3::Hasher, units: &[GarrisonedUnit]) {
     hash.update(&(units.len() as u64).to_le_bytes());
     for g in units {
@@ -14,6 +37,7 @@ fn occupants(hash: &mut blake3::Hasher, units: &[GarrisonedUnit]) {
         crate::game_world::combat::hash_hit(hash, g.unit.last_hit);
         hash.update(&[g.unit.carried.map_or(u8::MAX, |c| c.kind as u8)]);
         hash.update(&g.unit.carried.map_or(0, |c| c.amount).to_le_bytes());
+        hash_intent(hash, g.intent);
     }
 }
 
@@ -23,6 +47,7 @@ impl super::super::Economy {
         if self.garrison_orders.is_empty()
             && self.occupied_garrisons.is_empty()
             && self.ejections.is_empty()
+            && self.town_bells.is_empty()
         {
             return;
         }
@@ -31,6 +56,10 @@ impl super::super::Economy {
         for (id, building) in &self.garrison_orders {
             hash.update(&id.0.to_le_bytes());
             hash.update(&building.0.to_le_bytes());
+            hash_intent(
+                hash,
+                self.shelter_intents.get(id).copied().unwrap_or_default(),
+            );
         }
         hash.update(&(self.occupied_garrisons.len() as u64).to_le_bytes());
         for id in &self.occupied_garrisons {
@@ -46,6 +75,13 @@ impl super::super::Economy {
                 hash.update(&value.to_le_bytes());
             }
             occupants(hash, units);
+        }
+        if !self.town_bells.is_empty() {
+            hash.update(b"town bells");
+            hash.update(&(self.town_bells.len() as u64).to_le_bytes());
+            for id in &self.town_bells {
+                hash.update(&id.0.to_le_bytes());
+            }
         }
     }
 }

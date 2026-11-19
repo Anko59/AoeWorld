@@ -62,4 +62,11 @@ Rust and Python SDKs send the same Garrison/Ungarrison orders as the browser.
 Castles require Castle Age. Defensive buildings automatically prefer units,
 then armed buildings and other structures. Explicit in-range attack orders
 override automatic selection without resetting the reload timer. Empty Town
-Centers cannot shoot. Town Bell automation is not implemented.
+Centers cannot shoot.
+
+Back to Work releases villagers and reissues their former gather, farm,
+hunt or construction order if the target still accepts it. The Town Bell
+sends nearby owned villagers within 25 tiles to the nearest eligible shelter
+with space. Ringing again cancels pending bell orders and sends sheltered
+villagers back to work. Soldiers and villagers sheltered independently keep
+their orders.

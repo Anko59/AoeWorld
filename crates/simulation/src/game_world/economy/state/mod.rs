@@ -42,6 +42,8 @@ pub(crate) struct Economy {
     #[cfg(test)]
     pub(crate) tick_work: TickWork,
     pub(crate) garrison_orders: BTreeMap<EntityId, EntityId>,
+    pub(crate) shelter_intents: BTreeMap<EntityId, super::garrison::controls::ShelterIntent>,
+    pub(crate) town_bells: BTreeSet<EntityId>,
     /// Derived from live Steward garrison orders, at most one per Town Center.
     pub(crate) garrison_stewards: BTreeMap<EntityId, EntityId>,
     pub(crate) garrison_reservations: BTreeMap<EntityId, u8>,

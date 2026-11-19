@@ -1,7 +1,9 @@
 //! Shelter controls send ordinary owned-unit orders; occupants arrive on the wire.
 use super::{Client, construction, orders::send, owner};
 use aoe_core::ScreenPoint;
-use aoe_protocol::{ConstructionState, GameplayBuildingState, GameplayClientMessage as Message};
+use aoe_protocol::{
+    BuildingKind, ConstructionState, GameplayBuildingState, GameplayClientMessage as Message,
+};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 
@@ -60,12 +62,26 @@ pub(in super::super) fn interact(client: &mut Client, point: ScreenPoint) -> boo
     true
 }
 
+pub(super) fn shelter_controls(building: Option<&GameplayBuildingState>) -> (bool, bool) {
+    let Some(building) = building else {
+        return (false, false);
+    };
+    let bell = building.kind == BuildingKind::TownCenter
+        && building.construction == ConstructionState::Complete;
+    let back_to_work = building
+        .garrison
+        .iter()
+        .any(|unit| unit.kind == aoe_protocol::UnitKind::Villager);
+    (bell, back_to_work)
+}
+
 pub(super) fn present(client: &Client) {
     let b = client
         .village
         .buildings
         .iter()
         .find(|b| Some(b.id) == client.selected.building_id && b.player == owner(client));
+    let (bell, back_to_work) = shelter_controls(b);
     let mut values = vec![
         b.map_or(0.0, |b| f64::from(b.kind.garrison_capacity())),
         f64::from(u8::from(client.selected.units.iter().any(|id| {
@@ -74,6 +90,8 @@ pub(super) fn present(client: &Client) {
                 .get(id)
                 .is_some_and(|u| u.hp > 0 && u.player == owner(client))
         }))),
+        f64::from(u8::from(bell)),
+        f64::from(u8::from(back_to_work)),
     ];
     if let Some(b) = b {
         for u in &b.garrison {
@@ -89,7 +107,14 @@ pub(super) fn present(client: &Client) {
 }
 
 pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
-    for id in ["garrison", "ungarrison", "garrison-units", "build-castle"] {
+    for id in [
+        "garrison",
+        "ungarrison",
+        "garrison-units",
+        "build-castle",
+        "back-to-work",
+        "town-bell",
+    ] {
         let Some(button) = shared.borrow().document.get_element_by_id(id) else {
             continue;
         };
@@ -125,14 +150,22 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 return;
             }
             let sequence = client.next_sequence;
-            send(
-                &mut client,
-                Message::UngarrisonOrder {
+            let message = match id {
+                "back-to-work" => Message::BackToWorkOrder {
+                    sequence,
+                    building_id,
+                },
+                "town-bell" => Message::TownBellOrder {
+                    sequence,
+                    building_id,
+                },
+                _ => Message::UngarrisonOrder {
                     sequence,
                     building_id,
                     entity_id,
                 },
-            );
+            };
+            send(&mut client, message);
         });
         button.add_event_listener_with_callback("click", callback.as_ref().unchecked_ref())?;
         callback.forget();

@@ -62,6 +62,12 @@ impl GameWorld {
                     .map_or_else(Vec::new, |q| q.iter().copied().collect()),
                 hunt: self.hunting_target(stored.state.id),
                 garrison_order: self.economy.garrison_orders.get(&stored.state.id).copied(),
+                shelter_intent: self
+                    .economy
+                    .shelter_intents
+                    .get(&stored.state.id)
+                    .copied()
+                    .unwrap_or_default(),
                 embarked_in: self.economy.embarked.get(&stored.state.id).copied(),
                 general_controller: self.general_controller(stored.state.id),
                 general_order_tick: self.economy.generals.manual.get(&stored.state.id).copied(),
@@ -80,6 +86,7 @@ impl GameWorld {
                     queue: Vec::new(),
                     hunt: None,
                     garrison_order: None,
+                    shelter_intent: held.intent,
                     embarked_in: None,
                     general_controller: self.general_controller(held.unit.id),
                     general_order_tick: self.economy.generals.manual.get(&held.unit.id).copied(),
@@ -135,6 +142,7 @@ impl GameWorld {
             formations: self.formation_records(),
             animals: self.animal_records(),
             explored: self.explored_records(),
+            town_bells: self.economy.town_bells.iter().copied().collect(),
         };
         Some(snapshot.retimed(self.config.tick_hz, REFERENCE_HZ))
     }
@@ -181,6 +189,14 @@ impl GameWorld {
             self.expect_id(record.unit.id);
             self.restore_unit(record, &mut report);
         }
+        self.economy
+            .town_bells
+            .extend(snapshot.town_bells.iter().copied().filter(|id| {
+                self.economy
+                    .buildings
+                    .get(id)
+                    .is_some_and(|b| b.kind == BuildingKind::TownCenter && b.is_complete())
+            }));
         self.restore_general_ownership(&snapshot.units);
         for record in &snapshot.units {
             if let Some(transport) = record.embarked_in {
@@ -303,7 +319,7 @@ impl GameWorld {
         unit.sergeant = state.sergeant;
         unit.last_hit = state.last_hit;
         if let Some(building) = record.garrison_in
-            && !self.shelter_restored(id, building)
+            && !self.shelter_restored(id, building, record.shelter_intent)
         {
             report.units_lost += 1;
             return;
@@ -390,92 +406,5 @@ impl GameWorld {
             }
             None => false,
         }
-    }
-
-    /// Orders units back to what they were doing, through the ordinary order
-    /// paths; a refused order leaves the unit idle.
-    fn resume_jobs(&mut self, snapshot: &WorldSnapshot, report: &mut RestoreReport) {
-        let mut grouped = std::collections::BTreeSet::new();
-        let mut failed_moves = std::collections::BTreeSet::new();
-        for group in &snapshot.formations {
-            if group.pace_limit.is_some_and(|(n, d)| n == 0 || d == 0) {
-                continue;
-            }
-            let members: Vec<EntityId> = group
-                .members
-                .iter()
-                .copied()
-                .filter(|id| {
-                    self.lookup.contains_key(id) && self.unit(*id).is_some_and(|u| u.hp > 0)
-                })
-                .collect();
-            let Some(player) = members
-                .first()
-                .and_then(|id| self.unit(*id))
-                .map(|u| u.player)
-            else {
-                continue;
-            };
-            let moved = self
-                .issue_formation_move(
-                    player,
-                    &members,
-                    group.form,
-                    group.destination,
-                    false,
-                    group.attack_move,
-                )
-                .is_ok();
-            if moved && let Some(pace) = group.pace_limit {
-                let _ = self.issue_formation_pace(player, members[0], Some(pace));
-            }
-            // Each queued waypoint keeps its own attack-move flag.
-            for &(at, attack_move) in &group.queue {
-                let _ =
-                    self.issue_formation_move(player, &members, group.form, at, true, attack_move);
-            }
-            if moved {
-                grouped.extend(members);
-                report.formations += 1;
-            }
-        }
-        for record in &snapshot.units {
-            let (id, player) = (record.unit.id, record.unit.player);
-            if record.management.is_some() && self.restore_management(record) {
-                report.managers += 1;
-            }
-            if record.garrison_in.is_some() || record.embarked_in.is_some() {
-                continue;
-            }
-            let result = if let Some(building) = record.garrison_order {
-                self.issue_garrison(player, id, building)
-            } else if let Some((_, Some(farm))) = record.gather {
-                self.issue_farm(player, id, farm)
-            } else if let Some((node, None)) = record.gather {
-                self.issue_gather(player, id, node)
-            } else if let Some(building) = record.build {
-                self.issue_construct(player, &[id], building)
-            } else if let Some(animal) = record.hunt {
-                self.issue_hunt(player, &[id], animal)
-            } else if let Some(target) = record.unit.attack_target {
-                self.issue_attack(player, id, target)
-            } else if let Some(at) = record.move_to.filter(|_| !grouped.contains(&id)) {
-                let result = self
-                    .issue_move(id, at)
-                    .map(|_| ())
-                    .map_err(crate::EconomyError::Movement);
-                if result.is_err() {
-                    failed_moves.insert(id);
-                }
-                result
-            } else {
-                continue;
-            };
-            match result {
-                Ok(()) => report.jobs_resumed += 1,
-                Err(_) => report.jobs_lost += 1,
-            }
-        }
-        self.restore_player_queues(&snapshot.units, &failed_moves);
     }
 }

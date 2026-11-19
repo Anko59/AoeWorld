@@ -47,6 +47,8 @@ pub(in crate::gameplay) fn apply(
             building_id,
             entity_id,
         } => world.issue_ungarrison(player, building_id, entity_id),
+        PendingAction::TownBell(building) => world.issue_town_bell(player, building),
+        PendingAction::BackToWork(building) => world.issue_back_to_work(player, building),
         PendingAction::Trade(unit, building) => world.issue_trade(player, unit, building),
         PendingAction::Load {
             unit_ids,

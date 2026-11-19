@@ -22,9 +22,8 @@ use std::{
 };
 
 /// Read by `make check-fixtures` to explain a save that no longer loads.
-/// Bumped to 2 when #828 added `FormationRecord::pace_limit`, which made every
-/// earlier save's `WorldSnapshot` unreadable.
-pub const SAVE_VERSION: u16 = 2;
+/// Version 3 includes shelter intent and active Town Bells in the world snapshot.
+pub const SAVE_VERSION: u16 = 3;
 const MAX_NAME: usize = 60;
 const MAX_SAVE_BYTES: u64 = 2 << 30;
 

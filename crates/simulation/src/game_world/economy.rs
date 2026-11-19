@@ -18,6 +18,7 @@ mod fishing;
 pub(crate) use fishing::navigation::NavalNavigation;
 #[path = "economy/garrison/mod.rs"]
 mod garrison;
+pub(crate) use garrison::controls::ShelterIntent;
 #[path = "economy/construction/gates.rs"]
 mod gates;
 mod gathering;

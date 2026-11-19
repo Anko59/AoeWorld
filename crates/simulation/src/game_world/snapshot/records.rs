@@ -8,7 +8,7 @@ use aoe_core::{EntityId, Formation, PlayerId, TileRect, WorldPosition};
 use aoe_map::ResourceOverlaySnapshot;
 use serde::{Deserialize, Serialize};
 
-pub const WORLD_SNAPSHOT_VERSION: u16 = 6;
+pub const WORLD_SNAPSHOT_VERSION: u16 = 7;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WorldSnapshot {
@@ -24,6 +24,7 @@ pub struct WorldSnapshot {
     pub units: Vec<UnitRecord>,
     pub formations: Vec<FormationRecord>,
     pub animals: Vec<AnimalRecord>,
+    pub(crate) town_bells: Vec<EntityId>,
     pub explored: Vec<(PlayerId, crate::game_world::visibility::ExploredChunks)>,
 }
 
@@ -107,6 +108,7 @@ pub struct UnitRecord {
     pub hunt: Option<EntityId>,
     /// The building this unit was walking to shelter in.
     pub garrison_order: Option<EntityId>,
+    pub(crate) shelter_intent: crate::game_world::economy::ShelterIntent,
     /// The transport this unit was aboard.
     pub embarked_in: Option<EntityId>,
     /// Exact army membership, independent of unit allocation/spawn order.

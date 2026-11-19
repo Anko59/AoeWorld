@@ -7,4 +7,5 @@ mod general;
 mod navy;
 mod presentation;
 mod selection;
+mod shelter_controls;
 mod workers;

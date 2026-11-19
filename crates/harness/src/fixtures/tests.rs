@@ -262,7 +262,6 @@ fn fixtures_load_a_small_save_and_reject_its_snapshot_version() {
         serde_json::to_vec(&package).unwrap(),
     )
     .unwrap();
-    fs::write(saves.join("empty.json"), format!(r#"{{"id":"empty","name":"empty","saved_at":0,"tick":0,"game_seconds":0,"map_hash":"{hash}","opponents":0,"units":0,"buildings":0,"bytes":14,"save_ms":0}}"#)).unwrap();
     let world = aoe_simulation::GameWorld::new(Default::default()).unwrap();
     let version = u8::try_from(world.snapshot([0; 32]).unwrap().version).unwrap();
     // Minimal current postcard save: save header, zero seats, empty snapshot.
@@ -270,7 +269,9 @@ fn fixtures_load_a_small_save_and_reject_its_snapshot_version() {
     // Both versions come from their constants: a literal here would fail the
     // next time either is bumped, which is a save-format change, not a defect.
     let save_version = u8::try_from(aoe_server::SAVE_VERSION).unwrap();
-    let mut bytes = [save_version, 0, version, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let mut bytes = [save_version, 0, version, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let byte_count = bytes.len();
+    fs::write(saves.join("empty.json"), format!(r#"{{"id":"empty","name":"empty","saved_at":0,"tick":0,"game_seconds":0,"map_hash":"{hash}","opponents":0,"units":0,"buildings":0,"bytes":{byte_count},"save_ms":0}}"#)).unwrap();
     let fixture = Fixture {
         path: ".cache/dev-replay/packages/saves/empty.save".into(),
         kind: Kind::Save,
