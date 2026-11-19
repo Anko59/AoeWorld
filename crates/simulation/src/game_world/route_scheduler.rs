@@ -8,11 +8,12 @@ use super::GameWorld;
 use crate::game_movement::{MAX_ACTIVE_ROUTE_PLANNERS, MAX_ACTIVE_ROUTE_SEARCHES};
 use crate::{GameWorldError, MAX_ROUTE_WORK_PER_ORDER};
 use aoe_core::{EntityId, PlayerId};
-use aoe_map::{MovementOutcome, RoutePlanner, RoutePlannerPoll};
-use std::collections::{BTreeMap, VecDeque};
+use aoe_map::RoutePlanner;
+use std::collections::BTreeMap;
 
 mod accounting;
 mod attribution;
+mod batch;
 mod deadline;
 mod fast;
 mod group_end;
@@ -55,6 +56,15 @@ pub(crate) const NEAR_ROUTE_TILES: i32 = 64;
 /// True when a route from `from` to `to` uses its player's far slots.
 pub(crate) fn far_route(from: aoe_core::TileCoord, to: aoe_core::TileCoord) -> bool {
     (from.x - to.x).abs().max((from.y - to.y).abs()) > NEAR_ROUTE_TILES
+}
+
+/// A fresh planner for `order`'s current leg.
+fn order_planner(order: &super::MovementOrder) -> RoutePlanner {
+    RoutePlanner::new(
+        order.waypoint.tile_floor(),
+        order.target_tile,
+        MAX_ROUTE_WORK_PER_ORDER,
+    )
 }
 
 fn far_planner(planner: &RoutePlanner) -> bool {
@@ -237,9 +247,36 @@ impl GameWorld {
         if waiting.is_empty() {
             return budget;
         }
-        let players = waiting.into_iter().collect::<Vec<_>>();
-        let start = (self.tick.0 % players.len() as u64) as usize;
+        let mut players = waiting.into_iter().collect::<Vec<_>>();
         let mut budget = budget;
+        // A batch holds every slot it fills until all its searches end, where
+        // a serial pass freed each as its search finished. A second round
+        // gives the slots the first one freed to the units it refused.
+        for _ in 0..2 {
+            let refused;
+            (budget, refused) = self.serve_round(&players, budget, changed);
+            players = refused;
+            if players.is_empty() {
+                break;
+            }
+        }
+        budget
+    }
+
+    /// One batch over `players`: returns the budget left and, per player, the
+    /// units still waiting that were refused a slot.
+    fn serve_round(
+        &mut self,
+        players: &[(PlayerId, Vec<EntityId>)],
+        mut budget: u32,
+        changed: &mut Vec<EntityId>,
+    ) -> (u32, Vec<(PlayerId, Vec<EntityId>)>) {
+        let start = (self.tick.0 % players.len() as u64) as usize;
+        // Every player's searches are chosen and charged first, in turn
+        // order, then polled together on workers and finished in that order.
+        let mut batch = (Vec::new(), Vec::new());
+        let mut reserved = batch::Reserved::default();
+        let mut owners = Vec::new();
         for turn in 0..players.len() {
             let (player, ids) = &players[(start + turn) % players.len()];
             let remaining_players = (players.len() - turn) as u32;
@@ -252,24 +289,65 @@ impl GameWorld {
             // Reserve inside this player's fair share. A global near/far
             // split would let another player's near flood shrink this share.
             let reserve = if far.is_empty() { 0 } else { share / 4 };
-            share = self.serve_route_class(*player, &near, false, share - reserve, changed);
-            share = self.serve_route_class(*player, &far, true, share + reserve, changed);
+            let before = batch.1.len();
+            share = self.prepare_route_class(
+                (*player, false),
+                &near,
+                share - reserve,
+                &mut reserved,
+                &mut batch,
+            );
+            share = self.prepare_route_class(
+                (*player, true),
+                &far,
+                share + reserve,
+                &mut reserved,
+                &mut batch,
+            );
+            owners.push((*player, before..batch.1.len()));
             budget += share;
         }
-        budget
+        let (searches, visits) = batch;
+        let done = self.run_searches(searches, reserved, changed);
+        for &(id, far, search) in &visits {
+            if let Some(&(_, _, charged, spent)) = search.and_then(|at| done.get(at)) {
+                // Work a search was charged but did not spend goes to plan-ahead.
+                budget += charged.saturating_sub(spent);
+            }
+            self.end_disconnected_near_route(id, far, changed);
+        }
+        let refused = owners
+            .into_iter()
+            .filter_map(|(player, range)| {
+                let ids = visits[range]
+                    .iter()
+                    .filter(|(id, _, search)| {
+                        search.is_none()
+                            && self
+                                .lookup
+                                .get(id)
+                                .is_some_and(|&index| self.waiting_for_route(index))
+                    })
+                    .map(|&(id, _, _)| id)
+                    .collect::<Vec<_>>();
+                (!ids.is_empty()).then_some((player, ids))
+            })
+            .collect();
+        (budget, refused)
     }
 
     /// Shares a class's work between the units that can spend it: those that
     /// hold a planner (first in `ids`) and as many as the free slots admit.
     /// Dividing by every waiting unit left two holders 1 or 2 work a tick
-    /// behind 847 units that could not spend theirs.
-    fn serve_route_class(
+    /// behind 847 units that could not spend theirs. Each chosen search is
+    /// charged its allowance; returns what is left of `share`.
+    fn prepare_route_class(
         &mut self,
-        player: PlayerId,
+        (player, far): (PlayerId, bool),
         ids: &[EntityId],
-        far: bool,
         mut share: u32,
-        changed: &mut Vec<EntityId>,
+        reserved: &mut batch::Reserved,
+        (searches, visits): &mut batch::Batch,
     ) -> u32 {
         let holders = ids
             .iter()
@@ -286,154 +364,14 @@ impl GameWorld {
             } else {
                 (share / remaining).clamp(1, MAX_ROUTE_WORK_PER_ORDER)
             };
-            let spent = self.search_waiting_route(player, id, allowance, changed);
-            share -= spent.min(share);
-            self.end_disconnected_near_route(id, far, changed);
+            let search = self.prepare_search(player, id, allowance, reserved);
+            visits.push((id, far, search.as_ref().map(|_| searches.len())));
+            if let Some(search) = search {
+                share -= search.fair_charge().min(share);
+                searches.push(search);
+            }
         }
         share
-    }
-
-    /// One waiting unit's search with at most `allowance` work of the fair
-    /// budget; returns the fair work spent. A unit that holds no search slot
-    /// first gets its fast attempt (once per leg, from the fast budget); only
-    /// a search that attempt cannot settle takes a slot, and with no slot free
-    /// it keeps no frontier.
-    fn search_waiting_route(
-        &mut self,
-        player: PlayerId,
-        id: EntityId,
-        allowance: u32,
-        changed: &mut Vec<EntityId>,
-    ) -> u32 {
-        let Some(&index) = self.lookup.get(&id) else {
-            return 0;
-        };
-        let Some(order) = self.units[index].order else {
-            return 0;
-        };
-        let kind = self.units[index].state.kind;
-        let held = self.units[index].planner.as_ref();
-        let holds_planner = usize::from(held.is_some());
-        let holds_search = held.is_some_and(RoutePlanner::requires_search_slot);
-        let far = self.waits_for_far_route(index);
-        // A retained zero/partial-work planner still owes its full fast
-        // attempt after an exhausted issue-time budget; retention is no proof
-        // that the attempt ran. This matters with resumable reverse proofs.
-        let fast = !self.units[index].fast_route_tried && self.fast_route_allowance(player) > 0;
-        if !fast && allowance == 0 {
-            return 0;
-        }
-        if !holds_search && !fast && self.route_capacity_exhausted(player, holds_planner, 0, far) {
-            self.route_queued.insert((player, far));
-            self.route_metrics.slot_refusals += 1;
-            return 0;
-        }
-        let mut planner = self.take_planner(index).unwrap_or_else(|| {
-            RoutePlanner::new(
-                order.waypoint.tile_floor(),
-                order.target_tile,
-                MAX_ROUTE_WORK_PER_ORDER,
-            )
-        });
-        let fresh = planner.work() == 0;
-        self.reuse_region_endpoint_proof(&mut planner, kind, player);
-        let work_before = planner.work();
-        let (result, spent) = if fast {
-            self.set_work_unit(Some(id));
-            let (result, full) = self.poll_fast_route(&mut planner, kind, player);
-            self.set_work_unit(None);
-            self.units[index].fast_route_tried = full;
-            (result, 0)
-        } else {
-            let probe = self.planning_probe.clone();
-            let span = probe.as_ref().and_then(|p| p.movement_span("plan_fair"));
-            let result =
-                self.poll_world_route_planner(&mut planner, allowance, &|| false, kind, player);
-            drop(span);
-            let spent = planner.work().saturating_sub(work_before);
-            if work_before == 0 && spent > 0 {
-                self.route_metrics.searches_started += 1;
-            }
-            self.route_metrics.fair_work += u64::from(spent);
-            self.demand_route_work(Some(id), 1, spent);
-            let (from, to) = (planner.origin(), planner.destination());
-            self.route_metrics
-                .attribution
-                .work(kind, from, to, 1, spent);
-            (result, spent)
-        };
-        self.reuse_region_endpoint_proof(&mut planner, kind, player);
-        let reason = attribution::failure_reason(&result);
-        let (from, to) = (planner.origin(), planner.destination());
-        let error = match result {
-            RoutePlannerPoll::Path(path) => {
-                self.route_metrics.found(planner.work());
-                self.route_metrics.attribution.found(kind, from, to);
-                if planner.certified_destination().is_some() {
-                    self.route_metrics
-                        .sample("certified-nearest", kind, &planner);
-                }
-                if planner.work() >= 65_536 {
-                    self.route_metrics.sample("slow", kind, &planner);
-                }
-                if fast && fresh && planner.is_terminal() {
-                    self.cache_route(&planner, kind, player, &MovementOutcome::Path(path.clone()));
-                }
-                let mut route = VecDeque::from(path.tiles);
-                if route.pop_front() == Some(order.waypoint.tile_floor()) {
-                    self.units[index].route = route
-                        .into_iter()
-                        .filter_map(|t| aoe_core::WorldPosition::from_tile_center(t).ok())
-                        .collect();
-                    self.units[index].fast_route_tried = false;
-                    // A certified nearest endpoint still owes the order its
-                    // terminal Unreachable result after this final segment.
-                    if !planner.is_terminal()
-                        || planner.has_route_continuation()
-                        || planner.certified_destination().is_some()
-                    {
-                        self.store_planner(index, Some(planner));
-                    }
-                    return spent;
-                }
-                Some(GameWorldError::InvalidPosition)
-            }
-            RoutePlannerPoll::Pending => {
-                if fast && self.route_capacity_exhausted(player, 0, 0, far) {
-                    // No slot: keep only the compact continuation, if any.
-                    self.route_metrics.yielded += 1;
-                    planner.abandon_leg_search();
-                    if !planner.requires_search_slot() {
-                        self.store_planner(index, Some(planner));
-                    }
-                    return spent;
-                }
-                self.store_planner(index, Some(planner));
-                return spent;
-            }
-            RoutePlannerPoll::Complete => Some(GameWorldError::InvalidTerrain),
-            RoutePlannerPoll::InvalidDestination => Some(GameWorldError::InvalidPosition),
-            RoutePlannerPoll::Unreachable => Some(GameWorldError::Unreachable),
-            RoutePlannerPoll::SearchLimit => Some(GameWorldError::PathBudgetExceeded),
-            RoutePlannerPoll::Environment(error) => Some(GameWorldError::Environment(error)),
-        };
-        if fast && fresh && error == Some(GameWorldError::Unreachable) {
-            self.cache_route(&planner, kind, player, &MovementOutcome::Unreachable);
-        }
-        self.route_metrics.failed(planner.work());
-        let caller = self.units[index].route_caller;
-        self.route_metrics
-            .attribution
-            .failed(kind, from, to, planner.work(), reason, caller);
-        if self.units[index].formation == Some(id) {
-            let nearest = planner.nearest_reachable();
-            self.group_route_failed(index, error, reason, nearest, changed);
-            return spent;
-        }
-        self.stop_route(index, error);
-        self.active_movers.remove(id);
-        changed.push(id);
-        spent
     }
 
     /// Ends a unit's movement order after its route search failed.

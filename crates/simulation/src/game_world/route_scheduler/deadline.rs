@@ -128,6 +128,20 @@ impl GameWorld {
                 return;
             }
             Err(_) => return,
+            // A requested tile in a pocket beside a mine or a wall is still
+            // served from next to it, once refinement certifies that tile.
+            Ok(false)
+                if planner.certified_destination().is_none()
+                    && self
+                        .land_frontier(unit.state.player, bucket, from, to)
+                        .ok()
+                        .flatten()
+                        .is_some_and(|near| {
+                            (near.x - to.x).abs().max((near.y - to.y).abs()) <= 1
+                        }) =>
+            {
+                return;
+            }
             Ok(false) => {}
         }
         let unit = &self.units[index];

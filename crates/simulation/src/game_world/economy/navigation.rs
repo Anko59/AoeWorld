@@ -122,7 +122,7 @@ impl GameWorld {
         self.planning_probe = Some(probe);
     }
 
-    fn measure_planning(
+    pub(crate) fn measure_planning(
         &self,
     ) -> Option<crate::game_world::route_scheduler::PlanningMeasurement<'_>> {
         self.planning_probe.as_ref().map(|probe| {
@@ -196,6 +196,7 @@ impl GameWorld {
                 &preparation::LimitedMap {
                     generator,
                     allowance: &self.navigation_preparation_budget,
+                    denied: None,
                     world: self,
                     player,
                 },
@@ -225,6 +226,31 @@ impl GameWorld {
         player: aoe_core::PlayerId,
     ) -> RoutePlannerPoll {
         let _measurement = self.measure_planning();
+        self.poll_route_planner_limited(
+            planner,
+            budget,
+            cancelled,
+            kind,
+            player,
+            &self.navigation_preparation_budget,
+            None,
+        )
+    }
+
+    /// A poll that prepares cold chunks only from `preparations`, and marks
+    /// `denied` when it wanted one more: a batch of polls on workers gives
+    /// each one its own, so no poll sees another's preparation.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn poll_route_planner_limited(
+        &self,
+        planner: &mut RoutePlanner,
+        budget: u32,
+        cancelled: &dyn Fn() -> bool,
+        kind: crate::UnitKind,
+        player: aoe_core::PlayerId,
+        preparations: &std::sync::Mutex<u32>,
+        denied: Option<&std::sync::atomic::AtomicBool>,
+    ) -> RoutePlannerPoll {
         if kind.is_naval() {
             return planner.poll(
                 &super::fishing::navigation::NavalNavigation::new(self),
@@ -237,7 +263,8 @@ impl GameWorld {
             Terrain::Map { generator, overlay } => planner.poll(
                 &preparation::LimitedMap {
                     generator,
-                    allowance: &self.navigation_preparation_budget,
+                    allowance: preparations,
+                    denied,
                     world: self,
                     player,
                 },
@@ -281,6 +308,7 @@ impl GameWorld {
                 &preparation::LimitedMap {
                     generator,
                     allowance: &self.navigation_preparation_budget,
+                    denied: None,
                     world: self,
                     player,
                 },
@@ -317,6 +345,7 @@ impl GameWorld {
                 &preparation::LimitedMap {
                     generator,
                     allowance: &allowance,
+                    denied: None,
                     world: self,
                     player,
                 },
