@@ -166,11 +166,15 @@ class Config:
     # --- combat ------------------------------------------------------------
     #: Army size that starts an attack.
     attack_army_size: int = 12
+    #: Cell width for finding assembled soldiers at a local staging area.
+    army_muster_tiles: int = 16
     #: Retreat when the army drops below this fraction of its launch size.
     retreat_fraction: float = 0.4
     #: Defend when a threat is this close to the base.
     defend_radius: int = 24
     rally_offset: int = 7
+    rally_scan_trainers: int = 8
+    rally_retry_seconds: int = 8
     #: A wound counts as ours when a soldier of ours stood within this many tiles.
     hit_reach: int = 12
     #: Retry refused attack targets after the battlefield has had time to change.

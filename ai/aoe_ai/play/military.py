@@ -9,7 +9,7 @@ from aoeworld import BuildingKind, Tech, UnitKind, trainable, unit_cost
 from . import buildorder
 
 from ..context import Context
-from ..geometry import Tile, clamp_tile, dist
+from ..geometry import Tile, clamp_tile, dist, nearest
 
 TRAINERS = (BuildingKind.BARRACKS, BuildingKind.ARCHERY_RANGE, BuildingKind.STABLE)
 #: What stands in for a kind the age does not allow yet.
@@ -118,8 +118,8 @@ class MilitaryManager:
         return None
 
     # ----- rally -----------------------------------------------------------
-    def rally_point(self, ctx: Context) -> Tile:
-        home = ctx.home
+    def rally_point(self, ctx: Context, home: Optional[Tile] = None) -> Tile:
+        home = home or ctx.home
         # Between the Town Center and the map centre: toward where trouble comes from.
         width, height = ctx.world.map_size
         cx, cy = width // 2, height // 2
@@ -137,15 +137,45 @@ class MilitaryManager:
                 return candidate
         return clamp_tile(point, ctx.world.map_size)
 
-    def rally(self, ctx: Context) -> None:
-        if ctx.home is None or ctx.board.attacking:
+    def rally_production(self, ctx: Context) -> None:
+        """Set one changed server-owned rally per decision, cycling over training sites."""
+        trainers = [b for b in ctx.buildings if b.complete and b.kind in TRAINERS]
+        if not trainers:
             return
+        cfg, board = ctx.config, ctx.board
+        for _ in range(min(cfg.rally_scan_trainers, len(trainers))):
+            i = board.military_rally_cursor % len(trainers)
+            board.military_rally_cursor = i + 1
+            trainer = trainers[i]
+            key = f"military-rally:{trainer.id}"
+            if board.cooling(key, ctx.tick):
+                continue
+            home = nearest(ctx.centers, trainer.center, key=lambda tile: tile) or ctx.home
+            point = self.rally_point(ctx, home)
+            if dist(trainer.center, point) > cfg.march_hop_tiles:
+                point = self.rally_point(ctx, trainer.center)
+            if trainer.rally_position == point:
+                continue
+            if ctx.land_route(trainer.center, point) is None:
+                return
+            ctx.order("set_rally", trainer.id, *point)
+            board.cool(key, ctx.tick, cfg.rally_retry_seconds * ctx.world.tick_hz)
+            return
+
+    def rally(self, ctx: Context) -> None:
+        if ctx.home is None:
+            return
+        self.rally_production(ctx)
         point = self.rally_point(ctx)
         sent = 0
         marched = ctx.board.marched
+        field = ctx.board.attack_members
+        if ctx.board.attacking and not field:
+            return
         pause = ctx.config.march_pause_seconds * ctx.world.tick_hz
         for unit in ctx.army:
-            if (unit.idle and unit.id not in ctx.busy and dist(unit.tile, point) > 5 and sent < 12
+            if (unit.idle and unit.id not in ctx.busy and unit.id not in field
+                    and dist(unit.tile, point) > 5 and sent < 12
                     and ctx.tick - marched.get(unit.id, -pause) >= pause):
                 target = ctx.land_hop(unit.tile, point)
                 if target == unit.tile:
