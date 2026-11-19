@@ -285,7 +285,11 @@ for (const available of [false, true]) {
     // Rust emits for a Barracks. A queue must never inherit Villager art.
     await page.evaluate(() => {
       const buildings = Reflect.get(window, "aoeBuildings") as {
-        queue(values: number[][], visible: boolean): void;
+        queue(
+          values: number[][],
+          visible: boolean,
+          rows: [number, number, number[]][],
+        ): void;
         update(values: Float64Array): void;
       };
       const update = buildings.update;
@@ -309,6 +313,7 @@ for (const available of [false, true]) {
           [0, 10, 2],
         ],
         true,
+        [],
       );
       update(values);
     });

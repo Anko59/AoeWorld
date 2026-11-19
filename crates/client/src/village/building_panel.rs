@@ -364,7 +364,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }
             if action == 3 {
                 match code {
-                    0 => super::orders::train(&mut client, false),
+                    0 => super::orders::train(&mut client, false, lots == 5),
                     1 => super::orders::stop(&mut client),
                     2 => {
                         client.village.garrison_cursor = false;
@@ -373,7 +373,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                         client.village.move_cursor = true;
                         let _ = client.canvas.set_attribute("data-order-mode", "move");
                     }
-                    3 => super::orders::train(&mut client, true),
+                    3 => super::orders::train(&mut client, true, false),
                     4 => super::orders::delete(&mut client),
                     _ => (),
                 }
@@ -396,7 +396,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }
             if action == 1 {
                 if let Some(&kind) = aoe_protocol::UnitKind::ALL.get(code) {
-                    super::orders::train_kind(&mut client, kind);
+                    super::orders::train_kind(&mut client, kind, lots == 5);
                 }
                 return;
             }

@@ -53,10 +53,11 @@ export function playerState(
   researched = 0,
   population = 4,
   cap = 5,
+  food = 10000,
 ) {
   return [
     0,
-    ...uint(10000),
+    ...uint(food),
     ...uint(10000),
     ...uint(10000),
     ...uint(10000),

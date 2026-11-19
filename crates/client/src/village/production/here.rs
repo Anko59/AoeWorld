@@ -2,7 +2,7 @@
 use super::*;
 mod batch;
 use aoe_core::{FIXED_SUBUNITS_PER_TILE, ScreenPoint, WorldPosition};
-use aoe_protocol::{GameplayClientMessage as Message, RallyTarget, Stockpile};
+use aoe_protocol::{GameplayClientMessage as Message, RallyTarget};
 pub(crate) use batch::Batch;
 use wasm_bindgen::prelude::wasm_bindgen;
 
@@ -11,14 +11,6 @@ pub(super) struct HereRequest {
     pub kind: UnitKind,
     pub count: usize,
     pub position: WorldPosition,
-}
-
-fn spend(stockpile: &mut Stockpile, population: &mut u32, cost: Stockpile) {
-    stockpile.food = stockpile.food.saturating_sub(cost.food);
-    stockpile.wood = stockpile.wood.saturating_sub(cost.wood);
-    stockpile.gold = stockpile.gold.saturating_sub(cost.gold);
-    stockpile.stone = stockpile.stone.saturating_sub(cost.stone);
-    *population = population.saturating_add(1);
 }
 
 fn distance(b: &GameplayBuildingState, p: WorldPosition) -> u64 {
@@ -47,15 +39,11 @@ pub(super) fn plan(
     let Some(cost) = availability::training_cost(request.kind) else {
         return Vec::new();
     };
-    let mut stockpile = player.stockpile;
+    let mut stockpile = pending.unspent(player.stockpile);
     let mut population = player.population_used;
     for entry in &pending.entries {
         if entry.2.is_none_or(|tick| tick > pending.observed) {
-            spend(
-                &mut stockpile,
-                &mut population,
-                availability::training_cost(entry.3).unwrap_or_default(),
-            );
+            population = population.saturating_add(1);
         }
     }
     let queued: usize = buildings
@@ -104,7 +92,8 @@ pub(super) fn plan(
         }
         rally_count += usize::from(new_rally);
         result.push(building.id);
-        spend(&mut stockpile, &mut population, cost);
+        subtract(&mut stockpile, cost);
+        population = population.saturating_add(1);
     }
     result
 }

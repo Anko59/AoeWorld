@@ -352,7 +352,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }
             2 => toggle_grid(&mut client),
             3 => center_on_primary(&mut client),
-            4 => super::village::orders::train(&mut client, false),
+            4 | 40 => super::village::orders::train(&mut client, false, action == 40),
             5 => super::village::orders::focus_town_center(&mut client, true),
             7 | 8 => super::village::selection::idle(&mut client, action == 8),
             9 => super::village::orders::delete(&mut client),

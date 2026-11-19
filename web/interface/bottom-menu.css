@@ -101,7 +101,7 @@
 /* Multi-selection: the heading keeps a left column and the icons fill the rest of the panel, sized by selection-grid.js. */
 #bottom-panel[data-frame=native] #selected-icons:empty { display:none; }
 #bottom-panel[data-frame=native] #selection[data-count]:not([data-count="1"]) #selected-icons { position:absolute; left:164px; right:0; top:0; bottom:0; margin:0; max-height:none; overflow:hidden; display:flex; flex-wrap:wrap; align-content:flex-start; gap:3px; }
-#bottom-panel[data-frame=native] #selection[data-count]:not([data-count="1"]) #selection-content>:not(#selected-icons) { max-width:152px; }
+#bottom-panel[data-frame=native] #selection[data-count]:not([data-count="1"]) #selection-content>:not(#selected-icons,#training-multi) { max-width:152px; }
 #bottom-panel[data-frame=native] #selected-icons .unit-token { position:relative; overflow:hidden; flex:none; width:var(--token,36px); height:var(--token,36px); box-sizing:border-box; }
 #selected-icons .token-count { position:absolute; right:2px; bottom:1px; font:700 clamp(11px,calc(var(--token,36px) * .3),20px)/1 sans-serif; color:#fff; text-shadow:0 0 2px #000,0 0 2px #000,1px 1px #000; pointer-events:none; }
 
@@ -151,3 +151,26 @@
 
 #bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#steward-controls input[type=checkbox] { margin:0; }
 #bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#steward-controls button { font-size:9px; line-height:10px; padding:1px 2px; }
+
+#bottom-panel #selection #selection-content:has(#training-multi:not([hidden])) {
+  display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  grid-template-rows:auto minmax(0,1fr); gap:3px 8px;
+}
+#selection #selection-content:has(#training-multi:not([hidden])) > #selected-icons {
+  position:static; grid-column:2; grid-row:1; max-height:36px; margin:0;
+}
+#selection #selection-content:has(#training-multi:not([hidden])) > #building-panel { display:none; }
+#selection #selection-content > #training-multi:not([hidden]) {
+  grid-column:1 / -1; grid-row:2; max-width:none; min-height:0; overflow:auto;
+}
+#bottom-panel #selection #selection-content:has(#training-multi:not([hidden])) > #garrison-panel {
+  grid-column:2; grid-row:2; min-width:0; min-height:0; margin:0;
+}
+#bottom-panel #selection #selection-content:has(#garrison-panel:not([hidden])) > #training-multi {
+  grid-column:1;
+}
+.training-row { display:flex; align-items:center; gap:6px; min-height:25px; font-size:11px; }
+.training-site { flex:0 1 108px; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.training-tokens { display:flex; align-items:center; gap:2px; flex:1; min-width:0; overflow-x:auto; }
+#training-multi .unit-token { display:inline-flex; flex:none; width:18px; height:18px; padding:0; }
+.training-row .unit-token :is(.art-icon,.icon) { width:100%; height:100%; }

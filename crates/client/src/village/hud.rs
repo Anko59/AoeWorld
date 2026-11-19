@@ -342,6 +342,30 @@ pub(in super::super) fn update(client: &Client) {
             ]);
         }
     }
+    if client.selected.buildings.len() > 1 {
+        let mut producers: Vec<_> = client
+            .village
+            .buildings
+            .iter()
+            .filter(|b| {
+                b.player == owner
+                    && b.hp > 0
+                    && client.selected.has_building(b.id)
+                    && aoe_protocol::UnitKind::ALL
+                        .iter()
+                        .any(|kind| crate::building_ui::rules(b.kind).trains(*kind as u8))
+            })
+            .collect();
+        producers.sort_unstable_by_key(|b| b.id);
+        for building in producers {
+            values.extend_from_slice(&[
+                f64::from(building.id.0),
+                building.kind as u8 as f64,
+                building.training_queue.len() as f64,
+            ]);
+            values.extend(building.training_queue.iter().map(|e| e.kind as u8 as f64));
+        }
+    }
     let details = super::presentation::values(client);
     village_update(&values, map::feedback::connection_label(client), &details);
     super::building_panel::update(client, panel_scale);
