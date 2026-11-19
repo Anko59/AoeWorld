@@ -23,7 +23,11 @@ impl WorldSnapshot {
                 hit.tick = aoe_core::Tick(at(hit.tick.0));
             }
         }
-        for record in &mut self.buildings {
+        let remembered = self
+            .building_memory
+            .iter_mut()
+            .flat_map(|record| &mut record.buildings);
+        for record in self.buildings.iter_mut().chain(remembered) {
             if let Some(hit) = &mut record.last_hit {
                 hit.tick = aoe_core::Tick(at(hit.tick.0));
             }

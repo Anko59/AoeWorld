@@ -23,6 +23,10 @@ snapshots use pages of at most 65,536 amounts; the browser publishes the
 assembled snapshot atomically.
 Buildings retain their last observed state and age variant until revisited; an unseen
 destruction stays remembered. Owned building destruction is known immediately.
+A save retains each player’s last sightings of enemy buildings outside current
+sight, including the last sightings of buildings destroyed in fog. Loading
+rebuilds current sight, updates buildings that can be seen, and forgets any
+destroyed building whose site is visible again.
 The existing building count bounds building-state refresh work each tick.
 
 The bounded-cost tests compare 256- and 262,144-tile axes and verify zero LOS

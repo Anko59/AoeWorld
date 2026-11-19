@@ -1,14 +1,14 @@
 //! The values a save is made of.
 use crate::game_world::{
-    Age, BuildingKind, GameUnit, GameWorldError, HitRecord, PlayerEconomy, RallyPoint,
-    ResearchEntry, TrainingEntry,
+    Age, BuildingKind, ConstructionState, GameBuilding, GameUnit, GameWorldError, HitRecord,
+    PlayerEconomy, RallyPoint, ResearchEntry, TrainingEntry,
 };
 use crate::game_world::{AnimalKind, Facing, StewardSettings};
 use aoe_core::{EntityId, Formation, PlayerId, TileRect, WorldPosition};
 use aoe_map::ResourceOverlaySnapshot;
 use serde::{Deserialize, Serialize};
 
-pub const WORLD_SNAPSHOT_VERSION: u16 = 7;
+pub const WORLD_SNAPSHOT_VERSION: u16 = 8;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WorldSnapshot {
@@ -26,6 +26,16 @@ pub struct WorldSnapshot {
     pub animals: Vec<AnimalRecord>,
     pub(crate) town_bells: Vec<EntityId>,
     pub explored: Vec<(PlayerId, crate::game_world::visibility::ExploredChunks)>,
+    pub(crate) building_memory: Vec<BuildingMemoryRecord>,
+}
+
+/// A player's last sight of foreign buildings, including unseen destruction.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct BuildingMemoryRecord {
+    pub(crate) viewer: PlayerId,
+    pub(crate) buildings: Vec<BuildingRecord>,
+    /// In eviction order, oldest first.
+    pub(crate) ghosts: Vec<EntityId>,
 }
 
 /// One army group: posture, members, destination and the waypoints behind it.
@@ -90,6 +100,66 @@ pub struct BuildingRecord {
     pub gate_locked: bool,
     pub rally_point: Option<RallyPoint>,
     pub farm_reseeds: u8,
+}
+
+impl From<&GameBuilding> for BuildingRecord {
+    fn from(building: &GameBuilding) -> Self {
+        Self {
+            id: building.id,
+            player: building.player,
+            kind: building.kind,
+            footprint: building.footprint,
+            age: building.age,
+            complete: building.is_complete(),
+            bridge_span: building.bridge_span,
+            training_queue: building.training_queue.iter().copied().collect(),
+            general_recruit: None,
+            last_hit: building.last_hit,
+            work_done: building.work_done,
+            work_total: building.work_total,
+            hp: building.hp,
+            max_hp: building.max_hp,
+            los: building.los,
+            food_remaining: building.food_remaining,
+            research: building.research,
+            gate_open: building.gate_open,
+            gate_locked: building.gate_locked,
+            rally_point: building.rally_point,
+            farm_reseeds: building.farm_reseeds,
+        }
+    }
+}
+
+impl BuildingRecord {
+    pub(crate) fn last_sighting(&self) -> GameBuilding {
+        GameBuilding {
+            id: self.id,
+            player: self.player,
+            kind: self.kind,
+            footprint: self.footprint,
+            age: self.age,
+            state: if self.complete {
+                ConstructionState::Complete
+            } else {
+                ConstructionState::UnderConstruction
+            },
+            bridge_span: self.bridge_span,
+            training_queue: self.training_queue.iter().copied().collect(),
+            last_hit: self.last_hit,
+            work_done: self.work_done,
+            work_total: self.work_total,
+            hp: self.hp,
+            max_hp: self.max_hp,
+            los: self.los,
+            food_remaining: self.food_remaining,
+            research: self.research,
+            gate_open: self.gate_open,
+            gate_locked: self.gate_locked,
+            rally_point: self.rally_point,
+            farm_reseeds: self.farm_reseeds,
+            garrison: Vec::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

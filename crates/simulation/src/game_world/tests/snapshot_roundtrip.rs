@@ -9,6 +9,8 @@ use aoe_map::ResourceKind;
 
 #[path = "snapshot_roundtrip/compat.rs"]
 mod compat;
+#[path = "snapshot_roundtrip/fog.rs"]
+mod fog;
 #[path = "snapshot_roundtrip/general.rs"]
 mod general;
 
