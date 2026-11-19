@@ -62,6 +62,11 @@ pub struct Options {
     /// (`AOE_SIM_HZ` and `AOE_TICK_HZ`); default the server's own.
     #[arg(long)]
     pub tick_hz: Option<u32>,
+    /// The saved game's human watches this many tiles square around its
+    /// primary unit, as a player's camera does (the client asks for at most
+    /// 512); without it the human subscribes to nothing.
+    #[arg(long, requires = "save")]
+    pub human_view: Option<i32>,
     /// Wall-clock minutes the bots play after they are connected.
     #[arg(long, default_value_t = 20.0)]
     pub minutes: f64,

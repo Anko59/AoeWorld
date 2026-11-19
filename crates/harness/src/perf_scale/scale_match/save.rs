@@ -1,5 +1,6 @@
 //! Saved worlds use the server's skirmish restore and its ordinary AI fleet.
 use super::{BoxError, MapSource, Options, http, report, run::Server};
+use aoe_core::TileRect;
 use aoe_protocol::{
     GAMEPLAY_VERSION, GameplayClientMessage, GameplayServerMessage, decode_gameplay_server,
     encode_gameplay_client,
@@ -131,7 +132,7 @@ pub(super) struct Human {
 }
 
 impl Human {
-    fn connect(address: &str) -> Result<Self, BoxError> {
+    fn connect(address: &str, view: Option<i32>) -> Result<Self, BoxError> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(1)
             .enable_all()
@@ -152,17 +153,71 @@ impl Human {
                     .next()
                     .await
                     .ok_or("human socket closed before welcome")??;
-                let GameplayServerMessage::Welcome { resume_token, .. } =
-                    decode_gameplay_server(&frame.into_data())?
+                let GameplayServerMessage::Welcome {
+                    resume_token,
+                    width_tiles,
+                    height_tiles,
+                    ..
+                } = decode_gameplay_server(&frame.into_data())?
                 else {
                     return Err::<_, BoxError>("human socket was not welcomed".into());
                 };
                 let token = resume_token.0.iter().map(|b| format!("{b:02x}")).collect();
+                // A session with no subscription gets no frames. A one-tile
+                // view still lists the viewer's own units, so the first frame
+                // tells where the primary unit stands; the camera follows.
+                if view.is_some() {
+                    let region = TileRect::from_xywh(0, 0, 1, 1);
+                    let message = GameplayClientMessage::Subscribe {
+                        revision: 1,
+                        region,
+                    };
+                    socket
+                        .send(Message::Binary(encode_gameplay_client(&message)?.into()))
+                        .await?;
+                }
                 let task = tokio::spawn(async move {
+                    let mut view = view;
                     while let Some(Ok(frame)) = socket.next().await {
                         if frame.is_close() {
                             break;
                         }
+                        let Some(side) = view else { continue };
+                        let Ok(GameplayServerMessage::Snapshot { units, .. }) =
+                            decode_gameplay_server(&frame.into_data())
+                        else {
+                            continue;
+                        };
+                        // The one-tile view in the corner holds only the
+                        // viewer's own units: the camera goes to their middle
+                        // (the primary unit may be garrisoned or gone).
+                        let middle = |axis: fn(&aoe_protocol::GameplayUnitState) -> i32| {
+                            let mut values: Vec<_> = units.iter().map(axis).collect();
+                            values.sort_unstable();
+                            values.get(values.len() / 2).copied()
+                        };
+                        let (Some(x), Some(y)) = (
+                            middle(|u| u.position.tile_floor().x),
+                            middle(|u| u.position.tile_floor().y),
+                        ) else {
+                            continue;
+                        };
+                        let tile = aoe_core::TileCoord::new(x, y);
+                        let region =
+                            TileRect::from_xywh(tile.x - side / 2, tile.y - side / 2, side, side)
+                                .clamp(width_tiles, height_tiles);
+                        let message = GameplayClientMessage::Subscribe {
+                            revision: 2,
+                            region,
+                        };
+                        let Ok(bytes) = encode_gameplay_client(&message) else {
+                            break;
+                        };
+                        if socket.send(Message::Binary(bytes.into())).await.is_err() {
+                            break;
+                        }
+                        println!("scale-match: the human watches {region:?}");
+                        view = None;
                     }
                 });
                 Ok((token, task))
@@ -177,8 +232,12 @@ impl Human {
     }
 }
 
-pub(super) fn resume(server: &Server, card: &Value) -> Result<(Human, Value), BoxError> {
-    let bootstrap = Human::connect(&server.address)?;
+pub(super) fn resume(
+    server: &Server,
+    card: &Value,
+    view: Option<i32>,
+) -> Result<(Human, Value), BoxError> {
+    let bootstrap = Human::connect(&server.address, None)?;
     let response = http::request(
         &server.address,
         "POST",
@@ -205,12 +264,12 @@ pub(super) fn resume(server: &Server, card: &Value) -> Result<(Human, Value), Bo
                 return Ok((
                     human
                         .map(Ok)
-                        .unwrap_or_else(|| Human::connect(&server.address))?,
+                        .unwrap_or_else(|| Human::connect(&server.address, view))?,
                     status,
                 ));
             }
             Some("connecting_ai") if human.is_none() => {
-                human = Some(Human::connect(&server.address)?);
+                human = Some(Human::connect(&server.address, view)?);
             }
             Some("failed" | "cancelled" | "stopped") => {
                 return Err(format!("saved skirmish failed: {status}").into());

@@ -6,7 +6,7 @@ use aoe_core::{PlayerId, TileCoord};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 mod raster;
-use raster::{coalesce, raster};
+use raster::{coalesce, raster, raster_changed};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HoldingSpan {
@@ -74,7 +74,12 @@ impl GameWorld {
             sources.extend(self.steward_land_sources());
             sources.extend(self.vassal_land_sources());
             if cache.epoch.is_none() || cache.sources != sources {
-                cache.rows = raster(&sources, self.config.width_tiles, self.config.height_tiles);
+                let (width, height) = (self.config.width_tiles, self.config.height_tiles);
+                if cache.epoch.is_none() {
+                    cache.rows = raster(&sources, width, height);
+                } else {
+                    raster_changed(&mut cache.rows, &cache.sources, &sources, width, height);
+                }
                 cache.totals.clear();
                 let mut totals = BTreeMap::new();
                 for s in cache.rows.values().flatten() {
