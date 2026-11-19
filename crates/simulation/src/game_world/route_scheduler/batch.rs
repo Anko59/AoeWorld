@@ -107,7 +107,11 @@ impl GameWorld {
             });
         }
         for search in &mut searches {
-            if search.denied.swap(false, Ordering::Relaxed) {
+            // A denied chunk only asks for more allowance: a poll that still
+            // ended (a path found locally) keeps its result.
+            if search.denied.swap(false, Ordering::Relaxed)
+                && matches!(search.result, Some(RoutePlannerPoll::Pending))
+            {
                 // It wanted a cold chunk: alone now, from the tick's budget.
                 let budget = &self.navigation_preparation_budget;
                 search.result = Some(self.poll_search(search, budget));
