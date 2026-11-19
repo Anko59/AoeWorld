@@ -22,8 +22,8 @@ use std::{
 };
 
 /// Read by `make check-fixtures` to explain a save that no longer loads.
-/// Version 3 includes shelter intent and active Town Bells in the world snapshot.
-pub const SAVE_VERSION: u16 = 3;
+/// Version 4 includes last-seen enemy buildings in the world snapshot.
+pub const SAVE_VERSION: u16 = 4;
 const MAX_NAME: usize = 60;
 const MAX_SAVE_BYTES: u64 = 2 << 30;
 

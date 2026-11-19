@@ -9,9 +9,9 @@
 //! entity identities (which AI processes hold) are preserved.
 //!
 //! Kept beyond that: Steward, General and Vassal settings, army groups and
-//! their waypoints, queued moves, hunts, animals and fog exploration. Not kept,
-//! and restarted: route searches, trade runs, fog memory of destroyed buildings,
-//! carcasses, and what a General was deciding. `RestoreReport` counts misses.
+//! their waypoints, queued moves, hunts, animals, fog exploration and last sightings.
+//! Route searches, trade runs, carcasses and a General's current decisions are
+//! restarted. `RestoreReport` counts misses.
 mod general;
 mod orders;
 mod rate;
@@ -104,28 +104,10 @@ impl GameWorld {
                     .queues
                     .project(self.economy.construction.project(b))
             })
-            .map(|b| BuildingRecord {
-                id: b.id,
-                player: b.player,
-                kind: b.kind,
-                footprint: b.footprint,
-                age: b.age,
-                complete: b.state == ConstructionState::Complete,
-                bridge_span: b.bridge_span,
-                training_queue: b.training_queue.iter().copied().collect(),
-                general_recruit: self.economy.generals.recruits.get(&b.id).copied(),
-                last_hit: b.last_hit,
-                work_done: b.work_done,
-                work_total: b.work_total,
-                hp: b.hp,
-                max_hp: b.max_hp,
-                los: b.los,
-                food_remaining: b.food_remaining,
-                research: b.research,
-                gate_open: b.gate_open,
-                gate_locked: b.gate_locked,
-                rally_point: b.rally_point,
-                farm_reseeds: b.farm_reseeds,
+            .map(|b| {
+                let mut record = BuildingRecord::from(b.as_ref());
+                record.general_recruit = self.economy.generals.recruits.get(&b.id).copied();
+                record
             })
             .collect();
         // A save holds reference ticks, so it resumes at any rate.
@@ -142,6 +124,7 @@ impl GameWorld {
             formations: self.formation_records(),
             animals: self.animal_records(),
             explored: self.explored_records(),
+            building_memory: self.building_memory_records(),
             town_bells: self.economy.town_bells.iter().copied().collect(),
         };
         Some(snapshot.retimed(self.config.tick_hz, REFERENCE_HZ))
@@ -220,6 +203,7 @@ impl GameWorld {
             });
         }
         self.restore_general_recruits(&snapshot.buildings, &snapshot.units);
+        self.restore_building_memory(&snapshot.building_memory);
         self.set_fog_disabled(snapshot.fog_disabled);
         self.resume_jobs(snapshot, &mut report);
         self.rebind_trade_units();
