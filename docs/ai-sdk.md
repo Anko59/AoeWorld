@@ -244,7 +244,8 @@ reserve and waiting for the server's count before adding another entry.
   applies current age, prerequisites and unit-line upgrades. `unit_profile(kind)` gives the
   base line, age and combat roles. `unit_counter_bonus` and `unit_building_bonus` give
   base class bonuses. `technologies()` includes prerequisites, line upgrades, unit unlocks
-  and scoped stat improvements. `building_cost`, `unit_cost` and `tech_cost` give base costs.
+  and scoped stat improvements. `building_cost`, `unit_cost` and `tech_cost` give base costs;
+  `build_seconds`, `building_size` and `building_requires` give construction rules.
 
 `world.land_route(x, y, tx, ty)` searches explored terrain and ignores temporary occupancy.
 `None` means unknown, disconnected or beyond the query bound. Rivers, cliff edges and blocked
@@ -310,7 +311,7 @@ attack state, counters):
 
 | Module | Job |
 | --- | --- |
-| `play/buildorder.py` | the plan: stage (Dark, advance, Feudal), when to Loom and click Feudal Age, which buildings and upgrades come next |
+| `play/buildorder.py` | the plan: stage (Dark, advance, Feudal), when to Loom and click Feudal Age, which buildings come next |
 | `play/research.py` | advances ages, then schedules affordable research from the SDK technology tree |
 | `play/economy.py` | villagers without pause, shares of food, wood, gold and stone, sheep then berries then deer and boar, farms when the land runs dry |
 | `play/constructor.py` | Lumber Camp and Mill, camps beside far resources, Barracks, Archery Range, Blacksmith |

@@ -126,7 +126,10 @@ class ResearchManager:
                 needed = (needed[0] + food_float, needed[1] + wood_float, *needed[2:])
             if not ctx.can_afford(needed):
                 if arms and ctx.imperial and gold_goal == 0 and ctx.can_afford((needed[0], needed[1], 0, needed[3])):
+                    # Hold the gold now, so cheaper rows later in this pass
+                    # cannot spend what the higher-priority upgrade waits for.
                     gold_goal = cost[2]
+                    ctx.spent[2] += min(max(0, ctx.economy.gold - ctx.spent[2]), gold_goal)
                 continue
             building = min(available, key=lambda b: (b.queue_length, b.id))
             self.claim(ctx, row, building)
@@ -136,9 +139,6 @@ class ResearchManager:
                 available.clear()  # keep sibling military producers training
             else:
                 available.remove(building)
-        if gold_goal:
-            remaining = max(0, ctx.economy.gold - ctx.spent[2])
-            ctx.spent[2] += min(remaining, gold_goal)
 
     def first_castle_upgrade(self, ctx, candidates, started, sites, fielded) -> bool:
         """Fund the opening Castle upgrade before spending the next food delivery."""
