@@ -81,6 +81,10 @@ class Blackboard:
     land_failures: dict[tuple[tuple[int, int], tuple[int, int]], int] = field(default_factory=dict)
     #: villager id -> tick of its last job, (villager, animal) -> hunt orders given.
     assigned: dict[int, int] = field(default_factory=dict)
+    idle_after: int = -1
+    worker_view_until: int = 0
+    #: Worker -> (Steward, first idle tick), retained only while idle under that Steward.
+    steward_idle: dict[int, tuple[int, int]] = field(default_factory=dict)
     hunt_tries: dict[tuple[int, int], int] = field(default_factory=dict)
     #: villager id -> animal it was sent after; animal id -> ((hp, meat), tick it last changed).
     hunters: dict[int, int] = field(default_factory=dict)

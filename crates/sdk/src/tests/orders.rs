@@ -141,6 +141,43 @@ fn all_orders() -> Vec<Order> {
 }
 
 #[test]
+fn bulk_market_trade_uses_the_existing_browser_order() {
+    let message = Order::MarketTrade {
+        building: id(10),
+        resource: TradeResource::Wood,
+        buy: false,
+        lots: 64,
+    }
+    .message(9)
+    .unwrap();
+    assert_eq!(
+        message,
+        M::MarketTradeOrder {
+            sequence: 9,
+            building_id: id(10),
+            resource: TradeResource::Wood,
+            buy: false,
+            lots: 64,
+        },
+    );
+    let bytes = encode_gameplay_client(&message).unwrap();
+    assert_eq!(decode_gameplay_client(&bytes).unwrap(), message);
+}
+
+#[test]
+fn out_of_range_market_lots_are_rejected_before_sending() {
+    for lots in [0, aoe_protocol::MARKET_MAX_LOTS + 1] {
+        let order = Order::MarketTrade {
+            building: id(10),
+            resource: TradeResource::Wood,
+            buy: false,
+            lots,
+        };
+        assert!(order.message(9).is_none(), "lots = {lots}");
+    }
+}
+
+#[test]
 fn bridge_order_uses_the_same_bounded_wire_as_the_browser() {
     let order = Order::BuildBridge {
         builders: vec![id(3)],

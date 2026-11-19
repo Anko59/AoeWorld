@@ -292,3 +292,42 @@ async fn commands_issued_while_rejoining_are_kept_or_reported() {
     assert!(stats.reconnect_seconds > 0.0);
     assert!(!client.is_closed());
 }
+
+#[tokio::test]
+async fn a_view_focus_clamps_to_the_map_and_restores_the_original_policy() {
+    use aoe_sdk::{TileRect, ViewPolicy};
+
+    async fn wait_for_region(client: &Client, expected: TileRect) {
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let decision = client.next_decision().await.unwrap();
+                if decision.world.fog().region() == Some(expected) {
+                    return;
+                }
+            }
+        })
+        .await
+        .expect("the server sends fog for the requested region");
+    }
+
+    let url = format!("http://{}", server().await);
+    let info = start_match(&url, SECRET, &MatchMap::flat(500, 3), &[SlotKind::Ai])
+        .await
+        .unwrap();
+    let home = TileRect::from_xywh(40, 40, 40, 32);
+    let client = Client::connect(
+        &url,
+        &info.slots[0].token,
+        ConnectOptions {
+            view: ViewPolicy::Fixed(home),
+            ..ConnectOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    wait_for_region(&client, home).await;
+    client.focus_view(Some(TileCoord::new(499, 499)));
+    wait_for_region(&client, TileRect::from_xywh(460, 468, 40, 32)).await;
+    client.focus_view(None);
+    wait_for_region(&client, home).await;
+}

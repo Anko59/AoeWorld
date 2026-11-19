@@ -108,6 +108,25 @@ def test_reseed_sdk_uses_authoritative_ordinary_orders(server, secret):
         pytest.fail("reseed order was not acknowledged")
 
 
+def test_bulk_market_trade_receives_the_server_verdict(server, secret):
+    info = new_match(server, secret, ["ai"])
+    with aoeworld.connect(server, info.slots[0].token, decision_hz=5) as client:
+        first = client.wait_decision(timeout=10)
+        center = first.world.town_center()
+        sequence = client.market_trade(center.id, aoeworld.TradeResource.WOOD, False, 32)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            decision = client.wait_decision(timeout=2)
+            if decision is None:
+                continue
+            for event in decision.events:
+                if event.kind == "order_result" and event.sequence == sequence:
+                    assert event.result == aoeworld.CommandResult.REJECTED_NO_MARKET
+                    assert decision.world.economy.wood == 200
+                    return
+        pytest.fail("bulk market trade was not acknowledged")
+
+
 def test_scout_sdk_toggles_the_server_owned_exploration_state(server, secret):
     info = new_match(server, secret, ["ai"])
     with aoeworld.connect(server, info.slots[0].token, decision_hz=5) as client:

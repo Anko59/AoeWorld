@@ -131,6 +131,11 @@ impl World {
     fn passable(&self, x: i32, y: i32) -> Option<bool> {
         self.inner.passable(TileCoord::new(x, y))
     }
+    /// Whether this tile has enough exact land data to be a route endpoint.
+    fn land_known(&self, x: i32, y: i32) -> bool {
+        self.inner.land_known(TileCoord::new(x, y))
+    }
+
     /// A bounded route over explored public land; unknown or disconnected returns None.
     fn land_route(&self, x: i32, y: i32, tx: i32, ty: i32) -> Option<Vec<(i32, i32)>> {
         self.inner.land_route(TileCoord::new(x, y), TileCoord::new(tx, ty))

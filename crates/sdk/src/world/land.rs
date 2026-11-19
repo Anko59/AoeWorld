@@ -73,12 +73,15 @@ impl World {
         Some(path)
     }
 
-    fn known_land(&self, tile: TileCoord) -> bool {
-        self.in_bounds(tile) && self.fog.explored_exactly(tile) && self.passable(tile) == Some(true)
+    /// Whether this tile has enough exact land data to be a route endpoint.
+    pub fn land_known(&self, tile: TileCoord) -> bool {
+        self.in_bounds(tile)
+            && (self.map_hash.is_none()
+                || (self.fog.explored_exactly(tile) && self.passable(tile) == Some(true)))
     }
 
     fn land_step(&self, from: TileCoord, to: TileCoord) -> bool {
-        if !self.known_land(to) {
+        if !self.land_known(to) {
             return false;
         }
         if let Some(clear) = self.bridges.bridge_edge(from, to) {
@@ -89,7 +92,7 @@ impl World {
         }
         if from.x != to.x && from.y != to.y {
             for corner in [TileCoord::new(from.x, to.y), TileCoord::new(to.x, from.y)] {
-                if !self.known_land(corner) || !self.catalog.land_edge(from, corner) {
+                if !self.land_known(corner) || !self.catalog.land_edge(from, corner) {
                     return false;
                 }
             }
@@ -103,7 +106,7 @@ impl World {
         goal: TileCoord,
         frontier: bool,
     ) -> Option<Vec<TileCoord>> {
-        if !self.known_land(from) || (!frontier && !self.known_land(goal)) {
+        if !self.land_known(from) || (!frontier && !self.land_known(goal)) {
             return None;
         }
         let mut records = Records::from([(from, (0, None))]);

@@ -180,6 +180,13 @@ pub enum Order {
         building: EntityId,
         resource: TradeResource,
     },
+    /// Buy or sell several ordinary lots in one market order.
+    MarketTrade {
+        building: EntityId,
+        resource: TradeResource,
+        buy: bool,
+        lots: u32,
+    },
 }
 
 impl Order {
@@ -400,6 +407,23 @@ impl Order {
                 building_id: building,
                 resource,
             },
+            Order::MarketTrade {
+                building,
+                resource,
+                buy,
+                lots,
+            } => {
+                if !(1..=aoe_protocol::MARKET_MAX_LOTS).contains(&lots) {
+                    return None;
+                }
+                M::MarketTradeOrder {
+                    sequence,
+                    building_id: building,
+                    resource,
+                    buy,
+                    lots,
+                }
+            }
         })
     }
 

@@ -13,7 +13,7 @@ from .config import Config
 from .play.constructor import Constructor
 from .context import Context, OrderBudgetExhausted
 from .geometry import dist
-from .play.economy import EconomyManager
+from .play.economy import EconomyManager, unemployed
 from .blackboard import Blackboard
 from .play.military import MilitaryManager
 from .play.naval import NavalManager
@@ -23,6 +23,7 @@ from .play.bridges import BridgeManager
 from .play.management import ManagementManager
 from .play.market import MarketManager
 from .play.fortification import FortificationManager
+from .worker_view import survey_workers
 
 #: Refusals that mean "this target will never work for this unit".
 HOPELESS = (
@@ -71,6 +72,9 @@ class Brain:
         ctx.board.stats["villagers_peak"] = max(ctx.board.stats.get("villagers_peak", 0), len(ctx.villagers))
         if ctx.economy is None:
             return
+        if ctx.late_economy and any(unemployed(v) for v in ctx.villagers):
+            ctx.land_query_limit -= min(ctx.config.idle_land_query_reserve,
+                                        ctx.land_query_limit // 2)
         # Each stage gets an order slice; idle stages leave room for later work.
         def run(limit, action):
             if ctx.orders >= ctx.config.orders_per_decision:
@@ -103,7 +107,9 @@ class Brain:
                         and ctx.board.stats.get("army_peak", 0) < ctx.config.castle_army_min)
         if forming_army:
             run(4, self.military.train)
+        ctx.land_query_limit = ctx.config.land_queries_per_decision
         run(18, self.economy.work)
+        survey_workers(ctx)
         run(2, self.constructor.step)
         if not forming_army:
             run(4, self.military.train)
