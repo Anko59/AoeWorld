@@ -31,12 +31,48 @@ class CombatManager:
         if self.defend(ctx, army):
             return
         if mem.attacking:
-            self.attack(ctx, army)
-        elif len(army) >= ctx.config.attack_army_size:
-            mem.attacking = True
-            mem.attack_launch_size = len(army)
-            mem.bump("attacks_launched")
-            self.attack(ctx, army)
+            self.attack(ctx, self.field_army(ctx, army))
+        elif army and len(army) >= ctx.config.attack_army_size:
+            formed = self.assembled(ctx, army)
+            if len(formed) >= ctx.config.attack_army_size:
+                mem.attacking = True
+                mem.attack_launch_size = len(formed)
+                mem.attack_members = {u.id for u in formed}
+                mem.bump("attacks_launched")
+                self.attack(ctx, formed)
+
+    def assembled(self, ctx: Context, army: list) -> list:
+        """Find the strongest local muster, including troops across cell edges."""
+        size = ctx.config.army_muster_tiles
+        cells: dict[Tile, list] = {}
+        for unit in army:
+            x, y = unit.tile
+            cells.setdefault((x // size, y // size), []).append(unit)
+
+        def adjacent(cell: Tile):
+            x, y = cell
+            return (cells.get((x + dx, y + dy), ()) for dx in (-1, 0, 1) for dy in (-1, 0, 1))
+
+        def score(cell: Tile):
+            x, y = cell
+            return (-sum(len(group) for group in adjacent(cell)),
+                    dist((x * size + size // 2, y * size + size // 2), ctx.home), cell)
+
+        return [unit for group in adjacent(min(cells, key=score)) for unit in group]
+
+    def field_army(self, ctx: Context, available: list) -> list:
+        members = ctx.board.attack_members
+        if not members:
+            return available
+        field = [u for u in ctx.army if u.alive and u.id in members]
+        members.intersection_update(u.id for u in field)
+        middle = centroid([u.tile for u in field])
+        if middle is not None:
+            reinforcements = [u for u in available if u.id not in members
+                              and dist(u.tile, middle) <= ctx.config.army_muster_tiles]
+            members.update(u.id for u in reinforcements)
+            field.extend(reinforcements)
+        return field
 
     def recover_marches(self, ctx: Context) -> None:
         """Release accepted routes that stopped making observable progress.
@@ -170,9 +206,11 @@ class CombatManager:
         mem, cfg = ctx.board, ctx.config
         if not army:
             mem.attacking = False
+            mem.attack_members.clear()
             return
         if len(army) < cfg.retreat_fraction * mem.attack_launch_size:
             mem.attacking = False
+            mem.attack_members.clear()
             mem.bump("retreats")
             return
         middle = nearest(army, centroid([u.tile for u in army]) or ctx.home).tile

@@ -8,8 +8,62 @@ from aoe_ai.blackboard import Blackboard
 from aoe_ai.config import Config
 from aoe_ai.context import Context
 from aoe_ai.play.combat import CombatManager
+from aoe_ai.play.military import MilitaryManager
 from test_logic import play
 from fakes import FakeClient, FakeWorld, base, building, decision, order_result, unit
+
+
+def test_production_keeps_a_staging_rally_while_the_army_is_attacking():
+    units, buildings = base(3)
+    barracks = building(600, BuildingKind.BARRACKS, tile=(68, 53))
+    barracks.rally_position = None
+    world = FakeWorld(units, buildings + [barracks])
+    board, client = Blackboard(attacking=True), FakeClient()
+    manager = MilitaryManager()
+    manager.rally(Context(client, decision(world), board, Config()))
+
+    (structure, x, y), = client.named("set_rally")
+    assert structure == barracks.id
+    assert (x, y) != barracks.center
+    assert world.land_route(*barracks.center, x, y)
+
+    barracks.rally_position = (x, y)
+    client = FakeClient()
+    manager.rally(Context(client, decision(world), board, Config()))
+    assert client.named("set_rally") == []
+
+
+def test_a_scattered_roster_keeps_staging_even_above_the_attack_threshold():
+    units, buildings = base(3)
+    army = [unit(300 + i, UnitKind.SPEARMAN, tile=(60, 60)) for i in range(7)]
+    army += [unit(400 + i, UnitKind.SPEARMAN, tile=(180, 150)) for i in range(7)]
+    enemy = building(900, BuildingKind.HOUSE, tile=(90, 60), mine=False)
+    world = FakeWorld(units + army, buildings, enemy_buildings=[enemy])
+    board, client = Blackboard(), FakeClient()
+    CombatManager().step(Context(client, decision(world), board, Config()))
+
+    assert not board.attacking
+    assert client.named("attack") == []
+    assert client.named("formation_move") == []
+
+
+def test_a_staged_force_attacks_the_nearest_reachable_target_without_stragglers():
+    units, buildings = base(3)
+    staged = [unit(300 + i, UnitKind.SPEARMAN, tile=(60, 60)) for i in range(12)]
+    far = [unit(400 + i, UnitKind.SPEARMAN, tile=(160, 170)) for i in range(9)]
+    far += [unit(500 + i, UnitKind.SPEARMAN, tile=(220, 200)) for i in range(8)]
+    blocked = building(900, BuildingKind.HOUSE, tile=(71, 59), mine=False)
+    reachable = building(901, BuildingKind.HOUSE, tile=(85, 59), mine=False)
+    distant = building(902, BuildingKind.HOUSE, tile=(160, 185), mine=False)
+    world = FakeWorld(units + staged + far, buildings, enemy_buildings=[blocked, reachable, distant])
+    land_route = world.land_route
+    world.land_route = lambda x, y, tx, ty: None if (tx, ty) == blocked.center else land_route(x, y, tx, ty)
+    board, client = Blackboard(), FakeClient()
+    CombatManager().step(Context(client, decision(world), board, Config()))
+
+    assert board.attack_target == reachable.id
+    assert set(client.named("attack")) == {(soldier.id, reachable.id) for soldier in staged}
+    assert client.named("formation_move") == []
 
 
 @pytest.mark.parametrize("known_building", [False, True])

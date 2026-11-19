@@ -72,6 +72,7 @@ class Blackboard:
     attack_launch_size: int = 0
     attack_target: Optional[int] = None
     attacking: bool = False
+    attack_members: set[int] = field(default_factory=set)
     #: Which far point the army marches to when no enemy building is known.
     search_index: int = 0
     #: Destinations a move order was refused for.
@@ -104,6 +105,7 @@ class Blackboard:
     manager_settings: dict[int, tuple] = field(default_factory=dict)
     general_training: dict[int, bool] = field(default_factory=dict)
     military_cursor: int = 0
+    military_rally_cursor: int = 0
     production_cursor: int = 0
     expansion_cursor: int = 0
     hold_villagers_tick: int = -10**9
