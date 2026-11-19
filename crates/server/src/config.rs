@@ -37,17 +37,33 @@ impl Config {
         }
         Ok(Some((PathBuf::from(path), ticks)))
     }
-    /// Simulation steps per second when `AOE_TICK_HZ` is unset: ten, with
+    /// Simulation steps per second when `AOE_SIM_HZ` is unset: ten, with
     /// the client interpolating between them.
-    pub const DEFAULT_TICK_HZ: u32 = 10;
-    /// The rate every world of this server steps at: `AOE_TICK_HZ`, as
-    /// `from_env` validates it, else the default.
-    pub(crate) fn tick_hz_from_env() -> u32 {
+    pub const DEFAULT_SIM_HZ: u32 = 10;
+    /// The rate every world this server creates or resumes steps at:
+    /// `AOE_SIM_HZ` (1..=60), else the default. `AOE_TICK_HZ` only sets how
+    /// many ticks run per wall second (tests raise it to play faster).
+    pub(crate) fn sim_hz_from_env() -> u32 {
+        env::var("AOE_SIM_HZ")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .filter(|hz| (1..=60).contains(hz))
+            .unwrap_or(Self::DEFAULT_SIM_HZ)
+    }
+    /// Ticks per wall second for a world stepping at `world_hz`:
+    /// `AOE_TICK_HZ` when set (tests raise it to play faster); else the world's
+    /// own rate when it is this server's simulation rate; else the 20 Hz ticker
+    /// the demos with their own clock (1, 4 and 5 Hz) were made for.
+    pub(crate) fn pace_hz(world_hz: u32) -> u32 {
         env::var("AOE_TICK_HZ")
             .ok()
             .and_then(|value| value.parse().ok())
             .filter(|hz| (1..=60).contains(hz))
-            .unwrap_or(Self::DEFAULT_TICK_HZ)
+            .unwrap_or(if world_hz == Self::sim_hz_from_env() {
+                world_hz
+            } else {
+                aoe_core::REFERENCE_HZ
+            })
     }
     /// Local scenario/debug switch, applied by the authority at world creation.
     pub(crate) fn fog_disabled_from_env() -> bool {
@@ -102,7 +118,9 @@ impl Config {
     pub fn from_env() -> Result<Self, String> {
         let bind = env::var("AOE_BIND").unwrap_or_else(|_| "127.0.0.1:8080".to_owned());
         let name = env::var("AOE_SCENARIO").unwrap_or_else(|_| "smoke".to_owned());
-        let tick_hz = env::var("AOE_TICK_HZ").unwrap_or_else(|_| Self::DEFAULT_TICK_HZ.to_string());
+        // Ticks per wall second follow the simulation rate unless raised.
+        let tick_hz =
+            env::var("AOE_TICK_HZ").unwrap_or_else(|_| Self::sim_hz_from_env().to_string());
         let mut config = Self::parse(&bind, &name, &tick_hz)?;
         if let Some(path) = env::var_os("AOE_ASSET_PACK").filter(|value| !value.is_empty()) {
             let root = PathBuf::from("local-assets/packs")

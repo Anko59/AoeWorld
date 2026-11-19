@@ -16,6 +16,11 @@ impl GameplayService {
     pub fn set_paused(&self, paused: bool) {
         self.paused.store(paused, Ordering::Release);
     }
+
+    /// The rate the match's world steps at; the clock paces it from this.
+    pub async fn tick_hz(&self) -> u32 {
+        self.world.read().await.config().tick_hz
+    }
 }
 
 #[derive(Deserialize)]

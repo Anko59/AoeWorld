@@ -79,6 +79,7 @@ class ArenaServer:
             os.environ,
             AOE_BIND=f"127.0.0.1:{self.port}",
             AOE_MATCH_TOKEN=SECRET,
+            AOE_SIM_HZ=str(TICK_HZ),
             AOE_TICK_HZ=str(TICK_HZ),
             AOE_ARENA="1",
             AOE_MAP_PACKAGE_DIRECTORY=os.environ.get("AOE_ARENA_PACKAGES") or self.packages.name,

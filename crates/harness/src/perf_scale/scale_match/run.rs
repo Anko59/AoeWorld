@@ -105,6 +105,7 @@ fn start_server(options: &Options, root: &Path, work: &Path) -> Result<Server, B
             fs::canonicalize(&options.package_directory)?,
         )
         .env("AOE_BUILD_SHA", git(&["rev-parse", "HEAD"]))
+        .env("AOE_SIM_HZ", options.tick_hz().to_string())
         .env("AOE_TICK_HZ", options.tick_hz().to_string())
         .stdout(Stdio::from(log.try_clone()?))
         .stderr(Stdio::from(log));

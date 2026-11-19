@@ -93,7 +93,7 @@ impl GameplayService {
         // server paces it. A demo that chose its own clock keeps it, and a
         // resumed world was given its rate before its save was restored.
         if world.tick().0 == 0 && world.config().tick_hz == aoe_core::DEFAULT_SIMULATION_HZ {
-            world.set_tick_hz(crate::Config::tick_hz_from_env());
+            world.set_tick_hz(crate::Config::sim_hz_from_env());
         }
         if crate::Config::fog_disabled_from_env() {
             world.set_fog_disabled(true);

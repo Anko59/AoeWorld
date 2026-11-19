@@ -296,7 +296,7 @@ pub(super) async fn build(
         let cancelled = || cancelled.load(Ordering::Acquire);
         match resume {
             Some(loaded) => {
-                let hz = crate::Config::tick_hz_from_env();
+                let hz = crate::Config::sim_hz_from_env();
                 resume_service(
                     package,
                     provider,

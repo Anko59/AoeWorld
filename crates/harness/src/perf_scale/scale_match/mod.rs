@@ -58,8 +58,8 @@ pub struct Options {
     /// Militia every player starts with besides the standard kit (seeded, not played).
     #[arg(long, default_value_t = 0)]
     pub start_militia: u32,
-    /// Simulation steps per second the server runs at (`AOE_TICK_HZ`);
-    /// default the server's own.
+    /// Simulation steps per second the server's worlds step and run at
+    /// (`AOE_SIM_HZ` and `AOE_TICK_HZ`); default the server's own.
     #[arg(long)]
     pub tick_hz: Option<u32>,
     /// Wall-clock minutes the bots play after they are connected.
@@ -142,7 +142,7 @@ pub struct Options {
 impl Options {
     /// The rate this run's server steps at.
     pub(super) fn tick_hz(&self) -> u32 {
-        self.tick_hz.unwrap_or(aoe_server::Config::DEFAULT_TICK_HZ)
+        self.tick_hz.unwrap_or(aoe_server::Config::DEFAULT_SIM_HZ)
     }
 }
 
