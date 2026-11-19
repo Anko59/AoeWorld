@@ -214,6 +214,7 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
         };
         send(client, message);
     }
+    let mut attackers = Vec::new();
     for id in client.selected.units.clone() {
         if formation_move && military.binary_search(&id).is_ok() {
             continue;
@@ -243,11 +244,10 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
                 unit_ids: vec![id],
                 animal_id: target,
             },
-            (ClickOrder::Attack, Some(target), _) => Message::AttackOrder {
-                sequence,
-                entity_id: id,
-                target_id: target,
-            },
+            (ClickOrder::Attack, Some(_), _) => {
+                attackers.push(id);
+                continue;
+            }
             (ClickOrder::Gather, _, Some((resource_id, _))) => Message::GatherOrder {
                 sequence,
                 entity_id: id,
@@ -257,18 +257,30 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
                 sequence,
                 entity_id: id,
                 destination,
-                attack_move: client.village.attack_move && unit.kind != UnitKind::General,
+                attack_move: client.village.attack_move,
             },
             _ => Message::MoveOrder {
                 sequence,
                 entity_id: id,
                 destination,
-                attack_move: client.village.attack_move && unit.kind != UnitKind::General,
+                attack_move: client.village.attack_move,
             },
         };
         send(client, message);
         let blocker = map::feedback::blocker_at(client, destination.tile_floor());
         client.order_feedback.record(sequence, blocker);
+    }
+    if let Some(target_id) = animal.or(enemy) {
+        for ids in attackers.chunks(aoe_core::MAX_FORMATION_MEMBERS) {
+            send(
+                client,
+                Message::AttackOrder {
+                    sequence: client.next_sequence,
+                    entity_ids: ids.to_vec(),
+                    target_id,
+                },
+            );
+        }
     }
     if client.village.attack_move {
         super::waypoints::ping(client, destination);
@@ -317,7 +329,7 @@ fn building_attack_at_pointer(client: &mut Client, point: ScreenPoint) -> bool {
             client,
             Message::AttackOrder {
                 sequence,
-                entity_id,
+                entity_ids: vec![entity_id],
                 target_id,
             },
         );
@@ -350,7 +362,10 @@ fn military(client: &Client) -> Vec<aoe_core::EntityId> {
             client.units.get(id).is_some_and(|u| {
                 u.hp > 0
                     && u.player == owner(client)
-                    && !matches!(u.kind, UnitKind::Villager | UnitKind::General)
+                    && !matches!(
+                        u.kind,
+                        UnitKind::Villager | UnitKind::Steward | UnitKind::Vassal
+                    )
                     && !u.kind.is_naval()
             })
         })

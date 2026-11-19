@@ -80,12 +80,12 @@ export function initInterface() {
     const building=count>0 && selected.every(actor=>buildingKinds.includes(actor.kind));
     const owned=count>0 && selected.every(actor=>actor.owned);
     const units=owned && !building;
-    const military=units && count>1 && selected.every(u=>['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,...imperialUnits].includes(u.kind));
+    const military=units && selected.every(u=>['General','Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,...imperialUnits,...gunpowderUnits].includes(u.kind));
     const stance=units && selected.every(u=>!['Villager','FishingShip','TransportShip','Monk','Vassal','Steward','Sheep','Deer','Boar','Wolf'].includes(u.kind));
     show('combat-stance-label',stance);show('command-context',!stance);
     set(byId('combat-stance'), 'value', scene().dataset.selectedStance??'');
-    for(const name of ['line','box','staggered','flank']){show(`formation-${name}`,military);}
-    show('attack-move-units',military);
+    for(const name of ['line','box','staggered','flank']){show(`formation-${name}`,military && count>1);}
+    show('attack-move-units',military && (count>1 || first.kind==='General'));
     show('general-only-move',owned && count===1 && first.kind==='General');
     attribute(byId('selection'),'data-count',String(count));
     attribute(byId('selection'),'data-kind',first?.kind ?? '');

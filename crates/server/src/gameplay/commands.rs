@@ -302,11 +302,21 @@ impl GameplayService {
         entity_id: EntityId,
         target_id: EntityId,
     ) {
+        self.queue_group_attack(session_id, sequence, vec![entity_id], target_id)
+            .await;
+    }
+    pub async fn queue_group_attack(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        entity_ids: Vec<EntityId>,
+        target_id: EntityId,
+    ) {
         self.queue_command(
             session_id,
             sequence,
             PendingAction::Attack {
-                entity_id,
+                entity_ids,
                 target_id,
             },
         )

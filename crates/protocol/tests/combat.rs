@@ -88,13 +88,26 @@ fn round_trips(message: &GameplayServerMessage) {
 fn the_attack_order_and_its_rejections_round_trip() {
     let order = GameplayClientMessage::AttackOrder {
         sequence: 12,
-        entity_id: EntityId(7),
+        entity_ids: vec![EntityId(7), EntityId(11)],
         target_id: EntityId(9),
     };
-    assert_eq!(
-        decode_gameplay_client(&encode_gameplay_client(&order).unwrap()).unwrap(),
-        order
-    );
+    let bytes = encode_gameplay_client(&order).unwrap();
+    assert_eq!(bytes, [7, 12, 2, 7, 11, 9]);
+    assert_eq!(decode_gameplay_client(&bytes).unwrap(), order);
+    for entity_ids in [
+        vec![],
+        vec![EntityId(7); 2],
+        vec![EntityId(7); aoe_core::MAX_FORMATION_MEMBERS + 1],
+    ] {
+        assert!(
+            encode_gameplay_client(&GameplayClientMessage::AttackOrder {
+                sequence: 12,
+                entity_ids,
+                target_id: EntityId(9),
+            })
+            .is_err()
+        );
+    }
     for result in [
         CommandResult::RejectedInvalidTarget,
         CommandResult::RejectedInsufficientResources,

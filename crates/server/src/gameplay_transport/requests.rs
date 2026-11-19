@@ -235,11 +235,11 @@ pub(super) async fn read_requests(
             }
             Ok(GameplayClientMessage::AttackOrder {
                 sequence,
-                entity_id,
+                entity_ids,
                 target_id,
             }) => {
                 service
-                    .queue_attack(session_id, sequence, entity_id, target_id)
+                    .queue_group_attack(session_id, sequence, entity_ids, target_id)
                     .await
             }
             Ok(GameplayClientMessage::BuildOrder {

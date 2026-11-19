@@ -9,6 +9,59 @@ mod admission;
 mod garrison_controls;
 
 #[test]
+fn player_group_commands_keep_a_generals_soldiers() {
+    use aoe_core::{Formation, PlayerId, TileCoord, WorldPosition};
+    use aoe_simulation::{GameWorld, UnitKind};
+    let owner = PlayerId(0);
+    let (mut world, _) = GameWorld::general_demo(Seed(7)).unwrap();
+    world.set_fog_disabled(true);
+    let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
+    let general = world
+        .spawn_kind(owner, UnitKind::General, at(107, 132))
+        .unwrap();
+    let soldier = world
+        .units()
+        .find(|u| world.general_controller(u.id) == Some(general))
+        .unwrap()
+        .id;
+    let enemy = world
+        .spawn_kind(PlayerId(1), UnitKind::Militia, at(120, 132))
+        .unwrap();
+    let ids = vec![general, soldier];
+    for (destination, queued) in [(at(125, 136), false), (at(137, 136), true)] {
+        assert_eq!(
+            apply(
+                &mut world,
+                owner,
+                PendingAction::Formation {
+                    unit_ids: ids.clone(),
+                    formation: Formation::Line,
+                    destination: Some(destination),
+                    queued,
+                    attack_move: true,
+                }
+            ),
+            CommandResult::Accepted
+        );
+    }
+    assert_eq!(world.move_destinations(general).len(), 2);
+    assert_eq!(
+        apply(
+            &mut world,
+            owner,
+            PendingAction::Attack {
+                entity_ids: ids,
+                target_id: enemy,
+            }
+        ),
+        CommandResult::Accepted
+    );
+    assert!(world.move_destinations(general).is_empty());
+    assert_eq!(world.general_controller(soldier), Some(general));
+    assert_eq!(world.unit(soldier).unwrap().attack_target, Some(enemy));
+}
+
+#[test]
 fn queued_build_actions_keep_the_first_foundation_active_and_charge_each_one() {
     use aoe_core::{PlayerId, TileCoord, WorldConfig, WorldPosition};
     use aoe_simulation::{BuildingKind, GameWorld};
@@ -289,7 +342,7 @@ fn attack_orders_apply_with_typed_rejections_and_reach_the_wire_state() {
         )
         .unwrap();
     let attack = |entity_id, target_id| PendingAction::Attack {
-        entity_id,
+        entity_ids: vec![entity_id],
         target_id,
     };
     let own = PlayerId(0);
@@ -378,7 +431,7 @@ fn an_attack_without_a_reachable_position_reports_an_unreachable_route() {
             &mut world,
             PlayerId(0),
             PendingAction::Attack {
-                entity_id: attacker,
+                entity_ids: vec![attacker],
                 target_id: target,
             }
         ),

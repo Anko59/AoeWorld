@@ -389,7 +389,7 @@ impl Order {
             },
             Order::Attack { unit, target } => M::AttackOrder {
                 sequence,
-                entity_id: unit,
+                entity_ids: vec![unit],
                 target_id: target,
             },
             Order::Hunt { units, animal } => M::HuntOrder {

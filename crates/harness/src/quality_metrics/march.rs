@@ -42,7 +42,29 @@ pub(super) struct Scene {
     pub limit: u64,
 }
 pub(super) fn prepare(name: &str, path: OrderPath) -> Result<Scene> {
-    let world = aoe_simulation::terrain_fixtures::measurement_world(name);
+    let mut world = aoe_simulation::terrain_fixtures::measurement_world(name);
+    if name == "own-gate" {
+        let mut ids = Vec::new();
+        for n in 0..6 {
+            let kind = if n % 2 == 0 {
+                UnitKind::Militia
+            } else {
+                UnitKind::Archer
+            };
+            ids.push(world.spawn_kind(PlayerId(0), kind, at(103 + n % 3, 102 + n / 3)?)?);
+        }
+        let commander = world.spawn_kind(PlayerId(0), UnitKind::General, at(105, 104)?)?;
+        ids.push(commander);
+        return Ok(Scene {
+            world,
+            ids,
+            goal: at(105, 131)?,
+            path,
+            controller: Some(commander),
+            attack_move: false,
+            limit: 1_600,
+        });
+    }
     let (start, goal, limit) = match name {
         "quality-march" | "long-bridges-40" => ((35, 103), (610, 110), 24_000),
         "long" => ((35, 90), (1045, 100), 40_000),
@@ -176,8 +198,11 @@ impl Scene {
                 let g = self
                     .controller
                     .ok_or("quality order controller is missing")?;
-                self.world.general_player_order(p, &[g], Some(self.goal));
-                self.world.issue_move(g, self.goal)?;
+                if self.attack_move {
+                    self.world.issue_attack_move(g, self.goal)?;
+                } else {
+                    self.world.issue_move(g, self.goal)?;
+                }
             }
             OrderPath::Steward => {
                 self.world.issue_steward_settings(
@@ -223,6 +248,18 @@ impl Scene {
         let mut goals = vec![None; self.ids.len()];
         let mut missing_slots = 0_u64;
         let mut admitted = vec![false; self.ids.len()];
+        let gate = (name == "own-gate")
+            .then(|| {
+                self.world
+                    .buildings()
+                    .find(|b| b.kind.is_gate())
+                    .map(|b| (b.id, b.footprint))
+                    .ok_or("own-gate scene is missing its gate")
+            })
+            .transpose()?;
+        let mut gate_opened = false;
+        let mut entered_gate = vec![false; self.ids.len()];
+        let mut crossed_gate = vec![false; self.ids.len()];
         self.world.set_damage_observation(true);
         self.issue()?;
         let initial_tick = self.world.tick().0;
@@ -231,6 +268,9 @@ impl Scene {
         for tick in 1..=self.limit {
             elapsed = tick;
             self.world.advance();
+            if let Some((id, _)) = gate {
+                gate_opened |= self.world.building(id).is_some_and(|b| b.gate_open);
+            }
             for (n, &id) in self.ids.iter().enumerate() {
                 let slot = self.world.formation_destination_slot(id);
                 if !self.attack_move
@@ -251,6 +291,11 @@ impl Scene {
                 admitted[n] |= unit.is_some_and(|u| u.moving || u.planning) || slot.is_some();
                 let goal = goals[n].unwrap_or(self.goal);
                 let position = unit.map(|u| u.position).unwrap_or(starts[n]);
+                if let Some((_, footprint)) = gate {
+                    let tile = position.tile_floor();
+                    entered_gate[n] |= footprint.contains(tile);
+                    crossed_gate[n] |= entered_gate[n] && tile.y >= footprint.max.y;
+                }
                 let arrived =
                     unit.is_some_and(|u| u.hp > 0) && distance(position, goal) <= 2 * 1024;
                 let shape = self
@@ -300,8 +345,7 @@ impl Scene {
                 break;
             }
         }
-        Ok(
-            json!({"scenario": name, "order_path": self.path.name(), "seed": self.world.config().seed.0,
+        let mut report = json!({"scenario": name, "order_path": self.path.name(), "seed": self.world.config().seed.0,
             "general_squads": squad_count, "setup_starting_resource_nodes": self.world.starting_resources().len(),
             "arrival_target": if self.attack_move { "requested-objective-radius-2-tiles" } else { "assigned-destination-slot-radius-2-tiles" },
             "tick_hz": hz, "deadline_ticks": self.limit, "observed_ticks": elapsed, "setup_ticks": initial_tick,
@@ -311,7 +355,12 @@ impl Scene {
             "units_with_observed_movement_order": admitted.into_iter().filter(|v| *v).count(),
             "missing_slot_unit_ticks": missing_slots,
             "movement": movement.finish(),
-            "fight": self.attack_move.then(|| fight.finish(self.limit,hz)) }),
-        )
+            "fight": self.attack_move.then(|| fight.finish(self.limit,hz)) });
+        if gate.is_some() {
+            report["gate_opened"] = json!(gate_opened);
+            report["crossed_gate"] =
+                json!(crossed_gate.into_iter().filter(|crossed| *crossed).count());
+        }
+        Ok(report)
     }
 }

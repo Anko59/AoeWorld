@@ -288,3 +288,63 @@ fn gate_approach_and_closing_replay_identically_on_one_and_four_workers() {
 
 #[path = "gate_admission.rs"]
 mod admission;
+
+#[test]
+fn a_general_and_his_squads_march_through_an_initially_closed_owned_gate() {
+    let (mut world, _, _) = village();
+    let owner = PlayerId(0);
+    let gate = fort(&mut world, TileCoord::new(100, 100), false)[0];
+    let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
+    let soldiers: Vec<_> = (0..6)
+        .map(|n| {
+            let kind = if n % 2 == 0 {
+                UnitKind::Militia
+            } else {
+                UnitKind::Archer
+            };
+            world
+                .spawn_kind(owner, kind, at(103 + n % 3, 102 + n / 3))
+                .unwrap()
+        })
+        .collect();
+    let general = world
+        .spawn_kind(owner, UnitKind::General, at(105, 104))
+        .unwrap();
+    advance(&mut world, 2);
+    assert!(!world.building(gate).unwrap().gate_open);
+    // A waypoint on the threshold itself must pass owner-specific admission
+    // while the bodies still see a closed gate.
+    world
+        .issue_formation_move(
+            owner,
+            &[general],
+            aoe_core::Formation::Line,
+            at(105, 108),
+            false,
+            true,
+        )
+        .unwrap();
+    world.general_player_order(owner, &[general], Some(at(105, 131)));
+    let mut opened = false;
+    for _ in 0..1600 {
+        world.advance();
+        opened |= world.building(gate).unwrap().gate_open;
+        if soldiers
+            .iter()
+            .chain([&general])
+            .all(|&id| world.unit(id).unwrap().position.tile_floor().y > 108)
+        {
+            break;
+        }
+    }
+    assert!(opened, "the march opens the gate");
+    for id in soldiers {
+        assert_eq!(world.general_controller(id), Some(general));
+        assert!(
+            world.unit(id).unwrap().position.tile_floor().y > 108,
+            "{:?}",
+            world.unit(id)
+        );
+    }
+    assert!(world.unit(general).unwrap().position.tile_floor().y > 108);
+}

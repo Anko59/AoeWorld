@@ -37,7 +37,8 @@ pub enum ClientMessage {
     /// hit until the target dies. Cancelled by a later move or gather order.
     AttackOrder {
         sequence: u64,
-        entity_id: EntityId,
+        #[serde(deserialize_with = "bounded_members")]
+        entity_ids: Vec<EntityId>,
         target_id: EntityId,
     },
     /// Place a foundation of `kind` with its top-left tile at `origin` and send
@@ -275,7 +276,8 @@ pub(super) fn validate(message: &ClientMessage) -> Result<(), Error> {
     {
         return Err(Error::InvalidEconomyState);
     }
-    if let ClientMessage::DeleteOrder { entity_ids, .. } = message
+    if let ClientMessage::DeleteOrder { entity_ids, .. }
+    | ClientMessage::AttackOrder { entity_ids, .. } = message
         && (entity_ids.is_empty()
             || entity_ids.len() > aoe_core::MAX_FORMATION_MEMBERS
             || entity_ids

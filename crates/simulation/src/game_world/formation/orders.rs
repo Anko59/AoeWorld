@@ -38,10 +38,7 @@ impl GameWorld {
         if !self
             .unit_tile_passable(UnitKind::Militia, destination.tile_floor(), &|| false)
             .map_err(GameWorldError::Environment)?
-            || self
-                .economy
-                .blocked_tiles
-                .contains(&destination.tile_floor())
+            || !self.route_tile_admitted(player, destination.tile_floor())
         {
             return Err(GameWorldError::InvalidPosition.into());
         }

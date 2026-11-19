@@ -215,7 +215,7 @@ enum PendingAction {
         building_id: EntityId,
     },
     Attack {
-        entity_id: EntityId,
+        entity_ids: Vec<EntityId>,
         target_id: EntityId,
     },
     Train {

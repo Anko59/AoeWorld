@@ -44,7 +44,8 @@ scenario deadline. A low conditional arrival time cannot offset failed arrivals.
 
 ## Scenarios and commands
 
-The matrix has four march paths and three military combat paths. A Steward
+The matrix has four march paths and three military combat paths, plus a General
+gate crossing. A Steward
 transfers villagers between staffed Town Centers; it has no military attack
 order. Single means one ordinary unit, formation means forty units, General
 means forty adopted soldiers plus their commander, and Steward means forty
@@ -58,11 +59,14 @@ CPU cost or identical army composition.
 | long | Existing 1,010-tile real-terrain fixture, three river detours | 40,000 |
 | quality-march | 575-tile prepared map: ford, two completed bridges, forest walls and one-tile pass | 24,000 |
 | source-river | Locked France elevation, water, vegetation and hydrology pages; a completed bridge on the original river | 8,000 |
+| own-gate | Six soldiers in two squads and their General leave a closed stone fort | 1,600 |
 | attack-move-defended | Equal militia cohorts; defenders also have a Watch Tower | 2,400 |
 | melee | Equal militia cohorts on open ground | 2,400 |
 | ranged | Equal archer cohorts on open ground | 2,400 |
 
-The controlled fixtures use the real map generator, typed river geometry,
+The flat gate fixture records whether the initially closed own gate opened and
+how many of its seven actors crossed to the far side. The other controlled
+fixtures use the real map generator, typed river geometry,
 resource obstacles and ordinary navigation. Their page inputs are synthetic;
 only `source-river` uses real geographical sources. The France setup retains
 its pages and finds a local bridge span and nearby clearings in canonical order.
@@ -165,8 +169,11 @@ Tables display ratios, means and tile deviations to three decimals; the JSON kee
 | source-river | formation | 40 | 40 / 0 | 100.000% | 2237 / 2418 | 1.146 / 1.218 | 908.325 / 1722 | 0 | 2452 / 8000 |
 | source-river | general-squads | 40 | 40 / 0 | 100.000% | 2206 / 2302 | 1.140 / 1.174 | 848.725 / 1740 | 0 | 2339 / 8000 |
 | source-river | steward-transfer | 40 | 35 / 5 | 87.500% | 2374 / 2783 | 1.054 / 1.284 | 89.425 / 176 | 0 | 8000 / 8000 |
+| own-gate | Six soldiers in two squads and their General leave a closed stone fort | 1,600 |
 | attack-move-defended | single | 1 | 0 / 1 | 0.000% | — / — | — / — | 15.000 / 15 | 0 | 2400 / 2400 |
+| own-gate | Six soldiers in two squads and their General leave a closed stone fort | 1,600 |
 | attack-move-defended | formation | 40 | 0 / 40 | 0.000% | — / — | — / — | 631.575 / 1463 | 0 | 2400 / 2400 |
+| own-gate | Six soldiers in two squads and their General leave a closed stone fort | 1,600 |
 | attack-move-defended | general-squads | 40 | 0 / 40 | 0.000% | — / — | — / — | 413.225 / 1843 | 0 | 2400 / 2400 |
 | melee | single | 1 | 1 / 0 | 100.000% | 2395 / 2395 | 1.046 / 1.046 | 20.000 / 20 | 0 | 2400 / 2400 |
 | melee | formation | 40 | 2 / 38 | 5.000% | 2343 / 2357 | 1.065 / 1.071 | 702.825 / 1637 | 0 | 2400 / 2400 |
@@ -189,8 +196,11 @@ Tables display ratios, means and tile deviations to three decimals; the JSON kee
 | source-river | formation | — | 5.039 / 12.393 | 100.000% | 0 |
 | source-river | general-squads | 2 | 1.228 / 10.283 | 100.000% | 360 |
 | source-river | steward-transfer | — | — / — | — | 0 |
+| own-gate | Six soldiers in two squads and their General leave a closed stone fort | 1,600 |
 | attack-move-defended | single | — | 0.037 / 0.280 | 0.000% | 0 |
+| own-gate | Six soldiers in two squads and their General leave a closed stone fort | 1,600 |
 | attack-move-defended | formation | — | 0.644 / 10.894 | 43.958% | 3417 |
+| own-gate | Six soldiers in two squads and their General leave a closed stone fort | 1,600 |
 | attack-move-defended | general-squads | 2 | 0.710 / 5.589 | 97.459% | 17046 |
 | melee | single | — | 0.072 / 0.513 | 0.000% | 0 |
 | melee | formation | — | 0.710 / 12.378 | 43.417% | 1538 |
@@ -201,8 +211,11 @@ Tables display ratios, means and tile deviations to three decimals; the JSON kee
 
 | Scenario | Path | Engaged | First contact min / p50 / p95 | Damage dealt / received (HP) | HP per unit per fight-minute | Exchange |
 | --- | --- | --- | --- | --- | --- | --- |
+| own-gate | Six soldiers in two squads and their General leave a closed stone fort | 1,600 |
 | attack-move-defended | single | 0.000% | — / — / — | 0.000 / 8.000 | 0.000 | 0.000 |
+| own-gate | Six soldiers in two squads and their General leave a closed stone fort | 1,600 |
 | attack-move-defended | formation | 0.000% | — / — / — | 0.000 / 1068.000 | 0.000 | 0.000 |
+| own-gate | Six soldiers in two squads and their General leave a closed stone fort | 1,600 |
 | attack-move-defended | general-squads | 100.000% | 1917 / 2007 / 2154 | 1144.000 / 336.000 | 14.300 | 3.405 |
 | melee | single | 0.000% | — / — / — | 0.000 / 8.000 | 0.000 | 0.000 |
 | melee | formation | 0.000% | — / — / — | 0.000 / 820.000 | 0.000 | 0.000 |

@@ -1,29 +1,25 @@
 use super::*;
 
-/// The units a player's order takes over, and the march it gives a General
-/// among them. Generals must never overwrite these orders.
-fn commanded_units(
-    action: &PendingAction,
-) -> Option<(Vec<EntityId>, Option<aoe_core::WorldPosition>)> {
+/// Individual overrides and formation posture changes apply detachment after
+/// acceptance. Group moves and attacks handle their selections in simulation.
+fn commanded_units(action: &PendingAction) -> Option<Vec<EntityId>> {
     match action {
         PendingAction::Formation {
             unit_ids,
-            destination,
-            queued,
+            destination: None,
             ..
-        } => Some((unit_ids.clone(), destination.filter(|_| !queued))),
+        } => Some(unit_ids.clone()),
         PendingAction::AutoScout {
             entity_id,
             enabled: true,
-        } => Some((vec![*entity_id], None)),
-        PendingAction::GeneralMoveAlone { entity_id, .. } => Some((vec![*entity_id], None)),
+        } => Some(vec![*entity_id]),
+        PendingAction::GeneralMoveAlone { entity_id, .. } => Some(vec![*entity_id]),
         PendingAction::Load { unit_ids, .. } | PendingAction::Hunt { unit_ids, .. } => {
-            Some((unit_ids.clone(), None))
+            Some(unit_ids.clone())
         }
         PendingAction::Move { entity_id, .. }
-        | PendingAction::Attack { entity_id, .. }
         | PendingAction::Stop { entity_id }
-        | PendingAction::Garrison { entity_id, .. } => Some((vec![*entity_id], None)),
+        | PendingAction::Garrison { entity_id, .. } => Some(vec![*entity_id]),
         _ => None,
     }
 }
@@ -65,7 +61,7 @@ pub(in crate::gameplay) fn apply(
             queued,
             attack_move,
         } => match destination {
-            Some(destination) => world.issue_formation_move(
+            Some(destination) => world.issue_player_formation_move(
                 player,
                 &unit_ids,
                 formation,
@@ -169,7 +165,7 @@ pub(in crate::gameplay) fn apply(
             resource_id,
         } => world.issue_gather(player, entity_id, resource_id),
         PendingAction::Attack {
-            entity_id,
+            entity_ids,
             target_id,
         } => {
             let visible = world.unit_visible_to(player, target_id)
@@ -184,7 +180,7 @@ pub(in crate::gameplay) fn apply(
             if !visible {
                 return CommandResult::RejectedInvalidTarget;
             }
-            world.issue_attack(player, entity_id, target_id)
+            world.issue_player_attack(player, &entity_ids, target_id)
         }
         PendingAction::CancelTraining { building_id } => {
             world.issue_cancel_training(player, building_id)
@@ -265,9 +261,9 @@ pub(in crate::gameplay) fn apply(
     };
     use aoe_simulation::{EconomyError as E, GameWorldError as W};
     if result.is_ok()
-        && let Some((ids, destination)) = commanded
+        && let Some(ids) = commanded
     {
-        world.general_player_order(player, &ids, destination);
+        world.general_player_order(player, &ids, None);
     }
     match result {
         Ok(()) => CommandResult::Accepted,

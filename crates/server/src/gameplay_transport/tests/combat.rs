@@ -139,7 +139,7 @@ async fn castle_target_commands_and_a_slow_session_do_not_disconnect_other_socke
         &mut controller,
         GameplayClientMessage::AttackOrder {
             sequence: 2,
-            entity_id: castle,
+            entity_ids: vec![castle],
             target_id: enemy,
         },
     )
@@ -152,7 +152,7 @@ async fn castle_target_commands_and_a_slow_session_do_not_disconnect_other_socke
         &mut controller,
         GameplayClientMessage::AttackOrder {
             sequence: 3,
-            entity_id: castle,
+            entity_ids: vec![castle],
             target_id: EntityId(u32::MAX),
         },
     )
