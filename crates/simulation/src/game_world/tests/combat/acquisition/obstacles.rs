@@ -132,18 +132,33 @@ fn attack_move_does_not_leave_the_march_for_a_wall_ahead_of_a_house() {
 
 #[test]
 fn attack_move_can_stop_to_hit_an_isolated_gate() {
-    let mut w = world();
-    let soldier = w.spawn_militia(OWN, at(100, 100)).unwrap();
-    let gate = obstacle(&mut w, BuildingKind::PalisadeGate);
-    let hp = w.building(gate).unwrap().hp;
-    w.issue_formation_move(
-        OWN,
-        &[soldier],
-        aoe_core::Formation::Line,
-        at(110, 100),
-        false,
-        true,
-    )
-    .unwrap();
-    ticks_until(&mut w, 100, |w| w.building(gate).unwrap().hp < hp);
+    // Ranged units always find a free spot, so later obstacle rechecks find
+    // the same gate again; that must not restart the attack.
+    for kind in [UnitKind::Militia, UnitKind::Archer] {
+        let mut w = world();
+        let soldier = w.spawn_kind(OWN, kind, at(100, 100)).unwrap();
+        let gate = obstacle(&mut w, BuildingKind::PalisadeGate);
+        let hp = w.building(gate).unwrap().hp;
+        w.issue_formation_move(
+            OWN,
+            &[soldier],
+            aoe_core::Formation::Line,
+            at(110, 100),
+            false,
+            true,
+        )
+        .unwrap();
+        ticks_until(&mut w, 100, |w| w.building(gate).unwrap().hp < hp);
+        let resume = w.combat.attackers[&soldier].resume;
+        assert!(resume.is_some(), "{kind:?} keeps its march slot");
+        for _ in 0..w.config.ticks(20) {
+            w.advance();
+        }
+        assert_eq!(
+            w.unit(soldier).unwrap().attack_target,
+            Some(gate),
+            "{kind:?}"
+        );
+        assert_eq!(w.combat.attackers[&soldier].resume, resume, "{kind:?}");
+    }
 }

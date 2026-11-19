@@ -203,6 +203,9 @@ impl GameWorld {
             if buildings == BuildingTargets::RecheckObstacle && probe.preferred_in_sight {
                 self.end_attack(id, changed);
             }
+            // A recheck that finds the obstacle already under attack keeps that
+            // attack: beginning it again would drop the way back to the march.
+            let target = target.filter(|&t| building_attack.is_none_or(|(a, _)| a.target != t));
             if let Some(target) = target.filter(|&target| self.attack_spot_free(id, target)) {
                 if matches!(building_attack, Some((_, false))) {
                     self.stop_movement(self.lookup[&id]);
