@@ -76,6 +76,8 @@ test("view targets use the largest own army and newest real alert; editable keys
       0,
       0,
       0,
+      23,
+      0x4191f5,
     ];
     views.present([256, 256, 128, 128, 0, 0, 1280, 720, 0.04]);
     views.show(true);

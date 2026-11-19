@@ -22,11 +22,11 @@ export function initSettlements() {
   function clear() { plots.clear(); farms = new Path2D(); furrows = new Path2D(); fields = borders = 0; }
   return {
     update(values = []) {
-      const next = Array.from(values.slice(0, 2048 * 9)).join(',');
+      const next = Array.from(values.slice(0, 2048 * 10)).join(',');
       if (next === signature) return false;
       signature = next; rows = []; clear();
-      for (let at = 0; at + 8 < Math.min(values.length, 2048 * 9); at += 9) {
-        const r = Array.from(values.slice(at, at + 9));
+      for (let at = 0; at + 9 < Math.min(values.length, 2048 * 10); at += 10) {
+        const r = Array.from(values.slice(at, at + 10));
         if (r.every(Number.isFinite) && [0, 1].includes(r[7]) && buildingKinds[r[5]] && r[3] > r[1] && r[4] > r[2]) rows.push(r);
       }
       const rank = kind => kind === 0 ? 0 : kind === 16 ? 1 : kind === 13 ? 2 : 3;
@@ -63,7 +63,7 @@ export function initSettlements() {
       let sprites = 0;
       for (const row of ranked) {
         if (placed.length >= 192) break;
-        const [id,x0,y0,x1,y1,kind,colour,owned,native] = row;
+        const [id,x0,y0,x1,y1,kind,colour,owned,native,owner] = row;
         const [x,y] = project([(x0+x1)/2,(y0+y1)/2]);
         const sprite = buildingSprite(native, colour);
         const minimum = MIN[kind] ?? 46;
@@ -81,7 +81,7 @@ export function initSettlements() {
         }
         const index = placed.length;
         space.take(...r, index);
-        placed.push({ id, x, y, w, h, left, top, kind, colour, owned, buildings: 1, soldiers: 0, workers: 0, world: [(x0+x1)/2,(y0+y1)/2],
+        placed.push({ id, x, y, w, h, left, top, kind, colour, owned, owner, buildings: 1, units: new Map(), world: [(x0+x1)/2,(y0+y1)/2],
           fold() { this.buildings++; } });
         const tint = actorColour(colour), base = w * .42;
         context.fillStyle = '#0006'; context.beginPath(); context.ellipse(x, y + w * .04, base * 1.05, base * .52, 0, 0, Math.PI * 2); context.fill();
@@ -107,7 +107,7 @@ export function initSettlements() {
     },
     place(index) { return placed[index]; },
     // Counts for garrisons and the work around each place, drawn once units are binned.
-    chips(context, scale) { drawChips(context, placed, scale); },
+    chips(context, scale, artFor) { drawChips(context, placed, scale, artFor); },
     pick(x,y) { return hits.find(p => Math.abs(x-p.x)<=p.w/2 && Math.abs(y-p.y)<=p.h/2)?.world ?? null; },
     reset() { rows = []; hits = []; ranked = []; placed = []; signature = ''; clear(); layer.replaceChildren(); nodes.clear(); },
   };

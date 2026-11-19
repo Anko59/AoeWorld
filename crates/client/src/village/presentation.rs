@@ -25,14 +25,24 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
             && (u.player == owner || client.fog.state(position.map(|p| p.floor() as i32)) == 2)
         {
             values[6] += 1.0;
-            // Kind 2 marks workers, so the far map can tell them from soldiers.
-            let worker = matches!(
-                u.kind,
-                UnitKind::Villager | UnitKind::Vassal | UnitKind::Steward | UnitKind::FishingShip
-            );
+            // Low bits mark buildings, economy, ships and local ownership.
+            // Above them the actor carries its actual unit kind.
+            let economy = u.kind.is_trader()
+                || matches!(
+                    u.kind,
+                    UnitKind::Villager
+                        | UnitKind::Vassal
+                        | UnitKind::Steward
+                        | UnitKind::FishingShip
+                );
             actor_marker(
                 &mut values,
-                if worker { 2.0 } else { 0.0 },
+                f64::from(
+                    ((u.kind as u16 + 1) << 4)
+                        | (u16::from(u.player == owner) << 3)
+                        | (u16::from(u.kind.is_naval()) << 2)
+                        | (u16::from(economy) << 1),
+                ),
                 position,
                 u.player,
                 owner,

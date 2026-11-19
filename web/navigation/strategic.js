@@ -1,6 +1,5 @@
-import { aggregatePixels, actorColour } from '/minimap.js';
 import { initLayers } from '/navigation/layers.js';
-import { initTokens } from '/navigation/tokens.js';
+import { ARMY_FIELDS, initTokens } from '/navigation/tokens.js';
 import { initContacts } from '/navigation/contacts.js';
 import { initReveal } from '/navigation/reveal.js';
 import { initCockpit } from '/navigation/cockpit.js';
@@ -9,6 +8,8 @@ import { initSettlements } from '/navigation/landscape/settlements.js';
 import { initHoldings } from '/navigation/landscape/holdings.js';
 import { initMapKey } from '/navigation/landscape/key.js';
 import { drawUnits } from '/navigation/landscape/units.js';
+import { initUnitGroups } from '/navigation/landscape/groups.js';
+import { initUnitArt } from '/navigation/landscape/unit-art.js';
 import { createSpace } from '/navigation/landscape/space.js';
 import { onSprites } from '/navigation/landscape/sprites.js';
 
@@ -35,7 +36,8 @@ export function initStrategic(fog, actors) {
   const tokens = initTokens(), contacts = initContacts();
   const cockpit = initCockpit(() => { tokens.invalidate(); modelRevision++; previous = ''; if (lastState) frame(lastState); }), reveal = initReveal();
   const settlements = initSettlements(), holdingsLayer = initHoldings();
-  const mapKey = initMapKey(), space = createSpace();
+  const mapKey = initMapKey(), space = createSpace(), unitGroups = initUnitGroups();
+  const unitArt = initUnitArt(() => { modelRevision++; });
   onSprites(() => { modelRevision++; previous = ''; if (lastState) frame(lastState); });
   const layers = initLayers(() => {
     modelRevision++;
@@ -71,9 +73,12 @@ export function initStrategic(fog, actors) {
       previous = ''; picks = [];
       return false;
     }
-    const key = [...state, terrainRevision, actors.revision(), fog.revision, resourceRevision, modelRevision,
+    const camera = [cx, cy, width, height, zoom].join(',');
+    const revision = actors.revision(), now = performance.now();
+    const regroup = layers.enabled.armies && unitGroups.ready(revision, camera, now);
+    const key = [...state, terrainRevision, revision, fog.revision, resourceRevision, modelRevision,
       layers.enabled.threats ? contacts.clock() : 0].join(',');
-    if (key === previous) return false;
+    if (key === previous && !regroup) return false;
     const started = performance.now();
     window.aoeTelemetry?.mark(10);
     previous = key;
@@ -98,10 +103,9 @@ export function initStrategic(fog, actors) {
     const project = ([x, y]) => [width / 2 + (x - cx - y + cy) * 64 * zoom,
       height / 2 + (x - cx + y - cy) * 32 * zoom];
     pickRadius = 22;
-    let records = actors.records();
-    if (!layers.enabled.armies) records = [];
-    context.setTransform(1, 0, 0, 1, 0, 0);
     const scale = scene.clientWidth / width;
+    if (regroup) unitGroups.update(actors.records(), revision, camera, now, project, width, height, scale);
+    context.setTransform(1, 0, 0, 1, 0, 0);
     mapKey.update(zoom, scale);
     canvas.dataset.holdingRuns = String(holdingsLayer.draw(context, plane, zoom, layers.enabled.ownership));
     // One screen-space grid arbitrates every symbol: HUD, places, army tokens, then unit groups.
@@ -118,9 +122,10 @@ export function initStrategic(fog, actors) {
     window.aoeTelemetry?.mark(20);
     window.aoeTelemetry?.mark(11);
     canvas.dataset.threats = String(layers.enabled.threats ? contacts.draw(context, project) : 0);
-    tokens.draw(context, project, layers.enabled, scale, width, height, space);
-    picks = drawUnits(context, records, project, width, height, scale, space, settlements.place, tokens.mine());
-    settlements.chips(context, scale);
+    tokens.draw(context, project, layers.enabled, scale, width, height, space, unitArt.get);
+    picks = layers.enabled.armies ? drawUnits(context, unitGroups.groups(), project, width, height, scale,
+      space, settlements.place, unitArt.get) : [];
+    settlements.chips(context, scale, unitArt.get);
     // Deposits remain legible after sprite drawing stops and above clusters.
     // Rust sends only explored, non-forest resources; forests live in terrain.
     const colours = ['#e85b8a', '#3c8f4a', '#f2cf50', '#c4c8d0', '#75c8f0', '#75c8f0'];
@@ -145,7 +150,7 @@ export function initStrategic(fog, actors) {
     // surface until the detailed renderer presents a complete replacement.
     scene.dataset.strategicCovered = 'true';
     canvas.dataset.redraws = String(++redraws);
-    canvas.dataset.picks = JSON.stringify(picks.map(p => ({ x: p.x * scale, y: p.y * scale, count: p.count, hostile: p.hostile })));
+    canvas.dataset.picks = JSON.stringify(picks.map(p => ({ x: p.x * scale, y: p.y * scale, count: p.count, kind: p.kind, class: p.class, art: p.art, hostile: p.hostile })));
     canvas.dataset.frameMs = (performance.now() - started).toFixed(3);
     return true;
   }
@@ -178,7 +183,7 @@ export function initStrategic(fog, actors) {
       if (next === modelSignature) return;
       modelSignature = next; tokens.update(a, e, b); modelRevision++;
   }
-  return { frame, pick, present, navigation: reveal.navigation, cameraLink: reveal.link, interrupt: reveal.interrupt, cinematic: reveal.active, entity: tokens.entity, update, cockpit: cockpit.update, production: cockpit.production, building: cockpit.building, commerce: cockpit.commerce,
+  return { frame, pick, present, unitMiniatures: unitArt.update, navigation: reveal.navigation, cameraLink: reveal.link, interrupt: reveal.interrupt, cinematic: reveal.active, entity: tokens.entity, update, cockpit: cockpit.update, production: cockpit.production, building: cockpit.building, commerce: cockpit.commerce,
     // All arrays are the bounded, authorized HUD stream. Aggregate jobs once
     // at HUD cadence, rather than retaining Rust map implementations in WASM.
     receive(a, castles, b, c, workers, orders) {
@@ -195,7 +200,7 @@ export function initStrategic(fog, actors) {
       }
       for (let at = 0; at + 2 < orders.length; at += 3) destinations.set(orders[at], [orders[at + 1], orders[at + 2]]);
       const armies = Array.from(a), economy = [];
-      for (let at = 0; at + 14 < armies.length; at += 15) {
+      for (let at = 0; at + ARMY_FIELDS <= armies.length; at += ARMY_FIELDS) {
         const target = armies[at + 3] ? destinations.get(armies[at]) : null;
         armies[at + 8] = target?.[0] ?? NaN; armies[at + 9] = target?.[1] ?? NaN;
       }
@@ -212,7 +217,7 @@ export function initStrategic(fog, actors) {
     reset() {
       controlsVisible = null;
       cockpit.reset(); reveal.reset();
-      settlements.reset(); holdingsLayer.reset();
+      settlements.reset(); holdingsLayer.reset(); unitGroups.reset();
       tokens.update([], [], []); contacts.reset(); resources = [];
       knownResources.clear(); retiredResources.clear(); resourceSnapshot = false;
       modelSignature = ''; modelRevision++; previous = '';

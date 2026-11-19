@@ -1,8 +1,10 @@
 //! HUD-cadence summaries of the bounded, authorized client stream. Never a
 //! per-frame scan or a client-side reconstruction of General membership.
 use super::super::{Client, village};
-use aoe_core::PlayerId;
+use crate::strategic::ArmyKinds;
+use aoe_core::{EntityId, PlayerId};
 use aoe_protocol::{BuildingKind, GameplayBuildingState, GameplayUnitState, UnitKind};
+use std::collections::BTreeMap;
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen(
@@ -54,7 +56,7 @@ pub(in super::super) fn site_record(
     b: &GameplayBuildingState,
     owner: PlayerId,
     colour: [u8; 3],
-) -> [f64; 9] {
+) -> [f64; 10] {
     let [r, g, blue] = colour.map(u32::from);
     [
         f64::from(b.id.0),
@@ -70,6 +72,7 @@ pub(in super::super) fn site_record(
                 .building_id()
                 .unwrap_or(-1),
         ),
+        f64::from(b.player.0),
     ]
 }
 
@@ -83,13 +86,15 @@ fn report_hit(hit: Option<aoe_protocol::HitState>, position: [f64; 2], newest: &
 }
 
 // [id, world x/y, owned, selected, size (-1 unknown), state, stance,
-//  first authoritative order x/y (NaN absent), actual counts * 5].
+//  first authoritative order x/y (NaN absent), actual counts * 5, miniature, RGB].
 pub(in super::super) fn army_record(
     u: &GameplayUnitState,
     owner: PlayerId,
     selected: bool,
     destination: Option<[f64; 2]>,
-) -> Option<[f64; 15]> {
+    report: Option<&ArmyKinds>,
+    colour: u32,
+) -> Option<[f64; 17]> {
     if u.hp == 0 || u.kind != UnitKind::General {
         return None;
     }
@@ -97,7 +102,7 @@ pub(in super::super) fn army_record(
     let g = u.general.filter(|_| owned);
     let p = u.position.as_tiles();
     let target = destination.filter(|_| owned).unwrap_or([f64::NAN; 2]);
-    let mut v = [0.0; 15];
+    let mut v = [0.0; 17];
     v[..10].copy_from_slice(&[
         f64::from(u.id.0),
         p[0],
@@ -110,8 +115,12 @@ pub(in super::super) fn army_record(
         target[0],
         target[1],
     ]);
+    v[15] = g
+        .and_then(|g| report?.complete_dominant(g.army_size))
+        .unwrap_or(UnitKind::General) as u8 as f64;
+    v[16] = f64::from(colour);
     if let Some(g) = g {
-        for (out, n) in v[10..].iter_mut().zip(g.counts) {
+        for (out, n) in v[10..15].iter_mut().zip(g.counts) {
             *out = f64::from(n);
         }
     }
@@ -120,7 +129,8 @@ pub(in super::super) fn army_record(
 
 pub(in super::super) fn update(client: &Client) {
     let owner = village::owner(client);
-    let mut armies = Vec::new();
+    let mut generals = Vec::new();
+    let mut membership = BTreeMap::<EntityId, ArmyKinds>::new();
     let mut contacts = Vec::new();
     let mut workers = Vec::new();
     let mut last_alert = [f64::NAN; 3];
@@ -160,10 +170,11 @@ pub(in super::super) fn update(client: &Client) {
         if u.hp == 0 {
             continue;
         }
-        if armies.len() < 256 * 15
-            && let Some(v) = army_record(u, owner, client.selected.units.contains(&u.id), None)
-        {
-            armies.extend(v);
+        if u.kind == UnitKind::General && generals.len() < 256 {
+            generals.push(u);
+        }
+        if own && let Some(id) = u.commanded_by {
+            membership.entry(id).or_default().add(u.kind);
         }
         if own && (u.managed_by.is_some() || u.kind == UnitKind::Steward) {
             workers.extend([
@@ -177,6 +188,22 @@ pub(in super::super) fn update(client: &Client) {
             ]);
         }
     }
+    let armies: Vec<_> = generals
+        .into_iter()
+        .filter_map(|u| {
+            let [r, g, b] =
+                aoe_rendering::player_colour(u.player, owner, client.team_colour).map(u32::from);
+            army_record(
+                u,
+                owner,
+                client.selected.units.contains(&u.id),
+                None,
+                membership.get(&u.id),
+                r << 16 | g << 8 | b,
+            )
+        })
+        .flatten()
+        .collect();
     let mut economy = Vec::new();
     let mut bridges = Vec::new();
     let sites: Vec<_> = site_buildings(&client.village.buildings, owner, |b| {

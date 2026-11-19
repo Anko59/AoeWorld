@@ -1,4 +1,8 @@
 import { entityIcon } from '/interface/ui-art.js';
+import { actorColour } from '/minimap.js';
+import { drawMiniature } from '/navigation/landscape/units.js';
+
+export const ARMY_FIELDS = 17;
 const states = ['idle', 'marching', 'fighting', 'retreating'];
 const stances = ['Aggressive', 'Defensive', 'Stand ground', 'No attack'];
 const roles = ['Infantry', 'Archers', 'Cavalry', 'Siege', 'Scouts'];
@@ -60,7 +64,7 @@ export function initTokens() {
       layer.hidden = !value; if (!value) hits = [];
     },
     update(a, e, b) {
-      armies = rows(a, 15, 256); economy = rows(e, 13, 64); bridges = rows(b, 5, 2048);
+      armies = rows(a, ARMY_FIELDS, 256); economy = rows(e, 13, 64); bridges = rows(b, 5, 2048);
       const next = economy.map(r => [r[0], r[2], r[3], r[7] === -1]).flat().join(',');
       if (next !== domainSignature) {
         domainSignature = next; domains.clear();
@@ -98,8 +102,7 @@ export function initTokens() {
       }
       for (const r of hudRects) if (r.width && r.height) space.take(r.left - 4, r.top - 4, r.right + 4, r.bottom + 4, -1);
     },
-    mine() { const c = teamColours[document.getElementById('playground')?.dataset.playerColour] ?? teamColours.blue; return parseInt(c.slice(1), 16); },
-    draw(context, project, options, scale, width, height, space) {
+    draw(context, project, options, scale, width, height, space, artFor) {
       hits = [];
       const holdingColour = teamColours[document.getElementById('playground')?.dataset.playerColour] ?? teamColours.blue;
       const inView = (x, y) => x >= -100 && y >= -60 && x <= width + 100 && y <= height + 60;
@@ -189,17 +192,24 @@ export function initTokens() {
         place(node, ...position, visible, dense ? 40 : 118, dense ? 38 : 34, -id - 1, scale);
       }
       for (const r of armies) {
-        const [id, wx, wy, owned, selected, size, state, stance, tx, ty, ...counts] = r;
+        const [id, wx, wy, owned, selected, size, state, stance, tx, ty, infantry, archers, cavalry, siege, scouts, kind, rgb] = r;
+        const counts = [infantry, archers, cavalry, siege, scouts];
         const node = button(`a${id}`, 'army-token');
         const [x, y] = project([wx, wy]);
         const order = owned ? states[state] ?? 'idle' : 'visible enemy';
-        const signature = [size, order, stance, ...counts].join(',');
+        const visible = options.armies && inView(x, y) && positions.has(`a${id}`);
+        const art = visible ? artFor(kind) : null;
+        const signature = [size, order, stance, kind, rgb, !!art, ...counts].join(',');
         if (node.dataset.signature !== signature) {
           const total = counts.reduce((a, b) => a + b, 0);
           node.replaceChildren();
           const glyph = { marching: '➜', fighting: '⚔', retreating: '↩' }[order] ?? '';
           const title = document.createElement('b'); title.textContent = `${size < 0 ? '?' : size}${glyph ? ' ' + glyph : ''}`;
           const mode = document.createElement('small'); mode.textContent = owned ? (stances[stance] ?? '') : 'enemy';
+          const portrait = document.createElement('canvas'); portrait.width = portrait.height = 64;
+          portrait.className = 'army-portrait';
+          drawMiniature(portrait.getContext('2d'), 32, 31, 56, 0, actorColour(rgb), art);
+          node.style.borderColor = actorColour(rgb);
           const bar = document.createElement('span'); bar.className = 'army-mix';
           counts.forEach((count, i) => {
             const part = document.createElement('i');
@@ -207,12 +217,11 @@ export function initTokens() {
             part.style.background = ['#d7c19c', '#7ed19a', '#85bdf0', '#e6a177', '#dedc7a'][i];
             bar.append(part);
           });
-          node.append(title, mode, bar); node.dataset.signature = signature;
+          node.append(portrait, title, mode, bar); node.dataset.signature = signature;
           node.title = `General #${id} · ${order} · ${stances[stance] ?? 'unknown stance'}\n${size < 0 ? 'Enemy army details unknown' : roles.map((name, i) => `${name}: ${counts[i]}`).join(' · ')}\nClick to select · right-click ground to march · Alt: General alone`;
         }
         node.dataset.entity = String(id); node.dataset.owned = String(!!owned); node.dataset.order = order;
         node.setAttribute('aria-pressed', String(!!selected));
-        const visible = options.armies && inView(x, y) && positions.has(`a${id}`);
         if (visible && owned && Number.isFinite(tx) && Number.isFinite(ty)) {
           const [ex, ey] = project([tx, ty]);
           const dx = ex - x, dy = ey - y, distance = Math.hypot(dx, dy);

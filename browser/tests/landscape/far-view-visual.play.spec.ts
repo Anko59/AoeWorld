@@ -76,8 +76,8 @@ test("the far view paints terrain and real building sprites, not a black plane w
     ) as number[];
     s.terrain(raster);
     s.settlements([
-      10, 498, 498, 502, 502, 0, 0x4191f5, 1, 109, 11, 506, 500, 509, 503, 5,
-      0x4191f5, 1, 50, 12, 490, 500, 494, 504, 16, 0x4191f5, 0, 82,
+      10, 498, 498, 502, 502, 0, 0x4191f5, 1, 109, 1, 11, 506, 500, 509, 503, 5,
+      0x4191f5, 1, 50, 1, 12, 490, 500, 494, 504, 16, 0x4191f5, 0, 82, 2,
     ]);
     (window as unknown as { farFrame: () => void }).farFrame = () =>
       s.frame(frame);
@@ -122,4 +122,69 @@ test("the far view paints terrain and real building sprites, not a black plane w
   expect(
     raster.reduce((sum, v) => sum + v, 0) - (raster[3] ?? 0),
   ).toBeGreaterThan(60);
+});
+
+test("the dominant kind's art reaches the token pixels inside the owner rim", async ({
+  page,
+}) => {
+  const atlas = new PNG({ width: 64, height: 32 });
+  for (let y = 0; y < 32; y++)
+    for (let x = 0; x < 64; x++)
+      atlas.data.set(
+        x < 32 ? [235, 75, 95, 255] : [235, 215, 95, 255],
+        (y * 64 + x) * 4,
+      );
+  await page.route("**/asset-pack/unit-color.png", (route) =>
+    route.fulfill({ contentType: "image/png", body: PNG.sync.write(atlas) }),
+  );
+  await page.route("**/asset-pack/unit-player.png", (route) =>
+    route.fulfill({
+      contentType: "image/png",
+      body: PNG.sync.write(new PNG({ width: 64, height: 32 })),
+    }),
+  );
+  await page.route("**/landscape-test", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<canvas id="scene" style="width:1280px;height:720px"></canvas>',
+    }),
+  );
+  await page.goto("/landscape-test");
+  const state = [8000, 8000, 500, 500, 1280, 720, 0.04, 1];
+  await page.evaluate(async (frame) => {
+    // @ts-expect-error Served browser module.
+    const { initStrategic } = await import("/navigation/strategic.js");
+    const records = [
+      56, 500, 500, 0, 0x4191f5, 88, 500, 500, 0, 0x4191f5, 88, 500, 500, 0,
+      0x4191f5,
+    ];
+    const s = initStrategic(
+      { disabled: true, canvas: document.createElement("canvas"), revision: 0 },
+      { records: () => records, revision: () => 1 },
+    );
+    const art = Array.from({ length: 5 }, (_, i) =>
+      i === 2 || i === 4
+        ? [32, 32, i === 2 ? 0 : 32, 0, "unit-color.png", "unit-player.png"]
+        : null,
+    );
+    s.unitMiniatures(art);
+    const draw = () => {
+      s.frame(frame);
+      requestAnimationFrame(draw);
+    };
+    draw();
+  }, state);
+  const canvas = page.locator("#strategic-scene");
+  await expect(canvas).toHaveAttribute("data-picks", /"kind":4.*"art":true/);
+  const colours = await canvas.evaluate((node: HTMLCanvasElement) => {
+    const { x, y } = JSON.parse(node.dataset.picks ?? "[]")[0];
+    const ctx = node.getContext("2d");
+    const rgb = (dy: number) =>
+      Array.from(ctx?.getImageData(x, y + dy, 1, 1).data ?? []).slice(0, 3);
+    return [rgb(0), rgb(-16)];
+  });
+  expect(colours).toEqual([
+    [235, 215, 95],
+    [65, 145, 245],
+  ]);
 });

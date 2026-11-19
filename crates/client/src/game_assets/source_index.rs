@@ -94,6 +94,13 @@ impl FrameIndex {
         self.0.get(source).map_or(0, Vec::len)
     }
 
+    #[cfg(all(target_arch = "wasm32", not(feature = "diagnostics")))]
+    pub(crate) fn cell(&self, source: &str, frame: u32) -> Option<usize> {
+        let rows = self.0.get(source)?;
+        let index = rows.binary_search_by_key(&frame, |row| row.0).ok()?;
+        Some(rows[index].1)
+    }
+
     pub(crate) fn prefix(&self, source: &str, count: u32) -> Option<Vec<usize>> {
         if count == 0 {
             return Some(Vec::new());

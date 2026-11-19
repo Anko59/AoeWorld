@@ -29,5 +29,6 @@ pub(crate) async fn load(
     }
     .upload(sink)
     .await?;
+    native::publish_miniatures(&prepared.manifest);
     Ok((prepared.art, team, prepared.native))
 }

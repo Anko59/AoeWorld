@@ -190,7 +190,7 @@ pub(super) fn military_poses(kind: UnitKind) -> Option<[Pose; 4]> {
             SiegeOnagerAttack,
             SiegeOnagerDie,
         ],
-        _ => return None,
+        UnitKind::Villager | UnitKind::Militia | UnitKind::FishingShip => return None,
     })
 }
 

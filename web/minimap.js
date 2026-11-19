@@ -70,7 +70,8 @@ export function minimapWorldPoint(rect, clientX, clientY, world,
     Math.max(0, Math.min(world[1] - 1, view.center[1] + (y - x) * world[1]))];
 }
 
-// Five-number actor records: kind (unit/building), world x/y, owner, packed RGB.
+// Five-number actor records: kind and flags, world x/y, owner, packed RGB.
+// The low nibble flags buildings (1), economic units (2), ships (4), and local units (8).
 // Work is proportional to the received actors and occupied screen pixels, never
 // world area. Ties choose the smaller owner id, independent of arrival order.
 export function aggregatePixels(actors, project, width, height, cell = 1) {
@@ -90,8 +91,8 @@ export function aggregatePixels(actors, project, width, height, cell = 1) {
       pixels.set(key, pixel);
     }
     pixel.count++;
-    pixel[kind === 1 ? 'buildings' : 'units']++;
-    if (kind === 2) pixel.workers++;
+    pixel[kind & 1 ? 'buildings' : 'units']++;
+    if (kind & 2) pixel.workers++;
     pixel.world[0] += wx; pixel.world[1] += wy;
     const vote = pixel.owners.get(owner) ?? { count: 0, colour };
     vote.count++;

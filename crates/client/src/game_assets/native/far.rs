@@ -51,6 +51,61 @@ pub fn strategic_frame(
     Ok(pixels)
 }
 
+fn miniature_records(manifest: &Manifest) -> [Option<usize>; aoe_protocol::UnitKind::ALL.len()] {
+    use crate::unit_visuals::idle_pose;
+    use aoe_assets::catalog::units::SPRITES;
+    aoe_protocol::UnitKind::ALL.map(|kind| {
+        let source = SPRITES[idle_pose(kind)? as usize];
+        let cell = source.source_frame(source.rows() / 2, 0);
+        manifest
+            .frames
+            .sources()
+            .cell(&source.manifest_source(), cell as u32)
+    })
+}
+
+#[wasm_bindgen(
+    inline_js = "export function unit_miniatures(rows) { window.aoeNavigation?.strategic?.unitMiniatures(rows); }"
+)]
+extern "C" {
+    fn unit_miniatures(rows: js_sys::Array);
+}
+
+/// Publish one frame descriptor per unit kind from the already loaded pack.
+/// The browser fetches pixels only for kinds that actually reach the map.
+pub(in super::super) fn publish_miniatures(manifest: &Manifest) {
+    use js_sys::Array;
+    let rows = Array::new();
+    for record in miniature_records(manifest) {
+        let Some(frame) = record.map(|index| &manifest.frames[index]) else {
+            rows.push(&JsValue::NULL);
+            continue;
+        };
+        let row = Array::new();
+        for n in [frame.width, frame.height, frame.x, frame.y] {
+            row.push(&JsValue::from(n));
+        }
+        if let Some(native) = frame.native {
+            let Some(chunk) = manifest.chunks.get(usize::from(native.chunk)) else {
+                rows.push(&JsValue::NULL);
+                continue;
+            };
+            row.push(&JsValue::from_str(&chunk.file));
+            row.push(&JsValue::from(native.offset));
+            row.push(&JsValue::from(native.length));
+        } else {
+            let Some(page) = manifest.pages.get(usize::from(frame.page)) else {
+                rows.push(&JsValue::NULL);
+                continue;
+            };
+            row.push(&JsValue::from_str(&page.color));
+            row.push(&JsValue::from_str(&page.player));
+        }
+        rows.push(&row);
+    }
+    unit_miniatures(rows);
+}
+
 #[cfg(test)]
 #[path = "tests/far.rs"]
 mod tests;
