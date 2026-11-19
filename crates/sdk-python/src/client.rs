@@ -434,6 +434,19 @@ impl Client {
             resource: resource.into(),
         })
     }
+    fn market_trade(&self, building: u32, resource: TradeResource, buy: bool, lots: u32) -> u64 {
+        self.order(Order::MarketTrade {
+            building: EntityId(building),
+            resource: resource.into(),
+            buy,
+            lots,
+        })
+    }
+
+    #[pyo3(signature = (tile=None))]
+    fn focus_view(&self, tile: Option<(i32, i32)>) {
+        self.inner.focus_view(tile.map(|(x, y)| TileCoord::new(x, y)));
+    }
 
     fn __enter__(slf: Py<Self>) -> Py<Self> {
         slf

@@ -244,13 +244,13 @@ reserve and waiting for the server's count before adding another entry.
   `trainable`, `build_seconds`, `building_size`, `building_requires` expose the
   numbers the server charges from.
 
-`world.land_route(x, y, tx, ty)` returns a bounded route through explored
-public terrain, ignoring temporary units and buildings. `None` means unknown,
-disconnected or beyond the query bound. Rivers, cliff edges and blocked diagonal
-corners remain barriers. `world.land_frontier(x, y, tx, ty)` instead returns an
-explored reachable tile toward the goal. The example AI chooses known land
-routes for attacks and follows reachable frontiers while exploring; it never
-assumes that a loaded but unexplored tile proves a connection.
+`world.land_route(x, y, tx, ty)` searches explored terrain and ignores temporary occupancy.
+`None` means unknown, disconnected or beyond the query bound. Rivers, cliff edges and blocked
+diagonals remain barriers. `world.land_frontier(x, y, tx, ty)` finds a reachable tile toward
+the goal. `world.land_known(x, y)` checks for exact route endpoint data without searching.
+`client.focus_view((x, y))` centers a bounded subscription on a tile, and `client.focus_view()`
+restores the connection's original view policy. The example AI briefly surveys large idle
+settlements to learn exact terrain for jobs while the army is away.
 
 ### Events
 
@@ -268,13 +268,13 @@ tiles_per_side=500, seed=1, terrain="flat", map_hash=None) -> MatchInfo`. Except
 `ConnectionClosed`, `Refused` (bad token, bad secret).
 
 `Client`: `wait_decision(timeout=None) -> Decision | None`, `run(on_tick,
-until_tick=None, max_decisions=None) -> RunSummary`, `world`, `closed`,
-`close_reason`, `orders_sent`, `close()`, and the orders `move(unit, x, y)`, `stop(unit)`,
-`gather(unit, resource_id)`, `build(builders, kind, x, y)`, `build_wall(builders,
-x1, y1, x2, y2, kind=PALISADE_WALL)`, `construct(builders, building)`, `cancel_construction(b)`,
-`farm(unit, farm)`, `train(building, kind)`, `cancel_training(b)`,
-`research(building, tech)`, `cancel_research(b)`, `attack(unit, target)`,
-`hunt(units, animal)`, `market_buy(building, resource)`, `market_sell(...)`.
+until_tick=None, max_decisions=None) -> RunSummary`, `world`, `closed`, `close_reason`, `orders_sent`,
+`close()`, and the orders `move(unit, x, y)`, `stop(unit)`, `gather(unit, resource_id)`,
+`build(builders, kind, x, y)`, `build_wall(builders, x1, y1, x2, y2, kind=PALISADE_WALL)`,
+`construct(builders, building)`, `cancel_construction(b)`, `farm(unit, farm)`, `train(building, kind)`,
+`cancel_training(b)`, `research(building, tech)`, `cancel_research(b)`, `attack(unit, target)`,
+`hunt(units, animal)`, `market_buy(building, resource)`, `market_sell(...)`, and
+`market_trade(building, resource, buy, lots)` (100 units per lot, priced consecutively).
 
 `World`: `tick`, `tick_hz`, `seconds`, `map_size`, `me`, `economy`,
 `my_units(kind)`, `idle_units(kind)`, `visible_enemies()`, `unit(id)`,

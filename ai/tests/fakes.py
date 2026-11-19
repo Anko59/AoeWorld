@@ -69,6 +69,9 @@ class FakeWorld:
         self._enemy_buildings = list(enemy_buildings)
         self.sites: list[tuple] = []
 
+    def land_known(self, x, y):
+        return 0 <= x < self.map_size[0] and 0 <= y < self.map_size[1]
+
     def land_route(self, x, y, tx, ty):
         path = [(x, y)]
         while (x, y) != (tx, ty):

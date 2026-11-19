@@ -134,6 +134,7 @@ enum Command {
 pub struct Client {
     shared: Arc<Shared>,
     commands: mpsc::UnboundedSender<Command>,
+    default_view: ViewPolicy,
     next_sequence: AtomicU64,
     decision_ticks: u64,
     last_decision: Mutex<Option<u64>>,
@@ -185,6 +186,7 @@ impl Client {
             reconnect_micros: AtomicU64::new(0),
         });
         let (commands, receiver) = mpsc::unbounded_channel();
+        let default_view = options.view;
         let task = tokio::spawn(run(
             socket,
             shared.clone(),
@@ -196,6 +198,7 @@ impl Client {
         Ok(Client {
             shared,
             commands,
+            default_view,
             next_sequence: AtomicU64::new(1),
             decision_ticks,
             last_decision: Mutex::new(None),
@@ -234,6 +237,29 @@ impl Client {
     /// Changes how the slot's view region follows its units.
     pub fn set_view(&self, view: ViewPolicy) {
         let _ = self.commands.send(Command::View(view));
+    }
+
+    /// Center the existing view on one tile, or restore the connection's view policy.
+    pub fn focus_view(&self, tile: Option<TileCoord>) {
+        let view = tile.map_or(self.default_view, |tile| {
+            let (width, height) = match self.default_view {
+                ViewPolicy::Follow { max_side, .. } => (max_side, max_side),
+                ViewPolicy::Fixed(rect) => (rect.width(), rect.height()),
+            };
+            let (map_width, map_height) = self.shared.lock().world.map_size();
+            let bound = |span: i32, limit| {
+                span.clamp(16, aoe_protocol::MAX_SUBSCRIPTION_TILES)
+                    .min(limit)
+            };
+            let (width, height) = (bound(width, map_width), bound(height, map_height));
+            let x = tile.x.saturating_sub(width / 2).clamp(0, map_width - width);
+            let y = tile
+                .y
+                .saturating_sub(height / 2)
+                .clamp(0, map_height - height);
+            ViewPolicy::Fixed(TileRect::from_xywh(x, y, width, height))
+        });
+        self.set_view(view);
     }
 
     /// The current model without waiting for a decision point.

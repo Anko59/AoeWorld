@@ -93,6 +93,115 @@ def test_far_settlement_resources_can_be_used_beyond_first_town_center_radius():
     assert EconomyManager(Constructor()).best_node(ctx, worker, ResourceKind.WOOD) is tree
 
 
+def test_early_managers_leave_land_queries_for_idle_workers_in_large_economies():
+    from aoe_ai import Brain
+    from fakes import node, unit
+    from test_logic import play
+
+    ctx = kingdom(villagers=0, centers=1, wood=0, food=0)
+    worker = unit(903, tile=(51, 49))
+    tree = node(901, ResourceKind.WOOD, tile=(52, 49))
+    ctx.world._units.append(worker)
+    ctx.world._nodes = [tree]
+    brain = Brain(Config(land_queries_per_decision=4, late_economy_min_villagers=1))
+    checked = []
+    route = ctx.world.land_route
+
+    def prove(*args):
+        checked.append(args)
+        return route(*args) if args[-2:] == tree.tile else None
+
+    ctx.world.land_route = prove
+    ctx.world.land_frontier = lambda *args: None
+
+    def combat_queries(turn):
+        for x in range(60, 64):
+            turn.land_route((50, 50), (x, 50))
+
+    brain.combat.step = combat_queries
+    _, client = play(ctx.world, brain=brain)
+    assert client.named("gather") == [(worker.id, tree.id)]
+    assert len(checked) <= 4
+
+    checked.clear()
+    early = Brain(Config(land_queries_per_decision=4))
+    early.combat.step = combat_queries
+    _, client = play(ctx.world, brain=early)
+    assert client.named("gather") == []
+    assert [args[-2:] for args in checked] == [(x, 50) for x in range(60, 64)]
+
+
+def test_idle_assignment_checks_workers_beyond_the_first_batch():
+    from fakes import node, unit
+
+    ctx = kingdom(villagers=0, centers=1, food=0, wood=0)
+    tree = node(901, ResourceKind.WOOD, tile=(52, 49))
+    first = [unit(i, tile=(50 + i, 52)) for i in range(1, 33)]
+    last = unit(903, tile=(51, 49))
+    ctx.world._units.extend([*first, last])
+    ctx.world._nodes = [tree]
+    ctx.world.land_route = lambda x, y, tx, ty: [(x, y), (tx, ty)] if (x, y) == last.tile else None
+    cfg = Config(land_queries_per_decision=1, late_economy_min_villagers=32)
+    mgr = EconomyManager(Constructor())
+    # Every turn has a fresh route budget and the low IDs are eligible again.
+    for _ in range(len(first) + 1):
+        turn = Context(FakeClient(), decision(ctx.world), ctx.board, cfg)
+        mgr.assign_idle(turn)
+        if turn.client.named("gather") == [(last.id, tree.id)]:
+            break
+        ctx.world.tick += 4 * ctx.world.tick_hz
+    else:
+        raise AssertionError("an eligible villager could not get a turn")
+
+
+def test_steward_worker_gets_an_ai_job_only_after_continuous_idle_timeout():
+    from dataclasses import replace
+    from aoeworld import UnitTask
+    from fakes import node, unit
+
+    worker = unit(903, tile=(51, 49))
+    worker.managed_by = 950
+    tree = node(901, ResourceKind.WOOD, tile=(52, 49))
+    ctx = kingdom(villagers=0, centers=1, food=0, wood=0)
+    ctx.world._units.append(worker)
+    ctx.world._nodes = [tree]
+    cfg = replace(ctx.config, steward_idle_timeout_seconds=2)
+    mgr = EconomyManager(Constructor())
+
+    def assign(tick, task):
+        ctx.world.tick = tick
+        worker.task, worker.idle = task, task == UnitTask.IDLE
+        turn = Context(FakeClient(), decision(ctx.world), ctx.board, cfg)
+        mgr.assign_idle(turn)
+        return turn.client.named("gather")
+
+    assert assign(100, UnitTask.IDLE) == []
+    assert assign(139, UnitTask.IDLE) == []
+    assert assign(140, UnitTask.GATHERING) == []
+    assert assign(141, UnitTask.IDLE) == []
+    assert assign(180, UnitTask.IDLE) == []
+    assert assign(181, UnitTask.IDLE) == [(worker.id, tree.id)]
+
+
+def test_steward_worker_waiting_on_a_route_keeps_its_order():
+    from dataclasses import replace
+    from aoeworld import UnitTask
+    from fakes import node, unit
+
+    ctx = kingdom(villagers=0, centers=1)
+    worker = unit(903, tile=(51, 49), task=UnitTask.MOVING, gathering=ResourceKind.WOOD)
+    worker.managed_by = 950
+    ctx.world._units.append(worker)
+    ctx.world._nodes = [node(901, ResourceKind.WOOD, tile=(52, 49))]
+    cfg = replace(ctx.config, steward_idle_timeout_seconds=1)
+    mgr = EconomyManager(Constructor())
+    for tick in (100, 121, 142):
+        ctx.world.tick = tick
+        turn = Context(FakeClient(), decision(ctx.world), ctx.board, cfg)
+        mgr.assign_idle(turn)
+        assert turn.client.calls == []
+
+
 def test_a_seated_steward_gets_its_training_switch_turned_on_without_order_spam():
     ctx = kingdom(villagers=40, centers=1)
     ctx.buildings[0].garrison = [(900, UnitKind.STEWARD, 50, 50)]
@@ -121,10 +230,43 @@ def test_surplus_wood_is_sold_for_missing_gold_with_a_settlement_cooldown():
     ctx.economy.food_price = ctx.economy.wood_price = ctx.economy.stone_price = 100
     manager = MarketManager()
     manager.step(ctx)
-    assert ctx.client.named('market_sell') == [(950, TradeResource.WOOD)]
-    assert ctx.spent[1] == 100 and ctx.spent[2] == 0, 'sale proceeds wait for the server'
+    assert ctx.client.named('market_trade') == [(950, TradeResource.WOOD, False, 19)]
+    assert ctx.spent[1] == 1900 and ctx.spent[2] == 0, 'sale proceeds wait for the server'
     manager.step(ctx)
-    assert len(ctx.client.named('market_sell')) == 1
+    assert len(ctx.client.named('market_trade')) == 1
+
+
+def test_market_keeps_the_reserve_after_other_spending():
+    from aoe_ai.play.market import MarketManager
+    ctx = kingdom(food=1450, wood=2000, gold=0, stone=1400)
+    ctx.buildings.append(building(950, BuildingKind.MARKET))
+    ctx.economy.food_price = ctx.economy.wood_price = ctx.economy.stone_price = 100
+    ctx.spent[1] = 1130
+    MarketManager().step(ctx)
+    assert ctx.client.named('market_trade') == [(950, TradeResource.FOOD, False, 2)]
+    assert ctx.spent[:2] == [200, 1130]
+
+
+def test_market_caps_a_bulk_sale_when_stock_is_high_and_the_quote_is_low():
+    from dataclasses import replace
+    from aoe_ai.play.market import MarketManager
+    ctx = kingdom(food=250000, wood=200000, gold=0, stone=0)
+    ctx.buildings.append(building(950, BuildingKind.MARKET))
+    ctx.economy.food_price = ctx.economy.wood_price = ctx.economy.stone_price = 20
+    ctx.config = replace(ctx.config, market_max_sale_lots=32)
+    MarketManager().step(ctx)
+    assert ctx.client.named('market_trade') == [(950, TradeResource.FOOD, False, 32)]
+    assert ctx.spent[0] == 3200
+
+
+def test_feudal_market_sells_one_lot_at_a_time():
+    from aoe_ai.play.market import MarketManager
+    ctx = kingdom(villagers=30, centers=1, age=Age.FEUDAL, food=6000, wood=15000, gold=115)
+    ctx.buildings.append(building(950, BuildingKind.MARKET))
+    ctx.economy.food_price = ctx.economy.wood_price = ctx.economy.stone_price = 100
+    MarketManager().step(ctx)
+    assert ctx.client.named('market_sell') == [(950, TradeResource.WOOD)]
+    assert ctx.spent[1] == 100
 
 
 def test_a_gold_rich_kingdom_buys_wood_when_building_is_starved():

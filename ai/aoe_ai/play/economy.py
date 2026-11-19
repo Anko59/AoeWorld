@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import heapq
-from typing import Any, Optional
+from bisect import bisect_left
+from typing import Any, Iterable, Optional
 
 from aoeworld import (
     AnimalKind,
@@ -187,16 +188,22 @@ class EconomyManager:
         return shares
 
     def assign_idle(self, ctx: Context) -> None:
-        idle = [
-            v
-            for v in ctx.villagers
-            if (v.managed_by is None or not ctx.config.defer_to_steward) and unemployed(v) and v.id not in ctx.reserved_workers and v.id not in ctx.busy and ctx.board.builders.get(v.id) is None
-        ]
-        # A builder whose foundation finished (or vanished) is a worker again.
+        idle, builders, steward_idle = [], [], {}
+        timeout = ctx.config.steward_idle_timeout_seconds * ctx.world.tick_hz
         for v in ctx.villagers:
-            if v.id in ctx.board.builders and unemployed(v) and v.id not in ctx.reserved_workers and v.id not in ctx.busy:
-                del ctx.board.builders[v.id]
-                idle.append(v)
+            if v.id in ctx.reserved_workers or v.id in ctx.busy or not unemployed(v):
+                continue
+            was_builder = ctx.board.builders.pop(v.id, None) is not None
+            steward = v.managed_by
+            if steward is not None and ctx.config.defer_to_steward:
+                previous, since = ctx.board.steward_idle.get(v.id, (steward, ctx.tick))
+                since = since if previous == steward else ctx.tick
+                steward_idle[v.id] = (steward, since)
+                if ctx.tick - since < timeout:
+                    continue
+            (builders if was_builder else idle).append((v.id, v))
+        idle.extend(builders)
+        ctx.board.steward_idle = steward_idle
         if not idle:
             return
         counts = self.counts(ctx)
@@ -207,27 +214,38 @@ class EconomyManager:
         alive = {v.id for v in ctx.villagers}
         for gone in [i for i in assigned if i not in alive]:
             del assigned[gone]
-        self.learn_unreachable(ctx, idle)
-        given = 0
-        for villager in idle:
-            # A villager that goes idle right after an order cannot do it:
-            # give it a pause instead of repeating the order every decision.
-            if ctx.tick - assigned.get(villager.id, -pause) < pause:
-                continue
-            if given >= MAX_ASSIGN_PER_DECISION:
-                break  # the rest wait for the next decision, unstamped
-            ctx.require_order_budget()
-            assigned[villager.id] = ctx.tick
-            given += 1
-            order = sorted(KEYS, key=lambda k: shares[k] * total - counts[k], reverse=True)
-            for key in order:
-                if shares[key] <= 0 and key != order[0]:
+        self.learn_unreachable(ctx, (worker for _, worker in idle))
+        if ctx.late_economy:
+            idle.sort()
+        start = bisect_left(idle, (ctx.board.idle_after + 1,)) if ctx.late_economy else 0
+        given, limit = 0, ctx.land_query_limit
+        large_roster = ctx.late_economy and len(idle) > MAX_ASSIGN_PER_DECISION
+        quantum = min(ctx.config.idle_worker_land_queries, max(1, limit // 2))
+        try:
+            for offset in range(len(idle)):
+                worker_id, villager = idle[(start + offset) % len(idle)]
+                if ctx.tick - assigned.get(worker_id, -pause) < pause:
                     continue
-                if self.send(ctx, villager, key):
-                    counts[key] += 1
+                if given >= MAX_ASSIGN_PER_DECISION or (ctx.late_economy and not large_roster
+                                                        and given and ctx.land_budget_exhausted()):
                     break
-            else:
-                self.explore(ctx, villager)
+                ctx.require_order_budget()
+                ctx.board.idle_after = worker_id
+                assigned[worker_id] = ctx.tick
+                given += 1
+                if large_roster:
+                    ctx.land_query_limit = min(limit, ctx._land_queries + quantum)
+                order = sorted(KEYS, key=lambda k: shares[k] * total - counts[k], reverse=True)
+                for key in order:
+                    if shares[key] <= 0 and key != order[0]:
+                        continue
+                    if self.send(ctx, villager, key):
+                        counts[key] += 1
+                        break
+                else:
+                    self.explore(ctx, villager)
+        finally:
+            ctx.land_query_limit = limit
 
     def rebalance(self, ctx: Context) -> None:
         """Rallied and reassigned workers need not fall idle to change resources.
@@ -275,7 +293,7 @@ class EconomyManager:
         ctx.order("gather", villager.id, node.id)
         ctx.board.gather_sent[villager.id] = (node.id, ctx.tick)
 
-    def learn_unreachable(self, ctx: Context, idle: list) -> None:
+    def learn_unreachable(self, ctx: Context, idle: Iterable[Any]) -> None:
         """A villager idle right after a gather order could not reach the node:
         leave that node alone for a while instead of sending villagers there
         again (each such trip costs the server a hopeless route search)."""
@@ -314,6 +332,8 @@ class EconomyManager:
                 ctx.order("move", villager.id, *target)
 
     def best_node(self, ctx: Context, villager: Any, kind: ResourceKind) -> Optional[Any]:
+        if ctx.late_economy and (ctx.land_budget_exhausted() or not ctx.world.land_known(*villager.tile)):
+            return None
         reach = (ctx.config.wood_gather_distance if kind == ResourceKind.WOOD
                  else ctx.config.max_gather_distance)
         scored = []

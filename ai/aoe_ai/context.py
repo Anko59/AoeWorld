@@ -58,6 +58,7 @@ class Context:
         self.economy = decision.world.economy
         self.units = decision.world.my_units()
         self.villagers = [u for u in self.units if u.kind == UnitKind.VILLAGER]
+        self.late_economy = self.castle and len(self.villagers) >= config.late_economy_min_villagers
         self.scouts = [u for u in self.units if u.kind == UnitKind.SCOUT]
         military = [u for u in self.units if u.kind in MILITARY]
         #: Soldiers a General leads take his orders, not ours.
@@ -84,6 +85,7 @@ class Context:
         self._spots: dict[Any, list] = {}
         self._land_routes: dict[tuple[Tile, Tile], Any] = {}
         self._land_queries = 0
+        self.land_query_limit = config.land_queries_per_decision
         self._site_queries = 0
         self.orders = 0
         self.order_limit = config.orders_per_decision
@@ -102,12 +104,18 @@ class Context:
         board.marched = {i: tick for i, tick in board.marched.items() if i in army_ids}
         board.land_failures = {key: until for key, until in board.land_failures.items() if until > self.tick}
 
+    def land_budget_exhausted(self) -> bool:
+        return self._land_queries >= self.land_query_limit
+
     def land_route(self, origin: Tile, target: Tile) -> Optional[list[Tile]]:
         key = (origin, target)
         if key not in self._land_routes:
             if key in self.board.land_failures:
                 return None
-            if self._land_queries >= self.config.land_queries_per_decision:
+            if self.land_budget_exhausted():
+                return None
+            if self.late_economy and not (self.world.land_known(*origin) and self.world.land_known(*target)):
+                self._land_routes[key] = None
                 return None
             self._land_queries += 1
             self._land_routes[key] = self.world.land_route(*origin, *target)
@@ -137,7 +145,7 @@ class Context:
         return stop if self.land_route(origin, stop) is not None else origin
 
     def land_frontier(self, origin: Tile, target: Tile) -> Optional[Tile]:
-        if self._land_queries >= self.config.land_queries_per_decision:
+        if self.land_budget_exhausted() or (self.late_economy and not self.world.land_known(*origin)):
             return None
         self._land_queries += 1
         return self.world.land_frontier(*origin, *target)

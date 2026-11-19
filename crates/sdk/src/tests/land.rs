@@ -225,6 +225,7 @@ fn remembered_overview_pixels_do_not_prove_a_land_route() {
     let unseen = TileCoord::new(31, 10);
     assert_eq!(world.visibility(unseen), Visibility::Explored);
     assert!(!world.fog().explored_exactly(unseen));
+    assert!(!world.land_known(unseen));
     assert!(world.land_route(TileCoord::new(10, 10), unseen).is_none());
 }
 
@@ -243,6 +244,7 @@ fn remembered_exact_exploration_still_proves_a_land_route() {
     let world = remembered_flat_land();
     let from = TileCoord::new(10, 10);
     let to = TileCoord::new(12, 10);
+    assert!(world.land_known(from));
     let route = world.land_route(from, to).unwrap();
     assert_eq!(route.first(), Some(&from));
     assert_eq!(route.last(), Some(&to));

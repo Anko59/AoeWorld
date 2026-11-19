@@ -64,6 +64,7 @@ class Config:
     expand_workers_per_center: int = 30
     settlement_spacing: int = 28
     market_interval_seconds: int = 8
+    market_max_sale_lots: int = 64
     market_gold_reserve: int = 1400
     market_wood_reserve: int = 800
     market_food_reserve: int = 1200
@@ -160,6 +161,16 @@ class Config:
 
     #: Bound the public land queries across every manager in one decision.
     land_queries_per_decision: int = 16
+    #: Leave up to this many checks for idle workers within the overall limit.
+    idle_land_query_reserve: int = 8
+    #: Exact endpoint screening and surveys start in large Castle economies.
+    late_economy_min_villagers: int = 128
+    idle_worker_land_queries: int = 4
+    worker_view_cell_tiles: int = 64
+    worker_view_idle_minimum: int = 32
+    worker_view_seconds: int = 2
+    worker_view_interval_seconds: int = 6
+    worker_view_revisit_seconds: int = 30
     land_retry_seconds: int = 10
     land_cache_entries: int = 1024
 
@@ -204,8 +215,9 @@ class Config:
     #: Stewards to field (one per Town Center), from this many villagers.
     stewards: int = 1
     steward_min_villagers: int = 40
-    #: Leave villagers a Steward manages to the Steward (no gather orders).
+    #: Leave working villagers to their Steward and give it first choice of idle workers.
     defer_to_steward: bool = True
+    steward_idle_timeout_seconds: int = 30
     #: Vassals to field (one per Castle) and Generals in total.
     vassals: int = 1
     generals: int = 1
