@@ -99,10 +99,20 @@ pub(super) async fn read_requests(
                     .queue_general_mix(session_id, sequence, entity_id, mix)
                     .await
             }
-            Ok(GameplayClientMessage::StopOrder {
+            Ok(GameplayClientMessage::StopOrder { sequence, unit_ids }) => {
+                service
+                    .queue_stop_selection(session_id, sequence, unit_ids)
+                    .await
+            }
+            Ok(GameplayClientMessage::AutoScoutOrder {
                 sequence,
-                entity_id,
-            }) => service.queue_stop(session_id, sequence, entity_id).await,
+                unit_ids,
+                enabled,
+            }) => {
+                service
+                    .queue_auto_scout_selection(session_id, sequence, unit_ids, enabled)
+                    .await
+            }
             Ok(GameplayClientMessage::DeleteOrder {
                 sequence,
                 entity_ids,
@@ -165,15 +175,6 @@ pub(super) async fn read_requests(
             }) => {
                 service
                     .queue_garrison_control(session_id, sequence, building_id, true)
-                    .await
-            }
-            Ok(GameplayClientMessage::AutoScoutOrder {
-                sequence,
-                entity_id,
-                enabled,
-            }) => {
-                service
-                    .queue_auto_scout(session_id, sequence, entity_id, enabled)
                     .await
             }
             Ok(GameplayClientMessage::SetRallyOrder {

@@ -24,6 +24,26 @@ impl GameplayService {
         Ok(service)
     }
 
+    pub(crate) fn selection_orders_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        use aoe_core::{PlayerId, TileCoord, WorldConfig, WorldPosition};
+        use aoe_simulation::{EconomyError, UnitKind};
+
+        let config =
+            WorldConfig::new(128, 128, seed).map_err(|_| EconomyError::InvalidFootprint)?;
+        let mut world = GameWorld::new(config)?;
+        let primary = world.initialize_village(PlayerId(0), TileCoord::new(64, 64))?;
+        for y in 69..74 {
+            for x in 61..67 {
+                let position = WorldPosition::from_tile_center(TileCoord::new(x, y))
+                    .map_err(|_| EconomyError::InvalidFootprint)?;
+                world
+                    .spawn_kind(PlayerId(0), UnitKind::LightCavalry, position)
+                    .map_err(|_| EconomyError::InvalidFootprint)?;
+            }
+        }
+        Ok(Self::from_world(world, primary, None, None))
+    }
+
     pub fn roads_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
         let (world, primary) = GameWorld::roads_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))

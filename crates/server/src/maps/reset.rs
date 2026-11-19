@@ -138,7 +138,7 @@ pub(crate) async fn reset(
             | "steward-territory" | "steward-farming" | "steward-kingdom"
             | "feudal-military" | "general-army" | "general-appearance" | "imperial-army"
             | "trade-wonder" | "steward-fishing" | "steward-throughput"
-            | "steward-stability" | "walk-crowd"),
+            | "steward-stability" | "walk-crowd" | "selection-orders"),
         ) => {
             let constructor = match name {
                 "roads" => GameplayService::roads_demo,
@@ -152,6 +152,7 @@ pub(crate) async fn reset(
                 "steward-fishing" => GameplayService::steward_fishing_demo,
                 "steward-throughput" => GameplayService::steward_throughput_demo,
                 "walk-crowd" => GameplayService::walk_crowd_demo,
+                "selection-orders" => GameplayService::selection_orders_demo,
                 "general-army" => GameplayService::general_demo,
                 "imperial-army" => GameplayService::imperial_demo,
                 "trade-wonder" => GameplayService::trade_demo,

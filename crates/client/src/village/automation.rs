@@ -1,4 +1,4 @@
-//! Presentation and ordinary per-unit orders for authoritative cavalry scouting.
+//! Presentation and selection orders for authoritative cavalry scouting.
 use super::{Client, orders::send, owner};
 use aoe_protocol::GameplayClientMessage as Message;
 
@@ -25,19 +25,26 @@ pub(super) fn tally(units: impl IntoIterator<Item = (aoe_protocol::UnitKind, boo
 pub(super) fn toggle(client: &mut Client) {
     let counts = state(client);
     let enabled = counts[1] < counts[0];
-    for id in client.selected.units.clone() {
-        if client.units.get(&id).is_some_and(|unit| {
-            unit.player == owner(client) && unit.hp > 0 && unit.kind.can_auto_scout()
-        }) {
-            let sequence = client.next_sequence;
-            send(
-                client,
-                Message::AutoScoutOrder {
-                    sequence,
-                    entity_id: id,
-                    enabled,
-                },
-            );
-        }
+    let scouts = client
+        .selected
+        .units
+        .iter()
+        .copied()
+        .filter(|id| {
+            client.units.get(id).is_some_and(|unit| {
+                unit.player == owner(client) && unit.hp > 0 && unit.kind.can_auto_scout()
+            })
+        })
+        .collect::<Vec<_>>();
+    for unit_ids in scouts.chunks(aoe_core::MAX_FORMATION_MEMBERS) {
+        let sequence = client.next_sequence;
+        send(
+            client,
+            Message::AutoScoutOrder {
+                sequence,
+                unit_ids: unit_ids.to_vec(),
+                enabled,
+            },
+        );
     }
 }

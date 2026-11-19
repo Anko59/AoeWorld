@@ -64,7 +64,7 @@ fn wildlife_wire_golden_and_roundtrip() {
 
 #[test]
 fn stop_order_has_current_golden_wire_and_roundtrips() {
-    let bytes = [16, 3, 7];
+    let bytes = [16, 3, 1, 7];
     let order = decode_gameplay_client(&bytes).expect("StopOrder is a gameplay command");
     assert_eq!(encode_gameplay_client(&order).unwrap(), bytes);
 }

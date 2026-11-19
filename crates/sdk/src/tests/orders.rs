@@ -273,7 +273,7 @@ fn a_tile_move_targets_the_tile_centre_and_stop_keeps_its_unit() {
         Order::Stop { unit: id(2) }.message(1).unwrap(),
         M::StopOrder {
             sequence: 1,
-            entity_id: id(2)
+            unit_ids: vec![id(2)]
         }
     );
     assert_eq!(

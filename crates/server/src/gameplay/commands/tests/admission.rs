@@ -245,3 +245,56 @@ fn vassal_development_cannot_be_changed_by_another_owner() {
     );
     assert!(!world.vassal_status(vassal).unwrap().development);
 }
+
+#[tokio::test]
+async fn stop_and_auto_scout_apply_large_selections_over_multiple_ticks() {
+    let service = GameplayService::selection_orders_demo(Seed(7)).unwrap();
+    let (sender, mut receiver) = mpsc::channel(32);
+    let (session, _) = service.register(None, sender).await;
+    let scouts = service
+        .world
+        .read()
+        .await
+        .units()
+        .filter(|unit| unit.kind == aoe_simulation::UnitKind::LightCavalry)
+        .map(|unit| unit.id)
+        .collect::<Vec<_>>();
+    assert_eq!(scouts.len(), 30);
+    let count_scouting = || async {
+        let world = service.world.read().await;
+        scouts
+            .iter()
+            .filter(|&&id| world.unit(id).unwrap().auto_scout)
+            .count()
+    };
+
+    service
+        .queue_auto_scout_selection(session, 1, scouts.clone(), true)
+        .await;
+    service.tick().await;
+    assert!((1..scouts.len()).contains(&count_scouting().await));
+    service.tick().await;
+    assert_eq!(count_scouting().await, scouts.len());
+
+    service
+        .queue_stop_selection(session, 2, scouts.clone())
+        .await;
+    service.tick().await;
+    assert!((1..scouts.len()).contains(&count_scouting().await));
+    service.tick().await;
+    assert_eq!(count_scouting().await, 0);
+
+    let mut replies = Vec::new();
+    while let Ok(message) = receiver.try_recv() {
+        if let GameplayServerMessage::CommandAck {
+            sequence, result, ..
+        } = message
+        {
+            replies.push((sequence, result));
+        }
+    }
+    assert_eq!(
+        replies,
+        [(1, CommandResult::Accepted), (2, CommandResult::Accepted)]
+    );
+}

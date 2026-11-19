@@ -248,7 +248,7 @@ impl Order {
             },
             Order::AutoScout { unit, enabled } => M::AutoScoutOrder {
                 sequence,
-                entity_id: unit,
+                unit_ids: vec![unit],
                 enabled,
             },
             Order::FarmReseed { building, add } => M::FarmReseedOrder {
@@ -317,7 +317,7 @@ impl Order {
             },
             Order::Stop { unit } => M::StopOrder {
                 sequence,
-                entity_id: unit,
+                unit_ids: vec![unit],
             },
             Order::Gather { unit, resource } => M::GatherOrder {
                 sequence,

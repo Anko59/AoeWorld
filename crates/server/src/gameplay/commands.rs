@@ -1,7 +1,7 @@
 use super::slots::total_pending;
 use super::{
     GameplayService, MAX_ACK_HISTORY, MAX_PENDING_COMMANDS_GLOBAL,
-    MAX_PENDING_COMMANDS_PER_CONNECTION, PendingAction, PendingCommand,
+    MAX_PENDING_COMMANDS_PER_CONNECTION, PendingAction,
 };
 use aoe_core::{EntityId, WorldPosition};
 use aoe_protocol::{CommandResult, GameplayServerMessage};
@@ -33,7 +33,7 @@ mod garrison;
 #[path = "commands/navy.rs"]
 mod navy;
 #[path = "commands/queue.rs"]
-mod queue;
+pub(super) mod queue;
 pub(super) use apply::apply;
 
 impl GameplayService {
@@ -63,20 +63,6 @@ impl GameplayService {
             session_id,
             sequence,
             PendingAction::Stance { unit_ids, stance },
-        )
-        .await;
-    }
-    pub async fn queue_auto_scout(
-        &self,
-        session_id: u64,
-        sequence: u64,
-        entity_id: EntityId,
-        enabled: bool,
-    ) {
-        self.queue_command(
-            session_id,
-            sequence,
-            PendingAction::AutoScout { entity_id, enabled },
         )
         .await;
     }
