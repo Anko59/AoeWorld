@@ -402,6 +402,7 @@ export function initStartSequence({ readJson, start, cancel }) {
       el('loading-location').textContent = `${card.name} · ${card.opponents} AI opponent${card.opponents === 1 ? '' : 's'}`;
       progress(null, null, 'Reading your saved game…');
       show('loading');
+      loadingArt.start();
       try {
         const value = await run();
         if (value === null) { returnToSetup(); show('menu'); return; }
