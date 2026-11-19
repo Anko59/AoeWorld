@@ -104,3 +104,33 @@ fn ringing_again_before_arrival_cancels_only_bell_orders() {
     assert!(world.unit(bell_worker).is_some());
     assert!(world.unit(manual_worker).is_none());
 }
+
+#[test]
+fn the_next_bell_shelters_again_after_back_to_work_or_manual_release() {
+    let player = PlayerId(0);
+    for back_to_work in [true, false] {
+        let (mut world, center) = shelter(BuildingKind::TownCenter);
+        let worker = world.spawn_villager(player, at(99, 100)).unwrap();
+        world.issue_town_bell(player, center).unwrap();
+        ticks_until(&mut world, 300, |w| w.unit(worker).is_none());
+
+        if back_to_work {
+            world.issue_back_to_work(player, center).unwrap();
+        } else {
+            world.issue_ungarrison(player, center, None).unwrap();
+        }
+        assert!(world.unit(worker).is_some());
+        world.issue_town_bell(player, center).unwrap();
+        assert_eq!(world.economy.garrison_orders.get(&worker), Some(&center));
+    }
+}
+
+#[test]
+fn an_empty_bell_does_not_consume_the_next_ring() {
+    let player = PlayerId(0);
+    let (mut world, center) = shelter(BuildingKind::TownCenter);
+    world.issue_town_bell(player, center).unwrap();
+    let worker = world.spawn_villager(player, at(99, 100)).unwrap();
+    world.issue_town_bell(player, center).unwrap();
+    assert_eq!(world.economy.garrison_orders.get(&worker), Some(&center));
+}

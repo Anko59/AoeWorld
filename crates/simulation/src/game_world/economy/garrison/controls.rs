@@ -132,26 +132,39 @@ impl GameWorld {
                     (intent.bell == Some(building)).then_some((unit, *intent))
                 })
                 .collect();
+            let mut releasing = !pending.is_empty();
             for (unit, intent) in pending {
                 if self.issue_stop(player, unit).is_ok() {
                     self.resume_sheltered_work(player, unit, intent);
                 }
             }
-            for (id, _) in shelters {
-                self.release_matching(id, |occupant| occupant.intent.bell == Some(building), true);
-                if self.economy.buildings.get(&id).is_some_and(|shelter| {
+            let holds_bell_villagers = |world: &Self, id| {
+                world.building(id).is_some_and(|shelter| {
                     shelter
                         .garrison
                         .iter()
                         .any(|occupant| occupant.intent.bell == Some(building))
-                }) {
-                    self.economy.town_bells.insert(building);
+                })
+            };
+            for &(id, _) in &shelters {
+                if holds_bell_villagers(self, id) {
+                    releasing = true;
+                    self.release_matching(
+                        id,
+                        |occupant| occupant.intent.bell == Some(building),
+                        true,
+                    );
+                    if holds_bell_villagers(self, id) {
+                        self.economy.town_bells.insert(building);
+                    }
                 }
             }
-            return Ok(());
+            // Villagers may already have left by another command.
+            if releasing {
+                return Ok(());
+            }
         }
 
-        self.economy.town_bells.insert(building);
         let rect = TileRect::from_xywh(
             origin.x - BELL_RANGE,
             origin.y - BELL_RANGE,
@@ -173,6 +186,7 @@ impl GameWorld {
             candidates.sort_unstable_by_key(|&(id, at)| (distance_squared(tile, at), id));
             for &(id, _) in &candidates {
                 if self.issue_garrison(player, villager.id, id).is_ok() {
+                    self.economy.town_bells.insert(building);
                     self.economy
                         .shelter_intents
                         .entry(villager.id)
