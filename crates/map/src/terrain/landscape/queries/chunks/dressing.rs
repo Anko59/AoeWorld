@@ -74,10 +74,14 @@ pub(super) fn rock_anchor<const N: usize, const W: usize>(
         return Ok(false);
     }
     for at in rock_footprint(position) {
-        if !memo
-            .base(at)?
-            .is_some_and(|tile| tile.water == crate::WaterKind::None)
+        let Some(tile) = memo.base(at)? else {
+            return Ok(false);
+        };
+        // A resource node under the pile would hide the rock art and sit on
+        // blocked ground, so that spot grows no pile.
+        if tile.water != crate::WaterKind::None
             || !allows_dressing(reserved_at(at)?)
+            || memo.resource(at, tile)?.is_some()
         {
             return Ok(false);
         }

@@ -327,3 +327,49 @@ fn physical_chunks_and_points_drop_only_decorations() {
     }
     assert!(decorated > 0, "the fixture must exercise skipped dressing");
 }
+
+#[test]
+fn every_rock_blocked_tile_lies_under_drawn_rock_art_and_holds_no_resource() {
+    use crate::DecorationFamily;
+
+    let generator = relief(1, 20, |_, _| 300);
+    let scenes = chunks(&generator, 2..10);
+    let stones = scenes
+        .iter()
+        .flat_map(|scene| &scene.decorations)
+        .filter(|d| d.family == DecorationFamily::Stone)
+        .map(|d| d.tile)
+        .collect::<std::collections::HashSet<_>>();
+    let under_art = |at: TileCoord| {
+        (-1..=1).any(|dy| (-1..=1).any(|dx| stones.contains(&TileCoord::new(at.x + dx, at.y + dy))))
+    };
+    let mut blocked = 0;
+    for scene in &scenes {
+        for tile in &scene.tiles {
+            // A pile anchored outside the loaded chunks can reach the edge tiles.
+            let inner = 2 * CHUNK_TILES + 2..10 * CHUNK_TILES - 2;
+            if tile.terrain.passable
+                || !tile.terrain.surface.walkable()
+                || !inner.contains(&tile.tile.x)
+                || !inner.contains(&tile.tile.y)
+            {
+                continue;
+            }
+            if scene.resources.iter().any(|r| r.node.tile == tile.tile) {
+                assert!(
+                    !under_art(tile.tile),
+                    "a resource sits under the rocks at {:?}",
+                    tile.tile
+                );
+                continue;
+            }
+            blocked += 1;
+            assert!(
+                under_art(tile.tile),
+                "{:?} is blocked with no rock drawn",
+                tile.tile
+            );
+        }
+    }
+    assert!(blocked > 0, "the steppe grows rock piles");
+}
