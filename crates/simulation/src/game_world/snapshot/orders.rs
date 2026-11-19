@@ -77,6 +77,9 @@ impl GameWorld {
                 self.issue_hunt(player, &[id], animal)
             } else if let Some(target) = record.unit.attack_target {
                 self.issue_attack(player, id, target)
+            } else if record.unit.auto_scout {
+                // Plan again from the restored position and explored terrain.
+                self.issue_auto_scout(player, id, true)
             } else if let Some(at) = record.move_to.filter(|_| !grouped.contains(&id)) {
                 let result = self
                     .issue_move(id, at)

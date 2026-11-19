@@ -299,7 +299,6 @@ impl GameWorld {
         unit.facing = state.facing;
         unit.carried = state.carried;
         unit.stance = state.stance;
-        unit.auto_scout = state.auto_scout;
         unit.sergeant = state.sergeant;
         unit.last_hit = state.last_hit;
         if let Some(building) = record.garrison_in

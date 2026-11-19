@@ -41,6 +41,41 @@ fn restored_scout_skips_a_blocked_current_leg_and_finishes_its_queued_destinatio
 }
 
 #[test]
+fn active_auto_scout_keeps_exploring_after_save_and_load() {
+    let (mut saved, start) = flat();
+    let player = PlayerId(0);
+    let at = |dx| {
+        aoe_core::WorldPosition::from_tile_center(TileCoord::new(start.x + dx, start.y)).unwrap()
+    };
+    let scout = saved
+        .spawn_kind(player, crate::UnitKind::Scout, at(6))
+        .unwrap();
+    let idle = saved
+        .spawn_kind(player, crate::UnitKind::Scout, at(9))
+        .unwrap();
+    saved.issue_auto_scout(player, scout, true).unwrap();
+    for _ in 0..64 {
+        if saved.movement_goal(scout).is_some() {
+            break;
+        }
+        saved.advance();
+    }
+    assert!(saved.movement_goal(scout).is_some());
+
+    let (mut restored, report) = roundtrip(&saved, flat().0);
+    assert_eq!(report.units_lost, 0);
+    assert!(restored.unit(scout).unwrap().auto_scout);
+    assert!(!restored.unit(idle).unwrap().auto_scout);
+    let origin = restored.unit(scout).unwrap().position;
+    for _ in 0..256 {
+        restored.advance();
+    }
+    assert_ne!(restored.unit(scout).unwrap().position, origin);
+    assert!(restored.unit(scout).unwrap().auto_scout);
+    assert_eq!(restored.unit(idle).unwrap().position, at(9));
+}
+
+#[test]
 fn restored_sheltered_general_keeps_his_outdoor_army() {
     let (mut saved, start) = flat();
     saved.initialize_village(PlayerId(0), start).unwrap();

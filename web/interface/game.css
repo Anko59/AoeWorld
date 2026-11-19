@@ -189,6 +189,8 @@ html[data-interface-art=original] #command-grid button, html[data-interface-art=
 html[data-interface-art=original] #command-grid button { display:flex; align-items:center; justify-content:center; }
 html[data-interface-art=original] #command-grid button:disabled { opacity:.48; }
 html[data-interface-art=original] #command-grid button:hover:not(:disabled) { outline:1px solid #f1d889; outline-offset:-2px; }
+#command-grid #auto-scout[aria-pressed=true] { outline:2px solid #f4d577; outline-offset:-3px; }
+#command-grid #auto-scout[aria-pressed=mixed] { outline:2px dashed #f4d577; outline-offset:-3px; }
 html[data-interface-art=original] #command-grid button:active:not(:disabled) { transform:translateY(1px); }
 html[data-interface-art=original] #command-grid .empty-command { opacity:.35; }
 html[data-interface-art=original] #command-grid button>.art-icon, html[data-interface-art=original] #command-grid .train-icon { display:inline-flex; position:static; width:36px; height:36px; }
