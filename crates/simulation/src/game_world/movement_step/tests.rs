@@ -428,3 +428,42 @@ fn a_blocked_scout_escapes_a_fractional_parking_wedge_without_new_overlap() {
         );
     }
 }
+
+/// An unseen squad member steps as part of one body: no body sweep and no
+/// recheck when it applies. Seen by its owner's human seat, the same member
+/// keeps the full model.
+#[test]
+fn an_unseen_squad_member_steps_without_body_sweeps() {
+    for (seat, unseen) in [(PlayerId(0), true), (PlayerId(1), false)] {
+        let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(0)).unwrap()).unwrap();
+        world.set_human_seats(&[seat]);
+        let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
+        let army: Vec<_> = (0..3)
+            .map(|n| {
+                world
+                    .spawn_kind(PlayerId(1), crate::UnitKind::Militia, at(60, 100 + n))
+                    .unwrap()
+            })
+            .collect();
+        world
+            .issue_formation_move(
+                PlayerId(1),
+                &army,
+                aoe_core::Formation::Line,
+                at(160, 101),
+                false,
+                false,
+            )
+            .unwrap();
+        world.advance();
+        let mut tables = Tables::default();
+        tables.refresh(&world, true);
+        let motion = world
+            .propose_group_step(world.lookup[&army[1]], &tables)
+            .unwrap()
+            .member
+            .unwrap();
+        assert_eq!(motion.unseen, unseen, "watched by {seat:?}");
+        assert!(!unseen || motion.certified);
+    }
+}

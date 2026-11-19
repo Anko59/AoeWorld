@@ -34,16 +34,25 @@ impl GameWorld {
         }) && !self.embarked(unit.id)
     }
 
-    /// Whether the unit at `index` sits out this tick: no person sees it, it
-    /// is not fighting and its turn (its leader's, in a formation) is not due.
+    /// Whether the unit at `index` sits out this tick: it is an unseen
+    /// bystander and its turn (its leader's, in a formation) is not due.
     fn sits_out(&self, index: usize) -> bool {
         let id = self.units[index].state.id;
         let phase = self.units[index].formation.unwrap_or(id);
         !self.vision.human_seats.is_empty()
             && !(self.tick.0 + u64::from(phase.0)).is_multiple_of(self.config.ticks(STRIDE))
-            // Fighters keep every tick: an attacker that moves in jumps strikes
-            // less often (the first experiment lost 5-7% of kills per tick).
-            && !self.combat.attackers.contains_key(&id)
+            && self.unseen_bystander(index)
+    }
+
+    /// No person sees the unit at `index` and it is not fighting. Fighters
+    /// keep the full model: an attacker that moves in jumps strikes less often
+    /// (the first stride experiment lost 5-7% of kills per tick).
+    pub(crate) fn unseen_bystander(&self, index: usize) -> bool {
+        !self.vision.human_seats.is_empty()
+            && !self
+                .combat
+                .attackers
+                .contains_key(&self.units[index].state.id)
             && self.units[index].state.attack_target.is_none()
             && !self.seen_by_a_person(index)
     }
