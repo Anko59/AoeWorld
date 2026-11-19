@@ -2,10 +2,13 @@
 use aoe_core::TileCoord;
 use aoe_map::{EnvironmentPageError, MapChunkGenerator, ResourceOverlay, RouteTerrain};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub(super) struct LimitedMap<'a> {
     pub(super) generator: &'a MapChunkGenerator,
     pub(super) allowance: &'a Mutex<u32>,
+    /// Set when a chunk preparation was refused for want of allowance.
+    pub(super) denied: Option<&'a AtomicBool>,
     pub(super) world: &'a crate::GameWorld,
     pub(super) player: aoe_core::PlayerId,
 }
@@ -19,6 +22,9 @@ impl RouteTerrain for LimitedMap<'_> {
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         if *left == 0 {
+            if let Some(denied) = self.denied {
+                denied.store(true, Ordering::Relaxed);
+            }
             false
         } else {
             *left -= 1;

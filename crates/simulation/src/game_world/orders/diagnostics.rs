@@ -132,10 +132,6 @@ impl GameWorld {
         census
     }
 
-    pub(crate) fn set_work_unit(&mut self, id: Option<EntityId>) {
-        self.order_diagnostics.work_unit = id;
-    }
-
     /// `phase`: 0 issue-time, 1 fair pass, 2 planning ahead.
     pub(crate) fn demand_route_work(&mut self, id: Option<EntityId>, phase: usize, spent: u32) {
         let row = match id.or(self.order_diagnostics.work_unit) {
