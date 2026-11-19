@@ -1,7 +1,7 @@
 """Imperial Age: when the AI saves for it, what it raises and researches, and
 that every Castle Age capability keeps working in the new age."""
 
-from aoeworld import Age, BuildingKind, Tech, UnitKind
+from aoeworld import Age, BuildingKind, Tech, UnitKind, technologies
 
 from fakes import FakeWorld, base, building, economy, unit
 from test_logic import play
@@ -70,30 +70,47 @@ def test_the_castle_economy_raises_a_university_and_a_siege_workshop_for_the_age
 
 
 def test_imperial_army_trains_the_newest_identity_of_every_line():
-    units, buildings = castle_base(villagers=40, soldiers=6)
-    researched = CASTLE + [Tech.IMPERIAL_AGE, Tech.CROSSBOWMAN, Tech.ARBALESTER, Tech.PIKEMAN,
-                           Tech.HALBERDIER, Tech.CAVALIER, Tech.PALADIN]
-    _, client = play(FakeWorld(units, buildings,
-                               eco=castle_economy(age=Age.IMPERIAL, researched=researched, food=3000, gold=3000)))
-    trained = {args for args in client.named("train")}
+    from aoe_ai import Config
+    from aoe_ai.blackboard import Blackboard
+    from aoe_ai.context import Context
+    from aoe_ai.play.military import MilitaryManager
+    from fakes import FakeClient, decision
+
+    units, buildings = castle_base(villagers=40, soldiers=0)
+    researched = [row.tech for row in technologies()]
+    world = FakeWorld(units, buildings, eco=castle_economy(age=Age.IMPERIAL, researched=researched))
+    # Give these three lines the largest shares of the mix.
+    config = Config(army_mix={"ARCHER": 3, "SPEARMAN": 3}, castle_knight_weight=3)
+    ctx = Context(FakeClient(), decision(world), Blackboard(), config)
+    MilitaryManager().train(ctx)
+    trained = set(ctx.client.named("train"))
     assert (601, UnitKind.ARBALESTER) in trained
     assert (600, UnitKind.HALBERDIER) in trained
     assert (603, UnitKind.PALADIN) in trained
 
 
 def test_imperial_age_keeps_castle_age_training_and_the_villager_economy():
+    from aoe_ai import Brain
+
     units, buildings = castle_base(villagers=34, soldiers=6)
-    _, client = play(FakeWorld(units, buildings, eco=castle_economy(
-        age=Age.IMPERIAL, researched=CASTLE + [Tech.IMPERIAL_AGE], food=3000, gold=3000)))
+    world = FakeWorld(units, buildings, eco=castle_economy(
+        age=Age.IMPERIAL, researched=CASTLE + [Tech.IMPERIAL_AGE], food=3000, gold=3000))
+    brain = Brain()
+    for row in technologies():
+        if row.building == BuildingKind.STABLE:
+            brain.board.cool("research:" + str(row.tech), world.tick, world.tick_hz)
+    _, client = play(world, brain=brain)
     assert (603, UnitKind.KNIGHT) in client.named("train")
     assert any(args[1] == UnitKind.VILLAGER for args in client.named("train"))
 
 
-def test_imperial_upgrades_follow_the_castle_ones_in_priority_order():
+def test_imperial_upgrades_follow_the_castle_ones_for_fielded_lines():
     units, buildings = castle_base(villagers=40, soldiers=12)
+    units += [unit(400 + i, UnitKind.CROSSBOWMAN, tile=(64, 60)) for i in range(6)]
     researched = CASTLE + [Tech.IMPERIAL_AGE, Tech.CROSSBOWMAN, Tech.PIKEMAN]
     _, client = play(FakeWorld(units, buildings, eco=castle_economy(
         age=Age.IMPERIAL, researched=researched, food=1500, gold=1500)))
+    assert (600, Tech.HALBERDIER) in client.named("research")
     assert (601, Tech.ARBALESTER) in client.named("research")
 
 

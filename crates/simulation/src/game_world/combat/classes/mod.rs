@@ -72,6 +72,11 @@ pub(super) const fn unit_bonus(attacker: UnitKind, victim: UnitKind) -> u16 {
     BONUSES[0][attacker as usize][victim as usize]
 }
 
+/// Base damage bonuses against a building, before player-specific Masonry.
+pub const fn unit_building_bonus(attacker: UnitKind, target: BuildingKind) -> u16 {
+    BONUSES[0][attacker as usize][UNITS + target as usize]
+}
+
 pub(super) const fn masonry_kind(kind: BuildingKind) -> bool {
     !matches!(kind, BuildingKind::Farm) && !kind.is_barrier()
 }

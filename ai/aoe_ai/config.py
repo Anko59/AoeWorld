@@ -126,12 +126,23 @@ class Config:
     army_mix: dict[str, float] = field(
         default_factory=lambda: {"SPEARMAN": 4.0, "ARCHER": 3.0, "SKIRMISHER": 3.0}
     )
+    #: Default line share and adjustments based on visible counters or siege targets.
+    army_line_weight: float = 1.0
+    army_counter_weight: float = 3.0
+    army_counter_bonus_cap: int = 20
+    army_siege_weight: float = 2.0
+    army_siege_bonus_cap: int = 150
+    army_training_queue: int = 2
+    #: Cash floats for optional improvements while the economy is developing.
+    optional_research_food_float: int = 100
+    optional_research_wood_float: int = 75
+    research_retry_seconds: int = 5
     max_barracks: int = 2
     max_ranges: int = 2
 
     # --- optional river fleet ----------------------------------------------
     fishing_ships: int = 1
-    galleys: int = 2
+    warships: int = 2
     dock_search_radius: int = 12
     naval_settle_seconds: int = 2
 

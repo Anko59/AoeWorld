@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 import aoeworld
-from aoeworld import CommandResult, Tech, UnitKind
+from aoeworld import Age, CommandResult, Tech, UnitKind
 
 from .play.combat import CombatManager
 from .play import buildorder
@@ -15,6 +15,7 @@ from .context import Context, OrderBudgetExhausted
 from .geometry import dist
 from .play.economy import EconomyManager, unemployed
 from .blackboard import Blackboard
+from .roster import profile
 from .play.military import MilitaryManager
 from .play.naval import NavalManager
 from .play.research import ResearchManager
@@ -65,7 +66,7 @@ class Brain:
         self.absorb(ctx)
         self.note_damage(ctx)
         if ctx.castle:
-            castle_units = sum(u.kind in (UnitKind.KNIGHT, UnitKind.LIGHT_CAVALRY, UnitKind.CROSSBOWMAN, UnitKind.ELITE_SKIRMISHER, UnitKind.PIKEMAN, UnitKind.LONG_SWORDSMAN, UnitKind.MANGONEL, UnitKind.BATTERING_RAM) for u in ctx.army)
+            castle_units = sum(u.alive and profile(u.kind).age == Age.CASTLE for u in ctx.army + ctx.led)
             ctx.board.stats["castle_units_peak"] = max(ctx.board.stats.get("castle_units_peak", 0), castle_units)
         ctx.board.stats["army_peak"] = max(ctx.board.stats.get("army_peak", 0), len(ctx.army) + len(ctx.led))
         ctx.board.stats["pop_peak"] = max(ctx.board.stats.get("pop_peak", 0), ctx.economy.population if ctx.economy else 0)

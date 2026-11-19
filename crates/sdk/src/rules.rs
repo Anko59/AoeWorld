@@ -3,6 +3,11 @@
 use crate::model::{BuildingKind, Stockpile, Tech, UnitKind};
 use aoe_simulation as sim;
 
+mod production;
+pub use production::{
+    UnitProfile, training_options, unit_building_bonus, unit_counter_bonus, unit_profile,
+};
+
 fn stock(cost: sim::Stockpile) -> Stockpile {
     Stockpile {
         food: cost.food,
@@ -44,70 +49,86 @@ fn native_building(kind: BuildingKind) -> sim::BuildingKind {
     }
 }
 
-fn native_unit(kind: UnitKind) -> sim::UnitKind {
-    match kind {
-        UnitKind::Villager => sim::UnitKind::Villager,
-        UnitKind::Scout => sim::UnitKind::Scout,
-        UnitKind::Militia => sim::UnitKind::Militia,
-        UnitKind::FishingShip => sim::UnitKind::FishingShip,
-        UnitKind::Archer => sim::UnitKind::Archer,
-        UnitKind::Skirmisher => sim::UnitKind::Skirmisher,
-        UnitKind::Spearman => sim::UnitKind::Spearman,
-        UnitKind::ManAtArms => sim::UnitKind::ManAtArms,
-        UnitKind::LongSwordsman => sim::UnitKind::LongSwordsman,
-        UnitKind::Pikeman => sim::UnitKind::Pikeman,
-        UnitKind::Crossbowman => sim::UnitKind::Crossbowman,
-        UnitKind::EliteSkirmisher => sim::UnitKind::EliteSkirmisher,
-        UnitKind::Knight => sim::UnitKind::Knight,
-        UnitKind::LightCavalry => sim::UnitKind::LightCavalry,
-        UnitKind::Monk => sim::UnitKind::Monk,
-        UnitKind::Mangonel => sim::UnitKind::Mangonel,
-        UnitKind::BatteringRam => sim::UnitKind::BatteringRam,
-        UnitKind::Galley => sim::UnitKind::Galley,
-        UnitKind::FireShip => sim::UnitKind::FireShip,
-        UnitKind::DemolitionShip => sim::UnitKind::DemolitionShip,
-        UnitKind::TransportShip => sim::UnitKind::TransportShip,
-        UnitKind::WarGalley => sim::UnitKind::WarGalley,
-        UnitKind::Vassal => sim::UnitKind::Vassal,
-        UnitKind::Steward => sim::UnitKind::Steward,
-        UnitKind::TradeCart => sim::UnitKind::TradeCart,
-        UnitKind::TradeCog => sim::UnitKind::TradeCog,
-        UnitKind::General => sim::UnitKind::General,
-        UnitKind::TwoHandedSwordsman => sim::UnitKind::TwoHandedSwordsman,
-        UnitKind::Champion => sim::UnitKind::Champion,
-        UnitKind::Halberdier => sim::UnitKind::Halberdier,
-        UnitKind::Arbalester => sim::UnitKind::Arbalester,
-        UnitKind::Cavalier => sim::UnitKind::Cavalier,
-        UnitKind::Paladin => sim::UnitKind::Paladin,
-        UnitKind::Hussar => sim::UnitKind::Hussar,
-        UnitKind::CappedRam => sim::UnitKind::CappedRam,
-        UnitKind::SiegeRam => sim::UnitKind::SiegeRam,
-        UnitKind::Onager => sim::UnitKind::Onager,
-        UnitKind::FireGalley => sim::UnitKind::FireGalley,
-        UnitKind::FastFireShip => sim::UnitKind::FastFireShip,
-        UnitKind::DemolitionRaft => sim::UnitKind::DemolitionRaft,
-        UnitKind::HeavyDemolitionShip => sim::UnitKind::HeavyDemolitionShip,
-        UnitKind::Galleon => sim::UnitKind::Galleon,
-        UnitKind::CannonGalleon => sim::UnitKind::CannonGalleon,
-        UnitKind::EliteCannonGalleon => sim::UnitKind::EliteCannonGalleon,
-        UnitKind::Hulk => sim::UnitKind::Hulk,
-        UnitKind::WarHulk => sim::UnitKind::WarHulk,
-        UnitKind::Carrack => sim::UnitKind::Carrack,
-        UnitKind::CatapultGalleon => sim::UnitKind::CatapultGalleon,
-        UnitKind::CavalryArcher => sim::UnitKind::CavalryArcher,
-        UnitKind::HeavyCavalryArcher => sim::UnitKind::HeavyCavalryArcher,
-        UnitKind::CamelRider => sim::UnitKind::CamelRider,
-        UnitKind::HeavyCamelRider => sim::UnitKind::HeavyCamelRider,
-        UnitKind::Scorpion => sim::UnitKind::Scorpion,
-        UnitKind::HeavyScorpion => sim::UnitKind::HeavyScorpion,
-        UnitKind::HandCannoneer => sim::UnitKind::HandCannoneer,
-        UnitKind::BombardCannon => sim::UnitKind::BombardCannon,
-        UnitKind::Trebuchet => sim::UnitKind::Trebuchet,
-        UnitKind::TrebuchetUnpacked => sim::UnitKind::TrebuchetUnpacked,
-        UnitKind::Petard => sim::UnitKind::Petard,
-        UnitKind::SiegeOnager => sim::UnitKind::SiegeOnager,
-    }
+// Use one exhaustive mapping in both directions. The enum ordinals belong to
+// their own representations and need not match.
+macro_rules! unit_identities {
+    ($($unit:ident),+ $(,)?) => {
+        fn native_unit(kind: UnitKind) -> sim::UnitKind {
+            match kind {
+                $(UnitKind::$unit => sim::UnitKind::$unit,)+
+            }
+        }
+
+        fn public_unit(kind: sim::UnitKind) -> UnitKind {
+            match kind {
+                $(sim::UnitKind::$unit => UnitKind::$unit,)+
+            }
+        }
+    };
 }
+
+unit_identities!(
+    Villager,
+    Scout,
+    Militia,
+    FishingShip,
+    Archer,
+    Skirmisher,
+    Spearman,
+    ManAtArms,
+    LongSwordsman,
+    Pikeman,
+    Crossbowman,
+    EliteSkirmisher,
+    Knight,
+    LightCavalry,
+    Monk,
+    Mangonel,
+    BatteringRam,
+    Galley,
+    FireShip,
+    DemolitionShip,
+    TransportShip,
+    WarGalley,
+    Vassal,
+    Steward,
+    TradeCart,
+    TradeCog,
+    General,
+    TwoHandedSwordsman,
+    Champion,
+    Halberdier,
+    Arbalester,
+    Cavalier,
+    Paladin,
+    Hussar,
+    CappedRam,
+    SiegeRam,
+    Onager,
+    FireGalley,
+    FastFireShip,
+    DemolitionRaft,
+    HeavyDemolitionShip,
+    Galleon,
+    CannonGalleon,
+    EliteCannonGalleon,
+    Hulk,
+    WarHulk,
+    Carrack,
+    CatapultGalleon,
+    CavalryArcher,
+    HeavyCavalryArcher,
+    CamelRider,
+    HeavyCamelRider,
+    Scorpion,
+    HeavyScorpion,
+    HandCannoneer,
+    BombardCannon,
+    Trebuchet,
+    TrebuchetUnpacked,
+    Petard,
+    SiegeOnager,
+);
 
 fn native_tech(tech: Tech) -> sim::Tech {
     match tech {
@@ -324,6 +345,14 @@ pub struct Technology {
     pub prerequisite: Option<Tech>,
     pub building_count: usize,
     pub building_kinds: Vec<BuildingKind>,
+    /// Base line identities which this technology upgrades.
+    pub upgrades: Vec<UnitKind>,
+    /// Unit identities requiring this technology to train.
+    pub unlocks: Vec<UnitKind>,
+    /// Units directly affected by a scoped speed or hit-point bonus.
+    pub improves: Vec<UnitKind>,
+    /// Improves resource collection, farms or villager carrying capacity.
+    pub economic: bool,
 }
 
 pub fn technologies() -> Vec<Technology> {
@@ -336,6 +365,7 @@ pub fn technologies() -> Vec<Technology> {
             let building = BuildingKind::ALL
                 .into_iter()
                 .find(|b| native_building(*b) == row.building)?;
+            let (upgrades, unlocks, improves) = production::technology_units(row);
             let mut result = Technology {
                 tech,
                 building,
@@ -343,6 +373,15 @@ pub fn technologies() -> Vec<Technology> {
                 prerequisite: None,
                 building_count: 0,
                 building_kinds: Vec::new(),
+                upgrades,
+                unlocks,
+                improves,
+                economic: matches!(
+                    row.effect,
+                    sim::TechEffect::GatherRate { .. }
+                        | sim::TechEffect::FarmFood(_)
+                        | sim::TechEffect::VillagerEconomy { .. }
+                ),
             };
             match row.requires {
                 sim::TechRequirement::Technology(required) => {

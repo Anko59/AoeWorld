@@ -36,9 +36,10 @@ mod towers;
 #[cfg(test)]
 pub(crate) use approach::FarAttack;
 pub(crate) use approach::{MAX_POSITION_SEARCHES_PER_TICK, SearchWait};
+pub use classes::unit_building_bonus;
 pub use conversion::{conversion_chance, convertible_building, convertible_unit};
 pub(crate) use hash::hash_hit;
-pub use military::{apply_research_stats, researched_stats};
+pub use military::{apply_research_stats, class_bonus, researched_stats};
 pub use projectiles::{Projectile, ProjectileKind};
 pub use table::{
     BUILDING_COMBAT, BuildingAttack, BuildingCombat, DamageKind, FISHING_SHIP_SPEED_HUNDREDTHS,

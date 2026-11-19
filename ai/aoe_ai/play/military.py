@@ -1,121 +1,68 @@
-"""Training the army: a spearman, archer and skirmisher mix from finished
-production buildings, parked at a rally point near home."""
+"""Compose an army from completed production buildings and rally it."""
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Optional
 
-from aoeworld import BuildingKind, Tech, UnitKind, trainable, unit_cost
+from aoeworld import Building, UnitKind
+
 from . import buildorder
-
+from ..roster import (best_recruit, land_producers, land_soldier, options, price,
+                      profile, visible_composition)
 from ..context import Context
 from ..geometry import Tile, clamp_tile, dist, nearest
 
-TRAINERS = (BuildingKind.BARRACKS, BuildingKind.ARCHERY_RANGE, BuildingKind.STABLE)
-#: What stands in for a kind the age does not allow yet.
-SUBSTITUTE = {UnitKind.SPEARMAN: UnitKind.MILITIA}
-#: Each base kind and its upgraded identities, last = newest.
-LINES = {
-    UnitKind.ARCHER: ((Tech.CROSSBOWMAN, UnitKind.CROSSBOWMAN), (Tech.ARBALESTER, UnitKind.ARBALESTER)),
-    UnitKind.SPEARMAN: ((Tech.PIKEMAN, UnitKind.PIKEMAN), (Tech.HALBERDIER, UnitKind.HALBERDIER)),
-    UnitKind.KNIGHT: ((Tech.CAVALIER, UnitKind.CAVALIER), (Tech.PALADIN, UnitKind.PALADIN)),
-}
-#: Upgraded identity -> the base kind whose share of the mix it fills.
-BASE_OF = {upgraded: base for base, line in LINES.items() for _, upgraded in line}
-MIX_KINDS = {
-    "SPEARMAN": UnitKind.SPEARMAN,
-    "ARCHER": UnitKind.ARCHER,
-    "SKIRMISHER": UnitKind.SKIRMISHER,
-    "KNIGHT": UnitKind.KNIGHT,
-}
+TRAINERS = land_producers()
 
 
 class MilitaryManager:
-    # ----- training --------------------------------------------------------
-    def composition(self, ctx: Context) -> dict[UnitKind, int]:
-        have = {kind: 0 for kind in MIX_KINDS.values()}
-        for unit in ctx.army:
-            # Militia stand in for spearmen until the age allows them.
-            kind = UnitKind.SPEARMAN if unit.kind == UnitKind.MILITIA else unit.kind
-            kind = BASE_OF.get(kind, kind)
-            if kind in have:
-                have[kind] += 1
-        for building in ctx.buildings:
-            if building.kind in TRAINERS:
-                have_queue = building.queue_length
-                # Queue contents are not itemised per kind in the summary, so
-                # attribute them to what the building makes first.
-                options = [k for k in trainable(building.kind) if k in have]
-                if options and have_queue:
-                    have[options[0]] += have_queue
-        return have
-
     def train(self, ctx: Context) -> None:
         if ctx.board.cooling("world-limit:train", ctx.tick):
             return
-        if ctx.home is None or ctx.saving_castle or not ctx.feudal or len(ctx.villagers) < ctx.config.army_min_villagers:
+        if ctx.home is None or not ctx.feudal or len(ctx.villagers) < ctx.config.army_min_villagers:
             return
-        # Let wood accumulate for the second distinct Feudal building before
-        # production consumes every 25/35-wood increment.
+        # Imperial expansion already reserves its resources. Train with the
+        # remainder while saving the next Town Center or management unit.
+        if ctx.saving_castle and (not ctx.imperial or ctx.center is None):
+            return
         if (not ctx.castle and len(ctx.villagers) >= ctx.config.castle_villagers
                 and buildorder.castle_requirement_kinds(ctx) < 2):
             return
-        mix = dict(ctx.config.army_mix)
-        mix["KNIGHT"] = ctx.config.castle_knight_weight
-        have = self.composition(ctx)
         trainers = [b for b in ctx.buildings if b.kind in TRAINERS and b.complete]
         if not trainers:
             return
         start = ctx.board.military_cursor % len(trainers)
         ctx.board.military_cursor = (start + 4) % len(trainers)
+        researched = tuple(ctx.economy.researched)
+        mix = {getattr(UnitKind, name, None): weight for name, weight in ctx.config.army_mix.items()}
+        mix[UnitKind.KNIGHT] = ctx.config.castle_knight_weight
+        have = ctx.combat_lines.copy()
+        enemies = visible_composition(ctx.enemies, lambda kind: not profile(kind).naval)
+        known = [b for b in ctx.world.known_enemy_buildings() if b.id not in ctx.board.cleared]
+        target: Optional[Building] = next((b for b in known if b.id == ctx.board.attack_target), None)
+        if target is None:
+            target = nearest(known, ctx.home, key=lambda b: b.center)
         for building in trainers[start:] + trainers[:start]:
-            if building.kind not in TRAINERS or not building.complete:
-                continue
-            if building.queue_length >= 2 or building.researching is not None or building.kind in ctx.draining:
+            if (building.queue_length >= ctx.config.army_training_queue
+                    or building.researching is not None or building.id in ctx.draining):
                 continue
             if ctx.free_population() <= 0:
                 return
-            choice = self.pick(ctx, building, have, mix)
-            if choice is None:
+            roster = options(building.kind, ctx.economy.age, researched)
+            choices = [kind for kind in roster if land_soldier(kind)]
+            if not ctx.castle:
+                # The Feudal opening spends its early income on its core lines.
+                choices = [kind for kind in choices if profile(kind).line in mix]
+                if str(UnitKind.SPEARMAN) in ctx.board.blocked_units and UnitKind.SPEARMAN in choices:
+                    choices += [kind for kind in roster if profile(kind).line == UnitKind.MILITIA]
+            kind = best_recruit(ctx, choices, have, enemies, target.kind if target else None, mix)
+            if kind is None:
                 continue
-            ctx.spend(unit_cost(choice))
-            ctx.order("train", building.id, choice)
+            ctx.spend(price(kind))
+            ctx.order("train", building.id, kind)
             ctx.queued += 1
-            bucket = BASE_OF.get(choice, UnitKind.SPEARMAN if choice == UnitKind.MILITIA else choice)
-            have[bucket] += 1
+            have[profile(kind).line] += 1
             ctx.board.bump("army_queued")
-
-    def pick(self, ctx: Context, building: Any, have: dict, mix: dict) -> Optional[UnitKind]:
-        options = []
-        for kind in trainable(building.kind):
-            name = next((n for n, k in MIX_KINDS.items() if k == kind), None)
-            if name is None:
-                continue
-            train = self.allowed(ctx, kind)
-            if train is None or not ctx.can_afford(unit_cost(train)):
-                continue
-            options.append((have[kind] / mix.get(name, 1.0), train))
-        if not options:
-            return None
-        options.sort(key=lambda pair: pair[0])
-        return options[0][1]
-
-    def allowed(self, ctx: Context, kind: UnitKind) -> Optional[UnitKind]:
-        """`kind`, or a stand-in while the server has refused it for the age."""
-        if kind == UnitKind.KNIGHT and not ctx.castle:
-            return None
-        if ctx.castle and kind in LINES:
-            # The newest researched identity of the line.
-            for tech, upgraded in reversed(LINES[kind]):
-                if ctx.economy.has_researched(tech):
-                    return upgraded
-        blocked = ctx.board.blocked_units
-        if str(kind) not in blocked:
-            return kind
-        substitute = SUBSTITUTE.get(kind)
-        if substitute is not None and str(substitute) not in blocked:
-            return substitute
-        return None
 
     # ----- rally -----------------------------------------------------------
     def rally_point(self, ctx: Context, home: Optional[Tile] = None) -> Tile:

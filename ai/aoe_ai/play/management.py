@@ -266,7 +266,7 @@ class ManagementManager:
         cost = unit_cost(kind)
         busy = False
         for b in ctx.buildings:
-            if b.kind != house or not b.complete or not wants(b):
+            if b.kind != house or not b.complete or b.id in ctx.draining or not wants(b):
                 continue
             if b.queue_length or b.researching is not None:
                 busy = True  # a Town Center queued with villagers: save so the queue drains
@@ -364,7 +364,7 @@ class ManagementManager:
     def generals(self, ctx: Context) -> None:
         cfg, board = ctx.config, ctx.board
         for general in (u for u in ctx.units if u.kind == UnitKind.GENERAL and u.alive):
-            enabled = cfg.general_train and not (ctx.saving_castle or ctx.draining)
+            enabled = cfg.general_train and not (ctx.saving_castle or ctx.production_drain)
             if general.id not in board.generals:
                 ctx.order("general_mix", general.id, list(cfg.general_mix))
                 board.generals.add(general.id)

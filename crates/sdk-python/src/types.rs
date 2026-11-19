@@ -105,6 +105,7 @@ pub struct Building {
     /// False for a building remembered from earlier, now out of sight.
     pub visible: bool,
     pub queue_length: usize,
+    pub queued_units: Vec<UnitKind>,
     pub farm_reseeds: u8,
     pub garrison_capacity: u8,
     /// Occupants as (id, kind, hp, max_hp), visible to the owner only.
@@ -149,6 +150,7 @@ impl From<aoe_sdk::Building> for Building {
             max_hp: building.state.max_hp,
             visible: building.visible,
             queue_length: building.state.training_queue.len(),
+            queued_units: building.state.training_queue.iter().map(|unit| unit.kind.into()).collect(),
             farm_reseeds: building.state.farm_reseeds,
             garrison_capacity: building.kind().garrison_capacity(),
             garrison: building.state.garrison.iter().map(|u| (u.id.0, u.kind.into(), u.hp, u.max_hp)).collect(),

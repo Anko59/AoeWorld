@@ -85,6 +85,11 @@ fn villager_capacity() -> u16 {
 
 pub fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<Technology>()?;
+    module.add_class::<UnitProfile>()?;
+    module.add_function(wrap_pyfunction!(training_options, module)?)?;
+    module.add_function(wrap_pyfunction!(unit_profile, module)?)?;
+    module.add_function(wrap_pyfunction!(unit_counter_bonus, module)?)?;
+    module.add_function(wrap_pyfunction!(unit_building_bonus, module)?)?;
     module.add_function(wrap_pyfunction!(technologies, module)?)?;
     module.add_function(wrap_pyfunction!(market_quote, module)?)?;
     module.add_function(wrap_pyfunction!(building_cost, module)?)?;
@@ -112,6 +117,10 @@ struct Technology {
     prerequisite: Option<Tech>,
     building_count: usize,
     building_kinds: Vec<BuildingKind>,
+    upgrades: Vec<UnitKind>,
+    unlocks: Vec<UnitKind>,
+    improves: Vec<UnitKind>,
+    economic: bool,
 }
 
 #[pyfunction]
@@ -120,10 +129,56 @@ fn technologies() -> Vec<Technology> {
         tech: row.tech.into(), building: row.building.into(), age: row.age.into(),
         prerequisite: row.prerequisite.map(Into::into), building_count: row.building_count,
         building_kinds: row.building_kinds.into_iter().map(Into::into).collect(),
+        upgrades: row.upgrades.into_iter().map(Into::into).collect(),
+        unlocks: row.unlocks.into_iter().map(Into::into).collect(),
+        improves: row.improves.into_iter().map(Into::into).collect(),
+        economic: row.economic,
     }).collect()
 }
 
 #[pyfunction]
 fn market_quote(price: u16, buy: bool) -> u32 {
     aoe_sdk::rules::market_quote(price, buy)
+}
+
+/// Project a production building's public roster for an age and tech set.
+#[pyfunction]
+fn training_options(building: BuildingKind, age: Age, researched: Vec<Tech>) -> Vec<UnitKind> {
+    let researched: Vec<_> = researched.into_iter().map(Into::into).collect();
+    aoe_sdk::rules::training_options(building.into(), age.into(), &researched)
+        .into_iter()
+        .map(Into::into)
+        .collect()
+}
+
+#[pyclass(frozen, get_all, module = "aoeworld")]
+#[derive(Clone)]
+struct UnitProfile {
+    line: UnitKind,
+    age: Age,
+    armed: bool,
+    naval: bool,
+    siege: bool,
+}
+
+#[pyfunction]
+fn unit_profile(kind: UnitKind) -> UnitProfile {
+    let row = aoe_sdk::rules::unit_profile(kind.into());
+    UnitProfile {
+        line: row.line.into(),
+        age: row.age.into(),
+        armed: row.armed,
+        naval: row.naval,
+        siege: row.siege,
+    }
+}
+
+#[pyfunction]
+fn unit_counter_bonus(attacker: UnitKind, target: UnitKind) -> u16 {
+    aoe_sdk::rules::unit_counter_bonus(attacker.into(), target.into())
+}
+
+#[pyfunction]
+fn unit_building_bonus(attacker: UnitKind, target: BuildingKind) -> u16 {
+    aoe_sdk::rules::unit_building_bonus(attacker.into(), target.into())
 }

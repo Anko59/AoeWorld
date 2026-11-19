@@ -84,6 +84,7 @@ def test_orders_get_verdicts_as_events(server, secret):
                 if event.kind == "order_result":
                     verdicts[event.sequence] = event.result
         assert verdicts[accepted] == aoeworld.CommandResult.ACCEPTED
+        assert decision.world.town_center().queued_units == [UnitKind.VILLAGER]
         assert verdicts[rejected] != aoeworld.CommandResult.ACCEPTED
         assert len(verdicts) == 3
 
@@ -334,3 +335,20 @@ def test_town_center_construction_rules_are_exposed():
     assert aoeworld.building_required_age(BuildingKind.TOWN_CENTER) == aoeworld.Age.CASTLE
     assert aoeworld.building_cost(BuildingKind.TOWN_CENTER) == (0, 275, 0, 100)
     assert aoeworld.build_seconds(BuildingKind.TOWN_CENTER) == 150
+
+
+def test_production_planning_uses_current_rules():
+    castle = aoeworld.Age.CASTLE
+    imperial = aoeworld.Age.IMPERIAL
+    workshop = aoeworld.BuildingKind.SIEGE_WORKSHOP
+    tech = aoeworld.Tech
+    unit = aoeworld.UnitKind
+    assert unit.SCORPION in aoeworld.training_options(workshop, castle, [])
+    assert unit.BOMBARD_CANNON not in aoeworld.training_options(workshop, imperial, [])
+    assert unit.BOMBARD_CANNON in aoeworld.training_options(workshop, imperial, [tech.CHEMISTRY])
+    assert aoeworld.unit_profile(unit.SIEGE_ONAGER).line == unit.MANGONEL
+    assert aoeworld.unit_counter_bonus(unit.CAMEL_RIDER, unit.KNIGHT) > 0
+    assert aoeworld.unit_building_bonus(unit.PETARD, aoeworld.BuildingKind.CASTLE) > 0
+    chemistry = next(r for r in aoeworld.technologies() if r.tech == tech.CHEMISTRY)
+    assert unit.HAND_CANNONEER in chemistry.unlocks
+    assert unit.BOMBARD_CANNON in chemistry.unlocks

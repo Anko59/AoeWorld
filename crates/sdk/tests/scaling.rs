@@ -63,3 +63,77 @@ fn market_quotes_include_the_same_commission_as_the_server() {
     assert_eq!(aoe_sdk::rules::market_quote(100, true), 130);
     assert_eq!(aoe_sdk::rules::market_quote(100, false), 70);
 }
+
+#[test]
+fn training_catalog_follows_live_age_and_technology_rules() {
+    use aoe_sdk::{Age, BuildingKind, Tech, UnitKind, rules};
+
+    let workshop = BuildingKind::SiegeWorkshop;
+    let base = rules::training_options(workshop, Age::Castle, &[]);
+    assert!(base.contains(&UnitKind::Scorpion));
+    assert!(!base.contains(&UnitKind::BombardCannon));
+    assert!(!base.contains(&UnitKind::SiegeOnager));
+    let upgraded = rules::training_options(
+        workshop,
+        Age::Imperial,
+        &[Tech::Chemistry, Tech::Onager, Tech::SiegeOnager],
+    );
+    assert!(upgraded.contains(&UnitKind::BombardCannon));
+    assert!(upgraded.contains(&UnitKind::SiegeOnager));
+    assert!(!upgraded.contains(&UnitKind::Mangonel));
+    let ships = rules::training_options(
+        BuildingKind::Dock,
+        Age::Imperial,
+        &[Tech::WarGalley, Tech::HeavyWarships],
+    );
+    assert!(ships.contains(&UnitKind::Carrack));
+    assert!(ships.contains(&UnitKind::FastFireShip));
+    assert!(ships.contains(&UnitKind::Galleon));
+    assert!(!ships.contains(&UnitKind::Galley));
+    assert_eq!(rules::unit_profile(UnitKind::Carrack).line, UnitKind::Hulk);
+    assert_eq!(
+        rules::unit_profile(UnitKind::FastFireShip).line,
+        UnitKind::FireGalley
+    );
+    assert_eq!(
+        rules::unit_profile(UnitKind::TrebuchetUnpacked).line,
+        UnitKind::Trebuchet
+    );
+
+    let technologies = rules::technologies();
+    let chemistry = technologies
+        .iter()
+        .find(|r| r.tech == Tech::Chemistry)
+        .unwrap();
+    assert!(chemistry.unlocks.contains(&UnitKind::HandCannoneer));
+    assert!(chemistry.unlocks.contains(&UnitKind::BombardCannon));
+    let husbandry = technologies
+        .iter()
+        .find(|r| r.tech == Tech::Husbandry)
+        .unwrap();
+    assert!(husbandry.improves.contains(&UnitKind::CamelRider));
+    assert!(!husbandry.improves.contains(&UnitKind::Spearman));
+    let warships = technologies
+        .iter()
+        .find(|r| r.tech == Tech::HeavyWarships)
+        .unwrap();
+    assert!(warships.upgrades.contains(&UnitKind::Galley));
+    assert!(warships.upgrades.contains(&UnitKind::FireGalley));
+    assert!(warships.upgrades.contains(&UnitKind::Hulk));
+}
+
+#[test]
+fn planning_bonuses_use_the_game_combat_classes() {
+    use aoe_sdk::{BuildingKind, UnitKind, rules};
+    assert!(
+        rules::unit_counter_bonus(UnitKind::CamelRider, UnitKind::Knight)
+            > rules::unit_counter_bonus(UnitKind::CamelRider, UnitKind::Spearman)
+    );
+    assert!(
+        rules::unit_building_bonus(UnitKind::Trebuchet, BuildingKind::Castle)
+            > rules::unit_building_bonus(UnitKind::Scorpion, BuildingKind::Castle)
+    );
+    assert!(rules::unit_profile(UnitKind::Trebuchet).armed);
+    assert!(rules::unit_profile(UnitKind::Hulk).naval);
+    assert!(!rules::unit_profile(UnitKind::FishingShip).armed);
+}
