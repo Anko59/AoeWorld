@@ -130,7 +130,7 @@ fn appears(path: &std::path::Path) -> bool {
 #[test]
 fn playtest_is_a_child_make_running_alongside_the_review() {
     let (temp, root, head, options) = scripted(
-        "sleep 1\nmkdir -p reports/playtest\n\
+        "while [ ! -f \"$MARK/release\" ]; do sleep 0.05; done\nmkdir -p reports/playtest\n\
          printf '{\"revision\":\"%s\",\"pass\":true,\"failures\":[],\"ticks\":{\"p50_ms\":1,\"p95_ms\":2,\"max_ms\":3},\"session_drops\":0,\"scenarios\":[]}' \"$HEAD\" > \"reports/playtest/$HEAD.json\"",
     );
     let result = crate::ship::ship_with(&root, &options, &|root, tier, _, _, _| {
@@ -140,6 +140,8 @@ fn playtest_is_a_child_make_running_alongside_the_review() {
             "make playtest was not started"
         );
         assert!(!root.join(format!("reports/playtest/{head}.json")).exists());
+        // The playtest finishes only after this check, however slow the machine is.
+        std::fs::write(temp.path().join("release"), "").unwrap();
         Ok(crate::ship::review_gate::graded(root, tier, 9))
     });
     assert_eq!(result.expect("ship passes").head, head);
