@@ -14,9 +14,10 @@
 //! carcasses, and what a General was deciding. `RestoreReport` counts misses.
 mod general;
 mod orders;
+mod rate;
 mod records;
 use super::{BuildingKind, ConstructionState, GameUnit, GameWorld, GameWorldError};
-use aoe_core::{EntityId, TileCoord, TileRect, WorldPosition};
+use aoe_core::{EntityId, REFERENCE_HZ, TileCoord, TileRect, WorldPosition};
 
 /// How far from its place a restored unit may be put when that tile is taken.
 const NEAREST_RADIUS: i32 = 12;
@@ -120,7 +121,8 @@ impl GameWorld {
                 farm_reseeds: b.farm_reseeds,
             })
             .collect();
-        Some(WorldSnapshot {
+        // A save holds reference ticks, so it resumes at any rate.
+        let snapshot = WorldSnapshot {
             version: WORLD_SNAPSHOT_VERSION,
             tick: self.tick.0,
             next_entity_id: self.next_entity_id,
@@ -133,7 +135,8 @@ impl GameWorld {
             formations: self.formation_records(),
             animals: self.animal_records(),
             explored: self.explored_records(),
-        })
+        };
+        Some(snapshot.retimed(self.config.tick_hz, REFERENCE_HZ))
     }
 
     /// Rebuilds `snapshot` into this world: freshly built from the same map,
@@ -150,6 +153,7 @@ impl GameWorld {
         if !self.units.is_empty() || !self.economy.buildings.is_empty() {
             return Err(SnapshotError::NotEmpty);
         }
+        let snapshot = &snapshot.clone().retimed(REFERENCE_HZ, self.config.tick_hz);
         if let Some(resources) = &snapshot.resources {
             self.restore_resources(resources, content_hash, cancelled)
                 .map_err(|error| SnapshotError::Map(error.to_string()))?;
@@ -352,29 +356,6 @@ impl GameWorld {
             }
         }
         Err(GameWorldError::InvalidPosition)
-    }
-
-    /// What a management unit was set to, if it is one.
-    fn management_of(&self, id: EntityId, kind: crate::UnitKind) -> Option<Management> {
-        match kind {
-            crate::UnitKind::Steward => self.steward_settings(id).map(Management::Steward),
-            crate::UnitKind::Vassal => self.vassal_status(id).map(|status| Management::Vassal {
-                development: status.development,
-            }),
-            crate::UnitKind::General => {
-                self.economy
-                    .generals
-                    .armies
-                    .get(&id)
-                    .map(|army| Management::General {
-                        training: army.training,
-                        mix: army.mix,
-                        solo: army.solo,
-                        destination: army.destination,
-                    })
-            }
-            _ => None,
-        }
     }
 
     /// Puts management settings back; the unit's own activation (sheltering in

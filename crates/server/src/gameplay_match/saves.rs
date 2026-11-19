@@ -120,7 +120,9 @@ impl GameplayService {
                     as Arc<dyn EnvironmentPageProvider>,
             )
         };
-        resume_service(package, provider, &loaded, &|| false, Some(packages))
+        // The recording's commands are numbered in 20 Hz ticks.
+        let hz = aoe_core::REFERENCE_HZ;
+        resume_service(package, provider, &loaded, &|| false, Some(packages), hz)
             .map_err(|e| e.to_string())
     }
     /// Writes this match to `directory` as `name`.
@@ -140,14 +142,13 @@ impl GameplayService {
             })
             .collect();
         let guard = self.world.clone().read_owned().await;
-        let hz = guard.config().tick_hz.max(1);
         tokio::task::spawn_blocking(move || {
             let started = std::time::Instant::now();
             let world = guard
                 .snapshot(hash)
                 .ok_or("this game's terrain cannot be saved")?;
             drop(guard);
-            let (tick, hz) = (world.tick, u64::from(hz));
+            let tick = world.tick;
             let (units, buildings) = (world.units.len(), world.buildings.len());
             let opponents = seats.iter().filter(|seat| !seat.human).count();
             let bytes = postcard::to_allocvec(&SaveFile {
@@ -171,8 +172,9 @@ impl GameplayService {
                 id: id.clone(),
                 name,
                 saved_at,
+                // A snapshot counts reference ticks, whatever the world's rate.
                 tick,
-                game_seconds: tick / hz,
+                game_seconds: tick / u64::from(aoe_core::REFERENCE_HZ),
                 map_hash: hash.iter().map(|byte| format!("{byte:02x}")).collect(),
                 opponents,
                 units,
@@ -294,12 +296,19 @@ pub(super) async fn build(
         let cancelled = || cancelled.load(Ordering::Acquire);
         match resume {
             Some(loaded) => {
-                resume_service(package, provider, &loaded, &cancelled, directory.as_deref()).map(
-                    |(service, report)| {
-                        tracing::info!(?report, "saved game restored");
-                        service
-                    },
+                let hz = crate::Config::sim_hz_from_env();
+                resume_service(
+                    package,
+                    provider,
+                    &loaded,
+                    &cancelled,
+                    directory.as_deref(),
+                    hz,
                 )
+                .map(|(service, report)| {
+                    tracing::info!(?report, "saved game restored");
+                    service
+                })
             }
             None => GameplayService::from_match_rules_stored(
                 package,
@@ -339,6 +348,7 @@ fn resume_service(
     loaded: &Loaded,
     cancelled: &dyn Fn() -> bool,
     directory: Option<&FsPath>,
+    tick_hz: u32,
 ) -> Result<(GameplayService, aoe_simulation::RestoreReport), MatchError> {
     let content_hash = package.content_hash;
     let content_hash_hex = package.content_hash_hex();
@@ -355,6 +365,8 @@ fn resume_service(
         .map_err(GameWorldError::Environment)?;
     let seats = &loaded.file.seats;
     world.set_limits(MatchRules::default().limits(seats.len()));
+    // A save holds reference ticks; it resumes at `tick_hz`.
+    world.set_tick_hz(tick_hz);
     let report = world
         .restore_snapshot(&loaded.file.world, content_hash, cancelled)
         .map_err(|error| {

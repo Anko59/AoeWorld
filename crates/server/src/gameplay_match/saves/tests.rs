@@ -37,7 +37,7 @@ async fn a_saved_match_resumes_with_the_same_seats_units_and_buildings() {
 
     let loaded = read_save(&directory, &card.id).expect("readable");
     let (resumed, report) =
-        resume_service(package.clone(), None, &loaded, &|| false, None).expect("resumed");
+        resume_service(package.clone(), None, &loaded, &|| false, None, 20).expect("resumed");
     assert_eq!(report.units_lost + report.buildings_lost, 0, "{report:?}");
     assert_eq!(resumed.slot_infos().await.len(), 3);
     assert_eq!(

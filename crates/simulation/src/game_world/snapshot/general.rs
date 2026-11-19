@@ -1,9 +1,32 @@
 //! Restore explicit ownership after all identities exist, never by proximity.
-use super::{BuildingRecord, GameUnit, GameWorld, UnitRecord};
+use super::{BuildingRecord, GameUnit, GameWorld, Management, UnitRecord};
 use aoe_core::{EntityId, PlayerId};
 use std::collections::BTreeMap;
 
 impl GameWorld {
+    /// What a management unit was set to, if it is one.
+    pub(super) fn management_of(&self, id: EntityId, kind: crate::UnitKind) -> Option<Management> {
+        match kind {
+            crate::UnitKind::Steward => self.steward_settings(id).map(Management::Steward),
+            crate::UnitKind::Vassal => self.vassal_status(id).map(|status| Management::Vassal {
+                development: status.development,
+            }),
+            crate::UnitKind::General => {
+                self.economy
+                    .generals
+                    .armies
+                    .get(&id)
+                    .map(|army| Management::General {
+                        training: army.training,
+                        mix: army.mix,
+                        solo: army.solo,
+                        destination: army.destination,
+                    })
+            }
+            _ => None,
+        }
+    }
+
     fn restored_general_unit(&self, record: &UnitRecord) -> Option<GameUnit> {
         self.unit(record.unit.id)
             .or_else(|| {

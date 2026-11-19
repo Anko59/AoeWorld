@@ -161,11 +161,22 @@ impl AppState {
     }
 
     pub async fn run_ticks(self) {
-        let mut interval = tokio::time::interval(self.tick_period);
+        let mut period = self.tick_period;
+        let mut interval = tokio::time::interval(period);
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
         // Behind the clock, a tick's delivery overlaps the next tick.
         let mut behind = false;
         loop {
+            // Each world is paced at its own rate (`Config::pace_hz`); a new
+            // match, resumed save or demo may change it.
+            let current = self.gameplay.read().await.clone();
+            let hz = Config::pace_hz(current.tick_hz().await);
+            let paced = Duration::from_secs_f64(1.0 / f64::from(hz));
+            if paced != period {
+                period = paced;
+                interval = tokio::time::interval_at(tokio::time::Instant::now() + period, period);
+                interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+            }
             let scheduled = interval.tick().await;
             let started = tokio::time::Instant::now();
             if let Some(world) = self.world.write().await.as_mut() {
@@ -176,7 +187,7 @@ impl AppState {
                 continue;
             }
             gameplay.tick_overlapped(behind).await;
-            behind = started.elapsed() >= self.tick_period;
+            behind = started.elapsed() >= period;
             self.observe_tick(&gameplay, scheduled, started).await;
         }
     }

@@ -331,3 +331,72 @@ fn an_animal_under_a_later_foundation_is_put_beside_it_on_load() {
         "{at:?}"
     );
 }
+
+/// A save holds reference ticks: a game saved at 20 Hz resumes at 10 Hz at
+/// the same game time, its training as far along, and saves back the same.
+#[test]
+fn a_save_resumes_at_the_same_game_time_at_another_rate() {
+    let (mut saved, start) = flat();
+    saved.initialize_village(PlayerId(0), start).unwrap();
+    let center = saved.buildings().next().unwrap().id;
+    saved
+        .issue_train(PlayerId(0), center, crate::UnitKind::Villager)
+        .unwrap();
+    // A foundation, whose construction work is priced in world ticks.
+    let at = saved.building(center).unwrap().footprint.min;
+    let foundation = (6..30)
+        .find_map(|d| {
+            let rect = aoe_core::TileRect::from_xywh(at.x + d, at.y + d, 2, 2);
+            saved
+                .insert_building(PlayerId(0), crate::BuildingKind::House, rect, false)
+                .ok()
+        })
+        .expect("room for a house");
+    for _ in 0..100 {
+        saved.advance();
+    }
+    // A unit hit ten ticks before the save.
+    let hit = saved.units[0].state.id;
+    saved.units[0].state.last_hit = Some(crate::game_world::HitRecord {
+        attacker: hit,
+        tick: aoe_core::Tick(saved.tick().0 - 10),
+    });
+    assert_eq!(saved.config().tick_hz, 20);
+    let snapshot = saved.snapshot([0; 32]).unwrap();
+    let (mut restored, _) = flat();
+    restored.config = crate::movement_speed::cavalry_config(aoe_core::WorldConfig {
+        tick_hz: 10,
+        ..restored.config
+    });
+    restored
+        .restore_snapshot(&snapshot, [0; 32], &|| false)
+        .unwrap();
+    assert_eq!(restored.tick().0 * 2, saved.tick().0);
+    let work = |w: &GameWorld| {
+        let b = w.building(foundation).unwrap();
+        (b.work_done, b.work_total)
+    };
+    assert_eq!(
+        work(&restored).1 * 2,
+        work(&saved).1,
+        "the same game time to build"
+    );
+    assert_eq!(work(&restored).0 * 2, work(&saved).0);
+    let hit_at = |w: &GameWorld| w.unit(hit).unwrap().last_hit.unwrap().tick.0;
+    assert_eq!(
+        restored.tick().0 - hit_at(&restored),
+        5,
+        "ten ticks at 20 Hz"
+    );
+    let entry = |w: &GameWorld| w.building(center).unwrap().training_queue[0];
+    let (before, after) = (entry(&saved), entry(&restored));
+    assert_eq!(after.total_ticks * 2, before.total_ticks);
+    assert_eq!(after.progress_ticks * 2, before.progress_ticks);
+    let again = restored.snapshot([0; 32]).unwrap();
+    assert_eq!(again.tick, snapshot.tick);
+    let queue = |s: &WorldSnapshot| {
+        let b = s.buildings.iter().find(|b| b.id == center).unwrap();
+        b.training_queue.clone()
+    };
+    assert_eq!(queue(&again), queue(&snapshot));
+}

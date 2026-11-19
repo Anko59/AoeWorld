@@ -2,10 +2,6 @@
 use crate::perf_scale::stats::{Series, round};
 use serde_json::{Value, json};
 
-/// The server's tick budget at 20 Hz.
-pub(super) const BUDGET_MS: f64 = 50.0;
-const TICK_HZ: f64 = 20.0;
-
 /// One server tick as `GET /match/stats` reports it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct TickRow {
@@ -71,10 +67,11 @@ fn series(rows: &[TickRow], pick: impl Fn(&TickRow) -> f64) -> Value {
     Series(rows.iter().map(pick).collect()).summary()
 }
 
-/// Tick timings of a window of rows.
-pub(super) fn window(rows: &[TickRow], wall_seconds: f64) -> Value {
+/// Tick timings of a window of rows from a server stepping at `tick_hz`.
+pub(super) fn window(rows: &[TickRow], wall_seconds: f64, tick_hz: f64) -> Value {
     let missed = rows.iter().filter(|row| row.missed).count();
-    let over_budget = rows.iter().filter(|row| row.total_ms() > BUDGET_MS).count();
+    let budget_ms = 1_000.0 / tick_hz.max(1.0);
+    let over_budget = rows.iter().filter(|row| row.total_ms() > budget_ms).count();
     let orders: u64 = rows.iter().map(|row| row.orders).sum();
     let ticks_per_second = if wall_seconds > 0.0 {
         rows.len() as f64 / wall_seconds
@@ -94,9 +91,10 @@ pub(super) fn window(rows: &[TickRow], wall_seconds: f64) -> Value {
         "late_start_ms": series(rows, |row| row.late_us as f64 / 1000.0),
         "missed_ticks": missed,
         "missed_tick_rate": round(missed as f64 / rows.len().max(1) as f64),
-        "over_50ms": over_budget,
+        "tick_hz": tick_hz,
+        "over_budget": over_budget,
         "ticks_per_second": round(ticks_per_second),
-        "realtime_factor": round(ticks_per_second / TICK_HZ),
+        "realtime_factor": round(ticks_per_second / tick_hz.max(1.0)),
         "orders_applied": orders,
         "orders_per_second": round(if wall_seconds > 0.0 { orders as f64 / wall_seconds } else { 0.0 }),
         "units_first": rows.first().map_or(0, |row| row.units),
@@ -106,19 +104,28 @@ pub(super) fn window(rows: &[TickRow], wall_seconds: f64) -> Value {
 }
 
 /// Tick rows grouped at their observed wall-clock minute boundaries.
-#[derive(Default)]
 pub(super) struct Minutes {
     pub windows: Vec<Value>,
     rows: usize,
     seconds: f64,
+    tick_hz: f64,
 }
 
 impl Minutes {
+    pub fn at(tick_hz: u32) -> Self {
+        Self {
+            windows: Vec::new(),
+            rows: 0,
+            seconds: 0.0,
+            tick_hz: f64::from(tick_hz),
+        }
+    }
+
     pub fn record(&mut self, rows: &[TickRow], seconds: f64) {
         if seconds - self.seconds <= 0.01 {
             return;
         }
-        let mut value = window(&rows[self.rows..], seconds - self.seconds);
+        let mut value = window(&rows[self.rows..], seconds - self.seconds, self.tick_hz);
         value["minute"] = json!(self.windows.len() + 1);
         value["start_seconds"] = json!(round(self.seconds));
         value["end_seconds"] = json!(round(seconds));
