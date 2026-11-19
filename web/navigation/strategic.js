@@ -128,15 +128,15 @@ export function initStrategic(fog, actors) {
     window.aoeTelemetry?.mark(11);
     canvas.dataset.threats = String(layers.enabled.threats ? contacts.draw(context, project) : 0);
     if (remapResources) resourceMarkers.update(state, scale, project, fog, resources, resourceSource, camera, now);
-    const [shoals, forests] = layers.enabled.resources
-      ? resourceMarkers.draw(context, project, scale, width, height)
-      : [0, 0];
-    canvas.dataset.shoals = String(shoals);
+    const forests = layers.enabled.resources ? resourceMarkers.drawForests(context, project, scale, width, height) : 0;
     canvas.dataset.forests = String(forests);
     tokens.draw(context, project, layers.enabled, scale, width, height, space, portrait);
     picks = layers.enabled.armies ? drawUnits(context, unitGroups.groups(), project, width, height, scale,
       space, settlements.place, portrait) : [];
     settlements.chips(context, scale, portrait);
+    const fishingGrounds = layers.enabled.resources
+      ? resourceMarkers.drawFishingGrounds(context, project, scale, width, height, space) : 0;
+    canvas.dataset.fishingGrounds = String(fishingGrounds);
     if (layers.enabled.resources) resourceMarkers.drawDeposits(context, project, level);
     window.aoeTelemetry?.mark(18);
     canvas.dataset.resources = String(resources.length);

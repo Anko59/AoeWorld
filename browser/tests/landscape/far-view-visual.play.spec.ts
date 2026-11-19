@@ -229,7 +229,7 @@ test("fish cluster separately from forage and explored forests get wood markers"
     cells[25 * 64 + 25] = cells[25 * 64 + 26] = cells[40 * 64 + 40] = 0x82;
     strategic.terrain(null, { samples: 64, cells });
     strategic.resources([
-      4, 119, 130, 10, 0, 5, 123, 133, 11, 0, 5, 184, 130, 12, 0, 0, 121, 130,
+      4, 119, 130, 10, 0, 5, 123, 133, 11, 0, 5, 247, 37, 12, 0, 0, 121, 130,
       13, 0,
     ]);
     const state = [256, 256, 128, 128, 1280, 720, 0.04, 1];
@@ -238,7 +238,7 @@ test("fish cluster separately from forage and explored forests get wood markers"
     if (!canvas) throw Error("Strategic canvas missing");
     const counts = () => [
       canvas.dataset.resources,
-      canvas.dataset.shoals,
+      canvas.dataset.fishingGrounds,
       canvas.dataset.forests,
     ];
     strategic.frame(state);
@@ -262,4 +262,53 @@ test("fish cluster separately from forage and explored forests get wood markers"
     ["2", "1", "2"],
     ["2", "0", "0"],
   ]);
+});
+
+test("a dense sea shows a handful of fishing grounds with summed counts", async ({
+  page,
+}) => {
+  await page.route("**/landscape-test", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<canvas id="scene" style="width:1280px;height:720px"></canvas>',
+    }),
+  );
+  await page.goto("/landscape-test");
+  const badges = await page.evaluate(async () => {
+    // @ts-expect-error Served browser module.
+    const { initStrategic } = await import("/navigation/strategic.js");
+    const strategic = initStrategic(
+      { disabled: true, canvas: document.createElement("canvas"), revision: 0 },
+      { records: () => [], revision: () => 0 },
+    );
+    const records: number[] = [];
+    for (const [x, y, count] of [
+      [82, 174, 96],
+      [185, 74, 114],
+    ] as const) {
+      for (let i = 0; i < count; i++) {
+        records.push(
+          i % 2 ? 4 : 5,
+          x + (i % 12) * 3,
+          y + Math.floor(i / 12) * 3,
+          records.length,
+          0,
+        );
+      }
+    }
+    const canvas =
+      document.querySelector<HTMLCanvasElement>("#strategic-scene");
+    const ctx = canvas?.getContext("2d");
+    if (!ctx) throw Error("Strategic canvas missing");
+    const fillText = ctx.fillText.bind(ctx);
+    const counts: number[] = [];
+    ctx.fillText = (value, x, y) => {
+      counts.push(Number(value));
+      fillText(value, x, y);
+    };
+    strategic.resources(records);
+    strategic.frame([256, 256, 136, 150, 1280, 720, 0.055, 1]);
+    return counts.sort((a, b) => a - b);
+  });
+  expect(badges).toEqual([96, 114]);
 });

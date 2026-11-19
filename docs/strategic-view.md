@@ -145,9 +145,9 @@ group composition at most four times per second. Camera animation reprojects
 the cached groups. Owned General tokens use their dominant kind when the
 authorized stream contains their complete reported army, and other General
 tokens show the General's own portrait. Steward plaques fold above 12 towns,
-and the General panel can fold. Nearby known fish nodes share a shoal marker
-with a node count. Explored woodland from the overview raster gets forest
-markers sized by the canopy sampled in each patch. The Resources layer
+and the General panel can fold. Known fish nodes share fishing-ground markers with
+summed counts. The far view uses at most six fishing grounds per viewport.
+Explored woodland from the overview raster gets forest markers sized by the canopy sampled in each patch. The Resources layer
 controls both sets of markers.
 
 ## Market from the far view

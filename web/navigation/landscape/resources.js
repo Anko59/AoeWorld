@@ -1,6 +1,4 @@
-// Fish nodes have no shoal IDs. Group nearby known nodes at a fixed screen
-// size, so the kingdom view also has a bounded number of resource symbols.
-const SHOAL = 68, FOREST = 96, CADENCE_MS = 250;
+const FOREST = 96, CADENCE_MS = 250;
 
 function patches(size, width) {
   const bins = new Map();
@@ -48,18 +46,21 @@ function icon(context, [x, y], count, scale, forest) {
   const shape = forest ? trees : fish;
   context.stroke(shape); context.fill(shape);
   if (!forest) {
+    const label = String(count);
+    context.font = 'bold 16px Georgia,serif';
+    const badge = Math.max(26, context.measureText(label).width + 12);
+    context.beginPath(); context.roundRect(-badge / 2, 8, badge, 22, 6);
+    context.fillStyle = '#18252a'; context.fill();
     context.fillStyle = '#fff6d8';
-    context.font = 'bold 12px Georgia,serif';
-    context.textAlign = 'center'; context.textBaseline = 'top';
-    context.strokeText(String(count), 0, 7);
-    context.fillText(String(count), 0, 7);
+    context.textAlign = 'center'; context.textBaseline = 'middle';
+    context.fillText(label, 0, 19);
   }
   context.restore();
 }
 
 export function initResourceMarkers() {
   let raster = null, source, view, stamp = -Infinity;
-  let shoals = [], forests = [], deposits = [];
+  let grounds = [], forests = [], deposits = [];
   return {
     terrain(value) { raster = value; },
     ready(nextSource, nextView, now) {
@@ -69,7 +70,9 @@ export function initResourceMarkers() {
       const [worldWidth, worldHeight, cx, cy, width, height, zoom] = state;
       source = nextSource; view = nextView; stamp = now;
       deposits = [];
-      const water = patches(SHOAL, width * scale), wood = patches(FOREST, width * scale);
+      // Cover at most three columns by two rows, with a 24-tile minimum span.
+      const groundSize = Math.max(width / 3, height / 2, 24 * 64 * zoom) * scale;
+      const water = patches(groundSize, width * scale), wood = patches(FOREST, width * scale);
       const inView = (x, y) => x >= 0 && x < width && y >= 0 && y < height;
       const nodes = resources.filter(node => node.kind >= 4)
         .sort((a, b) => a.world[0] - b.world[0] || a.world[1] - b.world[1]);
@@ -82,7 +85,18 @@ export function initResourceMarkers() {
         const [x, y] = project(node.world);
         if (inView(x, y)) deposits.push(node);
       }
-      shoals = water.values(); forests = [];
+      // A ground that straddles a coast keeps its marker over known fish.
+      const terrainAt = (x, y) => {
+        const { samples, cells } = raster;
+        return cells[Math.floor(y * samples) * samples + Math.floor(x * samples)] & 15;
+      };
+      grounds = water.values(([x, y]) => {
+        if (!raster) return true;
+        const u = x / worldWidth, v = y / worldHeight;
+        const kind = terrainAt(u, v);
+        return kind >= 8 && kind <= 11 && (fog.disabled || fog.explored(u, v));
+      });
+      forests = [];
       if (raster) {
         // Invert the isometric view bounds before walking the forest raster.
         const { samples, cells } = raster;
@@ -102,8 +116,7 @@ export function initResourceMarkers() {
         }
         forests = wood.values(([x, y]) => {
           const u = x / worldWidth, v = y / worldHeight;
-          const at = Math.floor(v * samples) * samples + Math.floor(u * samples);
-          return (cells[at] & 15) === 2 && (fog.disabled || fog.explored(u, v));
+          return terrainAt(u, v) === 2 && (fog.disabled || fog.explored(u, v));
         });
       }
     },
@@ -118,18 +131,37 @@ export function initResourceMarkers() {
         context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
       }
     },
-    draw(context, project, scale, width, height) {
-      const inView = ([x, y]) => x >= 0 && x < width && y >= 0 && y < height;
-      let forestCount = 0, shoalCount = 0;
+    drawForests(context, project, scale, width, height) {
+      let count = 0;
       for (const patch of forests) {
-        const point = project(patch.world);
-        if (inView(point)) { icon(context, point, patch.count, scale, true); forestCount++; }
+        const [x, y] = project(patch.world);
+        if (x >= 0 && x < width && y >= 0 && y < height) {
+          icon(context, [x, y], patch.count, scale, true);
+          count++;
+        }
       }
-      for (const patch of shoals) {
-        const point = project(patch.world);
-        if (inView(point)) { icon(context, point, patch.count, scale, false); shoalCount++; }
+      return count;
+    },
+    drawFishingGrounds(context, project, scale, width, height, space) {
+      let count = 0;
+      const offsets = [[0, 0], [0, 44], [44, 0], [-44, 0], [0, -44], [44, 44], [-44, 44], [44, -44], [-44, -44]];
+      for (const patch of grounds) {
+        const [x, y] = project(patch.world);
+        if (!(x >= 0 && x < width && y >= 0 && y < height)) continue;
+        const px = x * scale, py = y * scale;
+        const chosen = offsets.find(([dx, dy]) => {
+          const sx = px + dx, sy = py + dy;
+          const rect = [sx - 28, sy - 9, sx + 28, sy + 32];
+          if (rect[0] < 0 || rect[1] < 0 || rect[2] > width * scale || rect[3] > height * scale
+            || !space.free(...rect)) return false;
+          space.take(...rect, -4);
+          return true;
+        });
+        const [dx, dy] = chosen ?? offsets[0];
+        icon(context, [(px + dx) / scale, (py + dy) / scale], patch.count, scale, false);
+        count++;
       }
-      return [shoalCount, forestCount];
+      return count;
     },
   };
 }

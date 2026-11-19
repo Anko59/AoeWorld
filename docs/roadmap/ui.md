@@ -16,7 +16,7 @@
 | Large army orders draw one move/attack-move line per unit (hundreds of lines) | 11-19e x1 | PLANNED | Owner playtest 11-19 evening (Anatolia 2 v4, build play18, 3.6 ticks/s at 61k units) | One grouped line per order from the group's centre to each waypoint |
 | A group that has arrived and stopped still shows its lines and flag to the last destination | 11-19e x1 | PLANNED | Owner playtest 11-19 evening (Anatolia 2 v4, build play18, 3.6 ticks/s at 61k units); owner worries it costs CPU | Clear the queue display on arrival; check the order really ended server-side |
 | Tech tooltips: what each technology does, in research buildings and in the far view | 11-19e x1 | PLANNED | Owner playtest 11-19 evening (Anatolia 2 v4, build play18, 3.6 ticks/s at 61k units) | Tooltips from the tech data (effects, cost, time) |
-| Far-view resources: fish drawn one by one fill the sea; no wood indicator | 11-19e x1 | IN FLIGHT | Owner evening playtest (Anatolia 2 v4, build play18, 3.6 ticks/s at 61k units). PR #929 clusters known fish nodes and marks explored woodland. | Owner review and ship |
+| Far-view resources: fish drawn one by one fill the sea; no wood indicator | 11-19e x1 | IN FLIGHT | Owner evening playtest (Anatolia 2 v4, build play18, 3.6 ticks/s at 61k units). PR #929 sums known fish nodes into a handful of fishing grounds and marks explored woodland. | Owner review and ship |
 | Unseeded farm and Dark Age Town Center art still wrong (reported again; compare with AoE2 DE references online) | 11-03, 11-09, 11-19e x3 | PLANNED | Owner playtest 11-19 evening (Anatolia 2 v4, build play18, 3.6 ticks/s at 61k units) | Compare with online DE reference images side by side before changing anything |
 
 ## Done or dropped
