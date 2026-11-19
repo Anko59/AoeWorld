@@ -261,8 +261,12 @@ impl GameWorld {
                     return false;
                 }
                 // Members of one formation stand a slot apart by construction
-                // and may brush through each other; strangers stay hard.
-                if record.formation.is_some() && record.formation == self.units[index].formation {
+                // and may brush through each other while both move; a member
+                // at rest stays hard, so arrivals never settle on it.
+                if other.moving
+                    && record.formation.is_some()
+                    && record.formation == self.units[index].formation
+                {
                     return false;
                 }
                 let r = if !soft && !work_squeeze && !unit.kind.is_naval() {
