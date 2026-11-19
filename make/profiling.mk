@@ -11,7 +11,7 @@ perf-groups-instructions-admitted: job-bootstrap
 perf-groups-instructions-steps:
 	@$(MAKE) --no-print-directory analysis-tools
 	@mkdir -p reports/perf
-	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GUNGRAUN_ALLOW_ASLR=yes -e CARGO_PROFILE_BENCH_DEBUG=1 $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo bench --locked -p aoe-simulation --bench group_instructions -- --output-format=json --save-summary=json > reports/perf/group-instructions.ndjson
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(CALLGRIND_ENV) -e CARGO_PROFILE_BENCH_DEBUG=1 $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo bench --locked -p aoe-simulation --bench group_instructions -- --output-format=json --save-summary=json > reports/perf/group-instructions.ndjson
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-stage-counters
 
 GROUP_CALLGRIND ?= target/gungraun/aoe-simulation/group_instructions/simulation/movement/callgrind.movement.out
@@ -46,7 +46,7 @@ perf-census-instructions-admitted: job-bootstrap
 perf-census-instructions-steps:
 	@$(MAKE) --no-print-directory analysis-tools
 	@mkdir -p reports/perf
-	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GUNGRAUN_ALLOW_ASLR=yes -e CARGO_PROFILE_BENCH_DEBUG=1 $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo bench --locked -p aoe-server --features bench-fixtures --bench census_instructions -- --output-format=json --save-summary=json > reports/perf/census-instructions.ndjson
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(CALLGRIND_ENV) -e CARGO_PROFILE_BENCH_DEBUG=1 $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo bench --locked -p aoe-server --features bench-fixtures --bench census_instructions -- --output-format=json --save-summary=json > reports/perf/census-instructions.ndjson
 
 # Closed-loop in-process late-game match with Rust bots (movement rework phase 0, rung 0):
 # ticks/s and phases per scale and worker count, hashes compared across workers.

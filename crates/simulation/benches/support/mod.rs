@@ -81,8 +81,26 @@ pub fn setup_distributed() -> GameWorld {
     setup_population(TARGET_DISTRIBUTED)
 }
 
+/// Workers of the late-game kernel. The calling thread is not one of them,
+/// so Callgrind's thread 1 counts the serial path alone (every count stays
+/// independent of which worker steals which task) and the workers the rest.
+const LATE_GAME_WORKERS: usize = 4;
+
+fn late_game_workers() {
+    static POOL: std::sync::Once = std::sync::Once::new();
+    POOL.call_once(|| {
+        if let Err(error) = rayon::ThreadPoolBuilder::new()
+            .num_threads(LATE_GAME_WORKERS)
+            .build_global()
+        {
+            eprintln!("benchmark worker setup failed: {error}");
+            std::process::exit(1);
+        }
+    });
+}
+
 pub fn setup_late_game() -> GameWorld {
-    single_worker();
+    late_game_workers();
     eprintln!("late-game instruction setup: generating 100 seats");
     let mut world = match GameWorld::late_game_workload() {
         Ok(world) => world,

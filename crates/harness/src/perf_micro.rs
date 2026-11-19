@@ -10,6 +10,11 @@
 //! On pull requests a row also fails more than [`FAIL_PERCENT`] above the
 //! latest passing `dev` measurement ([`dev`]), so a gain merged on `dev`
 //! cannot be spent by later changes while the baseline is stale.
+//!
+//! A kernel run on worker threads (Callgrind `--separate-threads=yes`) gives
+//! two rows: its main thread (`<kernel>_main`), the serial path a tick waits
+//! on, gated as above; and its total over every thread, which work moved to
+//! the workers does not shrink, failing only above [`PARALLEL_TOTAL_PERCENT`].
 use crate::perf::{Comparison, Verdict, compare_at, floor_at, over};
 use aoe_scenario::{LATE_GAME, SMOKE, TARGET_DISTRIBUTED};
 use serde::{Deserialize, Serialize};
@@ -22,10 +27,13 @@ use dev::DevReference;
 pub const WARN_PERCENT: u8 = 1;
 pub const FAIL_PERCENT: u8 = 3;
 pub const CREEP_PERCENT: u8 = 10;
+/// The total of a kernel that also reports its main thread.
+pub const PARALLEL_TOTAL_PERCENT: u8 = 10;
+const MAIN_THREAD: &str = "_main";
 
-/// Simulation (advance, viewport, late game, smoke and distributed ticks),
-/// protocol (1) and assets (1).
-const CASES: usize = 7;
+/// Simulation (advance, viewport, late game total and main thread, smoke and
+/// distributed ticks), protocol (1) and assets (1).
+const CASES: usize = 8;
 
 #[derive(Deserialize, Serialize)]
 struct Baseline {
@@ -44,7 +52,11 @@ struct Baseline {
 }
 
 fn metric(profile: &Value, tool: &str, name: &str, side: &str) -> Result<u64, Box<dyn Error>> {
-    let metrics = &profile["summaries"]["total"]["summary"][tool][name]["metrics"];
+    metric_in(&profile["summaries"]["total"]["summary"], tool, name, side)
+}
+
+fn metric_in(summary: &Value, tool: &str, name: &str, side: &str) -> Result<u64, Box<dyn Error>> {
+    let metrics = &summary[tool][name]["metrics"];
     let node = if metrics[side].is_null() {
         &metrics["Left"]
     } else {
@@ -59,7 +71,37 @@ fn metric(profile: &Value, tool: &str, name: &str, side: &str) -> Result<u64, Bo
         .ok_or_else(|| format!("missing {tool} {name} sample").into())
 }
 
-fn sample(line: &str) -> Result<(String, u64), Box<dyn Error>> {
+/// Callgrind's thread 1, when the run was split by thread: the main thread.
+fn main_thread(profile: &Value) -> Result<Option<u64>, Box<dyn Error>> {
+    let Some(parts) = profile["summaries"]["parts"].as_array() else {
+        return Ok(None);
+    };
+    if parts.len() < 2 {
+        return Ok(None);
+    }
+    let thread = |part: &Value| {
+        let details = &part["details"];
+        let info = if details["Left"].is_null() {
+            &details["Both"][0]
+        } else {
+            &details["Left"]
+        };
+        info["thread"].as_u64()
+    };
+    let main = parts
+        .iter()
+        .find(|part| thread(part) == Some(1))
+        .ok_or("threads were split but thread 1 is missing")?;
+    Ok(Some(metric_in(
+        &main["metrics_summary"],
+        "Callgrind",
+        "Ir",
+        "Both",
+    )?))
+}
+
+/// The kernel's total and, for a run split by thread, its main thread.
+fn sample(line: &str) -> Result<Vec<(String, u64)>, Box<dyn Error>> {
     let item: Value = serde_json::from_str(line)?;
     if item["version"] != "6" {
         return Err("unexpected Gungraun JSON version".into());
@@ -73,16 +115,21 @@ fn sample(line: &str) -> Result<(String, u64), Box<dyn Error>> {
         .iter()
         .find(|profile| profile["tool"] == "Callgrind")
         .ok_or("Callgrind sample missing")?;
-    Ok((name, metric(callgrind, "Callgrind", "Ir", "Both")?))
+    let mut rows = vec![(name.clone(), metric(callgrind, "Callgrind", "Ir", "Both")?)];
+    if let Some(main) = main_thread(callgrind)? {
+        rows.push((format!("{name}{MAIN_THREAD}"), main));
+    }
+    Ok(rows)
 }
 
 fn samples(path: &Path) -> Result<BTreeMap<String, u64>, Box<dyn Error>> {
     let content = fs::read_to_string(path)?;
     let mut result = BTreeMap::new();
     for line in content.lines().filter(|line| !line.trim().is_empty()) {
-        let (name, counts) = sample(line)?;
-        if result.insert(name, counts).is_some() {
-            return Err("duplicate microbenchmark".into());
+        for (name, counts) in sample(line)? {
+            if result.insert(name, counts).is_some() {
+                return Err("duplicate microbenchmark".into());
+            }
         }
     }
     if result.is_empty() {
@@ -194,9 +241,19 @@ fn compare_with_dev(
     {
         return Err("microbenchmark case set differs from baseline".into());
     }
+    let split: Vec<_> = observed
+        .keys()
+        .filter_map(|name| name.strip_suffix(MAIN_THREAD))
+        .map(str::to_owned)
+        .collect();
     Ok(observed
         .into_iter()
         .map(|(name, count)| {
+            let fail = if split.contains(&name) {
+                PARALLEL_TOTAL_PERCENT
+            } else {
+                FAIL_PERCENT
+            };
             let latest = dev.and_then(|dev| {
                 let kernel = name.strip_prefix("instructions::").unwrap_or(&name);
                 Some((dev.instructions.get(kernel).copied()?, dev.run))
@@ -207,27 +264,29 @@ fn compare_with_dev(
                 baseline.instructions[&name],
                 baseline.instruction_reference[&name],
                 latest,
+                fail,
             )
         })
         .collect())
 }
 
-/// One instruction row: fail above +3% of `baseline`, +10% of `reference` or
-/// +3% of the latest passing dev run (`latest`: its count and run id), warn
-/// above +1% of the baseline, ask for a refresh below -3%.
+/// One instruction row: fail above +`fail`% of `baseline`, +10% of
+/// `reference` or +`fail`% of the latest passing dev run (`latest`: its count
+/// and run id), warn above +1% of the baseline, ask for a refresh below -3%.
 fn judge(
     metric: &str,
     observed: u64,
     baseline: u64,
     reference: u64,
     latest: Option<(u64, u64)>,
+    fail: u8,
 ) -> Comparison {
-    let mut row = compare_at(metric, Some(observed), Some(baseline), FAIL_PERCENT);
+    let mut row = compare_at(metric, Some(observed), Some(baseline), fail);
     let delta =
         |from: u64| (i128::from(observed) - i128::from(from)) as f64 * 100.0 / from.max(1) as f64;
     if row.verdict == Verdict::Regression {
         row.note = Some(format!(
-            "FAIL {:+.1}% over baseline {baseline} (cap +{FAIL_PERCENT}%)",
+            "FAIL {:+.1}% over baseline {baseline} (cap +{fail}%)",
             delta(baseline)
         ));
     } else if over(observed, reference, CREEP_PERCENT) {
@@ -238,16 +297,16 @@ fn judge(
             floor_at(reference, CREEP_PERCENT) - 1
         ));
     } else if let Some((dev, run)) = latest
-        && over(observed, dev, FAIL_PERCENT)
+        && over(observed, dev, fail)
     {
         row.verdict = Verdict::Regression;
         row.note = Some(format!(
-            "FAIL {:+.1}% over latest passing dev run {run} ({dev}; cap +{FAIL_PERCENT}%)",
+            "FAIL {:+.1}% over latest passing dev run {run} ({dev}; cap +{fail}%)",
             delta(dev)
         ));
     } else if over(observed, baseline, WARN_PERCENT) {
         row.note = Some(format!(
-            "warning {:+.1}% over baseline {baseline} (fails above +{FAIL_PERCENT}%)",
+            "warning {:+.1}% over baseline {baseline} (fails above +{fail}%)",
             delta(baseline)
         ));
     } else if u128::from(observed) * 100 < u128::from(baseline) * u128::from(100 - FAIL_PERCENT) {
