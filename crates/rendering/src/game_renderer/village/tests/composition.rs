@@ -306,6 +306,7 @@ fn native_building_parts_keep_owner_masks_and_a_hostile_red_selection() {
 }
 #[wasm_bindgen_test]
 fn bridge_scenario_pieces_use_independent_native_art_slots() {
+    let art = art();
     for slot in 65..71 {
         let kind = SceneUnitKind::building(slot);
         assert_eq!(kind.building_slot(), Some(slot));
@@ -315,7 +316,10 @@ fn bridge_scenario_pieces_use_independent_native_art_slots() {
         let mut actor = unit(SceneUnitKind::Villager);
         deck.position = [4.0, 4.0];
         actor.position = deck.position;
-        assert!(super::super::scene_unit_depth(deck) < super::super::scene_unit_depth(actor));
+        assert!(
+            super::super::scene_unit_depth(&art, deck)
+                < super::super::scene_unit_depth(&art, actor)
+        );
     }
 }
 
@@ -375,22 +379,26 @@ fn shared_bridge_art_never_samples_an_unrelated_owner_mask_page() {
 
 #[wasm_bindgen_test]
 fn castle_buildings_clear_their_foundations_while_only_bridges_stay_below_actors() {
+    let art = art();
     let dark = unit(SceneUnitKind::BuildingTownCenter);
     let feudal = unit(SceneUnitKind::FeudalTownCenter);
-    let expected = super::super::scene_unit_depth(dark);
-    assert_eq!(super::super::scene_unit_depth(feudal), expected);
+    let expected = super::super::scene_unit_depth(&art, dark);
+    assert_eq!(super::super::scene_unit_depth(&art, feudal), expected);
     for slot in 45..65 {
         let building = unit(SceneUnitKind::building(slot));
         assert_eq!(
-            super::super::scene_unit_depth(building),
-            expected,
-            "Castle building slot {slot} must clear its own foundation like Dark Age art"
+            super::super::scene_unit_depth(&art, building),
+            1.0 + building.kind.building_side().unwrap() + 0.01,
+            "Castle building slot {slot} must clear its own footprint"
         );
     }
     let actor = unit(SceneUnitKind::Villager);
     for slot in 65..71 {
         let bridge = unit(SceneUnitKind::building(slot));
-        assert!(super::super::scene_unit_depth(bridge) < super::super::scene_unit_depth(actor));
+        assert!(
+            super::super::scene_unit_depth(&art, bridge)
+                < super::super::scene_unit_depth(&art, actor)
+        );
     }
 }
 

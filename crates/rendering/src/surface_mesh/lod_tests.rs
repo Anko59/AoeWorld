@@ -34,6 +34,45 @@ fn variable_height_map(side: i32) -> Vec<SceneTerrain> {
 }
 
 #[wasm_bindgen_test]
+fn an_isolated_farm_retains_its_nine_source_tiles_at_sprite_zoom_steps() {
+    let mut terrain = variable_height_map(256);
+    for tile in &mut terrain {
+        tile.elevation_meters = 0.0;
+        tile.surface = SceneTerrainSurface::flat(0.0);
+        let [x, y] = tile_key(tile.position);
+        if (126..129).contains(&x) && (125..128).contains(&y) {
+            tile.material = 17;
+        }
+    }
+    for zoom in [1.0, 0.5, 0.25, 0.15, 0.105] {
+        let faces = projected_surface_triangles(
+            &terrain,
+            SceneCamera {
+                center: [128.0; 2],
+                zoom,
+                viewport: [1280.0, 720.0],
+                focus_elevation_meters: 0.0,
+            },
+        );
+        let mut area = 0.0;
+        for face in faces.iter().filter(|face| face.material == 17) {
+            assert!((126..129).contains(&face.texture_tile[0]));
+            assert!((125..128).contains(&face.texture_tile[1]));
+            assert!(
+                face.points
+                    .iter()
+                    .all(|p| (126.0..=129.0).contains(&p.world[0])
+                        && (125.0..=128.0).contains(&p.world[1]))
+            );
+            let [a, b, c] = face.points.map(|p| p.world);
+            area += ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])).abs() / 2.0;
+        }
+        assert_eq!(area, 9.0, "zoom {zoom}");
+        assert!(faces.len() <= MAX_SURFACE_TRIANGLES);
+    }
+}
+
+#[wasm_bindgen_test]
 fn elevated_variable_lod_covers_view_and_uses_shared_coarse_corners() {
     let camera = SceneCamera {
         center: [256.0, 256.0],

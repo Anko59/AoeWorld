@@ -65,7 +65,7 @@ fn target(client: &Client, point: ScreenPoint, units_only: bool) -> Option<(Enti
                 camera,
                 client.last_frame as usize,
             );
-            let depth = aoe_rendering::scene_unit_depth(unit);
+            let depth = aoe_rendering::scene_unit_depth(&client.art, unit);
             (terrain_depth.is_none_or(|surface| surface <= depth + 1e-6)
                 && crate::unit_visuals::actor_hit_projected(
                     bounds,
@@ -180,7 +180,7 @@ fn building_target(client: &Client, point: ScreenPoint) -> Option<(f64, EntityId
                     p[0] + p[1] + 2.0 * scene.height(p).unwrap_or(f64::from(u.elevation_meters))
                 })
             } else {
-                aoe_rendering::scene_unit_depth(u)
+                aoe_rendering::scene_unit_depth(&client.art, u)
             };
             (terrain_depth.is_none_or(|surface| surface <= depth + 1e-6)
                 && (ground

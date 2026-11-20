@@ -193,10 +193,11 @@ fn decorative_rocks_use_small_native_frames_distinct_from_ore_at_both_zooms() {
             assert!((frame.anchor[1] - selected.anchor[1] * scale).abs() < 1e-3);
             assert_eq!(body.uv, selected.atlas.uv);
             assert_eq!(body.color, [1.0; 4]);
-            assert_eq!(
-                depth - crate::surface_mesh::surface_depth([10.5, 10.5, 0.0]),
-                1.5
-            );
+            // The DE ground rim is 186/96 tiles nearer in depth, plus the
+            // footprint margin. Camera zoom must leave the sort key alone.
+            let center_depth = crate::surface_mesh::surface_depth([10.5, 10.5, 0.0]);
+            let expected_depth = center_depth + 186.0 / 96.0 + 0.01;
+            assert!((depth - expected_depth).abs() < 1e-9);
             let bounds = resource_sprite_bounds(rock(variant), selected, camera).unwrap();
             assert!((bounds[2] - bounds[0] - f64::from(frame.size[0])).abs() < 1e-3);
         }

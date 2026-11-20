@@ -115,30 +115,76 @@ pub(super) const CORPSE_CLEARANCE: f64 = 0.5;
 /// depth units so a one-level rise in front of them still hides them.
 pub(super) const CORPSE_CEILING: f64 = 2.0;
 
-/// The rendered body depth, including clearance below the native hotspot.
-pub fn scene_unit_depth(unit: SceneUnit) -> f64 {
+const FOOTPRINT_MARGIN: f64 = 0.01;
+
+pub(super) fn building_half_extent(unit: SceneUnit, art: Option<&crate::BuildingArt>) -> [f64; 2] {
+    let side = unit.kind.building_side().unwrap_or(1.0);
+    art.map_or([side / 2.0; 2], |art| {
+        let [x, y] = art.footprint.map(|value| f64::from(value) / 2.0);
+        if matches!(art.unit_id, 792 | 796) {
+            [y, x]
+        } else {
+            [x, y]
+        }
+    })
+}
+
+pub(super) fn bridge_deck(unit: SceneUnit) -> bool {
+    unit.kind
+        .building_slot()
+        .is_some_and(|slot| (65..=70).contains(&slot))
+}
+
+pub(super) fn footprint_depth(position: [f64; 2], elevation: f64, half: [f64; 2]) -> f64 {
+    surface_depth([position[0] + half[0], position[1] + half[1], elevation]) + FOOTPRINT_MARGIN
+}
+
+pub(super) fn building_depth(unit: SceneUnit, art: Option<&crate::BuildingArt>) -> f64 {
+    if unit.visual.ghost() || bridge_deck(unit) {
+        let clearance = if unit.visual.ghost() {
+            32.0
+        } else {
+            super::decks::DECK_CLEARANCE
+        };
+        surface_depth([
+            unit.position[0],
+            unit.position[1],
+            f64::from(unit.elevation_meters),
+        ]) + clearance
+    } else {
+        footprint_depth(
+            unit.position,
+            f64::from(unit.elevation_meters),
+            building_half_extent(unit, art),
+        )
+    }
+}
+
+// Project the measured DE 623 ground rim onto the native 96×48 tile diamond.
+pub(super) const ROCK_HALF_EXTENT: [f64; 2] = [100.0 / 96.0, 86.0 / 96.0];
+
+/// Static body depth used by hit testing before comparing against terrain.
+pub fn scene_unit_depth(art: &GameArt, unit: SceneUnit) -> f64 {
+    if unit.kind.building_side().is_some() {
+        let id = unit.kind.oriented_building_id(unit.facing);
+        return building_depth(
+            unit,
+            art.compositions.iter().find(|b| Some(b.unit_id) == id),
+        );
+    }
     object_depth(WorldObject::Unit(unit))
 }
 
 pub(super) fn object_depth(object: WorldObject) -> f64 {
     let position = object.position();
-    // The native Town Center reaches 64 source pixels below its anchor, farther
-    // than a tree/unit. Its front foundation must clear its own flat footprint.
     let clearance = match object {
-        WorldObject::Unit(unit) if unit.visual.ghost() => 32.0,
         // Order feedback stays above a building used as the rally target.
         WorldObject::Resource(r, _, _) if r.kind == SceneResource::RALLY_FLAG => 4.0,
-        // The deck lies below actors walking across it, above the water.
-        WorldObject::Unit(unit)
-            if unit
-                .kind
-                .building_slot()
-                .is_some_and(|slot| (65..=70).contains(&slot)) =>
-        {
-            super::decks::DECK_CLEARANCE
+        WorldObject::Resource(r, _, _) if r.kind == SceneResource::ROCK => {
+            return footprint_depth(position, r.elevation_meters, ROCK_HALF_EXTENT);
         }
         WorldObject::Unit(unit) if unit.kind.building_side().is_some() => {
-            super::super::ground::BUILDING_CLEARANCE
+            return building_depth(unit, None);
         }
         WorldObject::Unit(unit) if unit.kind.is_corpse() => CORPSE_CLEARANCE,
         _ => GROUND_CLEARANCE,

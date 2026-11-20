@@ -113,6 +113,8 @@ export function initStrategic(fog, actors) {
     context.setTransform(1, 0, 0, 1, 0, 0);
     mapKey.update(zoom, scale);
     canvas.dataset.holdingRuns = String(holdingsLayer.draw(context, plane, zoom, layers.enabled.ownership));
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    if (layers.enabled.roads) tokens.drawRoads(context, project);
     // One screen-space grid arbitrates every symbol: HUD, places, army tokens, then unit groups.
     space.clear(); tokens.hud(space, width, height);
     const holdings = settlements.draw(context, project, layers.enabled.ownership, width, height, scale, plane, zoom, space);

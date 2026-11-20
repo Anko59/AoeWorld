@@ -7,39 +7,42 @@ test("far map draws road plots only with the Roads and bridges layer enabled", a
   await page.route("**/road-layer-test", (route) =>
     route.fulfill({
       contentType: "text/html",
-      body: "<canvas id='test' width='128' height='128'></canvas>",
+      body: "<canvas id='scene' width='128' height='128'></canvas>",
     }),
   );
   await page.goto("/road-layer-test");
   const result = await page.evaluate(async () => {
     // @ts-expect-error Runtime module is served by the game.
-    const { initTokens } = await import("/navigation/tokens.js");
-    // @ts-expect-error Runtime module is served by the game.
-    const { initLayers } = await import("/navigation/layers.js");
-    const layers = initLayers(() => {});
-    layers.show(true);
-    const tokens = initTokens();
-    const canvas = document.querySelector("canvas");
-    if (!canvas) throw Error("Test canvas missing");
+    const { initStrategic } = await import("/navigation/strategic.js");
+    const strategic = initStrategic(
+      { disabled: true, canvas: document.createElement("canvas"), revision: 0 },
+      { records: () => [], revision: () => 0 },
+    );
+    const frame = [256, 256, 64, 64, 128, 128, 0.0625, 1];
+    strategic.update([], [], [60, 60, 68, 68, 23]);
+    strategic.frame(frame);
+    const canvas =
+      document.querySelector<HTMLCanvasElement>("#strategic-scene");
+    if (!canvas) throw Error("Strategic canvas missing");
     const context = canvas.getContext("2d");
-    if (!context) throw Error("Test canvas context missing");
-    const project = ([x, y]: [number, number]) => [x * 16, y * 16];
-    tokens.update([], [], [2, 2, 5, 5, 23]);
-    const alpha = () => context.getImageData(48, 48, 1, 1).data[3];
-    document.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "F6", bubbles: true }),
-    );
-    tokens.draw(context, project, layers.enabled, 1, 128, 128);
-    const hidden = alpha();
-    document.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "F6", bubbles: true }),
-    );
-    tokens.draw(context, project, layers.enabled, 1, 128, 128);
-    const visible = alpha();
-    context.clearRect(0, 0, 128, 128);
-    tokens.update([], [], []);
-    tokens.draw(context, project, { roads: true }, 1, 128, 128);
-    return { hidden, visible, removed: alpha() };
+    if (!context) throw Error("Strategic canvas context missing");
+    const pixel = () => Array.from(context.getImageData(64, 64, 1, 1).data);
+    const toggle = () =>
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "F6", bubbles: true }),
+      );
+    toggle();
+    const hidden = pixel();
+    toggle();
+    const visible = pixel();
+    strategic.update([], [], []);
+    strategic.frame(frame);
+    return { hidden, visible, removed: pixel() };
   });
-  expect(result).toEqual({ hidden: 0, visible: 255, removed: 0 });
+  const ground = [88, 123, 69, 255];
+  expect(result).toEqual({
+    hidden: ground,
+    visible: [214, 181, 123, 255],
+    removed: ground,
+  });
 });

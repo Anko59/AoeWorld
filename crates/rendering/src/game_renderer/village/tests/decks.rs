@@ -28,7 +28,7 @@ fn an_actor_on_a_bridge_deck_stays_in_front_of_the_flat_piece_at_every_corner() 
     let mut deck = unit(SceneUnitKind::building(66));
     deck.id = EntityId(10);
     deck.position = [4.5, 4.5];
-    let deck_depth = super::super::scene_unit_depth(deck);
+    let deck_depth = super::super::scene_unit_depth(&art, deck);
     // The far corner of the tile is a whole depth unit shallower than its centre,
     // which left the actor behind the deck that it stands on.
     for corner in [[4.02, 4.02], [4.98, 4.02], [4.02, 4.98], [4.98, 4.98]] {
@@ -56,6 +56,6 @@ fn an_actor_off_the_bridge_keeps_its_ground_depth() {
     actor.position = [6.5, 4.5];
     let frames = super::super::world_sprite_frames(&art, &[], &[], &[deck, actor], camera(), 0);
     for depth in emitted(&frames, 11) {
-        assert_eq!(depth, super::super::scene_unit_depth(actor));
+        assert_eq!(depth, super::super::scene_unit_depth(&art, actor));
     }
 }
