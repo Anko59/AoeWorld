@@ -280,6 +280,7 @@ impl GameplayService {
     }
 }
 
+#[cfg(test)]
 pub(super) fn total_pending(sessions: &BTreeMap<u64, Session>) -> usize {
     sessions.values().map(|session| session.pending.len()).sum()
 }

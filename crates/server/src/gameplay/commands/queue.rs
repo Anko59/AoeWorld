@@ -196,7 +196,16 @@ impl GameplayService {
             (world.tick(), request)
         };
         let mut sessions = self.sessions.lock().await;
-        let global_pending = total_pending(&sessions);
+        // Humans and AI seats are counted apart: a hundred AI seats filling the
+        // shared budget must not refuse a person's build order.
+        let pending_of = |ai: bool| {
+            sessions
+                .values()
+                .filter(|s| s.ai == ai)
+                .map(|s| s.pending.len())
+                .sum::<usize>()
+        };
+        let class_pending = pending_of(sessions.get(&session_id).is_some_and(|s| s.ai));
         // One budget scales with the number of hosted seats, so many AI
         // connections do not exhaust a limit sized for a single human.
         let global_limit = MAX_PENDING_COMMANDS_GLOBAL.max(
@@ -234,7 +243,7 @@ impl GameplayService {
                 } else {
                     CommandResult::RejectedQueueFull
                 });
-            } else if global_pending >= global_limit {
+            } else if class_pending >= global_limit {
                 result = Some(CommandResult::RejectedQueueFull);
             } else {
                 let prepared = match preparation.filter(|request| request.owner == session.viewer) {

@@ -64,7 +64,7 @@ fn rejected_shift_bridge_keeps_full_construction_queue_and_resources() {
             false,
         )
         .unwrap();
-    world.economy.builders.get_mut(&worker).unwrap().queue = vec![house; 32];
+    world.economy.builders.get_mut(&worker).unwrap().queue = vec![house; 256];
     let before = world.canonical_hash();
     assert_eq!(
         world.issue_build_bridge(

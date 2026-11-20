@@ -264,7 +264,8 @@ for (const bug of [18, 14, 9, 8, 6, 16, 12]) {
           await page.locator("#stop-units").click();
           await expect
             .poll(() => page.locator("#construction-labels span").count())
-            .toBeGreaterThan(0);
+            // An unstarted foundation (0%) shows no progress bar.
+            .toBe(0);
         }
         if (config.bug === 12) {
           at.x = 92;
@@ -324,7 +325,7 @@ for (const bug of [18, 14, 9, 8, 6, 16, 12]) {
           ).toHaveAttribute("data-native", "142");
         if (config.bug === 14) {
           const labels = page.locator("#construction-labels");
-          if (config.side === "before") await expect(labels).toBeVisible();
+          if (config.side === "before") await expect(labels).toBeAttached();
           else await expect(labels).toBeHidden();
         }
         await page.evaluate(({ bug, side }) => {
@@ -416,11 +417,13 @@ for (const bug of [18, 14, 9, 8, 6, 16, 12]) {
         if (config.bug === 14)
           await expect
             .poll(() => page.locator("#construction-labels span").count())
-            .toBeGreaterThan(0);
+            // An unstarted foundation (0%) shows no progress bar.
+            .toBe(0);
         if (contact) {
           await expect
             .poll(() => page.locator("#construction-labels span").count())
-            .toBeGreaterThan(0);
+            // An unstarted foundation (0%) shows no progress bar.
+            .toBe(0);
           await camera(contact.foundation.x, contact.foundation.y, 1);
           await page.screenshot({
             path: `../.cache/showcase/bug-6-${config.side}-farm.png`,

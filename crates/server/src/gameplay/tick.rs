@@ -247,7 +247,21 @@ fn take_pending(
     start: usize,
 ) -> Vec<(u64, super::PendingCommand)> {
     let capacity = MAX_COMMANDS_PER_TICK;
-    let ids = sessions.keys().copied().collect::<Vec<_>>();
+    // People are served before AI seats: at 100 seats a round-robin over every
+    // session gave a human one order every few ticks. Each class still rotates.
+    let rotated = |ai: bool| {
+        let class = sessions
+            .iter()
+            .filter(|(_, session)| session.ai == ai)
+            .map(|(id, _)| *id)
+            .collect::<Vec<_>>();
+        let len = class.len().max(1);
+        (0..class.len())
+            .map(|turn| class[(start + turn) % len])
+            .collect::<Vec<_>>()
+    };
+    let mut ids = rotated(false);
+    ids.extend(rotated(true));
     let mut commands = Vec::new();
     let mut deferred = BTreeSet::new();
     if ids.is_empty() {
@@ -258,11 +272,10 @@ fn take_pending(
     let mut used = 0;
     loop {
         let before = used;
-        for turn in 0..ids.len() {
+        for &id in &ids {
             if used == capacity {
                 return commands;
             }
-            let id = ids[(start + turn) % ids.len()];
             let Some(session) = sessions.get_mut(&id) else {
                 continue;
             };
