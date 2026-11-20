@@ -4,7 +4,6 @@ use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Copy)]
 enum SelectionOrder {
-    Stop,
     AutoScout { enabled: bool },
 }
 
@@ -72,7 +71,6 @@ impl QueuedCommand {
                 let last = count == units.len();
                 for (index, entity_id) in units.by_ref().take(count).enumerate() {
                     let action = match order {
-                        SelectionOrder::Stop => PendingAction::Stop { entity_id },
                         SelectionOrder::AutoScout { enabled } => {
                             PendingAction::AutoScout { entity_id, enabled }
                         }
@@ -142,7 +140,7 @@ impl GameplayService {
         sequence: u64,
         units: Vec<EntityId>,
     ) {
-        self.queue_selection(session_id, sequence, units, SelectionOrder::Stop)
+        self.queue_command(session_id, sequence, PendingAction::StopSelection(units))
             .await;
     }
 

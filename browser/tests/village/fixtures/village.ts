@@ -32,6 +32,7 @@ export async function fiveVillagerFixture(
   feudal = false,
   military = false,
   militaryKind = 2,
+  count = 5,
 ) {
   await page.routeWebSocket("**/game/ws", (socket) => {
     socket.onMessage((message) => {
@@ -50,7 +51,7 @@ export async function fiveVillagerFixture(
             ...uint(32768),
             ...uint(1024),
             20,
-            0,
+            count === 5 ? 0 : 2,
             ...Array<number>(24).fill(1),
           ]),
         );
@@ -63,9 +64,9 @@ export async function fiveVillagerFixture(
         if (byte < 128) break;
         scale *= 128;
       }
-      const unit = (id: number, x: number, y: number, kind = 0) => [
-        id,
-        0,
+      const unit = (id: number, x: number, y: number, kind = 0, player = 0) => [
+        ...uint(id),
+        player,
         ...uint(x * 2048),
         ...uint(y * 2048),
         0,
@@ -84,23 +85,30 @@ export async function fiveVillagerFixture(
               : villagerCombat),
       ];
       const units = [
-        unit(0, 8195.5, 8190.5, 1),
-        ...[
-          [-4, 4],
-          [-3, 4],
-          [-2, 4],
-          [-4, 5],
-          [-3, 5],
-        ].map(([x = 0, y = 0], index) =>
+        ...(count === 5 ? [unit(0, 8195.5, 8190.5, 1)] : []),
+        ...(count === 5
+          ? [
+              [-4, 4],
+              [-3, 4],
+              [-2, 4],
+              [-4, 5],
+              [-3, 5],
+            ]
+          : Array.from({ length: count }, (_, i) => [
+              -2 + (i % 4),
+              1 + (Math.floor(i / 4) % 4),
+            ])
+        ).map(([x = 0, y = 0], index) =>
           unit(index + 2, 8192.5 + x, 8192.5 + y, military ? militaryKind : 0),
         ),
+        ...(count === 5 ? [] : [unit(count + 2, 8197.5, 8194.5, 2, 1)]),
       ].flat();
       socket.send(
         Buffer.from([
           1,
           ...uint(revision),
           ...uint(snapshotTick()),
-          6,
+          ...uint(count + 1),
           ...units,
           1,
           0,
@@ -123,7 +131,7 @@ export async function fiveVillagerFixture(
           ...townCenterState,
         ]),
       );
-      socket.send(wildlifeState(uint(revision)));
+      if (count === 5) socket.send(wildlifeState(uint(revision)));
       socket.send(
         fogState(uint, revision, snapshotTick(), [0, 0, 1, 1], [], [], true),
       );

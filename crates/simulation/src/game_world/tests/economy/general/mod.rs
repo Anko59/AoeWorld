@@ -5,6 +5,7 @@ mod appearance;
 mod detached;
 mod engage;
 mod fighting;
+mod group_commands;
 mod movement;
 mod orders;
 mod snapshot;

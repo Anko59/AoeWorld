@@ -147,10 +147,9 @@ test("live attack-move legs stay visible after placement and Stop clears them", 
   await expect(scene).toHaveAttribute("data-order-mode", "");
   const markers = page.locator("#waypoint-markers g[data-order=attack-move]");
   await expect(markers).toHaveCount(2);
-  const leg = page
-    .locator('#waypoint-markers path[data-order="attack-move"]')
-    .first();
-  await expect(leg).toHaveAttribute("d", /^M[^L]+L[^L]+L/);
+  const legs = page.locator('#waypoint-markers path[data-order="attack-move"]');
+  await expect(legs).toHaveCount(2);
+  await expect(legs.first()).toHaveAttribute("d", /^M[^L]+L[^L]+$/);
 
   await attack.click();
   await page.keyboard.press("Escape");
@@ -276,7 +275,7 @@ test("panning 200 unchanged queues retains every waypoint subtree", async ({
   expect(result.remaining).toBe(0);
 });
 
-test("shared move and attack-move orders draw one marker and a path for each member", async ({
+test("shared move and attack-move orders draw one line per leg from the group centre", async ({
   page,
 }) => {
   await page.route("**/start/bootstrap.js", (route) =>
@@ -304,10 +303,10 @@ test("shared move and attack-move orders draw one marker and a path for each mem
     await layer
       .locator("path[data-order=move]")
       .evaluateAll((lines) => lines.map((line) => line.getAttribute("d"))),
-  ).toEqual(["M20,10L200,200", "M30,20L200,200", "M50,60L200,200"]);
+  ).toEqual(["M25,15L200,200", "M50,60L200,200"]);
   expect(
     await layer
       .locator("path[data-order=attack-move]")
       .evaluateAll((lines) => lines.map((line) => line.getAttribute("d"))),
-  ).toEqual(["M200,200L400,400", "M200,200L400,400", ""]);
+  ).toEqual(["M200,200L400,400"]);
 });

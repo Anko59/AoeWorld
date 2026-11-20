@@ -29,7 +29,7 @@ impl MovementWaypoint {
 #[derive(Debug, Default)]
 pub(crate) struct PlayerMoveQueue {
     pub(crate) pending: VecDeque<MovementWaypoint>,
-    current: Option<MovementWaypoint>,
+    pub(crate) current: Option<MovementWaypoint>,
 }
 
 impl GameWorld {
@@ -88,10 +88,13 @@ impl GameWorld {
             return Err(GameWorldError::InvalidPosition.into());
         }
         let destination = self.config.snap_ground_position(destination);
-        if !self
-            .unit_tile_passable(unit.kind, destination.tile_floor(), &|| false)
-            .map_err(GameWorldError::Environment)?
-            || !self.route_tile_admitted(unit.player, destination.tile_floor())
+        let tile = destination.tile_floor();
+        let breach = attack_move && self.hostile_ground_blocker(unit.player, tile).is_some();
+        if !breach
+            && (!self
+                .unit_tile_passable(unit.kind, tile, &|| false)
+                .map_err(GameWorldError::Environment)?
+                || !self.route_tile_admitted(unit.player, tile))
         {
             return Err(GameWorldError::InvalidPosition.into());
         }
@@ -155,6 +158,22 @@ impl GameWorld {
             && (unit.kind.is_naval() || unit.kind == crate::UnitKind::Villager)
             && crate::unit_combat(unit.kind).attack > 0
         {
+            if self.config.valid_map_position(destination)
+                && let Some(target) =
+                    self.hostile_ground_blocker(unit.player, destination.tile_floor())
+                && self
+                    .building(target)
+                    .is_some_and(|b| self.building_visible_to(unit.player, b.footprint))
+            {
+                self.issue_attack(unit.player, id, target)?;
+                if let Some(attack) = self.combat.attackers.get_mut(&id) {
+                    attack.resume = Some(super::formation::Resume::new(
+                        destination,
+                        MovementWaypoint::individual(destination, true),
+                    ));
+                }
+                return Ok(true);
+            }
             let moving = self.issue_move(id, destination)?;
             if moving {
                 self.combat.scalar_marches.insert(id);
@@ -185,6 +204,51 @@ impl GameWorld {
             return Ok(true);
         }
         Ok(self.issue_move(id, destination)?)
+    }
+
+    /// Assign one display identity after a mixed selection's scalar orders
+    /// have been admitted. Physical destinations can have different offsets.
+    pub fn share_selection_waypoint(
+        &mut self,
+        ids: &[EntityId],
+        destination: WorldPosition,
+        queued: bool,
+        attack_move: bool,
+    ) {
+        let destination = self.config.snap_ground_position(destination);
+        let marker = self.shared_waypoint(destination, attack_move);
+        for &id in ids {
+            if queued
+                && let Some(last) = self
+                    .move_queues
+                    .get_mut(&id)
+                    .and_then(|queue| queue.pending.back_mut())
+                && last.position == destination
+                && last.order_id == 0
+            {
+                *last = marker;
+                continue;
+            }
+            if let Some(resume) = self
+                .combat
+                .attackers
+                .get_mut(&id)
+                .and_then(|attack| attack.resume.as_mut())
+                .filter(|resume| resume.marker.position == destination)
+            {
+                resume.marker = marker;
+                continue;
+            }
+            if self.formation_waypoints(id).is_some_and(|waypoints| {
+                waypoints
+                    .first()
+                    .is_some_and(|waypoint| waypoint.position == destination)
+            }) {
+                self.set_formation_marker(id, marker);
+            } else if self.movement_order(id).is_some() {
+                self.move_queues.entry(id).or_default().current = Some(marker);
+            }
+        }
     }
 
     pub fn move_destinations(&self, id: EntityId) -> Vec<WorldPosition> {

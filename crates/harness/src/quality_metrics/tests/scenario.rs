@@ -1,6 +1,26 @@
 use crate::quality_metrics::march::{self, OrderPath, prepare};
 
 #[test]
+fn own_gate_measures_the_commander_and_every_soldier_crossing() {
+    let run = |workers| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(workers)
+            .build()
+            .unwrap()
+            .install(|| {
+                prepare("own-gate", OrderPath::General)
+                    .unwrap()
+                    .measure("own-gate", None)
+                    .unwrap()
+            })
+    };
+    let result = run(1);
+    assert_eq!(result["gate_opened"], true);
+    assert_eq!(result["crossed_gate"], 7);
+    assert_eq!(result, run(2));
+}
+
+#[test]
 fn general_cohort_is_actually_adopted_and_orders_are_not_synthetic_labels() {
     let scene = prepare("river", OrderPath::General).unwrap();
     assert_eq!(scene.ids.len(), 40);

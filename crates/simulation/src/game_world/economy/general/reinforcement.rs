@@ -50,11 +50,6 @@ impl GameWorld {
         // The sliders' ratios; a role at zero is never bought. Cross
         // multiplication avoids floats.
         let mut roles: Vec<usize> = (0..5).filter(|&r| weights[r] > 0).collect();
-        roles.sort_by(|&a, &b| {
-            ((counts[a] + 1) * usize::from(weights[b]))
-                .cmp(&((counts[b] + 1) * usize::from(weights[a])))
-                .then(a.cmp(&b))
-        });
         let Some(centre) = self.unit(id).map(|u| u.position) else {
             return;
         };
@@ -100,20 +95,29 @@ impl GameWorld {
         if let Some(a) = self.economy.generals.armies.get_mut(&id) {
             a.production_scan = cursors;
         }
-        for r in roles {
-            let kinds: &[UnitKind] = match r {
-                0 => &[UnitKind::Militia, UnitKind::Spearman],
-                1 => &[UnitKind::Archer, UnitKind::Skirmisher],
-                2 => &[UnitKind::Knight],
-                3 => &[UnitKind::BatteringRam, UnitKind::Mangonel],
-                _ => &[UnitKind::Scout],
-            };
-            for &(building, kind) in &buildings {
-                if self.economy.generals.recruits.contains_key(&building) {
-                    continue;
-                }
-                for &unit in kinds {
-                    if crate::trainable_units(kind).contains(&unit)
+        let researched = self.player_economy(player).map_or(0, |p| p.researched);
+        for (building, kind) in buildings {
+            if self.economy.generals.recruits.contains_key(&building) {
+                continue;
+            }
+            roles.sort_by(|&a, &b| {
+                ((counts[a] + 1) * usize::from(weights[b]))
+                    .cmp(&((counts[b] + 1) * usize::from(weights[a])))
+                    .then(a.cmp(&b))
+            });
+            let roster = crate::trainable_units(kind);
+            // Keep a ram as the workshop's first reinforcement candidate.
+            let ram = UnitKind::BatteringRam.upgraded(researched);
+            let preferred = roster.contains(&ram).then_some(ram);
+            'roles: for &r in &roles {
+                for unit in preferred.into_iter().chain(
+                    roster
+                        .iter()
+                        .copied()
+                        .filter(|&unit| Some(unit) != preferred),
+                ) {
+                    if role(unit) == Some(r)
+                        && unit.upgraded(researched) == unit
                         && self.economy.generals.armies[&id].room_for(unit)
                         && self.issue_train(player, building, unit).is_ok()
                     {
@@ -133,7 +137,8 @@ impl GameWorld {
                             .recruits
                             .insert(building, (id, actual));
                         work.orders += 1;
-                        return;
+                        counts[r] += 1;
+                        break 'roles;
                     }
                 }
             }

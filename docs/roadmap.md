@@ -22,7 +22,7 @@ night and day briefs) and checked against `origin/dev` at `ec5bf2e15` (#857, 202
 1. Server lag in big late games: 11-19 4.0 ticks/s at 10 Hz (40% of real time) at 61.5k units; 11-16 2.6 of 20 at 45k-62k; target real time at 10 Hz with interpolation. Worked through the scale queue Q1 to Q6 of [scale](roadmap/scale.md), recorded on issue #865.
 2. Remove the route queue (rework phase 4, approved 11-07, asked again 11-19 evening: groups share one route); meanwhile long routes "100% dead": 9,000 to 10,000 units waiting on 11-16; 11-19 the owner's army orders wait ~110 s for a route and waiting units slide back; scale queue Q2 ([movement](roadmap/movement.md)).
 3. Armies near enemies not engaging (11-19 evening: attack approaches wait p50 344 ticks for a route; attack-move stops at enemy buildings with "destination blocked") (11-19: up to 2/3 idle in a fight, stuck behind allies, walls targeted first) ([gameplay](roadmap/gameplay.md), [movement](roadmap/movement.md)).
-4. Generals: own gates, all production buildings in range, keep soldiers on orders, attack-move with Generals ([movement](roadmap/movement.md)).
+4. Generals: group orders and Shift queues, own gates, and production within range are in flight on `night/generals` ([movement](roadmap/movement.md)).
 5. New content (navy, land units, gunpowder) playable end to end, reported broken twice (11-15, 11-19) ([gameplay](roadmap/gameplay.md)).
 6. Formation coherence on real terrain and Steward arrival 80-82% ([movement](roadmap/movement.md)).
 7. AIs: late-game economy stall (70% idle villagers, no gold) and armies that never leave home, then stronger AIs; 11-19 evening: still dead after #921 and #922 (56 of 61 alive AIs idle), gather and attack routes wait in the route queue ([AI](roadmap/ai.md)).

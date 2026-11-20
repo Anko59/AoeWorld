@@ -124,6 +124,11 @@ impl GameplayService {
         let (world, primary) = GameWorld::general_appearance_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))
     }
+    pub(crate) fn army_orders_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::army_orders_demo(seed)?;
+        Ok(Self::from_world(world, primary, None, None))
+    }
+
     pub fn walk_crowd_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
         let (world, primary) = GameWorld::walk_crowd_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))

@@ -32,6 +32,46 @@ pub(super) async fn read_requests(
             Ok(GameplayClientMessage::Subscribe { revision, region }) => {
                 service.subscribe(session_id, revision, region).await
             }
+            Ok(GameplayClientMessage::MoveSelectionOrder {
+                sequence,
+                unit_ids,
+                formation,
+                destination,
+                queued,
+                attack_move,
+            }) => {
+                service
+                    .queue_move_selection(
+                        session_id,
+                        sequence,
+                        crate::gameplay::SelectionMove {
+                            unit_ids,
+                            formation,
+                            destination,
+                            queued,
+                            attack_move,
+                        },
+                    )
+                    .await
+            }
+            Ok(GameplayClientMessage::AttackSelectionOrder {
+                sequence,
+                entity_ids,
+                target_id,
+            }) => {
+                service
+                    .queue_attack_selection(session_id, sequence, entity_ids, target_id)
+                    .await
+            }
+            Ok(GameplayClientMessage::TrainBatchOrder {
+                sequence,
+                kind,
+                building_ids,
+            }) => {
+                service
+                    .queue_train_batch(session_id, sequence, building_ids, kind)
+                    .await
+            }
             Ok(GameplayClientMessage::FormationOrder {
                 sequence,
                 unit_ids,

@@ -313,8 +313,8 @@ impl GameWorld {
                 work.generals += 1;
                 if let Some(survey) = self.general_survey(id, &mut work) {
                     self.general_decide(u, survey, changed, &mut work);
-                    self.general_reinforce(id, u.player, &mut work);
                 }
+                self.general_reinforce(id, u.player, &mut work);
                 changed.push(id);
             }
         }

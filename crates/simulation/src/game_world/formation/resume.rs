@@ -112,7 +112,11 @@ impl GameWorld {
             .map(|group| crate::game_world::snapshot::FormationRecord {
                 form: group.form,
                 members: group.members.iter().map(|member| member.id).collect(),
-                destination: group.destination,
+                destination: if group.breach.is_some() {
+                    group.marker.position
+                } else {
+                    group.destination
+                },
                 queue: group.queue.iter().map(|marker| marker.leg()).collect(),
                 attack_move: group.attack_move,
                 pace_limit: group.speed_limit,
@@ -128,15 +132,20 @@ impl GameWorld {
         if self.combat.scalar_marches.contains(&id) {
             return unit.order.map(|order| {
                 let at = order.destination;
-                Resume::new(at, MovementWaypoint::individual(at, true))
+                let marker = self
+                    .move_queues
+                    .get(&id)
+                    .and_then(|queue| queue.current)
+                    .unwrap_or_else(|| MovementWaypoint::individual(at, true));
+                Resume::new(at, marker)
             });
         }
         let group = self.formations.get(&unit.formation?)?;
-        if !group.attack_move {
+        if !group.attack_move || group.settled {
             return None;
         }
         let at = group.members.binary_search_by_key(&id, |m| m.id).ok()?;
-        Some(Resume::new(group.members[at].goal, group.marker))
+        Some(group.resume_at(group.members[at].goal))
     }
 
     /// A bounded look-ahead point on an admitted movement route. Controllers

@@ -78,9 +78,10 @@ in `general_player_order` (`economy/general/orders.rs`):
    whether or not any army exists or it ever belonged to one (villagers are
    not soldiers and are never recorded; the set is bounded by living soldiers
    and cleared on death: 5,600 entries when every soldier of the 100-seat
-   late-game workload is ordered). A formation order that also names the
-   soldier's General detaches the soldier too: it follows the order it was
-   given, and only the unnamed rest of the army follows his march.
+   late-game workload is ordered). When a move, attack or attack-move names
+   the soldier and its own General together, the soldier stays in the army.
+   The General carries out the order with its army, including members absent
+   from the selection that are within command range.
 3. Detachment survives garrison (a sheltered soldier has no map record but
    keeps its entry).
 4. A General recruits nearby free soldiers once, when created. Later surveys

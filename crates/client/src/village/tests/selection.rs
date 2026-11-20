@@ -4,6 +4,17 @@ use aoe_protocol::UnitKind;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn generals_can_join_formations_while_patrol_uses_stance_eligibility() {
+    use super::super::orders::{can_choose_stance, can_form};
+
+    assert!(can_form(UnitKind::General));
+    assert!(!can_choose_stance(UnitKind::General));
+    assert!(can_choose_stance(UnitKind::Militia));
+    assert!(can_choose_stance(UnitKind::Galley));
+    assert!(!can_form(UnitKind::Galley));
+}
+
+#[wasm_bindgen_test]
 fn idle_finder_updates_jobs_removals_and_cycles_in_id_order() {
     use super::super::selection::IdleFinder;
     use aoe_protocol::UnitTask;

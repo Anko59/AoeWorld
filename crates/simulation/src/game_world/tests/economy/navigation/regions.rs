@@ -449,3 +449,6 @@ fn a_cold_large_village_formation_with_a_blocked_centroid_stays_local() {
     std::fs::create_dir_all(&directory).unwrap();
     std::fs::write(directory.join("cold-origin.txt"), report).unwrap();
 }
+
+#[path = "regions/breach.rs"]
+mod breach;

@@ -79,7 +79,10 @@ impl GameWorld {
                         (d <= sight * sight).then_some((d, enemy))
                     })
                     .collect::<Vec<_>>();
-                seen.sort_unstable();
+                let breach = self.formations.get(&leader).and_then(|group| group.breach);
+                seen.sort_unstable_by_key(|&(distance, enemy)| {
+                    (Some(enemy) != breach, distance, enemy)
+                });
                 // Checked one by one: an earlier member may just have taken
                 // the last free spot around the same enemy.
                 let melee = self
@@ -138,7 +141,7 @@ impl GameWorld {
             min = (min.0.min(tile.x), min.1.min(tile.y));
             max = (max.0.max(tile.x), max.1.max(tile.y));
             widest = widest.max(i32::from(los));
-            let resume = Resume::new(member.goal, group.marker);
+            let resume = group.resume_at(member.goal);
             let sight = i64::from(los) * i64::from(FIXED_SUBUNITS_PER_TILE);
             lookers.push((member.id, unit.position, sight, resume));
         }
@@ -154,7 +157,12 @@ impl GameWorld {
         )
         .clamp(self.config.width_tiles, self.config.height_tiles);
         let mut enemies = self.formation_enemies(leader, player, area);
-        if enemies.is_empty() {
+        if let Some(id) = group.breach
+            && let Some(b) = self.building(id)
+            && self.building_visible_to(player, b.footprint)
+        {
+            enemies.push((id, Goal::Building(b.footprint)));
+        } else if enemies.is_empty() {
             enemies = self.formation_enemy_buildings(player, area);
         }
         (!enemies.is_empty()).then_some((player, lookers, enemies))

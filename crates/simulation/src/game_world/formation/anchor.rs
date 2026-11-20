@@ -313,3 +313,70 @@ fn route_failure_reason(error: Option<GameWorldError>) -> usize {
         _ => 4,
     }
 }
+
+/// Members of a direct order steer straight at their slots with no route of
+/// their own, so it is only direct when every straight line is clear: each
+/// member's line to its assigned slot, and to the destination centre.
+const DIRECT_LINE_TILES: i32 = 64;
+
+impl GameWorld {
+    /// Called once the group's slots are assigned (`member.goal`).
+    pub(super) fn direct_order(
+        &self,
+        origin: WorldPosition,
+        destination: WorldPosition,
+        group: &Group,
+    ) -> bool {
+        let members = group
+            .members
+            .iter()
+            .map(|m| {
+                let unit = self.units[self.lookup[&m.id]].state;
+                (unit.kind, unit.position, m.goal)
+            })
+            .collect::<Vec<_>>();
+        let travel = path::distance(origin, destination);
+        let (mut min, mut max) = (origin, origin);
+        for &(_, p, _) in &members {
+            min.x = min.x.min(p.x);
+            min.y = min.y.min(p.y);
+            max.x = max.x.max(p.x);
+            max.y = max.y.max(p.y);
+        }
+        (travel < 20 * 1024 || path::distance(min, max) > travel)
+            && members.iter().all(|&(kind, from, slot)| {
+                self.straight_line_clear(kind, from, slot)
+                    && self.straight_line_clear(kind, from, destination)
+            })
+    }
+
+    /// Static terrain, trees and buildings along the half-tile steps of a
+    /// straight walk; at most `DIRECT_LINE_TILES` long, longer is not clear.
+    fn straight_line_clear(&self, kind: UnitKind, from: WorldPosition, to: WorldPosition) -> bool {
+        let length = path::distance(from, to);
+        if length > i64::from(DIRECT_LINE_TILES * 1024) {
+            return false;
+        }
+        let parts = (length / 512).max(1);
+        let (dx, dy) = (i64::from(to.x - from.x), i64::from(to.y - from.y));
+        let mut previous = from;
+        for n in 1..=parts {
+            self.group_work.members(1);
+            let next = WorldPosition::new(
+                from.x + (dx * n / parts) as i32,
+                from.y + (dy * n / parts) as i32,
+            );
+            // Terrain and trees come from the step check; buildings block tiles
+            // only in the economy, which that check does not read.
+            if self.economy.blocked_tiles.contains(&next.tile_floor())
+                || !self
+                    .unit_position_step_clear(kind, previous, next)
+                    .unwrap_or(false)
+            {
+                return false;
+            }
+            previous = next;
+        }
+        true
+    }
+}

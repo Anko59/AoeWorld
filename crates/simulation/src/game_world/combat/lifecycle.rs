@@ -35,6 +35,36 @@ impl GameWorld {
         Ok(())
     }
 
+    /// Release each touched formation once, then stop the selected actors.
+    pub fn issue_stop_selection(
+        &mut self,
+        player: aoe_core::PlayerId,
+        ids: &[EntityId],
+    ) -> Result<(), crate::EconomyError> {
+        let members: Vec<_> = ids
+            .iter()
+            .copied()
+            .filter(|&id| {
+                self.unit(id)
+                    .is_some_and(|u| u.player == player && u.hp > 0)
+                    && !self.embarked(id)
+                    && self.units[self.lookup[&id]].formation.is_some()
+            })
+            .collect();
+        for &id in &members {
+            self.demand_cancelled(id);
+        }
+        self.leave_groups(&members);
+        let mut result = Err(crate::EconomyError::UnknownEntity);
+        for (i, &id) in ids.iter().enumerate() {
+            let stopped = self.issue_stop(player, id);
+            if i == 0 || stopped.is_ok() {
+                result = stopped;
+            }
+        }
+        result
+    }
+
     /// Delete owned units and buildings. A unit dies through `kill_unit`, a
     /// complete building is destroyed through `destroy_building` (occupants are
     /// ejected) and a foundation is cancelled with its refund. Any unknown,

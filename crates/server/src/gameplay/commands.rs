@@ -28,6 +28,7 @@ mod delete_tests;
 mod detach_tests;
 #[path = "commands/formations.rs"]
 mod formations;
+pub(crate) use formations::SelectionMove;
 #[path = "commands/garrison.rs"]
 mod garrison;
 #[path = "commands/navy.rs"]

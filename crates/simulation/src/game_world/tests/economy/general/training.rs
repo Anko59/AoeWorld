@@ -90,6 +90,58 @@ fn distant_barracks_cannot_permanently_hide_nearby_training() {
 }
 
 #[test]
+fn recruits_use_every_idle_building_in_each_bounded_slice() {
+    let (mut w, _) = setup();
+    let mut nearby = Vec::new();
+    for n in 0..31 {
+        nearby.push(
+            w.insert_building(
+                PlayerId(0),
+                BuildingKind::Barracks,
+                TileRect::from_xywh(112 + n % 8 * 4, 76 + n / 8 * 4, 3, 3),
+                true,
+            )
+            .unwrap(),
+        );
+    }
+    let distant = w
+        .insert_building(
+            PlayerId(0),
+            BuildingKind::Barracks,
+            TileRect::from_xywh(180, 80, 3, 3),
+            true,
+        )
+        .unwrap();
+    let g = soldier(&mut w, UnitKind::General, 105, 100);
+    w.issue_general_mix(PlayerId(0), g, [100, 0, 0, 0, 0])
+        .unwrap();
+    w.issue_general_training(PlayerId(0), g, true).unwrap();
+    decide(&mut w);
+    assert_eq!(w.general_status(g).unwrap().queued, 25);
+    decide(&mut w);
+    assert_eq!(w.general_status(g).unwrap().queued, nearby.len() as u16);
+    assert!(nearby.iter().all(|&id| queued(&w, id).len() == 1));
+    assert!(queued(&w, distant).is_empty());
+    assert!(w.general_work().building_visits <= 625 + 128);
+}
+
+#[test]
+fn castle_recruits_a_trainable_siege_unit_and_never_another_commander() {
+    let (mut w, castle) = setup();
+    w.economy.players.get_mut(&PlayerId(0)).unwrap().age = Age::Imperial;
+    let g = soldier(&mut w, UnitKind::General, 105, 100);
+    w.issue_general_mix(PlayerId(0), g, [0, 0, 0, 100, 0])
+        .unwrap();
+    w.issue_general_training(PlayerId(0), g, true).unwrap();
+    decide(&mut w);
+    assert!(matches!(
+        queued(&w, castle).as_slice(),
+        [UnitKind::Trebuchet | UnitKind::Petard]
+    ));
+    assert_eq!(w.general_status(g).unwrap().queued, 1);
+}
+
+#[test]
 fn production_scan_progress_is_hashed_and_replayed() {
     let prepare = || {
         let (mut w, _) = setup();
@@ -154,7 +206,7 @@ fn the_sliders_decide_the_unit_mix_and_zero_means_never() {
     }
     assert!(queued(&w, barracks).is_empty(), "infantry is set to zero");
     assert!(!queued(&w, range).is_empty());
-    // Heavier infantry than archers: infantry is bought first and more often.
+    // Unequal shares still use both buildings when both can train.
     let (mut w, _) = setup();
     let (barracks, range) = production(&mut w);
     let g = soldier(&mut w, UnitKind::General, 105, 100);
@@ -166,7 +218,7 @@ fn the_sliders_decide_the_unit_mix_and_zero_means_never() {
         !queued(&w, barracks).is_empty(),
         "the larger share goes first"
     );
-    assert!(queued(&w, range).is_empty());
+    assert!(!queued(&w, range).is_empty());
 }
 
 #[test]

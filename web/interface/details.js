@@ -9,6 +9,7 @@ const icons = ['food', 'wood', 'gold', 'stone', 'food', 'food'];
 let markers = '';
 let waypointLayer, waypointFrame = 0;
 const waypointUnits = new Map();
+const waypointSharedLines = new Map();
 const waypointMarkers = new Map();
 const svgNode = name => document.createElementNS('http://www.w3.org/2000/svg', name);
 const waypointOrders = ['move', 'attack-move'];
@@ -17,7 +18,7 @@ const waypointShapes = [
   'M0 0V-9M-12-34H12V-23Q12-14 0-9Q-12-14-12-23Z',
 ];
 window.aoeWaypoints = values => {
-  if (!values.length && !waypointUnits.size) return;
+  if (!values.length && !waypointUnits.size && !waypointSharedLines.size) return;
   if (!waypointLayer) {
     waypointLayer = svgNode('svg');
     waypointLayer.id = 'waypoint-markers';
@@ -25,6 +26,8 @@ window.aoeWaypoints = values => {
     document.body.append(waypointLayer);
   }
   const frame = ++waypointFrame, width = innerWidth, height = innerHeight;
+  const shared = new Map();
+  let previousX, previousY;
   for (let i = 0; i + 5 < values.length; i += 6) {
     const id = values[i], index = values[i+1], sharedOrder = values[i+5];
     const key = sharedOrder || `${id}/${index}`;
@@ -33,27 +36,38 @@ window.aoeWaypoints = values => {
     const y = marker?.frame === frame ? marker.y : values[i+3];
     const order = values[i+4] === 1 ? 1 : 0;
     if (!Number.isFinite(id) || !Number.isFinite(index) || !Number.isFinite(x) || !Number.isFinite(y)) continue;
-    let unit = waypointUnits.get(id);
-    if (!unit) {
-      const firstFlag = waypointLayer.querySelector('g');
-      const lines = waypointOrders.map(kind => {
-        const line = svgNode('path');
-        line.dataset.order = kind;
-        waypointLayer.insertBefore(line, firstFlag);
-        return line;
-      });
-      unit = { lines, frame: 0, paths: ['', ''] };
-      waypointUnits.set(id, unit);
-    }
-    if (unit.frame !== frame) {
-      unit.frame = frame;
-      unit.paths[0] = unit.paths[1] = '';
-    } else {
-      // Restart the dash pattern at every leg so overlapping routes keep their gaps.
-      unit.paths[order] += `M${unit.x},${unit.y}L${x},${y}`;
-    }
-    unit.x = x; unit.y = y;
+    const fromX = previousX, fromY = previousY;
+    previousX = x; previousY = y;
     if (index === 0) continue;
+    if (sharedOrder) {
+      const leg = shared.get(key);
+      if (leg) {
+        leg.x += fromX;
+        leg.y += fromY;
+        leg.count++;
+      } else {
+        shared.set(key, { x: fromX, y: fromY, count: 1, order });
+      }
+    } else {
+      let unit = waypointUnits.get(id);
+      if (!unit) {
+        const firstFlag = waypointLayer.querySelector('g');
+        const lines = waypointOrders.map(kind => {
+          const line = svgNode('path');
+          line.dataset.order = kind;
+          waypointLayer.insertBefore(line, firstFlag);
+          return line;
+        });
+        unit = { lines, frame: 0, paths: ['', ''] };
+        waypointUnits.set(id, unit);
+      }
+      if (unit.frame !== frame) {
+        unit.frame = frame;
+        unit.paths[0] = unit.paths[1] = '';
+      }
+      // Restart the dash pattern at every leg so overlapping routes keep their gaps.
+      unit.paths[order] += `M${fromX},${fromY}L${x},${y}`;
+    }
     if (!marker) {
       const node = svgNode('g');
       node.dataset.unit = String(id);
@@ -81,6 +95,24 @@ window.aoeWaypoints = values => {
       marker.node.setAttribute('visibility', visible ? 'visible' : 'hidden');
       marker.visible = visible;
     }
+  }
+  for (const [key, leg] of shared) {
+    let line = waypointSharedLines.get(key);
+    if (!line) {
+      line = svgNode('path');
+      waypointLayer.insertBefore(line, waypointLayer.querySelector('g'));
+      waypointSharedLines.set(key, line);
+    }
+    const marker = waypointMarkers.get(key);
+    const path = `M${leg.x / leg.count},${leg.y / leg.count}L${marker.x},${marker.y}`;
+    const order = waypointOrders[leg.order];
+    if (line.dataset.order !== order) line.dataset.order = order;
+    if (line.getAttribute('d') !== path) line.setAttribute('d', path);
+  }
+  for (const [key, line] of waypointSharedLines) {
+    if (shared.has(key)) continue;
+    line.remove();
+    waypointSharedLines.delete(key);
   }
   for (const [id, unit] of waypointUnits) {
     if (unit.frame !== frame) {

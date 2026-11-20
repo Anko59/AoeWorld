@@ -261,6 +261,35 @@ pub enum ClientMessage {
         entity_id: EntityId,
         destination: WorldPosition,
     },
+    /// A mixed selection moves together where formation rules permit it.
+    MoveSelectionOrder {
+        sequence: u64,
+        #[serde(deserialize_with = "bounded_members")]
+        unit_ids: Vec<EntityId>,
+        formation: Formation,
+        destination: WorldPosition,
+        queued: bool,
+        attack_move: bool,
+    },
+    AttackSelectionOrder {
+        sequence: u64,
+        #[serde(deserialize_with = "bounded_members")]
+        entity_ids: Vec<EntityId>,
+        target_id: EntityId,
+    },
+    /// One production click. Building IDs can repeat to queue several units.
+    TrainBatchOrder {
+        sequence: u64,
+        kind: UnitKind,
+        #[serde(deserialize_with = "bounded_training_batch")]
+        building_ids: Vec<EntityId>,
+    },
+}
+
+pub const MAX_TRAIN_BATCH: usize = 5;
+
+fn bounded_training_batch<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<EntityId>, D::Error> {
+    economy::bounded::<D, _, MAX_TRAIN_BATCH>(d)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -278,7 +307,13 @@ fn bounded_members<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<EntityId>, D::
 }
 
 pub(super) fn validate(message: &ClientMessage) -> Result<(), Error> {
-    if let ClientMessage::PatrolOrder { destination, .. } = message
+    if let ClientMessage::TrainBatchOrder { building_ids, .. } = message
+        && !(1..=MAX_TRAIN_BATCH).contains(&building_ids.len())
+    {
+        return Err(Error::InvalidEconomyState);
+    }
+    if let ClientMessage::PatrolOrder { destination, .. }
+    | ClientMessage::MoveSelectionOrder { destination, .. } = message
         && (destination.x < 0 || destination.y < 0)
     {
         return Err(Error::InvalidEconomyState);
@@ -301,7 +336,12 @@ pub(super) fn validate(message: &ClientMessage) -> Result<(), Error> {
     }
     if let ClientMessage::StanceOrder { unit_ids, .. }
     | ClientMessage::StopOrder { unit_ids, .. }
-    | ClientMessage::AutoScoutOrder { unit_ids, .. } = message
+    | ClientMessage::AutoScoutOrder { unit_ids, .. }
+    | ClientMessage::MoveSelectionOrder { unit_ids, .. }
+    | ClientMessage::AttackSelectionOrder {
+        entity_ids: unit_ids,
+        ..
+    } = message
         && (unit_ids.is_empty()
             || unit_ids.len() > aoe_core::MAX_FORMATION_MEMBERS
             || unit_ids

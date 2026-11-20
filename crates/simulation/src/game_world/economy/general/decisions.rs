@@ -17,6 +17,16 @@ impl GameWorld {
         if self.economy.generals.armies[&u.id].solo {
             return;
         }
+        // The ordinary explicit attack owns the army until its target is
+        // cleared. Attack-move acquisitions carry their formation origin.
+        if self
+            .combat
+            .attackers
+            .get(&u.id)
+            .is_some_and(|attack| attack.origin.is_none() && attack.resume.is_none())
+        {
+            return;
+        }
         let members: Vec<_> = self.economy.generals.armies[&u.id]
             .members
             .iter()

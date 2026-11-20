@@ -9,6 +9,28 @@ pub fn reset_measurement_actors(world: &mut GameWorld) {
     world.set_fog_disabled(true);
 }
 pub fn measurement_world(name: &str) -> GameWorld {
+    if name == "own-gate" {
+        let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(1)).unwrap()).unwrap();
+        let owner = PlayerId(0);
+        let wall = BuildingKind::StoneWall;
+        let mut place = |kind, x, y, width| {
+            world
+                .insert_building(owner, kind, TileRect::from_xywh(x, y, width, 1), true)
+                .unwrap();
+        };
+        for x in 100..=110 {
+            place(wall, x, 100, 1);
+            if !(103..107).contains(&x) {
+                place(wall, x, 108, 1);
+            }
+        }
+        for y in 101..108 {
+            place(wall, 100, y, 1);
+            place(wall, 110, y, 1);
+        }
+        place(BuildingKind::StoneGate, 103, 108, 4);
+        return world;
+    }
     let mut fixture = build(name);
     reset_measurement_actors(&mut fixture.world);
     let (x, y) = match name {

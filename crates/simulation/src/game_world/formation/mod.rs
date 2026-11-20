@@ -5,6 +5,8 @@ use super::*;
 use aoe_core::{Formation, MAX_FORMATION_MEMBERS, MAX_MOVE_DESTINATIONS};
 
 mod anchor;
+#[path = "orders/breach.rs"]
+mod breach;
 mod combat;
 mod detach;
 mod hash;
@@ -125,6 +127,8 @@ pub(crate) struct Group {
     queue: VecDeque<MovementWaypoint>,
     marker: MovementWaypoint,
     attack_move: bool,
+    /// A hostile obstacle at the current reachable frontier.
+    breach: Option<EntityId>,
     path: path::Path,
     /// Route end when the anchor corridor was last straightened.
     taut_end: Option<WorldPosition>,

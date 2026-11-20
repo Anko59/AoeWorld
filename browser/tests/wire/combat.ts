@@ -26,3 +26,17 @@ const transportTails = {
 
 export const transportCombat = (cargo: keyof typeof transportTails) =>
   transportTails[cargo];
+
+export function postcardFields(data: ArrayLike<number>, count: number) {
+  let offset = 0;
+  return Array.from({ length: count }, () => {
+    let number = 0;
+    for (let factor = 1; offset < data.length; factor *= 128) {
+      const byte = data[offset++];
+      if (byte === undefined) return -1;
+      number += (byte & 127) * factor;
+      if (byte < 128) return number;
+    }
+    return -1;
+  });
+}
