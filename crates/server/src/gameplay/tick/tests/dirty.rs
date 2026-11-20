@@ -51,25 +51,42 @@ async fn every_client_holds_the_full_conversion_of_its_view_each_tick() {
                 )
                 .await;
         }
-        // Sessions whose baseline is the frame the next one diffs against.
+        // Sessions whose baseline is a frame the next one diffs against: the
+        // last one, or for an AI session viewed every second tick the one before.
         let last = fixture.service.fanout_probe.last_generation();
         let clean = {
             let sessions = fixture.service.sessions.lock().await;
             fixture
                 .ids
                 .iter()
-                .filter(|id| last.is_some() && sessions[id].resident.frame == last)
+                .filter(|id| {
+                    let held = sessions[id].resident.frame;
+                    last.is_some()
+                        && (held == last
+                            || (sessions[id].ai && held == last.map(|g| g.saturating_sub(1))))
+                })
                 .count()
         };
         skipped += clean;
         fixture.service.tick().await;
         let world = fixture.service.world.read().await;
         let sessions = fixture.service.sessions.lock().await;
+        // An AI session is viewed every `AI_VIEW_TICKS`; between views it is
+        // sent no units and holds the view it last received.
+        let ai_due = world
+            .tick()
+            .0
+            .is_multiple_of(crate::gameplay::tick::AI_VIEW_TICKS);
         for (index, client) in clients.iter_mut().enumerate() {
+            let session = &sessions[&fixture.ids[index]];
+            let off = session.ai && !ai_due;
             while let Ok(message) = fixture.receivers[index].try_recv() {
+                assert!(
+                    !(off && matches!(message, GameplayServerMessage::Tick { .. })),
+                    "AI session {index} was sent units off its view tick {tick}"
+                );
                 apply(client, message);
             }
-            let session = &sessions[&fixture.ids[index]];
             let held = session
                 .resident
                 .iter()
@@ -79,6 +96,9 @@ async fn every_client_holds_the_full_conversion_of_its_view_each_tick() {
             let Some(subscription) = session.subscription else {
                 continue;
             };
+            if off {
+                continue;
+            }
             if session
                 .subscription_delivery
                 .as_ref()

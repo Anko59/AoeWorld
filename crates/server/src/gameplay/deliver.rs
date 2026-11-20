@@ -411,8 +411,9 @@ pub(super) fn deliver_on(
     // that did not apply them (skipped, superseded by a subscription that
     // raced the tick, or not even in this tick's views) rebuilds its building
     // baseline from the full view on its next delivery.
+    // An AI session the view cadence left out lost nothing (its changes wait).
     for (id, session) in sessions.iter_mut() {
-        if !applied.contains(id) {
+        if !applied.contains(id) && (built.frame.ai_due() || !session.ai) {
             session.rebuild_buildings = true;
         }
     }
