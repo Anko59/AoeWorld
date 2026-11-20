@@ -9,7 +9,7 @@ from typing import Any, Optional
 from aoeworld import AnimalKind, AnimalTask, Formation
 
 from ..context import Context
-from ..geometry import Tile, centroid, clamp_tile, dist, nearest
+from ..geometry import Tile, centroid, clamp_tile, dist, near_any, nearest
 
 #: Threat memories older than this many seconds are forgotten.
 THREAT_SECONDS = 20
@@ -215,8 +215,10 @@ class CombatManager:
             return
         middle = nearest(army, centroid([u.tile for u in army]) or ctx.home).tile
         # Engage visible enemy units close to the army first.
-        idle_army = [u for u in army if u.attack_target is None]
-        candidates = sorted((e for e in ctx.enemies if any(dist(e.tile, u.tile) <= ENGAGE_RADIUS for u in idle_army)),
+        # Every visible enemy against every idle soldier was 27% of bot CPU
+        # on the owner's 11-19 save; a grid of the soldiers answers the same.
+        near_idle = near_any([u.tile for u in army if u.attack_target is None], ENGAGE_RADIUS)
+        candidates = sorted((e for e in ctx.enemies if near_idle(e.tile)),
                             key=lambda e: (dist(e.tile, middle), e.id))
         candidates = candidates[:max(1, cfg.land_queries_per_decision // 4)]
         reachable_foes = [e for e in candidates if ctx.land_route(middle, e.tile) is not None]
