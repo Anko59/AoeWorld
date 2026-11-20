@@ -19,7 +19,7 @@ from .roster import land_soldier, profile, warship
 #: Orders whose first argument names the unit(s) given work.
 UNIT_ORDERS = frozenset({"gather", "hunt", "farm", "build", "build_bridge", "construct", "move", "formation_move", "attack", "stop"})
 
-# Node distances one resource kind keeps before starting over.
+# Tile distances one memo keeps before starting over.
 DROPOFF_MEMO = 65_536
 
 DROPOFFS = {
@@ -80,6 +80,11 @@ class Context:
         self.orders = 0
         self.order_limit = config.orders_per_decision
         self.centers = [b.center for b in self.buildings if b.kind == BuildingKind.TOWN_CENTER and b.complete]
+        # Every candidate node is measured against every Town Center: on the
+        # owner's 11-19 save that was 11% of bot CPU. Kept while they stay.
+        sites = (tuple(self.centers), self.home)
+        if board.settlements[0] != sites or len(board.settlements[1]) > DROPOFF_MEMO:
+            board.settlements = (sites, {})
         managers = {u.id for u in self.units} | {entry[0] for b in self.buildings for entry in b.garrison}
         board.generals.intersection_update(managers)
         building_ids = {b.id for b in self.buildings}
@@ -147,7 +152,15 @@ class Context:
         return self.world.find_build_site(*args)
 
     def settlement_distance(self, tile):
-        return min((dist(tile, center) for center in self.centers), default=dist(tile, self.home) if self.home else 1e9)
+        known = self.board.settlements[1]
+        distance = known.get(tile)
+        if distance is None:
+            if self.centers:
+                distance = min(dist(tile, center) for center in self.centers)
+            else:
+                distance = dist(tile, self.home) if self.home else 1e9
+            known[tile] = distance
+        return distance
 
     # ----- queries ---------------------------------------------------------
     @property
