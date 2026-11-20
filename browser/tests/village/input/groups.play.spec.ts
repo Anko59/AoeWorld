@@ -23,9 +23,7 @@ test("all ten control groups assign, select, extend and double-tap center", asyn
   await page.keyboard.press("Shift+1");
   await page.keyboard.press("Escape");
   await page.keyboard.press("1");
-  await expect(page.locator("#selection-name")).toHaveText(
-    "2 Villagers selected",
-  );
+  await expect(page.locator("#selection-name")).toHaveText("Villager x2");
   const before = commands.length;
   await page.keyboard.down("Control");
   await page.mouse.click(1000, 400, { button: "right" });

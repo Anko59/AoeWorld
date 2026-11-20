@@ -8,16 +8,48 @@ const EMPTY_LOOKS: u8 = 2;
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Resume {
     pub(crate) slot: WorldPosition,
+    pub(crate) marker: MovementWaypoint,
     pub(crate) empty: u8,
 }
 
 impl Resume {
-    pub(crate) fn new(slot: WorldPosition) -> Self {
-        Self { slot, empty: 0 }
+    pub(crate) fn new(slot: WorldPosition, marker: MovementWaypoint) -> Self {
+        Self {
+            slot,
+            marker,
+            empty: 0,
+        }
     }
 }
 
 impl GameWorld {
+    /// The shared FIFO precedes any waypoints later appended to this member.
+    pub(crate) fn detached_waypoints(&self, id: EntityId) -> PlayerMoveQueue {
+        let group = self.units[self.lookup[&id]]
+            .formation
+            .and_then(|leader| self.formations.get(&leader));
+        let mut queue = PlayerMoveQueue::default();
+        queue.pending.extend(
+            group
+                .into_iter()
+                .flat_map(|group| group.queue.iter())
+                .copied(),
+        );
+        if let Some(personal) = self.move_queues.get(&id) {
+            queue.pending.extend(personal.pending.iter().copied());
+        }
+        queue
+    }
+
+    /// Current attack-move destination while fighting or looking for another target.
+    pub(crate) fn offensive_resume(&self, id: EntityId) -> Option<Resume> {
+        self.combat
+            .attackers
+            .get(&id)
+            .and_then(|attacker| attacker.resume)
+            .or_else(|| self.combat.resuming.get(&id).copied())
+    }
+
     pub(super) fn advance_resumes(&mut self, changed: &mut Vec<EntityId>) {
         if self.combat.resuming.is_empty() {
             return;
@@ -57,9 +89,15 @@ impl GameWorld {
                 }
             } else {
                 self.combat.resuming.remove(&id);
+                let queue = self.move_queues.remove(&id);
                 if self.resume_attack_move(id, resume.slot) {
-                    changed.push(id);
+                    self.set_formation_marker(id, resume.marker);
                 }
+                if let Some(queue) = queue {
+                    self.move_queues.insert(id, queue);
+                }
+                // If the slot is now blocked, the movement phase tries the next leg.
+                changed.push(id);
             }
         }
     }
@@ -75,7 +113,7 @@ impl GameWorld {
                 form: group.form,
                 members: group.members.iter().map(|member| member.id).collect(),
                 destination: group.destination,
-                queue: group.queue.iter().copied().collect(),
+                queue: group.queue.iter().map(|marker| marker.leg()).collect(),
                 attack_move: group.attack_move,
                 pace_limit: group.speed_limit,
             })
@@ -85,19 +123,20 @@ impl GameWorld {
 
 impl GameWorld {
     /// Contact reactions share an offensive group's ordinary continuation.
-    pub(crate) fn offensive_destination_slot(&self, id: EntityId) -> Option<WorldPosition> {
+    pub(crate) fn offensive_continuation(&self, id: EntityId) -> Option<Resume> {
         let unit = &self.units[*self.lookup.get(&id)?];
-        if (unit.state.kind.is_naval() || unit.state.kind == UnitKind::Villager)
-            && self.combat.scalar_marches.contains(&id)
-        {
-            return unit.order.map(|order| order.destination);
+        if self.combat.scalar_marches.contains(&id) {
+            return unit.order.map(|order| {
+                let at = order.destination;
+                Resume::new(at, MovementWaypoint::individual(at, true))
+            });
         }
         let group = self.formations.get(&unit.formation?)?;
         if !group.attack_move {
             return None;
         }
         let at = group.members.binary_search_by_key(&id, |m| m.id).ok()?;
-        Some(group.members[at].goal)
+        Some(Resume::new(group.members[at].goal, group.marker))
     }
 
     /// A bounded look-ahead point on an admitted movement route. Controllers

@@ -84,6 +84,7 @@ impl Economy {
                 hash.update(&price.to_le_bytes());
             }
         }
+        self.market_recovery.update_hash(hash);
         hash.update(&(self.open_gates.len() as u64).to_le_bytes());
         for id in &self.open_gates {
             hash.update(&id.0.to_le_bytes());

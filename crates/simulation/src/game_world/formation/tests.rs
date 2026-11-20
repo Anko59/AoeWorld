@@ -361,7 +361,7 @@ fn a_queued_destination_gives_every_member_its_own_recovery_attempts() {
     group.members[1].retries = detach::MAX_RETRIES;
     group
         .queue
-        .push_back((WorldPosition::new(150 * 1024, 140 * 1024), false));
+        .push_back(w.shared_waypoint(WorldPosition::new(150 * 1024, 140 * 1024), false));
     w.next_formation_order(leader, &mut group);
     assert_eq!(group.members[1].retries, 0, "the new leg starts fresh");
     w.formations.insert(leader, group);

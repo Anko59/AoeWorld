@@ -333,6 +333,8 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     animation,
                     grid,
                 )
+            } else if client.selected.units.is_empty() && client.selected.building_id.is_none() {
+                map::render_cache::repaint_cleared_selection(&mut client)
             } else {
                 Ok(false)
             };

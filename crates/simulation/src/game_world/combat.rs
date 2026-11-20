@@ -95,7 +95,7 @@ pub(crate) struct Attacker {
     pub(crate) origin: Option<aoe_core::WorldPosition>,
     /// An attack-move member's slot at the group destination. When the fight
     /// ends and nothing else is in reach, the member marches there again.
-    pub(crate) resume: Option<aoe_core::WorldPosition>,
+    pub(crate) resume: Option<super::formation::Resume>,
     /// Start tick of this native attack cycle, or zero before its wind-up.
     pub(crate) swing_started: u64,
 }
@@ -247,12 +247,16 @@ impl GameWorld {
         {
             if let Some(a) = self.combat.attackers.get_mut(&id) {
                 a.origin = None;
+                if a.resume.take().is_some() {
+                    self.move_queues.remove(&id);
+                }
             }
             self.vassal_player_override(id);
             return Ok(());
         }
         let range =
             super::navy::attack_range(&self.unit_stats(id).ok_or(EconomyError::UnknownEntity)?);
+        let replaces_offensive = self.offensive_resume(id).is_some();
         let search_before = (
             self.combat.search_tick,
             self.combat.searches_used,
@@ -266,6 +270,9 @@ impl GameWorld {
             self.stop_movement(index);
         } else if !self.reserve_attack_search() {
             self.stop_unit_orders(index);
+            if replaces_offensive {
+                self.move_queues.remove(&id);
+            }
             self.begin_attack(id, target);
             if let Some(attacker) = self.combat.attackers.get_mut(&id) {
                 attacker.repath_tick = self.tick.0;
@@ -308,6 +315,9 @@ impl GameWorld {
         self.stop_gathering(id);
         self.economy.builders.remove(&id);
         self.cancel_transport_journey(id);
+        if replaces_offensive {
+            self.move_queues.remove(&id);
+        }
         self.begin_attack(id, target);
         if let Some(entry) = self.combat.attackers.get_mut(&id) {
             entry.far = initial_far;

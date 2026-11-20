@@ -64,7 +64,10 @@ fn repeating_a_single_units_attack_move_discards_its_queued_waypoints() {
     world
         .issue_queued_leg(soldier, at(100, 140), false)
         .unwrap();
-    assert_eq!(world.move_destinations(soldier).len(), 2);
+    assert_eq!(
+        world.move_waypoints(soldier),
+        [(at(130, 100), true), (at(100, 140), false)]
+    );
     world.issue_attack_move(soldier, at(130, 100)).unwrap();
     assert_eq!(world.move_destinations(soldier), vec![at(130, 100)]);
     for _ in 0..3_000 {

@@ -49,7 +49,7 @@ fn an_arrived_formation_acquires_enemies_after_its_move_finishes() {
     )
     .unwrap();
     ticks_until(&mut w, 500, |w| {
-        w.formation_destinations(a)
+        w.formation_waypoints(a)
             .is_some_and(|orders| orders.is_empty())
     });
     let enemy = w

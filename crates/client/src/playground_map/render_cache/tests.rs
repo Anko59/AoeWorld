@@ -224,6 +224,37 @@ fn unchanged_static_frame_ignores_animation_clock() {
 }
 
 #[wasm_bindgen_test]
+fn deselection_can_repaint_the_last_frame_while_new_art_is_loading() {
+    let scene = Rc::new(());
+    let mut cache = RenderFrameCache::default();
+    let selected = unit([1.0, 2.0], true, false);
+    let resources = [resource(9)];
+    cache.record_success(&scene, &art(), &[selected], &resources, true, 42, camera());
+
+    let repaint = cache
+        .cleared_selection()
+        .expect("displayed selection rings");
+    assert!(Rc::ptr_eq(&repaint.scene, &scene));
+    assert_eq!(repaint.units[0].position, selected.position);
+    assert!(!repaint.units[0].visual.selected());
+    assert!(repaint.resources == resources);
+    assert_eq!(repaint.animation, 42);
+    assert!(repaint.grid);
+    assert!(cache.unit(selected.id).unwrap().visual.selected());
+
+    cache.record_success(
+        &scene,
+        &art(),
+        &repaint.units,
+        &resources,
+        true,
+        42,
+        camera(),
+    );
+    assert!(cache.cleared_selection().is_none());
+}
+
+#[wasm_bindgen_test]
 fn scene_replacement_retries_and_releases_the_previous_scene() {
     let first = Rc::new(());
     let second = Rc::new(());

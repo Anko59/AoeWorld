@@ -6,12 +6,15 @@
 //! engine rules: prices start at 100 gold per 100 units, buying costs the
 //! price plus a 30% commission, selling pays the price minus 30%, every trade
 //! moves the price 3 gold, and prices stay within [20, 9999]. Between trades
-//! every price drifts back toward the starting price by one gold each
-//! `recovery_ticks`, so a market worn down by a large order keeps working.
+//! a price holds for `recovery_ticks`, then drifts back toward the starting
+//! price by one gold each interval.
 use super::{BuildingKind, EconomyError};
 use crate::GameWorld;
 use aoe_core::{EntityId, MARKET_MAX_PRICE, MARKET_MIN_PRICE, PlayerId};
 use aoe_map::ResourceKind;
+
+mod recovery;
+pub(crate) use recovery::{MarketCommodity, MarketRecovery};
 
 /// The single current market rules table.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -138,17 +141,20 @@ impl super::Stockpile {
 }
 
 impl GameWorld {
-    /// Called once per tick: prices step toward the base price every
-    /// `recovery_ticks`, independently per player and commodity.
+    /// Recover only commodities whose full interval has elapsed since their
+    /// last successful trade or recovery step.
     pub(crate) fn recover_market_prices(&mut self) {
-        if !self.tick.0.is_multiple_of(MARKET_RULES.recovery_ticks) {
-            return;
-        }
-        for state in self.economy.players.values_mut() {
-            let p = &mut state.market_prices;
-            p.wood = MARKET_RULES.recover(p.wood);
-            p.food = MARKET_RULES.recover(p.food);
-            p.stone = MARKET_RULES.recover(p.stone);
+        let now = self.tick.0;
+        let recovery = &mut self.economy.market_recovery;
+        while let Some((player, commodity)) = recovery.pop_due(now) {
+            let Some(state) = self.economy.players.get_mut(&player) else {
+                continue;
+            };
+            let price = commodity.price(&mut state.market_prices);
+            *price = MARKET_RULES.recover(*price);
+            if *price != MARKET_RULES.base_price {
+                recovery.schedule((player, commodity), now + MARKET_RULES.recovery_ticks);
+            }
         }
     }
 
@@ -181,7 +187,11 @@ impl GameWorld {
         // No fallible work follows these mutations.
         state.stockpile.gold -= cost;
         state.stockpile.market_add(kind, MARKET_RULES.trade_amount);
-        state.market_prices.set(kind, MARKET_RULES.raise(price));
+        let price = MARKET_RULES.raise(price);
+        state.market_prices.set(kind, price);
+        self.economy
+            .market_recovery
+            .after_trade(player, kind, price, self.tick.0);
         Ok(())
     }
 
@@ -213,7 +223,11 @@ impl GameWorld {
         }
         // No fallible work follows these mutations.
         state.stockpile.gold = state.stockpile.gold.saturating_add(proceeds);
-        state.market_prices.set(kind, MARKET_RULES.lower(price));
+        let price = MARKET_RULES.lower(price);
+        state.market_prices.set(kind, price);
+        self.economy
+            .market_recovery
+            .after_trade(player, kind, price, self.tick.0);
         Ok(())
     }
     /// Up to `lots` consecutive 100-unit trades. This is exactly what pressing
@@ -266,6 +280,9 @@ impl GameWorld {
             return Err(EconomyError::InsufficientResources);
         }
         state.market_prices.set(kind, price);
+        self.economy
+            .market_recovery
+            .after_trade(player, kind, price, self.tick.0);
         Ok(done)
     }
     /// The completed building a trade names; ownership and completion first.

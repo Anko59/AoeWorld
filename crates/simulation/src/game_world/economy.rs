@@ -66,6 +66,7 @@ mod wall;
 pub use vassal::{VASSAL_LIMIT, VASSAL_RADIUS, VassalStatus, VassalWait};
 
 pub use buildings::{BUILDING_RULES, BuildingRules, MAX_WALL_SEGMENTS, trainable_units};
+pub(crate) use market::MarketCommodity;
 pub use market::{MARKET_RULES, MarketPrices};
 
 /// Villagers one build order may assign to construction.

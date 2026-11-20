@@ -68,8 +68,9 @@ gold (buy) or 100 units (sell); a non-Market, unfinished or foreign building is
 refused, as are trades without enough resources; `RejectedNoMarket` is the wire
 reason for a building that is not a Market. Prices live in each
 `GameplayPlayerState` snapshot (append-only fields) and in the replay hash.
-Only trades move prices; there is no passive recovery, trade cart, tribute or
-Guilds fee reduction yet.
+After a successful trade, that commodity's price holds for 40 server ticks.
+It then moves one gold toward 100 every 40 ticks until it reaches 100 or the
+player trades that commodity again.
 
 **Constants and sources.** The Genie dat carries no trading fields: the
 `dat-table` survey in `local-assets/dat-table` and the SiegeEngineers

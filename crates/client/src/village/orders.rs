@@ -64,10 +64,14 @@ pub(super) fn train_kind(client: &mut Client, kind: UnitKind, batch: bool) {
     super::production::train(client, kind, batch);
 }
 
-pub(in super::super) fn stop(client: &mut Client) {
-    client.village.garrison_cursor = false;
+pub(in super::super) fn cancel_move_mode(client: &mut Client) {
     client.village.clear_move_cursor();
     let _ = client.canvas.set_attribute("data-order-mode", "");
+}
+
+pub(in super::super) fn stop(client: &mut Client) {
+    client.village.garrison_cursor = false;
+    cancel_move_mode(client);
     let owned = client
         .selected
         .units
@@ -99,7 +103,8 @@ pub(in super::super) fn stop(client: &mut Client) {
 }
 
 pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queued: bool) {
-    if !queued && building_attack_at_pointer(client, point) {
+    let contextual = !queued && !client.village.attack_move;
+    if contextual && building_attack_at_pointer(client, point) {
         return;
     }
     if client.selected.building_id.is_some() && super::rally::at_pointer(client, point) {
@@ -116,7 +121,7 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
         .or_else(|| super::picking::enemy_building(client, point));
     let animal = actor.filter(|a| a.1).map(|a| a.0);
     let resource = super::picking::resource(client, point);
-    if !queued
+    if contextual
         && actor.is_none()
         && resource.is_none()
         && enemy.is_none()
@@ -165,8 +170,7 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
             };
             send(client, message);
         }
-        client.village.clear_move_cursor();
-        let _ = client.canvas.set_attribute("data-order-mode", "");
+        cancel_move_mode(client);
         return;
     }
     for id in client.selected.units.clone() {
@@ -291,8 +295,7 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
         super::waypoints::ping(client, destination);
     }
     if !queued {
-        client.village.clear_move_cursor();
-        let _ = client.canvas.set_attribute("data-order-mode", "");
+        cancel_move_mode(client);
     }
 }
 

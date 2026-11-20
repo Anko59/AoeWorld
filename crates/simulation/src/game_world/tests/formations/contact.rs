@@ -93,7 +93,10 @@ fn contact_reaction_retains_an_offensive_groups_destination_slot() {
     // The shared contact/retaliation path must keep the same continuation as
     // the periodic offensive formation look, for any player's group.
     w.begin_autonomous_attack(ids[0], enemy, origin);
-    assert_eq!(w.combat.attackers[&ids[0]].resume, Some(slot));
+    assert_eq!(
+        w.combat.attackers[&ids[0]].resume.map(|resume| resume.slot),
+        Some(slot)
+    );
     w.kill_unit(w.lookup[&enemy]);
     for _ in 0..3500 {
         w.advance();
@@ -127,7 +130,10 @@ fn an_idle_members_contact_reaction_keeps_its_offensive_resume() {
     w.units[index].state.task = UnitTask::Idle;
     w.retaliate(index, enemy, &mut Vec::new());
     assert_eq!(w.unit(ids[0]).unwrap().attack_target, Some(enemy));
-    assert_eq!(w.combat.attackers[&ids[0]].resume, Some(slot));
+    assert_eq!(
+        w.combat.attackers[&ids[0]].resume.map(|resume| resume.slot),
+        Some(slot)
+    );
 }
 
 #[test]

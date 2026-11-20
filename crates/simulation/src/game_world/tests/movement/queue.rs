@@ -172,8 +172,12 @@ fn check_general_retreat_queue(enemy_x: i32) {
         Some(at(30, 10))
     );
     assert_eq!(
-        world.move_queues.get(&general).and_then(|q| q.front()),
-        Some(&(at(30, 30), false))
+        world
+            .move_queues
+            .get(&general)
+            .and_then(|q| q.pending.front())
+            .map(|marker| marker.leg()),
+        Some((at(30, 30), false))
     );
     // A save at retreat home contains that temporary settled formation.
     // Its completion on the first resumed tick must not skip the march leg.
@@ -189,8 +193,12 @@ fn check_general_retreat_queue(enemy_x: i32) {
         .restore_snapshot(&snapshot, [0; 32], &|| false)
         .unwrap();
     assert_eq!(
-        restored.move_queues.get(&general).and_then(|q| q.front()),
-        Some(&(at(30, 30), false)),
+        restored
+            .move_queues
+            .get(&general)
+            .and_then(|q| q.pending.front())
+            .map(|marker| marker.leg()),
+        Some((at(30, 30), false)),
         "resume must restore FIFO before ticking: move={:?}, attack={:?}",
         record.move_to,
         record.unit.attack_target
@@ -201,8 +209,12 @@ fn check_general_retreat_queue(enemy_x: i32) {
         Some(at(30, 10))
     );
     assert_eq!(
-        restored.move_queues.get(&general).and_then(|q| q.front()),
-        Some(&(at(30, 30), false))
+        restored
+            .move_queues
+            .get(&general)
+            .and_then(|q| q.pending.front())
+            .map(|marker| marker.leg()),
+        Some((at(30, 30), false))
     );
 }
 

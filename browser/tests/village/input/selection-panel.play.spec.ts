@@ -43,9 +43,7 @@ test("the multi-selection panel narrows a group with click, Shift, Ctrl and Ctrl
   await token(page, 2).click({ modifiers: ["Control"] });
   await expect.poll(() => tokenIds(page)).toEqual([2, 3]);
   await expect(page.locator("#selection")).toHaveAttribute("data-count", "2");
-  await expect(page.locator("#selection-name")).toHaveText(
-    "2 Villagers selected",
-  );
+  await expect(page.locator("#selection-name")).toHaveText("Villager x2");
 
   await page.screenshot({
     path: `../.cache/showcase/selection-portraits-${info.project.name}.png`,

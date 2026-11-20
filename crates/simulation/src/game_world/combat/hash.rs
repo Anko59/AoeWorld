@@ -107,7 +107,8 @@ impl Combat {
             } else {
                 hash.update(&[0]);
             }
-            if let Some(slot) = attacker.resume {
+            if let Some(resume) = attacker.resume {
+                let slot = resume.slot;
                 hash.update(&[1]);
                 hash.update(&slot.x.to_le_bytes());
                 hash.update(&slot.y.to_le_bytes());

@@ -35,14 +35,18 @@ export function groups_update(positions) { window.aoeNavigation?.groupsUpdate(po
 export function group_members() { return window.aoeNavigation?.groupMembers() ?? 0; }
 export function gameplay_key(event) {
   if (event.type === 'blur') return 6;
-  if (event.type === 'keyup') return event.key === 'Shift' ? 6 : 0;
+  if (event.type === 'keyup') {
+    if (event.key === 'Shift' && !event.shiftKey) return 6;
+    if (event.key === 'Control' && !event.ctrlKey && !event.shiftKey) return 41;
+    return 0;
+  }
   if (document.querySelector('dialog[open]') || event.repeat || event.altKey || event.metaKey ||
       (event.target instanceof Element && event.target.closest('input:not([type=button]):not([type=checkbox]):not([type=radio]),textarea,select,[contenteditable]'))) return 0;
   if (/^Digit[0-9]$/.test(event.code)) {
     event.preventDefault();
     return Number(event.code.slice(5)) + (event.ctrlKey ? 20 : event.shiftKey ? 30 : 10);
   }
-  if (event.ctrlKey) return 0;
+  if (event.ctrlKey && event.key !== 'Escape') return 0;
   if (window.aoeBuildings?.key(event)) return 0;
   const action = event.key === 'Escape' ? 1 : event.key === 'g' || event.key === 'G' ? 2 : event.key === 'Home' ? 3 : event.key.toLowerCase() === 'q' ? (event.shiftKey ? 40 : 4) : event.key.toLowerCase() === 'h' ? 5 : event.key === '.' ? 7 : event.key === ',' ? 8 : event.key === 'Delete' ? 9 : 0;
   if (action) event.preventDefault();

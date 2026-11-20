@@ -13,7 +13,7 @@ impl GameWorld {
         let unit = self.units[index].state;
         // An attack-move member hit on the march fights back instead of
         // walking on; the same rule for one unit, a formation and an army.
-        let marching = self.offensive_destination_slot(unit.id).is_some()
+        let marching = self.offensive_continuation(unit.id).is_some()
             && (unit.moving || unit.planning || matches!(unit.task, UnitTask::Moving));
         if unit.hp == 0
             || ((unit.moving || unit.planning) && !marching)

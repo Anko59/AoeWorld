@@ -9,7 +9,13 @@ const icons = ['food', 'wood', 'gold', 'stone', 'food', 'food'];
 let markers = '';
 let waypointLayer, waypointFrame = 0;
 const waypointUnits = new Map();
+const waypointMarkers = new Map();
 const svgNode = name => document.createElementNS('http://www.w3.org/2000/svg', name);
+const waypointOrders = ['move', 'attack-move'];
+const waypointShapes = [
+  'M0 0V-30h16l-4 6 4 6H0',
+  'M0 0V-9M-12-34H12V-23Q12-14 0-9Q-12-14-12-23Z',
+];
 window.aoeWaypoints = values => {
   if (!values.length && !waypointUnits.size) return;
   if (!waypointLayer) {
@@ -19,30 +25,53 @@ window.aoeWaypoints = values => {
     document.body.append(waypointLayer);
   }
   const frame = ++waypointFrame, width = innerWidth, height = innerHeight;
-  for (let i = 0; i + 3 < values.length; i += 4) {
-    const id = values[i], index = values[i+1], x = values[i+2], y = values[i+3];
+  for (let i = 0; i + 5 < values.length; i += 6) {
+    const id = values[i], index = values[i+1], sharedOrder = values[i+5];
+    const key = sharedOrder || `${id}/${index}`;
+    let marker = waypointMarkers.get(key);
+    const x = marker?.frame === frame ? marker.x : values[i+2];
+    const y = marker?.frame === frame ? marker.y : values[i+3];
+    const order = values[i+4] === 1 ? 1 : 0;
     if (!Number.isFinite(id) || !Number.isFinite(index) || !Number.isFinite(x) || !Number.isFinite(y)) continue;
     let unit = waypointUnits.get(id);
     if (!unit) {
-      unit = { line: svgNode('polyline'), markers: new Map(), frame: 0, points: '' };
+      const firstFlag = waypointLayer.querySelector('g');
+      const lines = waypointOrders.map(kind => {
+        const line = svgNode('path');
+        line.dataset.order = kind;
+        waypointLayer.insertBefore(line, firstFlag);
+        return line;
+      });
+      unit = { lines, frame: 0, paths: ['', ''] };
       waypointUnits.set(id, unit);
-      // Keep paths beneath flags without moving any retained marker nodes.
-      waypointLayer.insertBefore(unit.line, waypointLayer.querySelector('g'));
     }
-    if (unit.frame !== frame) { unit.frame = frame; unit.points = ''; }
-    unit.points += `${unit.points ? ' ' : ''}${x},${y}`;
-    let marker = unit.markers.get(index);
+    if (unit.frame !== frame) {
+      unit.frame = frame;
+      unit.paths[0] = unit.paths[1] = '';
+    } else {
+      // Restart the dash pattern at every leg so overlapping routes keep their gaps.
+      unit.paths[order] += `M${unit.x},${unit.y}L${x},${y}`;
+    }
+    unit.x = x; unit.y = y;
+    if (index === 0) continue;
     if (!marker) {
       const node = svgNode('g');
       node.dataset.unit = String(id);
-      node.dataset.waypoint = String(index);
-      node.innerHTML = '<ellipse rx="10" ry="5"/><path d="M0 0V-30h16l-4 6 4 6H0"/><text x="5" y="-21"></text>';
-      node.lastElementChild.textContent = String(index);
+      node.innerHTML = '<ellipse rx="10" ry="5"/><path/><text y="-21"></text>';
+      const [, glyph, number] = node.children;
       waypointLayer.append(node);
-      marker = { node, x: NaN, y: NaN, visible: null, frame: 0 };
-      unit.markers.set(index, marker);
+      marker = { node, glyph, number, x: NaN, y: NaN, visible: null, frame: 0 };
+      waypointMarkers.set(key, marker);
     }
+    // Keep the queue's numbering until its last member has passed an earlier leg.
+    marker.index = marker.frame === frame ? Math.max(marker.index, index) : index;
     marker.frame = frame;
+    if (marker.order !== order) {
+      marker.node.dataset.order = waypointOrders[order];
+      marker.glyph.setAttribute('d', waypointShapes[order]);
+      marker.number.setAttribute('x', order ? '0' : '5');
+      marker.order = order;
+    }
     if (marker.x !== x || marker.y !== y) {
       marker.node.setAttribute('transform', `translate(${x} ${y})`);
       marker.x = x; marker.y = y;
@@ -54,11 +83,24 @@ window.aoeWaypoints = values => {
     }
   }
   for (const [id, unit] of waypointUnits) {
-    for (const [index, marker] of unit.markers) {
-      if (marker.frame !== frame) { marker.node.remove(); unit.markers.delete(index); }
+    if (unit.frame !== frame) {
+      for (const line of unit.lines) line.remove();
+      waypointUnits.delete(id);
+    } else {
+      for (let order = 0; order < unit.lines.length; order++) {
+        const line = unit.lines[order], path = unit.paths[order];
+        if (line.getAttribute('d') !== path) line.setAttribute('d', path);
+      }
     }
-    if (unit.frame !== frame) { unit.line.remove(); waypointUnits.delete(id); }
-    else if (unit.line.getAttribute('points') !== unit.points) unit.line.setAttribute('points', unit.points);
+  }
+  for (const [key, marker] of waypointMarkers) {
+    if (marker.frame !== frame) {
+      marker.node.remove(); waypointMarkers.delete(key);
+    } else if (marker.shownIndex !== marker.index) {
+      marker.shownIndex = marker.index;
+      marker.node.dataset.waypoint = String(marker.index);
+      marker.number.textContent = String(marker.index);
+    }
   }
 };
 // A brief ring where an attack-move was ordered; it removes itself.

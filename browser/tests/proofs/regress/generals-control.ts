@@ -102,13 +102,16 @@ export async function generalsControlProof(
   await page.locator("#stop-units").click();
 
   await select("Militia", true);
-  await caption("Attack-move: first destination, then two Shift-left-clicks");
+  const button = side === "before" ? "left" : "right";
+  await caption(
+    `Attack-move: first destination, then two Shift-${button}-clicks`,
+  );
   await page.locator("#attack-move-units").click();
-  await page.mouse.click(1050, 340);
+  await page.mouse.click(1050, 340, { button });
   await page.locator("#attack-move-units").click();
   await page.keyboard.down("Shift");
-  await page.mouse.click(450, 300);
-  await page.mouse.click(950, 400);
+  await page.mouse.click(450, 300, { button });
+  await page.mouse.click(950, 400, { button });
   await page.keyboard.up("Shift");
   await page.waitForTimeout(500);
   const attackMarkers = await page.locator("#waypoint-markers g").count();
@@ -132,6 +135,6 @@ export async function generalsControlProof(
     expect(afterOrder).toBe(original - 1);
     expect(generalMarkers).toBe(2);
     expect(attackMarkers).toBeGreaterThanOrEqual(3);
-    expect(mode).toBe("attack-move");
+    expect(mode).toBe("");
   }
 }

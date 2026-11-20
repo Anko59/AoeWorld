@@ -24,7 +24,7 @@ const TARGETS_PER_MEMBER: usize = 3;
 
 /// A member as one look sees it: id, position, sight radius in subunits and
 /// its slot at the group destination.
-type Looker = (EntityId, WorldPosition, i64, WorldPosition);
+type Looker = (EntityId, WorldPosition, i64, Resume);
 /// What one look found: the owner, its members and the enemies near them.
 type Look = (PlayerId, Vec<Looker>, Vec<(EntityId, Goal)>);
 
@@ -71,7 +71,7 @@ impl GameWorld {
                 if engaged == ENGAGE_PER_LOOK {
                     break;
                 }
-                let (id, at, sight, slot) = lookers[(start + n) % lookers.len()];
+                let (id, at, sight, resume) = lookers[(start + n) % lookers.len()];
                 let mut seen = enemies
                     .iter()
                     .filter_map(|&(enemy, goal)| {
@@ -97,14 +97,19 @@ impl GameWorld {
                             || fighting.get(&enemy).copied().unwrap_or(0) < MELEE_SPOTS)
                             && self.attack_spot_free(id, enemy)
                     });
-                if let Some(target) = target
-                    && self.issue_attack(player, id, target).is_ok()
-                {
+                if let Some(target) = target {
+                    let queue = self.detached_waypoints(id);
+                    if self.issue_attack(player, id, target).is_err() {
+                        continue;
+                    }
                     if melee {
                         *fighting.entry(target).or_default() += 1;
                     }
                     if let Some(attacker) = self.combat.attackers.get_mut(&id) {
-                        attacker.resume = Some(slot);
+                        attacker.resume = Some(resume);
+                    }
+                    if !queue.pending.is_empty() {
+                        self.move_queues.insert(id, queue);
                     }
                     changed.push(id);
                     engaged += 1;
@@ -133,9 +138,9 @@ impl GameWorld {
             min = (min.0.min(tile.x), min.1.min(tile.y));
             max = (max.0.max(tile.x), max.1.max(tile.y));
             widest = widest.max(i32::from(los));
-            let slot = member.goal;
+            let resume = Resume::new(member.goal, group.marker);
             let sight = i64::from(los) * i64::from(FIXED_SUBUNITS_PER_TILE);
-            lookers.push((member.id, unit.position, sight, slot));
+            lookers.push((member.id, unit.position, sight, resume));
         }
         if lookers.is_empty() {
             return None;

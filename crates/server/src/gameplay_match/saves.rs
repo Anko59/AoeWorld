@@ -22,8 +22,8 @@ use std::{
 };
 
 /// Read by `make check-fixtures` to explain a save that no longer loads.
-/// Version 4 includes last-seen enemy buildings in the world snapshot.
-pub const SAVE_VERSION: u16 = 4;
+/// The world snapshot includes commodity recovery deadlines.
+pub const SAVE_VERSION: u16 = 5;
 const MAX_NAME: usize = 60;
 const MAX_SAVE_BYTES: u64 = 2 << 30;
 
