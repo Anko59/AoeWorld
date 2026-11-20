@@ -263,6 +263,7 @@ fn save_restore_rebuilds_private_and_started_foundation_indexes() {
     );
     assert!(!restored.building_entity_visible_to(enemy, planned));
     assert!(restored.building_entity_visible_to(enemy, active));
+}
 
 /// A player left out of one take keeps its changes for the next: an AI
 /// session viewed every second tick must not lose a building it saw change.
