@@ -86,6 +86,9 @@ class Blackboard:
     #: Worker -> (Steward, first idle tick), retained only while idle under that Steward.
     steward_idle: dict[int, tuple[int, int]] = field(default_factory=dict)
     hunt_tries: dict[tuple[int, int], int] = field(default_factory=dict)
+    # Per resource kind: the dropoff sites last seen and each node tile's
+    # distance to the nearest of them, kept while those sites stay the same.
+    dropoffs: dict[Any, tuple[tuple, dict[Tile, float]]] = field(default_factory=dict)
     #: villager id -> animal it was sent after; animal id -> ((hp, meat), tick it last changed).
     hunters: dict[int, int] = field(default_factory=dict)
     hunt_watch: dict[int, tuple[tuple[int, int], int]] = field(default_factory=dict)
