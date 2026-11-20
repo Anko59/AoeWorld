@@ -101,7 +101,8 @@ fn viewer_states(
     // Each viewer's land report is rastered once a second as before, but
     // viewers take turns: a hundred rasters no longer land on one tick.
     let tick = world.tick().0;
-    let land_tick = |viewer: PlayerId| (tick + u64::from(viewer.0)).is_multiple_of(LAND_TICKS);
+    // On an even tick, so a viewer seen every `AI_VIEW_TICKS` gets it too.
+    let land_tick = |viewer: PlayerId| (tick + 2 * u64::from(viewer.0)).is_multiple_of(LAND_TICKS);
     let rebuild = rebuild.into_iter().collect::<Vec<_>>();
     // Each viewer's state reads only the world, so viewers are built in
     // parallel.

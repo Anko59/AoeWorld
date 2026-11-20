@@ -95,7 +95,14 @@ impl GameplayService {
                 .unwrap_or_else(|error| error.into_inner());
             let mut failed = Vec::new();
             let mut snapshot = None;
+            let ai_due = world
+                .tick()
+                .0
+                .is_multiple_of(super::super::tick::AI_VIEW_TICKS);
             for (id, session) in sessions.iter_mut() {
+                if session.ai && !ai_due {
+                    continue;
+                }
                 if session
                     .subscription_delivery
                     .as_ref()

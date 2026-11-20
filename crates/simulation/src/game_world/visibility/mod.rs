@@ -376,6 +376,20 @@ impl GameWorld {
         self.vision.players.get(&player)?.remembered.get(&id)
     }
 
+    /// `take_remembered_building_changes` for the players `take` accepts;
+    /// the others keep theirs for a later call.
+    pub fn take_remembered_building_changes_of(
+        &mut self,
+        take: impl Fn(PlayerId) -> bool,
+    ) -> BTreeMap<PlayerId, BTreeSet<EntityId>> {
+        self.vision
+            .players
+            .iter_mut()
+            .filter(|(player, vision)| take(**player) && !vision.changed.is_empty())
+            .map(|(player, vision)| (*player, std::mem::take(&mut vision.changed)))
+            .collect()
+    }
+
     /// Takes, per player, the buildings whose memory changed since the last
     /// call, in id order. A consumer that tracks `remembered_building` per
     /// player needs to look at no other building.

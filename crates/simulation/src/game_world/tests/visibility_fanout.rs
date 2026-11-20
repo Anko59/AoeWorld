@@ -264,3 +264,28 @@ fn save_restore_rebuilds_private_and_started_foundation_indexes() {
     assert!(!restored.building_entity_visible_to(enemy, planned));
     assert!(restored.building_entity_visible_to(enemy, active));
 }
+
+/// A player left out of one take keeps its changes for the next: an AI
+/// session viewed every second tick must not lose a building it saw change.
+#[test]
+fn building_changes_left_out_of_a_take_wait_for_the_next() {
+    let mut w = world();
+    w.spawn_unit(PlayerId(0), at(64, 64)).unwrap();
+    let hall = w
+        .place_town_center(PlayerId(1), TileCoord::new(65, 65))
+        .unwrap();
+    w.advance();
+    let owner = w.take_remembered_building_changes_of(|player| player == PlayerId(1));
+    assert_eq!(owner.keys().copied().collect::<Vec<_>>(), [PlayerId(1)]);
+    w.building_mut(hall).unwrap().hp -= 100;
+    w.advance();
+    let rest = w.take_remembered_building_changes();
+    assert!(
+        rest[&PlayerId(0)].contains(&hall),
+        "kept from the first tick"
+    );
+    assert!(
+        rest[&PlayerId(1)].contains(&hall),
+        "the second tick's change"
+    );
+}

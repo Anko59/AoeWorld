@@ -97,6 +97,10 @@ pub(super) struct UnitFrame {
     generation: u64,
     base: Option<u64>,
     changed: Marks,
+    /// The frame before `base`, and the slots changed on the tick between:
+    /// an AI session viewed every second tick diffs against that frame.
+    earlier: Option<u64>,
+    before: Marks,
     visited: usize,
     converted: usize,
 }
@@ -128,9 +132,11 @@ impl UnitFrame {
         let Some(mut frame) = previous.filter(|p| p.tick.0 + 1 == world.tick().0) else {
             return Self::initial(world, threads, generation);
         };
+        frame.earlier = frame.base;
         frame.base = Some(frame.generation);
         frame.generation = generation;
         frame.tick = world.tick();
+        std::mem::swap(&mut frame.before, &mut frame.changed);
         frame.changed.clear();
         frame.visited = world.unit_changes().len();
         frame.converted = 0;
@@ -249,6 +255,8 @@ impl UnitFrame {
             generation,
             base: None,
             changed: Marks::all(count),
+            earlier: None,
+            before: Marks::default(),
             visited: count,
             converted: count,
         };
@@ -292,11 +300,18 @@ impl UnitFrame {
     pub(super) fn work(&self) -> (usize, usize) {
         (self.converted, self.changed.set.len())
     }
+    /// Whether AI sessions are viewed on this frame's tick.
+    pub(super) fn ai_due(&self) -> bool {
+        self.tick.0.is_multiple_of(super::tick::AI_VIEW_TICKS)
+    }
+
     pub(super) fn generation(&self) -> u64 {
         self.generation
     }
     pub(super) fn unchanged_since(&self, held: Option<u64>, slot: u32) -> bool {
-        held.is_some() && held == self.base && !self.changed.contains(slot)
+        held.is_some()
+            && !self.changed.contains(slot)
+            && (held == self.base || (held == self.earlier && !self.before.contains(slot)))
     }
     pub(super) fn state(&self, slot: u32) -> &GameplayUnitState {
         &self.parts[slot as usize / PART][slot as usize % PART]

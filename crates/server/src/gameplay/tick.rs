@@ -67,6 +67,7 @@ impl GameplayService {
             .filter(|s| s.human)
             .map(|s| s.player)
             .collect();
+        let human_players = humans.clone();
         let recorded = self.record_inputs(&pending);
         // Attack-position and construction validation can be CPU work. Keep
         // it off the async runtime so one order cannot starve socket I/O.
@@ -117,7 +118,14 @@ impl GameplayService {
         if world.tick().0.is_multiple_of(ROUTE_LOG_TICKS) {
             log_route_scheduler(&world);
         }
-        let changes = world.take_remembered_building_changes();
+        // AI sessions are viewed every `AI_VIEW_TICKS`: an AI decides about
+        // 1.6 times a second. Its players keep their building changes until then.
+        let ai_due = world.tick().0.is_multiple_of(AI_VIEW_TICKS);
+        let changes = if ai_due {
+            world.take_remembered_building_changes()
+        } else {
+            world.take_remembered_building_changes_of(|player| human_players.contains(&player))
+        };
         // The simulation has stepped: from here the world is only read, so
         // commands and map work may queue for the write lock while the views
         // are built on worker threads.
@@ -129,6 +137,13 @@ impl GameplayService {
             let sessions = self.sessions.lock().await;
             sessions
                 .iter()
+                // A fog toggle still reaches every session on the next tick.
+                .filter(|(_, session)| {
+                    ai_due
+                        || !session.ai
+                        || session.resident_fog.as_ref().map(|fog| fog.disabled)
+                            != Some(world.fog_disabled())
+                })
                 .filter_map(|(id, session)| view(*id, session))
                 .collect::<Vec<_>>()
         };
@@ -298,6 +313,10 @@ mod scenario;
 #[path = "tick/tests.rs"]
 #[cfg(test)]
 mod tests;
+
+/// Ticks between two views of an AI session; divides the AI fog and
+/// heartbeat periods, so those still land on a viewed tick.
+pub(super) const AI_VIEW_TICKS: u64 = 2;
 
 /// Route-scheduler occupancy is logged once a minute at 20 Hz.
 const ROUTE_LOG_TICKS: u64 = 1_200;
