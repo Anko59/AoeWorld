@@ -13,15 +13,6 @@ use crate::{GameWorld, MAX_ROUTE_WORK_PER_ORDER, UnitKind};
 use aoe_core::{PlayerId, TileCoord};
 use aoe_map::{MovementOutcome, RoutePlanner, RoutePlannerPoll};
 
-/// A trip of at most this many tiles (Chebyshev) is polled with at least
-/// `SHORT_ROUTE_WORK` even when the fast budgets are spent. On the owner's
-/// Anatolia save 9,809 of 17k orders deferred at issue were 4 tiles or
-/// shorter, mostly villagers' gather and return trips: a few searches of
-/// 8,192 work spent the world's fast budget and the rest waited in the queue.
-const SHORT_ROUTE_TILES: i32 = 16;
-/// Work a short trip may always spend; an open trip of 16 tiles settles well
-/// within it, and one that does not continues as any other order.
-const SHORT_ROUTE_WORK: u32 = 512;
 /// Work of a fast attempt whose frontier no slot could keep.
 pub(crate) const NO_SLOT_ROUTE_WORK: u32 = FAST_ROUTE_WORK / 2;
 
@@ -84,14 +75,6 @@ impl GameWorld {
             FAST_ROUTE_WORK
         };
         let allowance = self.fast_route_allowance(player).min(attempt);
-        // A short trip never waits behind other orders' fast attempts.
-        let (from, to) = (planner.origin(), planner.destination());
-        let short = (from.x - to.x).abs().max((from.y - to.y).abs()) <= SHORT_ROUTE_TILES;
-        let allowance = if short {
-            allowance.max(SHORT_ROUTE_WORK)
-        } else {
-            allowance
-        };
         if allowance == 0 {
             return (RoutePlannerPoll::Pending, false);
         }
@@ -113,6 +96,7 @@ impl GameWorld {
         self.charge_fast_route(player, spent);
         self.route_metrics.issue_work += u64::from(spent);
         self.demand_route_work(None, 0, spent);
+        let (from, to) = (planner.origin(), planner.destination());
         self.route_metrics
             .attribution
             .work(kind, from, to, 0, spent);

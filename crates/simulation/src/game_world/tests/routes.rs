@@ -206,24 +206,6 @@ fn toggle_provider_terrain() -> (Terrain, Arc<AtomicBool>) {
 }
 
 #[test]
-fn a_short_trip_is_routed_at_once_when_the_fast_budget_is_spent() {
-    let config = WorldConfig::new(64, 64, Seed(0)).expect("config");
-    let mut world = GameWorld::new(config).expect("world");
-    world.terrain = flat_map_terrain();
-    let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).expect("tile");
-    let near = world.spawn_unit(PlayerId(0), at(10, 10)).expect("spawn");
-    let far = world.spawn_unit(PlayerId(0), at(10, 20)).expect("spawn");
-    world.fast_route_budget = 0;
-    assert!(world.issue_move(near, at(14, 12)).expect("short trip"));
-    assert!(world.issue_move(far, at(60, 20)).expect("long trip"));
-    assert!(!world.unit(near).expect("unit").planning, "routed at issue");
-    assert!(
-        world.unit(far).expect("unit").planning,
-        "a long trip still waits"
-    );
-}
-
-#[test]
 fn planner_slot_exhaustion_defers_a_new_order_without_rejecting_it() {
     let config = WorldConfig::new(64, 64, Seed(0)).expect("config");
     let mut world = GameWorld::new(config).expect("world");
