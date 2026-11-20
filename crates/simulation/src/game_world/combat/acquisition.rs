@@ -175,6 +175,13 @@ impl GameWorld {
             {
                 continue;
             }
+            // A unit busy on a wall, gate or road looks for a better target
+            // once every few ticks, spread over units like the march scans.
+            if matches!(building_attack, Some((_, true)))
+                && !(self.tick.0 + u64::from(id.0)).is_multiple_of(self.config.ticks(4))
+            {
+                continue;
+            }
             let Some(mut area) = self.acquisition_area(&u) else {
                 continue;
             };
