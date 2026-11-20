@@ -69,26 +69,50 @@ fn the_train_button_and_each_slider_become_general_commands() {
 #[wasm_bindgen_test]
 fn strategic_armies_do_not_disclose_foreign_mix_stance_or_orders() {
     use crate::playground::game::strategic::army_record;
+    use crate::strategic::ArmyKinds;
     use aoe_core::PlayerId;
     use aoe_protocol::{CombatStance, UnitKind, UnitTask};
     let mut unit = super::workers::villager(UnitTask::Moving);
     unit.kind = UnitKind::General;
     unit.general = Some(status());
     unit.stance = CombatStance::Defensive;
-    let own = army_record(&unit, PlayerId(0), true, Some([30.5, 20.5])).unwrap();
+    let mut report = ArmyKinds::default();
+    for _ in 0..42 {
+        report.add(UnitKind::Archer);
+    }
+    let own = army_record(
+        &unit,
+        PlayerId(0),
+        true,
+        Some([30.5, 20.5]),
+        Some(&report),
+        0x4191f5,
+    )
+    .unwrap();
+    assert_eq!(own[15], UnitKind::Archer as u8 as f64);
     assert_eq!(own[5], 42.0);
     assert_eq!(&own[8..10], &[30.5, 20.5]);
-    assert_eq!(&own[10..], &[20.0, 10.0, 6.0, 4.0, 2.0]);
-    let foreign = army_record(&unit, PlayerId(1), false, Some([30.5, 20.5])).unwrap();
+    assert_eq!(&own[10..15], &[20.0, 10.0, 6.0, 4.0, 2.0]);
+    let foreign = army_record(
+        &unit,
+        PlayerId(1),
+        false,
+        Some([30.5, 20.5]),
+        Some(&report),
+        0xf54141,
+    )
+    .unwrap();
+    assert_eq!(foreign[15], UnitKind::General as u8 as f64);
+    assert_eq!(foreign[16], 0xf54141 as f64);
     assert_eq!(foreign[5], -1.0);
     assert_eq!(foreign[7], -1.0);
     assert!(foreign[8].is_nan() && foreign[9].is_nan());
-    assert_eq!(&foreign[10..], &[0.0; 5]);
+    assert_eq!(&foreign[10..15], &[0.0; 5]);
     unit.hp = 0;
-    assert!(army_record(&unit, PlayerId(0), false, None).is_none());
+    assert!(army_record(&unit, PlayerId(0), false, None, None, 0).is_none());
     unit.hp = 25;
     unit.kind = UnitKind::Villager;
-    assert!(army_record(&unit, PlayerId(0), false, None).is_none());
+    assert!(army_record(&unit, PlayerId(0), false, None, None, 0).is_none());
 }
 
 #[wasm_bindgen_test]
@@ -162,10 +186,11 @@ fn site_record_ownership_is_explicit_even_when_player_colours_match() {
     let own = site_record(&building, PlayerId(0), [65, 145, 245]);
     building.player = PlayerId(1);
     let enemy = site_record(&building, PlayerId(0), [65, 145, 245]);
-    assert_eq!(own.len(), 9);
+    assert_eq!(own.len(), 10);
     assert_eq!(own[..7], enemy[..7]);
     assert_eq!(own[7], 1.0);
     assert_eq!(enemy[7], 0.0);
+    assert_eq!([own[9], enemy[9]], [0.0, 1.0]);
 }
 
 #[wasm_bindgen_test]

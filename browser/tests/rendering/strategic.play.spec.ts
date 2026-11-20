@@ -48,6 +48,8 @@ test("strategic tokens retain identity, layers and fog-safe reports", async ({
         6,
         4,
         2,
+        4,
+        0x4191f5,
         8,
         530,
         500,
@@ -63,6 +65,8 @@ test("strategic tokens retain identity, layers and fog-safe reports", async ({
         0,
         0,
         0,
+        23,
+        0xf54141,
       ],
       [30, 480, 500, 0, 31, 25, 27, 4],
       [],
@@ -277,8 +281,8 @@ test("kingdom landscape keeps source relief, settlements and farms bounded and c
     );
     s.terrain(terrain);
     const sites = [
-      10, 498, 498, 502, 502, 0, 0x4191f5, 1, 109, 11, 506, 500, 509, 503, 5,
-      0x4191f5, 1, 50, 12, 490, 500, 494, 504, 16, 0x4191f5, 0, 82,
+      10, 498, 498, 502, 502, 0, 0x4191f5, 1, 109, 1, 11, 506, 500, 509, 503, 5,
+      0x4191f5, 1, 50, 1, 12, 490, 500, 494, 504, 16, 0x4191f5, 0, 82, 2,
     ];
     s.settlements(sites);
     const state = [8000, 8000, 500, 500, 1280, 720, 0.04, 1];
@@ -313,7 +317,7 @@ test("kingdom landscape keeps source relief, settlements and farms bounded and c
     const many = Array.from({ length: 3000 }, (_, id) => {
       const x = (id % 50) * 150,
         y = Math.floor(id / 50) * 120;
-      return [id, x, y, x + 4, y + 4, 1, 0x4191f5, 1, 70];
+      return [id, x, y, x + 4, y + 4, 1, 0x4191f5, 1, 70, 1];
     }).flat();
     s.settlements(many);
     s.terrain(

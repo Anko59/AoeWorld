@@ -31,6 +31,8 @@ export function initFogMap(svg) {
     context.putImageData(data, 0, 0);
   };
   draw.canvas = canvas;
+  draw.explored = (x, y) => draw.disabled || (x >= 0 && x < 1 && y >= 0 && y < 1
+    && data?.data[(Math.floor(y * 256) * 256 + Math.floor(x * 256)) * 4 + 3] < 255);
   draw.revision = 0;
   draw.disabled = false;
   draw(false, []);

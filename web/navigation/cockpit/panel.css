@@ -79,6 +79,7 @@ html:is([data-lod=map],[data-lod=markers]) #strategic-label { top:66px; left:50%
 #strategic-tokens button { position:absolute; transform:translate(-50%,-50%); box-sizing:border-box; pointer-events:auto; cursor:pointer; box-shadow:0 2px 6px #000b; }
 .army-token { width:84px; height:38px; padding:2px 4px 3px; border:2px solid var(--player-colour,#67a9ff); border-radius:4px 4px 16px 16px; background:linear-gradient(#2a2418,#171209); color:#fff1c8; text-align:center; }
 .army-token[data-owned="false"] { border-color:#f08476; background:linear-gradient(#3b211f,#1d0f0e); }
+.army-portrait { float:left; width:30px; height:30px; margin:-1px 3px 0 0; }
 .army-token b { display:block; font:700 14px/15px Georgia,serif; }
 .army-token small { display:none; }
 .army-mix { display:flex; height:4px; margin-top:2px; background:#0c1518; }

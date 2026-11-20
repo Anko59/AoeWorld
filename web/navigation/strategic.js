@@ -1,6 +1,5 @@
-import { aggregatePixels, actorColour } from '/minimap.js';
 import { initLayers } from '/navigation/layers.js';
-import { initTokens } from '/navigation/tokens.js';
+import { ARMY_FIELDS, ARMY_LAYOUT_FIELDS, initTokens } from '/navigation/tokens.js';
 import { initContacts } from '/navigation/contacts.js';
 import { initReveal } from '/navigation/reveal.js';
 import { initCockpit } from '/navigation/cockpit.js';
@@ -9,6 +8,9 @@ import { initSettlements } from '/navigation/landscape/settlements.js';
 import { initHoldings } from '/navigation/landscape/holdings.js';
 import { initMapKey } from '/navigation/landscape/key.js';
 import { drawUnits } from '/navigation/landscape/units.js';
+import { initUnitGroups } from '/navigation/landscape/groups.js';
+import { artReady, kindSprite, trainingKinds } from '/interface/ui-art.js';
+import { initResourceMarkers } from '/navigation/landscape/resources.js';
 import { createSpace } from '/navigation/landscape/space.js';
 import { onSprites } from '/navigation/landscape/sprites.js';
 
@@ -35,7 +37,10 @@ export function initStrategic(fog, actors) {
   const tokens = initTokens(), contacts = initContacts();
   const cockpit = initCockpit(() => { tokens.invalidate(); modelRevision++; previous = ''; if (lastState) frame(lastState); }), reveal = initReveal();
   const settlements = initSettlements(), holdingsLayer = initHoldings();
-  const mapKey = initMapKey(), space = createSpace();
+  const mapKey = initMapKey(), space = createSpace(), unitGroups = initUnitGroups();
+  const resourceMarkers = initResourceMarkers();
+  const portrait = kind => kindSprite(trainingKinds[kind]);
+  artReady.then(() => { modelRevision++; if (lastState && !canvas.hidden) frame(lastState); });
   onSprites(() => { modelRevision++; previous = ''; if (lastState) frame(lastState); });
   const layers = initLayers(() => {
     modelRevision++;
@@ -71,9 +76,14 @@ export function initStrategic(fog, actors) {
       previous = ''; picks = [];
       return false;
     }
-    const key = [...state, terrainRevision, actors.revision(), fog.revision, resourceRevision, modelRevision,
+    const camera = [cx, cy, width, height, zoom].join(',');
+    const revision = actors.revision(), now = performance.now();
+    const regroup = layers.enabled.armies && unitGroups.ready(revision, camera, now);
+    const resourceSource = `${resourceRevision},${terrainRevision},${fog.revision}`;
+    const remapResources = layers.enabled.resources && resourceMarkers.ready(resourceSource, camera, now);
+    const key = [...state, terrainRevision, revision, fog.revision, resourceRevision, modelRevision,
       layers.enabled.threats ? contacts.clock() : 0].join(',');
-    if (key === previous) return false;
+    if (key === previous && !regroup && !remapResources) return false;
     const started = performance.now();
     window.aoeTelemetry?.mark(10);
     previous = key;
@@ -98,10 +108,9 @@ export function initStrategic(fog, actors) {
     const project = ([x, y]) => [width / 2 + (x - cx - y + cy) * 64 * zoom,
       height / 2 + (x - cx + y - cy) * 32 * zoom];
     pickRadius = 22;
-    let records = actors.records();
-    if (!layers.enabled.armies) records = [];
-    context.setTransform(1, 0, 0, 1, 0, 0);
     const scale = scene.clientWidth / width;
+    if (regroup) unitGroups.update(actors.records(), revision, camera, now, project, width, height, scale);
+    context.setTransform(1, 0, 0, 1, 0, 0);
     mapKey.update(zoom, scale);
     canvas.dataset.holdingRuns = String(holdingsLayer.draw(context, plane, zoom, layers.enabled.ownership));
     // One screen-space grid arbitrates every symbol: HUD, places, army tokens, then unit groups.
@@ -118,20 +127,17 @@ export function initStrategic(fog, actors) {
     window.aoeTelemetry?.mark(20);
     window.aoeTelemetry?.mark(11);
     canvas.dataset.threats = String(layers.enabled.threats ? contacts.draw(context, project) : 0);
-    tokens.draw(context, project, layers.enabled, scale, width, height, space);
-    picks = drawUnits(context, records, project, width, height, scale, space, settlements.place, tokens.mine());
-    settlements.chips(context, scale);
-    // Deposits remain legible after sprite drawing stops and above clusters.
-    // Rust sends only explored, non-forest resources; forests live in terrain.
-    const colours = ['#e85b8a', '#3c8f4a', '#f2cf50', '#c4c8d0', '#75c8f0', '#75c8f0'];
-    const radius = level === 2 ? 3 : 2;
-    for (const resource of layers.enabled.resources ? resources : []) {
-      const [x, y] = project(resource.world);
-      context.fillStyle = '#101910';
-      context.fillRect(x - radius - 1, y - radius - 1, radius * 2 + 2, radius * 2 + 2);
-      context.fillStyle = colours[resource.kind] ?? '#e85b8a';
-      context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
-    }
+    if (remapResources) resourceMarkers.update(state, scale, project, fog, resources, resourceSource, camera, now);
+    const forests = layers.enabled.resources ? resourceMarkers.drawForests(context, project, scale, width, height) : 0;
+    canvas.dataset.forests = String(forests);
+    tokens.draw(context, project, layers.enabled, scale, width, height, space, portrait);
+    picks = layers.enabled.armies ? drawUnits(context, unitGroups.groups(), project, width, height, scale,
+      space, settlements.place, portrait) : [];
+    settlements.chips(context, scale, portrait);
+    const fishingGrounds = layers.enabled.resources
+      ? resourceMarkers.drawFishingGrounds(context, project, scale, width, height, space) : 0;
+    canvas.dataset.fishingGrounds = String(fishingGrounds);
+    if (layers.enabled.resources) resourceMarkers.drawDeposits(context, project, level);
     window.aoeTelemetry?.mark(18);
     canvas.dataset.resources = String(resources.length);
     canvas.dataset.clusters = String(picks.length);
@@ -145,7 +151,7 @@ export function initStrategic(fog, actors) {
     // surface until the detailed renderer presents a complete replacement.
     scene.dataset.strategicCovered = 'true';
     canvas.dataset.redraws = String(++redraws);
-    canvas.dataset.picks = JSON.stringify(picks.map(p => ({ x: p.x * scale, y: p.y * scale, count: p.count, hostile: p.hostile })));
+    canvas.dataset.picks = JSON.stringify(picks.map(p => ({ x: p.x * scale, y: p.y * scale, count: p.count, kind: p.kind, class: p.class, art: p.art, hostile: p.hostile })));
     canvas.dataset.frameMs = (performance.now() - started).toFixed(3);
     return true;
   }
@@ -172,11 +178,11 @@ export function initStrategic(fog, actors) {
     if (canvas.width !== 1) canvas.width = canvas.height = 1;
     canvas.dataset.workingBytes = '4';
   }
-  function update(a, e, b, c = []) {
+  function update(a, e, b, c = [], portraits = []) {
       contacts.update(c);
-      const next = [a, e, b, c].map(v => Array.from(v).join(',')).join(';');
+      const next = [a, e, b, c, portraits].map(v => Array.from(v).join(',')).join(';');
       if (next === modelSignature) return;
-      modelSignature = next; tokens.update(a, e, b); modelRevision++;
+      modelSignature = next; tokens.update(a, e, b, portraits); modelRevision++;
   }
   return { frame, pick, present, navigation: reveal.navigation, cameraLink: reveal.link, interrupt: reveal.interrupt, cinematic: reveal.active, entity: tokens.entity, update, cockpit: cockpit.update, production: cockpit.production, building: cockpit.building, commerce: cockpit.commerce,
     // All arrays are the bounded, authorized HUD stream. Aggregate jobs once
@@ -194,10 +200,13 @@ export function initStrategic(fog, actors) {
         jobs.set(manager, counts);
       }
       for (let at = 0; at + 2 < orders.length; at += 3) destinations.set(orders[at], [orders[at + 1], orders[at + 2]]);
-      const armies = Array.from(a), economy = [];
-      for (let at = 0; at + 14 < armies.length; at += 15) {
-        const target = armies[at + 3] ? destinations.get(armies[at]) : null;
-        armies[at + 8] = target?.[0] ?? NaN; armies[at + 9] = target?.[1] ?? NaN;
+      const armies = [], portraits = [], economy = [];
+      for (let at = 0; at + ARMY_FIELDS <= a.length; at += ARMY_FIELDS) {
+        const army = Array.from(a.slice(at, at + ARMY_LAYOUT_FIELDS));
+        const target = army[3] ? destinations.get(army[0]) : null;
+        army[8] = target?.[0] ?? NaN; army[9] = target?.[1] ?? NaN;
+        armies.push(...army);
+        portraits.push(army[0], a[at + ARMY_LAYOUT_FIELDS], a[at + ARMY_LAYOUT_FIELDS + 1]);
       }
       for (let at = 0; at + 7 < castles.length; at += 8) {
         const [id, x, y, selected, garrison, managed, residents, wait] = castles.slice(at, at + 8);
@@ -205,23 +214,25 @@ export function initStrategic(fog, actors) {
         if (steward === undefined) continue;
         economy.push(id, steward, x, y, selected, managed, residents, wait, ...(jobs.get(steward) ?? [0, 0, 0, 0, 0]));
       }
-      update(armies, economy, b, c);
+      update(armies, economy, b, c, portraits);
     },
     holdings(values) { if (holdingsLayer.update(values)) { modelRevision++; previous = ''; } },
     settlements(values) { if (settlements.update(values)) { modelRevision++; previous = ''; } },
     reset() {
       controlsVisible = null;
       cockpit.reset(); reveal.reset();
-      settlements.reset(); holdingsLayer.reset();
+      settlements.reset(); holdingsLayer.reset(); unitGroups.reset();
       tokens.update([], [], []); contacts.reset(); resources = [];
-      knownResources.clear(); retiredResources.clear(); resourceSnapshot = false;
+      knownResources.clear(); retiredResources.clear(); resourceSnapshot = false; resourceRevision++;
       modelSignature = ''; modelRevision++; previous = '';
     },
     terrain(value, raster) {
       const started = performance.now();
       window.aoeTelemetry?.mark(10);
       try {
-        terrain = raster ? paintTerrain(raster) ?? value : value;
+        const painted = raster ? paintTerrain(raster) : null;
+        terrain = painted ?? value;
+        resourceMarkers.terrain(painted ? raster : null);
       } finally {
         window.aoeTelemetry?.mark(17);
       }

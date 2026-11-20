@@ -8,6 +8,11 @@ pub(crate) fn far_building_visible(hp: u16, state: aoe_protocol::ConstructionSta
     hp > 0 && state == aoe_protocol::ConstructionState::Complete
 }
 
+#[cfg(any(all(target_arch = "wasm32", not(feature = "diagnostics")), test))]
+mod armies;
+#[cfg(all(target_arch = "wasm32", not(feature = "diagnostics")))]
+pub(crate) use armies::ArmyKinds;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum Lod {

@@ -5,7 +5,14 @@ const MINE = 0x4191f5;
 const ENEMY = 0xf54141;
 const state = [8000, 8000, 500, 500, 1280, 720, 0.04, 1];
 type Unit = [kind: number, x: number, y: number, id: number, colour: number];
-type Pick = { x: number; y: number; count: number; hostile?: boolean };
+type Pick = {
+  x: number;
+  y: number;
+  count: number;
+  hostile?: boolean;
+  kind: number;
+  class: number;
+};
 
 // World tile that projects to backing pixel (sx, sy) with the state above.
 const world = (sx: number, sy: number): [number, number] => {
@@ -13,11 +20,24 @@ const world = (sx: number, sy: number): [number, number] => {
   const b = (sy - 360) / 1.28;
   return [500 + (a + b) / 2, 500 + (b - a) / 2];
 };
-const group = (sx: number, sy: number, count: number, colour: number) =>
+const group = (
+  sx: number,
+  sy: number,
+  count: number,
+  colour: number,
+  kind = 2,
+  flags = 0,
+) =>
   Array.from({ length: count }, (): Unit => {
     const [x, y] = world(sx, sy);
     // Field 3 is the owning player; groups are binned per owner and cell.
-    return [0, x, y, colour === MINE ? 1 : 2, colour];
+    return [
+      (kind + 1) * 16 + flags + (colour === MINE ? 8 : 0),
+      x,
+      y,
+      colour === MINE ? 1 : 2,
+      colour,
+    ];
   });
 
 async function far(
@@ -64,7 +84,7 @@ test("an enemy force on top of my town centre stays a marked enemy group", async
     page,
     1280,
     [...group(640, 330, 2, MINE), ...group(640, 330, 3, ENEMY)],
-    [10, 498, 498, 502, 502, 0, MINE, 1, 109],
+    [10, 498, 498, 502, 502, 0, MINE, 1, 109, 1],
   );
   const found = await picks();
   const hostile = found.filter((p) => p.hostile);
@@ -99,7 +119,7 @@ test("unit group occupancy follows CSS pixels when the canvas backing differs", 
     page,
     640,
     [...group(800, 500, 1, MINE)],
-    [10, bx - 1, by - 1, bx + 1, by + 1, 0, MINE, 1, 109],
+    [10, bx - 1, by - 1, bx + 1, by + 1, 0, MINE, 1, 109, 1],
   );
   const found = await picks();
   expect(
@@ -109,5 +129,91 @@ test("unit group occupancy follows CSS pixels when the canvas backing differs", 
   await expect(page.locator("#strategic-scene")).toHaveAttribute(
     "data-settlements",
     "1",
+  );
+});
+
+test("mixed groups choose the most numerous kind, then the lowest kind on a tie", async ({
+  page,
+}) => {
+  const kinds = [
+    ...group(355, 220, 2, MINE, 2),
+    ...group(355, 220, 3, MINE, 4),
+    ...group(575, 220, 2, MINE, 12),
+    ...group(575, 220, 2, MINE, 16),
+    ...group(790, 220, 2, MINE, 16),
+    ...group(790, 220, 2, MINE, 12),
+  ];
+  const picks = await far(page, 1280, kinds);
+  expect((await picks()).map(({ kind, count }) => [kind, count])).toEqual([
+    [4, 5],
+    [12, 4],
+    [12, 4],
+  ]);
+});
+
+test("villagers, fishing ships, soldiers and warships keep separate groups in the same cell", async ({
+  page,
+}) => {
+  const picks = await far(page, 1280, [
+    ...group(550, 335, 1, MINE, 0, 2),
+    ...group(550, 335, 2, MINE, 3, 6),
+    ...group(550, 335, 3, MINE, 12),
+    ...group(550, 335, 4, MINE, 21, 4),
+  ]);
+  const found = await picks();
+  expect(
+    found.map(({ kind, class: type, count }) => [type, kind, count]).sort(),
+  ).toEqual([
+    [0, 12, 3],
+    [2, 0, 1],
+    [4, 21, 4],
+    [6, 3, 2],
+  ]);
+  expect(new Set(found.map(({ x, y }) => `${x},${y}`)).size).toBe(4);
+});
+
+test("only one actor scan is needed across camera animation frames", async ({
+  page,
+}) => {
+  await page.route("**/landscape-test", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<canvas id="scene" style="width:1280px;height:720px"></canvas>',
+    }),
+  );
+  await page.goto("/landscape-test");
+  const scans = await page.evaluate(async (frame) => {
+    Object.defineProperty(performance, "now", { value: () => 42 });
+    // @ts-expect-error Served browser module.
+    const { initStrategic } = await import("/navigation/strategic.js");
+    let reads = 0;
+    const s = initStrategic(
+      { disabled: true, canvas: document.createElement("canvas"), revision: 0 },
+      {
+        records: () => {
+          reads++;
+          return [];
+        },
+        revision: () => 1,
+      },
+    );
+    for (let i = 0; i < 12; i++) {
+      frame[2] = 500 + i;
+      s.frame(frame);
+    }
+    return reads;
+  }, state);
+  expect(scans).toBe(1);
+});
+
+test("crowded friendly cells preserve the population in the displayed counts", async ({
+  page,
+}) => {
+  const units = Array.from({ length: 28 * 16 }, (_, cell) =>
+    group(22 + (cell % 28) * 44, 22 + Math.floor(cell / 28) * 44, 2, MINE),
+  ).flat();
+  const picks = await far(page, 1280, units);
+  expect((await picks()).reduce((sum, pick) => sum + pick.count, 0)).toBe(
+    units.length,
   );
 });

@@ -17,15 +17,23 @@ async function load() {
     const wasm = await import('/pkg/aoe_client.js');
     const parts = wasm.strategic_building_parts(bytes);
     const manifest = JSON.parse(new TextDecoder().decode(bytes));
+    const category = prefix.slice('/asset-pack/'.length);
     for (let at = 0; at < parts.length;) {
       const id = parts[at++], count = parts[at++], list = [];
       for (let i = 0; i < count; i++) {
         const frame = manifest.frames[parts[at++]];
+        if (frame.native) {
+          const { chunk, offset, length } = frame.native;
+          frame.bytes = [category + manifest.chunks[chunk].file, offset, length];
+        } else {
+          const { color, player } = manifest.pages[frame.page];
+          frame.images = [category + color, category + player];
+        }
         list.push({ frame, dx: parts[at++], dy: parts[at++] });
       }
       if (list.length) recipes.set(id, list);
     }
-    assets = { prefix, manifest: { chunks: manifest.chunks, pages: manifest.pages }, wasm, chunks: new Map(), pages: new Map() };
+    assets = { wasm, chunks: new Map(), pages: new Map() };
     state = 'ready'; wake();
   } catch { state = 'missing'; }
 }
@@ -35,32 +43,31 @@ export function loadSprites() {
 async function image(path) {
   const value = new Image(); value.src = path; await value.decode(); return value;
 }
-async function pixels(frame, colour) {
-  const { prefix, manifest, wasm, chunks, pages } = assets;
-  if (frame.native) {
-    const n = frame.native;
-    let chunk = chunks.get(n.chunk);
+async function spritePixels(assets, frame, colour) {
+  const { wasm, chunks, pages } = assets;
+  if (frame.bytes) {
+    const [file, offset, length] = frame.bytes;
+    let chunk = chunks.get(file);
     if (!chunk) {
-      const file = manifest.chunks[n.chunk]?.file;
-      if (!file || !/^[a-zA-Z0-9_-]+\.bin$/.test(file)) throw Error('Invalid native thumbnail chunk');
-      const response = await fetch(`${prefix}${file}`);
+      if (!/^(?:buildings\/(?:actors\/)?)?[a-zA-Z0-9_-]+\.bin$/.test(file)) throw Error('Invalid native thumbnail chunk');
+      const response = await fetch(`/asset-pack/${file}`);
       if (!response.ok) throw Error('Missing native thumbnail chunk');
       chunk = new Uint8Array(await response.arrayBuffer());
       // Two encoded chunks only; decoded pixels are released after composition.
       if (chunks.size === 2) chunks.delete(chunks.keys().next().value);
-      chunks.set(n.chunk, chunk);
+      chunks.set(file, chunk);
     }
-    const rgba = wasm.strategic_frame(chunk.subarray(n.offset, n.offset + n.length), frame.width, frame.height, colour);
+    const rgba = wasm.strategic_frame(chunk.subarray(offset, offset + length), frame.width, frame.height, colour);
     return new ImageData(new Uint8ClampedArray(rgba), frame.width, frame.height);
   }
-  let pair = pages.get(frame.page);
+  const key = frame.images[0];
+  let pair = pages.get(key);
   if (!pair) {
-    const page = manifest.pages[frame.page];
-    const valid = file => typeof file === 'string' && /^[a-zA-Z0-9_.-]+$/.test(file);
-    if (!valid(page.color) || !valid(page.player)) throw Error('Invalid thumbnail page');
-    pair = await Promise.all([image(`${prefix}${page.color}`), image(`${prefix}${page.player}`)]);
+    const valid = file => typeof file === 'string' && /^(?:buildings\/(?:actors\/)?)?[a-zA-Z0-9_-]+\.png$/.test(file);
+    if (!frame.images.every(valid)) throw Error('Invalid thumbnail page');
+    pair = await Promise.all(frame.images.map(file => image(`/asset-pack/${file}`)));
     if (pages.size === 2) pages.delete(pages.keys().next().value);
-    pages.set(frame.page, pair);
+    pages.set(key, pair);
   }
   const cut = source => {
     const c = document.createElement('canvas'); c.width = frame.width; c.height = frame.height;
@@ -88,7 +95,7 @@ async function bake(id, colour, key) {
   const context = canvas.getContext('2d');
   for (const p of parts) {
     const f = p.frame, source = document.createElement('canvas'); source.width = f.width; source.height = f.height;
-    source.getContext('2d').putImageData(await pixels(f, colour), 0, 0);
+    source.getContext('2d').putImageData(await spritePixels(assets, f, colour), 0, 0);
     context.drawImage(source, (p.dx - f.anchor_x - left) * scale, (p.dy - f.anchor_y - top) * scale, f.width * scale, f.height * scale);
   }
   // Tint before composing, so upper unmasked parts cover lower player masks.
