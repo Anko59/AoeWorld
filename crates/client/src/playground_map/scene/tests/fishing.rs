@@ -46,8 +46,10 @@ async fn seeding_and_animal_tasks_have_distinct_numeric_hud_tags() {
         .iter()
         .map(|v| v.as_f64().unwrap())
         .collect();
-    let tasks: Vec<_> = values[17..]
+    let count = values[12] as usize;
+    let tasks: Vec<_> = values[15..]
         .chunks_exact(19)
+        .take(count)
         .map(|record| (record[0] as u32, record[5] as u8))
         .collect();
     client.canvas.remove();

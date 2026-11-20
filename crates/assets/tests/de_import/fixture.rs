@@ -108,6 +108,7 @@ pub(super) fn actors(install: &Path) {
         7210, 7258, 7450, 7411, 7415, 7409, 7039, 7051, 7378, 7374, 7278, 7163, 7186, 7063, 7462,
         7045, 7249, 7221, 7435, 7416, 7220, 7222, 7316, 7315, 7412, 7319, 7376, 7322, 7408, 7410,
         7015, 7017, 7023, 7054, 507005, 7314, 7372, 7373, 7377, 507003, 507004, 507006, 507007,
+        507002, 7242, 7375, 7047, 7218, 7235, 7244, 7323,
     ] {
         records.extend([0; 33]);
         records.extend(language.to_le_bytes());
@@ -120,7 +121,11 @@ pub(super) fn actors(install: &Path) {
         records.extend(1_u16.to_le_bytes());
         records.extend([0; 9]);
     }
-    for (directory, file) in [("units", "0_50730.dds"), ("tech", "0_test.dds")] {
+    for (directory, file) in [
+        ("units", "0_50730.dds"),
+        ("tech", "0_test.dds"),
+        ("tech", "148_heavy_warships.dds"),
+    ] {
         let path = install.join("widgetui/textures/ingame").join(directory);
         fs::create_dir_all(&path).unwrap();
         fs::write(path.join(file), super::dds()).unwrap();
@@ -161,7 +166,7 @@ fn native_interface(install: &Path) {
     };
     write(ingame.join("buildings/0_test.dds"), &super::dds());
     for index in [
-        0, 1, 2, 3, 28, 30, 31, 32, 35, 41, 43, 49, 62, 63, 64, 69, 74, 84,
+        0, 1, 2, 3, 6, 7, 8, 11, 28, 30, 31, 32, 35, 41, 43, 49, 62, 63, 64, 69, 74, 84,
     ] {
         write(ingame.join(format!("actions/{index:03}_.png")), &png);
     }
@@ -184,6 +189,18 @@ fn native_interface(install: &Path) {
     }
     for name in ["blank_icon", "frame_regular"] {
         write(ingame.join(format!("panels/{name}.png")), &png);
+    }
+    for name in [
+        "slider_bar",
+        "slider_bar_progress",
+        "slider_handle_normal",
+        "slider_handle_hover",
+        "slider_handle_active",
+    ] {
+        write(
+            install.join(format!("widgetui/textures/menu/scrollbars/{name}.png")),
+            &png,
+        );
     }
     write(
         install.join("widgetui/textures/backgrounds/mainmenu_bg.dds"),

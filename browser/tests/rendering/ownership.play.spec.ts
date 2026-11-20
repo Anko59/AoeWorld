@@ -29,17 +29,7 @@ test("foreign selections show their owner and have no commands or orders", async
     await page.mouse.click(actor.x, actor.y - 10);
     await expect(page.locator("#selection-owner")).toHaveText(owner);
     await expect(page.locator("#command-grid button:visible")).toHaveCount(0);
-    if (id === 40) {
-      // Hidden controls must also retain client-side ownership guards.
-      for (const command of [
-        "train-archer",
-        "research-loom",
-        "cancel-construction",
-        "cancel-research",
-        "market-buy-wood",
-      ])
-        await page.locator(`#${command}`).dispatchEvent("click");
-    }
+    await page.locator("#scene").focus();
     await page.keyboard.press("q");
     await page.keyboard.press("s");
     await page.mouse.click(1100, 600, { button: "right" });

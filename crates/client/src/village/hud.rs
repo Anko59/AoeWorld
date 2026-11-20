@@ -1,9 +1,7 @@
 use super::{Client, building_center, owner};
 use crate::playground::game::{map, position_of};
 use aoe_protocol::{ResourceKind, UnitKind, UnitTask};
-use std::{cell::RefCell, rc::Rc};
-use wasm_bindgen::{JsCast, JsValue, prelude::wasm_bindgen};
-use web_sys::{Element, MouseEvent};
+use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen(
     inline_js = "export function village_update(values, status, details) { window.aoeInterface?.numeric(values, status); window.aoeInterface?.details(details); }"
@@ -50,19 +48,12 @@ fn screen(
 }
 
 pub(in super::super) fn update(client: &Client) {
-    let stance = client
-        .selected
-        .units
-        .first()
-        .and_then(|id| client.units.get(id))
-        .filter(|first| {
-            client.selected.units.iter().all(|id| {
-                client
-                    .units
-                    .get(id)
-                    .is_some_and(|u| u.stance == first.stance)
-            })
-        })
+    let owner = owner(client);
+    let mut fighters = super::selection::owned_units(client)
+        .filter(|unit| super::orders::can_set_stance(unit.kind));
+    let stance = fighters
+        .next()
+        .filter(|first| fighters.all(|unit| unit.stance == first.stance))
         .map_or("", |u| ["0", "1", "2", "3"][u.stance as usize]);
     if client
         .canvas
@@ -72,12 +63,10 @@ pub(in super::super) fn update(client: &Client) {
     {
         let _ = client.canvas.set_attribute("data-selected-stance", stance);
     }
-    let owner = owner(client);
     let overview = crate::playground::game::strategic::active(client);
     // Header: four stockpiles, used/cap, four worker counts, clock,
-    // native-art flag, actor/queue/resource counts, and the two idle counts.
-    // Actor records contain eighteen numbers; queue records contain progress,
-    // total and unit kind.
+    // native-art flag, actor count and the two idle counts. Each actor
+    // record contains nineteen numbers. Production rows follow the actors.
     // Decode immediately in JS; never retain a view of WASM memory.
     // One geometry snapshot precedes every panel write. Later panels share it
     // instead of forcing layout after the numeric HUD has changed the DOM.
@@ -127,9 +116,9 @@ pub(in super::super) fn update(client: &Client) {
             .find(|(key, _)| *key == id)
             .map_or(y - 42.0 * client.camera.zoom, |(_, top)| *top)
     };
-    let mut values = vec![0.0; 17];
-    values[15] = client.village.idle_villagers.len() as f64;
-    values[16] = client.village.idle_military.len() as f64;
+    let mut values = vec![0.0; 15];
+    values[13] = client.village.idle_villagers.len() as f64;
+    values[14] = client.village.idle_military.len() as f64;
     values[10] = (client.village.tick / u64::from(client.config.tick_hz.max(1))) as f64;
     values[11] = flag(!client.art.village[0].is_empty());
     if let Some(player) = client.village.players.iter().find(|p| p.player == owner) {
@@ -182,13 +171,7 @@ pub(in super::super) fn update(client: &Client) {
             p.is_some_and(|p| p.age >= aoe_protocol::Age::Feudal),
             p.map_or(0, |p| p.researched),
         );
-        let loom = client
-            .village
-            .players
-            .iter()
-            .find(|p| p.player == unit.player)
-            .is_some_and(|p| p.researched & 1 != 0)
-            && unit.kind == UnitKind::Villager;
+        let loom = p.is_some_and(|p| p.researched & 1 != 0) && unit.kind == UnitKind::Villager;
         values.extend_from_slice(&[
             f64::from(unit.id.0),
             match unit.kind {
@@ -327,44 +310,38 @@ pub(in super::super) fn update(client: &Client) {
                 .map_or(0.0, |p| rendered_colour(client, p, owner)),
         ]);
     }
-    if let Some(building) = client
+    let group = client.selected.buildings.len() > 1;
+    let mut producers: Vec<_> = client
         .village
         .buildings
         .iter()
-        .find(|b| Some(b.id) == client.selected.building_id && b.player == owner)
-    {
-        values[13] = building.training_queue.len() as f64;
-        for entry in &building.training_queue {
-            values.extend_from_slice(&[
-                entry.progress_ticks as f64,
-                entry.total_ticks as f64,
-                entry.kind as u8 as f64,
-            ]);
-        }
-    }
-    if client.selected.buildings.len() > 1 {
-        let mut producers: Vec<_> = client
-            .village
-            .buildings
-            .iter()
-            .filter(|b| {
-                b.player == owner
-                    && b.hp > 0
-                    && client.selected.has_building(b.id)
-                    && aoe_protocol::UnitKind::ALL
-                        .iter()
-                        .any(|kind| crate::building_ui::rules(b.kind).trains(*kind as u8))
-            })
-            .collect();
-        producers.sort_unstable_by_key(|b| b.id);
-        for building in producers {
-            values.extend_from_slice(&[
-                f64::from(building.id.0),
-                building.kind as u8 as f64,
-                building.training_queue.len() as f64,
-            ]);
-            values.extend(building.training_queue.iter().map(|e| e.kind as u8 as f64));
-        }
+        .filter(|building| {
+            building.player == owner
+                && if group {
+                    building.hp > 0
+                        && client.selected.has_building(building.id)
+                        && UnitKind::ALL.iter().any(|kind| {
+                            crate::building_ui::rules(building.kind).trains(*kind as u8)
+                        })
+                } else {
+                    Some(building.id) == client.selected.building_id
+                }
+        })
+        .collect();
+    producers.sort_unstable_by_key(|building| building.id);
+    for building in producers {
+        let queue = &building.training_queue;
+        let (elapsed, total) = queue.first().map_or((0.0, 0.0), |entry| {
+            (entry.progress_ticks as f64, entry.total_ticks as f64)
+        });
+        values.extend([
+            f64::from(building.id.0),
+            building.kind as u8 as f64,
+            queue.len() as f64,
+            elapsed,
+            total,
+        ]);
+        values.extend(queue.iter().map(|entry| entry.kind as u8 as f64));
     }
     let details = super::presentation::values(client);
     village_update(&values, map::feedback::connection_label(client), &details);
@@ -383,57 +360,6 @@ pub(in super::super) fn update(client: &Client) {
     kingdom_activity_update(&rows);
     super::steward::present(client, panel_scale);
     crate::playground::game::strategic::update(client);
-}
-
-pub(in super::super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
-    for (id, military) in [("idle-villagers", false), ("idle-military", true)] {
-        let finder = shared.clone();
-        let callback = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(move || {
-            super::selection::idle(&mut finder.borrow_mut(), military);
-        });
-        shared
-            .borrow()
-            .document
-            .get_element_by_id(id)
-            .ok_or("idle finder button missing")?
-            .add_event_listener_with_callback(
-                "click",
-                wasm_bindgen::JsCast::unchecked_ref(callback.as_ref()),
-            )?;
-        callback.forget();
-    }
-    // One delegated listener serves every portrait the panel renders.
-    let panel = shared.clone();
-    let portraits =
-        wasm_bindgen::closure::Closure::<dyn FnMut(MouseEvent)>::new(move |event: MouseEvent| {
-            let token = event
-                .target()
-                .and_then(|target| target.dyn_into::<Element>().ok())
-                .and_then(|element| element.closest(".unit-token").ok().flatten());
-            let Some(id) = token
-                .and_then(|token| token.get_attribute("data-unit-id"))
-                .and_then(|id| id.parse::<u32>().ok())
-            else {
-                return;
-            };
-            super::selection::portrait(
-                &mut panel.borrow_mut(),
-                aoe_core::EntityId(id),
-                event.shift_key(),
-                event.ctrl_key(),
-            );
-        });
-    shared
-        .borrow()
-        .document
-        .get_element_by_id("selected-icons")
-        .ok_or("selected units panel missing")?
-        .add_event_listener_with_callback(
-            "click",
-            wasm_bindgen::JsCast::unchecked_ref(portraits.as_ref()),
-        )?;
-    portraits.forget();
-    super::building_panel::install(shared)
 }
 
 /// Villagers and Fishing Ships working a resource, including farming.

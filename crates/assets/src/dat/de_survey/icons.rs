@@ -68,6 +68,14 @@ const ADDITIONAL: &[(i16, i32)] = &[
     (17, 7017),
     (23, 7023),
     (54, 7054),
+    (905, 507002),
+    (244, 7242),
+    (376, 7375),
+    (47, 7047),
+    (218, 7218),
+    (236, 7235),
+    (239, 7244),
+    (320, 7323),
 ];
 
 /// Resolve each current UI technology's icon from the supported native DAT.
@@ -90,5 +98,8 @@ pub fn technology_icons(bytes: &[u8]) -> Result<Vec<(i16, i16)>, Error> {
             }
             Ok((id, tech.icon))
         })
+        // The Heavy Warships icon is 148_heavy_warships.dds. Its licensed DAT
+        // record has no effect and is excluded from the gameplay survey.
+        .chain([Ok((35, 148))])
         .collect()
 }

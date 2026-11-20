@@ -347,7 +347,10 @@ pub fn age_sprite_slot(
     if kind == BuildingKind::Road {
         return 9;
     }
-    if matches!(kind, BuildingKind::Bridge | BuildingKind::Wonder) {
+    if matches!(
+        kind,
+        BuildingKind::Bridge | BuildingKind::Wonder | BuildingKind::FishTrap
+    ) {
         return sprite_slot(kind, progress, rubble);
     }
     if let Some(slot) = stone_slot(kind, progress, rubble) {

@@ -82,7 +82,9 @@ fn real_naval_research_and_unit_icons_resolve() {
     let dat = read_bounded(&root.join("resources/_common/dat/empires2_x2_p1.dat")).unwrap();
     let dat = crate::dat::de_survey::inflate(&dat).unwrap();
     let techs = crate::dat::de_survey::technology_icons(&dat).unwrap();
-    for id in [906, 65, 374, 375, 373, 908, 907, 909, 910] {
+    for id in [
+        906, 65, 374, 375, 373, 908, 907, 909, 910, 35, 905, 244, 376, 47, 218, 236, 239, 320,
+    ] {
         assert!(techs.iter().any(|&(tech, _)| tech == id), "tech {id}");
     }
     let selected = unit_catalog::resolve(root).unwrap();

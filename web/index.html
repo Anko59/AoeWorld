@@ -31,18 +31,25 @@
     <div id="game-error" role="alert" hidden><span id="game-error-message"></span> <a id="reload-game" href="/">Reload game</a></div>
     <section id="bottom-panel" aria-label="Village command panel">
       <section id="commands" aria-label="Commands"><h2>COMMANDS <span id="command-context">Select a unit</span></h2>
-        <div id="command-grid">
-          <button id="train-villager" type="button" aria-label="Train Villager, 50 food, Q" title="Train Villager · 50 food · Q" hidden><svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#villager"></use></svg><kbd>Q</kbd><span class="cost"><svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#food"></use></svg>50</span></button>
-          <button id="move-units" type="button" aria-label="Move selected units" title="Move · choose a destination" hidden><svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#move"></use></svg><span>Move</span></button>
-          <button id="stop-units" type="button" aria-label="Stop selected units" title="Stop selected units" hidden><svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#stop"></use></svg><span>Stop</span></button>
-          <button id="delete-units" type="button" aria-label="Delete selected entities" title="Delete (Del)" aria-keyshortcuts="Delete" hidden><svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#delete"></use></svg><span>Delete</span></button>
-        </div>
+        <div id="command-grid"></div>
         <p id="command-hint">Click to select · drag to select a group</p>
-        <label id="combat-stance-label" hidden>Combat stance <select id="combat-stance"><option value="">Set stance…</option><option value="0">Aggressive</option><option value="1">Defensive</option><option value="2">Stand ground</option><option value="3">No attack</option></select></label>
       </section>
       <section id="selection" data-count="0" aria-label="Selection"><div id="selection-empty"><span class="crest">A<span>W</span></span><h2>Your village awaits</h2><p>Select villagers to gather resources.<br>Select the Town Center to grow your village.</p></div>
         <div id="selection-content" hidden><div id="selection-heading"><div id="portrait-frame"><div id="selection-portrait"></div><progress id="selection-health" max="1" value="1" aria-label="Selected entity health"></progress></div><div><p class="eyebrow"><span id="selection-owner">Your village</span></p><h1 id="selection-name"></h1><p id="selection-task"></p><p id="selection-load"></p><p id="unit-hp" hidden></p><p id="unit-combat" hidden></p></div></div><div id="selected-icons"></div>
-          <div id="training" hidden><div class="queue-heading"><span id="training-label">Training Villager</span><button id="cancel-training" type="button" title="Cancel active training and refund 50 food">Cancel</button></div><progress id="training-progress" max="100" value="0" aria-label="Villager training progress"></progress><div id="training-queue"></div></div>
+          <div id="building-panel" hidden>
+            <b id="building-hp"></b><div id="building-status"></div>
+            <progress id="construction-progress" max="1000" hidden></progress>
+            <div id="research-status"><span id="research-icon"></span><span id="research-label"></span>
+              <progress id="research-progress" max="100" aria-label="Research progress" hidden></progress>
+            </div>
+            <div id="market-prices"></div>
+            <div id="farm-reseed-queue" hidden>Farm reseeds queued: <span id="farm-reseed-count"></span></div>
+          </div>
+          <div id="training" hidden><div class="queue-heading" id="training-label"></div><progress id="training-progress" max="100" value="0" aria-label="Training progress"></progress><div id="training-queue"></div></div>
+          <div id="training-multi" role="region" aria-label="Building training queues" tabindex="0" hidden>
+            <div class="training-rows"></div><button type="button" class="training-page" title="Show the next three building queues" hidden></button>
+          </div>
+          <div id="garrison-panel" hidden><b>Garrison: <span id="garrison-count"></span></b><div id="garrison-units"></div></div>
         </div>
       </section>
     <section id="minimap" aria-label="Map navigation" data-raster="pending">
@@ -76,5 +83,6 @@
     <pre id="performance-overlay" aria-label="Client performance" hidden></pre>
   </main>
   <script type="module" src="/start/bootstrap.js"></script>
+  <div id="construction-labels"></div>
 </body>
 </html>

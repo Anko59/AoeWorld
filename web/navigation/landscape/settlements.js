@@ -1,4 +1,4 @@
-import { buildingKinds, buildingNames } from '/interface/buildings.js';
+import { buildingKinds, buildingNames } from '/interface/menu/catalog.js';
 import { actorColour } from '/minimap.js';
 import { settlementSymbols } from '/navigation/landscape/symbols.js';
 import { buildingSprite, loadSprites } from '/navigation/landscape/sprites.js';

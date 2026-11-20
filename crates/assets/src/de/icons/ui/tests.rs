@@ -197,8 +197,9 @@ fn real_de_building_icons_and_interface_sources_decode() {
     };
     let mut hash = blake3::Hasher::new();
     let sources = resolve(std::path::Path::new(&root), &mut hash).unwrap();
-    let mut groups = [false; 5];
+    let mut groups = [false; 6];
     let mut shelter_actions = BTreeMap::new();
+    let mut sliders = BTreeMap::new();
     for source in &sources {
         let bytes = read_bounded(&source.path).unwrap();
         assert_eq!(blake3::hash(&bytes).to_hex().as_str(), source.hash);
@@ -220,11 +221,29 @@ fn real_de_building_icons_and_interface_sources_decode() {
                 Role::Resource("food") => groups[2] = true,
                 Role::Panel("western-commands") => groups[3] = true,
                 Role::Panel("menu-background") => groups[4] = true,
+                Role::Unit(199) => groups[5] = true,
+                Role::Panel(name) if name.starts_with("slider-") => {
+                    assert!(
+                        sliders
+                            .insert(*name, (planes.width, planes.height))
+                            .is_none()
+                    );
+                }
                 _ => {}
             }
         }
     }
-    assert_eq!(groups, [true; 5], "real DE UI inventory is incomplete");
+    assert_eq!(groups, [true; 6], "real DE UI inventory is incomplete");
+    assert_eq!(
+        sliders,
+        BTreeMap::from([
+            ("slider-track", (386, 15)),
+            ("slider-fill", (386, 15)),
+            ("slider-thumb", (43, 43)),
+            ("slider-thumb-hover", (43, 43)),
+            ("slider-thumb-active", (43, 43)),
+        ])
+    );
     assert_eq!(
         shelter_actions,
         BTreeMap::from([

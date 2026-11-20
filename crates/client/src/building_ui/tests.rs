@@ -230,6 +230,19 @@ fn art_selection_distinguishes_every_kind_and_construction_stage() {
 }
 
 #[wasm_bindgen_test::wasm_bindgen_test]
+fn bottom_menu_fish_trap_draws_at_every_age() {
+    use aoe_protocol::Age;
+    for age in [Age::Dark, Age::Feudal, Age::Castle, Age::Imperial] {
+        for (progress, rubble) in [(1000, false), (0, false), (1000, true)] {
+            assert_eq!(
+                age_sprite_slot(B::FishTrap, progress, rubble, age),
+                age_sprite_slot(B::Farm, progress, rubble, age)
+            );
+        }
+    }
+}
+
+#[wasm_bindgen_test::wasm_bindgen_test]
 fn walls_include_both_endpoints_and_refuse_unbounded_lines() {
     assert_eq!(
         wall_tiles(TileCoord::new(0, 0), TileCoord::new(2, 2)).unwrap(),

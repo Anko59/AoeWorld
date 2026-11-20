@@ -1,226 +1,181 @@
 import { set, attribute } from '/interface/dom/update.js';
 import { transportLoads } from '/interface/navy/indicators.js';
-import { initGarrison } from '/interface/garrison/panel.js';
-import { castleKinds, castleNames, castleCommands, castleTechs, castleTraining, castleUnitNames } from '/interface/castle.js';
-import { imperialTechs, imperialTraining, imperialLines, imperialUnitNames } from '/interface/imperial.js';
-import { genericTechs, genericLines } from '/interface/generic.js';
-import { navyTechs, navyLines, navyTraining, navyTrainLines, navyUnitNames, dockUnitCells } from '/interface/navy.js';
-import { gunpowderTechs, gunpowderTraining, gunpowderLines, gunpowderTrainLines, gunpowderUnitNames } from '/interface/gunpowder.js';
-import { icon, entityIcon, setEntityIcon, techIds, trainingKinds } from '/interface/ui-art.js';
-// DOM presentation for authoritative Rust building state and footprint previews.
-const byId = id => document.getElementById(id);
-export const buildingKinds = ['TownCenter','House','LumberCamp','MiningCamp','Mill','Farm','Barracks','PalisadeWall','Outpost','Dock','ArcheryRange','Stable','Blacksmith','Market','WatchTower','PalisadeGate',...castleKinds,'Bridge','StoneWall','StoneGate','Road','Wonder','FishTrap'];
-export const buildingNames = ['Town Center','House','Lumber Camp','Mining Camp','Mill','Farm','Barracks','Palisade Wall','Outpost','Dock','Archery Range','Stable','Blacksmith','Market','Watch Tower','Palisade Gate',...castleNames,'Bridge','Stone Wall','Stone Gate','Road','Wonder','FishTrap'];
-// Codes are emitted by Rust building_ui::availability, where the rules live.
-const disabledReasons=['Unavailable','','requires Feudal Age','Already researched','Research in progress','Wait for the training queue to finish','Not enough food','Not enough wood','Not enough gold','Not enough stone','Training queue is full','Building is under construction','Requires prerequisite buildings or technology','Select your own building','requires Castle Age','A Steward is queued or garrisoned in this Town Center','requires Imperial Age'];
-const action=(button,label,code)=>{const reason=disabledReasons[code]??disabledReasons[0];set(button, 'disabled', code!==1);set(button, 'title', label+(reason?` · ${reason}`:''));attribute(button, 'aria-label', button.title);};
-const commands = [
-  ['house','House','Q','25 wood'], ['lumber-camp','Lumber Camp','R','100 wood'],
-  ['mining-camp','Mining Camp','E','100 wood'], ['mill','Mill','W','100 wood'],
-  ['farm','Farm','A','60 wood · needs Mill'], ['barracks','Barracks','Q','175 wood'],
-  ['palisade-wall','Palisade Wall','S','2 wood / tile'], ['outpost','Outpost','A','25 wood · 5 stone'],
-  ['dock','Dock','T','150 wood · needs a riverbank or coast'],
-  ['archery-range','Archery Range','W','175 wood · needs Barracks'], ['stable','Stable','E','175 wood · needs Barracks'],
-  ['blacksmith','Blacksmith','S','150 wood'], ['market','Market','D','175 wood · needs Mill'],
-  ['watch-tower','Watch Tower','F','35 wood · 125 stone'], ['palisade-gate','Palisade Gate','X','30 wood'], ...castleCommands,
-  ['bridge','Bridge','G','25 wood · 5 stone / water tile'],
-  ['stone-wall','Stone Wall','Z','5 stone / tile'], ['stone-gate','Stone Gate','G','30 stone'],
-  ['road','Road','Y','1 wood / tile · +25% land speed'],
-  ['wonder','Wonder','N','1000 wood · 1000 stone · 1000 gold · Imperial Age'],
-  ['fish-trap','Fish Trap','F','100 wood · select Fishing Ships · open water'],
-  ['town-center','Town Center','C','275 wood · 100 stone'],
-];
+import { artReady } from '/interface/ui-art.js';
+import { buildingKinds, names, price, techIds, techKinds, techName, trainingKinds } from './menu/catalog.js';
+import { describeBuilding, describeSelection } from './menu/selection.js';
+import { describeCommands } from './menu/commands.js';
+import { byId, commandGrid, renderFields, selectionCard, show, text } from './menu/render.js';
+import { productionRows, shelterRows } from './menu/production.js';
+
+const techCount = techKinds.length, buildCount = buildingKinds.length;
+const buildStart = 8 + techCount, foundationCount = buildStart + buildCount;
+const ageNames = ['Dark', 'Feudal', 'Castle', 'Imperial'];
+
+function readCatalog(values) {
+  let at = 0;
+  const next = size => {
+    const row = Array.from(values.subarray(at, at + size));
+    at += size;
+    return row;
+  };
+  const buildings = buildingKinds.map(() => {
+    const [age, buildable, required, population, dropOff] = next(5);
+    const cost = next(4), [attack, minRange, range] = next(3);
+    return { age, buildable: buildable === 1, requires: required < 0 ? undefined : required, population, dropOff, cost, attack, minRange, range };
+  });
+  const techs = techKinds.map((kind, index) => {
+    const [site, slot, ...cost] = next(6);
+    return { index, label: [techName(kind), price(cost)].filter(Boolean).join(' · '), site, slot, art: techIds[index], cost };
+  });
+  const units = trainingKinds.map(() => {
+    const [formation, stance, slot, ...cost] = next(7);
+    return { formation: formation === 1, stance: stance === 1, slot, cost };
+  });
+  return { buildings, techs, units, unitRules: Object.fromEntries(trainingKinds.map((kind, index) => [kind, units[index]])) };
+}
+
+function readBuildingState(v) {
+  const [age, kind, hp, maxHp, progress, food, researching, researchProgress] = v;
+  const current = v[foundationCount] ?? 0;
+  const from = foundationCount + 1;
+  const train = from + current * 3, market = train + trainingKinds.length + 1;
+  const reseed = market + 15;
+  return {
+    age, kind, hp, maxHp, progress, food, researching, researchProgress,
+    researchAvailability: Array.from(v.subarray(8, buildStart)),
+    build: v.subarray(buildStart, foundationCount),
+    foundations: v.subarray(from, train),
+    training: Array.from(v.subarray(train, market - 1)),
+    primary: v[market - 1],
+    market: buildingKinds[kind] === 'Market' && progress >= 1000 ? v.subarray(market, reseed) : null,
+    reseed: buildingKinds[kind] === 'Mill' ? { count: v[reseed], add: v[reseed + 1] === 1, remove: v[reseed + 2] === 1, cost: v[reseed + 3] } : null,
+    scouts: v[reseed + 4], scouting: v[reseed + 5],
+    cargo: v[reseed + 6] ? v[reseed + 7] : null,
+    transport: v.subarray(reseed + 8, -1),
+    waiting: v[v.length - 1] === 1,
+  };
+}
+
+function drawFoundations(positions) {
+  let labels = '';
+  for (let i = 0; i < positions.length; i += 3) {
+    const [x, y, progress] = positions.subarray(i, i + 3);
+    labels += `<span style="left:${x}px;top:${y}px">${Math.floor(progress / 10)}%<progress max="1000" value="${progress}"></progress></span>`;
+  }
+  renderFields({ 'construction-labels': { innerHTML: labels } });
+}
+
 export function initBuildings() {
-  initGarrison();
-  const grid = byId('command-grid');
-  const autoScout=document.createElement('button');autoScout.id='auto-scout';autoScout.hidden=true;autoScout.innerHTML=icon('commands','auto-scout','scout')+'<span class="command-label">Auto-scout</span>';autoScout.title='Auto-scout · explore the nearest reachable frontier';autoScout.setAttribute('aria-pressed','false');grid.append(autoScout);
-  const formations=['Line','Box','Staggered','Flank'].map((name,i)=>{const button=document.createElement('button');button.id=`formation-${name.toLowerCase()}`;button.className='formation-command';button.hidden=true;button.type='button';button.innerHTML=icon('commands',`formation-${name.toLowerCase()}`,'soldier')+`<span class="formation-name">${name}</span>`;button.title=`${name} formation`;button.setAttribute('aria-label',button.title);button.setAttribute('aria-pressed',String(i===0));button.addEventListener('click',()=>formations.forEach(b=>b.setAttribute('aria-pressed',String(b===button))));grid.append(button);return button;});
-  const attackMove=document.createElement('button');attackMove.id='attack-move-units';attackMove.hidden=true;attackMove.type='button';attackMove.innerHTML=icon('commands','attack-move','soldier')+'<span class="formation-name">Attack move</span>';attackMove.title='Advance in formation and engage visible enemies';grid.append(attackMove);
-  const generalMove=document.createElement('button');generalMove.id='general-only-move';generalMove.hidden=true;generalMove.type='button';generalMove.innerHTML=entityIcon('General')+'<span class="formation-name">General only</span>';generalMove.title='Move the General alone (Alt+right-click) · his army holds position';grid.append(generalMove);
-  const reseedButtons=['add','remove'].map(side=>{const button=document.createElement('button');button.id=`${side}-farm-reseed`;button.hidden=true;button.innerHTML=entityIcon('Farm')+`<span class="command-label">${side==='add'?'Queue farm reseed':'Remove farm reseed'}</span>`;grid.append(button);return button;});
-  const trainIcon=document.createElement('span');trainIcon.className='train-icon';
-  byId('train-villager').querySelector(':scope>.icon').replaceWith(trainIcon);
-  setEntityIcon(trainIcon,'Villager');
-  const trainingName=document.createElement('span');trainingName.className='training-unit';trainingName.hidden=true;byId('train-villager').append(trainingName);
-  const build = document.createElement('button');
-  build.id='build-menu'; build.hidden=true; build.innerHTML=icon('commands','build','towncenter')+'<kbd>B</kbd><small>Economic</small>'; build.title='Economic buildings (B)'; grid.append(build);
-  const military=document.createElement('button');military.id='build-military-menu';military.hidden=true;military.innerHTML=icon('commands','military','soldier')+'<kbd>V</kbd><small>Military</small>';military.title='Military buildings (V)';grid.append(military);
-  // Roads join walls and gates here: the economic page already fills three rows.
-  const militaryKinds=new Set([5,6,7,9,10,13,14,15,18,20,21,22,23]);
-  const category=i=>militaryKinds.has(i)?'military':'economy';
-  const buttons=commands.map(([id,name,key,cost],i)=>{
-    const button=document.createElement('button'); button.id=`build-${id}`; button.className="build-command"; button.hidden=true;
-    button.title=`${name} · ${cost} · ${key}`; button.setAttribute('aria-label',button.title);
-    button.innerHTML=`${entityIcon(buildingKinds[(i+1)%buildingKinds.length])}<span class="command-label">${name}</span><kbd>${key}</kbd><small>${cost}</small>`; grid.append(button); return button;
+  const send = (...args) => window.aoeBuildings?.command?.(...args);
+  const shelter = shelterRows(send);
+  const drawCard = selectionCard();
+  byId('selected-icons').addEventListener('click', event => {
+    const unit = event.target.closest('.unit-token[data-unit-id]');
+    if (!unit) return;
+    const grouped = event.ctrlKey || unit.classList.contains('unit-group');
+    send(16, Number(event.shiftKey) + 2 * Number(grouped), Number(unit.dataset.unitId));
   });
-  const research=['Loom · 50 gold','Town Watch · 75 food','Feudal Age · 500 food','Double-Bit Axe · 100 food · 50 wood','Horse Collar · 75 food · 75 wood','Gold Mining · 100 food · 75 wood','Stone Mining · 100 food · 75 wood','Wheelbarrow · 175 food · 50 wood','Man-at-Arms · 100 food · 40 gold','Forging · 150 food','Scale Mail Armor · 100 food','Scale Barding Armor · 150 food','Fletching · 100 food · 50 gold','Padded Archer Armor · 100 food',...castleTechs.map(t=>t[1]),'Medium Warships · 150 wood · 100 gold',...imperialTechs.map(t=>t[1]),...genericTechs.map(t=>t[1]),...navyTechs.map(t=>t[1]),...gunpowderTechs.map(t=>t[1])];
-  const sites=[0,0,0,2,4,3,3,0,6,12,12,12,12,12,...castleTechs.map(t=>t[2]),9,...imperialTechs.map(t=>t[2]),...genericTechs.map(t=>t[2]),...navyTechs.map(t=>t[2]),...gunpowderTechs.map(t=>t[2])];
-  const buildStart=8+research.length, trainKind=buildStart+commands.length, trainEnabled=trainKind+1, foundationCount=trainKind+2;
-  const techs=['loom','town-watch','feudal-age','double-bit-axe','horse-collar','gold-mining','stone-mining','wheelbarrow','man-at-arms','forging','scale-mail-armor','scale-barding-armor','fletching','padded-archer-armor',...castleTechs.map(t=>t[0]),'war-galley',...imperialTechs.map(t=>t[0]),...genericTechs.map(t=>t[0]),...navyTechs.map(t=>t[0]),...gunpowderTechs.map(t=>t[0])].map((id,i)=>{
-    const button=document.createElement('button'); button.id=`research-${id}`;button.className="research-command";button.hidden=true;button.innerHTML=icon('technologies',techIds[i],'technology')+`<span class="command-label">${i===8?'Research Man-at-Arms':research[i]}</span>`;grid.append(button);return button;
-  });
-  const militaryTrain=[['archer','Archer','25 wood · 45 gold',10,4],['skirmisher','Skirmisher','25 food · 35 wood',10,5],['spearman','Spearman','35 food · 25 wood',6,6],['scout','Scout Cavalry','80 food',11,1],...castleTraining.filter(t=>t[0]!=='long-swordsman'),...imperialTraining,['trade-cart','Trade Cart','100 wood · 50 gold',13,35],...gunpowderTraining].map(([id,name,cost,site,kind])=>{
-    const button=document.createElement('button');button.id=`train-${id}`;button.hidden=true;button.innerHTML=entityIcon(trainingKinds[kind])+`<span class="command-label">${name} · ${cost}</span>`;button.title=`Train ${name} · ${cost}`;button.setAttribute('aria-label',button.title);grid.append(button);return {button,site,kind};
-  });
-  const navalTrain=navyTraining.map(([id,name,unit,cost])=>{const kind=trainingKinds.indexOf(unit);const button=document.createElement('button');button.id=`train-${id}`;button.hidden=true;button.innerHTML=entityIcon(unit)+`<span class="command-label">${name}</span><small>${cost}</small>`;grid.append(button);return {button,kind,name,cost};});
-  const unload=document.createElement('button');unload.id='unload-transport';unload.hidden=true;unload.innerHTML=entityIcon('TransportShip')+'<span class="command-label">Unload passengers</span>';grid.append(unload);
-  const trades=['wood','food','stone'];
-  const tradeButtons=['buy','sell'].flatMap(side=>trades.map(res=>{const button=document.createElement('button');button.id=`market-${side}-${res}`;button.className='build-command market-command';button.hidden=true;grid.append(button);return {button,side,res};}));
-  // A line keeps its grid cell even when a different technology disappears.
-  const roots=new Map();
-  for(const [from,to] of [
-    ['train-archer','train-crossbowman'],['train-skirmisher','train-elite-skirmisher'],
-    ['train-spearman','train-pikeman'],['train-scout','train-light-cavalry'],...navyTrainLines.map(([from,to])=>[`train-${from}`,`train-${to}`]),
-    ['train-pikeman','train-halberdier'],['train-crossbowman','train-arbalester'],['train-knight','train-cavalier'],
-    ['train-cavalier','train-paladin'],['train-light-cavalry','train-hussar'],['train-battering-ram','train-capped-ram'],
-    ['train-capped-ram','train-siege-ram'],['train-mangonel','train-onager'],...gunpowderTrainLines,
-    ...[['town-watch','town-patrol'],['feudal-age','castle-age'],['double-bit-axe','bow-saw'],
-      ['horse-collar','heavy-plow'],['gold-mining','gold-shaft-mining'],['wheelbarrow','hand-cart'],
-      ['man-at-arms','long-swordsman'],['forging','iron-casting'],['scale-mail-armor','chain-mail-armor'],
-      ['scale-barding-armor','chain-barding-armor'],['fletching','bodkin-arrow'],
-      ['padded-archer-armor','leather-archer-armor'],...imperialLines,...genericLines,...navyLines,...gunpowderLines].map(([from,to])=>[`research-${from}`,`research-${to}`]),
-  ])roots.set(to,roots.get(from)??from);
-  const slots=(entries,row,reserved=new Map())=>{
-    const groups=new Map();
-    for(const {button,site} of entries){
-      if(!groups.has(site))groups.set(site,new Map());
-      const group=groups.get(site),root=roots.get(button.id)??button.id;
-      if(!group.has(root))group.set(root,group.size+(reserved.get(site)??0));
-      const index=group.get(root);
-      button.style.gridRow=String(row(site)+Math.floor(index/5));
-      button.style.gridColumn=String(index%5+1);
+  for (const [code, kind] of ['villagers', 'military'].entries()) {
+    byId('idle-' + kind).addEventListener('click', () => send(17, code));
+  }
+  let page = 'closed', commandPage = 0, formation = 0, selectionKey = '';
+  let selection = { selected: [], queue: null, trainingRows: [] }, resource = null;
+  let state, rules, previewScene, lastPreview, rendered = '', callback;
+  const dispatch = (order, shift) => {
+    if (Array.isArray(order)) {
+      const [action, code] = order;
+      if (action === 5) formation = code;
+      callback?.(action, code, 0, shift ? 5 : 1);
+    } else if (order === 'next' || order === 'previous') {
+      commandPage += order === 'next' ? 1 : -1;
+    } else {
+      page = page === order ? 'closed' : order;
+      commandPage = 0;
+      if (page === 'closed') callback?.(11, 0, 0, 1);
     }
+    render();
   };
-  slots([{button:byId('train-villager'),site:0}],()=>1);
-  slots([...militaryTrain,...navalTrain.map(entry=>({...entry,site:9}))],()=>1,new Map([[0,1],[6,1],[9,1]]));
-  slots(techs.map((button,i)=>({button,site:sites[i]})),site=>[0,6,10,11,16,17,19].includes(site)?2:1,new Map([[9,dockUnitCells]]));
-  const panel=document.createElement('div');panel.id='building-panel';panel.hidden=true;
-  panel.innerHTML='<b id="building-hp"></b><div id="building-status"></div><progress id="construction-progress" max="1000"></progress><div id="research-status"><span id="research-icon"></span><span id="research-label"></span><progress id="research-progress" max="100" aria-label="Research progress" hidden></progress></div><div id="market-prices"></div><button id="cancel-construction" hidden>Cancel construction</button><button id="cancel-research" hidden>Cancel research</button>';
-  const multiQueue=document.createElement('div');
-  multiQueue.id='training-multi';
-  multiQueue.hidden=true;
-  multiQueue.tabIndex=0;
-  multiQueue.setAttribute('role','region');
-  multiQueue.setAttribute('aria-label','Building training queues');
-  byId('training').after(multiQueue);
-  let previousRows='';
-  byId('selection-content').insertBefore(panel,byId('training'));
-  const reseedQueue=document.createElement('div');reseedQueue.id='farm-reseed-queue';reseedQueue.hidden=true;reseedQueue.innerHTML='Farm reseeds queued: <span id="farm-reseed-count">0</span>';panel.append(reseedQueue);
-  const progressLabels=document.createElement('div');progressLabels.id='construction-labels';document.body.append(progressLabels);
-  let open=false, state=[], lastPreview='', queue=[], previousQueue='', previousResearch=-1, previousLabels='';
-  const menu=()=>{
-    const villager=byId('selection').dataset.villagers==='true', ships=byId('selection').dataset.ships==='true';
-    set(build, 'hidden', !villager);set(military, 'hidden', !villager);if(!villager)open=false;
-    buttons.forEach((b,i)=>{set(b, 'hidden', commands[i][0]==='fish-trap'?!ships:!villager||open!==category(i));set(b, 'disabled', state[buildStart+i]!==1);const [id,name,key,cost]=commands[i];set(b, 'title', `${name} · ${cost} · ${category(i)==='military'?'V':'B'} ${key}${id==='wonder'&&state[0]<3?' · requires Imperial Age':(i>=15&&i<=18||id==='town-center')&&state[0]<2?' · requires Castle Age':state[0]===0&&(i>=9&&i<=13||i>=19&&i<=21)?' · requires Feudal Age':''}`);attribute(b, 'aria-label', b.title);});
-    if(open){for(const id of ['move-units','stop-units','delete-units'])set(byId(id), 'hidden', true);set(byId('command-context'), 'textContent', open==='military'?'Military buildings':'Economic buildings');set(byId('command-hint'), 'textContent', byId('scene').dataset.orderMode==='build'?(byId('scene').title||'Left-click a green footprint · drag walls or bridges bank to bank · Esc cancels'):'Choose a building · Esc closes the menu');}
-    grid.classList.toggle('building-menu-open',Boolean(open));
-    attribute(build, 'aria-expanded', String(open==='economy'));attribute(military, 'aria-expanded', String(open==='military'));
-    const active=Array.from(grid.children).filter(n=>n.tagName==='BUTTON'&&!n.hidden).length;
-    grid.querySelectorAll('.empty-command').forEach((n,i)=>{set(n, 'hidden', i>=Math.max(0,15-active));});
-  };
-  build.addEventListener('click',()=>{open=open==='economy'?false:'economy';menu();});
-  military.addEventListener('click',()=>{open=open==='military'?false:'military';menu();});
-  window.aoeBuildings={
-    // Names, building kinds and icon ids in Tech order, for the far-view research grid.
-    techs:research.map((label,i)=>({index:i,label,site:sites[i],art:techIds[i]})),
-    bind(callback) {
-      window.aoeBuildings.command=callback;
-      [...buttons,...techs,byId('cancel-construction'),byId('cancel-research'),...reseedButtons,autoScout].forEach((button,i)=>button.addEventListener('click',()=>callback(0,i)));
-      militaryTrain.forEach(({button,kind})=>button.addEventListener('click',event=>callback(1,kind,0,event.shiftKey?5:1)));
-      tradeButtons.forEach(({button},i)=>button.addEventListener('click',()=>callback(2,i)));
-      ['train-villager','stop-units','move-units','cancel-training','delete-units'].forEach((id,i)=>byId(id).addEventListener('click',event=>callback(3,i,0,event.shiftKey?5:1)));
-      navalTrain.forEach(({button,kind})=>button.addEventListener('click',event=>callback(1,kind,0,event.shiftKey?5:1)));
-      unload.addEventListener('click',()=>callback(4,0));
-      formations.forEach((button,i)=>button.addEventListener('click',()=>callback(5,i)));
-      attackMove.addEventListener('click',()=>callback(6,0));
-      generalMove.addEventListener('click',()=>callback(8,0));
-      byId('combat-stance').addEventListener('change',event=>{ if(event.target.value!=='') callback(7,Number(event.target.value)); set(event.target, 'value', ''); });
+  const grid = commandGrid(dispatch), rows = productionRows();
+  let foundationKey = '';
+  artReady.then(() => { rendered = ''; render(); });
+
+  function render() {
+    if (!state || !rules) return;
+    const scene = byId('scene');
+    const { selected, queue, trainingRows } = selection;
+    const key = selected.map(unit => unit.id).join(',');
+    if (key !== selectionKey) {
+      selectionKey = key;
+      page = 'closed';
+      commandPage = 0;
+    }
+    const garrison = shelter(), stance = scene.dataset.selectedStance;
+    const signature = JSON.stringify([selected, queue, trainingRows, resource, state,
+      garrison, stance, page, commandPage, formation, scene.dataset.orderMode]);
+    if (signature === rendered) return;
+    rendered = signature;
+    const card = describeSelection(selected, resource, rules.unitRules);
+    rows(state, card, selection);
+    if (card.building && card.count === 1) card.load = describeBuilding(card, rules.buildings[state.kind]);
+    if (state.cargo !== null) card.load = state.cargo + '/5 passengers';
+    drawCard(card, selected);
+    const commands = describeCommands(card, state, garrison, rules,
+      { page, formation, stance, training: card.count === 1 && queue?.units.length });
+    commandPage = grid.update(commands, commandPage);
+    const open = page !== 'closed';
+    text('command-context', open ? (page === 'military' ? 'Military buildings' : 'Economic buildings')
+      : card.name || 'Select a unit');
+    text('command-hint', open && scene.dataset.orderMode === 'build'
+      ? scene.title || 'Left-click a green footprint · drag walls or bridges bank to bank · Esc cancels'
+      : open ? 'Choose a building · Esc closes the menu' : card.hint || '');
+  }
+  window.aoeBuildings = {
+    techs: [],
+    catalog(values) { rules = readCatalog(values); this.techs = rules.techs; },
+    selection(value) { selection = value; },
+    resource(value) { resource = value; },
+    bind(send) { callback = send; this.command = send; },
+    key: grid.key,
+    ageProgress(age, fraction) {
+      const bar = byId('age-progress');
+      show('age-progress', Boolean(age));
+      if (!age) return;
+      const percent = Math.floor(Math.min(1, Math.max(0, fraction)) * 100);
+      if (bar.style.getPropertyValue('--progress') !== percent + '%') bar.style.setProperty('--progress', percent + '%');
+      set(bar.querySelector('small'), 'textContent', percent + '%');
+      attribute(bar, 'aria-valuenow', percent);
+      set(bar, 'title', 'Advancing to ' + ageNames[age] + ' Age · ' + percent + '%');
     },
-    queue(values,visible,rows) {
-      const grouped=visible && rows.length>0;
-      queue=grouped?[]:values;
-      set(byId('training'), 'hidden', !visible||!queue.length);
-      set(multiQueue,'hidden',!grouped);
-      const signature=grouped?JSON.stringify(rows):'';
-      if(signature===previousRows)return;
-      previousRows=signature;
-      multiQueue.innerHTML=grouped?rows.map(([id,kind,units],index)=>`
-        <div class="training-row">
-          <span class="training-site" title="${buildingNames[kind]} · ${id}">${buildingNames[kind]} ${index+1}</span>
-          <span class="training-tokens">${units.length?units.map(unit=>`<span class="unit-token" title="${trainingKinds[unit].replace(/([a-z])([A-Z])/g,'$1 $2')} queued">${entityIcon(trainingKinds[unit])}</span>`).join(''):'Empty'}</span>
-        </div>`).join(''):'';
+    update(values) {
+      // The WASM slice expires when this callback returns. Keyboard and button
+      // actions redraw from this small, browser-owned snapshot.
+      const { foundations, transport, ...panel } = readBuildingState(values.slice());
+      state = panel;
+      window.aoeNavigation?.strategic?.building?.ready(state.build);
+      text('age-name', ['I', 'II', 'III', 'IV'][state.age] + '  ' + ageNames[state.age] + ' Age');
+      const next = foundations.join(',');
+      if (next !== foundationKey) {
+        foundationKey = next;
+        drawFoundations(foundations);
+      }
+      transportLoads(transport);
+      render();
     },
-    key(event) {
-      const key=event.key.toUpperCase();
-      if(key==='B'&&!build.hidden){build.click();event.preventDefault();return true;}
-      if(key==='V'&&!military.hidden){military.click();event.preventDefault();return true;}
-      if(key==='ESCAPE'&&open){open=false;menu();return false;}
-      const index=commands.findIndex((c,i)=>category(i)===open&&c[2]===key);
-      if(open&&index>=0){buttons[index].click();event.preventDefault();return true;}
-      return false;
-    },
-    refresh:menu,
-    // Top-bar age-up research bar: `age` is the age being researched (1-3), 0 when none.
-    ageProgress(age,fraction) {
-      const bar=byId('age-progress');set(bar, 'hidden', !age);if(!age)return;
-      const percent=Math.floor(Math.min(1,Math.max(0,fraction))*100);
-      bar.style.setProperty('--progress',percent+'%');set(bar.querySelector('small'), 'textContent', percent+'%');
-      attribute(bar, 'aria-valuenow', String(percent));set(bar, 'title', `Advancing to ${['','Feudal','Castle','Imperial'][age]} Age · ${percent}%`);
-    },
-    update(v) {
-      state=Array.from(v);menu();
-      window.aoeNavigation?.strategic?.building?.ready(v.slice(buildStart, buildStart + commands.length));
-      set(byId('age-name'), 'textContent', ['I  Dark Age','II  Feudal Age','III  Castle Age','IV  Imperial Age'][v[0]]??'I  Dark Age');
-      const kind=v[1],selected=kind>=0,owned=byId('selection').dataset.owned==='true';
-      const availability=foundationCount+1+(v[foundationCount]??0)*3;
-      militaryTrain.forEach(({button,site,kind:unit})=>{set(button, 'hidden', !owned||kind!==site||v[4]<1000||v[availability+unit]===0);action(button,`Train ${button.textContent}`,v[availability+unit]);});
-      set(panel, 'hidden', !selected);
-      navalTrain.forEach(({button,kind:unit,name,cost})=>{set(button, 'hidden', !owned||kind!==9||v[4]<1000||v[availability+unit]===0);action(button,`Train ${name} · ${cost}`,v[availability+unit]);});
-      const market=availability+trainingKinds.length+1;
-      const reseed=market+15;
-      const transport=v[reseed+6]??0,cargo=v[reseed+7]??0;set(unload, 'hidden', !transport);set(unload, 'disabled', cargo===0);set(unload, 'title', 'Right-click a shore to sail there and unload');if(transport)set(byId('selection-load'), 'textContent', `${cargo}/5 passengers`);transportLoads(v.slice(reseed+8,-1));
-      const cavalry=v[reseed+4]??0,scouting=v[reseed+5]??0;set(autoScout, 'hidden', cavalry===0);set(autoScout, 'disabled', false);attribute(autoScout, 'aria-pressed', scouting===0?'false':scouting===cavalry?'true':'mixed');set(autoScout.querySelector('.command-label'), 'textContent', scouting===cavalry&&cavalry>0?'Stop auto-scout':'Auto-scout');
-      set(reseedQueue, 'hidden', kind!==4||!owned);set(byId('farm-reseed-count'), 'textContent', String(v[reseed]??0));
-      reseedButtons.forEach((button,i)=>{set(button, 'hidden', !owned||kind!==4||v[4]<1000);set(button, 'disabled', v[reseed+1+i]!==1);set(button, 'title', i===0?`Queue farm reseed · ${v[reseed+3]} wood`:`Remove farm reseed · refund ${v[reseed+3]} wood`);attribute(button, 'aria-label', button.title);});
-      tradeButtons.forEach(({button,side,res},i)=>{const price=v[market+i%3];const gold=v[market+(side==='buy'?9:12)+i%3];set(button, 'hidden', !owned||kind!==13||v[4]<1000);set(button, 'disabled', v[market+3+i]!==1);const name=res[0].toUpperCase()+res.slice(1);const signature=`${side}:${res}:${gold}`;if(button.dataset.signature!==signature){button.innerHTML=icon('resources',res,res)+`<span class="command-label">${side==='buy'?'Buy':'Sell'} ${name}</span><span class="trade-side">${side==='buy'?'+':'−'}</span><small>${gold} gold</small>`;button.dataset.signature=signature;}attribute(button, 'data-price', price);set(button, 'title', `${side==='buy'?'Buy':'Sell'} 100 ${res} for ${gold} gold (price ${price})`);attribute(button, 'aria-label', button.title);});
-      byId('market-prices')&&(set(byId('market-prices'), 'textContent', kind===13&&v[4]>=1000?`Prices per 100: wood ${v[market]} · food ${v[market+1]} · stone ${v[market+2]} gold`:''));
-      techs.forEach((b,i)=>{set(b, 'hidden', !owned||kind!==sites[i]||v[8+i]===0||v[8+i]===3);action(b,`Research ${research[i]}${i===8?' · Upgrades existing and future Militia':''}`,v[8+i]);});
-      const train=byId('train-villager');
-      const unitNames=['Villager','Scout Cavalry','Militia','Fishing Ship','Archer','Skirmisher','Spearman','Man-at-Arms',...castleUnitNames,'Galley','Fire Ship','Demolition Ship','Transport Ship','War Galley','Vassal','General',...imperialUnitNames,'Steward','Trade Cart','Trade Cog',...navyUnitNames,...gunpowderUnitNames];
-      const infantry=unitNames[v[availability+trainingKinds.length]]??'Militia';
-      if(selected){set(train, 'hidden', !owned||![0,6,9].includes(kind)||v[4]<1000);action(train,kind===9?'Train Fishing Ship, 75 wood, Q':kind===6?`Train ${infantry}, 50 food, 20 gold, Q`:'Train Villager, 50 food, Q',v[trainEnabled]);set(trainingName, 'hidden', kind!==6);set(trainingName, 'textContent', infantry);setEntityIcon(trainIcon,kind===9?'FishingShip':kind===6?trainingKinds[v[availability+trainingKinds.length]]:'Villager');set(train.querySelector('.cost'), 'textContent', kind===9?'75 W':kind===6?'50 F · 20 G':'50');}
-      const labels=Array.from({length:v[foundationCount]??0},(_,i)=>{const at=foundationCount+1+i*3;return `<span style="left:${v[at]}px;top:${v[at+1]}px">${Math.floor(v[at+2]/10)}%<progress max="1000" value="${v[at+2]}"></progress></span>`;}).join('');
-      if(labels!==previousLabels){progressLabels.innerHTML=labels;previousLabels=labels;}
-      if(selected){if(owned)set(byId('command-hint'), 'textContent', v[4]<1000?'Right-click this foundation with villagers to resume construction':kind===0?'Q: train a villager · train a Steward to manage the economy':kind===9?'Q: train a Fishing Ship · 75 wood':kind===6?`Q: train ${infantry} · 50 food, 20 gold`:kind===16?'Train a General · Vassal garrison in a Castle · fortify and defend · 20 villagers + 20 military':kind===5?'Right-click this Farm with a villager to work it':[10,11].includes(kind)?'Train military units below':kind===12?'Research equipment for your army':'Select villagers to gather or build');set(byId('selection-task'), 'textContent', v[4]<1000?'Under construction':v[6]>=0?'Researching':byId('training').hidden===false?`Training ${unitNames[v[trainKind]]}`:'Ready');set(byId('selection-load'), 'textContent', ['Resource drop-off · supports 5 population','Supports 5 population','Wood drop-off','Gold and stone drop-off','Food drop-off','Food production','Trains infantry','Blocks movement','Scouts the surrounding area','Fish drop-off · trains fishing, transport and war ships','Trains Archers and Skirmishers','Trains Scout Cavalry','Upgrades infantry, cavalry and archers','Market · buy and sell wood, food and stone for gold','Arrow defence · 5 pierce attack · range 1–8','Opens for nearby friendly units','Arrow defence · 11 pierce attack · five arrows','Trains Monks · nearby injured units heal automatically','Research building and ranged upgrades','Trains Mangonels and Battering Rams','Connects land across water · crossing along its length only'][kind]);}
-      set(byId('building-hp'), 'textContent', `${v[2]} / ${v[3]} HP`);
-      set(byId('building-status'), 'textContent', v[4]<1000?`Constructing · ${Math.floor(v[4]/10)}%`:v[5]>=0?`Complete · ${v[5]} food remaining`:'Complete');
-      set(byId('construction-progress'), 'hidden', v[4]>=1000);set(byId('construction-progress'), 'value', v[4]);
-      set(byId('cancel-construction'), 'hidden', !owned||!selected||v[4]>=1000);
-      set(byId('cancel-research'), 'hidden', !owned||v[6]<0);
-      const researching=v[6]>=0;
-      if(v[6]!==previousResearch){byId('research-icon').innerHTML=researching?icon('technologies',techIds[v[6]],'technology'):'';previousResearch=v[6];}
-      set(byId('research-label'), 'textContent', researching?`${research[v[6]].split(' · ')[0]} · ${Math.floor(v[7]*100)}%`:'');
-      set(byId('research-progress'), 'hidden', !researching);set(byId('research-progress'), 'value', Math.floor(v[7]*100));
-      if(queue.length){
-        const percent=Math.floor(queue[0][0]/Math.max(1,queue[0][1])*100), name=unitNames[queue[0][2]];
-        set(byId('training-progress'), 'value', percent);attribute(byId('training-progress'), 'aria-label', `${name} training progress`);
-        const waiting=v[v.length-1]===1;
-        set(byId('training-label'), 'textContent', waiting?`Waiting for housing · ${name} · ${percent}%`:`Training ${name} · ${percent}%`);
-        if(waiting)set(byId('selection-task'), 'textContent', 'Waiting for housing');
-        set(byId('cancel-training'), 'title', `Cancel active ${name} training and refund its cost`);
-        const signature=queue.map(entry=>entry[2]).join(',');
-        if(signature!==previousQueue){byId('training-queue').innerHTML=queue.map(([,,kind])=>`<span class="unit-token" title="${unitNames[kind]} queued">${entityIcon(trainingKinds[kind])}</span>`).join('');previousQueue=signature;}
-      } else previousQueue='';
-      menu();
-    },
-    preview(v) {
-      const signature=Array.from(v).join(','); if(signature===lastPreview)return; lastPreview=signature;
-      byId('scene').dataset.placementValid=String(v.length>0&&v[0]===1);
-      byId('scene').dataset.placementCount=String(v[1]??0);
-      byId('scene').dataset.placementInvalid=String(v[2]??0);
-      const reasons=['','Drag between two land banks','Bridge is too long or has an invalid direction','Bridge start must be on land','Bridge end must be on land','Not enough resources for this bridge','Bridge tiles must be clear and cross water'];
-      set(byId('scene'), 'title', reasons[v[3]??0]??'');
-      if(open&&byId('scene').dataset.orderMode==='build')set(byId('command-hint'), 'textContent', byId('scene').title||'Left-click a green footprint · drag walls or bridges bank to bank · Esc cancels');
+    preview(values) {
+      const scene = byId('scene');
+      const signature = values.join(',');
+      if (scene === previewScene && signature === lastPreview) return;
+      previewScene = scene;
+      lastPreview = signature;
+      attribute(scene, 'data-placement-valid', values[0] === 1);
+      attribute(scene, 'data-placement-count', values[1] ?? 0);
+      attribute(scene, 'data-placement-invalid', values[2] ?? 0);
+      const reasons = ['', 'Drag between two land banks', 'Bridge is too long or has an invalid direction',
+        'Bridge start must be on land', 'Bridge end must be on land', 'Not enough resources for this bridge',
+        'Bridge tiles must be clear and cross water'];
+      set(scene, 'title', reasons[values[3] ?? 0] ?? '');
+      if (page !== 'closed' && scene.dataset.orderMode === 'build') text('command-hint', scene.title ||
+        'Left-click a green footprint · drag walls or bridges bank to bank · Esc cancels');
     },
   };
 }

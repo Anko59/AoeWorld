@@ -167,3 +167,50 @@ fn portrait_clicks_follow_the_panel_modifiers() {
         [0, 2, 3]
     );
 }
+
+#[wasm_bindgen_test]
+fn bottom_menu_shift_selection_toggles_units_and_buildings_individually() {
+    let mut selection = Selection::default();
+    selection.units(vec![EntityId(9)]);
+    selection.toggle_building(EntityId(7));
+    selection.toggle_building(EntityId(4));
+    assert_eq!(selection.units, [EntityId(9)]);
+    assert_eq!(selection.buildings, [EntityId(4), EntityId(7)]);
+    assert_eq!(selection.building_id, Some(EntityId(7)));
+    selection.toggle_building(EntityId(7));
+    selection.toggle_unit(EntityId(9));
+    assert!(selection.units.is_empty());
+    assert_eq!(selection.building_id, Some(EntityId(4)));
+    assert_eq!(selection.buildings, [EntityId(4)]);
+}
+
+#[wasm_bindgen_test]
+fn bottom_menu_combat_capabilities_follow_the_current_unit_stats() {
+    use aoe_protocol::UnitKind as U;
+    let stance = super::super::orders::can_set_stance;
+    let formation = super::super::orders::can_form;
+    for unit in [
+        U::Scout,
+        U::LightCavalry,
+        U::CavalryArcher,
+        U::BombardCannon,
+        U::TrebuchetUnpacked,
+    ] {
+        assert!(stance(unit));
+        assert!(formation(unit));
+    }
+    for unit in [U::Galleon, U::Hulk, U::CannonGalleon] {
+        assert!(stance(unit));
+        assert!(!formation(unit));
+    }
+    for unit in [
+        U::Villager,
+        U::Steward,
+        U::Vassal,
+        U::FishingShip,
+        U::TradeCog,
+    ] {
+        assert!(!stance(unit));
+        assert!(!formation(unit));
+    }
+}

@@ -96,7 +96,13 @@ pub(in super::super) fn enemy_building(client: &Client, point: ScreenPoint) -> O
         .map(|b| b.id)
 }
 
-pub(in super::super) fn click(client: &mut Client, point: ScreenPoint, unit: Option<EntityId>) {
+pub(in super::super) fn click(
+    client: &mut Client,
+    point: ScreenPoint,
+    unit: Option<EntityId>,
+    add: bool,
+) {
+    let player = owner(client);
     if let Some((id, true, _)) = actor(client, point) {
         // A ground carcass must not hide a living unit standing on it.
         let living = client
@@ -110,15 +116,59 @@ pub(in super::super) fn click(client: &mut Client, point: ScreenPoint, unit: Opt
         }
     }
     if let Some(id) = unit {
-        client.selected.units(vec![id]);
+        if add
+            && client
+                .units
+                .get(&id)
+                .is_some_and(|unit| unit.player == player)
+        {
+            keep_owned(client, player);
+            client.selected.toggle_unit(id);
+        } else {
+            client.selected.units(vec![id]);
+        }
         return;
     }
     if let Some((_, id, _)) = resource_target(client, point) {
         client.selected.resource(id);
     } else if let Some((_, id)) = building_target(client, point) {
-        client.selected.building(id);
+        if add
+            && client
+                .village
+                .buildings
+                .iter()
+                .any(|b| b.id == id && b.player == player)
+        {
+            keep_owned(client, player);
+            client.selected.toggle_building(id);
+        } else {
+            client.selected.building(id);
+        }
     } else {
         client.selected = Default::default();
+    }
+}
+
+fn keep_owned(client: &mut Client, player: aoe_core::PlayerId) {
+    client.selected.units.retain(|id| {
+        client
+            .units
+            .get(id)
+            .is_some_and(|unit| unit.player == player)
+    });
+    client.selected.buildings.retain(|id| {
+        client
+            .village
+            .buildings
+            .iter()
+            .any(|b| b.id == *id && b.player == player)
+    });
+    if client
+        .selected
+        .building_id
+        .is_some_and(|id| !client.selected.buildings.contains(&id))
+    {
+        client.selected.building_id = client.selected.buildings.first().copied();
     }
 }
 
@@ -159,14 +209,17 @@ fn building_target(client: &Client, point: ScreenPoint) -> Option<(f64, EntityId
         .iter()
         .filter(|b| b.hp > 0)
         .flat_map(|b| {
-            // A farm's visible crop is painted into the ground mesh.
-            let ground = b.kind == aoe_protocol::BuildingKind::Farm
-                && world.is_some_and(|p| {
-                    p[0] >= f64::from(b.footprint.min.x)
-                        && p[0] < f64::from(b.footprint.max.x)
-                        && p[1] >= f64::from(b.footprint.min.y)
-                        && p[1] < f64::from(b.footprint.max.y)
-                });
+            // Farms and Fish Traps use the Farm art. Pick their footprint even
+            // where its crop or water sprite has no opaque pixels.
+            let ground = matches!(
+                b.kind,
+                aoe_protocol::BuildingKind::Farm | aoe_protocol::BuildingKind::FishTrap
+            ) && world.is_some_and(|p| {
+                p[0] >= f64::from(b.footprint.min.x)
+                    && p[0] < f64::from(b.footprint.max.x)
+                    && p[1] >= f64::from(b.footprint.min.y)
+                    && p[1] < f64::from(b.footprint.max.y)
+            });
             let start = rendered.partition_point(|u| u.id < b.id);
             rendered[start..]
                 .iter()

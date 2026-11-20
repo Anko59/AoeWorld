@@ -18,50 +18,21 @@ pub(super) fn send(client: &mut Client, message: Message) {
     }
 }
 
-pub(in super::super) fn train(client: &mut Client, cancel: bool, batch: bool) {
-    let Some(id) = super::production::selected(client).map(|building| building.id) else {
+pub(super) fn cancel_training(client: &mut Client) {
+    let Some(building) =
+        super::production::selected(client).filter(|building| building.player == owner(client))
+    else {
         return;
     };
-    if !client
-        .village
-        .buildings
-        .iter()
-        .any(|b| b.id == id && b.player == owner(client))
-    {
-        return;
-    }
-    if !cancel {
-        let kind = client
-            .village
-            .buildings
-            .iter()
-            .find(|b| b.id == id)
-            .map(|b| {
-                crate::building_ui::availability::primary_training(
-                    b,
-                    client
-                        .village
-                        .players
-                        .iter()
-                        .find(|p| p.player == owner(client)),
-                )
-            })
-            .unwrap_or(UnitKind::Villager);
-        super::production::train(client, kind, batch);
-        return;
-    }
+    let building_id = building.id;
     let sequence = client.next_sequence;
     send(
         client,
         Message::CancelTrainingOrder {
             sequence,
-            building_id: id,
+            building_id,
         },
     );
-}
-
-pub(super) fn train_kind(client: &mut Client, kind: UnitKind, batch: bool) {
-    super::production::train(client, kind, batch);
 }
 
 pub(in super::super) fn stop(client: &mut Client) {
@@ -101,10 +72,10 @@ pub(in super::super) fn stop(client: &mut Client) {
 }
 
 pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queued: bool) {
-    if !queued && building_attack_at_pointer(client, point) {
-        return;
-    }
-    if client.selected.building_id.is_some() && super::rally::at_pointer(client, point) {
+    if client.selected.units.is_empty()
+        && ((!queued && building_attack_at_pointer(client, point))
+            || (client.selected.building_id.is_some() && super::rally::at_pointer(client, point)))
+    {
         return;
     }
     let forced_move = queued || client.village.move_cursor;
@@ -147,16 +118,9 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
     };
     let destination = client.config.snap_ground_position(destination);
     if std::mem::take(&mut client.village.general_only) && !queued {
-        let generals: Vec<_> = client
-            .selected
-            .units
-            .iter()
-            .copied()
-            .filter(|id| {
-                client.units.get(id).is_some_and(|u| {
-                    u.kind == UnitKind::General && u.player == owner(client) && u.hp > 0
-                })
-            })
+        let generals: Vec<_> = super::selection::owned_units(client)
+            .filter(|unit| unit.kind == UnitKind::General)
+            .map(|unit| unit.id)
             .collect();
         for entity_id in generals {
             let sequence = client.next_sequence;
@@ -263,13 +227,13 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
                 sequence,
                 entity_id: id,
                 destination,
-                attack_move: client.village.attack_move && unit.kind != UnitKind::General,
+                attack_move: client.village.attack_move && can_set_stance(unit.kind),
             },
             _ => Message::MoveOrder {
                 sequence,
                 entity_id: id,
                 destination,
-                attack_move: client.village.attack_move && unit.kind != UnitKind::General,
+                attack_move: client.village.attack_move && can_set_stance(unit.kind),
             },
         };
         send(client, message);
@@ -346,20 +310,22 @@ pub(in super::super) fn focus_town_center(client: &mut Client, select: bool) {
     }
 }
 
+pub(super) fn can_set_stance(kind: UnitKind) -> bool {
+    kind != UnitKind::Villager
+        && crate::building_ui::content::rules().units[kind as usize]
+            .combat
+            .attack
+            > 0
+}
+
+pub(super) fn can_form(kind: UnitKind) -> bool {
+    can_set_stance(kind) && !kind.is_naval() && kind != UnitKind::General
+}
+
 fn military(client: &Client) -> Vec<aoe_core::EntityId> {
-    let mut military = client
-        .selected
-        .units
-        .iter()
-        .copied()
-        .filter(|id| {
-            client.units.get(id).is_some_and(|u| {
-                u.hp > 0
-                    && u.player == owner(client)
-                    && !matches!(u.kind, UnitKind::Villager | UnitKind::General)
-                    && !u.kind.is_naval()
-            })
-        })
+    let mut military = super::selection::owned_units(client)
+        .filter(|unit| can_form(unit.kind))
+        .map(|unit| unit.id)
         .take(aoe_core::MAX_FORMATION_MEMBERS)
         .collect::<Vec<_>>();
     military.sort_unstable();
@@ -367,12 +333,15 @@ fn military(client: &Client) -> Vec<aoe_core::EntityId> {
 }
 
 pub(super) fn formation(client: &mut Client, index: u32) {
-    let form = [
+    let Some(&form) = [
         aoe_core::Formation::Line,
         aoe_core::Formation::Box,
         aoe_core::Formation::Staggered,
         aoe_core::Formation::Flank,
-    ][index as usize];
+    ]
+    .get(index as usize) else {
+        return;
+    };
     client.village.formation = form;
     let unit_ids = military(client);
     if unit_ids.len() > 1 {
@@ -395,17 +364,8 @@ pub(super) fn formation(client: &mut Client, index: u32) {
 /// foreign entities). The server refuses the whole order if any id is foreign.
 pub(in super::super) fn delete(client: &mut Client) {
     let owner = owner(client);
-    let mut ids: Vec<aoe_core::EntityId> = client
-        .selected
-        .units
-        .iter()
-        .copied()
-        .filter(|id| {
-            client
-                .units
-                .get(id)
-                .is_some_and(|u| u.player == owner && u.hp > 0)
-        })
+    let mut ids: Vec<_> = super::selection::owned_units(client)
+        .map(|unit| unit.id)
         .collect();
     let mut buildings = client.selected.buildings.clone();
     buildings.extend(client.selected.building_id);
@@ -440,26 +400,9 @@ pub(super) fn stance(client: &mut Client, index: u32) {
     .get(index as usize) else {
         return;
     };
-    let unit_ids = client
-        .selected
-        .units
-        .iter()
-        .copied()
-        .filter(|id| {
-            client.units.get(id).is_some_and(|u| {
-                u.player == owner(client)
-                    && !matches!(
-                        u.kind,
-                        UnitKind::Villager
-                            | UnitKind::FishingShip
-                            | UnitKind::TransportShip
-                            | UnitKind::Monk
-                            | UnitKind::Vassal
-                            | UnitKind::Steward
-                            | UnitKind::General
-                    )
-            })
-        })
+    let unit_ids = super::selection::owned_units(client)
+        .filter(|unit| can_set_stance(unit.kind))
+        .map(|unit| unit.id)
         .collect::<Vec<_>>();
     for ids in unit_ids.chunks(aoe_core::MAX_FORMATION_MEMBERS) {
         let sequence = client.next_sequence;

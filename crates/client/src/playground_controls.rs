@@ -268,7 +268,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     client.selected.units(units);
                 } else {
                     let unit = pick(&client, target);
-                    super::village::picking::click(&mut client, target, unit);
+                    super::village::picking::click(&mut client, target, unit, event.shift_key());
                 }
             }
         }
@@ -352,10 +352,8 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }
             2 => toggle_grid(&mut client),
             3 => center_on_primary(&mut client),
-            4 | 40 => super::village::orders::train(&mut client, false, action == 40),
             5 => super::village::orders::focus_town_center(&mut client, true),
             7 | 8 => super::village::selection::idle(&mut client, action == 8),
-            9 => super::village::orders::delete(&mut client),
             10..=39 => groups::key(&mut client, action),
             _ => return,
         }

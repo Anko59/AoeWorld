@@ -1,4 +1,4 @@
-import { buildingKinds, buildingNames } from '/interface/buildings.js';
+import { buildingKinds, buildingNames } from '/interface/menu/catalog.js';
 import { entityIcon } from '/interface/ui-art.js';
 import { iconGrid } from '/navigation/cockpit/grid.js';
 

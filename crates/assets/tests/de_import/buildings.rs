@@ -14,7 +14,10 @@ pub(super) fn append(records: &mut Vec<u8>) {
     records.extend([0; 13]);
     records.extend(graphic.to_le_bytes());
     records.extend([0; 2]);
-    for id in aoe_assets::catalog::GAMEPLAY_BUILDING_IDS {
+    for id in aoe_assets::catalog::GAMEPLAY_BUILDING_IDS
+        .into_iter()
+        .chain([199])
+    {
         let id = id as i16;
         let mut b = units::record(id, &[graphic, -1, -1, -1, -1, -1, -1, -1], -1);
         b[0] = 80;

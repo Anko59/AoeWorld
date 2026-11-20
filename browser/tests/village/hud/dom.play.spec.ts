@@ -107,7 +107,7 @@ test("moving actor labels retain nodes while positions, health and loads change"
     const before = { health: bar.outerHTML, load: load.outerHTML };
     const selected = Array.from(
       { length: values[12] ?? 0 },
-      (_, i) => 17 + i * 19,
+      (_, i) => 15 + i * 19,
     ).find((at) => values[at + 4] === 1);
     if (selected === undefined) throw new Error("Selected actor missing");
     const change = (offset: number, delta: number) => {

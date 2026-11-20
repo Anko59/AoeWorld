@@ -1,13 +1,11 @@
 import { expect, type Page } from "@playwright/test";
 import { test } from "../../../server.js";
-import { readFile } from "node:fs/promises";
 
 declare global {
   interface Window {
     aoeSteward: {
       update(values: number[], label: string, settings: number[]): void;
       settings(): Uint8Array;
-      bind(callback: () => void): void;
     };
     confirmedSteward: () => number[];
   }
@@ -16,30 +14,31 @@ declare global {
 test.use({ video: "on" });
 
 async function panel(page: Page) {
-  await page.setContent('<main id="selection-content"></main>');
-  await page.addStyleTag({
-    content: await readFile("../web/interface/game.css", "utf8"),
-  });
-  const source = await readFile("../web/interface/steward/panel.js", "utf8");
-  await page.addScriptTag({
-    // The panel is a module; this page has no origin to import its slider fill from.
-    content:
-      source
-        .replace(/^import .*$/m, "const fillRange = () => {};")
-        .replace("export function", "function") + "\ninitSteward();",
-  });
-  await page.evaluate(() => {
+  await page.route("**/steward-settings-fixture", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<main id="selection-content"></main>',
+    }),
+  );
+  await page.goto("/steward-settings-fixture");
+  await page.evaluate(async () => {
+    const source = "/interface/steward/panel.js";
+    const { initSteward } = await import(source);
+    initSteward();
     const api = window.aoeSteward;
     let confirmed = [17, 45, 30, 15, 10, 100, 0];
     window.confirmedSteward = () => confirmed;
     api.update([], "Steward settings", confirmed);
-    api.bind(() => {
-      const submitted = Array.from(api.settings()) as number[];
-      if (submitted.slice(0, 4).some((v) => v > 0))
-        confirmed = [17, ...submitted];
-      // A rejected order sends no changed settings: ordinary HUD refreshes
-      // repeat the same authoritative signature.
-      api.update([], "Steward settings", confirmed);
+    Reflect.set(window, "aoeBuildings", {
+      command(action: number, code: number) {
+        if (action !== 18 || code !== 0) throw new Error("Unexpected order");
+        const submitted = Array.from(api.settings());
+        if (submitted.slice(0, 4).some((v) => v > 0))
+          confirmed = [17, ...submitted];
+        // A rejected order sends no changed settings: ordinary HUD refreshes
+        // repeat the same authoritative signature.
+        api.update([], "Steward settings", confirmed);
+      },
     });
   });
   for (const name of [
