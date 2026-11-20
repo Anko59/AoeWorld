@@ -24,7 +24,7 @@ from .naval import food_reachable
 from .reseeding import queue_reseeds
 from .production import train_villagers
 from ..context import Context
-from ..geometry import clamp_tile, dist, dist2, nearest, ring_points
+from ..geometry import clamp_tile, dist, nearest, ring_points
 
 KEYS = {
     "FOOD": ResourceKind.FOOD,
@@ -338,8 +338,10 @@ class EconomyManager:
                  else ctx.config.max_gather_distance)
         scored = []
         # The nearest few dozen to the villager are plenty to choose from.
+        # The squared distance inline: a call per known node was 8% of bot CPU.
+        vx, vy = villager.tile
         candidates = heapq.nsmallest(
-            48, ctx.resources(kind), key=lambda n: dist2(n.tile, villager.tile)
+            48, ctx.resources(kind), key=lambda n: (n.tile[0] - vx) ** 2 + (n.tile[1] - vy) ** 2
         )
         for node in candidates:
             if ctx.settlement_distance(node.tile) > reach or ctx.board.cooling(
