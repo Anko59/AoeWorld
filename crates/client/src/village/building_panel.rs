@@ -108,11 +108,18 @@ pub(super) fn update(client: &Client, scale: f64) {
     );
     v.push(train.number());
     let viewport = client.camera.viewport.map(|size| size * scale);
+    // No bar for a foundation nobody has started (a row of twenty planned
+    // buildings would be a wall of bars), and none in the far view, which
+    // draws foundations as plain markers.
+    let far = crate::playground::game::strategic::active(client);
     let foundations: Vec<_> = client
         .village
         .buildings
         .iter()
-        .filter(|b| b.construction == ConstructionState::UnderConstruction)
+        .filter(|b| {
+            !far && b.construction == ConstructionState::UnderConstruction
+                && b.progress_permille > 0
+        })
         .filter_map(|b| {
             let p = map::screen_position(client, super::building_center(b));
             let p = [p.x * scale, p.y * scale];

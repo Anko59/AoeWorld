@@ -251,17 +251,17 @@ fn queue_is_bounded_before_placing_or_charging_and_normal_build_replaces_it() {
     let builder = villager_at(&mut world, 99, 100);
     set_stock(&mut world, 0, 5000, 0, 0);
     fixture::survey(&mut world, PlayerId(0), at(115, 115), 40);
-    for i in 0..33 {
-        world
-            .issue_build(
-                PlayerId(0),
-                &[builder],
-                BuildingKind::House,
-                at(100 + (i % 8) * 3, 100 + (i / 8) * 3),
-                true,
-            )
-            .unwrap();
-    }
+    let first = world
+        .issue_build(
+            PlayerId(0),
+            &[builder],
+            BuildingKind::House,
+            at(100, 100),
+            true,
+        )
+        .unwrap();
+    let full = 256; // the bound in `continuation.rs`
+    world.economy.builders.get_mut(&builder).unwrap().queue = vec![first; full];
     let before = world.canonical_hash();
     assert_eq!(
         world.issue_build(
@@ -405,4 +405,33 @@ fn town_center_builders_gather_nearest_kind_unless_another_site_needs_them() {
         });
         assert_eq!(hashes[0], hashes[1]);
     }
+}
+
+#[test]
+fn forty_shift_placed_foundations_are_all_accepted_for_one_builder_group() {
+    // The owner's playtest: placing ~20 buildings at once answered "that order
+    // is too large"; every shift-placement must be accepted at this scale.
+    let (mut world, _, _) = village();
+    let builders = [
+        villager_at(&mut world, 99, 100),
+        villager_at(&mut world, 99, 101),
+    ];
+    world
+        .economy
+        .players
+        .get_mut(&PlayerId(0))
+        .unwrap()
+        .stockpile
+        .wood = 100_000;
+    fixture::survey(&mut world, PlayerId(0), at(110, 110), 40);
+    let mut placed = Vec::new();
+    for i in 0..40 {
+        let origin = at(100 + 4 * (i % 6), 104 + 4 * (i / 6));
+        let id = world
+            .issue_build(PlayerId(0), &builders, BuildingKind::House, origin, true)
+            .unwrap_or_else(|error| panic!("foundation {i}: {error:?}"));
+        placed.push(id);
+    }
+    assert_eq!(placed.len(), 40, "past the old 32-foundation queue cap");
+    assert!(placed.iter().all(|id| world.building(*id).is_some()));
 }

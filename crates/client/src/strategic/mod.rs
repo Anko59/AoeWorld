@@ -2,10 +2,11 @@
 #[cfg(test)]
 mod tests;
 
-/// Strategic places represent completed, living buildings rather than work sites.
+/// Strategic places are living buildings. A foundation is drawn too, as a plain
+/// marker without a progress bar, so a planned base can be seen from afar.
 #[cfg(any(all(target_arch = "wasm32", not(feature = "diagnostics")), test))]
-pub(crate) fn far_building_visible(hp: u16, state: aoe_protocol::ConstructionState) -> bool {
-    hp > 0 && state == aoe_protocol::ConstructionState::Complete
+pub(crate) fn far_building_visible(hp: u16, _state: aoe_protocol::ConstructionState) -> bool {
+    hp > 0
 }
 
 #[cfg(any(all(target_arch = "wasm32", not(feature = "diagnostics")), test))]

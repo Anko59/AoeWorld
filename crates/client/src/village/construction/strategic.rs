@@ -3,6 +3,8 @@ use super::*;
 use aoe_protocol::{CommandResult, GameplayUnitState, UnitTask};
 use wasm_bindgen::prelude::wasm_bindgen;
 
+/// Far builds keep their own small burst so other UI orders keep room.
+const FAR_BUILD_BURST: f64 = 20.0;
 const REACH_TILES: u64 = 64;
 const NO_NEARBY: &str =
     "No available villagers within 64 tiles of this site. Choose a site nearer your village.";
@@ -65,7 +67,7 @@ pub(crate) struct Admission {
 impl Default for Admission {
     fn default() -> Self {
         Self {
-            tokens: aoe_protocol::HUMAN_COMMAND_BURST as f64,
+            tokens: FAR_BUILD_BURST,
             last: 0.0,
             pending: None,
         }
@@ -73,8 +75,7 @@ impl Default for Admission {
 }
 impl Admission {
     pub fn ready(&mut self, time: f64) -> bool {
-        self.tokens = (self.tokens + (time - self.last).max(0.0) * 0.01)
-            .min(aoe_protocol::HUMAN_COMMAND_BURST as f64);
+        self.tokens = (self.tokens + (time - self.last).max(0.0) * 0.01).min(FAR_BUILD_BURST);
         self.last = time;
         self.tokens >= 1.0 && self.pending.is_none()
     }

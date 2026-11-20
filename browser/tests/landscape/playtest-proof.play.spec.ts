@@ -262,9 +262,33 @@ for (const bug of [18, 14, 9, 8, 6, 16, 12]) {
           await page.mouse.click(site[0] ?? 0, site[1] ?? 0);
           await page.locator("#build-menu").click();
           await page.locator("#stop-units").click();
+          // The foundation exists before any bar assertion is meaningful.
+          type Placed = { kind: string; x: number; y: number };
+          let house: Placed | undefined;
+          await expect
+            .poll(async () => {
+              const all = JSON.parse(
+                (await page.locator("#scene").getAttribute("data-actors")) ??
+                  "[]",
+              ) as Placed[];
+              house = all.find((a) => a.kind === "House");
+              return house !== undefined;
+            })
+            .toBe(true);
+          // An unstarted foundation (0%) shows no progress bar.
+          await expect(page.locator("#construction-labels span")).toHaveCount(
+            0,
+          );
+          // Start the work: a started foundation (progress > 0) shows its bar.
+          await page.mouse.click(house?.x ?? 0, house?.y ?? 0, {
+            button: "right",
+          });
+          await expect(page.locator("#selection-task")).toHaveText("Building");
           await expect
             .poll(() => page.locator("#construction-labels span").count())
             .toBeGreaterThan(0);
+          // Stop again so this real site stays unfinished throughout the take.
+          await page.locator("#stop-units").click();
         }
         if (config.bug === 12) {
           at.x = 92;
@@ -418,9 +442,10 @@ for (const bug of [18, 14, 9, 8, 6, 16, 12]) {
             .poll(() => page.locator("#construction-labels span").count())
             .toBeGreaterThan(0);
         if (contact) {
-          await expect
-            .poll(() => page.locator("#construction-labels span").count())
-            .toBeGreaterThan(0);
+          // The farm foundation (found by contactProof) is unstarted: no bar.
+          await expect(page.locator("#construction-labels span")).toHaveCount(
+            0,
+          );
           await camera(contact.foundation.x, contact.foundation.y, 1);
           await page.screenshot({
             path: `../.cache/showcase/bug-6-${config.side}-farm.png`,

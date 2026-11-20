@@ -366,3 +366,19 @@ async fn shift_training_uses_the_last_tick_slot_and_updates_the_whole_queue() {
         1
     );
 }
+
+#[tokio::test]
+async fn a_person_can_queue_thirty_build_orders_in_one_go() {
+    // Owner playtest: placing ~20 buildings at once answered "the order queue
+    // is full". One person's burst now covers a whole row of placements.
+    let service = GameplayService::new(Seed(7));
+    let (sender, mut receiver) = mpsc::channel(64);
+    let (id, _) = service.register(None, sender).await;
+    for sequence in 1..=30 {
+        service.queue_stop(id, sequence, EntityId(0)).await;
+    }
+    let sessions = service.sessions.lock().await;
+    assert_eq!(sessions[&id].pending.len(), 30);
+    drop(sessions);
+    assert!(receiver.try_recv().is_err(), "no rejection was sent");
+}
