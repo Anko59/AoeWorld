@@ -77,13 +77,14 @@ class Constructor:
 
     def builder_near(self, ctx: Context, tile: Tile) -> Optional[Any]:
         """The villager closest to `tile` that is not already building."""
+        farmers = set(ctx.board.farmers.values())  # not a scan per villager
         free = [
             v
             for v in ctx.villagers
             if v.task not in (UnitTask.BUILDING, UnitTask.SEEDING, UnitTask.FARMING)
             and v.id not in ctx.busy
             and v.id not in ctx.reserved_workers
-            and v.id not in ctx.board.farmers.values()
+            and v.id not in farmers
         ]
         return nearest(free, tile)
 
