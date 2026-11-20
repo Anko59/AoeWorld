@@ -106,3 +106,31 @@ def test_worker_exploration_stays_on_known_connected_land():
     ctx = Context(client, decision(world), Blackboard(), Config())
     Brain().economy.explore(ctx, units[0])
     assert client.named("move") and all(args[1] <= 55 for args in client.named("move"))
+
+
+def test_a_nodes_dropoff_distance_is_kept_while_the_dropoffs_stay(monkeypatch):
+    """Every villager scores the nodes around it; a large settlement has
+    dozens of camps, so each node's nearest dropoff is computed once while
+    the camps stay the same."""
+    import aoe_ai.context as context
+    from aoe_ai.blackboard import Blackboard
+    from aoe_ai.config import Config
+    from aoeworld import BuildingKind, ResourceKind
+    from fakes import FakeClient, building, decision, node
+    camps = [building(10 + i, BuildingKind.LUMBER_CAMP, tile=(20 * i, 40)) for i in range(5)]
+    board = Blackboard()
+    ctx = context.Context(FakeClient(), decision(FakeWorld([], camps)), board, Config())
+    calls = []
+    real = context.dist
+    monkeypatch.setattr(context, "dist", lambda a, b: calls.append(1) or real(a, b))
+    tree = node(500, ResourceKind.WOOD, (41, 44))
+    first = ctx.dropoff_distance(tree)
+    assert ctx.dropoff_distance(tree) == first == real((41, 44), camps[2].center)
+    assert len(calls) == len(camps)
+    # The next decision keeps it while the camps stay; a new camp starts over.
+    later = context.Context(FakeClient(), decision(FakeWorld([], camps)), board, Config())
+    assert later.dropoff_distance(tree) == first and len(calls) == len(camps)
+    camps.append(building(20, BuildingKind.LUMBER_CAMP, tile=(40, 44)))
+    moved = context.Context(FakeClient(), decision(FakeWorld([], camps)), board, Config())
+    assert moved.dropoff_distance(tree) < first and len(calls) == 2 * len(camps) - 1
+

@@ -19,6 +19,9 @@ from .roster import land_soldier, profile, warship
 #: Orders whose first argument names the unit(s) given work.
 UNIT_ORDERS = frozenset({"gather", "hunt", "farm", "build", "build_bridge", "construct", "move", "formation_move", "attack", "stop"})
 
+# Node distances one resource kind keeps before starting over.
+DROPOFF_MEMO = 65_536
+
 DROPOFFS = {
     ResourceKind.FOOD: (BuildingKind.TOWN_CENTER, BuildingKind.MILL),
     ResourceKind.WOOD: (BuildingKind.TOWN_CENTER, BuildingKind.LUMBER_CAMP),
@@ -69,7 +72,7 @@ class Context:
         #: Units that already got an order this decision.
         self.busy: set[int] = set()
         self._resources: dict[Any, list] = {}
-        self._spots: dict[Any, list] = {}
+        self._spots: dict[Any, tuple] = {}
         self._land_routes: dict[tuple[Tile, Tile], Any] = {}
         self._land_queries = 0
         self.land_query_limit = config.land_queries_per_decision
@@ -178,12 +181,22 @@ class Context:
         spots = self._spots.get(node.kind)
         if spots is None:
             kinds = DROPOFFS[node.kind]
-            spots = self._spots[node.kind] = [
+            spots = self._spots[node.kind] = tuple(
                 b.center for b in self.buildings if b.complete and b.kind in kinds
-            ]
+            )
+            # Each villager scores the nodes around it: on the owner's 11-19
+            # save this scan was 30% of all bot CPU (1.5 ms a call; 0.11
+            # kept). Distances are kept while the kind's sites stay the same.
+            held = self.board.dropoffs.get(node.kind)
+            if held is None or held[0] != spots or len(held[1]) > DROPOFF_MEMO:
+                self.board.dropoffs[node.kind] = (spots, {})
         if not spots:
             return 1e9
-        return min(dist(node.tile, s) for s in spots)
+        known = self.board.dropoffs[node.kind][1]
+        distance = known.get(node.tile)
+        if distance is None:
+            distance = known[node.tile] = min(dist(node.tile, s) for s in spots)
+        return distance
 
     def unrefused(self, tile: Tile) -> Tile:
         """`tile`, or the nearest tile around it the server has not refused as a
