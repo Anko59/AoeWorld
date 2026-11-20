@@ -24,7 +24,7 @@ export function groupUnits(units) {
 }
 const states = new WeakMap();
 const token = (unit, html, count) => count
-  ? `<span class="unit-token unit-group" data-unit-id="${unit.id}" data-count="${count}" title="${count} ${unit.name}">${html}<b class="token-count">${count}</b></span>`
+  ? `<span class="unit-token unit-group" data-unit-id="${unit.id}" data-count="${count}" title="${unit.name} x${count}">${html}<b class="token-count">${count}</b></span>`
   : `<span class="unit-token" data-unit-id="${unit.id}" title="${unit.name}">${html}</span>`;
 function layout(container, state) {
   const width = container.clientWidth, height = container.clientHeight;

@@ -135,7 +135,10 @@ dialog>button { width:100%; display:block; margin:9px 0; padding:10px; }
 #waypoint-markers { position:fixed; inset:0; width:100%; height:100%; z-index:2; pointer-events:none; overflow:hidden; }
 #waypoint-markers g { fill:#f6d05f; stroke:#292416; stroke-width:1.5; }
 #waypoint-markers text { font:10px sans-serif; fill:#171c1b; stroke:none; }
-#waypoint-markers polyline { fill:none; stroke:#f6d05f; stroke-width:1.5; stroke-dasharray:5 4; }
+#waypoint-markers path[data-order] { fill:none; stroke:#f6d05f; stroke-width:1.5; stroke-dasharray:5 4; }
+#waypoint-markers g[data-order=attack-move] { fill:#7e252a; stroke:#efd18f; stroke-linejoin:round; }
+#waypoint-markers g[data-order=attack-move] text { font:bold 12px Georgia,serif; fill:#fff0ce; text-anchor:middle; }
+#waypoint-markers path[data-order=attack-move] { stroke:#ff7164; stroke-width:3; stroke-dasharray:none; stroke-linecap:round; stroke-linejoin:round; }
 #unit-health-bars { position:fixed; inset:0; pointer-events:none; z-index:1; overflow:hidden; }
 .unit-hp-bar { position:absolute; width:36px; height:5px; background:#371c15; border:1px solid #16150d; }
 .unit-hp-bar > span { display:block; height:100%; background:#35b52d; }

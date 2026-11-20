@@ -1,6 +1,6 @@
 //! Authoritative queue markers follow camera projection on every backend.
 use super::Client;
-use crate::playground::game::map;
+use crate::playground::game::{map, position_of};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen(
@@ -23,16 +23,25 @@ pub(in super::super) fn present(client: &Client) {
     let mut values = Vec::new();
     let scale = f64::from(client.canvas.client_width()) / f64::from(client.canvas.width());
     for queue in &client.village.move_queues {
-        if !client.selected.units.contains(&queue.entity_id) {
+        if queue.destinations.is_empty() || !client.selected.units.contains(&queue.entity_id) {
             continue;
         }
-        for (index, p) in queue.destinations.iter().enumerate() {
-            let point = map::screen_position(client, p.as_tiles());
+        let Some(unit) = client.units.get(&queue.entity_id) else {
+            continue;
+        };
+        let start = map::screen_position(client, position_of(client, unit));
+        let id = f64::from(queue.entity_id.0);
+        // Index zero starts the first leg without drawing a waypoint marker.
+        values.extend_from_slice(&[id, 0.0, start.x * scale, start.y * scale, 0.0, 0.0]);
+        for (index, waypoint) in queue.destinations.iter().enumerate() {
+            let point = map::screen_position(client, waypoint.as_tiles());
             values.extend_from_slice(&[
-                f64::from(queue.entity_id.0),
+                id,
                 index as f64 + 1.0,
                 point.x * scale,
                 point.y * scale,
+                f64::from(u8::from(queue.is_attack_move(index))),
+                f64::from(queue.order_ids[index]),
             ]);
         }
     }

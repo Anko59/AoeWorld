@@ -70,7 +70,7 @@ impl GameWorld {
         let member_pending = if queued {
             ids.iter()
                 .filter_map(|id| self.move_queues.get(id))
-                .map(|queue| queue.len())
+                .map(|queue| queue.pending.len())
                 .max()
                 .unwrap_or(0)
         } else {
@@ -88,28 +88,40 @@ impl GameWorld {
             let pending = group.queue.len();
             let width = Self::move_queue_width();
             if ids.iter().any(|id| {
-                self.move_queues.get(id).map_or(0, |queue| queue.len()) + 1 + pending >= width
+                self.move_queues
+                    .get(id)
+                    .map_or(0, |queue| queue.pending.len())
+                    + 1
+                    + pending
+                    >= width
             }) {
                 return Err(EconomyError::OrderTooLarge);
             }
+            let marker = self.shared_waypoint(destination, attack_move);
             for &id in &ids {
                 self.move_queues
                     .entry(id)
                     .or_default()
-                    .push_back((destination, attack_move));
+                    .pending
+                    .push_back(marker);
                 self.vassal_player_override(id);
             }
             return Ok(());
         }
         if queued
-            && let Some(group) = self.formations.get_mut(&existing)
+            && let Some(group) = self.formations.get(&existing)
             && group.members.iter().map(|m| m.id).eq(ids.iter().copied())
             && !group.settled
         {
             if group.queue.len() + 1 + member_pending >= MAX_MOVE_DESTINATIONS {
                 return Err(EconomyError::OrderTooLarge);
             }
-            group.queue.push_back((destination, attack_move));
+            let marker = self.shared_waypoint(destination, attack_move);
+            let group = self
+                .formations
+                .get_mut(&existing)
+                .ok_or(EconomyError::UnknownEntity)?;
+            group.queue.push_back(marker);
             group.direct = false;
             for &id in &ids {
                 self.vassal_player_override(id);
@@ -215,6 +227,7 @@ impl GameWorld {
             static_area: None,
             destination,
             queue: VecDeque::new(),
+            marker: self.shared_waypoint(destination, attack_move),
             attack_move,
             path: path::Path::new(
                 std::iter::once(origin)
@@ -327,14 +340,19 @@ impl GameWorld {
         let Ok(stop) = WorldPosition::from_tile_center(stop) else {
             return false;
         };
-        group.queue.push_front((stop, group.attack_move));
+        group.queue.push_front(MovementWaypoint {
+            position: stop,
+            attack_move: group.attack_move,
+            ..group.marker
+        });
         true
     }
 
     pub(super) fn next_formation_order(&mut self, leader: EntityId, group: &mut Group) {
         let index = self.lookup[&leader];
         let player = self.units[index].state.player;
-        while let Some((destination, attack_move)) = group.queue.pop_front() {
+        while let Some(marker) = group.queue.pop_front() {
+            let (destination, attack_move) = marker.leg();
             let ids: Vec<_> = group.members.iter().map(|member| member.id).collect();
             let requested_destination = destination;
             let Ok(destination) =
@@ -353,6 +371,7 @@ impl GameWorld {
                     (destination, VecDeque::new())
                 };
                 group.destination = destination;
+                group.marker = marker;
                 group.attack_move = attack_move;
                 group.heading = WorldPosition::new(
                     destination.x - group.anchor.x,

@@ -120,8 +120,9 @@ export function initInterface() {
       text('unit-hp',`${first.hp} / ${first.maxHp} HP`);
       set(byId('selection-health'), 'value', first.hp); set(byId('selection-health'), 'max', Math.max(1,first.maxHp));
       text('unit-combat',`Attack ${first.attack} · Armour ${first.melee} / ${first.pierce} · Range ${first.range}`);
-      const groupName=selected.every(unit=>unit.kind===first.kind)?(building&&first.name.endsWith('s')?first.name:building&&first.name.endsWith('y')?`${first.name.slice(0,-1)}ies`:`${first.name}s`):'units';
-      text('selection-name',count>1?`${count} ${groupName} selected`:first.name);
+      const sameKind=selected.every(actor=>actor.kind===first.kind);
+      const groupName=sameKind?`${first.name} x${count}`:`${count} ${building?'buildings':'units'} selected`;
+      text('selection-name',count>1?groupName:first.name);
       text('selection-task',count===1?building?(state.queue.length?'Training':'Building'): `${first.task}${first.resource && first.task==='Gathering'?' '+first.resource:''}`:'Right-click to give this group an order');
       text('selection-load',animals.includes(first.kind)?`${first.amount} food remaining`:count===1 && first.amount?`Carrying ${first.amount}/${first.capacity} ${first.resource}`:building?first.kind==='Castle'?'Supports 20 population':castleKinds.includes(first.kind)?'':'Resource drop-off · supports 5 population':'');
       const signature=selected.map(unit=>`${unit.id}:${unit.kind}`).join(',');

@@ -46,6 +46,7 @@ mod block;
 mod chokepoint;
 mod clash;
 mod contact;
+mod queued_combat;
 
 #[test]
 fn formations_measure_shared_army_route() {

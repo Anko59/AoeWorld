@@ -57,9 +57,7 @@ test("double-click selects on-screen owned production buildings and balances que
   if (!actor) throw new Error("Barracks missing");
   await page.mouse.dblclick(actor.x, actor.y);
   await expect(page.locator("#selection")).toHaveAttribute("data-count", "3");
-  await expect(page.locator("#selection-name")).toHaveText(
-    "3 Barracks selected",
-  );
+  await expect(page.locator("#selection-name")).toHaveText("Barracks x3");
   const selected = await page.locator("#scene").evaluate((canvas) =>
     (
       JSON.parse(canvas.getAttribute("data-actors") ?? "[]") as {

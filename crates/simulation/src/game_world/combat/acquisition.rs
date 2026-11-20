@@ -158,7 +158,7 @@ impl GameWorld {
             // a General's soldier — strikes what is already in its weapon's
             // reach instead of walking past it. The group's bounded engage
             // look still decides who leaves the march to chase.
-            let marching = self.offensive_destination_slot(id).is_some()
+            let marching = self.offensive_continuation(id).is_some()
                 && (u.moving || u.planning || matches!(u.task, UnitTask::Moving));
             if u.hp == 0
                 || ((u.moving || u.planning) && building_attack.is_none() && !marching)
@@ -273,18 +273,18 @@ impl GameWorld {
         origin: WorldPosition,
     ) {
         // An attack-move member between fights keeps its way back to its slot.
-        let resume = self
-            .combat
-            .resuming
-            .remove(&id)
-            .map(|r| r.slot)
-            .or_else(|| self.offensive_destination_slot(id));
+        let continuation = self.offensive_continuation(id);
+        let queue = continuation.map(|_| self.detached_waypoints(id));
+        let resume = self.combat.resuming.remove(&id).or(continuation);
         self.leave_group(id);
         self.begin_attack(id, target);
         if let Some(a) = self.combat.attackers.get_mut(&id) {
             a.origin = Some(origin);
             a.repath_tick = self.tick.0;
             a.resume = resume;
+        }
+        if let Some(queue) = queue.filter(|queue| !queue.pending.is_empty()) {
+            self.move_queues.insert(id, queue);
         }
     }
 
@@ -313,7 +313,10 @@ impl GameWorld {
         };
         if !allowed {
             self.end_attack(id, changed);
-            if u.stance == CombatStance::Defensive && u.position != origin {
+            if u.stance == CombatStance::Defensive
+                && u.position != origin
+                && !self.combat.resuming.contains_key(&id)
+            {
                 let _ = self.issue_task_move(id, origin);
             }
         }

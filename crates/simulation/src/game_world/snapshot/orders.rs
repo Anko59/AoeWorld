@@ -78,7 +78,12 @@ impl GameWorld {
             } else if let Some(target) = record.unit.attack_target {
                 let result = self.issue_attack(player, id, target);
                 if let Some(attack) = self.combat.attackers.get_mut(&id) {
-                    attack.resume = record.scalar_attack_move;
+                    attack.resume = record.scalar_attack_move.map(|at| {
+                        super::super::formation::Resume::new(
+                            at,
+                            crate::MovementWaypoint::individual(at, true),
+                        )
+                    });
                     attack.swing_started = record.swing_started.unwrap_or(0).min(self.tick.0);
                 }
                 result
@@ -132,7 +137,7 @@ impl GameWorld {
             {
                 continue;
             }
-            let occupied = self.formation_destinations(id).map_or_else(
+            let occupied = self.formation_waypoints(id).map_or_else(
                 || usize::from(self.movement_order(id).is_some()),
                 |destinations| destinations.len(),
             );
@@ -140,7 +145,18 @@ impl GameWorld {
             if available == 0 {
                 continue;
             }
-            let queue = record.queue.iter().copied().take(available).collect();
+            let mut queue = crate::game_world::PlayerMoveQueue::default();
+            queue
+                .pending
+                .extend(
+                    record
+                        .queue
+                        .iter()
+                        .take(available)
+                        .map(|&(position, attack_move)| {
+                            crate::game_world::MovementWaypoint::individual(position, attack_move)
+                        }),
+                );
             self.player_override(id);
             self.move_queues.insert(id, queue);
             // Only a refused scalar move needs this recovery: successful

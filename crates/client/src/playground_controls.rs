@@ -163,7 +163,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         if event.button() == 2 {
             // Ctrl also queues: Firefox opens its menu on Shift+right-click.
             // Alt moves a selected General alone, leaving his army in place.
-            client.village.general_only = event.alt_key();
+            client.village.general_only = event.alt_key() && !client.village.attack_move;
             super::village::orders::at_pointer(
                 &mut client,
                 target,
@@ -177,8 +177,12 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             return;
         }
         if event.button() == 0 && client.village.move_cursor {
-            send_order(&mut client, target, event.shift_key() || event.ctrl_key());
-            return;
+            if client.village.attack_move {
+                super::village::orders::cancel_move_mode(&mut client);
+            } else {
+                send_order(&mut client, target, event.shift_key() || event.ctrl_key());
+                return;
+            }
         }
         if event.button() == 0 && super::village::production::here::click(&mut client, target) {
             return;
@@ -338,16 +342,18 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             1 => {
                 if client.village.placement.is_some() || client.village.garrison_cursor {
                     super::village::construction::cancel(&mut client);
-                } else {
+                } else if !client.village.attack_move {
                     client.selected = Default::default();
                 }
-                client.village.clear_move_cursor();
                 client.village.unload_cursor = false;
-                let _ = client.canvas.set_attribute("data-order-mode", "");
+                super::village::orders::cancel_move_mode(&mut client);
                 client.drag = None;
             }
             6 if client.village.repeat_placement || client.village.far_placement => {
                 super::village::construction::cancel(&mut client)
+            }
+            6 | 41 if client.village.attack_move => {
+                super::village::orders::cancel_move_mode(&mut client);
             }
             2 => toggle_grid(&mut client),
             3 => center_on_primary(&mut client),

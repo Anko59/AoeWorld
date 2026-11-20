@@ -2,8 +2,51 @@
 use super::orders::diagnostics::near_goal;
 use crate::{EconomyError, GameWorld, GameWorldError};
 use aoe_core::{EntityId, MAX_MOVE_DESTINATIONS, WorldPosition};
+use std::collections::VecDeque;
+
+/// The destination shown for a player order. An ID of zero is private to one unit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MovementWaypoint {
+    pub position: WorldPosition,
+    pub attack_move: bool,
+    pub order_id: u32,
+}
+
+impl MovementWaypoint {
+    pub(crate) fn individual(position: WorldPosition, attack_move: bool) -> Self {
+        Self {
+            position,
+            attack_move,
+            order_id: 0,
+        }
+    }
+
+    pub(crate) fn leg(self) -> (WorldPosition, bool) {
+        (self.position, self.attack_move)
+    }
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct PlayerMoveQueue {
+    pub(crate) pending: VecDeque<MovementWaypoint>,
+    current: Option<MovementWaypoint>,
+}
 
 impl GameWorld {
+    /// Allocate an identity only after admitting a shared order.
+    pub(crate) fn shared_waypoint(
+        &mut self,
+        position: WorldPosition,
+        attack_move: bool,
+    ) -> MovementWaypoint {
+        self.waypoint_order = self.waypoint_order.wrapping_add(1).max(1);
+        MovementWaypoint {
+            position,
+            attack_move,
+            order_id: self.waypoint_order,
+        }
+    }
+
     /// Live admission and save restoration share this command FIFO width.
     pub(crate) const fn move_queue_width() -> usize {
         MAX_MOVE_DESTINATIONS
@@ -60,7 +103,7 @@ impl GameWorld {
             return Ok(moving);
         }
         let formation_pending = self.formation_queue_summary(id).map_or(0, |(_, n)| n);
-        if self.move_queues.get(&id).map_or(1, |q| q.len() + 1) + formation_pending
+        if self.move_queues.get(&id).map_or(1, |q| q.pending.len() + 1) + formation_pending
             >= Self::move_queue_width()
         {
             return Err(EconomyError::OrderTooLarge);
@@ -73,7 +116,8 @@ impl GameWorld {
         self.move_queues
             .entry(id)
             .or_default()
-            .push_back((destination, attack_move));
+            .pending
+            .push_back(MovementWaypoint::individual(destination, attack_move));
         Ok(true)
     }
 
@@ -92,12 +136,9 @@ impl GameWorld {
         if !unit.kind.is_naval() && unit.kind != crate::UnitKind::Villager {
             return None;
         }
-        self.combat
-            .attackers
-            .get(&id)
-            .and_then(|a| a.resume)
-            .or_else(|| self.combat.resuming.get(&id).map(|r| r.slot))
-            .or_else(|| self.offensive_destination_slot(id))
+        self.offensive_resume(id)
+            .or_else(|| self.offensive_continuation(id))
+            .map(|resume| resume.slot)
     }
 
     /// Begin a player leg now. Attack-move runs as the unit's own one-member
@@ -146,26 +187,56 @@ impl GameWorld {
         Ok(self.issue_move(id, destination)?)
     }
 
-    /// Authoritative marker list, combining formation and player-command legs.
     pub fn move_destinations(&self, id: EntityId) -> Vec<WorldPosition> {
-        if let Some(mut destinations) = self.formation_destinations(id) {
-            if let Some(queue) = self.move_queues.get(&id) {
-                destinations.extend(queue.iter().map(|&(at, _)| at));
-            }
-            return destinations;
-        }
-        let Some(queue) = self.move_queues.get(&id) else {
-            return Vec::new();
-        };
-        self.movement_order(id)
-            .map(|o| o.destination)
+        self.move_waypoints(id)
             .into_iter()
-            .chain(queue.iter().map(|&(at, _)| at))
+            .map(|(position, _)| position)
             .collect()
+    }
+
+    /// Authoritative marker list with each destination's attack-move intent.
+    pub fn move_waypoints(&self, id: EntityId) -> Vec<(WorldPosition, bool)> {
+        self.movement_waypoints(id)
+            .into_iter()
+            .map(MovementWaypoint::leg)
+            .collect()
+    }
+
+    /// Visible waypoint identities survive a formation member leaving to fight.
+    pub fn movement_waypoints(&self, id: EntityId) -> Vec<MovementWaypoint> {
+        let queue = self.move_queues.get(&id);
+        let pending = queue
+            .into_iter()
+            .flat_map(|queue| queue.pending.iter().copied());
+        if let Some(resume) = self.offensive_resume(id).or_else(|| {
+            self.combat
+                .scalar_marches
+                .contains(&id)
+                .then(|| self.offensive_continuation(id))
+                .flatten()
+        }) {
+            return std::iter::once(resume.marker).chain(pending).collect();
+        }
+        if let Some(mut markers) = self.formation_waypoints(id) {
+            markers.extend(pending);
+            return markers;
+        }
+        queue.map_or_else(Vec::new, |queue| {
+            self.movement_order(id)
+                .map(|order| {
+                    queue
+                        .current
+                        .unwrap_or_else(|| MovementWaypoint::individual(order.destination, false))
+                })
+                .into_iter()
+                .chain(pending)
+                .collect()
+        })
     }
 
     fn queued_move_active(&self, id: EntityId) -> bool {
         self.movement_order(id).is_some()
+            || self.offensive_resume(id).is_some()
             || self
                 .lookup
                 .get(&id)
@@ -216,7 +287,8 @@ impl GameWorld {
             let Some(mut queue) = self.move_queues.remove(&id) else {
                 continue;
             };
-            while let Some((next, attack_move)) = queue.pop_front() {
+            while let Some(leg) = queue.pending.pop_front() {
+                let (next, attack_move) = leg.leg();
                 // A building may have blocked a previously valid destination.
                 // Skip that failed leg; never discard the later commands.
                 if self
@@ -233,6 +305,10 @@ impl GameWorld {
                         .is_some_and(|army| !army.solo)
                     {
                         self.general_march(id, next);
+                    }
+                    queue.current = (leg.order_id != 0).then_some(leg);
+                    if leg.order_id != 0 {
+                        self.set_formation_marker(id, leg);
                     }
                     self.move_queues.insert(id, queue);
                     break;

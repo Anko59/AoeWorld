@@ -251,7 +251,9 @@ test("the live browser trains the data roster and orders every trained unit", as
             )
             .click();
           await command(general ? 32 : 2, unit.id, () =>
-            page.mouse.click(destination.x, destination.y),
+            page.mouse.click(destination.x, destination.y, {
+              button: unit.kind === "Galley" ? "right" : "left",
+            }),
           );
           await expect
             .poll(async () => {

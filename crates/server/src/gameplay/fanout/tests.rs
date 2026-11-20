@@ -11,11 +11,13 @@ fn queued_destinations_are_private_to_the_owning_viewer_even_with_fog_disabled()
     let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
     let unit = world.spawn_unit(PlayerId(1), at(10, 10)).unwrap();
     world.issue_queued_move(unit, at(14, 10)).unwrap();
-    world.issue_queued_move(unit, at(14, 14)).unwrap();
+    world.issue_queued_leg(unit, at(14, 14), true).unwrap();
     world.set_fog_disabled(true);
     assert!(move_queues(&world, PlayerId(0), std::iter::once(unit)).is_empty());
     let own = move_queues(&world, PlayerId(1), std::iter::once(unit));
     assert_eq!(own[0].destinations, [at(14, 10), at(14, 14)]);
+    assert!(!own[0].is_attack_move(0));
+    assert!(own[0].is_attack_move(1));
 }
 
 #[test]

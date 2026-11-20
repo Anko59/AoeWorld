@@ -312,11 +312,17 @@ impl GameWorld {
             return;
         };
         let repath = now.saturating_add(self.repath_ticks());
-        if let Some(entry) = self.combat.attackers.get_mut(&id) {
+        // A new approach to the same fight must leave the player's march intact.
+        let queue = self.combat.attackers.get_mut(&id).and_then(|entry| {
             entry.repath_tick = repath;
+            entry.resume.and_then(|_| self.move_queues.remove(&id))
+        });
+        let result = self.issue_task_move(id, at);
+        if let Some(queue) = queue {
+            self.move_queues.insert(id, queue);
         }
         if matches!(
-            self.issue_task_move(id, at),
+            result,
             Err(crate::GameWorldError::Unreachable | crate::GameWorldError::InvalidPosition)
         ) {
             self.end_attack(id, changed);
@@ -331,10 +337,9 @@ impl GameWorld {
         };
         if self.units[index].state.hp > 0 {
             self.stop_movement(index);
-            if let Some(slot) = ended.and_then(|a| a.resume) {
-                self.combat
-                    .resuming
-                    .insert(id, crate::game_world::formation::Resume::new(slot));
+            if let Some(mut resume) = ended.and_then(|a| a.resume) {
+                resume.empty = 0;
+                self.combat.resuming.insert(id, resume);
             }
             let state = &mut self.units[index].state;
             state.attack_target = None;

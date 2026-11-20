@@ -24,6 +24,8 @@ mod formation;
 mod hash;
 #[path = "game_world/orders/queue.rs"]
 mod move_queue;
+pub use move_queue::MovementWaypoint;
+use move_queue::PlayerMoveQueue;
 mod movement_step;
 #[path = "game_world/navy/mod.rs"]
 mod navy;
@@ -67,7 +69,6 @@ pub use route_scheduler::{
 };
 pub use visibility::TileVisibility;
 pub use wildlife::*;
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct GameUnit {
     pub id: EntityId,
@@ -177,7 +178,8 @@ pub struct GameWorld {
     pub(crate) melee_traffic_clearance: Option<(EntityId, WorldPosition, bool)>,
     pub(crate) local_refinement_left: u32,
     pub(crate) formations: BTreeMap<EntityId, formation::Group>,
-    pub(crate) move_queues: BTreeMap<EntityId, VecDeque<(WorldPosition, bool)>>,
+    pub(crate) move_queues: BTreeMap<EntityId, PlayerMoveQueue>,
+    pub(crate) waypoint_order: u32,
     pub(crate) destinations: spacing::Destinations,
     pub(crate) terrain: Terrain,
     pub(crate) clearance: Mutex<clearance::Field>,
@@ -241,6 +243,7 @@ impl GameWorld {
             collisions: Default::default(),
             local_refinement_left: 4,
             move_queues: BTreeMap::new(),
+            waypoint_order: 0,
             formations: BTreeMap::new(),
             destinations: spacing::Destinations::default(),
             planning_budget: crate::MAX_ROUTE_WORK_PER_TICK,
@@ -354,15 +357,12 @@ impl GameWorld {
     pub fn config(&self) -> WorldConfig {
         self.config
     }
-
     pub fn tick(&self) -> Tick {
         self.tick
     }
-
     pub fn terrain(&self) -> &Terrain {
         &self.terrain
     }
-
     pub fn unit_count(&self) -> usize {
         self.units.len()
     }

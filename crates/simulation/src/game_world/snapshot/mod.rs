@@ -71,7 +71,9 @@ impl GameWorld {
                 queue: self
                     .move_queues
                     .get(&stored.state.id)
-                    .map_or_else(Vec::new, |q| q.iter().copied().collect()),
+                    .map_or_else(Vec::new, |q| {
+                        q.pending.iter().map(|marker| marker.leg()).collect()
+                    }),
                 hunt: self.hunting_target(stored.state.id),
                 garrison_order: self.economy.garrison_orders.get(&stored.state.id).copied(),
                 shelter_intent: self
@@ -134,6 +136,7 @@ impl GameWorld {
             fog_disabled: self.fog_disabled(),
             hp_quarters: self.combat.hp_quarters.clone(),
             players: self.economy.players.values().copied().collect(),
+            market_recovery: self.economy.market_recovery.snapshot(self.tick.0),
             resources,
             buildings,
             units,
@@ -173,6 +176,9 @@ impl GameWorld {
             self.economy.players.insert(player.player, *player);
         }
         self.tick = aoe_core::Tick(snapshot.tick);
+        self.economy
+            .market_recovery
+            .restore(snapshot.tick, &snapshot.market_recovery);
         self.economy.construction.tick = snapshot.tick;
         self.economy.queues.training.tick = snapshot.tick;
         self.economy.queues.research.tick = snapshot.tick;

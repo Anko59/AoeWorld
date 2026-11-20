@@ -122,7 +122,8 @@ pub(crate) struct Group {
     /// Rebuilt during target preparation, never retained as canonical state.
     static_area: Option<super::movement_step::certificates::StaticArea>,
     destination: WorldPosition,
-    queue: VecDeque<(WorldPosition, bool)>,
+    queue: VecDeque<MovementWaypoint>,
+    marker: MovementWaypoint,
     attack_move: bool,
     path: path::Path,
     /// Route end when the anchor corridor was last straightened.
@@ -301,16 +302,24 @@ impl GameWorld {
         self.active_movers.remove(id);
     }
 
-    pub(crate) fn formation_destinations(&self, id: EntityId) -> Option<Vec<WorldPosition>> {
+    pub(crate) fn formation_waypoints(&self, id: EntityId) -> Option<Vec<MovementWaypoint>> {
         let leader = self.units[*self.lookup.get(&id)?].formation?;
         let group = self.formations.get(&leader)?;
         Some(if group.settled {
             Vec::new()
         } else {
-            std::iter::once(group.destination)
-                .chain(group.queue.iter().map(|&(point, _)| point))
+            std::iter::once(group.marker)
+                .chain(group.queue.iter().copied())
                 .collect()
         })
+    }
+
+    pub(crate) fn set_formation_marker(&mut self, id: EntityId, marker: MovementWaypoint) {
+        if let Some(leader) = self.lookup.get(&id).and_then(|&i| self.units[i].formation)
+            && let Some(group) = self.formations.get_mut(&leader)
+        {
+            group.marker = marker;
+        }
     }
 
     /// The command endpoint and pending leg count, even after settling.

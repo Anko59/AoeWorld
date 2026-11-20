@@ -23,6 +23,8 @@ fn authoritative_move_queues_replace_the_current_subscription_and_ignore_stale_f
     let queue = aoe_protocol::MoveQueue {
         entity_id: EntityId(1),
         destinations: vec![p],
+        attack_move_mask: 1,
+        order_ids: vec![0],
     };
     world.apply(M::MoveQueues {
         revision: 1,

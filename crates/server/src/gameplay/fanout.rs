@@ -244,10 +244,25 @@ fn destinations(
     ids: impl Iterator<Item = EntityId>,
 ) -> Vec<aoe_protocol::MoveQueue> {
     ids.filter_map(|entity_id| {
-        let destinations = world.move_destinations(entity_id);
-        (!destinations.is_empty()).then_some(aoe_protocol::MoveQueue {
+        let markers = world.movement_waypoints(entity_id);
+        if markers.is_empty() {
+            return None;
+        }
+        let mut attack_move_mask = 0;
+        let mut destinations = Vec::with_capacity(markers.len());
+        let mut order_ids = Vec::with_capacity(markers.len());
+        for (index, marker) in markers.into_iter().enumerate() {
+            if marker.attack_move {
+                attack_move_mask |= 1_u16.checked_shl(index as u32).unwrap_or(0);
+            }
+            destinations.push(marker.position);
+            order_ids.push(marker.order_id);
+        }
+        Some(aoe_protocol::MoveQueue {
             entity_id,
             destinations,
+            attack_move_mask,
+            order_ids,
         })
     })
     .collect()

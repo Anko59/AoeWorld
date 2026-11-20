@@ -68,8 +68,19 @@ struct RenderedFrame<S> {
     scene: Rc<S>,
     units: Vec<SceneUnit>,
     resources: Vec<(SceneResource, Option<usize>)>,
+    camera: SceneCamera,
     grid: bool,
-    animation: Option<usize>,
+    animation: usize,
+    moving_animation: Option<usize>,
+}
+
+struct SelectionRepaint<S> {
+    scene: Rc<S>,
+    units: Vec<SceneUnit>,
+    resources: Vec<SceneResource>,
+    camera: SceneCamera,
+    grid: bool,
+    animation: usize,
 }
 
 /// Remembers only the last successfully rendered, currently visible frame.
@@ -111,6 +122,29 @@ impl<S> RenderFrameCache<S> {
         let units = &self.previous.as_ref()?.units;
         let index = units.binary_search_by_key(&id, |unit| unit.id).ok()?;
         Some(units[index])
+    }
+
+    fn cleared_selection(&self) -> Option<SelectionRepaint<S>> {
+        let frame = self.previous.as_ref()?;
+        if !frame.units.iter().any(|unit| unit.visual.selected()) {
+            return None;
+        }
+        let mut units = frame.units.clone();
+        for unit in &mut units {
+            unit.visual = unit.visual.with_selected(false);
+        }
+        Some(SelectionRepaint {
+            scene: frame.scene.clone(),
+            units,
+            resources: frame
+                .resources
+                .iter()
+                .map(|(resource, _)| *resource)
+                .collect(),
+            camera: frame.camera,
+            grid: frame.grid,
+            animation: frame.animation,
+        })
     }
 
     fn matching_scene(&self, scene: &Rc<S>) -> Option<&RenderedFrame<S>> {
@@ -174,7 +208,7 @@ impl<S> RenderFrameCache<S> {
                     )
                 }))
             || previous.grid != grid
-            || previous.animation != moving_animation(art, units, animation, camera)
+            || previous.moving_animation != moving_animation(art, units, animation, camera)
     }
 
     fn record_success(
@@ -203,8 +237,10 @@ impl<S> RenderFrameCache<S> {
                     )
                 })
                 .collect(),
+            camera,
             grid,
-            animation: moving_animation(art, units, animation, camera),
+            animation,
+            moving_animation: moving_animation(art, units, animation, camera),
         });
     }
 }
@@ -276,6 +312,26 @@ pub(in super::super) fn render_if_changed(
     client.capture.current_view = true;
     client.capture.frame = client.capture.frame.saturating_add(1);
     Ok(true)
+}
+
+/// Selection can change while new native sprite frames are still streaming.
+/// Reuse the last painted poses and camera so deselection can appear now.
+pub(in super::super) fn repaint_cleared_selection(client: &mut Client) -> Result<bool, String> {
+    let Some(frame) = client.rendered_frame.cleared_selection() else {
+        return Ok(false);
+    };
+    let result = render_if_changed(
+        client,
+        &frame.scene,
+        &frame.units,
+        &frame.resources,
+        frame.camera,
+        frame.animation,
+        frame.grid,
+    );
+    // These pixels can still represent an older camera view or game tick.
+    client.capture.current_view = false;
+    result.map(|_| false)
 }
 
 #[path = "render_cache/tests.rs"]

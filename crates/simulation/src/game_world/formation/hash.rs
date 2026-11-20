@@ -50,7 +50,8 @@ impl GameWorld {
             hash.update(&group.form_distance.to_le_bytes());
             hash.update(&group.half_width.to_le_bytes());
             hash.update(&(group.queue.len() as u64).to_le_bytes());
-            for &(p, attack_move) in &group.queue {
+            for marker in &group.queue {
+                let (p, attack_move) = marker.leg();
                 point(hash, p);
                 hash.update(&[u8::from(attack_move)]);
             }

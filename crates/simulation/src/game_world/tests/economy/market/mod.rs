@@ -277,14 +277,12 @@ fn a_bulk_purchase_spends_gold_lot_by_lot_at_rising_prices() {
 fn a_bulk_sale_that_hits_the_floor_recovers_toward_the_base_price() {
     let (mut world, _, _) = village();
     let id = market(&mut world, 100);
-    set_stock(&mut world, 0, 0, 0, 0);
-    world
-        .economy
-        .players
-        .get_mut(&PlayerId(0))
-        .unwrap()
-        .stockpile
-        .food = 100_000;
+    set_stock(&mut world, 100_000, 0, 0, 0);
+    // Execute one tick before the old global recovery boundary. The next
+    // published state must still show the floor reached by the sale.
+    for _ in 1..MARKET_RULES.recovery_ticks {
+        world.advance();
+    }
     let lots = world
         .issue_market_trade(PlayerId(0), id, ResourceKind::Food, false, 1000)
         .unwrap();
@@ -292,7 +290,13 @@ fn a_bulk_sale_that_hits_the_floor_recovers_toward_the_base_price() {
     assert_eq!(prices(&world).food, aoe_core::MARKET_MIN_PRICE);
     // Gold sits far below 1000 lots at the starting price: the floor pays 14 per lot.
     assert!(stock(&world).2 < 1000 * 14 + 2000);
-    for _ in 0..(MARKET_RULES.recovery_ticks * 10) {
+    for _ in 1..MARKET_RULES.recovery_ticks {
+        world.advance();
+        assert_eq!(prices(&world).food, aoe_core::MARKET_MIN_PRICE);
+    }
+    world.advance();
+    assert_eq!(prices(&world).food, aoe_core::MARKET_MIN_PRICE + 1);
+    for _ in 0..(MARKET_RULES.recovery_ticks * 9) {
         world.advance();
     }
     assert_eq!(prices(&world).food, aoe_core::MARKET_MIN_PRICE + 10);
@@ -305,4 +309,47 @@ fn a_bulk_sale_that_hits_the_floor_recovers_toward_the_base_price() {
         world.advance();
     }
     assert_eq!(prices(&world).food, MARKET_RULES.base_price);
+}
+
+#[test]
+fn a_successful_trade_restarts_only_its_commodity_recovery_after_restore() {
+    let (mut world, _, _) = village();
+    let id = market(&mut world, 100);
+    let player = PlayerId(0);
+    set_stock(&mut world, 0, 100, 1_000, 0);
+    world
+        .issue_market_buy(player, id, ResourceKind::Food)
+        .unwrap();
+    world
+        .issue_market_sell(player, id, ResourceKind::Wood)
+        .unwrap();
+    for _ in 0..10 {
+        world.advance();
+    }
+    world
+        .issue_market_buy(player, id, ResourceKind::Food)
+        .unwrap();
+    assert_eq!(
+        world.issue_market_sell(player, id, ResourceKind::Wood),
+        Err(EconomyError::InsufficientResources)
+    );
+
+    let bytes = postcard::to_allocvec(&world.snapshot([0; 32]).unwrap()).unwrap();
+    let snapshot = postcard::from_bytes(&bytes).unwrap();
+    let mut restored = super::super::world();
+    restored
+        .restore_snapshot(&snapshot, [0; 32], &|| false)
+        .unwrap();
+
+    for _ in 10..MARKET_RULES.recovery_ticks {
+        world.advance();
+        restored.advance();
+        assert_eq!(prices(&world), prices(&restored));
+    }
+    assert_eq!(prices(&restored).wood, 98);
+    assert_eq!(prices(&restored).food, 106);
+    for _ in 0..10 {
+        restored.advance();
+    }
+    assert_eq!(prices(&restored).food, 105);
 }

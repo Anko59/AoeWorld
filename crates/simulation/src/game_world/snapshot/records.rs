@@ -1,4 +1,5 @@
 //! The values a save is made of.
+use crate::game_world::economy::MarketCommodity;
 use crate::game_world::{
     Age, BuildingKind, ConstructionState, GameBuilding, GameUnit, GameWorldError, HitRecord,
     PlayerEconomy, RallyPoint, ResearchEntry, TrainingEntry,
@@ -8,7 +9,7 @@ use aoe_core::{EntityId, Formation, PlayerId, TileRect, WorldPosition};
 use aoe_map::ResourceOverlaySnapshot;
 use serde::{Deserialize, Serialize};
 
-pub const WORLD_SNAPSHOT_VERSION: u16 = 11;
+pub const WORLD_SNAPSHOT_VERSION: u16 = 12;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WorldSnapshot {
@@ -18,6 +19,8 @@ pub struct WorldSnapshot {
     pub fog_disabled: bool,
     pub hp_quarters: Vec<u8>,
     pub players: Vec<PlayerEconomy>,
+    /// Remaining server ticks, independent of the save's game-time tick rate.
+    pub(crate) market_recovery: Vec<(u64, PlayerId, MarketCommodity)>,
     /// Absent only for worlds without map terrain (test fixtures).
     pub resources: Option<ResourceOverlaySnapshot>,
     pub buildings: Vec<BuildingRecord>,

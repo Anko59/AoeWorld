@@ -254,6 +254,35 @@ fn a_galley_attack_move_fights_and_resumes_its_water_route() {
 }
 
 #[test]
+fn galley_attack_move_keeps_its_marker_and_queue_through_combat() {
+    let mut world = coast();
+    let (_, water) = bank(&world);
+    let galley = ship(&mut world, UnitKind::Galley, water, 0);
+    let target = ship(
+        &mut world,
+        UnitKind::FishingShip,
+        TileCoord::new(water.x + 4, water.y + 2),
+        1,
+    );
+    let end = at(TileCoord::new(water.x + 12, water.y));
+    let next = at(TileCoord::new(water.x + 14, water.y));
+    world.issue_attack_move(galley, end).unwrap();
+    world.issue_queued_move(galley, next).unwrap();
+    let expected = vec![(end, true), (next, false)];
+    assert_eq!(world.move_waypoints(galley), expected);
+    let mut attacked = false;
+    for _ in 0..1_500 {
+        world.advance();
+        if world.unit(galley).unwrap().attack_target == Some(target) {
+            attacked = true;
+            assert_eq!(world.move_waypoints(galley), expected);
+        }
+    }
+    assert!(attacked);
+    assert_eq!(world.unit(galley).unwrap().position, next);
+}
+
+#[test]
 fn galley_patrol_turns_back_and_stop_clears_the_route() {
     let mut world = coast();
     let (_, water) = bank(&world);

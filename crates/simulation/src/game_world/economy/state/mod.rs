@@ -54,6 +54,7 @@ pub(crate) struct Economy {
     pub(crate) transport_journeys: BTreeMap<EntityId, super::super::navy::Journey>,
     pub(crate) embarked: BTreeMap<EntityId, EntityId>,
     pub(crate) players: BTreeMap<PlayerId, PlayerEconomy>,
+    pub(crate) market_recovery: super::market::MarketRecovery,
     pub(crate) income: BTreeMap<PlayerId, income::Income>,
     pub(crate) buildings: BTreeMap<EntityId, GameBuilding>,
     pub(crate) farm_production: BTreeMap<EntityId, farm::FarmProduction>,

@@ -108,13 +108,13 @@ fn formation_commands_validate_ownership_and_share_the_queued_route() {
                 formation: Formation::Line,
                 destination: Some(next),
                 queued: true,
-                attack_move: false
+                attack_move: true
             }
         ),
         CommandResult::Accepted
     );
     for id in ids {
-        assert_eq!(w.move_destinations(id), vec![destination, next]);
+        assert_eq!(w.move_waypoints(id), [(destination, false), (next, true)]);
     }
 }
 

@@ -28,6 +28,7 @@ impl GameWorld {
             self.restore_general_stance(g, id);
         }
         self.stop_unit_orders(index);
+        self.move_queues.remove(&id);
         if unit.kind == crate::UnitKind::General {
             self.stop_general(id);
         }

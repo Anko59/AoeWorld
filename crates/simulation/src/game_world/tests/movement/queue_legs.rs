@@ -43,8 +43,8 @@ fn queued_attack_move_leg_keeps_the_units_earlier_move_and_queue() {
     // Shift attack-move for the single selected unit, as the client sends it.
     world.issue_queued_leg(unit, at(10, 30), true).unwrap();
     assert_eq!(
-        world.move_destinations(unit),
-        [at(30, 10), at(30, 30), at(10, 30)],
+        world.move_waypoints(unit),
+        [(at(30, 10), false), (at(30, 30), false), (at(10, 30), true)],
         "A, then B, then attack-move C"
     );
     let snapshot = world.snapshot([0; 32]).unwrap();
@@ -52,10 +52,7 @@ fn queued_attack_move_leg_keeps_the_units_earlier_move_and_queue() {
     restored
         .restore_snapshot(&snapshot, [0; 32], &|| false)
         .unwrap();
-    assert_eq!(
-        restored.move_destinations(unit),
-        world.move_destinations(unit)
-    );
+    assert_eq!(restored.move_waypoints(unit), world.move_waypoints(unit));
     for _ in 0..3000 {
         world.advance();
     }
