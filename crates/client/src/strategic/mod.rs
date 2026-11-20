@@ -9,6 +9,13 @@ pub(crate) fn far_building_visible(hp: u16, _state: aoe_protocol::ConstructionSt
     hp > 0
 }
 
+/// Roads and bridges draw as crossings only once finished; their foundations
+/// stay plain markers like every other foundation.
+#[cfg(any(all(target_arch = "wasm32", not(feature = "diagnostics")), test))]
+pub(crate) fn far_crossing_visible(hp: u16, state: aoe_protocol::ConstructionState) -> bool {
+    far_building_visible(hp, state) && state == aoe_protocol::ConstructionState::Complete
+}
+
 #[cfg(any(all(target_arch = "wasm32", not(feature = "diagnostics")), test))]
 mod armies;
 #[cfg(all(target_arch = "wasm32", not(feature = "diagnostics")))]

@@ -229,7 +229,10 @@ pub(in super::super) fn update(client: &Client) {
         if !crate::strategic::far_building_visible(b.hp, b.construction) {
             continue;
         }
-        if matches!(b.kind, BuildingKind::Bridge | BuildingKind::Road) && bridges.len() < 2048 * 5 {
+        if matches!(b.kind, BuildingKind::Bridge | BuildingKind::Road)
+            && crate::strategic::far_crossing_visible(b.hp, b.construction)
+            && bridges.len() < 2048 * 5
+        {
             bridges.extend([
                 f64::from(b.footprint.min.x),
                 f64::from(b.footprint.min.y),

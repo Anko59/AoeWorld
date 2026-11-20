@@ -12,6 +12,13 @@ fn living_sites_and_foundations_show_in_the_far_view() {
 }
 
 #[test]
+fn only_finished_roads_and_bridges_draw_as_far_view_crossings() {
+    assert!(far_crossing_visible(1, Complete));
+    assert!(!far_crossing_visible(1, UnderConstruction));
+    assert!(!far_crossing_visible(0, Complete));
+}
+
+#[test]
 fn dominant_kind_is_exact_only_for_a_complete_army_report_and_ties_use_kind_order() {
     use super::armies::ArmyKinds;
     use aoe_protocol::UnitKind::{Archer, Knight, Militia};
