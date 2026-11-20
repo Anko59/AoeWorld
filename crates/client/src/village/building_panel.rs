@@ -334,13 +334,16 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 return;
             }
             if action == 6 {
+                client.village.clear_move_cursor();
                 client.village.garrison_cursor = false;
                 client.village.unload_cursor = false;
-                client.village.attack_move = true;
+                client.village.attack_move = code == 0;
+                client.village.patrol_move = code == 1;
                 client.village.move_cursor = true;
-                let _ = client
-                    .canvas
-                    .set_attribute("data-order-mode", "attack-move");
+                let _ = client.canvas.set_attribute(
+                    "data-order-mode",
+                    if code == 1 { "patrol" } else { "attack-move" },
+                );
                 return;
             }
             if action == 9 || action == 10 {
@@ -348,9 +351,9 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 return;
             }
             if action == 8 {
+                client.village.clear_move_cursor();
                 client.village.garrison_cursor = false;
                 client.village.unload_cursor = false;
-                client.village.attack_move = false;
                 client.village.general_only = true;
                 client.village.move_cursor = true;
                 let _ = client
@@ -367,9 +370,9 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     0 => super::orders::train(&mut client, false, lots == 5),
                     1 => super::orders::stop(&mut client),
                     2 => {
+                        client.village.clear_move_cursor();
                         client.village.garrison_cursor = false;
                         client.village.unload_cursor = false;
-                        client.village.attack_move = false;
                         client.village.move_cursor = true;
                         let _ = client.canvas.set_attribute("data-order-mode", "move");
                     }

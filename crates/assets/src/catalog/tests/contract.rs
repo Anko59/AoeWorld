@@ -85,11 +85,8 @@ fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
             .chain(OPTIONAL_TERRAIN_SOURCES.iter())
             .all(|source| source.frames > 0)
     );
-    // Castle poses, architecture and deduplicated composite recipes extend the catalog.
-    // King poses extend the current semantic catalog; atlas limits are unchanged.
-    // Imperial poses and native icon identities extend the current catalog.
-    // Complete gate assemblies and both axes extend the current art catalog.
-    assert_eq!(VERSION, 24);
+    // The current catalog includes Fish Trap art and native weapon variants.
+    assert_eq!(VERSION, 25);
     assert_eq!(AssetRole::StoneDeposit as usize, 13);
     assert_eq!(AssetRole::TreeConifer as usize, 14);
     assert_eq!(AssetRole::TreePalm as usize, 15);

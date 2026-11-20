@@ -31,9 +31,8 @@ pub(super) fn key(client: &mut Client, action: u32) {
         return;
     }
     crate::playground::game::village::construction::cancel(client);
-    client.village.move_cursor = false;
+    client.village.clear_move_cursor();
     client.village.unload_cursor = false;
-    client.village.attack_move = false;
     client
         .selected
         .units(result.into_iter().map(EntityId).collect());

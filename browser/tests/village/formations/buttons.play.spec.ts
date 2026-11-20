@@ -6,6 +6,8 @@ import { fiveVillagerFixture } from "../fixtures/village.js";
 for (const [kind, unitKind] of [
   ["Militia", 2],
   ["Knight", 12],
+  ["CavalryArcher", 48],
+  ["HandCannoneer", 54],
 ] as const) {
   test(`${kind} groups select four formations and send one queued group move`, async ({
     page,
@@ -46,6 +48,7 @@ for (const [kind, unitKind] of [
     if (!first) throw new Error("Military fixture missing");
     await page.mouse.dblclick(first.x, first.y);
     await expect(page.locator("#selection")).toHaveAttribute("data-count", "5");
+    await expect(page.locator("#selection")).toHaveAttribute("data-kind", kind);
     for (const name of ["line", "box", "staggered", "flank"]) {
       const button = page.locator(`#formation-${name}`);
       await expect(button).toBeVisible();

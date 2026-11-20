@@ -8,7 +8,7 @@ use aoe_core::{EntityId, Formation, PlayerId, TileRect, WorldPosition};
 use aoe_map::ResourceOverlaySnapshot;
 use serde::{Deserialize, Serialize};
 
-pub const WORLD_SNAPSHOT_VERSION: u16 = 8;
+pub const WORLD_SNAPSHOT_VERSION: u16 = 11;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WorldSnapshot {
@@ -166,6 +166,10 @@ impl BuildingRecord {
 pub struct UnitRecord {
     pub unit: GameUnit,
     pub next_hit_tick: u64,
+    pub(crate) transform_until: Option<u64>,
+    pub(crate) swing_started: Option<u64>,
+    pub(crate) scalar_attack_move: Option<WorldPosition>,
+    pub(crate) patrol: Option<[WorldPosition; 2]>,
     /// The resource node and farm this worker was working.
     pub gather: Option<(u64, Option<EntityId>)>,
     /// The foundation this villager was building.

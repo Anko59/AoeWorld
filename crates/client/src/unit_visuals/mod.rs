@@ -350,7 +350,12 @@ pub(crate) fn native_walk_speed(kind: UnitKind) -> f64 {
 /// so a unit that is blocked, slowed or on a low tick rate plays only as much
 /// stride as it covers, and one on a road or upgraded plays proportionally more.
 pub(crate) fn walk_clock(kind: UnitKind, travelled: f64) -> f64 {
-    travelled.max(0.0) * 1000.0 / native_walk_speed(kind)
+    let speed = native_walk_speed(kind);
+    if speed > 0.0 {
+        travelled.max(0.0) * 1000.0 / speed
+    } else {
+        0.0
+    }
 }
 
 /// The animation clock, in milliseconds, of a `kind` of unit drawn in
@@ -384,6 +389,26 @@ pub(crate) fn pose_clock(
         ),
         release,
     )
+}
+
+/// Run a native swing once. The wind-up reaches the DAT release cell at the
+/// first simulation tick on or after its fractional release time.
+pub(crate) fn native_swing_clock(pose: Pose, elapsed_ticks: f64, hz: f64) -> f64 {
+    let source = sprites()[pose as usize];
+    let frame = source.frame_millis();
+    let release = f64::from(aoe_assets::catalog::units::release_frame(pose).unwrap_or(0)) * frame;
+    let delay_ticks = (release.round() * hz / 1000.0).ceil();
+    let elapsed = elapsed_ticks.max(0.0);
+    let phase = if elapsed < delay_ticks {
+        elapsed * release / delay_ticks
+    } else {
+        release + (elapsed - delay_ticks) * 1000.0 / hz
+    };
+    if phase < f64::from(source.stride) * frame {
+        phase
+    } else {
+        0.0
+    }
 }
 
 /// Milliseconds into an attack animation of `(length, frame)` milliseconds

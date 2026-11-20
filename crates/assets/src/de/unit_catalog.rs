@@ -14,6 +14,7 @@ mod bindings;
 pub use bindings::BINDINGS;
 mod canonical;
 mod inventory;
+pub(crate) mod particles;
 mod scene;
 #[derive(Clone, Copy, Debug)]
 pub enum Action {
@@ -25,6 +26,10 @@ pub enum Action {
     Decay,
     Work,
     Carry,
+    Construction,
+    Projectile,
+    AttackEffect(&'static str),
+    DeathEffect(&'static str),
 }
 pub struct Binding {
     pub pose: Pose,
@@ -36,6 +41,7 @@ pub struct Selected {
     pub unit: i16,
     pub icon: i16,
     pub pose: usize,
+    pub graphic: i16,
     pub sprite: u32,
     pub file: String,
     pub frames: u16,
@@ -45,6 +51,7 @@ pub struct Selected {
     pub replay: f32,
     pub terminal: bool,
     pub parts: Vec<de_survey::graphics::Part>,
+    pub(crate) particle: Option<particles::Sheet>,
 }
 
 pub fn resolve(install: &Path) -> Result<Vec<Selected>, Error> {
@@ -84,17 +91,34 @@ pub fn resolve(install: &Path) -> Result<Vec<Selected>, Error> {
         let idle = u.standing;
         let valid = |value: i16, fallback: i16| if value >= 0 { value } else { fallback };
         let graphic = match binding.action {
-            Action::Idle => idle,
+            Action::Idle | Action::Projectile => idle,
+            Action::Construction => u.building.as_ref().map_or(-1, |data| data.construction),
             Action::Walk => valid(u.walking, idle),
             Action::Run => valid(u.running, valid(u.walking, idle)),
             Action::Attack => valid(u.attack, valid(u.work, idle)),
+            Action::AttackEffect(_) => u.attack,
             Action::Work => valid(u.work, valid(u.attack, idle)),
             Action::Carry => valid(u.carrying, valid(u.walking, idle)),
             Action::Death => valid(u.dying, idle),
+            Action::DeathEffect(_) => u.dying,
             Action::Decay => units.get(&u.dead).map_or(valid(u.dying, idle), |corpse| {
                 valid(corpse.standing, valid(u.dying, idle))
             }),
         };
+        if binding.pose == Pose::FireStream {
+            selected.push(particles::select(
+                install,
+                u,
+                graphic,
+                binding.pose,
+                &de_survey::graphics::Particle {
+                    graphic,
+                    name: "flamethrower_flame".to_owned(),
+                    offset: [0, 0],
+                },
+            )?);
+            continue;
+        }
 
         let g = graphics.get(&graphic).ok_or_else(|| {
             invalid(
@@ -103,7 +127,33 @@ pub fn resolve(install: &Path) -> Result<Vec<Selected>, Error> {
                 format!("unit {} {} missing graphic {graphic}", u.id, u.name),
             )
         })?;
+        if let Action::AttackEffect(name) | Action::DeathEffect(name) = binding.action {
+            let particle = g.particles.iter().find(|p| p.name == name).ok_or_else(|| {
+                invalid(
+                    "DE unit",
+                    0,
+                    format!("graphic {graphic} missing particle {name}"),
+                )
+            })?;
+            selected.push(particles::select(
+                install,
+                u,
+                graphic,
+                binding.pose,
+                particle,
+            )?);
+            continue;
+        }
         let mut parts = g.parts.clone();
+        if matches!(binding.action, Action::Construction) {
+            // The DAT construction frames are selected by progress, so they
+            // have no playback duration. Runtime also selects them by progress.
+            for part in &mut parts {
+                if part.animation.frames > 1 && part.animation.seconds == 0.0 {
+                    part.animation.seconds = 1.0;
+                }
+            }
+        }
         if parts.is_empty() {
             return Err(invalid("DE unit", 0, "empty unit graphic"));
         }
@@ -167,22 +217,8 @@ pub fn resolve(install: &Path) -> Result<Vec<Selected>, Error> {
         );
         for part in &parts {
             let a = &part.animation;
-            if a.frames > 1 && a.seconds <= 0.0 {
+            if a.frames > 1 && a.seconds <= 0.0 && !matches!(binding.action, Action::Projectile) {
                 return Err(invalid("DE unit", 0, "zero animation duration"));
-            }
-            if a.frames > 1
-                && (a.frames != frames
-                    || (a.seconds - seconds).abs() > 0.000001
-                    || a.replay_delay != replay)
-            {
-                return Err(invalid(
-                    "DE unit",
-                    0,
-                    format!(
-                        "incommensurate delta timeline for graphic {graphic} (unit {}, {:?} of {:?})",
-                        u.id, binding.action, binding.pose
-                    ),
-                ));
             }
             if a.angles != angles && a.angles != 1 {
                 return Err(invalid("DE unit", 0, "incompatible delta directions"));
@@ -201,6 +237,7 @@ pub fn resolve(install: &Path) -> Result<Vec<Selected>, Error> {
             unit: u.id,
             icon: u.icon,
             pose: binding.pose as usize,
+            graphic,
             sprite: 200_000 + graphic as u32,
             file,
             frames,
@@ -210,6 +247,7 @@ pub fn resolve(install: &Path) -> Result<Vec<Selected>, Error> {
             replay,
             terminal,
             parts,
+            particle: None,
         });
     }
     canonical::apply(&mut selected)?;

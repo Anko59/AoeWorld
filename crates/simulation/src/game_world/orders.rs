@@ -1,6 +1,7 @@
 //! Movement order validation and issuance, shared by player and task orders.
 use super::*;
 pub(crate) mod diagnostics;
+mod patrol;
 pub use diagnostics::{ISSUER_SPANS, OrderDemand, OrderIssuer, OrderRedundancy};
 
 /// Area commands tolerate a tile; interaction contacts need the exact point.

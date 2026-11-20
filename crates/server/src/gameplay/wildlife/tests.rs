@@ -202,3 +202,90 @@ fn a_shooter_is_named_with_its_true_launch_only_while_its_position_is_seen() {
         assert!(origin_seen || shot.launched == world.tick());
     }
 }
+
+#[test]
+fn siege_and_naval_shots_publish_the_primary_dat_projectile() {
+    use aoe_protocol::ProjectileKind;
+    use aoe_simulation::UnitKind;
+    for (kind, distance, expected) in [
+        (UnitKind::HandCannoneer, 5, ProjectileKind::Native(380)),
+        (UnitKind::TrebuchetUnpacked, 10, ProjectileKind::Native(371)),
+        (UnitKind::BombardCannon, 8, ProjectileKind::Native(368)),
+        (UnitKind::Scorpion, 4, ProjectileKind::Native(367)),
+        (UnitKind::HeavyScorpion, 4, ProjectileKind::Native(627)),
+        (UnitKind::Galley, 4, ProjectileKind::Native(512)),
+        (UnitKind::WarGalley, 4, ProjectileKind::Native(372)),
+        (UnitKind::Galleon, 4, ProjectileKind::Native(373)),
+        (UnitKind::FireShip, 2, ProjectileKind::Native(676)),
+    ] {
+        let at = |x| WorldPosition::from_tile_center(TileCoord::new(x, 100)).unwrap();
+        let (mut world, target, launch) = if kind.is_naval() {
+            let (package, elevation, water) = GameWorld::naval_battle_environment(Seed(7)).unwrap();
+            let mut world =
+                GameWorld::from_prepared_map(package, elevation, water, vec![], vec![]).unwrap();
+            world.prepare_content_roster(0, true).unwrap();
+            let ship = world
+                .units()
+                .find(|u| u.player == PlayerId(1) && u.kind == UnitKind::TransportShip)
+                .unwrap();
+            let launch = WorldPosition::new(
+                ship.position.x - distance * aoe_core::FIXED_SUBUNITS_PER_TILE,
+                ship.position.y,
+            );
+            (world, ship.id, launch)
+        } else {
+            let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
+            let target = world
+                .spawn_villager(PlayerId(1), at(100 + distance))
+                .unwrap();
+            (world, target, at(100))
+        };
+        world.set_fog_disabled(true);
+        let shooter = world.spawn_kind(PlayerId(0), kind, launch).unwrap();
+        world.issue_attack(PlayerId(0), shooter, target).unwrap();
+        for _ in 0..40 {
+            world.advance();
+            if world.projectiles().any(|p| p.attacker == shooter) {
+                break;
+            }
+        }
+        let config = world.config();
+        let shots = super::projectiles(
+            &world,
+            TileRect::from_xywh(0, 0, config.width_tiles, config.height_tiles),
+            PlayerId(0),
+        );
+        assert_eq!(shots.len(), 1, "{kind:?}");
+        assert_eq!(
+            (shots[0].attacker, shots[0].kind),
+            (Some(shooter), expected)
+        );
+    }
+}
+
+#[test]
+fn mangonel_volley_publishes_primary_and_secondary_dat_projectiles() {
+    use aoe_protocol::ProjectileKind::Native;
+    let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
+    world.set_fog_disabled(true);
+    let at = |x| WorldPosition::from_tile_center(TileCoord::new(x, 100)).unwrap();
+    let shooter = world
+        .spawn_kind(PlayerId(0), aoe_simulation::UnitKind::Mangonel, at(100))
+        .unwrap();
+    let target = world.spawn_villager(PlayerId(1), at(106)).unwrap();
+    world.issue_attack(PlayerId(0), shooter, target).unwrap();
+    world.advance();
+    let shots = super::projectiles(&world, TileRect::from_xywh(0, 0, 256, 256), PlayerId(0));
+    assert_eq!(
+        shots.iter().map(|shot| shot.kind).collect::<Vec<_>>(),
+        [
+            Native(656),
+            Native(369),
+            Native(369),
+            Native(369),
+            Native(369),
+            Native(369)
+        ]
+    );
+    assert!(shots.iter().all(|shot| shot.attacker == Some(shooter)));
+}

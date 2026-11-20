@@ -6,6 +6,7 @@ fn selected(sprite: u32) -> Selected {
         unit: 539,
         icon: 42,
         pose: 121,
+        graphic: sprite as i16,
         sprite,
         file: format!("dat_{sprite}"),
         frames: 2,
@@ -14,6 +15,7 @@ fn selected(sprite: u32) -> Selected {
         seconds: 0.1,
         replay: 0.0,
         terminal: false,
+        particle: None,
         parts: vec![Part {
             graphic: sprite as i16,
             x: 0,

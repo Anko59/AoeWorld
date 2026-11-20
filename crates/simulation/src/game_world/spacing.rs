@@ -53,6 +53,7 @@ impl GameWorld {
             }
             let unit = self.units[index].state;
             if unit.hp == 0
+                || self.trebuchet_anchored(&unit)
                 || self.units[index].order.is_some()
                 || self.units[index].formation.is_some()
                 || u64::from(unit.id.0) % 4 != self.tick.0 % 4

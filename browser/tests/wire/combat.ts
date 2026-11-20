@@ -17,3 +17,12 @@ export const villagerCombat = fragment("villager");
 export const scoutCombat = fragment("scout");
 
 export const militiaCombat = fragment("militia");
+
+// Keep cargo in codec-checked tails so new fields cannot shift its position.
+const transportTails = {
+  0: fragment("transport-ship-empty"),
+  2: fragment("transport-ship-loaded"),
+} as const;
+
+export const transportCombat = (cargo: keyof typeof transportTails) =>
+  transportTails[cargo];

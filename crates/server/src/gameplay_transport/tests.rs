@@ -59,6 +59,7 @@ async fn one_invalid_entity_does_not_freeze_the_stream() {
         auto_scout: false,
         sergeant: false,
         cargo_count: 0,
+        native_action: None,
         home_castle: None,
         managed_by: None,
         commanded_by: None,

@@ -256,6 +256,11 @@ pub enum ClientMessage {
         sequence: u64,
         building_id: EntityId,
     },
+    PatrolOrder {
+        sequence: u64,
+        entity_id: EntityId,
+        destination: WorldPosition,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -273,6 +278,11 @@ fn bounded_members<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<EntityId>, D::
 }
 
 pub(super) fn validate(message: &ClientMessage) -> Result<(), Error> {
+    if let ClientMessage::PatrolOrder { destination, .. } = message
+        && (destination.x < 0 || destination.y < 0)
+    {
+        return Err(Error::InvalidEconomyState);
+    }
     if let ClientMessage::MarketTradeOrder { lots, .. } = message
         && !(1..=MARKET_MAX_LOTS).contains(lots)
     {

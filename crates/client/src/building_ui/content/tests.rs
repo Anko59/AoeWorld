@@ -2,13 +2,16 @@ use super::*;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
-fn native_static_pose_content_keeps_zero_duration_only_for_one_cell() {
+fn native_static_pose_and_pitch_cells_keep_zero_duration() {
     let mut value = fixture();
     let pose = aoe_assets::catalog::units::Pose::MangonelStand as usize;
     assert_eq!(value["actors"][pose][1], 1);
     assert_eq!(value["actors"][pose][2], 0);
     let content = decode(&serde_json::to_vec(&value).unwrap()).expect("native static content");
     assert_eq!(content.actors[pose].frame_millis(), 0.0);
+    let arrow = &content.actors[aoe_assets::catalog::units::Pose::GalleyArrow as usize];
+    assert_eq!(arrow.stride, 11);
+    assert_eq!(arrow.frame_millis(), 0.0);
     value["actors"][pose][1] = 2.into();
     assert!(decode(&serde_json::to_vec(&value).unwrap()).is_err());
 }

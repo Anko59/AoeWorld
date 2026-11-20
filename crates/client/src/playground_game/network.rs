@@ -354,7 +354,8 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                         .canvas
                         .set_attribute("data-projectiles", &projectiles.len().to_string());
                     client.village.projectile_tick = tick.0;
-                    record_shots(&mut client.village, &projectiles, tick.0);
+                    let hz = client.config.tick_hz;
+                    record_shots(&mut client.village, &projectiles, tick.0, hz);
                     client.village.projectiles = projectiles;
                     client.rendered_frame.clear();
                 }

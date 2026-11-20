@@ -87,12 +87,12 @@ impl BrowserContent {
         {
             return Err("invalid game content header");
         }
-        // All words are bounded before constructing records. Only melee armour
-        // and the upgrade words are signed. No attacker-selected allocation.
+        // Bound every word before constructing records. Melee armour, the
+        // absent-speed sentinel and upgrade masks can be signed.
         for (index, &word) in data[5..].iter().enumerate() {
             let unit_start = buildings * BUILDING_WORDS + techs * TECH_WORDS;
             let signed =
-                index >= unit_start && matches!((index - unit_start) % UNIT_WORDS, 4 | 18..=21);
+                index >= unit_start && matches!((index - unit_start) % UNIT_WORDS, 4 | 7 | 18..=21);
             let building = index < buildings * BUILDING_WORDS;
             let training_low = building && index % BUILDING_WORDS == 10;
             let training_high = building && index % BUILDING_WORDS == 11;
@@ -181,6 +181,7 @@ impl BrowserContent {
                 || r[3] > 1
                 || !(-32768..=32767).contains(&r[4])
                 || r[5] > 65535
+                || !(-1..=1_000_000).contains(&r[7])
                 || r[8] > 255
                 || r[9] > 255
                 || r[10] > 255
@@ -208,7 +209,7 @@ impl BrowserContent {
                     melee_armour: r[4] as i16,
                     pierce_armour: r[5] as u16,
                     attack_period_centiseconds: r[6] as u32,
-                    speed_hundredths: (r[7] != 0).then_some(r[7] as u32),
+                    speed_hundredths: u32::try_from(r[7]).ok(),
                     range: r[8] as u8,
                     min_range: r[9] as u8,
                     los: r[10] as u8,

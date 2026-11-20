@@ -63,6 +63,22 @@ fn projectile_wire_is_bounded_ordered_and_pins_the_appended_variant() {
         .collect::<Vec<_>>();
     assert_eq!(bytes, golden);
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), message);
+    for (kind, wire) in [
+        (ProjectileKind::Native(371), [4, 0xf3, 0x02]),
+        (ProjectileKind::Native(512), [4, 0x80, 0x04]),
+    ] {
+        let projectile = ProjectileState { kind, ..p };
+        let message = GameplayServerMessage::Projectiles {
+            revision: 1,
+            tick: Tick(11),
+            projectiles: vec![projectile],
+        };
+        let mut expected = golden.clone();
+        expected.pop();
+        expected.extend(wire);
+        assert_eq!(encode_gameplay_server(&message).unwrap(), expected);
+        assert_eq!(decode_gameplay_server(&expected).unwrap(), message);
+    }
     for projectiles in [
         vec![p; MAX_PROJECTILES + 1],
         vec![p, p],

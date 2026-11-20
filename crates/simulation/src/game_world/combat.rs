@@ -24,7 +24,9 @@ mod projectiles;
 mod retaliation;
 #[path = "combat/siege/mod.rs"]
 mod siege;
-pub use siege::TREBUCHET_UNPACK_SECONDS;
+pub use siege::{
+    TREBUCHET_TRANSFORM_WORK, TREBUCHET_WORK_PER_SECOND_TENTHS, trebuchet_transform_ticks,
+};
 mod spots;
 mod table;
 mod targeting;
@@ -40,7 +42,8 @@ pub use classes::unit_building_bonus;
 pub use conversion::{conversion_chance, convertible_building, convertible_unit};
 pub(crate) use hash::hash_hit;
 pub use military::{apply_research_stats, class_bonus, researched_stats};
-pub use projectiles::{Projectile, ProjectileKind};
+pub use projectiles::{DatProjectile, Projectile, ProjectileKind, dat_projectile};
+pub use siege::native_attack_windup_millis;
 pub use table::{
     BUILDING_COMBAT, BuildingAttack, BuildingCombat, DamageKind, FISHING_SHIP_SPEED_HUNDREDTHS,
     UNIT_COMBAT, UnitCombat, UnitCost, UnitTraining, building_combat, damage_dealt, unit_combat,
@@ -93,6 +96,8 @@ pub(crate) struct Attacker {
     /// An attack-move member's slot at the group destination. When the fight
     /// ends and nothing else is in reach, the member marches there again.
     pub(crate) resume: Option<aoe_core::WorldPosition>,
+    /// Start tick of this native attack cycle, or zero before its wind-up.
+    pub(crate) swing_started: u64,
 }
 
 #[derive(Debug)]
@@ -117,6 +122,11 @@ pub(crate) struct Combat {
     pub(crate) next_projectile: u64,
     pub(crate) tower_ready: BTreeMap<EntityId, u64>,
     pub(crate) attackers: BTreeMap<EntityId, Attacker>,
+    /// End ticks of stationary transitions, keyed by unit in its destination form.
+    pub(crate) trebuchets_transforming: BTreeMap<EntityId, u64>,
+    /// Units on attack-move legs that use individual routes.
+    pub(crate) scalar_marches: BTreeSet<EntityId>,
+    pub(crate) patrols: BTreeMap<EntityId, [aoe_core::WorldPosition; 2]>,
     /// Attack-move members between fights, waiting to march on to their slots.
     pub(crate) resuming: BTreeMap<EntityId, super::formation::Resume>,
     /// `(tick at which the body is removed, unit)` in death order.
@@ -160,6 +170,9 @@ impl Default for Combat {
             next_projectile: 0,
             tower_ready: Default::default(),
             attackers: Default::default(),
+            trebuchets_transforming: Default::default(),
+            scalar_marches: Default::default(),
+            patrols: Default::default(),
             resuming: Default::default(),
             dying: Default::default(),
             blasts: Vec::new(),
@@ -308,6 +321,7 @@ impl GameWorld {
     /// Sets the attack target and the visible state. The hit rate belongs to
     /// the unit (`StoredUnit::next_hit_tick`), so no order sequence can speed it up.
     pub(crate) fn begin_attack(&mut self, id: EntityId, target: EntityId) {
+        self.clear_scalar_march(id);
         self.combat.quiet.wake(id);
         self.combat.healing.wake(id);
         self.cancel_auto_scout(id);
@@ -327,6 +341,7 @@ impl GameWorld {
                     .map(|g| g.centre().tile_floor()),
                 origin: None,
                 resume: None,
+                swing_started: 0,
             },
         );
         let state = &mut self.units[index].state;
@@ -350,11 +365,24 @@ impl GameWorld {
     /// A move, gather or stop order replaces any attack order, and with it an
     /// attack-move member's pending way back to its slot.
     pub(crate) fn cancel_attack(&mut self, id: EntityId) {
+        self.clear_scalar_march(id);
+        self.cancel_patrol(id);
         self.combat.resuming.remove(&id);
         if self.combat.attackers.remove(&id).is_some()
             && let Some(&index) = self.lookup.get(&id)
         {
             self.units[index].state.attack_target = None;
+        }
+    }
+
+    pub(crate) fn clear_scalar_march(&mut self, id: EntityId) {
+        if self.combat.scalar_marches.remove(&id)
+            && self
+                .unit(id)
+                .is_some_and(|u| u.kind == crate::UnitKind::Villager)
+        {
+            self.combat.seekers.remove(&id);
+            self.combat.quiet.wake(id);
         }
     }
 

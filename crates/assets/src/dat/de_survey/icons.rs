@@ -33,6 +33,16 @@ const ADDITIONAL: &[(i16, i32)] = &[
     (907, 507004),
     (909, 507006),
     (910, 507007),
+    (35, 7035),
+    (905, 507002),
+    (244, 7242),
+    (376, 7375),
+    // Gunpowder, mounted archers, camels and siege upgrades.
+    (47, 7047),
+    (218, 7218),
+    (236, 7235),
+    (239, 7244),
+    (320, 7323),
     // Generic technologies of content track B (DAT ids, language name ids).
     (215, 7210),
     (602, 7258),
@@ -76,19 +86,81 @@ pub fn technology_icons(bytes: &[u8]) -> Result<Vec<(i16, i16)>, Error> {
     if bytes.get(..8) != Some(b"VER 8.9\0") {
         return Err(crate::invalid("DE icons", 0, "unsupported DAT version"));
     }
-    TECHS
+    let wanted: std::collections::BTreeMap<_, _> = TECHS
         .iter()
         .chain(ADDITIONAL)
-        .map(|&(id, language)| {
-            let tech = technology(bytes, id, language)?;
-            if tech.icon < 0 {
-                return Err(crate::invalid(
-                    "DE icons",
-                    tech.offset,
-                    "missing research icon",
-                ));
-            }
-            Ok((id, tech.icon))
-        })
-        .collect()
+        .map(|&(id, language)| (language, id))
+        .collect();
+    let mut icons = std::collections::BTreeMap::new();
+    // The icon can exist even for a DE entry whose effect was disabled.
+    // Locate the validated technology header from the debug name marker.
+    for (at, marker) in bytes.windows(4).enumerate() {
+        if marker[..2] != [0x60, 0x0a] || marker[3] != 0 || at < 55 {
+            continue;
+        }
+        let mut identity = Reader::new(bytes, at - 22);
+        let language = identity.i32()?;
+        let Some(&id) = wanted.get(&language) else {
+            continue;
+        };
+        if identity.i32()? != language + 1000 {
+            continue;
+        }
+        if let Ok(tech) = technology_at(bytes, id, at - 55)
+            && tech.icon >= 0
+            && icons
+                .insert(id, tech.icon)
+                .is_some_and(|previous| previous != tech.icon)
+        {
+            return Err(crate::invalid(
+                "DE icons",
+                tech.offset,
+                "ambiguous research icon",
+            ));
+        }
+    }
+    if icons.len() != wanted.len() {
+        let missing: Vec<_> = wanted
+            .values()
+            .filter(|id| !icons.contains_key(id))
+            .collect();
+        return Err(crate::invalid(
+            "DE icons",
+            0,
+            format!("missing research icons: {missing:?}"),
+        ));
+    }
+    Ok(icons.into_iter().collect())
+}
+
+pub(super) fn technology_at(bytes: &[u8], id: i16, start: usize) -> Result<Technology, Error> {
+    let mut r = Reader::new(bytes, start);
+    let requires = (0..6).map(|_| r.i16()).collect::<Result<Vec<_>, _>>()?;
+    let cost = (0..3)
+        .map(|_| Ok((r.i16()?, r.i16()?, r.u8()?)))
+        .collect::<Result<Vec<_>, Error>>()?;
+    r.skip(6 + 8)?;
+    let effect = r.i16()?;
+    r.skip(2)?;
+    let icon = r.i16()?;
+    r.skip(8)?;
+    let name = debug(&mut r)?;
+    r.skip(1)?;
+    let n = count(&mut r, 16, "research locations")?;
+    let locations = (0..n)
+        .map(|_| Ok((r.i16()?, r.i16()?, r.u8()?, r.i32()?)))
+        .collect::<Result<Vec<_>, Error>>()?;
+    if locations.is_empty() || effect < -1 {
+        return Err(r.fail("invalid research record"));
+    }
+    Ok(Technology {
+        id,
+        offset: start,
+        name,
+        requires,
+        cost,
+        effect,
+        icon,
+        locations,
+    })
 }

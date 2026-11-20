@@ -141,9 +141,14 @@ fn native_walk_speeds_are_the_simulations_own() {
             "{kind:?}"
         );
     }
-    // Every unit kind has a positive speed, so the animation clock is finite.
+    // Every unit kind that can move has a positive speed, so the animation
+    // clock is finite; an unpacked Trebuchet cannot move, as in DE.
     for kind in UnitKind::ALL {
-        assert!(native_walk_speed(kind) > 0.0, "{kind:?}");
+        if kind == UnitKind::TrebuchetUnpacked {
+            assert_eq!(native_walk_speed(kind), 0.0);
+        } else {
+            assert!(native_walk_speed(kind) > 0.0, "{kind:?}");
+        }
     }
 }
 
@@ -180,6 +185,7 @@ fn villager(task: UnitTask) -> aoe_protocol::GameplayUnitState {
         auto_scout: false,
         sergeant: false,
         cargo_count: 0,
+        native_action: None,
         home_castle: None,
         managed_by: None,
         commanded_by: None,
@@ -284,4 +290,65 @@ fn actor_hit_projection_skips_horizontal_misses_and_preserves_body_and_ground_ta
             }
         }
     }
+}
+
+#[wasm_bindgen_test]
+fn hand_cannoneer_holds_between_full_length_native_shots() {
+    use super::{Pose, packed_frame, pose_clock};
+    let frame = |tick| {
+        let pose = Pose::HandCannoneerAttack;
+        let time = pose_clock(
+            pose,
+            UnitKind::HandCannoneer,
+            (Some(100), tick, 20.0),
+            999.0,
+        );
+        packed_frame(pose, 0, time, None, tick, 20) >> 4
+    };
+    assert_eq!(frame(100.0), 15);
+    assert_eq!(frame(106.5), 28);
+    assert_eq!(frame(115.0), 0);
+    assert_eq!(frame(150.0), 0);
+    assert_eq!(frame(169.0), 15);
+}
+
+#[wasm_bindgen_test]
+fn siege_attack_plays_once_at_the_dat_rate_and_waits_through_reload() {
+    use super::{Pose, packed_frame, pose_clock};
+    for (kind, pose, frames, duration, release) in [
+        (UnitKind::Onager, Pose::OnagerAttack, 60, 1.0, 0),
+        (UnitKind::SiegeOnager, Pose::SiegeOnagerAttack, 60, 0.7, 0),
+        (UnitKind::Scorpion, Pose::ScorpionAttack, 60, 0.8, 12),
+        (
+            UnitKind::HeavyScorpion,
+            Pose::HeavyScorpionAttack,
+            30,
+            0.8,
+            6,
+        ),
+    ] {
+        for phase in release..frames {
+            let tick =
+                100.0 + (f64::from(phase - release) + 0.5) * duration * 20.0 / f64::from(frames);
+            let clock = pose_clock(pose, kind, (Some(100), tick, 20.0), 0.0);
+            assert_eq!(packed_frame(pose, 0, clock, None, tick, 20) >> 4, phase);
+        }
+        let clock = pose_clock(pose, kind, (Some(100), 126.0, 20.0), 0.0);
+        assert_eq!(clock, 0.0, "{kind:?} is still reloading");
+    }
+}
+
+#[wasm_bindgen_test]
+fn native_scorpion_windup_reaches_its_release_cell_on_the_server_tick() {
+    use super::{Pose, native_swing_clock, packed_frame};
+    let pose = Pose::ScorpionAttack;
+    let frame = |elapsed| {
+        let clock = native_swing_clock(pose, elapsed, 10.0);
+        packed_frame(pose, 0, clock, None, elapsed, 10) >> 4
+    };
+    assert_eq!(frame(0.0), 0);
+    assert_eq!(frame(1.0), 6);
+    assert_eq!(frame(2.0), 12);
+    assert_eq!(frame(3.0), 19);
+    assert_eq!(frame(9.0), 0);
 }

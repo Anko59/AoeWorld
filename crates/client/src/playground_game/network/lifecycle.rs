@@ -53,12 +53,24 @@ pub(super) fn record_shots(
     village: &mut village::Village,
     projectiles: &[aoe_protocol::ProjectileState],
     tick: u64,
+    hz: u32,
 ) {
+    let particles = &mut village.projectile_particles;
+    particles.retain(|_, shot| tick.saturating_sub(shot.impact.0) < u64::from(hz) * 2);
     for shot in projectiles {
         if let Some(attacker) = shot.attacker {
             let last = village.last_shot.entry(attacker).or_insert(shot.launched.0);
             *last = (*last).max(shot.launched.0);
         }
+        if let aoe_protocol::ProjectileKind::Native(id) = shot.kind {
+            let (muzzle, impact) = aoe_assets::catalog::units::projectile_effects(id);
+            if muzzle.is_some() || impact.is_some() {
+                particles.insert(shot.id, *shot);
+            }
+        }
+    }
+    while particles.len() > aoe_protocol::MAX_PROJECTILES {
+        particles.pop_first();
     }
     village
         .last_shot

@@ -41,4 +41,3 @@ export const castleTraining=[
   ['battering-ram','Battering Ram','160 wood · 75 gold',19,16],
 ];
 export const castleUnits=['LongSwordsman','Pikeman','Crossbowman','EliteSkirmisher','Knight','LightCavalry','Monk','Mangonel','BatteringRam'];
-export const castleUnitNames=['Long Swordsman','Pikeman','Crossbowman','Elite Skirmisher','Knight','Light Cavalry','Monk','Mangonel','Battering Ram'];

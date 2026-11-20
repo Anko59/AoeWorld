@@ -48,13 +48,14 @@ impl GameWorld {
         let fair_budget = std::mem::take(&mut self.planning_budget);
         let lookahead_budget = self.serve_route_searches(fair_budget, &mut changed);
         let mut scratch = std::mem::take(&mut self.movement_scratch);
-        // The movers in id order, then an empty set: what the loop below adds
-        // or removes is replaced by `still_moving`, as when the list was taken.
+        // Take movers in id order. The loop replaces them with `still_moving`.
         let mut movers = std::mem::take(&mut scratch.movers);
         movers.clear();
+        let holding = self.hold_transforming_movers(&mut changed);
         self.active_movers.extend_into(&mut movers);
         self.active_movers.clear();
         let mut parked = self.park_unseen_movers(&mut movers);
+        parked.extend(holding);
         let mover_count = movers.len();
         let start = if mover_count == 0 {
             0

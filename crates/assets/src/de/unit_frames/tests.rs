@@ -30,7 +30,7 @@ fn the_generic_decoder_preserves_every_native_cell_anchor_and_plane() {
                     y: 0,
                     width: 1,
                     height: 1,
-                    pixels: vec![[index as u8, 2, 3, 255]],
+                    pixels: vec![[index as u8, 2, 3, 255]].into(),
                 };
                 Frame {
                     width: 32,
@@ -47,8 +47,8 @@ fn the_generic_decoder_preserves_every_native_cell_anchor_and_plane() {
         let expected: Vec<_> = frames.iter().map(compose::planes).collect();
         let mut decoder = Decoder {
             source: None,
-            parts: vec![frames],
-            stream: None,
+            parts: vec![Cells::Repeated(frames)],
+            textures: Vec::new(),
         };
         assert_eq!(decoder.len(), usize::from(count));
         for (i, expected) in expected.iter().enumerate() {
@@ -59,5 +59,25 @@ fn the_generic_decoder_preserves_every_native_cell_anchor_and_plane() {
             assert_eq!(p.shadow, expected.shadow);
         }
         assert!(decoder.frame(usize::from(count)).is_err());
+    }
+}
+
+#[test]
+fn real_naval_composites_stream_the_fire_galley_walk_and_catapult_attack() {
+    let Some(install) = std::env::var_os("AOE_DE_DIR") else {
+        return;
+    };
+    use crate::catalog::units::Pose;
+    let install = Path::new(&install);
+    let catalog = super::super::unit_catalog::resolve(install).unwrap();
+    for pose in [Pose::FireGalleyWalk, Pose::CatapultGalleonAttack] {
+        let source = catalog.iter().find(|s| s.pose == pose as usize).unwrap();
+        let mut decoder = Decoder::new(install, source).unwrap();
+        let mut painted = false;
+        for index in 0..decoder.len() {
+            let frame = decoder.frame(index).unwrap();
+            painted |= frame.color.as_chunks::<4>().0.iter().any(|p| p[3] != 0);
+        }
+        assert!(painted, "{pose:?}");
     }
 }

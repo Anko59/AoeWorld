@@ -39,6 +39,9 @@ impl GameWorld {
 
     pub(crate) fn formation_motion(&self, index: usize) -> Option<Motion> {
         let unit = &self.units[index];
+        if unit.state.kind.is_trebuchet() && self.trebuchet_transforming(unit.state.id) {
+            return None;
+        }
         self.group_work.members(1);
         let leader = unit.formation?;
         let group = self.formations.get(&leader)?;

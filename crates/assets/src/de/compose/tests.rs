@@ -18,14 +18,15 @@ fn every_nonzero_player_mask_preserves_its_blend_weight_and_shade() {
                 .iter()
                 .enumerate()
                 .map(|(i, _)| [117, 120, 115, if i == 7 { 0 } else { 255 }])
-                .collect(),
+                .collect::<Vec<_>>()
+                .into(),
         }),
         player: Some(Layer {
             x: 4,
             y: 4,
             width: 8,
             height: 1,
-            pixels: masks.map(|m| [m, 0, 0, 255]).to_vec(),
+            pixels: masks.map(|m| [m, 0, 0, 255]).to_vec().into(),
         }),
         shadow: None,
     };
@@ -71,7 +72,7 @@ fn real_house_preserves_all_nonzero_player_pixels_including_mask_119() {
     let (x0, y0, _, _) = bounds(frame).unwrap();
     let mut marked = 0;
     let mut low = 0;
-    for (i, (base, weight)) in main.pixels.iter().zip(&mask.pixels).enumerate() {
+    for (i, (base, weight)) in main.pixels.iter().zip(mask.pixels.iter()).enumerate() {
         if base[3] == 0 || weight[0] == 0 {
             continue;
         }

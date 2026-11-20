@@ -58,12 +58,25 @@ fn hidden_projectile_building_bonus_survives_the_shooters_removal() {
         .spawn_kind(PlayerId(0), UnitKind::Mangonel, at(100, 100))
         .unwrap();
     let hp = w.building(target).unwrap().hp;
+    w.set_damage_observation(true);
     w.issue_attack(PlayerId(0), attacker, target).unwrap();
     w.advance();
-    assert_eq!(w.projectiles().count(), 1);
+    assert_eq!(w.projectiles().count(), 6);
     w.remove_unit(attacker);
     advance(&mut w, 40);
-    assert_eq!(hp - w.building(target).unwrap().hp, 77); // 40 - (-2) + 35 All Buildings.
+    let mut hits: Vec<_> = w
+        .take_damage_observations()
+        .into_iter()
+        .map(|hit| {
+            assert_eq!((hit.attacker, hit.target), (attacker, target));
+            hit.amount_quarters
+        })
+        .collect();
+    hits.sort_unstable();
+    // Only the primary stone deals damage: 40 - (-2) + 35 All Buildings.
+    // The other five have no attack entries and deal none.
+    assert_eq!(hits, [77 * 4]);
+    assert_eq!(hp - w.building(target).unwrap().hp, 77);
 }
 
 #[test]

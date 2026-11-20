@@ -37,7 +37,7 @@ test("double-click selects on-screen owned production buildings and balances que
   page,
 }) => {
   const buildings = [
-    { id: 40, kind: 6, x: 8185, y: 8190, queue: [2, 2] },
+    { id: 40, kind: 6, x: 8185, y: 8190, queue: [7, 7] },
     { id: 41, kind: 6, x: 8195, y: 8188, queue: [] as number[] },
     { id: 42, kind: 6, x: 8190, y: 8197, queue: [2] },
     { id: 43, kind: 6, x: 8190, y: 8183, player: 1 },
@@ -75,6 +75,10 @@ test("double-click selects on-screen owned production buildings and balances que
   const rows = page.locator("#training-multi .training-row");
   await expect(rows).toHaveCount(3);
   await expect(rows.nth(0).locator(".unit-token")).toHaveCount(2);
+  await expect(rows.nth(0).locator(".unit-token").first()).toHaveAttribute(
+    "title",
+    "Man-at-Arms queued",
+  );
   await expect(rows.nth(1)).toContainText("Empty");
   await expect(rows.nth(2).locator(".unit-token")).toHaveCount(1);
   await expect(page.locator("#training-queue")).toBeHidden();

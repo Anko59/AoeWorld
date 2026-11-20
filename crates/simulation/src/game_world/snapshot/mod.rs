@@ -43,6 +43,18 @@ impl GameWorld {
             .map(|stored| UnitRecord {
                 unit: stored.state,
                 next_hit_tick: stored.next_hit_tick,
+                transform_until: self
+                    .combat
+                    .trebuchets_transforming
+                    .get(&stored.state.id)
+                    .copied(),
+                swing_started: if crate::native_attack_windup_millis(stored.state.kind).is_some() {
+                    self.native_attack_started(stored.state.id).map(|t| t.0)
+                } else {
+                    None
+                },
+                scalar_attack_move: self.scalar_march_destination(stored.state.id),
+                patrol: self.combat.patrols.get(&stored.state.id).copied(),
                 gather: assignments.get(&stored.state.id).copied(),
                 build: self
                     .economy
@@ -79,6 +91,10 @@ impl GameWorld {
                 units.push(UnitRecord {
                     unit: held.unit,
                     next_hit_tick: held.next_hit_tick,
+                    transform_until: None,
+                    swing_started: None,
+                    scalar_attack_move: None,
+                    patrol: None,
                     gather: None,
                     build: None,
                     garrison_in: Some(building.id),
@@ -301,6 +317,11 @@ impl GameWorld {
         unit.stance = state.stance;
         unit.sergeant = state.sergeant;
         unit.last_hit = state.last_hit;
+        if state.kind.is_trebuchet()
+            && let Some(until) = record.transform_until.filter(|&until| until > self.tick.0)
+        {
+            self.combat.trebuchets_transforming.insert(id, until);
+        }
         if let Some(building) = record.garrison_in
             && !self.shelter_restored(id, building, record.shelter_intent)
         {

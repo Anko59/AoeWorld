@@ -65,11 +65,41 @@ impl Combat {
             hash.update(&id.0.to_le_bytes());
             hash.update(&ready.to_le_bytes());
         }
+        if !self.trebuchets_transforming.is_empty() {
+            hash.update(b"trebuchets transforming\0");
+            hash.update(&(self.trebuchets_transforming.len() as u64).to_le_bytes());
+            for (id, until) in &self.trebuchets_transforming {
+                hash.update(&id.0.to_le_bytes());
+                hash.update(&until.to_le_bytes());
+            }
+        }
+        if !self.scalar_marches.is_empty() {
+            hash.update(b"scalar attack moves\0");
+            hash.update(&(self.scalar_marches.len() as u64).to_le_bytes());
+            for id in &self.scalar_marches {
+                hash.update(&id.0.to_le_bytes());
+            }
+        }
+        if !self.patrols.is_empty() {
+            hash.update(b"patrols\0");
+            hash.update(&(self.patrols.len() as u64).to_le_bytes());
+            for (id, points) in &self.patrols {
+                hash.update(&id.0.to_le_bytes());
+                for at in points {
+                    hash.update(&at.x.to_le_bytes());
+                    hash.update(&at.y.to_le_bytes());
+                }
+            }
+        }
         hash.update(&(self.attackers.len() as u64).to_le_bytes());
         for (id, attacker) in &self.attackers {
             hash.update(&id.0.to_le_bytes());
             hash.update(&attacker.target.0.to_le_bytes());
             hash.update(&attacker.repath_tick.to_le_bytes());
+            if attacker.swing_started != 0 {
+                hash.update(b"swing\0");
+                hash.update(&attacker.swing_started.to_le_bytes());
+            }
             if let Some(origin) = attacker.origin {
                 hash.update(&[1]);
                 hash.update(&origin.x.to_le_bytes());

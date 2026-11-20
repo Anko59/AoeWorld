@@ -40,6 +40,7 @@ pub(crate) struct Village {
     pub unload_cursor: bool,
     pub formation: aoe_core::Formation,
     pub attack_move: bool,
+    pub patrol_move: bool,
     /// The next order walks the selected General alone (his army holds).
     pub general_only: bool,
     pub hovered_resource: std::cell::Cell<Option<u64>>,
@@ -52,6 +53,7 @@ pub(crate) struct Village {
     pub animals: Vec<aoe_protocol::AnimalState>,
     pub wildlife_tick: u64,
     pub projectiles: Vec<aoe_protocol::ProjectileState>,
+    pub projectile_particles: std::collections::BTreeMap<u64, aoe_protocol::ProjectileState>,
     pub projectile_tick: u64,
     /// Launch tick of each visible shooter's newest shot, to time its release.
     pub last_shot: std::collections::HashMap<aoe_core::EntityId, u64>,
@@ -59,6 +61,13 @@ pub(crate) struct Village {
 }
 
 impl Village {
+    pub fn clear_move_cursor(&mut self) {
+        self.move_cursor = false;
+        self.attack_move = false;
+        self.patrol_move = false;
+        self.general_only = false;
+    }
+
     pub fn remember_idle(&mut self, owner: PlayerId, unit: &aoe_protocol::GameplayUnitState) {
         self.idle_villagers.update(
             unit,

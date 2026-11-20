@@ -67,7 +67,7 @@ pub fn browser_content() -> Vec<i32> {
             i32::from(r.melee_armour),
             i32::from(r.pierce_armour),
             r.attack_period_centiseconds as i32,
-            r.speed_hundredths.unwrap_or(0) as i32,
+            r.speed_hundredths.map_or(-1, |speed| speed as i32),
             i32::from(r.range),
             i32::from(r.min_range),
             i32::from(r.los),

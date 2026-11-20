@@ -53,6 +53,7 @@ fn unit_with_delay(id: i16, language: i32, name: &str, frame_delay: i16) -> Vec<
     for value in [0.5_f32, 0.5, 4.0] {
         out.extend_from_slice(&value.to_le_bytes());
     }
+    out.extend_from_slice(&369_i32.to_le_bytes());
     out
 }
 
@@ -284,11 +285,12 @@ fn native_volley_counts_and_spawning_area_are_read_and_validated() {
         row["projectile_spawning_area"],
         serde_json::json!([0.5, 0.5, 4.0])
     );
-    for end in bytes.len() - 17..bytes.len() {
+    assert_eq!(row["secondary_projectile"], 369);
+    for end in bytes.len() - 21..bytes.len() {
         assert!(unit_record(&bytes[..end], 0, 82, "CSTL").is_err());
     }
     let mut invalid = bytes.clone();
-    let at = invalid.len() - 12;
+    let at = invalid.len() - 16;
     invalid[at..at + 4].copy_from_slice(&f32::NAN.to_le_bytes());
     assert!(unit_record(&invalid, 0, 82, "CSTL").is_err());
 }

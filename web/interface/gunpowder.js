@@ -1,7 +1,6 @@
 // Semantic metadata only. Prices, requirements and availability come from Rust.
 // Order follows the protocol's UnitKind and Tech enums after Steward / StoneShaftMining.
 export const gunpowderUnits=['CavalryArcher','HeavyCavalryArcher','CamelRider','HeavyCamelRider','Scorpion','HeavyScorpion','HandCannoneer','BombardCannon','Trebuchet','TrebuchetUnpacked','Petard','SiegeOnager'];
-export const gunpowderUnitNames=['Cavalry Archer','Heavy Cavalry Archer','Camel Rider','Heavy Camel Rider','Scorpion','Heavy Scorpion','Hand Cannoneer','Bombard Cannon','Trebuchet','Trebuchet (unpacked)','Petard','Siege Onager'];
 // DE DAT unit ids for icons and sprites.
 export const gunpowderEntities={CavalryArcher:39,HeavyCavalryArcher:474,CamelRider:329,HeavyCamelRider:330,Scorpion:279,HeavyScorpion:542,HandCannoneer:5,BombardCannon:36,Trebuchet:331,TrebuchetUnpacked:42,Petard:440,SiegeOnager:588};
 // DE DAT technology ids, in Tech order.

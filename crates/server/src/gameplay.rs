@@ -252,6 +252,7 @@ enum PendingAction {
         buy: bool,
         lots: u32,
     },
+    Patrol(EntityId, WorldPosition),
 }
 impl GameplayService {
     /// Server-side scenario setup, never a gameplay client command.

@@ -86,6 +86,7 @@ impl GameWorld {
         let stored = &self.units[index];
         let unit = &stored.state;
         unit.hp > 0
+            && !self.trebuchet_anchored(unit)
             && !unit.moving
             && !unit.planning
             && unit.task == UnitTask::Idle

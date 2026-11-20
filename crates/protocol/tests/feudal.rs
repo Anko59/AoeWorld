@@ -114,6 +114,7 @@ fn dark_players_cannot_claim_feudal_techs_and_wheelbarrow_loads_round_trip() {
         auto_scout: false,
         sergeant: false,
         cargo_count: 0,
+        native_action: None,
         home_castle: None,
         managed_by: None,
         commanded_by: None,

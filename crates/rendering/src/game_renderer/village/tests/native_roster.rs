@@ -188,9 +188,8 @@ fn imperial_actor_tags_round_trip_all_current_poses_in_a_compact_scene() {
 }
 #[wasm_bindgen_test]
 fn gunpowder_cavalry_and_siege_actor_tags_exceed_one_byte_slots() {
-    // Poses past 255 must not wrap onto older actors. The land units' 60
-    // poses follow the 63 naval ones (224..287).
-    for slot in 287..347 {
+    // The land units and their new native effects follow the 63 naval poses.
+    for slot in 287..350 {
         let kind = SceneUnitKind::actor(slot);
         // Identical animations share a canonical slot inside the new range.
         assert!(kind.actor_slot().is_some_and(|canonical| canonical >= 287));

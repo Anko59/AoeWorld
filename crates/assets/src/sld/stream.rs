@@ -1,4 +1,4 @@
-//! Sequential native cells retain only the previous/current decoded frame.
+//! Sequential native cells retain the current frame and the last full layer of each kind.
 use super::*;
 pub struct Stream {
     bytes: Vec<u8>,
@@ -7,6 +7,7 @@ pub struct Stream {
     count: usize,
     next: usize,
     current: Option<Frame>,
+    full_layers: FullLayers,
 }
 impl Stream {
     pub fn new(bytes: Vec<u8>) -> Result<Self, Error> {
@@ -21,6 +22,7 @@ impl Stream {
             count,
             next: 0,
             current: None,
+            full_layers: FullLayers::default(),
         })
     }
     pub fn len(&self) -> usize {
@@ -35,20 +37,21 @@ impl Stream {
             return Err(invalid(FORMAT, self.pos, "nonsequential stream index"));
         }
         while self.next <= index {
-            // MAX_SIDE and the three decoded planes additionally bound this
-            // to 12 Mi pixels per frame, at most 96 MiB for old + new layers.
+            // Up to three 48 MiB sets of layers can coexist during decoding:
+            // the retained frame, the full reference layers and the new frame.
             let mut budget = MAX_TOTAL_PIXELS;
-            let (frame, pos) = decode_frame(
+            let (frame, pos, full_layers) = decode_frame(
                 &self.bytes,
                 self.pos,
                 self.header,
-                self.current.as_ref(),
+                &self.full_layers,
                 &mut budget,
             )?;
             if self.next + 1 == self.count && pos != self.bytes.len() {
                 return Err(invalid(FORMAT, pos, "unparsed trailing bytes"));
             }
             self.current = Some(frame);
+            self.full_layers = full_layers;
             self.pos = pos;
             self.next += 1;
         }

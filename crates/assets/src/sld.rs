@@ -2,10 +2,11 @@
 //! description: a 16-byte header, per-frame headers, and up to five layers per
 //! frame. The main layer is BC1 (DXT1), the shadow and player-colour layers are
 //! BC4, and the damage-mask layers are skipped by length. A layer with the
-//! "reuse previous frame" flag fills its skipped blocks from the same layer of
-//! the preceding frame. Every count, size and offset is checked before use, so
-//! malformed input yields an [`Error`], never a panic.
+//! reuse flag fills its skipped blocks from the last full cell of that layer.
+//! Every count, size and offset is checked before use, so malformed input
+//! yields an [`Error`], never a panic.
 use crate::{Error, invalid, slice, u16_at, u32_at};
+use std::sync::Arc;
 
 const FORMAT: &str = "SLD";
 const HEADER: usize = 16;
@@ -25,7 +26,7 @@ pub struct Layer {
     pub y: u16,
     pub width: u16,
     pub height: u16,
-    pub pixels: Vec<[u8; 4]>,
+    pub pixels: Arc<Vec<[u8; 4]>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -56,6 +57,8 @@ const LAYERS: [Kind; 5] = [
     Kind::Skipped, // damage mask
     Kind::Player,
 ];
+
+type FullLayers = [Option<Layer>; LAYERS.len()];
 
 fn rgb565(value: u16) -> [u8; 4] {
     let red = ((value >> 11) & 31) as u8;
@@ -138,7 +141,7 @@ fn layer(
     kind: Kind,
     canvas: (usize, usize),
     main: &Rect,
-    previous: Option<&Layer>,
+    full_layer: &mut Option<Layer>,
     pixel_budget: &mut usize,
 ) -> Result<(Option<Layer>, usize), Error> {
     let length = u32_at(bytes, start, FORMAT)? as usize;
@@ -202,11 +205,8 @@ fn layer(
     }
     let blocks_wide = rect.width / 4;
     let blocks = blocks_wide * (rect.height / 4);
-    let reuse = if flags & REUSE_FLAG != 0 {
-        previous
-    } else {
-        None
-    };
+    let delta = flags & REUSE_FLAG != 0;
+    let reuse = if delta { full_layer.as_ref() } else { None };
     let mut pixels = vec![[0u8; 4]; pixel_count];
     let mut ordinal = 0usize;
     for pair in command_bytes.as_chunks::<2>().0 {
@@ -241,24 +241,25 @@ fn layer(
         }
     }
     // A sparse command list may stop early. Unmentioned tail blocks remain
-    // transparent; only explicit skip commands can reuse previous pixels.
+    // transparent; only explicit skip commands can reuse full-layer pixels.
     if data != end {
         return Err(invalid(FORMAT, start, "unused compressed layer payload"));
     }
     let to_u16 = |value: usize| value as u16; // every value is at most 65535
-    Ok((
-        Some(Layer {
-            x: to_u16(rect.x),
-            y: to_u16(rect.y),
-            width: to_u16(rect.width),
-            height: to_u16(rect.height),
-            pixels,
-        }),
-        end,
-    ))
+    let decoded = Layer {
+        x: to_u16(rect.x),
+        y: to_u16(rect.y),
+        width: to_u16(rect.width),
+        height: to_u16(rect.height),
+        pixels: Arc::new(pixels),
+    };
+    if !delta {
+        *full_layer = Some(decoded.clone());
+    }
+    Ok((Some(decoded), end))
 }
 
-/// Copies a 4x4 block from the previous frame's layer, in canvas coordinates.
+/// Copies a 4x4 block from the last full layer, in canvas coordinates.
 fn copy_block(
     pixels: &mut [[u8; 4]],
     rect: &Rect,
@@ -310,9 +311,9 @@ fn decode_frame(
     bytes: &[u8],
     mut pos: usize,
     header: usize,
-    previous: Option<&Frame>,
+    full_layers: &FullLayers,
     budget: &mut usize,
-) -> Result<(Frame, usize), Error> {
+) -> Result<(Frame, usize, FullLayers), Error> {
     let width = usize::from(u16_at(bytes, pos, FORMAT)?);
     let height = usize::from(u16_at(bytes, pos + 2, FORMAT)?);
     if width > MAX_SIDE || height > MAX_SIDE {
@@ -323,6 +324,11 @@ fn decode_frame(
     let flags = slice(bytes, pos + 8, 1, FORMAT)?[0];
     let index = u16_at(bytes, pos + 10, FORMAT)?;
     pos += FRAME_HEADER;
+    let mut next_full_layers = if index == 0 {
+        FullLayers::default()
+    } else {
+        full_layers.clone()
+    };
     let mut main = Rect {
         x: 0,
         y: 0,
@@ -337,16 +343,15 @@ fn decode_frame(
         if bit > 0 && decoded[0].is_none() && kind == Kind::Player {
             return Err(invalid(FORMAT, pos, "player layer without main layer"));
         }
-        let previous = (index > 0)
-            .then_some(previous)
-            .flatten()
-            .and_then(|frame| match kind {
-                Kind::Main => frame.main.as_ref(),
-                Kind::Shadow => frame.shadow.as_ref(),
-                Kind::Player => frame.player.as_ref(),
-                Kind::Skipped => None,
-            });
-        let (found, next) = layer(bytes, pos, kind, (width, height), &main, previous, budget)?;
+        let (found, next) = layer(
+            bytes,
+            pos,
+            kind,
+            (width, height),
+            &main,
+            &mut next_full_layers[bit],
+            budget,
+        )?;
         if let Some(found) = &found
             && kind == Kind::Main
         {
@@ -372,7 +377,7 @@ fn decode_frame(
         shadow,
         player,
     };
-    Ok((frame, pos))
+    Ok((frame, pos, next_full_layers))
 }
 
 /// Decodes every frame while retaining the original whole-file memory bound.
@@ -381,9 +386,12 @@ pub fn parse(bytes: &[u8]) -> Result<Vec<Frame>, Error> {
     let mut pos = header;
     let mut budget = MAX_TOTAL_PIXELS;
     let mut frames = Vec::with_capacity(count.min(256));
+    let mut full_layers = FullLayers::default();
     for _ in 0..count {
-        let (frame, next) = decode_frame(bytes, pos, header, frames.last(), &mut budget)?;
+        let (frame, next, next_full_layers) =
+            decode_frame(bytes, pos, header, &full_layers, &mut budget)?;
         frames.push(frame);
+        full_layers = next_full_layers;
         pos = next;
     }
     if pos != bytes.len() {

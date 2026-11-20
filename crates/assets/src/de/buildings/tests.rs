@@ -18,7 +18,13 @@ fn graphic(id: i16, file: &str, layer: u8) -> (i16, Graphic) {
         y: 0,
         layer,
     };
-    (id, Graphic { parts: vec![part] })
+    (
+        id,
+        Graphic {
+            parts: vec![part],
+            particles: Vec::new(),
+        },
+    )
 }
 
 fn unit(id: i16, standing: i16, annexes: &[(i16, [f32; 2])]) -> (i16, de_units::Unit) {
@@ -30,6 +36,8 @@ fn unit(id: i16, standing: i16, annexes: &[(i16, [f32; 2])]) -> (i16, de_units::
         researching: -1,
         research_complete: -1,
         foundation: 27,
+        transform_unit: -1,
+        train_seconds: None,
         annexes: annexes
             .iter()
             .map(|&(unit, offset)| de_units::Annex { unit, offset })
@@ -45,6 +53,10 @@ fn unit(id: i16, standing: i16, annexes: &[(i16, [f32; 2])]) -> (i16, de_units::
         walking: -1,
         running: -1,
         attack: -1,
+        projectile: -1,
+        speed: 0.0,
+        work_rate: 0.0,
+        projectile_arc: None,
         work: -1,
         carrying: -1,
         release: -1,

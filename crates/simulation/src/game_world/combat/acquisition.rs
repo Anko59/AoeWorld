@@ -132,6 +132,14 @@ impl GameWorld {
             let Some(u) = self.unit(id) else {
                 continue;
             };
+            if (u.kind.is_naval() || u.kind == UnitKind::Villager)
+                && self.units[self.lookup[&id]].order.is_none()
+            {
+                self.clear_scalar_march(id);
+                if u.kind == UnitKind::Villager {
+                    continue;
+                }
+            }
             if u.hp > 0 && (u.auto_scout || u.stance == CombatStance::NoAttack || self.embarked(id))
             {
                 if !self.economy.no_sleep {

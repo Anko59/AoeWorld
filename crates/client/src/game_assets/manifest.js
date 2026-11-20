@@ -85,7 +85,9 @@ export function parse_content(bytes, actorCount) {
     const row = array(actor);
     if (row.length !== 4) throw Error('invalid actor content record');
     const stride = integer(row[1],1,255);
-    return [u32(row[0]), stride, integer(row[2],stride === 1 ? 0 : 1,65535), integer(row[3],0,255)];
+    // Untimed native direction rows can also contain several projectile pitch cells.
+    // The Rust loader still checks all four words against the compiled DAT catalog.
+    return [u32(row[0]), stride, integer(row[2],0,65535), integer(row[3],0,255)];
   });
   return [new Int32Array(rules), new Uint32Array(words)];
 }

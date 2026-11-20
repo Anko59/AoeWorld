@@ -2,6 +2,8 @@
 use std::{fs, io::Write, path::Path};
 #[path = "buildings.rs"]
 mod buildings;
+#[path = "particles.rs"]
+mod particles;
 #[path = "units.rs"]
 mod units;
 
@@ -13,6 +15,7 @@ pub(super) fn actors(install: &Path) {
     fs::create_dir_all(&graphics).unwrap();
     fs::create_dir_all(&dat).unwrap();
     let mut records = b"VER 8.9\0".to_vec();
+    let particles = particles::write(install);
     let mut sources = std::collections::BTreeMap::new();
     for source in aoe_assets::catalog::units::SPRITES {
         if source.id < 200_000 {
@@ -30,13 +33,22 @@ pub(super) fn actors(install: &Path) {
     for (id, source) in sources {
         let graphic = (id - 200_000) as i16;
         let name = format!("synthetic_{graphic}_x1");
-        for text in [name.as_str(), ""] {
+        let particle = particles.name(graphic);
+        let file = if particle.is_empty() {
+            name.as_str()
+        } else {
+            "None"
+        };
+        for text in [file, particle] {
             records.extend_from_slice(&[0x60, 0x0a]);
             records.extend_from_slice(&(text.len() as u16).to_le_bytes());
             records.extend_from_slice(text.as_bytes());
         }
         records.extend_from_slice(&i32::from(graphic).to_le_bytes());
-        records.extend_from_slice(&[0; 23]);
+        let deltas = particles.deltas(graphic);
+        records.extend_from_slice(&[0; 14]);
+        records.extend_from_slice(&(deltas.len() as u16).to_le_bytes());
+        records.extend_from_slice(&[0; 7]);
         records.extend_from_slice(&u16::from(source.stride).to_le_bytes());
         records.extend_from_slice(&(source.rows() as u16).to_le_bytes());
         records.extend_from_slice(&0_f32.to_le_bytes());
@@ -45,6 +57,15 @@ pub(super) fn actors(install: &Path) {
         records.push(0);
         records.extend_from_slice(&graphic.to_le_bytes());
         records.extend_from_slice(&[0; 2]);
+        for delta in deltas {
+            records.extend_from_slice(&delta.to_le_bytes());
+            records.extend_from_slice(&[0; 10]);
+            records.extend_from_slice(&(-1_i16).to_le_bytes());
+            records.extend_from_slice(&[0; 2]);
+        }
+        if !particle.is_empty() {
+            continue;
+        }
         let cell = super::sld();
         let count = source.frames() as u16;
         let mut sld = cell[..16].to_vec();
@@ -108,6 +129,7 @@ pub(super) fn actors(install: &Path) {
         7210, 7258, 7450, 7411, 7415, 7409, 7039, 7051, 7378, 7374, 7278, 7163, 7186, 7063, 7462,
         7045, 7249, 7221, 7435, 7416, 7220, 7222, 7316, 7315, 7412, 7319, 7376, 7322, 7408, 7410,
         7015, 7017, 7023, 7054, 507005, 7314, 7372, 7373, 7377, 507003, 507004, 507006, 507007,
+        7035, 507002, 7242, 7375, 7047, 7218, 7235, 7244, 7323,
     ] {
         records.extend([0; 33]);
         records.extend(language.to_le_bytes());
@@ -161,7 +183,7 @@ fn native_interface(install: &Path) {
     };
     write(ingame.join("buildings/0_test.dds"), &super::dds());
     for index in [
-        0, 1, 2, 3, 28, 30, 31, 32, 35, 41, 43, 49, 62, 63, 64, 69, 74, 84,
+        0, 1, 2, 3, 28, 30, 31, 32, 35, 39, 41, 43, 49, 62, 63, 64, 69, 74, 84,
     ] {
         write(ingame.join(format!("actions/{index:03}_.png")), &png);
     }

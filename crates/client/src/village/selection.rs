@@ -77,9 +77,8 @@ pub(in super::super) fn idle(client: &mut super::Client, military: bool) {
     };
     let position = unit.position.as_tiles();
     super::construction::cancel(client);
-    client.village.move_cursor = false;
+    client.village.clear_move_cursor();
     client.village.unload_cursor = false;
-    client.village.attack_move = false;
     client.pointer = None;
     client.drag = None;
     client.selected.units(vec![id]);

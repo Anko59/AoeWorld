@@ -145,6 +145,7 @@ impl GameWorld {
         for &id in &ids {
             let i = self.lookup[&id];
             self.stop_movement(i);
+            self.pack_for_move(i);
             self.stop_gathering(id);
             self.cancel_attack(id);
             self.cancel_auto_scout(id);

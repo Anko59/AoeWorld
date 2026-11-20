@@ -182,12 +182,15 @@ fn stone_slot(kind: BuildingKind, progress: u16, rubble: bool) -> Option<usize> 
 /// Standing kinds, four foundation sizes, then rubble kinds.
 #[inline(never)]
 pub fn sprite_slot(kind: BuildingKind, progress: u16, rubble: bool) -> usize {
-    // The DE Fish Trap art is not imported yet: it borrows the Farm's sprites.
-    let kind = if kind == BuildingKind::FishTrap {
-        BuildingKind::Farm
-    } else {
-        kind
-    };
+    if kind == BuildingKind::FishTrap {
+        return if rubble {
+            92
+        } else if progress < 1000 {
+            93
+        } else {
+            91
+        };
+    }
     if let Some(slot) = stone_slot(kind, progress, rubble) {
         return slot;
     }
@@ -347,7 +350,10 @@ pub fn age_sprite_slot(
     if kind == BuildingKind::Road {
         return 9;
     }
-    if matches!(kind, BuildingKind::Bridge | BuildingKind::Wonder) {
+    if matches!(
+        kind,
+        BuildingKind::Bridge | BuildingKind::Wonder | BuildingKind::FishTrap
+    ) {
         return sprite_slot(kind, progress, rubble);
     }
     if let Some(slot) = stone_slot(kind, progress, rubble) {

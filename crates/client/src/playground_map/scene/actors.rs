@@ -22,6 +22,13 @@ pub(super) fn shown_pose(
     unit: &aoe_protocol::GameplayUnitState,
 ) -> (aoe_protocol::GameplayUnitState, crate::unit_visuals::Pose) {
     use crate::unit_visuals as visuals;
+    if client
+        .presentation
+        .trebuchet_frame(unit, client.last_frame)
+        .is_some()
+    {
+        return (*unit, visuals::Pose::TrebuchetTransition);
+    }
     let animal = unit
         .hunt_target
         .and_then(|id| client.village.animals.iter().find(|a| a.id == id));
@@ -48,12 +55,64 @@ pub(super) fn shown_pose(
     )
 }
 
+pub(super) fn death_effect(
+    client: &Client,
+    unit: &aoe_protocol::GameplayUnitState,
+    body: aoe_rendering::SceneUnit,
+) -> Option<aoe_rendering::SceneUnit> {
+    use crate::unit_visuals::Pose;
+    use aoe_protocol::UnitKind;
+    let since = unit.death_tick?;
+    let pose = match unit.kind {
+        UnitKind::Petard => Pose::PetardBlast,
+        UnitKind::DemolitionRaft | UnitKind::DemolitionShip | UnitKind::HeavyDemolitionShip => {
+            Pose::DemolitionBlast
+        }
+        _ => return None,
+    };
+    if client
+        .art
+        .actors
+        .get(pose as usize)
+        .is_none_or(Vec::is_empty)
+    {
+        return None;
+    }
+    let live = client
+        .presentation
+        .live_tick(client.last_frame)
+        .unwrap_or(client.village.tick as f64);
+    let elapsed =
+        (live - since.0 as f64).max(0.0) * 1000.0 / f64::from(client.config.tick_hz.max(1));
+    let source = aoe_assets::catalog::units::SPRITES[pose as usize];
+    let phase = elapsed / source.frame_millis();
+    if phase >= f64::from(source.stride) {
+        return None;
+    }
+    Some(
+        aoe_rendering::SceneUnit {
+            // Keep the effect distinct from its hull and from projectile actors.
+            id: aoe_core::EntityId(0x4000_0000 | (unit.id.0 & 0x3fff_ffff)),
+            kind: aoe_rendering::SceneUnitKind::actor(pose as u16),
+            visual: aoe_rendering::SceneUnitVisual::new(true),
+            ..body
+        }
+        .with_actor_frame((phase as u16) << 4),
+    )
+}
+
 pub(super) fn animation_frame(
     client: &Client,
     unit: &aoe_protocol::GameplayUnitState,
     pose: crate::unit_visuals::Pose,
     travelled: f64,
 ) -> u16 {
+    if pose == crate::unit_visuals::Pose::TrebuchetTransition
+        && let Some(phase) = client.presentation.trebuchet_frame(unit, client.last_frame)
+    {
+        let direction = (20 - u16::from(unit.facing % 8) * 2) % 16;
+        return direction | (phase << 4);
+    }
     // A walking unit's frame follows the distance it has really covered.
     let walking = unit.moving && unit.hp > 0 && unit.death_tick.is_none();
     let clock = if walking {

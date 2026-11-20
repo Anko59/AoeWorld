@@ -43,26 +43,42 @@ fn assert_wire(message: GameplayServerMessage, expected: Vec<u8>) {
 
 #[test]
 fn browser_unit_combat_fragments_match_the_current_codec() {
-    for (kind, hp, fragment) in [
+    for (kind, hp, cargo_count, fragment) in [
         (
             UnitKind::Villager,
             25,
+            0,
             include_str!("../../../browser/tests/wire/villager.hex"),
         ),
         (
             UnitKind::Scout,
             45,
+            0,
             include_str!("../../../browser/tests/wire/scout.hex"),
         ),
         (
             UnitKind::FishingShip,
             50,
+            0,
             include_str!("../../../browser/tests/wire/fishing-ship.hex"),
         ),
         (
             UnitKind::Militia,
             40,
+            0,
             include_str!("../../../browser/tests/wire/militia.hex"),
+        ),
+        (
+            UnitKind::TransportShip,
+            100,
+            0,
+            include_str!("../../../browser/tests/wire/transport-ship-empty.hex"),
+        ),
+        (
+            UnitKind::TransportShip,
+            100,
+            2,
+            include_str!("../../../browser/tests/wire/transport-ship-loaded.hex"),
         ),
     ] {
         let unit = GameplayUnitState {
@@ -85,7 +101,8 @@ fn browser_unit_combat_fragments_match_the_current_codec() {
             death_hunt: None,
             auto_scout: false,
             sergeant: false,
-            cargo_count: 0,
+            cargo_count,
+            native_action: None,
             home_castle: None,
             managed_by: None,
             commanded_by: None,

@@ -4,6 +4,8 @@ use super::*;
 #[derive(serde::Deserialize)]
 pub(crate) struct ResetOptions {
     scenario: Option<String>,
+    stage: Option<usize>,
+    realtime: Option<bool>,
 }
 
 pub(crate) async fn reset(
@@ -64,12 +66,37 @@ pub(crate) async fn reset(
                 Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
             }
         }
-        Some("naval-battle") => {
+        Some(name @ ("naval-battle" | "content-roster")) => {
             let seed = state.diagnostic_scenario.seed;
             let Ok((package, elevation, water)) =
                 aoe_simulation::GameWorld::naval_battle_environment(seed)
             else {
                 return StatusCode::INTERNAL_SERVER_ERROR;
+            };
+            let roster = if name == "content-roster" {
+                let Ok(mut world) = aoe_simulation::GameWorld::from_prepared_map(
+                    package.clone(),
+                    elevation.clone(),
+                    water.clone(),
+                    Vec::new(),
+                    Vec::new(),
+                ) else {
+                    return StatusCode::INTERNAL_SERVER_ERROR;
+                };
+                let Ok(primary) = world.prepare_content_roster(
+                    options.stage.unwrap_or_default(),
+                    options.realtime.unwrap_or_default(),
+                ) else {
+                    return StatusCode::BAD_REQUEST;
+                };
+                Some(GameplayService::from_world(
+                    world,
+                    primary,
+                    Some(package.content_hash),
+                    Some(crate::gameplay_map::map_metadata(&package)),
+                ))
+            } else {
+                None
             };
             let stored = package.clone();
             let directory = state.map_package_directory.clone();
@@ -93,9 +120,13 @@ pub(crate) async fn reset(
                 .write()
                 .await
                 .insert(package.content_hash_hex(), package);
-            match GameplayService::naval_battle_demo(seed) {
-                Ok(service) => service,
-                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
+            if let Some(roster) = roster {
+                roster
+            } else {
+                match GameplayService::naval_battle_demo(seed) {
+                    Ok(service) => service,
+                    Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
+                }
             }
         }
         Some("movement-lane") => {

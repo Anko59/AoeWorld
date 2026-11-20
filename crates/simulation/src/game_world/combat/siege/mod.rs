@@ -8,18 +8,24 @@ use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, TileRect, WorldPosit
 
 #[cfg(test)]
 mod tests;
+mod timing;
+pub use timing::native_attack_windup_millis;
 
-/// Seconds a Trebuchet spends unpacking before its first shot. The DAT
-/// transform animation lasts about four seconds in DE (not in data.json).
-pub const TREBUCHET_UNPACK_SECONDS: u32 = 4;
+/// DAT transform work (50) and work rate (4.5/s) of units 42 and 331.
+pub const TREBUCHET_TRANSFORM_WORK: u32 = 50;
+pub const TREBUCHET_WORK_PER_SECOND_TENTHS: u32 = 45;
+
+pub const fn trebuchet_transform_ticks(hz: u32) -> u64 {
+    (hz as u64 * TREBUCHET_TRANSFORM_WORK as u64 * 10)
+        .div_ceil(TREBUCHET_WORK_PER_SECOND_TENTHS as u64)
+}
 
 /// Blast radius in hundredths of a tile: DE's `BlastWidth` around the impact.
 pub(crate) const fn blast_hundredths(kind: UnitKind) -> u32 {
     match kind {
-        UnitKind::Mangonel
-        | UnitKind::CannonGalleon
-        | UnitKind::EliteCannonGalleon
-        | UnitKind::CatapultGalleon => 100,
+        UnitKind::CannonGalleon => 25,
+        UnitKind::EliteCannonGalleon | UnitKind::CatapultGalleon => 30,
+        UnitKind::Mangonel => 100,
         UnitKind::Onager => 125,
         UnitKind::SiegeOnager => 150,
         UnitKind::BombardCannon | UnitKind::Petard => 50,
@@ -49,11 +55,7 @@ impl GameWorld {
         if accuracy >= 100 || self.unit(p.target).is_none() {
             return false;
         }
-        // SplitMix64 of the projectile identity: replays roll identically.
-        let mut z = (p.id ^ (u64::from(p.attacker.0) << 32)).wrapping_add(0x9e37_79b9_7f4a_7c15);
-        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-        (z ^ (z >> 31)) % 100 >= accuracy
+        super::projectiles::projectile_roll(p.id, p.attacker) % 100 >= accuracy
     }
 
     /// A Scorpion bolt damages every enemy unit on its line, from the launch
@@ -195,8 +197,7 @@ impl GameWorld {
         out
     }
 
-    /// Switches a Trebuchet between its packed (moving) and unpacked (firing)
-    /// identities. Unpacking delays the first shot by the setup time.
+    /// Selects the destination form and starts the stationary transform.
     pub(super) fn set_trebuchet_packed(&mut self, index: usize, packed: bool) {
         let state = &self.units[index].state;
         let (from, to) = if packed {
@@ -207,13 +208,15 @@ impl GameWorld {
         if state.kind != from {
             return;
         }
-        let player = state.player;
+        let (id, player) = (state.id, state.player);
         self.units[index].state.kind = to;
         self.change_unit_census(player, Some(from), Some(to), 1);
-        if !packed {
-            let setup = u64::from(self.config.tick_hz) * u64::from(TREBUCHET_UNPACK_SECONDS);
-            self.units[index].next_hit_tick = self.tick.0 + setup;
-        }
+        self.combat.trebuchets_transforming.insert(
+            id,
+            self.tick
+                .0
+                .saturating_add(trebuchet_transform_ticks(self.config.tick_hz)),
+        );
     }
 
     /// Any move order packs an unpacked Trebuchet first.
@@ -221,6 +224,44 @@ impl GameWorld {
         if self.units[index].state.kind == UnitKind::TrebuchetUnpacked {
             self.set_trebuchet_packed(index, true);
         }
+    }
+
+    pub fn trebuchet_transform_until(&self, id: EntityId) -> Option<aoe_core::Tick> {
+        self.combat
+            .trebuchets_transforming
+            .get(&id)
+            .filter(|&&until| until > self.tick.0)
+            .copied()
+            .map(aoe_core::Tick)
+    }
+
+    pub(crate) fn trebuchet_transforming(&self, id: EntityId) -> bool {
+        self.trebuchet_transform_until(id).is_some()
+    }
+
+    pub(crate) fn trebuchet_anchored(&self, unit: &crate::GameUnit) -> bool {
+        unit.kind == UnitKind::TrebuchetUnpacked
+            || (unit.kind == UnitKind::Trebuchet && self.trebuchet_transforming(unit.id))
+    }
+
+    /// Routes can be prepared while packing. Hold only the transforming
+    /// units out of the current movement batch.
+    pub(crate) fn hold_transforming_movers(
+        &mut self,
+        changed: &mut Vec<EntityId>,
+    ) -> Vec<EntityId> {
+        let jobs = &mut self.combat.trebuchets_transforming;
+        jobs.retain(|id, until| {
+            if *until <= self.tick.0 {
+                changed.push(*id);
+                return false;
+            }
+            true
+        });
+        jobs.keys()
+            .copied()
+            .filter(|&id| self.active_movers.remove(id))
+            .collect()
     }
 
     /// Damage kind of a fixed-point artillery impact: Trebuchets hit as

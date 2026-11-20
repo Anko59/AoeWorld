@@ -2,6 +2,8 @@
 use super::kingdom::{coast_water, kingdom_position, kingdom_water_package};
 use crate::{BuildingKind, EconomyError, GameWorld, UnitKind};
 use aoe_core::{EntityId, PlayerId, Seed, TileCoord};
+#[path = "naval/content.rs"]
+mod content;
 
 impl GameWorld {
     /// The coast the naval demo fights on; the server publishes it so the

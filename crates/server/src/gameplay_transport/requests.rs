@@ -72,6 +72,15 @@ pub(super) async fn read_requests(
                     .queue_waypoint(session_id, sequence, entity_id, destination, attack_move)
                     .await
             }
+            Ok(GameplayClientMessage::PatrolOrder {
+                sequence,
+                entity_id,
+                destination,
+            }) => {
+                service
+                    .queue_patrol(session_id, sequence, entity_id, destination)
+                    .await
+            }
             Ok(GameplayClientMessage::GeneralOrder {
                 sequence,
                 entity_id,

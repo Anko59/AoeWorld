@@ -2,6 +2,28 @@
 use super::super::Graphic;
 pub(super) const GRAPHICS: &[(u32, Graphic)] = &[
     (
+        202617,
+        Graphic {
+            stem: "dat_2617",
+            cells: 481,
+            seconds: f32::from_bits(1023969417),
+            replay_delay: f32::from_bits(0),
+            angles: 16,
+            stride: 30,
+        },
+    ),
+    (
+        202620,
+        Graphic {
+            stem: "dat_2620",
+            cells: 481,
+            seconds: f32::from_bits(1023969417),
+            replay_delay: f32::from_bits(0),
+            angles: 16,
+            stride: 30,
+        },
+    ),
+    (
         202623,
         Graphic {
             stem: "dat_2623",
@@ -241,28 +263,6 @@ pub(super) const GRAPHICS: &[(u32, Graphic)] = &[
             replay_delay: f32::from_bits(0),
             angles: 16,
             stride: 45,
-        },
-    ),
-    (
-        202805,
-        Graphic {
-            stem: "dat_2805",
-            cells: 480,
-            seconds: f32::from_bits(1065353216),
-            replay_delay: f32::from_bits(0),
-            angles: 16,
-            stride: 30,
-        },
-    ),
-    (
-        202808,
-        Graphic {
-            stem: "dat_2808",
-            cells: 480,
-            seconds: f32::from_bits(1024864202),
-            replay_delay: f32::from_bits(0),
-            angles: 16,
-            stride: 30,
         },
     ),
 ];

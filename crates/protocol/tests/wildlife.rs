@@ -198,6 +198,7 @@ fn hunting_tasks_require_villagers_and_food_loads() {
         auto_scout: false,
         sergeant: false,
         cargo_count: 0,
+        native_action: None,
         home_castle: None,
         managed_by: None,
         commanded_by: None,

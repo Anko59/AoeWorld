@@ -40,7 +40,11 @@ impl GameWorld {
             HitPower {
                 attack: p.attack,
                 bonus: p.bonus,
-                kind: DamageKind::Pierce,
+                kind: if p.kind == super::ProjectileKind::Melee {
+                    DamageKind::Melee
+                } else {
+                    DamageKind::Pierce
+                },
                 elevation: !p.secondary,
             },
             changed,

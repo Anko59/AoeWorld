@@ -1,7 +1,7 @@
 //! Bounded browser-only interpolation; authoritative coordinates never change.
 use super::state::Sample;
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE};
-use aoe_protocol::GameplayUnitState;
+use aoe_protocol::{GameplayUnitState, UnitKind};
 use std::collections::{HashMap, VecDeque};
 
 /// Minimum distance, in subunits, between the ends of a heading segment.
@@ -63,7 +63,7 @@ impl Presentation {
                     + std::mem::size_of_val(h)
                     + h.capacity() * std::mem::size_of::<Sample>()
             })
-            .sum()
+            .sum::<usize>()
     }
 
     pub(crate) fn reset(&mut self, tick_hz: u32) {
@@ -195,6 +195,19 @@ impl Presentation {
         self.history.remove(&id);
     }
 
+    pub(crate) fn trebuchet_frame(&self, state: &GameplayUnitState, time: f64) -> Option<u16> {
+        let aoe_protocol::NativeAction::TrebuchetTransform(until) = state.native_action? else {
+            return None;
+        };
+        let remaining = until.0 as f64 - self.live_tick(time)?;
+        if remaining <= 0.0 {
+            return None;
+        }
+        let whole = aoe_simulation::trebuchet_transform_ticks(self.tick_hz as u32) as f64;
+        let elapsed = ((whole - remaining) / whole).max(0.0) * trebuchet_duration();
+        trebuchet_stage(state.kind, elapsed)
+    }
+
     #[inline(never)]
     pub(crate) fn position(&self, state: GameplayUnitState) -> [f64; 2] {
         self.pose(state).0
@@ -258,6 +271,22 @@ impl Presentation {
         let travel = history.back().map_or(0.0, |last| f64::from(last.travel));
         (state.position.as_tiles(), travel)
     }
+}
+
+/// DE's construction cells unfold during setup and reverse during packing.
+fn trebuchet_stage(kind: UnitKind, elapsed: f64) -> Option<u16> {
+    let unpacking = kind == UnitKind::TrebuchetUnpacked;
+    let duration = trebuchet_duration();
+    if elapsed >= duration {
+        return None;
+    }
+    let stage = (elapsed / duration * 3.0) as u16;
+    Some(if unpacking { stage } else { 2 - stage })
+}
+
+fn trebuchet_duration() -> f64 {
+    f64::from(aoe_simulation::TREBUCHET_TRANSFORM_WORK * 10)
+        / f64::from(aoe_simulation::TREBUCHET_WORK_PER_SECOND_TENTHS)
 }
 
 /// The tiles a unit had moved at `tick`, interpolated between its samples and

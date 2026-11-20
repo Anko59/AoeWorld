@@ -95,6 +95,46 @@ async fn galley_bolt_is_drawn_as_the_bolt_actor_until_impact() {
     client.canvas.remove();
 }
 
+#[wasm_bindgen_test]
+async fn fire_stream_uses_its_dat_lifetime_after_the_damage_tick() {
+    use aoe_core::{Tick, TileRect, WorldPosition};
+    let scene = PreparedScene::new(Camera::new([10.0, 10.0], [512.0; 2]), Vec::new());
+    let mut client = super::super::review_tests::client(&scene).await;
+    client.config.tick_hz = 20;
+    assert!(client.fog.apply(aoe_protocol::FogState {
+        revision: 1,
+        tick: Tick(100),
+        region: TileRect::from_xywh(0, 0, 16, 16),
+        disabled: false,
+        tiles: vec![2; 256],
+        overview: vec![],
+    }));
+    client.village.projectile_particles.insert(
+        1,
+        aoe_protocol::ProjectileState {
+            id: 1,
+            attacker: None,
+            from: WorldPosition::new(10_000, 10_000),
+            to: WorldPosition::new(12_000, 10_000),
+            launched: Tick(100),
+            impact: Tick(110),
+            kind: ProjectileKind::Native(676),
+        },
+    );
+    let flame = |tick, client: &mut Client| {
+        client.village.tick = tick;
+        let mut scene_units = Vec::new();
+        append(client, &scene, &mut scene_units);
+        scene_units
+            .into_iter()
+            .find(|unit| unit.kind == SceneUnitKind::FireStream)
+    };
+    let drawn = flame(118, &mut client).expect("the native flame is still burning");
+    assert!(drawn.position[0] > 10.0 && drawn.position[0] < 12.0);
+    assert!(flame(136, &mut client).is_none());
+    client.canvas.remove();
+}
+
 fn unpack(packed: u8) -> (u8, u8) {
     (packed & 7, packed >> 3)
 }

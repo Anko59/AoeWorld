@@ -7,6 +7,19 @@ use aoe_protocol::{
     encode_gameplay_server,
 };
 
+#[test]
+fn patrol_order_pins_the_current_destination_wire() {
+    let command = GameplayClientMessage::PatrolOrder {
+        sequence: 3,
+        entity_id: EntityId(7),
+        destination: WorldPosition::new(10, 12),
+    };
+    let bytes = encode_gameplay_client(&command).unwrap();
+    assert_eq!(bytes, [40, 3, 7, 20, 24]);
+    assert_eq!(decode_gameplay_client(&bytes).unwrap(), command);
+    assert!(decode_gameplay_client(&[40, 3, 7, 1, 24]).is_err());
+}
+
 fn unit(hp: u16, task: UnitTask, target: Option<EntityId>) -> GameplayUnitState {
     GameplayUnitState {
         id: EntityId(7),
@@ -32,12 +45,36 @@ fn unit(hp: u16, task: UnitTask, target: Option<EntityId>) -> GameplayUnitState 
         auto_scout: false,
         sergeant: false,
         cargo_count: 0,
+        native_action: None,
         home_castle: None,
         managed_by: None,
         commanded_by: None,
         general: None,
         stance: Default::default(),
     }
+}
+
+#[test]
+fn trebuchet_native_transition_is_bounded_to_a_live_stationary_trebuchet() {
+    let at = Tick(220);
+    let mut actor = unit(40, UnitTask::Attacking, Some(EntityId(6)));
+    actor.kind = UnitKind::TrebuchetUnpacked;
+    actor.native_action = Some(aoe_protocol::NativeAction::TrebuchetTransform(at));
+    let message = |unit| GameplayServerMessage::Snapshot {
+        revision: 1,
+        tick: Tick(42),
+        units: vec![unit],
+        players: vec![],
+        buildings: vec![],
+    };
+    let bytes = encode_gameplay_server(&message(actor)).unwrap();
+    assert_eq!(&bytes[bytes.len() - 6..], &[1, 0, 0xdc, 0x01, 0, 0]);
+    assert_eq!(decode_gameplay_server(&bytes).unwrap(), message(actor));
+    actor.moving = true;
+    assert!(encode_gameplay_server(&message(actor)).is_err());
+    actor.moving = false;
+    actor.kind = UnitKind::Militia;
+    assert!(encode_gameplay_server(&message(actor)).is_err());
 }
 
 fn center(hp: u16) -> GameplayBuildingState {
@@ -112,19 +149,18 @@ fn death_and_hunting_fields_are_appended_to_the_current_unit_wire() {
     let mut dying = unit(0, UnitTask::Dying, None);
     dying.death_tick = Some(Tick(41));
     let bytes = encode_gameplay_server(&tick_with(vec![dying], vec![])).unwrap();
-    // Current unit tails append home_castle, managed_by and combat stance.
-    // Regenerate the suffix pins for those owner-only fields, preserving option tags.
+    // The unit tail includes the optional native action after the owner-only fields.
     assert_eq!(
-        &bytes[bytes.len() - 16..],
-        &[1, 41, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        &bytes[bytes.len() - 17..],
+        &[1, 41, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     );
     round_trips(&tick_with(vec![dying], vec![]));
     dying.kind = UnitKind::Villager;
     dying.death_hunt = Some(aoe_protocol::AnimalKind::Sheep);
     let bytes = encode_gameplay_server(&tick_with(vec![dying], vec![])).unwrap();
     assert_eq!(
-        &bytes[bytes.len() - 17..],
-        &[1, 41, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        &bytes[bytes.len() - 18..],
+        &[1, 41, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     );
     round_trips(&tick_with(vec![dying], vec![]));
     let mut hunter = unit(25, UnitTask::Hunting, None);
@@ -132,8 +168,8 @@ fn death_and_hunting_fields_are_appended_to_the_current_unit_wire() {
     hunter.hunt_target = Some(EntityId(9));
     let bytes = encode_gameplay_server(&tick_with(vec![hunter], vec![])).unwrap();
     assert_eq!(
-        &bytes[bytes.len() - 16..],
-        &[0, 1, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        &bytes[bytes.len() - 17..],
+        &[0, 1, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     );
     round_trips(&tick_with(vec![hunter], vec![]));
 }

@@ -4,6 +4,25 @@ const RED_BLUE: [u8; 8] = [0x00, 0xF8, 0x1F, 0x00, 0x01, 0, 0, 0]; // pixel 0 us
 const SHADOW: [u8; 8] = [200, 0, 0x01, 0, 0, 0, 0, 0]; // pixel 0 is 0, the rest 200
 
 #[test]
+fn deltas_reuse_the_last_full_layer_without_retaining_earlier_changes() {
+    let mut file = header(3);
+    let rect = Some([0, 0, 8, 4]);
+    for (index, flags, command, blocks) in [
+        (0, 0, (0, 1), &[RED_BLUE][..]),
+        (1, REUSE_FLAG, (1, 1), &[RED_BLUE][..]),
+        (2, REUSE_FLAG, (2, 0), &[]),
+    ] {
+        frame_header(&mut file, 8, 1, index);
+        file.extend(layer_bytes(rect, flags, &[command], blocks));
+        pad(&mut file);
+    }
+    let frames = parse(&file).unwrap();
+    assert_eq!(frames[1].main.as_ref().unwrap().pixels[4][3], 255);
+    assert_eq!(frames[2].main, frames[0].main);
+    assert_eq!(Stream::new(file).unwrap().frame(2).unwrap(), &frames[2]);
+}
+
+#[test]
 fn short_command_arrays_leave_the_unmentioned_tail_transparent() {
     let mut file = header(2);
     frame_header(&mut file, 8, 3, 0);
@@ -310,7 +329,7 @@ fn total_decoded_pixels_are_budgeted() {
 }
 
 #[test]
-fn streamed_large_timeline_keeps_only_previous_and_current_cells() {
+fn streams_large_timelines_with_a_bounded_history() {
     let mut file = header(49);
     for index in 0..49 {
         frame_header(&mut file, 1024, 1, index);

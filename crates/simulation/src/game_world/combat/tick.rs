@@ -80,6 +80,9 @@ impl GameWorld {
             return;
         };
         let source = self.units[index].state;
+        if source.kind.is_trebuchet() && self.trebuchet_transforming(id) {
+            return;
+        }
         let original_goal = self.attack_goal(attacker.target, source.player);
         let stats = self.unit_state_stats(&source);
         let original_target = attacker.target;
@@ -122,12 +125,14 @@ impl GameWorld {
         if distance > range * range || approaching_slot {
             self.approach(id, index, attacker, goal, now, changed);
             if !self.can_strike_on_approach(id, &goal, distance, range) {
+                self.reset_native_swing(id, before.kind, changed);
                 return;
             }
         }
         let min = i64::from(stats.min_range) * MELEE_RANGE_SUBUNITS;
         if distance < min * min {
             self.stop_movement(index);
+            self.reset_native_swing(id, before.kind, changed);
             return;
         }
         // A legal blow does not wait for a preferred point. Keep approaching
@@ -149,7 +154,7 @@ impl GameWorld {
             changed.push(id);
             return;
         }
-        if now >= self.units[index].next_hit_tick {
+        if self.weapon_ready(index, changed) {
             self.units[index].next_hit_tick = now + u64::from(self.attack_period_ticks(&before));
             self.strike(id, attacker.target, changed);
         }
@@ -369,14 +374,8 @@ impl GameWorld {
             self.detonate_petard(attacker_id, target, stats.attack, changed);
             return;
         }
-        if stats.kind.is_artillery() || stats.kind.is_cannon_ship() {
-            self.launch_projectile(
-                attacker_id,
-                target,
-                (stats.attack, bonus),
-                super::ProjectileKind::Stone,
-                false,
-            );
+        if let Some(shot) = super::dat_projectile(stats.kind) {
+            self.launch_projectile(attacker_id, target, (stats.attack, bonus), shot.kind, false);
             return;
         }
         if stats.attack_kind == super::DamageKind::Pierce {
@@ -385,15 +384,6 @@ impl GameWorld {
                 crate::UnitKind::Skirmisher | crate::UnitKind::EliteSkirmisher
             ) {
                 super::ProjectileKind::Javelin
-            } else if matches!(
-                stats.kind,
-                crate::UnitKind::Galley
-                    | crate::UnitKind::WarGalley
-                    | crate::UnitKind::Galleon
-                    | crate::UnitKind::Scorpion
-                    | crate::UnitKind::HeavyScorpion
-            ) {
-                super::ProjectileKind::Bolt
             } else {
                 super::ProjectileKind::Arrow
             };

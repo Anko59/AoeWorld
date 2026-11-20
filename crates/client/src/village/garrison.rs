@@ -127,7 +127,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }
             if id == "garrison" {
                 construction::cancel(&mut client);
-                client.village.move_cursor = false;
+                client.village.clear_move_cursor();
                 client.village.garrison_cursor = true;
                 let _ = client.canvas.set_attribute("data-order-mode", "garrison");
                 return;

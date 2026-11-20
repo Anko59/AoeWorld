@@ -9,85 +9,8 @@ mod environment;
 #[path = "de_import/fixture.rs"]
 mod fixture;
 
-#[test]
-fn real_all_unit_timelines_match_de_dat_and_complete_native_sld_cells() {
-    let Some(root) = std::env::var_os("AOE_DE_DIR") else {
-        return;
-    };
-    let root = Path::new(&root);
-    let dat = aoe_assets::dat::de_survey::inflate(
-        &fs::read(root.join("resources/_common/dat/empires2_x2_p1.dat")).unwrap(),
-    )
-    .unwrap();
-    let units = aoe_assets::dat::de_units::find(&dat, &[4, 24, 7, 6]).unwrap();
-    use aoe_assets::catalog::units::{Pose, release_frame};
-    for (id, pose) in [
-        (4, Pose::ArcherAttack),
-        (24, Pose::CrossbowmanAttack),
-        (7, Pose::SkirmisherAttack),
-        (6, Pose::EliteSkirmisherAttack),
-    ] {
-        assert_eq!(
-            u8::try_from(units[&id].release).ok(),
-            release_frame(pose),
-            "DAT release frame for {id}"
-        );
-    }
-    let selected = de::unit_catalog::resolve(root).unwrap();
-    assert_eq!(selected.len(), 283);
-    let mut seen = std::collections::BTreeSet::new();
-    for g in selected {
-        let source = aoe_assets::catalog::units::SPRITES[g.pose];
-        assert_eq!(source.id, g.sprite);
-        assert_eq!(source.rows(), usize::from(g.angles));
-        assert_eq!(
-            u16::from(source.stride),
-            if g.terminal { 1 } else { g.frames }
-        );
-        assert_eq!(
-            source.frame_millis(),
-            if g.terminal {
-                0.0
-            } else {
-                f64::from(g.seconds) * 1000.0
-            }
-        );
-        for part in g.parts {
-            let a = part.animation;
-            if !seen.insert(a.file.clone()) {
-                continue;
-            }
-            let frames = aoe_assets::sld::parse(
-                &fs::read(
-                    root.join("resources/_common/drs/graphics")
-                        .join(format!("{}.sld", a.file)),
-                )
-                .unwrap(),
-            )
-            .unwrap();
-            assert!(
-                frames.len() >= usize::from(a.frames) * usize::from(a.angles),
-                "{}",
-                a.file
-            );
-            assert!(frames.iter().any(|f| f.main.is_some()), "{}", a.file);
-            if (130..135).contains(&g.pose) {
-                assert!(frames.iter().any(|f| f.player.is_some()));
-                for row in 0..usize::from(a.angles) {
-                    let start = row * usize::from(a.frames);
-                    assert!(
-                        frames[start..start + usize::from(a.frames)]
-                            .windows(2)
-                            .any(|w| w[0] != w[1]),
-                        "{} row {row}",
-                        a.file
-                    );
-                }
-            }
-        }
-    }
-    assert!(seen.len() > 140);
-}
+#[path = "de_import/unit_timelines.rs"]
+mod unit_timelines;
 
 #[test]
 fn real_siege_stone_has_thirty_native_rotation_cells() {
@@ -198,7 +121,7 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
         .collect();
     assert_eq!(
         native.len(),
-        172_945,
+        177_780,
         "every native unit/stone source cell is chunked"
     );
     assert_eq!(
@@ -248,8 +171,8 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
     assert_eq!((farm.width, farm.height), (32, 32));
     assert_eq!(
         report.entries.len(),
-        272,
-        "+1: the galley bolt; +69: the naval and Castle/Imperial land-unit sources"
+        290,
+        "native sources include construction, ammunition and particle effects"
     );
     assert_eq!(
         manifest
@@ -457,8 +380,27 @@ fn real_de_building_catalog_retains_every_spawned_recipe() {
         assert!(tc.parts.len() >= 4, "Town Center {id}");
         assert!(tc.parts.iter().all(|p| p.misplacement == [0.0; 2]), "{id}");
     }
-    let gate = catalog.recipes.iter().find(|b| b.unit_id == 64).unwrap();
-    assert!(gate.parts.iter().any(|p| p.misplacement != [0.0; 2]));
+    for (id, expected) in [(487, [[72, -36], [-72, 36]]), (490, [[-72, -36], [72, 36]])] {
+        let gate = catalog.recipes.iter().find(|b| b.unit_id == id).unwrap();
+        let corners: Vec<_> = gate
+            .parts
+            .iter()
+            .filter(|part| part.source.contains("_corner_"))
+            .map(|part| part.offset)
+            .collect();
+        assert_eq!(corners, expected, "gate {id} corner offsets");
+    }
+    let trap = catalog.recipes.iter().find(|b| b.unit_id == 199).unwrap();
+    assert!(
+        trap.parts
+            .iter()
+            .any(|p| p.source.ends_with("fish_trap_x1.sld"))
+    );
+    assert!(
+        trap.parts
+            .iter()
+            .any(|p| p.source.ends_with("fish_trap_underwater_x1.sld"))
+    );
     let mut counts = std::collections::BTreeMap::new();
     for source in &catalog.sources {
         let path = root

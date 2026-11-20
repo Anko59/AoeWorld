@@ -341,10 +341,9 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 } else {
                     client.selected = Default::default();
                 }
-                client.village.move_cursor = false;
+                client.village.clear_move_cursor();
                 client.village.unload_cursor = false;
-                client.village.attack_move = false;
-                client.village.general_only = false;
+                let _ = client.canvas.set_attribute("data-order-mode", "");
                 client.drag = None;
             }
             6 if client.village.repeat_placement || client.village.far_placement => {
