@@ -329,6 +329,20 @@ pub(crate) fn unit_rule(unit: &UnitState) -> Option<&'static str> {
     if unit.death_tick.is_some() && alive {
         return Some("unit.death_tick_only_when_dead");
     }
+    if unit.native_action.is_some_and(|action| match action {
+        super::super::NativeAction::TrebuchetTransform(until) => {
+            !alive
+                || !matches!(unit.kind, UnitKind::Trebuchet | UnitKind::TrebuchetUnpacked)
+                || unit.moving
+                || unit.planning
+                || until.0 == 0
+        }
+        super::super::NativeAction::AttackStarted(start) => {
+            !alive || unit.task != UnitTask::Attacking || start.0 == 0
+        }
+    }) {
+        return Some("unit.native_action");
+    }
     if unit
         .death_hunt
         .is_some_and(|_| alive || unit.kind != UnitKind::Villager)

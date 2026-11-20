@@ -13,83 +13,111 @@ pub(super) fn hash(install: &Path, source: &Selected) -> Result<String, Error> {
         )?;
         hash.update(&bytes);
     }
+    if let Some(particle) = &source.particle {
+        for path in particle.paths(install) {
+            hash.update(&read_bounded(&path)?);
+        }
+    }
     Ok(hash.finalize().to_hex().to_string())
 }
 pub(super) struct Decoder {
     source: Option<Selected>,
-    parts: Vec<Vec<sld::Frame>>,
-    stream: Option<sld::Stream>,
+    parts: Vec<Cells>,
+    textures: Vec<crate::dds::Texture>,
 }
+
+enum Cells {
+    Sequential(sld::Stream),
+    Repeated(Vec<sld::Frame>),
+}
+
+impl Cells {
+    fn len(&self) -> usize {
+        match self {
+            Self::Sequential(stream) => stream.len(),
+            Self::Repeated(frames) => frames.len(),
+        }
+    }
+
+    fn frame(&mut self, index: usize) -> Result<&sld::Frame, Error> {
+        match self {
+            Self::Sequential(stream) => stream.frame(index),
+            Self::Repeated(frames) => frames
+                .get(index)
+                .ok_or_else(|| invalid("DE unit", index, "missing delta cell")),
+        }
+    }
+}
+
 impl Decoder {
     pub fn streamed(bytes: Vec<u8>) -> Result<Self, Error> {
         Ok(Self {
             source: None,
-            parts: Vec::new(),
-            stream: Some(sld::Stream::new(bytes)?),
+            parts: vec![Cells::Sequential(sld::Stream::new(bytes)?)],
+            textures: Vec::new(),
         })
     }
     pub fn new(install: &Path, source: &Selected) -> Result<Self, Error> {
-        // One-part sources stream (the unpacked Trebuchet's attack alone
-        // exceeds the whole-file decode bound).
-        if let [part] = source.parts.as_slice() {
-            let path = install
-                .join(GRAPHICS)
-                .join(format!("{}.sld", part.animation.file));
+        if let Some(particle) = &source.particle {
             return Ok(Self {
                 source: Some(source.clone()),
                 parts: Vec::new(),
-                stream: Some(sld::Stream::new(read_bounded(&path)?)?),
+                textures: particle.load(install)?,
             });
         }
         let mut parts = Vec::new();
-        let mut bytes = 0usize;
+        let mut retained_bytes = 0usize;
+        let last_phase = f64::from(source.frames.saturating_sub(1)) * f64::from(source.seconds);
         for part in &source.parts {
-            let path = install
-                .join(GRAPHICS)
-                .join(format!("{}.sld", part.animation.file));
-            let frames = sld::parse(&read_bounded(&path)?).inspect_err(|_| {
-                eprintln!("SLD decode failed: {}", path.display());
-            })?;
-            bytes += frames
-                .iter()
-                .map(|f| {
-                    [&f.main, &f.shadow, &f.player]
-                        .into_iter()
-                        .flatten()
-                        .map(|l| l.pixels.len() * 4)
-                        .sum::<usize>()
-                })
-                .sum::<usize>();
-            if bytes > 256 * 1024 * 1024 {
+            let a = &part.animation;
+            let path = install.join(GRAPHICS).join(format!("{}.sld", a.file));
+            let bytes = read_bounded(&path)?;
+            // Direction-independent layers repeat across rows. Shorter looping
+            // layers also need random access. Stream the rest one cell at a time.
+            let repeated = source.parts.len() > 1
+                && a.frames > 1
+                && (a.angles == 1
+                    || (a.seconds > 0.0
+                        && (a.frames != source.frames || a.seconds != source.seconds)
+                        && last_phase
+                            >= f64::from(a.frames) * f64::from(a.seconds)
+                                + f64::from(a.replay_delay)));
+            let cells = if repeated {
+                let frames = sld::parse(&bytes).inspect_err(|_| {
+                    eprintln!("SLD decode failed: {}", path.display());
+                })?;
+                retained_bytes += frames
+                    .iter()
+                    .flat_map(|f| [&f.main, &f.shadow, &f.player].into_iter().flatten())
+                    .map(|l| l.pixels.len() * 4)
+                    .sum::<usize>();
+                Cells::Repeated(frames)
+            } else {
+                retained_bytes += bytes.len();
+                Cells::Sequential(sld::Stream::new(bytes)?)
+            };
+            if retained_bytes > 256 * 1024 * 1024 {
                 return Err(invalid("DE unit", 0, "delta source memory bound"));
             }
-            parts.push(frames);
+            parts.push(cells);
         }
         Ok(Self {
             source: Some(source.clone()),
-            stream: None,
+            textures: Vec::new(),
             parts,
         })
     }
     pub fn len(&self) -> usize {
-        if let Some(stream) = &self.stream
-            && self.source.is_none()
-        {
-            return stream.len();
-        }
         self.source
             .as_ref()
             .map_or_else(|| self.parts[0].len(), |s| usize::from(s.cells))
     }
     pub fn frame(&mut self, index: usize) -> Result<Planes, Error> {
-        if let Some(stream) = &mut self.stream {
-            return stream.frame(index).map(compose::planes);
+        if let Some(particle) = self.source.as_ref().and_then(|s| s.particle.as_ref()) {
+            return particle.frame(&self.textures, index);
         }
-        if self.parts.len() == 1 {
-            return self.parts[0]
-                .get(index)
-                .map(compose::planes)
-                .ok_or_else(|| invalid("DE unit", 0, "missing native cell"));
+        if let [part] = self.parts.as_mut_slice() {
+            return part.frame(index).map(compose::planes);
         }
         let source = self
             .source
@@ -98,15 +126,27 @@ impl Decoder {
         let row = index / usize::from(source.frames);
         let phase = index % usize::from(source.frames);
         let mut planes = Vec::new();
-        for (part, frames) in source.parts.iter().zip(&self.parts) {
+        let last = index + 1 == usize::from(source.cells);
+        for (part, frames) in source.parts.iter().zip(&mut self.parts) {
             let a = &part.animation;
-            let index = if a.angles == 1 { 0 } else { row } * usize::from(a.frames)
-                + if a.frames == 1 { 0 } else { phase };
-            let mut p = compose::planes(
-                frames
-                    .get(index)
-                    .ok_or_else(|| invalid("DE unit", 0, "missing delta cell"))?,
-            );
+            let layer_phase = if a.frames == source.frames && a.seconds == source.seconds {
+                phase
+            } else if a.frames == 1 || a.seconds == 0.0 {
+                0
+            } else {
+                // Sails and the hull can have their own DAT clocks.
+                let elapsed = phase as f64 * f64::from(source.seconds);
+                let seconds = f64::from(a.seconds);
+                let period = f64::from(a.frames) * seconds + f64::from(a.replay_delay);
+                ((elapsed % period / seconds) as usize).min(usize::from(a.frames - 1))
+            };
+            let index = if a.angles == 1 { 0 } else { row } * usize::from(a.frames) + layer_phase;
+            let mut p = compose::planes(frames.frame(index)?);
+            if last {
+                // Validate trailing native cells even when this compositor
+                // does not sample them.
+                frames.frame(frames.len() - 1)?;
+            }
             p.hotspot_x -= part.x;
             p.hotspot_y -= part.y;
             planes.push(p);

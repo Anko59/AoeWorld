@@ -139,3 +139,6 @@ ConstructionImperialSiegeWorkshop
 Wonder
 RubbleWonder
 ConstructionWonder
+FishTrap
+RubbleFishTrap
+ConstructionFishTrap

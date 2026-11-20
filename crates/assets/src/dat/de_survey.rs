@@ -63,7 +63,7 @@ const TECHS: &[(i16, i32)] = &[
     (182, 7180),
     (50, 7050),
     (93, 7093),
-    (321, 7321),
+    (322, 7321),
     (202, 7189),
     (14, 7014),
     (55, 7055),
@@ -87,6 +87,11 @@ const SOLDIERS: &[(i16, i32)] = &[
     (546, 5444),
     (125, 5099),
     (280, 5095),
+    (550, 5448),
+    (588, 5493),
+    (2626, 5523),
+    (2627, 5524),
+    (2628, 5525),
     (35, 5094),
     (4, 5083),
     (7, 5088),
@@ -128,6 +133,7 @@ pub struct Building {
     pub total_projectiles: f32,
     pub max_total_projectiles: u8,
     pub projectile_spawning_area: [f32; 3],
+    pub secondary_projectile: i32,
 }
 #[derive(Debug, Serialize)]
 pub struct Technology {
@@ -254,7 +260,7 @@ pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Resul
             (build_location, button, hot_key) = (location, slot, key);
         }
     }
-    let (total_projectiles, max_total_projectiles, projectile_spawning_area) =
+    let (total_projectiles, max_total_projectiles, projectile_spawning_area, secondary_projectile) =
         military::volley(&mut r)?;
     // Profession variants are not trained directly and have no train location.
     if build_seconds < 0
@@ -294,6 +300,7 @@ pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Resul
         total_projectiles,
         max_total_projectiles,
         projectile_spawning_area,
+        secondary_projectile,
     })
 }
 
@@ -308,39 +315,10 @@ fn technology(bytes: &[u8], id: i16, language: i32) -> Result<Technology, Error>
         let Some(start) = at.checked_sub(33) else {
             continue;
         };
-        let parsed = (|| {
-            let mut r = Reader::new(bytes, start);
-            let requires = (0..6).map(|_| r.i16()).collect::<Result<Vec<_>, _>>()?;
-            let cost = (0..3)
-                .map(|_| Ok((r.i16()?, r.i16()?, r.u8()?)))
-                .collect::<Result<Vec<_>, Error>>()?;
-            r.skip(6 + 8)?;
-            let effect = r.i16()?;
-            r.skip(2)?;
-            let icon = r.i16()?;
-            r.skip(8)?;
-            let name = debug(&mut r)?;
-            r.skip(1)?;
-            let n = count(&mut r, 16, "research locations")?;
-            let locations = (0..n)
-                .map(|_| Ok((r.i16()?, r.i16()?, r.u8()?, r.i32()?)))
-                .collect::<Result<Vec<_>, Error>>()?;
-            if locations.is_empty() || effect < 0 {
-                return Err(r.fail("invalid research record"));
-            }
-            Ok(Technology {
-                id,
-                offset: start,
-                name,
-                requires,
-                cost,
-                effect,
-                icon,
-                locations,
-            })
-        })();
-        if parsed.is_ok() {
-            return parsed;
+        if let Ok(parsed) = icons::technology_at(bytes, id, start)
+            && parsed.effect >= 0
+        {
+            return Ok(parsed);
         }
     }
     Err(crate::invalid(

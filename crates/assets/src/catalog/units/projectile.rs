@@ -43,6 +43,53 @@ pub fn projectile_facing(east: f64, south: f64) -> u8 {
     }
 }
 
+/// The native flight pose of the projectile unit carried by the gameplay stream.
+pub const fn projectile_pose(unit: u16) -> Option<Pose> {
+    Some(match unit {
+        368 | 374 => Pose::Cannonball,
+        512 => Pose::GalleyArrow,
+        477 | 478 => Pose::NativeArrow,
+        367 | 372 => Pose::ScorpionBolt,
+        373 | 627 => Pose::HeavyScorpionBolt,
+        2636 => Pose::BoardingHook,
+        656 => Pose::MangonelStone,
+        369 => Pose::MangonelScatter,
+        371 | 1932 => Pose::TrebuchetBoulder,
+        380 => Pose::GunpowderShot,
+        676 => Pose::FireStream,
+        _ => return None,
+    })
+}
+
+/// The signed arc multiplier of the DAT projectile record.
+pub const fn projectile_arc(unit: u16) -> f64 {
+    match unit {
+        477 | 478 => -0.06,
+        368 | 512 => -0.05,
+        369 | 374 | 656 | 1932 => 0.4,
+        371 => 0.65,
+        372 | 373 | 380 => 0.05,
+        676 => 0.45,
+        2636 => -0.3,
+        _ => 0.0,
+    }
+}
+
+pub const fn projectile_effects(unit: u16) -> (Option<Pose>, Option<Pose>) {
+    let muzzle = match unit {
+        368 => Some(Pose::BombardCannonMuzzle),
+        374 => Some(Pose::CannonGalleonMuzzle),
+        380 => Some(Pose::HandCannoneerMuzzle),
+        _ => None,
+    };
+    let impact = match unit {
+        371 | 1932 => Some(Pose::TrebuchetImpact),
+        367 | 368 | 372 | 373 | 374 | 380 | 627 | 656 | 676 => Some(Pose::ProjectileImpact),
+        _ => None,
+    };
+    (muzzle, impact)
+}
+
 /// Frame of an attack animation at which the shot or the strike is released,
 /// from the DE DAT unit's frame delay. `None` for poses that release nothing
 /// mid-animation; this changes visual alignment, never simulation shot timing.
@@ -51,6 +98,17 @@ pub const fn release_frame(pose: Pose) -> Option<u8> {
         Pose::ArcherAttack | Pose::CrossbowmanAttack => Some(15),
         Pose::ArbalesterAttack => Some(20),
         Pose::SkirmisherAttack | Pose::EliteSkirmisherAttack => Some(19),
+        Pose::HandCannoneerAttack => Some(15),
+        Pose::TrebuchetUnpackedAttack => Some(24),
+        Pose::MangonelAttack | Pose::OnagerAttack | Pose::SiegeOnagerAttack => Some(0),
+        Pose::ScorpionAttack => Some(12),
+        Pose::HeavyScorpionAttack => Some(6),
+        Pose::BombardCannonAttack => Some(7),
+        Pose::CavalryArcherAttack => Some(35),
+        Pose::HeavyCavalryArcherAttack => Some(46),
+        Pose::CamelRiderAttack | Pose::HeavyCamelRiderAttack => Some(20),
+        Pose::BatteringRamAttack | Pose::CappedRamAttack | Pose::SiegeRamAttack => Some(0),
+        Pose::CatapultGalleonAttack => Some(0),
         _ => None,
     }
 }

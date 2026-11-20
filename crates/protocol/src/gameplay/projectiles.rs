@@ -7,6 +7,8 @@ pub enum ProjectileKind {
     Javelin,
     Stone,
     Bolt,
+    /// Primary projectile identity from the unit data.
+    Native(u16),
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ProjectileState {
@@ -25,7 +27,8 @@ pub(super) fn bounded_projectiles<'de, D: Deserializer<'de>>(
     economy::bounded::<D, _, MAX_PROJECTILES>(d)
 }
 pub(super) fn valid_projectile(p: &ProjectileState, tick: Tick) -> bool {
-    p.launched <= tick
+    p.kind != ProjectileKind::Native(0)
+        && p.launched <= tick
         && tick < p.impact
         && p.impact > p.launched
         && p.impact.0 - p.launched.0 <= 10000

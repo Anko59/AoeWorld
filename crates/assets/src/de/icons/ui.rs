@@ -95,6 +95,7 @@ pub(super) fn resolve(install: &Path, hash: &mut blake3::Hasher) -> Result<Vec<S
         ("formation-staggered", 62),
         ("formation-flank", 63),
         ("attack-move", 84),
+        ("patrol", 39),
         ("auto-scout", 74),
     ] {
         let file = format!("actions/{index:03}_.png");
@@ -239,50 +240,59 @@ pub(super) fn decode(bytes: &[u8], is_png: bool) -> Result<Planes, Error> {
     if !is_png {
         return super::decode(bytes);
     }
+    let texture = decode_png(bytes, 2048, "DE interface")?;
+    let mut planes = Planes::blank(texture.width, texture.height, 0, 0);
+    planes
+        .color
+        .as_chunks_mut::<4>()
+        .0
+        .copy_from_slice(&texture.pixels);
+    Ok(planes)
+}
+
+pub(super) fn decode_png(
+    bytes: &[u8],
+    max_side: u32,
+    format: &'static str,
+) -> Result<crate::dds::Texture, Error> {
+    let max_bytes = max_side as usize * max_side as usize * 4;
     let mut decoder = png::Decoder::new(Cursor::new(bytes));
-    decoder.set_limits(png::Limits {
-        bytes: 16 * 1024 * 1024,
-    });
+    decoder.set_limits(png::Limits { bytes: max_bytes });
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut reader = decoder.read_info()?;
     let (width, height) = (reader.info().width, reader.info().height);
     if width == 0
         || height == 0
-        || width > 2048
-        || height > 2048
-        || width
-            .checked_mul(height)
-            .is_none_or(|pixels| pixels > 4 * 1024 * 1024)
-        || reader.output_buffer_size() > 16 * 1024 * 1024
+        || width > max_side
+        || height > max_side
+        || reader.output_buffer_size() > max_bytes
     {
-        return Err(invalid("DE interface", 0, "PNG dimensions"));
+        return Err(invalid(format, 0, "PNG dimensions"));
     }
     let mut pixels = vec![0; reader.output_buffer_size()];
     let frame = reader.next_frame(&mut pixels)?;
     if frame.bit_depth != png::BitDepth::Eight {
-        return Err(invalid("DE interface", 0, "PNG bit depth"));
+        return Err(invalid(format, 0, "PNG bit depth"));
     }
-    let mut planes = Planes::blank(width as u16, height as u16, 0, 0);
     let channels = frame.color_type.samples();
-    for (out, pixel) in planes
-        .color
-        .as_chunks_mut::<4>()
-        .0
-        .iter_mut()
-        .zip(pixels[..frame.buffer_size()].chunks_exact(channels))
-    {
-        let rgba = match frame.color_type {
+    if frame.color_type == png::ColorType::Indexed {
+        return Err(invalid(format, 0, "unexpanded PNG palette"));
+    }
+    let pixels = pixels[..frame.buffer_size()]
+        .chunks_exact(channels)
+        .map(|pixel| match frame.color_type {
             png::ColorType::Rgba => [pixel[0], pixel[1], pixel[2], pixel[3]],
             png::ColorType::Rgb => [pixel[0], pixel[1], pixel[2], 255],
             png::ColorType::Grayscale => [pixel[0], pixel[0], pixel[0], 255],
             png::ColorType::GrayscaleAlpha => [pixel[0], pixel[0], pixel[0], pixel[1]],
-            png::ColorType::Indexed => {
-                return Err(invalid("DE interface", 0, "unexpanded PNG palette"));
-            }
-        };
-        out.copy_from_slice(&rgba);
-    }
-    Ok(planes)
+            png::ColorType::Indexed => unreachable!(),
+        })
+        .collect();
+    Ok(crate::dds::Texture {
+        width: width as u16,
+        height: height as u16,
+        pixels,
+    })
 }
 
 pub(super) fn apply(

@@ -25,6 +25,7 @@ fn state(x: i32, moving: bool) -> GameplayUnitState {
         auto_scout: false,
         sergeant: false,
         cargo_count: 0,
+        native_action: None,
         home_castle: None,
         managed_by: None,
         commanded_by: None,
@@ -401,4 +402,17 @@ fn a_unit_shoved_back_and_forth_makes_no_progress() {
         (walked - 4.0 * 100.0 / f64::from(tile)).abs() < 1e-6,
         "{walked}"
     );
+}
+
+#[wasm_bindgen_test]
+fn trebuchet_transition_stages_reverse_on_repacking() {
+    use aoe_protocol::UnitKind;
+    assert_eq!(trebuchet_stage(UnitKind::TrebuchetUnpacked, 0.0), Some(0));
+    assert_eq!(trebuchet_stage(UnitKind::TrebuchetUnpacked, 5.0), Some(1));
+    assert_eq!(trebuchet_stage(UnitKind::TrebuchetUnpacked, 10.0), Some(2));
+    assert_eq!(trebuchet_stage(UnitKind::TrebuchetUnpacked, 11.12), None);
+    assert_eq!(trebuchet_stage(UnitKind::Trebuchet, 0.0), Some(2));
+    assert_eq!(trebuchet_stage(UnitKind::Trebuchet, 5.0), Some(1));
+    assert_eq!(trebuchet_stage(UnitKind::Trebuchet, 10.0), Some(0));
+    assert_eq!(trebuchet_stage(UnitKind::Trebuchet, 11.12), None);
 }

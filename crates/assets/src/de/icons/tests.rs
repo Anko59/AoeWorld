@@ -74,7 +74,7 @@ fn de_icon_dimensions_are_bounded_before_texture_decode() {
 
 /// Needs the owner's DE install (`AOE_DE_DIR`); skipped without it.
 #[test]
-fn real_naval_research_and_unit_icons_resolve() {
+fn real_naval_and_land_research_and_unit_icons_resolve() {
     let Some(root) = std::env::var_os("AOE_DE_DIR") else {
         return;
     };
@@ -82,8 +82,24 @@ fn real_naval_research_and_unit_icons_resolve() {
     let dat = read_bounded(&root.join("resources/_common/dat/empires2_x2_p1.dat")).unwrap();
     let dat = crate::dat::de_survey::inflate(&dat).unwrap();
     let techs = crate::dat::de_survey::technology_icons(&dat).unwrap();
-    for id in [906, 65, 374, 375, 373, 908, 907, 909, 910] {
-        assert!(techs.iter().any(|&(tech, _)| tech == id), "tech {id}");
+    assert_eq!(techs.len(), 105, "every current research slot has art");
+    assert_eq!(
+        techs
+            .iter()
+            .map(|&(id, _)| id)
+            .collect::<BTreeSet<_>>()
+            .len(),
+        techs.len(),
+        "two technologies must not share a catalog key"
+    );
+    assert!(techs.contains(&(321, 5)), "Sappers");
+    assert!(techs.contains(&(322, 61)), "Murder Holes");
+    let count = |id| techs.iter().filter(|&&(tech, _)| tech == id).count();
+    for id in [
+        906, 65, 374, 375, 373, 908, 907, 909, 910, 35, 905, 244, 376, 47, 218, 236, 239, 320, 321,
+        322,
+    ] {
+        assert_eq!(count(id), 1, "tech {id}");
     }
     let selected = unit_catalog::resolve(root).unwrap();
     resolve(root, &selected, &mut blake3::Hasher::new()).unwrap();

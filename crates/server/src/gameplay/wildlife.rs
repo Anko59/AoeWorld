@@ -42,14 +42,19 @@ pub(super) fn projectiles_from<'a>(
                 to: if visible(p.to) { p.to } else { position },
                 launched: if seen { p.launched } else { world.tick() },
                 impact: p.impact,
-                kind: match p.kind {
-                    aoe_simulation::ProjectileKind::Stone => aoe_protocol::ProjectileKind::Stone,
-                    aoe_simulation::ProjectileKind::Arrow => aoe_protocol::ProjectileKind::Arrow,
-                    aoe_simulation::ProjectileKind::Javelin => {
-                        aoe_protocol::ProjectileKind::Javelin
-                    }
-                    aoe_simulation::ProjectileKind::Bolt => aoe_protocol::ProjectileKind::Bolt,
-                },
+                kind: p.native_projectile_id().map_or_else(
+                    || match p.kind {
+                        aoe_simulation::ProjectileKind::Stone => {
+                            aoe_protocol::ProjectileKind::Stone
+                        }
+                        aoe_simulation::ProjectileKind::Javelin => {
+                            aoe_protocol::ProjectileKind::Javelin
+                        }
+                        aoe_simulation::ProjectileKind::Bolt => aoe_protocol::ProjectileKind::Bolt,
+                        _ => aoe_protocol::ProjectileKind::Arrow,
+                    },
+                    aoe_protocol::ProjectileKind::Native,
+                ),
             }
         })
         // Projectiles are shown, never simulated, on the client: a crowded

@@ -1,7 +1,6 @@
 // Semantic metadata only. Prices, requirements and availability come from Rust.
 // Order follows the protocol's UnitKind and Tech enums after General / WarGalley.
 export const imperialUnits=['TwoHandedSwordsman','Champion','Halberdier','Arbalester','Cavalier','Paladin','Hussar','CappedRam','SiegeRam','Onager'];
-export const imperialUnitNames=['Two-Handed Swordsman','Champion','Halberdier','Arbalester','Cavalier','Paladin','Hussar','Capped Ram','Siege Ram','Onager'];
 // [id, label, building kind index]
 export const imperialTechs=[
   ['imperial-age','Imperial Age · 1000 food · 800 gold',0],

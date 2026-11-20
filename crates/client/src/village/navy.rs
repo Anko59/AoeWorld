@@ -13,7 +13,7 @@ fn selected_transport(client: &Client) -> Option<EntityId> {
 
 pub(super) fn arm_unload(client: &mut Client) {
     if selected_transport(client).is_some() {
-        client.village.move_cursor = false;
+        client.village.clear_move_cursor();
         client.village.unload_cursor = true;
         let _ = client.canvas.set_attribute("data-order-mode", "unload");
         client.status = "Right-click a shore to sail there and unload".into();

@@ -21,6 +21,10 @@ pub struct Unit {
     pub walking: i16,
     pub running: i16,
     pub attack: i16,
+    pub projectile: i16,
+    pub speed: f32,
+    pub work_rate: f32,
+    pub projectile_arc: Option<f32>,
     pub work: i16,
     pub carrying: i16,
     pub release: i16,
@@ -86,6 +90,10 @@ fn parse(bytes: &[u8], at: usize, id: i16) -> Result<Unit, Error> {
         walking: -1,
         running: -1,
         attack: -1,
+        projectile: -1,
+        speed: 0.0,
+        work_rate: 0.0,
+        projectile_arc: None,
         work: -1,
         carrying: -1,
         release: 0,
@@ -96,14 +104,15 @@ fn parse(bytes: &[u8], at: usize, id: i16) -> Result<Unit, Error> {
     if kind < 30 {
         return Ok(unit);
     }
-    r.skip(4)?;
+    unit.speed = r.f32()?;
     unit.walking = r.i16()?;
     unit.running = r.i16()?;
     r.skip(37)?;
     if kind < 40 {
         return Ok(unit);
     }
-    r.skip(10)?;
+    r.skip(6)?;
+    unit.work_rate = r.f32()?;
     let drops = usize::from(r.u16()?);
     r.bounded(drops, 64, "drop sites")?;
     r.skip(drops * 2 + 14)?;
@@ -132,10 +141,20 @@ fn parse(bytes: &[u8], at: usize, id: i16) -> Result<Unit, Error> {
         r.bounded(n, 64, "combat entries")?;
         r.skip(n * 4)?;
     }
-    r.skip(6 + 12 + 2 + 3)?;
+    r.skip(6 + 12)?;
+    unit.projectile = r.i16()?;
+    r.skip(3)?;
     unit.release = r.i16()?;
     r.skip(13 + 4 + 4)?;
     unit.attack = r.i16()?;
+    if kind == 60 {
+        r.skip(32 + 5)?;
+        let arc = r.f32()?;
+        if !arc.is_finite() {
+            return Err(r.fail("projectile arc"));
+        }
+        unit.projectile_arc = Some(arc);
+    }
     if kind == 80 {
         unit.building = Some(building::parse(&mut r)?);
     }

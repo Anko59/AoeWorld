@@ -17,6 +17,8 @@ impl WorldSnapshot {
         self.tick = at(self.tick);
         for record in &mut self.units {
             record.next_hit_tick = at(record.next_hit_tick);
+            record.transform_until = record.transform_until.map(at);
+            record.swing_started = record.swing_started.map(at);
             record.general_order_tick = record.general_order_tick.map(at);
             record.unit.death_tick = record.unit.death_tick.map(|t| aoe_core::Tick(at(t.0)));
             if let Some(hit) = &mut record.unit.last_hit {

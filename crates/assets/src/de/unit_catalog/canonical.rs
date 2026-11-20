@@ -29,6 +29,7 @@ pub(super) fn apply(selected: &mut [Selected]) -> Result<(), Error> {
             s.seconds.to_bits(),
             s.replay.to_bits(),
             parts,
+            s.particle.as_ref().map(|p| &p.name),
         ))?;
         if let Some((sprite, file)) = sources.get(&key) {
             s.sprite = *sprite;

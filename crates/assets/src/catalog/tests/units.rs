@@ -185,15 +185,17 @@ fn every_shooting_attack_releases_inside_its_animation() {
         (Pose::SkirmisherAttack, 19),
         (Pose::CrossbowmanAttack, 15),
         (Pose::ArbalesterAttack, 20),
+        (Pose::HandCannoneerAttack, 15),
+        (Pose::TrebuchetUnpackedAttack, 24),
         (Pose::EliteSkirmisherAttack, 19),
     ] {
         let release = release_frame(pose).unwrap();
         assert_eq!(release, expected, "native DE frame delay");
         assert!(release > 0 && release < SPRITES[pose as usize].stride);
     }
-    // Melee and siege poses release nothing mid-animation.
+    // Poses without shot alignment play on the general animation clock.
     assert_eq!(release_frame(Pose::KnightAttack), None);
-    assert_eq!(release_frame(Pose::MangonelAttack), None);
+    assert_eq!(release_frame(Pose::MangonelAttack), Some(0));
 }
 
 #[test]
@@ -222,4 +224,16 @@ fn general_uses_distinct_full_paladin_animations() {
 fn a_pose_index_is_wider_than_a_byte() {
     assert_eq!(std::mem::size_of::<Pose>(), 2);
     assert!(Pose::TradeCogDecay as u16 > 223);
+}
+
+#[test]
+fn trebuchet_transition_and_projectiles_use_their_own_native_sources() {
+    let construction = SPRITES[Pose::TrebuchetTransition as usize];
+    assert_eq!((construction.stride, construction.rows()), (3, 32));
+    let boulder = SPRITES[Pose::TrebuchetBoulder as usize];
+    assert_eq!((boulder.stride, boulder.rows()), (30, 1));
+    assert_ne!(boulder.id, SPRITES[Pose::Stone as usize].id);
+    let shot = SPRITES[Pose::GunpowderShot as usize];
+    assert_eq!((shot.stride, shot.rows()), (1, 1));
+    assert_ne!(shot.id, SPRITES[Pose::Arrow as usize].id);
 }

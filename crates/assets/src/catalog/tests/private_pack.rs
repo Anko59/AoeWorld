@@ -335,7 +335,7 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
     let mut manifest = synthetic_manifest();
     assert_eq!(
         actor_frames(),
-        175238,
+        180_073,
         // Complete current DAT unit cells, including neutral colour semantics.
         // +480 over the previous pin: only the new farmer seed sheet (203364); the
         // four carry and hunter-carry poses reuse already-selected graphics.
@@ -344,6 +344,10 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
         // sinking and corpse animations shared with older ships add nothing).
         // +45328 for the 60 Castle/Imperial land-unit and gunpowder poses,
         // measured on the catalog that holds both the ships and those units.
+        // +127 for the Trebuchet pack/unpack transition, its boulder and the
+        // gunpowder shot (three native effect poses, #916).
+        // +4708 for the complete ammunition, particle, Fire Galley walk and
+        // Catapult Galleon attack cells from the installed DAT and effects.
         // Pin the complete current selection independently of runtime residency.
         "military, Castle, projectile and farmer cells included"
     );

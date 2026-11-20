@@ -33,35 +33,40 @@ pub(in super::super::super) fn units(
                     .state([u.position.tile_floor().x, u.position.tile_floor().y])
                     == 2
         })
-        .filter_map(|unit| {
+        .flat_map(|unit| {
             let (position, travelled) = client.presentation.pose(*unit);
             let height = scene
                 .height(position)
                 .unwrap_or_else(|| elevation_at_world(client, position))
                 as f32;
             if !visible(client, scene, position, height, false) {
-                return None;
+                return [None, None];
             }
             let (shown, pose) = actors::shown_pose(client, unit);
             let unit = &shown;
             let kind = aoe_rendering::SceneUnitKind::actor(pose as u16);
             let facing = actors::animation_frame(client, unit, pose, travelled);
-            Some(
-                aoe_rendering::SceneUnit {
-                    kind,
-                    id: unit.id,
-                    position,
-                    visual: aoe_rendering::SceneUnitVisual::new(
-                        unit.moving || position != unit.position.as_tiles(),
-                    )
-                    .with_player(Some(unit.player), player, client.team_colour, unit.hp > 0)
-                    .with_selected(unit.hp > 0 && client.selected.units.contains(&unit.id)),
-                    facing: 0,
-                    elevation_meters: height,
-                }
-                .with_actor_frame(facing),
-            )
+            let body = aoe_rendering::SceneUnit {
+                kind,
+                id: unit.id,
+                position,
+                visual: aoe_rendering::SceneUnitVisual::new(
+                    unit.moving || position != unit.position.as_tiles(),
+                )
+                .with_player(Some(unit.player), player, client.team_colour, unit.hp > 0)
+                .with_selected(unit.hp > 0 && client.selected.units.contains(&unit.id)),
+                facing: 0,
+                elevation_meters: height,
+            }
+            .with_actor_frame(facing);
+            // DAT unit 440 has a detonation effect and no corpse unit.
+            let has_body = unit.kind != aoe_protocol::UnitKind::Petard || unit.death_tick.is_none();
+            [
+                has_body.then_some(body),
+                actors::death_effect(client, unit, body),
+            ]
         })
+        .flatten()
         .collect::<Vec<_>>();
     for animal in &client.village.animals {
         let position = animal.position.as_tiles();

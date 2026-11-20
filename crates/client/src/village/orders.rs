@@ -66,9 +66,7 @@ pub(super) fn train_kind(client: &mut Client, kind: UnitKind, batch: bool) {
 
 pub(in super::super) fn stop(client: &mut Client) {
     client.village.garrison_cursor = false;
-    client.village.move_cursor = false;
-    client.village.attack_move = false;
-    client.village.general_only = false;
+    client.village.clear_move_cursor();
     let _ = client.canvas.set_attribute("data-order-mode", "");
     let owned = client
         .selected
@@ -167,8 +165,7 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
             };
             send(client, message);
         }
-        client.village.move_cursor = false;
-        client.village.attack_move = false;
+        client.village.clear_move_cursor();
         let _ = client.canvas.set_attribute("data-order-mode", "");
         return;
     }
@@ -207,6 +204,7 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
         military.retain(|id| client.units[id].kind != UnitKind::Scout);
     }
     let formation_move = military.len() > 1
+        && !client.village.patrol_move
         && (queued || client.village.move_cursor || (enemy.is_none() && animal.is_none()));
     if formation_move {
         let sequence = client.next_sequence;
@@ -235,6 +233,19 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
             continue;
         }
         let sequence = client.next_sequence;
+        if client.village.patrol_move {
+            if can_choose_stance(unit.kind) {
+                send(
+                    client,
+                    Message::PatrolOrder {
+                        sequence,
+                        entity_id: id,
+                        destination,
+                    },
+                );
+            }
+            continue;
+        }
         use crate::unit_visuals::{ClickOrder, click_order};
         let choice = click_order(
             unit.kind,
@@ -276,12 +287,11 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
         let blocker = map::feedback::blocker_at(client, destination.tile_floor());
         client.order_feedback.record(sequence, blocker);
     }
-    if client.village.attack_move {
+    if client.village.attack_move || client.village.patrol_move {
         super::waypoints::ping(client, destination);
     }
     if !queued {
-        client.village.move_cursor = false;
-        client.village.attack_move = false;
+        client.village.clear_move_cursor();
         let _ = client.canvas.set_attribute("data-order-mode", "");
     }
 }
@@ -346,6 +356,18 @@ pub(in super::super) fn focus_town_center(client: &mut Client, select: bool) {
     }
 }
 
+pub(super) fn can_form(kind: UnitKind) -> bool {
+    !kind.is_naval() && (can_choose_stance(kind) || kind == UnitKind::Monk)
+}
+
+pub(super) fn can_choose_stance(kind: UnitKind) -> bool {
+    !matches!(kind, UnitKind::Villager | UnitKind::General)
+        && crate::building_ui::content::rules().units[kind as usize]
+            .combat
+            .attack
+            > 0
+}
+
 fn military(client: &Client) -> Vec<aoe_core::EntityId> {
     let mut military = client
         .selected
@@ -353,12 +375,10 @@ fn military(client: &Client) -> Vec<aoe_core::EntityId> {
         .iter()
         .copied()
         .filter(|id| {
-            client.units.get(id).is_some_and(|u| {
-                u.hp > 0
-                    && u.player == owner(client)
-                    && !matches!(u.kind, UnitKind::Villager | UnitKind::General)
-                    && !u.kind.is_naval()
-            })
+            client
+                .units
+                .get(id)
+                .is_some_and(|u| u.hp > 0 && u.player == owner(client) && can_form(u.kind))
         })
         .take(aoe_core::MAX_FORMATION_MEMBERS)
         .collect::<Vec<_>>();
@@ -446,19 +466,10 @@ pub(super) fn stance(client: &mut Client, index: u32) {
         .iter()
         .copied()
         .filter(|id| {
-            client.units.get(id).is_some_and(|u| {
-                u.player == owner(client)
-                    && !matches!(
-                        u.kind,
-                        UnitKind::Villager
-                            | UnitKind::FishingShip
-                            | UnitKind::TransportShip
-                            | UnitKind::Monk
-                            | UnitKind::Vassal
-                            | UnitKind::Steward
-                            | UnitKind::General
-                    )
-            })
+            client
+                .units
+                .get(id)
+                .is_some_and(|u| u.player == owner(client) && can_choose_stance(u.kind))
         })
         .collect::<Vec<_>>();
     for ids in unit_ids.chunks(aoe_core::MAX_FORMATION_MEMBERS) {

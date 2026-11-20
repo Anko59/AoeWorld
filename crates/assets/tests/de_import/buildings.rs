@@ -17,23 +17,28 @@ pub(super) fn append(records: &mut Vec<u8>) {
     for id in aoe_assets::catalog::GAMEPLAY_BUILDING_IDS {
         let id = id as i16;
         let mut b = units::record(id, &[graphic, -1, -1, -1, -1, -1, -1, -1], -1);
-        b[0] = 80;
-        b[29..33].copy_from_slice(&1_f32.to_le_bytes());
-        b[33..37].copy_from_slice(&1_f32.to_le_bytes());
-        b.extend([0; 32 + 18 + 2 + 97]);
-        for _ in 0..6 {
-            b.extend((-1_i16).to_le_bytes());
-        }
-        b.extend([0; 4]);
-        for _ in 0..4 {
-            b.extend((-1_i16).to_le_bytes());
-        }
-        b.push(0);
-        for _ in 0..4 {
-            b.extend((-1_i16).to_le_bytes());
-            b.extend([0; 8]);
-        }
-        b.extend([0; 33]);
+        finish(&mut b, -1);
         records.extend(b);
     }
+}
+
+pub(super) fn finish(b: &mut Vec<u8>, construction: i16) {
+    b[0] = 80;
+    b[29..33].copy_from_slice(&1_f32.to_le_bytes());
+    b[33..37].copy_from_slice(&1_f32.to_le_bytes());
+    b.extend([0; 32 + 18 + 2 + 97]);
+    b.extend(construction.to_le_bytes());
+    for _ in 0..5 {
+        b.extend((-1_i16).to_le_bytes());
+    }
+    b.extend([0; 4]);
+    for _ in 0..4 {
+        b.extend((-1_i16).to_le_bytes());
+    }
+    b.push(0);
+    for _ in 0..4 {
+        b.extend((-1_i16).to_le_bytes());
+        b.extend([0; 8]);
+    }
+    b.extend([0; 33]);
 }

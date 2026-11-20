@@ -92,9 +92,8 @@ pub(super) fn arm(client: &mut Client, kind: BuildingKind) {
     client.village.placement = Some(kind);
     client.village.repeat_placement = false;
     client.village.wall_start = None;
-    client.village.move_cursor = false;
+    client.village.clear_move_cursor();
     client.village.unload_cursor = false;
-    client.village.attack_move = false;
     let _ = client.canvas.set_attribute("data-order-mode", "build");
 }
 

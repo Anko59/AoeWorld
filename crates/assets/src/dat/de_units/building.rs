@@ -21,12 +21,15 @@ pub struct Building {
     pub research_complete: i16,
     pub foundation: i16,
     pub annexes: Vec<Annex>,
+    pub transform_unit: i16,
+    pub train_seconds: Option<i16>,
 }
 pub(super) fn parse(r: &mut Reader<'_>) -> Result<Building, Error> {
     r.skip(32 + 18)?;
     let trains = usize::from(r.u16()?);
     r.bounded(trains, 256, "train locations")?;
-    r.skip(trains * 9 + 97)?;
+    let train_seconds = if trains == 0 { None } else { Some(r.i16()?) };
+    r.skip(trains * 9 - usize::from(train_seconds.is_some()) * 2 + 97)?;
     let construction = r.i16()?;
     let snow = r.i16()?;
     let destruction = r.i16()?;
@@ -47,7 +50,9 @@ pub(super) fn parse(r: &mut Reader<'_>) -> Result<Building, Error> {
             annexes.push(Annex { unit, offset });
         }
     }
-    r.skip(33)?;
+    r.skip(2)?;
+    let transform_unit = r.i16()?;
+    r.skip(29)?;
     Ok(Building {
         construction,
         snow,
@@ -57,5 +62,7 @@ pub(super) fn parse(r: &mut Reader<'_>) -> Result<Building, Error> {
         research_complete,
         foundation,
         annexes,
+        transform_unit,
+        train_seconds,
     })
 }

@@ -6,19 +6,27 @@ use aoe_assets::{
 use std::collections::BTreeMap;
 pub(super) fn append(bytes: &mut Vec<u8>) {
     let mut units: BTreeMap<i16, [i16; 8]> = BTreeMap::new();
+    let mut construction = BTreeMap::new();
     for b in BINDINGS {
         let graphic = (SPRITES[b.pose as usize].id - 200_000) as i16;
         let index = match b.action {
-            Action::Idle => 0,
+            Action::Idle | Action::Projectile => 0,
             Action::Walk => 1,
             Action::Run => 2,
-            Action::Attack => 3,
-            Action::Death => 4,
+            Action::Attack | Action::AttackEffect(_) => 3,
+            Action::Death | Action::DeathEffect(_) => 4,
             Action::Decay => 5,
             Action::Work => 6,
             Action::Carry => 7,
+            Action::Construction => {
+                construction.insert(b.unit, graphic);
+                continue;
+            }
         };
-        units.entry(b.unit).or_insert([-1; 8])[index] = graphic;
+        let assigned = &mut units.entry(b.unit).or_insert([-1; 8])[index];
+        if !matches!(b.action, Action::AttackEffect(_) | Action::DeathEffect(_)) || *assigned < 0 {
+            *assigned = graphic;
+        }
     }
     for id in super::HERO_PORTRAITS {
         units.entry(id).or_insert([-1; 8]);
@@ -32,6 +40,9 @@ pub(super) fn append(bytes: &mut Vec<u8>) {
         let mut row = record(id, &g, dead);
         if super::HERO_PORTRAITS.contains(&id) {
             row[51..53].copy_from_slice(&id.to_le_bytes());
+        }
+        if let Some(&graphic) = construction.get(&id) {
+            super::buildings::finish(&mut row, graphic);
         }
         bytes.extend(row);
         if dead >= 0 {

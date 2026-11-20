@@ -1,16 +1,20 @@
 use super::{Client, building_center, owner};
 use crate::playground::game::{map, position_of};
-use aoe_protocol::{ResourceKind, UnitKind, UnitTask};
+use aoe_protocol::{BuildingKind, ResourceKind, UnitKind, UnitTask};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, prelude::wasm_bindgen};
 use web_sys::{Element, MouseEvent};
 
 #[wasm_bindgen(
-    inline_js = "export function village_update(values, status, details) { window.aoeInterface?.numeric(values, status); window.aoeInterface?.details(details); }"
+    inline_js = "export function village_update(values, status, details) { window.aoeInterface?.numeric(values, status); window.aoeInterface?.details(details); } export function village_kinds(kinds, formation, stance) { window.aoeInterface?.kinds?.(kinds, formation, stance); }"
 )]
 extern "C" {
     fn village_update(values: &[f64], status: &str, details: &[f64]);
+    fn village_kinds(kinds: js_sys::Array, formation: &[u8], stance: &[u8]);
 }
+
+const BUILDING_OFFSET: usize = UnitKind::ALL.len();
+const ANIMAL_OFFSET: usize = BUILDING_OFFSET + BuildingKind::ALL.len();
 
 #[wasm_bindgen(
     inline_js = "export function kingdom_activity_update(v) { window.aoeActivity?.update(v); }"
@@ -76,7 +80,7 @@ pub(in super::super) fn update(client: &Client) {
     let overview = crate::playground::game::strategic::active(client);
     // Header: four stockpiles, used/cap, four worker counts, clock,
     // native-art flag, actor/queue/resource counts, and the two idle counts.
-    // Actor records contain eighteen numbers; queue records contain progress,
+    // Actor records contain nineteen numbers; queue records contain progress,
     // total and unit kind.
     // Decode immediately in JS; never retain a view of WASM memory.
     // One geometry snapshot precedes every panel write. Later panels share it
@@ -191,20 +195,19 @@ pub(in super::super) fn update(client: &Client) {
             && unit.kind == UnitKind::Villager;
         values.extend_from_slice(&[
             f64::from(unit.id.0),
-            match unit.kind {
-                UnitKind::Scout => 0.0,
-                UnitKind::Villager => 1.0,
-                UnitKind::Militia => 2.0 + aoe_protocol::BuildingKind::ALL.len() as f64,
-                UnitKind::FishingShip => 3.0 + aoe_protocol::BuildingKind::ALL.len() as f64,
-                _ => {
-                    8.0 + aoe_protocol::BuildingKind::ALL.len() as f64
-                        + (unit.kind as u8 - UnitKind::Archer as u8) as f64
-                }
-            },
+            unit.kind as u8 as f64,
             x,
             y,
             flag(selected),
-            unit.task as u8 as f64,
+            match unit.native_action {
+                Some(aoe_protocol::NativeAction::TrebuchetTransform(_))
+                    if unit.kind == UnitKind::Trebuchet =>
+                {
+                    18.0
+                }
+                Some(aoe_protocol::NativeAction::TrebuchetTransform(_)) => 19.0,
+                _ => unit.task as u8 as f64,
+            },
             resource.map_or(4.0, |kind| kind as u8 as f64),
             f64::from(unit.carried.map_or(0, |load| load.amount)),
             f64::from(unit.hp),
@@ -245,7 +248,7 @@ pub(in super::super) fn update(client: &Client) {
         values[12] += 1.0;
         values.extend_from_slice(&[
             f64::from(building.id.0),
-            2.0 + building.kind as u8 as f64,
+            (BUILDING_OFFSET + building.kind as usize) as f64,
             x,
             y,
             flag(selected),
@@ -289,23 +292,15 @@ pub(in super::super) fn update(client: &Client) {
             continue;
         }
         values[12] += 1.0;
-        let (kind, hp, attack) = match animal.kind {
-            aoe_protocol::AnimalKind::Sheep => {
-                (4.0 + aoe_protocol::BuildingKind::ALL.len() as f64, 7, 0)
-            }
-            aoe_protocol::AnimalKind::Deer => {
-                (5.0 + aoe_protocol::BuildingKind::ALL.len() as f64, 5, 0)
-            }
-            aoe_protocol::AnimalKind::Boar => {
-                (6.0 + aoe_protocol::BuildingKind::ALL.len() as f64, 75, 7)
-            }
-            aoe_protocol::AnimalKind::Wolf => {
-                (7.0 + aoe_protocol::BuildingKind::ALL.len() as f64, 25, 3)
-            }
+        let (hp, attack) = match animal.kind {
+            aoe_protocol::AnimalKind::Sheep => (7, 0),
+            aoe_protocol::AnimalKind::Deer => (5, 0),
+            aoe_protocol::AnimalKind::Boar => (75, 7),
+            aoe_protocol::AnimalKind::Wolf => (25, 3),
         };
         values.extend_from_slice(&[
             f64::from(animal.id.0),
-            kind,
+            (ANIMAL_OFFSET + animal.kind as usize) as f64,
             x,
             y,
             flag(selected),
@@ -386,6 +381,13 @@ pub(in super::super) fn update(client: &Client) {
 }
 
 pub(in super::super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
+    let kinds = UnitKind::ALL
+        .into_iter()
+        .map(|kind| JsValue::from_str(&format!("{kind:?}")))
+        .collect();
+    let formation = UnitKind::ALL.map(|kind| u8::from(super::orders::can_form(kind)));
+    let stance = UnitKind::ALL.map(|kind| u8::from(super::orders::can_choose_stance(kind)));
+    village_kinds(kinds, &formation, &stance);
     for (id, military) in [("idle-villagers", false), ("idle-military", true)] {
         let finder = shared.clone();
         let callback = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(move || {

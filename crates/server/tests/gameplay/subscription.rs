@@ -123,6 +123,7 @@ fn subscription_response_classification_rejects_changed_revision_or_nonstationar
         auto_scout: false,
         sergeant: false,
         cargo_count: 0,
+        native_action: None,
         home_castle: None,
         managed_by: None,
         commanded_by: None,

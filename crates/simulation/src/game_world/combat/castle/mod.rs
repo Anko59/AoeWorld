@@ -1,6 +1,6 @@
 //! Local Castle mechanics, using the existing unit spatial index.
 use crate::{GameWorld, Projectile, UnitKind};
-use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, TileCoord, TileRect};
+use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, TileCoord, TileRect, WorldPosition};
 mod rest;
 pub(crate) use rest::Rest;
 
@@ -14,7 +14,12 @@ impl GameWorld {
         // the inner half of the radius takes full damage, the rest half.
         let source = p.source.unwrap_or(UnitKind::Mangonel);
         let kind = Self::artillery_damage_kind(p.source);
-        let hundredths = i64::from(super::siege::blast_hundredths(source));
+        let scatter = p.is_secondary_stone();
+        let hundredths = if scatter {
+            1 // DAT projectile 369: 0.01 tiles and no damage classes.
+        } else {
+            i64::from(super::siege::blast_hundredths(source))
+        };
         if hundredths == 0 {
             // A Trebuchet boulder hits only what stands at its aim point.
             let hit = self
@@ -38,33 +43,45 @@ impl GameWorld {
             return;
         }
         let radius = i64::from(FIXED_SUBUNITS_PER_TILE) * hundredths / 100;
-        let tile = p.to.tile_floor();
+        let radius_i32 = radius as i32;
+        let min = WorldPosition::new(p.to.x - radius_i32, p.to.y - radius_i32).tile_floor();
+        let max = WorldPosition::new(p.to.x + radius_i32, p.to.y + radius_i32).tile_floor();
         let bounds = TileRect::new(
-            TileCoord::new((tile.x - 2).max(0), (tile.y - 2).max(0)),
+            TileCoord::new(min.x.max(0), min.y.max(0)),
             TileCoord::new(
-                (tile.x + 3).min(self.config.width_tiles),
-                (tile.y + 3).min(self.config.height_tiles),
+                (max.x + 1).min(self.config.width_tiles),
+                (max.y + 1).min(self.config.height_tiles),
             ),
         );
-        let hits: Vec<_> = self
-            .query(bounds)
-            .0
-            .into_iter()
-            .filter_map(|u| {
-                let dx = i64::from(u.position.x) - i64::from(p.to.x);
-                let dy = i64::from(u.position.y) - i64::from(p.to.y);
-                let d = dx * dx + dy * dy;
-                (u.hp > 0 && d <= radius * radius).then_some((u.id, d))
-            })
-            .collect();
-        for (id, d) in hits {
-            let divisor = if d <= radius * radius / 4 { 1 } else { 2 };
+        let mut hits = Vec::new();
+        let chunk_size = aoe_core::SPATIAL_CHUNK_TILES;
+        for y in bounds.min.y / chunk_size..=(bounds.max.y - 1) / chunk_size {
+            for x in bounds.min.x / chunk_size..=(bounds.max.x - 1) / chunk_size {
+                let Some(ids) = self.chunks.get(&aoe_core::ChunkCoord { x, y }) else {
+                    continue;
+                };
+                hits.extend(ids.iter().filter_map(|&id| {
+                    let u = self.unit(id)?;
+                    let dx = i64::from(u.position.x) - i64::from(p.to.x);
+                    let dy = i64::from(u.position.y) - i64::from(p.to.y);
+                    let d = dx * dx + dy * dy;
+                    (d <= radius * radius && u.hp > 0 && !self.embarked(id)).then_some((id, d))
+                }));
+            }
+        }
+        hits.sort_unstable_by_key(|&(id, _)| id);
+        let mut hit = |world: &mut GameWorld, id, divisor| {
+            if scatter {
+                // DAT projectile 369 has no attack entries: its stones are
+                // seen landing but deal no damage, not even the floor.
+                return;
+            }
             let bonus = if id == p.target {
                 p.bonus
             } else {
-                self.unit_damage_bonus(source, id)
+                world.unit_damage_bonus(source, id)
             };
-            self.resolve_hit(
+            world.resolve_hit(
                 (p.attacker, p.player),
                 id,
                 p.attack / divisor,
@@ -72,10 +89,14 @@ impl GameWorld {
                 kind,
                 changed,
             );
+        };
+        for (id, d) in hits {
+            hit(self, id, if d <= radius * radius / 4 { 1 } else { 2 });
         }
         let mut buildings = std::collections::BTreeSet::new();
-        for y in bounds.min.y..bounds.max.y {
-            for x in bounds.min.x..bounds.max.x {
+        // A footprint ending at the lower bound can touch the blast circle.
+        for y in (bounds.min.y - 1).max(0)..bounds.max.y {
+            for x in (bounds.min.x - 1).max(0)..bounds.max.x {
                 if let Some(id) = self.building_at(TileCoord::new(x, y)) {
                     buildings.insert(id);
                 }
@@ -87,18 +108,7 @@ impl GameWorld {
             };
             let distance = super::tick::Goal::Building(b.footprint).distance_squared(p.to);
             if distance <= radius * radius {
-                self.resolve_hit(
-                    (p.attacker, p.player),
-                    id,
-                    p.attack,
-                    if id == p.target {
-                        p.bonus
-                    } else {
-                        self.unit_damage_bonus(source, id)
-                    },
-                    kind,
-                    changed,
-                );
+                hit(self, id, 1);
             }
         }
     }

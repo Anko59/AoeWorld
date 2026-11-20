@@ -191,6 +191,7 @@ fn roaming_steward_and_worker_management_are_current_owner_only_state() {
         auto_scout: false,
         sergeant: false,
         cargo_count: 0,
+        native_action: None,
         home_castle: None,
         managed_by: None,
         commanded_by: None,
@@ -282,6 +283,7 @@ fn general_summary_and_command_tags_are_bounded_owner_only_state() {
         auto_scout: false,
         sergeant: false,
         cargo_count: 0,
+        native_action: None,
         home_castle: Some(EntityId(9)),
         managed_by: None,
         commanded_by: None,
@@ -334,18 +336,16 @@ fn general_summary_and_command_tags_are_bounded_owner_only_state() {
         "the roster accounts for every soldier"
     );
     u.general = valid;
-    // Current wire: state, training, queue, mix, counts and ten typed offices.
+    // Current wire: state, training, queue, mix, counts, offices and native action.
     let roster: Vec<u8> = (100..110).flat_map(|id| [1, id, 0, 20, 3]).collect();
-    let mut tail = vec![
-        0, 0, 1, 200, 1, 3, 1, 3, 35, 30, 20, 10, 5, 200, 1, 0, 0, 0, 0,
-    ];
+    let mut tail = vec![0, 1, 200, 1, 3, 1, 3, 35, 30, 20, 10, 5, 200, 1, 0, 0, 0, 0];
     tail.extend_from_slice(&roster);
-    tail.extend_from_slice(&[0, 0]);
+    tail.extend_from_slice(&[0, 0, 0]);
     assert_eq!(&bytes[bytes.len() - tail.len()..], tail);
     assert_eq!(decode_server(&bytes).unwrap(), message(u));
     u.general.as_mut().unwrap().state = crate::GeneralState::Idle;
     let idle = encode_server(&message(u)).unwrap();
-    tail[5] = 0;
+    tail[4] = 0;
     assert_eq!(&idle[idle.len() - tail.len()..], tail);
     assert_eq!(decode_server(&idle).unwrap(), message(u));
     u.general.as_mut().unwrap().army_size = 201;

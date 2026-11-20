@@ -61,7 +61,7 @@ pub fn find(bytes: &[u8], file: &str) -> Result<Animation, Error> {
 }
 
 mod indexed;
-pub use indexed::{Graphic, Part, indexed};
+pub use indexed::{Graphic, Part, Particle, indexed};
 
 /// Several native graphics share a debug filename but have distinct sprite ids.
 pub fn find_sprite(bytes: &[u8], file: &str, sprite: i32) -> Result<Animation, Error> {

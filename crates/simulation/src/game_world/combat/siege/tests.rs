@@ -5,6 +5,8 @@ use crate::{
 };
 use aoe_core::{EntityId, PlayerId, Seed, TileCoord, TileRect, WorldConfig, WorldPosition};
 
+mod volley;
+
 fn at(x: i32, y: i32) -> WorldPosition {
     WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap()
 }
@@ -277,8 +279,17 @@ fn camels_carry_their_anti_cavalry_bonus_and_chemistry_spares_gunpowder() {
         .spawn_kind(PlayerId(1), UnitKind::Knight, at(101, 100))
         .unwrap();
     let before = hp(&w, knight);
+    w.issue_stance(PlayerId(1), &[knight], aoe_core::CombatStance::NoAttack)
+        .unwrap();
     w.issue_attack(PlayerId(0), camel, knight).unwrap();
-    advance(&mut w, 2);
+    let windup = w.config.tick_hz.div_ceil(2);
+    advance(&mut w, windup);
+    assert_eq!(
+        hp(&w, knight),
+        before,
+        "a Camel's DAT wind-up lasts half a second"
+    );
+    advance(&mut w, 1);
     assert_eq!(before - hp(&w, knight), 13);
     let chem = Tech::Chemistry.bit();
     for (kind, delta) in [
@@ -371,9 +382,10 @@ fn trebuchets_unpack_before_firing_and_pack_to_move() {
     let before = w.building(castle).unwrap().hp;
     w.issue_attack(PlayerId(0), treb, castle).unwrap();
     let hz = w.config.tick_hz;
+    let transform = crate::trebuchet_transform_ticks(hz) as u32;
     advance(&mut w, 2);
     assert_eq!(w.unit(treb).unwrap().kind, UnitKind::TrebuchetUnpacked);
-    advance(&mut w, hz * crate::TREBUCHET_UNPACK_SECONDS - 4);
+    advance(&mut w, transform - 4);
     assert_eq!(
         w.building(castle).unwrap().hp,
         before,
@@ -381,8 +393,77 @@ fn trebuchets_unpack_before_firing_and_pack_to_move() {
     );
     advance(&mut w, hz * 6);
     assert!(w.building(castle).unwrap().hp < before, "the boulder lands");
+    let emplacement = w.unit(treb).unwrap().position;
     w.issue_move(treb, at(100, 101)).unwrap();
-    assert_eq!(w.unit(treb).unwrap().kind, UnitKind::Trebuchet);
+    for _ in 0..transform {
+        advance(&mut w, 1);
+        let unit = w.unit(treb).unwrap();
+        assert_eq!(unit.position, emplacement, "cannot move while packing");
+    }
+    advance(&mut w, hz);
+    let unit = w.unit(treb).unwrap();
+    assert_eq!(unit.kind, UnitKind::Trebuchet);
+    assert_ne!(
+        unit.position, emplacement,
+        "the accepted move starts after packing"
+    );
+}
+
+#[test]
+fn trebuchet_formation_waits_to_pack_after_a_save_and_restore() {
+    let mut before = imperial(&[]);
+    let position = at(100, 100);
+    let destination = at(106, 100);
+    let treb = before
+        .spawn_kind(PlayerId(0), UnitKind::TrebuchetUnpacked, position)
+        .unwrap();
+    before
+        .issue_formation_move(
+            PlayerId(0),
+            &[treb],
+            aoe_core::Formation::Line,
+            destination,
+            false,
+            false,
+        )
+        .unwrap();
+    let duration = crate::trebuchet_transform_ticks(before.config.tick_hz) as u32;
+    let half = duration / 2;
+    advance(&mut before, half);
+    assert_eq!(before.unit(treb).unwrap().position, position);
+    let save = before.snapshot([0; 32]).unwrap();
+    let mut after = imperial(&[]);
+    after.restore_snapshot(&save, [0; 32], &|| false).unwrap();
+    advance(&mut after, duration - half);
+    assert_eq!(after.unit(treb).unwrap().position, position);
+    advance(&mut after, 10);
+    assert_ne!(after.unit(treb).unwrap().position, position);
+}
+
+#[test]
+fn scorpion_shoots_only_after_the_dat_release_frame() {
+    let mut world = imperial(&[]);
+    let hz = world.config.tick_hz;
+    let shooter = world
+        .spawn_kind(PlayerId(0), UnitKind::Scorpion, at(100, 100))
+        .unwrap();
+    let target = world
+        .spawn_kind(PlayerId(1), UnitKind::Knight, at(105, 100))
+        .unwrap();
+    world.issue_attack(PlayerId(0), shooter, target).unwrap();
+    advance(&mut world, 1);
+    let start = world.native_attack_started(shooter).unwrap();
+    let release = (160 * u64::from(hz)).div_ceil(1_000);
+    for _ in 0..release - 1 {
+        advance(&mut world, 1);
+        assert!(!world.projectiles().any(|shot| shot.attacker == shooter));
+    }
+    advance(&mut world, 1);
+    let shot = world
+        .projectiles()
+        .find(|shot| shot.attacker == shooter)
+        .unwrap();
+    assert_eq!(shot.launched.0, start.0 + release);
 }
 
 #[test]

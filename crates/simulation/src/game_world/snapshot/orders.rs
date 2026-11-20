@@ -76,7 +76,14 @@ impl GameWorld {
             } else if let Some(animal) = record.hunt {
                 self.issue_hunt(player, &[id], animal)
             } else if let Some(target) = record.unit.attack_target {
-                self.issue_attack(player, id, target)
+                let result = self.issue_attack(player, id, target);
+                if let Some(attack) = self.combat.attackers.get_mut(&id) {
+                    attack.resume = record.scalar_attack_move;
+                    attack.swing_started = record.swing_started.unwrap_or(0).min(self.tick.0);
+                }
+                result
+            } else if let Some(at) = record.scalar_attack_move {
+                self.issue_attack_move(id, at).map(|_| ())
             } else if record.unit.auto_scout {
                 // Plan again from the restored position and explored terrain.
                 self.issue_auto_scout(player, id, true)
@@ -98,6 +105,15 @@ impl GameWorld {
             }
         }
         self.restore_player_queues(&snapshot.units, &failed_moves);
+        for record in &snapshot.units {
+            if let Some(patrol) = record
+                .patrol
+                .filter(|points| points.iter().all(|&at| self.config.valid_map_position(at)))
+                && self.unit(record.unit.id).is_some_and(|u| u.hp > 0)
+            {
+                self.combat.patrols.insert(record.unit.id, patrol);
+            }
+        }
     }
 
     pub(super) fn restore_player_queues(

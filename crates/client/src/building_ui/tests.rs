@@ -162,12 +162,16 @@ fn art_selection_distinguishes_every_kind_and_construction_stage() {
             continue;
         }
         if kind == B::FishTrap {
-            // No DE Fish Trap art yet: it draws as a Farm.
-            for (progress, rubble) in [(1000, false), (0, false), (1000, true)] {
-                assert_eq!(
-                    sprite_slot(kind, progress, rubble),
-                    sprite_slot(B::Farm, progress, rubble)
-                );
+            for age in [aoe_protocol::Age::Dark, aoe_protocol::Age::Imperial] {
+                for (progress, rubble, art) in [
+                    (1000, false, aoe_rendering::SceneUnitKind::FishTrap),
+                    (0, false, aoe_rendering::SceneUnitKind::ConstructionFishTrap),
+                    (1000, true, aoe_rendering::SceneUnitKind::RubbleFishTrap),
+                ] {
+                    let slot = age_sprite_slot(kind, progress, rubble, age);
+                    assert_eq!(aoe_rendering::SceneUnitKind::building(slot as u8), art);
+                    assert_eq!(art.building_id(), Some(199));
+                }
             }
             continue;
         }

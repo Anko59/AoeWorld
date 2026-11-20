@@ -57,15 +57,7 @@ impl GameWorld {
                 }
             } else {
                 self.combat.resuming.remove(&id);
-                let moved = self.issue_formation_move(
-                    unit.player,
-                    &[id],
-                    Formation::Line,
-                    resume.slot,
-                    false,
-                    true,
-                );
-                if moved.is_ok() {
+                if self.resume_attack_move(id, resume.slot) {
                     changed.push(id);
                 }
             }
@@ -95,6 +87,11 @@ impl GameWorld {
     /// Contact reactions share an offensive group's ordinary continuation.
     pub(crate) fn offensive_destination_slot(&self, id: EntityId) -> Option<WorldPosition> {
         let unit = &self.units[*self.lookup.get(&id)?];
+        if (unit.state.kind.is_naval() || unit.state.kind == UnitKind::Villager)
+            && self.combat.scalar_marches.contains(&id)
+        {
+            return unit.order.map(|order| order.destination);
+        }
         let group = self.formations.get(&unit.formation?)?;
         if !group.attack_move {
             return None;

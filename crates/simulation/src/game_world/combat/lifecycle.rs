@@ -124,6 +124,9 @@ impl GameWorld {
     /// Population is freed now; native death playback precedes thirty seconds of corpse decay.
     pub(crate) fn kill_unit(&mut self, index: usize) {
         let unit = self.units[index].state;
+        if unit.kind.is_trebuchet() {
+            self.combat.trebuchets_transforming.remove(&unit.id);
+        }
         if unit.death_tick.is_none() {
             self.change_unit_census(unit.player, Some(unit.kind), None, 1);
             if unit.kind.is_fire_line()
@@ -204,6 +207,9 @@ impl GameWorld {
 
     /// Removes a unit from every index. Its slot is filled by the last unit.
     pub(crate) fn remove_unit(&mut self, id: EntityId) {
+        self.clear_scalar_march(id);
+        self.cancel_patrol(id);
+        self.combat.trebuchets_transforming.remove(&id);
         // A dozing job of a removed worker is dropped by its next visit.
         self.wake_gatherer(id);
         self.forget_vassal_unit(id);

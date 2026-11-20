@@ -25,40 +25,40 @@ mod part8;
 #[path = "generated/part9.rs"]
 mod part9;
 pub(super) const fn get(id: u32) -> Option<Graphic> {
-    if id <= 200751 {
+    if id <= 200748 {
         return super::lookup(part0::GRAPHICS, id);
     }
-    if id <= 200934 {
+    if id <= 200933 {
         return super::lookup(part1::GRAPHICS, id);
     }
-    if id <= 201063 {
+    if id <= 201060 {
         return super::lookup(part2::GRAPHICS, id);
     }
-    if id <= 201155 {
+    if id <= 201154 {
         return super::lookup(part3::GRAPHICS, id);
     }
-    if id <= 201402 {
+    if id <= 201401 {
         return super::lookup(part4::GRAPHICS, id);
     }
-    if id <= 201969 {
+    if id <= 201949 {
         return super::lookup(part5::GRAPHICS, id);
     }
-    if id <= 202620 {
+    if id <= 202614 {
         return super::lookup(part6::GRAPHICS, id);
     }
-    if id <= 202808 {
+    if id <= 202804 {
         return super::lookup(part7::GRAPHICS, id);
     }
-    if id <= 203166 {
+    if id <= 203162 {
         return super::lookup(part8::GRAPHICS, id);
     }
-    if id <= 203975 {
+    if id <= 203446 {
         return super::lookup(part9::GRAPHICS, id);
     }
-    if id <= 209302 {
+    if id <= 205434 {
         return super::lookup(part10::GRAPHICS, id);
     }
-    if id <= 211311 {
+    if id <= 212217 {
         return super::lookup(part11::GRAPHICS, id);
     }
     None

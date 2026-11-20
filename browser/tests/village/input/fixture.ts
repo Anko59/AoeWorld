@@ -3,6 +3,7 @@ import { gameAssets } from "../../game-assets.js";
 import {
   militiaCombat,
   scoutCombat,
+  transportCombat,
   villagerCombat,
 } from "../../wire/combat.js";
 import {
@@ -79,7 +80,7 @@ export async function inputFixture(
     beforeSnapshot?: () => Promise<void>;
     carried?: boolean;
     query?: string;
-    cargo?: number;
+    cargo?: 0 | 2;
     player?: number[];
     military?: boolean;
     originalArt?: boolean;
@@ -145,15 +146,12 @@ export async function inputFixture(
         y: number,
         kind: number,
         player = viewer,
-        cargo = 0,
+        combat = kind === 1
+          ? scoutCombat
+          : kind === 2
+            ? militiaCombat
+            : villagerCombat,
       ) => {
-        const combat =
-          kind === 1
-            ? scoutCombat
-            : kind === 2
-              ? militiaCombat
-              : villagerCombat;
-        // Cargo precedes the optional home and management IDs, stance and General state.
         return [
           ...uint(id),
           player,
@@ -165,9 +163,7 @@ export async function inputFixture(
           0,
           ...(options.carried && id === 2 ? [1, 1, 7] : [0]),
           0,
-          ...combat.slice(0, -6),
-          cargo,
-          ...combat.slice(-5),
+          ...combat,
         ];
       };
       socket.send(
@@ -186,7 +182,9 @@ export async function inputFixture(
             options.military ? 1 : 0,
             viewer === 0 ? 1 : 0,
           ),
-          ...(navy ? unit(5, 8193.5, 8194.5, 20, viewer, navy.cargo) : []),
+          ...(navy
+            ? unit(5, 8193.5, 8194.5, 20, viewer, transportCombat(navy.cargo))
+            : []),
           ...Array.from({ length: options.offscreenUnits ?? 0 }, (_, index) =>
             unit(
               index + 100,

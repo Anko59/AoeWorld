@@ -12,10 +12,19 @@ pub struct Part {
 #[derive(Clone, Debug)]
 pub struct Graphic {
     pub parts: Vec<Part>,
+    pub particles: Vec<Particle>,
 }
+#[derive(Clone, Debug)]
+pub struct Particle {
+    pub graphic: i16,
+    pub name: String,
+    pub offset: [i32; 2],
+}
+
 struct Raw {
     own: Option<Part>,
     deltas: Vec<(i16, i16, i16)>,
+    particle: String,
 }
 fn raw(bytes: &[u8], at: usize) -> Result<(i16, Raw), Error> {
     let mut r = Reader::new(bytes, at);
@@ -87,7 +96,14 @@ fn raw(bytes: &[u8], at: usize) -> Result<(i16, Raw), Error> {
     if own.is_none() && deltas.is_empty() && !no_pixels {
         return Err(r.fail("empty graphic"));
     }
-    Ok((id, Raw { own, deltas }))
+    Ok((
+        id,
+        Raw {
+            own,
+            deltas,
+            particle,
+        },
+    ))
 }
 fn resolve(
     id: i16,
@@ -96,16 +112,23 @@ fn resolve(
     x: i32,
     y: i32,
     out: &mut Vec<Part>,
+    particles: &mut Vec<Particle>,
 ) -> Result<(), Error> {
-    if seen.len() >= 32 || !seen.insert(id) || out.len() >= 32 {
+    if seen.len() >= 32 || !seen.insert(id) || out.len() >= 32 || particles.len() >= 128 {
         return Err(crate::invalid(
             "DE graphic",
             0,
             "cyclic or oversized delta tree",
         ));
     }
-    // Non-drawable particle-only deltas belong to the effects pass.
     if let Some(r) = raw.get(&id) {
+        if !r.particle.is_empty() {
+            particles.push(Particle {
+                graphic: id,
+                name: r.particle.clone(),
+                offset: [x, y],
+            });
+        }
         if let Some(own) = &r.own {
             let mut p = own.clone();
             p.x += x;
@@ -113,7 +136,15 @@ fn resolve(
             out.push(p);
         }
         for &(child, dx, dy) in &r.deltas {
-            resolve(child, raw, seen, x + i32::from(dx), y + i32::from(dy), out)?;
+            resolve(
+                child,
+                raw,
+                seen,
+                x + i32::from(dx),
+                y + i32::from(dy),
+                out,
+                particles,
+            )?;
         }
     } else {
         return Err(crate::invalid("DE graphic", 0, "missing delta graphic"));
@@ -153,9 +184,20 @@ pub fn indexed(bytes: &[u8]) -> Result<BTreeMap<i16, Graphic>, Error> {
     let mut result = BTreeMap::new();
     for &id in all.keys() {
         let mut parts = Vec::new();
-        if resolve(id, &all, &mut BTreeSet::new(), 0, 0, &mut parts).is_ok() {
+        let mut particles = Vec::new();
+        if resolve(
+            id,
+            &all,
+            &mut BTreeSet::new(),
+            0,
+            0,
+            &mut parts,
+            &mut particles,
+        )
+        .is_ok()
+        {
             parts.sort_by_key(|p| p.layer);
-            result.insert(id, Graphic { parts });
+            result.insert(id, Graphic { parts, particles });
         }
     }
     Ok(result)

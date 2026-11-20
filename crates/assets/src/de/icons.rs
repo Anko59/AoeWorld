@@ -16,6 +16,10 @@ use std::{
 };
 mod ui;
 
+pub(super) fn particle_texture(bytes: &[u8]) -> Result<crate::dds::Texture, Error> {
+    ui::decode_png(bytes, 4096, "DE particle")
+}
+
 struct Source {
     icon: i16,
     technology: bool,

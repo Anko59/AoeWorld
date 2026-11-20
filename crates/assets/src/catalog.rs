@@ -4,7 +4,7 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 24;
+pub const VERSION: u8 = 25;
 
 pub mod buildings;
 pub mod candidates;
@@ -32,8 +32,8 @@ pub const IMPERIAL_BUILDING_IDS: [i32; 15] = [
 ];
 
 /// All current gameplay recipes, imported from their authoritative edition.
-pub const GAMEPLAY_BUILDING_IDS: [i32; 64] = {
-    let mut ids = [0; 64];
+pub const GAMEPLAY_BUILDING_IDS: [i32; 65] = {
+    let mut ids = [0; 65];
     let mut i = 0;
     while i < 64 {
         ids[i] = if i < 49 {
@@ -43,6 +43,7 @@ pub const GAMEPLAY_BUILDING_IDS: [i32; 64] = {
         };
         i += 1;
     }
+    ids[64] = 199; // Fish Trap (FTRAP).
     ids
 };
 

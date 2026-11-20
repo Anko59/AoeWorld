@@ -20,7 +20,8 @@ fn commanded_units(
         PendingAction::Load { unit_ids, .. } | PendingAction::Hunt { unit_ids, .. } => {
             Some((unit_ids.clone(), None))
         }
-        PendingAction::Move { entity_id, .. }
+        PendingAction::Patrol(entity_id, _)
+        | PendingAction::Move { entity_id, .. }
         | PendingAction::Attack { entity_id, .. }
         | PendingAction::Stop { entity_id }
         | PendingAction::Garrison { entity_id, .. } => Some((vec![*entity_id], None)),
@@ -35,6 +36,7 @@ pub(in crate::gameplay) fn apply(
 ) -> CommandResult {
     let commanded = commanded_units(&action);
     let result = match action {
+        PendingAction::Patrol(entity_id, at) => world.issue_patrol(player, entity_id, at),
         PendingAction::VassalDevelopment { vassal_id, enabled } => {
             world.issue_vassal_development(player, vassal_id, enabled)
         }
@@ -184,7 +186,9 @@ pub(in crate::gameplay) fn apply(
             if !visible {
                 return CommandResult::RejectedInvalidTarget;
             }
-            world.issue_attack(player, entity_id, target_id)
+            world
+                .issue_attack(player, entity_id, target_id)
+                .map(|()| world.cancel_patrol(entity_id))
         }
         PendingAction::CancelTraining { building_id } => {
             world.issue_cancel_training(player, building_id)

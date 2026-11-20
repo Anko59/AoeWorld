@@ -1,6 +1,21 @@
 use super::*;
 
 impl GameplayService {
+    pub async fn queue_patrol(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        entity_id: EntityId,
+        destination: WorldPosition,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::Patrol(entity_id, destination),
+        )
+        .await;
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub async fn queue_formation(
         &self,

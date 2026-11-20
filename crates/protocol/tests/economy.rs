@@ -79,6 +79,7 @@ fn unit() -> GameplayUnitState {
         auto_scout: false,
         sergeant: false,
         cargo_count: 0,
+        native_action: None,
         home_castle: None,
         managed_by: None,
         commanded_by: None,
@@ -201,10 +202,10 @@ fn full_economy_snapshot_and_delta_roundtrip() {
     let bytes = encode_gameplay_server(&snapshot).unwrap();
     assert_eq!(
         bytes,
-        // Pins officer identity, combat stance and the appended Steward census slot.
+        // Pins officer identity, combat stance, native action and the Steward census slot.
         vec![
             1, 1, 3, 1, 2, 0, 128, 16, 128, 16, 1, 0, 3, 0, 4, 1, 1, 10, 1, 1, 25, 25, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 200, 1, 200, 1, 100, 200, 1, 4, 5, 0, 0, 100, 100,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 200, 1, 200, 1, 100, 200, 1, 4, 5, 0, 0, 100, 100,
             100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 10, 10, 18, 18, 1, 232, 7, 224, 18, 224, 18,

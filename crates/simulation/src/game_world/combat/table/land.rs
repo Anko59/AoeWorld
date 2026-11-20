@@ -79,7 +79,7 @@ pub(super) const LAND: [UnitCombat; 12] = [
     troop(
         UnitKind::TrebuchetUnpacked,
         (150, 200, 1, 150),
-        (1_000, 80),
+        (1_000, 0),
         (16, 4, 19),
         (0, 200, 200),
         50,

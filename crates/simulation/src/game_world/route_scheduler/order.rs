@@ -109,7 +109,6 @@ impl GameWorld {
         if self.units[index].state.hp == 0 || self.embarked(id) {
             return Err(GameWorldError::UnknownEntity);
         }
-        self.pack_for_move(index);
         // Snap into the legal edge band (as on dev), keeping the exact point:
         // radius movement honours positions inside a tile.
         let destination = self.config.clamp_ground_position(destination);
@@ -162,6 +161,7 @@ impl GameWorld {
                     return Err(error);
                 }
             };
+        self.pack_for_move(index);
         self.demand_accepted(id);
         let speed_carry = self.units[index].order.map_or(0, |order| order.speed_carry);
         self.combat.quiet.wake(id);
@@ -170,11 +170,14 @@ impl GameWorld {
         self.discard_move_queue_for_order(id);
         let dx = i64::from(waypoint.x) - i64::from(origin.x);
         let dy = i64::from(waypoint.y) - i64::from(origin.y);
+        let stationary = kind.is_trebuchet() && self.trebuchet_transforming(id);
         self.set_movement_error(index, None);
         let unit = &mut self.units[index];
         unit.obstruction = None;
         unit.state.previous_position = origin;
-        unit.state.facing = facing_for(dx, dy, unit.state.facing);
+        if !stationary {
+            unit.state.facing = facing_for(dx, dy, unit.state.facing);
+        }
         unit.state.moving = !planning;
         unit.state.planning = planning;
         unit.planning_since = self.tick.0;

@@ -2,7 +2,6 @@
 // Naval Warfare Overhaul (DE update 169123); order follows the protocol's
 // UnitKind and Tech enums after Steward / StoneShaftMining.
 export const navyUnits=['FireGalley','FastFireShip','DemolitionRaft','HeavyDemolitionShip','Galleon','CannonGalleon','EliteCannonGalleon','Hulk','WarHulk','Carrack','CatapultGalleon'];
-export const navyUnitNames=['Fire Galley','Fast Fire Ship','Demolition Raft','Heavy Demolition Ship','Galleon','Cannon Galleon','Elite Cannon Galleon','Hulk','War Hulk','Carrack','Catapult Galleon'];
 // DAT unit ids of the icons.
 export const navyEntities={FireGalley:1103,FastFireShip:532,DemolitionRaft:1104,HeavyDemolitionShip:528,Galleon:442,CannonGalleon:420,EliteCannonGalleon:691,Hulk:2626,WarHulk:2627,Carrack:2628,CatapultGalleon:2633};
 // [id, label, building kind index (Dock 9, University 18), DAT technology id]

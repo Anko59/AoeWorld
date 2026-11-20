@@ -4,6 +4,8 @@
 use super::*;
 use crate::{Age, BuildingKind, Stockpile, Tech};
 
+mod volleys;
+
 struct Fleet {
     world: GameWorld,
     dock: EntityId,
@@ -310,15 +312,22 @@ fn a_cannon_galleon_throws_splash_shot_and_has_a_minimum_range() {
     let mut w = coast();
     let (_, water) = bank(&w);
     let cannon = ship(&mut w, CannonGalleon, water, 0);
-    let a = ship(&mut w, Galley, TileCoord::new(water.x + 8, water.y), 1);
-    let b = ship(&mut w, Galley, TileCoord::new(water.x + 8, water.y + 1), 1);
-    for id in [a, b] {
+    let at_impact = at(TileCoord::new(water.x + 8, water.y));
+    let a = w.spawn_kind(PlayerId(1), Galley, at_impact).unwrap();
+    let near = WorldPosition::new(
+        at_impact.x,
+        at_impact.y + aoe_core::FIXED_SUBUNITS_PER_TILE / 8,
+    );
+    let b = w.spawn_kind(PlayerId(1), Galley, near).unwrap();
+    let outside = ship(&mut w, Galley, TileCoord::new(water.x + 8, water.y + 1), 1);
+    for id in [a, b, outside] {
         w.issue_stance(PlayerId(1), &[id], aoe_core::CombatStance::NoAttack)
             .unwrap();
     }
     w.issue_attack(PlayerId(0), cannon, a).unwrap();
     let mut stone = false;
     let (hp_a, hp_b) = (w.unit(a).unwrap().hp, w.unit(b).unwrap().hp);
+    let hp_outside = w.unit(outside).unwrap().hp;
     for _ in 0..400 {
         advance(&mut w, 1);
         stone |= w
@@ -329,8 +338,9 @@ fn a_cannon_galleon_throws_splash_shot_and_has_a_minimum_range() {
     assert!(w.unit(a).unwrap().hp < hp_a, "target hit");
     assert!(
         w.unit(b).unwrap().hp < hp_b,
-        "splash hits the neighbouring ship"
+        "splash hits a ship inside the quarter-tile blast"
     );
+    assert_eq!(w.unit(outside).unwrap().hp, hp_outside);
     // Inside the three-tile minimum range nothing is fired.
     let mut w = coast();
     let (_, water) = bank(&w);

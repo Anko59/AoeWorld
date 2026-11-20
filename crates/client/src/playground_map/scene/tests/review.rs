@@ -48,7 +48,6 @@ async fn a_refused_view_is_sent_again_after_the_rate_window() {
     let mut client = client(&contact_scene()).await;
     client.sent_region = Some(aoe_core::TileRect::from_xywh(0, 0, 4, 4));
     client.subscribe_after = 0.0;
-
     super::super::super::retry_refused_view(&mut client, 1_000.0);
 
     assert_eq!(client.sent_region, None);
@@ -225,6 +224,7 @@ pub(super) async fn client_with_backend(scene: &PreparedScene, backend: Option<&
                 auto_scout: false,
                 sergeant: false,
                 cargo_count: 0,
+                native_action: None,
                 home_castle: None,
                 managed_by: None,
                 commanded_by: None,

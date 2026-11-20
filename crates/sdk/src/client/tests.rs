@@ -24,6 +24,7 @@ fn unit(id: u32, kind: UnitKind, tile: TileCoord) -> GameplayUnitState {
         auto_scout: false,
         sergeant: false,
         cargo_count: 0,
+        native_action: None,
         home_castle: None,
         managed_by: None,
         commanded_by: None,

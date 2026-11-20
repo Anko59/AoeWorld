@@ -7,9 +7,14 @@ pub enum ProjectileKind {
     Arrow,
     Javelin,
     Stone,
-    /// The galley line's DE bolt (projectile unit 372, graphic `p_bolt`).
     Bolt,
+    /// Fire streams and boarding hooks use the source's melee damage.
+    Melee,
 }
+
+mod sources;
+mod volleys;
+pub use sources::{DatProjectile, dat_projectile};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Projectile {
@@ -30,6 +35,22 @@ pub struct Projectile {
     pub(crate) source: Option<crate::UnitKind>,
 }
 impl Projectile {
+    pub fn source_kind(&self) -> Option<crate::UnitKind> {
+        self.source
+    }
+
+    pub fn native_projectile_id(&self) -> Option<u16> {
+        if self.is_secondary_stone() {
+            Some(369)
+        } else {
+            self.source_kind().and_then(dat_projectile).map(|p| p.id)
+        }
+    }
+
+    pub(super) fn is_secondary_stone(&self) -> bool {
+        self.kind == ProjectileKind::Stone && self.secondary
+    }
+
     pub fn position(&self, tick: Tick) -> WorldPosition {
         let duration = self.impact.0.saturating_sub(self.launched.0).max(1);
         let elapsed = tick.0.saturating_sub(self.launched.0).min(duration);
@@ -87,20 +108,17 @@ impl GameWorld {
         let Some(mut to) = self.attack_goal(target, player).map(|g| g.centre()) else {
             return;
         };
-        let dx = i64::from(to.x) - i64::from(from.x);
-        let dy = i64::from(to.y) - i64::from(from.y);
-        let distance = (dx * dx + dy * dy) as u64;
-        let distance = distance.isqrt() + u64::from(distance.isqrt().pow(2) < distance);
         // Licensed DE projectiles 363, 365 and 504 all move at 7 tiles/s.
-        let speed = if kind == ProjectileKind::Stone {
-            35
-        } else {
-            70
-        };
-        let ticks = (distance * u64::from(self.config.tick_hz) * 10)
-            .div_ceil(speed * FIXED_SUBUNITS_PER_TILE as u64)
-            .max(1);
-        if kind != ProjectileKind::Stone
+        let speed = source.and_then(dat_projectile).map_or(
+            if kind == ProjectileKind::Stone {
+                350
+            } else {
+                700
+            },
+            |p| p.speed_hundredths,
+        );
+        let ticks = flight_ticks(from, to, speed, self.config.tick_hz);
+        if !matches!(kind, ProjectileKind::Stone | ProjectileKind::Melee)
             && self.has_researched(player, crate::Tech::Ballistics)
             && let Some(u) = self.unit(target).filter(|u| u.moving)
         {
@@ -118,29 +136,33 @@ impl GameWorld {
                 ),
             );
         }
-        let id = self.combat.next_projectile;
-        let Some(next) = id.checked_add(1) else {
-            return;
+        let shot = Projectile {
+            id: self.combat.next_projectile,
+            player,
+            attacker,
+            target,
+            from,
+            to,
+            launched: self.tick,
+            impact: Tick(self.tick.0.saturating_add(ticks)),
+            kind,
+            attack: damage.0,
+            bonus: damage.1,
+            secondary,
+            source,
+        };
+        if self.insert_projectile(shot) && !secondary {
+            self.launch_volley(shot, speed);
+        }
+    }
+
+    fn insert_projectile(&mut self, shot: Projectile) -> bool {
+        let Some(next) = shot.id.checked_add(1) else {
+            return false;
         };
         self.combat.next_projectile = next;
-        self.combat.projectiles.insert(
-            id,
-            Projectile {
-                id,
-                player,
-                attacker,
-                target,
-                from,
-                to,
-                launched: self.tick,
-                impact: Tick(self.tick.0.saturating_add(ticks)),
-                kind,
-                attack: damage.0,
-                bonus: damage.1,
-                secondary,
-                source,
-            },
-        );
+        self.combat.projectiles.insert(shot.id, shot);
+        true
     }
     pub(super) fn advance_projectiles(&mut self, changed: &mut Vec<EntityId>) {
         let due: Vec<_> = self
@@ -158,14 +180,35 @@ impl GameWorld {
                     self.resolve_pass_through(p, changed);
                 } else if self.projectile_misses(&p) {
                     // A miss lands harmlessly; DE's stray-hit rule is not modelled.
-                } else if self.unit(p.target).is_none_or(|u| {
-                    let dx = i64::from(u.position.x) - i64::from(p.to.x);
-                    let dy = i64::from(u.position.y) - i64::from(p.to.y);
-                    dx * dx + dy * dy <= i64::from(FIXED_SUBUNITS_PER_TILE / 2).pow(2)
-                }) {
+                } else if p.kind == ProjectileKind::Melee
+                    || self.unit(p.target).is_none_or(|u| {
+                        let dx = i64::from(u.position.x) - i64::from(p.to.x);
+                        let dy = i64::from(u.position.y) - i64::from(p.to.y);
+                        dx * dx + dy * dy <= i64::from(FIXED_SUBUNITS_PER_TILE / 2).pow(2)
+                    })
+                {
                     self.resolve_projectile_hit(p, changed);
                 }
             }
         }
     }
+}
+
+fn flight_ticks(from: WorldPosition, to: WorldPosition, speed: u16, hz: u32) -> u64 {
+    let dx = i64::from(to.x) - i64::from(from.x);
+    let dy = i64::from(to.y) - i64::from(from.y);
+    let square = (dx * dx + dy * dy) as u64;
+    let floor = square.isqrt();
+    let distance = floor + u64::from(floor * floor < square);
+    (distance * u64::from(hz) * 100)
+        .div_ceil(u64::from(speed) * FIXED_SUBUNITS_PER_TILE as u64)
+        .max(1)
+}
+
+pub(super) fn projectile_roll(id: u64, attacker: EntityId) -> u64 {
+    // SplitMix64 keyed by identity, independent of worker order.
+    let mut z = (id ^ (u64::from(attacker.0) << 32)).wrapping_add(0x9e37_79b9_7f4a_7c15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^ (z >> 31)
 }

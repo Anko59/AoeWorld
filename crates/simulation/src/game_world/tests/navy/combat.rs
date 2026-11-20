@@ -230,8 +230,60 @@ fn demolition_ship_blast_reaches_three_tiles_but_not_beyond() {
 }
 
 #[test]
-fn galley_line_fires_the_dat_bolt() {
-    for kind in [UnitKind::Galley, UnitKind::WarGalley] {
+fn a_galley_attack_move_fights_and_resumes_its_water_route() {
+    let mut world = coast();
+    let (_, water) = bank(&world);
+    let galley = ship(&mut world, UnitKind::Galley, water, 0);
+    let target = ship(
+        &mut world,
+        UnitKind::FishingShip,
+        TileCoord::new(water.x + 4, water.y + 2),
+        1,
+    );
+    let end = at(TileCoord::new(water.x + 12, water.y));
+    world.issue_attack_move(galley, end).unwrap();
+    let mut attacked = false;
+    for _ in 0..1_300 {
+        world.advance();
+        attacked |= world
+            .unit(galley)
+            .is_some_and(|u| u.attack_target == Some(target));
+    }
+    assert!(attacked, "the Galley obeys the engage part of the order");
+    assert_eq!(world.unit(galley).unwrap().position, end);
+}
+
+#[test]
+fn galley_patrol_turns_back_and_stop_clears_the_route() {
+    let mut world = coast();
+    let (_, water) = bank(&world);
+    let galley = ship(&mut world, UnitKind::Galley, water, 0);
+    let start = world.unit(galley).unwrap().position;
+    let end = at(TileCoord::new(water.x + 5, water.y));
+    world.issue_patrol(PlayerId(0), galley, end).unwrap();
+    let mut furthest = start.x;
+    let mut returned = false;
+    for _ in 0..300 {
+        world.advance();
+        let unit = world.unit(galley).unwrap();
+        furthest = furthest.max(unit.position.x);
+        returned |= furthest >= end.x - 512 && unit.position.x < start.x + 512;
+    }
+    assert!(returned, "patrol reaches the endpoint and returns");
+    world.issue_stop(PlayerId(0), galley).unwrap();
+    let stopped = world.unit(galley).unwrap().position;
+    advance(&mut world, 200);
+    assert_eq!(world.unit(galley).unwrap().position, stopped);
+}
+
+#[test]
+fn galley_line_fires_arrows_then_bolts() {
+    use crate::ProjectileKind::{Arrow, Bolt};
+    for (kind, expected) in [
+        (UnitKind::Galley, Arrow),
+        (UnitKind::WarGalley, Bolt),
+        (UnitKind::Galleon, Bolt),
+    ] {
         let mut world = coast();
         let (_, water) = bank(&world);
         let attacker = ship(&mut world, kind, water, 0);
@@ -249,14 +301,14 @@ fn galley_line_fires_the_dat_bolt() {
         }
         assert_eq!(
             kinds,
-            std::collections::BTreeSet::from([crate::ProjectileKind::Bolt as u8]),
+            std::collections::BTreeSet::from([expected as u8]),
             "{kind:?}"
         );
     }
 }
 
 #[test]
-fn naval_battle_demo_builds_and_a_galley_fires_a_bolt_within_a_second() {
+fn naval_battle_demo_builds_and_a_war_galley_fires_a_bolt() {
     let (mut world, _) = GameWorld::naval_battle_demo(aoe_core::Seed(1)).unwrap();
     let galleys = |p| {
         world
@@ -273,5 +325,5 @@ fn naval_battle_demo_builds_and_a_galley_fires_a_bolt_within_a_second() {
             .projectiles()
             .any(|p| p.kind == crate::ProjectileKind::Bolt);
     }
-    assert!(bolt, "a galley fires a bolt");
+    assert!(bolt, "a War Galley fires a bolt");
 }

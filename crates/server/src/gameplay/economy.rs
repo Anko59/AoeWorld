@@ -105,6 +105,19 @@ pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitStat
     );
     state.cargo_count = world.transport_cargo(unit.id).len() as u8;
     command_state(world, unit, &mut state);
+    if unit.kind.is_trebuchet()
+        && let Some(until) = world.trebuchet_transform_until(unit.id)
+    {
+        state.native_action = Some(aoe_protocol::NativeAction::TrebuchetTransform(until));
+        state.moving = false;
+        state.planning = false;
+    } else if unit.task == aoe_simulation::UnitTask::Attacking
+        && aoe_simulation::native_attack_windup_millis(unit.kind).is_some()
+    {
+        state.native_action = world
+            .native_attack_started(unit.id)
+            .map(aoe_protocol::NativeAction::AttackStarted);
+    }
     state
 }
 /// A unit as the wire sees it, given the two facts only the economy knows.
@@ -153,6 +166,7 @@ pub(super) fn wire_unit(
         auto_scout: unit.auto_scout,
         sergeant: unit.sergeant,
         cargo_count: 0,
+        native_action: None,
         home_castle: None,
         managed_by: None,
         commanded_by: None,

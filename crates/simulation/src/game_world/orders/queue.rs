@@ -69,6 +69,7 @@ impl GameWorld {
         // autonomous frontier selection must not replace the queued legs.
         self.player_override(id);
         self.cancel_auto_scout(id);
+        self.cancel_patrol(id);
         self.move_queues
             .entry(id)
             .or_default()
@@ -86,6 +87,19 @@ impl GameWorld {
         self.start_leg(id, destination, true)
     }
 
+    pub(crate) fn scalar_march_destination(&self, id: EntityId) -> Option<WorldPosition> {
+        let unit = self.unit(id)?;
+        if !unit.kind.is_naval() && unit.kind != crate::UnitKind::Villager {
+            return None;
+        }
+        self.combat
+            .attackers
+            .get(&id)
+            .and_then(|a| a.resume)
+            .or_else(|| self.combat.resuming.get(&id).map(|r| r.slot))
+            .or_else(|| self.offensive_destination_slot(id))
+    }
+
     /// Begin a player leg now. Attack-move runs as the unit's own one-member
     /// formation, the route type that acquires targets on the way; Generals
     /// keep their army march and ordinary moves stay scalar.
@@ -95,6 +109,20 @@ impl GameWorld {
         destination: WorldPosition,
         attack_move: bool,
     ) -> Result<bool, EconomyError> {
+        if attack_move
+            && let Some(unit) = self.unit(id)
+            && (unit.kind.is_naval() || unit.kind == crate::UnitKind::Villager)
+            && crate::unit_combat(unit.kind).attack > 0
+        {
+            let moving = self.issue_move(id, destination)?;
+            if moving {
+                self.combat.scalar_marches.insert(id);
+                if unit.kind == crate::UnitKind::Villager {
+                    self.combat.seekers.insert(id);
+                }
+            }
+            return Ok(moving);
+        }
         if attack_move
             && !self.economy.generals.armies.contains_key(&id)
             && let Some(player) = self.unit(id).map(|u| u.player)
@@ -168,7 +196,7 @@ impl GameWorld {
 
     #[inline(never)] // a symbol of its own for the Callgrind stage counters
     pub(crate) fn resume_queued_moves(&mut self, changed: &mut [EntityId]) {
-        if self.move_queues.is_empty() {
+        if self.move_queues.is_empty() && self.combat.patrols.is_empty() {
             return;
         }
         // Movement proposals may finish in a rotated order. New searches must
@@ -179,9 +207,12 @@ impl GameWorld {
                 continue;
             }
             // Only queued units need the formation/army completion check.
-            if !self.move_queues.contains_key(&id) || self.queued_move_active(id) {
+            if (!self.move_queues.contains_key(&id) && !self.combat.patrols.contains_key(&id))
+                || self.queued_move_active(id)
+            {
                 continue;
             }
+            self.turn_patrol(id);
             let Some(mut queue) = self.move_queues.remove(&id) else {
                 continue;
             };

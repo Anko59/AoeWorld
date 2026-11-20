@@ -2,6 +2,8 @@ use super::*;
 use crate::unit_visuals::Pose;
 use aoe_protocol::ProjectileKind;
 use aoe_rendering::{SceneUnit, SceneUnitKind};
+#[path = "projectiles/particles.rs"]
+mod particles;
 
 /// Metres of arc height per tile of flight, capped, as drawn below.
 const ARC_PER_DISTANCE: f64 = 0.25;
@@ -22,6 +24,14 @@ pub(super) fn flight_facing(from: [f64; 2], to: [f64; 2]) -> u8 {
     aoe_assets::catalog::units::projectile_facing(dx - dy, dx + dy)
 }
 
+fn native_heading(from: [f64; 2], to: [f64; 2]) -> u16 {
+    let (dx, dy) = (to[0] - from[0], to[1] - from[1]);
+    let angle = (dx + dy).atan2(dx - dy);
+    (angle * 8.0 / std::f64::consts::PI)
+        .round()
+        .rem_euclid(16.0) as u16
+}
+
 /// The animation clock of `unit` in `pose`; see `unit_visuals::pose_clock`.
 pub(super) fn pose_clock(
     client: &Client,
@@ -32,14 +42,16 @@ pub(super) fn pose_clock(
         .presentation
         .live_tick(client.last_frame)
         .unwrap_or(client.village.tick as f64);
+    let hz = f64::from(client.config.tick_hz.max(1));
+    if let Some(aoe_protocol::NativeAction::AttackStarted(started)) = unit.native_action
+        && aoe_assets::catalog::units::release_frame(pose).is_some()
+    {
+        return crate::unit_visuals::native_swing_clock(pose, live - started.0 as f64, hz);
+    }
     crate::unit_visuals::pose_clock(
         pose,
         unit.kind,
-        (
-            client.village.last_shot.get(&unit.id).copied(),
-            live,
-            f64::from(client.config.tick_hz.max(1)),
-        ),
+        (client.village.last_shot.get(&unit.id).copied(), live, hz),
         client.last_frame,
     )
 }
@@ -53,9 +65,8 @@ pub(super) fn append(client: &Client, scene: &PreparedScene, units: &mut Vec<Sce
         .live_tick(client.last_frame)
         .unwrap_or(client.village.tick as f64)
         .max(client.village.tick as f64);
-    // Synthetic scene ids descend as shot ids rise; reverse iteration keeps
-    // the entity-id ordering required by the last-presented-frame cache.
-    for shot in client.village.projectiles.iter().rev() {
+    let start = units.len();
+    for shot in &client.village.projectiles {
         if now >= shot.impact.0 as f64 {
             continue;
         }
@@ -76,16 +87,36 @@ pub(super) fn append(client: &Client, scene: &PreparedScene, units: &mut Vec<Sce
             continue;
         }
         let distance = (to[0] - from[0]).hypot(to[1] - from[1]);
-        let pose = if shot.kind == ProjectileKind::Stone {
-            Pose::Stone
-        } else if shot.kind == ProjectileKind::Arrow {
-            Pose::Arrow
-        } else if shot.kind == ProjectileKind::Bolt {
-            Pose::Bolt
-        } else {
-            Pose::Javelin
+        let pose = match shot.kind {
+            ProjectileKind::Stone => Pose::Stone,
+            ProjectileKind::Arrow => Pose::Arrow,
+            ProjectileKind::Bolt => Pose::Bolt,
+            ProjectileKind::Javelin => Pose::Javelin,
+            ProjectileKind::Native(id) => {
+                let Some(pose) = aoe_assets::catalog::units::projectile_pose(id) else {
+                    continue;
+                };
+                pose
+            }
         };
-        let frame = if pose == Pose::Stone {
+        if pose == Pose::FireStream {
+            continue;
+        }
+        let frame = if matches!(pose, Pose::Arrow | Pose::Javelin | Pose::Bolt) {
+            u16::from(flight_facing(from, to))
+        } else if matches!(
+            pose,
+            Pose::GalleyArrow
+                | Pose::NativeArrow
+                | Pose::ScorpionBolt
+                | Pose::HeavyScorpionBolt
+                | Pose::BoardingHook
+        ) {
+            let source = aoe_assets::catalog::units::SPRITES[pose as usize];
+            // The DAT direction rows for the arrow and hook contain pitch
+            // cells with level flight in the center. Bolts use one cell.
+            native_heading(from, to) | (u16::from(source.stride / 2) << 4)
+        } else {
             crate::unit_visuals::packed_frame(
                 pose,
                 0,
@@ -94,12 +125,19 @@ pub(super) fn append(client: &Client, scene: &PreparedScene, units: &mut Vec<Sce
                 now,
                 client.config.tick_hz,
             )
-        } else {
-            u16::from(flight_facing(from, to))
+        };
+        let rise = match shot.kind {
+            ProjectileKind::Native(id) => {
+                4.0 * fraction
+                    * (1.0 - fraction)
+                    * distance
+                    * aoe_assets::catalog::units::projectile_arc(id)
+            }
+            _ => arc(fraction, distance),
         };
         units.push(
             SceneUnit {
-                id: aoe_core::EntityId(u32::MAX.saturating_sub(shot.id as u32)),
+                id: particles::scene_id(shot.id, false),
                 kind: SceneUnitKind::actor(pose as u16),
                 position,
                 visual: aoe_rendering::SceneUnitVisual::new(true).with_selected(false),
@@ -108,11 +146,13 @@ pub(super) fn append(client: &Client, scene: &PreparedScene, units: &mut Vec<Sce
                     .height(position)
                     .unwrap_or_else(|| elevation_at_world(client, position))
                     + 1.0
-                    + arc(fraction, distance)) as f32,
+                    + rise) as f32,
             }
             .with_actor_frame(frame),
         );
     }
+    particles::append(client, scene, units, now);
+    units[start..].sort_unstable_by_key(|u| u.id);
 }
 
 #[cfg(test)]

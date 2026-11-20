@@ -60,7 +60,7 @@ fn militia_timelines_use_fractional_native_dat_durations() {
 
 #[test]
 fn every_spawned_unit_pose_uses_all_native_cells_and_dat_timing() {
-    assert_eq!(SPRITES.len(), 347);
+    assert_eq!(SPRITES.len(), Pose::MangonelScatter as usize + 1);
     for (pose, source) in SPRITES.iter().copied().enumerate() {
         if matches!(pose, 72 | 73 | 120 | 223) {
             continue;
@@ -77,10 +77,7 @@ fn every_spawned_unit_pose_uses_all_native_cells_and_dat_timing() {
             for phase in 0..usize::from(source.stride) {
                 // A sheet may hold more cells than the DAT's declared frames
                 // (the Heavy Demolition Ship's sinking has ten for seven).
-                let native_stride = source.native.map_or_else(
-                    || source.frames() as usize / source.rows(),
-                    |g| usize::from(g.stride),
-                );
+                let native_stride = source.native_stride();
                 let expected = if source.stride == 1 && native_stride > 1 {
                     row * native_stride + native_stride - 1
                 } else {
