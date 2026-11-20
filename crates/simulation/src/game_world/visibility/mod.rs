@@ -376,9 +376,6 @@ impl GameWorld {
         self.vision.players.get(&player)?.remembered.get(&id)
     }
 
-    /// Takes, per player, the buildings whose memory changed since the last
-    /// call, in id order. A consumer that tracks `remembered_building` per
-    /// player needs to look at no other building.
     /// `take_remembered_building_changes` for the players `take` accepts;
     /// the others keep theirs for a later call.
     pub fn take_remembered_building_changes_of(
@@ -393,6 +390,9 @@ impl GameWorld {
             .collect()
     }
 
+    /// Takes, per player, the buildings whose memory changed since the last
+    /// call, in id order. A consumer that tracks `remembered_building` per
+    /// player needs to look at no other building.
     pub fn take_remembered_building_changes(&mut self) -> BTreeMap<PlayerId, BTreeSet<EntityId>> {
         self.vision
             .players

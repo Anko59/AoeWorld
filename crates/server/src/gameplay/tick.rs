@@ -137,7 +137,13 @@ impl GameplayService {
             let sessions = self.sessions.lock().await;
             sessions
                 .iter()
-                .filter(|(_, session)| ai_due || !session.ai)
+                // A fog toggle still reaches every session on the next tick.
+                .filter(|(_, session)| {
+                    ai_due
+                        || !session.ai
+                        || session.resident_fog.as_ref().map(|fog| fog.disabled)
+                            != Some(world.fog_disabled())
+                })
                 .filter_map(|(id, session)| view(*id, session))
                 .collect::<Vec<_>>()
         };
