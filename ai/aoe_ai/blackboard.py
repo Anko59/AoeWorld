@@ -89,6 +89,8 @@ class Blackboard:
     # Per resource kind: the dropoff sites last seen and each node tile's
     # distance to the nearest of them, kept while those sites stay the same.
     dropoffs: dict[Any, tuple[tuple, dict[Tile, float]]] = field(default_factory=dict)
+    # The Town Centers and home last seen, and each tile's distance to them.
+    settlements: tuple[Any, dict[Tile, float]] = field(default_factory=lambda: (None, {}))
     #: villager id -> animal it was sent after; animal id -> ((hp, meat), tick it last changed).
     hunters: dict[int, int] = field(default_factory=dict)
     hunt_watch: dict[int, tuple[tuple[int, int], int]] = field(default_factory=dict)

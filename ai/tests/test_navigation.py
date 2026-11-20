@@ -134,3 +134,28 @@ def test_a_nodes_dropoff_distance_is_kept_while_the_dropoffs_stay(monkeypatch):
     moved = context.Context(FakeClient(), decision(FakeWorld([], camps)), board, Config())
     assert moved.dropoff_distance(tree) < first and len(calls) == 2 * len(camps) - 1
 
+
+
+def test_settlement_distance_is_kept_while_the_town_centers_stay(monkeypatch):
+    """Every candidate node is checked against every Town Center; the answer
+    is kept per tile until a Town Center is finished or lost."""
+    import aoe_ai.context as context
+    from aoe_ai.blackboard import Blackboard
+    from aoe_ai.config import Config
+    from aoeworld import BuildingKind
+    from fakes import FakeClient, building, decision
+    centers = [building(30 + i, BuildingKind.TOWN_CENTER, tile=(60 * i, 10)) for i in range(4)]
+    board = Blackboard()
+    make = lambda: context.Context(FakeClient(), decision(FakeWorld([], centers)), board, Config())
+    calls = []
+    real = context.dist
+    monkeypatch.setattr(context, "dist", lambda a, b: calls.append(1) or real(a, b))
+    def measured(ctx):
+        calls.clear()
+        return ctx.settlement_distance((70, 30)), len(calls)
+    first, spent = measured(make())
+    assert spent == len(centers) and first == real((70, 30), centers[1].center)
+    assert measured(make()) == (first, 0)
+    centers.append(building(40, BuildingKind.TOWN_CENTER, tile=(68, 26)))
+    closer, spent = measured(make())
+    assert closer < first and spent == len(centers)
