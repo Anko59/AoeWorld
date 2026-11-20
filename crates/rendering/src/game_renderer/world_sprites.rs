@@ -154,7 +154,7 @@ pub(super) fn emit_world_sprite_frames(
         focus_elevation_meters: camera.focus_elevation_meters,
     };
     let decks = decks::Decks::new(units);
-    let fronts = fronts::Fronts::new(art, units);
+    let fronts = fronts::Fronts::new(art, units, resources);
     // Preserve resource-before-unit submission without allocating/copying an
     // unsorted intermediate object vector on every frame.
     for &r in resources.iter().filter(|&&r| environment::present(art, r)) {
@@ -242,7 +242,7 @@ pub(super) fn emit_world_sprite_frames(
                     };
                 } else if !unit.visual.moving()
                     && !unit.kind.rubble()
-                    && unit.kind.building_slot().is_none_or(|slot| slot < 65)
+                    && !bounds::bridge_deck(unit)
                     && unit.kind.building_id().is_some_and(|id| id != 50)
                 {
                     sprite.pages[3] |= Sprite::OCCLUDER;
@@ -255,8 +255,17 @@ pub(super) fn emit_world_sprite_frames(
             });
             continue;
         }
+        let actor_depth = |depth| {
+            if unit.kind.is_corpse() {
+                depth
+            } else {
+                fronts.actor_depth(unit.position, f64::from(unit.elevation_meters), depth)
+            }
+        };
         let Some((frames, stride, animated)) = village::frames(art, unit) else {
-            village::marker(unit, camera, &mut emit);
+            village::marker(unit, camera, &mut |(sprite, frame, depth, id)| {
+                emit((sprite, frame, actor_depth(depth), id));
+            });
             continue;
         };
         let (_, flipped) = unit_direction(unit, frames.len() / stride);
@@ -331,12 +340,7 @@ pub(super) fn emit_world_sprite_frames(
             frame.size[1],
             frame.anchor[1],
         );
-        let mut depth = base + clearance + decks.lift(unit.position);
-        if !unit.kind.is_corpse()
-            && let Some(floor) = fronts.floor(unit.position, f64::from(unit.elevation_meters))
-        {
-            depth = depth.max(floor);
-        }
+        let depth = actor_depth(base + clearance + decks.lift(unit.position));
         if let Some((shadow, shadow_frame)) = alpha_shadow(
             frame,
             unit.position,

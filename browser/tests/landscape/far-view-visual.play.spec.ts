@@ -79,6 +79,7 @@ test("the far view paints terrain and real building sprites, not a black plane w
       10, 498, 498, 502, 502, 0, 0x4191f5, 1, 109, 1, 11, 506, 500, 509, 503, 5,
       0x4191f5, 1, 50, 1, 12, 490, 500, 494, 504, 16, 0x4191f5, 0, 82, 2,
     ]);
+    s.receive([], [], [498, 498, 540, 502, 23], [], [], []);
     (window as unknown as { farFrame: () => void }).farFrame = () =>
       s.frame(frame);
     s.frame(frame);
@@ -93,6 +94,25 @@ test("the far view paints terrain and real building sprites, not a black plane w
   expect(Number(await canvas.getAttribute("data-settlements"))).toBeGreaterThan(
     0,
   );
+  const readRoadPixels = () =>
+    canvas.evaluate((node: HTMLCanvasElement) => {
+      const context = node.getContext("2d");
+      if (!context) throw new Error("Strategic context missing");
+      return (
+        [
+          [640, 360],
+          [717, 398],
+        ] as const
+      ).map(([x, y]) => Array.from(context.getImageData(x, y, 1, 1).data));
+    });
+  const [overlap, exposedRoad] = await readRoadPixels();
+  expect(exposedRoad).toEqual([214, 181, 123, 255]);
+  await page
+    .locator('[data-layer="roads"]')
+    .evaluate((button: HTMLButtonElement) => button.click());
+  const [buildingOnly, groundOnly] = await readRoadPixels();
+  expect(overlap).toEqual(buildingOnly);
+  expect(exposedRoad).not.toEqual(groundOnly);
   const lit = await canvas.evaluate((node: HTMLCanvasElement) => {
     const data = node
       .getContext("2d")

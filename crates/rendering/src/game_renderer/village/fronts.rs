@@ -1,15 +1,14 @@
-//! Standing actors stay in front of the flat sprites of the buildings they
-//! stand before and of the corpses lying beside them.
+//! Resolve overlaps between standing actors and nearby footprint-sorted sprites.
 use super::*;
+use bounds::{
+    ROCK_HALF_EXTENT, bridge_deck, building_depth, building_half_extent, footprint_depth,
+};
 use std::collections::HashMap;
 
 /// Cell side, in tiles, of the lookup that keeps the scan off distant buildings.
 const CELL: f64 = 8.0;
-/// A building sprite has one depth, centre plus `BUILDING_CLEARANCE`, while an
-/// actor's depth is its own position plus a smaller clearance. An actor in front
-/// of the footprint but within that difference of its centre line would lose the
-/// comparison and vanish behind the wall.
-const REACH: f64 = super::super::ground::BUILDING_CLEARANCE;
+/// Allow sprite overlap around the footprint while keeping queries local.
+const REACH: f64 = 3.0;
 /// Half side, in tiles, of the box a corpse covers.
 const CORPSE_REACH: f64 = 1.0;
 /// Tie-break above the building so the actor wins the equal-depth comparison.
@@ -37,7 +36,7 @@ fn cell(value: f64) -> i32 {
 }
 
 impl Fronts {
-    pub(super) fn new(art: &GameArt, units: &[SceneUnit]) -> Self {
+    pub(super) fn new(art: &GameArt, units: &[SceneUnit], resources: &[SceneResource]) -> Self {
         let mut fronts = Self::default();
         for unit in units {
             if unit.kind.is_corpse() {
@@ -52,42 +51,50 @@ impl Fronts {
                 });
                 continue;
             }
-            let Some(side) = unit.kind.building_side() else {
-                continue;
-            };
-            if unit.visual.ghost()
-                || unit.kind.rubble()
-                || unit
-                    .kind
-                    .building_slot()
-                    .is_some_and(|slot| slot == 5 || (65..=70).contains(&slot))
-                || unit.kind == SceneUnitKind::Farm
+            if unit.kind.building_side().is_none()
+                || unit.visual.ghost()
+                || bridge_deck(*unit)
+                || unit.kind.building_id() == Some(50)
             {
                 continue;
             }
-            let id = unit.kind.building_id();
-            let footprint = art
-                .compositions
-                .iter()
-                .find(|b| Some(b.unit_id) == id)
-                .map_or([side; 2], |b| b.footprint.map(f64::from));
-            let lower = [0, 1].map(|axis| unit.position[axis] - footprint[axis] / 2.0);
-            let upper = [0, 1].map(|axis| unit.position[axis] + footprint[axis] / 2.0);
-            let entry = Footprint {
-                lower,
-                upper,
-                elevation: f64::from(unit.elevation_meters),
-                depth: object_depth(WorldObject::Unit(*unit)),
-                beside: false,
-            };
-            fronts.insert(entry);
+            let id = unit.kind.oriented_building_id(unit.facing);
+            let art = art.compositions.iter().find(|b| Some(b.unit_id) == id);
+            fronts.insert_footprint(
+                unit.position,
+                f64::from(unit.elevation_meters),
+                building_half_extent(*unit, art),
+                building_depth(*unit, art),
+            );
+        }
+        for &rock in resources.iter().filter(|r| r.kind == SceneResource::ROCK) {
+            if !environment::present(art, rock) && scenery::frame(art, rock).is_none() {
+                continue;
+            }
+            fronts.insert_footprint(
+                rock.position,
+                rock.elevation_meters,
+                ROCK_HALF_EXTENT,
+                footprint_depth(rock.position, rock.elevation_meters, ROCK_HALF_EXTENT),
+            );
         }
         fronts
     }
 
+    fn insert_footprint(&mut self, center: [f64; 2], elevation: f64, half: [f64; 2], depth: f64) {
+        self.insert(Footprint {
+            lower: [0, 1].map(|axis| center[axis] - half[axis]),
+            upper: [0, 1].map(|axis| center[axis] + half[axis]),
+            elevation,
+            depth,
+            beside: false,
+        });
+    }
+
     fn insert(&mut self, entry: Footprint) {
-        let (x0, x1) = (cell(entry.lower[0]), cell(entry.upper[0] + REACH));
-        let (y0, y1) = (cell(entry.lower[1]), cell(entry.upper[1] + REACH));
+        let reach = if entry.beside { 0.0 } else { REACH };
+        let (x0, x1) = (cell(entry.lower[0] - reach), cell(entry.upper[0] + reach));
+        let (y0, y1) = (cell(entry.lower[1] - reach), cell(entry.upper[1] + reach));
         for x in x0..=x1 {
             for y in y0..=y1 {
                 self.cells.entry([x, y]).or_default().push(entry);
@@ -95,23 +102,42 @@ impl Fronts {
         }
     }
 
-    /// The least depth an actor at `position` needs to stay in front of every
-    /// building whose footprint it stands beside or before, if any.
-    pub(super) fn floor(&self, position: [f64; 2], elevation: f64) -> Option<f64> {
-        let list = self.cells.get(&[cell(position[0]), cell(position[1])])?;
-        let mut floor: Option<f64> = None;
+    /// Choose actor order at the ground contact point. Both the near face
+    /// and the projected width come from the footprint.
+    pub(super) fn actor_depth(&self, position: [f64; 2], elevation: f64, depth: f64) -> f64 {
+        let Some(list) = self.cells.get(&[cell(position[0]), cell(position[1])]) else {
+            return depth;
+        };
+        let mut floor = f64::NEG_INFINITY;
+        let mut ceiling = f64::INFINITY;
+        let lateral = position[0] - position[1];
+        let ground_depth = surface_depth([position[0], position[1], elevation]);
         for b in list {
-            let in_front = if b.beside {
-                (0..2)
+            if (elevation - b.elevation).abs() > LEVEL_TOLERANCE
+                || (0..2).any(|axis| {
+                    position[axis] < b.lower[axis] - REACH || position[axis] > b.upper[axis] + REACH
+                })
+            {
+                continue;
+            }
+            if b.beside {
+                if (0..2)
                     .all(|axis| position[axis] >= b.lower[axis] && position[axis] <= b.upper[axis])
-            } else {
-                (position[0] >= b.upper[0] && position[1] >= b.lower[1])
-                    || (position[1] >= b.upper[1] && position[0] >= b.lower[0])
-            };
-            if in_front && (elevation - b.elevation).abs() <= LEVEL_TOLERANCE {
-                floor = Some(floor.map_or(b.depth, |depth| depth.max(b.depth)));
+                {
+                    floor = floor.max(b.depth + MARGIN);
+                }
+                continue;
+            }
+            let in_front = (position[0] >= b.upper[0] && position[1] >= b.lower[1])
+                || (position[1] >= b.upper[1] && position[0] >= b.lower[0]);
+            if in_front {
+                floor = floor.max(b.depth + MARGIN);
+            } else if (b.lower[0] - b.upper[1]..=b.upper[0] - b.lower[1]).contains(&lateral)
+                && ground_depth < b.depth - MARGIN
+            {
+                ceiling = ceiling.min(b.depth - MARGIN);
             }
         }
-        floor.map(|depth| depth + MARGIN)
+        depth.max(floor).min(ceiling)
     }
 }

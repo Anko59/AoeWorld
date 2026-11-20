@@ -207,6 +207,7 @@ pub(super) fn building_select(
         sprite_building(art, unit, camera, animation, emit);
         return;
     };
+    let depth = super::bounds::building_depth(unit, Some(building));
     let destroyed = unit.visual.moving() || unit.kind.rubble();
     let elapsed = if unit.visual.moving() {
         art.building_clocks
@@ -343,7 +344,7 @@ pub(super) fn building_select(
             emit((
                 sprite.with_owner(unit.visual),
                 scaled(frame, camera.zoom as f32),
-                object_depth(WorldObject::Unit(unit)),
+                depth,
                 u64::from(unit.id.0),
             ));
         }

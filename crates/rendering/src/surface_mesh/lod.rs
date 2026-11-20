@@ -6,7 +6,7 @@ mod cliffs;
 mod grid;
 use grid::*;
 mod landscape;
-mod mountains;
+mod patches;
 mod shade;
 
 #[cfg(test)]
@@ -77,7 +77,7 @@ pub fn projected_surface_triangles(
     let coarse_heights = (size > 1).then(|| shared_coarse_heights(terrain, &cells, grid));
     let mut result = Vec::with_capacity(MAX_SURFACE_TRIANGLES);
     let divisions = budget::subdivisions(&cells, grid, skirts);
-    let patches = mountains::plan(
+    let patches = patches::plan(
         terrain,
         grid,
         divisions,
@@ -121,9 +121,7 @@ pub fn projected_surface_triangles(
         };
         let tile = grid_cell(grid, slot_index);
         let sample = candidate.sample;
-        let appearance = super::landscape::pack(sample.appearance);
         let heights = displayed_heights(sample, tile, grid, coarse_heights.as_ref());
-        let color = surface_color(sample);
         let lattice = {
             let stride = grid.width + 1;
             let (x, y) = (slot_index % grid.width, slot_index / grid.width);
@@ -136,7 +134,20 @@ pub fn projected_surface_triangles(
         } else {
             [[0, 1, 2], [0, 2, 3]]
         };
-        for (texture_tile, step) in patches.tiles(tile, divisions) {
+        for (texture_tile, step, crops) in patches.tiles(tile, divisions) {
+            let mut sample = sample;
+            if crops {
+                sample.material = appearance::FARM_FIELD;
+                sample.appearance = None;
+                sample.surface.water = 0;
+                if sample.surface.is_cliff() {
+                    sample.surface.kind = SceneTerrainSurface::PLATEAU;
+                }
+            } else if size > 1 && sample.material == appearance::FARM_FIELD {
+                sample.material = 2;
+            }
+            let appearance = super::landscape::pack(sample.appearance);
+            let color = surface_color(sample);
             let x = texture_tile[0] - tile[0];
             let y = texture_tile[1] - tile[1];
             let local_corners = [[x, y], [x + step, y], [x + step, y + step], [x, y + step]];

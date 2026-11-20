@@ -104,6 +104,20 @@ export function initTokens() {
       }
       for (const r of hudRects) if (r.width && r.height) space.take(r.left - 4, r.top - 4, r.right + 4, r.bottom + 4, -1);
     },
+    mine() { const c = teamColours[document.getElementById('playground')?.dataset.playerColour] ?? teamColours.blue; return parseInt(c.slice(1), 16); },
+    drawRoads(context, project) {
+      context.strokeStyle = '#f8dfac'; context.lineWidth = 4;
+      for (const [x0, y0, x1, y1, kind] of bridges) {
+        if (kind === 23) {
+          const corners = [[x0,y0],[x1,y0],[x1,y1],[x0,y1]].map(project);
+          context.fillStyle = '#d6b57b'; context.beginPath(); context.moveTo(...corners[0]);
+          for (const p of corners.slice(1)) context.lineTo(...p);
+          context.closePath(); context.fill(); continue;
+        }
+        const a = project([x0, y0]), b = project([x1, y1]);
+        context.beginPath(); context.moveTo(...a); context.lineTo(...b); context.stroke();
+      }
+    },
     draw(context, project, options, scale, width, height, space, artFor) {
       hits = [];
       const holdingColour = teamColours[document.getElementById('playground')?.dataset.playerColour] ?? teamColours.blue;
@@ -146,19 +160,6 @@ export function initTokens() {
         space.take(ax + 20, ay - 56, ax + 56, ay - 24, -3);
       }
       if (layer.dataset.grouped !== String(grouped)) layer.dataset.grouped = String(grouped);
-      if (options.roads) {
-        context.strokeStyle = '#f8dfac'; context.lineWidth = 4;
-        for (const [x0, y0, x1, y1, kind] of bridges) {
-          if (kind === 23) {
-            const corners = [[x0,y0],[x1,y0],[x1,y1],[x0,y1]].map(project);
-            context.fillStyle = '#d6b57b'; context.beginPath(); context.moveTo(...corners[0]);
-            for (const p of corners.slice(1)) context.lineTo(...p);
-            context.closePath(); context.fill(); continue;
-          }
-          const a = project([x0, y0]), b = project([x1, y1]);
-          context.beginPath(); context.moveTo(...a); context.lineTo(...b); context.stroke();
-        }
-      }
       for (const r of economy) {
         const [id, steward, wx, wy, selected, managed, residents, wait, f, w, g, s, idle] = r;
         const node = button(`e${id}`, 'steward-card');

@@ -179,6 +179,26 @@ fn site_projection_hides_construction_before_cap_and_keeps_completed_buildings()
 }
 
 #[wasm_bindgen_test]
+fn roads_and_bridges_do_not_displace_farms_in_the_far_view_sites() {
+    use crate::playground::game::strategic::site_buildings;
+    use aoe_core::PlayerId;
+    use aoe_protocol::BuildingKind;
+    let mut buildings: Vec<_> = (0..2049).map(super::buildings::building).collect();
+    for (index, building) in buildings[..2048].iter_mut().enumerate() {
+        building.kind = if index % 2 == 0 {
+            BuildingKind::Road
+        } else {
+            BuildingKind::Bridge
+        };
+    }
+    buildings[2048].kind = BuildingKind::Farm;
+    let sites: Vec<_> = site_buildings(&buildings, PlayerId(0), |_| true)
+        .map(|b| b.kind)
+        .collect();
+    assert_eq!(sites, [BuildingKind::Farm]);
+}
+
+#[wasm_bindgen_test]
 fn site_record_ownership_is_explicit_even_when_player_colours_match() {
     use crate::playground::game::strategic::site_record;
     use aoe_core::PlayerId;

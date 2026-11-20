@@ -46,7 +46,8 @@ pub(in super::super) fn site_buildings<'a>(
         })
     })
     .filter(move |b| {
-        crate::strategic::far_building_visible(b.hp, b.construction)
+        !matches!(b.kind, BuildingKind::Bridge | BuildingKind::Road)
+            && crate::strategic::far_building_visible(b.hp, b.construction)
             && (b.player == owner || explored(b))
     })
     .take(2048)
