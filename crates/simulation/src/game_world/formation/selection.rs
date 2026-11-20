@@ -1,19 +1,31 @@
 use super::*;
 
 impl GameWorld {
-    pub(crate) fn formation_members(
-        &self,
-        player: PlayerId,
-        ids: &[EntityId],
-    ) -> Result<(Vec<EntityId>, WorldPosition), EconomyError> {
-        if ids.is_empty() || ids.len() > MAX_FORMATION_MEMBERS {
+    pub(crate) fn validate_group_order_size(count: usize) -> Result<(), EconomyError> {
+        if count == 0 || count > MAX_FORMATION_MEMBERS {
             return Err(EconomyError::OrderTooLarge);
         }
+        Ok(())
+    }
+
+    pub(crate) fn canonical_group_selection(
+        ids: &[EntityId],
+    ) -> Result<Vec<EntityId>, EconomyError> {
+        Self::validate_group_order_size(ids.len())?;
         let mut ids = ids.to_vec();
         ids.sort_unstable();
         if ids.windows(2).any(|p| p[0] == p[1]) {
             return Err(EconomyError::OrderTooLarge);
         }
+        Ok(ids)
+    }
+
+    pub(crate) fn formation_members(
+        &self,
+        player: PlayerId,
+        ids: &[EntityId],
+    ) -> Result<(Vec<EntityId>, WorldPosition), EconomyError> {
+        let mut ids = Self::canonical_group_selection(ids)?;
         // A selection is sent as the player saw it; a member that fell before
         // the order arrived is left out rather than refusing the whole army.
         ids.retain(|&id| self.unit(id).is_some_and(|u| u.hp > 0));
@@ -244,7 +256,7 @@ impl GameWorld {
         Ok(frontier)
     }
 
-    fn formation_bucket(&self, ids: &[EntityId]) -> aoe_map::LandBucket {
+    pub(super) fn formation_bucket(&self, ids: &[EntityId]) -> aoe_map::LandBucket {
         ids.iter()
             .filter_map(|id| self.unit(*id))
             .filter_map(|unit| aoe_map::LandBucket::for_radius(unit.kind.collision_radius()))

@@ -49,6 +49,11 @@ impl GameWorld {
             hash.update(&group.form_start.to_le_bytes());
             hash.update(&group.form_distance.to_le_bytes());
             hash.update(&group.half_width.to_le_bytes());
+            if let Some(id) = group.breach {
+                hash.update(b"breach");
+                hash.update(&id.0.to_le_bytes());
+                point(hash, group.marker.position);
+            }
             hash.update(&(group.queue.len() as u64).to_le_bytes());
             for marker in &group.queue {
                 let (p, attack_move) = marker.leg();

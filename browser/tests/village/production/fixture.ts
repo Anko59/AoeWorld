@@ -137,14 +137,22 @@ export async function productionFixture(
           ]),
         );
       }
-      if (bytes[0] === 5) {
-        const building = buildings.find((b) => b.id === bytes[2]);
-        if (building) {
-          const result = verdicts.trainResults?.shift() ?? 0;
-          if (result === 0) {
+      if (bytes[0] === 5 || bytes[0] === 43) {
+        const batch = bytes[0] === 43;
+        const kind = bytes[batch ? 2 : 3] ?? 0;
+        const ids = batch ? bytes.subarray(4) : bytes.subarray(2, 3);
+        let result: number | undefined;
+        for (const id of ids) {
+          const building = buildings.find((b) => b.id === id);
+          if (!building) continue;
+          const verdict = verdicts.trainResults?.shift() ?? 0;
+          if (result === undefined || verdict === 0) result = verdict;
+          if (verdict === 0) {
             building.queue ??= [];
-            building.queue.push(bytes[3] ?? 0);
+            building.queue.push(kind);
           }
+        }
+        if (result !== undefined) {
           route.send(Buffer.from([3, bytes[1] ?? 0, result, ...uint(tick)]));
           update();
         }

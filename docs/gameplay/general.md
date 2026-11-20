@@ -9,8 +9,9 @@ rules apply. The Steward is the economy specialist.
 
 ## Command and production
 
-Creation adopts up to 100 living owned land soldiers within 24 tiles, in entity
-order, excluding civilians, monks, ships and other leaders. An existing
+Creation adopts up to 200 living owned land soldiers within 24 tiles, subject
+to the ten squad offices, in entity order, excluding civilians, monks, ships
+and other leaders. An existing
 General's soldiers are never stolen. Later surveys only observe enemies;
 ordinary General orders never recruit free or owner-commanded soldiers.
 The limit includes prepaid reinforcements. Death releases command immediately;
@@ -20,17 +21,18 @@ decision starts field movement. A newly trained commander does not pull the
 army back into its Castle exit before the player's first order.
 
 A new General trains nothing. After the **Train** button (`GeneralCommand::SetTraining`;
-SDK `Order::GeneralTrain`), an admitted decision with space remaining may buy one
-ordinary unit from an idle completed owned production building within the
-influence sphere. When the army and queued recruits reach 100, training switches
-itself off and stays off, even after losses, until Train is pressed again. The
+SDK `Order::GeneralTrain`), each admission can buy one ordinary unit per
+eligible building in the current scan slice. Training uses idle, completed, owned production buildings within
+the influence sphere. The scan rotates so later buildings get their turn.
+If the enabled roles have no squad vacancies left after reservations, training
+switches itself off and stays off until Train is pressed again. The
 **unit-mix sliders** (`GeneralCommand::SetMix`, SDK `Order::GeneralMix`, 0 to 100
 per role: infantry, archers, heavy cavalry, siege, scouts; default 35:30:20:10:5)
 set the ratio the manager buys toward; a role at zero is never bought. Upgrades
 follow the current research roster. Unavailable or unaffordable roles fall
 through to another available role.
-Barracks, Ranges, Stables and Workshops supply the current military roster;
-Castles currently train leaders, so they do not supply ordinary reinforcements.
+Barracks, Ranges, Stables, Workshops and Castles supply eligible units from
+their current military rosters. Recruiting excludes other leaders.
 The manager does not build missing production buildings or research upgrades.
 Queue reservations route new recruits directly to their General, regardless of
 spawn distance; cancellation, building destruction and General death retire
@@ -41,9 +43,9 @@ reservations. Existing manual queues and rallies remain ordinary gameplay.
 Selecting one owned General shows a panel above the command bar with two modes;
 a General starts in **Captain** mode. Captain shows what he manages: soldiers
 by role, and the Marching or Fighting sub-mode he is currently in. **Trainer**
-shows the five unit-mix sliders and the Train button with a note (idle, training
-toward 100, or at capacity). The mode is a client convenience; the sliders, the
-button and the soldier counts are authoritative server state
+shows the five unit-mix sliders, the Train button and the queued recruit count.
+The mode is a client convenience. The sliders, the button and the soldier
+counts are authoritative server state
 (`GeneralStatus.training/mix/counts/queued`).
 
 ## Influence sphere
@@ -54,6 +56,12 @@ intermediate legs even if the commander and a trailing squad temporarily become
 farther apart. Production buildings must lie inside the influence sphere.
 
 ## Orders
+
+Selecting a General with its soldiers keeps their membership for move, attack,
+and attack-move. An enemy click focuses the army's in-range soldiers on that
+target. Shift queues ground orders on the General, and the army follows the
+command sequence through its squads. Selecting a soldier without its own
+General still detaches it.
 
 Right-clicking ground leads the army (above). The **General only** button or
 Alt+right-click walks the General alone (`GeneralOrder::MoveAlone`; Rust SDK
@@ -70,9 +78,9 @@ army march. Each squad uses the ordinary formation routes, corridor following,
 obstruction handling, collision, path budgets and per-member arrival. Terrain
 can squeeze a squad into narrow files. At the objective, squad destinations
 place infantry ahead of archers, siege behind archers, Knights on the flanks and
-scouts/light cavalry ahead of the infantry. Shared formation assignment lays
-out each selection, including selections containing the General; army ownership
-does not select a different layout.
+scouts/light cavalry ahead of the infantry. Each squad uses the shared formation
+layout. Independent soldiers in the same selection use the player's chosen
+formation.
 
 Every decision compares nearby visible enemy HP/attack/cooldown strength with
 its whole army (every assigned member, wherever it stands). Defensive Castles and towers add a fixed threat allowance.
@@ -124,18 +132,20 @@ The estimator is deliberately simple, with no opponent-state or fog bypass.
 
 All state uses integers and ordered indexes and participates in canonical
 hashing: homes, destinations, membership, queued recruits, scan cursors, rotation
-and retreat deadlines, plus the original stances and override reasons in 101
+and retreat deadlines, plus the original stances and override reasons in 201
 inline slots per army. Stance bookkeeping allocates nothing per decision.
 No randomness, wall clock, network or client decisions.
 
 At 20 Hz, admission runs every ten ticks. At most eight Generals are admitted,
 rotating by entity ID. Each scans at most 1,024 spatial unit entries, 625 nearby
-building-occupancy tiles and 128 owner production buildings; each issues at
-most 16 withdrawal commands and 21 formation/waypoint commands,
-plus one training order.
+building-occupancy tiles and 25 buildings per indexed production kind. Each
+issues at most 16 withdrawal commands and 21 formation or waypoint commands.
+Recruitment makes at most one purchase per eligible building visited, bounded
+by squad vacancies and the owner's resources and population.
 Partial spatial censuses resume on the next admission and conservatively
 refuse a fight. The global census bounds per admission pass are 8,192 unit
-entries and 6,024 building/tile visits. Formation membership is at most 101.
+entries and 6,024 building or tile visits. Army membership is at most 200
+soldiers plus the General.
 More than eight active Generals share the admission budget; their decisions
 become less frequent. This bounds work, but is not 1,000-player qualification.
 

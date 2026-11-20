@@ -1,14 +1,11 @@
 //! Player orders that address the General alone rather than the whole army.
 use super::*;
 use crate::EconomyError;
+use aoe_core::Formation;
 
 impl GameWorld {
-    /// The rule (docs/movement/real-terrain.md, "A player's order beats a
-    /// General"). Per player a soldier is in an army or detached. Every player
-    /// order that names a soldier detaches it and restarts its clock, with or
-    /// without armies, and also when its own General is named in the same
-    /// order: the soldier follows the order it was given, not his march. An
-    /// order naming a General updates his march without recruiting soldiers.
+    /// A soldier selected without its commander leaves the army. Selecting
+    /// the commander alongside its soldiers keeps their existing membership.
     pub fn general_player_order(
         &mut self,
         player: PlayerId,
@@ -26,7 +23,10 @@ impl GameWorld {
                 generals.push(id);
             } else if let Some(ordered) = self.economy.generals.manual.get_mut(&id) {
                 *ordered = self.tick.0;
-            } else if self.general_controller(id).is_some() {
+            } else if let Some(commander) = self.general_controller(id) {
+                if sorted.binary_search(&commander).is_ok() {
+                    continue;
+                }
                 self.forget_general(id);
                 self.set_sergeant(id, false);
                 self.economy.generals.manual.insert(id, self.tick.0);
@@ -44,6 +44,164 @@ impl GameWorld {
         for general in generals {
             if let Some(destination) = destination {
                 self.general_march(general, destination);
+            }
+        }
+    }
+
+    /// Resolve a mixed player selection into independent units and army
+    /// commands. Only the commander owns the player's queued army waypoints.
+    pub fn issue_player_formation_move(
+        &mut self,
+        player: PlayerId,
+        ids: &[EntityId],
+        form: Formation,
+        destination: WorldPosition,
+        queued: bool,
+        attack_move: bool,
+    ) -> Result<(), EconomyError> {
+        if !ids
+            .iter()
+            .any(|id| self.economy.generals.armies.contains_key(id))
+        {
+            self.issue_formation_move(player, ids, form, destination, queued, attack_move)?;
+            self.general_player_order(player, ids, None);
+            return Ok(());
+        }
+        let (ids, _) = self.formation_members(player, ids)?;
+        let mut independent = Vec::new();
+        let mut commanders = Vec::new();
+        for &id in &ids {
+            if self.economy.generals.armies.contains_key(&id) {
+                commanders.push(id);
+            } else if self
+                .general_controller(id)
+                .is_none_or(|g| ids.binary_search(&g).is_err())
+            {
+                independent.push(id);
+            }
+        }
+        let mut accepted = false;
+        let mut error = EconomyError::UnknownEntity;
+        if !independent.is_empty() {
+            match self.issue_formation_move(
+                player,
+                &independent,
+                form,
+                destination,
+                queued,
+                attack_move,
+            ) {
+                Ok(()) => {
+                    self.general_player_order(player, &independent, None);
+                    accepted = true;
+                }
+                Err(reason) => error = reason,
+            }
+        }
+        for id in commanders {
+            let result = if queued {
+                self.issue_queued_leg(id, destination, attack_move)
+            } else if attack_move {
+                self.issue_attack_move(id, destination)
+            } else {
+                self.issue_move(id, destination)
+                    .map_err(EconomyError::Movement)
+            };
+            match result {
+                Ok(_) => accepted = true,
+                Err(reason) => error = reason,
+            }
+        }
+        accepted.then_some(()).ok_or(error)
+    }
+
+    /// Focus the whole in-range army when its commander is part of an attack.
+    /// Other selected soldiers receive independent orders and leave their army
+    /// only if their own attack was accepted.
+    pub fn issue_player_attack(
+        &mut self,
+        player: PlayerId,
+        ids: &[EntityId],
+        target: EntityId,
+    ) -> Result<(), EconomyError> {
+        let ids = Self::canonical_group_selection(ids)?;
+        if ids.iter().any(|&id| {
+            self.unit(id)
+                .map(|u| u.player)
+                .or_else(|| self.building(id).map(|b| b.player))
+                .is_some_and(|owner| owner != player)
+        }) {
+            return Err(EconomyError::NotOwner);
+        }
+        let mut commanders = Vec::new();
+        let mut expanded = ids.len();
+        for &id in &ids {
+            let Some(army) = self.economy.generals.armies.get(&id) else {
+                continue;
+            };
+            if army.solo
+                && !army
+                    .members
+                    .iter()
+                    .any(|member| ids.binary_search(member).is_ok())
+            {
+                continue;
+            }
+            // The ordinary group order limit also bounds implicit members.
+            expanded += army
+                .members
+                .iter()
+                .filter(|member| ids.binary_search(member).is_err())
+                .count();
+            Self::validate_group_order_size(expanded)?;
+            commanders.push(id);
+        }
+        let mut accepted = false;
+        let mut error = EconomyError::UnknownEntity;
+        for &id in &ids {
+            if self
+                .general_controller(id)
+                .is_some_and(|g| ids.binary_search(&g).is_ok())
+            {
+                continue;
+            }
+            match self.issue_attack(player, id, target) {
+                Ok(()) => {
+                    self.cancel_patrol(id);
+                    self.discard_move_queue_for_order(id);
+                    if let Some(attack) = self.combat.attackers.get_mut(&id) {
+                        attack.resume = None;
+                    }
+                    if commanders.binary_search(&id).is_ok() {
+                        self.focus_general_army(id, target);
+                    } else {
+                        self.general_player_order(player, &[id], None);
+                    }
+                    accepted = true;
+                }
+                Err(reason) => error = reason,
+            }
+        }
+        accepted.then_some(()).ok_or(error)
+    }
+
+    fn focus_general_army(&mut self, id: EntityId, target: EntityId) {
+        let Some(commander) = self.unit(id) else {
+            return;
+        };
+        self.hold_general_army(id);
+        let Some(army) = self.economy.generals.armies.get_mut(&id) else {
+            return;
+        };
+        army.solo = false;
+        army.state = GeneralState::Fighting;
+        let members: Vec<_> = army.members.iter().copied().collect();
+        for member in members {
+            if self
+                .unit(member)
+                .is_some_and(|u| in_influence(commander.position, u.position))
+            {
+                let _ = self.issue_attack(commander.player, member, target);
             }
         }
     }

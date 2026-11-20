@@ -31,9 +31,12 @@ test("Shift-click and Shift+Q each queue five units up to available slots", asyn
   await train.click({ modifiers: ["Shift"] });
   await expect(tokens).toHaveCount(15);
   await expect(train).toBeDisabled();
-  expect(commands.filter((c) => c[0] === 5).map((c) => c.slice(2))).toEqual(
-    Array.from({ length: 13 }, () => [40, 0]),
-  );
+  expect(commands.filter((c) => c[0] === 43).map((c) => c.slice(2))).toEqual([
+    [0, 5, 40, 40, 40, 40, 40],
+    [0, 5, 40, 40, 40, 40, 40],
+    [0, 3, 40, 40, 40],
+  ]);
+  expect(commands.filter((c) => c[0] === 5)).toHaveLength(0);
 });
 
 test("Shift-click on a secondary training button fills only affordable slots", async ({
@@ -62,9 +65,8 @@ test("Shift-click on a secondary training button fills only affordable slots", a
   await expect(page.locator("#stockpile-food")).toHaveText("70");
   await page.locator("#train-spearman").click({ modifiers: ["Shift"] });
   await expect(page.locator("#training-queue .unit-token")).toHaveCount(2);
-  expect(commands.filter((c) => c[0] === 5).map((c) => c.slice(2))).toEqual([
-    [40, 6],
-    [40, 6],
+  expect(commands.filter((c) => c[0] === 43).map((c) => c.slice(2))).toEqual([
+    [6, 2, 40, 40],
   ]);
 });
 

@@ -190,6 +190,30 @@ fn subtract(stockpile: &mut Stockpile, cost: Stockpile) {
     stockpile.stone = stockpile.stone.saturating_sub(cost.stone);
 }
 
+/// Publish a selected queue change on the next frame. Work progress retains
+/// the ordinary HUD cadence.
+pub(in crate::playground::game) fn refresh_changed_queue(
+    client: &mut Client,
+    changed: &[GameplayBuildingState],
+) {
+    if changed.iter().any(|building| {
+        client.selected.has_building(building.id)
+            && client
+                .village
+                .buildings
+                .iter()
+                .find(|old| old.id == building.id)
+                .is_some_and(|old| {
+                    !old.training_queue
+                        .iter()
+                        .map(|entry| entry.kind)
+                        .eq(building.training_queue.iter().map(|entry| entry.kind))
+                })
+    }) {
+        client.village.last_hud = f64::NEG_INFINITY;
+    }
+}
+
 pub(super) fn train(client: &mut Client, kind: UnitKind, batch: bool) {
     let Some(player) = client
         .village
@@ -203,27 +227,50 @@ pub(super) fn train(client: &mut Client, kind: UnitKind, batch: bool) {
         return;
     };
     let mut stockpile = client.village.pending_training.unspent(player.stockpile);
-    for _ in 0..if batch { 5 } else { 1 } {
+    let limit = if batch {
+        aoe_protocol::MAX_TRAIN_BATCH
+    } else {
+        1
+    };
+    let sequence = client.next_sequence;
+    let mut building_ids = Vec::new();
+    for _ in 0..limit {
         if !matches!(availability::cost(stockpile, cost), Availability::Ready) {
             break;
         }
         let Some(building_id) = target(client, kind).map(|b| b.id) else {
             break;
         };
-        let sequence = client.next_sequence;
-        super::orders::send(
-            client,
-            aoe_protocol::GameplayClientMessage::TrainOrder {
-                sequence,
-                building_id,
-                kind,
-            },
-        );
+        building_ids.push(building_id);
         client
             .village
             .pending_training
             .record(sequence, building_id, kind);
         subtract(&mut stockpile, cost);
+    }
+    if building_ids.is_empty() {
+        return;
+    }
+    use aoe_protocol::GameplayClientMessage;
+    let request = if batch {
+        GameplayClientMessage::TrainBatchOrder {
+            sequence,
+            kind,
+            building_ids,
+        }
+    } else {
+        GameplayClientMessage::TrainOrder {
+            sequence,
+            building_id: building_ids[0],
+            kind,
+        }
+    };
+    if !super::orders::send(client, request) {
+        client
+            .village
+            .pending_training
+            .entries
+            .retain(|entry| entry.0 != sequence);
     }
 }
 

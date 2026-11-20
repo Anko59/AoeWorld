@@ -44,7 +44,8 @@ scenario deadline. A low conditional arrival time cannot offset failed arrivals.
 
 ## Scenarios and commands
 
-The matrix has four march paths and three military combat paths. A Steward
+The matrix has four march paths and three military combat paths, plus a General
+gate crossing. A Steward
 transfers villagers between staffed Town Centers; it has no military attack
 order. Single means one ordinary unit, formation means forty units, General
 means forty adopted soldiers plus their commander, and Steward means forty
@@ -58,11 +59,14 @@ CPU cost or identical army composition.
 | long | Existing 1,010-tile real-terrain fixture, three river detours | 40,000 |
 | quality-march | 575-tile prepared map: ford, two completed bridges, forest walls and one-tile pass | 24,000 |
 | source-river | Locked France elevation, water, vegetation and hydrology pages; a completed bridge on the original river | 8,000 |
+| own-gate | Six soldiers in two squads and their General leave a closed stone fort | 1,600 |
 | attack-move-defended | Equal militia cohorts; defenders also have a Watch Tower | 2,400 |
 | melee | Equal militia cohorts on open ground | 2,400 |
 | ranged | Equal archer cohorts on open ground | 2,400 |
 
-The controlled fixtures use the real map generator, typed river geometry,
+The flat gate fixture records whether the initially closed own gate opened and
+how many of its seven actors crossed to the far side. The other controlled
+fixtures use the real map generator, typed river geometry,
 resource obstacles and ordinary navigation. Their page inputs are synthetic;
 only `source-river` uses real geographical sources. The France setup retains
 its pages and finds a local bridge span and nearby clearings in canonical order.

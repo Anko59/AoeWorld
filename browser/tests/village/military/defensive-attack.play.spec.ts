@@ -1,5 +1,6 @@
 import { expect } from "@playwright/test";
 import { test } from "../../../server.js";
+import { postcardFields } from "../../wire/combat.js";
 import { building, inputFixture } from "../input/fixture.js";
 
 test("right-clicking an enemy building commands the selected Castle weapon", async ({
@@ -21,9 +22,10 @@ test("right-clicking an enemy building commands the selected Castle weapon", asy
   await page.mouse.click(enemy.x, enemy.y, { button: "right" });
   await expect
     .poll(() =>
-      commands.some(
-        (bytes) => bytes[0] === 7 && bytes[2] === 10 && bytes[3] === 11,
-      ),
+      commands.some((bytes) => {
+        const [tag, , attacker, target] = postcardFields(bytes, 4);
+        return tag === 7 && attacker === 10 && target === 11;
+      }),
     )
     .toBe(true);
   expect(commands.some((bytes) => bytes[0] === 20)).toBe(false); // SetRallyOrder

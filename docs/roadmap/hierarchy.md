@@ -18,7 +18,7 @@
 | item | asked | status | evidence |
 | --- | --- | --- | --- |
 | The General: Castle leader, 50-tile sphere, Captain/Trainer modes, mix sliders | 10-29, 10-30 | DONE | #633, #662 |
-| Generals recruit only on creation; owner order takes soldier out | 11-09 | DONE | #800, #711 |
+| Generals adopt free soldiers on creation; independently ordered soldiers leave the army | 11-09 | DONE | #800, #711 |
 | Steward takes over TC economy; Vassal defends and fortifies land | 11-03 | DONE | #685, #688 |
 | Vassal stability: churn, farm tiling, adoption, split overlapping territory | 10-30, 11-03 | DONE | #641, #648, #680 |
 | Vassal "too many units nearby" census stall; Stewards delete old lumber camps | 11-10, 11-09 | DONE | #762 |

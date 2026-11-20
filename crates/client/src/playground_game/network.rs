@@ -293,6 +293,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                         client.village.rubble.push((b, tick.0.saturating_add(life)));
                     }
                 }
+                village::production::refresh_changed_queue(&mut client, &changed_buildings);
                 map::scene::replace_buildings(&mut client, buildings);
                 for id in removals {
                     client.village.idle_villagers.remove(id);

@@ -14,6 +14,7 @@ use tokio::sync::{Mutex, RwLock, mpsc};
 pub(crate) mod arena;
 #[path = "gameplay/commands.rs"]
 mod commands;
+pub(crate) use commands::SelectionMove;
 #[path = "gameplay/deliver.rs"]
 mod deliver;
 #[path = "gameplay/economy.rs"]
@@ -253,6 +254,16 @@ enum PendingAction {
         lots: u32,
     },
     Patrol(EntityId, WorldPosition),
+    MoveSelection(SelectionMove),
+    AttackSelection {
+        entity_ids: Vec<EntityId>,
+        target_id: EntityId,
+    },
+    TrainBatch {
+        building_ids: Vec<EntityId>,
+        kind: aoe_protocol::UnitKind,
+    },
+    StopSelection(Vec<EntityId>),
 }
 impl GameplayService {
     /// Server-side scenario setup, never a gameplay client command.

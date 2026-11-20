@@ -17,7 +17,14 @@ impl GameWorld {
         if self.formations.is_empty() {
             return;
         }
-        let leaders = self.formations.keys().copied().collect::<Vec<_>>();
+        let leaders = self
+            .formations
+            .iter()
+            .filter_map(|(&id, group)| (!group.settled).then_some(id))
+            .collect::<Vec<_>>();
+        if leaders.is_empty() {
+            return;
+        }
         let mut movers = Vec::new();
         // Temporarily detach the map so no parallel task can observe another
         // group's intermediate targets. Canonical apply order stays unchanged.
@@ -37,13 +44,11 @@ impl GameWorld {
             {
                 let mut jobs = groups
                     .iter_mut()
-                    .filter(|(id, _)| !resting.contains(id))
+                    .filter(|(id, group)| !group.settled && !resting.contains(id))
                     .map(|(&id, group)| (id, group))
                     .collect::<Vec<_>>();
                 crate::game_world::parallel::par_each_mut(&mut jobs, |(leader, group)| {
-                    if !group.settled {
-                        self.prepare_group_targets(*leader, group);
-                    }
+                    self.prepare_group_targets(*leader, group);
                 });
             }
             self.formations = groups;
@@ -93,7 +98,7 @@ impl GameWorld {
             let Some(mut group) = self.formations.remove(&leader) else {
                 continue;
             };
-            if group.queue.is_empty()
+            if (group.queue.is_empty() || group.breach.is_some())
                 && group
                     .members
                     .iter()
@@ -109,7 +114,9 @@ impl GameWorld {
                 group.anchor = group.destination;
                 group.progress = group.path.end();
             }
-            if self.units[self.lookup[&leader]].order.is_none() {
+            if self.units[self.lookup[&leader]].order.is_none()
+                && group.breach.is_none_or(|id| self.building(id).is_none())
+            {
                 // A member on a detour or still short of its give-up is not done:
                 // settling would stop the rejoin and retries that finish it.
                 group.settled = group.members.iter().all(|m| {

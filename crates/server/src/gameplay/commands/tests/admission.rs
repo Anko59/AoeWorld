@@ -294,3 +294,75 @@ async fn stop_and_auto_scout_apply_a_large_selection_in_one_tick() {
         [(1, CommandResult::Accepted), (2, CommandResult::Accepted)]
     );
 }
+
+#[tokio::test]
+async fn shift_training_uses_the_last_tick_slot_and_updates_the_whole_queue() {
+    let service = GameplayService::imperial_demo(Seed(7)).unwrap();
+    let (sender, mut receiver) = mpsc::channel(64);
+    let (session, _) = service.register(None, sender).await;
+    let building = service
+        .world
+        .read()
+        .await
+        .buildings()
+        .find(|b| b.kind == aoe_simulation::BuildingKind::TownCenter)
+        .unwrap()
+        .id;
+    let (other, _held) = mpsc::channel(64);
+    let (other, _) = service.register(None, other).await;
+    // Keep 31 earlier commands ready. A five-frame Shift-click would cross
+    // the 32-command tick budget, even with sufficient resources and tokens.
+    for sequence in 1..=16 {
+        service
+            .queue_stop(other, sequence, EntityId(u32::MAX))
+            .await;
+    }
+    for sequence in 1..=15 {
+        service
+            .queue_stop(session, sequence, EntityId(u32::MAX))
+            .await;
+    }
+    service
+        .queue_train_batch(
+            session,
+            16,
+            vec![building; 5],
+            aoe_protocol::UnitKind::Villager,
+        )
+        .await;
+    assert!(
+        service
+            .world
+            .read()
+            .await
+            .building(building)
+            .unwrap()
+            .training_queue
+            .is_empty()
+    );
+    service.tick().await;
+    assert_eq!(
+        service
+            .world
+            .read()
+            .await
+            .building(building)
+            .unwrap()
+            .training_queue
+            .len(),
+        5
+    );
+    assert_eq!(
+        std::iter::from_fn(|| receiver.try_recv().ok())
+            .filter(|msg| matches!(
+                msg,
+                GameplayServerMessage::CommandAck {
+                    sequence: 16,
+                    result: CommandResult::Accepted,
+                    ..
+                }
+            ))
+            .count(),
+        1
+    );
+}

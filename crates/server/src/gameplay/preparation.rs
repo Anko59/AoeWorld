@@ -257,26 +257,12 @@ impl Request {
                 destination,
                 ..
             } => {
-                if unit_ids.is_empty() || unit_ids.len() > aoe_core::MAX_FORMATION_MEMBERS {
-                    return None;
-                }
-                let unit = world.unit(unit_ids[0]).filter(|u| u.hp > 0)?;
-                let (x, y) = unit_ids.iter().try_fold((0_i64, 0_i64), |(x, y), id| {
-                    world
-                        .unit(*id)
-                        .map(|u| (x + i64::from(u.position.x), y + i64::from(u.position.y)))
-                })?;
-                (
-                    unit,
-                    aoe_core::WorldPosition::new(
-                        (x / unit_ids.len() as i64) as i32,
-                        (y / unit_ids.len() as i64) as i32,
-                    ),
-                    destination.unwrap_or(aoe_core::WorldPosition::new(
-                        (x / unit_ids.len() as i64) as i32,
-                        (y / unit_ids.len() as i64) as i32,
-                    )),
-                )
+                let (unit, center) = selection_center(world, unit_ids)?;
+                (unit, center, destination.unwrap_or(center))
+            }
+            super::PendingAction::MoveSelection(order) => {
+                let (unit, center) = selection_center(world, &order.unit_ids)?;
+                (unit, center, order.destination)
             }
             _ => return None,
         };
@@ -292,4 +278,31 @@ impl Request {
             ],
         })
     }
+}
+
+fn selection_center(
+    world: &aoe_simulation::GameWorld,
+    ids: &[aoe_core::EntityId],
+) -> Option<(aoe_simulation::GameUnit, aoe_core::WorldPosition)> {
+    if ids.is_empty() || ids.len() > aoe_core::MAX_FORMATION_MEMBERS {
+        return None;
+    }
+    let unit = ids
+        .iter()
+        .find_map(|id| world.unit(*id).filter(|u| u.hp > 0))?;
+    let (x, y, count) = ids
+        .iter()
+        .filter_map(|id| world.unit(*id))
+        .filter(|u| u.hp > 0 && u.player == unit.player)
+        .fold((0_i64, 0_i64, 0), |(x, y, count), u| {
+            (
+                x + i64::from(u.position.x),
+                y + i64::from(u.position.y),
+                count + 1,
+            )
+        });
+    Some((
+        unit,
+        aoe_core::WorldPosition::new((x / count) as i32, (y / count) as i32),
+    ))
 }

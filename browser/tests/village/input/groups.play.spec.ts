@@ -28,9 +28,12 @@ test("all ten control groups assign, select, extend and double-tap center", asyn
   await page.keyboard.down("Control");
   await page.mouse.click(1000, 400, { button: "right" });
   await page.keyboard.up("Control");
-  await expect.poll(() => commands.length).toBe(before + 2);
-  expect(commands.slice(before).map((c) => c[0])).toEqual([21, 21]);
-  expect(commands.slice(before).map((c) => c[2])).toEqual([2, 3]);
+  await expect.poll(() => commands.length).toBe(before + 1);
+  const order = commands[before] ?? [];
+  // MoveSelectionOrder carries the two members and queues their move together.
+  expect(order[0]).toBe(41);
+  expect(order.slice(2, 5)).toEqual([2, 2, 3]);
+  expect(order.slice(-2)).toEqual([1, 0]);
   // Single recall preserves the current camera; a double tap centers the group's centroid.
   await page.evaluate(() => {
     location.hash = "x=8202&y=8202&zoom=.6";

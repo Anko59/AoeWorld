@@ -68,6 +68,7 @@ pub(crate) fn run(options: Options) -> Result<()> {
         "long",
         "quality-march",
         "source-river",
+        "own-gate",
         "attack-move-defended",
         "melee",
         "ranged",
@@ -76,6 +77,9 @@ pub(crate) fn run(options: Options) -> Result<()> {
             continue;
         }
         for path in OrderPath::ALL {
+            if scenario == "own-gate" && path != OrderPath::General {
+                continue;
+            }
             if path == OrderPath::Steward
                 && matches!(scenario, "attack-move-defended" | "melee" | "ranged")
             {

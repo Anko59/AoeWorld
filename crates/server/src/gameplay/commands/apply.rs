@@ -1,17 +1,20 @@
 use super::*;
 
-/// The units a player's order takes over, and the march it gives a General
-/// among them. Generals must never overwrite these orders.
+#[path = "apply/selections.rs"]
+mod selections;
+
+/// Accepted overrides apply detachment after the order succeeds. Formation
+/// marches and attacks resolve commandership within their simulation paths.
 fn commanded_units(
     action: &PendingAction,
 ) -> Option<(Vec<EntityId>, Option<aoe_core::WorldPosition>)> {
     match action {
         PendingAction::Formation {
             unit_ids,
-            destination,
-            queued,
+            destination: march @ None,
             ..
-        } => Some((unit_ids.clone(), destination.filter(|_| !queued))),
+        } => Some((unit_ids.clone(), *march)),
+        PendingAction::StopSelection(ids) => Some((ids.clone(), None)),
         PendingAction::AutoScout {
             entity_id,
             enabled: true,
@@ -22,7 +25,6 @@ fn commanded_units(
         }
         PendingAction::Patrol(entity_id, _)
         | PendingAction::Move { entity_id, .. }
-        | PendingAction::Attack { entity_id, .. }
         | PendingAction::Stop { entity_id }
         | PendingAction::Garrison { entity_id, .. } => Some((vec![*entity_id], None)),
         _ => None,
@@ -36,6 +38,23 @@ pub(in crate::gameplay) fn apply(
 ) -> CommandResult {
     let commanded = commanded_units(&action);
     let result = match action {
+        PendingAction::MoveSelection(order) => {
+            return selections::move_selection(world, player, order);
+        }
+        PendingAction::AttackSelection {
+            entity_ids,
+            target_id,
+        } => selections::attack_selection(world, player, &entity_ids, target_id),
+        PendingAction::TrainBatch { building_ids, kind } => {
+            return selections::apply_each(
+                world,
+                player,
+                building_ids
+                    .into_iter()
+                    .map(|building_id| PendingAction::Train { building_id, kind }),
+            );
+        }
+        PendingAction::StopSelection(ids) => world.issue_stop_selection(player, &ids),
         PendingAction::Patrol(entity_id, at) => world.issue_patrol(player, entity_id, at),
         PendingAction::VassalDevelopment { vassal_id, enabled } => {
             world.issue_vassal_development(player, vassal_id, enabled)
@@ -67,7 +86,7 @@ pub(in crate::gameplay) fn apply(
             queued,
             attack_move,
         } => match destination {
-            Some(destination) => world.issue_formation_move(
+            Some(destination) => world.issue_player_formation_move(
                 player,
                 &unit_ids,
                 formation,
@@ -173,21 +192,7 @@ pub(in crate::gameplay) fn apply(
         PendingAction::Attack {
             entity_id,
             target_id,
-        } => {
-            let visible = world.unit_visible_to(player, target_id)
-                || world.animal(target_id).is_some_and(|animal| {
-                    animal.owner == Some(player)
-                        || world.visibility(player, animal.position.tile_floor())
-                            == aoe_simulation::TileVisibility::Visible
-                })
-                || world.building_entity_visible_to(player, target_id);
-            if !visible {
-                return CommandResult::RejectedInvalidTarget;
-            }
-            world
-                .issue_attack(player, entity_id, target_id)
-                .map(|()| world.cancel_patrol(entity_id))
-        }
+        } => selections::attack_selection(world, player, &[entity_id], target_id),
         PendingAction::CancelTraining { building_id } => {
             world.issue_cancel_training(player, building_id)
         }
@@ -267,9 +272,9 @@ pub(in crate::gameplay) fn apply(
     };
     use aoe_simulation::{EconomyError as E, GameWorldError as W};
     if result.is_ok()
-        && let Some((ids, destination)) = commanded
+        && let Some((ids, march)) = commanded
     {
-        world.general_player_order(player, &ids, destination);
+        world.general_player_order(player, &ids, march);
     }
     match result {
         Ok(()) => CommandResult::Accepted,

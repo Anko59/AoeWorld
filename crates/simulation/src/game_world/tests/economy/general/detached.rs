@@ -15,19 +15,25 @@ fn clock(w: &GameWorld, id: EntityId) -> Option<u64> {
 }
 
 #[test]
-fn an_order_naming_a_general_and_his_soldiers_detaches_the_soldiers() {
+fn an_order_naming_a_general_keeps_his_own_soldiers_only() {
     let (mut w, _) = setup();
     let (ids, g) = muster(&mut w);
     advance(&mut w, 20);
     assert_eq!(w.general_controller(ids[0]), Some(g));
+    let other = soldier(&mut w, UnitKind::Militia, 104, 105);
+    let rival = soldier(&mut w, UnitKind::General, 104, 106);
+    assert_eq!(w.general_controller(other), Some(rival));
     let mut named = ids[..3].to_vec();
     named.push(g);
+    named.push(other);
     w.general_player_order(PlayerId(0), &named, Some(at(150, 104)));
     for &id in &ids[..3] {
-        assert_eq!(w.general_controller(id), None, "{id:?} follows its order");
-        assert!(clock(&w, id).is_some());
+        assert_eq!(w.general_controller(id), Some(g));
+        assert!(clock(&w, id).is_none());
     }
     assert_eq!(w.general_controller(ids[5]), Some(g), "the rest stay");
+    assert_eq!(w.general_controller(other), None);
+    assert!(clock(&w, other).is_some());
 }
 
 #[test]

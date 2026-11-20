@@ -34,3 +34,35 @@ impl GameWorld {
         Ok((world, primary))
     }
 }
+
+impl GameWorld {
+    /// Repeatable army-order scene for a real socket, renderer and input.
+    pub fn army_orders_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
+        let config =
+            WorldConfig::new(256, 256, seed).map_err(|_| EconomyError::InvalidFootprint)?;
+        let mut world = Self::new(config)?;
+        world.set_fog_disabled(true);
+        let primary = world.initialize_village(PlayerId(0), TileCoord::new(80, 128))?;
+        for y in 120..135 {
+            for x in 98..118 {
+                let at = WorldPosition::from_tile_center(TileCoord::new(x, y))
+                    .map_err(|_| EconomyError::InvalidFootprint)?;
+                world.spawn_kind(PlayerId(0), UnitKind::Militia, at)?;
+            }
+        }
+        let wall = world.insert_building(
+            PlayerId(1),
+            BuildingKind::PalisadeWall,
+            TileRect::from_xywh(123, 127, 1, 1),
+            true,
+        )?;
+        // A damaged wall falls within the short recording.
+        world
+            .economy
+            .buildings
+            .get_mut(&wall)
+            .ok_or(EconomyError::UnknownEntity)?
+            .hp = 16;
+        Ok((world, primary))
+    }
+}

@@ -94,7 +94,17 @@ test("attack-move uses right clicks, ends on Shift release and cancels on Escape
   expect(orders[4]?.subarray(-2)).toEqual(Buffer.from([1, 0]));
 
   await attack.click();
-  await page.locator("#stop-units").click();
+  const remainingPings = await page
+    .locator("#stop-units")
+    .evaluate((button) => {
+      (Reflect.get(window, "aoeOrderPing") as (x: number, y: number) => void)(
+        500,
+        300,
+      );
+      (button as HTMLButtonElement).click();
+      return document.querySelectorAll(".order-ping").length;
+    });
+  expect(remainingPings).toBe(0);
   await expect(canvas).toHaveAttribute("data-order-mode", "");
   await expect.poll(() => orders.length).toBe(6);
   // This fixture's sequence and entity IDs each fit in one postcard byte.

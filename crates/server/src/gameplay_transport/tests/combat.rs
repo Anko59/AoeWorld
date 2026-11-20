@@ -190,3 +190,105 @@ async fn castle_target_commands_and_a_slow_session_do_not_disconnect_other_socke
     assert!(service.world.read().await.building(enemy).unwrap().hp < 2400);
     server.abort();
 }
+
+#[tokio::test]
+async fn thousand_units_move_attack_move_and_attack_in_one_frame_and_tick_each() {
+    let mut world = GameWorld::new(aoe_core::WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
+    world.set_fog_disabled(true);
+    let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
+    let primary = world
+        .initialize_village(PlayerId(0), TileCoord::new(100, 100))
+        .unwrap();
+    let ids: Vec<_> = (0..1000)
+        .map(|n| {
+            let kind = if n < 16 {
+                aoe_simulation::UnitKind::Villager
+            } else {
+                aoe_simulation::UnitKind::Militia
+            };
+            world
+                .spawn_kind(PlayerId(0), kind, at(70 + n % 40, 130 + n / 40))
+                .unwrap()
+        })
+        .collect();
+    let target_id = world
+        .place_town_center(PlayerId(1), TileCoord::new(140, 148))
+        .unwrap();
+    let service = GameplayService::from_scale_world(world, primary);
+    let handler = service.clone();
+    let router = axum::Router::new().route(
+        "/game/ws",
+        axum::routing::get(move |ws: axum::extract::WebSocketUpgrade| {
+            let handler = handler.clone();
+            async move { ws.on_upgrade(move |socket| handle_socket(handler, socket)) }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let mut socket = open(address).await;
+    let mut measurement = String::from("order,frame_bytes,units_applied,world_tick\n");
+    for (i, message) in [
+        GameplayClientMessage::MoveSelectionOrder {
+            sequence: 1,
+            unit_ids: ids.clone(),
+            formation: aoe_core::Formation::Box,
+            destination: at(120, 150),
+            queued: false,
+            attack_move: false,
+        },
+        GameplayClientMessage::MoveSelectionOrder {
+            sequence: 2,
+            unit_ids: ids.clone(),
+            formation: aoe_core::Formation::Box,
+            destination: at(124, 150),
+            queued: false,
+            attack_move: true,
+        },
+        GameplayClientMessage::AttackSelectionOrder {
+            sequence: 3,
+            entity_ids: ids.clone(),
+            target_id,
+        },
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let bytes = aoe_protocol::encode_gameplay_client(&message).unwrap();
+        assert!(bytes.len() < 3_000);
+        send(&mut socket, message).await;
+        assert_eq!(
+            ack(&service, &mut socket, i as u64 + 1).await,
+            CommandResult::Accepted
+        );
+        let world = service.world.read().await;
+        assert_eq!(
+            world.order_demand()[aoe_simulation::OrderIssuer::Player as usize].decisions,
+            i as u64 + 1
+        );
+        let applied = ids
+            .iter()
+            .filter(|&&id| {
+                if i == 2 {
+                    world.unit(id).unwrap().attack_target == Some(target_id)
+                } else {
+                    world.move_waypoints(id).first() == Some(&(at(120 + i as i32 * 4, 150), i == 1))
+                }
+            })
+            .count();
+        use std::fmt::Write as _;
+        let order = ["move", "attack-move", "attack"][i];
+        writeln!(
+            measurement,
+            "{order},{},{applied},{}",
+            bytes.len(),
+            world.tick().0
+        )
+        .unwrap();
+        assert_eq!(applied, 1_000);
+    }
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/orders");
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(directory.join("army-1000.csv"), measurement).unwrap();
+    server.abort();
+}

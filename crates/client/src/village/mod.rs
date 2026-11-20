@@ -17,6 +17,8 @@ pub(super) mod presentation;
 pub(super) mod production;
 pub(super) mod rally;
 pub(super) mod selection;
+#[path = "selection/orders.rs"]
+mod selection_orders;
 pub(super) mod steward;
 pub(super) mod waypoints;
 
