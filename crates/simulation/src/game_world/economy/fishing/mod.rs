@@ -1,6 +1,6 @@
 //! Trial DAT measurements plus current DE overrides (see docs/fishing.md).
 use crate::{BuildingKind, EconomyError, GameWorld, GameWorldError, Terrain, UnitKind};
-use aoe_core::{TileCoord, TileRect};
+use aoe_core::{PlayerId, TileCoord, TileRect};
 use aoe_map::{EnvironmentPageError, ObjectKind, WaterKind};
 pub(super) mod navigation;
 
@@ -41,8 +41,10 @@ impl GameWorld {
         }
         nearest
     }
+    /// Validate a site against public buildings and the player's private plans.
     pub fn validate_building_placement(
         &self,
+        player: PlayerId,
         kind: BuildingKind,
         origin: TileCoord,
     ) -> Result<(), EconomyError> {
@@ -58,10 +60,10 @@ impl GameWorld {
             return Err(EconomyError::InvalidFootprint);
         }
         if kind == BuildingKind::FishTrap {
-            return self.validate_fish_trap_placement(footprint);
+            return self.validate_fish_trap_placement(player, footprint);
         }
         if kind != BuildingKind::Dock {
-            return self.validate_footprint_ground(footprint);
+            return self.validate_footprint_ground(player, footprint);
         }
         let Terrain::Map { generator, overlay } = &self.terrain else {
             return Err(EconomyError::InvalidFootprint);
@@ -73,9 +75,9 @@ impl GameWorld {
             || self
                 .units()
                 .any(|u| !self.embarked(u.id) && footprint.contains(u.position.tile_floor()))
-            || self
-                .buildings()
-                .any(|b| super::placement::rects_overlap(b.footprint, footprint))
+            || self.buildings().any(|b| {
+                !b.is_unstarted() && super::placement::rects_overlap(b.footprint, footprint)
+            })
         {
             return Err(EconomyError::InvalidFootprint);
         }
@@ -88,7 +90,8 @@ impl GameWorld {
                     .map_err(GameWorldError::Environment)?
                     .ok_or(EconomyError::InvalidFootprint)?;
                 let wet = navigable(sample.water);
-                if overlay.blocks_tile(tile)
+                if self.building_at_for(player, tile).is_some()
+                    || overlay.blocks_tile(tile)
                     || (!wet && !sample.passable)
                     || generator
                         .object_at_with_cancel(tile, &|| false)
@@ -110,7 +113,11 @@ impl GameWorld {
 
     /// A Fish Trap stands entirely on navigable water, clear of buildings and
     /// other deck blockers. Ships may be inside it: they are its builders.
-    fn validate_fish_trap_placement(&self, footprint: TileRect) -> Result<(), EconomyError> {
+    fn validate_fish_trap_placement(
+        &self,
+        player: PlayerId,
+        footprint: TileRect,
+    ) -> Result<(), EconomyError> {
         let Terrain::Map { generator, overlay } = &self.terrain else {
             return Err(EconomyError::InvalidFootprint);
         };
@@ -125,7 +132,7 @@ impl GameWorld {
                     .map_err(GameWorldError::Environment)?
                     .ok_or(EconomyError::InvalidFootprint)?;
                 if !navigable(sample.water)
-                    || self.building_at(tile).is_some()
+                    || self.building_at_for(player, tile).is_some()
                     || self.economy.blocked_tiles.contains(&tile)
                     || overlay.blocks_tile(tile)
                     || overlay.bridge_connections(tile).is_some()

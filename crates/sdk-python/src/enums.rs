@@ -128,6 +128,8 @@ mirror!(
         Road,
         Wonder,
         FishTrap,
+        GuardTower,
+        Keep,
     ]
 );
 mirror!(

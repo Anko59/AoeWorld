@@ -44,25 +44,9 @@ test("villager build menu places a House and watches authoritative completion", 
   ).toBe(false);
   const worker = (await actors()).find((a) => a.kind === "Villager");
   if (!worker) throw new Error("Starting villager missing");
-  const selectWorker = async (nth: number | "Farming", boxed = false) => {
-    if (typeof nth === "number") {
-      // Recall the original builder, even while it moves beside a foundation.
-      await page.keyboard.press(String(nth + 1));
-      await expect(page.locator("#selection-name")).toHaveText("Villager");
-      return;
-    }
-    const villagers = (await actors()).filter((a) => a.kind === "Villager");
-    const worker = villagers.find((a) => a.task === "Farming");
-    if (!worker) throw new Error("Builder missing");
-    if (boxed) {
-      // A stationary farmer can share ground with a foreground sheep.
-      await page.mouse.move(worker.x - 6, worker.y - 6);
-      await page.mouse.down();
-      await page.mouse.move(worker.x + 6, worker.y + 6, { steps: 3 });
-      await page.mouse.up();
-    } else {
-      await page.mouse.click(worker.x, worker.y);
-    }
+  const selectWorker = async (nth: number) => {
+    // Recall the original builder, even while it moves beside a foundation.
+    await page.keyboard.press(String(nth + 1));
     await expect(page.locator("#selection-name")).toHaveText("Villager");
   };
   // Register idle builders before construction starts. A later coordinate
@@ -185,18 +169,11 @@ test("villager build menu places a House and watches authoritative completion", 
   await expect(page.locator("#workers-food")).toHaveText("1", {
     timeout: 15_000,
   });
-  // The top bar counts the farmer from the order on, while it still walks;
-  // box-select it only once it stands at work, not where it was a frame ago.
-  await expect
-    .poll(
-      async () =>
-        (await actors()).some(
-          (a) => a.kind === "Villager" && a.task === "Farming",
-        ),
-      { timeout: 60_000 },
-    )
-    .toBe(true);
-  await selectWorker("Farming", true);
+  // The farm's builder can stand behind the completed farm's art.
+  await selectWorker(1);
+  await expect(page.locator("#selection-task")).toHaveText("Farming", {
+    timeout: 60_000,
+  });
   await page.locator("#stop-units").click();
   await expect(page.locator("#workers-food")).toHaveText("0");
   const farm = (await actors()).find((a) => a.kind === "Farm");

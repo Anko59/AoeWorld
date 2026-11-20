@@ -115,6 +115,8 @@ impl GameWorld {
             BuildingKind::TownCenter,
             BuildingKind::Castle,
             BuildingKind::WatchTower,
+            BuildingKind::GuardTower,
+            BuildingKind::Keep,
         ]
         .into_iter()
         .flat_map(|kind| self.player_buildings_of(player, kind))

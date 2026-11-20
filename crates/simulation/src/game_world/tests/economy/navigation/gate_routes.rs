@@ -191,7 +191,9 @@ fn gate_destinations_reject_foundations_and_closed_enemies_but_allow_open_enemie
                 WorldPosition::from_tile_center(TileCoord::new(102, 90)).unwrap(),
             )
             .unwrap();
-        assert!(world.issue_move(own, target).is_err(), "foundation");
+        assert!(world.tile_passable(target.tile_floor()), "planned gate");
+        world.start_foundation(gate).unwrap();
+        assert!(world.issue_move(own, target).is_err(), "worked foundation");
         let building = world.building_mut(gate).unwrap();
         building.state = crate::ConstructionState::Complete;
         building.work_done = building.work_total;

@@ -24,7 +24,10 @@ fn open(w: &GameWorld, player: PlayerId, tile: TileCoord) -> bool {
     {
         return false;
     }
-    if let Some(b) = w.building_at(tile).and_then(|id| w.building(id)) {
+    if let Some(b) = w
+        .building_at_for(player, tile)
+        .and_then(|id| w.building(id))
+    {
         return b.player == player && b.kind.is_barrier();
     }
     w.tile_passable(tile) && w.visibility(player, tile) != TileVisibility::Unexplored

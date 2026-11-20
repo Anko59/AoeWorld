@@ -109,13 +109,13 @@ fn hundred_prepared_domains() -> (GameWorld, Vec<(EntityId, EntityId)>) {
     for (seat, (at, _, _)) in cells.into_iter().enumerate() {
         let owner = PlayerId(u16::try_from(seat).unwrap());
         let footprint = aoe_core::TileRect::from_xywh(at.x, at.y, 4, 4);
-        w.validate_building_placement(BuildingKind::TownCenter, at)
+        w.validate_building_placement(owner, BuildingKind::TownCenter, at)
             .unwrap();
         let town_center = w
             .insert_building(owner, BuildingKind::TownCenter, footprint, true)
             .unwrap();
         let camp = TileCoord::new(at.x + 10, at.y + 2);
-        w.validate_building_placement(BuildingKind::LumberCamp, camp)
+        w.validate_building_placement(owner, BuildingKind::LumberCamp, camp)
             .unwrap();
         w.insert_building(
             owner,

@@ -15,7 +15,7 @@ pub(super) fn wood_domain(workers: usize) -> (GameWorld, ResourceNode, EntityId,
     for radius in 6..=40 {
         for (dx, dy) in [(radius, 0), (0, radius), (-radius, 0), (0, -radius)] {
             let at = TileCoord::new(anchor.x + dx, anchor.y + dy);
-            if w.validate_building_placement(BuildingKind::TownCenter, at)
+            if w.validate_building_placement(PlayerId(0), BuildingKind::TownCenter, at)
                 .is_ok()
             {
                 site = Some(at);
@@ -73,7 +73,7 @@ fn known_wood_is_assigned_a_lumber_camp_is_built_and_loads_are_deposited() {
                     (-r..=r)
                         .map(|dx| TileCoord::new(15 + dx, 15 + dy))
                         .find(|t| {
-                            w.validate_building_placement(BuildingKind::House, *t)
+                            w.validate_building_placement(PlayerId(0), BuildingKind::House, *t)
                                 .is_ok()
                         })
                 })

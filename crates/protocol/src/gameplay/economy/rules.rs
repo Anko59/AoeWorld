@@ -55,6 +55,8 @@ fn rally_rule(building: &GameplayBuildingState) -> Option<&'static str> {
             | BuildingKind::Blacksmith
             | BuildingKind::Market
             | BuildingKind::WatchTower
+            | BuildingKind::GuardTower
+            | BuildingKind::Keep
             | BuildingKind::University
             | BuildingKind::Wonder
     );

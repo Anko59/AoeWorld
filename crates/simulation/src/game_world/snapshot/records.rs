@@ -9,7 +9,7 @@ use aoe_core::{EntityId, Formation, PlayerId, TileRect, WorldPosition};
 use aoe_map::ResourceOverlaySnapshot;
 use serde::{Deserialize, Serialize};
 
-pub const WORLD_SNAPSHOT_VERSION: u16 = 12;
+pub const WORLD_SNAPSHOT_VERSION: u16 = 13;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WorldSnapshot {
@@ -86,7 +86,7 @@ pub struct BuildingRecord {
     pub kind: BuildingKind,
     pub footprint: TileRect,
     pub age: Age,
-    pub complete: bool,
+    pub state: ConstructionState,
     pub bridge_span: Option<aoe_core::BridgeSpan>,
     pub training_queue: Vec<TrainingEntry>,
     /// The General that reserved the front training entry, and its bought kind.
@@ -113,7 +113,7 @@ impl From<&GameBuilding> for BuildingRecord {
             kind: building.kind,
             footprint: building.footprint,
             age: building.age,
-            complete: building.is_complete(),
+            state: building.state,
             bridge_span: building.bridge_span,
             training_queue: building.training_queue.iter().copied().collect(),
             general_recruit: None,
@@ -141,11 +141,7 @@ impl BuildingRecord {
             kind: self.kind,
             footprint: self.footprint,
             age: self.age,
-            state: if self.complete {
-                ConstructionState::Complete
-            } else {
-                ConstructionState::UnderConstruction
-            },
+            state: self.state,
             bridge_span: self.bridge_span,
             training_queue: self.training_queue.iter().copied().collect(),
             last_hit: self.last_hit,

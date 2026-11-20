@@ -104,7 +104,7 @@ impl GameWorld {
                 || !self.steward_site_walkable(worker, rect, s)
                 || self.validate_explored_footprint(s.player, rect).is_err()
                 || self
-                    .validate_building_placement(BuildingKind::Dock, tile)
+                    .validate_building_placement(s.player, BuildingKind::Dock, tile)
                     .is_err()
             {
                 continue;

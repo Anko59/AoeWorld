@@ -15,7 +15,7 @@ fn restored_scout_skips_a_blocked_current_leg_and_finishes_its_queued_destinatio
     let later = at(18, 7);
     saved.issue_move(scout, blocked).unwrap();
     saved.issue_queued_move(scout, later).unwrap();
-    saved
+    let foundation = saved
         .insert_building(
             PlayerId(0),
             crate::BuildingKind::House,
@@ -23,6 +23,7 @@ fn restored_scout_skips_a_blocked_current_leg_and_finishes_its_queued_destinatio
             false,
         )
         .unwrap();
+    saved.start_foundation(foundation).unwrap();
     assert_eq!(saved.movement_goal(scout), Some(blocked));
     assert_eq!(saved.move_destinations(scout), [blocked, later]);
     let (mut restored, report) = roundtrip(&saved, flat().0);

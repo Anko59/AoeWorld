@@ -88,7 +88,7 @@ const fn armour(kind: BuildingKind, melee_armour: i16, pierce_armour: u16) -> Bu
 /// House -2 melee: official AoE II DE update 56005:
 /// https://www.ageofempires.com/news/aoeii_de_update_56005/
 /// Farm and Outpost really have 0/0; these are not placeholders.
-pub const BUILDING_COMBAT: [BuildingCombat; 26] = [
+pub const BUILDING_COMBAT: [BuildingCombat; 28] = [
     armour(BuildingKind::TownCenter, 3, 5),
     armour(BuildingKind::House, -2, 7),
     armour(BuildingKind::LumberCamp, 0, 7),
@@ -103,16 +103,7 @@ pub const BUILDING_COMBAT: [BuildingCombat; 26] = [
     armour(BuildingKind::Stable, 1, 8),
     armour(BuildingKind::Blacksmith, 1, 8),
     armour(BuildingKind::Market, 1, 8),
-    BuildingCombat {
-        attack: Some(BuildingAttack {
-            attack: 5,
-            kind: DamageKind::Pierce,
-            min_range: 1,
-            range: 8,
-            period_centiseconds: 200,
-        }),
-        ..armour(BuildingKind::WatchTower, 1, 7)
-    },
+    tower(BuildingKind::WatchTower, 5, 1, 7),
     armour(BuildingKind::PalisadeGate, 0, 0),
     BuildingCombat {
         attack: Some(BuildingAttack {
@@ -134,7 +125,22 @@ pub const BUILDING_COMBAT: [BuildingCombat; 26] = [
     // Wonder 276: DE DAT armour 3 melee / 10 pierce.
     armour(BuildingKind::Wonder, 3, 10),
     armour(BuildingKind::FishTrap, 1, 1),
+    tower(BuildingKind::GuardTower, 7, 2, 8),
+    tower(BuildingKind::Keep, 8, 3, 9),
 ];
+
+const fn tower(kind: BuildingKind, attack: u16, melee: i16, pierce: u16) -> BuildingCombat {
+    BuildingCombat {
+        attack: Some(BuildingAttack {
+            attack,
+            kind: DamageKind::Pierce,
+            min_range: 1,
+            range: 8,
+            period_centiseconds: 200,
+        }),
+        ..armour(kind, melee, pierce)
+    }
+}
 
 pub(crate) fn age_armour(kind: BuildingKind, age: crate::Age) -> BuildingCombat {
     let mut stats = *building_combat(kind);

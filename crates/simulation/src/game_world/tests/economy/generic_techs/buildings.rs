@@ -74,40 +74,71 @@ fn architecture_adds_one_armour_so_a_blow_does_less() {
 }
 
 #[test]
-fn guard_tower_and_keep_upgrade_towers_in_place() {
+fn guard_tower_and_keep_upgrade_existing_and_future_towers() {
     let (mut w, _) = castle_player();
-    let tower = place(&mut w, BuildingKind::WatchTower, 0);
-    let (hp0, base_attack) = (
-        hp(&w, tower).1,
-        w.building_attack(PlayerId(0), BuildingKind::WatchTower)
-            .unwrap()
-            .attack,
-    );
-    learn(&mut w, Tech::GuardTower);
-    assert_eq!(hp(&w, tower), (hp0 + 650, hp0 + 650));
-    assert_eq!(
-        w.building_attack(PlayerId(0), BuildingKind::WatchTower)
-            .unwrap()
-            .attack,
-        base_attack + 2
-    );
-    learn(&mut w, Tech::Keep);
-    assert_eq!(hp(&w, tower).1, hp0 + 1400);
-    assert_eq!(
-        w.building_attack(PlayerId(0), BuildingKind::WatchTower)
-            .unwrap()
-            .attack,
-        base_attack + 3
-    );
-    let second = place(&mut w, BuildingKind::WatchTower, 1);
-    assert_eq!(hp(&w, second).1, hp0 + 1400);
-    // Other players' towers are unchanged.
-    assert_eq!(
-        w.building_attack(PlayerId(1), BuildingKind::WatchTower)
-            .unwrap()
-            .attack,
-        base_attack
-    );
+    let player = PlayerId(0);
+    let university = place(&mut w, BuildingKind::University, 3);
+    let first = place(&mut w, BuildingKind::WatchTower, 0);
+    let rival = w
+        .insert_building(
+            PlayerId(1),
+            BuildingKind::WatchTower,
+            aoe_core::TileRect::from_xywh(160, 160, 1, 1),
+            true,
+        )
+        .unwrap();
+    w.building_mut(first).unwrap().hp -= 25;
+    learn(&mut w, Tech::ImperialAge);
+    w.set_fog_disabled(true);
+    let mut existing = vec![first];
+    for (slot, tech, kind, max_hp, attack, armour) in [
+        (
+            1,
+            Tech::GuardTower,
+            BuildingKind::GuardTower,
+            1500,
+            7,
+            (2, 8),
+        ),
+        (2, Tech::Keep, BuildingKind::Keep, 2250, 8, (3, 9)),
+    ] {
+        w.issue_research(player, university, tech).unwrap();
+        let ticks = tech.rules().seconds * w.config().tick_hz;
+        advance(&mut w, ticks);
+        assert!(w.has_researched(player, tech));
+        let x = 120 + slot * 8;
+        let builder = w.spawn_villager(player, tile(x, 119)).unwrap();
+        let new = w
+            .issue_build(
+                player,
+                &[builder],
+                BuildingKind::WatchTower,
+                aoe_core::TileCoord::new(x, 120),
+                false,
+            )
+            .unwrap();
+        assert_eq!(w.building(new).unwrap().kind, kind);
+        let build_ticks = BuildingKind::WatchTower.rules().build_seconds * w.config().tick_hz;
+        advance(&mut w, build_ticks);
+        assert!(w.building(new).unwrap().is_complete());
+        existing.push(new);
+        assert_eq!(
+            w.player_buildings_of(player, BuildingKind::WatchTower)
+                .count(),
+            0
+        );
+        assert_eq!(w.player_buildings_of(player, kind).count(), existing.len());
+        for &id in &existing {
+            let b = w.building(id).unwrap();
+            assert_eq!(b.kind, kind);
+            assert_eq!(b.max_hp, max_hp);
+            assert_eq!(b.hp, max_hp - if id == first { 25 } else { 0 });
+            assert_eq!(w.building_attack(player, b.kind).unwrap().attack, attack);
+            let combat = crate::building_combat(b.kind);
+            assert_eq!((combat.melee_armour, combat.pierce_armour), armour);
+        }
+        assert_eq!(w.building(rival).unwrap().kind, BuildingKind::WatchTower);
+    }
 }
 
 #[test]
@@ -126,14 +157,14 @@ fn arrowslits_add_attack_by_tower_level() {
     );
     learn(&mut w, Tech::GuardTower);
     assert_eq!(
-        w.building_attack(PlayerId(0), BuildingKind::WatchTower)
+        w.building_attack(PlayerId(0), BuildingKind::GuardTower)
             .unwrap()
             .attack,
         base + 2 + 2
     );
     learn(&mut w, Tech::Keep);
     assert_eq!(
-        w.building_attack(PlayerId(0), BuildingKind::WatchTower)
+        w.building_attack(PlayerId(0), BuildingKind::Keep)
             .unwrap()
             .attack,
         base + 3 + 3

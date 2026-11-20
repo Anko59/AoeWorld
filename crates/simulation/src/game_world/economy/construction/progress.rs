@@ -9,6 +9,12 @@ impl GameWorld {
         id: EntityId,
         builders: u64,
     ) -> Option<(PlayerId, BuildingKind, TileRect)> {
+        if self.start_foundation(id).is_err() {
+            let player = self.economy.buildings.get(&id)?.player;
+            // A competing plan took the site first or collision ran out of capacity.
+            let _ = self.issue_cancel_construction(player, id);
+            return None;
+        }
         self.mark_building_changed(id);
         let building = self.economy.buildings.get_mut(&id)?;
         let total = building.work_total.max(1);
@@ -49,7 +55,7 @@ impl GameWorld {
         if kind == BuildingKind::TownCenter {
             self.open_town_center_arches(footprint);
         }
-        if matches!(kind, BuildingKind::WatchTower | BuildingKind::Castle) {
+        if kind.is_tower() || kind == BuildingKind::Castle {
             self.combat.tower_ready.insert(id, 0);
         }
         self.refresh_population_cap(player);

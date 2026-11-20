@@ -84,7 +84,7 @@ fn build(players: u16) -> Result<GameWorld, Box<dyn std::error::Error>> {
                     let origin = TileCoord::new(center.x + dx, center.y + dy);
                     let rules = kind.rules();
                     let rect = TileRect::from_xywh(origin.x, origin.y, rules.side, rules.depth);
-                    if world.validate_footprint(rect).is_ok() {
+                    if world.validate_footprint(player, rect).is_ok() {
                         placed = Some(world.insert_building(player, kind, rect, true)?);
                         break 'search;
                     }

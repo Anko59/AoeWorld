@@ -128,23 +128,57 @@ fn fish_keep_the_last_observed_amount_in_explored_fog() {
 }
 
 #[test]
+fn planned_docks_reserve_the_shore_for_their_owner() {
+    let mut world = coast();
+    let origin = site(&world);
+    let rules = BuildingKind::Dock.rules();
+    let dock = world
+        .insert_building(
+            PlayerId(0),
+            BuildingKind::Dock,
+            TileRect::from_xywh(origin.x, origin.y, rules.side, rules.depth),
+            false,
+        )
+        .unwrap();
+    assert_eq!(
+        world.validate_building_placement(PlayerId(0), BuildingKind::Dock, origin),
+        Err(EconomyError::InvalidFootprint)
+    );
+    assert_eq!(
+        world.validate_building_placement(PlayerId(1), BuildingKind::Dock, origin),
+        Ok(())
+    );
+    world.start_foundation(dock).unwrap();
+    for player in [PlayerId(0), PlayerId(1)] {
+        assert_eq!(
+            world.validate_building_placement(player, BuildingKind::Dock, origin),
+            Err(EconomyError::InvalidFootprint)
+        );
+    }
+}
+
+#[test]
 fn dock_rejects_inland_and_open_water_but_accepts_a_coast() {
     let mut world = coast();
     assert!(
         world
-            .validate_building_placement(BuildingKind::Dock, TileCoord::new(10, 10))
+            .validate_building_placement(PlayerId(0), BuildingKind::Dock, TileCoord::new(10, 10))
             .is_err()
     );
     let width = world.config().width_tiles;
     assert!(
         world
-            .validate_building_placement(BuildingKind::Dock, TileCoord::new(width - 10, 10))
+            .validate_building_placement(
+                PlayerId(0),
+                BuildingKind::Dock,
+                TileCoord::new(width - 10, 10)
+            )
             .is_err()
     );
     let origin = site(&world);
     assert!(
         world
-            .validate_building_placement(BuildingKind::Barracks, origin)
+            .validate_building_placement(PlayerId(0), BuildingKind::Barracks, origin)
             .is_err()
     );
     let rules = BuildingKind::Dock.rules();
@@ -358,7 +392,7 @@ fn site(world: &GameWorld) -> TileCoord {
         for x in 4..width - 4 {
             let tile = TileCoord::new(x, y);
             if world
-                .validate_building_placement(BuildingKind::Dock, tile)
+                .validate_building_placement(PlayerId(0), BuildingKind::Dock, tile)
                 .is_ok()
             {
                 return tile;

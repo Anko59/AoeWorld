@@ -170,7 +170,7 @@ impl GameWorld {
             if self.strike_animal(target, attacker_id, before - hp) {
                 self.finish_target_attack(attacker_id, target, changed);
             }
-        } else if let Some(building) = self.building(target) {
+        } else if let Some(building) = self.building(target).filter(|b| !b.is_unstarted()) {
             let armour = super::table::age_armour(building.kind, building.age);
             let masonry = self.building_has_masonry(&building);
             let (research_melee, research_pierce) =

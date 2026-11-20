@@ -158,7 +158,7 @@ fn spot(
             .map(|(dx, dy)| TileCoord::new(at.x + dx, at.y + dy))
             .find(|t| {
                 !refused.contains_key(t)
-                    && w.validate_building_placement(kind, *t).is_ok()
+                    && w.validate_building_placement(player, kind, *t).is_ok()
                     && w.validate_explored_footprint(player, footprint(kind, *t))
                         .is_ok()
             })
@@ -220,8 +220,19 @@ pub(super) fn sites(
         } else {
             center
         };
-        if let Some(b) = w
-            .player_buildings_of(player, kind)
+        // An upgraded Guard Tower or Keep still fills a Watch Tower site.
+        let kinds: &[BuildingKind] = if kind == BuildingKind::WatchTower {
+            &[
+                BuildingKind::WatchTower,
+                BuildingKind::GuardTower,
+                BuildingKind::Keep,
+            ]
+        } else {
+            std::slice::from_ref(&kind)
+        };
+        if let Some(b) = kinds
+            .iter()
+            .flat_map(|&k| w.player_buildings_of(player, k))
             .filter(|b| {
                 b.hp > 0
                     && within(home, b.footprint, reuse)

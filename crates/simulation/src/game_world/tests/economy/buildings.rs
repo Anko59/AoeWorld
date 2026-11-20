@@ -114,16 +114,22 @@ fn foundation_is_charged_on_placement_and_starts_at_zero_progress() {
         .unwrap();
     assert_eq!(stock(&world), (200, 175, 100, 200));
     let house = world.building(id).unwrap();
-    assert_eq!(house.state, ConstructionState::UnderConstruction);
+    assert_eq!(house.state, ConstructionState::Planned);
     assert_eq!(house.progress_permille(), 0);
     assert_eq!((house.footprint.width(), house.footprint.height()), (2, 2));
     assert_eq!((house.hp, house.max_hp), (1, 550));
-    assert!(!world.tile_passable(at(100, 100)) && !world.tile_passable(at(101, 101)));
+    assert!(world.tile_passable(at(100, 100)) && world.tile_passable(at(101, 101)));
     // A foundation never changes the count: four starting units plus this builder.
     assert_eq!(
         world.player_economy(PlayerId(0)).unwrap().population_used,
         5
     );
+    world.advance();
+    let house = world.building(id).unwrap();
+    assert_eq!(house.state, ConstructionState::UnderConstruction);
+    assert!(house.progress_permille() > 0);
+    assert!(!world.tile_passable(at(100, 100)) && !world.tile_passable(at(101, 101)));
+    assert_eq!(stock(&world), (200, 175, 100, 200));
 }
 
 #[test]

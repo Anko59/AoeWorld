@@ -21,6 +21,8 @@ mod scale;
 mod snapshot;
 #[path = "vassal/timeline.rs"]
 mod timeline;
+#[path = "vassal/towers.rs"]
+mod towers;
 
 fn setup() -> (GameWorld, EntityId, EntityId) {
     let (mut w, _, _) = village();

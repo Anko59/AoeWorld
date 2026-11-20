@@ -152,3 +152,115 @@ fn removed_buildings_leave_no_pending_memory_refresh() {
     w.mark_building_changed(id);
     assert!(!w.vision.dirty_buildings.contains(&id));
 }
+
+#[test]
+fn unstarted_foundation_is_private_until_work_begins() {
+    let mut w = world();
+    let owner = PlayerId(0);
+    let enemy = PlayerId(1);
+    let site = TileRect::from_xywh(64, 64, 2, 2);
+    let attacker = w
+        .spawn_kind(enemy, crate::UnitKind::Militia, at(62, 64))
+        .unwrap();
+    let foundation = w
+        .insert_building(owner, crate::BuildingKind::House, site, false)
+        .unwrap();
+    w.advance();
+    assert_eq!(w.visibility(owner, site.min), TileVisibility::Unexplored);
+    assert_eq!(w.visibility(enemy, site.min), TileVisibility::Visible);
+    assert!(w.known_buildings(owner).iter().any(|b| b.id == foundation));
+    assert!(
+        w.remembered_building(owner, foundation)
+            .is_none_or(|b| b.work_done == 0)
+    );
+    assert!(!w.known_buildings(enemy).iter().any(|b| b.id == foundation));
+    assert!(w.remembered_building(enemy, foundation).is_none());
+    assert!(w.tile_passable(site.min));
+    assert_eq!(
+        w.issue_attack(enemy, attacker, foundation),
+        Err(crate::EconomyError::InvalidTarget)
+    );
+
+    let builder = w.spawn_villager(owner, at(64, 63)).unwrap();
+    w.issue_construct(owner, &[builder], foundation).unwrap();
+    w.advance();
+    assert!(w.building(foundation).unwrap().work_done > 0);
+    assert!(!w.tile_passable(site.min));
+    assert!(w.remembered_building(owner, foundation).is_some());
+    assert!(w.remembered_building(enemy, foundation).is_some());
+    assert!(w.take_remembered_building_changes()[&enemy].contains(&foundation));
+    assert!(w.issue_attack(enemy, attacker, foundation).is_ok());
+}
+
+#[test]
+fn private_sites_do_not_reserve_ground_for_other_players() {
+    let mut w = world();
+    w.set_fog_disabled(true);
+    let a = PlayerId(0);
+    let b = PlayerId(1);
+    let at_site = TileCoord::new(64, 64);
+    let house = crate::BuildingKind::House;
+    let site = TileRect::from_xywh(64, 64, 2, 2);
+    let owner_plan = w.insert_building(a, house, site, false).unwrap();
+    let overlapping_corner = TileCoord::new(65, 65);
+    assert_eq!(
+        w.validate_building_placement(a, house, overlapping_corner),
+        Err(crate::EconomyError::InvalidFootprint)
+    );
+    assert_eq!(
+        w.validate_building_placement(b, house, overlapping_corner),
+        Ok(())
+    );
+    assert_eq!(
+        w.insert_building(a, house, site, false),
+        Err(crate::EconomyError::InvalidFootprint)
+    );
+    let other_plan = w.insert_building(b, house, site, false).unwrap();
+    for (viewer, own_plan) in [(a, owner_plan), (b, other_plan)] {
+        assert_eq!(
+            w.known_buildings(viewer)
+                .iter()
+                .map(|b| b.id)
+                .collect::<Vec<_>>(),
+            [own_plan]
+        );
+    }
+    w.start_foundation(other_plan).unwrap();
+    let uninvolved = PlayerId(2);
+    assert_eq!(
+        w.validate_building_placement(uninvolved, house, overlapping_corner),
+        Err(crate::EconomyError::InvalidFootprint)
+    );
+    assert_eq!(
+        w.start_foundation(owner_plan),
+        Err(crate::EconomyError::InvalidFootprint)
+    );
+    w.remove_building(owner_plan);
+    assert_eq!(w.building_at(at_site), Some(other_plan));
+    assert!(!w.tile_passable(at_site));
+}
+
+#[test]
+fn save_restore_rebuilds_private_and_started_foundation_indexes() {
+    let mut w = world();
+    let owner = PlayerId(0);
+    let enemy = PlayerId(1);
+    w.set_fog_disabled(true);
+    let house = crate::BuildingKind::House;
+    let planned_site = TileRect::from_xywh(40, 40, 2, 2);
+    let active_site = TileRect::from_xywh(50, 50, 2, 2);
+    let planned = w
+        .insert_building(owner, house, planned_site, false)
+        .unwrap();
+    let active = w.insert_building(owner, house, active_site, false).unwrap();
+    w.start_foundation(active).unwrap();
+    let (restored, _) = super::snapshot_roundtrip::roundtrip(&w, world());
+    assert!(restored.tile_passable(planned_site.min));
+    assert!(!restored.tile_passable(active_site.min));
+    assert_eq!(
+        restored.building_at_for(owner, planned_site.min),
+        Some(planned)
+    );
+    assert!(!restored.building_entity_visible_to(enemy, planned));
+    assert!(restored.building_entity_visible_to(enemy, active));
+}

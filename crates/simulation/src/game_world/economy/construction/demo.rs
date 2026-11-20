@@ -350,7 +350,7 @@ impl GameWorld {
                 TileCoord::new(x, y),
                 TileCoord::new(x + r.side, y + r.depth),
             );
-            world.validate_footprint(rect)?;
+            world.validate_footprint(PlayerId(0), rect)?;
             world.insert_building(PlayerId(0), kind, rect, true)?;
         }
         Ok((world, primary))

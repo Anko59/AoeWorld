@@ -4,7 +4,7 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 25;
+pub const VERSION: u8 = 26;
 
 pub mod buildings;
 pub mod candidates;
@@ -27,23 +27,22 @@ pub const TRIAL_BUILDING_IDS: [i32; 49] = [
     498, 133, 82, 104, 209, 49, 141, 464, 564, 586, 130, 132, 47, 10, 86, 18, 116, 31, 605, 606,
     607, 608, 609, 610, 117, 487, 490, 796,
 ];
-pub const IMPERIAL_BUILDING_IDS: [i32; 15] = [
-    142, 465, 565, 587, 131, 20, 51, 14, 153, 19, 137, 32, 210, 150, 276,
+pub const DE_BUILDING_IDS: [i32; 18] = [
+    142, 465, 565, 587, 131, 20, 51, 14, 153, 19, 137, 32, 210, 150, 276, 199, 234, 235,
 ];
 
 /// All current gameplay recipes, imported from their authoritative edition.
-pub const GAMEPLAY_BUILDING_IDS: [i32; 65] = {
-    let mut ids = [0; 65];
+pub const GAMEPLAY_BUILDING_IDS: [i32; TRIAL_BUILDING_IDS.len() + DE_BUILDING_IDS.len()] = {
+    let mut ids = [0; TRIAL_BUILDING_IDS.len() + DE_BUILDING_IDS.len()];
     let mut i = 0;
-    while i < 64 {
-        ids[i] = if i < 49 {
+    while i < ids.len() {
+        ids[i] = if i < TRIAL_BUILDING_IDS.len() {
             TRIAL_BUILDING_IDS[i]
         } else {
-            IMPERIAL_BUILDING_IDS[i - 49]
+            DE_BUILDING_IDS[i - TRIAL_BUILDING_IDS.len()]
         };
         i += 1;
     }
-    ids[64] = 199; // Fish Trap (FTRAP).
     ids
 };
 

@@ -180,9 +180,7 @@ pub(in crate::gameplay) fn apply(
                         || world.visibility(player, animal.position.tile_floor())
                             == aoe_simulation::TileVisibility::Visible
                 })
-                || world
-                    .building(target_id)
-                    .is_some_and(|b| world.building_visible_to(player, b.footprint));
+                || world.building_entity_visible_to(player, target_id);
             if !visible {
                 return CommandResult::RejectedInvalidTarget;
             }

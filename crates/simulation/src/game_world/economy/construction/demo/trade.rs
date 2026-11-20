@@ -9,7 +9,10 @@ impl GameWorld {
     fn trade_site(&self, kind: BuildingKind, xs: (i32, i32), from_y: i32) -> Option<TileCoord> {
         (from_y..self.config.height_tiles - 8)
             .flat_map(|y| (xs.0..xs.1).map(move |x| TileCoord::new(x, y)))
-            .find(|&at| self.validate_building_placement(kind, at).is_ok())
+            .find(|&at| {
+                self.validate_building_placement(PlayerId(0), kind, at)
+                    .is_ok()
+            })
     }
 
     pub fn trade_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
@@ -19,7 +22,7 @@ impl GameWorld {
         let shore = (20..100)
             .flat_map(|y| (4..w.config.width_tiles - 4).map(move |x| TileCoord::new(x, y)))
             .find(|&at| {
-                w.validate_building_placement(BuildingKind::Dock, at)
+                w.validate_building_placement(PlayerId(0), BuildingKind::Dock, at)
                     .is_ok()
             })
             .ok_or(EconomyError::InvalidFootprint)?;

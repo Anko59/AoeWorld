@@ -176,6 +176,37 @@ fn browser_dock_fragment_matches_current_codec() {
     assert_wire(combat_snapshot(vec![], vec![building]), expected);
 }
 
+#[test]
+fn upgraded_tower_kinds_have_current_wire_encodings() {
+    for (kind, id) in [(BuildingKind::GuardTower, 26), (BuildingKind::Keep, 27)] {
+        let tower = GameplayBuildingState {
+            id: EntityId(1),
+            player: PlayerId(0),
+            kind,
+            footprint: TileRect::from_xywh(5, 5, 1, 1),
+            construction: ConstructionState::Complete,
+            age: aoe_protocol::Age::Imperial,
+            progress_permille: 1000,
+            hp: 1000,
+            max_hp: 1000,
+            los: 10,
+            training_queue: vec![],
+            last_hit: None,
+            gate_open: false,
+            rally_point: None,
+            farm_reseeds: 0,
+            garrison: vec![],
+            bridge_span: None,
+            food_remaining: None,
+            research: None,
+        };
+        let message = combat_snapshot(vec![], vec![tower]);
+        let bytes = encode_gameplay_server(&message).unwrap();
+        assert_eq!(&bytes[..13], &[1, 1, 0, 0, 0, 1, 1, 0, id, 10, 10, 12, 12]);
+        assert_eq!(decode_gameplay_server(&bytes).unwrap(), message);
+    }
+}
+
 fn snapshot() -> GameplayServerMessage {
     GameplayServerMessage::Snapshot {
         revision: 1,

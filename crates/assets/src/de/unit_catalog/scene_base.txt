@@ -142,3 +142,9 @@ ConstructionWonder
 FishTrap
 RubbleFishTrap
 ConstructionFishTrap
+GuardTower
+Keep
+RubbleGuardTower
+RubbleKeep
+ConstructionGuardTower
+ConstructionKeep

@@ -25,12 +25,13 @@ impl GameWorld {
     /// site, never the other way round: a palisade on a stone site is
     /// replaced (see `upgradable`).
     fn vassal_site_done(&self, player: PlayerId, site: plan::Site) -> bool {
-        self.building_at(site.tile)
+        self.building_at_for(player, site.tile)
             .and_then(|b| self.building(b))
             .is_some_and(|b| {
                 b.player == player
                     && b.is_complete()
                     && (b.kind == site.kind
+                        || site.kind == BuildingKind::WatchTower && b.kind.is_tower()
                         || b.kind == BuildingKind::StoneWall
                             && site.kind == BuildingKind::PalisadeWall
                         || b.kind == BuildingKind::StoneGate
@@ -180,7 +181,7 @@ impl GameWorld {
                 continue;
             }
             let Some(building) = self
-                .building_at(*tile)
+                .building_at_for(player, *tile)
                 .and_then(|b| self.building(b))
                 .filter(|b| b.player == player && !b.is_complete())
             else {
@@ -239,7 +240,7 @@ impl GameWorld {
         let mut open = deficits
             .iter()
             .filter(|(_, site)| {
-                self.building_at(site.tile)
+                self.building_at_for(player, site.tile)
                     .and_then(|b| self.building(b))
                     .is_some_and(|b| b.player == player && !b.is_complete())
             })
@@ -255,7 +256,7 @@ impl GameWorld {
             .iter()
             .copied()
             .filter(|(_, site)| {
-                (self.building_at(site.tile).is_none()
+                (self.building_at_for(player, site.tile).is_none()
                     || self.upgradable(player, site.tile, site.kind).is_some())
                     && !self.economy.vassals.domains[&id]
                         .refused
@@ -304,7 +305,7 @@ impl GameWorld {
                         || (run.len() > 1
                             && (t.x - last.x, t.y - last.y)
                                 != (last.x - run[run.len() - 2].x, last.y - run[run.len() - 2].y))
-                        || (self.building_at(*t).is_some()
+                        || (self.building_at_for(player, *t).is_some()
                             && self.upgradable(player, *t, kind).is_none())
                         || self.economy.vassals.domains[&id].refused.contains_key(t)
                     {

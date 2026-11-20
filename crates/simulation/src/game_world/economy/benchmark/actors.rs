@@ -14,7 +14,7 @@ fn place(
     for dy in -24..=24 {
         for dx in -24..=24 {
             let rect = TileRect::from_xywh(center.x + dx, center.y + dy, rules.side, rules.depth);
-            if world.validate_footprint(rect).is_ok()
+            if world.validate_footprint(player, rect).is_ok()
                 && super::super::placement::perimeter(rect)
                     .into_iter()
                     .any(|tile| world.tile_passable(tile))

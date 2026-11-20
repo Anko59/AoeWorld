@@ -114,7 +114,7 @@ fn alternative_fixture(kind: ResourceKind, bad_count: usize, layout: Layout) -> 
                 if blocked.iter().any(|a| a.tile == at) || !walls.insert((at.x, at.y)) {
                     continue;
                 }
-                w.validate_building_placement(BuildingKind::PalisadeWall, at)
+                w.validate_building_placement(PlayerId(0), BuildingKind::PalisadeWall, at)
                     .unwrap();
                 w.insert_building(
                     PlayerId(0),
@@ -127,7 +127,8 @@ fn alternative_fixture(kind: ResourceKind, bad_count: usize, layout: Layout) -> 
         }
     }
     let mut building = |kind: BuildingKind, at: TileCoord| {
-        w.validate_building_placement(kind, at).unwrap();
+        w.validate_building_placement(PlayerId(0), kind, at)
+            .unwrap();
         w.insert_building(
             PlayerId(0),
             kind,

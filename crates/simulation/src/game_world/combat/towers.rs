@@ -17,11 +17,11 @@ impl GameWorld {
         };
         let (base, maximum) = match b.kind {
             BuildingKind::TownCenter => (1, 11),
-            BuildingKind::WatchTower => (1, 5),
+            BuildingKind::WatchTower | BuildingKind::GuardTower | BuildingKind::Keep => (1, 5),
             BuildingKind::Castle => (5, 21),
             _ => return 0,
         };
-        if b.kind != BuildingKind::WatchTower {
+        if !b.kind.is_tower() {
             if b.kind == BuildingKind::TownCenter && b.garrison.is_empty() {
                 return 0;
             }

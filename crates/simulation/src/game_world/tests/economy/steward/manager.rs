@@ -365,7 +365,7 @@ fn local_placement_keeps_farms_arches_and_live_units_reserved() {
         )
         .unwrap();
     assert_eq!(
-        w.validate_building_placement(BuildingKind::House, at),
+        w.validate_building_placement(PlayerId(0), BuildingKind::House, at),
         Err(EconomyError::InvalidFootprint)
     );
     w.remove_building(farm);
@@ -375,12 +375,12 @@ fn local_placement_keeps_farms_arches_and_live_units_reserved() {
     // Units step aside for ordered foundations; only the AI's own site
     // search (`steward_build_near`) keeps its people's ground reserved.
     assert!(
-        w.validate_building_placement(BuildingKind::House, at)
+        w.validate_building_placement(PlayerId(0), BuildingKind::House, at)
             .is_ok()
     );
     w.remove_unit(worker);
     assert!(
-        w.validate_building_placement(BuildingKind::House, at)
+        w.validate_building_placement(PlayerId(0), BuildingKind::House, at)
             .is_ok()
     );
     let tc = w
@@ -391,7 +391,7 @@ fn local_placement_keeps_farms_arches_and_live_units_reserved() {
     let arch = TileCoord::new(tc.max.x - 1, tc.max.y - 1);
     assert!(w.tile_passable(arch));
     assert_eq!(
-        w.validate_building_placement(BuildingKind::House, arch),
+        w.validate_building_placement(PlayerId(0), BuildingKind::House, arch),
         Err(EconomyError::InvalidFootprint)
     );
 }

@@ -31,6 +31,8 @@ pub const fn convertible_building(kind: BuildingKind) -> bool {
             | BuildingKind::Blacksmith
             | BuildingKind::Market
             | BuildingKind::WatchTower
+            | BuildingKind::GuardTower
+            | BuildingKind::Keep
             | BuildingKind::University
             | BuildingKind::SiegeWorkshop
     )

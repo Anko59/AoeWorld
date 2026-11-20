@@ -117,9 +117,8 @@ const fn is_masonry_kind(kind: BuildingKind) -> bool {
 }
 
 /// Maximum hit points of a finished building. Masonry and Architecture each add
-/// a tenth of the Age's value; the tower, wall and Castle upgrades add the
-/// difference of the DAT records (Watch Tower 850 -> Guard Tower 1500 -> Keep
-/// 2250, Stone Wall 1080 -> Fortified Wall 3000; Hoardings +1000).
+/// a tenth of the building's age-adjusted value. Fortified Wall adds 1920 HP
+/// to Stone Walls and Hoardings adds 1000 HP to Castles.
 pub fn building_max_hp(kind: BuildingKind, age: Age, researched: TechMask) -> u16 {
     let base = kind.age_stats(age).0;
     let has = |t: Tech| researched & t.bit() != 0;
@@ -129,8 +128,6 @@ pub fn building_max_hp(kind: BuildingKind, age: Age, researched: TechMask) -> u1
         hp += base / 10 * u16::from(has(Tech::Architecture));
     }
     hp.saturating_add(match kind {
-        BuildingKind::WatchTower if has(Tech::Keep) => 1400,
-        BuildingKind::WatchTower if has(Tech::GuardTower) => 650,
         BuildingKind::StoneWall if has(Tech::FortifiedWall) => 1920,
         BuildingKind::Castle if has(Tech::Hoardings) => 1000,
         _ => 0,
@@ -138,8 +135,8 @@ pub fn building_max_hp(kind: BuildingKind, age: Age, researched: TechMask) -> u1
 }
 
 /// Armour added to a building's base armour by these technologies (Masonry's
-/// own point is applied by the combat code): Architecture +1/+1, Guard Tower
-/// +1/+1, Keep +2/+2 over the Watch Tower, Fortified Wall +4/+2.
+/// own point is applied by the combat code): Architecture +1/+1 and
+/// Fortified Wall +4/+2.
 pub(crate) fn building_armour_bonus(kind: BuildingKind, researched: TechMask) -> (i16, u16) {
     if researched == 0 {
         return (0, 0);
@@ -150,29 +147,41 @@ pub(crate) fn building_armour_bonus(kind: BuildingKind, researched: TechMask) ->
         bonus = (1, 1);
     }
     let (melee, pierce) = match kind {
-        BuildingKind::WatchTower if has(Tech::Keep) => (2, 2),
-        BuildingKind::WatchTower if has(Tech::GuardTower) => (1, 1),
         BuildingKind::StoneWall if has(Tech::FortifiedWall) => (4, 2),
         _ => (0, 0),
     };
     (bonus.0 + melee, bonus.1 + pierce)
 }
 
-/// A tower's arrow attack: Guard Tower 7 and Keep 8 over the Watch Tower's 5,
-/// then Arrowslits (+1 Watch Tower, +2 Guard Tower, +3 Keep).
+/// Arrowslits adds one, two or three damage by tower tier.
 pub(crate) fn tower_attack(kind: BuildingKind, base: u16, researched: TechMask) -> u16 {
-    if kind != BuildingKind::WatchTower || researched == 0 {
+    if researched & Tech::Arrowslits.bit() == 0 {
         return base;
     }
-    let has = |t: Tech| researched & t.bit() != 0;
-    let (upgrade, slits) = if has(Tech::Keep) {
-        (3, 3)
-    } else if has(Tech::GuardTower) {
-        (2, 2)
-    } else {
-        (0, 1)
-    };
-    base + upgrade + if has(Tech::Arrowslits) { slits } else { 0 }
+    base + match kind {
+        BuildingKind::WatchTower => 1,
+        BuildingKind::GuardTower => 2,
+        BuildingKind::Keep => 3,
+        _ => 0,
+    }
+}
+
+/// Apply researched building replacements in prerequisite order.
+pub(crate) fn researched_building_kind(
+    mut kind: BuildingKind,
+    researched: TechMask,
+) -> BuildingKind {
+    if kind.is_tower() {
+        for tech in [Tech::GuardTower, Tech::Keep] {
+            if researched & tech.bit() != 0
+                && let TechEffect::UpgradeBuilding { from, to } = tech.rules().effect
+                && kind == from
+            {
+                kind = to;
+            }
+        }
+    }
+    kind
 }
 
 /// Percent of the normal construction rate: Treadmill Crane.
@@ -224,9 +233,28 @@ pub fn tribute_fee_permyriad(researched: TechMask) -> u16 {
 }
 
 impl crate::GameWorld {
-    /// Brings every building of `player` to `building_max_hp` for the player's
-    /// current technologies, keeping damage already taken: the hit points
-    /// gained (earned in proportion to the work done on a foundation) are added.
+    pub(super) fn upgrade_buildings(
+        &mut self,
+        player: aoe_core::PlayerId,
+        from: BuildingKind,
+        to: BuildingKind,
+    ) {
+        let Some(ids) = self.economy.dropoffs.remove(&(player, from)) else {
+            return;
+        };
+        let researched = self.player_economy(player).map_or(0, |p| p.researched);
+        for &id in &ids {
+            if let Some(building) = self.economy.buildings.get_mut(&id) {
+                building.kind = to;
+                refresh_hit_points(building, researched);
+                self.vision.dirty_buildings.insert(id);
+            }
+        }
+        let bucket = self.economy.dropoffs.entry((player, to)).or_default();
+        bucket.extend(ids);
+        bucket.sort_unstable();
+    }
+
     pub(super) fn refresh_building_hp(&mut self, player: aoe_core::PlayerId) {
         let researched = self.player_economy(player).map_or(0, |p| p.researched);
         for b in self
@@ -235,20 +263,28 @@ impl crate::GameWorld {
             .values_mut()
             .filter(|b| b.player == player)
         {
-            let target = building_max_hp(b.kind, b.age, researched);
-            if target <= b.max_hp {
-                continue;
+            if refresh_hit_points(b, researched) {
+                self.vision.dirty_buildings.insert(b.id);
             }
-            let bonus = target - b.max_hp;
-            self.vision.dirty_buildings.insert(b.id);
-            b.max_hp = target;
-            b.hp += if b.is_complete() {
-                bonus
-            } else {
-                (u64::from(bonus) * b.work_done / b.work_total.max(1)) as u16
-            };
         }
     }
+}
+
+/// Preserve damage taken. Incomplete buildings gain only the share of the
+/// increase they have earned through construction.
+fn refresh_hit_points(b: &mut crate::GameBuilding, researched: TechMask) -> bool {
+    let target = building_max_hp(b.kind, b.age, researched);
+    if target <= b.max_hp {
+        return false;
+    }
+    let bonus = target - b.max_hp;
+    b.max_hp = target;
+    b.hp += if b.is_complete() {
+        bonus
+    } else {
+        (u64::from(bonus) * b.work_done / b.work_total.max(1)) as u16
+    };
+    true
 }
 
 impl crate::GameWorld {
@@ -315,7 +351,7 @@ impl crate::GameWorld {
             return 0;
         }
         match tower {
-            BuildingKind::WatchTower => attack * 5 / 4,
+            kind if kind.is_tower() => attack * 5 / 4,
             BuildingKind::Castle | BuildingKind::Dock => 4,
             _ => 0,
         }

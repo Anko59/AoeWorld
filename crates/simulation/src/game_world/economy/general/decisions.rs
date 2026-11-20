@@ -42,10 +42,7 @@ impl GameWorld {
                 .iter()
                 .filter_map(|&id| self.building(id))
                 .map(|b| {
-                    if matches!(
-                        b.kind,
-                        crate::BuildingKind::Castle | crate::BuildingKind::WatchTower
-                    ) {
+                    if b.kind == crate::BuildingKind::Castle || b.kind.is_tower() {
                         2500
                     } else {
                         0

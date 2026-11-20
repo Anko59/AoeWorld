@@ -322,6 +322,8 @@ fn building_attack_at_pointer(client: &mut Client, point: ScreenPoint) -> bool {
                     b.kind,
                     aoe_protocol::BuildingKind::Castle
                         | aoe_protocol::BuildingKind::WatchTower
+                        | aoe_protocol::BuildingKind::GuardTower
+                        | aoe_protocol::BuildingKind::Keep
                         | aoe_protocol::BuildingKind::TownCenter
                 )
         })

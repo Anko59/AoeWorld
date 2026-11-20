@@ -35,6 +35,8 @@ fn native_building(kind: BuildingKind) -> sim::BuildingKind {
         BuildingKind::Blacksmith => N::Blacksmith,
         BuildingKind::Market => N::Market,
         BuildingKind::WatchTower => N::WatchTower,
+        BuildingKind::GuardTower => N::GuardTower,
+        BuildingKind::Keep => N::Keep,
         BuildingKind::PalisadeGate => N::PalisadeGate,
         BuildingKind::Castle => N::Castle,
         BuildingKind::Monastery => N::Monastery,

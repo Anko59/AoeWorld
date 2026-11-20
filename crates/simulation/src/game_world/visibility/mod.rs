@@ -52,6 +52,8 @@ pub(crate) struct Vision {
     observers: observers::Observers,
     /// Building footprint tiles, for sight-gain and sight-loss events.
     building_at_tile: TileBuildings,
+    /// Planned sites reserve placement only for their own player.
+    private_foundations: BTreeMap<(PlayerId, TileCoord), EntityId>,
     building_watchers: BTreeMap<EntityId, Watched>,
     /// Buildings changed or newly watched since the last memory refresh
     /// (`memory.rs`). Derived, never hashed.
@@ -202,10 +204,21 @@ impl GameWorld {
         })
     }
 
+    pub fn building_entity_visible_to(&self, player: PlayerId, id: EntityId) -> bool {
+        self.building(id).is_some_and(|b| {
+            b.player == player
+                || (!b.is_unstarted() && self.building_visible_to(player, b.footprint))
+        })
+    }
+
     /// Authoritative last observations, including buildings destroyed unseen.
     pub fn known_buildings(&self, player: PlayerId) -> Vec<GameBuilding> {
         if self.vision.disabled {
-            return self.buildings().map(|b| b.into_owned()).collect();
+            return self
+                .buildings()
+                .filter(|b| !b.is_unstarted() || b.player == player)
+                .map(|b| b.into_owned())
+                .collect();
         }
         let mut known = self
             .vision
@@ -213,10 +226,10 @@ impl GameWorld {
             .get(&player)
             .map(|v| v.remembered.clone())
             .unwrap_or_default();
-        for building in self
-            .buildings()
-            .filter(|b| b.player == player || self.building_visible_to(player, b.footprint))
-        {
+        for building in self.buildings().filter(|b| {
+            b.player == player
+                || (!b.is_unstarted() && self.building_visible_to(player, b.footprint))
+        }) {
             known.insert(building.id, building.into_owned());
         }
         known.into_values().collect()

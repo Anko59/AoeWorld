@@ -120,7 +120,7 @@ impl GameWorld {
                     TileCoord::new(origin.x - 1, origin.y - 1),
                     TileCoord::new(origin.x + rules.side + 1, origin.y + rules.depth + 1),
                 );
-                if self.validate_footprint(alley).is_err() {
+                if self.validate_footprint(player, alley).is_err() {
                     continue;
                 }
                 let rect = TileRect::new(
@@ -279,7 +279,7 @@ impl GameWorld {
                 continue;
             }
             let rect = TileRect::from_xywh(center.x + dx, center.y + dy, 1, 1);
-            if self.validate_footprint(rect).is_ok() {
+            if self.validate_footprint(player, rect).is_ok() {
                 self.insert_building(player, BuildingKind::StoneWall, rect, true)?;
                 placed += 1;
             }

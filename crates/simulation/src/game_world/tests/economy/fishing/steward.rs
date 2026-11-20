@@ -22,7 +22,7 @@ pub(super) fn domain(w: &mut GameWorld, shore: TileCoord) -> (EntityId, EntityId
                     continue;
                 }
                 let candidate = TileCoord::new(anchor.x + dx, anchor.y + dy);
-                if w.validate_building_placement(BuildingKind::TownCenter, candidate)
+                if w.validate_building_placement(PlayerId(0), BuildingKind::TownCenter, candidate)
                     .is_ok()
                 {
                     at = Some(candidate);

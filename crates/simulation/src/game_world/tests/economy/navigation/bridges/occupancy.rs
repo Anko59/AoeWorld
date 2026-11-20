@@ -8,11 +8,16 @@ fn agrees(w: &GameWorld) {
             let span =
                 BridgeSpan::new(TileCoord::new(26, y), TileCoord::new(38, y + rise)).unwrap();
             let tiles = span.tiles();
-            let scan = w
-                .buildings()
-                .any(|b| tiles.iter().any(|&t| b.contains_tile(t)));
-            let indexed = tiles.iter().any(|&t| w.building_at(t).is_some());
-            assert_eq!(indexed, scan, "{span:?}");
+            for player in [PlayerId(0), PlayerId(1)] {
+                let scan = w.buildings().any(|b| {
+                    (b.player == player || !b.is_unstarted())
+                        && tiles.iter().any(|&t| b.contains_tile(t))
+                });
+                let indexed = tiles
+                    .iter()
+                    .any(|&t| w.building_at_for(player, t).is_some());
+                assert_eq!(indexed, scan, "{span:?} for {player:?}");
+            }
         }
     }
 }
@@ -53,7 +58,10 @@ fn bridge_occupancy_matches_exact_scan_through_insert_rebuild_and_remove() {
             )
             .unwrap();
         agrees(&w);
-        assert!(w.building_at(TileCoord::new(29, 23)).is_none());
+        assert!(
+            w.building_at_for(PlayerId(1), TileCoord::new(29, 23))
+                .is_none()
+        );
         w.rebuild_building_sight_index();
         agrees(&w);
         w.remove_building(id);
@@ -62,11 +70,11 @@ fn bridge_occupancy_matches_exact_scan_through_insert_rebuild_and_remove() {
 }
 
 #[test]
-fn bridge_placement_rejects_nonblocking_road_and_foundation_on_its_span() {
+fn public_roads_block_bridge_placement_and_planned_roads_reserve_only_for_the_owner() {
     let mut w = river_width(true, 30..34);
     clear_nodes(&mut w, TileRect::from_xywh(26, 16, 12, 12));
     let (from, to) = (TileCoord::new(29, 20), TileCoord::new(34, 20));
-    assert!(w.bridge_site_valid(from, to));
+    assert!(w.bridge_site_valid(PlayerId(0), from, to));
     for complete in [false, true] {
         let id = w
             .insert_building(
@@ -76,8 +84,9 @@ fn bridge_placement_rejects_nonblocking_road_and_foundation_on_its_span() {
                 complete,
             )
             .unwrap();
-        assert!(!w.bridge_site_valid(from, to));
+        assert_eq!(w.bridge_site_valid(PlayerId(0), from, to), !complete);
+        assert!(!w.bridge_site_valid(PlayerId(1), from, to));
         w.remove_building(id);
-        assert!(w.bridge_site_valid(from, to));
+        assert!(w.bridge_site_valid(PlayerId(0), from, to));
     }
 }

@@ -71,7 +71,7 @@ fn distant_ore(
                 (-8, -8),
             ] {
                 let town_center = TileCoord::new(x + dx, y + dy);
-                if w.validate_building_placement(BuildingKind::TownCenter, town_center)
+                if w.validate_building_placement(PlayerId(0), BuildingKind::TownCenter, town_center)
                     .is_err()
                 {
                     continue;
@@ -91,8 +91,12 @@ fn distant_ore(
                     let camp = TileCoord::new(x + cx, y + cy);
                     let camp_rect = aoe_core::TileRect::from_xywh(camp.x, camp.y, 2, 2);
                     if !overlaps(town_center_rect, camp_rect)
-                        && w.validate_building_placement(BuildingKind::MiningCamp, camp)
-                            .is_ok()
+                        && w.validate_building_placement(
+                            PlayerId(0),
+                            BuildingKind::MiningCamp,
+                            camp,
+                        )
+                        .is_ok()
                     {
                         selected = Some((start, node, town_center_rect, camp_rect));
                         break 'origin;

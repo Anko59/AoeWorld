@@ -74,6 +74,21 @@ impl GateArt {
 pub fn rules(kind: BuildingKind) -> &'static aoe_simulation::BrowserBuilding {
     &content::rules().buildings[kind as usize]
 }
+pub(crate) fn tower_base_defence(kind: BuildingKind) -> Option<[f64; 3]> {
+    use aoe_simulation::BuildingKind as Native;
+    let stats = aoe_simulation::building_combat(match kind {
+        BuildingKind::WatchTower => Native::WatchTower,
+        BuildingKind::GuardTower => Native::GuardTower,
+        BuildingKind::Keep => Native::Keep,
+        _ => return None,
+    });
+    Some([
+        f64::from(stats.attack?.attack),
+        f64::from(stats.melee_armour),
+        f64::from(stats.pierce_armour),
+    ])
+}
+
 #[inline(never)]
 pub fn stock(s: aoe_simulation::Stockpile) -> Stockpile {
     Stockpile {
@@ -193,6 +208,15 @@ pub fn sprite_slot(kind: BuildingKind, progress: u16, rubble: bool) -> usize {
     }
     if let Some(slot) = stone_slot(kind, progress, rubble) {
         return slot;
+    }
+    if matches!(kind, BuildingKind::GuardTower | BuildingKind::Keep) {
+        return if rubble {
+            96 + usize::from(kind == BuildingKind::Keep)
+        } else if progress < 1000 {
+            9
+        } else {
+            94 + usize::from(kind == BuildingKind::Keep)
+        };
     }
     // The Wonder has one DE architecture for every age: standing, rubble, foundation.
     if kind == BuildingKind::Wonder {
@@ -350,10 +374,12 @@ pub fn age_sprite_slot(
     if kind == BuildingKind::Road {
         return 9;
     }
-    if matches!(
-        kind,
-        BuildingKind::Bridge | BuildingKind::Wonder | BuildingKind::FishTrap
-    ) {
+    if kind.is_tower()
+        || matches!(
+            kind,
+            BuildingKind::Bridge | BuildingKind::Wonder | BuildingKind::FishTrap
+        )
+    {
         return sprite_slot(kind, progress, rubble);
     }
     if let Some(slot) = stone_slot(kind, progress, rubble) {

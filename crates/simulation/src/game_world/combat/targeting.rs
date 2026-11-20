@@ -94,7 +94,7 @@ impl GameWorld {
         self.economy
             .buildings
             .get(&target)
-            .filter(|building| building.hp > 0 && building.player != attacker)
+            .filter(|b| b.hp > 0 && b.player != attacker && !b.is_unstarted())
             .map(|building| Goal::Building(building.footprint))
     }
 

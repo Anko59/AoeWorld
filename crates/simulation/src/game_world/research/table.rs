@@ -195,6 +195,10 @@ pub enum TechEffect {
     /// `research::building_max_hp` and friends; existing buildings are
     /// refreshed on completion.
     BuildingStats,
+    UpgradeBuilding {
+        from: BuildingKind,
+        to: BuildingKind,
+    },
     /// No stored change: the rule reads `has_researched` where it applies
     /// (combat, conversion, market, training). See docs/economy/generic-techs.md.
     Passive,

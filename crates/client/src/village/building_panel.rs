@@ -4,15 +4,15 @@ use crate::{
     building_ui::{self, availability},
     playground::game::map,
 };
-use aoe_protocol::{ConstructionState, GameplayClientMessage as Message, Tech};
+use aoe_protocol::{BuildingKind, ConstructionState, GameplayClientMessage as Message, Tech};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 
 #[wasm_bindgen(
-    inline_js = "export function buildings_update(v) { window.aoeBuildings?.update(v); } export function placement_update(v) { window.aoeBuildings?.preview(v); } export function age_progress_update(age, fraction) { window.aoeBuildings?.ageProgress(age, fraction); } export function buildings_bind(callback) { window.aoeBuildings.bind(callback); }"
+    inline_js = "export function buildings_update(v, tower) { window.aoeBuildings?.update(v, tower); } export function placement_update(v) { window.aoeBuildings?.preview(v); } export function age_progress_update(age, fraction) { window.aoeBuildings?.ageProgress(age, fraction); } export function buildings_bind(callback) { window.aoeBuildings.bind(callback); }"
 )]
 extern "C" {
-    fn buildings_update(v: &[f64]);
+    fn buildings_update(v: &[f64], tower: &[f64]);
     fn placement_update(v: &[f64]);
     fn age_progress_update(age: f64, fraction: f64);
     #[wasm_bindgen(catch)]
@@ -88,7 +88,12 @@ pub(super) fn update(client: &Client, scale: f64) {
     let builders = player.is_some() && construction::has_builders(client);
     let ships = player.is_some() && !construction::ship_builders(client).is_empty();
     let build_menu = availability::BuildMenu::new(player, completed, builders, ships);
-    for kind in KINDS.into_iter().skip(1).chain(std::iter::once(KINDS[0])) {
+    for kind in KINDS
+        .iter()
+        .copied()
+        .skip(1)
+        .chain(std::iter::once(KINDS[0]))
+    {
         v.push(f64::from(u8::from(build_menu.enabled(kind, 1))));
     }
     v.push(
@@ -161,7 +166,8 @@ pub(super) fn update(client: &Client, scale: f64) {
         b.is_some_and(|b| !b.training_queue.is_empty())
             && player.is_some_and(|p| p.population_used >= p.population_cap),
     )));
-    buildings_update(&v);
+    let tower = b.and_then(|b| building_ui::tower_base_defence(b.kind));
+    buildings_update(&v, tower.as_ref().map_or(&[][..], |stats| stats.as_slice()));
 }
 
 /// Far-view research and bulk trade name their building instead of using the
@@ -208,7 +214,9 @@ fn far_commerce_order(client: &mut Client, action: u32, code: usize, target: u32
     send(client, message);
 }
 
-pub(super) const KINDS: [aoe_protocol::BuildingKind; 26] = aoe_protocol::BuildingKind::ALL;
+pub(super) const KINDS: &[BuildingKind] = BuildingKind::ALL
+    .split_at(BuildingKind::GuardTower as usize)
+    .0;
 
 #[inline(never)]
 pub(in super::super) fn preview(client: &Client, units: &mut Vec<aoe_rendering::SceneUnit>) {

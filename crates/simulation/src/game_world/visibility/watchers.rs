@@ -98,6 +98,45 @@ impl Vision {
 }
 
 impl GameWorld {
+    pub(crate) fn building_at_for(&self, player: PlayerId, tile: TileCoord) -> Option<EntityId> {
+        self.building_at(tile).or_else(|| {
+            self.vision
+                .private_foundations
+                .get(&(player, tile))
+                .copied()
+        })
+    }
+
+    pub(crate) fn site_has_building(
+        &self,
+        footprint: TileRect,
+        span: Option<aoe_core::BridgeSpan>,
+        player: Option<PlayerId>,
+    ) -> bool {
+        footprint_tiles(footprint, span).any(|tile| {
+            if let Some(player) = player {
+                self.building_at_for(player, tile).is_some()
+            } else {
+                self.building_at(tile).is_some()
+            }
+        })
+    }
+
+    pub(crate) fn remove_foundation_reservation(
+        &mut self,
+        id: EntityId,
+        player: PlayerId,
+        footprint: TileRect,
+        span: Option<aoe_core::BridgeSpan>,
+    ) {
+        for tile in footprint_tiles(footprint, span) {
+            let key = (player, tile);
+            if self.vision.private_foundations.get(&key) == Some(&id) {
+                self.vision.private_foundations.remove(&key);
+            }
+        }
+    }
+
     /// Tile index and watcher seeding for a new building footprint.
     pub(crate) fn index_new_building(
         &mut self,
@@ -105,27 +144,31 @@ impl GameWorld {
         player: PlayerId,
         footprint: TileRect,
     ) {
-        self.combat.quiet.wake_area(footprint);
-        let span = self.building(id).and_then(|b| b.bridge_span);
-        for y in footprint.min.y..footprint.max.y {
-            for x in footprint.min.x..footprint.max.x {
-                if span.is_some_and(|span| !span.contains(TileCoord::new(x, y))) {
-                    continue;
-                }
-                self.vision
-                    .building_at_tile
-                    .insert(TileCoord::new(x, y), id);
+        let Some(building) = self.building(id) else {
+            return;
+        };
+        let (private, span) = (building.is_unstarted(), building.bridge_span);
+        if private {
+            for tile in footprint_tiles(footprint, span) {
+                self.vision.private_foundations.insert((player, tile), id);
+            }
+        } else {
+            self.combat.quiet.wake_area(footprint);
+            for tile in footprint_tiles(footprint, span) {
+                self.vision.building_at_tile.insert(tile, id);
             }
         }
         if self.vision.disabled {
             return;
         }
+        self.vision.players.entry(player).or_default();
         self.vision.dirty_buildings.insert(id);
         let mut watchers = BTreeSet::from([player]);
-        let players = self.vision.players.keys().copied().collect::<Vec<_>>();
-        for seen in players {
-            if self.building_visible_to(seen, footprint) {
-                watchers.insert(seen);
+        if !private {
+            for &seen in self.vision.players.keys() {
+                if self.building_visible_to(seen, footprint) {
+                    watchers.insert(seen);
+                }
             }
         }
         self.vision.building_watchers.insert(
@@ -142,6 +185,7 @@ impl GameWorld {
     /// Buildings destroyed while fog was off stay queued for the flush.
     pub(crate) fn rebuild_building_sight_index(&mut self) {
         self.vision.building_at_tile.clear();
+        self.vision.private_foundations.clear();
         self.vision.building_watchers.clear();
         let buildings = self
             .buildings()
@@ -180,4 +224,16 @@ impl GameWorld {
             }
         }
     }
+}
+
+fn footprint_tiles(
+    footprint: TileRect,
+    span: Option<aoe_core::BridgeSpan>,
+) -> impl Iterator<Item = TileCoord> {
+    let rectangular = (footprint.min.y..footprint.max.y)
+        .flat_map(move |y| (footprint.min.x..footprint.max.x).map(move |x| TileCoord::new(x, y)));
+    let raster = span.into_iter().flat_map(|bridge| bridge.tiles());
+    rectangular
+        .take(if span.is_some() { 0 } else { usize::MAX })
+        .chain(raster)
 }
