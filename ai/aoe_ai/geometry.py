@@ -50,3 +50,20 @@ def clamp_tile(tile: Tile, size: tuple[int, int], margin: int = 3) -> Tile:
         min(max(tile[0], margin), size[0] - 1 - margin),
         min(max(tile[1], margin), size[1] - 1 - margin),
     )
+
+
+def near_any(tiles: Iterable[Tile], radius: float):
+    """A test of whether a tile lies within `radius` of any of `tiles`, the
+    same answer as `any(dist(t, u) <= radius for u in tiles)`, from a grid of
+    `radius`-sized cells: only the 3x3 cells around a tile can hold one."""
+    size = max(1, math.ceil(radius))
+    cells: dict[Tile, list[Tile]] = {}
+    for u in tiles:
+        cells.setdefault((u[0] // size, u[1] // size), []).append(u)
+
+    def test(tile: Tile) -> bool:
+        cx, cy = tile[0] // size, tile[1] // size
+        return any(dist(tile, u) <= radius
+                   for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+                   for u in cells.get((cx + dx, cy + dy), ()))
+    return test
