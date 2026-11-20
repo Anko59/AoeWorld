@@ -1,7 +1,7 @@
 //! Fixed-radius, memoized site ranking; never scans a map-sized region.
 use super::{EconomyError, VILLAGE_RULES, placement::distance_squared};
 use crate::{GameWorld, GameWorldError, Terrain};
-use aoe_core::{TileCoord, TileRect};
+use aoe_core::{PlayerId, TileCoord, TileRect};
 use aoe_map::{GroundMaterial, ResourceKind, ResourceNode, Tile, WaterKind};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -16,6 +16,7 @@ type Samples = BTreeMap<TileCoord, Option<(Tile, Option<ResourceNode>)>>;
 impl GameWorld {
     pub(super) fn rank_start_sites(
         &self,
+        player: PlayerId,
         candidates: &mut Vec<TileCoord>,
         start: TileCoord,
     ) -> Result<(), EconomyError> {
@@ -33,7 +34,7 @@ impl GameWorld {
             .copied()
             .filter(|tile| distance_squared(*tile, start) <= CORE_D2 && near.contains(tile))
             .collect();
-        let scores = self.score_sites(generator, &core, &mut samples)?;
+        let scores = self.score_sites(player, generator, &core, &mut samples)?;
         if scores.values().any(|(shore, _)| !shore) {
             sort_by_score(&mut core, &scores);
             *candidates = core;
@@ -54,7 +55,7 @@ impl GameWorld {
             })
             .take(SITE_BUDGET)
             .collect();
-        let scores = self.score_sites(generator, &sites, &mut samples)?;
+        let scores = self.score_sites(player, generator, &sites, &mut samples)?;
         sort_by_score(candidates, &scores);
         Ok(())
     }
@@ -62,6 +63,7 @@ impl GameWorld {
     /// Shore and wood in view of each site whose footprint is free.
     fn score_sites(
         &self,
+        player: PlayerId,
         generator: &aoe_map::MapChunkGenerator,
         sites: &[TileCoord],
         samples: &mut Samples,
@@ -73,7 +75,7 @@ impl GameWorld {
                 origin,
                 TileCoord::new(origin.x.saturating_add(side), origin.y.saturating_add(side)),
             );
-            match self.validate_footprint(rect) {
+            match self.validate_footprint(player, rect) {
                 Ok(()) => {}
                 Err(EconomyError::InvalidFootprint) => continue,
                 Err(error) => return Err(error),

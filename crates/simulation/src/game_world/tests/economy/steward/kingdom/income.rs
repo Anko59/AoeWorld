@@ -104,6 +104,7 @@ fn stalled_food(
                     (at.y - 2..=at.y + 5).all(|y| {
                         (at.x - 2..=at.x + 5).all(|x| {
                             w.validate_building_placement(
+                                PlayerId(0),
                                 BuildingKind::StoneWall,
                                 TileCoord::new(x, y),
                             )
@@ -151,7 +152,7 @@ fn stalled_food(
         assigned(w, remote, workers, ResourceKind::Food),
         workers.len()
     );
-    w.validate_building_placement(BuildingKind::Mill, local_mill.footprint.min)
+    w.validate_building_placement(PlayerId(0), BuildingKind::Mill, local_mill.footprint.min)
         .unwrap();
     w.insert_building(PlayerId(0), BuildingKind::Mill, local_mill.footprint, true)
         .unwrap();

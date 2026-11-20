@@ -41,6 +41,10 @@ impl GameBuilding {
         }
         (self.work_done.saturating_mul(1000) / self.work_total).min(1000) as u16
     }
+    pub fn is_unstarted(&self) -> bool {
+        self.state == ConstructionState::Planned
+    }
+
     pub fn is_complete(&self) -> bool {
         self.state == ConstructionState::Complete
     }

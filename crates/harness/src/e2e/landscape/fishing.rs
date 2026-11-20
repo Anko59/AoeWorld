@@ -75,7 +75,7 @@ pub(crate) fn prepare(root: &Path, directory: &Path) -> Result<String> {
         .flat_map(|dy| (80..112).map(move |x| TileCoord::new(x, start.y + dy)))
         .find(|t| {
             world
-                .validate_building_placement(BuildingKind::Dock, *t)
+                .validate_building_placement(PlayerId(0), BuildingKind::Dock, *t)
                 .is_ok()
         })
         .ok_or_else(|| {

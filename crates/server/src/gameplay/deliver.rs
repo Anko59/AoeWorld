@@ -2,11 +2,13 @@
 //! This is the only fan-out step that holds the session lock.
 use super::Session;
 use super::fanout::{AI_HEARTBEAT_TICKS, Buildings, Built, SessionBuild, ViewerState};
-use aoe_core::{EntityId, PlayerId};
 use aoe_protocol::{FogState, GameplayServerMessage, GameplayUnitState};
 use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use tokio::sync::mpsc::error::TrySendError;
+
+#[path = "deliver/units.rs"]
+mod units;
 
 /// Sessions one worker task delivers at least.
 const SESSIONS_PER_TASK: usize = 2;
@@ -31,79 +33,6 @@ impl std::ops::Deref for Resident {
     fn deref(&self) -> &Self::Target {
         &self.units
     }
-}
-
-/// What changed between a session's baseline and the units now in view.
-struct UnitDiff {
-    changed: Vec<GameplayUnitState>,
-    removals: Vec<EntityId>,
-    /// The same ids are in view, so the baseline can be patched in place.
-    same_ids: bool,
-}
-
-/// Only units the frame marks changed are compared: one the baseline holds
-/// from the frame before is otherwise equal to it by construction.
-fn diff_units(resident: &Resident, current: &[u32], built: &Built, viewer: PlayerId) -> UnitDiff {
-    let mut diff = UnitDiff {
-        changed: Vec::new(),
-        removals: Vec::new(),
-        same_ids: true,
-    };
-    let frame = &built.frame;
-    let mut old = resident.units.iter().peekable();
-    for slot in current {
-        let state = frame.state(*slot);
-        while let Some(before) = old.next_if(|before| before.id < state.id) {
-            diff.removals.push(before.id);
-            diff.same_ids = false;
-        }
-        match old.next_if(|before| before.id == state.id) {
-            Some(_) if frame.unchanged_since(resident.frame, *slot) => {}
-            Some(before) => {
-                let now = state.for_viewer(viewer);
-                if before != &now {
-                    diff.changed.push(now);
-                }
-            }
-            None => {
-                diff.changed.push(state.for_viewer(viewer));
-                diff.same_ids = false;
-            }
-        }
-    }
-    for before in old {
-        diff.removals.push(before.id);
-        diff.same_ids = false;
-    }
-    diff
-}
-
-fn patch_units(
-    resident: &mut Resident,
-    diff: &UnitDiff,
-    current: &[u32],
-    built: &Built,
-    viewer: PlayerId,
-) {
-    if diff.same_ids {
-        // Both lists are in id order (the diff walks the view in order):
-        // one forward cursor finds every changed unit, no search per unit.
-        let mut at = 0;
-        for unit in &diff.changed {
-            while at < resident.len() && resident[at].id < unit.id {
-                at += 1;
-            }
-            if let Some(slot) = resident.units.get_mut(at).filter(|u| u.id == unit.id) {
-                *slot = *unit;
-            }
-        }
-    } else {
-        resident.units = current
-            .iter()
-            .map(|slot| built.frame.state(*slot).for_viewer(viewer))
-            .collect();
-    }
-    resident.frame = Some(built.frame.generation());
 }
 
 /// Same fog as the client already holds? The tick it was built at does not
@@ -211,7 +140,7 @@ fn deliver_tick(
     {
         return false;
     }
-    let diff = diff_units(&session.resident, slots, built, session.viewer);
+    let diff = units::diff(&session.resident, slots, built, session.viewer);
     let changed_players = viewer
         .players
         .iter()
@@ -221,7 +150,7 @@ fn deliver_tick(
     let mut changed_buildings = Vec::new();
     let mut building_removals = Vec::new();
     match &viewer.buildings {
-        Buildings::Full(known) => {
+        Buildings::Full(known, private) => {
             let in_view = |state: &aoe_protocol::GameplayBuildingState| {
                 !built.fog_disabled
                     || super::economy::building_in_camera(
@@ -230,18 +159,20 @@ fn deliver_tick(
                         subscription.region,
                     )
             };
-            changed_buildings = known
+            changed_buildings = private
                 .iter()
+                .chain(known.iter())
                 .filter(|(id, state)| {
                     in_view(state) && session.resident_buildings.get(*id) != Some(*state)
                 })
                 .take(aoe_protocol::MAX_ECONOMY_BUILDINGS + 1)
                 .map(|(_, state)| state.clone())
                 .collect();
+            let known_state = |id| private.get(id).or_else(|| known.get(id));
             building_removals = session
                 .resident_buildings
                 .keys()
-                .filter(|id| known.get(*id).is_none_or(|state| !in_view(state)))
+                .filter(|id| known_state(*id).is_none_or(|state| !in_view(state)))
                 .take(aoe_protocol::MAX_ECONOMY_BUILDINGS + 1)
                 .copied()
                 .collect();
@@ -266,6 +197,11 @@ fn deliver_tick(
     let more_buildings = changed_buildings.len() + building_removals.len() > limit;
     building_removals.truncate(limit);
     changed_buildings.truncate(limit - building_removals.len());
+    if matches!(&viewer.buildings, Buildings::Full(_, private) if !private.is_empty()) {
+        // Admit owned plans first when the batch is full, then put the
+        // selected changes in the ID order required by the wire format.
+        changed_buildings.sort_unstable_by_key(|state| state.id);
+    }
     if session.ai
         && diff.changed.is_empty()
         && diff.removals.is_empty()
@@ -293,7 +229,7 @@ fn deliver_tick(
     if !send(session, message, failed, id) {
         return false;
     }
-    patch_units(&mut session.resident, &diff, slots, built, session.viewer);
+    units::patch(&mut session.resident, &diff, slots, built, session.viewer);
     if session.resident_players != viewer.players {
         session.resident_players = viewer.players.clone();
     }

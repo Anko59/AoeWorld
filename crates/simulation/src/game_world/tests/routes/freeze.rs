@@ -275,6 +275,11 @@ fn cancelling_a_proven_sealed_entrance_allows_a_fresh_move() {
     }
     wall(&mut world, 264, 200, true);
     let entrance = wall(&mut world, 199, 200, false);
+    assert!(world.tile_passable(TileCoord::new(199, 200)));
+    world
+        .start_foundation(entrance)
+        .expect("start entrance wall");
+    assert!(!world.tile_passable(TileCoord::new(199, 200)));
     let destination = tile_position(200, 200);
     // One hundred players share the fair budget; no issue-time fast work
     // is left. Serve their searches without moving the stacked test units.

@@ -151,16 +151,18 @@ impl GameWorld {
                     self.upgrade_units(player, from, to, changed);
                 }
             }
+            TechEffect::UpgradeBuilding { from, to } => {
+                self.upgrade_buildings(player, from, to);
+            }
             TechEffect::Military => {
                 if matches!(tech, Tech::Fletching | Tech::BodkinArrow | Tech::Bracer) {
                     for b in self.economy.buildings.values_mut().filter(|b| {
                         b.player == player
-                            && matches!(
-                                b.kind,
-                                crate::BuildingKind::TownCenter
-                                    | crate::BuildingKind::WatchTower
-                                    | crate::BuildingKind::Castle
-                            )
+                            && (b.kind.is_tower()
+                                || matches!(
+                                    b.kind,
+                                    crate::BuildingKind::TownCenter | crate::BuildingKind::Castle
+                                ))
                     }) {
                         b.los += 1;
                         self.vision.dirty_buildings.insert(b.id);

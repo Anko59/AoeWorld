@@ -246,11 +246,12 @@ impl GameWorld {
     }
 
     fn restore_building(&mut self, record: &BuildingRecord, report: &mut RestoreReport) {
+        let complete = record.state == ConstructionState::Complete;
         let placed = self.insert_building_shape(
             record.player,
             record.kind,
             record.footprint,
-            record.complete && record.kind != BuildingKind::Bridge,
+            complete && record.kind != BuildingKind::Bridge,
             record.bridge_span,
         );
         let Ok(id) = placed else {
@@ -258,6 +259,11 @@ impl GameWorld {
             return;
         };
         if id != record.id {
+            report.buildings_lost += 1;
+            return;
+        }
+        if record.state != ConstructionState::Planned && self.start_foundation(id).is_err() {
+            self.remove_building(id);
             report.buildings_lost += 1;
             return;
         }
@@ -287,12 +293,10 @@ impl GameWorld {
             self.economy.active_research.insert(id);
             self.economy.queues.research.awake.insert(id);
         }
-        if record.complete && record.kind.is_gate() {
+        if complete && record.kind.is_gate() {
             self.restore_gate(id, record.gate_open);
         }
-        if record.complete
-            && let Some(span) = record.bridge_span
-        {
+        if complete && let Some(span) = record.bridge_span {
             if let Some(bridge) = self.building_mut(id) {
                 bridge.state = ConstructionState::Complete;
             }

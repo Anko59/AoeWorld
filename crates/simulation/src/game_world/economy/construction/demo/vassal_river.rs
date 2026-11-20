@@ -36,7 +36,10 @@ impl GameWorld {
                 .flat_map(|dy| (-r..=r).map(move |dx| (dx, dy)))
                 .filter(|(dx, dy)| dx.abs() == r || dy.abs() == r)
                 .map(|(dx, dy)| TileCoord::new(at.x + dx, at.y + dy))
-                .find(|t| self.validate_building_placement(kind, *t).is_ok())
+                .find(|t| {
+                    self.validate_building_placement(PlayerId(0), kind, *t)
+                        .is_ok()
+                })
         })
     }
 
@@ -74,7 +77,7 @@ impl GameWorld {
                     let span = BridgeSpan::new(from, to)?;
                     if !span.tiles().into_iter().all(|t| {
                         (self.vassal_river_land(t) == Some(true)) == (t == from || t == to)
-                    }) || !self.bridge_site_valid(from, to)
+                    }) || !self.bridge_site_valid(PlayerId(0), from, to)
                     {
                         continue;
                     }

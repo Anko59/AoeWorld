@@ -61,7 +61,7 @@ async fn coastal_village_builds_dock_trains_ship_and_feeds_fish_depletion() {
         .flat_map(|y| (4..124).map(move |x| TileCoord::new(x, y)))
         .filter(|tile| {
             probe
-                .validate_building_placement(aoe_simulation::BuildingKind::Dock, *tile)
+                .validate_building_placement(PlayerId(0), aoe_simulation::BuildingKind::Dock, *tile)
                 .is_ok()
         })
         .collect();

@@ -193,7 +193,7 @@ fn kingdom_showcase_has_legal_nonoverlapping_buildings_and_two_preserved_wood_so
         w.remove_building(*id);
     }
     for (_, kind, footprint) in sites {
-        w.validate_building_placement(kind, footprint.min)
+        w.validate_building_placement(PlayerId(0), kind, footprint.min)
             .unwrap_or_else(|error| {
                 panic!("illegal showcase {kind:?} at {footprint:?}: {error:?}")
             });

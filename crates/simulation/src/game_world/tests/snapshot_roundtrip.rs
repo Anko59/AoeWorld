@@ -313,7 +313,7 @@ fn an_animal_under_a_later_foundation_is_put_beside_it_on_load() {
         )
         .unwrap();
     // Placement checks terrain and buildings, not animals.
-    saved
+    let foundation = saved
         .insert_building(
             PlayerId(0),
             crate::BuildingKind::House,
@@ -321,6 +321,7 @@ fn an_animal_under_a_later_foundation_is_put_beside_it_on_load() {
             false,
         )
         .unwrap();
+    saved.start_foundation(foundation).unwrap();
     let (restored, report) = roundtrip(&saved, flat().0);
     assert_eq!(report.animals_lost, 0, "{report:?}");
     let back = restored

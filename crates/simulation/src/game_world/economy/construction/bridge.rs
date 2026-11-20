@@ -54,7 +54,7 @@ impl GameWorld {
                 _ => None,
             },
             |span| {
-                self.validate_bridge_placement(span).is_ok()
+                self.validate_bridge_placement(player, span).is_ok()
                     && span.tiles().iter().all(|tile| {
                         self.validate_explored_footprint(
                             player,
@@ -74,7 +74,7 @@ impl GameWorld {
             self.validate_explored_footprint(player, TileRect::from_xywh(tile.x, tile.y, 1, 1))?;
         }
         if snapped.is_none() {
-            self.validate_bridge_placement(span)?;
+            self.validate_bridge_placement(player, span)?;
         }
         let id =
             self.insert_building_shape(player, BuildingKind::Bridge, rect, false, Some(span))?;
@@ -88,15 +88,25 @@ impl GameWorld {
     }
 
     /// Whether a bridge could be placed from bank `from` to bank `to` now.
-    pub(crate) fn bridge_site_valid(&self, from: TileCoord, to: TileCoord) -> bool {
-        BridgeSpan::new(from, to).is_some_and(|span| self.validate_bridge_placement(span).is_ok())
+    pub(crate) fn bridge_site_valid(
+        &self,
+        player: PlayerId,
+        from: TileCoord,
+        to: TileCoord,
+    ) -> bool {
+        BridgeSpan::new(from, to)
+            .is_some_and(|span| self.validate_bridge_placement(player, span).is_ok())
     }
 
     pub fn bridge_footprint(from: TileCoord, to: TileCoord) -> Option<TileRect> {
         Some(BridgeSpan::new(from, to)?.footprint())
     }
 
-    fn validate_bridge_placement(&self, span: BridgeSpan) -> Result<(), EconomyError> {
+    fn validate_bridge_placement(
+        &self,
+        player: PlayerId,
+        span: BridgeSpan,
+    ) -> Result<(), EconomyError> {
         #[cfg(test)]
         let mut work = work::Validation::new();
         let Terrain::Map { generator, overlay } = &self.terrain else {
@@ -115,7 +125,7 @@ impl GameWorld {
             || span.tiles().into_iter().any(|tile| {
                 #[cfg(test)]
                 { work.visits += 1; }
-                self.building_at(tile).is_some()
+                self.building_at_for(player, tile).is_some()
             })
         {
             return Err(EconomyError::InvalidFootprint);

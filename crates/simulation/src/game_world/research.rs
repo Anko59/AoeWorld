@@ -10,6 +10,7 @@ mod content;
 mod effects;
 mod generic;
 mod generic_effects;
+pub(crate) use generic_effects::researched_building_kind;
 mod gunpowder;
 mod imperial;
 mod navy;

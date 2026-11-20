@@ -262,14 +262,7 @@ impl GameWorld {
             return self.visibility(player, a.position.tile_floor())
                 == crate::TileVisibility::Visible;
         }
-        self.building(target).is_some_and(|b| {
-            (b.footprint.min.y..b.footprint.max.y).any(|y| {
-                (b.footprint.min.x..b.footprint.max.x).any(|x| {
-                    self.visibility(player, aoe_core::TileCoord::new(x, y))
-                        == crate::TileVisibility::Visible
-                })
-            })
-        })
+        self.building_entity_visible_to(player, target)
     }
 }
 

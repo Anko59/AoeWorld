@@ -25,7 +25,7 @@ same install. Rust owns every number: `research/generic.rs` (table),
 | Heated Shot (380) | University / Castle | Watch Towers +125% attack, Castles and Docks +4 vs ships |
 | Arrowslits (608) | University / Imperial | Watch Tower +1, Guard Tower +2, Keep +3 attack |
 | Fortified Wall (194) | University / Castle | Stone Wall 1080 -> 3000 HP, armour 12/12; gates keep their stats (no DAT record) |
-| Guard Tower (140), Keep (63) | University / Castle, Imperial | Watch Towers upgrade in place: HP 850 -> 1500 -> 2250, attack 5 -> 7 -> 8, armour 2/8 -> 3/9 |
+| Guard Tower (140), Keep (63) | University / Castle, Imperial | Existing and future Watch Towers become Guard Towers, then Keeps. DAT base HP 850 → 1500 → 2250, attack 5 → 7 → 8, melee/pierce armour 1/7 → 2/8 → 3/9 |
 | Treadmill Crane (54, "Stone cutting") | University / Castle | construction 20% faster |
 | Devotion (46), Faith (45) | Monastery / Castle, Imperial | enemy conversion succeeds 85% / 50% of the time |
 | Fervor (252), Sanctity (231) | Monastery / Castle | Monk speed +15%, Monk HP +15 |

@@ -95,7 +95,7 @@ impl GameWorld {
 
     pub(super) fn secondary_damage_bonus(&self, kind: BuildingKind, target: EntityId) -> u16 {
         let index = match kind {
-            BuildingKind::WatchTower => 0,
+            BuildingKind::WatchTower | BuildingKind::GuardTower | BuildingKind::Keep => 0,
             BuildingKind::Castle => 1,
             _ => return self.building_damage_bonus(kind, target),
         };

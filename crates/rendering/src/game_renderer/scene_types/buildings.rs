@@ -18,7 +18,7 @@ const FOUNDATION: u8 = 1;
 const RUBBLE: u8 = 2;
 
 // Stable semantic slots; actor tags never enter the building metadata table.
-const ROWS: [(SceneUnitKind, i16, u8); 94] = [
+const ROWS: [(SceneUnitKind, i16, u8); 98] = [
     (BuildingTownCenter, 109, 4),
     (House, 70, 2),
     (LumberCamp, 562, 2),
@@ -114,10 +114,14 @@ const ROWS: [(SceneUnitKind, i16, u8); 94] = [
     (FishTrap, 199, 2),
     (RubbleFishTrap, 199, 2),
     (ConstructionFishTrap, 199, 2),
+    (GuardTower, 234, 1),
+    (Keep, 235, 1),
+    (RubbleGuardTower, 234, 1),
+    (RubbleKeep, 235, 1),
 ];
 
 // Construction retains the selected DAT age identity.
-const FOUNDATIONS: [(SceneUnitKind, i16, u8, u8); 55] = [
+const FOUNDATIONS: [(SceneUnitKind, i16, u8, u8); 57] = [
     (ConstructionTownCenter, 109, 4, 12),
     (ConstructionHouse, 70, 2, 10),
     (ConstructionLumberCamp, 562, 2, 10),
@@ -173,6 +177,8 @@ const FOUNDATIONS: [(SceneUnitKind, i16, u8, u8); 55] = [
     (ConstructionImperialSiegeWorkshop, 150, 4, 12),
     (ConstructionWonder, 276, 5, 90),
     (ConstructionFishTrap, 199, 2, 93),
+    (ConstructionGuardTower, 234, 1, 9),
+    (ConstructionKeep, 235, 1, 9),
 ];
 const META: [Meta; SceneUnitKind::Actor0 as usize] = {
     let mut out = [EMPTY; SceneUnitKind::Actor0 as usize];
@@ -186,7 +192,7 @@ const META: [Meta; SceneUnitKind::Actor0 as usize] = {
                 || (i >= 32 && i <= 37)
                 || (i >= 49 && i <= 52)
                 || i == 89
-                || i == 92;
+                || matches!(kind, RubbleFishTrap | RubbleGuardTower | RubbleKeep);
             out[tag] = Meta {
                 id,
                 slot: i as u8,

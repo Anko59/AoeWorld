@@ -166,7 +166,7 @@ impl GameWorld {
             ),
         );
         self.validate_explored_footprint(player, footprint)?;
-        self.validate_building_placement(kind, origin)?;
+        self.validate_building_placement(player, kind, origin)?;
         let id = self.insert_building(player, kind, footprint, false)?;
         self.charge(player, cost);
         self.step_builders_aside(&builders, id);

@@ -40,17 +40,22 @@ impl GameWorld {
                 .is_empty()
     }
 
-    pub(super) fn validate_footprint(&self, footprint: TileRect) -> Result<(), EconomyError> {
+    pub(super) fn validate_footprint(
+        &self,
+        player: PlayerId,
+        footprint: TileRect,
+    ) -> Result<(), EconomyError> {
         if !self.query(footprint).0.is_empty() {
             return Err(EconomyError::InvalidFootprint);
         }
-        self.validate_footprint_ground(footprint)
+        self.validate_footprint_ground(player, footprint)
     }
 
     /// Terrain, resource and building checks only: ordered foundations may
     /// stand on units, which step aside (see `construction::clearance`).
     pub(super) fn validate_footprint_ground(
         &self,
+        player: PlayerId,
         footprint: TileRect,
     ) -> Result<(), EconomyError> {
         if !footprint.valid(self.config.width_tiles, self.config.height_tiles) {
@@ -61,7 +66,7 @@ impl GameWorld {
         for y in footprint.min.y..footprint.max.y {
             for x in footprint.min.x..footprint.max.x {
                 let tile = TileCoord::new(x, y);
-                if self.building_at(tile).is_some()
+                if self.building_at_for(player, tile).is_some()
                     || self.economy.blocked_tiles.contains(&tile)
                     || !self
                         .terrain
@@ -93,7 +98,7 @@ impl GameWorld {
             origin,
             TileCoord::new(origin.x.saturating_add(side), origin.y.saturating_add(side)),
         );
-        self.validate_footprint(footprint)?;
+        self.validate_footprint(player, footprint)?;
         self.insert_building(player, BuildingKind::TownCenter, footprint, true)
     }
 
@@ -169,7 +174,7 @@ impl GameWorld {
                 tile.x,
             )
         });
-        self.rank_start_sites(&mut candidates, start)?;
+        self.rank_start_sites(player, &mut candidates, start)?;
         let side = VILLAGE_RULES.town_center_side;
         let start_is_free = self.tile_free(start);
         let mut selected = None;
@@ -184,7 +189,7 @@ impl GameWorld {
                     start,
                     TileCoord::new(origin.x + side / 2, origin.y + side / 2),
                 ) <= 64;
-            match self.validate_footprint(rect) {
+            match self.validate_footprint(player, rect) {
                 Ok(()) => {}
                 Err(EconomyError::InvalidFootprint) => continue,
                 Err(error) => return Err(error),

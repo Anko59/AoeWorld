@@ -63,7 +63,7 @@ impl GameWorld {
         // Validate every segment before placing any, so a refusal changes nothing.
         for rect in &rects {
             self.validate_explored_footprint(player, *rect)?;
-            self.validate_footprint_ground(*rect)?;
+            self.validate_footprint_ground(player, *rect)?;
         }
         let mut ids = Vec::new();
         for rect in rects {

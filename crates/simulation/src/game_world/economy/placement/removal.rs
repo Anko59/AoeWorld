@@ -21,11 +21,19 @@ impl GameWorld {
         {
             self.remove_bridge_deck(span);
         }
-        if building.kind == BuildingKind::Road {
+        if building.kind == BuildingKind::Road && building.is_complete() {
             self.economy.roads.remove(&building.footprint.min);
         }
         self.economy.active_training.remove(&id);
         self.economy.active_research.remove(&id);
+        if building.is_unstarted() {
+            self.remove_foundation_reservation(
+                id,
+                building.player,
+                building.footprint,
+                building.bridge_span,
+            );
+        }
         self.forget_building(id, building.footprint);
         if let Some(bucket) = self
             .economy
@@ -35,9 +43,10 @@ impl GameWorld {
         {
             bucket.remove(at);
         }
-        if let Some(rect) = building
-            .kind
-            .collision_rect(building.footprint, building.is_complete())
+        if !building.is_unstarted()
+            && let Some(rect) = building
+                .kind
+                .collision_rect(building.footprint, building.is_complete())
         {
             for y in rect.min.y..rect.max.y {
                 for x in rect.min.x..rect.max.x {

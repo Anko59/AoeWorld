@@ -210,7 +210,7 @@ impl Search {
             let (to, step, bridge) = if view.walkable(next) && view.crossable(tile, next) {
                 (next, 1, false)
             } else if !view.avoid.contains(&next)
-                && view.w.building_at(next).is_none()
+                && view.w.building_at_for(view.player, next).is_none()
                 && !view.passable(next)
             {
                 // Water (or other barrier) ahead: look for the far bank.
@@ -218,7 +218,7 @@ impl Search {
                     let m = TileCoord::new(tile.x + dx * k, tile.y + dy * k);
                     if view.free(m) {
                         Some((k, m))
-                    } else if view.passable(m) || view.w.building_at(m).is_some() {
+                    } else if view.passable(m) || view.w.building_at_for(view.player, m).is_some() {
                         Some((0, m))
                     } else {
                         None

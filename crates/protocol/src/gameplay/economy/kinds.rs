@@ -155,9 +155,11 @@ pub enum BuildingKind {
     Road,
     Wonder,
     FishTrap,
+    GuardTower,
+    Keep,
 }
 impl BuildingKind {
-    pub const ALL: [Self; 26] = [
+    pub const ALL: [Self; 28] = [
         Self::TownCenter,
         Self::House,
         Self::LumberCamp,
@@ -184,7 +186,12 @@ impl BuildingKind {
         Self::Road,
         Self::Wonder,
         Self::FishTrap,
+        Self::GuardTower,
+        Self::Keep,
     ];
+    pub const fn is_tower(self) -> bool {
+        matches!(self, Self::WatchTower | Self::GuardTower | Self::Keep)
+    }
     /// Footprint side in tiles; the single wire-level size table.
     pub const fn side(self) -> i32 {
         match self {
@@ -208,6 +215,8 @@ impl BuildingKind {
             | Self::StoneWall
             | Self::Outpost
             | Self::WatchTower
+            | Self::GuardTower
+            | Self::Keep
             | Self::Bridge
             | Self::Road => 1,
         }

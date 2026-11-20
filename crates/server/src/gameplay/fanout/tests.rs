@@ -56,7 +56,7 @@ fn rally_is_private_in_fog_and_a_hundred_no_fog_viewers_share_one_building_map()
         })
         .collect::<Vec<_>>();
     let ordinary = viewer_states(&world, &views[..1], &BTreeMap::new());
-    let Buildings::Full(own_view) = &ordinary[&PlayerId(0)].buildings else {
+    let Buildings::Full(own_view, _) = &ordinary[&PlayerId(0)].buildings else {
         panic!("full view");
     };
     assert_eq!(
@@ -65,12 +65,12 @@ fn rally_is_private_in_fog_and_a_hundred_no_fog_viewers_share_one_building_map()
     );
     world.set_fog_disabled(true);
     let complete = viewer_states(&world, &views, &BTreeMap::new());
-    let Buildings::Full(shared) = &complete[&PlayerId(0)].buildings else {
+    let Buildings::Full(shared, _) = &complete[&PlayerId(0)].buildings else {
         panic!("full view");
     };
     assert_eq!(shared[&enemy].rally_point.unwrap().position, target);
     for view in complete.values() {
-        let Buildings::Full(buildings) = &view.buildings else {
+        let Buildings::Full(buildings, _) = &view.buildings else {
             panic!("full view");
         };
         assert!(
@@ -495,3 +495,6 @@ mod holdings;
 
 #[path = "tests/fog_identity.rs"]
 mod fog_identity;
+
+#[path = "tests/foundations.rs"]
+mod foundations;

@@ -9,7 +9,7 @@ fn empty_tc(w: &mut GameWorld, anchor: TileCoord) -> EntityId {
                 }
                 let at = TileCoord::new(anchor.x + dx, anchor.y + dy);
                 let rect = aoe_core::TileRect::from_xywh(at.x, at.y, 4, 4);
-                if w.validate_building_placement(BuildingKind::TownCenter, at)
+                if w.validate_building_placement(PlayerId(0), BuildingKind::TownCenter, at)
                     .is_ok()
                     && w.query(rect).0.is_empty()
                 {

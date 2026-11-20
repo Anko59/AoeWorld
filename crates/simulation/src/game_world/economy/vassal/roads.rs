@@ -82,7 +82,7 @@ impl<'a> View<'a> {
         self.free_tiles.get(tile, || {
             !self.avoid.contains(&tile)
                 && !self.gate_tiles.contains(&tile)
-                && self.w.building_at(tile).is_none()
+                && self.w.building_at_for(self.player, tile).is_none()
                 && self.passable(tile)
         })
     }
@@ -92,7 +92,7 @@ impl<'a> View<'a> {
     pub(super) fn existing(&self, tile: TileCoord) -> bool {
         self.existing_tiles.get(tile, || {
             self.w
-                .building_at(tile)
+                .building_at_for(self.player, tile)
                 .and_then(|id| self.w.building(id))
                 .is_some_and(|b| {
                     b.player == self.player
@@ -116,7 +116,7 @@ impl<'a> View<'a> {
             // An unfinished road stays a deficit until it is complete.
             let unfinished = self
                 .w
-                .building_at(tile)
+                .building_at_for(self.player, tile)
                 .and_then(|id| self.w.building(id))
                 .is_some_and(|b| b.kind == BuildingKind::Road && !b.is_complete());
             if unfinished && self.roads.insert(tile) {
@@ -139,10 +139,10 @@ impl<'a> View<'a> {
         {
             return false;
         }
-        let w = self.w;
+        let (w, player) = (self.w, self.player);
         *self
             .bridge_ok
             .entry((a, b))
-            .or_insert_with(|| w.bridge_site_valid(a, b))
+            .or_insert_with(|| w.bridge_site_valid(player, a, b))
     }
 }

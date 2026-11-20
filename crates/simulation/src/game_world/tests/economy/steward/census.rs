@@ -45,7 +45,7 @@ fn a_small_economy_replaces_depleted_wood_and_keeps_training_despite_distant_bui
             (i64::from(tile.x * 1024 + 512 - home.center.x).pow(2)
                 + i64::from(tile.y * 1024 + 512 - home.center.y).pow(2))
                 > (100 * 1024_i64).pow(2)
-                && w.validate_building_placement(BuildingKind::PalisadeWall, *tile)
+                && w.validate_building_placement(PlayerId(0), BuildingKind::PalisadeWall, *tile)
                     .is_ok()
         })
         .take(crate::STEWARD_RULES.building_visits_per_domain + 1)

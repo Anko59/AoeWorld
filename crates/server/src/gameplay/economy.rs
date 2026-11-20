@@ -278,7 +278,8 @@ pub(super) fn subscription_buildings(
         .buildings()
         .filter(|b| {
             b.player == player
-                || (b.footprint.min.x < region.max.x
+                || (!b.is_unstarted()
+                    && b.footprint.min.x < region.max.x
                     && b.footprint.max.x > region.min.x
                     && b.footprint.min.y < region.max.y
                     && b.footprint.max.y > region.min.y)
@@ -313,7 +314,8 @@ pub(super) fn wire_building_state(
         footprint: state.footprint,
         bridge_span: state.bridge_span,
         construction: match state.state {
-            aoe_simulation::ConstructionState::UnderConstruction => {
+            aoe_simulation::ConstructionState::Planned
+            | aoe_simulation::ConstructionState::UnderConstruction => {
                 ConstructionState::UnderConstruction
             }
             aoe_simulation::ConstructionState::Complete => ConstructionState::Complete,

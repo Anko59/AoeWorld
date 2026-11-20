@@ -57,7 +57,7 @@ impl GameWorld {
         let dock = (30..80)
             .flat_map(|y| (32..self.config.width_tiles - 20).map(move |x| TileCoord::new(x, y)))
             .find(|&at| {
-                self.validate_building_placement(BuildingKind::Dock, at)
+                self.validate_building_placement(SEATS[0], BuildingKind::Dock, at)
                     .is_ok()
             })
             .ok_or(EconomyError::InvalidFootprint)?;

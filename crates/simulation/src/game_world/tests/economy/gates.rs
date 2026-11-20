@@ -21,6 +21,8 @@ fn palisade_gate_is_dark_age_buildable_and_opens_for_its_owner() {
         (gate.footprint.width(), gate.footprint.height(), gate.max_hp),
         (4, 1, 240)
     );
+    assert!(world.tile_passable(TileCoord::new(101, 100)));
+    world.advance();
     assert!(!world.tile_passable(TileCoord::new(101, 100)));
     finish(&mut world, id, 700);
     world.advance();
@@ -128,8 +130,8 @@ fn stone_walls_need_feudal_age_and_stone_and_lay_a_sturdy_line() {
     );
     assert!(BuildingKind::StoneWall.rules().max_hp > BuildingKind::PalisadeWall.rules().max_hp);
     assert!(
-        !world.tile_passable(TileCoord::new(102, 100)),
-        "a foundation blocks"
+        world.tile_passable(TileCoord::new(102, 100)),
+        "an unstarted wall stays passable"
     );
     for id in &ids {
         finish(&mut world, *id, 3000);
@@ -165,6 +167,8 @@ fn stone_gate_opens_for_its_owner_and_stays_shut_for_an_enemy() {
         (gate.footprint.width(), gate.footprint.height(), gate.max_hp),
         (4, 1, 2750)
     );
+    assert!(world.tile_passable(TileCoord::new(101, 100)));
+    world.advance();
     assert!(!world.tile_passable(TileCoord::new(101, 100)));
     finish(&mut world, id, 7000);
     world.advance();

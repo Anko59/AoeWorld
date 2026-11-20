@@ -69,7 +69,10 @@ fn behaviour_recording_scenes_have_a_live_primary_and_deterministic_setup() {
                 TileCoord::new(wet[0] - 1, 127),
                 TileCoord::new(wet[wet.len() - 1] + 1, 127),
             );
-            assert!(a.bridge_site_valid(from, to), "{from:?} -> {to:?}");
+            assert!(
+                a.bridge_site_valid(PlayerId(0), from, to),
+                "{from:?} -> {to:?}"
+            );
         }
     }
 }

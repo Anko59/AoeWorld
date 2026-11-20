@@ -229,17 +229,21 @@ fn rejected_foundations_leave_all_visibility_and_memory_unchanged() {
         for y in 99..=101 {
             for x in 99..=101 {
                 if (x, y) != (100, 100) {
-                    w.issue_build(
-                        PlayerId(1),
-                        &[enemy_builder],
-                        BuildingKind::PalisadeWall,
-                        TileCoord::new(x, y),
-                        false,
-                    )
-                    .unwrap();
+                    let wall = w
+                        .issue_build(
+                            PlayerId(1),
+                            &[enemy_builder],
+                            BuildingKind::PalisadeWall,
+                            TileCoord::new(x, y),
+                            false,
+                        )
+                        .unwrap();
+                    w.start_foundation(wall).unwrap();
                 }
             }
         }
+        // Direct fixture setup starts work outside the usual tick publication.
+        w.remember_visible_buildings();
         let vision_hash = |w: &GameWorld| {
             let mut hash = blake3::Hasher::new();
             w.vision.update_hash(&mut hash);

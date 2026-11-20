@@ -61,6 +61,7 @@ impl GameWorld {
                     TileCoord::new(128, 128),
                     false,
                 )?;
+                w.start_foundation(tc)?;
                 let b = w.building_mut(tc).ok_or(EconomyError::UnknownEntity)?;
                 b.work_done = b.work_total - 3 * 60;
                 b.hp = (u64::from(b.max_hp) * b.work_done / b.work_total) as u16;

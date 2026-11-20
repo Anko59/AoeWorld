@@ -56,7 +56,7 @@ impl BuildingKind {
         match self {
             Self::TownCenter => 15,
             Self::Castle => 20,
-            Self::WatchTower => 5,
+            Self::WatchTower | Self::GuardTower | Self::Keep => 5,
             _ => 0,
         }
     }

@@ -36,7 +36,7 @@ fn radius(kind: BuildingKind) -> i32 {
     match kind {
         BuildingKind::TownCenter => 12,
         BuildingKind::Castle => 16,
-        BuildingKind::WatchTower => 8,
+        BuildingKind::WatchTower | BuildingKind::GuardTower | BuildingKind::Keep => 8,
         BuildingKind::Outpost => 6,
         BuildingKind::Bridge => 0,
         BuildingKind::PalisadeWall

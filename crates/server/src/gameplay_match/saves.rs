@@ -22,8 +22,8 @@ use std::{
 };
 
 /// Read by `make check-fixtures` to explain a save that no longer loads.
-/// The world snapshot includes commodity recovery deadlines.
-pub const SAVE_VERSION: u16 = 5;
+/// The world snapshot includes commodity recovery deadlines and private planned foundations.
+pub const SAVE_VERSION: u16 = 6;
 const MAX_NAME: usize = 60;
 const MAX_SAVE_BYTES: u64 = 2 << 30;
 

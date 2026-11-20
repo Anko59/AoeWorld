@@ -32,10 +32,12 @@ pub(super) struct View {
     pub rebuild: bool,
 }
 
+type BuildingMap = BTreeMap<EntityId, GameplayBuildingState>;
+
 /// How a viewer's known buildings differ from last tick.
 pub(super) enum Buildings {
-    /// Every known building; the diff is against the whole baseline.
-    Full(Arc<BTreeMap<EntityId, GameplayBuildingState>>),
+    /// Every known building, with owned plans separate when a no-fog map is shared.
+    Full(Arc<BuildingMap>, BuildingMap),
     /// Only buildings whose memory changed (`None` once forgotten), by id.
     Changes(Vec<(EntityId, Option<GameplayBuildingState>)>),
 }
@@ -83,10 +85,19 @@ fn viewer_states(
         *rebuild.entry(view.viewer).or_default() |=
             view.rebuild || view.fog_disabled != Some(world.fog_disabled());
     }
-    let disabled = world.fog_disabled();
-    // Shared by every viewer when fog is disabled, so built once up front.
-    let first = rebuild.keys().next().filter(|_| disabled);
-    let everything = first.map(|first| Arc::new(economy::buildings(world, *first)));
+    let mut private: BTreeMap<PlayerId, BuildingMap> = BTreeMap::new();
+    let public = (!rebuild.is_empty() && world.fog_disabled()).then(|| {
+        let mut public = BuildingMap::new();
+        for b in world.buildings() {
+            let wire = wire_building_state(&b, None);
+            if b.is_unstarted() {
+                private.entry(b.player).or_default().insert(b.id, wire);
+            } else {
+                public.insert(b.id, wire);
+            }
+        }
+        Arc::new(public)
+    });
     // Each viewer's land report is rastered once a second as before, but
     // viewers take turns: a hundred rasters no longer land on one tick.
     let tick = world.tick().0;
@@ -103,7 +114,8 @@ fn viewer_states(
                 viewer,
                 rebuild,
                 changes,
-                everything.as_ref(),
+                public.as_ref(),
+                private.get(&viewer),
                 land_tick(viewer),
             );
             (viewer, state)
@@ -126,19 +138,21 @@ fn viewer_state(
     viewer: PlayerId,
     rebuild: bool,
     changes: &BTreeMap<PlayerId, BTreeSet<EntityId>>,
-    everything: Option<&Arc<BTreeMap<EntityId, GameplayBuildingState>>>,
+    public: Option<&Arc<BuildingMap>>,
+    private: Option<&BuildingMap>,
     land_tick: bool,
 ) -> ViewerState {
     let players = economy::player(world, viewer)
         .map(|state| (state.player, state))
         .into_iter()
         .collect();
-    let buildings = if let Some(all) = everything {
-        // With fog disabled all targets are revealed as well. Keep one
-        // shared map even when a hundred seats have set their rally points.
-        Buildings::Full(all.clone())
+    let buildings = if let Some(public) = public {
+        Buildings::Full(public.clone(), private.cloned().unwrap_or_default())
     } else if rebuild {
-        Buildings::Full(Arc::new(economy::buildings(world, viewer)))
+        Buildings::Full(
+            Arc::new(economy::buildings(world, viewer)),
+            BuildingMap::new(),
+        )
     } else {
         Buildings::Changes(
             changes

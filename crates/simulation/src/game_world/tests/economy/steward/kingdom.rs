@@ -34,7 +34,9 @@ fn place_near(w: &mut GameWorld, kind: BuildingKind, anchor: TileCoord) -> Entit
                     continue;
                 }
                 let tile = TileCoord::new(anchor.x + dx, anchor.y + dy);
-                if w.validate_building_placement(kind, tile).is_ok() {
+                if w.validate_building_placement(PlayerId(0), kind, tile)
+                    .is_ok()
+                {
                     return w
                         .insert_building(
                             PlayerId(0),

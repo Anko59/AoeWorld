@@ -227,7 +227,7 @@ pub(super) fn kingdom_building(
     at: TileCoord,
 ) -> Result<EntityId, EconomyError> {
     let rules = kind.rules();
-    world.validate_building_placement(kind, at)?;
+    world.validate_building_placement(PlayerId(0), kind, at)?;
     world.insert_building(
         PlayerId(0),
         kind,

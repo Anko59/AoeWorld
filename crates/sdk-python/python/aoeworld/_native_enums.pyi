@@ -109,6 +109,8 @@ class BuildingKind:
     ROAD: BuildingKind
     WONDER: BuildingKind
     FISH_TRAP: BuildingKind
+    GUARD_TOWER: BuildingKind
+    KEEP: BuildingKind
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
 class ResourceKind:

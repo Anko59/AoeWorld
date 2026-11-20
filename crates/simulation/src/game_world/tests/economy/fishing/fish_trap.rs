@@ -13,7 +13,7 @@ fn trap_world() -> (GameWorld, EntityId, EntityId, TileCoord) {
         .flat_map(|x| (origin.y - 3..origin.y + 6).map(move |y| TileCoord::new(x, y)))
         .find(|&tile| {
             world
-                .validate_building_placement(BuildingKind::FishTrap, tile)
+                .validate_building_placement(PlayerId(0), BuildingKind::FishTrap, tile)
                 .is_ok()
         })
         .expect("open water beside the dock");
@@ -64,16 +64,24 @@ fn only_fishing_ships_build_fish_traps_and_only_on_open_water() {
         world.player_economy(PlayerId(0)).unwrap().stockpile.wood,
         wood - 100
     );
-    // A second trap cannot overlap the first.
+    assert!(world.building(trap).unwrap().is_unstarted());
     assert_eq!(
-        world.validate_building_placement(BuildingKind::FishTrap, spot),
+        world.validate_building_placement(PlayerId(0), BuildingKind::FishTrap, spot),
         Err(EconomyError::InvalidFootprint)
+    );
+    assert_eq!(
+        world.validate_building_placement(PlayerId(1), BuildingKind::FishTrap, spot),
+        Ok(())
     );
     let rules = BuildingKind::FishTrap.rules();
     advance(&mut world, (rules.build_seconds + 20) * 20);
     let built = world.building(trap).unwrap();
     assert!(built.is_complete());
     assert_eq!((built.max_hp, built.food_remaining), (250, Some(715)));
+    assert_eq!(
+        world.validate_building_placement(PlayerId(1), BuildingKind::FishTrap, spot),
+        Err(EconomyError::InvalidFootprint)
+    );
 }
 
 #[test]

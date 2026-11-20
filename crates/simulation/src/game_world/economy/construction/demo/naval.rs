@@ -33,7 +33,7 @@ impl GameWorld {
         'shore: for y in 20..100 {
             for x in 4..w.config.width_tiles - 40 {
                 let tile = TileCoord::new(x, y);
-                if w.validate_building_placement(BuildingKind::Dock, tile)
+                if w.validate_building_placement(PlayerId(0), BuildingKind::Dock, tile)
                     .is_ok()
                 {
                     shore = Some(tile);

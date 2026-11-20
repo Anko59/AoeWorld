@@ -169,7 +169,10 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(100, 250, 0, 0),
         30,
         TechRequirement::None,
-        TechEffect::BuildingStats,
+        TechEffect::UpgradeBuilding {
+            from: BuildingKind::WatchTower,
+            to: BuildingKind::GuardTower,
+        },
     ),
     // DAT tech 63
     generic(
@@ -179,7 +182,10 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(500, 350, 0, 0),
         75,
         TechRequirement::Technology(Tech::GuardTower),
-        TechEffect::BuildingStats,
+        TechEffect::UpgradeBuilding {
+            from: BuildingKind::GuardTower,
+            to: BuildingKind::Keep,
+        },
     ),
     // DAT tech 46
     generic(

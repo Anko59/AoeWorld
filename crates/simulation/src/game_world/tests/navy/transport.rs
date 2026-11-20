@@ -318,10 +318,10 @@ fn embarked_units_vacate_bank_building_footprints_without_releasing_population()
                 .find(|tile| {
                     let origin = TileCoord::new(tile.x - 1, tile.y);
                     world
-                        .validate_building_placement(BuildingKind::House, origin)
+                        .validate_building_placement(PlayerId(0), BuildingKind::House, origin)
                         .is_ok()
                         && world
-                            .validate_building_placement(BuildingKind::Dock, origin)
+                            .validate_building_placement(PlayerId(0), BuildingKind::Dock, origin)
                             .is_ok()
                         && (1..=10).all(|dx| {
                             world
@@ -343,7 +343,7 @@ fn embarked_units_vacate_bank_building_footprints_without_releasing_population()
     let origin = TileCoord::new(land.x - 1, land.y);
     assert!(
         world
-            .validate_building_placement(BuildingKind::Dock, origin)
+            .validate_building_placement(PlayerId(0), BuildingKind::Dock, origin)
             .is_err()
     );
     world
@@ -360,7 +360,9 @@ fn embarked_units_vacate_bank_building_footprints_without_releasing_population()
     );
     for kind in [BuildingKind::House, BuildingKind::Dock] {
         assert!(
-            world.validate_building_placement(kind, origin).is_ok(),
+            world
+                .validate_building_placement(PlayerId(0), kind, origin)
+                .is_ok(),
             "{kind:?} must ignore the embarked passenger's old position"
         );
     }

@@ -82,7 +82,7 @@ fn a_town_center_foundation_opens_its_arches_only_on_completion() {
         .unwrap();
     for y in 64..68 {
         for x in 64..68 {
-            assert!(!world.tile_passable(TileCoord::new(x, y)));
+            assert!(world.tile_passable(TileCoord::new(x, y)));
         }
     }
     let builder = world
@@ -91,8 +91,16 @@ fn a_town_center_foundation_opens_its_arches_only_on_completion() {
             WorldPosition::from_tile_center(TileCoord::new(63, 66)).unwrap(),
         )
         .unwrap();
-    world.building_mut(tc).unwrap().work_total = 3;
+    world.building_mut(tc).unwrap().work_total = 6;
     world.issue_construct(PlayerId(0), &[builder], tc).unwrap();
+    world.advance();
+    assert_eq!(world.building(tc).unwrap().work_done, 3);
+    assert!(!world.building(tc).unwrap().is_complete());
+    for y in 64..68 {
+        for x in 64..68 {
+            assert!(!world.tile_passable(TileCoord::new(x, y)));
+        }
+    }
     world.advance();
     assert!(world.building(tc).unwrap().is_complete());
     for y in 64..68 {

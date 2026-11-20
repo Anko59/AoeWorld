@@ -187,7 +187,8 @@ pub fn build(name: &str) -> Fixture {
                         (BuildingKind::Farm, 0, 4, true),
                     ] {
                         let r = kind.rules();
-                        f.world
+                        let building = f
+                            .world
                             .insert_building(
                                 PlayerId(0),
                                 kind,
@@ -195,6 +196,10 @@ pub fn build(name: &str) -> Fixture {
                                 complete,
                             )
                             .unwrap();
+                        if !complete {
+                            // The march begins after the houses have become obstacles.
+                            f.world.start_foundation(building).unwrap();
+                        }
                     }
                 }
             }
@@ -237,7 +242,8 @@ pub fn build(name: &str) -> Fixture {
         // The General stands on the east bank, the followers on the west bank.
         "general-far-bank" => f.general_army((96, 43), (74, 38), at(150, 48)),
         "siege" => {
-            f.world
+            let foundation = f
+                .world
                 .insert_building(
                     PlayerId(0),
                     BuildingKind::Barracks,
@@ -245,6 +251,7 @@ pub fn build(name: &str) -> Fixture {
                     false,
                 )
                 .unwrap();
+            f.world.start_foundation(foundation).unwrap();
             f.move_unit(UnitKind::Mangonel, at(40, 49), at(85, 49));
         }
         "gap" => {

@@ -161,6 +161,9 @@ fn art_selection_distinguishes_every_kind_and_construction_stage() {
             assert_eq!(sprite_slot(kind, 1000, true), 20);
             continue;
         }
+        if matches!(kind, B::GuardTower | B::Keep) {
+            continue; // The DE tower line is covered below.
+        }
         if kind == B::FishTrap {
             for age in [aoe_protocol::Age::Dark, aoe_protocol::Age::Imperial] {
                 for (progress, rubble, art) in [
@@ -381,4 +384,39 @@ fn stone_walls_and_gates_use_their_own_de_art_slots() {
     assert_eq!(gate_kind(B::StoneGate, false, 1000), None);
     assert_eq!(gate_kind(B::StoneWall, true, 1000), None);
     assert!(B::StoneWall.is_wall() && B::StoneGate.is_gate() && !B::Bridge.is_wall());
+}
+
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn tower_tiers_use_their_native_de_building_recipes() {
+    use aoe_protocol::Age;
+    use aoe_rendering::SceneUnitKind as Art;
+    for (kind, dat_id, stats, standing, rubble) in [
+        (
+            B::WatchTower,
+            79,
+            [5.0, 1.0, 7.0],
+            Art::WatchTower,
+            Art::RubbleWatchTower,
+        ),
+        (
+            B::GuardTower,
+            234,
+            [7.0, 2.0, 8.0],
+            Art::GuardTower,
+            Art::RubbleGuardTower,
+        ),
+        (B::Keep, 235, [8.0, 3.0, 9.0], Art::Keep, Art::RubbleKeep),
+    ] {
+        assert_eq!(tower_base_defence(kind), Some(stats));
+        for age in [Age::Castle, Age::Imperial] {
+            assert_eq!(
+                Art::building(age_sprite_slot(kind, 1000, false, age) as u8),
+                standing
+            );
+        }
+        assert_eq!(Art::building(sprite_slot(kind, 1000, true) as u8), rubble);
+        assert_eq!(standing.building_id(), Some(dat_id));
+        assert_eq!(rubble.building_id(), Some(dat_id));
+        assert_eq!(Art::foundation(dat_id as i16).building_id(), Some(dat_id));
+    }
 }

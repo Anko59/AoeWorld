@@ -167,12 +167,15 @@ pub enum BuildingKind {
     Road,
     Wonder,
     FishTrap,
+    GuardTower,
+    Keep,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
 pub enum ConstructionState {
     UnderConstruction,
     Complete,
+    Planned,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]

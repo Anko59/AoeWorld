@@ -172,7 +172,9 @@ pub(super) const fn building_armour(kind: BuildingKind) -> Classes {
         BuildingKind::Wonder => &[(Building, 0)],
         // DAT 199: Building armour class 10.
         BuildingKind::FishTrap => &[(Building, 10), (StandardBuilding, 0)],
-        BuildingKind::WatchTower => &[(Building, 0), (StandardBuilding, 0), (StoneDefense, 0)],
+        BuildingKind::WatchTower | BuildingKind::GuardTower | BuildingKind::Keep => {
+            &[(Building, 0), (StandardBuilding, 0), (StoneDefense, 0)]
+        }
         BuildingKind::PalisadeWall
         | BuildingKind::PalisadeGate
         | BuildingKind::StoneWall
@@ -201,7 +203,9 @@ pub(super) const fn building_armour(kind: BuildingKind) -> Classes {
 pub(super) const fn building_attacks(kind: BuildingKind, secondary: bool) -> Classes {
     if secondary {
         match kind {
-            BuildingKind::WatchTower => return &[(StoneDefense, 5), (Ship, 7), (FishingShip, 7)],
+            BuildingKind::WatchTower | BuildingKind::GuardTower | BuildingKind::Keep => {
+                return &[(StoneDefense, 5), (Ship, 7), (FishingShip, 7)];
+            }
             BuildingKind::Castle => return &[(StoneDefense, 11), (Ship, 11), (FishingShip, 11)],
             _ => {}
         }
@@ -210,7 +214,9 @@ pub(super) const fn building_attacks(kind: BuildingKind, secondary: bool) -> Cla
         // Town Centers fire only secondary arrows, which carry these attacks.
         BuildingKind::Road => &[(Building, 0), (StandardBuilding, 0)],
         BuildingKind::TownCenter => &[(Building, 5), (Ship, 5), (FishingShip, 5)],
-        BuildingKind::WatchTower => &[(Spear, 2), (Ship, 7), (FishingShip, 7)],
+        BuildingKind::WatchTower | BuildingKind::GuardTower | BuildingKind::Keep => {
+            &[(Spear, 2), (Ship, 7), (FishingShip, 7)]
+        }
         BuildingKind::Castle => &[(Spear, 2)],
         _ => &[],
     }

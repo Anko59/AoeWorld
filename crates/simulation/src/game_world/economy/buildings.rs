@@ -8,6 +8,8 @@ mod barriers;
 mod fishing;
 #[path = "buildings/lines.rs"]
 mod lines;
+#[path = "buildings/towers.rs"]
+mod towers;
 #[path = "buildings/wonder.rs"]
 mod wonder;
 use super::{BuildingKind, Stockpile, UnitKind};
@@ -59,7 +61,7 @@ const NO_UNITS: &[UnitKind] = &[];
 const VILLAGERS: &[UnitKind] = &[UnitKind::Villager, UnitKind::Steward];
 
 /// Canonical order of `BuildingKind`.
-pub const BUILDING_RULES: [BuildingRules; 26] = [
+pub const BUILDING_RULES: [BuildingRules; 28] = [
     BuildingRules {
         kind: BuildingKind::TownCenter,
         cost: cost(0, 275, 0, 100),
@@ -298,23 +300,7 @@ pub const BUILDING_RULES: [BuildingRules; 26] = [
         food: 0,
         age: Age::Feudal,
     },
-    BuildingRules {
-        kind: BuildingKind::WatchTower,
-        cost: cost(0, 35, 0, 125),
-        build_seconds: 80,
-        max_hp: 850,
-        side: 1,
-        depth: 1,
-        los: 10,
-        population_support: 0,
-        accepts: NONE,
-        trainable: NO_UNITS,
-        requires: None,
-        buildable: true,
-        blocks: true,
-        food: 0,
-        age: Age::Feudal,
-    },
+    towers::WATCH_TOWER,
     BuildingRules {
         kind: BuildingKind::PalisadeGate,
         cost: cost(0, 30, 0, 0),
@@ -411,6 +397,8 @@ pub const BUILDING_RULES: [BuildingRules; 26] = [
     },
     wonder::WONDER,
     fishing::FISH_TRAP,
+    towers::GUARD_TOWER,
+    towers::KEEP,
 ];
 
 const fn castle(
@@ -452,6 +440,9 @@ pub const BUILD_WORK_PER_BASE_TICK: u64 = 3;
 pub const MAX_WALL_SEGMENTS: usize = 64;
 
 impl BuildingKind {
+    pub const fn is_tower(self) -> bool {
+        matches!(self, Self::WatchTower | Self::GuardTower | Self::Keep)
+    }
     /// A one-tile wall segment laid along a dragged line.
     pub const fn is_wall(self) -> bool {
         matches!(self, Self::PalisadeWall | Self::StoneWall)

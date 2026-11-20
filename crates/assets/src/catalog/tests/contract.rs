@@ -85,8 +85,17 @@ fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
             .chain(OPTIONAL_TERRAIN_SOURCES.iter())
             .all(|source| source.frames > 0)
     );
-    // The current catalog includes Fish Trap art and native weapon variants.
-    assert_eq!(VERSION, 25);
+    // The merged catalog includes the Fish Trap and both upgraded tower recipes.
+    assert_eq!(VERSION, 26);
+    assert_eq!(GAMEPLAY_BUILDING_IDS.len(), 67);
+    assert!(GAMEPLAY_BUILDING_IDS.ends_with(&[199, 234, 235]));
+    assert_eq!(
+        GAMEPLAY_BUILDING_IDS
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        GAMEPLAY_BUILDING_IDS.len()
+    );
     assert_eq!(AssetRole::StoneDeposit as usize, 13);
     assert_eq!(AssetRole::TreeConifer as usize, 14);
     assert_eq!(AssetRole::TreePalm as usize, 15);
