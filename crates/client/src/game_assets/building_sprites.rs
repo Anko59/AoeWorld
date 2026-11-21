@@ -96,29 +96,12 @@ pub(super) fn merge(
                     *record += manifest.frames.len();
                 }
             }
-            // DE's particle-only damage graphics have no sprite cells. Keep
-            // the base pack's drawable flame when this overlay supplies none.
-            if let Some(base) = manifest
-                .buildings
-                .iter()
-                .find(|old| old.unit_id == b.unit_id)
-            {
-                for damage in &mut b.damage {
-                    if damage.parts.is_empty()
-                        && let Some(base) = base.damage.iter().find(|old| {
-                            old.damage_percent == damage.damage_percent
-                                && old.apply_mode == damage.apply_mode
-                        })
-                    {
-                        damage.parts = base.parts.clone();
-                    }
-                }
-            }
         }
-        manifest
-            .buildings
-            .retain(|old| !recipes.iter().any(|new| new.unit_id == old.unit_id));
-        manifest.buildings.extend(recipes);
+        if prefix == "buildings/actors" {
+            merge_fire(manifest, &extra, recipes)?;
+        } else {
+            replace_buildings(manifest, recipes);
+        }
     }
     if !extra.terrains.is_empty() {
         manifest.terrains = extra.terrains;
@@ -126,6 +109,78 @@ pub(super) fn merge(
     manifest.pages.extend(extra.pages);
     manifest.chunks.extend(extra.chunks);
     manifest.frames.extend(extra.frames);
+    Ok(())
+}
+
+fn replace_buildings(manifest: &mut Manifest, mut recipes: Vec<manifest::BuildingComposition>) {
+    // Keep trial fire until the corresponding native fire stage is loaded.
+    for building in &mut recipes {
+        if let Some(base) = manifest
+            .buildings
+            .iter()
+            .find(|old| old.unit_id == building.unit_id)
+        {
+            for damage in &mut building.damage {
+                if damage.parts.is_empty()
+                    && let Some(base) = base.damage.iter().find(|old| same_stage(old, damage))
+                {
+                    damage.parts = base.parts.clone();
+                }
+            }
+        }
+    }
+    manifest
+        .buildings
+        .retain(|old| !recipes.iter().any(|new| new.unit_id == old.unit_id));
+    manifest.buildings.extend(recipes);
+}
+
+fn same_stage(a: &manifest::BuildingDamage, b: &manifest::BuildingDamage) -> bool {
+    a.damage_percent == b.damage_percent && a.apply_mode == b.apply_mode
+}
+
+fn merge_fire(
+    manifest: &mut Manifest,
+    actors: &Manifest,
+    recipes: Vec<manifest::BuildingComposition>,
+) -> Result<(), JsValue> {
+    let first_actor = manifest.frames.len();
+    for recipe in recipes {
+        if !recipe.parts.is_empty() || !recipe.construction.is_empty() || !recipe.states.is_empty()
+        {
+            return Err(error("Invalid actor building recipe"));
+        }
+        let building = manifest
+            .buildings
+            .iter_mut()
+            .find(|building| building.unit_id == recipe.unit_id)
+            .ok_or_else(|| error("Missing world building recipe"))?;
+        for fire in recipe
+            .damage
+            .into_iter()
+            .filter(|stage| !stage.parts.is_empty())
+        {
+            if !fire.parts.iter().all(|part| {
+                part.record
+                    .and_then(|index| index.checked_sub(first_actor))
+                    .and_then(|index| actors.frames.get(index))
+                    .is_some_and(|frame| frame.source.starts_with("de/particles/"))
+            }) {
+                return Err(error("Invalid building fire frame"));
+            }
+            let stage = building
+                .damage
+                .iter_mut()
+                .find(|stage| same_stage(stage, &fire))
+                .ok_or_else(|| error("Missing world damage stage"))?;
+            stage.parts.retain(|part| {
+                part.record
+                    .and_then(|index| manifest.frames.get(index))
+                    .is_some_and(|frame| frame.source.starts_with("de/"))
+            });
+            stage.parts.extend(fire.parts);
+        }
+    }
     Ok(())
 }
 

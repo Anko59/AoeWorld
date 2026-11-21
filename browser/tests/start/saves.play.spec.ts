@@ -1,6 +1,7 @@
 import { expect } from "@playwright/test";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
+import { saveMatch } from "./saves/flow.js";
 import { completedJob, setup } from "./skirmish.js";
 
 // Save a running game from the game menu, quit, and resume it from the main
@@ -18,23 +19,7 @@ test("a saved game is listed on the main menu and resumes where it was", async (
   if (!hash) throw new Error("The E2E stack must supply a prepared map");
   await completedJob(page, hash);
   await setup(page);
-  await page.getByRole("button", { name: "Start Game", exact: true }).click();
-  await expect(page.locator("#start-sequence")).toBeHidden({ timeout: 90_000 });
-  await expect(page.locator("#connection")).toHaveText("connected");
-  await expect(page.locator("#game-clock")).not.toHaveText("00:00", {
-    timeout: 20_000,
-  });
-  const population = await page.locator("#population").textContent();
-
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
-  await page.getByLabel("Save name").fill("E2E save");
-  await page.getByRole("button", { name: "Save game", exact: true }).click();
-  await expect(page.locator("#save-status")).toContainText("Saved “E2E save”", {
-    timeout: 30_000,
-  });
-  const saved = await page.locator("#game-clock").textContent();
-  await page.getByRole("button", { name: "Quit to Main Menu" }).click();
-  await expect(page.locator("#main-menu")).toBeVisible();
+  const { population, saved } = await saveMatch(page);
 
   await page.getByRole("button", { name: "Load Game" }).click();
   await expect(page.getByRole("heading", { name: "Load Game" })).toBeVisible();

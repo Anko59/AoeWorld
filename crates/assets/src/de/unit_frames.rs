@@ -1,4 +1,5 @@
 //! The same compositor handles every drawable DAT graphic and delta layer.
+use super::unit_catalog::particles::Sheet;
 use super::{GRAPHICS, compose, read_bounded, unit_catalog::Selected};
 use crate::{Error, invalid, pack::atlas::Planes, sld};
 use std::path::Path;
@@ -24,6 +25,7 @@ pub(super) struct Decoder {
     source: Option<Selected>,
     parts: Vec<Cells>,
     textures: Vec<crate::dds::Texture>,
+    particle: Option<Sheet>,
 }
 
 enum Cells {
@@ -55,15 +57,20 @@ impl Decoder {
             source: None,
             parts: vec![Cells::Sequential(sld::Stream::new(bytes)?)],
             textures: Vec::new(),
+            particle: None,
+        })
+    }
+    pub fn particle(install: &Path, particle: &Sheet) -> Result<Self, Error> {
+        Ok(Self {
+            source: None,
+            parts: Vec::new(),
+            textures: particle.load(install)?,
+            particle: Some(particle.clone()),
         })
     }
     pub fn new(install: &Path, source: &Selected) -> Result<Self, Error> {
         if let Some(particle) = &source.particle {
-            return Ok(Self {
-                source: Some(source.clone()),
-                parts: Vec::new(),
-                textures: particle.load(install)?,
-            });
+            return Self::particle(install, particle);
         }
         let mut parts = Vec::new();
         let mut retained_bytes = 0usize;
@@ -105,15 +112,19 @@ impl Decoder {
             source: Some(source.clone()),
             textures: Vec::new(),
             parts,
+            particle: None,
         })
     }
     pub fn len(&self) -> usize {
+        if let Some(particle) = &self.particle {
+            return particle.len();
+        }
         self.source
             .as_ref()
             .map_or_else(|| self.parts[0].len(), |s| usize::from(s.cells))
     }
     pub fn frame(&mut self, index: usize) -> Result<Planes, Error> {
-        if let Some(particle) = self.source.as_ref().and_then(|s| s.particle.as_ref()) {
+        if let Some(particle) = &self.particle {
             return particle.frame(&self.textures, index);
         }
         if let [part] = self.parts.as_mut_slice() {

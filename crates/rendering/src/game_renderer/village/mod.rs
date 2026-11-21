@@ -168,15 +168,19 @@ pub(super) fn building_select(
                     unit.position[1] + f64::from(y),
                 ];
                 let tile = position.map(|v| v.floor() as i32);
-                let native =
-                    crate::surface_mesh::terrain_texture_frame(art, 17, tile).or_else(|| {
-                        let mut frame = *art.buildings[5].first()?;
-                        frame.atlas.uv[0] += frame.atlas.uv[2] * (x + 1) as f32 / 3.0;
-                        frame.atlas.uv[1] += frame.atlas.uv[3] * (y + 1) as f32 / 3.0;
-                        frame.atlas.uv[2] /= 3.0;
-                        frame.atlas.uv[3] /= 3.0;
-                        Some(frame)
-                    });
+                let native = crate::surface_mesh::terrain_texture_frame(
+                    art,
+                    crate::surface_mesh::UNSEEDED_FARM_FIELD,
+                    tile,
+                )
+                .or_else(|| {
+                    let mut frame = *art.buildings[5].first()?;
+                    frame.atlas.uv[0] += frame.atlas.uv[2] * (x + 1) as f32 / 3.0;
+                    frame.atlas.uv[1] += frame.atlas.uv[3] * (y + 1) as f32 / 3.0;
+                    frame.atlas.uv[2] /= 3.0;
+                    frame.atlas.uv[3] /= 3.0;
+                    Some(frame)
+                });
                 if let Some(mut frame) = native {
                     frame.size = [
                         aoe_core::ISO_TILE_WIDTH as f32,

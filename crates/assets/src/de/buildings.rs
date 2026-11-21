@@ -6,10 +6,12 @@ use crate::{
 };
 use de_survey::graphics::{Graphic, Part};
 use std::collections::{BTreeMap, BTreeSet};
+use unit_catalog::particles::{self, ParticleFrames};
 
 pub struct Catalog {
     pub recipes: Vec<dat::BuildingComposition>,
     pub sources: BTreeSet<String>,
+    pub(super) fires: BTreeMap<String, ParticleFrames>,
 }
 fn family(head: &str, part: &str) -> Option<String> {
     let (prefix, _) = head.split_once("_age")?;
@@ -18,11 +20,13 @@ fn family(head: &str, part: &str) -> Option<String> {
     Some(format!("{prefix}_age{age}{}", tail.get(1..)?))
 }
 struct Resolver<'a> {
+    install: &'a Path,
     graphics: &'a BTreeMap<i16, Graphic>,
     units: &'a BTreeMap<i16, de_units::Unit>,
     directory: PathBuf,
     disabled: BTreeSet<i16>,
     sources: BTreeSet<String>,
+    fires: BTreeMap<String, ParticleFrames>,
 }
 impl Resolver<'_> {
     fn parts(&mut self, id: i16, position: [f32; 2]) -> Result<Vec<dat::BuildingPart>, Error> {
@@ -91,6 +95,40 @@ impl Resolver<'_> {
             });
         }
         Ok(out)
+    }
+    fn damage_parts(&mut self, id: i16) -> Result<Vec<dat::BuildingPart>, Error> {
+        let mut parts = self.parts(id, [0.0; 2])?;
+        let Some(graphic) = self.graphics.get(&id) else {
+            return Ok(parts);
+        };
+        for fire in graphic
+            .particles
+            .iter()
+            .filter(|p| p.name.starts_with("fire_"))
+        {
+            let source = format!("de/particles/{}", fire.name);
+            let frames = match self.fires.entry(source.clone()) {
+                std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(particles::read(self.install, &fire.name, [0; 2])?)
+                }
+            };
+            parts.push(dat::BuildingPart {
+                graphic_id: i32::from(fire.graphic),
+                slp_id: -1,
+                source,
+                available: true,
+                frames: frames.frames,
+                angles: frames.angles,
+                primary: false,
+                frame_rate: frames.seconds,
+                replay_delay: 0.0,
+                offset: fire.offset,
+                misplacement: [0.0; 2],
+                layer: 20,
+            });
+        }
+        Ok(parts)
     }
     /// Shadows first, then annexes from back to front; ties keep DAT order.
     fn assembled(&mut self, id: i16, head: Option<&str>) -> Result<Vec<dat::BuildingPart>, Error> {
@@ -171,11 +209,13 @@ pub fn resolve(install: &Path) -> Result<Catalog, Error> {
     let units = de_units::find(&dat, &ids)?;
     let graphics = de_survey::graphics::indexed(&dat)?;
     let mut r = Resolver {
+        install,
         graphics: &graphics,
         units: &units,
         directory: install.join(GRAPHICS),
         disabled: de_units::disabled(&dat)?,
         sources: BTreeSet::new(),
+        fires: BTreeMap::new(),
     };
     let mut recipes = Vec::new();
     for id in ids {
@@ -280,7 +320,7 @@ pub fn resolve(install: &Path) -> Result<Catalog, Error> {
                 Ok(dat::BuildingDamage {
                     damage_percent: d.percent,
                     apply_mode: d.mode,
-                    parts: r.parts(d.graphic, [0.0; 2])?,
+                    parts: r.damage_parts(d.graphic)?,
                 })
             })
             .collect::<Result<_, Error>>()?;
@@ -299,6 +339,7 @@ pub fn resolve(install: &Path) -> Result<Catalog, Error> {
     Ok(Catalog {
         recipes,
         sources: r.sources,
+        fires: r.fires,
     })
 }
 #[cfg(test)]

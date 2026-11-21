@@ -1,15 +1,15 @@
 //! Refine crop boundaries and mountain blending bands within the mesh budget.
 use super::*;
-use appearance::FARM_FIELD;
-use std::collections::HashSet;
+use appearance::{FARM_FIELD, UNSEEDED_FARM_FIELD, is_farm_field};
+use std::collections::{HashMap, hash_map::Entry};
 
 pub(super) struct Patches {
     grid: CellGrid,
     mixed: Vec<bool>,
     refinement: i32,
-    crop_patches: Vec<usize>,
+    crop_patches: Vec<[usize; 2]>,
     crop_refinement: i32,
-    crop_tiles: HashSet<[i32; 2]>,
+    crop_tiles: HashMap<[i32; 2], u8>,
 }
 
 impl Patches {
@@ -17,21 +17,25 @@ impl Patches {
         &self,
         tile: [i32; 2],
         divisions: i32,
-    ) -> impl Iterator<Item = ([i32; 2], i32, bool)> + '_ {
+    ) -> impl Iterator<Item = ([i32; 2], i32, Option<u8>)> + '_ {
         (0..divisions * divisions).flat_map(move |patch| {
             let origin = [
                 tile[0] + patch % divisions * self.grid.size,
                 tile[1] + patch / divisions * self.grid.size,
             ];
             let index = grid_index(self.grid, origin);
-            let count = index
+            let counts = index
                 .and_then(|index| self.crop_patches.get(index))
                 .copied()
-                .unwrap_or(0);
-            let full_crop = count == (self.grid.size as usize).saturating_pow(2);
-            let refinement = if full_crop {
+                .unwrap_or_default();
+            let full = (self.grid.size as usize).saturating_pow(2);
+            let full_crop = counts
+                .iter()
+                .position(|&count| count == full)
+                .map(|state| [FARM_FIELD, UNSEEDED_FARM_FIELD][state]);
+            let refinement = if full_crop.is_some() {
                 1
-            } else if count > 0 {
+            } else if counts != [0; 2] {
                 self.crop_refinement
             } else if index.is_some_and(|index| self.mixed[index]) {
                 self.refinement
@@ -44,7 +48,11 @@ impl Patches {
                     origin[0] + sub % refinement * step,
                     origin[1] + sub / refinement * step,
                 ];
-                (tile, step, full_crop || self.crop_tiles.contains(&tile))
+                (
+                    tile,
+                    step,
+                    full_crop.or_else(|| self.crop_tiles.get(&tile).copied()),
+                )
             })
         })
     }
@@ -63,22 +71,23 @@ pub(super) fn plan(
         width: grid.width * divisions as usize,
         height: grid.height * divisions as usize,
     };
-    // Store per-patch masks and only the planted tiles inside these bounds.
+    // Store per-patch masks and only the farm tiles inside these bounds.
     let len = patch_grid.width * patch_grid.height;
     let mut masks = vec![0_u32; len];
     let mut crop_patches = Vec::new();
-    let mut crop_tiles = HashSet::new();
+    let mut crop_tiles = HashMap::new();
     if grid.size > 1 {
         for sample in terrain {
             let tile = tile_key(sample.position);
-            if sample.material == FARM_FIELD {
+            if is_farm_field(sample.material) {
                 if let Some(index) = grid_index(patch_grid, cell_key(tile, patch_grid.size))
-                    && crop_tiles.insert(tile)
+                    && let Entry::Vacant(entry) = crop_tiles.entry(tile)
                 {
+                    entry.insert(sample.material);
                     if crop_patches.is_empty() {
-                        crop_patches.resize(len, 0);
+                        crop_patches.resize(len, [0; 2]);
                     }
-                    crop_patches[index] += 1;
+                    crop_patches[index][usize::from(sample.material == UNSEEDED_FARM_FIELD)] += 1;
                 }
                 continue;
             }
@@ -113,11 +122,11 @@ pub(super) fn plan(
     let (mut crop_boundaries, mut mountain_boundaries) = (0, 0);
     let full = (patch_grid.size as usize).saturating_pow(2);
     for (index, mixed) in mixed.iter().enumerate() {
-        let count = crop_patches.get(index).copied().unwrap_or(0);
+        let counts = crop_patches.get(index).copied().unwrap_or_default();
         let tile = grid_cell(patch_grid, index);
         if grid_index(grid, cell_key(tile, grid.size)).is_some_and(|i| cells[i].is_some()) {
-            crop_boundaries += usize::from(count > 0 && count < full);
-            mountain_boundaries += usize::from(count == 0 && *mixed);
+            crop_boundaries += usize::from(counts != [0; 2] && !counts.contains(&full));
+            mountain_boundaries += usize::from(counts == [0; 2] && *mixed);
         }
     }
     let (crop_refinement, crop_extra) = refinement(
@@ -127,10 +136,15 @@ pub(super) fn plan(
     );
     let crop_step = patch_grid.size / crop_refinement;
     if crop_step > 1 {
-        crop_tiles = crop_tiles
-            .into_iter()
-            .map(|tile| cell_key(tile, crop_step))
-            .collect();
+        let mut coarse = HashMap::<_, u8>::new();
+        for (tile, material) in crop_tiles {
+            // Keep a planted field when both states share one budgeted patch.
+            coarse
+                .entry(cell_key(tile, crop_step))
+                .and_modify(|old| *old = (*old).min(material))
+                .or_insert(material);
+        }
+        crop_tiles = coarse;
     }
     let (refinement, _) = refinement(
         patch_grid.size,

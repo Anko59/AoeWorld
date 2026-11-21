@@ -47,7 +47,9 @@ test("first zoom pulls back, reveals the land, then brings in the cockpit once p
   page,
 }) => {
   await setup(page);
-  await page.clock.install();
+  const epoch = Date.UTC(2025, 0, 1);
+  await page.clock.install({ time: epoch });
+  await page.clock.pauseAt(epoch + 60_000);
   await far(page);
   const reveal = page.locator("#cockpit-reveal");
   await expect(reveal).toBeVisible();

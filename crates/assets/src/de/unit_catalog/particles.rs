@@ -76,7 +76,9 @@ struct Emitter {
     image_count: Option<usize>,
     image_angles: Option<u16>,
     atlas_images_raw: Option<Sequence>,
-    duration: f32,
+    duration: Option<f32>,
+    duration1: Option<f32>,
+    duration2: Option<f32>,
     scale: Option<f32>,
     scale_start1: Option<f32>,
     scale_start2: Option<f32>,
@@ -85,6 +87,13 @@ struct Emitter {
     alpha: Option<f32>,
     alpha_start: Option<f32>,
     alpha_end: Option<f32>,
+}
+
+pub(crate) struct ParticleFrames {
+    pub(crate) sheet: Sheet,
+    pub(crate) frames: u16,
+    pub(crate) angles: u16,
+    pub(crate) seconds: f32,
 }
 
 fn safe_path(path: &str) -> bool {
@@ -140,14 +149,7 @@ fn source(
     }
 }
 
-pub(super) fn select(
-    install: &Path,
-    unit: &de_units::Unit,
-    graphic: i16,
-    pose: Pose,
-    particle: &Particle,
-) -> Result<Selected, Error> {
-    let name = &particle.name;
+pub(crate) fn read(install: &Path, name: &str, offset: [i32; 2]) -> Result<ParticleFrames, Error> {
     let bad = || invalid("DE particle", 0, format!("invalid emitter {name}"));
     if !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') || name.is_empty() {
         return Err(bad());
@@ -157,19 +159,27 @@ pub(super) fn select(
     let emitter: Emitter = serde_json::from_slice(&read(&format!("{name}.json"))?)?;
     let (source, count) = source(read, &emitter)?;
     let angles = emitter.image_angles.unwrap_or(1);
-    let (start_scale, end_scale) = match emitter.scale {
-        Some(scale) => (scale, scale),
-        None => (
-            (emitter.scale_start1.ok_or_else(bad)? + emitter.scale_start2.ok_or_else(bad)?) / 2.0,
-            (emitter.scale_end1.ok_or_else(bad)? + emitter.scale_end2.ok_or_else(bad)?) / 2.0,
-        ),
+    let mean = |a, b| match (a, b) {
+        (Some(a), Some(b)) => Some((a + b) / 2.0),
+        _ => None,
     };
+    let duration = emitter
+        .duration
+        .or_else(|| mean(emitter.duration1, emitter.duration2))
+        .ok_or_else(bad)?;
+    let scale = |a, b| match (emitter.scale, a, b) {
+        (Some(scale), _, _) => Ok(scale),
+        (None, None, None) => Ok(1.0),
+        _ => mean(a, b).ok_or_else(bad),
+    };
+    let start_scale = scale(emitter.scale_start1, emitter.scale_start2)?;
+    let end_scale = scale(emitter.scale_end1, emitter.scale_end2)?;
     let start_alpha = emitter.alpha_start.or(emitter.alpha).unwrap_or(1.0);
     let end_alpha = emitter.alpha_end.or(emitter.alpha).unwrap_or(1.0);
     if !matches!(angles, 1 | 16 | 32)
         || !count.is_multiple_of(usize::from(angles))
         || !(1..=128).contains(&(count / usize::from(angles)))
-        || !(0.01..=60.0).contains(&emitter.duration)
+        || !(0.01..=60.0).contains(&duration)
         || [start_scale, end_scale]
             .into_iter()
             .any(|v| !(0.01..=1.0).contains(&v))
@@ -180,6 +190,36 @@ pub(super) fn select(
         return Err(bad());
     }
     let frames = count as u16 / angles;
+    Ok(ParticleFrames {
+        frames,
+        angles,
+        seconds: duration / f32::from(frames),
+        sheet: Sheet {
+            name: name.to_owned(),
+            source,
+            stride: usize::from(frames),
+            offset,
+            start_scale,
+            end_scale,
+            start_alpha,
+            end_alpha,
+        },
+    })
+}
+
+pub(super) fn select(
+    install: &Path,
+    unit: &de_units::Unit,
+    graphic: i16,
+    pose: Pose,
+    particle: &Particle,
+) -> Result<Selected, Error> {
+    let ParticleFrames {
+        sheet,
+        frames,
+        angles,
+        seconds,
+    } = read(install, &particle.name, particle.offset)?;
     let effect = particle.graphic;
     Ok(Selected {
         unit: unit.id,
@@ -190,21 +230,12 @@ pub(super) fn select(
         file: format!("dat_{effect}"),
         frames,
         angles,
-        cells: count as u16,
-        seconds: emitter.duration / f32::from(frames),
+        cells: frames * angles,
+        seconds,
         replay: 0.0,
         terminal: false,
         parts: Vec::new(),
-        particle: Some(Sheet {
-            name: name.clone(),
-            source,
-            stride: usize::from(frames),
-            offset: particle.offset,
-            start_scale,
-            end_scale,
-            start_alpha,
-            end_alpha,
-        }),
+        particle: Some(sheet),
     })
 }
 
@@ -212,6 +243,22 @@ pub(super) fn select(
 mod tests;
 
 impl Sheet {
+    pub(crate) fn len(&self) -> usize {
+        match &self.source {
+            Source::Atlas { cells, .. } => cells.len(),
+            Source::Sequence(paths) => paths.len(),
+        }
+    }
+
+    pub(crate) fn hash(&self, install: &Path) -> Result<String, Error> {
+        let mut hash = blake3::Hasher::new();
+        hash.update(format!("{self:?}").as_bytes());
+        for path in self.paths(install) {
+            hash.update(&super::super::read_bounded(&path)?);
+        }
+        Ok(hash.finalize().to_hex().to_string())
+    }
+
     pub(crate) fn paths(&self, install: &Path) -> impl Iterator<Item = std::path::PathBuf> {
         let paths: &[String] = match &self.source {
             Source::Atlas { path, .. } => std::slice::from_ref(path),
