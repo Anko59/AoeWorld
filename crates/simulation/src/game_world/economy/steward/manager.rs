@@ -1,5 +1,6 @@
 use super::{
-    STEWARD_RULES, StewardStatus, StewardWait, StewardWork, rules::Budget, snapshot::Snapshot,
+    Manager, STEWARD_RULES, StewardStatus, StewardWait, StewardWork, rules::Budget,
+    snapshot::Snapshot,
 };
 use crate::{BuildingKind, GameWorld, UnitKind, UnitTask, VILLAGE_RULES};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, WorldPosition};
@@ -23,35 +24,52 @@ fn dist2(a: WorldPosition, b: WorldPosition) -> i64 {
     dx * dx + dy * dy
 }
 
+impl Manager {
+    fn scheduled(&mut self, tick: u64, period: u64) -> Vec<EntityId> {
+        if self.active.is_empty() {
+            return Vec::new();
+        }
+        // The world-wide budget stays at `domains_per_pass` visits per period;
+        // rotating by owner gives every kingdom a turn before any kingdom's
+        // next domain, so the cost does not grow with the number of players.
+        let due = self.active.len().min(STEWARD_RULES.domains_per_pass) as u64;
+        let phase = tick % period;
+        let take = ((phase + 1) * due).div_ceil(period) - (phase * due).div_ceil(period);
+        let mut ids = Vec::with_capacity(take as usize);
+        for _ in 0..take {
+            let Some((&player, domains)) = self
+                .cursor
+                .and_then(|cursor| self.by_player.range((Excluded(cursor), Unbounded)).next())
+                .or_else(|| self.by_player.first_key_value())
+            else {
+                break;
+            };
+            let Some((&id, _)) = self
+                .last_domain
+                .get(&player)
+                .and_then(|&cursor| domains.range((Excluded(cursor), Unbounded)).next())
+                .or_else(|| domains.first_key_value())
+            else {
+                continue;
+            };
+            self.cursor = Some(player);
+            self.last_domain.insert(player, id);
+            ids.push(id);
+        }
+        ids
+    }
+}
+
 impl GameWorld {
     pub(crate) fn advance_stewards(&mut self, changed: &mut Vec<EntityId>) {
         self.refresh_steward_walk();
         let mut work = StewardWork::default();
-        // A pass's domains spread over its period instead of all landing on
-        // one tick in twenty: each domain still runs once per period, the
-        // first on the period's first tick, without one tick carrying them all.
         let period = self.config.ticks(STEWARD_RULES.period_ticks);
-        let due = STEWARD_RULES
-            .domains_per_pass
-            .min(self.economy.stewards.active.len()) as u64;
-        let phase = self.tick.0 % period;
-        let take = ((phase + 1) * due).div_ceil(period) - (phase * due).div_ceil(period);
-        let take = take as usize;
-        if take == 0 {
+        let ids = self.economy.stewards.scheduled(self.tick.0, period);
+        if ids.is_empty() {
             self.economy.stewards.work = work;
             return;
         }
-        let active = &self.economy.stewards.active;
-        let ids: Vec<_> = if let Some(cursor) = self.economy.stewards.cursor {
-            active
-                .range((Excluded(cursor), Unbounded))
-                .chain(active.range(..=cursor))
-                .take(take)
-                .copied()
-                .collect()
-        } else {
-            active.iter().take(take).copied().collect()
-        };
         // A departure reserves its slot until arrival, even when the destination
         // is not among this pass's admitted domains.
         let finished: Vec<_> = self
@@ -78,7 +96,6 @@ impl GameWorld {
             *incoming.entry(*dest).or_default() += 1;
         }
         for id in ids {
-            self.economy.stewards.cursor = Some(id);
             if !self.active_steward(id) {
                 self.set_steward_town_center(id, None);
                 continue;

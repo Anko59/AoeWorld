@@ -2,7 +2,19 @@ use super::super::Economy;
 impl Economy {
     pub(crate) fn hash_steward_manager(&self, h: &mut blake3::Hasher) {
         let m = &self.stewards;
-        h.update(&m.cursor.map_or(u32::MAX, |id| id.0).to_le_bytes());
+        h.update(
+            &m.cursor
+                .map_or(u32::MAX, |id| u32::from(id.0))
+                .to_le_bytes(),
+        );
+        if !m.last_domain.is_empty() {
+            h.update(b"steward-player-cursors");
+            h.update(&(m.last_domain.len() as u64).to_le_bytes());
+            for (player, domain) in &m.last_domain {
+                h.update(&player.0.to_le_bytes());
+                h.update(&domain.0.to_le_bytes());
+            }
+        }
         h.update(&(m.active.len() as u64).to_le_bytes());
         for id in &m.active {
             h.update(&id.0.to_le_bytes());

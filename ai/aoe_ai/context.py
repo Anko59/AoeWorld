@@ -66,6 +66,7 @@ class Context:
         #: Set by a manager that needs the Town Center's queue to drain.
         self.hold_town_center = False
         self.saving_castle = False
+        self.hold_military_training = False
         #: Producer IDs held for research this decision.
         self.draining: set[int] = set()
         self.production_drain = False
@@ -136,8 +137,8 @@ class Context:
             if length > self.config.march_hop_tiles:
                 break
             stop = after
-        stop = self.unrefused(stop)
-        return stop if self.land_route(origin, stop) is not None else origin
+        target = self.unrefused(stop)
+        return target if target == stop or self.land_route(origin, target) is not None else origin
 
     def land_frontier(self, origin: Tile, target: Tile) -> Optional[Tile]:
         if self.land_budget_exhausted() or (self.late_economy and not self.world.land_known(*origin)):
@@ -250,6 +251,11 @@ class Context:
         self.require_order_budget()
         for i in range(4):
             self.spent[i] += cost[i]
+
+    def reserve(self, cost: tuple[int, int, int, int]) -> None:
+        have = (self.economy.food, self.economy.wood, self.economy.gold, self.economy.stone)
+        for i, price in enumerate(cost):
+            self.spent[i] += max(0, min(price, have[i] - self.spent[i]))
 
     def try_spend(self, cost: tuple[int, int, int, int]) -> bool:
         if self.can_afford(cost):

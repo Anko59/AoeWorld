@@ -243,7 +243,12 @@ pub(super) fn run(options: &Options, saved: Option<Value>) -> Result<(), BoxErro
     let mut last_cpu = procs::process(server.child.id()).map_or(0.0, |(seconds, _)| seconds);
     let mut last_sample = Instant::now();
     let mut failure = None;
-    let mut phase_minutes = vec![save::sample(&server, 0.0, saved.is_some())?];
+    let mut phase_minutes = vec![save::sample(
+        &server,
+        0.0,
+        saved.is_some(),
+        options.late_game,
+    )?];
     let mut minutes = report::Minutes::at(options.tick_hz());
     while run_started.elapsed() < wall {
         if let Some(reason) = server.exited() {
@@ -270,7 +275,12 @@ pub(super) fn run(options: &Options, saved: Option<Value>) -> Result<(), BoxErro
         }
         let seconds = run_started.elapsed().as_secs_f64();
         if seconds >= 60.0 * (minutes.windows.len() + 1) as f64 && seconds < wall.as_secs_f64() {
-            phase_minutes.push(save::sample(&server, seconds, saved.is_some())?);
+            phase_minutes.push(save::sample(
+                &server,
+                seconds,
+                saved.is_some(),
+                options.late_game,
+            )?);
             minutes.record(&rows, seconds);
         }
         if options.browser
@@ -324,7 +334,12 @@ pub(super) fn run(options: &Options, saved: Option<Value>) -> Result<(), BoxErro
     }
     let wall_seconds = run_started.elapsed().as_secs_f64();
     let _ = pull_ticks(&server, &mut cursor, &mut rows);
-    phase_minutes.push(save::sample(&server, wall_seconds, saved.is_some())?);
+    phase_minutes.push(save::sample(
+        &server,
+        wall_seconds,
+        saved.is_some(),
+        options.late_game,
+    )?);
     minutes.record(&rows, wall_seconds);
     let march = probe.map(super::march::Probe::finish);
     let late = late.map(super::late::Driver::finish);

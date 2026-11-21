@@ -328,8 +328,8 @@ fn hundred_thousand_population_manager_work_stays_inside_its_world_budget() {
         w.unit_count() + w.buildings().map(|b| b.garrison.len()).sum::<usize>(),
         100_000
     );
-    // One period serves `domains_per_pass` domains, spread over its ticks;
-    // every tick stays inside the budget of the domains it serves.
+    // A period admits the fixed world-wide budget, rotated across owners.
+    // Each admitted domain also retains its own work limits.
     let started = std::time::Instant::now();
     let mut served = 0;
     for tick in 0..STEWARD_RULES.period_ticks {
@@ -338,7 +338,7 @@ fn hundred_thousand_population_manager_work_stays_inside_its_world_budget() {
         let cost = w.steward_work();
         let n = cost.domains;
         served += n;
-        assert!(n <= STEWARD_RULES.domains_per_pass.div_ceil(2), "{cost:?}");
+        assert!(n <= 1, "{cost:?}");
         assert!(cost.unit_visits <= n * STEWARD_RULES.unit_visits_per_domain);
         assert!(cost.building_visits <= n * STEWARD_RULES.building_visits_per_domain);
         assert!(cost.orders <= n * STEWARD_RULES.orders_per_domain);

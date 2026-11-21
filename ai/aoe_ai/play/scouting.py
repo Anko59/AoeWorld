@@ -7,8 +7,26 @@ from __future__ import annotations
 
 import math
 
+from aoeworld import UnitTask, Visibility
+
 from ..context import Context
 from ..geometry import Tile, clamp_tile, dist, ring_points
+
+
+def mission_destination(ctx: Context, goal: Tile) -> Tile | None:
+    """Pick a public destination and let the server plan the full route."""
+    for radius in (0, 2, 4, 8):
+        offsets = ((0, 0),) if not radius else (
+            (radius, 0), (-radius, 0), (0, radius), (0, -radius),
+            (radius, radius), (-radius, radius), (radius, -radius), (-radius, -radius),
+        )
+        for dx, dy in offsets:
+            tile = clamp_tile((goal[0] + dx, goal[1] + dy), ctx.world.map_size)
+            if tile in ctx.board.bad_moves:
+                continue
+            if ctx.world.visibility(*tile) == Visibility.UNEXPLORED or ctx.world.passable(*tile) is not False:
+                return tile
+    return None
 
 
 class ScoutManager:
@@ -20,8 +38,20 @@ class ScoutManager:
         live = {scout.id for scout in ctx.scouts}
         board.scout_sent = {i: tick for i, tick in board.scout_sent.items() if i in live}
         board.scout_targets = {i: tile for i, tile in board.scout_targets.items() if i in live}
+        board.scout_progress = {i: progress for i, progress in board.scout_progress.items() if i in live}
         for scout in ctx.scouts:
-            if not scout.idle or scout.id in ctx.busy:
+            if scout.id in ctx.busy or scout.attack_target is not None:
+                continue
+            if scout.moving or scout.task == UnitTask.MOVING:
+                tile, since = board.scout_progress.get(scout.id, (scout.tile, ctx.tick))
+                if dist(tile, scout.tile) >= 2:
+                    tile, since = scout.tile, ctx.tick
+                board.scout_progress[scout.id] = tile, since
+                if ctx.tick - since >= ctx.config.march_stall_seconds * ctx.world.tick_hz:
+                    ctx.order("stop", scout.id)
+                    board.scout_progress.pop(scout.id, None)
+                continue
+            if not scout.idle:
                 continue
             target = board.scout_targets.get(scout.id)
             if (target is not None and target != scout.tile
@@ -49,6 +79,8 @@ class ScoutManager:
                 target = ctx.unrefused(target)
                 if ctx.land_route(scout.tile, target) is None:
                     target = None
+            if target is None and board.scout_stage >= 2:
+                target = mission_destination(ctx, goal)
             if target is None or target == scout.tile:
                 board.scout_index += 1
                 continue
@@ -56,6 +88,7 @@ class ScoutManager:
                 board.scout_index += 1
             board.scout_targets[scout.id] = target
             board.scout_sent[scout.id] = ctx.tick
+            board.scout_progress[scout.id] = scout.tile, ctx.tick
             ctx.order("move", scout.id, *target)
 
     def extend(self, ctx: Context) -> None:

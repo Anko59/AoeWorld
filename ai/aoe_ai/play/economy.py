@@ -81,12 +81,8 @@ class EconomyManager:
         queue_reseeds(ctx)
 
     def wood_dropoff(self, ctx: Context) -> None:
-        """Fund a nearby camp before queues spend every distant wood delivery.
-
-        Inspect one rotating cutter in contact with its forest, even on arrival.
-        No route queries run before idle assignment, and the tree scan runs once.
-        Loaded returns finish; paid camps release the budget. During age-up the
-        first Barracks must be paid before a proactive camp can spend any wood.
+        """Reserve camp wood while the cutter travels or delivers its load.
+        Build beside the trees with an unloaded worker. The first Barracks has priority.
         """
         if ctx.economy is None or ctx.home is None:
             return
@@ -95,25 +91,32 @@ class EconomyManager:
             return
         if buildorder.unpaid_age_up_barracks(ctx):
             return
-        workers = [v for v in ctx.villagers if v.task in (UnitTask.GATHERING, UnitTask.MOVING)
-                   and v.gathering == ResourceKind.WOOD and v.carrying is None
+        workers = [v for v in ctx.villagers if v.task in (UnitTask.GATHERING, UnitTask.MOVING, UnitTask.RETURNING)
+                   and v.gathering == ResourceKind.WOOD
                    and v.id not in ctx.busy and v.id not in ctx.board.builders
                    and (v.managed_by is None or not ctx.config.defer_to_steward)]
         if not workers:
             return
         worker = workers[ctx.board.wood_dropoff_cursor % len(workers)]
         ctx.board.wood_dropoff_cursor = (ctx.board.wood_dropoff_cursor + 1) % len(workers)
-        node = nearest((n for n in ctx.resources(ResourceKind.WOOD) if n.remaining > 0), worker.tile)
-        if (node is None or dist(node.tile, worker.tile) > ctx.config.wood_camp_contact_tiles
+        sent = ctx.board.gather_sent.get(worker.id)
+        trees = ctx.resources(ResourceKind.WOOD)
+        node = next((n for n in trees if n.id == sent[0] and n.remaining > 0), None) if sent else None
+        known_destination = node is not None
+        loaded = worker.carrying is not None or worker.task == UnitTask.RETURNING
+        if node is None and not loaded:
+            node = nearest((n for n in trees if n.remaining > 0), worker.tile)
+        if (node is None
                 or ctx.settlement_distance(node.tile) > ctx.config.wood_gather_distance
                 or ctx.dropoff_distance(node) <= ctx.config.dropoff_distance
                 or self.constructor.camp_near(ctx, kind, node)):
             return
         cost = building_cost(kind)
-        if not ctx.can_afford(cost):
-            ctx.spend(cost)
-        else:
+        can_build = not loaded and dist(node.tile, worker.tile) <= ctx.config.wood_camp_contact_tiles
+        if can_build and ctx.can_afford(cost):
             self.constructor.ensure_camp(ctx, kind, node, worker)
+        elif can_build or known_destination:
+            ctx.reserve(cost)
 
     def castle_food(self, ctx: Context) -> None:
         """Keep gold for the age and its first army upgrade before moving miners."""
@@ -131,11 +134,9 @@ class EconomyManager:
                 ctx.board.bump("castle_food_workers")
                 return
 
-    # ----- production ------------------------------------------------------
     def train_villagers(self, ctx: Context) -> None:
         train_villagers(ctx)
 
-    # ----- allocation ------------------------------------------------------
     def counts(self, ctx: Context) -> dict[str, int]:
         counts = {key: 0 for key in KEYS}
         for v in ctx.villagers:
@@ -160,29 +161,27 @@ class EconomyManager:
             shares["GOLD"] = 0.0
         if buildorder.wants_imperial_food(ctx):
             shares = dict(cfg.imperial_shares)
-        # Early on nothing but food and wood matter.
         if ctx.tick - ctx.board.saving_tick <= 3 * ctx.world.tick_hz:
             shares = {"FOOD": 0.45, "WOOD": 0.25, "GOLD": 0.30, "STONE": 0.0}
-        elif ctx.castle and buildorder.wanted_centers(ctx) > 1:
-            shares = {"FOOD": 0.42, "WOOD": 0.40, "GOLD": 0.10, "STONE": 0.08}
-        # A Castle cannot be placed in Feudal. Mining its stone now takes
-        # woodcutters away from the army and the buildings that unlock Castle Age.
-        cfg_castles = cfg.castles and ctx.castle and ctx.economy.stone < 700 and (
-            ctx.count(BuildingKind.CASTLE) + sum(1 for p in ctx.board.plans if p.kind == BuildingKind.CASTLE) < buildorder.wanted_castles(ctx))
-        if cfg_castles or (buildorder.wanted_centers(ctx) > ctx.count(BuildingKind.TOWN_CENTER) and ctx.castle and ctx.economy.stone < 150):
-            take = cfg.castle_stone_share
-            shares["STONE"] = take
-            shares["FOOD"] = max(0.2, shares["FOOD"] - take * 0.5)
-            shares["WOOD"] = max(0.15, shares["WOOD"] - take * 0.5)
+        elif ctx.castle and not buildorder.wants_imperial_food(ctx):
+            shares = dict(cfg.castle_shares)
         if ctx.castle:
-            if ctx.economy.wood > cfg.market_wood_reserve * 2 and ctx.economy.gold < cfg.market_gold_reserve:
-                take = min(0.2, shares["WOOD"] - 0.1)
-                shares["WOOD"] -= take
-                shares["GOLD"] += take
-            if ctx.economy.food > cfg.market_food_reserve * 2 and ctx.economy.gold < cfg.market_gold_reserve:
-                take = min(0.15, shares["FOOD"] - 0.2)
-                shares["FOOD"] -= take
-                shares["GOLD"] += take
+            stone_goal = buildorder.next_stone_cost(ctx)
+            shortages = {
+                "GOLD": cfg.castle_gold_boost * max(0.0, 1 - ctx.economy.gold / max(1, cfg.market_gold_reserve)),
+                "STONE": cfg.castle_stone_share * max(0.0, 1 - ctx.economy.stone / stone_goal)
+                if stone_goal else 0.0,
+            }
+            # Keep both food and wood available for villagers, farms and camps.
+            spare = {key: max(0.0, shares[key] - floor) for key, floor in cfg.castle_worker_floors.items()}
+            available = sum(spare.values())
+            requested = sum(shortages.values())
+            if available and requested:
+                shifted = min(available, requested)
+                for kind, amount in spare.items():
+                    shares[kind] -= shifted * amount / available
+                for kind, amount in shortages.items():
+                    shares[kind] += shifted * amount / requested
         if len(ctx.villagers) < 10:
             shares.update(GOLD=0.0, STONE=0.0)
         return shares
@@ -256,9 +255,10 @@ class EconomyManager:
         counts, shares = self.counts(ctx), self.shares(ctx)
         total = max(1, len(ctx.villagers))
         gaps = {key: shares[key] * total - counts[key] for key in KEYS}
-        target = max(gaps, key=gaps.get)
         source = min(gaps, key=gaps.get)
-        if gaps[target] <= 1 or gaps[source] >= -1:
+        target = next((key for key in sorted(gaps, key=gaps.get, reverse=True) if gaps[key] > 1
+                       and (key == "FOOD" or ctx.resources(KEYS[key]))), None)
+        if target is None or gaps[source] >= -1:
             return
         pause = ctx.config.worker_dwell_seconds * ctx.world.tick_hz
         for worker in ctx.villagers:
@@ -334,10 +334,11 @@ class EconomyManager:
     def best_node(self, ctx: Context, villager: Any, kind: ResourceKind) -> Optional[Any]:
         if ctx.late_economy and (ctx.land_budget_exhausted() or not ctx.world.land_known(*villager.tile)):
             return None
-        reach = (ctx.config.wood_gather_distance if kind == ResourceKind.WOOD
-                 else ctx.config.max_gather_distance)
+        cfg = ctx.config
+        reach = cfg.wood_gather_distance if kind is ResourceKind.WOOD else cfg.max_gather_distance
+        if kind in (ResourceKind.GOLD, ResourceKind.STONE):
+            reach = cfg.ore_gather_distance
         scored = []
-        # The nearest few dozen to the villager are plenty to choose from.
         # The squared distance inline: a call per known node was 8% of bot CPU.
         vx, vy = villager.tile
         candidates = heapq.nsmallest(
@@ -351,12 +352,9 @@ class EconomyManager:
             drop = min(ctx.dropoff_distance(node), 60.0)
             score = 2.0 * drop + dist(node.tile, villager.tile)
             scored.append((score, node.id, node))
-        # Check in preference order, leaving the bounded query budget available
-        # for other workers once a connected resource has been found.
         return next((node for _, _, node in sorted(scored)
                      if food_reachable(ctx, villager, node)), None)
 
-    # ----- food ------------------------------------------------------------
     def send_to_food(self, ctx: Context, villager: Any) -> bool:
         """Sheep first, then berries (with a Mill beside them), then deer and
         boar, then farms once the land runs dry."""
