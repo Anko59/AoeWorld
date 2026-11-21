@@ -48,20 +48,21 @@ The mode is a client convenience. The sliders, the button and the soldier
 counts are authoritative server state
 (`GeneralStatus.training/mix/counts/queued`).
 
-## Influence sphere
+## Training radius
 
-A General's influence reaches 50 tiles (`GENERAL_INFLUENCE_TILES`). New march
-orders reach soldiers inside it. An admitted march continues through its
-intermediate legs even if the commander and a trailing squad temporarily become
-farther apart. Production buildings must lie inside the influence sphere.
+Production buildings must be within 50 tiles of the General
+(`GENERAL_INFLUENCE_TILES`). Army orders reach all assigned soldiers on the
+field, including squads farther away from the General.
 
 ## Orders
 
 Selecting a General with its soldiers keeps their membership for move, attack,
-and attack-move. An enemy click focuses the army's in-range soldiers on that
-target. Shift queues ground orders on the General, and the army follows the
-command sequence through its squads. Selecting a soldier without its own
-General still detaches it.
+and attack-move. An enemy click focuses the army on that target. Shift queues
+ground orders on the army. The next leg starts after the commander and squads
+finish the current one. Move and attack-move keep their individual behavior
+through saves and restores. Selecting a soldier without its own General still
+detaches it. A Vassal can call the General for defence after the owner's active
+command finishes.
 
 Right-clicking ground leads the army (above). The **General only** button or
 Alt+right-click walks the General alone (`GeneralOrder::MoveAlone`; Rust SDK
@@ -82,25 +83,23 @@ scouts/light cavalry ahead of the infantry. Each squad uses the shared formation
 layout. Independent soldiers in the same selection use the player's chosen
 formation.
 
-Every decision compares nearby visible enemy HP/attack/cooldown strength with
-its whole army (every assigned member, wherever it stands). Defensive Castles and towers add a fixed threat allowance.
-An enemy advantage above 25%, a severely depleted engaged army, or a wounded
-General triggers retreat toward the Castle
+When the army is under automatic control, the General compares nearby visible
+enemy HP, attack and cooldown with its whole army. Defensive Castles and towers
+add a fixed threat allowance. An enemy advantage above 25%, a severely depleted
+engaged army, or a wounded General triggers retreat toward the Castle
 that trained it (nearest completed Castle for scenario-spawned Generals).
 The Castle's outside rendezvous survives destruction. Retreat lasts at least
 five seconds; once safe, the army regroups and resumes its retained destination.
 
-A march is an attack-move formation for each typed squad and for the General
-himself, through the same order API a player's group selection uses. Spotting an
-enemy changes the panel's state, not the admitted march: the ordinary formation
-engage look picks reachable enemies inside each soldier's own sight and resumes
-the soldier's march after combat. There is no separate General firing-position
-search or army-wide target priority. Siege uses the same acquisition as a
-player's attack-move group, including buildings.
+A march uses ordinary formations for the General and each squad. Plain moves
+keep their destination when the army sees a threat. On an attack-move, a squad
+can engage a nearby enemy spotted by its General or seen by the soldier itself.
+A soldier that breaks off for combat resumes the march afterward. Siege uses
+the same acquisition as other attack-move formations, including buildings.
 
 The slowest squad's ordinary route supplies a 64-tile intermediate destination
 for the other squads and the commander, followed by their final destinations
-in the ordinary offensive waypoint FIFO. The shared anchor continues through
+in the ordinary formation waypoint queue. The shared anchor continues through
 the waypoint without rebuilding a squad's physical centroid midway across a
 bridge. Squads already within 64 tiles finish their own approach, so a commander
 already across a river is not sent back toward the crossing. Destination
@@ -110,14 +109,12 @@ During intermediate legs squads coordinate at the slowest army member's pace
 through ordinary formation pace control, which can coordinate any player's
 groups. On final approaches they catch up at their own pace; a squad more than
 twelve tiles ahead of the commander uses the escort pace until he catches up.
-The commander keeps that escort pace. Movement has no collision exemption or
-General lookup. Front members respect that pace; only trailing members spend
+The commander keeps that escort pace. All squads use ordinary collision rules. Front members respect that pace; only trailing members spend
 catch-up credit. Queued intermediate destinations are passing points, and their
 shared corridor remains available to the rear after the anchor turns.
 
-After every admitted march and fight has finished, a still-visible contact may
-receive another ordinary offensive click. This clears contacts passed by the
-first march without replacing an underway order or assigning individual targets.
+After the owner's final waypoint or attack finishes, the General can pursue
+contacts under automatic control again.
 
 Marching preserves the player's stances. Retreat retains a temporary Defensive
 stance to limit autonomous pursuit while falling back. Units below one-third
@@ -131,7 +128,7 @@ The estimator is deliberately simple, with no opponent-state or fog bypass.
 ## Determinism and work limits
 
 All state uses integers and ordered indexes and participates in canonical
-hashing: homes, destinations, membership, queued recruits, scan cursors, rotation
+hashing: homes, destinations, membership, army waypoints, queued recruits, scan cursors, rotation
 and retreat deadlines, plus the original stances and override reasons in 201
 inline slots per army. Stance bookkeeping allocates nothing per decision.
 No randomness, wall clock, network or client decisions.

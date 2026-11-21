@@ -1,13 +1,14 @@
 use super::*;
 
 #[test]
-fn gameplay_guide_describes_offensive_formation_marching() {
+fn gameplay_guide_describes_the_two_owner_march_modes() {
     let guide = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../docs/gameplay/general.md"
     ));
-    assert!(guide.contains("A march is an attack-move formation"));
-    assert!(!guide.contains("A march is a plain formation move"));
+    assert!(guide.contains("Plain moves\nkeep their destination"));
+    assert!(guide.contains("On an attack-move"));
+    assert!(guide.contains("enemy spotted by its General"));
 }
 
 #[test]

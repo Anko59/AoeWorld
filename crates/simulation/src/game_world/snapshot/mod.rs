@@ -68,12 +68,7 @@ impl GameWorld {
                     .then_some(stored.order)
                     .flatten()
                     .map(|o| o.destination),
-                queue: self
-                    .move_queues
-                    .get(&stored.state.id)
-                    .map_or_else(Vec::new, |q| {
-                        q.pending.iter().map(|marker| marker.leg()).collect()
-                    }),
+                queue: self.snapshot_pending_moves(stored.state.id),
                 hunt: self.hunting_target(stored.state.id),
                 garrison_order: self.economy.garrison_orders.get(&stored.state.id).copied(),
                 shelter_intent: self
@@ -404,6 +399,7 @@ impl GameWorld {
                 mix,
                 solo,
                 destination,
+                owner_march,
             }) => {
                 let Some(army) = self.economy.generals.armies.get_mut(&id) else {
                     return false;
@@ -411,8 +407,11 @@ impl GameWorld {
                 army.training = training;
                 army.mix = mix;
                 army.solo = solo;
-                if let Some(destination) = destination {
+                if let Some(destination) =
+                    destination.filter(|&at| self.config.valid_ground_position(at))
+                {
                     army.destination = Some(destination);
+                    army.owner_march = if solo { None } else { owner_march };
                     army.state = crate::GeneralState::Marching;
                     army.routed = None;
                 }

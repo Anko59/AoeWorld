@@ -1,11 +1,12 @@
 //! Deterministic army command; execution uses ordinary routes and combat orders.
 use crate::{GameUnit, GameWorld, UnitKind};
 use aoe_core::{EntityId, PlayerId, WorldPosition};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 mod decisions;
 mod fight;
 mod hash;
 mod orders;
+mod owner_orders;
 mod reinforcement;
 mod squads;
 mod status;
@@ -15,7 +16,7 @@ mod survey;
 use stances::StanceOverride;
 
 pub const GENERAL_ARMY_LIMIT: usize = 200;
-/// Tiles around a General within which he commands soldiers and picks buildings.
+/// Tiles around a General within which he picks production buildings.
 pub const GENERAL_INFLUENCE_TILES: i64 = 50;
 /// Infantry:archers:heavy cavalry:siege:scouts a new General aims for.
 pub const DEFAULT_MIX: [u8; 5] = [35, 30, 20, 10, 5];
@@ -45,6 +46,9 @@ pub(crate) struct Army {
     /// Stable facing across intermediate legs toward the retained destination.
     pub layout: Option<(WorldPosition, WorldPosition)>,
     pub destination: Option<WorldPosition>,
+    /// Active owner march, with its attack-move intent. Automation cannot replace it.
+    pub owner_march: Option<bool>,
+    pub waypoints: VecDeque<(WorldPosition, bool)>,
     pub state: GeneralState,
     pub micro_after: usize,
     pub scan: (usize, usize),
@@ -140,6 +144,8 @@ impl GameWorld {
                 squads: Vec::new(),
                 layout: None,
                 destination: None,
+                owner_march: None,
+                waypoints: VecDeque::new(),
                 state: GeneralState::Idle,
                 micro_after: 0,
                 scan: (0, 0),
@@ -223,6 +229,8 @@ impl GameWorld {
             return;
         };
         a.destination = None;
+        a.owner_march = None;
+        a.waypoints.clear();
         a.routed = None;
         a.layout = None;
         a.commander_march = None;
@@ -237,6 +245,7 @@ impl GameWorld {
         for (slot, &id) in members.iter_mut().zip(&a.members) {
             *slot = Some(id);
         }
+        self.cancel_general_recall(id);
         for member in members.into_iter().flatten() {
             if let Some(&index) = self.lookup.get(&member) {
                 self.stop_unit_orders(index);
@@ -311,7 +320,9 @@ impl GameWorld {
                     continue;
                 };
                 work.generals += 1;
-                if let Some(survey) = self.general_survey(id, &mut work) {
+                if self.economy.generals.armies[&id].owner_march.is_some() {
+                    self.advance_owner_general_move(u, changed, &mut work);
+                } else if let Some(survey) = self.general_survey(id, &mut work) {
                     self.general_decide(u, survey, changed, &mut work);
                 }
                 self.general_reinforce(id, u.player, &mut work);

@@ -4,6 +4,11 @@ use crate::GameUnit;
 const THREAT_MOVED_TILES: i64 = 8;
 
 impl GameWorld {
+    pub(crate) fn cancel_general_recall(&mut self, id: EntityId) {
+        self.economy.vassals.recalls.remove(&id);
+        self.economy.vassals.returns.remove(&id);
+    }
+
     pub(super) fn vassal_defend(
         &mut self,
         id: EntityId,
@@ -84,6 +89,7 @@ impl GameWorld {
                                 && u.hp > 0
                                 && super::super::general::distance(home, u.position)
                                     <= (100 * 1024_i64).pow(2)
+                                && !self.general_has_owner_order(u)
                         })
                 })
                 .collect();

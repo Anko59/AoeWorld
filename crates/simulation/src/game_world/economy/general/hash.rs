@@ -58,6 +58,16 @@ impl Economy {
                     h.update(&p.y.to_le_bytes());
                 }
             }
+            if let Some(attack_move) = a.owner_march {
+                h.update(b"owner-march");
+                h.update(&[u8::from(attack_move)]);
+                h.update(&(a.waypoints.len() as u64).to_le_bytes());
+                for &(at, attack_move) in &a.waypoints {
+                    h.update(&at.x.to_le_bytes());
+                    h.update(&at.y.to_le_bytes());
+                    h.update(&[u8::from(attack_move)]);
+                }
+            }
             h.update(&(a.squads.len() as u64).to_le_bytes());
             for squad in &a.squads {
                 h.update(&[squad.arm as u8, u8::from(squad.final_leg)]);

@@ -21,6 +21,7 @@ impl GameWorld {
                         mix: army.mix,
                         solo: army.solo,
                         destination: army.destination,
+                        owner_march: army.owner_march,
                     })
             }
             _ => None,

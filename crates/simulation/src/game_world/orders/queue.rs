@@ -80,24 +80,7 @@ impl GameWorld {
         destination: WorldPosition,
         attack_move: bool,
     ) -> Result<bool, EconomyError> {
-        let unit = self
-            .unit(id)
-            .filter(|u| u.hp > 0 && !self.embarked(u.id))
-            .ok_or(EconomyError::UnknownEntity)?;
-        if !self.config.valid_map_position(destination) {
-            return Err(GameWorldError::InvalidPosition.into());
-        }
-        let destination = self.config.snap_ground_position(destination);
-        let tile = destination.tile_floor();
-        let breach = attack_move && self.hostile_ground_blocker(unit.player, tile).is_some();
-        if !breach
-            && (!self
-                .unit_tile_passable(unit.kind, tile, &|| false)
-                .map_err(GameWorldError::Environment)?
-                || !self.route_tile_admitted(unit.player, tile))
-        {
-            return Err(GameWorldError::InvalidPosition.into());
-        }
+        let destination = self.validate_queued_leg(id, destination, attack_move)?;
         if !self.queued_move_active(id) {
             let moving = self.start_leg(id, destination, attack_move)?;
             if moving {
@@ -122,6 +105,33 @@ impl GameWorld {
             .pending
             .push_back(MovementWaypoint::individual(destination, attack_move));
         Ok(true)
+    }
+
+    pub(crate) fn validate_queued_leg(
+        &self,
+        id: EntityId,
+        destination: WorldPosition,
+        attack_move: bool,
+    ) -> Result<WorldPosition, EconomyError> {
+        let unit = self
+            .unit(id)
+            .filter(|u| u.hp > 0 && !self.embarked(u.id))
+            .ok_or(EconomyError::UnknownEntity)?;
+        if !self.config.valid_map_position(destination) {
+            return Err(GameWorldError::InvalidPosition.into());
+        }
+        let destination = self.config.snap_ground_position(destination);
+        let tile = destination.tile_floor();
+        let breach = attack_move && self.hostile_ground_blocker(unit.player, tile).is_some();
+        if !breach
+            && (!self
+                .unit_tile_passable(unit.kind, tile, &|| false)
+                .map_err(GameWorldError::Environment)?
+                || !self.route_tile_admitted(unit.player, tile))
+        {
+            return Err(GameWorldError::InvalidPosition.into());
+        }
+        Ok(destination)
     }
 
     /// Replace the unit's order by an attack-move: the same one-member group a
@@ -268,6 +278,11 @@ impl GameWorld {
 
     /// Visible waypoint identities survive a formation member leaving to fight.
     pub fn movement_waypoints(&self, id: EntityId) -> Vec<MovementWaypoint> {
+        if !self.economy.generals.armies.is_empty()
+            && let Some(waypoints) = self.owner_general_waypoints(id)
+        {
+            return waypoints;
+        }
         let queue = self.move_queues.get(&id);
         let pending = queue
             .into_iter()
@@ -359,14 +374,13 @@ impl GameWorld {
                     .start_leg(id, next, attack_move)
                     .is_ok_and(|moving| moving)
                 {
-                    // An army march turns on this leg; a solo commander keeps
-                    // his army holding throughout the automatic tick phases.
+                    // Owner army waypoints advance only after the squads settle.
                     if self
                         .economy
                         .generals
                         .armies
                         .get(&id)
-                        .is_some_and(|army| !army.solo)
+                        .is_some_and(|army| !army.solo && army.owner_march.is_none())
                     {
                         self.general_march(id, next);
                     }
