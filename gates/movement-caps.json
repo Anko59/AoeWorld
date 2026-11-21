@@ -130,6 +130,8 @@
     {"count":2,"expr":"CANDIDATES","file":"crates/simulation/src/game_world/economy/steward/search.rs","kind":"use"},
     {"count":1,"expr":"placed.len() >= ATTEMPTS_PER_PASS","file":"crates/simulation/src/game_world/economy/vassal/development.rs","kind":"cmp"},
     {"count":1,"expr":"run.len() == WALL_RUN","file":"crates/simulation/src/game_world/economy/vassal/development.rs","kind":"cmp"},
+    {"count":1,"expr":".take(ATTEMPTS_PER_PASS * 4)","file":"crates/simulation/src/game_world/economy/vassal/development.rs","kind":"take"},
+    {"count":1,"expr":".take(8)","file":"crates/simulation/src/game_world/economy/vassal/mod.rs","kind":"take"},
     {"count":1,"expr":"VASSAL_LIMIT","file":"crates/simulation/src/game_world/economy/vassal/mod.rs","kind":"use"},
     {"count":1,"expr":".take(WORK_TOWERS)","file":"crates/simulation/src/game_world/economy/vassal/plan.rs","kind":"take"},
     {"count":1,"expr":"MAX_BRIDGE","file":"crates/simulation/src/game_world/economy/vassal/roads.rs","kind":"use"},

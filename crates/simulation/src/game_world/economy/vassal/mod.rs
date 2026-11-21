@@ -21,7 +21,6 @@ pub const VASSAL_LIMIT: usize = 20;
 /// The domain a Vassal develops, fortifies and defends: a Steward's circle.
 pub const VASSAL_RADIUS: i32 = super::steward::STEWARD_RULES.radius_tiles;
 const PASS_TICKS: u64 = 20;
-const DOMAINS_PER_PERIOD: usize = 8;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum VassalWait {
@@ -102,7 +101,7 @@ impl Manager {
     fn scheduled_domain(&self, tick: u64) -> Option<EntityId> {
         use std::ops::Bound::{Excluded, Unbounded};
 
-        let due = self.domains.len().min(DOMAINS_PER_PERIOD) as u64;
+        let due = (0..self.domains.len()).take(8).len() as u64;
         let phase = tick % PASS_TICKS;
         // Spend the existing visit budget across the period. As the budget is
         // less than the period, consecutive boundaries differ by at most one.

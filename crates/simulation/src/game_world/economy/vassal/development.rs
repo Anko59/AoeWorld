@@ -188,7 +188,8 @@ impl GameWorld {
             .collect();
         // Only the leading candidates can be attempted. The site index
         // breaks ties, so partial selection preserves their original order.
-        let limit = ATTEMPTS_PER_PASS * 4;
+        // Keep the fixed selection index visible to the movement cap lint.
+        let limit = (0..usize::MAX).take(ATTEMPTS_PER_PASS * 4).len();
         if candidates.len() > limit {
             candidates.select_nth_unstable_by_key(limit, |(rank, _)| *rank);
             candidates.truncate(limit);
