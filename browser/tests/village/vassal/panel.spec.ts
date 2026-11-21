@@ -38,10 +38,14 @@ test("Vassal panel shows work, switches Vassals and sends pause/resume", async (
   await expect(page.locator("#vassal-status")).toContainText("20/20 military");
   const squads = page.getByRole("list", { name: "Defence squads" });
   await expect(squads.getByRole("listitem")).toHaveText([
-    "Infantry · 6 holding",
-    "Archers · 7 holding",
-    "Cavalry · 7 holding",
+    "Inf 6 hold",
+    "Arc 7 hold",
+    "Cav 7 hold",
   ]);
+  await expect(squads.getByRole("listitem").first()).toHaveAttribute(
+    "title",
+    "Infantry · 6 holding",
+  );
   await expect(page.locator("#vassal-status")).toContainText(
     "development complete",
   );
@@ -72,7 +76,7 @@ test("Vassal panel shows work, switches Vassals and sends pause/resume", async (
   });
   await expect(chooser).toHaveValue("13");
   await expect(squads.getByRole("listitem")).toHaveText([
-    "Infantry · 12 attacking, 8 moving",
+    "Inf 12 attack, 8 mov",
   ]);
   await expect(page.getByRole("slider", { name: "Focus" })).toHaveAttribute(
     "aria-valuetext",
@@ -119,7 +123,7 @@ test("Castle Vassal report and development toggle use the authoritative server",
   await expect(panel.locator("[data-jobs=current]")).toContainText("Current");
   await expect(
     panel.getByRole("list", { name: "Defence squads" }),
-  ).toContainText(/Infantry · \d+ (holding|moving|attacking)/);
+  ).toContainText(/Inf \d+ (hold|mov|attack)/);
   const planned = panel.locator("[data-jobs=planned]");
   await expect(planned).toHaveText(/^Planned [1-9]\d*$/);
   await planned.hover();

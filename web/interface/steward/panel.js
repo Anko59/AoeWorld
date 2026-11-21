@@ -175,7 +175,8 @@ export function initVassal() {
       renderFields({ 'vassal-squads': { hidden: squads.length === 0 } });
       squadList.replaceChildren(...squads.split('\n').filter(Boolean).map(text => {
         const row = document.createElement('li');
-        row.textContent = text;
+        row.title = row.ariaLabel = text;
+        row.textContent = text.replace(/^(\w{1,3})\w* · /, '$1 ').replace(/ (attack|mov|hold)\w*/g, ' $1');
         return row;
       }));
       showDetails();
