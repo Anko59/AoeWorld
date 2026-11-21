@@ -3,6 +3,7 @@
 //! (`Tech[47]` Chemistry, `unit_upgrades[474|330|542|588]`). Effects: the DE
 //! help strings (Chemistry: string 28047) and the Age of Empires wiki.
 use super::super::{BuildingKind, Stockpile};
+use super::rule_effect::RuleEffect;
 use super::table::*;
 use crate::UnitKind as U;
 
@@ -40,7 +41,7 @@ pub(super) const RULES: [TechRules; 5] = [
         (300, 0, 200),
         100,
         TechRequirement::Age(Age::Imperial),
-        TechEffect::Military,
+        TechEffect::Rule(RuleEffect::ProjectileAttack),
     ),
     imperial(
         Tech::HeavyCavalryArcher,

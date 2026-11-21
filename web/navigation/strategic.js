@@ -30,7 +30,12 @@ export function initStrategic(fog, actors) {
   const context = canvas.getContext('2d', { alpha: false });
   let terrain = null, terrainRevision = 0, previous = '', redraws = 0, picks = [], pickRadius = 0;
   let resources = [], resourceRevision = 0;
-  const knownResources = new Map(), retiredResources = new Set();
+  const knownResources = [new Map(), new Map()], retiredResources = new Set();
+  const refreshResources = () => {
+    resources = knownResources.flatMap(cache => [...cache.values()]);
+    resourceRevision++;
+    previous = '';
+  };
   let resourceSnapshot = false;
   let modelRevision = 0, modelSignature = '', lastState = null;
   let controlsVisible = null;
@@ -225,7 +230,8 @@ export function initStrategic(fog, actors) {
       cockpit.reset(); reveal.reset();
       settlements.reset(); holdingsLayer.reset(); unitGroups.reset();
       tokens.update([], [], []); contacts.reset(); resources = [];
-      knownResources.clear(); retiredResources.clear(); resourceSnapshot = false; resourceRevision++;
+      knownResources.forEach(cache => cache.clear());
+      retiredResources.clear(); resourceSnapshot = false; resourceRevision++;
       modelSignature = ''; modelRevision++; previous = '';
     },
     terrain(value, raster) {
@@ -249,24 +255,30 @@ export function initStrategic(fog, actors) {
       for (let at = 0; at + 4 < values.length; at += 5) {
         const kind = values[at], x = values[at + 1], y = values[at + 2], low = values[at + 3], high = values[at + 4];
         if (![kind, x, y, low, high].every(Number.isFinite)) continue;
-        const key = `${high}:${low}`, old = knownResources.get(key);
-        if (!old || old.kind !== kind || old.world[0] !== x || old.world[1] !== y) changed = true;
-        knownResources.delete(key);
-        knownResources.set(key, { kind, world: [x, y] });
+        const cache = knownResources[Number(kind === 1)];
+        const key = `${high}:${low}`, old = cache.get(key);
+        const same = old?.kind === kind && old.world[0] === x && old.world[1] === y;
+        if (!same) changed = true;
+        cache.delete(key);
+        cache.set(key, same ? old : { kind, world: [x, y] });
       }
-      while (knownResources.size > 2048) { knownResources.delete(knownResources.keys().next().value); changed = true; }
-      if (changed) { resources = [...knownResources.values()]; resourceRevision++; previous = ''; }
+      for (const cache of knownResources) {
+        while (cache.size > 2048) { cache.delete(cache.keys().next().value); changed = true; }
+      }
+      if (changed) refreshResources();
     },
     depleted(ids, begin, complete) {
       if (begin) { retiredResources.clear(); resourceSnapshot = !complete; }
       for (let at = 0; at + 1 < ids.length; at += 2) {
         const key = `${ids[at + 1]}:${ids[at]}`;
-        if (knownResources.has(key)) retiredResources.add(key);
+        if (knownResources.some(cache => cache.has(key))) retiredResources.add(key);
       }
       if (!complete) return;
       let changed = false;
-      for (const key of retiredResources) if (knownResources.delete(key)) changed = true;
+      for (const key of retiredResources) {
+        for (const cache of knownResources) if (cache.delete(key)) changed = true;
+      }
       retiredResources.clear(); resourceSnapshot = false;
-      if (changed) { resources = [...knownResources.values()]; resourceRevision++; previous = ''; }
+      if (changed) refreshResources();
     } };
 }

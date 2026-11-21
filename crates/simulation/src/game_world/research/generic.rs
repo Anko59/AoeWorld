@@ -3,6 +3,7 @@
 //! prerequisite come from the licensed DE DAT (tech ids in the comments, data
 //! dated 2026-10-27, DE update 188329); effect text from the DE help strings.
 use super::super::{BuildingKind, Stockpile};
+use super::rule_effect::{ArmorClass, AttackBonus, BuildingGroup, ConversionTarget, RuleEffect};
 use super::table::*;
 const fn cost(food: u32, wood: u32, gold: u32, stone: u32) -> Stockpile {
     Stockpile {
@@ -53,7 +54,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(75, 0, 25, 0),
         25,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::BonusDamage(AttackBonus::InfantryBuildings)),
     ),
     // DAT tech 875
     generic(
@@ -63,7 +64,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(50, 0, 100, 0),
         25,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::Armor(ArmorClass::Militia)),
     ),
     // DAT tech 437
     generic(
@@ -73,7 +74,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(300, 250, 0, 0),
         45,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::ArcheryReload),
     ),
     // DAT tech 436
     generic(
@@ -83,7 +84,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(200, 0, 250, 0),
         65,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::BonusDamage(AttackBonus::MountedArchersSpears)),
     ),
     // DAT tech 435
     generic(
@@ -119,7 +120,9 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(300, 200, 0, 0),
         70,
         TechRequirement::Technology(Tech::Masonry),
-        TechEffect::BuildingStats,
+        TechEffect::Rule(RuleEffect::BuildingDurability(BuildingGroup::Standard {
+            bonus_resistance: false,
+        })),
     ),
     // DAT tech 377
     generic(
@@ -129,7 +132,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(500, 600, 0, 0),
         45,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::BonusDamage(AttackBonus::SiegeBuildings)),
     ),
     // DAT tech 380
     generic(
@@ -139,7 +142,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(350, 0, 100, 0),
         30,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::BonusDamage(AttackBonus::FortificationsShips)),
     ),
     // DAT tech 608
     generic(
@@ -149,7 +152,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(250, 250, 0, 0),
         25,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::TowerAttack),
     ),
     // DAT tech 194
     generic(
@@ -159,7 +162,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(200, 100, 0, 0),
         50,
         TechRequirement::None,
-        TechEffect::BuildingStats,
+        TechEffect::Rule(RuleEffect::BuildingDurability(BuildingGroup::StoneWall)),
     ),
     // DAT tech 140
     generic(
@@ -195,7 +198,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(100, 0, 200, 0),
         40,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::ConversionResistance),
     ),
     // DAT tech 45
     generic(
@@ -205,7 +208,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(550, 0, 750, 0),
         60,
         TechRequirement::Technology(Tech::Devotion),
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::ConversionResistance),
     ),
     // DAT tech 252
     generic(
@@ -241,7 +244,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(0, 0, 200, 0),
         35,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::GarrisonHealing),
     ),
     // DAT tech 438
     generic(
@@ -251,7 +254,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(0, 0, 200, 0),
         75,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::SharedConversion),
     ),
     // DAT tech 233
     generic(
@@ -261,7 +264,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(0, 0, 120, 0),
         65,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::ConversionRecovery),
     ),
     // DAT tech 230
     generic(
@@ -271,7 +274,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(0, 0, 200, 0),
         55,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::MonkRange),
     ),
     // DAT tech 319
     generic(
@@ -281,7 +284,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(0, 0, 325, 0),
         40,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::Convert(ConversionTarget::Monks)),
     ),
     // DAT tech 316
     generic(
@@ -291,7 +294,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(0, 0, 475, 0),
         50,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::Convert(ConversionTarget::SiegeAndBuildings)),
     ),
     // DAT tech 439
     generic(
@@ -301,7 +304,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(0, 0, 1000, 0),
         60,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::DeathOnConversion),
     ),
     // DAT tech 315
     generic(
@@ -311,7 +314,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(150, 0, 150, 0),
         60,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::TrainingRate),
     ),
     // DAT tech 379
     generic(
@@ -321,7 +324,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(400, 400, 0, 0),
         75,
         TechRequirement::None,
-        TechEffect::BuildingStats,
+        TechEffect::Rule(RuleEffect::BuildingDurability(BuildingGroup::Castle)),
     ),
     // DAT tech 321
     generic(
@@ -331,7 +334,9 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(400, 200, 0, 0),
         10,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::BonusDamage(
+            AttackBonus::VillagersBuildingsAndRams,
+        )),
     ),
     // DAT tech 408
     generic(
@@ -341,7 +346,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(0, 0, 200, 0),
         1,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::Unimplemented),
     ),
     // DAT tech 48
     generic(
@@ -364,7 +369,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(300, 0, 200, 0),
         50,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::MarketCommission),
     ),
     // DAT tech 17
     generic(
@@ -374,7 +379,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(300, 0, 200, 0),
         70,
         TechRequirement::Technology(Tech::Coinage),
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::TributeFee),
     ),
     // DAT tech 23
     generic(
@@ -384,7 +389,7 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(200, 0, 100, 0),
         70,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::TributeFee),
     ),
     // DAT tech 54
     generic(
@@ -394,6 +399,6 @@ pub(super) const RULES: [TechRules; 34] = [
         cost(0, 200, 0, 50),
         20,
         TechRequirement::None,
-        TechEffect::Passive,
+        TechEffect::Rule(RuleEffect::ConstructionRate),
     ),
 ];

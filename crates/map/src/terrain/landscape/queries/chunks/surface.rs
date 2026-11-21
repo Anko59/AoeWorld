@@ -60,7 +60,7 @@ pub(super) const fn soft_ground(material: GroundMaterial) -> bool {
 /// line are summer grass and heath, not snow.
 pub(super) fn material(
     base: Tile,
-    appearance: LandscapeAppearance,
+    floor_strength: u16,
     cover: Option<crate::terrain::relief::Cover>,
 ) -> GroundMaterial {
     use crate::terrain::relief::Cover;
@@ -70,7 +70,7 @@ pub(super) fn material(
     if cover == Some(Cover::Snow) {
         return GroundMaterial::Snow;
     }
-    if appearance.floor_strength > 0 {
+    if floor_strength > 0 {
         return GroundMaterial::ForestFloor;
     }
     if cover == Some(Cover::Rock) {

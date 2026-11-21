@@ -17,7 +17,7 @@ mod gates;
 pub(super) mod picking;
 
 pub(super) fn contact_scene() -> PreparedScene {
-    let generator = fixture::plane(-432, -432);
+    let generator = fixture::plane(-432, -432).without_loose_rocks();
     let source = generator
         .landscape_point_with_cancel(aoe_core::TileCoord::new(282, 603), &|| false)
         .unwrap()

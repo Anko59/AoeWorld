@@ -13,6 +13,7 @@ static CONTENT: OnceLock<Content> = OnceLock::new();
 
 #[wasm_bindgen(module = "/src/game_assets/manifest.js")]
 extern "C" {
+    fn install_research_tooltips(tooltips: &JsValue);
     #[wasm_bindgen(catch)]
     fn parse_content(bytes: &[u8], actor_count: usize) -> Result<Array, JsValue>;
 }
@@ -40,11 +41,13 @@ pub(crate) async fn load() -> Result<(), JsValue> {
         return Ok(());
     }
     let bytes = crate::game_assets::fetch("/pkg/content.json").await?;
-    let _ = CONTENT.set(decode(&bytes)?);
+    let (content, tooltips) = decode(&bytes)?;
+    let _ = CONTENT.set(content);
+    install_research_tooltips(&tooltips);
     Ok(())
 }
 
-fn decode(bytes: &[u8]) -> Result<Content, JsValue> {
+fn decode(bytes: &[u8]) -> Result<(Content, JsValue), JsValue> {
     let fields = parse_content(bytes, aoe_assets::catalog::units::SPRITES.len())?;
     let rules = BrowserContent::decode(&Int32Array::new(&fields.get(0)).to_vec())
         .map_err(JsValue::from_str)?;
@@ -67,7 +70,7 @@ fn decode(bytes: &[u8]) -> Result<Content, JsValue> {
         }
     }
     let actors = expected.as_slice();
-    Ok(Content { rules, actors })
+    Ok((Content { rules, actors }, fields.get(2)))
 }
 
 #[cfg(test)]

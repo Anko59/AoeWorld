@@ -85,8 +85,11 @@ pub(crate) fn run(command: AssetCommand) -> Result<(), Box<dyn std::error::Error
                     ]
                 })
                 .collect();
-            let content =
-                serde_json::json!({"rules": aoe_simulation::browser_content(), "actors": actors});
+            let content = serde_json::json!({
+                "rules": aoe_simulation::browser_content(),
+                "actors": actors,
+                "researchTooltips": aoe_simulation::browser_research_tooltips()
+            });
             std::fs::create_dir_all("web/pkg")?;
             std::fs::write("web/pkg/content.json", serde_json::to_vec(&content)?)?;
             for (name, source) in browser_shaders() {

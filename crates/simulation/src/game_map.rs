@@ -61,6 +61,15 @@ impl GameWorld {
         })
     }
 
+    /// Removes loose rock piles from this world's terrain. Fixtures that place
+    /// buildings and units at hand-picked offsets assume open ground.
+    pub fn without_loose_rocks(mut self) -> Self {
+        if let Terrain::Map { generator, .. } = &mut self.terrain {
+            *generator = generator.clone().without_loose_rocks();
+        }
+        self
+    }
+
     pub fn from_prepared_map(
         package: MapPackage,
         elevation_pages: Vec<ElevationPage>,

@@ -5,11 +5,15 @@ use crate::water::PreparedWater;
 use crate::{CompactChunk, ElevationPage, PotentialBiomePage, WaterPage};
 use std::sync::Arc;
 
+#[path = "tests/ground_dressing.rs"]
+mod ground_dressing;
+
 fn fixture(width: i32, class: u8, height: i32) -> MapChunkGenerator {
     let mut generator = MapChunkGenerator::new([17; 32], 1, width);
     generator.elevation = Some(Arc::new(PreparedElevation {
         samples_per_axis: 1,
         compression: crate::Ratio::new(30, 1).expect("ratio"),
+        constant_height: None,
         pages: [(
             (0, 0),
             ElevationPage {
@@ -95,7 +99,21 @@ fn candidate_forest_families_floor_and_source_geometry_survive_the_codec() {
                         base.geographic_height_centimeters
                     );
                     assert_eq!(tile.terrain.surface, base.surface);
-                    assert_eq!(tile.terrain.passable, base.passable);
+                    if tile.terrain.passable != base.passable {
+                        let blocked_by_stone = dressing::rock_footprint(tile.tile).any(|at| {
+                            generator
+                                .evaluate_landscape_point_with_cancel::<false>(
+                                    at,
+                                    &policy,
+                                    &|_| Reservations::default(),
+                                    &|| false,
+                                )
+                                .unwrap()
+                                .and_then(|point| point.decoration)
+                                .is_some_and(|d| d.family == DecorationFamily::Stone)
+                        });
+                        assert!(base.passable && blocked_by_stone);
+                    }
                     assert_eq!(
                         tile.terrain.vegetation_provenance,
                         base.vegetation_provenance
@@ -386,113 +404,4 @@ fn historical_clearings_cannot_be_refilled_by_decorations() {
             .iter()
             .any(|resource| resource.node.object == ObjectKind::Tree)
     );
-}
-
-#[test]
-fn ground_variety_changes_only_the_drawn_sheet_and_stays_in_its_family() {
-    use GroundMaterial::{Dirt, DryGrass, GrassDirt, Gravel, Sand, WornGrass};
-    let families: [(u8, &[GroundMaterial]); 2] = [
-        (20, &[DryGrass, GrassDirt, Dirt, WornGrass]),
-        (27, &[Sand, Gravel, Dirt]),
-    ];
-    for (class, family) in families {
-        let generator = fixture(512, class, 20_000);
-        let mut seen = Vec::new();
-        for (x, y) in [(0, 0), (3, 5), (7, 7)] {
-            let chunk = candidate(&generator, x, y);
-            assert_eq!(chunk.tiles.len(), 1024);
-            for tile in &chunk.tiles {
-                let base = generator
-                    .landscape_base_at(tile.tile, &|| false)
-                    .expect("source")
-                    .expect("in bounds");
-                // Heights, surface, water, biome, provenance and passability
-                // are the base tile's: variety is not a physical input.
-                let mut physical = tile.terrain;
-                physical.material = base.material;
-                assert_eq!(physical, base);
-                assert!(family.contains(&tile.terrain.material), "class {class}");
-                if !seen.contains(&tile.terrain.material) {
-                    seen.push(tile.terrain.material);
-                }
-                // Seamless: a single point query draws the same sheet.
-                if tile.tile.x % 32 == 31 || tile.tile.y % 32 == 0 {
-                    let point = generator
-                        .evaluate_landscape_point_with_cancel::<false>(
-                            tile.tile,
-                            &policy,
-                            &|_| Reservations::default(),
-                            &|| false,
-                        )
-                        .expect("source")
-                        .expect("in bounds");
-                    assert_eq!(point.tile, *tile);
-                }
-            }
-        }
-        assert!(seen.len() >= 3, "class {class} shows {seen:?}");
-    }
-}
-
-#[test]
-fn meadow_dressing_forms_noticeable_patches_and_preserves_physics() {
-    let generator = fixture(128, 8, 100);
-    let meadow = |_: TileCoord, _: Tile| LandscapePolicy {
-        wildness_per_thousand: Some(0),
-        support_per_thousand: 0,
-    };
-    for (cx, cy) in [(0, 0), (1, 1), (2, 2)] {
-        let scene = generator
-            .evaluate_landscape_chunk_with_cancel(
-                cx,
-                cy,
-                &meadow,
-                &|_| Reservations::default(),
-                &|| false,
-            )
-            .unwrap()
-            .unwrap();
-        let vegetation = scene
-            .decorations
-            .iter()
-            .filter(|d| d.family != DecorationFamily::Stone && d.family != DecorationFamily::Cliff)
-            .collect::<Vec<_>>();
-        assert!(
-            (80..240).contains(&vegetation.len()),
-            "noticeable meadow: {}",
-            vegetation.len()
-        );
-        let clustered = vegetation
-            .iter()
-            .filter(|d| {
-                vegetation.iter().any(|other| {
-                    other.tile != d.tile
-                        && (other.tile.x - d.tile.x).abs() <= 2
-                        && (other.tile.y - d.tile.y).abs() <= 2
-                })
-            })
-            .count();
-        assert!(clustered * 4 > vegetation.len() * 3, "natural patches");
-        for d in &scene.decorations {
-            assert!(!scene.resources.iter().any(|r| r.node.tile == d.tile));
-            let point = generator
-                .evaluate_landscape_point_with_cancel::<false>(
-                    d.tile,
-                    &meadow,
-                    &|_| Reservations::default(),
-                    &|| false,
-                )
-                .unwrap()
-                .unwrap();
-            assert_eq!(point.decoration, Some(*d), "chunk traversal and boundaries");
-            assert_eq!(
-                point.tile.terrain.surface,
-                generator.sample_base_tile(d.tile).surface
-            );
-            assert_eq!(
-                point.tile.terrain.passable,
-                generator.sample_base_tile(d.tile).passable
-            );
-        }
-    }
 }

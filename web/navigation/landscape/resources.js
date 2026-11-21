@@ -67,7 +67,7 @@ export function initResourceMarkers() {
       return nextSource !== source || (nextView !== view && now - stamp >= CADENCE_MS);
     },
     update(state, scale, project, fog, resources, nextSource, nextView, now) {
-      const [worldWidth, worldHeight, cx, cy, width, height, zoom] = state;
+      const [worldWidth, worldHeight, , , width, height, zoom] = state;
       source = nextSource; view = nextView; stamp = now;
       deposits = [];
       // Cover at most three columns by two rows, with a 24-tile minimum span.
@@ -83,7 +83,12 @@ export function initResourceMarkers() {
       for (const node of resources) {
         if (node.kind >= 4) continue;
         const [x, y] = project(node.world);
-        if (inView(x, y)) deposits.push(node);
+        if (!inView(x, y)) continue;
+        if (node.kind === 1) {
+          if (fog.disabled || fog.explored(node.world[0] / worldWidth, node.world[1] / worldHeight)) {
+            wood.add(x * scale, y * scale, node.world);
+          }
+        } else deposits.push(node);
       }
       // A ground that straddles a coast keeps its marker over known fish.
       const terrainAt = (x, y) => {
@@ -96,29 +101,7 @@ export function initResourceMarkers() {
         const kind = terrainAt(u, v);
         return kind >= 8 && kind <= 11 && (fog.disabled || fog.explored(u, v));
       });
-      forests = [];
-      if (raster) {
-        // Invert the isometric view bounds before walking the forest raster.
-        const { samples, cells } = raster;
-        const reach = width / (256 * zoom) + height / (128 * zoom);
-        const dx = worldWidth / samples, dy = worldHeight / samples;
-        const right = Math.min(samples, Math.ceil((cx + reach) / dx));
-        const bottom = Math.min(samples, Math.ceil((cy + reach) / dy));
-        for (let row = Math.max(0, Math.floor((cy - reach) / dy)); row < bottom; row++) {
-          for (let col = Math.max(0, Math.floor((cx - reach) / dx)); col < right; col++) {
-            if ((cells[row * samples + col] & 15) !== 2) continue;
-            const u = (col + .5) / samples, v = (row + .5) / samples;
-            if (!fog.disabled && !fog.explored(u, v)) continue;
-            const world = [u * worldWidth, v * worldHeight];
-            const [x, y] = project(world);
-            if (inView(x, y)) wood.add(x * scale, y * scale, world);
-          }
-        }
-        forests = wood.values(([x, y]) => {
-          const u = x / worldWidth, v = y / worldHeight;
-          return terrainAt(u, v) === 2 && (fog.disabled || fog.explored(u, v));
-        });
-      }
+      forests = wood.values(([x, y]) => fog.disabled || fog.explored(x / worldWidth, y / worldHeight));
     },
     drawDeposits(context, project, level) {
       const colours = ['#e85b8a', '#3c8f4a', '#f2cf50', '#c4c8d0'];

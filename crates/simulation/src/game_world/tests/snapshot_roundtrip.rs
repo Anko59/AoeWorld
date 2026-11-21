@@ -30,8 +30,9 @@ pub(super) fn flat() -> (GameWorld, TileCoord) {
                 .map(|n| n.tile)
         })
         .expect("a resource node");
-    let world =
-        GameWorld::from_prepared_map(package, pages, water, Vec::new(), Vec::new()).unwrap();
+    let world = GameWorld::from_prepared_map(package, pages, water, Vec::new(), Vec::new())
+        .unwrap()
+        .without_loose_rocks();
     (world, start)
 }
 

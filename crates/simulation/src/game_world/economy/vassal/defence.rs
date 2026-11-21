@@ -256,10 +256,16 @@ impl GameWorld {
                 .is_some_and(|a| a.destination == Some(goal) && !a.solo)
             {
                 self.economy.vassals.returns.remove(&g);
-            } else if let Some(u) = self
-                .unit(g)
-                .filter(|u| u.position.tile_floor() == goal.tile_floor())
-            {
+            } else if let Some(u) = self.unit(g).filter(|u| {
+                // Stopping on entering the home tile left him up to a tile
+                // short of the spot he was recalled from: stop within an
+                // eighth of a tile of it instead.
+                let (dx, dy) = (
+                    i64::from(u.position.x) - i64::from(goal.x),
+                    i64::from(u.position.y) - i64::from(goal.y),
+                );
+                dx * dx + dy * dy <= (i64::from(aoe_core::FIXED_SUBUNITS_PER_TILE) / 8).pow(2)
+            }) {
                 self.record_vassal_decision();
                 let _ = self.issue_stop(u.player, g);
                 self.economy.vassals.returns.remove(&g);

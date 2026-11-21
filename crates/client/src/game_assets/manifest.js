@@ -89,7 +89,15 @@ export function parse_content(bytes, actorCount) {
     // The Rust loader still checks all four words against the compiled DAT catalog.
     return [u32(row[0]), stride, integer(row[2],0,65535), integer(row[3],0,255)];
   });
-  return [new Int32Array(rules), new Uint32Array(words)];
+  const tooltips = array(data.researchTooltips);
+  if (tooltips.length !== rules[2] || !tooltips.every(value =>
+    typeof value === 'string' && value.trim().length > 0 && value.length <= 400
+  )) throw Error('invalid research tooltips');
+  return [new Int32Array(rules), new Uint32Array(words), tooltips];
+}
+
+export function install_research_tooltips(tooltips) {
+  window.aoeBuildings?.setResearchTooltips(tooltips);
 }
 
 function document(text) {

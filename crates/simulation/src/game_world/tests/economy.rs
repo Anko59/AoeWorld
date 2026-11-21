@@ -49,8 +49,9 @@ fn resource_world(kind: ResourceKind) -> (GameWorld, ResourceNode, EntityId) {
     let generator = package
         .generator_with_environment(pages.clone(), water.clone(), Vec::new(), Vec::new())
         .unwrap();
-    let mut world =
-        GameWorld::from_prepared_map(package, pages, water, Vec::new(), Vec::new()).unwrap();
+    let mut world = GameWorld::from_prepared_map(package, pages, water, Vec::new(), Vec::new())
+        .unwrap()
+        .without_loose_rocks();
     for y in 0..8 {
         for x in 0..8 {
             for node in generator.chunk(x, y).unwrap().resources {

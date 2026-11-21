@@ -370,3 +370,26 @@ fn preview_coordinate_rejects_arithmetic_and_i32_overflow() {
 }
 
 mod rivers;
+
+#[tokio::test]
+async fn content_roster_reset_builds_the_coastal_fixture() {
+    let config = crate::Config {
+        bind: "127.0.0.1:0".parse().unwrap(),
+        scenario: aoe_scenario::SMOKE,
+        tick_hz: 20,
+        asset_pack: None,
+        map_package_directory: None,
+        open_map_package: None,
+        map_worker: None,
+        geodata_cache_directory: ".cache/geodata".into(),
+    };
+    let state = crate::AppState::new(&config, "roster-reset-test").unwrap();
+    assert_eq!(
+        reset(
+            State(state),
+            Query::try_from_uri(&"/maps/reset?scenario=content-roster".parse().unwrap()).unwrap(),
+        )
+        .await,
+        StatusCode::NO_CONTENT
+    );
+}
