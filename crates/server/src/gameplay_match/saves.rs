@@ -93,9 +93,12 @@ fn valid_id(id: &str) -> bool {
 impl GameplayService {
     /// Restore through the ordinary save loader, including navigation and warmup,
     /// without starting any AI processes, sockets or tick clock.
+    /// Restores `save` stepping at `hz`: a recording's own rate, since its
+    /// ticks count in it (`Recording::tick_hz`).
     pub fn from_saved_replay(
         save: &FsPath,
         packages: &FsPath,
+        hz: u32,
     ) -> Result<(Self, aoe_simulation::RestoreReport), String> {
         let id = save
             .file_stem()
@@ -119,8 +122,6 @@ impl GameplayService {
                     as Arc<dyn EnvironmentPageProvider>,
             )
         };
-        // The recording's commands are numbered in 20 Hz ticks.
-        let hz = aoe_core::REFERENCE_HZ;
         resume_service(package, provider, &loaded, &|| false, Some(packages), hz)
             .map_err(|e| e.to_string())
     }

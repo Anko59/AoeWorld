@@ -33,6 +33,9 @@ enum Row {
     Header {
         ticks: usize,
         start_tick: u64,
+        /// Simulation steps per second the recorded world ran at: its ticks
+        /// count in that rate, and a replay must restore at it.
+        tick_hz: u32,
         initial_hash: [u8; 32],
         map_hash: Option<[u8; 32]>,
     },
@@ -40,6 +43,7 @@ enum Row {
     Complete,
 }
 pub struct Recording {
+    pub tick_hz: u32,
     pub initial_hash: [u8; 32],
     pub map_hash: Option<[u8; 32]>,
     pub ticks: Vec<RecordedTick>,
@@ -55,6 +59,7 @@ impl Recording {
         let Row::Header {
             ticks,
             start_tick,
+            tick_hz,
             initial_hash,
             map_hash,
         } = serde_json::from_str(&rows.next().ok_or("missing header")??)?
@@ -65,6 +70,7 @@ impl Recording {
             return Err("invalid tick count".into());
         }
         let mut result = Self {
+            tick_hz,
             initial_hash,
             map_hash,
             ticks: Vec::new(),
@@ -146,6 +152,7 @@ impl GameplayService {
         recorder.row(&Row::Header {
             ticks,
             start_tick: world.tick().0,
+            tick_hz: world.config().tick_hz,
             initial_hash: world.canonical_hash(),
             map_hash: self.map_content_hash,
         })?;
