@@ -63,6 +63,9 @@ fn the_match_body_names_slots_rules_and_a_france_map() {
     assert_eq!(scaled["start_units"]["late_game_scale"], 410);
     // `--scale` only shapes the late game.
     assert!(Cli::try_parse_from(["scale-match", "--scale", "2"]).is_err());
+    // A new match's seat 0 can watch too, not only a saved game's human.
+    let watched = options(&["--late-game", "--human-view", "200"]);
+    assert_eq!(watched.human_view, Some(200));
 }
 
 #[test]

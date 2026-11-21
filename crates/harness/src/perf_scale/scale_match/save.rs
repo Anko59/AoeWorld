@@ -123,6 +123,11 @@ fn import_pair(
     result
 }
 
+/// A page of seat 0 in a new match watching `side` tiles around its units.
+pub(super) fn watch(server: &Server, side: i32) -> Result<Human, BoxError> {
+    Human::connect(&server.address, Some(side))
+}
+
 /// A real human socket keeps the skirmish alive, without issuing any orders.
 /// The runtime drains messages in the background and closes them on drop.
 pub(super) struct Human {
