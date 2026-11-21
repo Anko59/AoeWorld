@@ -44,7 +44,10 @@ pub(in super::super) fn site_buildings<'a>(
     (0..4)
         .flat_map(move |pass| buildings.iter().filter(move |b| rank(b) == pass))
         .filter(move |b| {
-            !matches!(b.kind, BuildingKind::Bridge | BuildingKind::Road)
+            // A finished road or bridge draws as a crossing instead; its
+            // foundation is a site marker like every other foundation.
+            !(matches!(b.kind, BuildingKind::Bridge | BuildingKind::Road)
+                && crate::strategic::far_crossing_visible(b.hp, b.construction))
                 && crate::strategic::far_building_visible(b.hp, b.construction)
                 && (b.player == owner || explored(b))
         })
