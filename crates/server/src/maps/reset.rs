@@ -74,7 +74,7 @@ pub(crate) async fn reset(
                 return StatusCode::INTERNAL_SERVER_ERROR;
             };
             let roster = if name == "content-roster" {
-                let Ok(mut world) = aoe_simulation::GameWorld::from_prepared_map(
+                let Ok(world) = aoe_simulation::GameWorld::from_prepared_map(
                     package.clone(),
                     elevation.clone(),
                     water.clone(),
@@ -83,6 +83,7 @@ pub(crate) async fn reset(
                 ) else {
                     return StatusCode::INTERNAL_SERVER_ERROR;
                 };
+                let mut world = world.without_loose_rocks();
                 let Ok(primary) = world.prepare_content_roster(
                     options.stage.unwrap_or_default(),
                     options.realtime.unwrap_or_default(),

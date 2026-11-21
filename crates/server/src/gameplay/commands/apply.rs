@@ -59,6 +59,13 @@ pub(in crate::gameplay) fn apply(
         PendingAction::VassalDevelopment { vassal_id, enabled } => {
             world.issue_vassal_development(player, vassal_id, enabled)
         }
+        PendingAction::VassalFocus { vassal_id, focus } => {
+            let focus = match focus {
+                aoe_protocol::VassalFocus::Fortify => aoe_simulation::VassalFocus::Fortify,
+                aoe_protocol::VassalFocus::Roads => aoe_simulation::VassalFocus::Roads,
+            };
+            world.issue_vassal_focus(player, vassal_id, focus)
+        }
         PendingAction::Stance { unit_ids, stance } => world.issue_stance(player, &unit_ids, stance),
         PendingAction::Garrison {
             entity_id,

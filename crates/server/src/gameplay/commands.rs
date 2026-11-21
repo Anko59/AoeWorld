@@ -53,6 +53,21 @@ impl GameplayService {
         )
         .await;
     }
+    pub async fn queue_vassal_focus(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        vassal_id: EntityId,
+        focus: aoe_protocol::VassalFocus,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::VassalFocus { vassal_id, focus },
+        )
+        .await;
+    }
+
     pub async fn queue_stance(
         &self,
         session_id: u64,

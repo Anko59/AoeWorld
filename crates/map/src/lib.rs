@@ -86,4 +86,7 @@ pub const REFERENCE_WALK_METERS_PER_SECOND_DENOMINATOR: u32 = 6;
 pub const CAVALRY_METERS_PER_SECOND: u32 = 3;
 /// The only deterministic generation recipe: the composed landscape. It is part
 /// of canonical package identity; packages naming any other value are rejected.
+/// Packages store inputs only; terrain, rocks and their walkability are derived
+/// when read. Rock footprints therefore block walking on every existing package
+/// without changing its identity, so saves keep their map hash.
 pub const GENERATION_RECIPE_VERSION: u16 = 4;

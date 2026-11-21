@@ -8,15 +8,16 @@ mod game_waypoints;
 mod game_world;
 pub use game_world::TileVisibility;
 pub use game_world::apply_research_stats;
-#[cfg(any(not(target_arch = "wasm32"), feature = "content-source"))]
-pub use game_world::browser_content;
 #[cfg(not(target_arch = "wasm32"))]
 pub use game_world::parallel::meter as parallel_meter;
 #[cfg(feature = "bench-fixtures")]
 pub use game_world::terrain_fixtures;
+pub use game_world::{ArmorClass, AttackBonus, BuildingGroup, ConversionTarget, RuleEffect};
 pub use game_world::{BrowserBuilding, BrowserContent, BrowserTech, BrowserUnit};
 pub use game_world::{HoldingSpan, LandControl};
 pub use game_world::{RestoreReport, SnapshotError, WORLD_SNAPSHOT_VERSION, WorldSnapshot};
+#[cfg(any(not(target_arch = "wasm32"), feature = "content-source"))]
+pub use game_world::{browser_content, browser_research_tooltips};
 mod movement_speed;
 mod navigation_cache;
 mod terrain;
@@ -51,12 +52,13 @@ pub use game_world::{
     StewardWait, StewardWork, Stockpile, TECH_RULES, TREBUCHET_TRANSFORM_WORK,
     TREBUCHET_WORK_PER_SECOND_TENTHS, Tech, TechEffect, TechMask, TechRequirement, TechRules,
     TechTarget, TickPhase, TrainingEntry, UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask,
-    UnitTraining, VASSAL_LIMIT, VASSAL_RADIUS, VILLAGE_RULES, VassalStatus, VassalWait,
-    VillageRules, WorldLimits, build_speed_percent, building_combat, building_max_hp, class_bonus,
-    conversion_chance, convertible_building, convertible_unit, damage_dealt, dat_projectile,
-    market_commission_permyriad, native_attack_windup_millis, researched_stats,
-    trade_speed_percent, trainable_units, training_speed_percent, trebuchet_transform_ticks,
-    tribute_fee_permyriad, unit_building_bonus, unit_combat, villager_capacity,
+    UnitTraining, VASSAL_LIMIT, VASSAL_RADIUS, VILLAGE_RULES, VassalFocus, VassalJob, VassalJobs,
+    VassalStatus, VassalWait, VillageRules, WorldLimits, build_speed_percent, building_combat,
+    building_max_hp, class_bonus, conversion_chance, convertible_building, convertible_unit,
+    damage_dealt, dat_projectile, market_commission_permyriad, native_attack_windup_millis,
+    researched_stats, trade_speed_percent, trainable_units, training_speed_percent,
+    trebuchet_transform_ticks, tribute_fee_permyriad, unit_building_bonus, unit_combat,
+    villager_capacity,
 };
 pub use navigation_cache::NavigationCacheUsage;
 use std::collections::BTreeMap;

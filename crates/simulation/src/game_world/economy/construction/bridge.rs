@@ -42,7 +42,7 @@ impl GameWorld {
         to: TileCoord,
         queued: bool,
     ) -> Result<EntityId, EconomyError> {
-        let builders = self.validate_builders(player, builders, false)?;
+        let builders = self.placement_builders(player, builders, false)?;
         self.validate_build_queue(&builders, 1, queued)?;
         let snapped = aoe_core::snap_bridge_start(
             from,
@@ -79,7 +79,9 @@ impl GameWorld {
         let id =
             self.insert_building_shape(player, BuildingKind::Bridge, rect, false, Some(span))?;
         self.charge(player, cost);
-        if !self.assign_build_orders(&builders, &[id], queued) {
+        if builders.is_empty() {
+            self.queue_foundations(&[id], None);
+        } else if !self.assign_build_orders(&builders, &[id], queued) {
             let _ = self.issue_cancel_construction(player, id);
             return Err(GameWorldError::Unreachable.into());
         }

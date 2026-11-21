@@ -24,8 +24,9 @@ fn an_unclaimed_worker_never_falls_back_to_a_sibling_stewards_tree() {
             natural.extend(generator.chunk(x, y).unwrap().resources);
         }
     }
-    let mut w =
-        GameWorld::from_prepared_map(package, pages, water, Vec::new(), Vec::new()).unwrap();
+    let mut w = GameWorld::from_prepared_map(package, pages, water, Vec::new(), Vec::new())
+        .unwrap()
+        .without_loose_rocks();
     w.set_fog_disabled(true);
     for node in natural {
         w.deplete_resource(node.id, node.initial_amount).unwrap();

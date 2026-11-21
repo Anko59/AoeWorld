@@ -7,10 +7,16 @@ use std::cell::RefCell;
 struct Entry {
     base: Option<Tile>,
     candidate: Option<Option<ResourceNode>>,
+    dressing_roll: Option<u64>,
+    landscape: Option<LandscapeSample>,
 }
 
 /// One 192-tile cell and its wildness.
 type CliffCell = ((i32, i32), Option<crate::terrain::relief::CliffPiece>);
+/// A rock anchor can sit one tile outside a chunk and probe two more tiles
+/// for scree. The resulting 38 tiles can intersect 14 three-tile cliff cells.
+const CLIFF_CACHE_SIDE: i32 = 14;
+const CLIFF_CACHE_SIZE: usize = (CLIFF_CACHE_SIDE * CLIFF_CACHE_SIDE) as usize;
 
 type CellWildness = ((i64, i64), u16);
 
@@ -31,7 +37,7 @@ pub(super) struct Memo<'a, const N: usize, const W: usize> {
     cancelled: &'a dyn Fn() -> bool,
     entries: RefCell<[Entry; N]>,
     cells: RefCell<[Option<CellWildness>; 16]>,
-    cliffs: RefCell<[Option<CliffCell>; 169]>,
+    cliffs: RefCell<[Option<CliffCell>; CLIFF_CACHE_SIZE]>,
     /// Water kinds; the dense provenance spares a base tile a second sample.
     water: RefCell<[Option<MemoWater>; W]>,
     shores: RefCell<[Option<Shore>; N]>,
@@ -54,7 +60,7 @@ impl<'a> PointMemo<'a> {
             cancelled,
             entries: RefCell::new([Entry::default(); 25]),
             cells: RefCell::new([None; 16]),
-            cliffs: RefCell::new([None; 169]),
+            cliffs: RefCell::new([None; CLIFF_CACHE_SIZE]),
             water: RefCell::new([None; 361]),
             shores: RefCell::new([None; 25]),
             probe_reach: true,
@@ -76,7 +82,7 @@ impl<'a> ChunkMemo<'a> {
             cancelled,
             entries: RefCell::new([Entry::default(); 1296]),
             cells: RefCell::new([None; 16]),
-            cliffs: RefCell::new([None; 169]),
+            cliffs: RefCell::new([None; CLIFF_CACHE_SIZE]),
             water: RefCell::new([None; 2500]),
             shores: RefCell::new([None; 1296]),
             probe_reach: false,
@@ -109,6 +115,45 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
             .landscape_cell_wildness(cx, cy, self.cancelled)?;
         self.cells.borrow_mut()[slot] = Some(((cx, cy), value));
         Ok(value)
+    }
+    pub(super) fn landscape(
+        &self,
+        position: TileCoord,
+        evaluate: impl FnOnce() -> Result<Option<(LandscapeSample, Tile)>, EnvironmentPageError>,
+    ) -> Result<Option<(LandscapeSample, Tile)>, EnvironmentPageError> {
+        if (self.cancelled)() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        let index = self.index(position);
+        if let Some(index) = index {
+            let entry = &self.entries.borrow()[index];
+            if let (Some(sample), Some(base)) = (entry.landscape, entry.base) {
+                return Ok(Some((sample, base)));
+            }
+        }
+        let result = evaluate()?;
+        if let (Some(index), Some((sample, _))) = (index, result) {
+            self.entries.borrow_mut()[index].landscape = Some(sample);
+        }
+        Ok(result)
+    }
+    pub(super) fn dressing_roll(&self, position: TileCoord) -> u64 {
+        let index = self.index(position);
+        if let Some(index) = index
+            && let Some(roll) = self.entries.borrow()[index].dressing_roll
+        {
+            return roll;
+        }
+        let roll = unsigned_noise(
+            self.generator.geography_key,
+            b"landscape-dressing-v9",
+            position.x,
+            position.y,
+        ) ^ self.generator.procedural_seed.rotate_left(29);
+        if let Some(index) = index {
+            self.entries.borrow_mut()[index].dressing_roll = Some(roll);
+        }
+        roll
     }
     pub(super) fn base(&self, position: TileCoord) -> Result<Option<Tile>, EnvironmentPageError> {
         // Cancellation is observed even on a hit. Do not retain source errors.
@@ -155,8 +200,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         }
         Ok(result)
     }
-    /// A 36-tile halo intersects at most 13x13 three-tile cells. Direct mapping
-    /// is collision-free inside that halo; out-of-halo queries are not retained.
+    /// Direct mapping is collision-free in the composition and scree halo.
     /// Cache dry and non-cliff decisions too, but never errors or cancellation.
     pub(super) fn cliff(
         &self,
@@ -167,7 +211,8 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         }
         let side = crate::terrain::relief::CLIFF_CELL_TILES;
         let cell = (position.x.div_euclid(side), position.y.div_euclid(side));
-        let slot = (cell.1.rem_euclid(13) * 13 + cell.0.rem_euclid(13)) as usize;
+        let slot = (cell.1.rem_euclid(CLIFF_CACHE_SIDE) * CLIFF_CACHE_SIDE
+            + cell.0.rem_euclid(CLIFF_CACHE_SIDE)) as usize;
         let cached = self.cliffs.borrow()[slot];
         let piece = if let Some((key, piece)) = cached
             && key == cell
@@ -177,9 +222,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
             let piece = self
                 .generator
                 .cliff_piece_with_cancel(position, self.cancelled)?;
-            if self.index(position).is_some() {
-                self.cliffs.borrow_mut()[slot] = Some((cell, piece));
-            }
+            self.cliffs.borrow_mut()[slot] = Some((cell, piece));
             piece
         };
         Ok(piece.map(|mut piece| {

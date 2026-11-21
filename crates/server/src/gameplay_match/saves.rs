@@ -22,7 +22,7 @@ use std::{
 };
 
 /// Read by `make check-fixtures` to explain a save that no longer loads.
-/// The world snapshot includes commodity recovery deadlines and private planned foundations.
+/// Includes the shared construction queue, Vassal focus and General queued-leg modes.
 pub const SAVE_VERSION: u16 = 20;
 const MAX_NAME: usize = 60;
 const MAX_SAVE_BYTES: u64 = 2 << 30;

@@ -9,7 +9,7 @@ fn count(w: &GameWorld, f: impl Fn(&crate::GameBuilding) -> bool) -> usize {
 }
 
 /// Run `builders` villagers for `limit` ticks, printing one line per event.
-pub(super) fn timeline(builders: usize, limit: u32) -> (Option<u32>, Option<u32>, Option<u32>) {
+pub(super) fn timeline(villagers: usize, limit: u32) -> (Option<u32>, Option<u32>, Option<u32>) {
     let (mut w, v, _) = setup();
     w.set_fog_disabled(true);
     w.economy.players.get_mut(&PlayerId(0)).unwrap().stockpile = Stockpile {
@@ -18,7 +18,7 @@ pub(super) fn timeline(builders: usize, limit: u32) -> (Option<u32>, Option<u32>
         gold: 100_000,
         stone: 100_000,
     };
-    for i in 0..builders {
+    for i in 0..villagers {
         let at = TileCoord::new(86 + i as i32 % 10, 97 + i as i32 / 10);
         w.spawn_villager(PlayerId(0), WorldPosition::from_tile_center(at).unwrap())
             .unwrap();
@@ -53,15 +53,14 @@ pub(super) fn timeline(builders: usize, limit: u32) -> (Option<u32>, Option<u32>
         }
     }
     eprintln!(
-        "timeline {builders} builders: 20 wall tiles {first_wall:?}, first gate {first_gate:?}, developed {done:?}"
+        "timeline {villagers} villagers: 20 wall tiles {first_wall:?}, first gate {first_gate:?}, developed {done:?}"
     );
     (first_wall, first_gate, done)
 }
 
 #[test]
 fn vassal_timeline_with_eight_builders() {
-    let r = timeline(8, 60_000);
-    // Measured 8 builders: 20 wall tiles 3,500, the threatened side ~10,000 and
-    // the whole domain 52,800 ticks (39,600 before every gate was joined by road).
+    let r = timeline(16, 60_000);
+    // The shared quota supports eight builders from 16 villagers.
     assert!(r.2.is_some_and(|t| t <= 60_000), "{r:?}");
 }

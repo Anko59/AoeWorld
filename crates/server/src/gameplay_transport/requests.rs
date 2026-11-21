@@ -244,6 +244,15 @@ pub(super) async fn read_requests(
                     .queue_vassal_development(session_id, sequence, vassal_id, enabled)
                     .await
             }
+            Ok(GameplayClientMessage::VassalFocusOrder {
+                sequence,
+                vassal_id,
+                focus,
+            }) => {
+                service
+                    .queue_vassal_focus(session_id, sequence, vassal_id, focus)
+                    .await
+            }
             Ok(GameplayClientMessage::StewardDismissOrder {
                 sequence,
                 steward_id,

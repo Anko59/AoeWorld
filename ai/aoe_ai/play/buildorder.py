@@ -61,7 +61,11 @@ def castle_prerequisite_wood(ctx: Context) -> int:
     Paid foundations and pending orders already reserve their own cost. Rich
     stockpiles can still feed farms and soldiers above this bounded reserve.
     """
-    if not ctx.feudal or ctx.castle or castle_requirement_kinds(ctx) >= 2:
+    if not ctx.feudal or ctx.castle:
+        return 0
+    if unpaid_age_up_barracks(ctx):
+        return building_cost(BuildingKind.BARRACKS)[1] + ctx.config.wood_reserve
+    if castle_requirement_kinds(ctx) >= 2 or emergency_defence(ctx):
         return 0
     placed = {b.kind for b in ctx.buildings} | {p.kind for p in ctx.board.plans}
     if len(placed.intersection(CASTLE_REQUIREMENT)) >= 2:
@@ -86,6 +90,11 @@ def stage(ctx: Context) -> str:
     return DARK
 
 
+def emergency_defence(ctx: Context) -> bool:
+    return (ctx.board.raid_until > ctx.tick
+            and len(ctx.army) + len(ctx.led) < ctx.config.castle_army_min)
+
+
 def wants_castle_food(ctx: Context) -> bool:
     """Prepare the age's food while the Feudal army finishes forming."""
     return ctx.feudal and not ctx.castle and len(ctx.villagers) >= ctx.config.castle_villagers
@@ -97,7 +106,8 @@ def wants_loom(ctx: Context) -> bool:
 
 def unpaid_age_up_barracks(ctx: Context) -> bool:
     """The age-up's first Barracks must precede discretionary wood drop-offs."""
-    return (ctx.center is not None and ctx.center.researching == Tech.FEUDAL_AGE
+    return ((ctx.feudal and not ctx.castle or
+             ctx.center is not None and ctx.center.researching == Tech.FEUDAL_AGE)
             and not any(b.kind == BuildingKind.BARRACKS for b in ctx.buildings)
             and not any(p.kind == BuildingKind.BARRACKS for p in ctx.board.plans))
 
@@ -139,6 +149,34 @@ def wanted_castles(ctx):
     return max(ctx.config.castles, (ctx.count(BuildingKind.TOWN_CENTER, complete=True) + 1) // 2) if ctx.config.castles else 0
 
 
+def planned_count(ctx, kind):
+    return ctx.count(kind) + sum(plan.kind == kind for plan in ctx.board.plans)
+
+
+def next_stone_cost(ctx):
+    """The next structure worth stockpiling or trading stone for."""
+    centers = planned_count(ctx, BuildingKind.TOWN_CENTER)
+    if (not centers and ctx.villagers) or (
+        ctx.castle and len(ctx.villagers) >= ctx.config.expand_villagers
+        and centers < wanted_centers(ctx)
+    ):
+        return building_cost(BuildingKind.TOWN_CENTER)[3]
+    if ctx.castle and planned_count(ctx, BuildingKind.CASTLE) < wanted_castles(ctx):
+        return building_cost(BuildingKind.CASTLE)[3]
+    return 0
+
+
+def wants_urgent_market(ctx):
+    if not ctx.castle or len(ctx.villagers) < 24:
+        return False
+    gold, stone = ctx.economy.gold, ctx.economy.stone
+    next_bill = next_stone_cost(ctx)
+    center_shortage = next_bill == building_cost(BuildingKind.TOWN_CENTER)[3] and stone < next_bill
+    established = len(ctx.army) + len(ctx.led) >= ctx.config.imperial_army_min
+    return gold < ctx.config.market_stone_gold_floor or center_shortage or (
+        established and (gold < ctx.config.market_gold_reserve or stone < next_bill))
+
+
 # ----- buildings ----------------------------------------------------------
 def wanted_buildings(ctx: Context) -> list[tuple[BuildingKind, int]]:
     """(kind, how many) in the order they should appear; Feudal Age only.
@@ -150,6 +188,8 @@ def wanted_buildings(ctx: Context) -> list[tuple[BuildingKind, int]]:
         if ctx.center is not None and ctx.center.researching == Tech.FEUDAL_AGE:
             return [(BuildingKind.BARRACKS, 1)]
         return []
+    if unpaid_age_up_barracks(ctx):
+        return [(BuildingKind.BARRACKS, 1)]
     # Finish the Blacksmith before expanding production so the second Castle
     # prerequisite does not compete with another Barracks for construction wood.
     wants = [
@@ -157,6 +197,10 @@ def wanted_buildings(ctx: Context) -> list[tuple[BuildingKind, int]]:
         (BuildingKind.ARCHERY_RANGE, 1),
     ]
     wants.append((BuildingKind.BLACKSMITH, 1))
+    market_needed = len(ctx.villagers) >= 24
+    urgent_market = wants_urgent_market(ctx)
+    if urgent_market:
+        wants.append((BuildingKind.MARKET, 1))
     if ctx.castle or (ctx.center is not None and ctx.center.researching == Tech.CASTLE_AGE):
         wants.insert(2, (BuildingKind.STABLE, max(1, ctx.count(BuildingKind.TOWN_CENTER, complete=True) // 2)))
     # The Imperial Age buildings come before the second Barracks and Range:
@@ -167,7 +211,7 @@ def wanted_buildings(ctx: Context) -> list[tuple[BuildingKind, int]]:
         wants.append((BuildingKind.BARRACKS, max(ctx.config.max_barracks, ctx.count(BuildingKind.TOWN_CENTER, complete=True))))
     if len(ctx.villagers) >= 26:
         wants.append((BuildingKind.ARCHERY_RANGE, max(ctx.config.max_ranges, ctx.count(BuildingKind.TOWN_CENTER, complete=True))))
-    if len(ctx.villagers) >= 24:
+    if market_needed and not urgent_market:
         wants.append((BuildingKind.MARKET, 1))
     return wants
 

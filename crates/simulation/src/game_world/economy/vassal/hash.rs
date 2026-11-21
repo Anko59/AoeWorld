@@ -24,9 +24,7 @@ impl Economy {
             for n in [d.center.x, d.center.y] {
                 h.update(&n.to_le_bytes());
             }
-            h.update(&[u8::from(d.development), u8::from(d.status.developed)]);
-            // The road stage permits assigned workers to leave the domain radius.
-            h.update(&[d.status.next.map_or(u8::MAX, |kind| kind as u8)]);
+            h.update(&[u8::from(d.development), d.status.focus as u8]);
             h.update(&(d.cursor as u64).to_le_bytes());
             h.update(&[u8::from(d.progress.is_some())]);
             if let Some((site, work, since)) = d.progress {
@@ -54,6 +52,10 @@ impl Economy {
                     h.update(&t.y.to_le_bytes());
                 }
             }
+            h.update(&(d.paid.len() as u64).to_le_bytes());
+            for id in &d.paid {
+                h.update(&id.0.to_le_bytes());
+            }
             h.update(&[u8::from(d.hot.is_some())]);
             if let Some(t) = d.hot {
                 h.update(&t.x.to_le_bytes());
@@ -65,11 +67,9 @@ impl Economy {
                 h.update(&tile.y.to_le_bytes());
                 h.update(&until.to_le_bytes());
             }
-            for members in [&d.workers, &d.soldiers] {
-                h.update(&(members.len() as u64).to_le_bytes());
-                for unit in members {
-                    h.update(&unit.0.to_le_bytes());
-                }
+            h.update(&(d.soldiers.len() as u64).to_le_bytes());
+            for unit in &d.soldiers {
+                h.update(&unit.0.to_le_bytes());
             }
         }
         h.update(&(m.returns.len() as u64).to_le_bytes());

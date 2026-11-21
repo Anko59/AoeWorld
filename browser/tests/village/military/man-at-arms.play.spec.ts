@@ -68,7 +68,10 @@ test("Barracks explains the upgrade gate and researches existing and future Men-
   const train = page.locator("#train-villager");
   await expect(upgrade).toContainText("Research Man-at-Arms");
   await expect(upgrade).toBeDisabled();
-  await expect(upgrade).toHaveAttribute("title", /requires Feudal Age/);
+  await expect(upgrade).toHaveAttribute(
+    "aria-description",
+    /requires Feudal Age/,
+  );
   await expect(train).toHaveAttribute("title", /Train Militia/);
   await expect(train).toContainText("Militia");
   await train.click();
@@ -89,7 +92,7 @@ test("Barracks explains the upgrade gate and researches existing and future Men-
   await train.click();
   await train.click();
   await expect(upgrade).toBeDisabled();
-  await expect(upgrade).toHaveAttribute("title", /training queue/);
+  await expect(upgrade).toHaveAttribute("aria-description", /training queue/);
   await expect(upgrade).toBeEnabled();
   await upgrade.click();
   await expect(train).toBeDisabled();

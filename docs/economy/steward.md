@@ -20,15 +20,18 @@ and the distinction between capacity and performance qualification.
 
 ## Deterministic economy
 
-Sheltering the Steward in a Town Center activates its circular domain. The Rust simulation
-visits up to eight active domains every 20 ticks (one second at 20 Hz), rotating
-in entity order. Each domain scans at most 1,024 spatial-bucket entries and 2,048
-of its owner's buildings; a retained cursor progresses through crowded buckets.
-A partial census never authorizes training or a new foundation. Each admitted
-domain may attempt 64 ordinary orders, eight bounded resource searches and 32
-placement checks. Site searches resume across passes. The world maxima per pass
-are therefore 8,192 unit visits, 16,384 building visits, 512 orders, 64 resource
-searches and 256 site checks. Ordinary pathfinding retains its shared budgets.
+Sheltering a Steward in a Town Center activates its circular domain. Each
+game second budgets one domain visit per owner with active Stewards, with room
+for up to eight visits in small kingdoms. Owners take turns and each owner
+rotates through its domains. The work is spread across ticks, with a ceiling
+of four domains on any tick, so a large world may take more than one second
+to reach every owner.
+
+An admitted domain scans up to 1,024 spatial-bucket entries and 2,048 of its
+owner's buildings, attempts 64 orders and eight resource searches, and checks
+32 placement sites. Census and placement resume across passes. A partial
+census cannot authorize training or a new foundation. Pathfinding retains
+its shared budgets.
 
 ### Exact rules (what is adopted, when TCs train, why it stops)
 
@@ -108,18 +111,17 @@ Idle workers and unloaded managed gatherers respond to those kingdom needs.
 Carried loads finish their ordinary delivery first, and a refused replacement
 keeps the current productive job. Training retains its normal admission before
 productive reassignment; optional maintenance follows.
-A busy worker keeps its job through ordinary stock changes. Only a dry Food
-stock (under a tenth of another kind's weighted reserve) re-tasks busy
-non-farming gatherers, at most a quarter of the domain (at least one) working
-Farms or building them, one change per 12 seconds. Such a retask places a Farm
-before taking another wild forage node, since foraging is finite and does not
-count toward that quota. Shore fish are for boats,
+A busy worker keeps its job through ordinary stock changes. A weighted reserve
+below a tenth of another can redirect one unloaded non-farming gatherer every
+12 seconds, up to a quarter of the domain (at least one worker) on the needed
+resource. A Food retask prefers a Farm to wild forage, which is finite and
+does not count toward the quota. Shore fish are for boats,
 so walking villagers never count them as Food supply. Idle dispatch keeps its ordinary
 budget, and severe shortages can still redirect the available workforce.
-Known resources within ten tiles are preferred. A local miss can also probe a
-completed matching drop-off, rotating its building ID between queries. A
-retained search visits eight-tile blocks outward from the domain centre, so
-Gold and Stone beyond the ordinary ten-tile replacement radius remain usable.
+Local searches cover ten tiles and can also probe a completed drop-off, rotating
+its building ID between queries. After one local ore probe, the Steward checks
+discoveries retained from the domain's outward sweep. A Gold or Stone miss is shared by workers for the
+rest of the pass, leaving search budget for other jobs.
 The ordinary replacement search itself keeps its existing radius.
 
 Distant drop-offs prompt normal Lumber/Mining Camp or Mill construction. An
@@ -130,17 +132,19 @@ opening another plot. Each unfinished Farm keeps one future farmer, while
 other economic foundations may take helpers. New Farms tile in three-tile
 cells around Mills and Town Centers; full clusters expand with another Mill.
 Farm placement resumes across passes within the same 32-site budget, and
-exhausting natural-resource searches does not prevent farming with the
-remaining order and placement budget. The manager helps unfinished economic
-foundations with the nearest unloaded idle villagers in the admitted census:
-at most three builders on a House or Mill, four on a Lumber/Mining Camp. A Farm
-gets one prospective farmer. Known managed builders outside a partial census
-and assignments earlier in the same pass count immediately. Other workers keep
-looking for resource work instead of joining a full
-team. A pending Mill does not block Farms served by completed drop-offs once
-the normal completed-Mill prerequisite is met. The manager prepays two normal
-Mill reseeds. Every cost, exploration check, placement
-rule and build/train time is the ordinary simulation rule.
+continues from the next plot after finding a site. While a Mill is pending,
+only farm sites use that placement budget. Exhausting natural-resource
+searches leaves the remaining order and placement budget available for farms.
+The manager helps unfinished economic foundations with nearby unloaded idle
+villagers. Houses and Mills normally get up to three builders, Lumber and
+Mining Camps get up to four, and a Farm gets one prospective farmer. When
+housing is full and the player still needs its first Mill, idle builders can
+fill the work positions around those Houses and Mills. This requires a complete
+census. Known managed builders outside a partial census and assignments
+earlier in the same pass count immediately. Pending Mills leave completed
+drop-offs available for Farm placement after the first Mill is built. The
+manager prepays two normal Mill reseeds. Every cost, exploration check,
+placement rule and build or train time follows the ordinary simulation rules.
 
 Adopted farmers also build a nearby Mill for an old distant plot when a legal
 site exists within six tiles of its centre. Repairs rotate between plots and
@@ -172,9 +176,8 @@ separate: an eight-tile block has at most 32 spatial history-range seeks, 256
 retained starting identities and 64 tile probes before deduplication to 64
 returned candidates. These are fixed spatial bounds, rather than a scan of the
 world's history. Its storage caps are separate too: 4,096 starting identities,
-2^20 depletion entries, and an 8,192-entry/32-MiB resource-block cache. Across
-eight admitted domains, the unchanged search budget admits at most 64 queries
-per pass. Ordinary order admission and pathfinding retain their own budgets.
+2^20 depletion entries, and an 8,192-entry/32-MiB resource-block cache. At most
+four domains and 32 resource searches are admitted in a tick.
 
 The server records this phase as `steward_economy`. The synthetic 100-player,
 100,000-population test checks the manager's admission and work counts. It does

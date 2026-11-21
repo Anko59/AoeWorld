@@ -48,6 +48,13 @@ class Config:
     feudal_shares: dict[str, float] = field(
         default_factory=lambda: {"FOOD": 0.46, "WOOD": 0.30, "GOLD": 0.24, "STONE": 0.0}
     )
+    castle_shares: dict[str, float] = field(
+        default_factory=lambda: {"FOOD": 0.43, "WOOD": 0.40, "GOLD": 0.17, "STONE": 0.0}
+    )
+    castle_gold_boost: float = 0.23
+    castle_worker_floors: dict[str, float] = field(
+        default_factory=lambda: {"FOOD": 0.24, "WOOD": 0.18}
+    )
     #: Gold-heavy shares while the Imperial Age is being saved for.
     imperial_shares: dict[str, float] = field(
         default_factory=lambda: {"FOOD": 0.40, "WOOD": 0.25, "GOLD": 0.35, "STONE": 0.0}
@@ -60,12 +67,16 @@ class Config:
     max_gather_distance: int = 70
     #: Timber can run out on an open start; known reachable forests get camps.
     wood_gather_distance: int = 256
+    ore_gather_distance: int = 160
     workers_per_center: int = 60
     expand_workers_per_center: int = 30
     settlement_spacing: int = 28
     market_interval_seconds: int = 8
     market_max_sale_lots: int = 64
     market_gold_reserve: int = 1400
+    market_stone_gold_floor: int = 650
+    market_emergency_sale_lots: int = 3
+    market_emergency_stone_reserve: int = 500
     market_wood_reserve: int = 800
     market_food_reserve: int = 1200
     market_stone_reserve: int = 1400
@@ -122,6 +133,7 @@ class Config:
     #: The army is trained from Feudal Age on, never before: Dark Age food
     #: belongs to villagers and the age.
     army_min_villagers: int = 18
+    emergency_army_villagers: int = 6
     #: Spearmen : archers : skirmishers.
     army_mix: dict[str, float] = field(
         default_factory=lambda: {"SPEARMAN": 4.0, "ARCHER": 3.0, "SKIRMISHER": 3.0}
@@ -133,6 +145,7 @@ class Config:
     army_siege_weight: float = 2.0
     army_siege_bonus_cap: int = 150
     army_training_queue: int = 2
+    army_train_orders: int = 8
     #: Cash floats for optional improvements while the economy is developing.
     optional_research_food_float: int = 100
     optional_research_wood_float: int = 75
@@ -162,6 +175,7 @@ class Config:
     #: soldier made the server plan thousands of map-wide routes at a time.
     march_hop_tiles: int = 48
     march_group_tiles: int = 16
+    march_group_members: int = 256
     army_formation: str = "LINE"
     #: A soldier is sent on at most once per this many seconds, and an army
     #: that got no nearer its goal for `march_stall_seconds` gives it up.
@@ -194,6 +208,14 @@ class Config:
     retreat_fraction: float = 0.4
     #: Defend when a threat is this close to the base.
     defend_radius: int = 24
+    combat_engage_tiles: int = 8
+    combat_targets_per_cell: int = 12
+    combat_engage_route_queries: int = 4
+    threat_seconds: int = 20
+    raid_hold_seconds: int = 90
+    raid_general_retry_seconds: int = 20
+    counter_seconds: int = 300
+    counter_min_soldiers: int = 6
     rally_offset: int = 7
     rally_scan_trainers: int = 8
     rally_retry_seconds: int = 8
@@ -214,8 +236,8 @@ class Config:
     #: Minimum Castles (650 stone each); more settlements raise the target once in Castle Age; Vassals and
     #: Generals are trained there.
     castles: int = 1
-    #: Stone share of the villagers while a wanted Castle is unpaid.
-    castle_stone_share: float = 0.15
+    #: Maximum stone share when the next settlement is unfunded.
+    castle_stone_share: float = 0.22
     #: Minimum Town Centers (the first is the start's) and the villagers
     #: from which the next is placed; each trains villagers.
     town_centers: int = 1
@@ -228,7 +250,7 @@ class Config:
     steward_min_villagers: int = 40
     #: Leave working villagers to their Steward and give it first choice of idle workers.
     defer_to_steward: bool = True
-    steward_idle_timeout_seconds: int = 30
+    steward_idle_timeout_seconds: int = 8
     #: Vassals to field (one per Castle) and Generals in total.
     vassals: int = 1
     generals: int = 1

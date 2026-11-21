@@ -1,6 +1,6 @@
 import { set } from '/interface/dom/update.js';
 
-function slider({ label, name = label, id, step = 1, suffix = '', input: onInput }) {
+function slider({ label, name = label, id, step = 1, max = 100, suffix = '', format, input: onInput, change: onChange }) {
   const row = document.createElement('label');
   row.className = 'menu-slider';
   const title = document.createElement('span');
@@ -8,21 +8,24 @@ function slider({ label, name = label, id, step = 1, suffix = '', input: onInput
   const input = document.createElement('input');
   input.type = 'range';
   input.min = '0';
-  input.max = '100';
+  input.max = String(max);
   input.step = String(step);
   if (id) input.id = id;
   input.setAttribute('aria-label', name);
   const output = document.createElement('output');
   row.append(title, input, output);
   const paint = () => {
-    const value = input.value + '%';
+    const value = (Number(input.value) * 100 / max) + '%';
     if (input.style.getPropertyValue('--fill') !== value) input.style.setProperty('--fill', value);
-    set(output, 'textContent', input.value + suffix);
+    const shown = format ? format(Number(input.value)) : input.value + suffix;
+    set(output, 'textContent', shown);
+    input.setAttribute('aria-valuetext', shown);
   };
   input.addEventListener('input', () => {
     paint();
     onInput?.(Number(input.value));
   });
+  input.addEventListener('change', () => onChange?.(Number(input.value)));
   paint();
   return {
     row, input,

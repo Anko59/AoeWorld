@@ -1,62 +1,10 @@
 //! Far-view construction uses the ordinary placement and one grouped build order.
 use super::*;
-use aoe_protocol::{CommandResult, GameplayUnitState, UnitTask};
+use aoe_protocol::CommandResult;
 use wasm_bindgen::prelude::wasm_bindgen;
 
 /// Far builds keep their own small burst so other UI orders keep room.
 const FAR_BUILD_BURST: f64 = 20.0;
-const REACH_TILES: u64 = 64;
-const NO_NEARBY: &str =
-    "No available villagers within 64 tiles of this site. Choose a site nearer your village.";
-
-pub(crate) fn choose<'a>(
-    units: impl Iterator<Item = &'a GameplayUnitState>,
-    player: aoe_core::PlayerId,
-    at: TileCoord,
-) -> Vec<EntityId> {
-    let mut candidates = Vec::with_capacity(5);
-    for u in units.filter(|u| eligible(u, player)) {
-        let idle = !u.moving
-            && !u.planning
-            && u.gathering.is_none()
-            && matches!(
-                u.task,
-                UnitTask::Idle | UnitTask::Carrying | UnitTask::Moving
-            );
-        let dx = (i64::from(u.position.x) - i64::from(at.x) * 1024).unsigned_abs();
-        let dy = (i64::from(u.position.y) - i64::from(at.y) * 1024).unsigned_abs();
-        let distance = dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy));
-        if distance > (REACH_TILES * 1024).pow(2) {
-            continue;
-        }
-        let key = (
-            u8::from(u.managed_by.is_some()) * 2 + u8::from(!idle),
-            distance,
-            u.id,
-        );
-        let index = candidates.partition_point(|c| *c < key);
-        if index < 4 {
-            candidates.insert(index, key);
-            candidates.truncate(4);
-        }
-    }
-    let busy = candidates.first().map_or(u8::MAX, |c| c.0);
-    candidates
-        .into_iter()
-        .filter(|c| c.0 == busy)
-        .take(4)
-        .map(|c| c.2)
-        .collect()
-}
-
-pub(super) fn eligible(u: &GameplayUnitState, player: aoe_core::PlayerId) -> bool {
-    u.player == player
-        && u.hp > 0
-        && u.kind == UnitKind::Villager
-        && u.attack_target.is_none()
-        && u.hunt_target.is_none()
-        && !matches!(u.task, UnitTask::Building | UnitTask::Seeding)
-}
 
 /// Track all outgoing human commands, so far builds leave room for other UI orders.
 pub(crate) struct Admission {
@@ -100,7 +48,7 @@ pub(crate) fn acknowledge(client: &mut Client, sequence: u64, result: CommandRes
     }
     client.village.build_admission.pending = None;
     far_build_result(if result == CommandResult::Accepted {
-        "Accepted 1 building order. Villagers are on their way."
+        "Accepted 1 building order. Queued for nearby villagers."
     } else {
         map::feedback::order_message(result, None)
     });
@@ -116,10 +64,6 @@ pub(crate) fn connection_reset(client: &mut Client) {
     }
 }
 
-pub(crate) fn no_nearby() {
-    far_build_result(NO_NEARBY);
-}
-
 pub(crate) fn preview(client: &Client) {
     let Some(kind) = client.village.placement else {
         far_build_preview(&[], "");
@@ -129,14 +73,11 @@ pub(crate) fn preview(client: &Client) {
         return;
     };
     let tiles = tiles(client, at).unwrap_or_default();
-    let nearby = !choose(client.units.values(), owner(client), at).is_empty();
-    let valid = nearby && span_valid(client, kind, &tiles);
-    let reason = if !nearby {
-        NO_NEARBY
-    } else if valid {
-        "Click to send nearby villagers · Esc cancels"
+    let valid = span_valid(client, kind, &tiles);
+    let reason = if valid {
+        "Click to place a foundation · Esc cancels"
     } else if !enabled(client, kind, 1) {
-        "No available villagers, resources, age or required buildings"
+        "Insufficient resources, age or required buildings"
     } else if tiles
         .iter()
         .any(|t| map::terrain_tile(client, t.x, t.y).is_none())

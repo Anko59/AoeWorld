@@ -1,4 +1,5 @@
 use super::*;
+use wasm_bindgen::JsCast;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
@@ -7,7 +8,7 @@ fn native_static_pose_and_pitch_cells_keep_zero_duration() {
     let pose = aoe_assets::catalog::units::Pose::MangonelStand as usize;
     assert_eq!(value["actors"][pose][1], 1);
     assert_eq!(value["actors"][pose][2], 0);
-    let content = decode(&serde_json::to_vec(&value).unwrap()).expect("native static content");
+    let (content, _) = decode(&serde_json::to_vec(&value).unwrap()).expect("native static content");
     assert_eq!(content.actors[pose].frame_millis(), 0.0);
     let arrow = &content.actors[aoe_assets::catalog::units::Pose::GalleyArrow as usize];
     assert_eq!(arrow.stride, 11);
@@ -19,6 +20,7 @@ fn native_static_pose_and_pitch_cells_keep_zero_duration() {
 fn fixture() -> serde_json::Value {
     serde_json::json!({
         "rules": aoe_simulation::browser_content(),
+        "researchTooltips": aoe_simulation::browser_research_tooltips(),
         "actors": aoe_assets::catalog::units::SPRITES.iter().map(|s|
             [s.id, u32::from(s.stride), u32::from(s.millis), u32::from(s.phases)]
         ).collect::<Vec<_>>()
@@ -28,7 +30,9 @@ fn fixture() -> serde_json::Value {
 #[wasm_bindgen_test]
 fn generated_content_preserves_native_actor_sampling_and_game_rules() {
     let data = serde_json::to_vec(&fixture()).unwrap();
-    let content = decode(&data).unwrap();
+    let (content, tooltips) = decode(&data).unwrap();
+    let tooltips: Array = tooltips.unchecked_into();
+    assert_eq!(tooltips.length() as usize, aoe_protocol::Tech::ALL.len());
     assert_eq!(content.rules.units.len(), aoe_protocol::UnitKind::ALL.len());
     for (actor, source) in content
         .actors
@@ -50,6 +54,7 @@ fn malformed_runtime_content_is_rejected_before_installation() {
     }
     for (section, index, value) in [
         ("rules", 0, serde_json::json!(0)),
+        ("researchTooltips", 0, serde_json::json!(" ")),
         ("rules", 1, serde_json::json!(-1)),
         ("rules", 4, serde_json::json!(1.5)),
         ("actors", 0, serde_json::json!([993, 0, 1000, 0])),

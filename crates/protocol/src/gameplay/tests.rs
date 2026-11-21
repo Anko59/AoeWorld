@@ -7,6 +7,7 @@ mod fog;
 mod formations;
 mod garrison;
 mod queues;
+mod vassal;
 
 #[test]
 fn building_orders_pin_the_current_queue_flag() {

@@ -4,8 +4,11 @@ use super::*;
 mod surface;
 use crate::terrain::{resource_id, resources, unsigned_noise};
 use surface::{appearance, material, soft_ground, tree_family};
+#[path = "chunks/composition.rs"]
+mod composition;
 #[path = "chunks/dressing.rs"]
 mod dressing;
+use composition::Composition;
 #[path = "chunks/memo.rs"]
 mod memo;
 #[path = "chunks/starting.rs"]
@@ -73,7 +76,22 @@ impl MapChunkGenerator {
             resources: Vec::new(),
             decorations: Vec::new(),
         };
-        let memo = memo::ChunkMemo::new_chunk(self, TileCoord::new(ox, oy), cancelled);
+        let origin = TileCoord::new(ox, oy);
+        let memo = memo::ChunkMemo::new_chunk(self, origin, cancelled);
+        let composition = Composition {
+            generator: self,
+            memo: &memo,
+            policy_at,
+            reserved_at,
+            cancelled,
+            memoize_rocks: false,
+        };
+        let rocks = dressing::ChunkRocks::new(
+            origin,
+            self.width_tiles,
+            |at| composition.rock_anchor(at),
+            self.loose_rocks,
+        )?;
         for ly in 0..CHUNK_TILES {
             for lx in 0..CHUNK_TILES {
                 let position = TileCoord::new(
@@ -83,10 +101,8 @@ impl MapChunkGenerator {
                 if let Some(point) = self
                     .evaluate_landscape_point_with_memo::<false, PHYSICAL, 1296, 2500>(
                         position,
-                        policy_at,
-                        reserved_at,
-                        cancelled,
-                        &memo,
+                        &composition,
+                        Some(rocks.at(lx, ly)),
                     )?
                 {
                     chunk.tiles.push(point.tile);
@@ -102,6 +118,7 @@ impl MapChunkGenerator {
         Ok(Some(chunk))
     }
 
+    #[cfg(test)]
     pub(in crate::terrain) fn evaluate_landscape_point_with_cancel<const PHYSICAL: bool>(
         &self,
         position: TileCoord,
@@ -110,12 +127,18 @@ impl MapChunkGenerator {
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<super::LandscapePoint>, EnvironmentPageError> {
         let memo = memo::PointMemo::new(self, position, cancelled);
-        self.evaluate_landscape_point_with_memo::<false, PHYSICAL, 25, 361>(
-            position,
+        let composition = Composition {
+            generator: self,
+            memo: &memo,
             policy_at,
             reserved_at,
             cancelled,
-            &memo,
+            memoize_rocks: false,
+        };
+        self.evaluate_landscape_point_with_memo::<false, PHYSICAL, 25, 361>(
+            position,
+            &composition,
+            None,
         )
     }
 
@@ -127,13 +150,30 @@ impl MapChunkGenerator {
         position: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<super::LandscapePoint>, EnvironmentPageError> {
+        self.evaluate_default_point::<true, true>(position, cancelled)
+    }
+
+    pub(in crate::terrain) fn evaluate_default_point<
+        const SURFACE_ONLY: bool,
+        const PHYSICAL: bool,
+    >(
+        &self,
+        position: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<super::LandscapePoint>, EnvironmentPageError> {
         let memo = memo::PointMemo::new(self, position, cancelled);
-        self.evaluate_landscape_point_with_memo::<true, true, 25, 361>(
-            position,
-            &crate::terrain::landscape_dispatch::default_policy,
-            &|at| self.landscape_reservations_at(at),
+        let composition = Composition {
+            generator: self,
+            memo: &memo,
+            policy_at: &crate::terrain::landscape_dispatch::default_policy,
+            reserved_at: &|at| self.landscape_reservations_at(at),
             cancelled,
-            &memo,
+            memoize_rocks: PHYSICAL && !SURFACE_ONLY && crate::terrain::point_memo::SLOTS > 0,
+        };
+        self.evaluate_landscape_point_with_memo::<SURFACE_ONLY, PHYSICAL, 25, 361>(
+            position,
+            &composition,
+            None,
         )
     }
 
@@ -145,58 +185,18 @@ impl MapChunkGenerator {
     >(
         &self,
         position: TileCoord,
-        policy_at: &dyn Fn(TileCoord, Tile) -> LandscapePolicy,
-        reserved_at: &dyn Fn(TileCoord) -> Reservations,
-        cancelled: &dyn Fn() -> bool,
-        memo: &memo::Memo<'_, N, W>,
+        composition: &Composition<'_, N, W>,
+        rocks: Option<(bool, bool)>,
     ) -> Result<Option<super::LandscapePoint>, EnvironmentPageError> {
-        let effective_policy = |position, base: Tile| {
-            let mut policy = policy_at(position, base);
-            // Explicit temperate-summer model policy, not reconstructed climate
-            // evidence. Keep all source heights/corners and passability intact.
-            if policy.support_per_thousand <= 1000
-                && matches!(
-                    base.biome,
-                    Biome::Temperate | Biome::Boreal | Biome::Woodland
-                )
-                && base.geographic_height_centimeters >= 230_000
-            {
-                policy.support_per_thousand = 0;
-            }
-            // No forest on snow or bare rock, wherever the snow line is.
-            if policy.support_per_thousand <= 1000
-                && self
-                    .ground_cover(position, base.geographic_height_centimeters, base.biome)
-                    .is_some()
-            {
-                policy.support_per_thousand = 0;
-            }
-            policy
-        };
-        let shared_reservations = |position| {
-            let mut reservations = reserved_at(position);
-            reservations.resource_approach |= memo.reserved(position)?;
-            reservations.shore |= matches!(
-                memo.shore(position)?,
-                memo::Shore::Beach | memo::Shore::Bank
-            );
-            Ok(reservations)
-        };
-        let Some((sample, base)) = self.evaluate_landscape_inner_with_base(
-            position,
-            &effective_policy,
-            &shared_reservations,
-            cancelled,
-            &|position| memo.base(position)?.ok_or(EnvironmentPageError::Invalid),
-            &|cx, cy| memo.wildness(cx, cy),
-        )?
-        else {
+        let memo = composition.memo;
+        let cancelled = composition.cancelled;
+        let Some((sample, base)) = composition.sample(position)? else {
             return Ok(None);
         };
         let appearance = appearance(base, sample.density);
         let mut terrain = base;
         let cover = self.ground_cover(position, base.geographic_height_centimeters, base.biome);
-        terrain.material = material(base, appearance, cover);
+        terrain.material = material(base, appearance.floor_strength, cover);
         // Shore band: appearance on land, a shallow rim in open water. It
         // never changes water kind, passability, heights or the shaped outline.
         let shore = memo.shore(position)?;
@@ -221,6 +221,16 @@ impl MapChunkGenerator {
                 sample.historical_land_use,
             );
         }
+        let rock = if self.loose_rocks && base.passable && base.water == crate::WaterKind::None {
+            let (anchor, covered) = match rocks {
+                Some(flags) => flags,
+                None => composition.rock_coverage(position)?,
+            };
+            terrain.passable = !covered;
+            anchor
+        } else {
+            false
+        };
         let tile = LandscapeTile {
             tile: position,
             terrain,
@@ -234,15 +244,11 @@ impl MapChunkGenerator {
                 decoration: None,
             }));
         }
-        let reserved = shared_reservations(position)?;
-        // Large-forest glades and trails stay free of blocking resources.
         let open = sample.density.opening != crate::landscape_patches::Opening::None;
-        let fish = memo.fish(position, terrain)?;
-        let node = if fish.is_some() {
-            fish
+        let reserved = composition.reservations(position)?;
+        let node = if let Some(fish) = memo.fish(position, terrain)? {
+            Some(fish)
         } else if !reserved.route && !reserved.start && !open {
-            // Resource candidates use the source/base biome. Forage also
-            // needs the final ground after snow-line and shore composition.
             memo.resource(position, base)?.filter(|node| {
                 node.object != ObjectKind::ForageBush || soft_ground(terrain.material)
             })
@@ -283,7 +289,6 @@ impl MapChunkGenerator {
             None
         };
         if PHYSICAL {
-            // Decorations never feed back into terrain or resources.
             return Ok(Some(super::LandscapePoint {
                 tile,
                 historical_land_use: sample.historical_land_use,
@@ -304,58 +309,19 @@ impl MapChunkGenerator {
             });
         }
         if resource.is_none()
+            && (rock || terrain.passable)
             && base.passable
             && base.water == crate::WaterKind::None
-            && !matches!(
-                sample.historical_land_use,
-                LandUse::Crop | LandUse::Grazing | LandUse::Nonland
-            )
-            && !reserved.route
-            && !reserved.start
-            && !reserved.resource_approach
-            && !reserved.shore
+            && dressing::uncultivated(sample.historical_land_use)
+            && dressing::allows_dressing(reserved)
         {
-            let roll = unsigned_noise(
-                self.geography_key,
-                b"landscape-dressing-v9",
-                position.x,
-                position.y,
-            ) ^ self.procedural_seed.rotate_left(29);
-            // Loose rocks: bare rock, scree beside cliffs, a few elsewhere.
-            let rock_roll = (roll >> 24) % 1000;
-            if base.water == crate::WaterKind::None
-                && rock_roll < crate::terrain::relief::MAX_ROCK_PER_THOUSAND
-                && sample.density.canopy_per_thousand == 0
-            {
-                let mut beside_cliff = false;
-                for (dx, dy) in crate::terrain::relief::SCREE_REACH {
-                    let near = TileCoord::new(
-                        position.x.saturating_add(dx),
-                        position.y.saturating_add(dy),
-                    );
-                    if memo.base(near)?.is_some_and(|tile| {
-                        tile.surface.is_cliff()
-                            && tile.geographic_height_centimeters
-                                > base.geographic_height_centimeters
-                    }) {
-                        beside_cliff = true;
-                        break;
-                    }
-                }
-                if rock_roll
-                    < self.rock_per_thousand(position, terrain.material, base.biome, beside_cliff)
-                {
-                    decoration = Some(LandscapeDecoration {
-                        tile: position,
-                        family: DecorationFamily::Stone,
-                        variant: (roll >> 8) as u8,
-                        orientation: ((roll >> 16) & 7) as u8,
-                    });
-                }
-            }
-            if decoration.is_none()
-                && let Some(family) = dressing::family(self, position, terrain, appearance, roll)
-            {
+            let roll = memo.dressing_roll(position);
+            let family = if rock {
+                Some(DecorationFamily::Stone)
+            } else {
+                dressing::family(self, position, terrain, appearance, roll)
+            };
+            if let Some(family) = family {
                 decoration = Some(LandscapeDecoration {
                     tile: position,
                     family,

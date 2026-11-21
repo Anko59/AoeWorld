@@ -181,3 +181,41 @@ impl GameWorld {
         true
     }
 }
+
+impl GameWorld {
+    /// Whether static terrain, trees and buildings leave the half-tile steps
+    /// of a straight walk from `from` to `to` clear, and how many steps were
+    /// checked. A walk longer than `max_tiles` is not clear.
+    pub(crate) fn straight_walk_clear(
+        &self,
+        kind: UnitKind,
+        from: WorldPosition,
+        to: WorldPosition,
+        max_tiles: i32,
+    ) -> (bool, u64) {
+        let (dx, dy) = (i64::from(to.x - from.x), i64::from(to.y - from.y));
+        let length = (dx * dx + dy * dy).isqrt();
+        if length > i64::from(max_tiles * 1024) {
+            return (false, 0);
+        }
+        let parts = (length / 512).max(1);
+        let mut previous = from;
+        for n in 1..=parts {
+            let next = WorldPosition::new(
+                from.x + (dx * n / parts) as i32,
+                from.y + (dy * n / parts) as i32,
+            );
+            // Terrain and trees come from the step check; buildings block tiles
+            // only in the economy, which that check does not read.
+            if self.economy.blocked_tiles.contains(&next.tile_floor())
+                || !self
+                    .unit_position_step_clear(kind, previous, next)
+                    .unwrap_or(false)
+            {
+                return (false, n as u64);
+            }
+            previous = next;
+        }
+        (true, parts as u64)
+    }
+}

@@ -7,6 +7,7 @@ from typing import Optional
 from aoeworld import Building, UnitKind
 
 from . import buildorder
+from .combat.march import march
 from ..roster import (best_recruit, land_producers, land_soldier, options, price,
                       profile, visible_composition)
 from ..context import Context
@@ -19,30 +20,37 @@ class MilitaryManager:
     def train(self, ctx: Context) -> None:
         if ctx.board.cooling("world-limit:train", ctx.tick):
             return
-        if ctx.home is None or not ctx.feudal or len(ctx.villagers) < ctx.config.army_min_villagers:
+        defending = buildorder.emergency_defence(ctx)
+        minimum = ctx.config.emergency_army_villagers if defending else ctx.config.army_min_villagers
+        if ctx.home is None or not ctx.feudal or len(ctx.villagers) < minimum:
             return
-        # Imperial expansion already reserves its resources. Train with the
-        # remainder while saving the next Town Center or management unit.
-        if ctx.saving_castle and (not ctx.imperial or ctx.center is None):
+        # Castle Age planning reserves specific resources for development.
+        # The Feudal opening can still pause the whole army for its age-up.
+        if ctx.hold_military_training or (ctx.saving_castle and (not ctx.castle or ctx.center is None)):
             return
         if (not ctx.castle and len(ctx.villagers) >= ctx.config.castle_villagers
-                and buildorder.castle_requirement_kinds(ctx) < 2):
+                and buildorder.castle_requirement_kinds(ctx) < 2 and not defending):
             return
         trainers = [b for b in ctx.buildings if b.kind in TRAINERS and b.complete]
         if not trainers:
             return
         start = ctx.board.military_cursor % len(trainers)
-        ctx.board.military_cursor = (start + 4) % len(trainers)
         researched = tuple(ctx.economy.researched)
         mix = {getattr(UnitKind, name, None): weight for name, weight in ctx.config.army_mix.items()}
         mix[UnitKind.KNIGHT] = ctx.config.castle_knight_weight
         have = ctx.combat_lines.copy()
         enemies = visible_composition(ctx.enemies, lambda kind: not profile(kind).naval)
-        known = [b for b in ctx.world.known_enemy_buildings() if b.id not in ctx.board.cleared]
+        known = [b for b in ctx.world.known_enemy_buildings() if not ctx.board.cooling(f"target:{b.id}", ctx.tick)]
         target: Optional[Building] = next((b for b in known if b.id == ctx.board.attack_target), None)
         if target is None:
             target = nearest(known, ctx.home, key=lambda b: b.center)
-        for building in trainers[start:] + trainers[:start]:
+        target_kind = target.kind if target else None
+        for offset in range(len(trainers)):
+            if ctx.orders >= ctx.order_limit:
+                return
+            index = (start + offset) % len(trainers)
+            building = trainers[index]
+            ctx.board.military_cursor = index + 1
             if (building.queue_length >= ctx.config.army_training_queue
                     or building.researching is not None or building.id in ctx.draining):
                 continue
@@ -55,7 +63,12 @@ class MilitaryManager:
                 choices = [kind for kind in choices if profile(kind).line in mix]
                 if str(UnitKind.SPEARMAN) in ctx.board.blocked_units and UnitKind.SPEARMAN in choices:
                     choices += [kind for kind in roster if profile(kind).line == UnitKind.MILITIA]
-            kind = best_recruit(ctx, choices, have, enemies, target.kind if target else None, mix)
+            kind = best_recruit(ctx, choices, have, enemies, target_kind, mix)
+            if (kind is None and not ctx.castle and choices
+                    and all(price(unit)[1] > ctx.economy.wood for unit in choices)):
+                # The Barracks can still train from food and gold while timber recovers.
+                infantry = [unit for unit in roster if profile(unit).line == UnitKind.MILITIA]
+                kind = best_recruit(ctx, infantry, have, enemies, target_kind, mix)
             if kind is None:
                 continue
             ctx.spend(price(kind))
@@ -113,20 +126,11 @@ class MilitaryManager:
         if ctx.home is None:
             return
         self.rally_production(ctx)
+        if ctx.board.raid_until > ctx.tick:
+            return
         point = self.rally_point(ctx)
-        sent = 0
-        marched = ctx.board.marched
         field = ctx.board.attack_members
         if ctx.board.attacking and not field:
             return
-        pause = ctx.config.march_pause_seconds * ctx.world.tick_hz
-        for unit in ctx.army:
-            if (unit.idle and unit.id not in ctx.busy and unit.id not in field
-                    and dist(unit.tile, point) > 5 and sent < 12
-                    and ctx.tick - marched.get(unit.id, -pause) >= pause):
-                target = ctx.land_hop(unit.tile, point)
-                if target == unit.tile:
-                    continue
-                marched[unit.id] = ctx.tick
-                ctx.order("move", unit.id, *target)
-                sent += 1
+        troops = [u for u in ctx.army if u.alive and u.id not in field and dist(u.tile, point) > 5]
+        march(ctx, troops, ctx.home, point, purpose="rally")

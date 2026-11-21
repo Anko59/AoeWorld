@@ -67,12 +67,11 @@ pub struct GameplayService {
     recording: Arc<std::sync::Mutex<Option<crate::replay::Recorder>>>,
 }
 pub(super) struct Session {
-    /// Index of the match slot this session plays. Several sessions may share
-    /// one slot; each has its own order sequence and rate limit.
+    /// Match slot index. Sessions sharing a slot retain their own order sequences and rate limits.
     pub(super) slot: usize,
     /// Whose fog-filtered view this session receives: its slot's player.
     pub(super) viewer: PlayerId,
-    /// The slot's primary unit (the Welcome identity), kept for view queries.
+    /// The slot's Welcome identity for view queries.
     pub(super) primary_unit_id: EntityId,
     /// AI slots get a higher order budget and quiet idle ticks.
     pub(super) ai: bool,
@@ -87,7 +86,6 @@ pub(super) struct Session {
     last_command_refill: Instant,
     subscription_times: VecDeque<Instant>,
     pending: VecDeque<QueuedCommand>,
-    /// Units the client holds, sorted by id.
     resident: deliver::Resident,
     resource_revision: Option<u64>,
     resident_players: BTreeMap<aoe_core::PlayerId, aoe_protocol::GameplayPlayerState>,
@@ -116,6 +114,10 @@ enum PendingAction {
     VassalDevelopment {
         vassal_id: EntityId,
         enabled: bool,
+    },
+    VassalFocus {
+        vassal_id: EntityId,
+        focus: aoe_protocol::VassalFocus,
     },
     Stance {
         unit_ids: Vec<EntityId>,

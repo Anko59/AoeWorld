@@ -96,7 +96,8 @@ pub(crate) struct Manager {
     pub(super) manual: BTreeSet<EntityId>,
     /// Worker -> destination until an automatic arrival is adopted or cancelled.
     pub(super) transfers: BTreeMap<EntityId, EntityId>,
-    pub(super) cursor: Option<EntityId>,
+    pub(super) cursor: Option<PlayerId>,
+    pub(super) last_domain: BTreeMap<PlayerId, EntityId>,
     /// Only set during an authoritative advance; never across an API boundary.
     pub(crate) automatic: bool,
     /// Issuing domain before a new worker has a controller. Transient within
@@ -274,6 +275,7 @@ impl GameWorld {
                 members.remove(&id);
                 if members.is_empty() {
                     self.economy.stewards.by_player.remove(&player);
+                    self.economy.stewards.last_domain.remove(&player);
                 }
             }
             let (workers, refused) = self
@@ -411,9 +413,6 @@ impl GameWorld {
             .is_some_and(|owner| *owner != steward)
         {
             self.forget_steward_refusals(worker);
-        }
-        if self.vassal_controller(worker).is_some() {
-            return;
         }
         let ship = self
             .unit(worker)

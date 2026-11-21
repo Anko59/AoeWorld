@@ -2,6 +2,7 @@
 //! number or a requirement here and the rules, the tests and the wire follow.
 //! Values and data provenance: docs/economy.md.
 use super::super::{BuildingKind, Stockpile};
+use super::rule_effect::{ArmorClass, RuleEffect};
 
 /// The player's age, used by building and technology requirements.
 #[derive(
@@ -154,13 +155,12 @@ pub enum TechTarget {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TechEffect {
-    Military,
+    Rule(RuleEffect),
     UpgradeMilitia,
     UpgradeUnit {
         from: super::super::UnitKind,
         to: super::super::UnitKind,
     },
-    Masonry,
     /// Upgrade every listed `(from, to)` ship pair, existing and queued.
     UpgradeShips(&'static [(super::super::UnitKind, super::super::UnitKind)]),
     /// Every villager of the player, existing and future.
@@ -177,6 +177,10 @@ pub enum TechEffect {
         percent: u16,
     },
     FarmFood(u16),
+    FarmFoodAndCarry {
+        food: u16,
+        carry: u16,
+    },
     VillagerEconomy {
         capacity_permyriad: u32,
         speed_percent: u16,
@@ -191,17 +195,10 @@ pub enum TechEffect {
         target: TechTarget,
         hp: u16,
     },
-    /// Changes building hit points, armour or attack through
-    /// `research::building_max_hp` and friends; existing buildings are
-    /// refreshed on completion.
-    BuildingStats,
     UpgradeBuilding {
         from: BuildingKind,
         to: BuildingKind,
     },
-    /// No stored change: the rule reads `has_researched` where it applies
-    /// (combat, conversion, market, training). See docs/economy/generic-techs.md.
-    Passive,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -349,11 +346,35 @@ pub const TECH_RULES: [TechRules; 105] = [
         requires: TechRequirement::Age(Age::Feudal),
         effect: TechEffect::UpgradeMilitia,
     },
-    military(Tech::Forging, 150, 0, 50),
-    military(Tech::ScaleMailArmor, 100, 0, 40),
-    military(Tech::ScaleBardingArmor, 150, 0, 45),
-    military(Tech::Fletching, 100, 50, 30),
-    military(Tech::PaddedArcherArmor, 100, 0, 40),
+    military(Tech::Forging, RuleEffect::MeleeAttack, 150, 0, 50),
+    military(
+        Tech::ScaleMailArmor,
+        RuleEffect::Armor(ArmorClass::Infantry),
+        100,
+        0,
+        40,
+    ),
+    military(
+        Tech::ScaleBardingArmor,
+        RuleEffect::Armor(ArmorClass::Cavalry),
+        150,
+        0,
+        45,
+    ),
+    military(
+        Tech::Fletching,
+        RuleEffect::Arrows { galleys: true },
+        100,
+        50,
+        30,
+    ),
+    military(
+        Tech::PaddedArcherArmor,
+        RuleEffect::Armor(ArmorClass::Archers),
+        100,
+        0,
+        40,
+    ),
     super::castle::RULES[0],
     super::castle::RULES[1],
     super::castle::RULES[2],
@@ -456,7 +477,7 @@ pub const TECH_RULES: [TechRules; 105] = [
     super::gunpowder::RULES[4],
 ];
 
-const fn military(tech: Tech, food: u32, gold: u32, seconds: u32) -> TechRules {
+const fn military(tech: Tech, effect: RuleEffect, food: u32, gold: u32, seconds: u32) -> TechRules {
     TechRules {
         age: Age::Feudal,
         tech,
@@ -464,7 +485,7 @@ const fn military(tech: Tech, food: u32, gold: u32, seconds: u32) -> TechRules {
         cost: cost(food, 0, gold, 0),
         seconds,
         requires: TechRequirement::Age(Age::Feudal),
-        effect: TechEffect::Military,
+        effect: TechEffect::Rule(effect),
     }
 }
 

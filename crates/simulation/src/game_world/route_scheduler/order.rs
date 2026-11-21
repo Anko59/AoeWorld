@@ -12,6 +12,8 @@ use aoe_core::{EntityId, TileCoord, WorldPosition};
 use aoe_map::{MovementOutcome, RoutePlanner};
 use std::collections::VecDeque;
 
+/// Longest straight trip, in tiles, that is walked without a route search.
+const DIRECT_TRIP_TILES: i32 = 8;
 /// How long (ticks, 10 s at 20 Hz) an unreachable verdict is remembered.
 const UNREACHABLE_MEMO_TICKS: u64 = 200;
 
@@ -258,8 +260,20 @@ impl GameWorld {
                 | Some(MapRoutePlan::SearchLimit) => {
                     return Err(GameWorldError::PathBudgetExceeded);
                 }
-                Some(MapRoutePlan::Pending(planner, fast_tried)) => {
+                // A short land trip along a clear straight line does not wait
+                // for a search. On the scoreboard save most orders deferred at
+                // issue were villagers' trips of four tiles or less, queued
+                // behind other orders' searches.
+                Some(MapRoutePlan::Pending(planner, fast_tried))
+                    if kind.is_naval()
+                        || !self
+                            .straight_walk_clear(kind, origin, destination, DIRECT_TRIP_TILES)
+                            .0 =>
+                {
                     (origin, VecDeque::new(), planner, true, fast_tried)
+                }
+                Some(MapRoutePlan::Pending(..)) => {
+                    (destination, VecDeque::new(), None, false, false)
                 }
                 Some(MapRoutePlan::Environment(error)) => {
                     return Err(GameWorldError::Environment(error));

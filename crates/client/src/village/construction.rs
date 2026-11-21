@@ -44,20 +44,14 @@ pub(super) fn completed(client: &Client) -> u32 {
 }
 
 #[inline(never)]
-pub(super) fn has_builders(client: &Client) -> bool {
-    if crate::playground::game::strategic::active(client) {
-        client
-            .units
-            .values()
-            .any(|u| strategic::eligible(u, owner(client)))
-    } else {
-        client.selected.units.iter().any(|id| {
+pub(super) fn allows_land_placement(client: &Client) -> bool {
+    crate::playground::game::strategic::active(client)
+        || client.selected.units.iter().any(|id| {
             client
                 .units
                 .get(id)
                 .is_some_and(|u| u.player == owner(client) && u.kind == UnitKind::Villager)
         })
-    }
 }
 
 #[inline(never)]
@@ -70,16 +64,10 @@ pub(super) fn enabled(client: &Client, kind: BuildingKind, count: u32) -> bool {
     else {
         return false;
     };
-    if !has_builders(client) && ship_builders(client).is_empty() {
-        return false;
-    }
-    building_ui::availability::BuildMenu::new(
-        Some(player),
-        completed(client),
-        has_builders(client),
-        !ship_builders(client).is_empty(),
-    )
-    .enabled(kind, count)
+    let land = allows_land_placement(client);
+    let fishing = !ship_builders(client).is_empty();
+    building_ui::availability::BuildMenu::new(Some(player), completed(client), land, fishing)
+        .enabled(kind, count)
 }
 
 #[inline(never)]
@@ -266,16 +254,12 @@ pub(in super::super) fn place(client: &mut Client, point: ScreenPoint, release: 
     }
     let sequence = client.next_sequence;
     let builder_ids = if far {
-        strategic::choose(client.units.values(), owner(client), at)
+        Vec::new()
     } else if kind == BuildingKind::FishTrap {
         ship_builders(client)
     } else {
         builders(client)
     };
-    if far && builder_ids.is_empty() {
-        strategic::no_nearby();
-        return;
-    }
     let message = if kind == BuildingKind::Bridge {
         Message::BuildBridgeOrder {
             sequence,

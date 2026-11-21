@@ -125,6 +125,7 @@ impl GameWorld {
             } else if !self.next_queued_build(builder)
                 && (kind == BuildingKind::Farm
                     || self.steward_has_held_job(builder)
+                    || self.economy.dispatch.lent.contains_key(&builder)
                     || !self.continue_foundation(builder, player))
             {
                 self.after_building(builder, player, building, kind, footprint);
@@ -225,7 +226,12 @@ impl GameWorld {
             .take_while(|((owner, _), _)| *owner == player)
             .flat_map(|(_, ids)| ids)
             .filter_map(|id| self.building(*id))
-            .filter(|b| !b.is_complete())
+            .filter(|b| {
+                !b.is_complete()
+                    && (!self.economy.dispatch.sites.contains_key(&b.id)
+                        || self.economy.builders.assigned_count(b.id)
+                            < self.dispatch_builder_limit(b))
+            })
             .filter_map(|b| {
                 let nearest = TileCoord::new(
                     tile.x.clamp(b.footprint.min.x, b.footprint.max.x - 1),
@@ -276,6 +282,18 @@ impl GameWorld {
         // budget, before choosing a new profession or helping another site.
         if self.steward_has_held_job(builder) {
             return;
+        }
+        // A manual gatherer lent to construction goes back to its resource.
+        if let Some((_, target)) = self.economy.dispatch.lent.remove(&builder) {
+            use super::super::gathering::WorkTarget;
+            let back = match target {
+                WorkTarget::Farm(farm) => self.issue_farm(player, builder, farm).is_ok(),
+                WorkTarget::Node(node) => self.issue_gather(player, builder, node).is_ok(),
+                WorkTarget::Animal(animal) => self.begin_carcass_gather(builder, animal).is_ok(),
+            };
+            if back {
+                return;
+            }
         }
         let radius = super::super::VILLAGE_RULES.replacement_radius_tiles;
         if kind == BuildingKind::TownCenter {

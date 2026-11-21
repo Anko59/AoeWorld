@@ -107,13 +107,31 @@ fn base_table_returns_what_was_inserted_and_matches_edge_evaluation() {
 #[test]
 fn memo_memory_is_a_fixed_budget() {
     use super::{Point, SLOTS};
-    let per_table = SLOTS
-        * std::mem::size_of::<Option<(TileCoord, Point)>>().max(std::mem::size_of::<
-            Option<(TileCoord, Option<super::super::super::Tile>)>,
-        >());
-    // Two tables per generator, never more than 40 MiB, and none in the browser.
-    assert!(2 * per_table <= 40 << 20, "{per_table}");
+    let bytes = SLOTS
+        * (std::mem::size_of::<Option<(TileCoord, Point)>>()
+            + std::mem::size_of::<Option<(TileCoord, Option<super::super::super::Tile>)>>()
+            + std::mem::size_of::<Option<(TileCoord, bool)>>());
+    assert!(bytes <= 40 << 20, "{bytes}");
     if cfg!(target_arch = "wasm32") {
         assert_eq!(SLOTS, 0);
     }
+}
+
+#[test]
+#[cfg(not(target_arch = "wasm32"))]
+fn rock_anchor_answers_are_bounded_and_distinguish_misses_from_empty_ground() {
+    use super::{PointMemo, SLOTS};
+
+    let [a, b, c] = [0, 5599, 11198].map(|x| TileCoord::new(x, 0));
+    let mut memo = PointMemo::default();
+    assert_eq!(memo.get_rock(a), None);
+    memo.insert_rock(a, false);
+    memo.insert_rock(b, true);
+    assert_eq!(memo.get_rock(a), Some(false));
+    assert_eq!(memo.get_rock(b), Some(true));
+    memo.insert_rock(c, false);
+    assert_eq!(memo.get_rock(a), None);
+    assert_eq!(memo.get_rock(b), Some(true));
+    assert_eq!(memo.get_rock(c), Some(false));
+    assert_eq!(memo.rocks.len(), SLOTS);
 }

@@ -21,9 +21,10 @@ pub use gameplay::{
     ResourceAmount, ResourceKind, ResourceState, ResumeToken,
     ServerMessage as GameplayServerMessage, SquadKind, SquadStatus, StewardReport, StewardWait,
     Stockpile, Tech, TechMask, TradeResource, TrainingState, UnitKind,
-    UnitState as GameplayUnitState, UnitTask, VERSION as GAMEPLAY_VERSION, VassalReport,
-    decode_client as decode_gameplay_client, decode_server as decode_gameplay_server,
-    encode_client as encode_gameplay_client, encode_server as encode_gameplay_server,
+    UnitState as GameplayUnitState, UnitTask, VERSION as GAMEPLAY_VERSION, VassalFocus, VassalJob,
+    VassalJobs, VassalReport, decode_client as decode_gameplay_client,
+    decode_server as decode_gameplay_server, encode_client as encode_gameplay_client,
+    encode_server as encode_gameplay_server,
 };
 #[cfg(feature = "server-repair")]
 pub use gameplay::{

@@ -20,6 +20,7 @@ pub(super) const SLOTS: usize = 1 << 17;
 pub(super) struct PointMemo {
     slots: Vec<Option<(TileCoord, Point)>>,
     bases: Vec<Option<(TileCoord, Option<Tile>)>>,
+    rocks: Vec<Option<(TileCoord, bool)>>,
 }
 
 fn index(tile: TileCoord) -> usize {
@@ -68,6 +69,20 @@ impl PointMemo {
             return;
         }
         store(&mut self.slots, tile, point);
+    }
+
+    /// A default-policy anchor decision shared by neighboring cold points.
+    pub(super) fn get_rock(&self, tile: TileCoord) -> Option<bool> {
+        if SLOTS == 0 {
+            return None;
+        }
+        lookup(&self.rocks, tile)
+    }
+
+    pub(super) fn insert_rock(&mut self, tile: TileCoord, rock: bool) {
+        if SLOTS != 0 {
+            store(&mut self.rocks, tile, rock);
+        }
     }
 
     /// The base physical tile used by route edge checks.

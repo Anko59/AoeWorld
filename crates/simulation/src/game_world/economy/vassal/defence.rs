@@ -43,9 +43,16 @@ impl GameWorld {
                 d.hot = Some(tile);
             }
         }
-        // Wolves killed builders (the Vassal ignored animals): soldiers kill
-        // the wolf, and a hunted builder walks to the castle's soldiers.
-        let wolves = self.vassal_wolves(id, &soldiers);
+        let wolves = if soldiers.is_empty() {
+            Vec::new()
+        } else {
+            let victims = units
+                .iter()
+                .filter(|u| u.player == player && u.hp > 0 && inside(center, u.position))
+                .map(|u| u.id)
+                .collect();
+            self.wolves_hunting(&victims)
+        };
         for soldier in soldiers {
             if let Some((wolf, _)) = wolves.first().filter(|_| threat.is_none()) {
                 self.record_vassal_decision();
@@ -127,29 +134,6 @@ impl GameWorld {
         if let Some(d) = self.economy.vassals.domains.get_mut(&id) {
             d.status.responding = responding;
         }
-    }
-    /// Wolves hunting this domain's builders or soldiers. With no soldier to
-    /// answer them, a hunted builder withdraws to the castle.
-    fn vassal_wolves(&mut self, id: EntityId, soldiers: &[EntityId]) -> Vec<(EntityId, EntityId)> {
-        let Some(d) = self.economy.vassals.domains.get(&id) else {
-            return Vec::new();
-        };
-        let (castle, center) = (d.castle, d.center);
-        let victims: BTreeSet<_> = d.workers.iter().chain(&d.soldiers).copied().collect();
-        let wolves = self.wolves_hunting(&victims);
-        if soldiers.is_empty() && !wolves.is_empty() {
-            let home = TileCoord::new(center.x, center.y + 4);
-            for (_, victim) in &wolves {
-                if self.building(castle).is_some()
-                    && let Ok(to) = WorldPosition::from_tile_center(home)
-                    && !self.moving_towards(*victim, to)
-                {
-                    self.record_vassal_decision();
-                    let _ = self.issue_move(*victim, to);
-                }
-            }
-        }
-        wolves
     }
     /// A recalled General marches to where the threat was seen. Raiders that
     /// walked on from there left him standing out of sight of them forever,
@@ -238,10 +222,16 @@ impl GameWorld {
                 .is_some_and(|a| a.destination == Some(goal) && !a.solo)
             {
                 self.economy.vassals.returns.remove(&g);
-            } else if let Some(u) = self
-                .unit(g)
-                .filter(|u| u.position.tile_floor() == goal.tile_floor())
-            {
+            } else if let Some(u) = self.unit(g).filter(|u| {
+                // Stopping on entering the home tile left him up to a tile
+                // short of the spot he was recalled from: stop within an
+                // eighth of a tile of it instead.
+                let (dx, dy) = (
+                    i64::from(u.position.x) - i64::from(goal.x),
+                    i64::from(u.position.y) - i64::from(goal.y),
+                );
+                dx * dx + dy * dy <= (i64::from(aoe_core::FIXED_SUBUNITS_PER_TILE) / 8).pow(2)
+            }) {
                 self.record_vassal_decision();
                 let _ = self.issue_stop(u.player, g);
                 self.economy.vassals.returns.remove(&g);

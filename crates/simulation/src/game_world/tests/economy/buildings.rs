@@ -218,10 +218,18 @@ fn invalid_placements_and_orders_are_refused_atomically() {
             at(150, 150),
             EconomyError::UnknownEntity,
         ),
+        // Empty land groups still validate the site. Fish Traps require a ship.
         (
             PlayerId(0),
             vec![],
             BuildingKind::House,
+            tc.min,
+            EconomyError::InvalidFootprint,
+        ),
+        (
+            PlayerId(0),
+            vec![],
+            BuildingKind::FishTrap,
             at(150, 150),
             EconomyError::OrderTooLarge,
         ),

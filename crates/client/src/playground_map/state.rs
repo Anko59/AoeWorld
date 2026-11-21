@@ -14,5 +14,13 @@ pub(crate) struct Drag {
     pub start: ScreenPoint,
     pub current: ScreenPoint,
     pub middle: bool,
+    pub moved: bool,
     pub center: [f64; 2],
+}
+
+impl Drag {
+    pub(crate) fn update(&mut self, point: ScreenPoint) {
+        self.current = point;
+        self.moved |= (point.x - self.start.x).abs() > 4.0 || (point.y - self.start.y).abs() > 4.0;
+    }
 }

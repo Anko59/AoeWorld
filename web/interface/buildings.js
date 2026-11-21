@@ -65,6 +65,8 @@ function drawFoundations(positions) {
   renderFields({ 'construction-labels': { innerHTML: labels } });
 }
 
+let tooltips = [];
+
 export function initBuildings() {
   const send = (...args) => window.aoeBuildings?.command?.(...args);
   const shelter = shelterRows(send);
@@ -131,7 +133,9 @@ export function initBuildings() {
   }
   window.aoeBuildings = {
     techs: [],
-    catalog(values) { rules = readCatalog(values); this.techs = rules.techs; },
+    // Research tooltips arrive with the game content, before or after the catalog.
+    setResearchTooltips(list) { tooltips = list; this.techs.forEach(tech => { tech.tooltip = tooltips[tech.index]; }); },
+    catalog(values) { rules = readCatalog(values); this.techs = rules.techs; this.setResearchTooltips(tooltips); },
     selection(value) { selection = value; },
     resource(value) { resource = value; },
     bind(send) { callback = send; this.command = send; },

@@ -9,7 +9,7 @@ use std::{
     time::Instant,
 };
 
-const MAGIC: &[u8; 8] = b"AOENAV02";
+const MAGIC: &[u8; 8] = b"AOENAV03";
 const HEADER_BYTES: usize = 44;
 const INDEX_RECORD_BYTES: usize = 44;
 const MAX_CHUNK_BYTES: usize = 4 << 20;

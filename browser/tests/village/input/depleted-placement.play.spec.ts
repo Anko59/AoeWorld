@@ -3,6 +3,7 @@ import { test } from "../../../server.js";
 import { gameAssets } from "../../game-assets.js";
 import { fiveVillagerFixture } from "../fixtures/village.js";
 import { chunks } from "../../rendering/fixtures/hover.js";
+import { inputFixture } from "./fixture.js";
 
 const uint = (value: number): number[] => {
   const bytes: number[] = [];
@@ -141,3 +142,49 @@ for (const [kind, name] of [
     await expect(page.locator("#scene")).toHaveAttribute("data-order-mode", "");
   });
 }
+
+test("far-view woodland markers disappear when the last tree is depleted", async ({
+  page,
+}, info) => {
+  let socket: WebSocketRoute | undefined;
+  let subscription: number[] = [];
+  await inputFixture(
+    page,
+    info.project.name === "webgpu" ? "webgpu" : "webgl2",
+    [],
+    false,
+    0,
+    (bytes, route) => {
+      if (bytes[0] !== 1) return;
+      socket = route;
+      subscription = [];
+      for (const byte of bytes.subarray(1)) {
+        subscription.push(byte);
+        if (byte < 128) break;
+      }
+    },
+    {
+      resources: [8192, 8193].map((x) => ({
+        kind: 1,
+        name: "tree",
+        gather: "chop",
+        x,
+        y: 8187,
+      })),
+    },
+  );
+  await page.evaluate(() => {
+    location.hash = "x=8192.5&y=8192.5&zoom=.04";
+  });
+  await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
+  const far = page.locator("#strategic-scene");
+  await expect(far).toHaveAttribute("data-forests", "1");
+
+  const id = (x: number) => uint(8187 * 2 ** 19 + x * 2);
+  if (!socket) throw new Error("Fixture not connected");
+  socket.send(Buffer.from([5, ...subscription, 0, 1, 1, ...id(8192), 0, 0]));
+  await expect(far).toHaveAttribute("data-resources", "1");
+  await expect(far).toHaveAttribute("data-forests", "1");
+  socket.send(Buffer.from([5, ...subscription, 1, 1, 2, 1, ...id(8193), 0, 0]));
+  await expect(far).toHaveAttribute("data-forests", "0");
+});
