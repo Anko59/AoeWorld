@@ -7,7 +7,7 @@ use crate::game_world::movement_step::settling::GIVE_UP_AFTER_TICKS;
 mod speed;
 mod stride;
 
-/// How close to its slot a member holds while its group waits for a route.
+/// How far a slot may drift from a member's target while its group waits for a route.
 const HOLD: i64 = 2 * 1024;
 
 impl GameWorld {
@@ -218,6 +218,7 @@ impl GameWorld {
         for member in &mut group.members {
             self.group_work.members(1);
             let unit = self.units[self.lookup[&member.id]].state;
+            let held = member.target;
             // Carrier arrival does not prove that a trailing body has passed
             // the route's bends. Keep its shared corridor until it catches up.
             let catching_up = group.progress - member.progress > i64::from(group.half_width) + 1024;
@@ -450,9 +451,9 @@ impl GameWorld {
             }
             // While the carrier waits for its route, slots near the anchor
             // are recomputed every tick and members two-step back and forth
-            // around them. Hold the ones already near their slot; stragglers close in.
-            if waiting && !member.arrived && path::distance(unit.position, ideal) <= HOLD {
-                member.target = unit.position;
+            // around them. Keep last tick's target while the slot stays near it.
+            if waiting && !member.arrived && path::distance(held, ideal) <= HOLD {
+                member.target = held;
             }
         }
     }
