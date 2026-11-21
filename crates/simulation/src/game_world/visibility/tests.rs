@@ -253,3 +253,28 @@ fn a_fog_view_reported_unchanged_equals_the_view_held() {
         "{skipped} skipped, {rebuilt} rebuilt"
     );
 }
+
+#[test]
+fn the_state_census_counts_contact_watch_and_movers() {
+    let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(1)).unwrap()).unwrap();
+    let at = |x, y| aoe_core::WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
+    let attacker = world.spawn_militia(PlayerId(0), at(100, 100)).unwrap();
+    let near = world.spawn_militia(PlayerId(1), at(110, 100)).unwrap();
+    // Same chunk neighbourhood, beyond the narrow 16 tiles.
+    world.spawn_militia(PlayerId(1), at(100, 130)).unwrap();
+    // No threat around it: two idle units of different players.
+    world.spawn_militia(PlayerId(2), at(200, 200)).unwrap();
+    world.spawn_militia(PlayerId(3), at(201, 200)).unwrap();
+    world.issue_attack(PlayerId(0), attacker, near).unwrap();
+    world.set_human_views(&[crate::HumanView {
+        player: PlayerId(0),
+        region: TileRect::from_xywh(90, 90, 20, 20),
+        unit_zoom: true,
+    }]);
+    let census = world.state_census();
+    assert_eq!((census.units, census.threats), (5, 1));
+    assert_eq!((census.contact_simple, census.contact_narrow), (3, 2));
+    // The view plus its 16-tile margin holds the attacker and the near enemy.
+    assert_eq!(census.watched, 2);
+    assert_eq!(census.movers, 1);
+}

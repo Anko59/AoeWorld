@@ -56,6 +56,7 @@ fn sample(world: &GameWorld) -> Value {
         "oldest_wait_ticks": routes.oldest_wait_ticks,
         "players_at_search_cap": routes.players_at_search_cap,
         "world_capacity_exhausted": routes.world_capacity_exhausted,
+        "census": world.state_census(),
     })
 }
 
