@@ -5,7 +5,7 @@ use super::*;
 /// How many empty looks, four ticks apart, end a fight for good.
 const EMPTY_LOOKS: u8 = 2;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Resume {
     pub(crate) slot: WorldPosition,
     pub(crate) marker: MovementWaypoint,

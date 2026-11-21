@@ -25,6 +25,7 @@ fn scene(friends: usize) -> (GameWorld, EntityId, EntityId, TargetArea) {
         source: Goal::Unit(source.position, source.kind.collision_radius()),
         min: 0,
         max: i64::from(FIXED_SUBUNITS_PER_TILE),
+        sight: 3 * i64::from(FIXED_SUBUNITS_PER_TILE),
         actor,
         ram: false,
     };
@@ -39,7 +40,7 @@ fn a_sampled_enemy_rejects_quiet_even_outside_the_attack_window() {
             .bounds(&world)
             .contains(world.unit(enemy).unwrap().position.tile_floor())
     );
-    let result = world.acquire_target(&area, true);
+    let result = world.acquire_target(&area, BuildingTargets::Unit);
     assert!(result.target.is_none());
     assert!(result.sampled_hostile);
 }
@@ -56,7 +57,7 @@ fn a_retained_corpse_does_not_report_a_sampled_hostile() {
             .unwrap()
             .contains(&enemy)
     );
-    let result = world.acquire_target(&area, true);
+    let result = world.acquire_target(&area, BuildingTargets::Unit);
     assert!(result.target.is_none());
     assert!(!result.sampled_hostile);
 }
@@ -64,11 +65,43 @@ fn a_retained_corpse_does_not_report_a_sampled_hostile() {
 #[test]
 fn an_unsampled_enemy_still_requires_the_full_quiet_proof() {
     let (mut world, actor, _, area) = scene(BUCKET_WINDOW * 2);
-    let result = world.acquire_target(&area, true);
+    let result = world.acquire_target(&area, BuildingTargets::Unit);
     assert!(result.target.is_none());
     assert!(!result.sampled_hostile);
     assert_eq!(world.combat_stats().targeting_scanned, BUCKET_WINDOW as u32);
     let source = world.unit(actor).unwrap();
     world.sleep_quiet_acquisition(&source, &area);
     assert!(!world.skip_quiet_acquisition(actor));
+}
+
+#[test]
+fn an_unsampled_enemy_in_sight_blocks_an_obstacle_after_one_rotation() {
+    let (mut world, actor, enemy, area) = scene(BUCKET_WINDOW * 2);
+    let tile = world.unit(actor).unwrap().position.tile_floor();
+    let wall = world
+        .insert_building(
+            PlayerId(1),
+            BuildingKind::StoneWall,
+            TileRect::from_xywh(tile.x + 1, tile.y, 1, 1),
+            true,
+        )
+        .unwrap();
+    let area = TargetArea {
+        max: area.sight,
+        ..area
+    };
+    // The current sample starts in the friend-only part of the bucket.
+    world
+        .combat
+        .target_rounds
+        .insert(actor, 3 * BUCKET_WINDOW as u64);
+    let probe = world.acquire_target(&area, BuildingTargets::Unit);
+    assert!(!probe.sampled_hostile);
+    assert_eq!(probe.target, None);
+    assert!(probe.preferred_in_sight);
+    world.issue_delete(PlayerId(1), &[enemy]).unwrap();
+    assert_eq!(
+        world.acquire_target(&area, BuildingTargets::Unit).target,
+        Some(wall)
+    );
 }
