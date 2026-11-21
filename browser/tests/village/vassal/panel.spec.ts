@@ -1,26 +1,32 @@
 import { expect } from "@playwright/test";
 import { test } from "../../../server.js";
-import { readFile } from "node:fs/promises";
 
 test("Vassal panel explains completion, alerts and sends pause/resume", async ({
   page,
 }) => {
-  await page.setContent('<main id="selection-content"></main>');
-  const source = await readFile("../web/interface/steward/vassal.js", "utf8");
-  await page.addScriptTag({
-    content: source.replace("export function", "function") + "\ninitVassal();",
-  });
-  await page.evaluate(() => {
+  await page.route("**/vassal-panel-fixture", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<main id="selection-content"></main>',
+    }),
+  );
+  await page.goto("/vassal-panel-fixture");
+  await page.evaluate(async () => {
+    const module = "/interface/steward/panel.js";
+    const { initVassal } = await import(module);
+    initVassal();
     const w = window as unknown as {
       aoeVassal: {
-        update(v: number[], label: string): void;
-        bind(cb: () => void): void;
+        update(v: number[], label: string, help?: string): void;
       };
       sent: number;
     };
     w.sent = 0;
-    w.aoeVassal.bind(() => {
-      w.sent += 1;
+    Reflect.set(window, "aoeBuildings", {
+      command(action: number, code: number) {
+        if (action !== 18 || code !== 2) throw new Error("Unexpected order");
+        w.sent += 1;
+      },
     });
     w.aoeVassal.update(
       [12, 1],
@@ -40,14 +46,23 @@ test("Vassal panel explains completion, alerts and sends pause/resume", async ({
   await page.evaluate(() => {
     (
       window as unknown as {
-        aoeVassal: { update(v: number[], label: string): void };
+        aoeVassal: { update(v: number[], label: string, help: string): void };
       }
     ).aoeVassal.update(
-      [12, 0],
+      [12, 0, 1],
       "UNDER ATTACK · 1 General responding · development paused",
+      "Calls nearby Generals",
     );
   });
   await expect(page.locator("#vassal-status")).toContainText("UNDER ATTACK");
+  await expect(page.locator("#vassal-panel")).toHaveAttribute(
+    "data-alert",
+    "true",
+  );
+  await expect(page.locator("#vassal-status")).toHaveAttribute(
+    "title",
+    "Calls nearby Generals",
+  );
   await page
     .getByRole("button", { name: "Resume development", exact: true })
     .click();

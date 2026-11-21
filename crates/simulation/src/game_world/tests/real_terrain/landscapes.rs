@@ -83,7 +83,7 @@ fn run(case: &str, count: usize, limit: u32) {
             // Region witnesses remove duplicate proof work; physical output pins stay fixed.
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (5707, 54775, 2997392)
+                (5707, 54775, 2997429)
             );
         }
         "long" => {

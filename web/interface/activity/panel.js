@@ -1,5 +1,6 @@
 import { entityIcon, icon, trainingKinds, techIds } from '/interface/ui-art.js';
 import { set, attribute } from '/interface/dom/update.js';
+import { names, techKinds, techName } from '/interface/menu/catalog.js';
 
 export function initActivity() {
   const panel = document.createElement('section');
@@ -18,7 +19,7 @@ export function initActivity() {
       const key = `${research}:${kind}`;
       live.add(key);
       let row = rows.get(key);
-      const name = research ? window.aoeBuildings.techs[kind].label.split(' · ')[0] : trainingKinds[kind].replace(/([a-z])([A-Z])/g, '$1 $2');
+      const name = research ? techName(techKinds[kind]) : names[trainingKinds[kind]];
       if (!row) {
         const button = document.createElement('button'); button.type = 'button';
         button.innerHTML = `${research ? icon('technologies', techIds[kind], 'technology') : entityIcon(trainingKinds[kind])}<span><b></b><progress max="1000"></progress></span><strong></strong>`;

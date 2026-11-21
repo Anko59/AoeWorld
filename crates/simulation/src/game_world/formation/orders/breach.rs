@@ -14,6 +14,15 @@ impl Group {
 }
 
 impl GameWorld {
+    /// Whether the unit belongs to an army whose group, not the soldier, deals
+    /// with the walls on its route: a lone unit has no group to do it.
+    pub(crate) fn in_breaching_group(&self, id: EntityId) -> bool {
+        self.units[self.lookup[&id]]
+            .formation
+            .and_then(|leader| self.formations.get(&leader))
+            .is_some_and(|group| group.breach.is_some() || group.members.len() > 1)
+    }
+
     pub(crate) fn hostile_ground_blocker(
         &self,
         player: PlayerId,

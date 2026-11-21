@@ -163,7 +163,8 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         if event.button() == 2 {
             // Ctrl also queues: Firefox opens its menu on Shift+right-click.
             // Alt moves a selected General alone, leaving his army in place.
-            client.village.general_only = event.alt_key() && !client.village.attack_move;
+            client.village.general_only =
+                event.alt_key() && !client.village.attack_move && !client.village.patrol_move;
             super::village::orders::at_pointer(
                 &mut client,
                 target,
@@ -270,7 +271,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.selected.units(units);
             } else if !super::strategic::focus(&mut client, target) {
                 let unit = pick(&client, target);
-                super::village::picking::click(&mut client, target, unit);
+                super::village::picking::click(&mut client, target, unit, event.shift_key());
             }
         }
         let _ = client.canvas.release_pointer_capture(event.pointer_id());
@@ -354,10 +355,8 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }
             2 => toggle_grid(&mut client),
             3 => center_on_primary(&mut client),
-            4 | 40 => super::village::orders::train(&mut client, false, action == 40),
             5 => super::village::orders::focus_town_center(&mut client, true),
             7 | 8 => super::village::selection::idle(&mut client, action == 8),
-            9 => super::village::orders::delete(&mut client),
             10..=39 => groups::key(&mut client, action),
             _ => return,
         }

@@ -1,11 +1,9 @@
 use super::*;
 #[wasm_bindgen(
-    inline_js = "export function vassal_update(v, label) { window.aoeVassal?.update(v, label); } export function vassal_bind(cb) { window.aoeVassal.bind(cb); }"
+    inline_js = "export function vassal_update(v, label, help) { window.aoeVassal?.update(v, label, help); }"
 )]
 extern "C" {
-    fn vassal_update(v: &[u32], label: &str);
-    #[wasm_bindgen(catch)]
-    fn vassal_bind(cb: &js_sys::Function) -> Result<(), JsValue>;
+    fn vassal_update(v: &[u32], label: &str, help: &str);
 }
 fn selected(client: &Client) -> Option<&aoe_protocol::GarrisonUnitState> {
     super::super::production::selected(client)
@@ -16,20 +14,20 @@ fn selected(client: &Client) -> Option<&aoe_protocol::GarrisonUnitState> {
 }
 pub(super) fn present(client: &Client) {
     let Some(g) = selected(client) else {
-        vassal_update(&[], "");
+        hide();
         return;
     };
     let Some(r) = g.vassal else {
-        vassal_update(&[], "");
+        hide();
         return;
     };
     let why = [
         "building",
-        "waiting for economy reserve (200 food, 200 wood, 100 gold, 200 stone)",
+        "waiting for reserves",
         "waiting for idle builders",
-        "site blocked or unreachable; trying other sites",
+        "trying alternate sites",
         "development paused",
-        "developed enough; spending stopped and builders released",
+        "development complete",
         "waiting for age",
     ]
     .get(usize::from(r.wait))
@@ -44,33 +42,31 @@ pub(super) fn present(client: &Client) {
         "holding territory · ".into()
     };
     let label = format!(
-        "Vassal · {alert}{}/20 villagers · {}/20 military · next: {next} · {why}. Developed when two towers, a barracks, the gated wall ring and a road to the nearest Town Center are complete: {}/{} sites. Territory: 24 tiles. Calls Generals within 100 tiles.",
+        "Vassal · {alert}{}/20 villagers · {}/20 military · next: {next} · {why} · {}/{} sites",
         r.villagers, r.military, r.completed, r.total
     );
     vassal_update(
         &[g.id.0, u32::from(r.development), u32::from(r.alert)],
         &label,
+        "Development requires two towers, a barracks, a gated wall ring and a road to the nearest Town Center. Economy reserve: 200 food, 200 wood, 100 gold and 200 stone. Territory: 24 tiles. Calls Generals within 100 tiles.",
     );
 }
-pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
-    let callback = Closure::<dyn FnMut()>::new(move || {
-        let mut client = shared.borrow_mut();
-        let Some((id, enabled)) =
-            selected(&client).and_then(|g| g.vassal.map(|r| (g.id, !r.development)))
-        else {
-            return;
-        };
-        let sequence = client.next_sequence;
-        super::super::orders::send(
-            &mut client,
-            aoe_protocol::GameplayClientMessage::VassalDevelopmentOrder {
-                sequence,
-                vassal_id: id,
-                enabled,
-            },
-        );
-    });
-    vassal_bind(callback.as_ref().unchecked_ref())?;
-    callback.forget();
-    Ok(())
+pub(super) fn hide() {
+    vassal_update(&[], "", "");
+}
+pub(super) fn toggle(client: &mut Client) {
+    let Some((id, enabled)) =
+        selected(client).and_then(|g| g.vassal.map(|r| (g.id, !r.development)))
+    else {
+        return;
+    };
+    let sequence = client.next_sequence;
+    super::super::orders::send(
+        client,
+        aoe_protocol::GameplayClientMessage::VassalDevelopmentOrder {
+            sequence,
+            vassal_id: id,
+            enabled,
+        },
+    );
 }

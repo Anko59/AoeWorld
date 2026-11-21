@@ -183,7 +183,7 @@ fn native_interface(install: &Path) {
     };
     write(ingame.join("buildings/0_test.dds"), &super::dds());
     for index in [
-        0, 1, 2, 3, 28, 30, 31, 32, 35, 39, 41, 43, 49, 62, 63, 64, 69, 74, 84,
+        0, 1, 2, 3, 6, 7, 8, 11, 28, 30, 31, 32, 35, 39, 41, 43, 49, 62, 63, 64, 69, 74, 84,
     ] {
         write(ingame.join(format!("actions/{index:03}_.png")), &png);
     }
@@ -206,6 +206,18 @@ fn native_interface(install: &Path) {
     }
     for name in ["blank_icon", "frame_regular"] {
         write(ingame.join(format!("panels/{name}.png")), &png);
+    }
+    for name in [
+        "slider_bar",
+        "slider_bar_progress",
+        "slider_handle_normal",
+        "slider_handle_hover",
+        "slider_handle_active",
+    ] {
+        write(
+            install.join(format!("widgetui/textures/menu/scrollbars/{name}.png")),
+            &png,
+        );
     }
     write(
         install.join("widgetui/textures/backgrounds/mainmenu_bg.dds"),

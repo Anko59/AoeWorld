@@ -1,11 +1,8 @@
 import { set, attribute } from '/interface/dom/update.js';
-import { icon } from '/interface/ui-art.js';
 import { transportHint } from '/interface/navy/indicators.js';
 // Presentation only; authoritative values and the simulation's movement rule
 // arrive with the four-Hz HUD update. No canvas frame loop or terrain guesses.
 const byId = id => document.getElementById(id);
-const kinds = ['Berry bush', 'Tree', 'Gold deposit', 'Stone deposit', 'Shore fish', 'Deep fish'];
-const icons = ['food', 'wood', 'gold', 'stone', 'food', 'food'];
 let markers = '';
 let waypointLayer, waypointFrame = 0;
 const waypointUnits = new Map();
@@ -148,24 +145,7 @@ window.aoeOrderPing = (x, y) => {
 };
 export function updateDetails(values) {
   attribute(byId('scene'), 'data-connected', String(values[0] === 1));
-  if (values[1] >= 0) {
-    attribute(byId('selection'), 'data-count', '1');
-    attribute(byId('selection'), 'data-kind', 'Resource');
-    set(byId('selection-empty'), 'hidden', true);
-    set(byId('selection-content'), 'hidden', false);
-    set(byId('selection-owner'), 'textContent', 'Natural resource');
-    set(byId('selection-name'), 'textContent', kinds[values[1]]);
-    set(byId('selection-task'), 'textContent', values[2] ? 'Natural resource' : 'Exhausted');
-    set(byId('selection-load'), 'textContent', `${values[2]} ${icons[values[1]]} remaining`);
-    const portrait=byId('selection-portrait'), key=`resource-${values[1]}`;
-    if (portrait.dataset.entityIcon!==key) {
-      portrait.dataset.entityIcon=key;
-      portrait.innerHTML=icon('units',[59,349,66,102,53,53][values[1]],icons[values[1]]);
-    }
-    set(byId('selection-health'), 'hidden', true);
-    if (byId('selected-icons').firstChild) byId('selected-icons').replaceChildren();
-    set(byId('command-context'), 'textContent', kinds[values[1]]);
-  }
+  window.aoeBuildings?.resource(values[1] < 0 ? null : { kind: values[1], amount: values[2] });
   const cursor = ['', 'gather', 'move', 'forbidden', 'attack', 'hunt', 'gather', 'gather', 'gather', 'gather', 'build', 'garrison', 'board'][values[3]];
   attribute(byId('scene'), 'data-command-cursor', cursor);
   transportHint(cursor === 'board');

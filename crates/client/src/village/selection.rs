@@ -2,6 +2,16 @@ use aoe_core::{EntityId, PlayerId, ScreenPoint};
 use aoe_protocol::{GameplayUnitState, UnitKind, UnitTask};
 use std::{collections::BTreeSet, ops::Bound};
 
+pub(super) fn owned_units(client: &super::Client) -> impl Iterator<Item = &GameplayUnitState> {
+    let player = super::owner(client);
+    client
+        .selected
+        .units
+        .iter()
+        .filter_map(|id| client.units.get(id))
+        .filter(move |unit| unit.player == player && unit.hp > 0)
+}
+
 /// Updated only by authoritative snapshots, unit deltas and removals.
 #[derive(Default)]
 pub(crate) struct IdleFinder {
@@ -114,6 +124,29 @@ impl Selection {
         self.buildings.clear();
         self.resource_id = Some(id);
     }
+    pub fn toggle_unit(&mut self, id: EntityId) {
+        self.resource_id = None;
+        if let Some(index) = self.units.iter().position(|&unit| unit == id) {
+            self.units.remove(index);
+        } else {
+            self.units.push(id);
+        }
+    }
+    pub fn toggle_building(&mut self, id: EntityId) {
+        self.resource_id = None;
+        match self.buildings.binary_search(&id) {
+            Ok(index) => {
+                self.buildings.remove(index);
+                if self.building_id == Some(id) {
+                    self.building_id = self.buildings.first().copied();
+                }
+            }
+            Err(index) => {
+                self.buildings.insert(index, id);
+                self.building_id = self.building_id.or(Some(id));
+            }
+        }
+    }
     pub fn has_building(&self, id: EntityId) -> bool {
         self.building_id == Some(id) || self.buildings.binary_search(&id).is_ok()
     }
@@ -214,7 +247,7 @@ pub(in super::super) fn portrait(
     shift: bool,
     ctrl: bool,
 ) {
-    if client.selected.building_id.is_some() {
+    if client.selected.has_building(clicked) {
         let next = narrow_by_portrait(
             &client.selected.buildings,
             clicked,
@@ -231,6 +264,9 @@ pub(in super::super) fn portrait(
         );
         client.selected.building_id = next.first().copied();
         client.selected.buildings = next;
+        if !shift {
+            client.selected.units.clear();
+        }
         return;
     }
     let next = narrow_by_portrait(
@@ -240,5 +276,9 @@ pub(in super::super) fn portrait(
         shift,
         ctrl,
     );
-    client.selected.units(next);
+    if shift {
+        client.selected.units = next;
+    } else {
+        client.selected.units(next);
+    }
 }
