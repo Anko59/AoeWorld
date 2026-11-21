@@ -5,11 +5,11 @@ use aoe_protocol::{
 };
 use aoe_simulation::{GameWorld, GameWorldError, NavigationCacheUsage};
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::BTreeMap,
     sync::{Arc, atomic::AtomicU64},
     time::{Duration, Instant},
 };
-use tokio::sync::{Mutex, RwLock, mpsc};
+use tokio::sync::{Mutex, RwLock};
 #[path = "gameplay/arena.rs"]
 pub(crate) mod arena;
 #[path = "gameplay/commands.rs"]
@@ -41,6 +41,7 @@ pub use slots::{SlotInfo, SlotSetup};
 #[path = "gameplay/wildlife.rs"]
 mod wildlife;
 use commands::queue::{PendingCommand, QueuedCommand};
+pub(crate) use deliver::session::{Session, Subscription};
 use economy::unit_state;
 #[path = "gameplay/resources.rs"]
 mod resources;
@@ -65,48 +66,6 @@ pub struct GameplayService {
     /// What the last tick spent where; read by `run_ticks`.
     probe: Arc<crate::gameplay_match::TickProbe>,
     recording: Arc<std::sync::Mutex<Option<crate::replay::Recorder>>>,
-}
-pub(super) struct Session {
-    /// Match slot index. Sessions sharing a slot retain their own order sequences and rate limits.
-    pub(super) slot: usize,
-    /// Whose fog-filtered view this session receives: its slot's player.
-    pub(super) viewer: PlayerId,
-    /// The slot's Welcome identity for view queries.
-    pub(super) primary_unit_id: EntityId,
-    /// AI slots get a higher order budget and quiet idle ticks.
-    pub(super) ai: bool,
-    pub(super) sender: mpsc::Sender<GameplayServerMessage>,
-    subscription_delivery: Option<fanout::subscription::Delivery>,
-    subscription: Option<Subscription>,
-    last_sequence: Option<u64>,
-    acknowledgements: VecDeque<u64>,
-    /// Acks (one-shot verdicts) waiting for room in the outgoing queue.
-    pending_acks: VecDeque<GameplayServerMessage>,
-    command_tokens: f64,
-    last_command_refill: Instant,
-    subscription_times: VecDeque<Instant>,
-    pending: VecDeque<QueuedCommand>,
-    resident: deliver::Resident,
-    resource_revision: Option<u64>,
-    resident_players: BTreeMap<aoe_core::PlayerId, aoe_protocol::GameplayPlayerState>,
-    resident_buildings: BTreeMap<EntityId, aoe_protocol::GameplayBuildingState>,
-    resident_animals: Vec<aoe_protocol::AnimalState>,
-    resident_projectiles: Vec<aoe_protocol::ProjectileState>,
-    resident_land: Option<Arc<aoe_simulation::LandControl>>,
-    resident_move_queues: Vec<aoe_protocol::MoveQueue>,
-    vision_revision: Option<u64>,
-    /// The fog view the client holds; an unchanged rebuild is not resent.
-    resident_fog: Option<aoe_protocol::FogState>,
-    /// Set when the building baseline can no longer be advanced by change
-    /// lists alone (a new point of view, fog switched).
-    rebuild_buildings: bool,
-    resource_vision_revision: Option<u64>,
-    resident_resources: Vec<aoe_protocol::ResourceAmount>,
-}
-#[derive(Clone, Copy)]
-struct Subscription {
-    revision: u64,
-    region: TileRect,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
