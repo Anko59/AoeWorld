@@ -7,7 +7,7 @@ export const gunpowderEntities={CavalryArcher:39,HeavyCavalryArcher:474,CamelRid
 export const gunpowderTechIds=[47,218,236,239,320];
 // [id, label, building kind index]
 export const gunpowderTechs=[
-  ['chemistry','Chemistry · 300 food · 200 gold · +1 missile attack, unlocks gunpowder',18],
+  ['chemistry','Chemistry · 300 food · 200 gold',18],
   ['heavy-cavalry-archer','Heavy Cavalry Archer · 900 food · 500 gold',10],
   ['heavy-camel-rider','Heavy Camel Rider · 325 food · 360 gold',11],
   ['heavy-scorpion','Heavy Scorpion · 800 food · 750 wood',19],

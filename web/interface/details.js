@@ -182,6 +182,7 @@ export function updateDetails(values) {
   window.aoeNavigation?.resources(values.subarray(at, at + values[7] * 5));
   const point = () => [values[at+1]/world[0]*256, values[at+2]/world[1]*256];
   for (let index=0; index<values[7]; index++,at+=5) {
+    if (values[at] === 1) continue;
     const [x,y] = point();
     const colour = ['#ce4d59', '', '#f2cf50', '#c4c8d0', '#75c8f0', '#75c8f0'][values[at]];
     resources += `<circle cx="${x}" cy="${y}" r="${Math.min(2, 128 / Math.max(...world))}" fill="${colour}"/>`;

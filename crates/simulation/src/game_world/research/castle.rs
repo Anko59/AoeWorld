@@ -1,5 +1,6 @@
 //! Castle rules surveyed from the licensed DE DAT; see docs/economy/castle.md.
 use super::super::{BuildingKind, Stockpile};
+use super::rule_effect::{ArmorClass, BuildingGroup, RuleEffect};
 use super::table::*;
 const fn cost(food: u32, wood: u32, gold: u32, stone: u32) -> Stockpile {
     Stockpile {
@@ -102,7 +103,7 @@ pub(super) const RULES: [TechRules; 19] = [
         cost(220, 0, 120, 0),
         75,
         TechRequirement::Technology(Tech::Forging),
-        TechEffect::Military,
+        TechEffect::Rule(RuleEffect::MeleeAttack),
     ),
     castle(
         Tech::ChainMailArmor,
@@ -110,7 +111,7 @@ pub(super) const RULES: [TechRules; 19] = [
         cost(200, 0, 100, 0),
         55,
         TechRequirement::Technology(Tech::ScaleMailArmor),
-        TechEffect::Military,
+        TechEffect::Rule(RuleEffect::Armor(ArmorClass::Infantry)),
     ),
     castle(
         Tech::ChainBardingArmor,
@@ -118,7 +119,7 @@ pub(super) const RULES: [TechRules; 19] = [
         cost(250, 0, 150, 0),
         60,
         TechRequirement::Technology(Tech::ScaleBardingArmor),
-        TechEffect::Military,
+        TechEffect::Rule(RuleEffect::Armor(ArmorClass::Cavalry)),
     ),
     castle(
         Tech::BodkinArrow,
@@ -126,7 +127,7 @@ pub(super) const RULES: [TechRules; 19] = [
         cost(200, 0, 100, 0),
         35,
         TechRequirement::Technology(Tech::Fletching),
-        TechEffect::Military,
+        TechEffect::Rule(RuleEffect::Arrows { galleys: true }),
     ),
     castle(
         Tech::LeatherArcherArmor,
@@ -134,7 +135,7 @@ pub(super) const RULES: [TechRules; 19] = [
         cost(150, 0, 150, 0),
         55,
         TechRequirement::Technology(Tech::PaddedArcherArmor),
-        TechEffect::Military,
+        TechEffect::Rule(RuleEffect::Armor(ArmorClass::Archers)),
     ),
     castle(
         Tech::HeavyPlow,
@@ -142,7 +143,10 @@ pub(super) const RULES: [TechRules; 19] = [
         cost(125, 125, 0, 0),
         40,
         TechRequirement::Technology(Tech::HorseCollar),
-        TechEffect::FarmFood(125),
+        TechEffect::FarmFoodAndCarry {
+            food: 125,
+            carry: 1,
+        },
     ),
     castle(
         Tech::BowSaw,
@@ -172,7 +176,9 @@ pub(super) const RULES: [TechRules; 19] = [
         cost(150, 175, 0, 0),
         50,
         TechRequirement::None,
-        TechEffect::Masonry,
+        TechEffect::Rule(RuleEffect::BuildingDurability(BuildingGroup::Standard {
+            bonus_resistance: true,
+        })),
     ),
     castle(
         Tech::Ballistics,
@@ -180,7 +186,7 @@ pub(super) const RULES: [TechRules; 19] = [
         cost(0, 300, 175, 0),
         60,
         TechRequirement::None,
-        TechEffect::Military,
+        TechEffect::Rule(RuleEffect::LeadTargets),
     ),
     castle(
         Tech::MurderHoles,
@@ -188,7 +194,7 @@ pub(super) const RULES: [TechRules; 19] = [
         cost(200, 0, 0, 100),
         35,
         TechRequirement::None,
-        TechEffect::Military,
+        TechEffect::Rule(RuleEffect::RemoveMinimumRange),
     ),
 ];
 /// Two distinct Feudal production/economy buildings, excluding towers and gates.

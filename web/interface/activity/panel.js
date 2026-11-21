@@ -3,7 +3,7 @@ import { set, attribute } from '/interface/dom/update.js';
 
 export function initActivity() {
   const panel = document.createElement('section');
-  panel.id = 'kingdom-activity'; panel.hidden = true;
+  panel.id = 'kingdom-activity'; panel.className = 'far-stone'; panel.hidden = true;
   panel.setAttribute('aria-label', 'Kingdom activity');
   panel.innerHTML = '<h2>Kingdom activity</h2><div class="activity-rows"></div><small class="activity-more" hidden></small>';
   document.getElementById('playground').append(panel);

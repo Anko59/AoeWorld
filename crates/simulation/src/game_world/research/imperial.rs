@@ -1,5 +1,6 @@
 //! Imperial Age rules surveyed from the licensed DE DAT; see docs/economy/imperial.md.
 use super::super::{BuildingKind, Stockpile};
+use super::rule_effect::{ArmorClass, RuleEffect};
 use super::table::*;
 use crate::UnitKind as U;
 const fn cost(food: u32, wood: u32, gold: u32, stone: u32) -> Stockpile {
@@ -148,7 +149,7 @@ pub(super) const RULES: [TechRules; 19] = [
         cost(275, 0, 225, 0),
         100,
         after(Tech::IronCasting),
-        TechEffect::Military,
+        TechEffect::Rule(RuleEffect::MeleeAttack),
     ),
     imperial(
         Tech::PlateMailArmor,
@@ -156,7 +157,7 @@ pub(super) const RULES: [TechRules; 19] = [
         cost(300, 0, 150, 0),
         70,
         after(Tech::ChainMailArmor),
-        TechEffect::Military,
+        TechEffect::Rule(RuleEffect::Armor(ArmorClass::Infantry)),
     ),
     imperial(
         Tech::PlateBardingArmor,
@@ -164,7 +165,7 @@ pub(super) const RULES: [TechRules; 19] = [
         cost(350, 0, 200, 0),
         75,
         after(Tech::ChainBardingArmor),
-        TechEffect::Military,
+        TechEffect::Rule(RuleEffect::Armor(ArmorClass::Cavalry)),
     ),
     imperial(
         Tech::Bracer,
@@ -172,7 +173,7 @@ pub(super) const RULES: [TechRules; 19] = [
         cost(300, 0, 200, 0),
         40,
         after(Tech::BodkinArrow),
-        TechEffect::Military,
+        TechEffect::Rule(RuleEffect::Arrows { galleys: false }),
     ),
     imperial(
         Tech::RingArcherArmor,
@@ -180,7 +181,7 @@ pub(super) const RULES: [TechRules; 19] = [
         cost(250, 0, 250, 0),
         70,
         after(Tech::LeatherArcherArmor),
-        TechEffect::Military,
+        TechEffect::Rule(RuleEffect::Armor(ArmorClass::Archers)),
     ),
     imperial(
         Tech::CropRotation,

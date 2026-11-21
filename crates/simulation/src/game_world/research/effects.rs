@@ -1,5 +1,5 @@
 //! What a finished technology does to the world.
-use super::{TECH_RULES, Tech, TechEffect};
+use super::{RuleEffect, TECH_RULES, Tech, TechEffect};
 use crate::{GameWorld, UnitKind};
 use aoe_core::{EntityId, PlayerId};
 
@@ -80,7 +80,10 @@ impl GameWorld {
             .filter(|r| self.has_researched(player, r.tech))
             .fold(crate::BuildingKind::Farm.rules().food, |total, r| {
                 match r.effect {
-                    TechEffect::FarmFood(bonus) => total.saturating_add(bonus),
+                    TechEffect::FarmFood(bonus)
+                    | TechEffect::FarmFoodAndCarry { food: bonus, .. } => {
+                        total.saturating_add(bonus)
+                    }
                     _ => total,
                 }
             })
@@ -154,25 +157,23 @@ impl GameWorld {
             TechEffect::UpgradeBuilding { from, to } => {
                 self.upgrade_buildings(player, from, to);
             }
-            TechEffect::Military => {
-                if matches!(tech, Tech::Fletching | Tech::BodkinArrow | Tech::Bracer) {
-                    for b in self.economy.buildings.values_mut().filter(|b| {
-                        b.player == player
-                            && (b.kind.is_tower()
-                                || matches!(
-                                    b.kind,
-                                    crate::BuildingKind::TownCenter | crate::BuildingKind::Castle
-                                ))
-                    }) {
-                        b.los += 1;
-                        self.vision.dirty_buildings.insert(b.id);
-                    }
+            TechEffect::Rule(RuleEffect::Arrows { .. }) => {
+                for b in self.economy.buildings.values_mut().filter(|b| {
+                    b.player == player
+                        && (b.kind.is_tower()
+                            || matches!(
+                                b.kind,
+                                crate::BuildingKind::TownCenter | crate::BuildingKind::Castle
+                            ))
+                }) {
+                    b.los += 1;
+                    self.vision.dirty_buildings.insert(b.id);
                 }
             }
-            TechEffect::Masonry | TechEffect::BuildingStats => {
+            TechEffect::Rule(RuleEffect::BuildingDurability(_)) => {
                 self.refresh_building_hp(player);
             }
-            TechEffect::UnitSpeed { .. } | TechEffect::Passive => {}
+            TechEffect::UnitSpeed { .. } | TechEffect::Rule(_) => {}
             TechEffect::UnitHp { target, hp } => {
                 for stored in &mut self.units {
                     let unit = &mut stored.state;
@@ -191,6 +192,7 @@ impl GameWorld {
             }
             TechEffect::GatherRate { .. }
             | TechEffect::FarmFood(_)
+            | TechEffect::FarmFoodAndCarry { .. }
             | TechEffect::VillagerEconomy { .. } => {}
             TechEffect::AgeUp(age) => {
                 state.age = age;
@@ -240,9 +242,9 @@ impl GameWorld {
                 }
             }
         }
-        match tech {
-            Tech::Conscription => self.speed_up_training(player),
-            Tech::TreadmillCrane => self.speed_up_construction(player),
+        match tech.rules().effect {
+            TechEffect::Rule(RuleEffect::TrainingRate) => self.speed_up_training(player),
+            TechEffect::Rule(RuleEffect::ConstructionRate) => self.speed_up_construction(player),
             _ => {}
         }
         self.upgrade_garrisoned_units(player, tech);

@@ -1,3 +1,4 @@
+import { bindResearchTooltip, updateResearchTooltip } from '/interface/dom/research-tooltip.js';
 import { icon } from '/interface/ui-art.js';
 import { buildingNames } from '/interface/buildings.js';
 import { iconGrid } from './grid.js';
@@ -28,7 +29,11 @@ export function initResearch(host) {
           status.textContent = `Ordered ${members.find(t => t.index === index).label.split(' · ')[0]} at ${buildingNames[site]} #${bid}.`;
         }
       });
-      for (const t of members) grid.set(t.index, { title: t.label });
+      for (const t of members) {
+        const button = grid.get(t.index);
+        button.removeAttribute('title');
+        bindResearchTooltip(button);
+      }
       root.insertBefore(title, status); root.insertBefore(grid.grid, status);
       groups.push({ title, grid, members });
     }
@@ -43,8 +48,9 @@ export function initResearch(host) {
         for (const t of g.members) {
           const code = report[4 + t.index * 2], at = report[4 + t.index * 2 + 1];
           const visible = Number.isFinite(code) && at >= 0 && code !== 0 && code !== 3;
-          g.grid.set(t.index, { hidden: !visible, enabled: code === 1, note: visible ? (code === 1 ? t.label.split(' · ').slice(1).join(' · ').replace(/ (food|wood|gold|stone)/g, m => m[1].toUpperCase()) : reasons[code] ?? '') : '',
-            title: `${t.label}${code === 1 ? '' : ` · ${reasons[code] ?? ''}`}` });
+          g.grid.set(t.index, { hidden: !visible, enabled: code === 1, note: visible ? (code === 1 ? t.label.split(' · ').slice(1).join(' · ').replace(/ (food|wood|gold|stone)/g, m => m[1].toUpperCase()) : reasons[code] ?? '') : '' });
+          const reason = code === 1 ? '' : reasons[code];
+          updateResearchTooltip(g.grid.get(t.index), `${t.label.split(' · ')[0]} · ${t.tooltip}${reason ? ` · ${reason}` : ''}`);
           if (visible) shown++;
         }
         g.title.hidden = g.grid.grid.hidden = shown === 0; any ||= shown > 0;
