@@ -15,12 +15,14 @@
 //! a finding past its allowance is new and fails, and an allowance past its
 //! findings is stale and fails too, so each phase that removes a cap must
 //! shrink the file in the same change. Nothing may ever be added to it.
+//! A constant marked as the threshold of one unit, cell or passage (`record`)
+//! is accepted where it is compared with a field of one such record.
 use expr::{
     bound, cap_bound, cap_named, const_name, counter_like, drain_like, length, render_expr,
 };
 use serde::Deserialize;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     error::Error,
     fs,
     path::{Path, PathBuf},
@@ -92,7 +94,7 @@ pub fn check(root: &Path, base_source: &Path) -> Result<Vec<String>, Box<dyn Err
 
 /// Every cap use in the behaviour code under `root`.
 pub fn scan(root: &Path) -> Result<Vec<Finding>, Box<dyn Error>> {
-    let mut findings = Vec::new();
+    let mut files = Vec::new();
     for scope in SCOPES {
         for path in sources(&root.join(scope))? {
             let label = path
@@ -102,21 +104,37 @@ pub fn scan(root: &Path) -> Result<Vec<Finding>, Box<dyn Error>> {
             if is_test_file(&label) || is_workload(&label) {
                 continue;
             }
-            findings.extend(lint(&label, &fs::read_to_string(&path)?)?);
+            let file = syn::parse_file(&fs::read_to_string(&path)?)
+                .map_err(|error| format!("{label}: {error}"))?;
+            files.push((label, file));
         }
     }
-    Ok(findings)
+    // A threshold is used across files: collect every mark before linting.
+    let marked = files
+        .iter()
+        .flat_map(|(_, file)| record::marked(file))
+        .collect::<BTreeSet<_>>();
+    Ok(files
+        .iter()
+        .flat_map(|(label, file)| lint_file(label, file, &marked))
+        .collect())
 }
 
-/// Lints one source file: `label` is its path relative to the root.
+/// Lints one source file on its own marks: `label` is its path relative to the root.
+#[cfg(test)]
 pub fn lint(label: &str, source: &str) -> Result<Vec<Finding>, Box<dyn Error>> {
     let file = syn::parse_file(source).map_err(|error| format!("{label}: {error}"))?;
+    Ok(lint_file(label, &file, &record::marked(&file)))
+}
+
+fn lint_file(label: &str, file: &syn::File, marked: &BTreeSet<String>) -> Vec<Finding> {
     let mut finder = Finder {
         label,
+        marked,
         found: Vec::new(),
     };
-    finder.visit_file(&file);
-    Ok(finder.found)
+    finder.visit_file(file);
+    finder.found
 }
 
 /// The allowlist file's text for these findings.
@@ -188,6 +206,7 @@ fn compare(findings: &[Finding], allowlist: &Allowlist) -> Vec<String> {
 
 struct Finder<'a> {
     label: &'a str,
+    marked: &'a BTreeSet<String>,
     found: Vec<Finding>,
 }
 
@@ -238,6 +257,13 @@ impl<'ast> Visit<'ast> for Finder<'_> {
             | BinOp::Eq(_)
             | BinOp::Ne(_) => {
                 let sides = [(&*node.left, &*node.right), (&*node.right, &*node.left)];
+                // One record's field against its marked threshold.
+                if let Some((field, _)) = sides.iter().find(|(field, threshold)| {
+                    record::record_field(field) && record::marked_constant(threshold, self.marked)
+                }) {
+                    visit::visit_expr(self, field);
+                    return;
+                }
                 for (counter, other) in sides {
                     // A counter against a constant or a literal, a length
                     // against a constant, or a drained budget against anything.
@@ -349,5 +375,6 @@ fn sources(path: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>> {
 
 mod expr;
 mod ratchet;
+mod record;
 #[cfg(test)]
 mod tests;

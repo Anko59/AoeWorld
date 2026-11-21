@@ -3,7 +3,7 @@
 | rule | since | source |
 | --- | --- | --- |
 | Quiet machine while the owner plays: no builds, no agents; never touch the served checkout; never leave a test match | 11-09, 11-15 | owner "I want the machine free when I play" |
-| Perf is judged by instructions per tick on `make save-replay`, never wall time on a loaded machine; a perf brief names every CI-gated counter (late_game, advance, smoke_ticks, distributed_ticks, viewport_query) | 11-12, 11-14 | owner "Can't you measure instruction count?" |
+| Perf is judged by instructions per tick and by wall time, wall time only on a quiet machine (no other build or match running, load average under 3 before the run; median of 3 where repeated, load written beside it; otherwise instructions only, and say so); a perf brief names every CI-gated counter (late_game, advance, smoke_ticks, distributed_ticks, viewport_query) | 11-12, 11-14, 11-21 | owner "Can't you measure instruction count?"; #978 rule 3 |
 | Replay-hash equality is not required; track and justify behaviour changes; gameplay acceptance is `make quality-metrics` | 11-13 | owner "don't be afraid to break things" |
 | Prove the measurement before calling a metric a gameplay defect | 11-14 | the attack-move harness bug |
 | Visible changes ship with in-game before/after video; invisible ones say no video; never cards-only; no recordings in Git | 10-28, 11-03 | owner |
@@ -20,5 +20,5 @@
 | Kill a branch after two failed attempts; ship or cut rewrite branches within hours; bigger PRs | 11-11, 11-12 | owner |
 | Codex first for implementation; Sonnet or Haiku subagents otherwise; at most 4 Codex sessions | 11-09, 10-28 | owner |
 | Never end a turn with nothing running when the owner gave the machine | 11-05 | owner |
-| Scale work follows the queue in [scale](scale.md) in order, judged on one frozen scoreboard (Anatolia save, live ticks/s and replay instructions); every speed number comes with work numbers; skip work whose best case is under 5%; every experiment ends with ten lines on issue #865; one line a day for the owner | 11-16 | owner agreed to issue #865 plus additions |
+| Scale work follows the steps of #978 in order (its State comment holds the current step and the frozen references); judge by growth, not by percent: work is worth doing when it stops a cost from growing with units, and a saving that does not and is under 5% at 61k is listed and skipped; every speed number comes with the service numbers; one line a day on #978 | 11-21 | owner, #978 (replaces the #865 queue of 11-16) |
 | Experiment lane: `exp/...` branches with hooks on but no review, video or docs; two days to a first number; never merged as is; only a winner is redone as ordinary PRs | 11-16 | issue #865 rule 4, hooks kept on |

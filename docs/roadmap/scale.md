@@ -5,7 +5,11 @@ minimum 1000p/1M, real time at every rung, no queue (units never silently wait),
 sharding later and never required. Near target 11-08: about 2M units for the management hierarchy.
 Rungs: 0 measurement, 1 100k units, 2 500k, 3 2M, 4 clients (see issue 748).
 
-## Scale queue (issue #865, agreed 11-16)
+**Plan since 11-21: [#978](https://github.com/Anko59/AoeWorld/issues/978), scale roadmap v2** (stages R1 61-75k units,
+R2 250k, R3 1M, R4 2M in real time on this machine). Its State comment holds the current step and the frozen
+references; the rows below stay as the record of what #865 tried and are not worked any more.
+
+## Scale queue (issue #865, agreed 11-16; closed 11-21, replaced by #978)
 
 Worked in this order, one item at a time, by one session that records every result as a comment on issue #865.
 Each item ends with the scoreboard before and after plus its work numbers; a speed gain that does less work is a loss.
