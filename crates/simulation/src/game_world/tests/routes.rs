@@ -405,3 +405,16 @@ fn a_short_clear_trip_walks_straight_when_the_fast_budget_is_spent() {
         "a long trip still waits"
     );
 }
+
+#[test]
+fn a_mover_waiting_for_its_route_is_counted_as_waiting() {
+    let config = WorldConfig::new(64, 64, Seed(0)).expect("config");
+    let mut world = GameWorld::new(config).expect("world");
+    world.terrain = flat_map_terrain();
+    let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).expect("tile");
+    let far = world.spawn_unit(PlayerId(0), at(10, 20)).expect("spawn");
+    world.fast_route_budget = 0;
+    assert!(world.issue_move(far, at(60, 20)).expect("long trip"));
+    assert_eq!(world.order_mover_census().iter().sum::<u64>(), 1);
+    assert_eq!(world.order_waiting_census().iter().sum::<u64>(), 1);
+}

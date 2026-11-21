@@ -47,6 +47,10 @@ pub struct StartUnits {
     /// and armies for every seat (`late_game.rs`, `scale-match --late-game`).
     #[serde(default)]
     pub late_game: bool,
+    /// The late game's seat shapes in percent (`LateGameSeat::scaled`); 0
+    /// keeps the owner's shapes (`scale-match --late-game --scale`).
+    #[serde(default)]
+    pub late_game_scale: u32,
 }
 
 /// Soldiers of several kinds placed for slot 0 only, around its village, so
@@ -120,7 +124,7 @@ impl MatchRules {
             + u64::from(start_units.militia)
             + start_units.probe_army.total()
             + if start_units.late_game {
-                super::late_game::units_per_seat()
+                super::late_game::units_per_seat(start_units.late_game_scale)
             } else {
                 0
             };
@@ -176,10 +180,11 @@ pub(super) fn seed_units(
         militia,
         probe_army,
         late_game,
+        late_game_scale,
     } = rules.start_units;
     let mut placed = seed_probe_army(world, scouts.first().copied(), probe_army);
     if late_game {
-        placed += super::late_game::seed(world, scouts, cancelled);
+        placed += super::late_game::seed(world, scouts, late_game_scale, cancelled);
     }
     if villagers == 0 && militia == 0 {
         return Ok(placed);
