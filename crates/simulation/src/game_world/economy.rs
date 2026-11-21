@@ -63,7 +63,9 @@ pub use steward::{
 };
 mod vassal;
 mod wall;
-pub use vassal::{VASSAL_LIMIT, VASSAL_RADIUS, VassalStatus, VassalWait};
+pub use vassal::{
+    VASSAL_LIMIT, VASSAL_RADIUS, VassalFocus, VassalJob, VassalJobs, VassalStatus, VassalWait,
+};
 
 pub use buildings::{BUILDING_RULES, BuildingRules, MAX_WALL_SEGMENTS, trainable_units};
 pub(crate) use market::MarketCommodity;

@@ -254,8 +254,8 @@ pub(super) fn present(client: &Client, scale: f64) {
 }
 
 pub(super) fn menu_order(client: &mut Client, code: u32) {
-    if code == 2 {
-        vassal::toggle(client);
+    if (2..=4).contains(&code) {
+        vassal::order(client, code);
         return;
     }
     let Some(steward_id) = super::production::selected(client)

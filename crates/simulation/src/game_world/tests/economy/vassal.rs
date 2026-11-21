@@ -19,6 +19,8 @@ mod roads;
 mod scale;
 #[path = "vassal/snapshot.rs"]
 mod snapshot;
+#[path = "vassal/staffing.rs"]
+mod staffing;
 #[path = "vassal/timeline.rs"]
 mod timeline;
 #[path = "vassal/towers.rs"]
@@ -71,15 +73,16 @@ fn vassal_caps_reserve_pause_and_completed_land_stops_spending() {
     advance(&mut w, 40);
     let s = w.vassal_status(v).unwrap();
     assert_eq!(s.military, 20);
-    assert_eq!(s.villagers, 0, "paused builders return to the economy");
+    assert!(
+        w.economy.dispatch.sites.is_empty(),
+        "pausing stops placement"
+    );
     let before = w.player_economy(PlayerId(0)).unwrap().stockpile;
     advance(&mut w, 40);
     assert_eq!(w.player_economy(PlayerId(0)).unwrap().stockpile, before);
     w.issue_vassal_development(PlayerId(0), v, true).unwrap();
     advance(&mut w, 20);
-    assert_eq!(w.vassal_status(v).unwrap().villagers, 20);
-    // Measured: 20 builders finish the ~570-site domain in about 45,000
-    // ticks (8 builders: 104,000); 60,000 bounds it with walking margin.
+    assert!(!w.economy.dispatch.sites.is_empty());
     for _ in 0..60_000 {
         w.advance();
         if w.vassal_status(v).unwrap().developed {
@@ -109,7 +112,7 @@ fn vassal_caps_reserve_pause_and_completed_land_stops_spending() {
             ))
             .collect::<Vec<_>>()
     );
-    assert_eq!(w.vassal_status(v).unwrap().villagers, 0);
+    assert!(w.economy.dispatch.sites.is_empty());
     let after = w.player_economy(PlayerId(0)).unwrap().stockpile;
     advance(&mut w, 100);
     assert_eq!(w.player_economy(PlayerId(0)).unwrap().stockpile, after);
@@ -138,7 +141,7 @@ fn vassal_keeps_economy_reserve_and_releases_on_ungarrison() {
     w.economy.players.get_mut(&PlayerId(0)).unwrap().stockpile = reserve;
     advance(&mut w, 80);
     assert_eq!(w.player_economy(PlayerId(0)).unwrap().stockpile, reserve);
-    assert_eq!(w.vassal_controller(worker), Some(v));
+    assert_eq!(w.vassal_controller(worker), None);
     w.issue_ungarrison(PlayerId(0), castle, Some(v)).unwrap();
     assert_eq!(w.vassal_controller(worker), None);
     assert_eq!(w.vassal_status(v), None);
@@ -212,7 +215,7 @@ fn vassal_fortification_replay_agrees_with_one_and_four_workers() {
 
 #[test]
 fn vassal_preserves_busy_general_members_and_explicit_owner_orders() {
-    let (mut w, v, _) = setup();
+    let (mut w, _, _) = setup();
     let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
     let soldier = w
         .spawn_kind(PlayerId(0), UnitKind::Militia, at(98, 92))
@@ -229,7 +232,7 @@ fn vassal_preserves_busy_general_members_and_explicit_owner_orders() {
     let worker = w.spawn_villager(PlayerId(0), at(97, 95)).unwrap();
     w.tick.0 = 39;
     w.advance();
-    assert_eq!(w.vassal_controller(worker), Some(v));
+    assert_eq!(w.vassal_controller(worker), None);
     w.issue_move(worker, at(120, 110)).unwrap();
     assert_eq!(
         w.vassal_controller(worker),
@@ -433,7 +436,7 @@ fn vassal_does_not_take_busy_steward_builders() {
     advance(&mut w, 40);
     assert_eq!(w.steward_controller(worker), Some(steward));
     assert_eq!(w.vassal_controller(worker), None);
-    assert_eq!(w.vassal_status(v).unwrap().villagers, 0);
+    assert!(w.vassal_status(v).unwrap().planned.count > 0);
 }
 
 #[test]

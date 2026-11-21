@@ -41,7 +41,8 @@ pub enum ClientMessage {
         target_id: EntityId,
     },
     /// Place a foundation of `kind` with its top-left tile at `origin` and send
-    /// the named villagers to build it. The cost is paid on acceptance. Use
+    /// the named villagers to build it, or use an empty group for shared land construction.
+    /// The cost is paid on acceptance. Use
     /// `BuildWallOrder` for wall or road lines.
     BuildOrder {
         sequence: u64,
@@ -283,6 +284,11 @@ pub enum ClientMessage {
         kind: UnitKind,
         #[serde(deserialize_with = "bounded_training_batch")]
         building_ids: Vec<EntityId>,
+    },
+    VassalFocusOrder {
+        sequence: u64,
+        vassal_id: EntityId,
+        focus: super::VassalFocus,
     },
 }
 

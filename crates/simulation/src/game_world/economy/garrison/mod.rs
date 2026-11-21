@@ -9,14 +9,15 @@ mod release;
 mod research;
 pub(crate) mod timers;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GarrisonedUnit {
     pub unit: GameUnit,
     pub(crate) next_hit_tick: u64,
     pub(crate) heal_at: u64,
     /// Telemetry of an active Steward's economy; outside the canonical hash.
     pub steward: Option<crate::StewardStatus>,
-    pub vassal: Option<crate::VassalStatus>,
+    /// Allocate the larger work report only for an active Vassal.
+    pub vassal: Option<std::sync::Arc<crate::VassalStatus>>,
     pub(crate) intent: controls::ShelterIntent,
 }
 

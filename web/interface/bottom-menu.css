@@ -129,7 +129,7 @@
   align-items:stretch;
 }
 #bottom-panel[data-frame=native] #selection-content:has(>#vassal-panel:not([hidden])):has(>#building-panel:not([hidden])) {
-  --building-columns:minmax(210px,min(36%,290px)) minmax(0,1fr) minmax(130px,min(28%,200px));
+  --building-columns:minmax(190px,min(36%,290px)) minmax(0,1fr) minmax(150px,min(30%,210px));
   grid-template-areas:"card details manager" "shelter queue manager";
 }
 #bottom-panel[data-frame=native] #selection-content:has(>#steward-controls:not([hidden])):has(>#building-panel:not([hidden])) {
@@ -163,6 +163,9 @@
 #bottom-panel[data-frame=native] #selection-content:has(>#steward-status:not([hidden])):has(>#steward-controls[hidden]) >#building-panel { padding-bottom:12px; }
 #bottom-panel[data-frame=native] #selection[data-type=enemy] #selection-content #selection-heading .eyebrow { display:block; }
 #bottom-panel[data-frame=native] #selection-content:has(>#training[hidden]):not(:has(>#steward-controls:not([hidden]))) >#building-panel { grid-row:1 / 3; }
+#bottom-panel[data-frame=native] #vassal-panel { font-size:10px; line-height:11px; }
+#bottom-panel[data-frame=native] #vassal-panel input[type=range], #bottom-panel[data-frame=native] #vassal-chooser select { height:14px; }
+#bottom-panel[data-frame=native] #vassal-chooser select { font:inherit; padding:0; }
 #bottom-panel[data-frame=native] #garrison-panel>b { font-size:10px; line-height:10px; }
 #bottom-panel[data-frame=native] #garrison-panel:not([hidden]) { display:flex; flex-direction:column; align-items:stretch; gap:0; }
 #bottom-panel[data-frame=native] #garrison-units { flex:1 1 0; min-height:0; max-height:none; overflow:hidden; align-content:flex-start; gap:2px; }

@@ -37,6 +37,8 @@ test("far construction previews the footprint and reports only server acknowledg
   );
   await page.mouse.click(700, 340);
   await expect.poll(() => orders.length).toBe(1);
+  // The single-byte sequence is followed by an empty builder list.
+  expect(orders[0]?.[2]).toBe(0);
   await expect(page.locator("#far-building")).toContainText("Submitting");
   await expect(page.locator("#far-building")).not.toContainText("Accepted");
   if (!acknowledge) throw new Error("Missing build order");
@@ -46,12 +48,6 @@ test("far construction previews the footprint and reports only server acknowledg
   // Choosing a site over the Town Center refuses locally, with a red reason.
   await openTab(page, "build");
   await page.locator('[aria-label="Building type"] [data-id="1"]').click();
-  await page.mouse.move(1000, 360);
-  await expect(page.locator("#far-building")).toContainText(
-    "No available villagers within 64 tiles",
-  );
-  await page.mouse.click(1000, 360);
-  expect(orders).toHaveLength(1);
   await page.mouse.move(640, 360);
   await expect(page.locator("#far-footprint")).toHaveAttribute(
     "data-valid",
@@ -79,6 +75,9 @@ test("far construction spends real stock through the ordinary validated build or
   await gameAssets(page);
   await page.goto("/?play=1#x=128&y=128&zoom=.04");
   await expect(page.locator("#connection")).toHaveText("connected");
+  const population = page.locator("#population");
+  await expect(population).toHaveText(/^\d+\/\d+$/);
+  const beforeCap = Number((await population.textContent())?.split("/")[1]);
   await openTab(page, "build");
   await page.locator('[aria-label="Building type"] [data-id="1"]').click();
   await page.mouse.move(650, 380);
@@ -91,6 +90,9 @@ test("far construction spends real stock through the ordinary validated build or
     "Accepted 1 building order",
   );
   await expect(page.locator("#stockpile-wood")).toHaveText("9975");
+  await expect(population).toHaveText(new RegExp(`/${beforeCap + 5}$`), {
+    timeout: 35_000,
+  });
   await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
 });
 

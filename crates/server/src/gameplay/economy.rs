@@ -3,6 +3,8 @@ pub(super) mod holdings;
 use super::GameplayService;
 #[path = "economy/kinds.rs"]
 mod kinds;
+#[path = "economy/vassal.rs"]
+mod vassal;
 use aoe_core::{EntityId, PlayerId, TileRect};
 use aoe_protocol::{
     Age, BuildingKind, CarriedResource, ConstructionState, GameplayBuildingState,
@@ -13,6 +15,7 @@ use aoe_simulation::{GameUnit, GameWorld};
 pub(super) use kinds::{native_building, native_kind, native_tech};
 use kinds::{wire_building, wire_kind, wire_tech};
 use std::collections::BTreeMap;
+use vassal::wire_vassal;
 
 /// Owned economy units remain selectable offscreen; population workloads use spatial queries.
 pub(super) fn query_units(
@@ -333,19 +336,10 @@ pub(super) fn wire_building_state(
             .map(|g| aoe_protocol::GarrisonUnitState {
                 vassal: g
                     .vassal
+                    .as_deref()
+                    .copied()
                     .filter(|_| g.unit.hp > 0)
-                    .map(|v| aoe_protocol::VassalReport {
-                        villagers: v.villagers,
-                        military: v.military,
-                        development: v.development,
-                        developed: v.developed,
-                        alert: v.alert,
-                        next: v.next.map(wire_building),
-                        wait: v.wait as u8,
-                        completed: v.completed,
-                        total: v.total,
-                        responding: v.responding,
-                    }),
+                    .map(wire_vassal),
                 id: g.unit.id,
                 kind: wire_kind(g.unit.kind),
                 hp: g.unit.hp,
