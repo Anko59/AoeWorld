@@ -382,3 +382,26 @@ mod movement_ground;
 mod regions;
 mod saturation;
 mod starvation;
+
+#[test]
+fn a_short_clear_trip_walks_straight_when_the_fast_budget_is_spent() {
+    let config = WorldConfig::new(64, 64, Seed(0)).expect("config");
+    let mut world = GameWorld::new(config).expect("world");
+    world.terrain = flat_map_terrain();
+    let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).expect("tile");
+    let near = world.spawn_unit(PlayerId(0), at(10, 10)).expect("spawn");
+    let far = world.spawn_unit(PlayerId(0), at(10, 20)).expect("spawn");
+    world.fast_route_budget = 0;
+    assert!(world.issue_move(near, at(14, 12)).expect("short trip"));
+    assert!(world.issue_move(far, at(60, 20)).expect("long trip"));
+    let near = world.unit(near).expect("unit");
+    assert!(!near.planning, "a short clear trip does not wait");
+    assert_eq!(
+        world.movement_order(near.id).expect("order").waypoint,
+        at(14, 12)
+    );
+    assert!(
+        world.unit(far).expect("unit").planning,
+        "a long trip still waits"
+    );
+}
