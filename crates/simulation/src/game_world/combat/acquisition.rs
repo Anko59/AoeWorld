@@ -195,6 +195,10 @@ impl GameWorld {
                 Some((_, false)) => BuildingTargets::None,
                 // A marcher can leave to pursue an isolated obstacle. Spread
                 // those wider looks out like the formation's periodic scans.
+                // A grouped soldier leaves wall work to its group's breach: its
+                // own look would pull it out of the formation and lose the
+                // order the wall stands in the way of.
+                None if self.in_breaching_group(id) => BuildingTargets::Ordinary,
                 None if marching
                     && u.stance != CombatStance::StandGround
                     && (self.tick.0 + u64::from(id.0)).is_multiple_of(self.config.ticks(4)) =>

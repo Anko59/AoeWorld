@@ -29,6 +29,8 @@ pub(super) enum BuildingTargets {
     None,
     Tower,
     Unit,
+    /// Buildings other than walls, gates and roads.
+    Ordinary,
     Marching,
     RecheckObstacle,
 }
