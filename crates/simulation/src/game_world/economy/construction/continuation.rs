@@ -225,7 +225,12 @@ impl GameWorld {
             .take_while(|((owner, _), _)| *owner == player)
             .flat_map(|(_, ids)| ids)
             .filter_map(|id| self.building(*id))
-            .filter(|b| !b.is_complete())
+            .filter(|b| {
+                !b.is_complete()
+                    && (!self.economy.dispatch.sites.contains_key(&b.id)
+                        || self.economy.builders.assigned_count(b.id)
+                            < self.dispatch_builder_limit(b))
+            })
             .filter_map(|b| {
                 let nearest = TileCoord::new(
                     tile.x.clamp(b.footprint.min.x, b.footprint.max.x - 1),

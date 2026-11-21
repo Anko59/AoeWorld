@@ -1,19 +1,21 @@
 import { expect } from "@playwright/test";
 import { test } from "../../../server.js";
-import { readFile } from "node:fs/promises";
 
-test("Vassal panel explains completion, alerts and sends pause/resume", async ({
+test("Vassal panel shows work, switches Vassals and sends pause/resume", async ({
   page,
 }) => {
-  await page.setContent('<main id="selection-content"></main>');
-  const source = await readFile("../web/interface/steward/vassal.js", "utf8");
-  await page.addScriptTag({
-    content: source.replace("export function", "function") + "\ninitVassal();",
-  });
+  await page.route("**/vassal-panel-standalone", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<main id="selection-content"></main><script type="module">import {initVassal} from "/interface/steward/vassal.js"; initVassal();</script>',
+    }),
+  );
+  await page.goto("/vassal-panel-standalone");
+  await page.waitForFunction(() => "aoeVassal" in window);
   await page.evaluate(() => {
     const w = window as unknown as {
       aoeVassal: {
-        update(v: number[], label: string): void;
+        update(v: number[], label: string, jobs: string): void;
         bind(cb: () => void): void;
       };
       sent: number;
@@ -23,30 +25,44 @@ test("Vassal panel explains completion, alerts and sends pause/resume", async ({
       w.sent += 1;
     });
     w.aoeVassal.update(
-      [12, 1],
-      "Vassal · 20/20 villagers · 20/20 military · building towers · developed at 77/77 completed sites",
+      [12, 1, 0, 0, 0, 0, 77, 12, 13],
+      "20/20 military\nholding territory\ndevelopment complete",
+      "\n\nWatchTower at 92, 92",
     );
   });
   await expect(page.locator("#vassal-status")).toContainText("20/20 military");
   await expect(page.locator("#vassal-status")).toContainText(
-    "developed at 77/77",
+    "development complete",
   );
+  await expect(
+    page.getByLabel("Finished 77, Watch Tower at 92, 92"),
+  ).toBeVisible();
   await page
     .getByRole("button", { name: "Stop development", exact: true })
     .click();
   expect(
     await page.evaluate(() => (window as unknown as { sent: number }).sent),
   ).toBe(1);
+  const chooser = page.getByRole("combobox", { name: "Vassal" });
+  await chooser.selectOption("13");
   await page.evaluate(() => {
-    (
-      window as unknown as {
-        aoeVassal: { update(v: number[], label: string): void };
-      }
-    ).aoeVassal.update(
-      [12, 0],
-      "UNDER ATTACK · 1 General responding · development paused",
+    const { aoeVassal } = window as unknown as {
+      aoeVassal: {
+        selected(): number;
+        update(v: number[], label: string, jobs: string): void;
+      };
+    };
+    aoeVassal.update(
+      [aoeVassal.selected(), 0, 1, 1, 0, 1, 0, 12, 13],
+      "20/20 military · UNDER ATTACK\ndevelopment paused",
+      "\nRoad at 92, 92\n",
     );
   });
+  await expect(chooser).toHaveValue("13");
+  await expect(page.getByRole("slider", { name: "Focus" })).toHaveAttribute(
+    "aria-valuetext",
+    "Roads",
+  );
   await expect(page.locator("#vassal-status")).toContainText("UNDER ATTACK");
   await page
     .getByRole("button", { name: "Resume development", exact: true })
@@ -76,22 +92,51 @@ test("Castle Vassal report and development toggle use the authoritative server",
     const castle = actors.find((a) => a.kind === "Castle");
     if (!castle) throw new Error("Castle has not rendered yet");
     await page.mouse.click(castle.x, castle.y - 8);
-    await expect(page.locator("#vassal-status")).toContainText(
-      "/20 villagers",
-      { timeout: 1_000 },
-    );
+    await expect(page.locator("#vassal-status")).toContainText("/20 military", {
+      timeout: 1_000,
+    });
   }).toPass({ timeout: 20_000 });
+  const panel = page.locator("#vassal-panel");
+  await expect(panel.locator("[data-jobs=current]")).toContainText("Current");
+  const planned = panel.locator("[data-jobs=planned]");
+  await expect(planned).toHaveText(/^Planned [1-9]\d*$/);
+  await planned.hover();
+  await expect(page.getByRole("tooltip")).toContainText(" at ");
+  await expect(panel.locator("[data-jobs=finished]")).toContainText("Finished");
+  await page.evaluate(() => {
+    const { aoeVassal } = window as unknown as {
+      aoeVassal: {
+        update(values: number[], label: string, jobs: string): void;
+      };
+    };
+    const update = aoeVassal.update.bind(aoeVassal);
+    aoeVassal.update = (values, label, jobs) => {
+      const panel = document.getElementById("vassal-panel");
+      if (panel && values.length) {
+        panel.dataset.serverTuning = `${values[3]}`;
+      }
+      update(values, label, jobs);
+    };
+  });
+  const focus = panel.getByRole("slider", { name: "Focus" });
+  await focus.press("End");
+  await expect(focus).toHaveAttribute("aria-valuetext", "Roads");
+  await focus.blur();
+  await expect(panel).toHaveAttribute("data-server-tuning", "1", {
+    timeout: 10_000,
+  });
   await page
     .getByRole("button", { name: "Stop development", exact: true })
     .click();
   await expect(page.locator("#vassal-status")).toContainText(
     "development paused",
   );
-  await expect(page.locator("#vassal-status")).toContainText("0/20 villagers");
   await page
     .getByRole("button", { name: "Resume development", exact: true })
     .click();
-  await expect(page.locator("#vassal-status")).toContainText("20/20 villagers");
+  await expect(page.locator("#vassal-status")).not.toContainText(
+    "development paused",
+  );
 });
 
 test("attacked Vassal shows its alert while a nearby General arrives and returns", async ({

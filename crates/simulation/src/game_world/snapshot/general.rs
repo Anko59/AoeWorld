@@ -10,6 +10,7 @@ impl GameWorld {
             crate::UnitKind::Steward => self.steward_settings(id).map(Management::Steward),
             crate::UnitKind::Vassal => self.vassal_status(id).map(|status| Management::Vassal {
                 development: status.development,
+                focus: status.focus,
             }),
             crate::UnitKind::General => {
                 self.economy

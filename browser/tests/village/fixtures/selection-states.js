@@ -25,7 +25,7 @@
     O["aoeGeneral.update"]([]);
     O["aoeGarrison.update"]([0, 0]);
     O["aoeSteward.update"]([], "", []);
-    O["aoeVassal.update"]([], "");
+    O["aoeVassal.update"]([], "", "");
     for (const id of [
       "building-panel",
       "training",
@@ -219,8 +219,9 @@
     for (let i = 0; i < 20; i++) g.push(i + 1, 0, 25, 25);
     O["aoeGarrison.update"]([20, 1, ...g]);
     O["aoeVassal.update"](
-      [1, 1, 1],
-      "Vassal: defending the domain · 3 threats nearby · garrison 20/20",
+      [1, 1, 1, 0, 20, 550, 183, 1, 2],
+      "20/20 military · UNDER ATTACK · 1 General(s) responding\nworking",
+      "StoneWall at 92, 92\tWatchTower at 98, 97\tBridge at 83, 21\nStoneWall at 77, 32\tRoad at 20, 12\tRoad at 30, 39\nRoad at 20, 40\tStoneGate at 14, 20",
     );
     await frames();
   };

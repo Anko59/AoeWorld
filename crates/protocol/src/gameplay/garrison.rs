@@ -1,5 +1,5 @@
 use super::{BuildingKind, ConstructionState, GameplayBuildingState, UnitKind};
-use aoe_core::EntityId;
+use aoe_core::{EntityId, TileCoord};
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// Owner-visible occupants. They have no map position or targetable unit state.
@@ -17,7 +17,6 @@ pub struct GarrisonUnitState {
 /// Owner-only finite fortification progress and defence alert.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct VassalReport {
-    pub villagers: u8,
     pub military: u8,
     pub development: bool,
     pub developed: bool,
@@ -28,6 +27,39 @@ pub struct VassalReport {
     pub completed: u16,
     pub total: u16,
     pub responding: u16,
+    pub focus: VassalFocus,
+    pub current: VassalJobs,
+    pub planned: VassalJobs,
+    pub finished: VassalJobs,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum VassalFocus {
+    Fortify,
+    Roads,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct VassalJob {
+    pub kind: BuildingKind,
+    pub tile: TileCoord,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct VassalJobs {
+    pub count: u32,
+    pub recent: [Option<VassalJob>; 3],
+}
+
+impl VassalJobs {
+    fn valid(self) -> bool {
+        self.recent.iter().flatten().count() <= self.count as usize
+            && self
+                .recent
+                .iter()
+                .flatten()
+                .all(|j| j.tile.checked().is_ok())
+    }
 }
 
 /// What the Steward's domain is doing and, if it is not growing, why not.
@@ -120,11 +152,13 @@ fn steward_valid(u: &GarrisonUnitState) -> bool {
 fn vassal_valid(u: &GarrisonUnitState) -> bool {
     u.vassal.is_none_or(|r| {
         u.kind == UnitKind::Vassal
-            && r.villagers <= 20
             && r.military <= 20
             && r.wait <= 6
             && r.completed <= r.total
             && (!r.developed || r.completed == r.total)
+            && [r.current, r.planned, r.finished]
+                .into_iter()
+                .all(VassalJobs::valid)
     })
 }
 

@@ -12,7 +12,9 @@ mod sanitize;
 mod validation;
 pub use aoe_core::CombatStance;
 pub use aoe_core::Formation;
-pub use garrison::{GarrisonUnitState, StewardReport, StewardWait, VassalReport};
+pub use garrison::{
+    GarrisonUnitState, StewardReport, StewardWait, VassalFocus, VassalJob, VassalJobs, VassalReport,
+};
 #[cfg(feature = "server-repair")]
 pub use sanitize::sanitize_server;
 use validation::validate_server;
@@ -33,7 +35,7 @@ pub use projectiles::{MAX_PROJECTILES, ProjectileKind, ProjectileState};
 pub use resources::{MAX_RESOURCE_CACHE, MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
 pub use wildlife::*;
 
-pub const VERSION: u16 = 18;
+pub const VERSION: u16 = 23;
 /// One gameplay frame: room for 65,536 units alongside bounded buildings,
 /// training queues and other view state. This is a memory guard, not housing.
 pub const MAX_MESSAGE: usize = 16 * 1_048_576;

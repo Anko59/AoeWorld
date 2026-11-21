@@ -140,7 +140,7 @@ impl GameWorld {
         if !kind.is_gate() || !vertical {
             return self.issue_build(player, builders, kind, origin, queued);
         }
-        let builders = self.validate_builders(player, builders, false)?;
+        let builders = self.placement_builders(player, builders, false)?;
         self.validate_build_queue(&builders, 1, queued)?;
         let cost = self.check_buildable(player, kind, 1)?;
         let r = kind.rules();
@@ -150,7 +150,9 @@ impl GameWorld {
         let id = self.insert_building(player, kind, footprint, false)?;
         self.charge(player, cost);
         self.step_builders_aside(&builders, id);
-        if !self.assign_build_orders(&builders, &[id], queued) {
+        if builders.is_empty() {
+            self.queue_foundations(&[id], None);
+        } else if !self.assign_build_orders(&builders, &[id], queued) {
             let _ = self.issue_cancel_construction(player, id);
             return Err(crate::GameWorldError::Unreachable.into());
         }

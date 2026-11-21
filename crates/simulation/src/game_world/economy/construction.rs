@@ -15,6 +15,7 @@ const APPROACH_TILE_TRIES: usize = 6;
 
 mod clearance;
 mod continuation;
+pub(crate) mod dispatch;
 mod jobs;
 mod progress;
 mod repair;
@@ -154,7 +155,7 @@ impl GameWorld {
         if kind == BuildingKind::Bridge {
             return Err(EconomyError::InvalidFootprint);
         }
-        let builders = self.validate_builders(player, builders, kind == BuildingKind::FishTrap)?;
+        let builders = self.placement_builders(player, builders, kind == BuildingKind::FishTrap)?;
         self.validate_build_queue(&builders, 1, queued)?;
         let cost = self.check_buildable(player, kind, 1)?;
         let side = kind.rules().side;
@@ -170,7 +171,9 @@ impl GameWorld {
         let id = self.insert_building(player, kind, footprint, false)?;
         self.charge(player, cost);
         self.step_builders_aside(&builders, id);
-        if !self.assign_build_orders(&builders, &[id], queued) {
+        if builders.is_empty() {
+            self.queue_foundations(&[id], None);
+        } else if !self.assign_build_orders(&builders, &[id], queued) {
             let _ = self.issue_cancel_construction(player, id);
             return Err(crate::GameWorldError::Unreachable.into());
         }
