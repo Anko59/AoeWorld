@@ -33,7 +33,7 @@ tempfile = "3"
 pprof = { version = "0.15", default-features = false, optional = true }
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.31", features = ["signal", "process", "fs", "time"] }
+nix = { version = "0.32", features = ["signal", "process", "fs", "time"] }
 
 [dev-dependencies]
 gungraun = { version = "=0.19.4", features = ["client_requests"] }
