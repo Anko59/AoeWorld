@@ -169,3 +169,37 @@ pub fn setup_late_game() -> GameWorld {
     eprintln!("late-game instruction setup: ready");
     world
 }
+
+/// The late game with four times the units per village (`LATE_GAME_X4`),
+/// warmed 96 ticks: Callgrind runs the warm-up too, at four times the units.
+/// Only `instructions.rs` measures it; the other benches share this module.
+#[allow(dead_code)]
+pub fn setup_late_game_x4() -> GameWorld {
+    late_game_workers();
+    eprintln!("late-game x4 instruction setup: generating 100 seats");
+    let mut world = match GameWorld::late_game_workload_scaled(4) {
+        Ok(world) => world,
+        Err(error) => {
+            eprintln!("late-game x4 workload failed: {error}");
+            std::process::exit(1);
+        }
+    };
+    eprintln!("late-game x4 instruction setup: warming 96 ticks");
+    for _ in 0..96 {
+        world.advance();
+    }
+    let gathering = world
+        .units()
+        .filter(|u| u.task == aoe_simulation::UnitTask::Gathering)
+        .count();
+    eprintln!(
+        "late-game x4: {} units, {gathering} gathering",
+        world.unit_count()
+    );
+    assert_eq!(world.players().count(), 100);
+    assert!((52_000..=60_000).contains(&world.unit_count()));
+    // After 96 warm ticks most seeded trips are still on their way (621 of
+    // ~32,000 villagers gathering on 11-21); the economy has only started.
+    assert!(gathering >= 500);
+    world
+}

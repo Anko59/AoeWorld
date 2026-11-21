@@ -5,14 +5,17 @@
   "valgrind": "3.19.0",
   "allow_aslr": true,
   "smoke_workload_hash": "c068a47ebd635279753bfe7d8b630de70a1164e3ec1c92139c1c56d6c323ad56",
-  "late_game_workload_hash": "36c2ec66e60a9bfbe2ab7aa381bdc9a5f3c7867b90a9620070955cab0c662a4d",
+  "late_game_workload_hash": "bfc506bbddca36b9e9a2118a5870d80315a48d28c3d98ca4f8b97fde47837a6b",
+  "late_game_x4_workload_hash": "98e8984d3221af60d18f644af1e49d6b6e07b8732826a01153d36f03e9f3add7",
   "instructions": {
     "instructions::assets::palette_decode": 243938,
     "instructions::protocol::snapshot_encode": 206498,
     "instructions::simulation::advance": 721228,
     "instructions::simulation::distributed_ticks": 9780464,
-    "instructions::simulation::late_game": 1343891456,
-    "instructions::simulation::late_game_main": 1049403457,
+    "instructions::simulation::late_game": 1290088816,
+    "instructions::simulation::late_game_main": 979759719,
+    "instructions::simulation::late_game_x4": 6677857977,
+    "instructions::simulation::late_game_x4_main": 5753676657,
     "instructions::simulation::smoke_ticks": 5268567,
     "instructions::simulation::viewport_query": 183030
   },
@@ -22,8 +25,10 @@
     "instructions::protocol::snapshot_encode": 206498,
     "instructions::simulation::advance": 721238,
     "instructions::simulation::distributed_ticks": 9780464,
-    "instructions::simulation::late_game": 1343891456,
-    "instructions::simulation::late_game_main": 1049403457,
+    "instructions::simulation::late_game": 1290088816,
+    "instructions::simulation::late_game_main": 979759719,
+    "instructions::simulation::late_game_x4": 6677857977,
+    "instructions::simulation::late_game_x4_main": 5753676657,
     "instructions::simulation::smoke_ticks": 4986840,
     "instructions::simulation::viewport_query": 183030
   }

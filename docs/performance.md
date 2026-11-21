@@ -110,7 +110,7 @@ per 64 ticks against 906). The radius-movement change that follows cut the tick
 to about 260M instructions. The −40.2% above therefore holds only for dev before
 #573; this batch's net late-game claim is the 431M measured on top of it.
 On 2026-11-14 the late game was re-taken at 140,826,786 and target-distributed at 9,780,464, baseline and `instruction_reference` both (from 240,557,748 and 10,330,744; workload hashes unchanged):
-a tightening: the old reference sat 71% above the tick, so the +10% creep guard let it grow 88% before firing and only the +3% comparison with dev, which stopped #846's +33.7%, was live. The same day it became the eight ticks from 385, at 1,343,891,456 for both (CI's count): dev's single tick cost 141M against 168M averaged over the eight, since cold portal builds land in some ticks and not others, and #846's +33.7% was +14.6% over the window.
+a tightening: the old reference sat 71% above the tick, so the +10% creep guard let it grow 88% before firing and only the +3% comparison with dev, which stopped #846's +33.7%, was live. The same day it became the eight ticks from 385, at 1,343,891,456 for both (CI's count): dev's single tick cost 141M against 168M averaged over the eight, since cold portal builds land in some ticks and not others, and #846's +33.7% was +14.6% over the window. On 2026-11-21 (#978 slice 1b) the late-game workload gained a human seat with a 200 by 200 view at unit zoom over seat 0's Town Center, so unseen units take the level of detail that live games use; its hash changed and both rows were re-taken at 1,290,088,816 (total) and 979,759,719 (main), baseline and `instruction_reference`. A second workload, `late_game_x4` (the same 100 seats with four times the villagers and soldiers, 55,900 units, warmed 96 ticks), adds two rows at 6,677,857,977 and 5,753,676,657, so the gate sees cost per unit: four times the units cost 5.9 times the main thread. The other rows kept their baselines and references.
 
 The same radius movement made the small workloads' ticks slower: smoke +63%
 instructions (4.93M to 8.03M for the four ticks `perf-smoke` times) and
@@ -284,8 +284,8 @@ until 2026-10-27) is a `REGRESSION`.
 ### Instruction gate
 
 CI runners are noisy, so performance is gated on Callgrind instruction counts (deterministic), never elapsed time. The
-pinned analysis image counts seven kernels (simulation, protocol, palette decoding; `crates/harness/src/perf_micro.rs`)
-in eight rows: late_game runs on 4 workers with `--separate-threads=yes`, and its main thread (`late_game_main`, the
+pinned analysis image counts eight kernels (simulation, protocol, palette decoding; `crates/harness/src/perf_micro.rs`)
+in ten rows: late_game and late_game_x4 run on 4 workers with `--separate-threads=yes`, and its main thread (`late_game_main`, the
 serial path a tick waits on) is gated as below, while its total over all threads fails only above +10% (owner 11-19:
 the gates must see parallel work). Each row is compared with its `instructions` baseline in `baselines/perf/micro.json`:
 

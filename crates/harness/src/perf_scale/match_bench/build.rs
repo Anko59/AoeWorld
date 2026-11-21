@@ -5,12 +5,14 @@
 //! so the same options give the same world.
 use super::super::world::{BoxError, package};
 use aoe_core::{EntityId, PlayerId, TileCoord, WorldPosition};
-use aoe_simulation::{BuildingKind, GameWorld, LateGameSeat, UnitKind, WorldLimits};
+use aoe_simulation::{BuildingKind, GameWorld, HumanView, LateGameSeat, UnitKind, WorldLimits};
 use std::time::Instant;
 
 /// Map side of the owner's 100-seat match (package dc7e0d4b, 2,000 tiles).
 pub(super) const OWNER_SIDE: f64 = 2_000.0;
 pub(super) const OWNER_SEATS: f64 = 100.0;
+/// The person's screen at unit zoom, as #978's claim runs use.
+const HUMAN_VIEW_TILES: i32 = 200;
 
 #[derive(Clone, Debug)]
 pub(super) struct Shape {
@@ -150,6 +152,21 @@ pub(super) fn build(shape: &Shape) -> Result<Built, BoxError> {
     }
     let mut generals = Vec::new();
     if let Some(human) = seats.first() {
+        // Slot 0 is a person watching its village at unit zoom (#978 1b), so
+        // the level of detail runs here as in a live game.
+        let half = HUMAN_VIEW_TILES / 2;
+        world.set_human_seats(&[human.id]);
+        world.set_human_views(&[HumanView {
+            player: human.id,
+            region: aoe_core::TileRect::from_xywh(
+                human.center.x - half,
+                human.center.y - half,
+                HUMAN_VIEW_TILES,
+                HUMAN_VIEW_TILES,
+            )
+            .clamp(world.config().width_tiles, world.config().height_tiles),
+            unit_zoom: true,
+        }]);
         for dx in [-70, 70] {
             if let Ok(at) =
                 WorldPosition::from_tile_center(TileCoord::new(human.center.x + dx, human.center.y))
