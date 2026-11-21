@@ -92,7 +92,8 @@ pub(super) fn move_selection(
                 entity_id,
                 destination,
                 queued: queued && unit.is_some(),
-                attack_move: attack_move && unit.is_some(),
+                attack_move: attack_move
+                    && unit.is_some_and(|u| aoe_simulation::unit_combat(u.kind).attack > 0),
             },
         );
         if verdict == CommandResult::Accepted {

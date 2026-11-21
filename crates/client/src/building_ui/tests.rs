@@ -165,14 +165,17 @@ fn art_selection_distinguishes_every_kind_and_construction_stage() {
             continue; // The DE tower line is covered below.
         }
         if kind == B::FishTrap {
-            for age in [aoe_protocol::Age::Dark, aoe_protocol::Age::Imperial] {
+            use aoe_protocol::Age;
+            use aoe_rendering::SceneUnitKind;
+            for age in [Age::Dark, Age::Feudal, Age::Castle, Age::Imperial] {
                 for (progress, rubble, art) in [
-                    (1000, false, aoe_rendering::SceneUnitKind::FishTrap),
-                    (0, false, aoe_rendering::SceneUnitKind::ConstructionFishTrap),
-                    (1000, true, aoe_rendering::SceneUnitKind::RubbleFishTrap),
+                    (1000, false, SceneUnitKind::FishTrap),
+                    (0, false, SceneUnitKind::ConstructionFishTrap),
+                    (999, false, SceneUnitKind::ConstructionFishTrap),
+                    (1000, true, SceneUnitKind::RubbleFishTrap),
                 ] {
                     let slot = age_sprite_slot(kind, progress, rubble, age);
-                    assert_eq!(aoe_rendering::SceneUnitKind::building(slot as u8), art);
+                    assert_eq!(SceneUnitKind::building(slot as u8), art);
                     assert_eq!(art.building_id(), Some(199));
                 }
             }

@@ -63,6 +63,45 @@ async function select(page: Page, actor: Actor) {
   }).toPass({ timeout: 10_000 });
 }
 
+async function firstCommandPage(page: Page) {
+  const previous = page.locator("#previous-commands");
+  while (await previous.isVisible()) await previous.click();
+}
+
+async function trainingOptions(page: Page) {
+  await firstCommandPage(page);
+  const buttons = page.locator(
+    '#command-grid button[id^="train-"]:visible:enabled',
+  );
+  const currentPage = () =>
+    buttons.evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        option: node.id,
+        title: node.getAttribute("title"),
+        portraits: Array.from(
+          node.querySelectorAll('[data-ui-group="units"]'),
+          (icon) => icon.getAttribute("data-ui-id"),
+        ),
+      })),
+    );
+  const options = await currentPage();
+  const next = page.locator("#more-commands");
+  while (await next.isVisible()) {
+    await next.click();
+    options.push(...(await currentPage()));
+  }
+  return options;
+}
+
+async function trainingButton(page: Page, id: string) {
+  await firstCommandPage(page);
+  const button = page.locator(`#${id}`);
+  const next = page.locator("#more-commands");
+  while (!(await button.isVisible()) && (await next.isVisible()))
+    await next.click();
+  return button;
+}
+
 test.use({ viewport: { width: 1600, height: 900 } });
 
 test("the live browser trains the data roster and orders every trained unit", async ({
@@ -122,22 +161,26 @@ test("the live browser trains the data roster and orders every trained unit", as
             ).length,
         )
         .toBe(sites.length);
-      if (nativeArt && stage === 0) {
-        // Every index shown in the research menu resolves in the current pack.
-        const icons = await request.get("/asset-pack/buildings/interface.json");
-        expect(icons.ok()).toBe(true);
-        const art = (await icons.json()) as {
-          technologies: Record<string, unknown>;
-        };
+      if (stage === 0) {
         const menu = await page.evaluate(() => {
           const buildings = Reflect.get(window, "aoeBuildings") as {
             techs: { art: number }[];
           };
           return buildings.techs.map((tech) => tech.art);
         });
+        expect(menu).toHaveLength(techCount);
         expect(new Set(menu).size).toBe(techCount);
-        for (const id of menu)
-          expect(art.technologies[id], `research icon ${id}`).toBeTruthy();
+        if (nativeArt) {
+          const icons = await request.get(
+            "/asset-pack/buildings/interface.json",
+          );
+          expect(icons.ok()).toBe(true);
+          const art = (await icons.json()) as {
+            technologies: Record<string, unknown>;
+          };
+          for (const id of menu)
+            expect(art.technologies[id], `research icon ${id}`).toBeTruthy();
+        }
       }
 
       for (const site of sites) {
@@ -147,19 +190,7 @@ test("the live browser trains the data roster and orders every trained unit", as
           site,
         );
         await select(page, building);
-        const buttons = page.locator(
-          '#command-grid button[id^="train-"]:visible:enabled',
-        );
-        const options = await buttons.evaluateAll((nodes) =>
-          nodes.map((node) => ({
-            option: node.id,
-            title: node.getAttribute("title"),
-            portraits: Array.from(
-              node.querySelectorAll('[data-ui-group="units"]'),
-              (icon) => icon.getAttribute("data-ui-id"),
-            ),
-          })),
-        );
+        const options = await trainingOptions(page);
         for (const { option, title, portraits } of options) {
           expect(portraits, option).toHaveLength(1);
           const portrait = required(portraits[0], `portrait for ${option}`);
@@ -167,7 +198,7 @@ test("the live browser trains the data roster and orders every trained unit", as
           if (buttonsSeen.has(buttonKey)) continue;
           buttonsSeen.add(buttonKey);
           await select(page, building);
-          const button = page.locator(`#${option}`);
+          const button = await trainingButton(page, option);
           const before = new Set((await actors(page)).map((a) => a.id));
           const kind = await command(5, building.id, () => button.click());
           let born: Actor | undefined;
@@ -215,8 +246,8 @@ test("the live browser trains the data roster and orders every trained unit", as
           }
           if (trained.has(kind)) continue;
 
-          const stance = page.locator("#combat-stance");
-          if (await stance.isVisible()) await stance.selectOption("3");
+          const stance = page.locator("#stance-no-attack");
+          if (await stance.isVisible()) await stance.click();
           const naval = site === "Dock";
           // The fixture clears an open tile west of town and another east
           // of the Dock. Project each from its known building centre.

@@ -1,5 +1,5 @@
 import { icon } from '/interface/ui-art.js';
-import { buildingNames } from '/interface/buildings.js';
+import { buildingNames } from '/interface/menu/catalog.js';
 import { iconGrid } from './grid.js';
 
 // Research from the far view. Rust reports, for every technology, an availability

@@ -1,5 +1,5 @@
 import { kindSprite } from '/interface/ui-art.js';
-import { buildingKinds } from '/interface/buildings.js';
+import { buildingKinds } from '/interface/menu/catalog.js';
 
 // Real interface art, clipped into a bronze-rimmed medallion. Baked once per
 // building kind; a missing pack keeps the drawn ink below.

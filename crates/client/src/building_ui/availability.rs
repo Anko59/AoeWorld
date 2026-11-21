@@ -217,8 +217,8 @@ pub(crate) fn training_cost(kind: UnitKind) -> Option<Stockpile> {
 pub(crate) fn primary_training(
     b: &GameplayBuildingState,
     player: Option<&GameplayPlayerState>,
-) -> UnitKind {
-    match b.kind {
+) -> Option<UnitKind> {
+    Some(match b.kind {
         aoe_protocol::BuildingKind::Barracks => {
             if player.is_some_and(|p| p.researched & Tech::Champion.bit() != 0) {
                 UnitKind::Champion
@@ -233,7 +233,7 @@ pub(crate) fn primary_training(
             }
         }
         aoe_protocol::BuildingKind::Dock => UnitKind::FishingShip,
-        aoe_protocol::BuildingKind::Castle => UnitKind::Vassal,
-        _ => UnitKind::Villager,
-    }
+        aoe_protocol::BuildingKind::TownCenter => UnitKind::Villager,
+        _ => return None,
+    })
 }

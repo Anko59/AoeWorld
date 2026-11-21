@@ -3,6 +3,8 @@ import { test } from "../../../server.js";
 import { fiveVillagerFixture } from "../fixtures/village.js";
 import { centerVillage, freshHud } from "../fixtures/resources.js";
 import { gameAssets } from "../../game-assets.js";
+import { darkAgeState } from "../../wire/buildings.js";
+import { uint } from "../input/fixture.js";
 
 test("Imperial Siege Workshop research remains clickable beneath training", async ({
   page,
@@ -167,7 +169,8 @@ for (const available of [false, true]) {
       }
       return route.fallback();
     });
-    await fiveVillagerFixture(page);
+    let ageState = darkAgeState;
+    await fiveVillagerFixture(page, undefined, undefined, () => ageState);
     await page.goto("/?play=1");
     await expect(page.locator("#connection")).toHaveText("connected");
     await centerVillage(page, true);
@@ -187,9 +190,6 @@ for (const available of [false, true]) {
       ).toBeVisible();
       await expect(
         page.locator("#research-loom .original-icon image"),
-      ).toHaveAttribute("href", "/asset-pack/buildings/ui-de.svg");
-      await expect(
-        page.locator("#research-imperial-age .original-icon image"),
       ).toHaveAttribute("href", "/asset-pack/buildings/ui-de.svg");
       await expect(
         page.locator('#top-bar [data-ui-id="wood"] .original-icon'),
@@ -238,6 +238,14 @@ for (const available of [false, true]) {
         "none",
       );
       await page.screenshot({ path: "../.cache/showcase/command-colours.png" });
+      // The Castle Age snapshot exposes Imperial as the next advancement.
+      ageState = [2, ...uint((1 << 2) | (1 << 14))];
+      await page.reload();
+      await expect(page.locator("#connection")).toHaveText("connected");
+      await centerVillage(page, true);
+      await expect(
+        page.locator("#research-imperial-age .original-icon image"),
+      ).toHaveAttribute("href", "/asset-pack/buildings/ui-de.svg");
     } else {
       await expect(page.locator("html")).toHaveAttribute(
         "data-interface-art",
@@ -283,13 +291,24 @@ for (const available of [false, true]) {
     await expect(page.locator("#build-house")).toBeHidden();
     // Exercise the presentation boundary with the same bounded numeric fields
     // Rust emits for a Barracks. A queue must never inherit Villager art.
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
+      const catalogPath = "/interface/menu/catalog.js";
+      const { buildingKinds, techKinds, trainingKinds } = await import(
+        catalogPath
+      );
       const buildings = Reflect.get(window, "aoeBuildings") as {
-        queue(
-          values: number[][],
-          visible: boolean,
-          rows: [number, number, number[]][],
-        ): void;
+        selection(state: {
+          selected: {
+            id: number;
+            kind: string;
+            player: number;
+            owned: boolean;
+            hp: number;
+            maxHp: number;
+          }[];
+          queue: { elapsed: number; total: number; units: number[] };
+          trainingRows: [];
+        }): void;
         update(values: Float64Array): void;
       };
       const update = buildings.update;
@@ -298,23 +317,33 @@ for (const available of [false, true]) {
         numeric(values: Float64Array, status: string): void;
       };
       hud.numeric = () => {};
-      const values = new Float64Array(64);
-      values[1] = 6;
-      values[2] = 1000;
-      values[3] = 1000;
-      values[4] = 1000;
-      values[5] = -1;
-      values[6] = -1;
-      values[37] = 2;
-      values[38] = 1;
-      buildings.queue(
-        [
-          [5, 10, 2],
-          [0, 10, 2],
-        ],
-        true,
-        [],
+      const values = new Float64Array(
+        34 + techKinds.length + buildingKinds.length + trainingKinds.length,
       );
+      values.set([
+        0,
+        buildingKinds.indexOf("Barracks"),
+        1000,
+        1000,
+        1000,
+        -1,
+        -1,
+      ]);
+      const militia = trainingKinds.indexOf("Militia");
+      buildings.selection({
+        selected: [
+          {
+            id: 1,
+            kind: "Barracks",
+            player: 0,
+            owned: true,
+            hp: 1000,
+            maxHp: 1000,
+          },
+        ],
+        queue: { elapsed: 5, total: 10, units: [militia, militia] },
+        trainingRows: [],
+      });
       update(values);
     });
     await expect(page.locator("#training-label")).toHaveText(

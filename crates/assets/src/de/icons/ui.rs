@@ -81,6 +81,10 @@ pub(super) fn resolve(install: &Path, hash: &mut blake3::Hasher) -> Result<Vec<S
         ("delete", 1),
         ("ungarrison", 2),
         ("stop", 3),
+        ("stance-aggressive", 6),
+        ("stance-defensive", 7),
+        ("stance-stand-ground", 8),
+        ("stance-no-attack", 11),
         ("repair", 28),
         ("build", 30),
         ("military", 31),
@@ -153,6 +157,21 @@ pub(super) fn resolve(install: &Path, hash: &mut blake3::Hasher) -> Result<Vec<S
             &mut sources,
             format!("de/interface/{file}"),
             directory.join(file),
+            Role::Panel(role),
+        );
+    }
+    for (file, role) in [
+        ("slider_bar", "slider-track"),
+        ("slider_bar_progress", "slider-fill"),
+        ("slider_handle_normal", "slider-thumb"),
+        ("slider_handle_hover", "slider-thumb-hover"),
+        ("slider_handle_active", "slider-thumb-active"),
+    ] {
+        let file = format!("scrollbars/{file}.png");
+        add(
+            &mut sources,
+            format!("de/interface/{file}"),
+            install.join("widgetui/textures/menu").join(file),
             Role::Panel(role),
         );
     }
