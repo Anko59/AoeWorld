@@ -109,7 +109,11 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
                     // Work beside the queue: units with a movement goal, and
                     // resources delivered in the last minute (income is not
                     // saved, so it starts empty at the restore).
-                    routes["movers"] = json!(w.order_mover_census().iter().sum::<u64>());
+                    let movers = w.order_mover_census().iter().sum::<u64>();
+                    let waiting = w.order_waiting_census().iter().sum::<u64>();
+                    routes["movers"] = json!(movers);
+                    routes["waiting"] = json!(waiting);
+                    routes["waiting_share"] = json!(waiting as f64 / movers.max(1) as f64);
                     routes["delivered_last_minute"] = json!(w.players().map(|p| w.recent_deliveries(p.player).iter().sum::<u64>()).sum::<u64>());
                     routes
                 }).await);

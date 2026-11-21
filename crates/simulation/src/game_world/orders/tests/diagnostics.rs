@@ -104,6 +104,11 @@ fn retained_and_accepted_requests_are_counted_apart_and_route_work_follows_the_i
     let row = &w.order_demand()[OrderIssuer::PythonAi as usize];
     assert_eq!((row.orders, row.accepted, row.retained), (2, 1, 1));
     assert_eq!(w.order_mover_census()[OrderIssuer::PythonAi as usize], 1);
+    assert_eq!(
+        w.order_waiting_census().iter().sum::<u64>(),
+        0,
+        "routed at issue"
+    );
     let issue_work: u64 = w.order_route_work().iter().map(|r| r[0]).sum();
     let python_issue = w.order_route_work()[OrderIssuer::PythonAi as usize][0];
     assert_eq!(issue_work, python_issue, "issue-time work is the caller's");

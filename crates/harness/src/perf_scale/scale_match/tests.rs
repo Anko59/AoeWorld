@@ -56,8 +56,13 @@ fn the_match_body_names_slots_rules_and_a_france_map() {
     assert!(setup::match_body(&options(&["--map", "package"])).is_err());
     let late = setup::match_body(&options(&["--late-game", "--seed", "9"])).unwrap();
     assert_eq!(late["start_units"]["late_game"], true);
+    assert_eq!(late["start_units"]["late_game_scale"], 100);
     assert_eq!(late["start_units"]["probe_army"], json!({}));
     assert_eq!(late["seed"], 9);
+    let scaled = setup::match_body(&options(&["--late-game", "--scale", "4.1"])).unwrap();
+    assert_eq!(scaled["start_units"]["late_game_scale"], 410);
+    // `--scale` only shapes the late game.
+    assert!(Cli::try_parse_from(["scale-match", "--scale", "2"]).is_err());
 }
 
 #[test]

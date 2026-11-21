@@ -132,6 +132,10 @@ pub struct Options {
     /// villagers, armies) and march slot 0's army by script (`late` in the report).
     #[arg(long, conflicts_with = "march_probe")]
     pub late_game: bool,
+    /// The late game's seat shapes times this factor (`match-bench --scale`);
+    /// `--tiles` sets the map side.
+    #[arg(long, default_value_t = 1.0, requires = "late_game")]
+    pub scale: f64,
     /// Build the server with its sampling profiler and write a flame graph,
     /// folded stacks and top-N table into this directory (keep it in `.cache/`).
     #[arg(long)]

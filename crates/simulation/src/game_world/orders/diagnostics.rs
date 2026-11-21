@@ -130,6 +130,23 @@ impl GameWorld {
         census
     }
 
+    /// The movers of `order_mover_census` that wait for a route search
+    /// (#978 service number: the share of units with a goal waiting).
+    pub fn order_waiting_census(&self) -> [u64; 8] {
+        let mut census = [0; 8];
+        for (index, unit) in self.units.iter().enumerate() {
+            if self.waiting_for_route(index) && self.movement_goal(unit.state.id).is_some() {
+                let row = self
+                    .order_diagnostics
+                    .last
+                    .get(&unit.state.id)
+                    .map_or(7, |p| p.1 as usize);
+                census[row] += 1;
+            }
+        }
+        census
+    }
+
     /// `phase`: 0 issue-time, 1 fair pass, 2 planning ahead.
     pub(crate) fn demand_route_work(&mut self, id: Option<EntityId>, phase: usize, spent: u32) {
         let row = match id {

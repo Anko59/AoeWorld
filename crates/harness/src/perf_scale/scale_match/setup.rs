@@ -37,6 +37,7 @@ pub(super) fn match_body(options: &Options) -> Result<Value, BoxError> {
     if options.march_probe || options.late_game {
         body["start_units"]["probe_army"] = super::march::probe_army(options.march_probe);
         body["start_units"]["late_game"] = json!(options.late_game);
+        body["start_units"]["late_game_scale"] = json!((options.scale * 100.0).round() as u32);
         body["seed"] = json!(options.seed);
     }
     match options.map {
