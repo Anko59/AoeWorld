@@ -4,7 +4,7 @@
 //! comment compares against; the gate (`perf-ci`, no network) only reads it.
 //! An unusable reference never passes silently: the gate says why and keeps
 //! the committed-baseline checks.
-use aoe_scenario::{LATE_GAME, SMOKE, TARGET_DISTRIBUTED};
+use aoe_scenario::{LATE_GAME, LATE_GAME_X4, SMOKE, TARGET_DISTRIBUTED};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs, path::Path};
 
@@ -40,6 +40,7 @@ pub fn identity() -> BTreeMap<String, String> {
         ("smoke", SMOKE.workload_hash()),
         ("late_game", LATE_GAME.workload_hash()),
         ("late_game_ticks", LATE_GAME_TICKS.to_string()),
+        ("late_game_x4", LATE_GAME_X4.workload_hash()),
         ("target_distributed", TARGET_DISTRIBUTED.workload_hash()),
     ]
     .into_iter()

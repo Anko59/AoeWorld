@@ -6,7 +6,7 @@ use gungraun::{Callgrind, EntryPoint};
 use std::hint::black_box;
 
 mod support;
-use support::{four_ticks, setup_distributed, setup_late_game, setup_smoke};
+use support::{four_ticks, setup_distributed, setup_late_game, setup_late_game_x4, setup_smoke};
 
 fn setup() -> World {
     World::new(SMOKE)
@@ -53,6 +53,24 @@ fn late_game(mut world: GameWorld) -> GameWorld {
     black_box(world)
 }
 
+#[library_benchmark(
+    setup = setup_late_game_x4,
+    config = LibraryBenchmarkConfig::default().tool(
+        Callgrind::with_args(["--instr-atstart=no", "--separate-threads=yes"])
+            .entry_point(EntryPoint::None)
+    )
+)]
+fn late_game_x4(mut world: GameWorld) -> GameWorld {
+    // Four times the units of `late_game`, the same eight measured ticks:
+    // the two rows together show cost per unit (#978 rule 7).
+    gungraun::client_requests::callgrind::start_instrumentation();
+    for _ in 0..8 {
+        world.advance();
+    }
+    gungraun::client_requests::callgrind::stop_instrumentation();
+    black_box(world)
+}
+
 // The ticks `perf-smoke` and `perf-ci` time for their population workloads,
 // where movement, collision and reservation costs show up.
 #[library_benchmark(
@@ -83,6 +101,7 @@ library_benchmark_group!(
         advance,
         viewport_query,
         late_game,
+        late_game_x4,
         smoke_ticks,
         distributed_ticks
     ]

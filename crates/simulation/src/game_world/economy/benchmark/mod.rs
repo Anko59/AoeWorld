@@ -8,10 +8,17 @@ mod actors;
 mod map;
 
 impl GameWorld {
-    /// Fixed CI workload: 100 seats, 8,000 villagers and 6,000 soldiers.
+    /// Fixed CI workload: 100 seats, 8,000 villagers and 6,000 soldiers;
+    /// seat 0 is a person watching its own village (`human_view`).
     /// Construction is excluded from measurement; no original assets are read.
     pub fn late_game_workload() -> Result<Self, Box<dyn std::error::Error>> {
-        build(100)
+        build(100, 1)
+    }
+
+    /// The same 100 seats with `scale` times the villagers and soldiers of
+    /// each village, so the gate sees cost per unit (#978 rule 7).
+    pub fn late_game_workload_scaled(scale: u16) -> Result<Self, Box<dyn std::error::Error>> {
+        build(100, scale)
     }
 
     /// The same construction at eight seats, for per-PR checks that need the
@@ -19,7 +26,7 @@ impl GameWorld {
     /// workload costs minutes, which belongs in the post-merge tier.
     #[cfg(test)]
     pub(crate) fn small_late_game_workload() -> Result<Self, Box<dyn std::error::Error>> {
-        build(8)
+        build(8, 1)
     }
 }
 
@@ -27,7 +34,12 @@ fn position(tile: TileCoord) -> Result<WorldPosition, EconomyError> {
     Ok(WorldPosition::from_tile_center(tile).map_err(crate::GameWorldError::from)?)
 }
 
-fn build(players: u16) -> Result<GameWorld, Box<dyn std::error::Error>> {
+/// The view of seat 0's person: a 200 by 200 tile screen at unit zoom over
+/// its main Town Center, as #978's claim runs use.
+const HUMAN_VIEW_TILES: i32 = 200;
+
+fn build(players: u16, scale: u16) -> Result<GameWorld, Box<dyn std::error::Error>> {
+    let scale = usize::from(scale.max(1));
     let request = MapRequest {
         center_latitude_e7: 466_000_000,
         center_longitude_e7: 25_000_000,
@@ -107,7 +119,7 @@ fn build(players: u16) -> Result<GameWorld, Box<dyn std::error::Error>> {
             .players
             .get_mut(&player)
             .ok_or(EconomyError::NotOwner)?;
-        state.population_cap = 200;
+        state.population_cap = 200 * scale as u32;
         state.stockpile = Stockpile {
             food: 100_000,
             wood: 100_000,
@@ -126,13 +138,13 @@ fn build(players: u16) -> Result<GameWorld, Box<dyn std::error::Error>> {
         let mut pending = std::collections::VecDeque::from([center]);
         while let Some(tile) = pending.pop_front() {
             spots.push(tile);
-            if spots.len() >= 1_024 {
+            if spots.len() >= 1_024 * scale {
                 break;
             }
             for (dx, dy) in [(0, -1), (-1, 0), (1, 0), (0, 1)] {
                 let next = TileCoord::new(tile.x + dx, tile.y + dy);
-                if next.x.abs_diff(center.x) <= 40
-                    && next.y.abs_diff(center.y) <= 40
+                if next.x.abs_diff(center.x) <= 40 * scale as u32
+                    && next.y.abs_diff(center.y) <= 40 * scale as u32
                     && !seen.contains(&next)
                     && world.tile_passable(next)
                     && world.terrain.crossable(tile, next, world.config())
@@ -144,11 +156,24 @@ fn build(players: u16) -> Result<GameWorld, Box<dyn std::error::Error>> {
         }
         map::mature_resources(&mut world, center, &spots)?;
         spots.retain(|tile| world.tile_passable(*tile));
-        for tile in spots.iter().copied().cycle().take(80 - villagers.len()) {
+        for tile in spots
+            .iter()
+            .copied()
+            .cycle()
+            .take(80 * scale - villagers.len())
+        {
             villagers.push(world.spawn_villager(player, position(tile)?)?);
         }
-        actors::seed(&mut world, player, primary, center, &spots, production[1])
-            .map_err(|error| format!("seat {seat}: actor setup: {error}"))?;
+        actors::seed(
+            &mut world,
+            player,
+            primary,
+            center,
+            &spots,
+            production[1],
+            scale,
+        )
+        .map_err(|error| format!("seat {seat}: actor setup: {error}"))?;
         // Scenario-only mature housing, restored after all setup construction.
         // Keep the measured actor counts and production queues unchanged.
         world
@@ -156,16 +181,15 @@ fn build(players: u16) -> Result<GameWorld, Box<dyn std::error::Error>> {
             .players
             .get_mut(&player)
             .ok_or(EconomyError::NotOwner)?
-            .population_cap = 200;
+            .population_cap = 200 * scale as u32;
         // The combined workload respects eco2 reservations: use all resource
         // kinds in the ordinary starting kit, rather than overbooking the few
         // nearby trees. Keep all 80 real gather/return jobs and full queues.
         let mut nodes = std::collections::BTreeMap::new();
-        for node in world
-            .starting_resources()
-            .into_iter()
-            .filter(|n| n.tile.x.abs_diff(center.x) <= 30 && n.tile.y.abs_diff(center.y) <= 30)
-        {
+        for node in world.starting_resources().into_iter().filter(|n| {
+            n.tile.x.abs_diff(center.x) <= 30 * scale as u32
+                && n.tile.y.abs_diff(center.y) <= 30 * scale as u32
+        }) {
             nodes.insert(node.id, node);
         }
         for dy in [-12, -6, 0, 6, 12] {
@@ -252,6 +276,26 @@ fn build(players: u16) -> Result<GameWorld, Box<dyn std::error::Error>> {
             .and_then(|b| b.research.as_mut())
             .ok_or(EconomyError::UnknownEntity)?;
         entry.progress_ticks = u64::from(seat);
+        if seat == 0 {
+            let at = world
+                .building(tc)
+                .ok_or(EconomyError::UnknownEntity)?
+                .footprint
+                .min;
+            let half = HUMAN_VIEW_TILES / 2;
+            world.set_human_seats(&[player]);
+            world.set_human_views(&[crate::HumanView {
+                player,
+                region: TileRect::from_xywh(
+                    at.x - half,
+                    at.y - half,
+                    HUMAN_VIEW_TILES,
+                    HUMAN_VIEW_TILES,
+                )
+                .clamp(world.config.width_tiles, world.config.height_tiles),
+                unit_zoom: true,
+            }]);
+        }
     }
     Ok(world)
 }

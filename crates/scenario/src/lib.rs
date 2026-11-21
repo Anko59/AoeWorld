@@ -16,7 +16,10 @@ pub struct Scenario {
 
 // The recipe is part of the workload identity: changing actors, routes or
 // camera work intentionally requires a new measured baseline, not an engine pin.
-pub const LATE_GAME_RECIPE: &str = "castle;80-villagers;60-army;192-tile-marches;12-formation;1-explorer;2-ships;southern-sea;1-monk;1-wounded-knight;1-garrison-archer;1-tower;25-blocked-barracks;200-queues;100-loom;384-warm;128-sample;3-runs;100-cameras-192x128;400-pans";
+pub const LATE_GAME_RECIPE: &str = "castle;80-villagers;60-army;192-tile-marches;12-formation;1-explorer;2-ships;southern-sea;1-monk;1-wounded-knight;1-garrison-archer;1-tower;25-blocked-barracks;200-queues;100-loom;384-warm;128-sample;3-runs;100-cameras-192x128;400-pans;1-human-seat-200x200-unit-view";
+/// The same 100 seats with four times the villagers and soldiers per village,
+/// warmed less and sampled on fewer ticks so the gate sees cost per unit.
+pub const LATE_GAME_X4_RECIPE: &str = "late-game-x4;castle;320-villagers;240-army;192-tile-marches;12-formation;1-explorer;2-ships;southern-sea;1-monk;1-wounded-knight;1-garrison-archer;1-tower;25-blocked-barracks;200-queues;100-loom;96-warm;8-ticks;1-human-seat-200x200-unit-view";
 
 pub const LATE_GAME: Scenario = Scenario {
     version: 1,
@@ -26,6 +29,17 @@ pub const LATE_GAME: Scenario = Scenario {
     active_extent: 16_384,
     players: 100,
     entities: 14_000,
+    hotspot_entities: 0,
+};
+
+pub const LATE_GAME_X4: Scenario = Scenario {
+    version: 1,
+    name: "late-game-x4",
+    seed: Seed(41),
+    world_size: 16_384,
+    active_extent: 16_384,
+    players: 100,
+    entities: 56_000,
     hotspot_entities: 0,
 };
 
@@ -154,6 +168,9 @@ impl Scenario {
         hasher.update(&self.hotspot_entities.to_le_bytes());
         if self == LATE_GAME {
             hasher.update(LATE_GAME_RECIPE.as_bytes());
+        }
+        if self == LATE_GAME_X4 {
+            hasher.update(LATE_GAME_X4_RECIPE.as_bytes());
         }
         hasher.finalize().to_hex().to_string()
     }

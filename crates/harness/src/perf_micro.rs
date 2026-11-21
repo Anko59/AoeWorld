@@ -16,7 +16,7 @@
 //! on, gated as above; and its total over every thread, which work moved to
 //! the workers does not shrink, failing only above [`PARALLEL_TOTAL_PERCENT`].
 use crate::perf::{Comparison, Verdict, compare_at, floor_at, over};
-use aoe_scenario::{LATE_GAME, SMOKE, TARGET_DISTRIBUTED};
+use aoe_scenario::{LATE_GAME, LATE_GAME_X4, SMOKE, TARGET_DISTRIBUTED};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::BTreeMap, error::Error, fs, path::Path};
@@ -31,9 +31,9 @@ pub const CREEP_PERCENT: u8 = 10;
 pub const PARALLEL_TOTAL_PERCENT: u8 = 10;
 const MAIN_THREAD: &str = "_main";
 
-/// Simulation (advance, viewport, late game total and main thread, smoke and
-/// distributed ticks), protocol (1) and assets (1).
-const CASES: usize = 8;
+/// Simulation (advance, viewport, late game and four-times late game, each
+/// total and main thread, smoke and distributed ticks), protocol (1) and assets (1).
+const CASES: usize = 10;
 
 #[derive(Deserialize, Serialize)]
 struct Baseline {
@@ -44,6 +44,7 @@ struct Baseline {
     allow_aslr: bool,
     smoke_workload_hash: String,
     late_game_workload_hash: String,
+    late_game_x4_workload_hash: String,
     target_distributed_workload_hash: String,
     instructions: BTreeMap<String, u64>,
     /// Fixed anchor for the creep guard. Refreshing `instructions` never moves
@@ -171,6 +172,7 @@ fn proposal(
         allow_aslr: true,
         smoke_workload_hash: SMOKE.workload_hash(),
         late_game_workload_hash: LATE_GAME.workload_hash(),
+        late_game_x4_workload_hash: LATE_GAME_X4.workload_hash(),
         target_distributed_workload_hash: TARGET_DISTRIBUTED.workload_hash(),
         instructions: observed.clone(),
         instruction_reference: observed
@@ -231,6 +233,7 @@ fn compare_with_dev(
         || !baseline.allow_aslr
         || baseline.smoke_workload_hash != SMOKE.workload_hash()
         || baseline.late_game_workload_hash != LATE_GAME.workload_hash()
+        || baseline.late_game_x4_workload_hash != LATE_GAME_X4.workload_hash()
         || baseline.target_distributed_workload_hash != TARGET_DISTRIBUTED.workload_hash()
     {
         return Err("microbenchmark baseline identity is incompatible".into());

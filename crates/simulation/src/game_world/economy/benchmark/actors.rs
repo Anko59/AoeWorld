@@ -33,6 +33,7 @@ pub(super) fn seed(
     center: TileCoord,
     spots: &[TileCoord],
     barracks: EntityId,
+    scale: usize,
 ) -> Result<(), Box<dyn Error>> {
     world.issue_auto_scout(player, scout, true)?;
     let tower = place(world, player, center)?;
@@ -82,13 +83,13 @@ pub(super) fn seed(
         }
     }
     let mut army = Vec::new();
-    for tile in spots.iter().copied().cycle().take(60 - count) {
+    for tile in spots.iter().copied().cycle().take(60 * scale - count) {
         if world.tile_passable(tile) {
             army.push(world.spawn_militia(player, position(tile)?)?);
         }
     }
-    // Keep exactly 140 population even if the tower claimed a former spawn.
-    while army.len() + count < 60 {
+    // Keep exactly 140 population (times `scale`) even if the tower claimed a former spawn.
+    while army.len() + count < 60 * scale {
         army.push(world.spawn_militia(player, position(hospital)?)?);
     }
     for (index, &id) in army.iter().enumerate().skip(12) {

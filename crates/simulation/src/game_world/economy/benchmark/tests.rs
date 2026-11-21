@@ -10,8 +10,8 @@ mod sleep;
 
 #[test]
 fn late_game_workload_keeps_real_jobs_and_full_queues() {
-    let mut world = build(2).unwrap();
-    let mut reference = build(2).unwrap();
+    let mut world = build(2, 1).unwrap();
+    let mut reference = build(2, 1).unwrap();
     reference.set_work_sleep(false);
     assert_eq!(world.unit_count(), 280);
     assert_eq!(world.players().count(), 2);
@@ -115,7 +115,7 @@ fn late_game_full_population_replays_identically_on_one_and_four_workers() {
 
 #[test]
 fn late_game_exercises_exploration_marches_and_backlogged_production() {
-    let mut world = build(2).unwrap();
+    let mut world = build(2, 1).unwrap();
     assert!(!world.fog_disabled());
     for player in world.players() {
         assert_eq!(player.age, crate::Age::Castle);
@@ -167,7 +167,7 @@ fn late_game_exercises_exploration_marches_and_backlogged_production() {
 
 #[test]
 fn late_game_all_seats_seed_the_requested_actors() {
-    let world = build(100).unwrap();
+    let world = build(100, 1).unwrap();
     assert_eq!(world.unit_count(), 14_000);
     assert_eq!(world.units().filter(|u| u.auto_scout).count(), 100);
     assert_eq!(world.units().filter(|u| u.kind.is_naval()).count(), 200);

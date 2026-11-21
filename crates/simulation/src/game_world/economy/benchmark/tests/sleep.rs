@@ -150,7 +150,7 @@ fn run_pair(
 
 #[test]
 fn work_sleep_replays_hash_for_hash_over_two_game_minutes() {
-    let (slept, ..) = run_pair(build(8).unwrap(), build(8).unwrap(), 2_400, 1);
+    let (slept, ..) = run_pair(build(8, 1).unwrap(), build(8, 1).unwrap(), 2_400, 1);
     // Most visits of a gathering village are pure credit ticks.
     assert!(slept >= 300, "only {slept}/1000 gatherer visits slept");
 }
