@@ -210,6 +210,9 @@ impl GameWorld {
                 }
             }
         }
+        if kind.is_wall() {
+            self.management_wall_changed(rect, true);
+        }
         self.collision_closed(footprint);
         Ok(())
     }
@@ -217,6 +220,7 @@ impl GameWorld {
     fn register_gate_footprint(&mut self, id: EntityId, kind: BuildingKind, footprint: TileRect) {
         if kind.is_gate() {
             self.economy.gates.insert(id);
+            self.management_barrier_changed(footprint);
             for y in footprint.min.y..footprint.max.y {
                 for x in footprint.min.x..footprint.max.x {
                     self.economy.gate_tiles.insert(TileCoord::new(x, y), id);

@@ -1,9 +1,8 @@
 //! Steward land ownership follows walking costs. Water work keeps its own
 //! shoreline service area so a land barrier does not strand fishing boats.
 use super::{Home, STEWARD_RULES};
-use crate::{GameWorld, Terrain, UnitKind};
+use crate::{GameWorld, UnitKind};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, TileCoord, TileRect, WorldPosition};
-use std::collections::VecDeque;
 use std::sync::Arc;
 
 fn d2(a: WorldPosition, b: WorldPosition) -> i64 {
@@ -75,45 +74,27 @@ impl Home {
 }
 impl GameWorld {
     pub(super) fn refresh_steward_walk(&mut self) {
-        if self.economy.stewards.active.is_empty() {
-            return;
-        }
-        let second = self.tick.0 / u64::from(self.config.tick_hz);
-        if self.economy.stewards.walk_second == Some(second) {
-            return;
-        }
-        self.economy.stewards.walk_second = Some(second);
-        let mut previous = std::mem::take(&mut self.economy.walking.stewards);
-        for (&player, members) in &self.economy.stewards.by_player {
-            let sources: Vec<_> = members
-                .keys()
-                .filter_map(|&id| {
-                    let town = self.steward_town_center(id)?;
-                    self.building(town).map(|b| (id, b.footprint))
-                })
-                .collect();
-            let walking = self.walking_group(sources, previous.get(&player));
-            for id in members.keys() {
-                if let Some(home) = self.economy.steward_homes.get_mut(id)
-                    && home
-                        .walking
-                        .as_ref()
-                        .is_none_or(|prior| !Arc::ptr_eq(prior, &walking))
-                {
+        let period = self.config.tick_hz;
+        for key in self.economy.walking.stewards.due(self.tick.0, period) {
+            let cache = &self.economy.walking;
+            let Some(walking) = cache.stewards.refresh(self, key, cache) else {
+                continue;
+            };
+            for id in walking.offices() {
+                if let Some(home) = self.economy.steward_homes.get_mut(&id) {
+                    if home.walking.is_none() || walking.zone_changed(id) {
+                        home.walk_recheck = true;
+                        home.regions = None;
+                        self.economy
+                            .stewards
+                            .controlled
+                            .mark(home.workers.iter().copied());
+                    }
                     home.walking = Some(walking.clone());
-                    home.walk_recheck = true;
-                    // Land connectivity is labelled over the walking zone.
-                    home.regions = None;
-                    self.economy
-                        .stewards
-                        .controlled
-                        .mark(home.workers.iter().copied());
                 }
             }
-            previous.insert(player, walking);
+            self.economy.walking.stewards.publish(key, walking);
         }
-        previous.retain(|player, _| self.economy.stewards.by_player.contains_key(player));
-        self.economy.walking.stewards = previous;
     }
 
     pub(super) fn recheck_steward_walk(&mut self, id: EntityId, changed: &mut Vec<EntityId>) {
@@ -170,35 +151,30 @@ impl GameWorld {
                     .controlled
                     .mark(home.workers.iter().chain(&home.navy.ships).copied());
                 home.rivals = rivals;
-                home.regions = None;
             }
         }
     }
 }
 
-// Connectivity inside one Steward's territory. A job is only worth giving a
-// villager when a walk exists that never leaves the office's walking zone (cut
-// by its siblings and bounded by the 100-tile service box). Static ground is labelled once per territory and bridge change;
-// each query is then a few array reads, never a route search.
+// Connectivity is clipped to the office's territory using the same region
+// steps as its walking field. Passing through another office is disallowed.
 #[derive(Debug)]
 pub(super) struct Regions {
-    epoch: u32,
-    min: TileCoord,
-    side: i32,
-    /// 0 outside the territory or on closed ground, otherwise a component id.
-    labels: Vec<u16>,
+    bounds: TileRect,
+    // Zero means closed or outside the walking zone.
+    labels: Vec<u32>,
 }
 
 impl Regions {
-    fn label(&self, tile: TileCoord) -> u16 {
-        let (x, y) = (tile.x - self.min.x, tile.y - self.min.y);
-        if x < 0 || y < 0 || x >= self.side || y >= self.side {
+    fn label(&self, tile: TileCoord) -> u32 {
+        if !self.bounds.contains(tile) {
             return 0;
         }
-        self.labels[(y * self.side + x) as usize]
+        let (x, y) = (tile.x - self.bounds.min.x, tile.y - self.bounds.min.y);
+        self.labels[(y * self.bounds.width() + x) as usize]
     }
 
-    fn label_near(&self, tile: TileCoord) -> u16 {
+    fn label_near(&self, tile: TileCoord) -> u32 {
         for r in 0..=1 {
             for dy in -r..=r {
                 for dx in -r..=r {
@@ -240,98 +216,15 @@ impl Home {
 }
 
 impl GameWorld {
-    /// Builds the labels once; later passes only compare the epoch.
     pub(super) fn steward_ensure_regions(&mut self, id: EntityId) {
-        let epoch = self.economy.stewards.bridge_epoch;
-        let Some(home) = self.economy.steward_homes.get(&id) else {
+        let Some(home) = self.economy.steward_homes.get_mut(&id) else {
             return;
         };
-        if !matches!(self.terrain, Terrain::Map { .. })
-            || home.regions.as_ref().is_some_and(|r| r.epoch == epoch)
+        if home.regions.is_none()
+            && let Some((bounds, labels)) = home.walking.as_ref().and_then(|zone| zone.regions(id))
         {
-            return;
+            home.regions = Some(Arc::new(Regions { bounds, labels }));
         }
-        let regions = Arc::new(self.label_territory(home, epoch));
-        if let Some(home) = self.economy.steward_homes.get_mut(&id) {
-            home.regions = Some(regions);
-        }
-    }
-
-    fn label_territory(&self, home: &Home, epoch: u32) -> Regions {
-        let r = STEWARD_RULES.radius_tiles;
-        let c = home.center.tile_floor();
-        let side = 2 * r + 1;
-        let min = TileCoord::new(c.x - r, c.y - r);
-        let mut labels = vec![0u16; (side * side) as usize];
-        let inside = |tile: TileCoord| {
-            home.owns(WorldPosition::new(
-                tile.x * FIXED_SUBUNITS_PER_TILE + FIXED_SUBUNITS_PER_TILE / 2,
-                tile.y * FIXED_SUBUNITS_PER_TILE + FIXED_SUBUNITS_PER_TILE / 2,
-            )) && tile.x >= 0
-                && tile.y >= 0
-                && tile.x < self.config.width_tiles
-                && tile.y < self.config.height_tiles
-        };
-        let index = |tile: TileCoord| ((tile.y - min.y) * side + (tile.x - min.x)) as usize;
-        let mut next = 0u16;
-        for y in min.y..min.y + side {
-            for x in min.x..min.x + side {
-                let start = TileCoord::new(x, y);
-                if labels[index(start)] != 0 || !inside(start) {
-                    continue;
-                }
-                // Closed ground is its own unlabelled tile; open ground floods.
-                if !self.ground_open(start) {
-                    continue;
-                }
-                next = next.saturating_add(1);
-                labels[index(start)] = next;
-                let mut queue = VecDeque::from([start]);
-                while let Some(from) = queue.pop_front() {
-                    for (dx, dy) in [
-                        (0, -1),
-                        (-1, 0),
-                        (1, 0),
-                        (0, 1),
-                        (-1, -1),
-                        (1, -1),
-                        (-1, 1),
-                        (1, 1),
-                    ] {
-                        let to = TileCoord::new(from.x + dx, from.y + dy);
-                        if to.x < min.x
-                            || to.y < min.y
-                            || to.x >= min.x + side
-                            || to.y >= min.y + side
-                            || labels[index(to)] != 0
-                            || !inside(to)
-                            || !self.terrain.ground_step_open(from, to)
-                        {
-                            continue;
-                        }
-                        labels[index(to)] = next;
-                        queue.push_back(to);
-                    }
-                }
-            }
-        }
-        Regions {
-            epoch,
-            min,
-            side,
-            labels,
-        }
-    }
-
-    fn ground_open(&self, tile: TileCoord) -> bool {
-        let Terrain::Map { generator, overlay } = &self.terrain else {
-            return true;
-        };
-        generator
-            .walk_at_with_cancel(tile, &|| false)
-            .ok()
-            .flatten()
-            .is_some_and(|cell| cell.passable || overlay.bridge_connections(tile).is_some())
     }
 }
 
@@ -352,22 +245,21 @@ impl GameWorld {
             return;
         };
         let mut labels = old.labels.clone();
-        for y in 0..old.side {
-            for x in 0..old.side {
-                let (tx, ty) = (old.min.x + x, old.min.y + y);
+        let width = old.bounds.width();
+        for y in 0..old.bounds.height() {
+            for x in 0..width {
+                let (tx, ty) = (old.bounds.min.x + x, old.bounds.min.y + y);
                 let near = tx >= rect.min.x - 6
                     && tx <= rect.max.x + 6
                     && ty >= rect.min.y - 6
                     && ty <= rect.max.y + 6;
-                if near && labels[(y * old.side + x) as usize] != 0 {
-                    labels[(y * old.side + x) as usize] = u16::MAX;
+                if near && labels[(y * width + x) as usize] != 0 {
+                    labels[(y * width + x) as usize] = u32::MAX;
                 }
             }
         }
         home.regions = Some(Arc::new(Regions {
-            epoch: old.epoch,
-            min: old.min,
-            side: old.side,
+            bounds: old.bounds,
             labels,
         }));
     }

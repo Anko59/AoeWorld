@@ -92,9 +92,9 @@ fn stalled_food(
             })),
         "stalled farmers must retain full real food loads"
     );
-    // A Steward now needs a food-accepting TC. Put its host behind ordinary
-    // closed walls, preserving the assertion that real full-load farmers earn
-    // no income while managed; the unsealed local drop-offs remain out of domain.
+    // Enclose the Town Center with one-tile towers. They block real drop-off
+    // paths while leaving workers inside the Steward's strategic walking zone.
+    // The unsealed local drop-offs remain outside that zone.
     let site = (12..50)
         .find_map(|radius| {
             [(radius, 0), (0, radius), (-radius, 0), (0, -radius)]
@@ -105,7 +105,7 @@ fn stalled_food(
                         (at.x - 2..=at.x + 5).all(|x| {
                             w.validate_building_placement(
                                 PlayerId(0),
-                                BuildingKind::StoneWall,
+                                BuildingKind::WatchTower,
                                 TileCoord::new(x, y),
                             )
                             .is_ok()
@@ -134,7 +134,7 @@ fn stalled_food(
             if x == site.x - 2 || x == site.x + 5 || y == site.y - 2 || y == site.y + 5 {
                 w.insert_building(
                     PlayerId(0),
-                    BuildingKind::StoneWall,
+                    BuildingKind::WatchTower,
                     aoe_core::TileRect::from_xywh(x, y, 1, 1),
                     true,
                 )

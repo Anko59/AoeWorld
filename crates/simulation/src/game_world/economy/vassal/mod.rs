@@ -106,7 +106,6 @@ pub(crate) struct Manager {
     returns: BTreeMap<EntityId, WorldPosition>,
     cursor: Option<EntityId>,
     plan_cursor: Option<EntityId>,
-    walk_second: Option<u64>,
 }
 impl Manager {
     fn scheduled_domain(&self, tick: u64) -> Option<EntityId> {
@@ -139,11 +138,16 @@ impl GameWorld {
             (b.footprint.min.x + b.footprint.max.x) / 2,
             (b.footprint.min.y + b.footprint.max.y) / 2,
         );
+        let (player, footprint) = (b.player, b.footprint);
+        self.economy
+            .walking
+            .vassals
+            .set(player, id, Some(footprint));
         self.economy.vassals.domains.insert(
             id,
             Domain {
                 castle,
-                player: b.player,
+                player,
                 center,
                 walking: None,
                 soldiers: BTreeSet::new(),
@@ -201,15 +205,7 @@ impl GameWorld {
     }
     pub(crate) fn deactivate_vassal(&mut self, id: EntityId) {
         if let Some(d) = self.economy.vassals.domains.remove(&id) {
-            if !self
-                .economy
-                .vassals
-                .domains
-                .values()
-                .any(|other| other.player == d.player)
-            {
-                self.economy.walking.vassals.remove(&d.player);
-            }
+            self.economy.walking.vassals.set(d.player, id, None);
             for soldier in d.soldiers {
                 self.economy.vassals.controlled.remove(&soldier);
             }
@@ -348,32 +344,22 @@ impl GameWorld {
     }
 
     fn refresh_vassal_walk(&mut self) {
-        if self.economy.vassals.domains.is_empty() {
-            return;
-        }
-        let second = self.tick.0 / u64::from(self.config.tick_hz);
-        if self.economy.vassals.walk_second == Some(second) {
-            return;
-        }
-        self.economy.vassals.walk_second = Some(second);
-        let mut owners = BTreeMap::<PlayerId, Vec<(EntityId, TileRect)>>::new();
-        for (&id, domain) in &self.economy.vassals.domains {
-            if let Some(castle) = self.building(domain.castle) {
-                owners
-                    .entry(domain.player)
-                    .or_default()
-                    .push((id, castle.footprint));
-            }
-        }
-        let previous = std::mem::take(&mut self.economy.walking.vassals);
-        for (player, sources) in owners {
-            let walking = self.walking_group(sources.clone(), previous.get(&player));
-            for (id, _) in sources {
+        for key in self
+            .economy
+            .walking
+            .vassals
+            .due(self.tick.0, self.config.tick_hz)
+        {
+            let cache = &self.economy.walking;
+            let Some(walking) = cache.vassals.refresh(self, key, cache) else {
+                continue;
+            };
+            for id in walking.offices() {
                 if let Some(domain) = self.economy.vassals.domains.get_mut(&id) {
                     domain.walking = Some(walking.clone());
                 }
             }
-            self.economy.walking.vassals.insert(player, walking);
+            self.economy.walking.vassals.publish(key, walking);
         }
     }
 

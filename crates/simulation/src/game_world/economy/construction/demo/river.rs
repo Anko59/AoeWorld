@@ -114,7 +114,7 @@ impl GameWorld {
         for tile in span.tiles() {
             self.economy.blocked_tiles.remove(&tile);
         }
-        self.management_ground_changed(Some(span.footprint()));
+        self.management_ground_changed(span.footprint());
         self.collision_opened(span.footprint());
         for (n, tile) in soldiers.into_iter().enumerate() {
             let kind = match n {
@@ -178,7 +178,7 @@ impl GameWorld {
         for tile in span.tiles() {
             self.economy.blocked_tiles.remove(&tile);
         }
-        self.management_ground_changed(Some(span.footprint()));
+        self.management_ground_changed(span.footprint());
         self.collision_opened(span.footprint());
         Ok(())
     }

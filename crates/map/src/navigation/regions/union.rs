@@ -46,6 +46,37 @@ fn union(parent: &mut [u32], a: u32, b: u32) {
     }
 }
 
+/// Label the reversible links of a clipped walk raster. Zero means a tile is
+/// excluded; each component takes its first row-major index plus one.
+pub fn clipped_region_labels(width: usize, steps: &[Option<u8>]) -> Vec<u32> {
+    assert!(width > 0 && steps.len().is_multiple_of(width));
+    let height = steps.len() / width;
+    let mut parent: Vec<_> = (0..steps.len() as u32).collect();
+    for (cell, &step) in steps.iter().enumerate() {
+        let Some(step) = step else { continue };
+        let (x, y) = ((cell % width) as i32, (cell / width) as i32);
+        // E, SW, S and SE own each unordered pair exactly once.
+        for (direction, (dx, dy)) in super::label::NEIGHBOURS.into_iter().enumerate().skip(4) {
+            if step & (1 << direction) == 0 {
+                continue;
+            }
+            let (nx, ny) = (x + dx, y + dy);
+            if nx < 0 || nx >= width as i32 || ny >= height as i32 {
+                continue;
+            }
+            let next = ny as usize * width + nx as usize;
+            if steps[next].is_some_and(|mask| mask & (1 << (7 - direction)) != 0) {
+                union(&mut parent, cell as u32, next as u32);
+            }
+        }
+    }
+    steps
+        .iter()
+        .enumerate()
+        .map(|(cell, steps)| steps.map_or(0, |_| find(&mut parent, cell as u32) + 1))
+        .collect()
+}
+
 fn map_find(parent: &mut BTreeMap<u32, u32>, mut at: u32) -> u32 {
     while let Some(&up) = parent.get(&at).filter(|&&up| up != at) {
         at = up;

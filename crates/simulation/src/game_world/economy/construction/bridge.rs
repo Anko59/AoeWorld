@@ -178,8 +178,7 @@ impl GameWorld {
         if !overlay.complete_bridge(span) {
             return false;
         }
-        self.economy.stewards.bridge_epoch += 1;
-        self.management_ground_changed(Some(span.footprint()));
+        self.management_ground_changed(span.footprint());
         for tile in span.tiles() {
             self.economy.blocked_tiles.remove(&tile);
         }
@@ -188,8 +187,7 @@ impl GameWorld {
     }
 
     pub(super) fn remove_bridge_deck(&mut self, span: BridgeSpan) {
-        self.economy.stewards.bridge_epoch += 1;
-        self.management_ground_changed(Some(span.footprint()));
+        self.management_ground_changed(span.footprint());
         // Only occupants over underlying blocking water drown. Endpoints and
         // naturally wadeable marsh remain safe when the structure collapses.
         let drowned = self

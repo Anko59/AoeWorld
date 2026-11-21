@@ -404,23 +404,29 @@ impl MapChunkGenerator {
         }
     }
 
+    /// The immutable resource nodes captured in one prepared navigation chunk.
+    pub fn chunk_resource_nodes(
+        &self,
+        key: (i32, i32),
+    ) -> Result<Vec<ResourceNode>, EnvironmentPageError> {
+        Ok(self
+            .navigation_cells(key, &|| false)?
+            .into_iter()
+            .flatten()
+            .filter_map(|cell| cell.node)
+            .collect())
+    }
+
     pub(crate) fn navigation_cells(
         &self,
         key: (i32, i32),
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Vec<Option<WalkCell>>, EnvironmentPageError> {
-        if self.has_static_navigation() {
-            return (0..CELLS)
-                .map(|index| {
-                    self.walk_at_with_cancel(
-                        TileCoord::new(
-                            key.0 * CHUNK_TILES + (index % SIDE) as i32,
-                            key.1 * CHUNK_TILES + (index / SIDE) as i32,
-                        ),
-                        cancelled,
-                    )
-                })
-                .collect();
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        if let Some(snapshot) = self.static_navigation().get() {
+            return Ok(snapshot.cells(key).unwrap_or_else(|| vec![None; CELLS]));
         }
         let chunk = self.walk_chunk(key, cancelled)?;
         (0..CELLS)

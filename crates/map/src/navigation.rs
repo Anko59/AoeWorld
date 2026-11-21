@@ -24,7 +24,7 @@ pub use planner::{
 };
 pub use regions::{
     ANY_PLAYER, LandBucket, MapRegionGround, RegionChunk, RegionGround, RegionReachability,
-    RegionStats, RegionTile, Regions,
+    RegionStats, RegionTile, Regions, clipped_region_labels,
 };
 
 pub const ORTHOGONAL_COST: u32 = 1_024;

@@ -1,0 +1,300 @@
+use super::*;
+use crate::Terrain;
+use crate::game_world::terrain_fixtures::build;
+
+#[test]
+fn harvesting_a_walking_zone_keeps_the_field_and_the_patch_assignment() {
+    let mut world = build("general-forest").world;
+    let player = PlayerId(0);
+    let sources = vec![
+        (EntityId(1), TileRect::from_xywh(61, 27, 4, 4)),
+        (EntityId(2), TileRect::from_xywh(97, 27, 4, 4)),
+    ];
+    let Terrain::Map { overlay, .. } = &world.terrain else {
+        unreachable!()
+    };
+    let harvested = overlay
+        .starting_nodes()
+        .find(|node| node.tile == TileCoord::new(81, 29))
+        .unwrap();
+    let remaining = TileCoord::new(82, 29);
+    let before = install(&mut world, player, &sources);
+    assert_eq!(
+        before.patch_owner(harvested.tile),
+        before.patch_owner(remaining)
+    );
+    let owner = before.patch_owner(remaining).expect("forest has a Steward");
+    world
+        .prepare_resource_depletion(harvested.id, harvested.initial_amount)
+        .unwrap()
+        .commit();
+    assert!(
+        refresh(&mut world, player).is_none(),
+        "a harvest rebuilt the zone"
+    );
+    assert_eq!(before.patch_owner(remaining), Some(owner));
+}
+
+#[test]
+fn a_local_walking_edit_reuses_the_other_offices_field() {
+    let mut world = build("river").world;
+    let player = PlayerId(0);
+    let sources = vec![
+        (EntityId(1), TileRect::from_xywh(20, 35, 4, 4)),
+        (EntityId(2), TileRect::from_xywh(230, 200, 4, 4)),
+    ];
+    let before = install(&mut world, player, &sources);
+    world.management_ground_changed(TileRect::from_xywh(21, 42, 1, 1));
+    let after = refresh(&mut world, player).unwrap();
+    assert!(!Arc::ptr_eq(
+        &before.fields[0].active.field,
+        &after.fields[0].active.field
+    ));
+    assert!(Arc::ptr_eq(
+        &before.fields[1].active.field,
+        &after.fields[1].active.field
+    ));
+    assert!(Arc::ptr_eq(
+        &before.fields[1].active.claims,
+        &after.fields[1].active.claims
+    ));
+    assert!(!after.zone_changed(sources[1].0));
+}
+
+#[test]
+fn a_walking_zone_respects_walls_and_its_owners_gate() {
+    use crate::BuildingKind;
+    use aoe_core::{Seed, WorldConfig};
+
+    let mut world = GameWorld::new(WorldConfig::new(32, 32, Seed(1)).unwrap()).unwrap();
+    let player = PlayerId(0);
+    let sources = vec![(EntityId(1000), TileRect::from_xywh(7, 12, 4, 4))];
+    let far = TileCoord::new(20, 16);
+    let before = install(&mut world, player, &sources);
+    assert!(before.owns(sources[0].0, far));
+
+    for y in (0..32).filter(|y| !(12..16).contains(y)) {
+        world
+            .insert_building(
+                player,
+                BuildingKind::StoneWall,
+                TileRect::from_xywh(15, y, 1, 1),
+                true,
+            )
+            .unwrap();
+    }
+    let gate = world
+        .insert_building(
+            player,
+            BuildingKind::StoneGate,
+            TileRect::from_xywh(15, 12, 1, 4),
+            true,
+        )
+        .unwrap();
+    let through_gate = refresh(&mut world, player).unwrap();
+    assert!(through_gate.owns(sources[0].0, far));
+    world.set_gate_locked(player, gate, true).unwrap();
+    let locked = refresh(&mut world, player).unwrap();
+    assert!(!locked.owns(EntityId(1000), far));
+}
+
+fn install(
+    world: &mut GameWorld,
+    player: PlayerId,
+    sources: &[(EntityId, TileRect)],
+) -> Arc<Walking> {
+    for &(id, rect) in sources {
+        world.economy.walking.stewards.set(player, id, Some(rect));
+    }
+    refresh(world, player).unwrap()
+}
+
+fn refresh(world: &mut GameWorld, player: PlayerId) -> Option<Arc<Walking>> {
+    let key = Groups::key(player);
+    let cache = &world.economy.walking;
+    let next = cache.stewards.refresh(world, key, cache)?;
+    world.economy.walking.stewards.publish(key, next.clone());
+    Some(next)
+}
+
+#[test]
+fn changed_walking_zones_refresh_at_each_players_phase() {
+    use aoe_core::{Seed, WorldConfig};
+
+    let mut world = GameWorld::new(WorldConfig::new(32, 32, Seed(1)).unwrap()).unwrap();
+    let period = world.config.tick_hz;
+    let source = TileRect::from_xywh(7, 12, 4, 4);
+    for player in [PlayerId(3), PlayerId(7), PlayerId(22)] {
+        install(
+            &mut world,
+            player,
+            &[(EntityId(u32::from(player.0)), source)],
+        );
+    }
+    world.management_ground_changed(source);
+
+    let mut refreshed = Vec::new();
+    for tick in 20..40 {
+        for (_, player) in world.economy.walking.stewards.due(tick, period) {
+            if refresh(&mut world, player).is_some() {
+                refreshed.push((tick, player));
+            }
+        }
+    }
+    assert_eq!(
+        refreshed,
+        [(24, PlayerId(3)), (24, PlayerId(22)), (28, PlayerId(7))]
+    );
+}
+
+#[test]
+fn a_friendly_gate_toggle_leaves_its_owners_walking_zone_current() {
+    use aoe_core::{Seed, WorldConfig};
+
+    let mut world = GameWorld::new(WorldConfig::new(32, 32, Seed(1)).unwrap()).unwrap();
+    let owner = PlayerId(3);
+    let neighbor = PlayerId(7);
+    let source = TileRect::from_xywh(7, 12, 4, 4);
+    install(&mut world, owner, &[(EntityId(3), source)]);
+    install(&mut world, neighbor, &[(EntityId(7), source)]);
+    world.management_gate_toggled(TileRect::from_xywh(15, 12, 1, 4), owner);
+
+    assert!(refresh(&mut world, owner).is_none());
+    assert!(refresh(&mut world, neighbor).is_some());
+}
+
+#[test]
+fn walking_refresh_phases_survive_a_tick_rate_change() {
+    use aoe_core::{Seed, WorldConfig};
+
+    let mut world = GameWorld::new(WorldConfig::new(32, 32, Seed(1)).unwrap()).unwrap();
+    let player = PlayerId(17);
+    let source = TileRect::from_xywh(7, 12, 4, 4);
+    install(&mut world, player, &[(EntityId(17), source)]);
+    world.set_tick_hz(4);
+    world.management_ground_changed(source);
+
+    let mut refreshed = Vec::new();
+    for tick in 40..44 {
+        for (_, player) in world
+            .economy
+            .walking
+            .stewards
+            .due(tick, world.config.tick_hz)
+        {
+            if refresh(&mut world, player).is_some() {
+                refreshed.push((tick, player));
+            }
+        }
+    }
+    assert_eq!(refreshed, [(43, player)]);
+}
+
+#[test]
+fn removing_a_walking_source_reassigns_the_whole_patch() {
+    let mut world = build("general-forest").world;
+    let player = PlayerId(0);
+    let sources = [
+        (EntityId(1), TileRect::from_xywh(61, 27, 4, 4)),
+        (EntityId(2), TileRect::from_xywh(97, 27, 4, 4)),
+    ];
+    let before = install(&mut world, player, &sources);
+    let left = TileCoord::new(75, 29);
+    let right = TileCoord::new(86, 29);
+    let old_owner = before.patch_owner(left).unwrap();
+    assert_eq!(before.patch_owner(right), Some(old_owner));
+    let survivor = sources.iter().position(|&(id, _)| id != old_owner).unwrap();
+
+    world.economy.walking.stewards.set(player, old_owner, None);
+    let after = refresh(&mut world, player).unwrap();
+    assert!(Arc::ptr_eq(
+        &before.fields[survivor].active.field,
+        &after.fields[0].active.field
+    ));
+    assert!(Arc::ptr_eq(
+        &before.fields[survivor].active.claims,
+        &after.fields[0].active.claims
+    ));
+    assert_eq!(after.patch_owner(left), Some(sources[survivor].0));
+    assert_eq!(after.patch_owner(right), Some(sources[survivor].0));
+}
+
+#[test]
+fn walking_fields_reuse_a_previously_seen_gate_state() {
+    use crate::BuildingKind;
+    use aoe_core::{Seed, WorldConfig};
+
+    let mut world = GameWorld::new(WorldConfig::new(32, 32, Seed(1)).unwrap()).unwrap();
+    for y in (0..32).filter(|y| !(12..16).contains(y)) {
+        world
+            .insert_building(
+                PlayerId(0),
+                BuildingKind::StoneWall,
+                TileRect::from_xywh(15, y, 1, 1),
+                true,
+            )
+            .unwrap();
+    }
+    let gate = world
+        .insert_building(
+            PlayerId(0),
+            BuildingKind::StoneGate,
+            TileRect::from_xywh(15, 12, 1, 4),
+            true,
+        )
+        .unwrap();
+    let player = PlayerId(1);
+    let office = EntityId(1000);
+    let far = TileCoord::new(20, 16);
+    let closed = install(
+        &mut world,
+        player,
+        &[(office, TileRect::from_xywh(7, 12, 4, 4))],
+    );
+    assert!(!closed.owns(office, far));
+
+    world.restore_gate(gate, true);
+    let open = refresh(&mut world, player).unwrap();
+    assert!(open.owns(office, far));
+
+    world.advance();
+    let closed_again = refresh(&mut world, player).unwrap();
+    assert!(!closed_again.owns(office, far));
+    assert!(Arc::ptr_eq(
+        &closed.fields[0].active.field,
+        &closed_again.fields[0].active.field
+    ));
+}
+
+#[test]
+fn walking_region_labels_respect_the_boundary_and_both_directions() {
+    use aoe_map::clipped_region_labels;
+
+    // Each row is a three-tile horizontal run. The right tiles also have a
+    // south edge, but only the second of those edges has a reverse step.
+    let west = 1 << 3;
+    let east = 1 << 4;
+    let north = 1 << 1;
+    let south = 1 << 6;
+    let mut steps = [
+        Some(east),
+        Some(west | east),
+        Some(west | south),
+        Some(east),
+        Some(west | east),
+        Some(west | south),
+        Some(east),
+        Some(west | east),
+        Some(west | north),
+    ];
+    assert_eq!(
+        clipped_region_labels(3, &steps),
+        [1, 1, 1, 4, 4, 4, 4, 4, 4]
+    );
+    steps[1] = None;
+    steps[5] = None;
+    assert_eq!(
+        clipped_region_labels(3, &steps),
+        [1, 0, 3, 4, 4, 0, 7, 7, 7]
+    );
+}

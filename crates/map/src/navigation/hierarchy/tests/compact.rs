@@ -127,7 +127,12 @@ fn decoded_static_chunks_answer_every_tile_as_the_packed_view() {
         .collect();
     let bytes = stored.encode().unwrap();
     let decoded = super::decoded::Decoded::new(1);
-    let packed = |at| packed::View::new(&bytes).cell(at);
+    let view = packed::View::new(&bytes);
+    let packed = |at| view.cell(at);
+    assert_eq!(
+        view.cells(),
+        (0..grid::CELLS).map(packed).collect::<Vec<_>>()
+    );
     // The first passes read packed bytes until the chunk is decoded.
     for _ in 0..3 {
         for at in 0..grid::CELLS {

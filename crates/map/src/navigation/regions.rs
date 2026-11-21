@@ -28,6 +28,7 @@ mod terrain;
 pub use label::Input as RegionChunk;
 pub use terrain::MapRegionGround;
 mod union;
+pub use union::clipped_region_labels;
 use union::{Global, SuperRegions};
 
 const CHUNK: i32 = 32;

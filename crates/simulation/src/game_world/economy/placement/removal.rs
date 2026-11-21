@@ -64,12 +64,16 @@ impl GameWorld {
                     overlay.remove_footprint(rect);
                 }
             }
+            if building.kind.is_wall() {
+                self.management_wall_changed(rect, false);
+            }
             self.collision_opened(building.footprint);
         }
         self.release_destroyed_garrison(id, building.footprint, building.garrison, &mut Vec::new());
         self.economy.open_gates.remove(&id);
         if self.economy.gates.remove(&id) {
             let rect = building.footprint;
+            self.management_barrier_changed(rect);
             for y in rect.min.y..rect.max.y {
                 for x in rect.min.x..rect.max.x {
                     let tile = TileCoord::new(x, y);

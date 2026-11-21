@@ -92,6 +92,16 @@ impl NavigationSnapshot {
             ),
         })
     }
+    pub(crate) fn cells(&self, key: Key) -> Option<Vec<Option<WalkCell>>> {
+        let at = self.index(key)?;
+        Some(match &self.chunks {
+            Chunks::Owned(chunks) => (0..grid::CELLS).map(|cell| chunks[at].cell(cell)).collect(),
+            Chunks::Packed { storage, records } => {
+                View::new(&storage.bytes()[records[at].clone()]).cells()
+            }
+        })
+    }
+
     fn graph(&self, key: Key) -> Option<Arc<ChunkPortals>> {
         let at = self.index(key)?;
         Some(match &self.chunks {

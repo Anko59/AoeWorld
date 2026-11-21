@@ -5,17 +5,12 @@ use super::{RegionChunk, RegionGround, RegionTile};
 mod chunk;
 use crate::{EnvironmentPageError, MapChunkGenerator, ResourceOverlay, WalkCell};
 use aoe_core::TileCoord;
-use std::cell::{Cell, RefCell};
-use std::collections::VecDeque;
-
-type CachedChunk = ((i32, i32), Vec<Option<WalkCell>>);
+use std::cell::Cell;
 
 pub struct MapRegionGround<'a> {
     generator: &'a MapChunkGenerator,
     overlay: &'a ResourceOverlay,
     cancelled: &'a dyn Fn() -> bool,
-    /// The current chunk and its eight neighbours; never a map-sized tile cache.
-    recent: RefCell<VecDeque<CachedChunk>>,
     error: Cell<Option<EnvironmentPageError>>,
 }
 
@@ -29,9 +24,14 @@ impl<'a> MapRegionGround<'a> {
             generator,
             overlay,
             cancelled,
-            recent: RefCell::default(),
             error: Cell::new(None),
         }
+    }
+
+    /// Capture terrain and bridge steps before the caller's territory barriers.
+    /// Ordinary buildings and natural resources are left to unit routing.
+    pub fn territory_chunk(&self, key: (i32, i32), size: (i32, i32)) -> [Option<u8>; super::CELLS] {
+        chunk::read(self, key, size, |_, _| true)
     }
 
     /// A failed read invalidates the query, never a proof of blocked ground.
@@ -53,45 +53,17 @@ impl<'a> MapRegionGround<'a> {
         }
     }
 
-    fn bulk_cell(&self, tile: TileCoord) -> Option<WalkCell> {
+    fn chunk_cells(&self, key: (i32, i32)) -> Option<Vec<Option<WalkCell>>> {
         if self.error.get().is_some() {
             return None;
         }
-        if (self.cancelled)() {
-            self.error.set(Some(EnvironmentPageError::Cancelled));
-            return None;
-        }
-        if tile.x < 0
-            || tile.y < 0
-            || tile.x >= self.generator.width_tiles()
-            || tile.y >= self.generator.width_tiles()
-        {
-            return None;
-        }
-        let key = (tile.x / super::CHUNK, tile.y / super::CHUNK);
-        let at = super::label::index(tile);
-        if let Some((_, cells)) = self
-            .recent
-            .borrow()
-            .iter()
-            .find(|(cached, _)| *cached == key)
-        {
-            return cells[at];
-        }
-        let cells = match self.generator.navigation_cells(key, self.cancelled) {
-            Ok(cells) => cells,
+        match self.generator.navigation_cells(key, self.cancelled) {
+            Ok(cells) => Some(cells),
             Err(error) => {
                 self.error.set(Some(error));
-                return None;
+                None
             }
-        };
-        let result = cells[at];
-        let mut recent = self.recent.borrow_mut();
-        if recent.len() == 9 {
-            recent.pop_front();
         }
-        recent.push_back((key, cells));
-        result
     }
 }
 
@@ -100,7 +72,24 @@ impl RegionGround for MapRegionGround<'_> {
         self.error.get().is_none()
     }
     fn chunk(&self, key: (i32, i32), size: (i32, i32)) -> Option<RegionChunk> {
-        Some(chunk::read(self, key, size))
+        let steps = chunk::read(self, key, size, |tile, cell| {
+            !self.overlay.blocks_tile(tile)
+                && cell.node.is_none_or(|node| !self.overlay.blocks_node(node))
+        });
+        let classes = steps
+            .iter()
+            .map(|step| {
+                if step.is_some() {
+                    RegionTile::Open
+                } else {
+                    RegionTile::Blocked
+                }
+            })
+            .collect();
+        Some(RegionChunk::new(
+            classes,
+            steps.into_iter().map(|step| step.unwrap_or(0)).collect(),
+        ))
     }
     fn tile(&self, tile: TileCoord) -> RegionTile {
         if self.cell(tile).is_some_and(|cell| {
