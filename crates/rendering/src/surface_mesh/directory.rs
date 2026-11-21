@@ -5,7 +5,7 @@
 //! mesh LOD. The packer never allocates rows 0–1 of a page (frames start at
 //! texel 2), so those rows of page 0 hold a small RGBA8 table read per fragment
 //! by WGSL, GLSL and the Canvas rasterizer. Entry `i` is texel `(i % 2048,
-//! i / 2048)`; entry 0 stays the white origin. Entries 1..=36 are two header
+//! i / 2048)`; entry 0 stays the white origin. Entries 1..=40 are two header
 //! texels per scene material (first frame entry, frame count; sheet columns,
 //! rows, zero for coordinate-stable accents), followed by two texels per frame
 //! (origin; extent and page). No extra texture, binding or upload exists.
@@ -23,7 +23,7 @@ mod tests;
 pub(crate) const TILED: u8 = 6;
 const SIDE: usize = GAME_ATLAS_SIDE as usize;
 const ENTRIES: usize = 2 * SIDE;
-const MATERIALS: usize = 19;
+pub(super) const MATERIALS: usize = 20;
 const FIRST_FRAME: usize = 1 + 2 * MATERIALS;
 pub(super) const MAX_CELLS: usize = (ENTRIES - FIRST_FRAME) / 2;
 
@@ -47,7 +47,7 @@ pub fn write_terrain_directory_page(art: &crate::GameArt, page: &mut [u8]) -> Re
 
 fn table(art: &crate::GameArt) -> Result<Vec<u8>, String> {
     let mut table = vec![0_u8; (FIRST_FRAME - 1) * 4];
-    let mut starts = [0_usize; 19];
+    let mut starts = [0_usize; MATERIALS];
     for material in 0..MATERIALS {
         let Some((group, frames, topology)) = terrain_group(art, material as u8) else {
             continue;

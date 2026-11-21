@@ -134,16 +134,16 @@ pub fn projected_surface_triangles(
         } else {
             [[0, 1, 2], [0, 2, 3]]
         };
-        for (texture_tile, step, crops) in patches.tiles(tile, divisions) {
+        for (texture_tile, step, farm) in patches.tiles(tile, divisions) {
             let mut sample = sample;
-            if crops {
-                sample.material = appearance::FARM_FIELD;
+            if let Some(material) = farm {
+                sample.material = material;
                 sample.appearance = None;
                 sample.surface.water = 0;
                 if sample.surface.is_cliff() {
                     sample.surface.kind = SceneTerrainSurface::PLATEAU;
                 }
-            } else if size > 1 && sample.material == appearance::FARM_FIELD {
+            } else if size > 1 && appearance::is_farm_field(sample.material) {
                 sample.material = 2;
             }
             let appearance = super::landscape::pack(sample.appearance);

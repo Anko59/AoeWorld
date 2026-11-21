@@ -2,73 +2,80 @@ import { expect } from "@playwright/test";
 import { test } from "../../../server.js";
 import { playerState, productionFixture } from "./fixture.js";
 import { gameAssets } from "../../game-assets.js";
-import { forceWebGl } from "../../rendering/backends.js";
+import { fallbackTest, forceWebGl } from "../../rendering/backends.js";
 import { openTab } from "../../rendering/fixtures/cockpit-tabs.js";
 
-test("Units here charges real resources, trains a soldier and persists its rally on the real server", async ({
-  page,
-  request,
-}) => {
-  test.setTimeout(90_000);
-  expect(
-    (await request.post("/maps/reset?scenario=feudal-military")).status(),
-  ).toBe(204);
-  await forceWebGl(page);
-  await gameAssets(page);
-  await page.goto("/?play=1#x=128&y=128&zoom=.04");
-  await expect(page.locator("#playground")).toHaveAttribute(
-    "data-renderer",
-    "webgl2",
-    { timeout: 30_000 },
-  );
-  await expect(page.locator("#connection")).toHaveText("connected");
-  await openTab(page, "train");
-  await page.locator('[aria-label="Unit type"] [data-id="2"]').click();
-  await openTab(page, "train");
-  await page.getByLabel("Unit count").fill("3");
-  await page.getByRole("button", { name: "Units here", exact: true }).click();
-  await page.mouse.click(635, 374);
-  await expect(page.locator("#units-here-status")).toContainText("Accepted 3");
-  // The current authoritative Militia table charges 50 food and 20 gold.
-  await expect(page.locator("#stockpile-food")).toHaveText("9850");
-  await expect(page.locator("#stockpile-gold")).toHaveText("9940");
-  await expect(page.locator(".cockpit-army")).toContainText(/Militia: [1-9]/, {
-    timeout: 40_000,
-  });
-  await page.reload();
-  await expect(page.locator("#connection")).toHaveText("connected", {
-    timeout: 30_000,
-  });
-  await page.evaluate(() => {
-    location.hash = "x=122&y=131&zoom=.6";
-  });
-  await expect(page.locator("#scene")).toHaveAttribute("data-lod", "sprites");
-  await expect
-    .poll(async () => {
-      const actors = JSON.parse(
-        (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
-      ) as { kind: string; x: number; y: number }[];
-      const barracks = actors.find((a) => a.kind === "Barracks");
-      if (!barracks) return false;
-      await page.mouse.click(barracks.x, barracks.y);
-      return page.locator("#selection").getAttribute("data-kind");
-    })
-    .toBe("Barracks");
-  await expect(page.locator("#scene")).toHaveAttribute(
-    "data-rally-point",
-    /.+/,
-  );
-  const encoded = await page.locator("#scene").getAttribute("data-rally-point");
-  if (!encoded) throw new Error("Authoritative rally missing");
-  const [rx, ry] = encoded
-    .split(",")
-    .map(Number)
-    .map((n) => n / 1024);
-  if (rx === undefined || ry === undefined)
-    throw new Error("Rally position incomplete");
-  expect(Math.abs(rx - 132.5)).toBeLessThan(1);
-  expect(Math.abs(ry - 134.5)).toBeLessThan(1);
-});
+fallbackTest(
+  "Units here charges real resources, trains a soldier and persists its rally on the real server",
+  async ({ page, request }) => {
+    fallbackTest.setTimeout(90_000);
+    expect(
+      (await request.post("/maps/reset?scenario=feudal-military")).status(),
+    ).toBe(204);
+    await forceWebGl(page);
+    await gameAssets(page);
+    await page.goto("/?play=1#x=128&y=128&zoom=.04");
+    await expect(page.locator("#playground")).toHaveAttribute(
+      "data-renderer",
+      "webgl2",
+      { timeout: 30_000 },
+    );
+    await expect(page.locator("#connection")).toHaveText("connected");
+    await openTab(page, "train");
+    await page.locator('[aria-label="Unit type"] [data-id="2"]').click();
+    await openTab(page, "train");
+    await page.getByLabel("Unit count").fill("3");
+    await page.getByRole("button", { name: "Units here", exact: true }).click();
+    await page.mouse.click(635, 374);
+    await expect(page.locator("#units-here-status")).toContainText(
+      "Accepted 3",
+    );
+    // The current authoritative Militia table charges 50 food and 20 gold.
+    await expect(page.locator("#stockpile-food")).toHaveText("9850");
+    await expect(page.locator("#stockpile-gold")).toHaveText("9940");
+    await expect(page.locator(".cockpit-army")).toContainText(
+      /Militia: [1-9]/,
+      {
+        timeout: 40_000,
+      },
+    );
+    await page.reload();
+    await expect(page.locator("#connection")).toHaveText("connected", {
+      timeout: 30_000,
+    });
+    await page.evaluate(() => {
+      location.hash = "x=122&y=131&zoom=.6";
+    });
+    await expect(page.locator("#scene")).toHaveAttribute("data-lod", "sprites");
+    await expect
+      .poll(async () => {
+        const actors = JSON.parse(
+          (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
+        ) as { kind: string; x: number; y: number }[];
+        const barracks = actors.find((a) => a.kind === "Barracks");
+        if (!barracks) return false;
+        await page.mouse.click(barracks.x, barracks.y);
+        return page.locator("#selection").getAttribute("data-kind");
+      })
+      .toBe("Barracks");
+    await expect(page.locator("#scene")).toHaveAttribute(
+      "data-rally-point",
+      /.+/,
+    );
+    const encoded = await page
+      .locator("#scene")
+      .getAttribute("data-rally-point");
+    if (!encoded) throw new Error("Authoritative rally missing");
+    const [rx, ry] = encoded
+      .split(",")
+      .map(Number)
+      .map((n) => n / 1024);
+    if (rx === undefined || ry === undefined)
+      throw new Error("Rally position incomplete");
+    expect(Math.abs(rx - 132.5)).toBeLessThan(1);
+    expect(Math.abs(ry - 134.5)).toBeLessThan(1);
+  },
+);
 
 test("Units here shares ordinary training and rally orders across equally near eligible queues", async ({
   page,

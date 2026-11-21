@@ -8,7 +8,7 @@ pub(super) struct Input<'a> {
     pub ranges: &'a RoleRanges,
     pub actor_ranges: &'a [Option<Range<usize>>],
     pub rally_range: Option<Range<usize>>,
-    pub native_farm: Option<(Range<usize>, TerrainTopology)>,
+    pub farm_sheets: super::terrain::FarmSheets,
     pub terrain_topology: [Option<TerrainTopology>; 12],
     pub depth_topology: [Option<TerrainTopology>; 5],
     pub residents: usize,
@@ -22,7 +22,7 @@ pub(super) fn resolve(input: Input<'_>) -> Result<GameArt, JsValue> {
         ranges,
         actor_ranges,
         rally_range,
-        native_farm,
+        farm_sheets: [planted, unseeded],
         terrain_topology,
         depth_topology,
         residents,
@@ -57,7 +57,7 @@ pub(super) fn resolve(input: Input<'_>) -> Result<GameArt, JsValue> {
         }
     }
     let buildings = resolved_buildings;
-    let foundation = if let Some((r, t)) = native_farm {
+    let foundation = if let Some((r, t)) = planted {
         (records[r].to_vec(), Some(t))
     } else {
         buildings::foundation(&manifest, &selected, &records)?
@@ -105,6 +105,8 @@ pub(super) fn resolve(input: Input<'_>) -> Result<GameArt, JsValue> {
         tree_shadows: group(AssetRole::WoodTreeShadow),
         tree_families: [group(AssetRole::TreeConifer), group(AssetRole::TreePalm)],
         scenery: aoe_rendering::SceneryArt {
+            farm_seedbed: unseeded
+                .map_or_else(Default::default, |(r, t)| (records[r].to_vec(), Some(t))),
             rally_flags: building_sprites::rally_frames(
                 &records,
                 rally_range,

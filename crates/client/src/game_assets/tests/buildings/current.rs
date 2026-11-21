@@ -142,6 +142,54 @@ async fn overlay_without_drawable_fire_keeps_the_base_damage_animation() {
 }
 
 #[wasm_bindgen_test]
+fn native_actor_fire_keeps_the_world_building_recipe() {
+    let mut world = pack_fixture([
+        ("de/town_center.sld".into(), 1, false),
+        ("trial-fire".into(), 1, false),
+    ]);
+    let part = |source: &str, frames| {
+        serde_json::json!({
+            "graphic_id":1,"slp_id":1,"source":source,"available":true,"frames":frames,
+            "angles":1,"primary":false,"frame_rate":0.05,"replay_delay":0.0,
+            "offset":[12,-40],"misplacement":[0.0,0.0],"layer":20
+        })
+    };
+    let recipe = |body, fire| {
+        serde_json::json!({
+            "unit_id":142,"footprint":[2.0,2.0],"foundation_terrain":-1,
+            "foundation_slp":null,"foundation_size":[0,0],"parts":body,
+            "construction":[],"states":[],"damage":[{"damage_percent":25,"apply_mode":0,"parts":fire}]
+        })
+    };
+    world["buildings"] = serde_json::json!([recipe(
+        vec![part("de/town_center.sld", 1)],
+        vec![part("trial-fire", 1)]
+    )]);
+    compile(&mut world);
+    let mut manifest: Manifest = serde_json::from_value(world).unwrap();
+    manifest.buildings = recipes::decode(&manifest.building_data, &manifest.frames).unwrap();
+
+    let fire = "de/particles/fire_fixture";
+    let mut actors = pack_fixture([(fire.into(), 2, false)]);
+    actors["buildings"] = serde_json::json!([recipe(vec![], vec![part(fire, 2)])]);
+    compile(&mut actors);
+    building_sprites::merge(
+        &mut manifest,
+        serde_json::from_value(actors).unwrap(),
+        "buildings/actors",
+    )
+    .unwrap();
+
+    let building = &manifest.buildings[0];
+    assert_eq!(building.parts[0].record, Some(0));
+    let parts = &building.damage[0].parts;
+    assert_eq!(parts.len(), 1);
+    assert_eq!(parts[0].record, Some(2));
+    assert_eq!(parts[0].frames, 2);
+    assert_eq!(parts[0].offset, [12, -40]);
+}
+
+#[wasm_bindgen_test]
 fn imperial_buildings_keep_castle_art_only_when_the_imperial_recipe_is_absent() {
     use aoe_protocol::{Age, BuildingKind};
     for kind in BuildingKind::ALL.into_iter().take(20) {

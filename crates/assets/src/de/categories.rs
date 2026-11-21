@@ -1,5 +1,46 @@
 //! One current DE pack layout: bounded world and actor categories, both required.
 use super::*;
+use crate::dat::{BuildingComposition, BuildingDamage};
+
+/// Keep the world and animated-effect recipes under their own startup budgets.
+pub(super) fn split_fires(recipes: &mut [BuildingComposition]) -> Vec<BuildingComposition> {
+    let mut fires = Vec::new();
+    for building in recipes {
+        let mut damage = Vec::new();
+        for state in &mut building.damage {
+            let mut parts = Vec::new();
+            state.parts.retain(|part| {
+                if part.source.starts_with("de/particles/") {
+                    parts.push(part.clone());
+                    false
+                } else {
+                    true
+                }
+            });
+            if !parts.is_empty() {
+                damage.push(BuildingDamage {
+                    damage_percent: state.damage_percent,
+                    apply_mode: state.apply_mode,
+                    parts,
+                });
+            }
+        }
+        if !damage.is_empty() {
+            fires.push(BuildingComposition {
+                unit_id: building.unit_id,
+                footprint: building.footprint,
+                foundation_terrain: -1,
+                foundation_slp: None,
+                foundation_size: [0; 2],
+                parts: Vec::new(),
+                construction: Vec::new(),
+                states: Vec::new(),
+                damage,
+            });
+        }
+    }
+    fires
+}
 
 pub(super) fn indices(
     len: usize,

@@ -1,5 +1,6 @@
 //! Footprint wear and Farm textures share ground triangles across backends.
 use super::*;
+use crate::surface_mesh::{FARM_FIELD, UNSEEDED_FARM_FIELD};
 
 pub(super) struct BuildingGround {
     centers: Vec<[f64; 2]>,
@@ -70,18 +71,22 @@ pub fn apply_building_foundations(
             } else {
                 building.and_then(|b| b.foundation_material).unwrap_or(2)
             };
-            // A farm has no upright construction sprite. Its native field
-            // surface marks the foundation from placement through completion;
-            // the apron remains ordinary dirt.
+            // A farm has no upright construction sprite. Bare furrows cover
+            // the foundation until it is seeded. The apron stays ordinary dirt.
             let crops = id == 50;
+            let material = if crops {
+                building.and_then(|b| b.foundation_material).unwrap_or(2)
+            } else {
+                dirt
+            };
             Some(Foundation {
                 lower,
                 upper,
                 apron: dirt,
-                material: if crops {
-                    building.and_then(|b| b.foundation_material).unwrap_or(2)
+                material: if material == FARM_FIELD && unit.kind.is_foundation() {
+                    UNSEEDED_FARM_FIELD
                 } else {
-                    dirt
+                    material
                 },
                 crops,
             })

@@ -9,6 +9,7 @@ fn level(art: &mut GameArt, value: u8) {
         .iter_mut()
         .chain(art.water_depth.iter_mut().map(|s| &mut s.1))
         .chain(std::iter::once(&mut art.foundation.1))
+        .chain(std::iter::once(&mut art.scenery.farm_seedbed.1))
     {
         if let Some(TerrainTopology::Dds { size, level, .. }) = topology {
             *level = value.min((size[0].max(size[1]).ilog2().saturating_sub(4)) as u8);
@@ -44,8 +45,9 @@ pub fn scene_terrain_frames(
     }
     for candidate in initial.min(8)..=8 {
         level(art, candidate);
-        let groups: [_; 19] = std::array::from_fn(|m| terrain_group(art, m as u8));
-        let mut seen = [false; 19];
+        let groups: [_; directory::MATERIALS] =
+            std::array::from_fn(|m| terrain_group(art, m as u8));
+        let mut seen = [false; directory::MATERIALS];
         let mut directory_cells = 0;
         for (group, frames, _) in groups.iter().flatten() {
             if !seen[*group] {

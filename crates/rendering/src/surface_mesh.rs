@@ -11,7 +11,9 @@ pub use cliff_art::scene_cliff_native_frames;
 pub(crate) mod directory;
 pub(crate) mod floor;
 pub(crate) mod landscape;
-pub(crate) use appearance::{apply_terrain_textures, procedural_tint, terrain_texture_frame};
+pub(crate) use appearance::{
+    FARM_FIELD, UNSEEDED_FARM_FIELD, apply_terrain_textures, procedural_tint, terrain_texture_frame,
+};
 mod lod;
 mod picking;
 pub use picking::pick_surface_point;
@@ -399,7 +401,7 @@ fn tile_key(position: [f64; 2]) -> [i32; 2] {
 fn surface_color(sample: SceneTerrain) -> [f32; 3] {
     let mut color = match sample.material {
         1 => [0.56, 0.48, 0.28],
-        2 | 17 => [0.48, 0.30, 0.18],
+        2 | FARM_FIELD | UNSEEDED_FARM_FIELD => [0.48, 0.30, 0.18],
         3 => [0.74, 0.66, 0.42],
         4 => [0.40, 0.40, 0.40],
         5 => [0.22, 0.46, 0.66],
