@@ -20,6 +20,8 @@ pub use work::{VassalFocus, VassalJob, VassalJobs};
 pub const VASSAL_LIMIT: usize = 20;
 /// The domain a Vassal develops, fortifies and defends: a Steward's circle.
 pub const VASSAL_RADIUS: i32 = super::steward::STEWARD_RULES.radius_tiles;
+const PASS_TICKS: u64 = 20;
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum VassalWait {
     #[default]
@@ -105,6 +107,25 @@ pub(crate) struct Manager {
     cursor: Option<EntityId>,
     plan_cursor: Option<EntityId>,
     walk_second: Option<u64>,
+}
+impl Manager {
+    fn scheduled_domain(&self, tick: u64) -> Option<EntityId> {
+        use std::ops::Bound::{Excluded, Unbounded};
+
+        let due = (0..self.domains.len()).take(8).len() as u64;
+        let phase = tick % PASS_TICKS;
+        // Spend the existing visit budget across the period. As the budget is
+        // less than the period, consecutive boundaries differ by at most one.
+        if ((phase + 1) * due).div_ceil(PASS_TICKS) == (phase * due).div_ceil(PASS_TICKS) {
+            return None;
+        }
+        let cursor = self.cursor.unwrap_or(EntityId(0));
+        self.domains
+            .range((Excluded(cursor), Unbounded))
+            .next()
+            .or_else(|| self.domains.first_key_value())
+            .map(|(&id, _)| id)
+    }
 }
 impl GameWorld {
     pub(crate) fn activate_vassal(&mut self, id: EntityId, castle: EntityId) {
@@ -219,31 +240,17 @@ impl GameWorld {
     pub(crate) fn advance_vassals(&mut self, changed: &mut Vec<EntityId>) {
         self.refresh_vassal_walk();
         self.advance_vassal_plans();
-        if (self.economy.vassals.domains.is_empty() && self.economy.vassals.returns.is_empty())
-            || !self.tick.0.is_multiple_of(20)
-        {
-            return;
+        if self.tick.0.is_multiple_of(PASS_TICKS) && !self.economy.vassals.returns.is_empty() {
+            self.finish_vassal_returns();
         }
-        self.finish_vassal_returns();
-        use std::ops::Bound::{Excluded, Unbounded};
-        let cursor = self.economy.vassals.cursor.unwrap_or(EntityId(0));
-        let ids: Vec<_> = self
-            .economy
-            .vassals
-            .domains
-            .range((Excluded(cursor), Unbounded))
-            .chain(self.economy.vassals.domains.range(..=cursor))
-            .map(|(&id, _)| id)
-            .take(8)
-            .collect();
-        for id in ids {
+        if let Some(id) = self.economy.vassals.scheduled_domain(self.tick.0) {
             self.economy.vassals.cursor = Some(id);
             let d = &self.economy.vassals.domains[&id];
             if !self.building(d.castle).is_some_and(|b| {
                 b.hp > 0 && b.garrison.iter().any(|g| g.unit.id == id && g.unit.hp > 0)
             }) {
                 self.deactivate_vassal(id);
-                continue;
+                return;
             }
             let (center, player) = (d.center, d.player);
             let walking = d.walking.clone();
@@ -297,7 +304,7 @@ impl GameWorld {
             self.vassal_develop(id);
             let squads = self.vassal_squads(id);
             let Some(d) = self.economy.vassals.domains.get_mut(&id) else {
-                continue;
+                return;
             };
             d.status.military = d.soldiers.len() as u8;
             d.status.squads = squads;

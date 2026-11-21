@@ -90,12 +90,9 @@ impl GameWorld {
         work
     }
 
-    pub(super) fn publish_vassal_work(&mut self, id: EntityId, mut work: Workload) {
-        let focus = self.economy.vassals.domains[&id].status.focus;
+    pub(super) fn publish_vassal_work(&mut self, id: EntityId, work: Workload) {
         let mut current = VassalJobs::default();
         let mut planned = VassalJobs::default();
-        work.deficits
-            .sort_by_key(|(_, site)| (site.build_priority(focus), site.tier));
         for (building, job) in work.open {
             if self.economy.builders.assigned_count(building) == 0 {
                 planned.preview(job);
