@@ -117,6 +117,7 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
                     routes["movers"] = json!(movers);
                     routes["waiting"] = json!(waiting);
                     routes["waiting_share"] = json!(waiting as f64 / movers.max(1) as f64);
+                    routes["census"] = json!(w.state_census());
                     routes["delivered_last_minute"] = json!(w.players().map(|p| w.recent_deliveries(p.player).iter().sum::<u64>()).sum::<u64>());
                     routes
                 }).await);
