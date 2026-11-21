@@ -7,6 +7,9 @@ use crate::game_world::movement_step::settling::GIVE_UP_AFTER_TICKS;
 mod speed;
 mod stride;
 
+/// How far a slot may drift from a member's target while its group waits for a route.
+const HOLD: i64 = 2 * 1024;
+
 impl GameWorld {
     #[inline(never)] // a symbol of its own for the Callgrind stage counters
     pub(crate) fn advance_formations(
@@ -132,8 +135,10 @@ impl GameWorld {
         self.detach_blocked_members();
     }
 
-    fn prepare_group_targets(&self, leader: EntityId, group: &mut Group) {
-        let navigating = self.units[self.lookup[&leader]].order.is_some();
+    pub(super) fn prepare_group_targets(&self, leader: EntityId, group: &mut Group) {
+        let carrier = &self.units[self.lookup[&leader]];
+        let navigating = carrier.order.is_some();
+        let waiting = navigating && carrier.state.planning;
         let mut cursor = group.path_cursor;
         // Look ahead and behind the anchor before the front reaches a wall.
         // A capped value proves at least 7.5 tiles; it is not a wall at 7.5.
@@ -213,6 +218,7 @@ impl GameWorld {
         for member in &mut group.members {
             self.group_work.members(1);
             let unit = self.units[self.lookup[&member.id]].state;
+            let held = member.target;
             // Carrier arrival does not prove that a trailing body has passed
             // the route's bends. Keep its shared corridor until it catches up.
             let catching_up = group.progress - member.progress > i64::from(group.half_width) + 1024;
@@ -442,6 +448,12 @@ impl GameWorld {
                         layout::oriented(point, WorldPosition::new(offset.x, 0), tangent);
                     member.target = member.center;
                 }
+            }
+            // While the carrier waits for its route, slots near the anchor
+            // are recomputed every tick and members two-step back and forth
+            // around them. Keep last tick's target while the slot stays near it.
+            if waiting && !member.arrived && path::distance(held, ideal) <= HOLD {
+                member.target = held;
             }
         }
     }

@@ -208,6 +208,14 @@ test("Canvas replacement keeps village selection, drag feedback and training con
   await expect(page.locator("#drag-box")).toBeHidden();
   await clickActor(page, "Villager");
   await expect(page.locator("#selection-name")).toHaveText("Villager");
+  await page.keyboard.press("b");
+  await page.keyboard.press("q");
+  await page.mouse.move(960, 340);
+  const scene = page.locator("#scene");
+  await expect(scene).toHaveAttribute("data-order-mode", "build");
+  await expect(scene).toHaveAttribute("data-placement-count", "1");
+  await page.keyboard.press("Escape");
+  await expect(scene).toHaveAttribute("data-order-mode", "");
   await clickActor(page, "TownCenter");
   await page.getByRole("button", { name: /Train Villager/ }).click();
   await expect(page.locator("#stockpile-food")).toHaveText("150");

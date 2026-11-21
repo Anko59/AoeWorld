@@ -4,25 +4,29 @@ import { test } from "../../../server.js";
 test("Vassal panel shows work, switches Vassals and sends pause/resume", async ({
   page,
 }) => {
-  await page.route("**/vassal-panel-standalone", (route) =>
+  await page.route("**/vassal-panel-fixture", (route) =>
     route.fulfill({
       contentType: "text/html",
-      body: '<main id="selection-content"></main><script type="module">import {initVassal} from "/interface/steward/vassal.js"; initVassal();</script>',
+      body: '<main id="selection-content"></main>',
     }),
   );
-  await page.goto("/vassal-panel-standalone");
-  await page.waitForFunction(() => "aoeVassal" in window);
-  await page.evaluate(() => {
+  await page.goto("/vassal-panel-fixture");
+  await page.evaluate(async () => {
+    const module = "/interface/steward/panel.js";
+    const { initVassal } = await import(module);
+    initVassal();
     const w = window as unknown as {
       aoeVassal: {
         update(v: number[], label: string, jobs: string): void;
-        bind(cb: () => void): void;
       };
       sent: number;
     };
     w.sent = 0;
-    w.aoeVassal.bind(() => {
-      w.sent += 1;
+    Reflect.set(window, "aoeBuildings", {
+      command(action: number, code: number) {
+        if (action !== 18 || code !== 2) throw new Error("Unexpected order");
+        w.sent += 1;
+      },
     });
     w.aoeVassal.update(
       [12, 1, 0, 0, 0, 0, 77, 12, 13],
@@ -64,6 +68,10 @@ test("Vassal panel shows work, switches Vassals and sends pause/resume", async (
     "Roads",
   );
   await expect(page.locator("#vassal-status")).toContainText("UNDER ATTACK");
+  await expect(page.locator("#vassal-panel")).toHaveAttribute(
+    "data-alert",
+    "true",
+  );
   await page
     .getByRole("button", { name: "Resume development", exact: true })
     .click();

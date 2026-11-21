@@ -49,7 +49,7 @@ export function building(
     ...sint(x),
     ...sint(y),
     ...sint(x + side),
-    ...sint(y + side),
+    ...sint(y + (kind === 15 || kind === 20 || kind === 22 ? 1 : side)),
     complete ? 1 : 0,
     ...uint(complete ? 1000 : 200),
     ...uint(hp),
@@ -64,7 +64,9 @@ export function building(
     0,
     0, // Prepaid Mill reseeds follow the rally point in the current wire.
     0, // Current building state appends its bounded garrison list.
-    0, // Only bridges carry raster endpoints.
+    ...(kind === 20
+      ? [1, ...sint(x), ...sint(y), ...sint(x + side - 1), ...sint(y)]
+      : [0]),
   ];
 }
 
@@ -85,6 +87,7 @@ export async function inputFixture(
     military?: boolean;
     originalArt?: boolean;
     offscreenUnits?: number;
+    ownedUnits?: { id: number; x: number; y: number; kind: number }[];
     url?: string;
     resources?: Parameters<typeof chunks>[0];
   } = {},
@@ -171,7 +174,11 @@ export async function inputFixture(
           1,
           ...revision,
           0,
-          ...uint((navy ? 5 : 4) + (options.offscreenUnits ?? 0)),
+          ...uint(
+            (navy ? 5 : 4) +
+              (options.offscreenUnits ?? 0) +
+              (options.ownedUnits?.length ?? 0),
+          ),
           ...unit(0, 8192.5, 8192.5, 1),
           ...unit(2, 8194.5, 8194.5, 0),
           ...unit(3, 8196.5, 8194.5, options.military ? 2 : 0),
@@ -185,6 +192,9 @@ export async function inputFixture(
           ...(navy
             ? unit(5, 8193.5, 8194.5, 20, viewer, transportCombat(navy.cargo))
             : []),
+          ...(options.ownedUnits ?? []).flatMap(({ id, x, y, kind }) =>
+            unit(id, x, y, kind),
+          ),
           ...Array.from({ length: options.offscreenUnits ?? 0 }, (_, index) =>
             unit(
               index + 100,

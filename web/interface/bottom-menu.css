@@ -16,16 +16,14 @@
 
 #bottom-panel[data-frame=native] #commands { width:var(--frame-width); height:var(--frame-height); padding:24px 22px 14px; border:0; }
 #bottom-panel[data-frame=native] #commands h2 { height:12px; margin:0 0 3px; font-size:9px; line-height:12px; overflow:hidden; }
-#bottom-panel[data-frame=native] #combat-stance-label { top:22px; right:22px; }
-#bottom-panel[data-frame=native] #combat-stance { max-width:100px; font-size:10px; padding:0; }
+#bottom-panel[data-frame=native] #command-grid button>.art-icon { width:32px; height:32px; }
 #bottom-panel[data-frame=native] #command-grid { width:auto; margin:0; grid-template-columns:repeat(5,1fr); grid-template-rows:repeat(3,38px); gap:3px 4px; }
-#bottom-panel[data-frame=native] #command-grid button>.art-icon,#bottom-panel[data-frame=native] #command-grid .train-icon { width:32px; height:32px; }
 #bottom-panel[data-frame=native] #command-hint { margin:3px 0 0; font-size:9px; line-height:12px; height:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 #bottom-panel[data-frame=native] #selection { margin-left:-5.5px; flex:1 1 0; min-width:var(--frame-min-width,0); height:var(--frame-height); padding:25px 64px 14px 22px; overflow:hidden; }
 #bottom-panel[data-frame=native] #selection-content,#bottom-panel[data-frame=native] #selection-empty { max-height:100%; }
 /* The selection never scrolls: every state below is laid out to fit, and the spec fails on any overflow. */
-#bottom-panel[data-frame=native] #selection-content { height:100%; position:relative; overflow:hidden; }
+#selection-content { height:100%; position:relative; overflow:hidden; }
 #bottom-panel[data-frame=native] #selection-portrait { width:64px; height:64px; }
 #bottom-panel[data-frame=native] #selection-portrait>.art-icon { width:52px; height:52px; }
 #bottom-panel[data-frame=native] #selection-empty { padding:0; }
@@ -82,61 +80,92 @@
 #bottom-panel[data-frame=native] .submode { border-color:#6a5632; color:#6a5632; }
 #bottom-panel[data-frame=native] .submode[aria-current=true] { color:#2b1d0c; border-color:#2b1d0c; background:#e0b96655; }
 
-/* Brass buttons and range sliders in keeping with the carved frame. */
-#bottom-panel[data-frame=native] :is(#general-modes button,#general-train,#steward-controls button,#vassal-panel button,#cancel-training,#building-panel button) { color:#f1deb0; background:linear-gradient(#7a6742,#3d3322); border:1px solid #1e160a; border-radius:2px; box-shadow:inset 0 1px #d9c48a80,inset 0 -1px #0006; text-shadow:0 1px 1px #000; padding:2px 6px; font-size:10px; }
+/* Brass buttons are shared by the selection's embedded controls. */
+#bottom-panel[data-frame=native] :is(#general-modes button,#general-train,#steward-controls button,#vassal-panel button) { color:#f1deb0; background:linear-gradient(#7a6742,#3d3322); border:1px solid #1e160a; border-radius:2px; box-shadow:inset 0 1px #d9c48a80,inset 0 -1px #0006; text-shadow:0 1px 1px #000; padding:2px 6px; font-size:10px; }
 #bottom-panel[data-frame=native] :is(#general-modes button,#general-train,#steward-controls button,#vassal-panel button):hover { background:linear-gradient(#8f7a4c,#4b3f28); }
 #bottom-panel[data-frame=native] :is(#general-modes button[aria-selected=true],#general-train[aria-pressed=true]) { background:linear-gradient(#4a2d1a,#7d4a2a); border-color:#e6c36d; color:#ffe9a8; }
-#selection input[type=range] { --fill:50%; -webkit-appearance:none; appearance:none; height:16px; margin:0; background:none; cursor:pointer; min-width:0; }
-#selection input[type=range]::-webkit-slider-runnable-track { height:7px; border:1px solid #1e160a; border-radius:4px; background:linear-gradient(90deg,#c58f2f 0 var(--fill),#2c2216 var(--fill) 100%); box-shadow:inset 0 1px 2px #000a,0 1px #fff5; }
-#selection input[type=range]::-moz-range-track { height:7px; border:1px solid #1e160a; border-radius:4px; background:linear-gradient(90deg,#c58f2f 0 var(--fill),#2c2216 var(--fill) 100%); box-shadow:inset 0 1px 2px #000a,0 1px #fff5; }
-#selection input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; margin-top:-5px; border-radius:50%; border:2px solid #1e160a; background:radial-gradient(circle at 35% 30%,#f6e4a6,#b8872c 55%,#6b4a14); box-shadow:0 1px 2px #000a; }
-#selection input[type=range]::-moz-range-thumb { width:10px; height:10px; border-radius:50%; border:2px solid #1e160a; background:radial-gradient(circle at 35% 30%,#f6e4a6,#b8872c 55%,#6b4a14); box-shadow:0 1px 2px #000a; }
-#selection input[type=range]:focus-visible { outline:1px solid #f6e4a6; outline-offset:2px; }
-#bottom-panel[data-frame=native] .general-slider { grid-template-columns:50px 1fr 30px; gap:5px; margin-bottom:1px; }
-#bottom-panel[data-frame=native] .general-slider output,#bottom-panel[data-frame=native] #steward-controls output { color:#4b2f0e; font-weight:600; }
+/* The five crops come from the private DE interface atlas. Browser ranges
+   keep their native input semantics, hit area and keyboard handling. */
+.menu-slider input { height:18px; margin:0; cursor:pointer; min-width:0; }
+#bottom-panel[data-slider-art=native] .menu-slider input {
+  appearance:none; background:none;
+  --track-images:var(--slider-fill) left center / var(--fill) 100% no-repeat,
+    var(--slider-track) center / 100% 100% no-repeat;
+  --thumb-image:var(--slider-thumb);
+}
+#bottom-panel[data-slider-art=native] .menu-slider input::-webkit-slider-runnable-track { height:8px; background:var(--track-images); }
+#bottom-panel[data-slider-art=native] .menu-slider input::-moz-range-track { height:8px; background:var(--track-images); }
+#bottom-panel[data-slider-art=native] .menu-slider input::-webkit-slider-thumb {
+  appearance:none; width:18px; height:18px; margin-top:-5px; background:var(--thumb-image) center / contain no-repeat;
+}
+#bottom-panel[data-slider-art=native] .menu-slider input::-moz-range-thumb {
+  width:18px; height:18px; border:0; background:var(--thumb-image) center / contain no-repeat;
+}
+#bottom-panel[data-slider-art=native] .menu-slider input:hover { --thumb-image:var(--slider-thumb-hover); }
+#bottom-panel[data-slider-art=native] .menu-slider input:active { --thumb-image:var(--slider-thumb-active); }
+.menu-slider input:focus-visible { outline:1px solid currentColor; outline-offset:1px; }
+#bottom-panel[data-frame=native] #general-sliders .menu-slider { grid-template-columns:50px 1fr 30px; gap:5px; margin-bottom:1px; }
+#bottom-panel[data-frame=native] .menu-slider output { color:#4b2f0e; font-weight:600; }
 
 /* Owner colour fills the transparent player-colour regions of unit portraits. */
 .art-icon[style*="--tint"] .original-icon { background:linear-gradient(var(--tint),color-mix(in srgb,var(--tint) 55%,#000)); }
 
 /* Multi-selection: the heading keeps a left column and the icons fill the rest of the panel, sized by selection-grid.js. */
-#bottom-panel[data-frame=native] #selected-icons:empty { display:none; }
-#bottom-panel[data-frame=native] #selection[data-count]:not([data-count="1"]) #selected-icons { position:absolute; left:164px; right:0; top:0; bottom:0; margin:0; max-height:none; overflow:hidden; display:flex; flex-wrap:wrap; align-content:flex-start; gap:3px; }
-#bottom-panel[data-frame=native] #selection[data-count]:not([data-count="1"]) #selection-content>:not(#selected-icons,#training-multi) { max-width:152px; }
-#bottom-panel[data-frame=native] #selected-icons .unit-token { position:relative; overflow:hidden; flex:none; width:var(--token,36px); height:var(--token,36px); box-sizing:border-box; }
+#selected-icons:empty { display:none; }
+#selection[data-count]:not([data-count="1"]) #portrait-frame { display:none; }
+#selection[data-count]:not([data-count="1"]) #selection-name { font-size:15px; }
+#selection[data-count]:not([data-count="1"]) #selected-icons { position:absolute; left:164px; right:0; top:0; bottom:0; overflow:hidden; display:flex; flex-wrap:wrap; align-content:flex-start; gap:3px; }
+#selection[data-count]:not([data-count="1"]) #selection-content>:not(#selected-icons,#training-multi) { max-width:152px; }
+#selected-icons .unit-token { position:relative; overflow:hidden; flex:none; width:var(--token,36px); height:var(--token,36px); }
 #selected-icons .token-count { position:absolute; right:2px; bottom:1px; font:700 clamp(11px,calc(var(--token,36px) * .3),20px)/1 sans-serif; color:#fff; text-shadow:0 0 2px #000,0 0 2px #000,1px 1px #000; pointer-events:none; }
 
-/* A selected building: portrait and garrison on the left, status and production on the right.
-   Garrison and queue tokens are sized by autoFit() to the room each has. */
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) { display:grid; grid-template-columns:minmax(210px,min(40%,290px)) minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); column-gap:12px; align-items:stretch; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])):has(#vassal-panel:not([hidden])) { grid-template-columns:minmax(190px,min(36%,290px)) minmax(0,1fr) minmax(150px,min(30%,210px)); }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])):has(#steward-controls:not([hidden])) { grid-template-columns:minmax(154px,min(31%,210px)) minmax(0,1fr) minmax(130px,min(28%,200px)); column-gap:8px; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#selected-icons:empty { display:none; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#selection-heading { grid-column:1; grid-row:1; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) #selection-heading { gap:8px; min-width:0; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) #selection-heading>div:last-child { min-width:0; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) #selection-heading .eyebrow { display:none; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) #selection-portrait { width:40px; height:40px; flex:none; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) #selection-portrait>:is(.art-icon,.icon) { width:36px; height:36px; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) #selection-portrait .art-icon>.icon { width:100%; height:100%; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) #selection-name { font-size:14px; line-height:16px; margin:0; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) #selection-task { font-size:9px; line-height:10px; margin:0; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) #selection-load { font-size:9px; line-height:10px; white-space:normal; margin:0; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#building-panel { grid-column:2; grid-row:1; align-self:start; min-width:0; margin:0; padding-bottom:12px; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])):has(#training[hidden])>#building-panel { grid-row:1 / 3; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#training { grid-column:2 / -1; grid-row:2; min-height:0; margin:2px 0 0; max-width:none; display:flex; flex-direction:column; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#training[hidden] { display:none; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#garrison-panel { grid-column:1; grid-row:2; min-height:0; margin:0; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#vassal-panel { grid-column:3; grid-row:1 / 3; font-size:10px; line-height:11px; }
-#bottom-panel[data-frame=native] #selection-content:has(#vassal-panel:not([hidden]))>#training { grid-column:2; }
-#bottom-panel[data-frame=native] #vassal-panel input[type=range],#bottom-panel[data-frame=native] #vassal-chooser select { height:14px; }
+/* A building uses the same slots with or without the management controls. */
+#bottom-panel[data-frame=native] #selection-content:has(>#building-panel:not([hidden])) {
+  display:grid;
+  grid-template-columns:var(--building-columns,minmax(210px,min(40%,290px)) minmax(0,1fr));
+  grid-template-rows:var(--building-rows,auto minmax(0,1fr));
+  grid-template-areas:"card details" "shelter queue";
+  column-gap:var(--building-gap,12px);
+  align-items:stretch;
+}
+#bottom-panel[data-frame=native] #selection-content:has(>#vassal-panel:not([hidden])):has(>#building-panel:not([hidden])) {
+  --building-columns:minmax(190px,min(36%,290px)) minmax(0,1fr) minmax(150px,min(30%,210px));
+  grid-template-areas:"card details manager" "shelter queue manager";
+}
+#bottom-panel[data-frame=native] #selection-content:has(>#steward-controls:not([hidden])):has(>#building-panel:not([hidden])) {
+  --building-columns:minmax(154px,min(31%,210px)) minmax(0,1fr) minmax(130px,min(28%,200px));
+  --building-rows:auto auto minmax(0,1fr);
+  --building-gap:8px;
+  grid-template-areas:"card details manager" "shelter report manager" "shelter queue manager";
+}
+#bottom-panel[data-frame=native] #selection-content:has(>#building-panel:not([hidden])) {
+  #selection-heading { grid-area:card; gap:8px; }
+  #selection-heading, #selection-heading>div:last-child { min-width:0; }
+  #selection-heading .eyebrow { display:none; }
+  #selection-portrait { width:40px; height:40px; flex:none; }
+  #selection-portrait>:is(.art-icon,.icon) { width:36px; height:36px; }
+  #selection-portrait .art-icon>.icon { width:100%; height:100%; }
+  #selection-name { font-size:14px; line-height:16px; margin:0; }
+  :is(#selection-task,#selection-load) { font-size:9px; line-height:10px; margin:0; white-space:normal; }
+  >#building-panel { grid-area:details; align-self:start; min-width:0; min-height:fit-content; margin:0; }
+  >#training:not([hidden]) { grid-area:queue; min-height:0; margin:2px 0 0; max-width:none; display:flex; flex-direction:column; }
+  >#garrison-panel { grid-area:shelter; min-height:0; margin:0; }
+  >:is(#vassal-panel,#steward-controls) { grid-area:manager; }
+  >#steward-status { grid-area:details; align-self:end; margin:0; font-size:9px; line-height:11px; white-space:normal; }
+  >#steward-controls { align-self:start; font-size:9px; line-height:12px; gap:1px; padding-right:8px; }
+  >#steward-controls label { gap:3px; }
+  >#steward-controls input[type=range] { min-width:40px; width:50px; height:14px; }
+  >#steward-controls output { width:18px; }
+  >#steward-controls input[type=checkbox] { margin:0; }
+  >#steward-controls button { font-size:9px; line-height:10px; padding:1px 2px; }
+}
+#bottom-panel[data-frame=native] #selection-content:has(>#steward-controls:not([hidden])):has(>#building-panel:not([hidden])) >#steward-status { grid-area:report; align-self:start; }
+#bottom-panel[data-frame=native] #selection-content:has(>#steward-status:not([hidden])):has(>#steward-controls[hidden]) >#building-panel { padding-bottom:12px; }
+#bottom-panel[data-frame=native] #selection[data-type=enemy] #selection-content #selection-heading .eyebrow { display:block; }
+#bottom-panel[data-frame=native] #selection-content:has(>#training[hidden]):not(:has(>#steward-controls:not([hidden]))) >#building-panel { grid-row:1 / 3; }
+#bottom-panel[data-frame=native] #vassal-panel { font-size:10px; line-height:11px; }
+#bottom-panel[data-frame=native] #vassal-panel input[type=range], #bottom-panel[data-frame=native] #vassal-chooser select { height:14px; }
 #bottom-panel[data-frame=native] #vassal-chooser select { font:inherit; padding:0; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#steward-status { grid-column:2; grid-row:1; align-self:end; margin:0; font-size:9px; line-height:11px; white-space:normal; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#steward-controls { grid-column:3; grid-row:1 / 3; padding-bottom:44px; font-size:9px; line-height:12px; gap:1px; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#steward-controls label { gap:3px; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#steward-controls input[type=range] { min-width:40px; width:50px; height:14px; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#steward-controls output { width:18px; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])):has(#steward-controls:not([hidden]))>#training { grid-column:2; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])):has(#steward-controls:not([hidden]))>#steward-status { grid-column:3; grid-row:2; }
 #bottom-panel[data-frame=native] #garrison-panel>b { font-size:10px; line-height:10px; }
 #bottom-panel[data-frame=native] #garrison-panel:not([hidden]) { display:flex; flex-direction:column; align-items:stretch; gap:0; }
 #bottom-panel[data-frame=native] #garrison-units { flex:1 1 0; min-height:0; max-height:none; overflow:hidden; align-content:flex-start; gap:2px; }
@@ -145,15 +174,10 @@
 #bottom-panel[data-frame=native] #training-queue { flex:1 1 0; flex-wrap:wrap; align-content:flex-start; gap:2px; min-height:0; overflow:hidden; margin-top:3px; }
 #bottom-panel[data-frame=native] #training-queue .unit-token { flex:none; width:var(--token,28px); height:var(--token,28px); max-width:none; box-sizing:border-box; overflow:hidden; }
 #bottom-panel[data-frame=native] #research-status { flex-wrap:wrap; min-width:0; }
-#bottom-panel[data-frame=native] #building-panel { min-height:fit-content; }
 #bottom-panel[data-frame=native] #training-queue .icon { width:100%; height:100%; }
-#bottom-panel[data-frame=native] #steward-controls { padding-right:8px; }
 /* Token art always fills its token exactly, whatever the intrinsic size of the art. */
 #bottom-panel[data-frame=native] :is(#selected-icons,#training-queue) .unit-token { position:relative; }
 #bottom-panel[data-frame=native] :is(#selected-icons,#training-queue) .unit-token>.art-icon { position:absolute; inset:0; width:auto; height:auto; }
-
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#steward-controls input[type=checkbox] { margin:0; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#steward-controls button { font-size:9px; line-height:10px; padding:1px 2px; }
 
 #bottom-panel #selection #selection-content:has(#training-multi:not([hidden])) {
   display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr);
@@ -162,9 +186,8 @@
 #selection #selection-content:has(#training-multi:not([hidden])) > #selected-icons {
   position:static; grid-column:2; grid-row:1; max-height:36px; margin:0;
 }
-#selection #selection-content:has(#training-multi:not([hidden])) > #building-panel { display:none; }
 #selection #selection-content > #training-multi:not([hidden]) {
-  grid-column:1 / -1; grid-row:2; max-width:none; min-height:0; overflow:auto;
+  grid-column:1 / -1; grid-row:2; max-width:none; min-height:0; position:relative;
 }
 #bottom-panel #selection #selection-content:has(#training-multi:not([hidden])) > #garrison-panel {
   grid-column:2; grid-row:2; min-width:0; min-height:0; margin:0;
@@ -173,7 +196,10 @@
   grid-column:1;
 }
 .training-row { display:flex; align-items:center; gap:6px; min-height:25px; font-size:11px; }
+#training-multi:has(.training-page:not([hidden])) .training-row { min-height:22px; }
+#training-multi:has(.training-page:not([hidden])) { padding-right:40px; }
+.training-page { position:absolute; right:0; bottom:0; padding:1px 4px; font-size:10px; }
 .training-site { flex:0 1 108px; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-.training-tokens { display:flex; align-items:center; gap:2px; flex:1; min-width:0; overflow-x:auto; }
+.training-tokens { display:flex; align-items:center; gap:2px; flex:1; min-width:0; white-space:nowrap; }
 #training-multi .unit-token { display:inline-flex; flex:none; width:18px; height:18px; padding:0; }
 .training-row .unit-token :is(.art-icon,.icon) { width:100%; height:100%; }

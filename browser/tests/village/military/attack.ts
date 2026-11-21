@@ -93,7 +93,7 @@ export async function militaryAttack(
   await expect(page.locator("#unit-combat")).toContainText("Range 5");
   // No Attack leaves the Archer only explicit orders, so an Attacking task
   // and Scout damage after the click both come from the order.
-  await page.locator("#combat-stance").selectOption("3");
+  await page.locator("#stance-no-attack").click();
   const archer = (await actors(page)).find(
     (a) => a.owned && a.kind === "Archer",
   );

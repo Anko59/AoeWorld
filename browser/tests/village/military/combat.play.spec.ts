@@ -68,12 +68,18 @@ test("military stance buttons update the authoritative server state", async ({
     "data-kind",
     "Scout",
   );
-  await expect(page.getByLabel("Combat stance")).toBeInViewport({ ratio: 1 });
-  await page.getByLabel("Combat stance").selectOption("3");
+  const noAttack = page.getByRole("button", { name: "No Attack", exact: true });
+  const aggressive = page.getByRole("button", {
+    name: "Aggressive",
+    exact: true,
+  });
+  await expect(noAttack).toBeInViewport({ ratio: 1 });
+  await noAttack.click();
   await expect(scene).toHaveAttribute("data-selected-stance", "3");
-  await expect(page.getByLabel("Combat stance")).toHaveValue("3");
-  await page.getByLabel("Combat stance").selectOption("0");
+  await expect(noAttack).toHaveAttribute("aria-pressed", "true");
+  await aggressive.click();
   await expect(scene).toHaveAttribute("data-selected-stance", "0");
+  await expect(aggressive).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("#game-error")).toBeHidden();
   await page.screenshot({
     path: info.outputPath("combat-stance.png"),

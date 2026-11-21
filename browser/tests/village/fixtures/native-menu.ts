@@ -68,6 +68,13 @@ export async function nativeMenu(page: Page, foreign = false) {
             ["western-top", { ...small, width: 36 }],
             ["portrait", small],
             ["button", small],
+            ...[
+              "slider-track",
+              "slider-fill",
+              "slider-thumb",
+              "slider-thumb-hover",
+              "slider-thumb-active",
+            ].map((role) => [role, small]),
           ]),
         },
       });

@@ -13,7 +13,7 @@
     ["aoeGarrison", ["update"]],
     ["aoeSteward", ["update"]],
     ["aoeVassal", ["update"]],
-    ["aoeBuildings", ["update", "queue", "refresh", "preview"]],
+    ["aoeBuildings", ["update", "selection", "resource", "preview"]],
   ])
     for (const fn of fns) {
       O[obj + "." + fn] = window[obj][fn].bind(window[obj]);
@@ -39,8 +39,6 @@
     $("#selected-icons").replaceChildren();
     $("#training-queue").replaceChildren();
     for (const id of [
-      "cancel-construction",
-      "cancel-research",
       "farm-reseed-queue",
       "construction-progress",
       "research-progress",
@@ -66,7 +64,8 @@
     $("#selection-task").textContent = o.task ?? "";
     $("#selection-load").textContent = o.load ?? "";
     $("#selection-owner").textContent = "Your village";
-    if (count === 1) ui.setEntityIcon($("#selection-portrait"), kind, tint);
+    if (count === 1)
+      $("#selection-portrait").innerHTML = ui.entityIcon(kind, tint);
     if (o.unit) {
       $("#unit-hp").hidden = false;
       $("#unit-combat").hidden = false;
@@ -173,7 +172,6 @@
     $("#research-label").textContent = "Wheelbarrow · 40%";
     $("#research-progress").hidden = false;
     $("#research-progress").value = 40;
-    $("#cancel-research").hidden = false;
     $("#research-icon").innerHTML = ui.icon("technologies", 1, "technology");
     $("#training").hidden = false;
     $("#training-label").textContent = "Training Villager · 40%";
@@ -190,13 +188,12 @@
         25,
         25,
       );
-    O["aoeGarrison.update"]([15, 1, ...g]);
+    O["aoeGarrison.update"]([15, 1, 1, 1, ...g]);
     if (steward) {
       $("#research-status").hidden = true;
-      $("#cancel-research").hidden = true;
       O["aoeSteward.update"](
         [],
-        "Steward domain active · 15/20 villagers managed",
+        "Steward domain active · 15/20 villagers managed · 18 in territory · waiting: villager training is off",
         new Uint8Array([1, 40, 30, 20, 10, 20, 1]),
       );
     }
@@ -217,7 +214,7 @@
     ).join("");
     const g = [];
     for (let i = 0; i < 20; i++) g.push(i + 1, 0, 25, 25);
-    O["aoeGarrison.update"]([20, 1, ...g]);
+    O["aoeGarrison.update"]([20, 1, 0, 1, ...g]);
     O["aoeVassal.update"](
       [1, 1, 1, 0, 20, 550, 183, 1, 2],
       "20/20 military · UNDER ATTACK · 1 General(s) responding\nworking",
@@ -240,7 +237,6 @@
     $("#building-hp").textContent = "100 / 100 HP";
     $("#building-status").textContent = "Constructing · 37%";
     $("#construction-progress").hidden = false;
-    $("#cancel-construction").hidden = false;
     $("#farm-reseed-queue").hidden = false;
     await frames();
   };
