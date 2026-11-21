@@ -9,12 +9,6 @@ pub enum VassalFocus {
     Roads,
 }
 
-impl VassalFocus {
-    pub(super) fn priority(self, kind: BuildingKind) -> bool {
-        self == Self::Roads && !matches!(kind, BuildingKind::Road | BuildingKind::Bridge)
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct VassalJob {
     pub kind: BuildingKind,
@@ -101,7 +95,7 @@ impl GameWorld {
         let mut current = VassalJobs::default();
         let mut planned = VassalJobs::default();
         work.deficits
-            .sort_by_key(|(_, site)| (focus.priority(site.kind), site.tier));
+            .sort_by_key(|(_, site)| (site.build_priority(focus), site.tier));
         for (building, job) in work.open {
             if self.economy.builders.assigned_count(building) == 0 {
                 planned.preview(job);

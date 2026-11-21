@@ -32,8 +32,17 @@ pub enum VassalWait {
     Age,
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct VassalSquad {
+    pub holding: u8,
+    pub moving: u8,
+    pub attacking: u8,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct VassalStatus {
     pub military: u8,
+    /// Infantry, archers, cavalry, siege and scouts, in that order.
+    pub squads: [VassalSquad; 5],
     pub development: bool,
     pub developed: bool,
     pub alert: bool,
@@ -52,6 +61,7 @@ pub(crate) struct Domain {
     castle: EntityId,
     player: PlayerId,
     center: TileCoord,
+    walking: Option<std::sync::Arc<super::land::walking::Walking>>,
     soldiers: BTreeSet<EntityId>,
     development: bool,
     cursor: usize,
@@ -94,6 +104,7 @@ pub(crate) struct Manager {
     returns: BTreeMap<EntityId, WorldPosition>,
     cursor: Option<EntityId>,
     plan_cursor: Option<EntityId>,
+    walk_second: Option<u64>,
 }
 impl GameWorld {
     pub(crate) fn activate_vassal(&mut self, id: EntityId, castle: EntityId) {
@@ -113,6 +124,7 @@ impl GameWorld {
                 castle,
                 player: b.player,
                 center,
+                walking: None,
                 soldiers: BTreeSet::new(),
                 development: true,
                 cursor: 0,
@@ -168,6 +180,15 @@ impl GameWorld {
     }
     pub(crate) fn deactivate_vassal(&mut self, id: EntityId) {
         if let Some(d) = self.economy.vassals.domains.remove(&id) {
+            if !self
+                .economy
+                .vassals
+                .domains
+                .values()
+                .any(|other| other.player == d.player)
+            {
+                self.economy.walking.vassals.remove(&d.player);
+            }
             for soldier in d.soldiers {
                 self.economy.vassals.controlled.remove(&soldier);
             }
@@ -196,6 +217,7 @@ impl GameWorld {
         self.economy.vassals.manual.remove(&id);
     }
     pub(crate) fn advance_vassals(&mut self, changed: &mut Vec<EntityId>) {
+        self.refresh_vassal_walk();
         self.advance_vassal_plans();
         if (self.economy.vassals.domains.is_empty() && self.economy.vassals.returns.is_empty())
             || !self.tick.0.is_multiple_of(20)
@@ -224,6 +246,7 @@ impl GameWorld {
                 continue;
             }
             let (center, player) = (d.center, d.player);
+            let walking = d.walking.clone();
             let stale: Vec<_> = d
                 .soldiers
                 .iter()
@@ -244,10 +267,9 @@ impl GameWorld {
             )
             .clamp(self.config.width_tiles, self.config.height_tiles);
             let units = self.query(rect).0;
-            for u in units
-                .iter()
-                .filter(|u| u.player == player && u.hp > 0 && inside(center, u.position))
-            {
+            for u in units.iter().filter(|u| {
+                u.player == player && u.hp > 0 && owns(walking.as_deref(), id, center, u.position)
+            }) {
                 if self.vassal_controller(u.id).is_some()
                     || self.general_controller(u.id).is_some()
                     || self.economy.vassals.manual.contains(&u.id)
@@ -273,10 +295,12 @@ impl GameWorld {
             }
             self.vassal_defend(id, &units, changed);
             self.vassal_develop(id);
+            let squads = self.vassal_squads(id);
             let Some(d) = self.economy.vassals.domains.get_mut(&id) else {
                 continue;
             };
             d.status.military = d.soldiers.len() as u8;
+            d.status.squads = squads;
             let (castle, status) = (d.castle, d.status);
             if let Some(g) = self
                 .economy
@@ -291,8 +315,16 @@ impl GameWorld {
         }
     }
 }
-fn inside(center: TileCoord, at: WorldPosition) -> bool {
-    within(center, at, VASSAL_RADIUS)
+fn owns(
+    walking: Option<&super::land::walking::Walking>,
+    id: EntityId,
+    center: TileCoord,
+    at: WorldPosition,
+) -> bool {
+    walking.map_or_else(
+        || within(center, at, VASSAL_RADIUS),
+        |walking| walking.owns(id, at.tile_floor()),
+    )
 }
 fn within(center: TileCoord, at: WorldPosition, radius: i32) -> bool {
     super::general::distance(WorldPosition::new(center.x * 1024, center.y * 1024), at)
@@ -300,6 +332,44 @@ fn within(center: TileCoord, at: WorldPosition, radius: i32) -> bool {
 }
 
 impl GameWorld {
+    fn vassal_owns(&self, id: EntityId, at: WorldPosition) -> bool {
+        self.economy
+            .vassals
+            .domains
+            .get(&id)
+            .is_some_and(|d| owns(d.walking.as_deref(), id, d.center, at))
+    }
+
+    fn refresh_vassal_walk(&mut self) {
+        if self.economy.vassals.domains.is_empty() {
+            return;
+        }
+        let second = self.tick.0 / u64::from(self.config.tick_hz);
+        if self.economy.vassals.walk_second == Some(second) {
+            return;
+        }
+        self.economy.vassals.walk_second = Some(second);
+        let mut owners = BTreeMap::<PlayerId, Vec<(EntityId, TileRect)>>::new();
+        for (&id, domain) in &self.economy.vassals.domains {
+            if let Some(castle) = self.building(domain.castle) {
+                owners
+                    .entry(domain.player)
+                    .or_default()
+                    .push((id, castle.footprint));
+            }
+        }
+        let previous = std::mem::take(&mut self.economy.walking.vassals);
+        for (player, sources) in owners {
+            let walking = self.walking_group(sources.clone(), previous.get(&player));
+            for (id, _) in sources {
+                if let Some(domain) = self.economy.vassals.domains.get_mut(&id) {
+                    domain.walking = Some(walking.clone());
+                }
+            }
+            self.economy.walking.vassals.insert(player, walking);
+        }
+    }
+
     pub(super) fn vassal_land_sources(&self) -> Vec<(PlayerId, TileCoord, i32)> {
         self.economy
             .vassals

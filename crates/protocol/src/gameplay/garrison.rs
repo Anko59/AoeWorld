@@ -31,6 +31,8 @@ pub struct VassalReport {
     pub current: VassalJobs,
     pub planned: VassalJobs,
     pub finished: VassalJobs,
+    /// Holding, moving and attacking counts for infantry, archers, cavalry, siege and scouts.
+    pub squads: [[u8; 3]; 5],
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -151,8 +153,10 @@ fn steward_valid(u: &GarrisonUnitState) -> bool {
 
 fn vassal_valid(u: &GarrisonUnitState) -> bool {
     u.vassal.is_none_or(|r| {
+        let squad_total: u16 = r.squads.iter().flatten().copied().map(u16::from).sum();
         u.kind == UnitKind::Vassal
             && r.military <= 20
+            && squad_total == u16::from(r.military)
             && r.wait <= 6
             && r.completed <= r.total
             && (!r.developed || r.completed == r.total)

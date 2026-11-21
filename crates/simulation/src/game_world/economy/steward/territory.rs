@@ -1,8 +1,7 @@
-//! Territory split between one player's Steward TownCenters: a point belongs to the
-//! nearest active town_center within the radius (integer squared distance), ties to
-//! the lower Steward ID. No point ever belongs to two Stewards.
+//! Steward land ownership follows walking costs. Water work keeps its own
+//! shoreline service area so a land barrier does not strand fishing boats.
 use super::{Home, STEWARD_RULES};
-use crate::{GameWorld, Terrain};
+use crate::{GameWorld, Terrain, UnitKind};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, TileCoord, TileRect, WorldPosition};
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -16,6 +15,13 @@ impl Home {
     /// Inside the circle and not closer to (or tied but lower-ID than) another
     /// active town_center of the same player.
     pub(crate) fn owns(&self, at: WorldPosition) -> bool {
+        self.walking.as_ref().map_or_else(
+            || self.owns_water(at),
+            |walking| walking.owns(self.id, at.tile_floor()),
+        )
+    }
+
+    pub(crate) fn owns_water(&self, at: WorldPosition) -> bool {
         self.contains(at) && {
             let mine = d2(self.center, at);
             !self.rivals.iter().any(|&(id, c)| {
@@ -24,8 +30,123 @@ impl Home {
             })
         }
     }
+
+    pub(super) fn owns_resident(&self, kind: UnitKind, at: WorldPosition) -> bool {
+        if kind == UnitKind::FishingShip {
+            self.owns_water(at)
+        } else {
+            self.owns(at)
+        }
+    }
+
+    /// Every margin-expanded corner fits the service area, and the site's
+    /// centre belongs to this office. Docks can be centred over water.
+    pub(in super::super) fn covers(&self, rect: TileRect, margin: i32) -> bool {
+        self.covers_site(rect, margin, false)
+    }
+
+    pub(super) fn covers_shore(&self, rect: TileRect, margin: i32) -> bool {
+        self.covers_site(rect, margin, true)
+    }
+
+    fn covers_site(&self, rect: TileRect, margin: i32, shore: bool) -> bool {
+        let center = WorldPosition::new(
+            (rect.min.x + rect.max.x) * FIXED_SUBUNITS_PER_TILE / 2,
+            (rect.min.y + rect.max.y) * FIXED_SUBUNITS_PER_TILE / 2,
+        );
+        let owns = if shore {
+            self.owns_water(center)
+        } else {
+            self.owns(center)
+        };
+        owns && [rect.min.x - margin, rect.max.x + margin]
+            .into_iter()
+            .all(|x| {
+                [rect.min.y - margin, rect.max.y + margin]
+                    .into_iter()
+                    .all(|y| {
+                        self.contains(WorldPosition::new(
+                            x * FIXED_SUBUNITS_PER_TILE,
+                            y * FIXED_SUBUNITS_PER_TILE,
+                        ))
+                    })
+            })
+    }
 }
 impl GameWorld {
+    pub(super) fn refresh_steward_walk(&mut self) {
+        if self.economy.stewards.active.is_empty() {
+            return;
+        }
+        let second = self.tick.0 / u64::from(self.config.tick_hz);
+        if self.economy.stewards.walk_second == Some(second) {
+            return;
+        }
+        self.economy.stewards.walk_second = Some(second);
+        let mut previous = std::mem::take(&mut self.economy.walking.stewards);
+        for (&player, members) in &self.economy.stewards.by_player {
+            let sources: Vec<_> = members
+                .keys()
+                .filter_map(|&id| {
+                    let town = self.steward_town_center(id)?;
+                    self.building(town).map(|b| (id, b.footprint))
+                })
+                .collect();
+            let walking = self.walking_group(sources, previous.get(&player));
+            for id in members.keys() {
+                if let Some(home) = self.economy.steward_homes.get_mut(id)
+                    && home
+                        .walking
+                        .as_ref()
+                        .is_none_or(|prior| !Arc::ptr_eq(prior, &walking))
+                {
+                    home.walking = Some(walking.clone());
+                    home.walk_recheck = true;
+                    // Land connectivity is labelled over the walking zone.
+                    home.regions = None;
+                    self.economy
+                        .stewards
+                        .controlled
+                        .mark(home.workers.iter().copied());
+                }
+            }
+            previous.insert(player, walking);
+        }
+        previous.retain(|player, _| self.economy.stewards.by_player.contains_key(player));
+        self.economy.walking.stewards = previous;
+    }
+
+    pub(super) fn recheck_steward_walk(&mut self, id: EntityId, changed: &mut Vec<EntityId>) {
+        let Some(home) = self.economy.steward_homes.get_mut(&id) else {
+            return;
+        };
+        if !std::mem::take(&mut home.walk_recheck) {
+            return;
+        }
+        let player = home.player;
+        let workers = home
+            .workers
+            .iter()
+            .copied()
+            .filter(|worker| {
+                self.economy.gatherers.get(worker).is_some_and(|job| {
+                    job.farm.is_none()
+                        && home
+                            .walking
+                            .as_ref()
+                            .and_then(|zone| zone.patch_owner(job.tile))
+                            .is_some_and(|owner| owner != id)
+                })
+            })
+            .collect::<Vec<_>>();
+        for worker in workers {
+            self.record_order_decisions(1);
+            if self.issue_stop(player, worker).is_ok() {
+                changed.push(worker);
+            }
+        }
+    }
+
     /// Recompute each active domain's nearby rivals for one player. Runs only
     /// when a domain activates or deactivates, never per tick.
     pub(super) fn refresh_steward_territory(&mut self, player: PlayerId) {
@@ -56,8 +177,8 @@ impl GameWorld {
 }
 
 // Connectivity inside one Steward's territory. A job is only worth giving a
-// villager when a walk exists that never leaves the 100-tile circle (cut by its
-// siblings). Static ground is labelled once per territory and bridge change;
+// villager when a walk exists that never leaves the office's walking zone (cut
+// by its siblings and bounded by the 100-tile service box). Static ground is labelled once per territory and bridge change;
 // each query is then a few array reads, never a route search.
 #[derive(Debug)]
 pub(super) struct Regions {

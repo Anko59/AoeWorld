@@ -372,7 +372,7 @@ Archery Range, Stable, University, Monastery, Castle and Market research, and
 Monk conversion.
 
 The [Steward](economy/steward.md) is trained at a Town Center and has a fixed
-100-tile home radius. It builds Houses before its population space runs out.
+home zone within 100 walking tiles. It builds Houses before population space runs out.
 
 ## Defensive Vassal
 
@@ -391,13 +391,15 @@ and lets Stewards seed their other farms while those slots are full. Remaining
 work sets the number requested for each site. Owner orders using explicitly
 selected builders take precedence.
 
-The Castle panel shows planned, current, and finished work. Pausing stops
+The Castle panel shows planned, current, and finished work, along with how
+many defenders in each squad are holding, moving, or attacking. Pausing stops
 new placement while shared builders finish foundations already paid for.
 Upgraded towers still serve their sites, and a replan keeps paid work available.
-Visible enemies inside the territory raise an alert. The garrison's soldiers
-engage them and friendly Generals within 100 tiles receive ordinary marches.
-Once the threat leaves, surviving Generals resume their saved destination or
-return to their previous position. A newer owner march or stop takes precedence.
+Visible enemies inside the 100-walking-tile zone raise an alert. Its defenders
+engage them. Friendly Generals within 32 tiles of the Castle respond when a
+land path to the threat is confirmed. Once the threat leaves, surviving
+Generals resume their saved march or return to their previous position.
+A newer owner march or stop takes precedence.
 
 ## Roads
 
@@ -410,11 +412,8 @@ occupy the tile. Foundations and demolished roads give no bonus. Routes and
 pathfinding costs are unchanged; an empty road index skips tile lookups.
 
 The close view paints the pack's native dirt sheet into the shared terrain;
-the far map's F6 Roads & bridges layer shows known road plots. After completing
-its towers, barracks and gated wall ring, a Vassal builds a road from its Castle
-to the nearest completed owned Town Center. Those tiles count toward developed
-enough, and the panel reports Road as the next step. The route search visits
-at most 8192 tiles per pass and can use completed friendly gates and existing
-bridges. An unavailable route remains a blocked deficit. Automatic purchases
-of new bridges need a separate bounded bank/span planner; this slice does not
-infer a bridge from water or lay a road over it.
+the far map's F6 Roads & bridges layer shows known roads and crossings. Vassals
+plan a connected trunk from the Castle to Town Centers, production buildings,
+camps and gates. Route searches resume in bounded work slices. Where the
+trunk needs a river crossing, the bridge foundation enters the shared
+construction queue before its approach roads.

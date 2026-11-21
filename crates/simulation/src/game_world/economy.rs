@@ -64,7 +64,8 @@ pub use steward::{
 mod vassal;
 mod wall;
 pub use vassal::{
-    VASSAL_LIMIT, VASSAL_RADIUS, VassalFocus, VassalJob, VassalJobs, VassalStatus, VassalWait,
+    VASSAL_LIMIT, VASSAL_RADIUS, VassalFocus, VassalJob, VassalJobs, VassalSquad, VassalStatus,
+    VassalWait,
 };
 
 pub use buildings::{BUILDING_RULES, BuildingRules, MAX_WALL_SEGMENTS, trainable_units};

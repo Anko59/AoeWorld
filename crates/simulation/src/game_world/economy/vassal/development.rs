@@ -85,7 +85,7 @@ impl GameWorld {
         let enabled = d.development;
         let focus = d.status.focus;
         work.deficits
-            .sort_by_key(|(_, site)| (focus.priority(site.kind), site.tier));
+            .sort_by_key(|(_, site)| (site.build_priority(focus), site.tier));
         let Some(d) = self.economy.vassals.domains.get_mut(&id) else {
             return;
         };
@@ -174,7 +174,7 @@ impl GameWorld {
             .collect();
         candidates.sort_by_key(|(i, site, replacement, distance)| {
             (
-                focus.priority(site.kind),
+                site.build_priority(focus),
                 if threatened { site.tier } else { 0 },
                 !replacement,
                 distance + u64::from(site.kind.rules().build_seconds) * 4,

@@ -5,7 +5,7 @@ use super::road_job::Network;
 use super::*;
 use std::ops::{Deref, DerefMut};
 pub(super) const TIER_GATE_ROAD: u8 = 5;
-pub(super) const MAX_NODES: usize = 64;
+const MAX_NODES: usize = 64;
 pub(super) const MAX_BRIDGE: i32 = 14;
 const BRIDGE_SPACING: i32 = 30;
 pub(super) const STUB: i32 = 3;
@@ -111,7 +111,7 @@ impl<'a> View<'a> {
         if self.free(tile) && self.roads.insert(tile) {
             self.out.push(Site::new(BuildingKind::Road, tile, tier));
             self.goals.insert(tile);
-        } else if self.existing(tile) {
+        } else if self.gate_tiles.contains(&tile) || self.existing(tile) {
             self.goals.insert(tile);
             // An unfinished road stays a deficit until it is complete.
             let unfinished = self
@@ -131,11 +131,9 @@ impl<'a> View<'a> {
         // that one and walk the bank.
         let near =
             |t: TileCoord, o: TileCoord| (t.x - o.x).abs().max((t.y - o.y).abs()) <= BRIDGE_SPACING;
-        if self
-            .fixed
-            .keys()
-            .chain(self.planned_spans.iter())
-            .any(|&f| near(f, a) || near(f, b))
+        if self.roads.contains(&a)
+            || self.roads.contains(&b)
+            || self.fixed.keys().any(|&f| near(f, a) || near(f, b))
         {
             return false;
         }

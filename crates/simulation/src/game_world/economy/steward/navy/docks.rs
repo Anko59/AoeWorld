@@ -100,7 +100,7 @@ impl GameWorld {
                 near.y + (candidate / 9) as i32 - 4,
             );
             let rect = TileRect::from_xywh(tile.x, tile.y, 3, 3);
-            if !s.home.covers(rect, 1)
+            if !s.home.covers_shore(rect, 1)
                 || !self.steward_site_walkable(worker, rect, s)
                 || self.validate_explored_footprint(s.player, rect).is_err()
                 || self

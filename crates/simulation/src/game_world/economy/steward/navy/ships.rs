@@ -35,7 +35,7 @@ impl GameWorld {
             // their trip or discarding a load. Their current fish is known work.
             if let Some(task) = self.economy.gatherers.get(&boat.id)
                 && task.fish.is_some()
-                && WorldPosition::from_tile_center(task.tile).is_ok_and(|at| s.home.owns(at))
+                && WorldPosition::from_tile_center(task.tile).is_ok_and(|at| s.home.owns_water(at))
             {
                 let node = if let Terrain::Map { generator, .. } = &self.terrain {
                     generator.resource_by_id(task.node)
