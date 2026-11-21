@@ -2,6 +2,7 @@
 use super::*;
 use crate::{BuildingKind, UnitKind};
 mod obstacles;
+mod passing;
 mod sleep;
 
 #[test]
