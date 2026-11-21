@@ -97,7 +97,12 @@ fn load(root: &Path, fixture: &Fixture) -> Result<(), String> {
                 .ok_or("save has no package directory")?;
             // This is the game's decoder and restore, including resource-overlay
             // validation. No AI, socket, clock, tick or replay is started.
-            aoe_server::GameplayService::from_saved_replay(&path, packages).map(|_| ())
+            aoe_server::GameplayService::from_saved_replay(
+                &path,
+                packages,
+                aoe_core::DEFAULT_SIMULATION_HZ,
+            )
+            .map(|_| ())
         }
     }
 }

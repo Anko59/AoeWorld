@@ -40,8 +40,11 @@ fn hex(hash: &[u8; 32]) -> String {
     hash.iter().map(|b| format!("{b:02x}")).collect()
 }
 fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
-    let (service, restored) =
-        GameplayService::from_saved_replay(&options.save, &options.package_directory)?;
+    let (service, restored) = GameplayService::from_saved_replay(
+        &options.save,
+        &options.package_directory,
+        recording.tick_hz,
+    )?;
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
