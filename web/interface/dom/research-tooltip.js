@@ -1,7 +1,10 @@
 let tooltip, anchor;
 
 function hide() {
-  if (anchor) tooltip.hidePopover();
+  if (anchor) {
+    tooltip.hidePopover();
+    if (anchor.dataset.title) anchor.title = anchor.dataset.title;
+  }
   anchor = null;
 }
 
@@ -20,7 +23,9 @@ function show(button) {
   }
   tooltip.textContent = detail;
   if (!anchor) tooltip.showPopover();
+  else if (anchor !== button && anchor.dataset.title) anchor.title = anchor.dataset.title;
   anchor = button;
+  button.removeAttribute('title'); // the popover replaces the native tooltip while open
   const box = button.getBoundingClientRect();
   const { width, height } = tooltip.getBoundingClientRect();
   const left = Math.max(8, Math.min(box.left, window.innerWidth - width - 8));
@@ -38,7 +43,9 @@ export function bindResearchTooltip(button) {
   }
 }
 
-export function updateResearchTooltip(button, detail) {
+export function updateResearchTooltip(button, detail, title) {
+  button.dataset.title = title;
+  if (anchor !== button) button.title = title;
   if (button.getAttribute('aria-description') !== detail) {
     button.setAttribute('aria-description', detail);
     if (anchor === button) show(button);

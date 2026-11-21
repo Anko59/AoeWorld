@@ -140,9 +140,10 @@ export function commandGrid(dispatch) {
     const title = [entry.label, entry.cost, entry.reason, entry.key].filter(Boolean).join(' · ');
     attribute(button, 'aria-label', entry.label);
     if (entry.tooltip) {
-      // Research cards describe the technology in a popover instead of a native title.
-      if (!button.dataset.tooltip) { button.dataset.tooltip = '1'; button.removeAttribute('title'); bindResearchTooltip(button); }
-      updateResearchTooltip(button, [entry.label.replace(/^Research /, ''), entry.tooltip, entry.reason].filter(Boolean).join(' · '));
+      // Research cards describe the technology in a popover; the title keeps the
+      // cost and requirement text (hidden only while the popover is open).
+      if (!button.dataset.tooltip) { button.dataset.tooltip = '1'; bindResearchTooltip(button); }
+      updateResearchTooltip(button, [entry.label.replace(/^Research /, ''), entry.tooltip, entry.reason].filter(Boolean).join(' · '), entry.title ?? title);
     } else {
       set(button, 'title', entry.title ?? title);
       attribute(button, 'aria-description', [entry.cost, entry.reason].filter(Boolean).join(' · '));
