@@ -2,6 +2,7 @@
 //! Costs and times: SiegeEngineers/aoe2techtree data.json (DE update 188329).
 //! Ages and effects: docs/navy.md, with its sources and stated assumptions.
 use super::super::{BuildingKind, Stockpile, UnitKind as U};
+use super::rule_effect::{ArmorClass, RuleEffect};
 use super::table::*;
 
 const fn cost(food: u32, wood: u32, gold: u32) -> Stockpile {
@@ -56,7 +57,6 @@ const IMPERIAL: TechRequirement = TechRequirement::Age(Age::Imperial);
 const fn after(tech: Tech) -> TechRequirement {
     TechRequirement::Technology(tech)
 }
-const STAT: TechEffect = TechEffect::Military;
 
 /// In `Tech` order, from `FishingLines`.
 pub(super) const RULES: [TechRules; 13] = [
@@ -67,7 +67,7 @@ pub(super) const RULES: [TechRules; 13] = [
         cost(50, 100, 0),
         20,
         NONE,
-        STAT,
+        TechEffect::Rule(RuleEffect::FishingYield),
     ),
     rule(
         Tech::Gillnets,
@@ -76,7 +76,7 @@ pub(super) const RULES: [TechRules; 13] = [
         cost(100, 125, 0),
         30,
         after(Tech::FishingLines),
-        STAT,
+        TechEffect::Rule(RuleEffect::FishingYield),
     ),
     rule(
         Tech::Careening,
@@ -85,7 +85,7 @@ pub(super) const RULES: [TechRules; 13] = [
         cost(100, 0, 200),
         50,
         CASTLE,
-        STAT,
+        TechEffect::Rule(RuleEffect::Armor(ArmorClass::Ships)),
     ),
     rule(
         Tech::DryDock,
@@ -94,7 +94,7 @@ pub(super) const RULES: [TechRules; 13] = [
         cost(200, 0, 400),
         60,
         after(Tech::Careening),
-        STAT,
+        TechEffect::Rule(RuleEffect::Armor(ArmorClass::Ships)),
     ),
     rule(
         Tech::Shipwright,
@@ -103,7 +103,7 @@ pub(super) const RULES: [TechRules; 13] = [
         cost(1000, 0, 300),
         60,
         IMPERIAL,
-        STAT,
+        TechEffect::Rule(RuleEffect::ShipProduction),
     ),
     rule(
         Tech::ClinkerConstruction,
@@ -112,7 +112,7 @@ pub(super) const RULES: [TechRules; 13] = [
         cost(150, 100, 0),
         50,
         CASTLE,
-        STAT,
+        TechEffect::Rule(RuleEffect::ShipSpeed),
     ),
     rule(
         Tech::CarvelHull,
@@ -121,7 +121,7 @@ pub(super) const RULES: [TechRules; 13] = [
         cost(350, 200, 0),
         60,
         after(Tech::ClinkerConstruction),
-        STAT,
+        TechEffect::Rule(RuleEffect::ShipSpeed),
     ),
     rule(
         Tech::Siphons,
@@ -130,7 +130,7 @@ pub(super) const RULES: [TechRules; 13] = [
         cost(100, 0, 175),
         45,
         CASTLE,
-        STAT,
+        TechEffect::Rule(RuleEffect::FireShipAttack),
     ),
     rule(
         Tech::Incendiaries,
@@ -139,7 +139,7 @@ pub(super) const RULES: [TechRules; 13] = [
         cost(200, 0, 325),
         50,
         after(Tech::Siphons),
-        STAT,
+        TechEffect::Rule(RuleEffect::DeathBlast),
     ),
     rule(
         Tech::HeavyWarships,

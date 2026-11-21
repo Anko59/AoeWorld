@@ -1,6 +1,10 @@
 import { expect } from "@playwright/test";
 import { test } from "../../../server.js";
-import { productionFixture } from "../production/fixture.js";
+import { inputFixture } from "../input/fixture.js";
+import {
+  productionBuilding,
+  productionFixture,
+} from "../production/fixture.js";
 
 test("kingdom activity groups all owned queues, focuses a producer, and clears completed work", async ({
   page,
@@ -64,4 +68,48 @@ test("kingdom activity caps visible types and reports overflow", async ({
   const bounds = await panel.boundingBox();
   if (!bounds) throw new Error("Activity panel has no bounds");
   expect(bounds.height).toBeLessThanOrEqual(280);
+});
+
+test("kingdom activity stays above the far-view menus and uses the original panel frame", async ({
+  page,
+  request,
+}) => {
+  const originalArt = (
+    await request.get("/asset-pack/buildings/interface.json")
+  ).ok();
+  await inputFixture(
+    page,
+    "webgpu",
+    [productionBuilding({ id: 40, kind: 0, x: 8187, y: 8190, queue: [0] })],
+    false,
+    0,
+    undefined,
+    { originalArt },
+  );
+  await page.evaluate(() => {
+    location.hash = "x=8192.5&y=8192.5&zoom=.04";
+  });
+  const panel = page.locator("#kingdom-activity");
+  await expect(panel.getByRole("button", { name: /Villager/ })).toBeVisible();
+  await expect(page.locator("#strategic-cockpit")).toBeVisible();
+  const dock = page.locator("#far-dock");
+  await expect(dock).toBeVisible();
+  const layout = await panel.evaluate((node) => {
+    const menus = ["strategic-cockpit", "far-dock"].map((id) => {
+      const menu = document.getElementById(id);
+      if (!menu) throw new Error("Far-view menu missing");
+      return Number(getComputedStyle(menu).zIndex);
+    });
+    return { zIndex: Number(getComputedStyle(node).zIndex), menus };
+  });
+  expect(layout.zIndex).toBeGreaterThan(Math.max(...layout.menus));
+  if (originalArt) {
+    await expect(panel).toHaveCSS("border-image-source", /url\("blob:/);
+    const [activityBox, dockBox] = await Promise.all([
+      panel.boundingBox(),
+      dock.boundingBox(),
+    ]);
+    if (!activityBox || !dockBox) throw new Error("HUD bounds missing");
+    expect(activityBox.y).toBeGreaterThanOrEqual(dockBox.y + dockBox.height);
+  }
 });

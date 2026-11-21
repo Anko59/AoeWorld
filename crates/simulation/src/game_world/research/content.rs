@@ -247,6 +247,10 @@ impl BrowserContent {
 mod source;
 #[cfg(any(not(target_arch = "wasm32"), feature = "content-source"))]
 pub use source::browser_content;
+#[cfg(any(not(target_arch = "wasm32"), feature = "content-source"))]
+mod tooltips;
+#[cfg(any(not(target_arch = "wasm32"), feature = "content-source"))]
+pub use tooltips::browser_research_tooltips;
 
 #[cfg(test)]
 mod tests;

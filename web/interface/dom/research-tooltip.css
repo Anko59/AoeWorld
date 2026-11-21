@@ -1,0 +1,12 @@
+#research-tooltip {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  max-width: min(340px, calc(100vw - 16px));
+  padding: 8px 10px;
+  border: 1px solid var(--gold);
+  color: var(--ink);
+  background: #242620;
+  box-shadow: 0 3px 12px #0009;
+  pointer-events: none;
+}

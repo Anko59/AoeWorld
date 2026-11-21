@@ -224,7 +224,7 @@ test("the dominant kind's art reaches the token pixels inside the owner rim", as
   ]);
 });
 
-test("fish cluster separately from forage and explored forests get wood markers", async ({
+test("fish cluster separately from forage and known wood markers respect fog", async ({
   page,
 }) => {
   await page.route("**/landscape-test", (route) =>
@@ -250,7 +250,7 @@ test("fish cluster separately from forage and explored forests get wood markers"
     strategic.terrain(null, { samples: 64, cells });
     strategic.resources([
       4, 119, 130, 10, 0, 5, 123, 133, 11, 0, 5, 247, 37, 12, 0, 0, 121, 130,
-      13, 0,
+      13, 0, 1, 102, 102, 14, 0, 1, 106, 102, 15, 0, 1, 162, 162, 16, 0,
     ]);
     const state = [256, 256, 128, 128, 1280, 720, 0.04, 1];
     const canvas =
@@ -277,10 +277,10 @@ test("fish cluster separately from forage and explored forests get wood markers"
     return [initial, depleted, revealed, counts()];
   });
   expect(result).toEqual([
-    ["4", "2", "1"],
-    ["2", "1", "1"],
-    ["2", "1", "2"],
-    ["2", "0", "0"],
+    ["7", "2", "1"],
+    ["5", "1", "1"],
+    ["5", "1", "2"],
+    ["5", "0", "0"],
   ]);
 });
 

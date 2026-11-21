@@ -207,8 +207,15 @@ impl GameWorld {
         if unit.kind == UnitKind::FishingShip {
             15 + 5 * self.fishing_ship_upgrades(unit.player)
         } else {
-            self.villager_capacity(unit.player)
-                + u16::from(farmer && self.has_researched(unit.player, crate::Tech::HeavyPlow))
+            let carry = match crate::Tech::HeavyPlow.rules().effect {
+                crate::TechEffect::FarmFoodAndCarry { carry, .. }
+                    if farmer && self.has_researched(unit.player, crate::Tech::HeavyPlow) =>
+                {
+                    carry
+                }
+                _ => 0,
+            };
+            self.villager_capacity(unit.player) + carry
         }
     }
 

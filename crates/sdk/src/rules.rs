@@ -382,6 +382,7 @@ pub fn technologies() -> Vec<Technology> {
                     row.effect,
                     sim::TechEffect::GatherRate { .. }
                         | sim::TechEffect::FarmFood(_)
+                        | sim::TechEffect::FarmFoodAndCarry { .. }
                         | sim::TechEffect::VillagerEconomy { .. }
                 ),
             };

@@ -188,9 +188,6 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         if event.button() == 0 && super::village::production::here::click(&mut client, target) {
             return;
         }
-        if event.button() == 0 && super::strategic::focus(&mut client, target) {
-            return;
-        }
         let middle = event.button() == 1;
         if event.button() != 0 && !middle {
             return;
@@ -200,6 +197,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             start: target,
             current: target,
             middle,
+            moved: false,
             center: client.camera.center,
         });
     });
@@ -215,7 +213,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             let Some(drag) = client.drag.as_mut() else {
                 return;
             };
-            drag.current = target;
+            drag.update(target);
             (drag.start, drag.center, drag.middle)
         };
         if middle {
@@ -264,17 +262,16 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             let _ = client.canvas.release_pointer_capture(event.pointer_id());
             return;
         }
-        if let Some(drag) = client.drag.take() {
-            let moved = (drag.current.x - drag.start.x).abs() > 4.0
-                || (drag.current.y - drag.start.y).abs() > 4.0;
-            if !drag.middle {
-                if moved {
-                    let units = pick_box(&client, drag.start, target);
-                    client.selected.units(units);
-                } else {
-                    let unit = pick(&client, target);
-                    super::village::picking::click(&mut client, target, unit, event.shift_key());
-                }
+        if let Some(mut drag) = client.drag.take()
+            && !drag.middle
+        {
+            drag.update(target);
+            if drag.moved {
+                let units = pick_box(&client, drag.start, target);
+                client.selected.units(units);
+            } else if !super::strategic::focus(&mut client, target) {
+                let unit = pick(&client, target);
+                super::village::picking::click(&mut client, target, unit, event.shift_key());
             }
         }
         let _ = client.canvas.release_pointer_capture(event.pointer_id());
