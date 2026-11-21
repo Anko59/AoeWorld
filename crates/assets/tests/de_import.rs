@@ -121,7 +121,7 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
         .collect();
     assert_eq!(
         native.len(),
-        177_780,
+        177_782,
         "every native unit/stone source cell is chunked"
     );
     assert_eq!(
@@ -133,6 +133,18 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
         manifest.pages.len(),
         1,
         "native timelines consume no PNG area"
+    );
+    let imperial = actors.buildings.iter().find(|b| b.unit_id == 142).unwrap();
+    let fire = &imperial.damage[0].parts[0];
+    assert_eq!(fire.source, "de/particles/fire_fixture");
+    assert_eq!(fire.frame_rate, 0.5);
+    assert_eq!(
+        actors
+            .frames
+            .iter()
+            .filter(|f| f.source == fire.source && f.native.is_some())
+            .count(),
+        2
     );
     let house = manifest
         .frames
@@ -171,7 +183,7 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
     assert_eq!((farm.width, farm.height), (32, 32));
     assert_eq!(
         report.entries.len(),
-        290,
+        291,
         "native sources include construction, ammunition and particle effects"
     );
     assert_eq!(
@@ -424,7 +436,7 @@ fn real_de_building_catalog_retains_every_spawned_recipe() {
             .chain(&b.construction)
             .chain(b.states.iter().flat_map(|s| &s.parts))
             .chain(b.damage.iter().flat_map(|d| &d.parts))
-            .filter(|p| p.available)
+            .filter(|p| p.available && !p.source.starts_with("de/particles/"))
         {
             assert!(
                 counts[&p.source] >= usize::from(p.frames) * usize::from(p.angles),
@@ -438,4 +450,30 @@ fn real_de_building_catalog_retains_every_spawned_recipe() {
         counts.len(),
         counts.values().sum::<usize>()
     );
+}
+
+#[test]
+fn real_de_building_damage_keeps_native_fires_after_an_age_upgrade() {
+    let Some(root) = std::env::var_os("AOE_DE_DIR") else {
+        return;
+    };
+    let recipes = de::buildings::resolve(Path::new(&root)).unwrap().recipes;
+    for id in [109, 71, 141, 142, 465, 20] {
+        let building = recipes
+            .iter()
+            .find(|building| building.unit_id == id)
+            .unwrap();
+        let severe = building
+            .damage
+            .iter()
+            .find(|state| state.damage_percent == 75)
+            .unwrap();
+        assert!(
+            severe.parts.iter().any(|part| part.available
+                && part.source.starts_with("de/particles/")
+                && part.frames > 1
+                && part.frame_rate > 0.0),
+            "missing native fire for building {id}"
+        );
+    }
 }

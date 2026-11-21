@@ -98,7 +98,7 @@ pub(super) fn prepare(mut manifest: Manifest, team: [u8; 3]) -> Result<Prepared,
             ranges[selection.role as usize] = Some(start..selected.len());
         }
     }
-    let native_farm = terrain::selection(
+    let farm_sheets = terrain::selection(
         &manifest,
         &mut selected,
         &mut domains,
@@ -161,7 +161,7 @@ pub(super) fn prepare(mut manifest: Manifest, team: [u8; 3]) -> Result<Prepared,
         ranges: &ranges,
         actor_ranges: &actor_ranges,
         rally_range,
-        native_farm,
+        farm_sheets,
         terrain_topology,
         depth_topology,
         residents: native.as_ref().map_or(0, NativeFrames::len),

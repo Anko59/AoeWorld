@@ -22,7 +22,9 @@ remain unavailable metadata. Empty civilization slots are distinguished from
 missing records; for example, one nested Town Center annex has a zero pointer.
 Unknown nonempty references fail import. Legacy terrain-only graphic names
 produce no SLD layer: the Farm's terrain textures belong to the terrain pass.
-Particle references remain the effects pass's responsibility.
+Damage graphics can reference particle emitters without SLD cells. The
+importer resolves their native fire atlas cells, animation timing and pixel
+offsets from the installed emitters and DAT.
 
 Each drawable SLD retains every native cell and direction, including trailing
 source cells. The runtime addresses the DAT's declared timeline and selects
@@ -50,6 +52,8 @@ its required `actors/` link points to the verified actor component. All DAT stat
 remain in the source pack. The runtime validates all of them and selects complete,
 construction, damage, destruction, rubble and gate-opening art for residency;
 unimplemented snow/research/debris states do not occupy the live frame table.
+Native fire records live in the actor component's recipe budget. At load they
+join the world building's matching damage stage while preserving its architecture and SLD layers.
 
 Building timelines share the unit cache, starting at four colour/mask page
 pairs and growing for visible demand within 512 MiB including startup layers.
@@ -69,9 +73,10 @@ seconds of its DAT corpse/rubble. Exhausted Farms leave no rubble. The scene
 record stays 32 bytes; a bounded companion list carries fractional destruction
 time from the authoritative presentation clock.
 
-Farm crops remain terrain triangles. The complete DE crop sheet now uses the
-generic native-cell terrain importer and view-dependent residency. Footprint preparation, dirt aprons, ordinary terrain
-blending and server-owned construction rules are unchanged by the animation pass.
+Farm crops remain terrain triangles. The DE terrain directory supplies bare
+furrows (`g_fc1`) for placement and construction, then the planted field
+(`g_fm1`) on completion. Both sheets use the generic mip importer and
+view-dependent residency. The dirt apron blends with the surrounding ground.
 
 ## Validation
 

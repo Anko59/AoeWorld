@@ -103,6 +103,26 @@ html:is([data-lod=map],[data-lod=markers]) #strategic-label { top:66px; left:50%
 .far-legend .art-icon { width:20px; height:20px; display:inline-block; vertical-align:middle; }
 :is(#strategic-cockpit,#far-dock,#strategic-tokens) .original-icon image { image-rendering:auto; }
 .far-body { padding-bottom:6px; }
+
+/* Keep the order controls in sight while browsing the roster. */
+#units-here .training-order { position:sticky; top:0; z-index:1; display:grid; gap:5px; padding:7px; background:#d9c698; border:1px solid #7a6238; box-shadow:inset 0 1px #f4e2ad,0 2px 3px #36261260; }
+#units-here .far-row { margin:0; font-size:12px; }
+#units-here .far-input { width:54px; }
+#units-here .far-counts { display:flex; gap:4px; }
+#units-here :is(.far-chip,.far-act) { min-height:31px; border:1px solid #1e160a; border-radius:2px; background:linear-gradient(#7a6742,#3d3322); color:#fff0c5; box-shadow:inset 0 1px #d9c48a80; text-shadow:0 1px #000; font:bold 13px Georgia,serif; }
+#units-here .far-chip { min-width:31px; }
+#units-here .far-act { text-align:center; }
+#units-here :is(.far-chip,.far-act)[aria-pressed=true] { background:linear-gradient(#4a2d1a,#7d4a2a); border-color:#f0d58a; outline:0; }
+#units-here :is(.far-cell,.far-chip,.far-act,.far-input):focus-visible { outline:2px solid #fff0a0; outline-offset:-3px; }
+#units-here .far-status { font-size:12px; line-height:1.2; margin:0; }
+#units-here .far-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px; margin-top:6px; }
+#units-here .far-cell { display:grid; grid-template-columns:36px minmax(0,1fr); align-content:center; gap:2px 5px; min-height:55px; padding:4px; min-width:0; }
+#units-here .far-cell:not(:disabled) { order:-1; }
+#units-here .far-cell:disabled { opacity:1; filter:none; background:#342b1d; color:#e4d5b1; }
+#units-here .far-cell > .art-icon { grid-row:1 / 3; width:36px; height:36px; align-self:center; }
+#units-here .command-label { white-space:normal; overflow-wrap:anywhere; }
+#units-here .far-cell .command-label { grid-column:2; text-align:left; font:bold 12px/1.2 Georgia,serif; }
+#units-here .command-note { grid-column:2; color:#d9c78f; text-align:left; overflow-wrap:anywhere; font-size:11px; line-height:1.15; }
 .far-cell { min-height:66px; }
 /* Software compositors repaint everything above a canvas that changes every
    frame; own layers and no per-icon blur keep the panels out of that path. */

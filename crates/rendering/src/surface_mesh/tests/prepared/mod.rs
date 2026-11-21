@@ -70,6 +70,7 @@ fn prepared_terrain_resolves_streamed_cliffs_after_upload_eviction_and_relocatio
     let mut art = fixture::art();
     let mut cliff = art.terrain[0][0];
     cliff.stream = 1;
+    cliff.size = [256.0; 2];
     art.scenery.cliff_faces = vec![cliff; 25];
     art.environment.push(BuildingArt {
         unit_id: 264,
@@ -99,9 +100,96 @@ fn prepared_terrain_resolves_streamed_cliffs_after_upload_eviction_and_relocatio
         art.resident[0] = address;
         let mut expected = source.clone();
         apply_terrain_textures(&mut expected, &art);
+        if let Some(address) = address {
+            assert_eq!(expected[0].texture_uv.unwrap().page, address.page);
+            assert_eq!(expected[0].tint, 0);
+        }
         assert_eq!(
             format!("{:?}", prepared.surfaces(&art).collect::<Vec<_>>()),
             format!("{expected:?}")
+        );
+    }
+}
+
+#[wasm_bindgen_test]
+fn streamed_cliffs_split_an_opaque_de_interior_across_adjacent_wall_segments() {
+    let mut art = fixture::art();
+    let frame = art.terrain[0][0];
+    art.environment.push(BuildingArt {
+        unit_id: 264,
+        footprint: [3.0; 2],
+        foundation_material: None,
+        parts: vec![crate::BuildingPart {
+            frame,
+            angles: 24,
+            animation: Vec::new(),
+            frame_rate: 0.0,
+            replay_delay: 0.0,
+            offset: [0.0; 2],
+            depth: 0.0,
+        }],
+        construction: Vec::new(),
+        states: Vec::new(),
+        damage: Vec::new(),
+    });
+    let address = AtlasAddress {
+        page: 8,
+        uv: [0.25, 0.25, 0.125, 0.125],
+    };
+    art.scenery.cliff_faces = (1..=24)
+        .map(|stream| crate::GameFrame {
+            stream,
+            size: [256.0; 2],
+            ..frame
+        })
+        .collect();
+    art.resident = vec![Some(address); 24];
+    let mut wall = projected_surface_triangles(&terrain(), camera())[0];
+    wall.skirt = true;
+    wall.tint = 13;
+    wall.texture_mode = 4;
+    let at = |rect: AtlasAddress, axis: usize, uv: f32| rect.uv[axis] + uv * rect.uv[axis + 2];
+    for (axis, order, tile, points, boundary) in [
+        (
+            1,
+            2,
+            [0, -4],
+            [[1., -4., 4.], [1., -3., 4.], [1., -3., 0.]],
+            [0.7, 0.3],
+        ),
+        (
+            0,
+            4,
+            [-4, 0],
+            [[-3., 1., 4.], [-4., 1., 4.], [-4., 1., 0.]],
+            [0.3, 0.7],
+        ),
+    ] {
+        wall.tile = tile;
+        wall.order = order;
+        for (point, world) in wall.points.iter_mut().zip(points) {
+            point.world = world;
+        }
+        let mut next = wall;
+        next.tile[axis] += 1;
+        for point in &mut next.points {
+            point.world[axis] += 1.0;
+        }
+        let mut faces = [wall, next];
+        assert_eq!(crate::scene_cliff_native_frames(&art, &faces).len(), 1);
+        apply_terrain_textures(&mut faces, &art);
+        let [a, b] = faces.map(|face| face.texture_uv.unwrap());
+        assert!((at(a, 0, boundary[0]) - at(b, 0, boundary[1])).abs() < 0.000001);
+        for rect in [a, b] {
+            assert_eq!(rect.page, 8);
+            for axis in 0..2 {
+                assert!(at(rect, axis, 0.3) > address.uv[axis]);
+                assert!(at(rect, axis, 0.7) < address.uv[axis] + address.uv[axis + 2]);
+            }
+        }
+        assert_eq!(
+            faces.map(|face| face.points.map(|p| p.world)),
+            [wall, next].map(|face| face.points.map(|p| p.world))
         );
     }
 }

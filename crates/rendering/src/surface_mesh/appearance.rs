@@ -50,13 +50,18 @@ pub(super) fn assign_materials(
 }
 
 /// Scene material of the native farm field, painted by the building foundations.
-pub(super) const FARM_FIELD: u8 = 17;
+pub(crate) const FARM_FIELD: u8 = 17;
+pub(crate) const UNSEEDED_FARM_FIELD: u8 = 19;
+
+pub(super) fn is_farm_field(material: u8) -> bool {
+    matches!(material, FARM_FIELD | UNSEEDED_FARM_FIELD)
+}
 
 fn blendable(triangle: &ProjectedSurfaceTriangle, wet: bool) -> bool {
     // A farm field is one material to its very edge. Its vertices read the
     // tile half a tile behind each corner, so blending would turn the far
     // corner of an isolated field into the dirt around it.
-    triangle.material != FARM_FIELD
+    !is_farm_field(triangle.material)
         && !triangle.skirt
         && triangle.texture_materials.is_some()
         && water_material(triangle.material) == wet
@@ -289,7 +294,7 @@ pub(crate) fn procedural_tint(texel: [u8; 4], tint: u8) -> [u8; 4] {
 
 /// Frames and topology: terrain groups 0–11, grass fallback 12,
 /// optional water/ice sheets 13–15, DAT foundation 16, marsh shallows 17
-/// and the road ground 18.
+/// the road ground 18 and the unseeded farm 19.
 #[inline(never)]
 pub(crate) fn terrain_group(
     art: &GameArt,
@@ -304,8 +309,14 @@ fn terrain_group_all(
     art: &GameArt,
     material: u8,
 ) -> Option<(usize, &[GameFrame], Option<crate::TerrainTopology>)> {
-    if material == 17 && !art.foundation.0.is_empty() {
-        return Some((16, &art.foundation.0, art.foundation.1));
+    if is_farm_field(material) {
+        let (frames, topology) = &art.scenery.farm_seedbed;
+        if material == UNSEEDED_FARM_FIELD && !frames.is_empty() {
+            return Some((19, frames, *topology));
+        }
+        if !art.foundation.0.is_empty() {
+            return Some((16, &art.foundation.0, art.foundation.1));
+        }
     }
     // A built road draws the pale pebbly sheet: the native worn cobbles read as
     // old, and as part of the dirt where a track crosses a dirt patch.
@@ -337,7 +348,7 @@ fn terrain_group_all(
     let material = usize::from(match material {
         7 if !art.terrain[11].is_empty() => 11,
         4 if !art.terrain[4].is_empty() => 4,
-        4 | 7 | 9 | 18 => 2,
+        4 | 7 | 9 | 18 | UNSEEDED_FARM_FIELD => 2,
         8 | 10..=12 => 5,
         6 if art.terrain[6].is_empty() => 2,
         // Ground variety (scene 13–16, groups 7–10) draws its base sheet when

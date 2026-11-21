@@ -303,6 +303,7 @@ export function initStartSequence({ readJson, start, cancel }) {
         el('recenter').click();
         return;
       }
+      if (waiting.resumed) window.aoeNavigation?.strategic?.skipReveal?.();
       waiting = null;
       jobRunning = false;
       prepared = false;
@@ -406,7 +407,7 @@ export function initStartSequence({ readJson, start, cancel }) {
       try {
         const value = await run();
         if (value === null) { returnToSetup(); show('menu'); return; }
-        this.activated(value);
+        this.activated(value, true);
       } catch (failure) { error(failure.message); }
     },
     opponents,
@@ -464,12 +465,12 @@ export function initStartSequence({ readJson, start, cancel }) {
         ? ` · ${completed.toLocaleString()} / ${total.toLocaleString()} ${unit || 'steps'}` : '';
       progress(jobStages[phase] ?? phase, completed, total, title + counts);
     },
-    activated(value) {
+    activated(value, resumed = false) {
       if (!skirmishJob) return;
       recovery = false;
       prepared = true;
       if (!value.start_available) { error(value.message || 'This location has no suitable land start. Choose another place.'); return; }
-      waiting = { hash: value.content_hash, frame: el('scene').dataset.frame, centered: false, maxPending: 0 };
+      waiting = { hash: value.content_hash, frame: el('scene').dataset.frame, centered: false, resumed, maxPending: 0 };
       el('loading-title').textContent = 'Opening your world';
       el('reconnect').click();
       checkTerrain();

@@ -46,6 +46,7 @@ fn the_generic_decoder_preserves_every_native_cell_anchor_and_plane() {
             .collect();
         let expected: Vec<_> = frames.iter().map(compose::planes).collect();
         let mut decoder = Decoder {
+            particle: None,
             source: None,
             parts: vec![Cells::Repeated(frames)],
             textures: Vec::new(),

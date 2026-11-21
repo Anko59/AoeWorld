@@ -75,11 +75,13 @@ fn assemble(
     let graphics: BTreeMap<_, _> = graphics.into_iter().collect();
     let units: BTreeMap<_, _> = units.into_iter().collect();
     let mut resolver = Resolver {
+        install: Path::new("absent"),
         graphics: &graphics,
         units: &units,
         directory: PathBuf::from("absent"),
         disabled: BTreeSet::new(),
         sources: BTreeSet::new(),
+        fires: BTreeMap::new(),
     };
     resolver
         .assembled(1, Some(head))

@@ -72,9 +72,29 @@ struct Loaded {
     stem: String,
     source: String,
     hash: String,
-    path: PathBuf,
     frames: Vec<FrameInfo>,
-    unit: Option<unit_catalog::Selected>,
+    input: Input,
+}
+
+enum Input {
+    Sld(PathBuf),
+    Unit(unit_catalog::Selected),
+    Particle(unit_catalog::particles::Sheet),
+}
+
+fn composed_info(decoder: &mut unit_frames::Decoder) -> Result<Vec<FrameInfo>, Error> {
+    (0..decoder.len())
+        .map(|i| {
+            let p = decoder.frame(i)?;
+            Ok(FrameInfo {
+                width: p.width,
+                height: p.height,
+                anchor: (p.hotspot_x, p.hotspot_y),
+                canvas: (p.width, p.height),
+                body: (p.width, p.height),
+            })
+        })
+        .collect()
 }
 
 fn read_bounded(path: &Path) -> Result<Vec<u8>, Error> {
@@ -102,7 +122,7 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
         return Err(crate::invalid("DE", 0, "install and output paths overlap"));
     }
     let units = unit_catalog::resolve(&install)?;
-    let buildings = buildings::resolve(&install)?;
+    let mut buildings = buildings::resolve(&install)?;
     native::validate_catalog(&units)?;
     let graphics = install.join(GRAPHICS);
     if !graphics.is_dir() {
@@ -182,9 +202,25 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
             stem,
             source: format!("de/{file}"),
             hash: hash.to_hex().to_string(),
-            path,
             frames,
-            unit: None,
+            input: Input::Sld(path),
+        });
+    }
+    let unit_start = loaded.len();
+    for (source, particle) in buildings.fires {
+        let sheet = particle.sheet;
+        let hash = sheet.hash(&install)?;
+        hasher.update(source.as_bytes());
+        hasher.update(hash.as_bytes());
+        let frames = composed_info(&mut unit_frames::Decoder::particle(&install, &sheet)?)?;
+        loaded.push(Loaded {
+            building: "building",
+            role: "fire",
+            stem: sheet.name.clone(),
+            source,
+            hash,
+            frames,
+            input: Input::Particle(sheet),
         });
     }
     let unique: std::collections::BTreeMap<_, _> =
@@ -192,28 +228,15 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
     for (_, unit) in unique {
         let hash = unit_frames::hash(&install, &unit)?;
         hasher.update(hash.as_bytes());
-        let mut decoder = unit_frames::Decoder::new(&install, &unit)?;
-        let frames = (0..decoder.len())
-            .map(|i| decoder.frame(i))
-            .map(|p| {
-                p.map(|p| FrameInfo {
-                    width: p.width,
-                    height: p.height,
-                    anchor: (p.hotspot_x, p.hotspot_y),
-                    canvas: (p.width, p.height),
-                    body: (p.width, p.height),
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let frames = composed_info(&mut unit_frames::Decoder::new(&install, &unit)?)?;
         loaded.push(Loaded {
             building: "unit",
             role: "native",
             stem: unit.file.clone(),
             source: format!("de/{}.sld", unit.file),
             hash,
-            path: PathBuf::new(),
             frames,
-            unit: Some(unit),
+            input: Input::Unit(unit),
         });
     }
     for b in &buildings.recipes {
@@ -269,18 +292,29 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
     }
     let mut cache = cache::Cache::new(|index: usize| {
         let sprite = &loaded[index];
-        if let Some(unit) = &sprite.unit {
-            if unit_frames::hash(&install, unit)? != sprite.hash {
-                return Err(crate::invalid("DE unit", 0, "source changed during import"));
+        let changed = || crate::invalid("DE", 0, "source changed during import");
+        let decoder = match &sprite.input {
+            Input::Unit(unit) => {
+                if unit_frames::hash(&install, unit)? != sprite.hash {
+                    return Err(changed());
+                }
+                unit_frames::Decoder::new(&install, unit)?
             }
-            Ok(vec![unit_frames::Decoder::new(&install, unit)?])
-        } else {
-            let bytes = read_bounded(&sprite.path)?;
-            if blake3::hash(&bytes).to_hex().as_str() != sprite.hash {
-                return Err(crate::invalid("DE", 0, "source changed during import"));
+            Input::Particle(sheet) => {
+                if sheet.hash(&install)? != sprite.hash {
+                    return Err(changed());
+                }
+                unit_frames::Decoder::particle(&install, sheet)?
             }
-            Ok(vec![unit_frames::Decoder::streamed(bytes)?])
-        }
+            Input::Sld(path) => {
+                let bytes = read_bounded(path)?;
+                if blake3::hash(&bytes).to_hex().as_str() != sprite.hash {
+                    return Err(changed());
+                }
+                unit_frames::Decoder::streamed(bytes)?
+            }
+        };
+        Ok(vec![decoder])
     });
     let mut terrain_cache = cache::Cache::new(|index: usize| {
         let s = &terrain.sheets[index];
@@ -294,21 +328,18 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
         }
         Ok(vec![terrain::Decoder::new(crate::dds::parse(&bytes)?)])
     });
-    let unit_start = loaded
-        .iter()
-        .position(|s| s.unit.is_some())
-        .unwrap_or(split);
     let (world_indices, actor_indices) = categories::indices(refs.len(), unit_start..split)?;
     let hash = hasher.finalize().to_hex().to_string();
     let actor_hash = blake3::hash(format!("{hash}:actors").as_bytes())
         .to_hex()
         .to_string();
     let actor_refs: Vec<_> = actor_indices.iter().map(|&i| refs[i].clone()).collect();
+    let fires = categories::split_fires(&mut buildings.recipes);
     let actors = write_pack_streamed(
         &output_root,
         actor_hash,
         &actor_refs,
-        Vec::new(),
+        fires,
         Vec::new(),
         |_, _| true,
         |sprite, frame| cache.get(actor_indices[sprite])?[0].frame(frame),
@@ -343,15 +374,15 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
         entries,
         absent,
     };
-    for sprite in loaded
-        .iter()
-        .filter(|s| s.unit.is_none() && s.building != "building")
-    {
+    for sprite in loaded.iter().filter(|s| s.building != "building") {
+        let Input::Sld(path) = &sprite.input else {
+            continue;
+        };
         preview::write(
             &local.join("de-preview"),
             &[(
                 sprite.stem.strip_suffix("_x1").unwrap_or(&sprite.stem),
-                sld::parse(&read_bounded(&sprite.path)?)?.as_slice(),
+                sld::parse(&read_bounded(path)?)?.as_slice(),
             )],
         )?;
     }

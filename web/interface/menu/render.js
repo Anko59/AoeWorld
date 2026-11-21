@@ -96,6 +96,45 @@ export function commandSlots(commands, page = 0) {
   return { slots, page };
 }
 
+export function commandButtons() {
+  let artLoaded = false;
+  artReady.then(() => { artLoaded = true; });
+  const buttons = new Map();
+  return entry => {
+    let button = buttons.get(entry.id);
+    if (!button) {
+      button = Object.assign(document.createElement('button'), { type: 'button', id: entry.id });
+      buttons.set(entry.id, button);
+    }
+    const hasNote = entry.note !== undefined;
+    const signature = JSON.stringify([artLoaded, entry.icon, entry.label, entry.key, entry.badge, entry.cost, hasNote]);
+    if (button.dataset.artKey !== signature) {
+      button.innerHTML = (entry.icon ? drawIcon(entry.icon) : '') +
+        '<span class="command-label"></span><kbd></kbd><span class="trade-side" hidden></span>' +
+        (hasNote ? '<small class="command-note"></small>' : '');
+      const offset = entry.icon ? 1 : 0;
+      const label = button.children[offset], shortcut = button.children[offset + 1], badge = button.children[offset + 2];
+      label.textContent = [entry.label, entry.cost].filter(Boolean).join(' · ');
+      shortcut.textContent = { Delete: 'Del', Escape: 'Esc' }[entry.key] ?? entry.key ?? '';
+      shortcut.hidden = entry.key === undefined;
+      badge.textContent = entry.badge ?? '';
+      badge.hidden = !entry.badge;
+      button.dataset.artKey = signature;
+    }
+    if (hasNote) set(button.lastElementChild, 'textContent', entry.note);
+    set(button, 'className', entry.className ?? '');
+    set(button, 'disabled', Boolean(entry.disabled));
+    const title = [entry.label, entry.cost, entry.reason, entry.key].filter(Boolean).join(' · ');
+    set(button, 'title', entry.title ?? title);
+    attribute(button, 'aria-label', entry.name ?? entry.label);
+    attribute(button, 'aria-description', [entry.cost, entry.reason].filter(Boolean).join(' · '));
+    if (entry.key !== undefined) attribute(button, 'aria-keyshortcuts', entry.key);
+    if (entry.pressed !== undefined) attribute(button, 'aria-pressed', entry.pressed);
+    if (entry.price !== undefined) attribute(button, 'data-price', entry.price);
+    return button;
+  };
+}
+
 export function commandGrid(dispatch) {
   const host = byId('command-grid');
   const unavailable = document.createElement('div');
@@ -109,42 +148,13 @@ export function commandGrid(dispatch) {
     return empty;
   });
   host.replaceChildren(...emptyCells);
-  let artLoaded = false;
-  artReady.then(() => { artLoaded = true; });
-  const buttons = new Map();
+  const renderButton = commandButtons();
   host.addEventListener('click', event => {
     const button = event.target.closest('button');
     if (!button || button.disabled) return;
     const entry = entries.find(command => command?.id === button.id);
     if (entry) dispatch(entry.order, event.shiftKey);
   });
-  function renderButton(entry) {
-    let button = buttons.get(entry.id);
-    if (!button) {
-      button = Object.assign(document.createElement('button'), { type: 'button', id: entry.id });
-      buttons.set(entry.id, button);
-    }
-    const signature = JSON.stringify([artLoaded, entry.icon, entry.label, entry.key, entry.badge, entry.cost]);
-    if (button.dataset.artKey !== signature) {
-      button.innerHTML = drawIcon(entry.icon) + '<span class="command-label"></span><kbd></kbd><span class="trade-side" hidden></span>';
-      const [, label, shortcut, badge] = button.children;
-      label.textContent = [entry.label, entry.cost].filter(Boolean).join(' · ');
-      shortcut.textContent = { Delete: 'Del', Escape: 'Esc' }[entry.key] ?? entry.key;
-      badge.textContent = entry.badge ?? '';
-      badge.hidden = !entry.badge;
-      button.dataset.artKey = signature;
-    }
-    set(button, 'className', entry.className ?? '');
-    set(button, 'disabled', Boolean(entry.disabled));
-    const title = [entry.label, entry.cost, entry.reason, entry.key].filter(Boolean).join(' · ');
-    set(button, 'title', entry.title ?? title);
-    attribute(button, 'aria-label', entry.label);
-    attribute(button, 'aria-description', [entry.cost, entry.reason].filter(Boolean).join(' · '));
-    attribute(button, 'aria-keyshortcuts', entry.key);
-    if (entry.pressed !== undefined) attribute(button, 'aria-pressed', entry.pressed);
-    if (entry.price !== undefined) attribute(button, 'data-price', entry.price);
-    return button;
-  }
   return {
     update(commands, page) {
       const layout = commandSlots(commands.filter(command => !command.hidden), page);
