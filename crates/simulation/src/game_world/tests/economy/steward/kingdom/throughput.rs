@@ -174,3 +174,77 @@ fn forty_productive_managed_farmers_keep_their_jobs_without_taking_manual_worker
     );
     assert!(w.unit(manual).unwrap().moving || w.unit(manual).unwrap().planning);
 }
+
+#[test]
+fn dry_ore_searches_leave_enough_budget_to_assign_wood_workers() {
+    let (mut world, steward, workers, _) = throughput_realm(40);
+    let home = world.economy.steward_homes[&steward].center.tile_floor();
+    let Terrain::Map { generator, overlay } = &world.terrain else {
+        panic!("prepared map fixture");
+    };
+    let radius = crate::STEWARD_RULES.radius_tiles;
+    let span = |axis: i32| {
+        (axis - radius).max(0).div_euclid(aoe_map::CHUNK_TILES)
+            ..=(axis + radius).div_euclid(aoe_map::CHUNK_TILES)
+    };
+    let mut ores = overlay.starting_nodes().collect::<Vec<_>>();
+    for y in span(home.y) {
+        for x in span(home.x) {
+            ores.extend(generator.chunk(x, y).unwrap().resources);
+        }
+    }
+    for node in ores
+        .into_iter()
+        .filter(|n| matches!(n.kind, ResourceKind::Gold | ResourceKind::Stone))
+    {
+        world
+            .deplete_resource(node.id, node.initial_amount)
+            .unwrap();
+    }
+    reserves(&mut world, 30_000, 1_000, 0, 0);
+    for _ in 0..2 * world.config().tick_hz {
+        world.advance();
+        assert_other_work_stays_bounded(&world);
+    }
+    assert!(
+        assigned(&world, steward, &workers, ResourceKind::Wood) >= 24,
+        "repeated ore misses must not starve available wood work: {}",
+        missing_work(&world, steward, &workers)
+    );
+}
+
+#[test]
+fn a_severe_stone_shortage_redirects_a_productive_wood_worker() {
+    let (mut world, steward, workers, wood) = throughput_realm(8);
+    let stone = (3..=9)
+        .flat_map(|dx| (-4..=4).map(move |dy| TileCoord::new(wood.tile.x + dx, wood.tile.y + dy)))
+        .find(|tile| world.tile_free(*tile))
+        .and_then(|tile| ResourceNode::starting(tile, ResourceKind::Stone))
+        .unwrap();
+    let Terrain::Map { generator, overlay } = &mut world.terrain else {
+        panic!("prepared map fixture");
+    };
+    overlay.insert_starting_resource(generator, stone).unwrap();
+    world.resource_chunks.get_mut().unwrap().clear();
+    world.resource_collision_changed();
+    place_near(&mut world, BuildingKind::MiningCamp, stone.tile);
+    reserves(&mut world, 30_000, 1_000, 30_000, 30_000);
+    for _ in 0..2 * world.config().tick_hz {
+        world.advance();
+    }
+    assert_eq!(assigned(&world, steward, &workers, ResourceKind::Wood), 8);
+
+    reserves(&mut world, 30_000, 1_000, 30_000, 0);
+    for _ in 0..100 * world.config().tick_hz {
+        world.advance();
+        if resource_stock(&world, ResourceKind::Stone) > 0 {
+            assert!(assigned(&world, steward, &workers, ResourceKind::Stone) > 0);
+            assert!(assigned(&world, steward, &workers, ResourceKind::Wood) > 0);
+            return;
+        }
+    }
+    panic!(
+        "an existing Steward must redirect productive labor and deliver stone: {}",
+        missing_work(&world, steward, &workers)
+    );
+}

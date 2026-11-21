@@ -6,35 +6,36 @@ from __future__ import annotations
 import math
 from typing import Any, Optional
 
-from aoeworld import AnimalKind, AnimalTask, Formation
+from aoeworld import AnimalKind, AnimalTask, BuildingKind, UnitTask
 
-from ..context import Context
-from ..geometry import Tile, centroid, clamp_tile, dist, near_any, nearest
-
-#: Threat memories older than this many seconds are forgotten.
-THREAT_SECONDS = 20
-#: A soldier with nothing to do goes for a visible enemy this close.
-ENGAGE_RADIUS = 30
+from ...context import Context
+from ...geometry import Tile, centroid, clamp_tile, dist, nearest
+from . import raid
+from .march import march
 
 
 class CombatManager:
     def step(self, ctx: Context) -> None:
         if ctx.home is None:
             return
-        self.note_threats(ctx)
+        raid.observe(ctx)
         self.protect_workers(ctx)
         self.recover_marches(ctx)
         army = [u for u in ctx.army if u.alive and u.id not in ctx.busy]
         mem = ctx.board
         if not army and any(u.alive for u in ctx.army):
             return
-        if self.defend(ctx, army):
+        if raid.respond(ctx, army, self.engage, self.pull_back) or self.defend(ctx, army):
             return
+        self.engage(ctx, army, ctx.enemies)
+        attack_size = ctx.config.attack_army_size
+        if mem.counter_owner is not None and ctx.tick < mem.counter_until:
+            attack_size = min(attack_size, ctx.config.counter_min_soldiers)
         if mem.attacking:
             self.attack(ctx, self.field_army(ctx, army))
-        elif army and len(army) >= ctx.config.attack_army_size:
+        elif len(army) >= attack_size:
             formed = self.assembled(ctx, army)
-            if len(formed) >= ctx.config.attack_army_size:
+            if len(formed) >= attack_size:
                 mem.attacking = True
                 mem.attack_launch_size = len(formed)
                 mem.attack_members = {u.id for u in formed}
@@ -86,7 +87,8 @@ class CombatManager:
         mem.march_progress = {i: p for i, p in mem.march_progress.items() if i in live}
         stall = ctx.config.march_stall_seconds * ctx.world.tick_hz
         for unit in ctx.army:
-            if not unit.moving or unit.attack_target is not None or unit.id in ctx.busy:
+            if ((not unit.moving and unit.task != UnitTask.MOVING)
+                    or unit.attack_target is not None or unit.id in ctx.busy):
                 mem.march_progress.pop(unit.id, None)
                 continue
             tile, since = mem.march_progress.get(unit.id, (unit.tile, ctx.tick))
@@ -97,6 +99,7 @@ class CombatManager:
                 ctx.order("stop", unit.id)
                 mem.march_progress.pop(unit.id, None)
                 mem.marched.pop(unit.id, None)
+                mem.cool(f"march-alone:{unit.id}", ctx.tick, 2 * stall)
                 mem.march_goal = None
                 mem.bump("marches_recovered")
 
@@ -136,15 +139,40 @@ class CombatManager:
     def available_target(self, ctx: Context, unit: int, target: int) -> bool:
         return not ctx.board.cooling(f"attack:{unit}:{target}", ctx.tick)
 
-    def note_threats(self, ctx: Context) -> None:
-        for event in ctx.events:
-            if event.kind == "under_attack":
-                ctx.board.bump("threats_seen")
-                ctx.board.threat_until = ctx.tick + THREAT_SECONDS * ctx.world.tick_hz
-                ctx.board.threat_tile = (event.x, event.y)
-
-    def threatened(self, ctx: Context) -> bool:
-        return ctx.board.threat_until > ctx.tick
+    def engage(self, ctx, army, enemies):
+        """Close groups fight enemies they can see without probing a route per soldier."""
+        if not army or not enemies:
+            return
+        cfg = ctx.config
+        radius = cfg.combat_engage_tiles
+        cells = {}
+        for enemy in enemies:
+            if enemy.alive:
+                x, y = enemy.tile
+                group = cells.setdefault((x // radius, y // radius), [])
+                if len(group) < cfg.combat_targets_per_cell:
+                    group.append(enemy)
+        origins = {}
+        limit = ctx.land_query_limit
+        ctx.land_query_limit = min(limit, ctx._land_queries + cfg.combat_engage_route_queries)
+        try:
+            for unit in army:
+                if ctx.orders >= ctx.order_limit:
+                    return
+                if unit.attack_target is not None or unit.id in ctx.busy:
+                    continue
+                cx, cy = (value // radius for value in unit.tile)
+                origin = origins.setdefault((cx, cy), unit.tile)
+                targets = (enemy for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+                           for enemy in cells.get((cx + dx, cy + dy), ())
+                           if dist(unit.tile, enemy.tile) <= radius
+                           and self.available_target(ctx, unit.id, enemy.id))
+                for target in sorted(targets, key=lambda enemy: (dist(unit.tile, enemy.tile), enemy.id)):
+                    if ctx.land_route(origin, target.tile) is not None:
+                        ctx.order("attack", unit.id, target.id)
+                        break
+        finally:
+            ctx.land_query_limit = limit
 
     def defend(self, ctx: Context, army: list) -> bool:
         """Engage enemies near home. True when the army is busy defending."""
@@ -165,14 +193,14 @@ class CombatManager:
         for unit in army:
             if sent >= 30:
                 break
-            if unit.idle or unit.attack_target is None:
+            if unit.id not in ctx.busy and (unit.idle or unit.attack_target is None):
                 target = nearest([e for e in near if self.available_target(ctx, unit.id, e.id)], unit.tile)
                 if target is None:
                     continue
                 if ctx.land_route(unit.tile, target.tile) is None:
                     continue
                 if dist(unit.tile, target.tile) > ctx.config.march_hop_tiles:
-                    self.march(ctx, [unit], unit.tile, target.tile)
+                    march(ctx, [unit], unit.tile, target.tile)
                 else:
                     ctx.order("attack", unit.id, target.id)
                 # Reserve a paused defender too: rally must not override it.
@@ -181,15 +209,18 @@ class CombatManager:
         ctx.board.bump("defences")
         return sent > 0
 
-    def pull_back(self, ctx: Context, near: list) -> None:
-        """Outnumbered at home: villagers next to a raider walk to the Town
-        Center instead of dying at their work; they return to work when idle."""
+    def pull_back(self, ctx: Context, near: list, *, shelter: Optional[Tile] = None,
+                  limit: int = 20) -> None:
+        """Order endangered villagers back to a Town Center when outnumbered."""
+        shelter = shelter or ctx.home
+        target = clamp_tile((shelter[0] + 4, shelter[1] + 4), ctx.world.map_size)
         pulled = 0
         for villager in ctx.villagers:
-            if pulled >= 20:
+            if pulled >= limit or ctx.orders >= ctx.order_limit:
                 break
-            if any(dist(e.tile, villager.tile) <= 7 for e in near) and dist(villager.tile, ctx.home) > 3:
-                ctx.order("move", villager.id, ctx.home[0] + 4, ctx.home[1] + 4)
+            if (villager.id not in ctx.busy and dist(villager.tile, shelter) > 3
+                    and any(dist(e.tile, villager.tile) <= 7 for e in near)):
+                ctx.order("move", villager.id, *target)
                 ctx.board.builders.pop(villager.id, None)
                 pulled += 1
         if pulled:
@@ -197,10 +228,23 @@ class CombatManager:
 
     # ----- offence ---------------------------------------------------------
     def target_building(self, ctx: Context, origin: Tile, unit: Optional[int] = None) -> Optional[Any]:
-        cleared = ctx.board.cleared
-        known = sorted((b for b in ctx.world.known_enemy_buildings() if b.id not in cleared and (unit is None or self.available_target(ctx, unit, b.id))),
-                       key=lambda b: (dist(origin, b.center), b.id))
-        return next((b for b in known if ctx.land_route(origin, b.center) is not None), None)
+        board = ctx.board
+        countering = board.counter_owner is not None and board.counter_until > ctx.tick
+        known = [b for b in ctx.world.known_enemy_buildings() if not board.cooling(f"target:{b.id}", ctx.tick)
+                 and (unit is None or self.available_target(ctx, unit, b.id))]
+        if countering:
+            bases = [b for b in known if b.owner == board.counter_owner]
+            return min(bases, default=None, key=lambda b: (
+                b.kind not in (BuildingKind.TOWN_CENTER, BuildingKind.CASTLE),
+                dist(origin, b.center), b.id,
+            ))
+        known.sort(key=lambda b: (b.id != board.attack_target, dist(origin, b.center), b.id))
+        if known and known[0].id == board.attack_target:
+            return known[0]
+        reachable = next((b for b in known[:max(1, ctx.config.land_queries_per_decision // 4)]
+                          if ctx.land_route(origin, b.center) is not None), None)
+        return reachable or next((b for b in known
+                                  if not ctx.world.land_known(*origin) or not ctx.world.land_known(*b.center)), None)
 
     def attack(self, ctx: Context, army: list) -> None:
         mem, cfg = ctx.board, ctx.config
@@ -214,22 +258,6 @@ class CombatManager:
             mem.bump("retreats")
             return
         middle = nearest(army, centroid([u.tile for u in army]) or ctx.home).tile
-        # Engage visible enemy units close to the army first.
-        # Every visible enemy against every idle soldier was 27% of bot CPU
-        # on the owner's 11-19 save; a grid of the soldiers answers the same.
-        near_idle = near_any([u.tile for u in army if u.attack_target is None], ENGAGE_RADIUS)
-        candidates = sorted((e for e in ctx.enemies if near_idle(e.tile)),
-                            key=lambda e: (dist(e.tile, middle), e.id))
-        candidates = candidates[:max(1, cfg.land_queries_per_decision // 4)]
-        reachable_foes = [e for e in candidates if ctx.land_route(middle, e.tile) is not None]
-        for unit in army:
-            if unit.id in ctx.busy or unit.attack_target is not None:
-                continue
-            foes = [e for e in reachable_foes if dist(e.tile, unit.tile) <= ENGAGE_RADIUS
-                    and self.available_target(ctx, unit.id, e.id)
-                    and ctx.land_route(unit.tile, e.tile) is not None]
-            if foes:
-                ctx.order("attack", unit.id, nearest(foes, unit.tile).id)
         building = self.target_building(ctx, middle)
         # The server forgets a destroyed building when its footprint is seen.
         # Distance from its centre cannot establish sight of a remembered target.
@@ -238,7 +266,8 @@ class CombatManager:
             return
         mem.attack_target = building.id
         if self.stalled(ctx, middle, building.center):
-            mem.cleared.add(building.id)
+            mem.cool(f"target:{building.id}", ctx.tick, cfg.march_stall_seconds * ctx.world.tick_hz)
+            mem.attack_target = mem.march_goal = None
             mem.bump("targets_unreachable")
             return
         marching: dict[Tile, list] = {}
@@ -247,16 +276,18 @@ class CombatManager:
                 continue
             # Shared-origin queries are cached; each march group checks its hop.
             # Per-soldier origins would exhaust the public query budget here.
-            target = self.target_building(ctx, middle, unit.id)
-            if target is None:
-                continue
+            target = building
+            if not self.available_target(ctx, unit.id, building.id):
+                target = self.target_building(ctx, middle, unit.id)
+                if target is None:
+                    continue
             if target.visible and dist(unit.tile, target.center) <= cfg.march_hop_tiles:
                 ctx.order("attack", unit.id, target.id)
             else:
                 goal = target.center if target.visible else self.approach(ctx, target, middle)
                 marching.setdefault(goal, []).append(unit)
         for goal, members in marching.items():
-            self.march(ctx, members, middle, goal)
+            march(ctx, members, middle, goal)
 
     def approach(self, ctx: Context, building: Any, origin: Tile) -> Tile:
         """A tile just outside the building toward `origin`: a move onto the
@@ -295,6 +326,11 @@ class CombatManager:
             for a in range(8)
         ]
         points = [far] + sorted(ring, key=lambda p: -dist(p, ctx.home))
+        bearing = mem.counter_bearing
+        if bearing and ctx.tick < mem.counter_until:
+            scale = min(width, height) / max(1, math.hypot(*bearing))
+            aim = tuple(round(a + b * scale) for a, b in zip(ctx.home, bearing))
+            points.insert(0, clamp_tile(aim, ctx.world.map_size))
         target = ctx.unrefused(clamp_tile(points[mem.search_index % len(points)], ctx.world.map_size))
         if dist(middle, target) <= 10:
             mem.search_index += 1
@@ -306,48 +342,13 @@ class CombatManager:
             return
         if not any(u.idle for u in army):
             return
-        reachable = ctx.land_frontier(middle, target)
-        if reachable is None or reachable == middle:
-            mem.search_index += 1
-            return
-        self.march(ctx, army, middle, reachable)
+        march(ctx, army, middle, target)
 
     def stalled(self, ctx: Context, middle: Tile, goal: Tile) -> bool:
-        """True when the army got no nearer `goal` for `march_stall_seconds`."""
+        """Track motion along detours, including legs away from the goal."""
         mem = ctx.board
-        d = dist(middle, goal)
-        if mem.march_goal != goal:
-            mem.march_goal, mem.march_best, mem.march_since = goal, d, ctx.tick
-            return False
-        if d < mem.march_best - 8:
-            mem.march_best, mem.march_since = d, ctx.tick
+        if (mem.march_goal != goal or mem.march_anchor is None
+                or dist(middle, mem.march_anchor) >= 8):
+            mem.march_goal, mem.march_anchor, mem.march_since = goal, middle, ctx.tick
             return False
         return ctx.tick - mem.march_since > ctx.config.march_stall_seconds * ctx.world.tick_hz
-
-    def march(self, ctx: Context, army: list, middle: Tile, goal: Tile) -> None:
-        """Nearby soldiers share one short land hop and one server route.
-        Stragglers form separate groups so assembly stays local."""
-        mem = ctx.board
-        pause = ctx.config.march_pause_seconds * ctx.world.tick_hz
-        groups: dict[Tile, list] = {}
-        side = ctx.config.march_group_tiles
-        for unit in army:
-            if unit.idle and unit.id not in ctx.busy and ctx.tick - mem.marched.get(unit.id, -pause) >= pause:
-                key = (unit.tile[0] // side, unit.tile[1] // side)
-                groups.setdefault(key, []).append(unit)
-        for members in groups.values():
-            members.sort(key=lambda u: u.id)
-            origin = centroid([u.tile for u in members]) or middle
-            target = ctx.land_hop(origin, goal)
-            if target == origin:
-                continue
-            for unit in members:
-                mem.marched[unit.id] = ctx.tick
-                mem.march_progress[unit.id] = (unit.tile, ctx.tick)
-            if len(members) > 1:
-                # Attack-move: each soldier fights what it meets on the way and
-                # then walks on to its slot, instead of ignoring the enemy.
-                ctx.order("formation_move", [u.id for u in members], *target,
-                          getattr(Formation, ctx.config.army_formation), attack_move=True)
-            else:
-                ctx.order("move", members[0].id, *target)

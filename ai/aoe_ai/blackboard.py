@@ -36,8 +36,6 @@ class Blackboard:
     bad_resources: set[int] = field(default_factory=set)
     #: (kind name, x, y) sites the server refused.
     bad_sites: set[tuple[str, int, int]] = field(default_factory=set)
-    #: Building targets abandoned after a stalled land approach.
-    cleared: set[int] = field(default_factory=set)
     #: Unit kinds the server refused to train (cleared when the age changes).
     blocked_units: set[str] = field(default_factory=set)
     plans: list[Plan] = field(default_factory=list)
@@ -51,9 +49,9 @@ class Blackboard:
     scout_index: int = 0
     scout_radius: int = 0
     scout_stage: int = 0
-    #: The army's march: goal, nearest the army got to it, and since when.
+    #: The army's goal and last observed progress.
     march_goal: Optional[Tile] = None
-    march_best: float = 0.0
+    march_anchor: Optional[Tile] = None
     march_since: int = 0
     #: soldier id -> tick of its last march order
     marched: dict[int, int] = field(default_factory=dict)
@@ -64,11 +62,21 @@ class Blackboard:
     #: scout id -> the waypoint it was last sent to
     scout_sent: dict[int, int] = field(default_factory=dict)
     scout_targets: dict[int, Tile] = field(default_factory=dict)
+    scout_progress: dict[int, tuple[Tile, int]] = field(default_factory=dict)
     home: Optional[Tile] = None
     #: Ticks at which a thing was last tried, to avoid hammering refusals.
     cooldowns: dict[str, int] = field(default_factory=dict)
     threat_until: int = -1
     threat_tile: Optional[Tile] = None
+    raid_tile: Optional[Tile] = None
+    raid_started: int = -1
+    raid_until: int = -1
+    raid_reach: dict[int, bool] = field(default_factory=dict)
+    counter_owner: Optional[int] = None
+    counter_bearing: Optional[Tile] = None
+    counter_until: int = -1
+    march_after: dict[str, tuple[int, int, int]] = field(default_factory=dict)
+    army_view_until: int = 0
     attack_launch_size: int = 0
     attack_target: Optional[int] = None
     attacking: bool = False

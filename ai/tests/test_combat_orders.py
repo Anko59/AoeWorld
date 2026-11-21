@@ -1,5 +1,7 @@
 """An engagement must survive the rest of the same combat decision."""
 
+from types import SimpleNamespace
+
 import pytest
 from aoeworld import Formation, BuildingKind, CommandResult, UnitKind, UnitTask
 
@@ -8,9 +10,16 @@ from aoe_ai.blackboard import Blackboard
 from aoe_ai.config import Config
 from aoe_ai.context import Context
 from aoe_ai.play.combat import CombatManager
+from aoe_ai.play.combat import raid as raid_module
+from aoe_ai.play.combat.march import march
 from aoe_ai.play.military import MilitaryManager
 from test_logic import play
 from fakes import FakeClient, FakeWorld, base, building, decision, order_result, unit
+
+
+def raid_respond(ctx, army):
+    cm = CombatManager()
+    return raid_module.respond(ctx, army, cm.engage, cm.pull_back)
 
 
 def test_production_keeps_a_staging_rally_while_the_army_is_attacking():
@@ -170,6 +179,25 @@ def test_two_defenders_still_pull_workers_back_from_ten_raiders():
     assert ctx._land_queries <= config.land_queries_per_decision // 4 + len(army)
 
 
+def test_reported_raid_preserves_worker_retreat_when_the_army_is_outnumbered():
+    units, buildings = base(6)
+    worker = units[0]
+    worker.tile = (68, 52)
+    worker.x, worker.y = worker.tile
+    worker.task, worker.idle = UnitTask.GATHERING, False
+    defenders = [unit(301, UnitKind.SPEARMAN, tile=(55, 52))]
+    raiders = [unit(800 + i, UnitKind.SPEARMAN, tile=(53 + i, 52), mine=False)
+               for i in range(10)]
+    event = SimpleNamespace(kind="under_attack", id=buildings[0].id, x=53, y=52,
+                            is_building=True, attacker=raiders[0].id)
+    client = FakeClient()
+    world = FakeWorld(units + defenders, buildings, enemies=raiders)
+    CombatManager().step(Context(client, decision(world, [event]), Blackboard(), Config()))
+
+    assert (worker.id, 56, 56) in client.named("move")
+    assert client.named("attack")
+
+
 def test_unconnected_raiders_do_not_trigger_defence():
     units, buildings = base(6)
     raiders = [unit(800 + i, UnitKind.SPEARMAN, tile=(60, 52), mine=False)
@@ -188,7 +216,7 @@ def test_marching_an_army_uses_one_formation_and_keeps_stragglers_local():
     client = FakeClient()
     world = FakeWorld(army, tick=100)
     ctx = Context(client, decision(world), Blackboard(), Config())
-    CombatManager().march(ctx, army, (60,60), (200,200))
+    march(ctx, army, (60,60), (200,200))
     groups = client.named("formation_move")
     assert len(groups) == 1 and groups[0][0] == list(range(300,314))
     assert groups[0][3] == Formation.LINE
@@ -197,7 +225,7 @@ def test_marching_an_army_uses_one_formation_and_keeps_stragglers_local():
     assert len(client.named("move")) == 1 and client.named("move")[0][0] == 400
     assert ctx.busy == {u.id for u in army}
     # The same idle report immediately afterwards must not reset the shared route.
-    CombatManager().march(ctx, army, (60,60), (200,200))
+    march(ctx, army, (60,60), (200,200))
     assert client.named("formation_move") == groups
 
 
@@ -258,7 +286,7 @@ def test_stationary_moving_army_recovers_after_the_stall_deadline(known_building
             marching.add(args[0])
     assert marching == {soldier.id for soldier in army}
     if known_building:
-        assert target.id not in board.cleared
+        assert not board.cooling(f"target:{target.id}", deadline + config.march_pause_seconds * 20 + 10)
         assert board.attack_target == target.id
 
 
@@ -280,3 +308,125 @@ def test_a_moving_army_keeps_its_route_while_it_is_making_progress():
             soldier.tile = (soldier.tile[0] + 10, soldier.tile[1] + 10)
             soldier.x, soldier.y = soldier.tile
             soldier.task, soldier.idle, soldier.moving = UnitTask.MOVING, False, True
+
+
+def raid(soldiers, *, tick=100, raider_visible=True):
+    workers, buildings = base(3)
+    attacker = unit(901, UnitKind.MILITIA, tile=(55, 54), mine=False)
+    attacker.owner = 2
+    victim = buildings[0]
+    hit = SimpleNamespace(kind="under_attack", id=victim.id, x=55, y=54,
+                          is_building=True, attacker=attacker.id)
+    return FakeWorld(workers + soldiers, buildings, tick=tick,
+                     enemies=[attacker] if raider_visible else []), hit
+
+
+def test_damage_to_a_town_center_recalls_a_distant_army_in_one_order():
+    soldiers = [unit(300 + i, UnitKind.SPEARMAN, tile=(245, 220), task=UnitTask.MOVING)
+                for i in range(12)]
+    for soldier in soldiers:
+        soldier.moving = True
+        soldier.attack_target = 888
+    world, hit = raid(soldiers)
+    client = FakeClient()
+    board = Blackboard(attacking=True, attack_launch_size=len(soldiers))
+    ctx = Context(client, decision(world, [hit]), board, Config())
+    CombatManager().step(ctx)
+
+    (members, x, y, _), = client.named("formation_move")
+    assert members == [u.id for u in soldiers]
+    assert x < soldiers[0].x and y < soldiers[0].y
+    assert client.options_of("formation_move") == [{"attack_move": False}], "disengage from the old target"
+
+
+def test_a_small_idle_group_engages_a_visible_enemy_away_from_home():
+    soldiers = [unit(300 + i, UnitKind.SPEARMAN, tile=(220 + i, 220)) for i in range(3)]
+    workers, buildings = base(3)
+    enemy = unit(800, UnitKind.MILITIA, tile=(221, 222), mine=False)
+    world = FakeWorld(workers + soldiers, buildings, enemies=[enemy])
+    client = FakeClient()
+    CombatManager().step(Context(client, decision(world), Blackboard(), Config()))
+
+    assert {args[0] for args in client.named("attack")} == {u.id for u in soldiers}
+
+
+def test_repelled_raid_targets_the_attackers_base_over_a_closer_bystander():
+    soldiers = [unit(300 + i, UnitKind.SPEARMAN, tile=(65, 60)) for i in range(15)]
+    board, cfg = Blackboard(), Config()
+    world, hit = raid(soldiers)
+    CombatManager().step(Context(FakeClient(), decision(world, [hit]), board, cfg))
+
+    world, _ = raid(soldiers, tick=world.tick + 20 * 90, raider_visible=False)
+    bystander = building(880, BuildingKind.HOUSE, tile=(90, 65), mine=False)
+    base = building(890, BuildingKind.TOWN_CENTER, tile=(175, 165), mine=False)
+    base.owner = 2
+    world._enemy_buildings = [bystander, base]
+    client = FakeClient()
+    CombatManager().step(Context(client, decision(world), board, cfg))
+
+    assert board.attack_target == base.id
+    assert client.named("formation_move")
+
+
+def test_each_spread_out_march_group_uses_one_route_query_for_its_hop():
+    army = [unit(300 + i, UnitKind.SPEARMAN, tile=(35 + 20 * i, 60))
+            for i in range(8)]
+    world = FakeWorld(army, size=(500, 500))
+    client = FakeClient()
+    ctx = Context(client, decision(world), Blackboard(), Config(land_queries_per_decision=8))
+    march(ctx, army, army[0].tile, (360, 60))
+
+    assert {args[0] for args in client.named("move")} == {u.id for u in army}
+    assert ctx._land_queries <= 8
+
+
+def test_a_hit_on_a_worker_recalls_the_army_even_when_the_attacker_is_out_of_view():
+    soldiers = [unit(300 + i, UnitKind.SPEARMAN, tile=(245, 220)) for i in range(12)]
+    world, hit = raid(soldiers, raider_visible=False)
+    hit.id, hit.is_building = 1, False
+    client = FakeClient()
+    ctx = Context(client, decision(world, [hit]), Blackboard(), Config())
+    CombatManager().step(ctx)
+
+    (members, *_), = client.named("formation_move")
+    assert members == [u.id for u in soldiers]
+    assert ctx.board.counter_owner is None
+
+
+def test_a_field_force_can_march_to_a_goal_outside_its_terrain_view():
+    from aoeworld import Visibility
+
+    army = [unit(300 + i, UnitKind.SPEARMAN, tile=(145, 150)) for i in range(4)]
+    workers, buildings = base(3)
+    world = FakeWorld(workers + army, buildings)
+    world.land_known = lambda *_: False
+    world.visibility = lambda *_: Visibility.UNEXPLORED
+    world.land_route = lambda *_: None
+    client = FakeClient()
+    ctx = Context(client, decision(world), Blackboard(), Config())
+
+    march(ctx, army, (145, 150), (215, 215))
+
+    assert [(members, x, y) for members, x, y, _ in client.named("formation_move")] == [
+        ([soldier.id for soldier in army], 215, 215)]
+
+
+def test_unreachable_raider_does_not_keep_defence_mode_alive():
+    units, buildings = base(6)
+    raiders = [unit(800, UnitKind.SPEARMAN, tile=(60, 52), mine=False)]
+    army = [unit(300 + i, UnitKind.SPEARMAN, tile=(55, 52)) for i in range(4)]
+    event = SimpleNamespace(kind="under_attack", id=buildings[0].id, x=53, y=52,
+                            is_building=True, attacker=raiders[0].id)
+    world = FakeWorld(units + army, buildings, enemies=raiders)
+    world.land_route = lambda *args: None
+    board, config = Blackboard(), Config()
+    client = FakeClient()
+    CombatManager().step(Context(client, decision(world, [event]), board, config))
+    first_until = board.raid_until
+    assert first_until > 0
+    # Later decisions see the same raider: the raid must expire, not renew.
+    late = world.tick_hz * config.raid_hold_seconds + 1
+    world.tick = first_until + late
+    ctx = Context(client, decision(world), board, config)
+    assert not raid_respond(ctx, army)
+    assert board.raid_until == first_until

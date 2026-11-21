@@ -27,6 +27,8 @@ pub(super) struct Snapshot {
     pub farm_first: bool,
     /// Only reused within this authoritative pass; accepted jobs retain state.
     pub offers: [Vec<aoe_map::ResourceNode>; 4],
+    /// Exhausted ore probes are shared by workers for this pass only.
+    pub ore_misses: [bool; 4],
 }
 impl GameWorld {
     /// An owner may create a low-kind building behind a pending scan cursor.
@@ -191,6 +193,7 @@ impl GameWorld {
             avoid: None,
             farm_first: false,
             offers: Default::default(),
+            ore_misses: [false; 4],
         })
     }
 }

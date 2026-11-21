@@ -10,7 +10,7 @@ from types import SimpleNamespace as NS
 from typing import Any
 
 import aoeworld
-from aoeworld import AnimalKind, AnimalTask, Age, BuildingKind, ResourceKind, UnitKind, UnitTask
+from aoeworld import AnimalKind, AnimalTask, Age, BuildingKind, ResourceKind, UnitKind, UnitTask, Visibility
 
 
 def unit(id, kind=UnitKind.VILLAGER, tile=(50, 50), task=UnitTask.IDLE, gathering=None, mine=True):
@@ -71,6 +71,12 @@ class FakeWorld:
 
     def land_known(self, x, y):
         return 0 <= x < self.map_size[0] and 0 <= y < self.map_size[1]
+
+    def visibility(self, x, y):
+        return Visibility.VISIBLE if self.land_known(x, y) else Visibility.UNEXPLORED
+
+    def passable(self, x, y):
+        return True if self.land_known(x, y) else None
 
     def land_route(self, x, y, tx, ty):
         path = [(x, y)]

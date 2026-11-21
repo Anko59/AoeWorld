@@ -1,6 +1,6 @@
 use crate::SlotInfo;
 use aoe_core::{FIXED_SUBUNITS_PER_TILE, PlayerId, WorldPosition};
-use aoe_simulation::{BuildingKind, GameWorld, UnitKind, UnitTask};
+use aoe_simulation::{BuildingKind, GameUnit, GameWorld, UnitKind, UnitTask};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -37,6 +37,9 @@ struct Player {
     buildings: BTreeMap<String, usize>,
     resources: Value,
     town_centers: Vec<Value>,
+    completed_town_centers: usize,
+    completed_castles: usize,
+    idle_villagers: usize,
     army: Value,
     activity: &'static str,
     kills: u64,
@@ -45,6 +48,8 @@ struct Player {
     activities: [usize; 5],
     #[serde(skip)]
     army_sum: (i64, i64, usize),
+    #[serde(skip)]
+    marching_soldiers: usize,
     #[serde(skip)]
     unit_counts: UnitCounts,
     #[serde(skip)]
@@ -58,6 +63,22 @@ fn position(at: WorldPosition) -> Value {
 fn center(rect: aoe_core::TileRect) -> Value {
     json!({"x": (f64::from(rect.min.x) + f64::from(rect.max.x)) / 2.0,
            "y": (f64::from(rect.min.y) + f64::from(rect.max.y)) / 2.0})
+}
+
+fn unit_activity(unit: &GameUnit) -> usize {
+    match unit.task {
+        UnitTask::Attacking => 3,
+        UnitTask::Building | UnitTask::Seeding => 1,
+        UnitTask::Gathering
+        | UnitTask::Returning
+        | UnitTask::Carrying
+        | UnitTask::Farming
+        | UnitTask::Hunting
+        | UnitTask::Fishing
+        | UnitTask::Shepherding => 0,
+        _ if unit.moving || unit.planning => 4,
+        _ => 2,
+    }
 }
 
 pub(super) fn match_state(world: &GameWorld, seats: &[SlotInfo]) -> Value {
@@ -87,11 +108,11 @@ pub(super) fn match_state(world: &GameWorld, seats: &[SlotInfo]) -> Value {
     let sheltered = world
         .buildings()
         .flat_map(|b| occupants(&b).collect::<Vec<_>>());
-    for (unit, at) in world
+    for (unit, at, sheltered) in world
         .units()
-        .map(|u| (u, u.position))
-        .chain(sheltered)
-        .filter(|(u, _)| u.hp > 0)
+        .map(|u| (u, u.position, false))
+        .chain(sheltered.map(|(u, at)| (u, at, true)))
+        .filter(|(u, _, _)| u.hp > 0)
     {
         let player = players.entry(unit.player).or_insert_with(|| Player {
             id: unit.player.0,
@@ -100,19 +121,32 @@ pub(super) fn match_state(world: &GameWorld, seats: &[SlotInfo]) -> Value {
         });
         player.population += 1;
         player.unit_counts.0[unit.kind as usize] += 1;
-        let activity = match unit.task {
-            UnitTask::Attacking => 3,
-            UnitTask::Building | UnitTask::Seeding => 1,
-            UnitTask::Gathering
-            | UnitTask::Returning
-            | UnitTask::Farming
-            | UnitTask::Hunting
-            | UnitTask::Fishing
-            | UnitTask::Shepherding => 0,
-            _ if unit.moving || unit.planning => 4,
-            _ => 2,
-        };
-        player.activities[activity] += 1;
+        if !sheltered
+            && unit.kind == UnitKind::Villager
+            && matches!(unit.task, UnitTask::Idle | UnitTask::Carrying)
+            && !unit.moving
+            && !unit.planning
+        {
+            player.idle_villagers += 1;
+        }
+        if !sheltered
+            && !matches!(
+                unit.kind,
+                UnitKind::Villager
+                    | UnitKind::Scout
+                    | UnitKind::FishingShip
+                    | UnitKind::TransportShip
+                    | UnitKind::Steward
+                    | UnitKind::Vassal
+                    | UnitKind::TradeCart
+                    | UnitKind::TradeCog
+            )
+            && (unit.moving || unit.planning)
+            && unit.task != UnitTask::Attacking
+        {
+            player.marching_soldiers += 1;
+        }
+        player.activities[unit_activity(&unit)] += 1;
         if !matches!(unit.kind, UnitKind::Villager | UnitKind::FishingShip) {
             player.army_sum.0 += i64::from(at.x);
             player.army_sum.1 += i64::from(at.y);
@@ -128,6 +162,9 @@ pub(super) fn match_state(world: &GameWorld, seats: &[SlotInfo]) -> Value {
         player.building_counts[building.kind as usize] += 1;
         if building.kind == BuildingKind::TownCenter {
             player.town_centers.push(center(building.footprint));
+            player.completed_town_centers += usize::from(building.is_complete());
+        } else if building.kind == BuildingKind::Castle && building.is_complete() {
+            player.completed_castles += 1;
         }
     }
     for (id, player) in &mut players {
@@ -173,7 +210,7 @@ pub(super) fn match_state(world: &GameWorld, seats: &[SlotInfo]) -> Value {
                 "y": y as f64 / size as f64 / f64::from(FIXED_SUBUNITS_PER_TILE)
             })
         });
-        player.army = json!({"size":size,"centroid":centroid});
+        player.army = json!({"size":size,"centroid":centroid,"marching":player.marching_soldiers});
         (player.kills, player.losses) = world.player_combat_totals(*id);
     }
     let counts = world.combat_telemetry();

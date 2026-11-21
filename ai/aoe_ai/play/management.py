@@ -34,13 +34,22 @@ def available_vassals(ctx):
         garrisoned(b, UnitKind.VASSAL) and threatened(ctx, b.center) for b in ctx.buildings)
 
 
+def ready_for_stewards(ctx):
+    cfg = ctx.config
+    workers = len(ctx.villagers)
+    return cfg.stewards and (workers >= cfg.steward_min_villagers or (
+        workers >= cfg.expand_villagers
+        and len(ctx.army) + len(ctx.led) >= cfg.imperial_army_min
+        and ctx.count(BuildingKind.MARKET, complete=True) > 0))
+
+
 def funding_reserve(ctx):
     """Protect the first available manager of each enabled kind from science."""
     cfg = ctx.config
     result = [0, 0, 0, 0]
     if not cfg.save_for_management or not ctx.castle:
         return tuple(result)
-    kinds = [(cfg.stewards and len(ctx.villagers) >= cfg.steward_min_villagers,
+    kinds = [(ready_for_stewards(ctx),
               UnitKind.STEWARD, BuildingKind.TOWN_CENTER),
              (cfg.vassals and any(threatened(ctx, b.center) for b in ctx.buildings
                                  if b.kind == BuildingKind.CASTLE), UnitKind.VASSAL, BuildingKind.CASTLE),
@@ -82,7 +91,7 @@ class ManagementManager:
     def expand(self, ctx: Context) -> None:
         """A second (third...) Town Center on the way to the map centre."""
         cfg, board = ctx.config, ctx.board
-        total = ctx.count(BuildingKind.TOWN_CENTER) + sum(1 for p in board.plans if p.kind == BuildingKind.TOWN_CENTER)
+        total = buildorder.planned_count(ctx, BuildingKind.TOWN_CENTER)
         if (total >= buildorder.wanted_centers(ctx) or (total > 0 and (len(ctx.villagers) < cfg.expand_villagers or not ctx.castle))
                 or board.cooling("expand", ctx.tick)):
             return
@@ -122,7 +131,7 @@ class ManagementManager:
         cfg, board = ctx.config, ctx.board
         if not cfg.castles or not ctx.castle or board.cooling("castle", ctx.tick):
             return
-        total = ctx.count(BuildingKind.CASTLE) + sum(1 for p in board.plans if p.kind == BuildingKind.CASTLE)
+        total = buildorder.planned_count(ctx, BuildingKind.CASTLE)
         if total >= buildorder.wanted_castles(ctx):
             return
         cost = building_cost(BuildingKind.CASTLE)
@@ -228,7 +237,7 @@ class ManagementManager:
         if not ctx.castle or (ctx.hold_town_center and ctx.saving_castle):
             return
         # Stewards: one per Town Center, from enough villagers.
-        if cfg.stewards and len(ctx.villagers) >= cfg.steward_min_villagers:
+        if ready_for_stewards(ctx):
             have = self.fielded(ctx, UnitKind.STEWARD) + self.in_production(ctx, UnitKind.STEWARD)
             if have < min(max(cfg.stewards, math.ceil(len(ctx.villagers) / 80)), ctx.count(BuildingKind.TOWN_CENTER, complete=True)):
                 self.train(ctx, BuildingKind.TOWN_CENTER, UnitKind.STEWARD,
@@ -248,8 +257,9 @@ class ManagementManager:
 
     def fielded(self, ctx: Context, kind: UnitKind) -> int:
         """Units of `kind` that exist: in the field or sheltered in a building."""
-        return sum(1 for u in ctx.units if u.kind == kind) + sum(
-            1 for b in ctx.buildings for entry in b.garrison if entry[1] == kind and entry[0] not in {u.id for u in ctx.units})
+        fielded = {u.id for u in ctx.units if u.kind == kind}
+        return len(fielded) + sum(
+            entry[1] == kind and entry[0] not in fielded for b in ctx.buildings for entry in b.garrison)
 
     def in_production(self, ctx: Context, kind: UnitKind) -> int:
         """Units ordered and still training: counted until one more exists or the
@@ -287,14 +297,15 @@ class ManagementManager:
             return
         if busy:
             self.save(ctx, kind, cost)
+            if house == BuildingKind.TOWN_CENTER and ctx.saving_castle:
+                ctx.hold_military_training = True
 
     def save(self, ctx: Context, kind: UnitKind, cost: tuple) -> None:
-        """Save for `kind`: no soldiers, the gold and food shares up. Self-limiting:
-        after `save_seconds` the army spends again for `save_pause_seconds`."""
+        """Reserve the manager's price and let the army spend any surplus."""
         board, cfg = ctx.board, ctx.config
         key = "save:" + str(kind)
-        if not cfg.save_for_management or board.cooling(key, ctx.tick) or buildorder.imperial_ready(ctx):
-            return  # the Imperial Age price comes first
+        if not cfg.save_for_management or board.cooling(key, ctx.tick) or buildorder.stage(ctx) == buildorder.IMPERIAL_ADVANCE:
+            return  # the Imperial Age price comes first once the prerequisites stand
         hz = ctx.world.tick_hz
         since = board.save_since.setdefault(key, ctx.tick)
         if ctx.tick - since > cfg.save_seconds * hz:
@@ -304,9 +315,7 @@ class ManagementManager:
         ctx.saving_castle = True
         board.saving_tick = ctx.tick
         board.hold_villagers_tick = ctx.tick  # villagers eat the 1,000 food: pause them meanwhile
-        have = (ctx.economy.food, ctx.economy.wood, ctx.economy.gold, ctx.economy.stone)
-        for i in range(4):
-            ctx.spent[i] += max(0, min(cost[i], have[i] - ctx.spent[i]))
+        ctx.reserve(cost)
         board.bump("saving_for_management")
 
     def defenders(self, ctx):
@@ -381,6 +390,15 @@ class ManagementManager:
         """March each General's army at the nearest known enemy building."""
         cfg = ctx.config
         for general in (u for u in ctx.units if u.kind == UnitKind.GENERAL and u.alive):
+            if ctx.board.raid_until > ctx.tick:
+                target = ctx.board.raid_tile
+                key = f"recall-general:{general.id}"
+                if dist(general.tile, target) > cfg.defend_radius // 2 and not ctx.board.cooling(key, ctx.tick):
+                    hop = ctx.land_hop(general.tile, target)
+                    if hop != general.tile:
+                        ctx.order("move", general.id, *hop)
+                        ctx.board.cool(key, ctx.tick, cfg.raid_general_retry_seconds * ctx.world.tick_hz)
+                continue
             if general.id in ctx.busy or general.general_state != GeneralState.IDLE or not general.idle:
                 continue
             led = general.army_size or 0

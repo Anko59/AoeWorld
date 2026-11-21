@@ -131,66 +131,75 @@ impl GameWorld {
             {
                 continue;
             }
-            // Reuse paid plots before any Food foundation, but never force
-            // Food ahead of the kingdom's more urgent available resource.
-            if kind == ResourceKind::Food {
-                if self.steward_reclaim_farm(worker, s, budget, work) {
-                    return Some(kind);
-                }
-                if self
-                    .steward_help_foundation(worker, Some(BuildingKind::Farm), s, budget, work)
-                    .is_some()
-                {
-                    return Some(kind);
-                }
-            }
-            // Wild forage is finite and never counted as farming supply, so a
-            // dry-Food retask places a Farm before taking another forage node.
-            if kind == ResourceKind::Food
-                && s.farm_first
-                && self.steward_food(worker, s, budget, work)
-            {
-                return Some(kind);
-            }
-            if let Some(node) = self.steward_resource(worker, kind, s, budget, work) {
-                let close = s.buildings.iter().any(|b| {
-                    b.is_complete()
-                        && b.kind.accepts(kind)
-                        && super::super::dropoff::ring_distance(b.footprint, node.tile) <= 64
-                });
-                let camp = match kind {
-                    ResourceKind::Food => BuildingKind::Mill,
-                    ResourceKind::Wood => BuildingKind::LumberCamp,
-                    ResourceKind::Gold | ResourceKind::Stone => BuildingKind::MiningCamp,
-                };
-                if !close && self.steward_build_near(worker, camp, node.tile, s, budget, work) {
-                    return Some(kind);
-                }
-                // A far existing camp remains useful when a nearer one cannot
-                // be afforded. No drop-off at all is not a usable gather job.
-                if s.buildings
-                    .iter()
-                    .any(|b| b.is_complete() && b.kind.accepts(kind))
-                    && budget.order(work)
-                {
-                    let accepted = self.issue_gather(s.player, worker, node.id).is_ok();
-                    self.steward_resource_result(worker, kind, node.id, accepted, s);
-                    if accepted {
-                        return Some(kind);
-                    }
-                }
-            } else if kind == ResourceKind::Food && self.steward_food(worker, s, budget, work) {
+            if self.steward_job_kind(worker, kind, s, budget, work) {
                 return Some(kind);
             }
         }
         None
     }
 
-    /// Continuity keeps busy workers on their jobs, so a resource that has run
-    /// dry would otherwise never get workers or Farms while nobody is idle.
-    /// When the wanted kind is under a tenth of a worker's current kind, one
-    /// unloaded gatherer is re-tasked (at most a tenth of the domain, at least
-    /// one, on the wanted kind or building its Farms and Mills) per cooldown.
+    fn steward_job_kind(
+        &mut self,
+        worker: EntityId,
+        kind: ResourceKind,
+        s: &mut Snapshot,
+        budget: &mut Budget,
+        work: &mut StewardWork,
+    ) -> bool {
+        // Reuse paid plots before any Food foundation, but never force
+        // Food ahead of the kingdom's more urgent available resource.
+        if kind == ResourceKind::Food {
+            if self.steward_reclaim_farm(worker, s, budget, work) {
+                return true;
+            }
+            if self
+                .steward_help_foundation(worker, Some(BuildingKind::Farm), s, budget, work)
+                .is_some()
+            {
+                return true;
+            }
+        }
+        // Wild forage is finite and never counted as farming supply, so a
+        // dry-Food retask places a Farm before taking another forage node.
+        if kind == ResourceKind::Food && s.farm_first && self.steward_food(worker, s, budget, work)
+        {
+            return true;
+        }
+        if let Some(node) = self.steward_resource(worker, kind, s, budget, work) {
+            let close = s.buildings.iter().any(|b| {
+                b.is_complete()
+                    && b.kind.accepts(kind)
+                    && super::super::dropoff::ring_distance(b.footprint, node.tile) <= 64
+            });
+            let camp = match kind {
+                ResourceKind::Food => BuildingKind::Mill,
+                ResourceKind::Wood => BuildingKind::LumberCamp,
+                ResourceKind::Gold | ResourceKind::Stone => BuildingKind::MiningCamp,
+            };
+            if !close && self.steward_build_near(worker, camp, node.tile, s, budget, work) {
+                return true;
+            }
+            // A far existing camp remains useful when a nearer one cannot
+            // be afforded. No drop-off at all is not a usable gather job.
+            if s.buildings
+                .iter()
+                .any(|b| b.is_complete() && b.kind.accepts(kind))
+                && budget.order(work)
+            {
+                let accepted = self.issue_gather(s.player, worker, node.id).is_ok();
+                self.steward_resource_result(worker, kind, node.id, accepted, s);
+                if accepted {
+                    return true;
+                }
+            }
+        } else if kind == ResourceKind::Food && self.steward_food(worker, s, budget, work) {
+            return true;
+        }
+        false
+    }
+
+    /// Reassign one unloaded gatherer at a time after a severe shortage.
+    /// Paid farm jobs, carried loads and pending routes stay with their worker.
     pub(super) fn steward_rebalance(
         &mut self,
         s: &mut Snapshot,
@@ -208,86 +217,92 @@ impl GameWorld {
         let Some(priority) = self.steward_priority(s.player, s.home.settings.weights) else {
             return;
         };
-        let wanted = priority.kinds()[0];
-        // Only a dry Food stock justifies interrupting busy workers: Farms
-        // are the one supply the kingdom can always build more of.
-        if wanted != ResourceKind::Food {
-            return;
-        }
         let managed = self.economy.steward_homes[&s.steward].workers.len();
-        let on_wanted = s
-            .units
-            .iter()
-            .filter(|u| {
-                self.steward_controller(u.id) == Some(s.steward)
-                    && ((self.gathering_kind(u.id) == Some(wanted)
-                        // Foraging does not feed a kingdom: only Farms count.
-                        && (wanted != ResourceKind::Food
-                            || u.task == crate::UnitTask::Farming))
-                        // Farm and Mill crews are Food workers in the making.
-                        || (wanted == ResourceKind::Food
-                            && self.economy.builders.get(&u.id).is_some_and(|task| {
-                                self.building(task.building).is_some_and(|b| {
-                                    matches!(b.kind, BuildingKind::Farm | BuildingKind::Mill)
-                                })
-                            })))
+        let kinds = priority.kinds();
+        if managed == 0
+            || !kinds.iter().any(|&wanted| {
+                kinds
+                    .iter()
+                    .any(|&current| priority.severe(wanted, current))
             })
-            .count();
-        if on_wanted >= (managed / QUOTA_DIVISOR).max(1) {
+        {
             return;
         }
+        let mut working = [0; 4];
         let split = s
             .home
             .rebalance_cursor
             .map_or(0, |id| s.units.partition_point(|u| u.id <= id));
-        let candidate = s.units[split..]
-            .iter()
-            .chain(&s.units[..split])
-            .filter(|u| {
-                self.steward_controller(u.id) == Some(s.steward)
+        let mut candidates = Vec::new();
+        for u in s.units[split..].iter().chain(&s.units[..split]) {
+            if self.steward_controller(u.id) != Some(s.steward) {
+                continue;
+            }
+            if let Some(task) = self.economy.gatherers.get(&u.id) {
+                // Only Farms count as long-term Food supply. Preserve the
+                // farmer's paid plot and let any loaded worker finish delivery.
+                if task.kind != ResourceKind::Food || task.farm.is_some() {
+                    working[task.kind as usize] += 1;
+                }
+                if task.animal.is_none()
+                    && task.farm.is_none()
                     && u.carried.is_none()
-                    && !u.moving
                     && !u.planning
+                    && !self.steward_has_held_job(u.id)
                     && self.economy.steward_homes[&s.steward]
                         .assigned_at
                         .get(&u.id)
-                        .is_none_or(|assigned| {
-                            now.saturating_sub(*assigned)
+                        .is_none_or(|&assigned| {
+                            now.saturating_sub(assigned)
                                 >= STEWARD_RULES.worker_dwell_seconds
                                     * u64::from(self.config.tick_hz)
                         })
-                    && !self.steward_has_held_job(u.id)
-                    && !self.economy.builders.contains_key(&u.id)
-                    && self.economy.gatherers.get(&u.id).is_some_and(|task| {
-                        task.animal.is_none()
-                            && task.farm.is_none()
-                            && priority.severe(wanted, task.kind)
-                    })
-            })
-            .map(|u| u.id)
-            .next();
-        let Some(worker) = candidate else {
-            return;
-        };
-        s.home.rebalance_cursor = Some(worker);
-        let previous = self.gathering_kind(worker);
-        s.avoid = None;
-        s.farm_first = true;
-        let job = self.steward_job(worker, s, budget, work);
-        s.farm_first = false;
-        let cooldown = if job.is_some() && job != previous {
-            FOUND_COOLDOWN_SECONDS
-        } else {
-            MISSED_COOLDOWN_SECONDS
-        };
-        s.home.rebalance_after = now + cooldown * u64::from(self.config.tick_hz);
-        if let Some(home) = self.economy.steward_homes.get_mut(&s.steward) {
-            home.rebalance_after = s.home.rebalance_after;
-            home.rebalance_cursor = s.home.rebalance_cursor;
+                {
+                    candidates.push((u.id, task.kind));
+                }
+            } else if self.economy.builders.get(&u.id).is_some_and(|task| {
+                self.building(task.building)
+                    .is_some_and(|b| matches!(b.kind, BuildingKind::Farm | BuildingKind::Mill))
+            }) {
+                working[ResourceKind::Food as usize] += 1;
+            }
         }
-        if let Some(kind) = job {
-            self.claim_steward_worker(s.steward, worker, kind);
-            changed.push(worker);
+        let mut reassigned = false;
+        let mut attempted = false;
+        for wanted in kinds {
+            if working[wanted as usize] >= (managed / QUOTA_DIVISOR).max(1) {
+                continue;
+            }
+            let Some(&(worker, _)) = candidates
+                .iter()
+                .find(|(_, current)| priority.severe(wanted, *current))
+            else {
+                continue;
+            };
+            attempted = true;
+            s.home.rebalance_cursor = Some(worker);
+            s.avoid = None;
+            s.farm_first = wanted == ResourceKind::Food;
+            let started = self.steward_job_kind(worker, wanted, s, budget, work);
+            s.farm_first = false;
+            if started {
+                self.claim_steward_worker(s.steward, worker, wanted);
+                changed.push(worker);
+                reassigned = true;
+                break;
+            }
+        }
+        if attempted {
+            let cooldown = if reassigned {
+                FOUND_COOLDOWN_SECONDS
+            } else {
+                MISSED_COOLDOWN_SECONDS
+            };
+            s.home.rebalance_after = now + cooldown * u64::from(self.config.tick_hz);
+            if let Some(home) = self.economy.steward_homes.get_mut(&s.steward) {
+                home.rebalance_after = s.home.rebalance_after;
+                home.rebalance_cursor = s.home.rebalance_cursor;
+            }
         }
     }
 
