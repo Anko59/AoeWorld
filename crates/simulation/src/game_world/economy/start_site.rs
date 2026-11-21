@@ -11,6 +11,10 @@ const SITE_BUDGET: usize = 384;
 /// reach of the walkable region that suffices to survey it.
 const CORE_D2: u64 = 36;
 const CORE_REGION: i32 = 12;
+/// Impassable ground (rock piles, cliffs) the surveyed disc may hold before
+/// a village counts as cramped. Clusters of rock piles near the Town Center
+/// can interrupt the scout's sweep and leave starting herds out of sight.
+const CRAMPED_BLOCKED_TILES: usize = 24;
 type Samples = BTreeMap<TileCoord, Option<(Tile, Option<ResourceNode>)>>;
 
 impl GameWorld {
@@ -35,7 +39,7 @@ impl GameWorld {
             .filter(|tile| distance_squared(*tile, start) <= CORE_D2 && near.contains(tile))
             .collect();
         let scores = self.score_sites(player, generator, &core, &mut samples)?;
-        if scores.values().any(|(shore, _)| !shore) {
+        if scores.values().any(|(shore, _, _)| !shore) {
             sort_by_score(&mut core, &scores);
             *candidates = core;
             return Ok(());
@@ -60,14 +64,14 @@ impl GameWorld {
         Ok(())
     }
 
-    /// Shore and wood in view of each site whose footprint is free.
+    /// Shore, wood and open ground around each site whose footprint is free.
     fn score_sites(
         &self,
         player: PlayerId,
         generator: &aoe_map::MapChunkGenerator,
         sites: &[TileCoord],
         samples: &mut Samples,
-    ) -> Result<BTreeMap<TileCoord, (bool, bool)>, EconomyError> {
+    ) -> Result<BTreeMap<TileCoord, (bool, bool, bool)>, EconomyError> {
         let side = VILLAGE_RULES.town_center_side;
         let mut scores = BTreeMap::new();
         for origin in sites.iter().copied() {
@@ -83,6 +87,7 @@ impl GameWorld {
             let center = TileCoord::new(origin.x + side / 2, origin.y + side / 2);
             let mut shore = false;
             let mut wood = 0;
+            let mut blocked = 0;
             for dy in -12_i32..=12 {
                 for dx in -12_i32..=12 {
                     if dx * dx + dy * dy > 144 {
@@ -108,16 +113,18 @@ impl GameWorld {
                                     GroundMaterial::Sand | GroundMaterial::Shore
                                 );
                         }
+                        blocked +=
+                            usize::from(!terrain.passable && terrain.water == WaterKind::None);
                         wood += usize::from(node.is_some_and(|n| n.kind == ResourceKind::Wood));
                     }
                 }
             }
-            scores.insert(origin, (shore, wood == 0));
-            // The ranking key prefers inland sites with wood in view, then the
-            // earliest candidate. Candidates are scored in that order, so the
-            // first such site is the final winner: scoring the rest of the
-            // 384 (about 12,000 point samples) cannot change the choice.
-            if !shore && wood > 0 {
+            scores.insert(origin, (shore, wood == 0, blocked > CRAMPED_BLOCKED_TILES));
+            // The ranking key prefers inland, uncramped sites with wood in view,
+            // then the earliest candidate. Candidates are scored in that order,
+            // so the first such site is the final winner: scoring the rest of
+            // the 384 (about 12,000 point samples) cannot change the choice.
+            if !shore && wood > 0 && blocked <= CRAMPED_BLOCKED_TILES {
                 break;
             }
             if samples.len() == SAMPLE_BUDGET {
@@ -128,16 +135,21 @@ impl GameWorld {
     }
 }
 
-/// Inland sites with wood in view first, then the nearest candidates.
-fn sort_by_score(candidates: &mut [TileCoord], scores: &BTreeMap<TileCoord, (bool, bool)>) {
+/// Inland sites with wood in view and room around them first, then the nearest
+/// candidates.
+fn sort_by_score(candidates: &mut [TileCoord], scores: &BTreeMap<TileCoord, (bool, bool, bool)>) {
     let original: BTreeMap<_, _> = candidates
         .iter()
         .enumerate()
         .map(|(i, t)| (*t, i))
         .collect();
     candidates.sort_by_key(|tile| {
-        let (shore, no_wood) = scores.get(tile).copied().unwrap_or((true, true));
-        (!scores.contains_key(tile), shore, no_wood, original[tile])
+        let score = scores.get(tile).copied();
+        (
+            score.is_none(),
+            score.unwrap_or((true, true, true)),
+            original[tile],
+        )
     });
 }
 
