@@ -79,7 +79,7 @@ pub(super) async fn measure(
             .join_slot(info.token, sender)
             .await
             .map_err(|_| "late-game seat refused")?;
-        service.subscribe(id, 1, region).await;
+        service.subscribe(id, 1, region, true).await;
         receivers.push(receiver);
         cameras.push((id, region));
     }
@@ -110,6 +110,7 @@ pub(super) async fn measure(
                             region.width(),
                             region.height(),
                         ),
+                        true,
                     )
                     .await;
                 camera_updates += 1;

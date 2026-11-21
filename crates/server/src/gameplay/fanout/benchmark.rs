@@ -10,6 +10,7 @@ pub(super) fn views(connected: usize) -> Vec<View> {
             subscription: Subscription {
                 revision: 1,
                 region: TileRect::from_xywh(0, 0, 32, 32),
+                unit_zoom: true,
             },
             vision: None,
             fog_disabled: Some(false),

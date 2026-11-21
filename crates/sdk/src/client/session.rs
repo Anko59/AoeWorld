@@ -106,6 +106,7 @@ async fn rejoin(
             &GameplayClientMessage::Subscribe {
                 revision: 1,
                 region: first,
+                unit_zoom: false,
             },
         )
         .await;
@@ -185,7 +186,7 @@ async fn session(
                     });
                 }
                 if let Some((revision, region)) = subscribe
-                    && let Err(error) = send_frame(&mut socket, &GameplayClientMessage::Subscribe { revision, region }).await
+                    && let Err(error) = send_frame(&mut socket, &GameplayClientMessage::Subscribe { revision, region, unit_zoom: false }).await
                 {
                     break (error.to_string(), true);
                 }

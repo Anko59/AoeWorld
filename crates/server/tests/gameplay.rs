@@ -201,6 +201,7 @@ async fn controller_owns_orders_and_reconnects_with_a_resume_token() {
         GameplayClientMessage::Subscribe {
             revision: 1,
             region: center,
+            unit_zoom: false,
         },
     )
     .await;
@@ -308,6 +309,7 @@ async fn gameplay_rejects_obsolete_revisions_and_invalid_regions() {
         GameplayClientMessage::Subscribe {
             revision: 1,
             region: TileRect::new(TileCoord::new(0, 0), TileCoord::new(1, 1)),
+            unit_zoom: false,
         },
     )
     .await;
@@ -326,6 +328,7 @@ async fn gameplay_rejects_obsolete_revisions_and_invalid_regions() {
         GameplayClientMessage::Subscribe {
             revision: 1,
             region: TileRect::new(TileCoord::new(0, 0), TileCoord::new(2, 2)),
+            unit_zoom: false,
         },
     )
     .await;
@@ -335,6 +338,7 @@ async fn gameplay_rejects_obsolete_revisions_and_invalid_regions() {
         GameplayClientMessage::Subscribe {
             revision: 2,
             region: TileRect::new(TileCoord::new(0, 0), TileCoord::new(513, 1)),
+            unit_zoom: false,
         },
     )
     .await;
@@ -364,6 +368,7 @@ async fn map_activation_keeps_existing_gameplay_when_no_land_start_exists() {
         GameplayClientMessage::Subscribe {
             revision: 1,
             region: TileRect::new(TileCoord::new(0, 0), TileCoord::new(32, 32)),
+            unit_zoom: false,
         },
     )
     .await;

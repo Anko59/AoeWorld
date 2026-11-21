@@ -19,7 +19,7 @@ async fn no_fog_tick_orders_owned_plans_among_public_buildings() {
     let (sender, mut receiver) = tokio::sync::mpsc::channel(32);
     let (session, _) = service.register(None, sender).await;
     service
-        .subscribe(session, 1, TileRect::from_xywh(0, 0, 128, 128))
+        .subscribe(session, 1, TileRect::from_xywh(0, 0, 128, 128), true)
         .await;
     while receiver.try_recv().is_ok() {}
     let expected = {
@@ -90,6 +90,7 @@ fn full_fanout_reveals_a_foundation_only_after_work_even_with_fog_disabled() {
         subscription: Subscription {
             revision: 1,
             region: TileRect::from_xywh(0, 0, 256, 256),
+            unit_zoom: true,
         },
         vision: None,
         fog_disabled: Some(true),

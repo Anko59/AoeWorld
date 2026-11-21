@@ -33,7 +33,7 @@ async fn fixture(
 async fn fog_off_snapshot_keeps_only_the_viewers_economy_while_revealing_enemies() {
     let (service, id, mut receiver, enemy, enemy_building) = fixture(true).await;
     service
-        .subscribe(id, 1, TileRect::from_xywh(0, 0, 128, 128))
+        .subscribe(id, 1, TileRect::from_xywh(0, 0, 128, 128), true)
         .await;
     let mut snapshot = false;
     while let Ok(message) = receiver.try_recv() {
@@ -61,7 +61,7 @@ async fn fog_off_snapshot_keeps_only_the_viewers_economy_while_revealing_enemies
 async fn fog_mode_change_never_inserts_foreign_economies_into_tick_baselines() {
     let (service, id, mut receiver, enemy, enemy_building) = fixture(false).await;
     service
-        .subscribe(id, 1, TileRect::from_xywh(0, 0, 128, 128))
+        .subscribe(id, 1, TileRect::from_xywh(0, 0, 128, 128), true)
         .await;
     while receiver.try_recv().is_ok() {}
     service.set_fog_disabled(true).await;

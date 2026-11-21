@@ -50,4 +50,5 @@ pub(crate) struct Session {
 pub(crate) struct Subscription {
     pub(crate) revision: u64,
     pub(crate) region: TileRect,
+    pub(crate) unit_zoom: bool,
 }

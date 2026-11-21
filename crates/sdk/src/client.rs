@@ -169,6 +169,7 @@ impl Client {
             &GameplayClientMessage::Subscribe {
                 revision: 1,
                 region: first,
+                unit_zoom: false,
             },
         )
         .await?;

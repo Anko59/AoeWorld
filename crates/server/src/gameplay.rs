@@ -66,6 +66,8 @@ pub struct GameplayService {
     /// What the last tick spent where; read by `run_ticks`.
     probe: Arc<crate::gameplay_match::TickProbe>,
     recording: Arc<std::sync::Mutex<Option<crate::replay::Recorder>>>,
+    /// Each human session's latest admitted view: an input of the next tick.
+    pub(super) human_views: Arc<std::sync::Mutex<BTreeMap<u64, aoe_simulation::HumanView>>>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -297,7 +299,13 @@ impl GameplayService {
         self.world.read().await.navigation_cache_usage()
     }
 
-    pub async fn subscribe(&self, session_id: u64, revision: u64, region: TileRect) {
+    pub async fn subscribe(
+        &self,
+        session_id: u64,
+        revision: u64,
+        region: TileRect,
+        unit_zoom: bool,
+    ) {
         let world = self.world.read().await;
         let config = world.config();
         if revision == 0
@@ -398,7 +406,22 @@ impl GameplayService {
             tick: world.tick(),
             animals: animals.clone(),
         };
-        session.subscription = Some(Subscription { revision, region });
+        session.subscription = Some(Subscription {
+            revision,
+            region,
+            unit_zoom,
+        });
+        if !session.ai {
+            let view = aoe_simulation::HumanView {
+                player: viewer,
+                region,
+                unit_zoom,
+            };
+            self.human_views
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .insert(session_id, view);
+        }
         session.resource_revision = None;
         session.resident = units.clone().into();
         session.resident_players = players;
@@ -438,13 +461,22 @@ impl GameplayService {
             .await
             .get(&session_id)
             .and_then(|session| {
-                session
-                    .subscription
-                    .map(|subscription| (subscription.revision, subscription.region))
+                session.subscription.map(|subscription| {
+                    (
+                        subscription.revision,
+                        subscription.region,
+                        subscription.unit_zoom,
+                    )
+                })
             });
-        if let Some((current_revision, region)) = region {
-            self.subscribe(session_id, revision.max(current_revision + 1), region)
-                .await;
+        if let Some((current_revision, region, unit_zoom)) = region {
+            self.subscribe(
+                session_id,
+                revision.max(current_revision + 1),
+                region,
+                unit_zoom,
+            )
+            .await;
         } else {
             self.send_to(
                 session_id,

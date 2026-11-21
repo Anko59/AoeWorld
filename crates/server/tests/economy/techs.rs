@@ -28,6 +28,7 @@ async fn the_town_center_researches_loom_and_gates_town_watch_over_the_wire() {
             id,
             1,
             TileRect::new(TileCoord::new(0, 0), TileCoord::new(256, 256)),
+            true,
         )
         .await;
     let GameplayServerMessage::Snapshot {

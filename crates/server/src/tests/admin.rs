@@ -362,7 +362,7 @@ async fn fog_toggle_updates_all_hundred_sessions_with_camera_bounded_entities() 
         let (sender, mut receiver) = tokio::sync::mpsc::channel(64);
         let (id, _) = gameplay.join_slot(info.token, sender).await.unwrap();
         let region = TileRect::from_xywh(80, 80, 64, 64);
-        gameplay.subscribe(id, 1, region).await;
+        gameplay.subscribe(id, 1, region, true).await;
         while receiver.try_recv().is_ok() {}
         receivers.push((info.player, receiver));
     }

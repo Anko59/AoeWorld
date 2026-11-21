@@ -178,14 +178,14 @@ pub(super) async fn start() -> Fixture {
     for (index, info) in infos.iter().enumerate() {
         let (sender, receiver) = mpsc::channel(8192);
         let (id, _) = service.join_slot(info.token, sender).await.unwrap();
-        service.subscribe(id, 1, region(placed[index])).await;
+        service.subscribe(id, 1, region(placed[index]), true).await;
         viewers.push(info.player);
         ids.push(id);
         receivers.push(receiver);
     }
     let (sender, receiver) = mpsc::channel(8192);
     let (id, _) = service.register(None, sender).await;
-    service.subscribe(id, 1, region(placed[1])).await;
+    service.subscribe(id, 1, region(placed[1]), true).await;
     viewers.push(infos[0].player);
     ids.push(id);
     receivers.push(receiver);
@@ -237,7 +237,7 @@ pub(super) async fn run_with(
         if tick == 100 {
             // A moved view and a resync rebuild their baselines mid-match.
             service
-                .subscribe(ids[2], 2, region(TileCoord::new(190, 180)))
+                .subscribe(ids[2], 2, region(TileCoord::new(190, 180)), true)
                 .await;
             service.resync(ids[3], 3).await;
         }
@@ -252,4 +252,37 @@ pub(super) async fn run_with(
         }
     }
     logs
+}
+
+#[tokio::test]
+async fn a_human_sessions_view_reaches_the_next_tick_and_leaves_with_it() {
+    // The receivers stay alive: a session whose channel closes is disconnected.
+    let Fixture {
+        service,
+        ids,
+        viewers,
+        placed,
+        receivers: _receivers,
+    } = start().await;
+    service.tick_overlapped(false).await;
+    let seen = |world: &GameWorld| {
+        world
+            .human_views()
+            .iter()
+            .filter(|view| view.player == viewers[0])
+            .map(|view| (view.region, view.unit_zoom))
+            .collect::<Vec<_>>()
+    };
+    // The seat's own page and its second page (`start`); AI seats have none.
+    let views = seen(&*service.world.read().await);
+    assert_eq!(
+        views,
+        [(region(placed[0]), true), (region(placed[1]), true)]
+    );
+    service.disconnect(ids[0]).await;
+    service.tick_overlapped(false).await;
+    assert_eq!(
+        seen(&*service.world.read().await),
+        [(region(placed[1]), true)]
+    );
 }

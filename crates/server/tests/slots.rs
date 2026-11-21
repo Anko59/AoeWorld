@@ -44,6 +44,7 @@ async fn seat(service: &GameplayService, token: ResumeToken) -> Seat {
             id,
             1,
             TileRect::new(TileCoord::new(0, 0), TileCoord::new(500, 500)),
+            true,
         )
         .await;
     let messages = drain(&mut rx);
@@ -244,7 +245,7 @@ async fn sessions_survive_a_stalled_reader_and_catch_up_in_one_delta() {
         // A tiny queue: the first views fill it, then nobody reads.
         let (tx, mut rx) = mpsc::channel(3);
         let (id, _) = service.join_slot(info.token, tx).await.unwrap();
-        service.subscribe(id, 1, region).await;
+        service.subscribe(id, 1, region, true).await;
         let buildings = drain(&mut rx)
             .into_iter()
             .find_map(|message| match message {
@@ -307,6 +308,7 @@ async fn a_stalled_reader_still_receives_every_ack_in_order() {
             id,
             1,
             TileRect::new(TileCoord::new(0, 0), TileCoord::new(500, 500)),
+            true,
         )
         .await;
     for sequence in 1..=8 {

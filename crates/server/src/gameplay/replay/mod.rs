@@ -24,6 +24,9 @@ pub struct RecordedTick {
     /// Tick BEFORE application; commands retain their actual application order.
     pub tick: u64,
     pub commands: Vec<RecordedCommand>,
+    /// The human clients' views this tick ran with (`set_human_views`).
+    #[serde(default)]
+    pub views: Vec<aoe_simulation::HumanView>,
     pub hash: [u8; 32],
 }
 #[derive(Serialize, Deserialize)]
@@ -183,6 +186,7 @@ impl GameplayService {
         recorder.row(&Row::Tick(RecordedTick {
             tick,
             commands,
+            views: world.human_views().to_vec(),
             hash: world.canonical_hash(),
         }))?;
         recorder.remaining -= 1;
@@ -224,6 +228,7 @@ impl GameplayService {
             .iter()
             .map(|c| command_name(&c.action))
             .collect();
+        world.set_human_views(&tick.views);
         let mut raw = Vec::with_capacity(tick.commands.len());
         let wall = std::time::Instant::now();
         let started = probe.sample()?;

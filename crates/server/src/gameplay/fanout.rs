@@ -183,7 +183,9 @@ fn build_session(
     nearby: &Nearby,
     (scratch, near): &mut (Scratch, Vec<u32>),
 ) -> Option<SessionBuild> {
-    let Subscription { revision, region } = view.subscription;
+    let Subscription {
+        revision, region, ..
+    } = view.subscription;
     let vision = viewers.get(&view.viewer)?.vision;
     let tick = world.tick();
     // An AI gets a changed fog view at most once a second. A view whose

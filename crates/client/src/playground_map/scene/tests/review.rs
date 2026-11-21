@@ -42,7 +42,6 @@ pub(super) fn contact_scene() -> PreparedScene {
         terrain,
     )
 }
-
 #[wasm_bindgen_test]
 async fn a_refused_view_is_sent_again_after_the_rate_window() {
     let mut client = client(&contact_scene()).await;
@@ -197,6 +196,7 @@ pub(super) async fn client_with_backend(scene: &PreparedScene, backend: Option<&
         token: None,
         revision: 0,
         sent_region: None,
+        sent_unit_zoom: false,
         subscribe_after: 0.0,
         next_sequence: 1,
         order_feedback: Default::default(),

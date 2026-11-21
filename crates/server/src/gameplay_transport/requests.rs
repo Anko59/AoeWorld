@@ -29,8 +29,14 @@ pub(super) async fn read_requests(
                     .queue_stance(session_id, sequence, unit_ids, stance)
                     .await
             }
-            Ok(GameplayClientMessage::Subscribe { revision, region }) => {
-                service.subscribe(session_id, revision, region).await
+            Ok(GameplayClientMessage::Subscribe {
+                revision,
+                region,
+                unit_zoom,
+            }) => {
+                service
+                    .subscribe(session_id, revision, region, unit_zoom)
+                    .await
             }
             Ok(GameplayClientMessage::MoveSelectionOrder {
                 sequence,

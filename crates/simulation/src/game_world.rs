@@ -68,7 +68,7 @@ pub use route_scheduler::{
     ROUTE_FAILURES, ROUTE_REACH, ROUTE_REQUESTERS, RouteAttribution, RouteCaller, RouteClass,
     RouteQueueBreakdown, RouteQueueCell, RouteSchedulerStats,
 };
-pub use visibility::TileVisibility;
+pub use visibility::{HumanView, TileVisibility};
 pub use wildlife::*;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct GameUnit {

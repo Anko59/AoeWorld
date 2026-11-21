@@ -20,7 +20,7 @@ async fn wildlife_hunting_scenario_over_the_wire() {
     let (tx, mut rx) = mpsc::channel(256);
     let (id, _) = service.register(None, tx).await;
     let region = TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384));
-    service.subscribe(id, 1, region).await;
+    service.subscribe(id, 1, region, true).await;
     let initial = drain(&mut rx);
     let units = initial
         .iter()
@@ -176,6 +176,7 @@ async fn wildlife_subscription_replaces_the_region_and_a_full_queue_keeps_the_co
             id,
             1,
             TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384)),
+            true,
         )
         .await;
     assert!(drain(&mut rx).iter().any(|m| matches!(m, GameplayServerMessage::WildlifeState { revision: 1, animals, .. } if animals.len() == 15)));
@@ -184,6 +185,7 @@ async fn wildlife_subscription_replaces_the_region_and_a_full_queue_keeps_the_co
             id,
             2,
             TileRect::new(TileCoord::new(1, 1), TileCoord::new(100, 100)),
+            true,
         )
         .await;
     assert!(drain(&mut rx).iter().any(|m| matches!(m, GameplayServerMessage::WildlifeState { revision: 2, animals, .. } if animals.is_empty())));
@@ -200,6 +202,7 @@ async fn wildlife_subscription_replaces_the_region_and_a_full_queue_keeps_the_co
             id,
             1,
             TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384)),
+            true,
         )
         .await;
     let GameplayServerMessage::Welcome {
@@ -226,7 +229,7 @@ async fn a_military_hit_publishes_a_valid_retaliating_predator_in_the_same_tick(
             panic!("welcome");
         };
         let region = TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384));
-        service.subscribe(session, 1, region).await;
+        service.subscribe(session, 1, region, true).await;
         let initial = drain(&mut rx);
         let center = initial
             .iter()
@@ -287,7 +290,7 @@ async fn a_military_hit_publishes_a_valid_retaliating_predator_in_the_same_tick(
             }
         }
         let debug = if target.is_none() {
-            service.subscribe(session, 99, region).await;
+            service.subscribe(session, 99, region, true).await;
             drain(&mut rx)
                 .into_iter()
                 .filter_map(|m| match m {

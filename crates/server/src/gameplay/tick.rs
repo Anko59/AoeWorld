@@ -68,11 +68,19 @@ impl GameplayService {
             .map(|s| s.player)
             .collect();
         let human_players = humans.clone();
+        let views: Vec<_> = self
+            .human_views
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .values()
+            .copied()
+            .collect();
         let recorded = self.record_inputs(&pending);
         // Attack-position and construction validation can be CPU work. Keep
         // it off the async runtime so one order cannot starve socket I/O.
         let applied = tokio::task::spawn_blocking(move || {
             let mut acknowledgements = BTreeMap::<u64, Vec<GameplayServerMessage>>::new();
+            world.set_human_views(&views);
             for (session_id, player, command) in pending {
                 let issuer = if humans.contains(&player) {
                     aoe_simulation::OrderIssuer::Player

@@ -171,6 +171,7 @@ async fn gameplay_client(
         GameplayClientMessage::Subscribe {
             revision: 1,
             region: tile_region,
+            unit_zoom: false,
         },
     )
     .await?;

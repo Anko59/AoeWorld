@@ -66,11 +66,15 @@ pub(crate) struct Vision {
     /// Players a person plays: a mover none of them sees may step less often
     /// (`formation/steering/stride.rs`). Set by the host, never hashed.
     pub(crate) human_seats: Vec<PlayerId>,
+    /// What those players' clients show (`views.rs`). Set by the host, never hashed.
+    pub(crate) human_views: Vec<views::HumanView>,
 }
 
 mod batch;
 mod explored;
+mod views;
 pub(crate) use explored::ExploredChunks;
+pub use views::HumanView;
 mod change;
 mod land;
 mod observers;
