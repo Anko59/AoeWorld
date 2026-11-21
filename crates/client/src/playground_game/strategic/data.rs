@@ -27,31 +27,32 @@ extern "C" {
     );
 }
 
+/// The sites sent to the far view, at most [`MAX_SITES`]. Your own capitals
+/// come first, then the rest of your buildings (so a freshly built stable is
+/// never cut by a large foreign base), then everyone else's.
 pub(in super::super) fn site_buildings<'a>(
     buildings: &'a [GameplayBuildingState],
     owner: PlayerId,
     explored: impl Fn(&GameplayBuildingState) -> bool + 'a,
 ) -> impl Iterator<Item = &'a GameplayBuildingState> {
-    [
-        Some(BuildingKind::TownCenter),
-        Some(BuildingKind::Castle),
-        None,
-    ]
-    .into_iter()
-    .flat_map(move |priority| {
-        buildings.iter().filter(move |b| {
-            let capital = b.player == owner
-                && matches!(b.kind, BuildingKind::TownCenter | BuildingKind::Castle);
-            priority.map_or(!capital, |kind| b.player == owner && b.kind == kind)
+    let rank = move |b: &GameplayBuildingState| match (b.player == owner, b.kind) {
+        (true, BuildingKind::TownCenter) => 0,
+        (true, BuildingKind::Castle) => 1,
+        (true, _) => 2,
+        _ => 3,
+    };
+    (0..4)
+        .flat_map(move |pass| buildings.iter().filter(move |b| rank(b) == pass))
+        .filter(move |b| {
+            !matches!(b.kind, BuildingKind::Bridge | BuildingKind::Road)
+                && crate::strategic::far_building_visible(b.hp, b.construction)
+                && (b.player == owner || explored(b))
         })
-    })
-    .filter(move |b| {
-        !matches!(b.kind, BuildingKind::Bridge | BuildingKind::Road)
-            && crate::strategic::far_building_visible(b.hp, b.construction)
-            && (b.player == owner || explored(b))
-    })
-    .take(2048)
+        .take(MAX_SITES)
 }
+
+/// Rows the far view takes (`2048 * 10` values in `settlements.js`).
+pub(in super::super) const MAX_SITES: usize = 2048;
 
 pub(in super::super) fn site_record(
     b: &GameplayBuildingState,

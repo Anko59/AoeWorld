@@ -155,27 +155,43 @@ fn site_projection_caps_after_owned_capitals_and_castles_and_visibility() {
 }
 
 #[wasm_bindgen_test]
-fn site_projection_hides_construction_before_cap_and_keeps_completed_buildings() {
+fn site_projection_shows_foundations_and_hides_only_the_dead() {
     use crate::playground::game::strategic::site_buildings;
     use aoe_core::PlayerId;
     use aoe_protocol::ConstructionState;
-    let mut buildings: Vec<_> = (0..2050).map(super::buildings::building).collect();
-    for (index, b) in buildings[..2048].iter_mut().enumerate() {
-        b.kind = aoe_protocol::BuildingKind::ALL[index % aoe_protocol::BuildingKind::ALL.len()];
-        b.construction = ConstructionState::UnderConstruction;
-        b.progress_permille = 999;
-    }
-    buildings[2049].player = PlayerId(1);
+    let mut buildings: Vec<_> = (0..3).map(super::buildings::building).collect();
+    buildings[0].construction = ConstructionState::UnderConstruction;
+    buildings[0].progress_permille = 0;
+    buildings[1].construction = ConstructionState::UnderConstruction;
+    buildings[1].progress_permille = 999;
+    buildings[2].hp = 0;
     let ids = |explored| {
         site_buildings(&buildings, PlayerId(0), move |_| explored)
             .map(|b| b.id)
             .collect::<Vec<_>>()
     };
-    assert_eq!(ids(true).len(), 2);
-    assert_eq!(ids(true), vec![EntityId(2048), EntityId(2049)]);
-    assert_eq!(ids(false), vec![EntityId(2048)]);
-    buildings[0].construction = ConstructionState::Complete;
-    assert_eq!(site_buildings(&buildings, PlayerId(0), |_| true).count(), 3);
+    assert_eq!(ids(false), vec![EntityId(0), EntityId(1)]);
+}
+
+#[wasm_bindgen_test]
+fn a_new_own_building_survives_the_cap_behind_a_large_foreign_base() {
+    use crate::playground::game::strategic::site_buildings;
+    use aoe_core::PlayerId;
+    let mut buildings: Vec<_> = (0..5000)
+        .map(|id| {
+            let mut b = super::buildings::building(id);
+            b.player = PlayerId(1);
+            b
+        })
+        .collect();
+    // The owner's newest buildings sit last in the stream.
+    buildings.push(super::buildings::building(9001));
+    buildings.push(super::buildings::building(9002));
+    let sites: Vec<_> = site_buildings(&buildings, PlayerId(0), |_| true)
+        .map(|b| b.id)
+        .collect();
+    assert_eq!(sites.len(), 2048);
+    assert_eq!(&sites[..2], &[EntityId(9001), EntityId(9002)]);
 }
 
 #[wasm_bindgen_test]

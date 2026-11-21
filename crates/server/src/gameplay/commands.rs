@@ -1,3 +1,4 @@
+#[cfg(test)]
 use super::slots::total_pending;
 use super::{
     GameplayService, MAX_ACK_HISTORY, MAX_PENDING_COMMANDS_GLOBAL,

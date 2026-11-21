@@ -125,7 +125,11 @@ fn units_here_split_bounds_a_burst_including_one_rally_per_producer() {
         &PendingTraining::default(),
         |_| false,
     );
-    assert_eq!(orders.len(), aoe_protocol::HUMAN_COMMAND_BURST / 2);
+    // `plan` takes at most 10 units a click; the burst only bounds it further.
+    assert_eq!(
+        orders.len(),
+        (aoe_protocol::HUMAN_COMMAND_BURST / 2).min(10)
+    );
     assert!(
         plan(
             &buildings,
