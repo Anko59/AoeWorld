@@ -25,7 +25,6 @@ pub struct RecordedTick {
     pub tick: u64,
     pub commands: Vec<RecordedCommand>,
     /// The human clients' views this tick ran with (`set_human_views`).
-    #[serde(default)]
     pub views: Vec<aoe_simulation::HumanView>,
     pub hash: [u8; 32],
 }
