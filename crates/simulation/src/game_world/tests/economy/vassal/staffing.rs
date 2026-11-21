@@ -253,3 +253,85 @@ fn a_borrowed_steward_villager_returns_to_its_farm() {
         w.building(house)
     );
 }
+
+#[test]
+fn far_placed_foundations_borrow_manual_gatherers_and_return_them() {
+    let (mut w, node, _) = resource_world(aoe_map::ResourceKind::Wood);
+    let player = PlayerId(0);
+    w.initialize_village(player, node.tile).unwrap();
+    w.set_fog_disabled(true);
+    w.economy.players.get_mut(&player).unwrap().stockpile = Stockpile {
+        food: 10_000,
+        wood: 10_000,
+        gold: 10_000,
+        stone: 10_000,
+    };
+    let starting = w
+        .units()
+        .filter(|u| u.kind == UnitKind::Villager)
+        .map(|u| u.id)
+        .collect::<Vec<_>>();
+    w.issue_delete(player, &starting).unwrap();
+    let mut workers = Vec::new();
+    'search: for dy in -12..=12 {
+        for dx in -12..=12 {
+            let tile = TileCoord::new(node.tile.x + dx, node.tile.y + dy);
+            let Ok(position) = WorldPosition::from_tile_center(tile) else {
+                continue;
+            };
+            let Ok(worker) = w.spawn_villager(player, position) else {
+                continue;
+            };
+            if w.issue_gather(player, worker, node.id).is_ok() {
+                workers.push(worker);
+            } else {
+                w.issue_delete(player, &[worker]).unwrap();
+            }
+            if workers.len() == 12 {
+                break 'search;
+            }
+        }
+    }
+    assert_eq!(workers.len(), 12);
+    advance(&mut w, 40);
+    assert!(
+        workers
+            .iter()
+            .all(|id| w.economy.gatherers.contains_key(id))
+    );
+    assert!(w.economy.stewards.controlled.is_empty());
+    // A far-view placement names no builder: the shared queue recruits them.
+    let house = w
+        .issue_build(
+            player,
+            &[],
+            BuildingKind::House,
+            TileCoord::new(node.tile.x + 8, node.tile.y + 8),
+            false,
+        )
+        .unwrap();
+    let mut peak = 0;
+    for _ in 0..3_000 {
+        w.advance();
+        peak = peak.max(
+            workers
+                .iter()
+                .filter(|id| w.economy.builders.contains_key(id))
+                .count(),
+        );
+        if w.building(house).unwrap().is_complete() {
+            break;
+        }
+    }
+    assert!(w.building(house).unwrap().is_complete());
+    assert!(peak >= 1, "no manual gatherer was recruited");
+    // At most a quarter of 12 villagers are lent.
+    assert!(peak <= 3, "peak {peak}");
+    advance(&mut w, 60);
+    assert!(w.economy.dispatch.lent.is_empty());
+    assert!(
+        workers
+            .iter()
+            .all(|id| w.economy.gatherers.contains_key(id) && !w.economy.builders.contains_key(id))
+    );
+}

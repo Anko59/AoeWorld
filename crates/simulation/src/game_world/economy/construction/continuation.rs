@@ -125,6 +125,7 @@ impl GameWorld {
             } else if !self.next_queued_build(builder)
                 && (kind == BuildingKind::Farm
                     || self.steward_has_held_job(builder)
+                    || self.economy.dispatch.lent.contains_key(&builder)
                     || !self.continue_foundation(builder, player))
             {
                 self.after_building(builder, player, building, kind, footprint);
@@ -281,6 +282,18 @@ impl GameWorld {
         // budget, before choosing a new profession or helping another site.
         if self.steward_has_held_job(builder) {
             return;
+        }
+        // A manual gatherer lent to construction goes back to its resource.
+        if let Some((_, target)) = self.economy.dispatch.lent.remove(&builder) {
+            use super::super::gathering::WorkTarget;
+            let back = match target {
+                WorkTarget::Farm(farm) => self.issue_farm(player, builder, farm).is_ok(),
+                WorkTarget::Node(node) => self.issue_gather(player, builder, node).is_ok(),
+                WorkTarget::Animal(animal) => self.begin_carcass_gather(builder, animal).is_ok(),
+            };
+            if back {
+                return;
+            }
         }
         let radius = super::super::VILLAGE_RULES.replacement_radius_tiles;
         if kind == BuildingKind::TownCenter {

@@ -1,4 +1,5 @@
 //! Shared automatic construction for placed foundations.
+use super::super::gathering::WorkTarget;
 use super::{super::buildings::BUILD_WORK_PER_BASE_TICK, *};
 use std::{
     collections::BTreeMap,
@@ -9,11 +10,16 @@ use std::{
 const REACH: i32 = 128;
 const RESIDENTS_PER_BUILDER: usize = 2;
 const RESIDENTS_PER_BORROW: usize = 4;
+// A player's own gatherers answer a foundation only from nearby.
+const MANUAL_REACH: i32 = 64;
 
 #[derive(Debug, Default)]
 pub(crate) struct ConstructionDispatch {
     pub(crate) sites: BTreeMap<EntityId, Option<EntityId>>,
     pub(crate) cursor: Option<EntityId>,
+    /// Manual gatherers lent to construction and the job each one returns to.
+    /// Like Steward held jobs this is transient: a restore drops it.
+    pub(crate) lent: BTreeMap<EntityId, (aoe_map::ResourceKind, WorkTarget)>,
 }
 
 impl GameWorld {
@@ -65,7 +71,9 @@ impl GameWorld {
                 && building.kind != BuildingKind::FishTrap
             {
                 let (active, borrowed) = builders.entry(building.player).or_default();
-                *borrowed += usize::from(self.steward_has_held_job(worker));
+                *borrowed += usize::from(
+                    self.steward_has_held_job(worker) || dispatch.lent.contains_key(&worker),
+                );
                 // A Steward's seeder is starting a food job. Far-view Farms
                 // still use a shared construction slot.
                 let steward_seeding = building.kind == BuildingKind::Farm
@@ -73,6 +81,13 @@ impl GameWorld {
                     && self.steward_controller(worker).is_some();
                 *active += usize::from(!steward_seeding);
             }
+        }
+        if !self.economy.dispatch.lent.is_empty() {
+            let working = &self.economy.builders;
+            self.economy
+                .dispatch
+                .lent
+                .retain(|id, _| working.contains_key(id));
         }
         let automatic = std::mem::replace(&mut self.economy.stewards.automatic, true);
         for id in sites {
@@ -144,27 +159,33 @@ impl GameWorld {
             }
             if u.carried.is_some()
                 || u.attack_target.is_some()
-                || self.economy.stewards.manual.contains(&u.id)
                 || self.economy.stewards.transfers.contains_key(&u.id)
                 || self.economy.garrison_orders.contains_key(&u.id)
                 || self.steward_has_held_job(u.id)
             {
                 continue;
             }
-            let idle = u.task == UnitTask::Idle
-                && !u.moving
-                && !u.planning
-                && !self.economy.gatherers.contains_key(&u.id);
+            let gathering = self.economy.gatherers.contains_key(&u.id);
+            let manual = self.economy.stewards.manual.contains(&u.id);
+            let idle =
+                !manual && u.task == UnitTask::Idle && !u.moving && !u.planning && !gathering;
             let steward = self.steward_controller(u.id);
             if let Some(steward) = steward
                 && !self.economy.steward_homes[&steward].covers(footprint, 1)
             {
                 continue;
             }
-            let steward_gatherer = steward.is_some() && self.economy.gatherers.contains_key(&u.id);
-            if idle || steward_gatherer {
-                candidates.push((!idle, distance, u.id));
-            }
+            // Idle first, then Steward-managed gatherers, then the player's own.
+            let tier = if idle {
+                0
+            } else if gathering && steward.is_some() {
+                1
+            } else if gathering && distance <= (MANUAL_REACH as u64).pow(2) {
+                2
+            } else {
+                continue;
+            };
+            candidates.push((tier, distance, u.id));
         }
         let wanted = (need - assigned).min(capacity);
         let tries = wanted + 2;
@@ -175,11 +196,26 @@ impl GameWorld {
         candidates.sort_unstable();
         let mut admitted = 0;
         let mut borrowed = 0;
-        for (from_gathering, _, worker) in candidates {
+        for (tier, _, worker) in candidates {
+            let from_gathering = tier > 0;
             if from_gathering && borrowed >= borrow_capacity {
                 break;
             }
+            let job = (tier == 2)
+                .then(|| self.economy.gatherers.get(&worker))
+                .flatten()
+                .map(|task| {
+                    let target = task
+                        .animal
+                        .map(WorkTarget::Animal)
+                        .or_else(|| task.farm.map(WorkTarget::Farm))
+                        .unwrap_or(WorkTarget::Node(task.node));
+                    (task.kind, target)
+                });
             if self.issue_construct(player, &[worker], id).is_ok() {
+                if let Some(job) = job {
+                    self.economy.dispatch.lent.insert(worker, job);
+                }
                 changed.push(worker);
                 borrowed += usize::from(from_gathering);
                 admitted += 1;
