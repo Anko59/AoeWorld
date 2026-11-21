@@ -4,12 +4,12 @@ use crate::game_world::{
     Age, BuildingKind, ConstructionState, GameBuilding, GameUnit, GameWorldError, HitRecord,
     PlayerEconomy, RallyPoint, ResearchEntry, TrainingEntry,
 };
-use crate::game_world::{AnimalKind, Facing, StewardSettings};
+use crate::game_world::{AnimalKind, Facing, StewardSettings, VassalFocus};
 use aoe_core::{EntityId, Formation, PlayerId, TileRect, WorldPosition};
 use aoe_map::ResourceOverlaySnapshot;
 use serde::{Deserialize, Serialize};
 
-pub const WORLD_SNAPSHOT_VERSION: u16 = 18;
+pub const WORLD_SNAPSHOT_VERSION: u16 = 23;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WorldSnapshot {
@@ -24,6 +24,8 @@ pub struct WorldSnapshot {
     /// Absent only for worlds without map terrain (test fixtures).
     pub resources: Option<ResourceOverlaySnapshot>,
     pub buildings: Vec<BuildingRecord>,
+    pub(crate) dispatch_sites: Vec<(EntityId, Option<EntityId>)>,
+    pub(crate) dispatch_cursor: Option<EntityId>,
     pub units: Vec<UnitRecord>,
     pub formations: Vec<FormationRecord>,
     pub animals: Vec<AnimalRecord>,
@@ -76,6 +78,7 @@ pub enum Management {
     },
     Vassal {
         development: bool,
+        focus: VassalFocus,
     },
 }
 

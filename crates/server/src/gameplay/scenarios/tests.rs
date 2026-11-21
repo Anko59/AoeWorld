@@ -404,7 +404,7 @@ async fn vassal_demo_streams_castle_age_stocks_and_the_active_defensive_report()
             active |= buildings.iter().any(|b| {
                 b.garrison
                     .iter()
-                    .any(|g| g.vassal.is_some_and(|r| r.villagers == 20))
+                    .any(|g| g.vassal.is_some_and(|r| r.planned.count > 0))
             });
         }
         service.tick().await;

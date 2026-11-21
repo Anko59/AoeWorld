@@ -17,6 +17,10 @@ pub(crate) struct Builders {
 }
 
 impl Builders {
+    pub(in super::super) fn assigned_count(&self, building: EntityId) -> usize {
+        self.members.get(&building).map_or(0, BTreeSet::len)
+    }
+
     pub(crate) fn insert(&mut self, id: EntityId, task: BuildTask) -> Option<BuildTask> {
         let old = self.remove(&id);
         self.dirty.insert(task.building);

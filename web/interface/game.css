@@ -270,7 +270,14 @@ html:has(#scene[data-order-mode=build]) #strategic-tokens button { pointer-event
 /* A selected Castle's defensive domain is part of the selection panel. */
 #vassal-panel { padding:6px 10px; line-height:1.4; }
 :is(#general-panel,#vassal-panel) { color:var(--ink); font-size:11px; background:linear-gradient(135deg,#454b3b,#242a22); border:1px solid #807658; box-shadow:inset 0 0 0 2px #1117,0 2px 8px #0008; }
-#vassal-status { margin:0 0 6px; }
+#vassal-status { margin:0 0 3px; white-space:pre-line; }
+#vassal-panel .menu-slider { display:grid; grid-template-columns:47px minmax(24px,1fr) 34px; align-items:center; gap:3px; margin-bottom:1px; }
+#vassal-panel .menu-slider input { width:100%; margin-inline:0; }
+#vassal-jobs { list-style:none; margin:0 0 3px; padding:0; }
+#vassal-jobs li { display:flex; align-items:center; gap:3px; min-height:13px; width:max-content; }
+#vassal-jobs .vassal-job { position:relative; line-height:0; }
+#vassal-jobs :is(.art-icon,.icon) { width:12px; height:12px; }
+#vassal-job-details { position:fixed; z-index:25; padding:5px 8px; color:#f1deb0; background:#32291c; border:1px solid #8d754b; border-radius:2px; white-space:pre-line; font-size:12px; pointer-events:none; }
 #vassal-panel[data-alert="true"] { border-color:#ed8566; }
 #game-paused { position:absolute; top:84px; left:50%; transform:translateX(-50%); z-index:20; display:flex; gap:14px; align-items:center; padding:10px 18px; color:var(--ink); border:2px ridge #b19a69; background:linear-gradient(135deg,#424735,#242c23); box-shadow:0 8px 40px #000a; }
 #game-paused[hidden] { display:none; }

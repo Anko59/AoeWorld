@@ -4,7 +4,7 @@ import { iconGrid } from '/navigation/cockpit/grid.js';
 
 // Build from far zoom: one click on a building icon arms its footprint, the
 // next click on the map places it. No drop-down; availability is Rust's.
-const prompt = 'Choose a building, then a site. Nearby free villagers answer.';
+const prompt = 'Choose a building, then place its foundation. Nearby villagers build as capacity opens.';
 export function initFarBuilding(panel) {
   const form = document.createElement('section');
   form.id = 'far-building';
@@ -17,7 +17,7 @@ export function initFarBuilding(panel) {
     window.aoeNavigation?.production?.reset();
     window.aoeBuildings?.command(0, (id + count - 1) % count);
     chosen = id; mark();
-    status.textContent = 'Click a clear site · free villagers within 64 tiles answer · Esc or right-click cancels.';
+    status.textContent = 'Click a clear site · nearby villagers build when available · Esc or right-click cancels.';
     document.getElementById('scene')?.focus();
   });
   form.querySelector('.far-slot').append(grid.grid);
@@ -32,7 +32,7 @@ export function initFarBuilding(panel) {
       state = Array.from(values);
       buildable.forEach((kind, id) => {
         const ok = state[(id + count - 1) % count] === 1;
-        grid.set(id, { enabled: ok, title: `${names[kind]}${ok ? '' : ' · needs villagers, resources, age and prerequisite buildings'}` });
+        grid.set(id, { enabled: ok, title: `${names[kind]}${ok ? '' : ' · needs resources, the required age and prerequisite buildings'}` });
       });
     },
     show(value) { visible = value; if (!value) svg.setAttribute('hidden', ''); },

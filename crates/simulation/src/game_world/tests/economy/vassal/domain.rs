@@ -108,7 +108,7 @@ fn vassal_fortifies_a_steward_sized_domain_and_defends_its_edge() {
 
 #[test]
 fn vassal_soldiers_kill_a_wolf_hunting_a_builder() {
-    let (mut w, v, _) = setup();
+    let (mut w, _, _) = setup();
     w.set_fog_disabled(true);
     let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
     let builder = w.spawn_villager(PlayerId(0), at(84, 100)).unwrap();
@@ -116,7 +116,7 @@ fn vassal_soldiers_kill_a_wolf_hunting_a_builder() {
         w.spawn_militia(PlayerId(0), at(88 + i, 98)).unwrap();
     }
     advance(&mut w, 40);
-    assert_eq!(w.vassal_controller(builder), Some(v));
+    assert_eq!(w.vassal_controller(builder), None);
     let wolf = w.spawn_animal(crate::AnimalKind::Wolf, at(82, 99)).unwrap();
     let mut killed = None;
     for t in 0..1_200 {

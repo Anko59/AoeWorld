@@ -44,7 +44,7 @@ impl GameWorld {
         if !(kind.is_wall() || kind == BuildingKind::Road) {
             return Err(EconomyError::NotBuildable);
         }
-        let builders = self.validate_builders(player, builders, false)?;
+        let builders = self.placement_builders(player, builders, false)?;
         let tiles = line_tiles(from, to);
         if tiles.len() > MAX_WALL_SEGMENTS {
             return Err(EconomyError::OrderTooLarge);
@@ -78,6 +78,11 @@ impl GameWorld {
             }
         }
         self.charge(player, cost);
+        if builders.is_empty() {
+            self.queue_foundations(&ids, None);
+            self.remember_visible_buildings();
+            return Ok(ids);
+        }
         for id in &ids {
             self.step_builders_aside(&builders, *id);
         }

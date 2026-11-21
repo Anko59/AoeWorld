@@ -159,15 +159,8 @@ fn real_carried_garrison_food_counts_as_income_once() {
     );
     assert_eq!(resource_stock(&control.w, ResourceKind::Food), before);
     for id in &party {
-        let occupant = deposited
-            .w
-            .building(center)
-            .unwrap()
-            .garrison
-            .iter()
-            .find(|g| g.unit.id == *id)
-            .copied()
-            .unwrap();
+        let shelter = deposited.w.building(center).unwrap();
+        let occupant = shelter.garrison.iter().find(|g| g.unit.id == *id).unwrap();
         assert!(occupant.unit.carried.is_none());
     }
     // Equal present stocks isolate the real garrison deposit history. All

@@ -67,6 +67,7 @@ impl GameWorld {
             return d.plan.clone();
         }
         let mut plan = sites(self, d.center, d.player, age, &d.refused, d.hot);
+        let paid = self.paid_vassal_work(d.player, d.center);
         // Keep useful network orders while its replacement is being searched.
         plan.extend(
             d.plan
@@ -83,6 +84,7 @@ impl GameWorld {
         };
         if let Some(d) = self.economy.vassals.domains.get_mut(&id) {
             d.plan.clone_from(&plan);
+            d.paid = paid;
             d.plan_age = age;
             d.planned = self.tick.0;
             d.replan_at = None;
@@ -95,6 +97,33 @@ impl GameWorld {
 }
 
 impl GameWorld {
+    /// Recover paid work whose placement lies outside the new plan. The owner
+    /// index is walked only when rebuilding the domain plan.
+    fn paid_vassal_work(&self, player: PlayerId, center: TileCoord) -> Vec<EntityId> {
+        let radius_squared = u64::from(VASSAL_RADIUS.unsigned_abs()).pow(2);
+        [
+            BuildingKind::PalisadeWall,
+            BuildingKind::StoneWall,
+            BuildingKind::PalisadeGate,
+            BuildingKind::StoneGate,
+            BuildingKind::WatchTower,
+            BuildingKind::Bridge,
+            BuildingKind::Road,
+        ]
+        .into_iter()
+        .filter_map(|kind| self.economy.dropoffs.get(&(player, kind)))
+        .flatten()
+        .filter_map(|id| self.economy.buildings.get(id))
+        .filter(|b| {
+            !b.is_complete()
+                && b.hp > 0
+                && super::super::placement::distance_squared(center, b.footprint.min)
+                    <= radius_squared
+        })
+        .map(|b| b.id)
+        .collect()
+    }
+
     /// Footprints of the domain's planned fortification (every site but roads).
     #[cfg(test)]
     pub(crate) fn vassal_fortification(&mut self, id: EntityId) -> Vec<(BuildingKind, TileRect)> {
@@ -302,6 +331,8 @@ pub(super) fn sites(
         }
     }
     sites.extend(super::ring::sites(w, center, player, age, toward));
+    let mut seen = BTreeSet::new();
+    sites.retain(|s| seen.insert((s.kind as u8, s.tile)));
     sites
 }
 

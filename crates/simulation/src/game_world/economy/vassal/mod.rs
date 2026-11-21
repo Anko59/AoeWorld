@@ -14,6 +14,8 @@ mod road_job;
 mod road_search;
 mod roads;
 mod threat;
+mod work;
+pub use work::{VassalFocus, VassalJob, VassalJobs};
 
 pub const VASSAL_LIMIT: usize = 20;
 /// The domain a Vassal develops, fortifies and defends: a Steward's circle.
@@ -31,7 +33,6 @@ pub enum VassalWait {
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct VassalStatus {
-    pub villagers: u8,
     pub military: u8,
     pub development: bool,
     pub developed: bool,
@@ -41,13 +42,16 @@ pub struct VassalStatus {
     pub completed: u16,
     pub total: u16,
     pub responding: u16,
+    pub focus: VassalFocus,
+    pub current: VassalJobs,
+    pub planned: VassalJobs,
+    pub finished: VassalJobs,
 }
 #[derive(Debug)]
 pub(crate) struct Domain {
     castle: EntityId,
     player: PlayerId,
     center: TileCoord,
-    workers: BTreeSet<EntityId>,
     soldiers: BTreeSet<EntityId>,
     development: bool,
     cursor: usize,
@@ -56,6 +60,8 @@ pub(crate) struct Domain {
     status: VassalStatus,
     /// Cached plan (see `plan::REPLAN_TICKS`), its age and the tick it was made.
     plan: Vec<plan::Site>,
+    /// Paid defensive foundations in the territory at the last survey.
+    paid: Vec<EntityId>,
     plan_age: crate::Age,
     planned: u64,
     /// Earliest explicit rebuild deadline, independent of road completion.
@@ -107,13 +113,13 @@ impl GameWorld {
                 castle,
                 player: b.player,
                 center,
-                workers: BTreeSet::new(),
                 soldiers: BTreeSet::new(),
                 development: true,
                 cursor: 0,
                 refused: BTreeMap::new(),
                 progress: None,
                 plan: Vec::new(),
+                paid: Vec::new(),
                 plan_age: crate::Age::Dark,
                 planned: 0,
                 replan_at: None,
@@ -132,12 +138,11 @@ impl GameWorld {
     pub fn vassal_controller(&self, id: EntityId) -> Option<EntityId> {
         self.economy.vassals.controlled.get(&id).copied()
     }
-    pub fn issue_vassal_development(
+    fn owned_vassal(
         &mut self,
         player: PlayerId,
         id: EntityId,
-        enabled: bool,
-    ) -> Result<(), EconomyError> {
+    ) -> Result<&mut Domain, EconomyError> {
         let d = self
             .economy
             .vassals
@@ -147,31 +152,21 @@ impl GameWorld {
         if d.player != player {
             return Err(EconomyError::NotOwner);
         }
+        Ok(d)
+    }
+
+    pub fn issue_vassal_development(
+        &mut self,
+        player: PlayerId,
+        id: EntityId,
+        enabled: bool,
+    ) -> Result<(), EconomyError> {
+        let d = self.owned_vassal(player, id)?;
         d.development = enabled;
         d.status.development = enabled;
-        if !enabled {
-            self.release_vassal_builders(id);
-        }
         Ok(())
     }
-    fn release_vassal_builders(&mut self, id: EntityId) {
-        let workers = self
-            .economy
-            .vassals
-            .domains
-            .get_mut(&id)
-            .map(|d| std::mem::take(&mut d.workers))
-            .unwrap_or_default();
-        for worker in workers {
-            self.economy.vassals.controlled.remove(&worker);
-            if let Some(u) = self.unit(worker) {
-                self.record_vassal_decision();
-                let _ = self.issue_stop(u.player, worker);
-            }
-        }
-    }
     pub(crate) fn deactivate_vassal(&mut self, id: EntityId) {
-        self.release_vassal_builders(id);
         if let Some(d) = self.economy.vassals.domains.remove(&id) {
             for soldier in d.soldiers {
                 self.economy.vassals.controlled.remove(&soldier);
@@ -186,7 +181,6 @@ impl GameWorld {
         if let Some(v) = self.economy.vassals.controlled.remove(&id)
             && let Some(d) = self.economy.vassals.domains.get_mut(&v)
         {
-            d.workers.remove(&id);
             d.soldiers.remove(&id);
         }
     }
@@ -194,9 +188,7 @@ impl GameWorld {
         if self.economy.stewards.automatic || self.vassal_controller(id).is_none() {
             return;
         }
-        if self.unit(id).is_some_and(|u| u.kind != UnitKind::Villager) {
-            self.economy.vassals.manual.insert(id);
-        }
+        self.economy.vassals.manual.insert(id);
         self.release_vassal_unit(id);
     }
     pub(crate) fn forget_vassal_unit(&mut self, id: EntityId) {
@@ -233,18 +225,12 @@ impl GameWorld {
             }
             let (center, player) = (d.center, d.player);
             let stale: Vec<_> = d
-                .workers
+                .soldiers
                 .iter()
-                .chain(&d.soldiers)
                 .copied()
                 .filter(|&unit| {
-                    self.unit(unit).is_none_or(|u| {
-                        u.hp == 0
-                            || (u.kind == UnitKind::Villager
-                                && !within(center, u.position, VASSAL_RADIUS + 8)
-                                && d.status.next != Some(BuildingKind::Road))
-                            || self.embarked(unit)
-                    })
+                    self.unit(unit)
+                        .is_none_or(|u| u.hp == 0 || self.embarked(unit))
                 })
                 .collect();
             for unit in stale {
@@ -273,34 +259,16 @@ impl GameWorld {
                 {
                     continue;
                 }
-                let worker = u.kind == UnitKind::Villager;
-                if !worker && super::general::role(u.kind).is_none() {
+                if u.kind == UnitKind::Villager || super::general::role(u.kind).is_none() {
                     continue;
                 }
-                // A Steward's villagers and the town's own (the starting
-                // villagers by a Town Center) stay with the town.
-                if worker
-                    && (self.steward_controller(u.id).is_some()
-                        || self.by_own_town_center(player, u.position))
-                {
-                    continue;
-                }
-                let d = &self.economy.vassals.domains[&id];
-                if worker
-                    && (!d.development || d.status.developed || d.workers.len() >= VASSAL_LIMIT)
-                    || !worker && d.soldiers.len() >= VASSAL_LIMIT
-                {
-                    continue;
-                }
-                self.forget_steward_worker(u.id);
                 let Some(d) = self.economy.vassals.domains.get_mut(&id) else {
-                    continue;
+                    break;
                 };
-                if worker {
-                    d.workers.insert(u.id);
-                } else {
-                    d.soldiers.insert(u.id);
+                if d.soldiers.len() >= VASSAL_LIMIT {
+                    break;
                 }
+                d.soldiers.insert(u.id);
                 self.economy.vassals.controlled.insert(u.id, id);
             }
             self.vassal_defend(id, &units, changed);
@@ -308,36 +276,24 @@ impl GameWorld {
             let Some(d) = self.economy.vassals.domains.get_mut(&id) else {
                 continue;
             };
-            d.status.villagers = d.workers.len() as u8;
             d.status.military = d.soldiers.len() as u8;
             let (castle, status) = (d.castle, d.status);
             if let Some(g) = self
-                .building_mut(castle)
+                .economy
+                .buildings
+                .get_mut(&castle)
                 .and_then(|b| b.garrison.iter_mut().find(|g| g.unit.id == id))
+                && g.vassal.as_deref() != Some(&status)
             {
-                g.vassal = Some(status);
+                g.vassal = Some(std::sync::Arc::new(status));
+                self.mark_building_changed(castle);
             }
         }
-    }
-}
-/// Tiles around a Town Center whose idle villagers belong to the town.
-const TOWN_TILES: i32 = 12;
-impl GameWorld {
-    fn by_own_town_center(&self, player: PlayerId, at: WorldPosition) -> bool {
-        self.player_buildings_of(player, BuildingKind::TownCenter)
-            .any(|b| {
-                let c = TileCoord::new(
-                    (b.footprint.min.x + b.footprint.max.x) / 2,
-                    (b.footprint.min.y + b.footprint.max.y) / 2,
-                );
-                within(c, at, TOWN_TILES)
-            })
     }
 }
 fn inside(center: TileCoord, at: WorldPosition) -> bool {
     within(center, at, VASSAL_RADIUS)
 }
-/// Builders of the wall ring's corners stand just outside the radius.
 fn within(center: TileCoord, at: WorldPosition, radius: i32) -> bool {
     super::general::distance(WorldPosition::new(center.x * 1024, center.y * 1024), at)
         <= (i64::from(radius) * 1024).pow(2)

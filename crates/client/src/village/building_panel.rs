@@ -92,7 +92,7 @@ pub(super) fn update(client: &Client, scale: f64) {
                 availability::research(b, player, owner(client), completed, duplicate, r).number();
         }
     }
-    let builders = player.is_some() && construction::has_builders(client);
+    let builders = player.is_some() && construction::allows_land_placement(client);
     let ships = player.is_some() && !construction::ship_builders(client).is_empty();
     let build_menu = availability::BuildMenu::new(player, completed, builders, ships);
     for kind in KINDS
@@ -383,7 +383,7 @@ fn menu_order(client: &mut Client, action: u32, code: u32, target: u32, lots: u3
             code & 2 != 0,
         ),
         (17, _) => super::selection::idle(client, code == 1),
-        (18, 0..=2) => super::steward::menu_order(client, code),
+        (18, 0..=4) => super::steward::menu_order(client, code),
         _ => (),
     }
 }

@@ -112,6 +112,7 @@ impl GameWorld {
         self.with_order_issuer(crate::OrderIssuer::Vassal, |w| {
             w.advance_vassals(&mut changed)
         });
+        self.dispatch_construction(&mut changed);
         self.with_order_issuer(crate::OrderIssuer::General, |w| {
             w.advance_generals(&mut changed)
         });
