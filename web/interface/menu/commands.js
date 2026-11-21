@@ -91,7 +91,8 @@ export function describeCommands(card, state, shelter, rules, { page, stance, fo
     action('research-' + id(techKinds[index]), 'Research ' + techName(techKinds[index]),
       ['technologies', rules.techs[index].art, 'technology'], [0, buildableKinds.length + index],
       '', { slot: rules.techs[index].slot, cost: price(rules.techs[index].cost), ...withCode(code),
-        hidden: code === 0 || code === 3, className: 'research-command', research: true }),
+        hidden: code === 0 || code === 3, className: 'research-command', research: true,
+        tooltip: rules.techs[index].tooltip }),
   ]).sort(byLine);
   return [...train, ...research, ...buildingActions(state), ...general];
 }

@@ -87,3 +87,27 @@ fn browser_content_rejects_truncated_extra_and_invalid_records() {
         );
     }
 }
+
+#[test]
+fn browser_research_tooltips_cover_the_entire_research_catalog() {
+    let tooltips = crate::browser_research_tooltips();
+    assert_eq!(tooltips.len(), crate::TECH_RULES.len());
+    for (tooltip, rule) in tooltips.iter().zip(crate::TECH_RULES) {
+        assert!(
+            !tooltip.trim().is_empty(),
+            "missing tooltip for {:?}",
+            rule.tech
+        );
+        assert!(
+            tooltip.ends_with(&format!("{} s", rule.seconds)),
+            "{tooltip}"
+        );
+    }
+    for (tech, effect) in [
+        (crate::Tech::Loom, "Villagers: +15 HP"),
+        (crate::Tech::Husbandry, "Mounted units: +10% movement speed"),
+        (crate::Tech::HeavyScorpion, "Scorpion → Heavy Scorpion"),
+    ] {
+        assert!(tooltips[tech as usize].contains(effect), "{:?}", tech);
+    }
+}

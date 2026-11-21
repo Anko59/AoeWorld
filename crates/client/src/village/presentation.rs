@@ -3,7 +3,10 @@ use super::{Client, building_center, owner};
 use crate::playground::game::map;
 use crate::resource_state::ResourceStateCache;
 use aoe_core::{ScreenPoint, TileCoord};
+use aoe_map::ResourceKind;
 use aoe_protocol::UnitKind;
+
+const RESOURCE_MARKER_LIMIT: usize = 2048;
 pub(in super::super) fn values(client: &Client) -> Vec<f64> {
     super::rally::present(client);
     let scale = f64::from(client.canvas.client_width()) / f64::from(client.canvas.width());
@@ -62,32 +65,32 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
         );
     }
 
+    // Wood has its own budget so a dense stand cannot displace other deposits.
+    let mut marker_counts = [0; 2];
     // Strategic actors update at HUD cadence. Never build a detailed picking
     // scene for a distant overview.
     if crate::playground::game::strategic::active(client) {
-        // The map LOD still needs the resources an RTS player scouts for.
-        // Forests are already painted into the terrain raster; send only the
-        // deposits that would otherwise disappear when sprites stop drawing.
-        // The scan is bounded by the resident terrain chunks (a fixed residency
-        // budget), not by map size, and stops at the marker cap. Starting nodes
-        // go first so the cap never drops them, and a node that also appears in
-        // a chunk is sent once.
+        // The overview draws live resource markers from the same bounded set
+        // of resident chunks as the detailed view. Starting nodes go first,
+        // and a node that also appears in a chunk is sent once.
         let mut sent = std::collections::HashSet::new();
         let natural = client
             .terrain_chunks
             .values()
             .flat_map(|chunk| chunk.resources().map(|(node, _)| *node));
         for node in client.resources.starting_nodes().chain(natural) {
-            if values[7] >= 2048.0 {
+            if marker_counts == [RESOURCE_MARKER_LIMIT; 2] {
                 break;
             }
-            if node.kind as u8 == 1
+            let count = &mut marker_counts[usize::from(node.kind == ResourceKind::Wood)];
+            if *count >= RESOURCE_MARKER_LIMIT
                 || client.fog.state([node.tile.x, node.tile.y]) == 0
                 || !client.resources.visible(node.id)
                 || !sent.insert(node.id)
             {
                 continue;
             }
+            *count += 1;
             values[7] += 1.0;
             resource_marker(&mut values, node);
         }
@@ -215,7 +218,8 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
         if highlighted && values[3] == 1.0 {
             values[3] = gather_cursor(node.object, node.kind);
         }
-        if node.kind as u8 == 1 && !highlighted {
+        let count = &mut marker_counts[usize::from(node.kind == ResourceKind::Wood)];
+        if *count >= RESOURCE_MARKER_LIMIT && !highlighted {
             continue;
         }
         let Some((p, visible)) =
@@ -230,9 +234,8 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
             values[5] = p.y * scale;
             values[8] = (aoe_core::ISO_TILE_WIDTH * client.camera.zoom * scale).max(10.0);
         }
-        // Forests are already in the terrain raster. Show other visible
-        // deposits only, bounded by resident chunks and the viewport.
-        if node.kind as u8 != 1 && visible && values[7] < 2048.0 {
+        if visible && *count < RESOURCE_MARKER_LIMIT {
+            *count += 1;
             values[7] += 1.0;
             resource_marker(&mut values, *node);
         }

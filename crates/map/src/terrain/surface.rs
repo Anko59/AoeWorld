@@ -50,7 +50,7 @@ impl TileSurface {
 impl MapChunkGenerator {
     /// Determines whether an adjacent terrain edge can be crossed without
     /// interpreting center-height samples as a substitute for shared geometry.
-    /// Composition changes material only, so edges use physical base terrain.
+    /// Both cached and cold reads use the composed terrain's walkability.
     pub fn edge_between(&self, from: TileCoord, to: TileCoord) -> EdgePassability {
         self.edge_between_with_cancel(from, to, &|| false)
             .unwrap_or(EdgePassability::Blocked)
@@ -71,25 +71,12 @@ impl MapChunkGenerator {
             return Ok(edge);
         }
         let from = self
-            .base_physical_tile_with_cancel(from, cancelled)?
+            .walk_at_with_cancel(from, cancelled)?
             .ok_or(EnvironmentPageError::Invalid)?;
         let to = self
-            .base_physical_tile_with_cancel(to, cancelled)?
+            .walk_at_with_cancel(to, cancelled)?
             .ok_or(EnvironmentPageError::Invalid)?;
-        Ok(physical_edge(from, to))
-    }
-}
-
-fn physical_edge(from: super::Tile, to: super::Tile) -> EdgePassability {
-    if !from.passable
-        || !to.passable
-        || !from.surface.walkable()
-        || !to.surface.walkable()
-        || (i32::from(from.game_height_level) - i32::from(to.game_height_level)).abs() > 1
-    {
-        EdgePassability::Blocked
-    } else {
-        EdgePassability::Passable
+        Ok(from.edge_to(to))
     }
 }
 

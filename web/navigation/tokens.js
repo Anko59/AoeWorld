@@ -32,10 +32,13 @@ export function initTokens() {
       const scene = document.getElementById('scene');
       const bounds = node.getBoundingClientRect();
       const x = bounds.left + bounds.width / 2, y = bounds.top + bounds.height / 2;
-      scene.dispatchEvent(new PointerEvent('pointerdown', {
+      const init = {
         clientX: x, clientY: y, button: event.button ?? 0,
         ctrlKey: event.ctrlKey, altKey: event.altKey, shiftKey: event.shiftKey,
-      }));
+      };
+      scene.dispatchEvent(new PointerEvent('pointerdown', init));
+      // Selection completes on release, so a token press is a whole click.
+      if (init.button === 0) scene.dispatchEvent(new PointerEvent('pointerup', init));
     };
     node.addEventListener('pointerdown', forward);
     node.addEventListener('click', event => { if (event.detail === 0) forward(event); });

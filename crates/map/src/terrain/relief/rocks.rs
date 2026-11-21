@@ -1,5 +1,5 @@
-//! Loose rocks: purely visual stones on bare rock, as scree beside cliffs, a
-//! few on snow and in dry grassland. They never block and are no resource.
+//! Loose rocks on bare rock, as scree beside cliffs, or scattered across
+//! snow and dry grassland. Piles block their measured ground footprint.
 //! Density follows a continuous world-anchored cluster field, so rocks lie in
 //! loose groups with empty ground between them.
 use super::{relief_key, smooth};

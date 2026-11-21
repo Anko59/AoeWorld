@@ -305,8 +305,11 @@ pub(super) fn kingdom_water_environment(
     water: Vec<WaterPage>,
 ) -> Result<GameWorld, EconomyError> {
     let (package, elevation, water) = kingdom_water_package(seed, side_meters, water)?;
-    GameWorld::from_prepared_map(package, elevation, water, Vec::new(), Vec::new())
-        .map_err(Into::into)
+    // The fixtures place buildings at fixed offsets, so they need open ground.
+    Ok(
+        GameWorld::from_prepared_map(package, elevation, water, Vec::new(), Vec::new())?
+            .without_loose_rocks(),
+    )
 }
 
 pub(super) fn kingdom_water_package(

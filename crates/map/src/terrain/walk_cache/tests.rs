@@ -49,21 +49,15 @@ fn chunk_cells_and_edges_equal_direct_evaluation_including_the_map_edge() {
             for (dx, dy) in [(1, 0), (0, 1), (1, 1), (-1, 1)] {
                 let next = TileCoord::new(x + dx, y + dy);
                 let cached = generator.edge_between_with_cancel(tile, next, &|| false);
-                let (Some(a), Some(b)) = (
-                    generator
-                        .base_physical_tile_with_cancel(tile, &|| false)
-                        .unwrap(),
-                    generator
-                        .base_physical_tile_with_cancel(next, &|| false)
-                        .unwrap_or(None),
-                ) else {
+                let (Some(a), Some(b)) = (direct(&generator, tile), direct(&generator, next))
+                else {
                     assert!(cached.is_err());
                     continue;
                 };
                 let expected = if !a.passable
                     || !b.passable
-                    || !a.surface.walkable()
-                    || !b.surface.walkable()
+                    || !a.walkable_surface
+                    || !b.walkable_surface
                     || (i32::from(a.game_height_level) - i32::from(b.game_height_level)).abs() > 1
                 {
                     EdgePassability::Blocked

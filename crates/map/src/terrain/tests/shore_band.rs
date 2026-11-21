@@ -371,13 +371,22 @@ fn modeled_rivers_keep_their_level_stay_connected_and_get_textured_banks() {
 fn seeded_fallback_river_banks_coexist_with_ground_variety() {
     let generator = MapChunkGenerator::new([23; 32], 1, 512);
     let mut tiles = std::collections::BTreeMap::new();
+    let mut stones = std::collections::BTreeSet::new();
     for cy in 0..16 {
         for cx in 0..16 {
-            let chunk = generator.chunk(cx, cy).expect("fallback chunk");
-            for (index, tile) in chunk.tiles.into_iter().enumerate() {
-                let index = index as i32;
-                tiles.insert((cx * 32 + index % 32, cy * 32 + index / 32), tile);
+            let chunk = generator
+                .landscape_chunk_with_cancel(cx, cy, &|| false)
+                .expect("fallback chunk");
+            for tile in chunk.tiles {
+                tiles.insert((tile.tile.x, tile.tile.y), tile.terrain);
             }
+            stones.extend(
+                chunk
+                    .decorations
+                    .iter()
+                    .filter(|d| d.family == crate::DecorationFamily::Stone)
+                    .map(|d| (d.tile.x, d.tile.y)),
+            );
         }
     }
     let (mut banks, mut natural_dirt) = (0, 0);
@@ -385,7 +394,9 @@ fn seeded_fallback_river_banks_coexist_with_ground_variety() {
         if tile.material != GroundMaterial::Dirt {
             continue;
         }
-        assert!(tile.passable && tile.water == WaterKind::None);
+        let stone = (-1..=1).any(|dy| (-1..=1).any(|dx| stones.contains(&(x + dx, y + dy))));
+        assert_eq!(tile.passable, !stone);
+        assert_eq!(tile.water, WaterKind::None);
         let river_near = (-3..=3).any(|dy: i32| {
             (-3..=3).any(|dx: i32| {
                 dx * dx + dy * dy <= WIDE
@@ -398,8 +409,9 @@ fn seeded_fallback_river_banks_coexist_with_ground_variety() {
             banks += 1;
         } else {
             natural_dirt += 1;
-            // Variety changes only the drawn sheet, never physical terrain.
-            let base = generator.sample_base_tile(TileCoord::new(x, y));
+            // Ground variety and rock collision are separate decisions.
+            let mut base = generator.sample_base_tile(TileCoord::new(x, y));
+            base.passable &= !stone;
             let mut physical = *tile;
             physical.material = base.material;
             assert_eq!(physical, base, "variety changed physical land at {x},{y}");

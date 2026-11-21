@@ -14,12 +14,13 @@ pub(crate) use generic_effects::researched_building_kind;
 mod gunpowder;
 mod imperial;
 mod navy;
+mod rule_effect;
 mod table;
 mod upgrades;
 
-#[cfg(any(not(target_arch = "wasm32"), feature = "content-source"))]
-pub use content::browser_content;
 pub use content::{BrowserBuilding, BrowserContent, BrowserTech, BrowserUnit};
+#[cfg(any(not(target_arch = "wasm32"), feature = "content-source"))]
+pub use content::{browser_content, browser_research_tooltips};
 
 pub use effects::villager_capacity;
 pub(crate) use effects::{carry_capacity, villager_speed_percent};
@@ -30,6 +31,7 @@ pub use generic_effects::{
 pub(crate) use generic_effects::{
     building_armour_bonus, tower_attack, unit_hp_bonus, unit_speed_percent,
 };
+pub use rule_effect::{ArmorClass, AttackBonus, BuildingGroup, ConversionTarget, RuleEffect};
 pub use table::{
     Age, FEUDAL_BUILDINGS, TECH_RULES, Tech, TechEffect, TechMask, TechRequirement, TechRules,
     TechTarget,

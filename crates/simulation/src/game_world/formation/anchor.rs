@@ -353,30 +353,8 @@ impl GameWorld {
     /// Static terrain, trees and buildings along the half-tile steps of a
     /// straight walk; at most `DIRECT_LINE_TILES` long, longer is not clear.
     fn straight_line_clear(&self, kind: UnitKind, from: WorldPosition, to: WorldPosition) -> bool {
-        let length = path::distance(from, to);
-        if length > i64::from(DIRECT_LINE_TILES * 1024) {
-            return false;
-        }
-        let parts = (length / 512).max(1);
-        let (dx, dy) = (i64::from(to.x - from.x), i64::from(to.y - from.y));
-        let mut previous = from;
-        for n in 1..=parts {
-            self.group_work.members(1);
-            let next = WorldPosition::new(
-                from.x + (dx * n / parts) as i32,
-                from.y + (dy * n / parts) as i32,
-            );
-            // Terrain and trees come from the step check; buildings block tiles
-            // only in the economy, which that check does not read.
-            if self.economy.blocked_tiles.contains(&next.tile_floor())
-                || !self
-                    .unit_position_step_clear(kind, previous, next)
-                    .unwrap_or(false)
-            {
-                return false;
-            }
-            previous = next;
-        }
-        true
+        let (clear, steps) = self.straight_walk_clear(kind, from, to, DIRECT_LINE_TILES);
+        self.group_work.members(steps);
+        clear
     }
 }

@@ -32,7 +32,9 @@ fn thirty_two_militia_showcase_keeps_block_and_normal_march_speed() {
         original.environment,
     )
     .unwrap();
-    let mut w = GameWorld::from_prepared_map(package, pages, vec![], vec![], vec![]).unwrap();
+    let mut w = GameWorld::from_prepared_map(package, pages, vec![], vec![], vec![])
+        .unwrap()
+        .without_loose_rocks();
     w.prepare_navigation(&|| false).unwrap();
     for _ in 0..40 {
         w.allocate_entity_id().unwrap();

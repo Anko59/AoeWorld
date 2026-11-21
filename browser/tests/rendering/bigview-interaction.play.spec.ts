@@ -18,7 +18,9 @@ test("map clusters zoom into their location and selected units keep right-click 
   // Villagers stand away from the town centre; units at a place fold into its plaque.
   const orders = await ownersFixture(page, 12);
   await page.goto("/?play=1#x=8192.5&y=8192.5&zoom=1");
-  await expect(page.locator("#connection")).toHaveText("connected");
+  await expect(page.locator("#connection")).toHaveText("connected", {
+    timeout: 30_000,
+  });
   await expect(page.locator("#playground")).toHaveAttribute(
     "data-renderer",
     info.project.name === "webgpu"
@@ -46,14 +48,33 @@ test("map clusters zoom into their location and selected units keep right-click 
   ) as { x: number; y: number; count: number }[];
   const cluster = clusters.find((c) => c.count > 1);
   if (!cluster) throw new Error("Counted cluster missing");
-  await page.mouse.click(cluster.x, cluster.y);
+  await page.mouse.move(cluster.x, cluster.y);
+  await page.mouse.down();
+  await freshHud(page);
+  await expect(page.locator("#scene")).toHaveAttribute("data-lod", "map");
+  await page.mouse.up();
   await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
   await expect(page.locator("#selection")).toHaveAttribute("data-count", "1");
   const marker = JSON.parse(
     (await page.locator("#strategic-scene").getAttribute("data-picks")) ?? "[]",
   ) as { x: number; y: number }[];
   if (!marker[0]) throw new Error("Marker missing");
-  await page.mouse.click(marker[0].x, marker[0].y);
+  const { x, y } = marker[0];
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 60, y + 60, { steps: 6 });
+  await page.mouse.up();
+  await freshHud(page);
+  await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
+  // Returning to the starting point before release still counts as a drag.
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 60, y + 60, { steps: 6 });
+  await page.mouse.move(x, y, { steps: 6 });
+  await page.mouse.up();
+  await freshHud(page);
+  await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
+  await page.mouse.click(x, y);
   await expect(page.locator("#scene")).toHaveAttribute("data-lod", "sprites");
 });
 

@@ -1,3 +1,4 @@
+import { bindResearchTooltip, updateResearchTooltip } from '/interface/dom/research-tooltip.js';
 import { set, attribute } from '/interface/dom/update.js';
 import { artReady, entityIcon, icon, playerTint } from '/interface/ui-art.js';
 import { renderSelectionIcons } from '/interface/selection-grid.js';
@@ -125,9 +126,16 @@ export function commandButtons() {
     set(button, 'className', entry.className ?? '');
     set(button, 'disabled', Boolean(entry.disabled));
     const title = [entry.label, entry.cost, entry.reason, entry.key].filter(Boolean).join(' · ');
-    set(button, 'title', entry.title ?? title);
     attribute(button, 'aria-label', entry.name ?? entry.label);
-    attribute(button, 'aria-description', [entry.cost, entry.reason].filter(Boolean).join(' · '));
+    if (entry.tooltip) {
+      // Research cards describe the technology in a popover; the title keeps the
+      // cost and requirement text (hidden only while the popover is open).
+      if (!button.dataset.tooltip) { button.dataset.tooltip = '1'; bindResearchTooltip(button); }
+      updateResearchTooltip(button, [entry.label.replace(/^Research /, ''), entry.tooltip, entry.reason].filter(Boolean).join(' · '), entry.title ?? title);
+    } else {
+      set(button, 'title', entry.title ?? title);
+      attribute(button, 'aria-description', [entry.cost, entry.reason].filter(Boolean).join(' · '));
+    }
     if (entry.key !== undefined) attribute(button, 'aria-keyshortcuts', entry.key);
     if (entry.pressed !== undefined) attribute(button, 'aria-pressed', entry.pressed);
     if (entry.price !== undefined) attribute(button, 'data-price', entry.price);
