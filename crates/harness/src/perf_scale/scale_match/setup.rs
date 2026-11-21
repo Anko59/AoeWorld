@@ -87,7 +87,11 @@ pub(super) fn start(
             )
             .into());
         }
-        (serde_json::from_slice(&response.body)?, None, None)
+        let human = options
+            .human_view
+            .map(|side| save::watch(server, side))
+            .transpose()?;
+        (serde_json::from_slice(&response.body)?, human, None)
     };
     Ok(result)
 }
