@@ -2,7 +2,23 @@
 use super::*;
 pub(super) fn append(records: &mut Vec<u8>) {
     let graphic = 28000_i16;
-    for name in ["b_dark_house_age1_x1", ""] {
+    let fire = 28001_i16;
+    graphic_record(records, graphic, "b_dark_house_age1_x1", "");
+    graphic_record(records, fire, "None", "fire_fixture");
+    for id in aoe_assets::catalog::GAMEPLAY_BUILDING_IDS {
+        let id = id as i16;
+        let mut b = units::record(id, &[graphic, -1, -1, -1, -1, -1, -1, -1], -1);
+        if id == 142 {
+            b[157] = 1;
+            b.splice(158..158, fire.to_le_bytes().into_iter().chain([75, 0, 0]));
+        }
+        finish(&mut b, -1);
+        records.extend(b);
+    }
+}
+
+fn graphic_record(records: &mut Vec<u8>, graphic: i16, file: &str, particle: &str) {
+    for name in [file, particle] {
         records.extend([0x60, 0x0a]);
         records.extend((name.len() as u16).to_le_bytes());
         records.extend(name.as_bytes());
@@ -14,12 +30,6 @@ pub(super) fn append(records: &mut Vec<u8>) {
     records.extend([0; 13]);
     records.extend(graphic.to_le_bytes());
     records.extend([0; 2]);
-    for id in aoe_assets::catalog::GAMEPLAY_BUILDING_IDS {
-        let id = id as i16;
-        let mut b = units::record(id, &[graphic, -1, -1, -1, -1, -1, -1, -1], -1);
-        finish(&mut b, -1);
-        records.extend(b);
-    }
 }
 
 pub(super) fn finish(b: &mut Vec<u8>, construction: i16) {

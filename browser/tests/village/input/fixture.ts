@@ -41,6 +41,7 @@ export function building(
   complete = true,
   player = 0,
   food?: number,
+  age = 0,
 ) {
   return [
     id,
@@ -59,7 +60,7 @@ export function building(
     0,
     0,
     0,
-    0,
+    age,
     0,
     0,
     0, // Prepaid Mill reseeds follow the rally point in the current wire.

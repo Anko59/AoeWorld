@@ -37,6 +37,8 @@ pub struct GameFrame {
 /// Optional nonblocking scenery; an empty group means the pack has no such art.
 #[derive(Default)]
 pub struct SceneryArt {
+    /// Native bare furrows under a Farm that is still being seeded.
+    pub farm_seedbed: (Vec<GameFrame>, Option<TerrainTopology>),
     /// Native DAT gather-point flag (ten cells).
     pub rally_flags: Vec<GameFrame>,
     /// Raw 25-slot cliff-face group; only the reviewed slots are drawn.

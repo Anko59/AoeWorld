@@ -85,6 +85,13 @@ export function initReveal() {
     if (visible) begin();
     if (original && !motion) finish = [original[2],original[3],original[8]];
   }
+  function reset(alreadySeen = false) {
+    generation++;
+    seen = alreadySeen;
+    checking = false;
+    requested = motion = finish = near = latest = null;
+    dismiss();
+  }
   return {
     navigation(state) {
       latest = Array.from(state);
@@ -129,6 +136,7 @@ export function initReveal() {
       dismiss();
       return target;
     },
-    reset() { generation++; seen = false; checking = false; requested = motion = finish = near = latest = null; dismiss(); },
+    skip: () => reset(true),
+    reset,
   };
 }

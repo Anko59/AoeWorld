@@ -303,7 +303,7 @@ pub(super) fn test_unit(kind: SceneUnitKind) -> SceneUnit {
 }
 
 #[wasm_bindgen_test]
-fn farm_foundation_and_completed_farm_use_the_native_field_surface() {
+fn unseeded_farm_uses_bare_furrows_until_construction_completes() {
     let mut art = crate::surface_mesh::mix::fixture::art();
     art.compositions.push(crate::BuildingArt {
         unit_id: 50,
@@ -315,7 +315,7 @@ fn farm_foundation_and_completed_farm_use_the_native_field_surface() {
         damage: Vec::new(),
     });
     for (kind, expected) in [
-        (SceneUnitKind::ConstructionFarm, 17),
+        (SceneUnitKind::ConstructionFarm, 19),
         (SceneUnitKind::Farm, 17),
     ] {
         let mut tiles = [SceneTerrain {

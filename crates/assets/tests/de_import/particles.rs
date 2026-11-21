@@ -39,6 +39,18 @@ pub(super) fn write(install: &Path) -> Particles {
         json!({ "frames": vec![cell; 1024] }).to_string(),
     )
     .unwrap();
+    fs::write(
+        path.join("fire_fixture.json"),
+        json!({
+            "AtlasFile": "textures/atlases/fixture.dds",
+            "ImageCount": 2,
+            "Duration1": 0.9,
+            "Duration2": 1.1,
+            "IsFire": true
+        })
+        .to_string(),
+    )
+    .unwrap();
     let mut particles = Particles::default();
     for binding in BINDINGS {
         let parent_action: fn(&Action) -> bool;
