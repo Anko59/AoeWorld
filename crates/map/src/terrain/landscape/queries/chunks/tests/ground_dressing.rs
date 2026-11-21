@@ -145,6 +145,19 @@ fn a_loose_rock_cannot_spill_into_a_reserved_tile_across_a_chunk_edge() {
         })
         .expect("fixture has a pile on the east edge of a chunk");
     let next = candidate(&generator, edge.x / CHUNK_TILES, edge.y / CHUNK_TILES);
+    let physical = generator
+        .evaluate_physical_chunk_with_cancel(
+            next.x,
+            next.y,
+            &policy,
+            &|_| Reservations::default(),
+            &|| false,
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(physical.tiles, next.tiles);
+    assert_eq!(physical.resources, next.resources);
+
     assert!(
         !next
             .tiles
@@ -170,4 +183,99 @@ fn a_loose_rock_cannot_spill_into_a_reserved_tile_across_a_chunk_edge() {
             .decoration
             .is_none_or(|d| d.family != DecorationFamily::Stone)
     );
+}
+
+#[test]
+fn rock_coverage_visits_each_halo_anchor_once_and_stamps_overlap() {
+    use std::{cell::RefCell, collections::BTreeSet};
+
+    let origin = TileCoord::new(32, 32);
+    let outside = TileCoord::new(31, 40);
+    let inside = TileCoord::new(33, 40);
+    let seen = RefCell::new(BTreeSet::new());
+    let rocks = dressing::ChunkRocks::new(
+        origin,
+        96,
+        |at| {
+            assert!(seen.borrow_mut().insert((at.x, at.y)));
+            Ok(at == outside || at == inside)
+        },
+        true,
+    )
+    .unwrap();
+    assert_eq!(seen.into_inner().len(), 34 * 34);
+    assert_eq!(rocks.at(0, 8), (false, true));
+    assert_eq!(rocks.at(1, 8), (true, true));
+    assert_eq!(rocks.at(2, 9), (false, true));
+    assert_eq!(rocks.at(3, 9), (false, false));
+}
+
+#[test]
+fn packed_and_decoded_navigation_block_the_full_rock_footprint() {
+    let generator = fixture(96, 20, 20_000);
+    let piles = (0..3).flat_map(|y| (0..3).map(move |x| (x, y)));
+    let center = piles
+        .flat_map(|(x, y)| {
+            generator
+                .landscape_chunk_with_cancel(x, y, &|| false)
+                .unwrap()
+                .decorations
+        })
+        .find(|decoration| {
+            let interior = 1..CHUNK_TILES - 1;
+            decoration.family == DecorationFamily::Stone
+                && interior.contains(&(decoration.tile.x % CHUNK_TILES))
+                && interior.contains(&(decoration.tile.y % CHUNK_TILES))
+        })
+        .expect("steppe fixture grows a rock wholly inside a chunk")
+        .tile;
+    let mut bytes = Vec::new();
+    let mut records = Vec::new();
+    for y in 0..3 {
+        for x in 0..3 {
+            let start = bytes.len();
+            bytes.extend(
+                generator
+                    .prepare_static_navigation_chunk(x, y, &|| false)
+                    .unwrap()
+                    .encode()
+                    .unwrap(),
+            );
+            records.push(start..bytes.len());
+        }
+    }
+    let snapshot = Arc::new(
+        crate::NavigationSnapshot::from_storage(3, Arc::new(bytes), records, &|| false).unwrap(),
+    );
+    let loaded = fixture(96, 20, 20_000);
+    loaded
+        .install_navigation_snapshot(snapshot.clone())
+        .unwrap();
+    let assert_footprint = || {
+        for tile in dressing::rock_footprint(center) {
+            let cell = loaded
+                .walk_at_with_cancel(tile, &|| false)
+                .unwrap()
+                .unwrap();
+            assert!(!cell.passable, "rock at {center:?} covers {tile:?}");
+            assert!(cell.node.is_none());
+        }
+    };
+    assert_footprint();
+    let packed_bytes = snapshot.heap_bytes();
+    for _ in 0..2 * CHUNK_TILES * CHUNK_TILES {
+        assert!(
+            !loaded
+                .walk_at_with_cancel(center, &|| false)
+                .unwrap()
+                .unwrap()
+                .passable
+        );
+    }
+    assert!(
+        snapshot.heap_bytes() > packed_bytes,
+        "the chunk was decoded"
+    );
+    assert_footprint();
+    assert_eq!(loaded.walk_cache_usage(), (0, 0));
 }

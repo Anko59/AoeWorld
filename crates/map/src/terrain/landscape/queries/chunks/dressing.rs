@@ -8,11 +8,69 @@ use super::*;
 /// and round out to every tile it overlaps.
 const ROCK_REACH_X: i32 = (100 + 48) / 96;
 const ROCK_REACH_Y: i32 = (86 + 48) / 96;
+pub(super) const ROCK_TILES: usize = ((2 * ROCK_REACH_X + 1) * (2 * ROCK_REACH_Y + 1)) as usize;
 
 pub(super) fn rock_footprint(center: TileCoord) -> impl Iterator<Item = TileCoord> {
     (-ROCK_REACH_Y..=ROCK_REACH_Y).flat_map(move |dy| {
         (-ROCK_REACH_X..=ROCK_REACH_X).map(move |dx| TileCoord::new(center.x + dx, center.y + dy))
     })
+}
+
+const CHUNK_SIDE: usize = CHUNK_TILES as usize;
+const ANCHOR: u8 = 1;
+const COVERED: u8 = 2;
+
+/// Scan the one-tile halo too, since a pile in the next chunk can cover a
+/// local tile. These flags are folded into the ordinary terrain and walk bits.
+pub(super) struct ChunkRocks {
+    origin: TileCoord,
+    flags: [u8; CHUNK_SIDE * CHUNK_SIDE],
+}
+
+impl ChunkRocks {
+    pub(super) fn new(
+        origin: TileCoord,
+        width: i32,
+        anchor: impl Fn(TileCoord) -> Result<bool, EnvironmentPageError>,
+        enabled: bool,
+    ) -> Result<Self, EnvironmentPageError> {
+        let mut rocks = Self {
+            origin,
+            flags: [0; CHUNK_SIDE * CHUNK_SIDE],
+        };
+        if enabled {
+            let halo = |start: i32, reach: i32| {
+                (start - reach).max(0)..start.saturating_add(CHUNK_TILES + reach).min(width)
+            };
+            for y in halo(origin.y, ROCK_REACH_Y) {
+                for x in halo(origin.x, ROCK_REACH_X) {
+                    let at = TileCoord::new(x, y);
+                    if anchor(at)? {
+                        for tile in rock_footprint(at) {
+                            if let Some(index) = rocks.index(tile) {
+                                rocks.flags[index] |= COVERED;
+                            }
+                        }
+                        if let Some(index) = rocks.index(at) {
+                            rocks.flags[index] |= ANCHOR;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(rocks)
+    }
+
+    fn index(&self, tile: TileCoord) -> Option<usize> {
+        let x = tile.x.wrapping_sub(self.origin.x) as usize;
+        let y = tile.y.wrapping_sub(self.origin.y) as usize;
+        (x < CHUNK_SIDE && y < CHUNK_SIDE).then(|| y * CHUNK_SIDE + x)
+    }
+
+    pub(super) fn at(&self, local_x: i32, local_y: i32) -> (bool, bool) {
+        let flags = self.flags[local_y as usize * CHUNK_SIDE + local_x as usize];
+        (flags & ANCHOR != 0, flags & COVERED != 0)
+    }
 }
 
 pub(super) fn allows_dressing(reserved: Reservations) -> bool {
@@ -34,8 +92,7 @@ pub(super) fn rock_anchor<const N: usize, const W: usize>(
     reserved_at: &dyn Fn(TileCoord) -> Result<Reservations, EnvironmentPageError>,
 ) -> Result<bool, EnvironmentPageError> {
     let roll = (memo.dressing_roll(position) >> 24) % 1000;
-    if !generator.loose_rocks
-        || roll >= crate::terrain::relief::MAX_ROCK_PER_THOUSAND
+    if roll >= crate::terrain::relief::MAX_ROCK_PER_THOUSAND
         || !generator.landscape_in_bounds(position)
     {
         return Ok(false);
@@ -105,14 +162,13 @@ fn scree_at<const N: usize, const W: usize>(
     terrain: Tile,
     roll: u64,
 ) -> Result<bool, EnvironmentPageError> {
-    // One sample is flat, and fallback terrain has no corner relief. Skip
-    // the outer scree halo entirely on either map.
+    // Uniform and fallback elevation cannot produce cliff scree.
     let has_relief = generator.provider_environment.as_ref().map_or_else(
         || {
             generator
                 .elevation
                 .as_ref()
-                .is_some_and(|elevation| elevation.samples_per_axis > 1)
+                .is_some_and(|elevation| elevation.has_relief())
         },
         |environment| environment.samples_per_axis > 1,
     );

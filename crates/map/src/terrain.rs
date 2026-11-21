@@ -194,7 +194,7 @@ impl MapChunkGenerator {
     }
 
     /// Grows no loose rock piles, for fixture worlds whose hand-placed layouts
-    /// assume open ground. Package-derived worlds never use this.
+    /// assume open ground. Ordinary package play keeps loose rocks enabled.
     pub fn without_loose_rocks(mut self) -> Self {
         self.loose_rocks = false;
         self.derived = Default::default();
@@ -247,11 +247,11 @@ impl MapChunkGenerator {
             geography_key: self.geography_key,
             procedural_seed: self.procedural_seed,
             width_tiles: self.width_tiles,
-            elevation: Some(Arc::new(PreparedElevation {
-                samples_per_axis: environment.samples_per_axis,
+            elevation: Some(Arc::new(PreparedElevation::verified(
+                environment.samples_per_axis,
                 compression,
-                pages: level_zero,
-            })),
+                level_zero,
+            ))),
             water: self.water,
             biome: self.biome,
             historical_land_use: self.historical_land_use,

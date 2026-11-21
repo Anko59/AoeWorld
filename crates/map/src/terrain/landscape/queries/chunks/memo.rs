@@ -8,7 +8,6 @@ struct Entry {
     base: Option<Tile>,
     candidate: Option<Option<ResourceNode>>,
     dressing_roll: Option<u64>,
-    rock: Option<bool>,
     landscape: Option<LandscapeSample>,
 }
 
@@ -155,26 +154,6 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
             self.entries.borrow_mut()[index].dressing_roll = Some(roll);
         }
         roll
-    }
-    pub(super) fn rock(
-        &self,
-        position: TileCoord,
-        evaluate: impl FnOnce() -> Result<bool, EnvironmentPageError>,
-    ) -> Result<bool, EnvironmentPageError> {
-        if (self.cancelled)() {
-            return Err(EnvironmentPageError::Cancelled);
-        }
-        let index = self.index(position);
-        if let Some(index) = index
-            && let Some(rock) = self.entries.borrow()[index].rock
-        {
-            return Ok(rock);
-        }
-        let rock = evaluate()?;
-        if let Some(index) = index {
-            self.entries.borrow_mut()[index].rock = Some(rock);
-        }
-        Ok(rock)
     }
     pub(super) fn base(&self, position: TileCoord) -> Result<Option<Tile>, EnvironmentPageError> {
         // Cancellation is observed even on a hit. Do not retain source errors.

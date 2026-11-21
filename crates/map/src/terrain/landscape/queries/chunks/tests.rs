@@ -13,6 +13,7 @@ fn fixture(width: i32, class: u8, height: i32) -> MapChunkGenerator {
     generator.elevation = Some(Arc::new(PreparedElevation {
         samples_per_axis: 1,
         compression: crate::Ratio::new(30, 1).expect("ratio"),
+        constant_height: None,
         pages: [(
             (0, 0),
             ElevationPage {
