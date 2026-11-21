@@ -7,6 +7,7 @@ use super::{
 use crate::{EconomyError, GameWorld, UnitKind, UnitTask};
 use aoe_core::{CombatStance, EntityId, PlayerId, WorldPosition};
 use std::ops::Bound::{Excluded, Unbounded};
+mod share;
 pub(crate) mod sleep;
 
 pub(super) const MAX_ACQUISITIONS: usize = 128;
@@ -229,6 +230,9 @@ impl GameWorld {
                 if matches!(building_attack, Some((_, false))) {
                     self.stop_movement(self.lookup[&id]);
                 }
+                let group = self.units[self.lookup[&id]]
+                    .formation
+                    .filter(|_| !marching && building_attack.is_none());
                 self.begin_autonomous_attack(
                     id,
                     target,
@@ -237,6 +241,9 @@ impl GameWorld {
                         .unwrap_or(u.position),
                 );
                 changed.push(id);
+                if let Some(leader) = group {
+                    self.alert_idle_group(leader, u.position, changed);
+                }
             }
         }
     }

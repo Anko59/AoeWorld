@@ -215,6 +215,18 @@ impl GameWorld {
 
     /// One unit leaves its group: a death, a stop, a single-unit move or
     /// retaliation. The others keep route, slots, queue and pace.
+    /// The members of `leader`'s group still in it.
+    pub(crate) fn attached_members(&self, leader: EntityId) -> Vec<EntityId> {
+        self.formations.get(&leader).map_or_else(Vec::new, |group| {
+            group
+                .members
+                .iter()
+                .filter(|m| !m.detached)
+                .map(|m| m.id)
+                .collect()
+        })
+    }
+
     pub(crate) fn leave_group(&mut self, id: EntityId) {
         self.leave_groups(&[id]);
     }
