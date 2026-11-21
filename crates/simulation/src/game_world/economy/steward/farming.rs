@@ -268,11 +268,12 @@ impl GameWorld {
         if anchors.is_empty() {
             return false;
         }
-        // Each anchor has at most 16 farm lattice cells followed by 8 new
-        // Mill sites. The retained cursor reaches every anchor without ever
-        // increasing this pass's ordinary placement/order budgets.
+        // Search farm cells first. Expansion sites are eligible only once
+        // the current Mill finishes, so a pending Mill leaves the entire
+        // placement budget available for farms.
         let farm_slots = anchors.len() * 16;
-        let total = farm_slots + anchors.len() * 8;
+        let mill_slots = if pending_mill { 0 } else { anchors.len() * 8 };
+        let total = farm_slots + mill_slots;
         // Fresh searches begin at the nearest drop-off. Saved indices always
         // refer to the stable entity-ordered list, including a saved zero.
         let start = s.home.farm_after.map_or_else(
@@ -313,9 +314,6 @@ impl GameWorld {
                     TileCoord::new(rect.min.x + (x - 1) * 3, rect.min.y + (y - 1) * 3),
                 )
             } else {
-                if pending_mill {
-                    continue;
-                }
                 let offset = candidate - farm_slots;
                 let rect = anchors[offset / 8].1;
                 let dx = (rect.width() + 2) / 3 * 3 + 6;
@@ -335,12 +333,9 @@ impl GameWorld {
                     TileCoord::new(rect.min.x + x, rect.min.y + y),
                 )
             };
+            // Continue from the next slot on the next job. Restarting after
+            // every success makes newly idle villagers revisit occupied plots.
             if self.steward_farm_site(worker, kind, tile, s, budget, work) {
-                // Start with farms again once a cluster has gained a building.
-                s.home.farm_after = None;
-                if let Some(home) = self.economy.steward_homes.get_mut(&s.steward) {
-                    home.farm_after = None;
-                }
                 return true;
             }
         }

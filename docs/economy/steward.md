@@ -130,17 +130,19 @@ opening another plot. Each unfinished Farm keeps one future farmer, while
 other economic foundations may take helpers. New Farms tile in three-tile
 cells around Mills and Town Centers; full clusters expand with another Mill.
 Farm placement resumes across passes within the same 32-site budget, and
-exhausting natural-resource searches does not prevent farming with the
-remaining order and placement budget. The manager helps unfinished economic
-foundations with the nearest unloaded idle villagers in the admitted census:
-at most three builders on a House or Mill, four on a Lumber/Mining Camp. A Farm
-gets one prospective farmer. Known managed builders outside a partial census
-and assignments earlier in the same pass count immediately. Other workers keep
-looking for resource work instead of joining a full
-team. A pending Mill does not block Farms served by completed drop-offs once
-the normal completed-Mill prerequisite is met. The manager prepays two normal
-Mill reseeds. Every cost, exploration check, placement
-rule and build/train time is the ordinary simulation rule.
+continues from the next plot after finding a site. While a Mill is pending,
+only farm sites use that placement budget. Exhausting natural-resource
+searches leaves the remaining order and placement budget available for farms.
+The manager helps unfinished economic foundations with nearby unloaded idle
+villagers. Houses and Mills normally get up to three builders, Lumber and
+Mining Camps get up to four, and a Farm gets one prospective farmer. When
+housing is full and the player still needs its first Mill, idle builders can
+fill the work positions around those Houses and Mills. This requires a complete
+census. Known managed builders outside a partial census and assignments
+earlier in the same pass count immediately. Pending Mills leave completed
+drop-offs available for Farm placement after the first Mill is built. The
+manager prepays two normal Mill reseeds. Every cost, exploration check,
+placement rule and build or train time follows the ordinary simulation rules.
 
 Adopted farmers also build a nearby Mill for an old distant plot when a legal
 site exists within six tiles of its centre. Repairs rotate between plots and

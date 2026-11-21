@@ -74,9 +74,34 @@ fn busy() -> GameWorld {
         .unwrap();
     world.issue_move(scout, at(40, 36)).unwrap();
     world.issue_queued_move(scout, at(46, 40)).unwrap();
+    let castle = world
+        .insert_building(
+            PlayerId(0),
+            crate::BuildingKind::Castle,
+            aoe_core::TileRect::from_xywh(start.x + 18, start.y + 18, 4, 4),
+            true,
+        )
+        .unwrap();
+    let vassal = world
+        .spawn_kind(PlayerId(0), crate::UnitKind::Vassal, at(17, 20))
+        .unwrap();
+    world.issue_garrison(PlayerId(0), vassal, castle).unwrap();
     for _ in 0..40 {
         world.advance();
     }
+    world
+        .issue_vassal_focus(PlayerId(0), vassal, crate::VassalFocus::Roads)
+        .unwrap();
+    world.set_fog_disabled(true);
+    world
+        .issue_build(
+            PlayerId(0),
+            &[],
+            crate::BuildingKind::House,
+            TileCoord::new(start.x + 9, start.y + 9),
+            false,
+        )
+        .unwrap();
     world
 }
 

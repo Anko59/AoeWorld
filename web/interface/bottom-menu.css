@@ -108,7 +108,7 @@
 /* A selected building: portrait and garrison on the left, status and production on the right.
    Garrison and queue tokens are sized by autoFit() to the room each has. */
 #bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])) { display:grid; grid-template-columns:minmax(210px,min(40%,290px)) minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); column-gap:12px; align-items:stretch; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])):has(#vassal-panel:not([hidden])) { grid-template-columns:minmax(210px,min(36%,290px)) minmax(0,1fr) minmax(130px,min(28%,200px)); }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])):has(#vassal-panel:not([hidden])) { grid-template-columns:minmax(190px,min(36%,290px)) minmax(0,1fr) minmax(150px,min(30%,210px)); }
 #bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden])):has(#steward-controls:not([hidden])) { grid-template-columns:minmax(154px,min(31%,210px)) minmax(0,1fr) minmax(130px,min(28%,200px)); column-gap:8px; }
 #bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#selected-icons:empty { display:none; }
 #bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#selection-heading { grid-column:1; grid-row:1; }
@@ -126,7 +126,10 @@
 #bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#training { grid-column:2 / -1; grid-row:2; min-height:0; margin:2px 0 0; max-width:none; display:flex; flex-direction:column; }
 #bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#training[hidden] { display:none; }
 #bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#garrison-panel { grid-column:1; grid-row:2; min-height:0; margin:0; }
-#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#vassal-panel { grid-column:3; grid-row:1; }
+#bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#vassal-panel { grid-column:3; grid-row:1 / 3; font-size:10px; line-height:11px; }
+#bottom-panel[data-frame=native] #selection-content:has(#vassal-panel:not([hidden]))>#training { grid-column:2; }
+#bottom-panel[data-frame=native] #vassal-panel input[type=range],#bottom-panel[data-frame=native] #vassal-chooser select { height:14px; }
+#bottom-panel[data-frame=native] #vassal-chooser select { font:inherit; padding:0; }
 #bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#steward-status { grid-column:2; grid-row:1; align-self:end; margin:0; font-size:9px; line-height:11px; white-space:normal; }
 #bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#steward-controls { grid-column:3; grid-row:1 / 3; padding-bottom:44px; font-size:9px; line-height:12px; gap:1px; }
 #bottom-panel[data-frame=native] #selection-content:has(#building-panel:not([hidden]))>#steward-controls label { gap:3px; }

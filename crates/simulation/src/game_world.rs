@@ -55,7 +55,8 @@ pub use economy::{
     PlayerEconomy, RallyPoint, RallyTarget, STEWARD_RULES, STEWARD_STALL_SECONDS, SquadKind,
     SquadStatus, StewardRules, StewardSettings, StewardStatus, StewardWait, StewardWork, Stockpile,
     TickPhase, TrainingEntry, UnitKind, UnitTask, VASSAL_LIMIT, VASSAL_RADIUS, VILLAGE_RULES,
-    VassalStatus, VassalWait, VillageRules, WorldLimits, trainable_units,
+    VassalFocus, VassalJob, VassalJobs, VassalStatus, VassalWait, VillageRules, WorldLimits,
+    trainable_units,
 };
 pub use facing::Facing;
 pub(crate) use facing::facing_for;
@@ -492,9 +493,8 @@ fn next_random(state: &mut u64) -> u64 {
     *state
 }
 
-#[cfg(test)]
-mod tests;
-
 #[cfg(any(test, feature = "bench-fixtures"))]
 #[path = "game_world/tests/real_terrain/fixtures/mod.rs"]
 pub mod terrain_fixtures;
+#[cfg(test)]
+mod tests;

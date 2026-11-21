@@ -4,6 +4,7 @@ use super::*;
 impl GameWorld {
     /// Delete a building and its collision (cancelled foundation, spent farm).
     pub(crate) fn remove_building(&mut self, id: EntityId) {
+        self.economy.dispatch.sites.remove(&id);
         self.economy.town_bells.remove(&id);
         self.wake_construction(id);
         self.forget_queues(id);

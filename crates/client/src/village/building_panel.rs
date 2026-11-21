@@ -85,7 +85,7 @@ pub(super) fn update(client: &Client, scale: f64) {
                 availability::research(b, player, owner(client), completed, duplicate, r).number();
         }
     }
-    let builders = player.is_some() && construction::has_builders(client);
+    let builders = player.is_some() && construction::allows_land_placement(client);
     let ships = player.is_some() && !construction::ship_builders(client).is_empty();
     let build_menu = availability::BuildMenu::new(player, completed, builders, ships);
     for kind in KINDS

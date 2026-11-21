@@ -59,6 +59,9 @@ impl GameWorld {
             self.combat.tower_ready.insert(id, 0);
         }
         self.refresh_population_cap(player);
+        if let Some(Some(vassal)) = self.economy.dispatch.sites.remove(&id) {
+            self.finish_vassal_job(vassal, id);
+        }
         Some((player, kind, footprint))
     }
 }

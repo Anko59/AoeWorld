@@ -40,7 +40,7 @@ impl GameWorld {
         let occupants = std::mem::take(&mut shelter.garrison);
         let mut retained = Vec::new();
         for occupant in occupants {
-            if !matches(&occupant) || !self.eject_occupant(footprint, occupant, false) {
+            if !matches(&occupant) || !self.eject_occupant(footprint, &occupant, false) {
                 retained.push(occupant);
             } else if resume {
                 self.resume_sheltered_work(occupant.unit.player, occupant.unit.id, occupant.intent);
@@ -58,7 +58,7 @@ impl GameWorld {
     fn eject_occupant(
         &mut self,
         footprint: TileRect,
-        occupant: GarrisonedUnit,
+        occupant: &GarrisonedUnit,
         forced: bool,
     ) -> bool {
         // Local, canonical rings; queries visit occupied spatial buckets only.
@@ -126,7 +126,7 @@ impl GameWorld {
             if occupant.unit.kind == UnitKind::Steward {
                 self.set_steward_town_center(occupant.unit.id, None);
             }
-            if self.eject_occupant(footprint, occupant, true) {
+            if self.eject_occupant(footprint, &occupant, true) {
                 changed.push(occupant.unit.id);
             } else {
                 retained.push(occupant);

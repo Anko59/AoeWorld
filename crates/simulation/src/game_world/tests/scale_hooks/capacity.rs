@@ -156,7 +156,7 @@ fn a_full_world_refuses_as_a_world_limit() {
             TileCoord::new(110, 100),
             false
         ),
-        Err(EconomyError::OrderTooLarge)
+        Err(EconomyError::Capacity)
     );
 }
 

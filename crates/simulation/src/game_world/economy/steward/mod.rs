@@ -412,9 +412,6 @@ impl GameWorld {
         {
             self.forget_steward_refusals(worker);
         }
-        if self.vassal_controller(worker).is_some() {
-            return;
-        }
         let ship = self
             .unit(worker)
             .is_some_and(|u| u.kind == UnitKind::FishingShip);

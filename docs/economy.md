@@ -376,24 +376,24 @@ The [Steward](economy/steward.md) is trained at a Town Center and has a fixed
 
 ## Defensive Vassal
 
-Garrison a Vassal in an owned Castle to activate a 24-tile defensive territory.
-It adopts only idle own units, up to 20 villagers and 20 military. Busy Steward
-workers keep their jobs. General army members are never recruited, including
-idle members during a recall or return. Accepted owner orders release Vassal
-control; a manually commanded soldier stays outside Vassal recruitment for its
-remaining lifetime, including after Stop or completion of its order.
-Ungarrisoning releases the domain.
+Garrison a Vassal in an owned Castle to plan defenses and infrastructure in
+its territory. The Vassal can recruit up to 20 idle own military units.
+General army members and manually commanded soldiers stay out of recruitment.
 
-Development has a finite target: two Watch Towers (from Feudal Age), one
-Castle-side Barracks and a 21-by-21 wall perimeter with two four-tile gates.
-Castle Age uses stone walls; earlier ages use palisades. After these 77 Castle
-Age sites, development adds a road to the nearest Town Center. The panel counts
-the fortifications and road tiles and reports the next deficit, construction, reserve,
-blocked sites, missing builders, pause or completion. Completed land stops
-buying and releases its builders. Destruction reopens the relevant deficit.
-Each purchase preserves 200 food, 200 wood, 100 gold and 200 stone for the
-Steward economy. Stop/resume controls only development; defence stays active.
+The Vassal pays for a bounded pipeline of foundations while preserving 200
+food, 200 wood, 100 gold, and 200 stone. Far-view land placement uses the same
+shared construction queue. It prefers nearby idle villagers and can borrow
+unloaded Steward gatherers, preserving their resource job for after construction.
+The queue adds builders up to half the player's living villagers and borrows
+at most a quarter from active gathering. It allows one builder for small
+villages. It counts far-view Farm foundations toward the construction limit
+and lets Stewards seed their other farms while those slots are full. Remaining
+work sets the number requested for each site. Owner orders using explicitly
+selected builders take precedence.
 
+The Castle panel shows planned, current, and finished work. Pausing stops
+new placement while shared builders finish foundations already paid for.
+Upgraded towers still serve their sites, and a replan keeps paid work available.
 Visible enemies inside the territory raise an alert. The garrison's soldiers
 engage them and friendly Generals within 100 tiles receive ordinary marches.
 Once the threat leaves, surviving Generals resume their saved destination or

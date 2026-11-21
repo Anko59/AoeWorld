@@ -139,6 +139,14 @@ impl GameWorld {
             market_recovery: self.economy.market_recovery.snapshot(self.tick.0),
             resources,
             buildings,
+            dispatch_sites: self
+                .economy
+                .dispatch
+                .sites
+                .iter()
+                .map(|(&site, &v)| (site, v))
+                .collect(),
+            dispatch_cursor: self.economy.dispatch.cursor,
             units,
             formations: self.formation_records(),
             animals: self.animal_records(),
@@ -202,6 +210,15 @@ impl GameWorld {
                     .get(id)
                     .is_some_and(|b| b.kind == BuildingKind::TownCenter && b.is_complete())
             }));
+        for &(site, vassal) in &snapshot.dispatch_sites {
+            if self
+                .building(site)
+                .is_some_and(|b| !b.is_complete() && b.hp > 0)
+            {
+                self.economy.dispatch.sites.insert(site, vassal);
+            }
+        }
+        self.economy.dispatch.cursor = snapshot.dispatch_cursor;
         self.restore_general_ownership(&snapshot.units);
         for record in &snapshot.units {
             if let Some(transport) = record.embarked_in {
@@ -396,8 +413,9 @@ impl GameWorld {
             Some(Management::Steward(settings)) => {
                 self.issue_steward_settings(player, id, settings).is_ok()
             }
-            Some(Management::Vassal { development }) => self
-                .issue_vassal_development(player, id, development)
+            Some(Management::Vassal { development, focus }) => self
+                .issue_vassal_focus(player, id, focus)
+                .and_then(|()| self.issue_vassal_development(player, id, development))
                 .is_ok(),
             Some(Management::General {
                 training,

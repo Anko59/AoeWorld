@@ -1,74 +1,116 @@
 use super::*;
+use aoe_protocol::{VassalFocus, VassalJobs};
+
 #[wasm_bindgen(
-    inline_js = "export function vassal_update(v, label) { window.aoeVassal?.update(v, label); } export function vassal_bind(cb) { window.aoeVassal.bind(cb); }"
+    inline_js = "export function vassal_update(v, label, jobs) { window.aoeVassal?.update(v, label, jobs); } export function vassal_bind(cb) { window.aoeVassal.bind(cb); } export function vassal_selected() { return window.aoeVassal?.selected() ?? 0; }"
 )]
 extern "C" {
-    fn vassal_update(v: &[u32], label: &str);
+    fn vassal_update(v: &[u32], label: &str, jobs: &str);
+    fn vassal_selected() -> u32;
     #[wasm_bindgen(catch)]
     fn vassal_bind(cb: &js_sys::Function) -> Result<(), JsValue>;
 }
-fn selected(client: &Client) -> Option<&aoe_protocol::GarrisonUnitState> {
+
+fn occupants(client: &Client) -> impl Iterator<Item = &aoe_protocol::GarrisonUnitState> {
     super::super::production::selected(client)
-        .filter(|b| b.player == owner(client) && b.kind == BuildingKind::Castle)?
-        .garrison
-        .iter()
-        .find(|g| g.kind == UnitKind::Vassal && g.hp > 0)
+        .filter(|b| b.player == owner(client) && b.kind == BuildingKind::Castle)
+        .into_iter()
+        .flat_map(|b| &b.garrison)
+        .filter(|g| g.kind == UnitKind::Vassal && g.hp > 0 && g.vassal.is_some())
 }
+
+fn selected(client: &Client) -> Option<&aoe_protocol::GarrisonUnitState> {
+    let mut occupants = occupants(client);
+    let first = occupants.next()?;
+    let requested = vassal_selected();
+    if first.id.0 == requested {
+        return Some(first);
+    }
+    occupants.find(|g| g.id.0 == requested).or(Some(first))
+}
+
+fn jobs_text(groups: [VassalJobs; 3]) -> String {
+    use std::fmt::Write;
+    let mut text = String::new();
+    for jobs in groups {
+        for job in jobs.recent.into_iter().flatten() {
+            let _ = write!(text, "{:?} at {}, {}\t", job.kind, job.tile.x, job.tile.y);
+        }
+        text.push('\n');
+    }
+    text
+}
+
 pub(super) fn present(client: &Client) {
-    let Some(g) = selected(client) else {
-        vassal_update(&[], "");
-        return;
-    };
-    let Some(r) = g.vassal else {
-        vassal_update(&[], "");
+    let Some((g, r)) = selected(client).and_then(|g| g.vassal.map(|r| (g, r))) else {
+        vassal_update(&[], "", "");
         return;
     };
     let why = [
-        "building",
-        "waiting for economy reserve (200 food, 200 wood, 100 gold, 200 stone)",
-        "waiting for idle builders",
-        "site blocked or unreachable; trying other sites",
+        "working",
+        "waiting for economy reserve",
+        "waiting for available builders",
+        "site blocked or unreachable",
         "development paused",
-        "developed enough; spending stopped and builders released",
+        "development complete",
         "waiting for age",
     ]
     .get(usize::from(r.wait))
     .copied()
     .unwrap_or("waiting");
-    let next = r
-        .next
-        .map_or_else(|| "none".to_owned(), |kind| format!("{kind:?}"));
     let alert = if r.alert {
-        format!("UNDER ATTACK · {} General(s) responding · ", r.responding)
+        format!(" · UNDER ATTACK · {} General(s) responding", r.responding)
     } else {
-        "holding territory · ".into()
+        "\nholding territory".to_owned()
     };
-    let label = format!(
-        "Vassal · {alert}{}/20 villagers · {}/20 military · next: {next} · {why}. Developed when two towers, a barracks, the gated wall ring and a road to the nearest Town Center are complete: {}/{} sites. Territory: 24 tiles. Calls Generals within 100 tiles.",
-        r.villagers, r.military, r.completed, r.total
-    );
+    let label = format!("{}/20 military{alert}\n{why}", r.military);
+    let mut values = vec![
+        g.id.0,
+        u32::from(r.development),
+        u32::from(r.alert),
+        r.focus as u32,
+        r.current.count,
+        r.planned.count,
+        r.finished.count,
+    ];
+    values.extend(occupants(client).map(|g| g.id.0));
     vassal_update(
-        &[g.id.0, u32::from(r.development), u32::from(r.alert)],
+        &values,
         &label,
+        &jobs_text([r.current, r.planned, r.finished]),
     );
 }
+
 pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
-    let callback = Closure::<dyn FnMut()>::new(move || {
+    let callback = Closure::<dyn FnMut(u8, u8)>::new(move |action, value| {
         let mut client = shared.borrow_mut();
-        let Some((id, enabled)) =
-            selected(&client).and_then(|g| g.vassal.map(|r| (g.id, !r.development)))
-        else {
+        let Some((g, report)) = selected(&client).and_then(|g| g.vassal.map(|r| (g, r))) else {
             return;
         };
         let sequence = client.next_sequence;
-        super::super::orders::send(
-            &mut client,
-            aoe_protocol::GameplayClientMessage::VassalDevelopmentOrder {
+        let vassal_id = g.id;
+        use aoe_protocol::GameplayClientMessage as Message;
+        let message = match action {
+            0 => Message::VassalDevelopmentOrder {
                 sequence,
-                vassal_id: id,
-                enabled,
+                vassal_id,
+                enabled: !report.development,
             },
-        );
+            1 => {
+                let Some(&focus) =
+                    [VassalFocus::Fortify, VassalFocus::Roads].get(usize::from(value))
+                else {
+                    return;
+                };
+                Message::VassalFocusOrder {
+                    sequence,
+                    vassal_id,
+                    focus,
+                }
+            }
+            _ => return,
+        };
+        super::super::orders::send(&mut client, message);
     });
     vassal_bind(callback.as_ref().unchecked_ref())?;
     callback.forget();

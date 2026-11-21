@@ -22,6 +22,21 @@ impl Economy {
         self.hash_steward_manager(hash);
         self.hash_generals(hash);
         self.hash_vassals(hash);
+        if !self.dispatch.sites.is_empty() {
+            hash.update(b"construction-dispatch");
+            hash.update(
+                &self
+                    .dispatch
+                    .cursor
+                    .map_or(u32::MAX, |id| id.0)
+                    .to_le_bytes(),
+            );
+            hash.update(&(self.dispatch.sites.len() as u64).to_le_bytes());
+            for (site, vassal) in &self.dispatch.sites {
+                hash.update(&site.0.to_le_bytes());
+                hash.update(&vassal.map_or(u32::MAX, |id| id.0).to_le_bytes());
+            }
+        }
         hash.update(&(self.income.len() as u64).to_le_bytes());
         for (player, income) in &self.income {
             hash.update(&player.0.to_le_bytes());

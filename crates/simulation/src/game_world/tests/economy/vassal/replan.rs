@@ -32,13 +32,6 @@ fn pending_domain() -> (GameWorld, EntityId, Site, EntityId) {
     let tower = w.vassal_plan(v)[0];
     assert_eq!(tower.kind, BuildingKind::WatchTower);
     assert!(w.vassal_planning_pending(v));
-    w.economy
-        .vassals
-        .domains
-        .get_mut(&v)
-        .unwrap()
-        .workers
-        .insert(worker);
     (w, v, tower, worker)
 }
 
@@ -222,4 +215,70 @@ fn f3_refused_placement_relocates_before_refusal_expires() {
         "F3: the refused barracks must move within 200 ticks, before refusal expiry"
     );
     assert!(rebuilt.iter().any(|s| s.kind == site.kind));
+}
+
+#[test]
+fn completed_gate_satisfies_wall_sites_even_when_damaged() {
+    let (mut w, v, _, _) = pending_domain();
+    let gate = w
+        .insert_building(
+            PlayerId(0),
+            BuildingKind::StoneGate,
+            TileRect::from_xywh(95, 98, 4, 1),
+            true,
+        )
+        .unwrap();
+    let sites =
+        [95, 96, 97, 98].map(|x| Site::new(BuildingKind::PalisadeWall, TileCoord::new(x, 98), 0));
+    let work = |w: &GameWorld| w.vassal_workload(&w.economy.vassals.domains[&v], &sites);
+    assert!(work(&w).deficits.is_empty());
+    w.building_mut(gate).unwrap().hp -= 20;
+    let work = work(&w);
+    assert!(work.deficits.is_empty());
+    assert!(work.open.is_empty());
+}
+
+#[test]
+fn paid_road_omitted_from_the_new_plan_remains_available_to_builders() {
+    let (mut w, v, _, _) = pending_domain();
+    let tile = TileCoord::new(95, 98);
+    let road = w
+        .insert_building(
+            PlayerId(0),
+            BuildingKind::Road,
+            TileRect::from_xywh(tile.x, tile.y, 1, 1),
+            false,
+        )
+        .unwrap();
+    w.economy.vassals.domains.get_mut(&v).unwrap().replan_at = Some(w.tick.0);
+    w.vassal_plan(v);
+    let domain = &w.economy.vassals.domains[&v];
+    let work = w.vassal_workload(domain, &[]);
+    assert_eq!(
+        work.open.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+        [road]
+    );
+}
+
+#[test]
+fn private_road_on_the_plan_is_counted_once_by_its_owner() {
+    let (mut w, v, _, _) = pending_domain();
+    let player = PlayerId(0);
+    let tile = TileCoord::new(95, 98);
+    let road = w
+        .insert_building(
+            player,
+            BuildingKind::Road,
+            TileRect::from_xywh(tile.x, tile.y, 1, 1),
+            false,
+        )
+        .unwrap();
+    assert_eq!(w.building_at_for(player, tile), Some(road));
+    assert_eq!(w.building_at_for(PlayerId(1), tile), None);
+    w.economy.vassals.domains.get_mut(&v).unwrap().paid = vec![road];
+    let site = Site::new(BuildingKind::Road, tile, 0);
+    let work = w.vassal_workload(&w.economy.vassals.domains[&v], &[site]);
+    assert!(work.deficits.is_empty());
+    assert_eq!(work.open.len(), 1);
+    assert_eq!(work.open[0].0, road);
 }

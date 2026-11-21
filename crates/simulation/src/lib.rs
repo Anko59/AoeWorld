@@ -51,12 +51,13 @@ pub use game_world::{
     StewardWait, StewardWork, Stockpile, TECH_RULES, TREBUCHET_TRANSFORM_WORK,
     TREBUCHET_WORK_PER_SECOND_TENTHS, Tech, TechEffect, TechMask, TechRequirement, TechRules,
     TechTarget, TickPhase, TrainingEntry, UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask,
-    UnitTraining, VASSAL_LIMIT, VASSAL_RADIUS, VILLAGE_RULES, VassalStatus, VassalWait,
-    VillageRules, WorldLimits, build_speed_percent, building_combat, building_max_hp, class_bonus,
-    conversion_chance, convertible_building, convertible_unit, damage_dealt, dat_projectile,
-    market_commission_permyriad, native_attack_windup_millis, researched_stats,
-    trade_speed_percent, trainable_units, training_speed_percent, trebuchet_transform_ticks,
-    tribute_fee_permyriad, unit_building_bonus, unit_combat, villager_capacity,
+    UnitTraining, VASSAL_LIMIT, VASSAL_RADIUS, VILLAGE_RULES, VassalFocus, VassalJob, VassalJobs,
+    VassalStatus, VassalWait, VillageRules, WorldLimits, build_speed_percent, building_combat,
+    building_max_hp, class_bonus, conversion_chance, convertible_building, convertible_unit,
+    damage_dealt, dat_projectile, market_commission_permyriad, native_attack_windup_millis,
+    researched_stats, trade_speed_percent, trainable_units, training_speed_percent,
+    trebuchet_transform_ticks, tribute_fee_permyriad, unit_building_bonus, unit_combat,
+    villager_capacity,
 };
 pub use navigation_cache::NavigationCacheUsage;
 use std::collections::BTreeMap;
