@@ -16,6 +16,7 @@ const states = [
   ["General trainer sliders", "general", "trainer", 10],
   ["Steward sliders", "steward"],
   ["Town Center, queue 15, garrison 15", "tc", 15, 15],
+  ["Town Center, queue and garrison with a Steward", "tc", 15, 15, true],
   ["Castle, queue 15, garrison 20, Vassal", "castle"],
   ["Market", "market"],
   ["foundation", "foundation"],

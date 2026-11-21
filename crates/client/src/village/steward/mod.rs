@@ -3,21 +3,18 @@ use super::{Client, building_center, owner};
 use crate::playground::game::map;
 use aoe_core::{EntityId, PlayerId};
 use aoe_protocol::{BuildingKind, ConstructionState, UnitKind};
-use std::{cell::RefCell, rc::Rc};
-use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
+use wasm_bindgen::prelude::wasm_bindgen;
 
 mod mix;
 mod territory;
 mod vassal;
 
 #[wasm_bindgen(
-    inline_js = "export function steward_update(v, label, settings) { window.aoeSteward?.update(v, label, settings); } export function steward_bind(callback) { window.aoeSteward.bind(callback); } export function steward_settings() { return window.aoeSteward.settings(); }"
+    inline_js = "export function steward_update(v, label, settings) { window.aoeSteward?.update(v, label, settings); } export function steward_settings() { return window.aoeSteward.settings(); }"
 )]
 extern "C" {
     fn steward_update(v: &[f64], label: &str, settings: &[u32]);
     fn steward_settings() -> Vec<u8>;
-    #[wasm_bindgen(catch)]
-    fn steward_bind(callback: &js_sys::Function) -> Result<(), JsValue>;
 }
 
 #[wasm_bindgen(inline_js = "export function general_update(v) { window.aoeGeneral?.update(v); }")]
@@ -190,6 +187,12 @@ fn describe(report: Option<aoe_protocol::StewardReport>) -> String {
 }
 
 pub(super) fn present(client: &Client, scale: f64) {
+    if client.selected.units.len() + client.selected.buildings.len() > 1 {
+        vassal::hide();
+        steward_update(&[], "", &[]);
+        general_update(&[]);
+        return;
+    }
     vassal::present(client);
     let player = owner(client);
     let mut points = Vec::new();
@@ -250,43 +253,40 @@ pub(super) fn present(client: &Client, scale: f64) {
     general_update(&general_panel(client, player));
 }
 
-pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
-    vassal::install(shared.clone())?;
-    let callback = Closure::<dyn FnMut(u32)>::new(move |action| {
-        let mut client = shared.borrow_mut();
-        let Some(steward_id) = super::production::selected(&client)
-            .filter(|b| b.player == owner(&client) && b.kind == BuildingKind::TownCenter)
-            .and_then(|b| {
-                b.garrison
-                    .iter()
-                    .find(|g| g.kind == UnitKind::Steward && g.hp > 0)
-            })
-            .map(|g| g.id)
-        else {
+pub(super) fn menu_order(client: &mut Client, code: u32) {
+    if code == 2 {
+        vassal::toggle(client);
+        return;
+    }
+    let Some(steward_id) = super::production::selected(client)
+        .filter(|b| b.player == owner(client) && b.kind == BuildingKind::TownCenter)
+        .and_then(|b| {
+            b.garrison
+                .iter()
+                .find(|g| g.kind == UnitKind::Steward && g.hp > 0)
+        })
+        .map(|g| g.id)
+    else {
+        return;
+    };
+    let sequence = client.next_sequence;
+    let message = if code == 1 {
+        aoe_protocol::GameplayClientMessage::StewardDismissOrder {
+            sequence,
+            steward_id,
+        }
+    } else {
+        let values = steward_settings();
+        let [food, wood, gold, stone, cap, training] = values.as_slice() else {
             return;
         };
-        let sequence = client.next_sequence;
-        let message = if action == 1 {
-            aoe_protocol::GameplayClientMessage::StewardDismissOrder {
-                sequence,
-                steward_id,
-            }
-        } else {
-            let values = steward_settings();
-            let [food, wood, gold, stone, cap, training] = values.as_slice() else {
-                return;
-            };
-            aoe_protocol::GameplayClientMessage::StewardSettingsOrder {
-                sequence,
-                steward_id,
-                weights: [*food, *wood, *gold, *stone],
-                cap: *cap,
-                training: *training == 1,
-            }
-        };
-        super::orders::send(&mut client, message);
-    });
-    steward_bind(callback.as_ref().unchecked_ref())?;
-    callback.forget();
-    Ok(())
+        aoe_protocol::GameplayClientMessage::StewardSettingsOrder {
+            sequence,
+            steward_id,
+            weights: [*food, *wood, *gold, *stone],
+            cap: *cap,
+            training: *training == 1,
+        }
+    };
+    super::orders::send(client, message);
 }

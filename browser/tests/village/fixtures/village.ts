@@ -29,7 +29,7 @@ export async function fiveVillagerFixture(
   page: Page,
   observe?: (bytes: Buffer, socket: WebSocketRoute) => void,
   snapshotTick: () => number = () => 0,
-  feudal = false,
+  age: boolean | (() => number[]) = false,
   military = false,
   militaryKind = 2,
   count = 5,
@@ -118,7 +118,11 @@ export async function fiveVillagerFixture(
           ...uint(200),
           6,
           10,
-          ...(feudal ? feudalAgeState : darkAgeState),
+          ...(typeof age === "function"
+            ? age()
+            : age
+              ? feudalAgeState
+              : darkAgeState),
           ...playerEconomyTail,
           1,
           1,

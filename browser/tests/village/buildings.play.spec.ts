@@ -1,10 +1,19 @@
-import { expect } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 import { centerVillage } from "./fixtures/resources.js";
 
 test.use({ video: { mode: "on", size: { width: 1280, height: 720 } } });
+
+async function pressCommandKey(page: Page, id: string) {
+  const button = page.locator(`#${id}`);
+  await expect(button).toBeEnabled();
+  const key = await button.getAttribute("aria-keyshortcuts");
+  if (!key) throw new Error(`Missing shortcut for ${id}`);
+  await page.locator("#scene").focus();
+  await page.keyboard.press(key.length === 1 ? key.toLowerCase() : key);
+}
 
 test("villager build menu places a House and watches authoritative completion", async ({
   page,
@@ -212,10 +221,10 @@ test("villager build menu places a House and watches authoritative completion", 
   await page.locator("#research-loom").click();
   await expect(page.locator("#research-status")).toContainText("Loom");
   await expect(page.locator("#stockpile-gold")).toHaveText("50");
-  await page.locator("#cancel-research").click();
+  await pressCommandKey(page, "cancel-research");
   await expect(page.locator("#research-status")).toHaveText("");
   await page.keyboard.press("q");
   await expect(page.locator("#training-label")).toContainText("Villager");
-  await page.locator("#cancel-training").click();
+  await pressCommandKey(page, "cancel-training");
   await expect(page.locator("#training")).toBeHidden();
 });
