@@ -158,6 +158,7 @@ fn physical_sources() -> (MapChunkGenerator, MapChunkGenerator) {
     dense.elevation = Some(Arc::new(PreparedElevation {
         samples_per_axis: 4,
         compression: Ratio::new(30, 1).unwrap(),
+        constant_height: None,
         pages: [((0, 0), elevation.clone())].into(),
     }));
     // Keep vegetation procedural on both paths; physical terrain is independent

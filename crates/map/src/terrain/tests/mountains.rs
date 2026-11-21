@@ -21,6 +21,7 @@ pub(super) fn relief(seed: u64, class: u8, height: impl Fn(i32, i32) -> i32) -> 
     generator.elevation = Some(Arc::new(PreparedElevation {
         samples_per_axis: SAMPLES,
         compression: Ratio::new(30, 1).expect("ratio"),
+        constant_height: None,
         pages: [(
             (0, 0),
             ElevationPage {

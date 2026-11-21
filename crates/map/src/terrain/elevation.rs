@@ -12,10 +12,51 @@ pub(super) enum AxisPosition {
 pub(super) struct PreparedElevation {
     pub(super) samples_per_axis: u16,
     pub(super) compression: Ratio,
+    /// A complete verified level-zero field can prove that no relief exists.
+    pub(super) constant_height: Option<i32>,
     pub(super) pages: BTreeMap<(u16, u16), ElevationPage>,
 }
 
 impl PreparedElevation {
+    pub(super) fn verified(
+        samples_per_axis: u16,
+        compression: Ratio,
+        pages: BTreeMap<(u16, u16), ElevationPage>,
+    ) -> Self {
+        let page_side = u16::from(ENVIRONMENT_PAGE_SAMPLES);
+        let axis_size = |at: u16| {
+            samples_per_axis
+                .saturating_sub(at * page_side)
+                .min(page_side)
+        };
+        // Page verification checks hashes and page count. A short page can
+        // still have a valid hash, so check coverage before using one height.
+        let complete = pages.values().all(|page| {
+            u16::from(page.width) == axis_size(page.x)
+                && u16::from(page.height) == axis_size(page.y)
+        });
+        let constant_height = if complete {
+            let mut heights = pages
+                .values()
+                .flat_map(|page| page.geographic_height_centimeters.iter().copied());
+            heights
+                .next()
+                .filter(|first| heights.all(|height| height == *first))
+        } else {
+            None
+        };
+        Self {
+            samples_per_axis,
+            compression,
+            pages,
+            constant_height,
+        }
+    }
+
+    pub(super) fn has_relief(&self) -> bool {
+        self.samples_per_axis > 1 && self.constant_height.is_none()
+    }
+
     pub(super) fn height_at(&self, tile: TileCoord, width_tiles: i32) -> Option<i32> {
         self.sample(tile.x, tile.y, width_tiles, AxisPosition::TileCenter)
     }
@@ -50,6 +91,11 @@ impl PreparedElevation {
     }
 
     fn sample(&self, x: i32, y: i32, width_tiles: i32, position: AxisPosition) -> Option<i32> {
+        if let Some(height) = self.constant_height
+            && width_tiles > 0
+        {
+            return Some(height);
+        }
         let (x0, x1, x_remainder, denominator) =
             source_axis_position(x, self.samples_per_axis, width_tiles, position)?;
         let (y0, y1, y_remainder, _) =

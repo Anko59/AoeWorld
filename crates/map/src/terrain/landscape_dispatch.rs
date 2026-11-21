@@ -13,9 +13,8 @@ pub struct LandscapePoint {
 }
 
 impl MapChunkGenerator {
-    /// Physical terrain only. Composition changes material and marks the
-    /// shallow rim, never water kind, passability, surface or height;
-    /// overlays remain a caller concern.
+    /// Undecorated terrain for source constraints and placement.
+    /// Walk queries use composed terrain, including loose rock footprints.
     pub(super) fn base_physical_tile_with_cancel(
         &self,
         tile: TileCoord,
@@ -157,12 +156,7 @@ impl MapChunkGenerator {
         }
         let _span = self.measure_navigation(crate::NavigationPhase::TerrainPoint);
         let point = self
-            .evaluate_landscape_point_with_cancel::<true>(
-                tile,
-                &default_policy,
-                &|position| self.landscape_reservations_at(position),
-                cancelled,
-            )?
+            .evaluate_default_point::<false, true>(tile, cancelled)?
             .map(|point| {
                 (
                     point.tile.terrain,
@@ -182,12 +176,7 @@ impl MapChunkGenerator {
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<LandscapePoint>, EnvironmentPageError> {
-        self.evaluate_landscape_point_with_cancel::<false>(
-            tile,
-            &default_policy,
-            &|position| self.landscape_reservations_at(position),
-            cancelled,
-        )
+        self.evaluate_default_point::<false, false>(tile, cancelled)
     }
 
     /// Shared start reservations: the starting glade always clears canopy,

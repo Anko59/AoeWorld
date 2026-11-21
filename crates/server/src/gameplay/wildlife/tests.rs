@@ -221,8 +221,9 @@ fn siege_and_naval_shots_publish_the_primary_dat_projectile() {
         let at = |x| WorldPosition::from_tile_center(TileCoord::new(x, 100)).unwrap();
         let (mut world, target, launch) = if kind.is_naval() {
             let (package, elevation, water) = GameWorld::naval_battle_environment(Seed(7)).unwrap();
-            let mut world =
-                GameWorld::from_prepared_map(package, elevation, water, vec![], vec![]).unwrap();
+            let mut world = GameWorld::from_prepared_map(package, elevation, water, vec![], vec![])
+                .unwrap()
+                .without_loose_rocks();
             world.prepare_content_roster(0, true).unwrap();
             let ship = world
                 .units()

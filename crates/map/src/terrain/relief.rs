@@ -207,7 +207,11 @@ impl MapChunkGenerator {
         if self.provider.is_some() {
             return super::provider::cliff_piece(self, tile, cancelled);
         }
-        let Some(elevation) = self.elevation.as_ref() else {
+        let Some(elevation) = self
+            .elevation
+            .as_ref()
+            .filter(|elevation| elevation.constant_height.is_none())
+        else {
             return Ok(None);
         };
         let piece = cliff_at(self, tile, elevation.compression, &|x, y| {

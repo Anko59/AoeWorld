@@ -15,7 +15,8 @@ fn coastal_roster_tiers_cover_every_defined_production_kind() {
             Vec::new(),
             Vec::new(),
         )
-        .unwrap();
+        .unwrap()
+        .without_loose_rocks();
         world.prepare_content_roster(stage, false).unwrap();
         let sites: Vec<_> = world
             .player_buildings(SEATS[0])
@@ -49,8 +50,9 @@ fn coastal_roster_tiers_cover_every_defined_production_kind() {
 fn coastal_castle_trains_a_trebuchet_that_stays_packed_until_ordered() {
     let (package, elevation, water) =
         GameWorld::naval_battle_environment(aoe_scenario::SMOKE.seed).unwrap();
-    let mut world =
-        GameWorld::from_prepared_map(package, elevation, water, Vec::new(), Vec::new()).unwrap();
+    let mut world = GameWorld::from_prepared_map(package, elevation, water, Vec::new(), Vec::new())
+        .unwrap()
+        .without_loose_rocks();
     world.prepare_content_roster(0, false).unwrap();
     let castle = world
         .player_buildings(SEATS[0])

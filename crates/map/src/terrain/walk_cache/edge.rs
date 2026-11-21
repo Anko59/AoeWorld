@@ -2,6 +2,21 @@
 //! route search probes join two tiles of one chunk; those read the chunk once.
 use super::*;
 
+impl WalkCell {
+    pub(in crate::terrain) fn edge_to(self, other: Self) -> EdgePassability {
+        if self.passable
+            && other.passable
+            && self.walkable_surface
+            && other.walkable_surface
+            && (i32::from(self.game_height_level) - i32::from(other.game_height_level)).abs() <= 1
+        {
+            EdgePassability::Passable
+        } else {
+            EdgePassability::Blocked
+        }
+    }
+}
+
 impl MapChunkGenerator {
     pub(in crate::terrain) fn cached_edge(
         &self,
@@ -12,18 +27,7 @@ impl MapChunkGenerator {
         let (Lookup::Cell(a), Lookup::Cell(b)) = self.walk_lookup_pair(from, to, cancelled)? else {
             return Ok(None);
         };
-        Ok(Some(
-            if !a.passable
-                || !b.passable
-                || !a.walkable_surface
-                || !b.walkable_surface
-                || (i32::from(a.game_height_level) - i32::from(b.game_height_level)).abs() > 1
-            {
-                EdgePassability::Blocked
-            } else {
-                EdgePassability::Passable
-            },
-        ))
+        Ok(Some(a.edge_to(b)))
     }
 
     /// `walk_lookup` of both tiles; one thread-local chunk read when they

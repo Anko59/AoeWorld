@@ -123,11 +123,17 @@ fully transparent textures, or coverage outside the diamond.
 
 ## Loose rocks
 
-`Stone` decorations draw graphics 1034: seven plain grey rock piles (56–85 ×
-33–46), the stone-deposit shapes without ore glints. The decoration variant
-selects the larger frames for three quarters of piles, retaining all seven
-shapes and their native hotspots. Emission and culling use the shared object
-scale of 128/96, with the soft shadow of objects without paired shadow art.
+`Stone` decorations use DE unit 623 (ROCKX, graphic 3358). Its DAT collision
+and clearance half extents are both 0.5 tile. The six native cells of
+`n_rock_rock1_x1.sld` have a wider ground rim. Measure opaque main-layer
+pixels at and below the hotspot relative to the hotspot. Undo the 96 × 48
+native tile projection with `(x + 2y, -x + 2y) / 96` and take the maximum
+absolute reach across the six cells, 100 and 86 native pixels along the two
+ground axes. The centred envelope overlaps three tiles on each axis, so the
+pile blocks all nine. All variants use the same measured envelope.
+Packs without the DE composition draw frames 0, 2 and 4 of graphics 1034
+(56–67 × 33–37 pixels) at the shared 128/96 object scale and use the same map
+walkability. Objects without paired shadow art use a soft shadow.
 Crags 233/234, the rock slab 235 and the
 boulders painted into the cliff faces are not used as separate objects.
 

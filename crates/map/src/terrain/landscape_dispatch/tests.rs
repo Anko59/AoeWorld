@@ -20,6 +20,7 @@ fn flat(seed: u64, width: i32) -> MapChunkGenerator {
     generator.elevation = Some(Arc::new(PreparedElevation {
         samples_per_axis: 1,
         compression: Ratio::new(30, 1).unwrap(),
+        constant_height: None,
         pages: [(
             (0, 0),
             ElevationPage {

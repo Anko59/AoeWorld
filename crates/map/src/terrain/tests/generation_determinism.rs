@@ -134,7 +134,12 @@ fn ground_sheet_plumbing_coexists_with_generated_variety() {
                 .expect("chunk");
             for tile in scene.tiles {
                 if DRAWN_MATERIALS.contains(&tile.terrain.material) {
-                    assert!(tile.terrain.passable);
+                    let surface = generator
+                        .landscape_surface_with_cancel(tile.tile, &|| false)
+                        .unwrap()
+                        .unwrap();
+                    assert_eq!(tile.terrain.passable, surface.tile.terrain.passable);
+                    assert!(generator.sample_base_tile(tile.tile).passable);
                     assert_eq!(tile.terrain.water, WaterKind::None);
                     observed.insert(tile.terrain.material as u8);
                 }

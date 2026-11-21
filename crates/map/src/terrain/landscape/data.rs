@@ -1,5 +1,5 @@
 //! Composed landscape scene data: physical terrain plus its ecological appearance,
-//! resources with visual families and nonblocking decorations.
+//! resources with visual families and scenery records.
 use super::{ResourceNode, Tile};
 use aoe_core::TileCoord;
 use serde::{Deserialize, Serialize};
@@ -87,9 +87,8 @@ pub enum DecorationFamily {
     Cliff,
 }
 
-/// Visual dressing with no resource identity, amount or simulation API; it
-/// never blocks by itself (a cliff piece marks terrain that is impassable on
-/// its own). Orientation is one of eight directions (0..=7); variant is opaque.
+/// Visual dressing with no resource identity or amount. Stone and cliff art
+/// mark footprints in the composed terrain. Orientation is in 0..=7.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LandscapeDecoration {

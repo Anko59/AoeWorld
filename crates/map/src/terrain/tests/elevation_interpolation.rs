@@ -9,6 +9,8 @@ use std::{collections::BTreeMap, sync::Arc};
 mod base_sampling;
 #[path = "elevation_interpolation/modeled_water.rs"]
 mod modeled_water;
+#[path = "elevation_interpolation/uniform.rs"]
+mod uniform;
 
 #[derive(Debug)]
 struct Pages(BTreeMap<EnvironmentPageKey, Arc<EnvironmentPage>>);
