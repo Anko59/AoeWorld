@@ -114,6 +114,7 @@ impl GameWorld {
         let Terrain::Map { generator, overlay } = &self.terrain else {
             return Err(EconomyError::InvalidFootprint);
         };
+        let tiles = span.tiles();
         if !span
             .footprint()
             .valid(self.config.width_tiles, self.config.height_tiles)
@@ -124,7 +125,7 @@ impl GameWorld {
                 .any(|u| u.hp > 0 && !self.embarked(u.id) && span.contains(u.position.tile_floor()))
             // The footprint index includes foundations, nonblocking roads,
             // open gates and only the raster cells of angled bridges.
-            || span.tiles().into_iter().any(|tile| {
+            || tiles.iter().copied().any(|tile| {
                 #[cfg(test)]
                 { work.visits += 1; }
                 self.building_at_for(player, tile).is_some()
@@ -132,20 +133,32 @@ impl GameWorld {
         {
             return Err(EconomyError::InvalidFootprint);
         }
-        for tile in span.tiles() {
+        // Road searches also encounter dry obstacles. Reject those spans
+        // using physical water before reading ground and resource data.
+        for &tile in &tiles {
             let end = tile == span.from || tile == span.to;
-            let (sample, node) = generator
-                .tile_and_node_with_cancel(tile, &|| false)
+            let water = generator
+                .water_at_with_cancel(tile, &|| false)
+                .map_err(GameWorldError::Environment)?
+                .ok_or(EconomyError::InvalidFootprint)?;
+            if (water == WaterKind::None) != end {
+                return Err(EconomyError::InvalidFootprint);
+            }
+        }
+        for tile in tiles {
+            #[cfg(test)]
+            {
+                work.ground_reads += 1;
+            }
+            let end = tile == span.from || tile == span.to;
+            let ground = generator
+                .walk_at_with_cancel(tile, &|| false)
                 .map_err(GameWorldError::Environment)?
                 .ok_or(EconomyError::InvalidFootprint)?;
             if overlay.blocks_tile(tile)
                 || overlay.bridge_connections(tile).is_some()
-                || node.is_some_and(|n| overlay.blocks_node(n))
-                || if end {
-                    !sample.passable || sample.water != WaterKind::None
-                } else {
-                    sample.water == WaterKind::None
-                }
+                || ground.node.is_some_and(|n| overlay.blocks_node(n))
+                || end && !ground.passable
             {
                 return Err(EconomyError::InvalidFootprint);
             }

@@ -43,6 +43,9 @@ impl GameWorld {
             TileCoord::new(footprint.min.x - 2, footprint.min.y - 2),
             TileCoord::new(footprint.max.x + 2, footprint.max.y + 2),
         );
+        if near.contains(muster) {
+            return;
+        }
         let crowd: Vec<_> = d
             .soldiers
             .iter()
@@ -53,9 +56,6 @@ impl GameWorld {
                 })
             })
             .collect();
-        if near.contains(muster) {
-            return;
-        }
         for s in crowd {
             if let Ok(to) = WorldPosition::from_tile_center(muster) {
                 self.record_vassal_decision();
@@ -84,8 +84,9 @@ impl GameWorld {
         let developed = work.deficits.is_empty() && work.open.is_empty() && d.pending.is_none();
         let enabled = d.development;
         let focus = d.status.focus;
+        let has_soldiers = !d.soldiers.is_empty();
         work.deficits
-            .sort_by_key(|(_, site)| (focus.priority(site.kind), site.tier));
+            .sort_unstable_by_key(|(index, site)| (focus.priority(site.kind), site.tier, *index));
         let Some(d) = self.economy.vassals.domains.get_mut(&id) else {
             return;
         };
@@ -101,9 +102,11 @@ impl GameWorld {
             VassalWait::Building
         };
         if enabled && !developed {
-            for &(building, _) in &work.open {
-                if let Some(footprint) = self.building(building).map(|b| b.footprint) {
-                    self.clear_vassal_soldiers(id, footprint);
+            if has_soldiers {
+                for &(building, _) in &work.open {
+                    if let Some(footprint) = self.building(building).map(|b| b.footprint) {
+                        self.clear_vassal_soldiers(id, footprint);
+                    }
                 }
             }
             self.observe_vassal_progress(id, &work);
@@ -169,22 +172,30 @@ impl GameWorld {
                 ((!occupied || replacement)
                     && (!survey_pending || near || replacement)
                     && !d.refused.contains_key(&site.tile))
-                .then_some((i, site, replacement, distance))
+                .then(|| {
+                    let rank = (
+                        focus.priority(site.kind),
+                        if threatened { site.tier } else { 0 },
+                        !replacement,
+                        distance + u64::from(site.kind.rules().build_seconds) * 4,
+                        site.tier,
+                        i < cursor,
+                        i,
+                    );
+                    (rank, site)
+                })
             })
             .collect();
-        candidates.sort_by_key(|(i, site, replacement, distance)| {
-            (
-                focus.priority(site.kind),
-                if threatened { site.tier } else { 0 },
-                !replacement,
-                distance + u64::from(site.kind.rules().build_seconds) * 4,
-                site.tier,
-                *i < cursor,
-                *i,
-            )
-        });
+        // Only the leading candidates can be attempted. The site index
+        // breaks ties, so partial selection preserves their original order.
+        let limit = ATTEMPTS_PER_PASS * 4;
+        if candidates.len() > limit {
+            candidates.select_nth_unstable_by_key(limit, |(rank, _)| *rank);
+            candidates.truncate(limit);
+        }
+        candidates.sort_unstable_by_key(|(rank, _)| *rank);
         let mut placed = BTreeSet::new();
-        for (i, site, _, _) in candidates.into_iter().take(ATTEMPTS_PER_PASS * 4) {
+        for ((.., i), site) in candidates {
             let plan::Site {
                 kind,
                 tile,

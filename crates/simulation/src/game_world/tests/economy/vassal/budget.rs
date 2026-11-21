@@ -1,36 +1,77 @@
 use super::*;
 
 #[test]
+fn vassal_domains_are_spread_and_the_next_period_serves_waiting_domains() {
+    let (mut w, first, _) = setup();
+    let mut ids = vec![first];
+    for x in (104..=200).step_by(12) {
+        ids.push(garrison_domain(&mut w, x));
+    }
+    advance(&mut w, 2);
+    for &id in &ids {
+        w.issue_vassal_development(PlayerId(0), id, false).unwrap();
+    }
+    let mut visited = Vec::new();
+    for tick in 20..60 {
+        w.tick.0 = tick;
+        w.advance_vassals(&mut Vec::new());
+        let next: Vec<_> = ids
+            .iter()
+            .copied()
+            .filter(|id| w.vassal_status(*id).unwrap().wait == crate::VassalWait::Paused)
+            .filter(|id| !visited.contains(id))
+            .collect();
+        assert!(next.len() <= 1, "tick {tick} admitted {next:?}");
+        visited.extend(next);
+        if tick == 39 {
+            assert_eq!(visited, ids[..8]);
+        }
+    }
+    assert_eq!(visited, ids);
+}
+
+fn garrison_domain(w: &mut GameWorld, x: i32) -> EntityId {
+    let castle = w
+        .insert_building(
+            PlayerId(0),
+            BuildingKind::Castle,
+            TileRect::from_xywh(x, 90, 4, 4),
+            true,
+        )
+        .unwrap();
+    let unit = w
+        .spawn_kind(
+            PlayerId(0),
+            UnitKind::Vassal,
+            WorldPosition::from_tile_center(TileCoord::new(x - 1, 92)).unwrap(),
+        )
+        .unwrap();
+    w.issue_garrison(PlayerId(0), unit, castle).unwrap();
+    unit
+}
+
+#[test]
 fn road_planning_yields_and_every_domain_finishes() {
     let (mut w, v, _) = setup();
     let mut ids = vec![v];
     for x in [140, 190] {
-        let castle = w
-            .insert_building(
-                PlayerId(0),
-                BuildingKind::Castle,
-                TileRect::from_xywh(x, 90, 4, 4),
-                true,
-            )
-            .unwrap();
-        let unit = w
-            .spawn_kind(
-                PlayerId(0),
-                UnitKind::Vassal,
-                WorldPosition::from_tile_center(TileCoord::new(x - 1, 92)).unwrap(),
-            )
-            .unwrap();
-        w.issue_garrison(PlayerId(0), unit, castle).unwrap();
-        ids.push(unit);
+        ids.push(garrison_domain(&mut w, x));
     }
     advance(&mut w, 2);
     w.set_fog_disabled(true);
-    w.tick.0 = 19;
-    w.advance_vassals(&mut Vec::new());
-    w.tick.0 = 20;
-    w.advance_vassals(&mut Vec::new());
-    assert!(
-        ids.iter().all(|&id| w.vassal_planning_pending(id)),
+    let mut yielded = std::collections::BTreeSet::new();
+    for tick in 20..40 {
+        w.tick.0 = tick;
+        w.advance_vassals(&mut Vec::new());
+        yielded.extend(
+            ids.iter()
+                .copied()
+                .filter(|&id| w.vassal_planning_pending(id)),
+        );
+    }
+    assert_eq!(
+        yielded.into_iter().collect::<Vec<_>>(),
+        ids,
         "road searches must yield"
     );
     let mut ticks = 0;
