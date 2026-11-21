@@ -159,3 +159,20 @@ def test_settlement_distance_is_kept_while_the_town_centers_stay(monkeypatch):
     centers.append(building(40, BuildingKind.TOWN_CENTER, tile=(68, 26)))
     closer, spent = measured(make())
     assert closer < first and spent == len(centers)
+
+
+def test_an_off_map_view_does_not_end_a_scout_mission():
+    from aoeworld import Visibility
+
+    world = frontier_world(100)
+    world._units = [u for u in world._units if u.kind != UnitKind.SCOUT or u.id == 200]
+    world.visibility = lambda *_: Visibility.UNEXPLORED
+    world.land_route = lambda *_: None
+    world.land_frontier = lambda *_: None
+    brain = Brain()
+    brain.board.scout_stage = 2
+    brain.board.scout_waypoints = [(200, 50)]
+
+    _, client = play(world, brain=brain)
+
+    assert (200, 200, 50) in client.named("move")

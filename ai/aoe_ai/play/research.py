@@ -27,8 +27,10 @@ class ResearchManager:
             # it is bought, then resume while it researches.
             if center.researching is None:
                 ctx.saving_castle = True
+                ctx.hold_military_training = True
                 ctx.hold_town_center = True
-                self.research(ctx, Tech.IMPERIAL_AGE, center)
+                if not self.research(ctx, Tech.IMPERIAL_AGE, center):
+                    ctx.reserve(research_price(Tech.IMPERIAL_AGE))
                 return
         if stage == buildorder.CASTLE_ADVANCE:
             ctx.saving_castle = True
@@ -159,7 +161,8 @@ class ResearchManager:
             self.claim(ctx, row, building)
         else:
             ctx.saving_castle = True
-            ctx.spend(cost)
+            ctx.hold_military_training = True
+            ctx.reserve(cost)
         return True
 
     def claim(self, ctx, row, building) -> None:

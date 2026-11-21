@@ -38,7 +38,7 @@ class Constructor:
         return unfinished + sum(1 for p in ctx.board.plans if p.kind == kind)
 
     def total(self, ctx: Context, kind: BuildingKind) -> int:
-        return ctx.count(kind) + sum(1 for p in ctx.board.plans if p.kind == kind)
+        return buildorder.planned_count(ctx, kind)
 
     # ----- placing ---------------------------------------------------------
     def place(
@@ -181,18 +181,32 @@ class Constructor:
         node = nearest(ctx.resources(wanted), ctx.home, key=lambda n: n.tile)
         return node.tile if node is not None else ctx.home
 
-    def production(self, ctx: Context) -> None:
+    def fund_market(self, ctx: Context) -> None:
+        """Build the first market before spending on discretionary construction."""
+        market = BuildingKind.MARKET
+        if self.total(ctx, market) or not buildorder.wants_urgent_market(ctx):
+            return
+        self.production(ctx, only=market)
+        if not self.total(ctx, market):
+            wood = max(0, ctx.economy.wood - ctx.spent[1] - ctx.config.expansion_wood_float)
+            ctx.reserve((0, min(wood, building_cost(market)[1]), 0, 0))
+
+    def production(self, ctx: Context, only: Optional[BuildingKind] = None) -> None:
         """Raise the production buildings the build order asks for, one at a time."""
         if ctx.board.cooling("production", ctx.tick):
             return
-        for kind, wanted in buildorder.wanted_buildings(ctx):
+        wants = buildorder.wanted_buildings(ctx) if only is None else [(only, 1)]
+        for kind, wanted in wants:
             if self.total(ctx, kind) >= wanted:
                 continue
             needs = buildorder.PREREQUISITE.get(kind)
             if needs is not None and not ctx.count(needs, complete=True):
                 continue
             cost = building_cost(kind)
-            if not ctx.can_afford((cost[0], cost[1] + ctx.config.wood_reserve, cost[2], cost[3])):
+            first_barracks = (ctx.feudal and kind == BuildingKind.BARRACKS
+                              and buildorder.unpaid_age_up_barracks(ctx))
+            margin = 0 if first_barracks else ctx.config.wood_reserve
+            if not ctx.can_afford((cost[0], cost[1] + margin, cost[2], cost[3])):
                 continue
             trainers = [b for b in ctx.buildings if b.kind == BuildingKind.TOWN_CENTER and b.complete]
             near = min(trainers, key=lambda c: sum(dist(c.center, b.center) < 24 for b in ctx.buildings if b.kind == kind)).center if trainers else ctx.home

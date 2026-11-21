@@ -316,8 +316,8 @@ attack state, counters):
 | `play/economy.py` | villagers without pause, shares of food, wood, gold and stone, sheep then berries then deer and boar, farms when the land runs dry |
 | `play/constructor.py` | Lumber Camp and Mill, camps beside far resources, Barracks, Archery Range, Blacksmith |
 | `play/military.py` | trains a mixed army, reinforced by counters and siege, and rallies it |
-| `play/scouting.py` | the starting area, then the circle round the map centre through home (far side first), then wider rings |
-| `play/combat.py` | defend the base (villagers next to raiders walk home when outnumbered), attack the nearest known enemy building at 12 units, retreat below 40% |
+| `play/scouting.py` | surveys home, then scouts across the map and recovers stalled scouts |
+| `play/combat/` | recalls soldiers, reassigns stalled groups, engages nearby enemies, and counterattacks the raider’s known base |
 
 The build order: villagers from the first second, a Lumber Camp and a Mill at 8 villagers (they also satisfy the age's two-kinds
 rule), Loom at 10, and at 21 villagers with those standing it stops training
@@ -355,18 +355,18 @@ until the age changes, a villager that falls idle right after an order waits
 four seconds, and a hunted animal nobody finishes is dropped. Everything is
 read from the fog-filtered world: nothing is assumed about enemy positions
 beyond "villages are spread evenly over the map".
-Workers with a carried load and no gather job are reassigned too. Nearby
-automatic farmers are associated with their plots from their work pose and
-tile; builders leave them at work, and refused farms cool down instead of
-trapping idle workers in repeated assignments. Nearby
-soldiers or the scout protect workers from wolves and attacking boars; without
-them, nearby workers fight together. Marching soldiers engage visible enemies,
-and soldiers whose accepted movement makes no progress for the configured
-stall interval stop and receive a fresh route on a later decision. A `MOVING`
-task alone does not prove progress; working routes are left to finish.
-A refused attack cools down for that soldier and target while alternatives
-are tried. A fogged building remains a target until its destruction is observed;
-standing nearby alone does not establish that it is gone.
+Workers carrying resources without a gather job are reassigned. The AI links
+automatic farmers to plots by pose and tile, leaves them at work, and cools down
+refused farm orders. Nearby soldiers or scouts protect workers from wolves and
+attacking boars. Workers fight together if no defender is nearby.
+
+Castle Age AIs can fund their first Market while keeping wood for a Lumber Camp.
+Markets buy stone for expansion, and shortages send more workers to known ore.
+
+Idle and marching soldiers engage nearby visible enemies. Stalled marches stop
+after the configured interval and get a fresh route on a later decision. Refused
+attacks cool down for that soldier and target while alternatives are tried. A
+fogged building remains a target until its destruction is observed.
 Tunables are in `config.py`. `python -m aoe_ai --help` lists the launcher modes.
 
 ### The standard start

@@ -313,7 +313,12 @@ pub(super) fn host_names(options: &Options) -> Result<Vec<String>, BoxError> {
         .collect())
 }
 
-pub(super) fn sample(server: &Server, seconds: f64, strict: bool) -> Result<Value, BoxError> {
+pub(super) fn sample(
+    server: &Server,
+    seconds: f64,
+    strict: bool,
+    development: bool,
+) -> Result<Value, BoxError> {
     let perf = server.get("/admin/perf");
     let routes = server.get("/admin/match/routes");
     let mut row = if strict {
@@ -323,10 +328,16 @@ pub(super) fn sample(server: &Server, seconds: f64, strict: bool) -> Result<Valu
     };
     // Work beside the speed numbers (#865 rule 2): kills and losses so far,
     // and the hits and deaths of the last game minute.
-    if let Ok(state) = server.get("/admin/match") {
-        row["work"] = work(&state);
+    let state = server.get("/admin/match");
+    if let Ok(state) = &state {
+        row["work"] = work(state);
     }
     println!("  phases (p50, p95 ms) {row}");
+    if development {
+        let state = state?;
+        row["match_tick"] = state["tick"].clone();
+        row["players"] = state["players"].clone();
+    }
     Ok(row)
 }
 

@@ -189,6 +189,13 @@ fn a_hundred_prepared_map_domains_rotate_real_resource_queries_inside_finder_bud
                 observed.insert(*steward);
             }
         }
+        if tick + 1 == 2 * crate::STEWARD_RULES.period_ticks as usize {
+            assert_eq!(
+                observed.len(),
+                100,
+                "each player gets a pass within two seconds"
+            );
+        }
     }
     assert_eq!(
         observed.len(),

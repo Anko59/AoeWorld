@@ -401,3 +401,83 @@ def test_an_established_army_waits_for_the_next_town_center_price():
     ctx.army = [unit(3000 + i, UnitKind.SPEARMAN) for i in range(ctx.config.imperial_army_min)]
     ManagementManager().expand(ctx)
     assert ctx.saving_castle, 'ongoing army spending must not consume the expansion float'
+
+
+def test_the_market_buys_stone_for_an_unpaid_town_center_below_gold_target():
+    from aoe_ai.play.market import MarketManager
+
+    ctx = kingdom(villagers=90, centers=1, gold=950, stone=0, food=2000)
+    ctx.buildings.append(building(950, BuildingKind.MARKET))
+    ctx.economy.food_price = ctx.economy.wood_price = ctx.economy.stone_price = 100
+    MarketManager().step(ctx)
+
+    assert ctx.client.named("market_buy") == [(950, TradeResource.STONE)]
+    assert ctx.spent[2] == 130
+
+
+def test_late_workforce_shares_follow_metal_shortages_even_without_food_or_wood_glut():
+    manager = EconomyManager(Constructor())
+    poor = kingdom(villagers=90, centers=1, gold=500, stone=0, food=800, wood=600)
+    rich = kingdom(villagers=90, centers=1, gold=2500, stone=1500, food=800, wood=600)
+    scarce, stocked = manager.shares(poor), manager.shares(rich)
+
+    assert scarce["GOLD"] > stocked["GOLD"]
+    assert scarce["STONE"] > stocked["STONE"]
+    assert abs(sum(scarce.values()) - 1.0) < 1e-9
+
+
+def test_remote_explored_ore_can_open_a_mining_camp_after_home_ore_runs_out():
+    from fakes import node
+
+    ctx = kingdom(villagers=90, centers=1, gold=500, stone=0)
+    worker = ctx.villagers[0]
+    ore = node(950, ResourceKind.STONE, tile=(160, 60))
+    ctx.world._nodes = [ore]
+
+    assert EconomyManager(Constructor()).send(ctx, worker, "STONE")
+    assert any(order[1] == BuildingKind.MINING_CAMP for order in ctx.client.named("build"))
+
+
+def test_a_management_reserve_allows_military_training_from_surplus():
+    from aoe_ai.play.military import MilitaryManager
+
+    ctx = kingdom(villagers=40, centers=1, gold=1000, food=1000)
+    ctx.saving_castle = True
+    ctx.spent[2] = 1000
+    MilitaryManager().train(ctx)
+
+    assert ctx.client.named("train")
+    assert ctx.spent[2] == 1000
+
+
+def test_a_gold_starved_castle_economy_prioritizes_a_market():
+    c = kingdom(villagers=50, gold=150, stone=800)
+    order = [kind for kind, _ in buildorder.wanted_buildings(c)]
+
+    assert order.index(BuildingKind.MARKET) < order.index(BuildingKind.UNIVERSITY)
+
+
+def test_emergency_stone_sale_keeps_the_next_construction_budget():
+    from aoe_ai.play.market import MarketManager
+
+    ctx = kingdom(villagers=50, centers=1, gold=0, stone=800, food=250, wood=300)
+    ctx.buildings += [building(950, BuildingKind.MARKET),
+                      building(951, BuildingKind.CASTLE)]
+    ctx.economy.food_price = ctx.economy.wood_price = ctx.economy.stone_price = 100
+    MarketManager().step(ctx)
+
+    assert ctx.client.named("market_trade") == [(950, TradeResource.STONE, False, 3)]
+    assert ctx.economy.stone - ctx.spent[3] >= buildorder.next_stone_cost(ctx) + 100
+
+
+def test_saving_the_first_steward_can_begin_before_imperial_buildings_stand():
+    from aoeworld import unit_cost
+
+    ctx = kingdom(villagers=50, centers=1, food=800, gold=600)
+    ctx.board.stats["army_peak"] = ctx.config.imperial_army_min
+    assert buildorder.wants_imperial_food(ctx)
+    assert buildorder.stage(ctx) == buildorder.CASTLE
+    ManagementManager().save(ctx, UnitKind.STEWARD, unit_cost(UnitKind.STEWARD))
+
+    assert ctx.spent[2] == 600
+    assert ctx.spent[0] == 800

@@ -78,3 +78,160 @@ def test_host_mode_plays_given_tokens_and_writes_a_report(server, secret, tmp_pa
     document = json.loads(report.read_text())
     assert [bot["slot"] for bot in document["bots"]] == [0, 1]
     assert all(bot["decisions"] > 0 for bot in document["bots"])
+
+
+def test_scripted_raid_draws_the_field_army_home():
+    """The human raids home while the AI's field army besieges a third seat."""
+    import http.client
+    import json
+    import urllib.parse
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from aoe_ai import Brain
+    from aoe_ai.arena import ArenaServer, SECRET, play
+    from aoe_ai.context import Context
+    from aoe_ai.geometry import dist
+
+    root = Path(__file__).resolve().parents[2]
+    binary = Path(os.environ.get("AOE_SERVER_BIN", root / "target" / "debug" / "aoe-server"))
+    cfg = Config(attack_army_size=30)
+    report = {}
+
+    with ArenaServer(binary, root) as arena:
+        address = urllib.parse.urlsplit(arena.url)
+        connection = http.client.HTTPConnection(address.hostname, address.port, timeout=30)
+
+        def request(method, path, body=None):
+            connection.request(method, path, None if body is None else json.dumps(body),
+                               {"x-aoeworld-admin-token": SECRET, "content-type": "application/json"})
+            response = connection.getresponse()
+            data = response.read()
+            assert response.status == 200, data
+            return json.loads(data)
+
+        setup = request("POST", "/match", {
+            "slots": ["human", "ai", "ai"], "flat": {"tiles_per_side": 350, "seed": 7},
+            "seed": 7, "start_tiles": [[95, 175], [190, 175], [190, 85]],
+            "start_units": {"militia": 24},
+        })
+        info = SimpleNamespace(slots=[SimpleNamespace(**slot) for slot in setup["slots"]])
+        players = request("GET", "/admin/match")["players"]
+        centers = [p["town_centers"][0] for p in players]
+        home = round(centers[1]["x"]), round(centers[1]["y"])
+        away = round(centers[2]["x"]), round(centers[2]["y"]) + 5
+        human_start = info.slots[0].start_tile
+        # Use opposite sides of the TC for staging and the scripted raid.
+        edge = 1 if human_start[0] > home[0] else -1
+        staging = home[0] + edge * 34, home[1] + 10
+        approaches = [(home[0] + edge * dx, home[1] + dy)
+                      for dx, dy in ((5, 0), (7, 2), (7, -2), (12, -7), (12, 7))]
+
+        class Defender(Brain):
+            siege_id = None
+            returning = frozenset()
+
+            def decide(self, client, turn):
+                world = turn.world
+                soldiers = [u for u in world.my_units(aoeworld.UnitKind.MILITIA) if u.alive]
+                if "staged" not in report and soldiers:
+                    client.formation_move([u.id for u in soldiers], *away)
+                    report["staged"] = turn.tick
+                if "hit" not in report:
+                    outpost = next((b for b in world.known_enemy_buildings()
+                                    if b.owner == 2 and b.visible and b.kind == aoeworld.BuildingKind.TOWN_CENTER), None)
+                    if outpost and self.siege_id is None:
+                        self.siege_id = outpost.id
+                        for soldier in soldiers:
+                            client.attack(soldier.id, outpost.id)
+                        report["besieged"] = turn.tick
+                    if self.siege_id is not None:
+                        deployed = {u.id for u in soldiers if dist(u.tile, home) > 50
+                                    and u.attack_target == self.siege_id}
+                        report["occupied"] = len(deployed)
+                        if any(e.kind == "under_attack" and e.is_building for e in turn.events):
+                            self.returning = deployed
+                            report["hit"] = turn.tick
+                            report["occupied_at_hit"] = len(deployed)
+                if "raided" not in report:
+                    return
+                ctx = Context(client, turn, self.board, self.config)
+                self.absorb(ctx)
+                self.combat.step(ctx)
+                if "hit" in report and turn.tick <= report["hit"] + 140 * turn.world.tick_hz:
+                    returned = sum(u.id in self.returning and dist(u.tile, home) < 24 for u in soldiers)
+                    report["returned"] = max(report.get("returned", 0), returned)
+
+        class Raider(Brain):
+            march_sequence = None
+            attempts = 0
+
+            def decide(self, client, turn):
+                soldiers = {u.id for u in turn.world.my_units(aoeworld.UnitKind.MILITIA) if u.alive}
+                if "raider_staged" not in report and len(soldiers) >= 10:
+                    self.raiders = sorted(soldiers)[:10]
+                    client.formation_move(self.raiders, *staging)
+                    report["raider_staged"] = turn.tick
+                if "raided" not in report:
+                    if report.get("occupied", 0) < 18 or "raider_staged" not in report:
+                        return
+                    report["raided"] = turn.tick
+                if "targeted" in report:
+                    return
+                target = next((b for b in turn.world.known_enemy_buildings()
+                               if b.owner == 1 and b.visible and b.kind == aoeworld.BuildingKind.TOWN_CENTER), None)
+                if target:
+                    for soldier in self.raiders:
+                        if soldier in soldiers:
+                            client.attack(soldier, target.id)
+                    report["targeted"] = turn.tick
+                    return
+                for event in turn.events:
+                    if event.kind == "order_result" and event.sequence == self.march_sequence:
+                        report.setdefault("raid_verdicts", []).append(str(event.result))
+                        if event.result != aoeworld.CommandResult.ACCEPTED:
+                            self.march_sequence = None
+                if self.march_sequence is None and self.attempts < len(approaches):
+                    at = approaches[self.attempts]
+                    self.attempts += 1
+                    self.march_sequence = client.formation_move(self.raiders, *at, attack_move=True)
+
+        class Outpost(Brain):
+            sequence = None
+            attempts = 0
+
+            def decide(self, client, turn):
+                if "outpost_staged" in report:
+                    return
+                for event in turn.events:
+                    if event.kind == "order_result" and event.sequence == self.sequence:
+                        report.setdefault("outpost_verdicts", []).append(str(event.result))
+                        if event.result == aoeworld.CommandResult.ACCEPTED:
+                            report["outpost_staged"] = turn.tick
+                            return
+                        self.sequence = None
+                targets = [(away[0] + dx, away[1] + dy)
+                           for dx, dy in ((45, 0), (0, -45), (40, 18), (-45, 0), (55, -38))]
+                if self.sequence is not None or self.attempts >= len(targets):
+                    return
+                soldiers = turn.world.my_units(aoeworld.UnitKind.MILITIA)
+                if soldiers:
+                    self.sequence = client.formation_move([u.id for u in soldiers], *targets[self.attempts])
+                    self.attempts += 1
+
+        brains = [Raider(cfg), Defender(cfg), Outpost(cfg)]
+
+        def observe(tick, _host, _match):
+            if tick >= 6 * 60 * 20:
+                state = request("GET", "/admin/match")
+                report["combat"] = [(p["kills"], p["losses"]) for p in state["players"]]
+
+        result = play(arena.url, 3, 6.1, 350, 7, config=cfg, match_info=info,
+                      brain_factory=brains.__getitem__, observe=observe)
+        connection.close()
+
+    print(report, flush=True)
+    assert all(bot["errors"] == 0 for bot in result["bots"]), result
+    assert "hit" in report and report["occupied_at_hit"] >= 12, report
+    assert report.get("returned", 0) >= 10, report
+    assert report["combat"][0][1] >= 3, report

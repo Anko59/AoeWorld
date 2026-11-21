@@ -368,7 +368,7 @@ def test_an_army_marches_to_a_far_target_in_short_hops():
     assert abs(dist(stop, (60, 60)) - 48) <= 2 and dist(stop, far.center) < dist((60, 60), far.center), moves
 
 
-def test_an_army_that_gets_no_nearer_gives_its_target_up_and_waits_between_orders():
+def test_an_army_that_stalls_retries_its_target_after_a_cooldown():
     units, buildings = base(10)
     army = [unit(300 + i, UnitKind.SPEARMAN, tile=(60, 60)) for i in range(14)]
     far = building(900, BuildingKind.HOUSE, tile=(250, 250), mine=False, visible=False)
@@ -378,9 +378,14 @@ def test_an_army_that_gets_no_nearer_gives_its_target_up_and_waits_between_order
     # Idle again a second later (stopped short): not re-sent at once.
     _, client = play(FakeWorld(units + army, buildings, enemy_buildings=[far], eco=eco, tick=120), brain=brain)
     assert [a for a in army_moves(client) if a[0] >= 300] == []
-    # A minute on and no nearer: the building is given up.
-    play(FakeWorld(units + army, buildings, enemy_buildings=[far], eco=eco, tick=100 + 61 * 20), brain=brain)
-    assert 900 in brain.board.cleared
+    # A stalled approach waits before assigning the still-known target again.
+    stall = 100 + 61 * 20
+    play(FakeWorld(units + army, buildings, enemy_buildings=[far], eco=eco, tick=stall), brain=brain)
+    assert brain.board.cooling(f"target:{far.id}", stall)
+    retry = stall + brain.config.march_stall_seconds * 20 + 1
+    _, client = play(FakeWorld(units + army, buildings, enemy_buildings=[far], eco=eco, tick=retry), brain=brain)
+    assert brain.board.attack_target == far.id
+    assert [a for a in army_moves(client) if a[0] >= 300]
 
 
 def test_town_center_rallies_to_food_then_wood_and_keeps_the_same_target():

@@ -7,7 +7,9 @@ pub struct StewardRules {
     pub period_ticks: u64,
     /// Minimum productive job tenure before a shortage rebalance.
     pub worker_dwell_seconds: u64,
+    /// A small kingdom can visit several domains per second.
     pub domains_per_pass: usize,
+    pub domains_per_tick: usize,
     pub unit_visits_per_domain: usize,
     pub building_visits_per_domain: usize,
     pub orders_per_domain: usize,
@@ -20,6 +22,7 @@ pub const STEWARD_RULES: StewardRules = StewardRules {
     period_ticks: 20,
     worker_dwell_seconds: 20,
     domains_per_pass: 8,
+    domains_per_tick: 4,
     unit_visits_per_domain: 1_024,
     building_visits_per_domain: 2_048,
     orders_per_domain: 64,

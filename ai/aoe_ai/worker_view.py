@@ -5,8 +5,25 @@ from .context import Context
 from .play.economy import unemployed
 
 
+def focus_army(ctx: Context, tile) -> None:
+    board, cfg = ctx.board, ctx.config
+    key = "army-view"
+    if board.army_view_until or board.cooling(key, ctx.tick):
+        return
+    hz = ctx.world.tick_hz
+    ctx.client.focus_view(tile)
+    board.army_view_until = ctx.tick + cfg.worker_view_seconds * hz
+    board.worker_view_until = 0
+    board.cool(key, ctx.tick, cfg.worker_view_interval_seconds * hz)
+
+
 def survey_workers(ctx: Context) -> None:
     board, cfg = ctx.board, ctx.config
+    if board.army_view_until:
+        if ctx.tick >= board.army_view_until:
+            ctx.client.focus_view()
+            board.army_view_until = 0
+        return
     if not ctx.late_economy and not board.worker_view_until:
         return
     threat = (board.threat_until > ctx.tick and board.threat_tile is not None

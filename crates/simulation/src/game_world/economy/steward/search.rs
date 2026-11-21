@@ -309,8 +309,12 @@ impl GameWorld {
         if budget.orders >= STEWARD_RULES.orders_per_domain {
             return None;
         }
+        let ore = matches!(kind, ResourceKind::Gold | ResourceKind::Stone);
+        if ore && s.ore_misses[kind as usize] {
+            return None;
+        }
         let from = self.unit(worker)?.position.tile_floor();
-        for preference in 0..3 {
+        for preference in if ore { 2..3 } else { 0..3 } {
             if preference == 1
                 && let Some(node) = self.steward_camp_resource(worker, kind, s, budget, work)
             {
@@ -366,6 +370,12 @@ impl GameWorld {
             // Retain and rotate every offered node, even after a refused order.
             self.steward_offer_resource(worker, kind, Some(node), s, budget, work)
                 .or(retained)
+        } else if ore && retained.is_none() {
+            if let Some(node) = self.steward_camp_resource(worker, kind, s, budget, work) {
+                return self.steward_offer_resource(worker, kind, Some(node), s, budget, work);
+            }
+            s.ore_misses[kind as usize] = true;
+            None
         } else {
             retained
         }
