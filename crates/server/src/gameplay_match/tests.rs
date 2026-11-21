@@ -153,6 +153,94 @@ fn every_flat_match_village_gets_the_full_standard_start() {
     }
 }
 
+#[test]
+fn a_scout_survey_finds_nearby_deer_in_each_seeded_flat_village() {
+    use aoe_core::WorldPosition;
+    use aoe_simulation::{AnimalKind, BuildingKind, TileVisibility};
+
+    let (package, pages) = flat::package(flat::FlatMap {
+        tiles_per_side: 500,
+        seed: 3,
+    })
+    .unwrap();
+    let mut world = GameWorld::from_prepared_map(package, pages, vec![], vec![], vec![]).unwrap();
+    world.set_tick_hz(crate::Config::DEFAULT_SIM_HZ);
+    world.prepare_navigation(&|| false).unwrap();
+    let placed = AtomicUsize::new(0);
+    let scouts = place_villages(&mut world, 2, Some(3), &placed, &|| false).unwrap();
+    world.prepare_navigation(&|| false).unwrap();
+
+    let mut surveys: Vec<_> = scouts
+        .into_iter()
+        .enumerate()
+        .map(|(slot, scout)| {
+            let player = PlayerId(slot as u16);
+            let rect = world
+                .buildings()
+                .find(|building| {
+                    building.player == player && building.kind == BuildingKind::TownCenter
+                })
+                .unwrap()
+                .footprint;
+            let home = TileCoord::new((rect.min.x + rect.max.x) / 2, (rect.min.y + rect.max.y) / 2);
+            let near = move |tile: TileCoord| {
+                (tile.x - home.x).pow(2) + (tile.y - home.y).pow(2) <= 18 * 18
+            };
+            let herd: Vec<_> = world
+                .animals()
+                .filter(|animal| {
+                    animal.kind == AnimalKind::Deer && near(animal.position.tile_floor())
+                })
+                .collect();
+            assert!(
+                herd.len() >= 2,
+                "{player:?} at {home:?} is missing its herd"
+            );
+            assert!(
+                herd.iter()
+                    .all(|animal| world.tile_passable(animal.position.tile_floor()))
+            );
+            // The public SDK survey samples two rings, roughly seven tiles apart.
+            let points = [(8, 8), (14, 12)]
+                .into_iter()
+                .flat_map(move |(radius, count)| {
+                    (0..count).map(move |i| {
+                        let angle = std::f64::consts::TAU * f64::from(i) / f64::from(count);
+                        let dx = (f64::from(radius) * angle.cos()).round() as i32;
+                        let dy = (f64::from(radius) * angle.sin()).round() as i32;
+                        WorldPosition::from_tile_center(TileCoord::new(home.x + dx, home.y + dy))
+                            .unwrap()
+                    })
+                });
+            (player, scout, near, points, false)
+        })
+        .collect();
+    for tick in 0..4_000 {
+        if tick % (crate::Config::DEFAULT_SIM_HZ / 2) == 0 {
+            for (player, scout, near, points, saw_deer) in &mut surveys {
+                *saw_deer |= world.animals().any(|animal| {
+                    let tile = animal.position.tile_floor();
+                    animal.kind == AnimalKind::Deer
+                        && near(tile)
+                        && world.visibility(*player, tile) == TileVisibility::Visible
+                });
+                if world.movement_order(*scout).is_none()
+                    && let Some(goal) = points.next()
+                {
+                    let _ = world.issue_move(*scout, goal);
+                }
+            }
+            if surveys.iter().all(|survey| survey.4) {
+                return;
+            }
+        }
+        world.advance();
+    }
+    for (player, _, _, _, saw_deer) in surveys {
+        assert!(saw_deer, "{player:?} did not discover its starting deer");
+    }
+}
+
 #[path = "tests/passes.rs"]
 mod passes;
 #[path = "tests/real_package.rs"]
