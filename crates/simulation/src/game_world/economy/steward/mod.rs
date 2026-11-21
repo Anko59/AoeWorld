@@ -47,6 +47,8 @@ pub(crate) struct Home {
     held_jobs: BTreeMap<EntityId, jobs::HeldJob>,
     resources: search::Search,
     regions: Option<std::sync::Arc<territory::Regions>>,
+    walking: Option<std::sync::Arc<super::land::walking::Walking>>,
+    walk_recheck: bool,
     navy: navy::Fleet,
     pub(crate) stalls: BTreeMap<EntityId, watchdog::Stall>,
     pub(super) status: StewardStatus,
@@ -62,25 +64,6 @@ impl Home {
         let dy = i64::from(at.y) - i64::from(self.center.y);
         let r = i64::from(STEWARD_RULES.radius_tiles * FIXED_SUBUNITS_PER_TILE);
         dx * dx + dy * dy <= r * r
-    }
-    /// Every margin-expanded corner lies in the circle and the building's
-    /// centre lies in this Steward's own territory.
-    pub(super) fn covers(&self, rect: TileRect, margin: i32) -> bool {
-        self.owns(WorldPosition::new(
-            (rect.min.x + rect.max.x) * FIXED_SUBUNITS_PER_TILE / 2,
-            (rect.min.y + rect.max.y) * FIXED_SUBUNITS_PER_TILE / 2,
-        )) && [rect.min.x - margin, rect.max.x + margin]
-            .into_iter()
-            .all(|x| {
-                [rect.min.y - margin, rect.max.y + margin]
-                    .into_iter()
-                    .all(|y| {
-                        self.contains(WorldPosition::new(
-                            x * FIXED_SUBUNITS_PER_TILE,
-                            y * FIXED_SUBUNITS_PER_TILE,
-                        ))
-                    })
-            })
     }
 }
 #[derive(Debug, Default)]
@@ -105,6 +88,7 @@ pub(crate) struct Manager {
     pub(super) work: StewardWork,
     /// Bumped when a bridge appears or collapses; invalidates region labels.
     pub(super) bridge_epoch: u32,
+    walk_second: Option<u64>,
 }
 impl GameWorld {
     pub(crate) fn register_steward(&mut self, id: EntityId) {
@@ -133,6 +117,8 @@ impl GameWorld {
                 held_jobs: BTreeMap::new(),
                 resources: search::Search::default(),
                 regions: None,
+                walking: None,
+                walk_recheck: false,
                 navy: navy::Fleet::default(),
                 stalls: BTreeMap::new(),
                 status: StewardStatus::default(),
@@ -249,6 +235,9 @@ impl GameWorld {
             )
         });
         if let Some(h) = self.economy.steward_homes.get_mut(&id) {
+            if h.town_center != town_center {
+                h.walking = None;
+            }
             h.town_center = town_center;
             if let Some(center) = center {
                 h.center = center;
@@ -274,6 +263,7 @@ impl GameWorld {
                 members.remove(&id);
                 if members.is_empty() {
                     self.economy.stewards.by_player.remove(&player);
+                    self.economy.walking.stewards.remove(&player);
                 }
             }
             let (workers, refused) = self
@@ -294,6 +284,7 @@ impl GameWorld {
                     };
                     h.resources = search::Search::default();
                     h.regions = None;
+                    h.walking = None;
                     let ships = std::mem::take(&mut h.navy.ships);
                     h.workers.extend(ships);
                     h.navy = navy::Fleet::default();
@@ -346,7 +337,7 @@ impl GameWorld {
                 && !self.embarked(id)
         })?;
         let home = self.economy.steward_homes.get(&steward)?;
-        (home.owns(unit.position)
+        (home.owns_resident(unit.kind, unit.position)
             && self.active_steward(steward)
             && self
                 .building(home.town_center?)
@@ -442,13 +433,17 @@ impl GameWorld {
             .or(self.economy.stewards.ordering)
             .and_then(|v| self.economy.steward_homes.get(&v))
             .is_none_or(|h| {
-                h.owns(at)
-                    && self.unit(worker).is_some_and(|u| {
-                        u.player == h.player
-                            // Ships sail; only walkers need a land route.
-                            && (u.kind != UnitKind::Villager
-                                || h.connects_tile(u.position.tile_floor(), at.tile_floor()))
-                    })
+                self.unit(worker).is_some_and(|u| {
+                    u.player == h.player
+                        && match u.kind {
+                            UnitKind::FishingShip => h.owns_water(at),
+                            UnitKind::Villager => {
+                                h.owns(at)
+                                    && h.connects_tile(u.position.tile_floor(), at.tile_floor())
+                            }
+                            _ => h.owns(at),
+                        }
+                })
             })
     }
     /// Latest explanation of what this Steward's domain is doing.

@@ -25,6 +25,7 @@ fn dist2(a: WorldPosition, b: WorldPosition) -> i64 {
 
 impl GameWorld {
     pub(crate) fn advance_stewards(&mut self, changed: &mut Vec<EntityId>) {
+        self.refresh_steward_walk();
         let mut work = StewardWork::default();
         // A pass's domains spread over its period instead of all landing on
         // one tick in twenty: each domain still runs once per period, the
@@ -93,6 +94,7 @@ impl GameWorld {
                     self.release_steward_worker(worker);
                 }
             }
+            self.recheck_steward_walk(id, changed);
             let Some(mut snapshot) = self.steward_snapshot(id, &mut work) else {
                 continue;
             };

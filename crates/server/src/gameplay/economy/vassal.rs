@@ -29,5 +29,8 @@ pub(super) fn wire_vassal(v: aoe_simulation::VassalStatus) -> aoe_protocol::Vass
         current: jobs(v.current),
         planned: jobs(v.planned),
         finished: jobs(v.finished),
+        squads: v
+            .squads
+            .map(|squad| [squad.holding, squad.moving, squad.attacking]),
     }
 }

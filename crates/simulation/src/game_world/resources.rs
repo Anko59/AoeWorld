@@ -31,6 +31,10 @@ impl PreparedResourceDepletion<'_> {
             unreachable!("prepared mutation exclusively borrows a map world");
         };
         overlay.apply_depletion(&self.depletion);
+        if self.depletion.became_nonblocking || self.depletion.remaining == 0 {
+            self.world
+                .management_ground_changed(Some(resource_area(self.depletion.id)));
+        }
         if self.depletion.became_nonblocking {
             self.world
                 .collision_opened(resource_area(self.depletion.id));
@@ -114,6 +118,7 @@ impl GameWorld {
     }
 
     pub(super) fn resource_collision_changed(&mut self) {
+        self.management_ground_changed(None);
         self.navigation_cache.clear();
         for cache in &mut self.economy.movement_ground {
             cache.get_mut().unwrap_or_else(|e| e.into_inner()).clear();

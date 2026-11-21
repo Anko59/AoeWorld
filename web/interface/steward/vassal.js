@@ -13,12 +13,14 @@ export function initVassal() {
     <div id="vassal-controls"></div>
     <p id="vassal-status" role="status"></p>
     <ul id="vassal-jobs" aria-label="Vassal jobs"></ul>
-    <button id="vassal-development" type="button"></button>`;
+    <button id="vassal-development" type="button"></button>
+    <ul id="vassal-squads" aria-label="Defence squads" hidden></ul>`;
   document.getElementById('selection-content').append(panel);
   const status = panel.querySelector('#vassal-status');
   const toggle = panel.querySelector('#vassal-development');
   const controls = panel.querySelector('#vassal-controls');
   const list = panel.querySelector('#vassal-jobs');
+  const squadsList = panel.querySelector('#vassal-squads');
   const details = document.createElement('div');
   details.id = 'vassal-job-details';
   details.setAttribute('role', 'tooltip');
@@ -89,7 +91,7 @@ export function initVassal() {
   window.aoeVassal = {
     bind(callback) { send = callback; },
     selected() { return panel.hidden ? 0 : Number(select.value); },
-    update(values, label, jobs) {
+    update(values, label, jobs, squads) {
       panel.hidden = values.length === 0;
       if (panel.hidden) {
         current = hovered = focused = undefined;
@@ -102,7 +104,7 @@ export function initVassal() {
       const changed = id !== current;
       current = id;
       focus(focusValue, changed);
-      const next = `${id}:${enabled}:${alert}:${label}:${counts.join(',')}:${jobs}`;
+      const next = `${id}:${enabled}:${alert}:${label}:${counts.join(',')}:${jobs}:${squads}`;
       if (signature === next) return;
       signature = next;
       panel.dataset.alert = String(alert === 1);
@@ -127,6 +129,12 @@ export function initVassal() {
         row.dataset.details = names.length ? [heading, ...names].join('\n') : '';
         row.setAttribute('aria-label', [heading, ...names].join(', '));
       });
+      squadsList.hidden = squads.length === 0;
+      squadsList.replaceChildren(...squads.split('\n').filter(Boolean).map(text => {
+        const row = document.createElement('li');
+        row.textContent = text;
+        return row;
+      }));
       showDetails();
     },
   };

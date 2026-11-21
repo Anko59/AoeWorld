@@ -7,7 +7,7 @@ fn join_slot_is_an_appended_variant_with_a_pinned_wire_form() {
         version: VERSION,
         resume_token: None,
     };
-    assert_eq!(encode_client(&hello).unwrap(), [0, 23, 0]);
+    assert_eq!(encode_client(&hello).unwrap(), [0, 25, 0]);
     let mut token = [0_u8; 24];
     for (index, byte) in token.iter_mut().enumerate() {
         *byte = index as u8;
@@ -16,7 +16,7 @@ fn join_slot_is_an_appended_variant_with_a_pinned_wire_form() {
         version: VERSION,
         token: ResumeToken(token),
     };
-    let mut expected = vec![19, 23];
+    let mut expected = vec![19, 25];
     expected.extend(0..24_u8);
     assert_eq!(encode_client(&join).unwrap(), expected);
     assert_eq!(decode_client(&expected).unwrap(), join);

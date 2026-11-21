@@ -34,6 +34,7 @@ pub(crate) struct Economy {
     /// and water. Collision changes invalidate only affected chunks.
     pub(crate) movement_ground: [std::sync::Mutex<aoe_map::RouteGroundCache>; 2],
     pub(crate) land: std::sync::Mutex<super::land::Cache>,
+    pub(crate) walking: super::land::walking::ZoneCache,
     pub(crate) census: std::sync::Mutex<census::Cache>,
     pub(crate) vassals: super::vassal::Manager,
     pub(crate) generals: super::general::Manager,

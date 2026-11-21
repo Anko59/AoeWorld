@@ -1,7 +1,7 @@
 //! The domain plan, cached on the domain and rebuilt only every
 //! `REPLAN_TICKS`, on an age change or when it is empty: towers by the
 //! villagers' work points, production behind the castle away from the enemy,
-//! the domain wall ring (see `ring`) and the road to the Town Center.
+//! the domain wall ring (see `ring`) and trunk roads serving the domain.
 use super::*;
 use crate::Age;
 
@@ -32,10 +32,18 @@ impl Site {
             end: None,
         }
     }
+
+    pub(super) fn build_priority(self, focus: VassalFocus) -> (bool, bool) {
+        // Reserve the banks and enter the shared queue before the approach roads.
+        (
+            self.kind != BuildingKind::Bridge,
+            focus == VassalFocus::Roads && self.kind != BuildingKind::Road,
+        )
+    }
 }
 
-/// Build order: the home towers, the threatened side's wall, then roads and
-/// production, work-point towers, and the other sides by threat.
+/// Fortification tiers after bridge priority: home towers, the threatened
+/// wall, roads and production, work-point towers, then the other sides.
 pub(super) const TIER_HOME_TOWER: u8 = 0;
 pub(super) const TIER_ROAD: u8 = 2;
 pub(super) const TIER_PRODUCTION: u8 = 2;

@@ -89,7 +89,7 @@ impl GameWorld {
                     && u.hp > 0
                     && matches!(u.kind, UnitKind::Villager | UnitKind::FishingShip)
                     && !self.embarked(u.id)
-                    && home.owns(u.position)
+                    && home.owns_resident(u.kind, u.position)
                 {
                     if u.kind == UnitKind::FishingShip {
                         boats.push(u);
@@ -135,13 +135,17 @@ impl GameWorld {
             .take(STEWARD_RULES.building_visits_per_domain)
             .collect();
         let complete_buildings = candidates.peek().is_none();
+        let covers = |b: &crate::GameBuilding| {
+            if b.kind == BuildingKind::Dock {
+                home.covers_shore(b.footprint, 0)
+            } else {
+                home.covers(b.footprint, 0)
+            }
+        };
         for (kind, id) in batch {
             work.building_visits += 1;
             scan.after = Some((kind, id));
-            if self
-                .building(id)
-                .is_some_and(|b| home.covers(b.footprint, 0))
-            {
+            if self.building(id).is_some_and(|b| covers(&b)) {
                 scan.known.insert(id);
             }
         }
@@ -150,7 +154,7 @@ impl GameWorld {
             .known
             .iter()
             .filter_map(|id| self.building(*id))
-            .filter(|b| b.player == player && home.covers(b.footprint, 0))
+            .filter(|b| b.player == player && covers(b))
             .map(|b| b.into_owned())
             .collect();
         if let Some(h) = self.economy.steward_homes.get_mut(&id) {

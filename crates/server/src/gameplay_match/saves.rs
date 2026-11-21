@@ -23,7 +23,7 @@ use std::{
 
 /// Read by `make check-fixtures` to explain a save that no longer loads.
 /// Includes the shared construction queue and Vassal focus.
-pub const SAVE_VERSION: u16 = 16;
+pub const SAVE_VERSION: u16 = 18;
 const MAX_NAME: usize = 60;
 const MAX_SAVE_BYTES: u64 = 2 << 30;
 

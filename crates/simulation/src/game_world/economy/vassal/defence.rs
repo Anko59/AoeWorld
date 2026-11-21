@@ -1,9 +1,35 @@
 use super::*;
 use crate::GameUnit;
+use aoe_map::{LandBucket, RegionReachability};
+
+/// Nearby field commanders are close enough to act as a local reserve.
+const CALL_RADIUS: i32 = 32;
 /// Tiles a threat must move from where a General was sent to redirect him.
 const THREAT_MOVED_TILES: i64 = 8;
 
 impl GameWorld {
+    pub(super) fn vassal_squads(&self, id: EntityId) -> [VassalSquad; 5] {
+        let mut squads = [VassalSquad::default(); 5];
+        for unit in self.economy.vassals.domains[&id]
+            .soldiers
+            .iter()
+            .filter_map(|&soldier| self.unit(soldier))
+        {
+            let Some(role) = super::super::general::role(unit.kind) else {
+                continue;
+            };
+            let squad = &mut squads[role];
+            if unit.task == UnitTask::Attacking || unit.attack_target.is_some() {
+                squad.attacking += 1;
+            } else if unit.task == UnitTask::Moving || unit.moving || unit.planning {
+                squad.moving += 1;
+            } else {
+                squad.holding += 1;
+            }
+        }
+        squads
+    }
+
     pub(super) fn vassal_defend(
         &mut self,
         id: EntityId,
@@ -19,7 +45,7 @@ impl GameWorld {
             .filter(|u| {
                 u.player != player
                     && u.hp > 0
-                    && inside(center, u.position)
+                    && self.vassal_owns(id, u.position)
                     && self.unit_visible_to(player, u.id)
             })
             .min_by_key(|u| u.id)
@@ -43,7 +69,7 @@ impl GameWorld {
         } else {
             let victims = units
                 .iter()
-                .filter(|u| u.player == player && u.hp > 0 && inside(center, u.position))
+                .filter(|u| u.player == player && u.hp > 0 && self.vassal_owns(id, u.position))
                 .map(|u| u.id)
                 .collect();
             self.wolves_hunting(&victims)
@@ -60,7 +86,7 @@ impl GameWorld {
                 let _ = self.issue_attack(player, soldier, enemy.0);
             } else if self
                 .unit(soldier)
-                .is_some_and(|u| u.task == UnitTask::Attacking || !inside(center, u.position))
+                .is_some_and(|u| u.task == UnitTask::Attacking || !self.vassal_owns(id, u.position))
                 && let Ok(to) =
                     WorldPosition::from_tile_center(TileCoord::new(center.x, center.y + 4))
                 && (self
@@ -77,22 +103,18 @@ impl GameWorld {
             d.status.alert = threat.is_some();
         }
         if let Some(enemy) = threat {
-            let home = WorldPosition::new(center.x * 1024, center.y * 1024);
-            let generals: Vec<_> = self
-                .economy
-                .generals
-                .armies
-                .keys()
-                .copied()
-                .filter(|g| {
-                    !self.economy.vassals.recalls.contains_key(g)
-                        && self.unit(*g).is_some_and(|u| {
-                            u.player == player
-                                && u.hp > 0
-                                && super::super::general::distance(home, u.position)
-                                    <= (100 * 1024_i64).pow(2)
-                        })
+            let generals: Vec<_> = units
+                .iter()
+                .filter(|u| {
+                    u.kind == UnitKind::General
+                        && u.player == player
+                        && u.hp > 0
+                        && within(center, u.position, CALL_RADIUS)
+                        && !self.embarked(u.id)
+                        && !self.economy.vassals.recalls.contains_key(&u.id)
+                        && self.vassal_help_reachable(u, enemy.1)
                 })
+                .map(|u| u.id)
                 .collect();
             for g in generals {
                 let Some(a) = self.economy.generals.armies.get(&g) else {
@@ -129,6 +151,18 @@ impl GameWorld {
             d.status.responding = responding;
         }
     }
+    fn vassal_help_reachable(&self, general: &GameUnit, destination: WorldPosition) -> bool {
+        LandBucket::for_radius(general.kind.collision_radius()).is_some_and(|bucket| {
+            self.land_reachable_bounded(
+                general.player,
+                bucket,
+                general.position.tile_floor(),
+                destination.tile_floor(),
+            )
+            .is_ok_and(RegionReachability::is_reachable)
+        })
+    }
+
     /// A recalled General marches to where the threat was seen. Raiders that
     /// walked on from there left him standing out of sight of them forever,
     /// so the recall never ended: send him on when the threat has moved.
@@ -152,6 +186,12 @@ impl GameWorld {
             .map(|(&g, _)| g)
             .collect();
         for g in moved {
+            if self
+                .unit(g)
+                .is_none_or(|u| !self.vassal_help_reachable(&u, threat))
+            {
+                continue;
+            }
             self.record_vassal_decision();
             self.general_march(g, threat);
             if let Some(recall) = self.economy.vassals.recalls.get_mut(&g) {
