@@ -168,7 +168,12 @@ impl GameWorld {
             .map(|g| g.destination)
     }
 
-    pub(crate) fn formation_matches(&self, ids: &[EntityId], goal: WorldPosition) -> bool {
+    pub(crate) fn formation_matches(
+        &self,
+        ids: &[EntityId],
+        goal: WorldPosition,
+        attack_move: bool,
+    ) -> bool {
         let Some(leader) = ids
             .first()
             .and_then(|id| self.lookup.get(id))
@@ -177,11 +182,13 @@ impl GameWorld {
             return false;
         };
         self.formations.get(&leader).is_some_and(|group| {
-            (if group.attack_move {
-                group.destination == goal
-            } else {
-                near_goal(group.destination, goal)
-            }) && group.members.iter().map(|m| m.id).eq(ids.iter().copied())
+            group.attack_move == attack_move
+                && (if attack_move {
+                    group.destination == goal
+                } else {
+                    near_goal(group.destination, goal)
+                })
+                && group.members.iter().map(|m| m.id).eq(ids.iter().copied())
         })
     }
 

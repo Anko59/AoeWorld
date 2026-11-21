@@ -179,7 +179,16 @@ pub(in crate::gameplay) fn apply(
             if !world.config().valid_map_position(destination) {
                 return CommandResult::RejectedInvalidDestination;
             }
-            if queued {
+            if unit.kind == aoe_simulation::UnitKind::General {
+                world.issue_player_formation_move(
+                    player,
+                    &[entity_id],
+                    aoe_core::Formation::Line,
+                    destination,
+                    queued,
+                    attack_move,
+                )
+            } else if queued {
                 world
                     .issue_queued_leg(entity_id, destination, attack_move)
                     .map(|_| ())

@@ -4,6 +4,20 @@ use aoe_core::EntityId;
 use std::collections::BTreeSet;
 
 impl GameWorld {
+    pub(super) fn snapshot_pending_moves(
+        &self,
+        id: EntityId,
+    ) -> Vec<(aoe_core::WorldPosition, bool)> {
+        if let Some(army) = self.economy.generals.armies.get(&id)
+            && army.owner_march.is_some()
+        {
+            return army.waypoints.iter().copied().collect();
+        }
+        self.move_queues.get(&id).map_or_else(Vec::new, |q| {
+            q.pending.iter().map(|marker| marker.leg()).collect()
+        })
+    }
+
     /// Orders units back to what they were doing, through the ordinary order
     /// paths; a refused order leaves the unit idle.
     pub(super) fn resume_jobs(&mut self, snapshot: &WorldSnapshot, report: &mut RestoreReport) {
@@ -92,7 +106,14 @@ impl GameWorld {
             } else if record.unit.auto_scout {
                 // Plan again from the restored position and explored terrain.
                 self.issue_auto_scout(player, id, true)
-            } else if let Some(at) = record.move_to.filter(|_| !grouped.contains(&id)) {
+            } else if let Some(at) = record.move_to.filter(|_| !grouped.contains(&id))
+                && self
+                    .economy
+                    .generals
+                    .armies
+                    .get(&id)
+                    .is_none_or(|army| army.owner_march.is_none())
+            {
                 let result = self
                     .issue_move(id, at)
                     .map(|_| ())
@@ -135,6 +156,18 @@ impl GameWorld {
                 || self.unit(id).is_none_or(|u| u.hp == 0)
                 || self.embarked(id)
             {
+                continue;
+            }
+            if let Some(army) = self.economy.generals.armies.get_mut(&id)
+                && army.owner_march.is_some()
+            {
+                army.waypoints.extend(
+                    record
+                        .queue
+                        .iter()
+                        .copied()
+                        .take(Self::move_queue_width() - 1),
+                );
                 continue;
             }
             let occupied = self.formation_waypoints(id).map_or_else(

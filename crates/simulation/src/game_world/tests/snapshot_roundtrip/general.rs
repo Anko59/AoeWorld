@@ -248,3 +248,38 @@ fn restored_general_keeps_the_assignment_of_a_recruit_still_in_training() {
         .expect("paid training finishes");
     assert_eq!(restored.general_controller(recruit.id), Some(general));
 }
+
+#[test]
+fn a_restored_general_keeps_the_army_waypoint_modes_and_fifo() {
+    let (mut saved, start) = flat();
+    let at = |x, y| {
+        aoe_core::WorldPosition::from_tile_center(TileCoord::new(start.x + x, start.y + y)).unwrap()
+    };
+    let player = PlayerId(0);
+    let soldier = saved
+        .spawn_kind(player, crate::UnitKind::Militia, at(5, 5))
+        .unwrap();
+    let g = saved
+        .spawn_kind(player, crate::UnitKind::General, at(6, 6))
+        .unwrap();
+    let expected = [(at(25, 8), false), (at(25, 25), true), (at(8, 25), false)];
+    for (i, (goal, attack_move)) in expected.into_iter().enumerate() {
+        saved
+            .issue_player_formation_move(
+                player,
+                &[g, soldier],
+                aoe_core::Formation::Line,
+                goal,
+                i != 0,
+                attack_move,
+            )
+            .unwrap();
+    }
+    for _ in 0..30 {
+        saved.advance();
+    }
+    let (restored, report) = roundtrip(&saved, flat().0);
+    assert_eq!(report.units_lost, 0);
+    assert_eq!(restored.general_controller(soldier), Some(g));
+    assert_eq!(restored.move_waypoints(g), expected);
+}

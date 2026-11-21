@@ -42,14 +42,16 @@ impl GameWorld {
             }
         }
         for general in generals {
-            if let Some(destination) = destination {
+            if self.economy.garrison_orders.contains_key(&general) || self.embarked(general) {
+                self.hold_general_army(general);
+            } else if let Some(destination) = destination {
                 self.general_march(general, destination);
             }
         }
     }
 
     /// Resolve a mixed player selection into independent units and army
-    /// commands. Only the commander owns the player's queued army waypoints.
+    /// commands. The roster owns its queued army waypoints.
     pub fn issue_player_formation_move(
         &mut self,
         player: PlayerId,
@@ -99,23 +101,15 @@ impl GameWorld {
             }
         }
         for id in commanders {
-            let result = if queued {
-                self.issue_queued_leg(id, destination, attack_move)
-            } else if attack_move {
-                self.issue_attack_move(id, destination)
-            } else {
-                self.issue_move(id, destination)
-                    .map_err(EconomyError::Movement)
-            };
-            match result {
-                Ok(_) => accepted = true,
+            match self.issue_owner_general_move(id, destination, queued, attack_move) {
+                Ok(()) => accepted = true,
                 Err(reason) => error = reason,
             }
         }
         accepted.then_some(()).ok_or(error)
     }
 
-    /// Focus the whole in-range army when its commander is part of an attack.
+    /// Focus the whole army when its commander is part of an attack.
     /// Other selected soldiers receive independent orders and leave their army
     /// only if their own attack was accepted.
     pub fn issue_player_attack(
@@ -197,12 +191,7 @@ impl GameWorld {
         army.state = GeneralState::Fighting;
         let members: Vec<_> = army.members.iter().copied().collect();
         for member in members {
-            if self
-                .unit(member)
-                .is_some_and(|u| in_influence(commander.position, u.position))
-            {
-                let _ = self.issue_attack(commander.player, member, target);
-            }
+            let _ = self.issue_attack(commander.player, member, target);
         }
     }
 
@@ -278,14 +267,14 @@ impl GameWorld {
     }
 
     fn hold_general_army(&mut self, id: EntityId) {
-        let Some(centre) = self.unit(id).map(|u| u.position) else {
-            return;
-        };
         self.restore_general_stances(id);
+        self.cancel_general_recall(id);
         let Some(a) = self.economy.generals.armies.get_mut(&id) else {
             return;
         };
         a.destination = None;
+        a.owner_march = None;
+        a.waypoints.clear();
         a.routed = None;
         a.layout = None;
         a.commander_march = None;
@@ -301,9 +290,7 @@ impl GameWorld {
             *slot = Some(m);
         }
         for member in members.into_iter().flatten() {
-            if let Some(&index) = self.lookup.get(&member)
-                && in_influence(centre, self.units[index].state.position)
-            {
+            if let Some(&index) = self.lookup.get(&member) {
                 self.stop_unit_orders(index);
             }
         }

@@ -9,7 +9,7 @@ use aoe_core::{EntityId, Formation, PlayerId, TileRect, WorldPosition};
 use aoe_map::ResourceOverlaySnapshot;
 use serde::{Deserialize, Serialize};
 
-pub const WORLD_SNAPSHOT_VERSION: u16 = 23;
+pub const WORLD_SNAPSHOT_VERSION: u16 = 27;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WorldSnapshot {
@@ -75,6 +75,8 @@ pub enum Management {
         mix: [u8; 5],
         solo: bool,
         destination: Option<WorldPosition>,
+        /// Presence marks an owner march, and the flag records attack-move.
+        owner_march: Option<bool>,
     },
     Vassal {
         development: bool,
@@ -178,8 +180,9 @@ pub struct UnitRecord {
     pub build: Option<EntityId>,
     /// The building this unit was sheltering in.
     pub garrison_in: Option<EntityId>,
-    /// Where it was walking (units outside army groups), and the waypoints queued behind.
+    /// The scalar movement destination of a unit outside formations.
     pub move_to: Option<WorldPosition>,
+    /// Pending personal waypoints, or the General's pending army waypoints.
     pub queue: Vec<(WorldPosition, bool)>,
     pub hunt: Option<EntityId>,
     /// The building this unit was walking to shelter in.

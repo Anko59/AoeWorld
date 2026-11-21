@@ -306,6 +306,7 @@ impl GameWorld {
             pace,
         } = leg;
         let army = &self.economy.generals.armies[&g];
+        let attack_move = army.owner_march.unwrap_or(true);
         let admitted = squad.map_or(army.commander_march, |at| army.squads[at].march);
         let same = admitted.is_some_and(|(to, _)| to == objective);
         let saved_final = same
@@ -414,7 +415,10 @@ impl GameWorld {
             .copied()
             .filter(|&id| !(retained && occupied(self, id)))
             .collect();
-        if !pending.is_empty() && !self.formation_matches(ids, goal) {
+        if pending.is_empty() {
+            return;
+        }
+        if !self.formation_matches(ids, goal, attack_move) {
             work.orders += 1;
             if self
                 .issue_formation_move(
@@ -423,34 +427,35 @@ impl GameWorld {
                     aoe_core::Formation::Line,
                     goal,
                     false,
-                    true,
+                    attack_move,
                 )
-                .is_ok()
+                .is_err()
             {
-                if !final_leg && goal != finish {
-                    // The shared FIFO continues the anchor through a bend;
-                    // rebuilding a physical centroid on a deck can put it off-lane.
-                    work.orders += 1;
-                    let _ = self.issue_formation_move(
-                        player,
-                        &pending,
-                        aoe_core::Formation::Line,
-                        finish,
-                        true,
-                        true,
-                    );
-                }
-                let _ = self.issue_formation_pace(player, pending[0], pace_limit);
-                if let Some(army) = self.economy.generals.armies.get_mut(&g) {
-                    if let Some(at) = squad {
-                        army.squads[at].march = Some((objective, finish));
-                        army.squads[at].final_leg = final_leg;
-                    } else {
-                        army.commander_march = Some((objective, finish));
-                        army.routed = final_leg.then_some(objective);
-                    }
-                }
-                changed.extend(&pending);
+                return;
+            }
+            if !final_leg && goal != finish {
+                // Continue the shared anchor through a bend. A physical centroid
+                // recomputed on a bridge can fall outside its single lane.
+                work.orders += 1;
+                let _ = self.issue_formation_move(
+                    player,
+                    &pending,
+                    aoe_core::Formation::Line,
+                    finish,
+                    true,
+                    attack_move,
+                );
+            }
+            let _ = self.issue_formation_pace(player, pending[0], pace_limit);
+            changed.extend(&pending);
+        }
+        if let Some(army) = self.economy.generals.armies.get_mut(&g) {
+            if let Some(at) = squad {
+                army.squads[at].march = Some((objective, finish));
+                army.squads[at].final_leg = final_leg;
+            } else {
+                army.commander_march = Some((objective, finish));
+                army.routed = final_leg.then_some(objective);
             }
         }
     }

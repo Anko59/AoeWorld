@@ -74,6 +74,21 @@ fn busy() -> GameWorld {
         .unwrap();
     world.issue_move(scout, at(40, 36)).unwrap();
     world.issue_queued_move(scout, at(46, 40)).unwrap();
+    let general = world
+        .spawn_kind(PlayerId(0), crate::UnitKind::General, at(30, 65))
+        .unwrap();
+    for (goal, queued, attack_move) in [(at(43, 65), false, false), (at(50, 72), true, true)] {
+        world
+            .issue_player_formation_move(
+                PlayerId(0),
+                &[general],
+                Formation::Line,
+                goal,
+                queued,
+                attack_move,
+            )
+            .unwrap();
+    }
     let castle = world
         .insert_building(
             PlayerId(0),

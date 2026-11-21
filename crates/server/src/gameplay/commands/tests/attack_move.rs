@@ -75,3 +75,31 @@ fn repeating_a_single_units_attack_move_discards_its_queued_waypoints() {
     }
     assert_eq!(world.unit(soldier).unwrap().position, at(130, 100));
 }
+
+#[test]
+fn a_single_general_keeps_waypoint_modes_through_move_selection() {
+    use aoe_core::Formation;
+    let player = PlayerId(0);
+    let (mut world, _) = GameWorld::general_demo(Seed(7)).unwrap();
+    let general = world
+        .spawn_kind(player, UnitKind::General, at(107, 132))
+        .unwrap();
+    let waypoints = [(at(125, 136), true), (at(137, 136), false)];
+    for (i, (destination, attack_move)) in waypoints.into_iter().enumerate() {
+        assert_eq!(
+            apply(
+                &mut world,
+                player,
+                PendingAction::MoveSelection(SelectionMove {
+                    unit_ids: vec![general],
+                    formation: Formation::Line,
+                    destination,
+                    queued: i != 0,
+                    attack_move,
+                })
+            ),
+            CommandResult::Accepted
+        );
+    }
+    assert_eq!(world.move_waypoints(general), waypoints);
+}

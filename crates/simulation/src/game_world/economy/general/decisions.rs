@@ -19,30 +19,16 @@ impl GameWorld {
         }
         // The ordinary explicit attack owns the army until its target is
         // cleared. Attack-move acquisitions carry their formation origin.
-        if self
-            .combat
-            .attackers
-            .get(&u.id)
-            .is_some_and(|attack| attack.origin.is_none() && attack.resume.is_none())
-        {
+        if self.general_has_explicit_attack(u.id) {
             return;
         }
-        let members: Vec<_> = self.economy.generals.armies[&u.id]
+        let mut army: Vec<_> = self.economy.generals.armies[&u.id]
             .members
-            .iter()
-            .copied()
-            .collect();
-        let mut army: Vec<_> = members
             .iter()
             .filter_map(|&id| self.unit(id))
             .filter(|v| v.hp > 0 && !self.embarked(v.id))
             .collect();
         army.push(u);
-        let ordered: Vec<_> = army
-            .iter()
-            .copied()
-            .filter(|v| in_influence(u.position, v.position) || self.formation(v.id).is_some())
-            .collect();
         // The whole army counts, wherever its soldiers stand: a column strung
         // out along the road is as strong as it is when it gathers.
         let friendly: u64 = army.iter().copied().map(strength).sum();
@@ -89,7 +75,7 @@ impl GameWorld {
         // A soldier still far from the army's objective keeps marching past a
         // contact; only one that has arrived near it is sent at the contact.
         let objective = self.economy.generals.armies[&u.id].destination;
-        let idle_near: Vec<EntityId> = ordered
+        let idle_near: Vec<EntityId> = army
             .iter()
             .filter(|v| {
                 !v.moving
@@ -161,15 +147,12 @@ impl GameWorld {
             }
         }
         self.reconcile_general_stances(u.id, state);
-        if ordered.is_empty() {
-            return;
-        }
         if let Some(to) = engagement
             .filter(|_| state != GeneralState::Retreating)
             .or(destination)
             .or(army_contact)
         {
-            let healthy: Vec<_> = ordered
+            let healthy: Vec<_> = army
                 .iter()
                 .copied()
                 .filter(|v| state != GeneralState::Fighting || v.hp * 3 >= v.max_hp)
@@ -205,7 +188,7 @@ impl GameWorld {
             }
         }
         if state == GeneralState::Fighting {
-            self.general_fight(u, &ordered, changed, work);
+            self.general_fight(u, &army, changed, work);
         }
     }
 }
