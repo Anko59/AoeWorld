@@ -169,6 +169,8 @@ pub struct MapChunkGenerator {
     river_queries: Arc<std::sync::Mutex<provider::rivers::Cache>>,
     /// Memo of composed tile answers; every builder that changes inputs resets it.
     derived: Arc<walk_cache::DerivedCaches>,
+    /// Loose rock piles; only fixture worlds with hand-placed layouts disable them.
+    loose_rocks: bool,
 }
 
 impl MapChunkGenerator {
@@ -187,7 +189,16 @@ impl MapChunkGenerator {
             provider_compression: None,
             river_queries: Arc::default(),
             derived: Default::default(),
+            loose_rocks: true,
         }
+    }
+
+    /// Grows no loose rock piles, for fixture worlds whose hand-placed layouts
+    /// assume open ground. Package-derived worlds never use this.
+    pub fn without_loose_rocks(mut self) -> Self {
+        self.loose_rocks = false;
+        self.derived = Default::default();
+        self
     }
 
     /// Share immutable landscape inputs while giving a bounded query worker
@@ -250,6 +261,7 @@ impl MapChunkGenerator {
             provider_compression: self.provider_compression,
             river_queries: self.river_queries,
             derived: Default::default(),
+            loose_rocks: self.loose_rocks,
         })
     }
 
@@ -287,6 +299,7 @@ impl MapChunkGenerator {
             provider_compression: self.provider_compression,
             river_queries: self.river_queries,
             derived: Default::default(),
+            loose_rocks: self.loose_rocks,
         })
     }
 
@@ -324,6 +337,7 @@ impl MapChunkGenerator {
             provider_compression: self.provider_compression,
             river_queries: self.river_queries,
             derived: Default::default(),
+            loose_rocks: self.loose_rocks,
         })
     }
 
@@ -360,6 +374,7 @@ impl MapChunkGenerator {
             provider_compression: self.provider_compression,
             river_queries: self.river_queries,
             derived: Default::default(),
+            loose_rocks: self.loose_rocks,
         })
     }
 

@@ -34,7 +34,8 @@ pub(super) fn rock_anchor<const N: usize, const W: usize>(
     reserved_at: &dyn Fn(TileCoord) -> Result<Reservations, EnvironmentPageError>,
 ) -> Result<bool, EnvironmentPageError> {
     let roll = (memo.dressing_roll(position) >> 24) % 1000;
-    if roll >= crate::terrain::relief::MAX_ROCK_PER_THOUSAND
+    if !generator.loose_rocks
+        || roll >= crate::terrain::relief::MAX_ROCK_PER_THOUSAND
         || !generator.landscape_in_bounds(position)
     {
         return Ok(false);
