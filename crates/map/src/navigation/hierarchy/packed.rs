@@ -169,6 +169,34 @@ impl<'a> View<'a> {
         })
     }
 
+    pub(super) fn cells(self) -> Vec<Option<WalkCell>> {
+        let mut run = self.runs;
+        let mut node = 0;
+        (0..grid::CELLS)
+            .map(|tile| {
+                if usize::from(u16_at(self.bytes, run)) <= tile {
+                    run += RUN;
+                }
+                let flags = self.bytes[run + 4];
+                let at = self.nodes + node * NODE;
+                let resource = (at < self.portals
+                    && usize::from(u16_at(self.bytes, at + 8)) == tile)
+                    .then(|| {
+                        let resource = self.node(node);
+                        node += 1;
+                        resource
+                    });
+                (flags & 1 != 0).then_some(WalkCell {
+                    passable: flags & 2 != 0,
+                    walkable_surface: flags & 4 != 0,
+                    mud: flags & 8 != 0,
+                    game_height_level: u16_at(self.bytes, run + 2) as i16,
+                    node: resource,
+                })
+            })
+            .collect()
+    }
+
     pub(super) fn node(self, index: usize) -> crate::ResourceNode {
         let at = self.nodes + index * NODE;
         use crate::{ObjectKind::*, ResourceKind::*};

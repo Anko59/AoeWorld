@@ -87,9 +87,6 @@ pub(crate) struct Manager {
     /// one admitted domain pass, including ordinary resource replacements.
     pub(super) ordering: Option<EntityId>,
     pub(super) work: StewardWork,
-    /// Bumped when a bridge appears or collapses; invalidates region labels.
-    pub(super) bridge_epoch: u32,
-    walk_second: Option<u64>,
 }
 impl GameWorld {
     pub(crate) fn register_steward(&mut self, id: EntityId) {
@@ -229,15 +226,19 @@ impl GameWorld {
             .and_then(|home| home.town_center)
     }
     pub(crate) fn set_steward_town_center(&mut self, id: EntityId, town_center: Option<EntityId>) {
-        let center = town_center.and_then(|c| self.building(c)).map(|b| {
+        let footprint = town_center
+            .and_then(|c| self.building(c))
+            .map(|b| b.footprint);
+        let center = footprint.map(|rect| {
             WorldPosition::new(
-                (b.footprint.min.x + b.footprint.max.x) * FIXED_SUBUNITS_PER_TILE / 2,
-                (b.footprint.min.y + b.footprint.max.y) * FIXED_SUBUNITS_PER_TILE / 2,
+                (rect.min.x + rect.max.x) * FIXED_SUBUNITS_PER_TILE / 2,
+                (rect.min.y + rect.max.y) * FIXED_SUBUNITS_PER_TILE / 2,
             )
         });
         if let Some(h) = self.economy.steward_homes.get_mut(&id) {
             if h.town_center != town_center {
                 h.walking = None;
+                h.regions = None;
             }
             h.town_center = town_center;
             if let Some(center) = center {
@@ -264,7 +265,6 @@ impl GameWorld {
                 members.remove(&id);
                 if members.is_empty() {
                     self.economy.stewards.by_player.remove(&player);
-                    self.economy.walking.stewards.remove(&player);
                     self.economy.stewards.last_domain.remove(&player);
                 }
             }
@@ -309,6 +309,7 @@ impl GameWorld {
             }
         }
         if let Some((player, _)) = known {
+            self.economy.walking.stewards.set(player, id, footprint);
             self.refresh_steward_territory(player);
         }
     }

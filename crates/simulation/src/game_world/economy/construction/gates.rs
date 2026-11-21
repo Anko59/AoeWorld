@@ -31,6 +31,7 @@ impl GameWorld {
         }
         gate.gate_locked = locked;
         let rect = gate.footprint;
+        self.management_barrier_changed(rect);
         if locked {
             self.collision_closed(rect);
         } else {
@@ -60,6 +61,7 @@ impl GameWorld {
             }
         }
         self.economy.open_gates.insert(id);
+        self.management_barrier_changed(rect);
         if let Some(gate) = self.building_mut(id) {
             gate.gate_open = true;
         }
@@ -115,6 +117,9 @@ impl GameWorld {
             }
             if let Some(gate) = self.building_mut(id) {
                 gate.gate_open = open;
+            }
+            if !locked {
+                self.management_gate_toggled(rect, owner);
             }
             if open {
                 self.collision_opened(rect);

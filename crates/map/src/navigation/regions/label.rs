@@ -81,6 +81,8 @@ pub(super) fn input(ground: &dyn RegionGround, key: (i32, i32), size: (i32, i32)
 }
 
 impl Input {
+    pub const STEP_OFFSETS: [(i32, i32); 8] = NEIGHBOURS;
+
     pub(super) fn new(classes: Vec<RegionTile>, masks: Vec<u8>) -> Self {
         let edges = masks
             .into_iter()

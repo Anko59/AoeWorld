@@ -45,6 +45,9 @@ impl GameWorld {
             return None;
         }
         self.economy.buildings.get_mut(&id)?.state = ConstructionState::Complete;
+        if kind.is_gate() {
+            self.management_barrier_changed(footprint);
+        }
         if kind == BuildingKind::Road {
             self.economy.roads.insert(footprint.min);
         }
