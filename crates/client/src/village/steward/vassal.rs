@@ -2,10 +2,10 @@ use super::*;
 use aoe_protocol::{VassalFocus, VassalJobs};
 
 #[wasm_bindgen(
-    inline_js = "export function vassal_update(v, label, jobs) { window.aoeVassal?.update(v, label, jobs); } export function vassal_selected() { return window.aoeVassal?.selected() ?? 0; }"
+    inline_js = "export function vassal_update(v, label, jobs, squads) { window.aoeVassal?.update(v, label, jobs, squads); } export function vassal_selected() { return window.aoeVassal?.selected() ?? 0; }"
 )]
 extern "C" {
-    fn vassal_update(v: &[u32], label: &str, jobs: &str);
+    fn vassal_update(v: &[u32], label: &str, jobs: &str, squads: &str);
     fn vassal_selected() -> u32;
 }
 
@@ -39,9 +39,30 @@ fn jobs_text(groups: [VassalJobs; 3]) -> String {
     text
 }
 
+fn squads_text(squads: [[u8; 3]; 5]) -> String {
+    use std::fmt::Write;
+    let mut rows = String::new();
+    let names = ["Infantry", "Archers", "Cavalry", "Siege", "Scouts"];
+    for (name, [holding, moving, attacking]) in names.into_iter().zip(squads) {
+        let jobs = [
+            ("attacking", attacking),
+            ("moving", moving),
+            ("holding", holding),
+        ]
+        .into_iter()
+        .filter(|&(_, count)| count != 0)
+        .map(|(task, count)| format!("{count} {task}"))
+        .collect::<Vec<_>>();
+        if !jobs.is_empty() {
+            let _ = writeln!(rows, "{name} · {}", jobs.join(", "));
+        }
+    }
+    rows
+}
+
 pub(super) fn present(client: &Client) {
     let Some((g, r)) = selected(client).and_then(|g| g.vassal.map(|r| (g, r))) else {
-        vassal_update(&[], "", "");
+        vassal_update(&[], "", "", "");
         return;
     };
     let why = [
@@ -76,11 +97,12 @@ pub(super) fn present(client: &Client) {
         &values,
         &label,
         &jobs_text([r.current, r.planned, r.finished]),
+        &squads_text(r.squads),
     );
 }
 
 pub(super) fn hide() {
-    vassal_update(&[], "", "");
+    vassal_update(&[], "", "", "");
 }
 
 /// Menu command 2 toggles development; 3 and 4 choose the Fortify or Roads focus.
@@ -111,3 +133,7 @@ pub(super) fn order(client: &mut Client, code: u32) {
     };
     super::super::orders::send(client, message);
 }
+
+#[cfg(test)]
+#[path = "vassal_tests.rs"]
+mod tests;

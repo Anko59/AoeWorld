@@ -9,12 +9,6 @@ pub enum VassalFocus {
     Roads,
 }
 
-impl VassalFocus {
-    pub(super) fn priority(self, kind: BuildingKind) -> bool {
-        self == Self::Roads && !matches!(kind, BuildingKind::Road | BuildingKind::Bridge)
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct VassalJob {
     pub kind: BuildingKind,

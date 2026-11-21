@@ -353,7 +353,7 @@ fn idle_ships_without_local_fish_do_not_starve_land_worker_orders() {
             w.unit_tile_passable(UnitKind::FishingShip, *tile, &|| false)
                 .unwrap()
                 && w.economy.steward_homes[&king]
-                    .owns(WorldPosition::from_tile_center(*tile).unwrap())
+                    .owns_water(WorldPosition::from_tile_center(*tile).unwrap())
                 && w.nearest_resource_matching(*tile, ResourceKind::Food, 10, None, |n| {
                     matches!(n.object, ObjectKind::DeepFish | ObjectKind::ShoreFish)
                 })

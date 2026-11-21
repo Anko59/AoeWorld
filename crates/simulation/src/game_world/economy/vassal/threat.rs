@@ -14,7 +14,7 @@ impl GameWorld {
             .chain(d.plan.iter().filter_map(|site| self.building_at(site.tile)));
         let hits = units
             .iter()
-            .filter(|u| u.player == d.player && u.hp > 0 && inside(d.center, u.position))
+            .filter(|u| u.player == d.player && u.hp > 0 && self.vassal_owns(id, u.position))
             .filter_map(|u| u.last_hit)
             .chain(structures.filter_map(|id| {
                 self.building(id)

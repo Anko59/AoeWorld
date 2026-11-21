@@ -61,8 +61,8 @@ and attack-move. An enemy click focuses the army on that target. Shift queues
 ground orders on the army. The next leg starts after the commander and squads
 finish the current one. Move and attack-move keep their individual behavior
 through saves and restores. Selecting a soldier without its own General still
-detaches it. A Vassal can call the General for defence after the owner's active
-command finishes.
+detaches it. A Vassal can call a General within 32 tiles of the Castle when the
+General can reach the threat and has no active owner order.
 
 Right-clicking ground leads the army (above). The **General only** button or
 Alt+right-click walks the General alone (`GeneralOrder::MoveAlone`; Rust SDK

@@ -30,6 +30,7 @@ fn vassal_report_has_current_golden_wire_and_bounded_counts() {
         },
         finished: crate::VassalJobs::default(),
         military: 20,
+        squads: [[6, 0, 0], [0, 0, 7], [0, 7, 0], [0; 3], [0; 3]],
         development: true,
         developed: false,
         alert: true,
@@ -42,7 +43,8 @@ fn vassal_report_has_current_golden_wire_and_bounded_counts() {
     assert_eq!(
         postcard::to_allocvec(&report).unwrap(),
         [
-            20, 1, 0, 1, 1, 14, 0, 1, 77, 1, 0, 0, 0, 0, 0, 76, 1, 14, 40, 42, 0, 0, 0, 0, 0, 0,
+            20, 1, 0, 1, 1, 14, 0, 1, 77, 1, 0, 0, 0, 0, 0, 76, 1, 14, 40, 42, 0, 0, 0, 0, 0, 0, 6,
+            0, 0, 0, 0, 7, 0, 7, 0, 0, 0, 0, 0, 0, 0,
         ]
     );
     let mut b = GameplayBuildingState {
@@ -85,8 +87,11 @@ fn vassal_report_has_current_golden_wire_and_bounded_counts() {
     assert!(encode_server(&msg(b.clone())).is_ok());
     b.garrison[0].vassal.as_mut().unwrap().military = 21;
     assert!(encode_server(&msg(b.clone())).is_err());
+    b.garrison[0].vassal.as_mut().unwrap().military = 20;
+    b.garrison[0].vassal.as_mut().unwrap().squads[0][0] = 255;
+    assert!(encode_server(&msg(b.clone())).is_err());
     let report = b.garrison[0].vassal.as_mut().unwrap();
-    report.military = 20;
+    report.squads[0][0] = 6;
     report.planned.count = 0;
     assert!(encode_server(&msg(b)).is_err());
 }

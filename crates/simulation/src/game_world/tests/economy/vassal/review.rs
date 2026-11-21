@@ -110,3 +110,59 @@ fn a_town_center_outside_the_wall_square_but_in_the_domain_gets_a_road() {
         "no road beyond the wall toward the far Town Center"
     );
 }
+
+#[test]
+fn the_castle_trunk_serves_existing_and_planned_production() {
+    let (mut w, v, castle) = setup();
+    w.set_fog_disabled(true);
+    let workshop = TileRect::from_xywh(118, 121, 3, 3);
+    w.insert_building(PlayerId(0), BuildingKind::SiegeWorkshop, workshop, true)
+        .unwrap();
+
+    let fort = w.vassal_fortification(v);
+    let mut anchors: Vec<_> = fort
+        .iter()
+        .filter(|(kind, _)| {
+            matches!(
+                kind,
+                BuildingKind::Barracks | BuildingKind::ArcheryRange | BuildingKind::Stable
+            )
+        })
+        .copied()
+        .collect();
+    assert_eq!(anchors.len(), 3);
+    anchors.push((BuildingKind::SiegeWorkshop, workshop));
+    let mut tiles = roads(&mut w, v);
+    let castle = w.building(castle).unwrap().footprint;
+    let entrance = cardinal_edge(castle)
+        .find(|tile| tiles.remove(tile))
+        .expect("the trunk reaches the Castle");
+    let mut visit = vec![entrance];
+    let mut connected = BTreeSet::new();
+    while let Some(tile) = visit.pop() {
+        connected.insert(tile);
+        visit.extend(
+            cardinal_edge(TileRect::from_xywh(tile.x, tile.y, 1, 1)).filter(|t| tiles.remove(t)),
+        );
+    }
+    eprintln!(
+        "castle trunk: {} connected road tiles for {} production sites",
+        connected.len(),
+        anchors.len()
+    );
+    for (kind, footprint) in anchors {
+        assert!(
+            cardinal_edge(footprint).any(|t| connected.contains(&t)),
+            "{kind:?} at {footprint:?} has no continuous road to the Castle"
+        );
+    }
+}
+
+fn cardinal_edge(r: TileRect) -> impl Iterator<Item = TileCoord> {
+    (r.min.x..r.max.x)
+        .flat_map(move |x| [TileCoord::new(x, r.min.y - 1), TileCoord::new(x, r.max.y)])
+        .chain(
+            (r.min.y..r.max.y)
+                .flat_map(move |y| [TileCoord::new(r.min.x - 1, y), TileCoord::new(r.max.x, y)]),
+        )
+}

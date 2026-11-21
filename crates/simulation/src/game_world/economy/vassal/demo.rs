@@ -48,9 +48,9 @@ impl GameWorld {
         let v = w.spawn_kind(PlayerId(0), UnitKind::Vassal, at(89, 92)?)?;
         w.issue_garrison(PlayerId(0), v, castle)?;
         for i in 0..12 {
-            w.spawn_kind(PlayerId(0), UnitKind::Knight, at(138 + i % 4, 94 + i / 4)?)?;
+            w.spawn_kind(PlayerId(0), UnitKind::Knight, at(65 + i % 4, 94 + i / 4)?)?;
         }
-        let general = w.spawn_kind(PlayerId(0), UnitKind::General, at(138, 92)?)?;
+        let general = w.spawn_kind(PlayerId(0), UnitKind::General, at(65, 92)?)?;
         // Finish the approach from the south, outside the waiting General's
         // sight. Coming from the north lured him into combat before the call
         // and left only a brief alert during capture setup.

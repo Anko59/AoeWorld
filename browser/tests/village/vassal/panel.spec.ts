@@ -1,6 +1,8 @@
 import { expect } from "@playwright/test";
 import { test } from "../../../server.js";
 
+test.use({ video: { mode: "on", size: { width: 1280, height: 720 } } });
+
 test("Vassal panel shows work, switches Vassals and sends pause/resume", async ({
   page,
 }) => {
@@ -17,7 +19,7 @@ test("Vassal panel shows work, switches Vassals and sends pause/resume", async (
     initVassal();
     const w = window as unknown as {
       aoeVassal: {
-        update(v: number[], label: string, jobs: string): void;
+        update(v: number[], label: string, jobs: string, squads: string): void;
       };
       sent: number;
     };
@@ -32,9 +34,20 @@ test("Vassal panel shows work, switches Vassals and sends pause/resume", async (
       [12, 1, 0, 0, 0, 0, 77, 12, 13],
       "20/20 military\nholding territory\ndevelopment complete",
       "\n\nWatchTower at 92, 92",
+      "Infantry · 6 holding\nArchers · 7 holding\nCavalry · 7 holding",
     );
   });
   await expect(page.locator("#vassal-status")).toContainText("20/20 military");
+  const squads = page.getByRole("list", { name: "Defence squads" });
+  await expect(squads.getByRole("listitem")).toHaveText([
+    "Inf 6 hold",
+    "Arc 7 hold",
+    "Cav 7 hold",
+  ]);
+  await expect(squads.getByRole("listitem").first()).toHaveAttribute(
+    "title",
+    "Infantry · 6 holding",
+  );
   await expect(page.locator("#vassal-status")).toContainText(
     "development complete",
   );
@@ -53,16 +66,20 @@ test("Vassal panel shows work, switches Vassals and sends pause/resume", async (
     const { aoeVassal } = window as unknown as {
       aoeVassal: {
         selected(): number;
-        update(v: number[], label: string, jobs: string): void;
+        update(v: number[], label: string, jobs: string, squads: string): void;
       };
     };
     aoeVassal.update(
       [aoeVassal.selected(), 0, 1, 1, 0, 1, 0, 12, 13],
       "20/20 military · UNDER ATTACK\ndevelopment paused",
       "\nRoad at 92, 92\n",
+      "Infantry · 12 attacking, 8 moving",
     );
   });
   await expect(chooser).toHaveValue("13");
+  await expect(squads.getByRole("listitem")).toHaveText([
+    "Inf 12 attack, 8 mov",
+  ]);
   await expect(page.getByRole("slider", { name: "Focus" })).toHaveAttribute(
     "aria-valuetext",
     "Roads",
@@ -106,6 +123,9 @@ test("Castle Vassal report and development toggle use the authoritative server",
   }).toPass({ timeout: 20_000 });
   const panel = page.locator("#vassal-panel");
   await expect(panel.locator("[data-jobs=current]")).toContainText("Current");
+  await expect(
+    panel.getByRole("list", { name: "Defence squads" }),
+  ).toContainText(/Inf \d+ (hold|mov|attack)/);
   const planned = panel.locator("[data-jobs=planned]");
   await expect(planned).toHaveText(/^Planned [1-9]\d*$/);
   await planned.hover();
@@ -114,16 +134,21 @@ test("Castle Vassal report and development toggle use the authoritative server",
   await page.evaluate(() => {
     const { aoeVassal } = window as unknown as {
       aoeVassal: {
-        update(values: number[], label: string, jobs: string): void;
+        update(
+          values: number[],
+          label: string,
+          jobs: string,
+          squads: string,
+        ): void;
       };
     };
     const update = aoeVassal.update.bind(aoeVassal);
-    aoeVassal.update = (values, label, jobs) => {
+    aoeVassal.update = (values, label, jobs, squads) => {
       const panel = document.getElementById("vassal-panel");
       if (panel && values.length) {
         panel.dataset.serverTuning = `${values[3]}`;
       }
-      update(values, label, jobs);
+      update(values, label, jobs, squads);
     };
   });
   const focus = panel.getByRole("slider", { name: "Focus" });

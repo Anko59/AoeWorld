@@ -13,7 +13,6 @@ type State = (TileCoord, u8);
 type Priority = Reverse<(u32, u32, i32, i32, u8)>;
 pub(super) struct Search {
     pub(super) node: TileRect,
-    pub(super) edge: Vec<TileCoord>,
     tier: u8,
     aim: Option<TileCoord>,
     heap: BinaryHeap<Priority>,
@@ -28,13 +27,7 @@ pub(super) struct Search {
     history: blake3::Hasher,
 }
 impl Search {
-    pub(super) fn new(
-        view: &View<'_>,
-        starts: &[TileCoord],
-        node: TileRect,
-        edge: Vec<TileCoord>,
-        tier: u8,
-    ) -> Self {
+    pub(super) fn new(view: &View<'_>, starts: &[TileCoord], node: TileRect, tier: u8) -> Self {
         let aim = starts.first().and_then(|s| {
             view.goals
                 .iter()
@@ -43,7 +36,6 @@ impl Search {
         });
         let mut search = Self {
             node,
-            edge,
             tier,
             aim,
             heap: BinaryHeap::new(),
@@ -90,7 +82,6 @@ impl Search {
                 "{:?}",
                 (
                     self.node,
-                    &self.edge,
                     self.tier,
                     self.aim,
                     self.settled,
@@ -143,12 +134,13 @@ impl Search {
                     } else {
                         (b, a)
                     };
-                    view.out.push(Site {
-                        end: Some(to),
-                        ..Site::new(BuildingKind::Bridge, from, self.tier)
-                    });
+                    if view.planned_spans.insert((from, to)) {
+                        view.out.push(Site {
+                            end: Some(to),
+                            ..Site::new(BuildingKind::Bridge, from, self.tier)
+                        });
+                    }
                     view.goals.extend([a, b]);
-                    view.planned_spans.extend([a, b]);
                     let len = (a.x - b.x).abs().max((a.y - b.y).abs()) as u32 + 1;
                     view.fixed.insert(a, (b, len));
                     view.fixed.insert(b, (a, len));
@@ -174,6 +166,11 @@ impl Search {
             return None;
         }
         if view.goals.contains(&tile) {
+            if !view.rooted {
+                view.goals.clear();
+                view.goals.insert(tile);
+                view.rooted = true;
+            }
             self.at = Some(here);
             self.tiles.push(tile);
             self.phase = 1;
