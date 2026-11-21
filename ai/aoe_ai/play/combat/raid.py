@@ -33,6 +33,7 @@ def observe(ctx):
             board.search_index = 0
             board.counter_owner = None
             board.counter_bearing = None
+            board.raid_reach.clear()
         board.raid_until = ctx.tick + cfg.raid_hold_seconds * hz
         if enemy is not None:
             board.counter_owner = enemy.owner
@@ -42,20 +43,47 @@ def observe(ctx):
         return
 
 
+def reachable(ctx, visible):
+    """Raiders the settlement's soldiers can walk to, cached per raid.
+
+    An enemy across water never renews the raid, so it cannot pin the army in
+    defence. Unanswered queries (budget spent) count as unknown, not reachable.
+    """
+    reach = ctx.board.raid_reach
+    if len(reach) > 256:
+        reach.clear()
+    shortlist = sorted(visible, key=lambda e: (dist(e.tile, ctx.board.raid_tile), e.id))
+    budget = max(1, ctx.config.land_queries_per_decision // 4)
+    found = []
+    for enemy in shortlist:
+        if enemy.id not in reach:
+            if budget <= 0:
+                continue
+            budget -= 1
+            route = ctx.land_route(ctx.home, enemy.tile)
+            if route is None and ctx.land_unanswered(ctx.home, enemy.tile):
+                continue
+            reach[enemy.id] = route is not None
+        if reach[enemy.id]:
+            found.append(enemy)
+    return found
+
+
 def respond(ctx, army, engage, pull_back):
     board, cfg = ctx.board, ctx.config
     if board.raid_until <= ctx.tick:
         return False
     at = board.raid_tile
     # Stay near the hit while raiders remain visible around the settlement.
-    raiders = [e for e in ctx.enemies if e.alive and dist(e.tile, at) <= cfg.defend_radius]
+    visible = [e for e in ctx.enemies if e.alive and dist(e.tile, at) <= cfg.defend_radius]
+    raiders = reachable(ctx, visible)
     if raiders:
         board.raid_until = ctx.tick + cfg.raid_hold_seconds * ctx.world.tick_hz
         if any(e.owner == board.counter_owner for e in raiders):
             board.counter_until = board.raid_until + cfg.counter_seconds * ctx.world.tick_hz
-    if len(raiders) >= 3 and len(army) * 2 < len(raiders):
+    if raiders and len(visible) >= 3 and len(army) * 2 < len(visible):
         shelter = min(ctx.centers, key=lambda center: dist(center, at), default=ctx.home)
-        pull_back(ctx, raiders, shelter=shelter, limit=4)
+        pull_back(ctx, visible, shelter=shelter, limit=4)
     local = [u for u in army if dist(u.tile, at) <= cfg.defend_radius]
     engage(ctx, local, raiders)
     goal = nearest(raiders, at).tile if raiders else at

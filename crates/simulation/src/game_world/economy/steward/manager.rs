@@ -29,13 +29,10 @@ impl Manager {
         if self.active.is_empty() {
             return Vec::new();
         }
-        // Give each owner a turn before returning to any owner's next domain.
-        // Spread a period's work across ticks with a hard per-tick ceiling.
-        let due = self
-            .active
-            .len()
-            .min(self.by_player.len().max(STEWARD_RULES.domains_per_pass)) as u64;
-        let due = due.min(period * STEWARD_RULES.domains_per_tick as u64);
+        // The world-wide budget stays at `domains_per_pass` visits per period;
+        // rotating by owner gives every kingdom a turn before any kingdom's
+        // next domain, so the cost does not grow with the number of players.
+        let due = self.active.len().min(STEWARD_RULES.domains_per_pass) as u64;
         let phase = tick % period;
         let take = ((phase + 1) * due).div_ceil(period) - (phase * due).div_ceil(period);
         let mut ids = Vec::with_capacity(take as usize);

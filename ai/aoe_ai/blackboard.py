@@ -71,6 +71,7 @@ class Blackboard:
     raid_tile: Optional[Tile] = None
     raid_started: int = -1
     raid_until: int = -1
+    raid_reach: dict[int, bool] = field(default_factory=dict)
     counter_owner: Optional[int] = None
     counter_bearing: Optional[Tile] = None
     counter_until: int = -1

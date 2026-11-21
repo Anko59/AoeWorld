@@ -328,7 +328,7 @@ fn hundred_thousand_population_manager_work_stays_inside_its_world_budget() {
         w.unit_count() + w.buildings().map(|b| b.garrison.len()).sum::<usize>(),
         100_000
     );
-    // A period admits as many owners as the per-tick ceiling allows.
+    // A period admits the fixed world-wide budget, rotated across owners.
     // Each admitted domain also retains its own work limits.
     let started = std::time::Instant::now();
     let mut served = 0;
@@ -338,7 +338,7 @@ fn hundred_thousand_population_manager_work_stays_inside_its_world_budget() {
         let cost = w.steward_work();
         let n = cost.domains;
         served += n;
-        assert!(n <= 4, "{cost:?}");
+        assert!(n <= 1, "{cost:?}");
         assert!(cost.unit_visits <= n * STEWARD_RULES.unit_visits_per_domain);
         assert!(cost.building_visits <= n * STEWARD_RULES.building_visits_per_domain);
         assert!(cost.orders <= n * STEWARD_RULES.orders_per_domain);
@@ -349,7 +349,7 @@ fn hundred_thousand_population_manager_work_stays_inside_its_world_budget() {
         "100 players, 100000 population, 100 Stewards: {served} domains in {:?}",
         started.elapsed()
     );
-    assert_eq!(served, 80);
+    assert_eq!(served, STEWARD_RULES.domains_per_pass);
 }
 
 #[test]

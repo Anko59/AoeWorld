@@ -10,10 +10,16 @@ from aoe_ai.blackboard import Blackboard
 from aoe_ai.config import Config
 from aoe_ai.context import Context
 from aoe_ai.play.combat import CombatManager
+from aoe_ai.play.combat import raid as raid_module
 from aoe_ai.play.combat.march import march
 from aoe_ai.play.military import MilitaryManager
 from test_logic import play
 from fakes import FakeClient, FakeWorld, base, building, decision, order_result, unit
+
+
+def raid_respond(ctx, army):
+    cm = CombatManager()
+    return raid_module.respond(ctx, army, cm.engage, cm.pull_back)
 
 
 def test_production_keeps_a_staging_rally_while_the_army_is_attacking():
@@ -403,3 +409,24 @@ def test_a_field_force_can_march_to_a_goal_outside_its_terrain_view():
 
     assert [(members, x, y) for members, x, y, _ in client.named("formation_move")] == [
         ([soldier.id for soldier in army], 215, 215)]
+
+
+def test_unreachable_raider_does_not_keep_defence_mode_alive():
+    units, buildings = base(6)
+    raiders = [unit(800, UnitKind.SPEARMAN, tile=(60, 52), mine=False)]
+    army = [unit(300 + i, UnitKind.SPEARMAN, tile=(55, 52)) for i in range(4)]
+    event = SimpleNamespace(kind="under_attack", id=buildings[0].id, x=53, y=52,
+                            is_building=True, attacker=raiders[0].id)
+    world = FakeWorld(units + army, buildings, enemies=raiders)
+    world.land_route = lambda *args: None
+    board, config = Blackboard(), Config()
+    client = FakeClient()
+    CombatManager().step(Context(client, decision(world, [event]), board, config))
+    first_until = board.raid_until
+    assert first_until > 0
+    # Later decisions see the same raider: the raid must expire, not renew.
+    late = world.tick_hz * config.raid_hold_seconds + 1
+    world.tick = first_until + late
+    ctx = Context(client, decision(world), board, config)
+    assert not raid_respond(ctx, army)
+    assert board.raid_until == first_until
