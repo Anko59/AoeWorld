@@ -451,9 +451,12 @@ impl BuildingKind {
     pub const fn is_gate(self) -> bool {
         matches!(self, Self::PalisadeGate | Self::StoneGate)
     }
-    /// Walls and gates: not targeted by arrows, outside the Masonry bonus.
+    /// Walls and gates are outside the Masonry bonus.
     pub const fn is_barrier(self) -> bool {
         self.is_wall() || self.is_gate()
+    }
+    pub(crate) const fn is_obstacle_target(self) -> bool {
+        self.is_barrier() || matches!(self, Self::Road)
     }
     /// Movement collision is separate from the placement/selection footprint.
     /// AoK DAT 109 is non-obstructing; its annex 618 has half extents (1,1)

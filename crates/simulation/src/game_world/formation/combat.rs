@@ -208,9 +208,9 @@ impl GameWorld {
         out
     }
 
-    /// Visible enemy buildings in `area`, read through the sight system's
-    /// tile index. A window over `ENGAGE_BUILDING_TILES` reads a rotating
-    /// band of rows per look.
+    /// Ordinary enemy buildings in a rotating band of visible tiles.
+    /// Only a member's own acquisition can rule out alternatives in its sight
+    /// before it stops for a wall, gate, or road.
     fn formation_enemy_buildings(&self, player: PlayerId, area: TileRect) -> Vec<(EntityId, Goal)> {
         let (width, height) = (area.width(), area.height());
         if width <= 0 || height <= 0 {
@@ -229,7 +229,9 @@ impl GameWorld {
                 if out.iter().any(|&(seen, _)| seen == id) {
                     continue;
                 }
-                if let Some(b) = self.building(id).filter(|b| b.player != player && b.hp > 0)
+                if let Some(b) = self
+                    .building(id)
+                    .filter(|b| b.player != player && b.hp > 0 && !b.kind.is_obstacle_target())
                     && self.visibility(player, tile) == TileVisibility::Visible
                 {
                     out.push((id, Goal::Building(b.footprint)));

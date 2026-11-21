@@ -370,7 +370,7 @@ Every slot improves against the current control. The historical recipe 3 island 
 was 1,053 versus 945 here; that older result is not an identical-input comparison.
 
 Castle stone waits for Castle Age; known timber can receive camps out to 256 tiles.
-Quiet Vassals release builders, and galleys require a nearby enemy warship.
+Vassals own no builders (shared construction raises their foundations), and galleys require a nearby enemy warship.
 Unfunded optional science reserves only owned resources and leaves surplus food for growth.
 
 | minute | source | slot / case | pop | TCs | cells | age | techs | food / wood / gold / stone | military | kills | castles / towers / walls / gates | Stewards / Vassals / Generals |

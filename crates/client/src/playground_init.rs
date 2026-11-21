@@ -98,7 +98,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
     resize(&mut shared.borrow_mut());
     super::fixture::set_active(&shared);
     controls::install(shared.clone())?;
-    super::village::hud::install(shared.clone())?;
+    super::village::building_panel::install(shared.clone())?;
     super::capture::install(shared.clone())?;
     connect(shared.clone())?;
     install_colour(shared.clone(), colour)?;

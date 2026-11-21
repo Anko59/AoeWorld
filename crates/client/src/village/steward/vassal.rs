@@ -2,13 +2,11 @@ use super::*;
 use aoe_protocol::{VassalFocus, VassalJobs};
 
 #[wasm_bindgen(
-    inline_js = "export function vassal_update(v, label, jobs, squads) { window.aoeVassal?.update(v, label, jobs, squads); } export function vassal_bind(cb) { window.aoeVassal.bind(cb); } export function vassal_selected() { return window.aoeVassal?.selected() ?? 0; }"
+    inline_js = "export function vassal_update(v, label, jobs, squads) { window.aoeVassal?.update(v, label, jobs, squads); } export function vassal_selected() { return window.aoeVassal?.selected() ?? 0; }"
 )]
 extern "C" {
     fn vassal_update(v: &[u32], label: &str, jobs: &str, squads: &str);
     fn vassal_selected() -> u32;
-    #[wasm_bindgen(catch)]
-    fn vassal_bind(cb: &js_sys::Function) -> Result<(), JsValue>;
 }
 
 fn occupants(client: &Client) -> impl Iterator<Item = &aoe_protocol::GarrisonUnitState> {
@@ -103,40 +101,37 @@ pub(super) fn present(client: &Client) {
     );
 }
 
-pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
-    let callback = Closure::<dyn FnMut(u8, u8)>::new(move |action, value| {
-        let mut client = shared.borrow_mut();
-        let Some((g, report)) = selected(&client).and_then(|g| g.vassal.map(|r| (g, r))) else {
-            return;
-        };
-        let sequence = client.next_sequence;
-        let vassal_id = g.id;
-        use aoe_protocol::GameplayClientMessage as Message;
-        let message = match action {
-            0 => Message::VassalDevelopmentOrder {
-                sequence,
-                vassal_id,
-                enabled: !report.development,
+pub(super) fn hide() {
+    vassal_update(&[], "", "", "");
+}
+
+/// Menu command 2 toggles development; 3 and 4 choose the Fortify or Roads focus.
+pub(super) fn order(client: &mut Client, code: u32) {
+    let Some((vassal_id, development)) =
+        selected(client).and_then(|g| g.vassal.map(|r| (g.id, r.development)))
+    else {
+        return;
+    };
+    let sequence = client.next_sequence;
+    use aoe_protocol::GameplayClientMessage as Message;
+    let message = match code {
+        2 => Message::VassalDevelopmentOrder {
+            sequence,
+            vassal_id,
+            enabled: !development,
+        },
+        3 | 4 => Message::VassalFocusOrder {
+            sequence,
+            vassal_id,
+            focus: if code == 3 {
+                VassalFocus::Fortify
+            } else {
+                VassalFocus::Roads
             },
-            1 => {
-                let Some(&focus) =
-                    [VassalFocus::Fortify, VassalFocus::Roads].get(usize::from(value))
-                else {
-                    return;
-                };
-                Message::VassalFocusOrder {
-                    sequence,
-                    vassal_id,
-                    focus,
-                }
-            }
-            _ => return,
-        };
-        super::super::orders::send(&mut client, message);
-    });
-    vassal_bind(callback.as_ref().unchecked_ref())?;
-    callback.forget();
-    Ok(())
+        },
+        _ => return,
+    };
+    super::super::orders::send(client, message);
 }
 
 #[cfg(test)]

@@ -1,4 +1,7 @@
-use super::{Client, orders::can_form};
+use super::{
+    Client,
+    orders::{can_attack_move, can_form},
+};
 use aoe_core::{EntityId, WorldPosition};
 use aoe_protocol::GameplayClientMessage as Message;
 
@@ -18,7 +21,7 @@ pub(super) fn movement(
         1 => {
             let entity_id = unit_ids[0];
             let unit = client.units.get(&entity_id);
-            let attack_move = attack_move && unit.is_some();
+            let attack_move = attack_move && unit.is_some_and(|u| can_attack_move(u.kind));
             if queued && unit.is_some() {
                 Message::QueueMoveOrder {
                     sequence,

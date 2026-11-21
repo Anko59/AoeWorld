@@ -1,4 +1,4 @@
-import { buildingKinds, buildingNames } from '/interface/buildings.js';
+import { buildableKinds, names } from '/interface/menu/catalog.js';
 import { entityIcon } from '/interface/ui-art.js';
 import { iconGrid } from '/navigation/cockpit/grid.js';
 
@@ -11,11 +11,9 @@ export function initFarBuilding(panel) {
   form.setAttribute('aria-label', 'Build from kingdom view');
   form.innerHTML = `<div class="far-slot"></div><p role="status" class="far-status">${prompt}</p>`;
   panel.append(form);
-  // Guard Tower and Keep are upgrades, not foundations: the build commands
-  // and availability codes cover only the kinds a villager can place.
-  const buildable = buildingKinds.filter(kind => kind !== 'GuardTower' && kind !== 'Keep');
+  const buildable = buildableKinds;
   const count = buildable.length;
-  const grid = iconGrid('Building type', buildable.map((kind, id) => ({ id, label: buildingNames[id], art: entityIcon(kind) })), id => {
+  const grid = iconGrid('Building type', buildable.map((kind, id) => ({ id, label: names[kind], art: entityIcon(kind) })), id => {
     window.aoeNavigation?.production?.reset();
     window.aoeBuildings?.command(0, (id + count - 1) % count);
     chosen = id; mark();
@@ -32,9 +30,9 @@ export function initFarBuilding(panel) {
   return {
     ready(values) {
       state = Array.from(values);
-      buildable.forEach((_, id) => {
+      buildable.forEach((kind, id) => {
         const ok = state[(id + count - 1) % count] === 1;
-        grid.set(id, { enabled: ok, title: `${buildingNames[id]}${ok ? '' : ' · needs resources, the required age and prerequisite buildings'}` });
+        grid.set(id, { enabled: ok, title: `${names[kind]}${ok ? '' : ' · needs resources, the required age and prerequisite buildings'}` });
       });
     },
     show(value) { visible = value; if (!value) svg.setAttribute('hidden', ''); },

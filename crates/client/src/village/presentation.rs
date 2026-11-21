@@ -119,12 +119,8 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
         (client.camera.center[0] as i32).div_euclid(aoe_map::CHUNK_TILES),
         (client.camera.center[1] as i32).div_euclid(aoe_map::CHUNK_TILES),
     ];
-    values[3] = if client.selected.units.iter().any(|id| {
-        client
-            .units
-            .get(id)
-            .is_some_and(|u| u.hp > 0 && u.player == owner)
-    }) {
+    let owned_selection = super::selection::owned_units(client).next().is_some();
+    values[3] = if owned_selection {
         if hover.is_some() {
             1.0
         } else if client.pointer.is_some_and(|p| passable(client, p)) {
@@ -138,12 +134,7 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
     if !client.village.move_cursor
         && client.village.placement.is_none()
         && client.drag.is_none()
-        && client.selected.units.iter().any(|id| {
-            client
-                .units
-                .get(id)
-                .is_some_and(|u| u.hp > 0 && u.player == owner)
-        })
+        && owned_selection
         && let Some(point) = client.pointer
     {
         let actor = super::picking::actor(client, point);

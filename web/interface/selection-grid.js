@@ -29,16 +29,11 @@ const token = (unit, html, count) => count
 function layout(container, state) {
   const width = container.clientWidth, height = container.clientHeight;
   if (!state.units.length) { container.replaceChildren(); state.mode = ''; return; }
-  // Only the native frame gives the container a size of its own; elsewhere it grows with its icons.
-  if (!container.closest('#bottom-panel[data-frame=native]')) {
-    if (state.mode !== 'plain') { state.mode = 'plain'; container.removeAttribute('data-layout'); container.innerHTML = state.units.map(unit => token(unit, state.icon(unit.kind, unit.tint))).join(''); }
-    return;
-  }
   if (width <= 0 || height <= 0) return;
   let size = tokenSize(width, height, state.units.length), mode = 'units';
   if (!size) {
     mode = 'groups'; state.groups ??= groupUnits(state.units);
-    size = tokenSize(width, height, state.groups.length) || tokenSize(width, height, state.groups.length, SMALLEST - 1, TINIEST) || TINIEST;
+    size = tokenSize(width, height, state.groups.length, BIGGEST, TINIEST) || TINIEST;
   }
   container.style.setProperty('--token', `${size}px`);
   container.dataset.layout = mode;
@@ -57,13 +52,6 @@ export function renderSelectionIcons(container, units, icon) {
     state = { units: [], groups: null, mode: '', icon };
     states.set(container, state);
     new ResizeObserver(() => layout(container, state)).observe(container);
-    // A group icon selects the whole type; shift removes the whole type.
-    container.addEventListener('click', event => {
-      const group = event.target instanceof Element && event.target.closest('.unit-group');
-      if (!group || event.ctrlKey) return;
-      event.stopImmediatePropagation(); event.preventDefault();
-      group.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true, shiftKey: event.shiftKey }));
-    }, true);
   }
   state.units = units; state.groups = null; state.mode = ''; state.icon = icon;
   layout(container, state);
@@ -71,11 +59,11 @@ export function renderSelectionIcons(container, units, icon) {
 // Keeps a run of same-size tokens (garrison, training queue) inside its
 // container as tokens come and go and the container changes size. The
 // container's size comes from CSS; `--token` is the largest size that fits.
-export function autoFit(container, { high = 30, low = 22, gap = 2 } = {}) {
+export function autoFit(container, high = 30) {
   const fit = () => {
     const width = container.clientWidth, height = container.clientHeight, count = container.children.length;
     if (width <= 0 || height <= 0 || !count) return;
-    const size = tokenSize(width, height, count, high, low, gap) || tokenSize(width, height, count, low - 1, TINIEST, gap) || TINIEST;
+    const size = tokenSize(width, height, count, high, TINIEST, 2) || TINIEST;
     container.style.setProperty('--token', `${size}px`);
   };
   new ResizeObserver(fit).observe(container);

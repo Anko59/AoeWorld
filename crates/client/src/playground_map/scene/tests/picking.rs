@@ -98,7 +98,7 @@ fn click(client: &mut Client, offset: [f64; 2]) {
         y: 360.0 + offset[1] * client.camera.zoom,
     };
     let unit = picking::unit(client, point);
-    picking::click(client, point, unit);
+    picking::click(client, point, unit, false);
 }
 
 #[wasm_bindgen_test]
@@ -467,7 +467,7 @@ async fn road_ground_paints_only_complete_tiles_and_remains_selectable() {
     assert_eq!(terrain[0].material, 18);
     client.village.buildings = vec![road];
     let point = super::super::screen_position(&client, [99.5, 99.5]);
-    picking::click(&mut client, point, None);
+    picking::click(&mut client, point, None, false);
     assert_eq!(client.selected.building_id, Some(EntityId(77)));
     client.canvas.remove();
 }

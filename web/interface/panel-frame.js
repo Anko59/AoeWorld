@@ -12,16 +12,8 @@ export const FRAME_SPECS = {
   minimap: { selector:'#minimap' },
 };
 const MIN_FRAME = 120;
-const images = new Map();
-const load = page => {
-  if (!images.has(page)) images.set(page, new Promise((resolve, reject) => {
-    const image = new Image(); image.onload = () => resolve(image); image.onerror = reject;
-    image.src = `/asset-pack/${page}`;
-  }));
-  return images.get(page);
-};
 // Smallest rectangle holding every non-transparent texel of an atlas crop.
-export function opaqueBounds(data, width, height) {
+function opaqueBounds(data, width, height) {
   let left = width, top = height, right = -1, bottom = -1;
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
     if (data[(y * width + x) * 4 + 3] === 0) continue;
@@ -30,15 +22,14 @@ export function opaqueBounds(data, width, height) {
   }
   return right < 0 ? null : { x:left, y:top, width:right - left + 1, height:bottom - top + 1 };
 }
-async function measure(art) {
-  const image = await load(art.page);
+function measure(art, image) {
   const canvas = document.createElement('canvas'); canvas.width = art.width; canvas.height = art.height;
   const context = canvas.getContext('2d', { willReadFrequently:true });
   if (!context) return null;
   context.drawImage(image, art.x, art.y, art.width, art.height, 0, 0, art.width, art.height);
   const bounds = opaqueBounds(context.getImageData(0, 0, art.width, art.height).data, art.width, art.height);
   if (!bounds || bounds.width < MIN_FRAME || bounds.height < MIN_FRAME) return null;
-  return { image, canvas, bounds };
+  return { canvas, bounds };
 }
 // CSS background that shows exactly `crop` of its atlas page, stretched to
 // fill the box it is applied to.
@@ -60,8 +51,8 @@ function layer(node, className, box, style) {
 const px = value => `${value * FRAME_SCALE}px`;
 // Draws the frame art for one panel and returns its natural css size, or null
 // when the crop is not native menu art (the SVG chrome is then kept).
-export async function frame(node, art, spec) {
-  const measured = await measure(art);
+export async function frame(node, art, image, spec) {
+  const measured = measure(art, image);
   if (!measured) return null;
   const { bounds, canvas } = measured;
   const base = { x:art.x + bounds.x, y:art.y + bounds.y, width:bounds.width, height:bounds.height };
@@ -93,5 +84,3 @@ export async function frame(node, art, spec) {
   node.style.setProperty('--frame-min-width', `${(left + right) * FRAME_SCALE}px`);
   return { ...natural, bounds };
 }
-// Range sliders paint their filled part from --fill (0..100%).
-export const fillRange = input => input.style.setProperty('--fill', `${100 * (input.value - (input.min || 0)) / ((input.max || 100) - (input.min || 0))}%`);

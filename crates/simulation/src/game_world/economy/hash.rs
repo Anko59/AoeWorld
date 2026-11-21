@@ -37,6 +37,20 @@ impl Economy {
                 hash.update(&vassal.map_or(u32::MAX, |id| id.0).to_le_bytes());
             }
         }
+        if !self.dispatch.lent.is_empty() {
+            use super::gathering::WorkTarget;
+            hash.update(b"construction-lent");
+            for (worker, (kind, target)) in &self.dispatch.lent {
+                let (tag, id) = match *target {
+                    WorkTarget::Node(id) => (0, id),
+                    WorkTarget::Farm(id) => (1, u64::from(id.0)),
+                    WorkTarget::Animal(id) => (2, u64::from(id.0)),
+                };
+                hash.update(&worker.0.to_le_bytes());
+                hash.update(&[*kind as u8, tag]);
+                hash.update(&id.to_le_bytes());
+            }
+        }
         hash.update(&(self.income.len() as u64).to_le_bytes());
         for (player, income) in &self.income {
             hash.update(&player.0.to_le_bytes());

@@ -162,7 +162,7 @@ fn production_lines_expose_only_the_current_unit_and_next_technology() {
         ),
     ] {
         let player = rich_player(mask);
-        assert_eq!(primary_training(&b, Some(&player)), current);
+        assert_eq!(primary_training(&b, Some(&player)), Some(current));
         for unit in [
             UnitKind::Militia,
             UnitKind::ManAtArms,

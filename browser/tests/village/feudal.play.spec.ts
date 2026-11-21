@@ -27,7 +27,7 @@ async function select(page: Page, kind: string) {
 
 // A building's centre can sit under a tree crown or its builder. Natural
 // starts scatter trees differently, so click around the centre until the
-// selection shows the building's own hit points.
+// selection shows the intended building.
 async function selectBuilding(page: Page, kind: string) {
   const actor = (await actors(page)).find((a) => a.kind === kind);
   if (!actor) throw new Error(`${kind} missing`);
@@ -42,8 +42,8 @@ async function selectBuilding(page: Page, kind: string) {
   ] as const) {
     await page.mouse.click(actor.x + dx, actor.y + dy);
     await page.waitForTimeout(200);
-    const text = (await page.locator("#building-hp").textContent()) ?? "";
-    if (/[1-9]\d* \/ [1-9]/.test(text)) return;
+    if ((await page.locator("#selection").getAttribute("data-kind")) === kind)
+      return;
   }
   throw new Error(`${kind} could not be selected by any click near its centre`);
 }
