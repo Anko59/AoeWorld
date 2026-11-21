@@ -16,10 +16,18 @@ impl GameplayService {
             });
         }
         sessions.clear();
+        self.human_views
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clear();
     }
 
     pub async fn disconnect(&self, session_id: u64) {
         self.sessions.lock().await.remove(&session_id);
+        self.human_views
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .remove(&session_id);
     }
 
     /// Slot occupancy for a match host: AI slots holding a live connection,

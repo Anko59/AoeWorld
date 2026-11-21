@@ -30,6 +30,7 @@ async fn default_game_starts_with_four_units() {
             id,
             1,
             TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384)),
+            true,
         )
         .await;
     let GameplayServerMessage::Snapshot { units, players, .. } = rx.try_recv().unwrap() else {
@@ -58,6 +59,7 @@ async fn headless_village_gathers_wood_deposits_and_trains_a_villager() {
             id,
             1,
             TileRect::new(TileCoord::new(0, 0), TileCoord::new(side, side)),
+            true,
         )
         .await;
     let GameplayServerMessage::Snapshot {
@@ -175,6 +177,7 @@ async fn headless_village_gathers_wood_deposits_and_trains_a_villager() {
                 id,
                 99,
                 TileRect::new(TileCoord::new(0, 0), TileCoord::new(side, side)),
+                true,
             )
             .await;
         format!(

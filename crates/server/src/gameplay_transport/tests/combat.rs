@@ -52,6 +52,7 @@ async fn open(address: std::net::SocketAddr) -> Socket {
         GameplayClientMessage::Subscribe {
             revision: 1,
             region: TileRect::from_xywh(80, 100, 60, 60),
+            unit_zoom: false,
         },
     )
     .await;
@@ -115,7 +116,7 @@ async fn castle_target_commands_and_a_slow_session_do_not_disconnect_other_socke
     let (blocked_tx, _blocked_rx) = mpsc::channel(1);
     let (blocked, _) = service.register(None, blocked_tx).await;
     service
-        .subscribe(blocked, 1, TileRect::from_xywh(80, 100, 60, 60))
+        .subscribe(blocked, 1, TileRect::from_xywh(80, 100, 60, 60), true)
         .await;
 
     // This is the current browser's right-click on an enemy building with a

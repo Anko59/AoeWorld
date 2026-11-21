@@ -7,6 +7,8 @@ use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use tokio::sync::mpsc::error::TrySendError;
 
+#[path = "deliver/session.rs"]
+pub(crate) mod session;
 #[path = "deliver/units.rs"]
 mod units;
 

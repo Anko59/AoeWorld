@@ -45,6 +45,7 @@ async fn controller() -> (
             id,
             1,
             TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384)),
+            true,
         )
         .await;
     drain_without_holdings(&mut rx);
@@ -55,7 +56,7 @@ async fn controller() -> (
 async fn panning_keeps_owned_villagers_authoritative_for_selection_and_worker_counters() {
     let (service, id, mut rx, _) = controller().await;
     let distant = TileRect::new(TileCoord::new(64, 64), TileCoord::new(68, 68));
-    service.subscribe(id, 2, distant).await;
+    service.subscribe(id, 2, distant, true).await;
     let GameplayServerMessage::Snapshot { units, .. } = rx.try_recv().unwrap() else {
         panic!("snapshot")
     };
@@ -126,7 +127,7 @@ async fn economy_updates_reach_both_pages_and_resync_is_complete() {
     let (tx, mut observer) = mpsc::channel(64);
     let (other, _) = service.register(None, tx).await;
     let region = TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384));
-    service.subscribe(other, 1, region).await;
+    service.subscribe(other, 1, region, true).await;
     let GameplayServerMessage::Snapshot { buildings, .. } = observer.try_recv().unwrap() else {
         panic!("snapshot")
     };
@@ -187,7 +188,7 @@ async fn a_full_outgoing_queue_keeps_the_session_and_catches_up_on_economy_chang
     let (tx, mut rx) = mpsc::channel(1);
     let (id, _) = service.register(None, tx).await;
     let region = TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384));
-    service.subscribe(id, 1, region).await;
+    service.subscribe(id, 1, region, true).await;
     let GameplayServerMessage::Snapshot { buildings, .. } = rx.try_recv().unwrap() else {
         panic!("snapshot")
     };
@@ -208,7 +209,7 @@ async fn full_subscription_frames_do_not_lose_an_economy_delta() {
     let (tx, mut rx) = mpsc::channel(4);
     let (id, _) = service.register(None, tx).await;
     let region = TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384));
-    service.subscribe(id, 1, region).await;
+    service.subscribe(id, 1, region, true).await;
     let initial = drain_without_holdings(&mut rx);
     let GameplayServerMessage::Snapshot { buildings, .. } = &initial[0] else {
         panic!("snapshot");
@@ -225,7 +226,7 @@ async fn full_subscription_frames_do_not_lose_an_economy_delta() {
         GameplayServerMessage::Holdings { revision: 1, .. }
     ));
     tokio::task::yield_now().await;
-    service.subscribe(id, 2, region).await;
+    service.subscribe(id, 2, region, true).await;
     service
         .queue_train(id, 1, buildings[0].id, UnitKind::Villager)
         .await;
@@ -256,7 +257,7 @@ async fn first_views_arrive_in_order_even_when_they_must_wait_for_room() {
     let (tx, mut rx) = mpsc::channel(2);
     let (id, _) = service.register(None, tx).await;
     let region = TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384));
-    service.subscribe(id, 1, region).await;
+    service.subscribe(id, 1, region, true).await;
     let mut got = Vec::new();
     for _ in 0..200 {
         got.extend(drain_without_holdings(&mut rx));
@@ -288,7 +289,7 @@ async fn stalled_camera_subscriptions_keep_only_the_in_flight_and_latest_views()
     let (id, _) = service.register(None, tx).await;
     for revision in 1..=10 {
         service
-            .subscribe(id, revision, TileRect::from_xywh(8000, 8000, 64, 64))
+            .subscribe(id, revision, TileRect::from_xywh(8000, 8000, 64, 64), true)
             .await;
     }
     let mut revisions = Vec::new();
@@ -317,7 +318,7 @@ async fn a_disconnected_session_cancels_its_waiting_subscription_worker() {
     let (tx, mut old_rx) = mpsc::channel(1);
     let (old, _) = service.register(None, tx).await;
     service
-        .subscribe(old, 1, TileRect::from_xywh(8000, 8000, 64, 64))
+        .subscribe(old, 1, TileRect::from_xywh(8000, 8000, 64, 64), true)
         .await;
     service.disconnect(old).await;
     tokio::task::yield_now().await;
@@ -341,7 +342,7 @@ async fn every_boundary_frame_follows_its_snapshot_even_with_a_stalled_reader() 
     let (id, _) = service.register(None, tx).await;
     for revision in 1..=10 {
         service
-            .subscribe(id, revision, TileRect::from_xywh(8000, 8000, 64, 64))
+            .subscribe(id, revision, TileRect::from_xywh(8000, 8000, 64, 64), true)
             .await;
     }
     let mut snapshots = std::collections::BTreeSet::new();

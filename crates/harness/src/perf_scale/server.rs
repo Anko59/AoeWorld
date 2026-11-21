@@ -117,7 +117,7 @@ async fn session_run(
             None => service.register(None, sender).await.0,
         };
         let center = players[index % players.len()].center;
-        service.subscribe(id, 1, region(center, side)).await;
+        service.subscribe(id, 1, region(center, side), true).await;
         receivers.push(receiver);
     }
     let subscribe_ms = subscribe_started.elapsed().as_secs_f64() * 1e3;

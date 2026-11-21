@@ -22,7 +22,7 @@ async fn a_prebuilt_world_serves_a_subscribed_session() {
     assert_eq!(primary_unit_id, primary);
     assert_eq!(map_content_hash, None, "a scale world has no map identity");
     let region = TileRect::new(TileCoord::new(0, 0), TileCoord::new(200, 200));
-    service.subscribe(session, 1, region).await;
+    service.subscribe(session, 1, region, true).await;
     service.tick().await;
     let mut snapshot_units = None;
     while let Ok(message) = receiver.try_recv() {

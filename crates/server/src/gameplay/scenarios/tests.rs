@@ -18,7 +18,7 @@ async fn vassal_demo_delivers_attack_recall_and_return() {
     let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
     let (session, _) = service.register(None, sender).await;
     service
-        .subscribe(session, 1, TileRect::from_xywh(70, 70, 180, 180))
+        .subscribe(session, 1, TileRect::from_xywh(70, 70, 180, 180), true)
         .await;
     let (mut alert, mut called, mut arrived, mut returned) = (false, false, false, false);
     let mut damaged = false;
@@ -168,7 +168,7 @@ async fn farming_showcase_streams_valid_initial_and_active_economy_frames() {
     let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
     let (session, _) = service.register(None, sender).await;
     service
-        .subscribe(session, 1, TileRect::from_xywh(80, 80, 80, 80))
+        .subscribe(session, 1, TileRect::from_xywh(80, 80, 80, 80), true)
         .await;
     let mut snapshot = false;
     let mut active = false;
@@ -218,7 +218,7 @@ async fn kingdom_showcase_streams_valid_initial_and_active_encoded_frames() {
     };
     let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
     let (session, _) = service.register(None, sender).await;
-    service.subscribe(session, 1, region).await;
+    service.subscribe(session, 1, region, true).await;
     let mut initial = false;
     let mut active = false;
     for _ in 0..=60 {
@@ -293,7 +293,7 @@ async fn fishing_showcase_streams_valid_managed_ships_and_a_completed_dock() {
     let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
     let (session, _) = service.register(None, sender).await;
     service
-        .subscribe(session, 1, TileRect::from_xywh(40, 0, 210, 180))
+        .subscribe(session, 1, TileRect::from_xywh(40, 0, 210, 180), true)
         .await;
     let (mut snapshot, mut fleet, mut dock) = (false, false, false);
     for _ in 0..600 {
@@ -379,7 +379,7 @@ async fn vassal_demo_streams_castle_age_stocks_and_the_active_defensive_report()
     let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
     let (session, _) = service.register(None, sender).await;
     service
-        .subscribe(session, 1, TileRect::from_xywh(70, 70, 90, 70))
+        .subscribe(session, 1, TileRect::from_xywh(70, 70, 90, 70), true)
         .await;
     let mut stocks = false;
     let mut active = false;
@@ -422,7 +422,7 @@ async fn road_demo_stream_contains_valid_road_buildings() {
     let (sender, mut receiver) = tokio::sync::mpsc::channel(128);
     let (session, _) = service.register(None, sender).await;
     service
-        .subscribe(session, 1, TileRect::from_xywh(60, 60, 70, 70))
+        .subscribe(session, 1, TileRect::from_xywh(60, 60, 70, 70), true)
         .await;
     let mut roads = 0;
     while let Ok(message) = receiver.try_recv() {

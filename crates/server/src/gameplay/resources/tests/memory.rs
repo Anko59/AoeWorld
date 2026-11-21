@@ -17,7 +17,7 @@ async fn unchanged_resource_memory_sends_nothing_when_observers_change() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(32);
     let (id, _) = service.register(None, tx).await;
     let region = TileRect::from_xywh(0, 0, 64, 64);
-    service.subscribe(id, 1, region).await;
+    service.subscribe(id, 1, region, true).await;
     service.publish_resources().await;
     let initial = resource_message(&mut rx);
     assert!(
@@ -142,7 +142,7 @@ async fn unchanged_resource_memory_sends_nothing_when_observers_change() {
             .any(|c| c.id == hidden.id && c.remaining == hidden.initial_amount - 1)
     );
     // A new subscription still resets the complete remembered state.
-    service.subscribe(id, 2, region).await;
+    service.subscribe(id, 2, region, true).await;
     service.publish_resources().await;
     assert_eq!(resource_message(&mut rx).from_revision, None);
 }

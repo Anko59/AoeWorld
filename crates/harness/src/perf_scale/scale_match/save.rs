@@ -171,6 +171,7 @@ impl Human {
                     let message = GameplayClientMessage::Subscribe {
                         revision: 1,
                         region,
+                        unit_zoom: true,
                     };
                     socket
                         .send(Message::Binary(encode_gameplay_client(&message)?.into()))
@@ -209,6 +210,7 @@ impl Human {
                         let message = GameplayClientMessage::Subscribe {
                             revision: 2,
                             region,
+                            unit_zoom: true,
                         };
                         let Ok(bytes) = encode_gameplay_client(&message) else {
                             break;

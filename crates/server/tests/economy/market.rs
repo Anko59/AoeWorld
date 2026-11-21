@@ -30,6 +30,7 @@ async fn a_completed_market_trades_and_moves_prices_over_the_wire() {
             session,
             1,
             TileRect::new(TileCoord::new(0, 0), TileCoord::new(256, 256)),
+            true,
         )
         .await;
     let GameplayServerMessage::Snapshot {

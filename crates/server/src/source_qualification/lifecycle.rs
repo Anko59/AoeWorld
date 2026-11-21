@@ -201,6 +201,7 @@ async fn subscribe_and_tick(
         .send(GameplayClientMessage::Subscribe {
             revision,
             region: TileRect::from_xywh(0, 0, 64, 64),
+            unit_zoom: false,
         })
         .await?;
     loop {

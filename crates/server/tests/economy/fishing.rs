@@ -83,6 +83,7 @@ async fn coastal_village_builds_dock_trains_ship_and_feeds_fish_depletion() {
             session,
             1,
             TileRect::new(TileCoord::new(0, 0), TileCoord::new(128, 128)),
+            true,
         )
         .await;
     let GameplayServerMessage::Snapshot {

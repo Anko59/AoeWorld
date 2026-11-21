@@ -42,6 +42,7 @@ pub async fn prepare(url: &str) -> Result<(), Box<dyn std::error::Error>> {
                                 128,
                                 128,
                             ),
+                            unit_zoom: false,
                         })?
                         .into(),
                     ))
@@ -87,6 +88,7 @@ pub async fn prepare(url: &str) -> Result<(), Box<dyn std::error::Error>> {
                                     128,
                                     128,
                                 ),
+                                unit_zoom: false,
                             })?
                             .into(),
                         ))

@@ -155,6 +155,7 @@ fn command_cost_keeps_issuers_apart_and_lists_refusals_with_their_action() {
     let tick = super::RecordedTick {
         tick: 7,
         commands: vassal_commands(3),
+        views: Vec::new(),
         hash: [0; 32],
     };
     let names = vec!["VassalDevelopment".to_owned(); 3];
@@ -188,6 +189,7 @@ async fn attribution_adds_two_counter_reads_per_command_and_nothing_else_to_the_
         let tick = super::RecordedTick {
             tick,
             commands,
+            views: Vec::new(),
             hash: [0; 32],
         };
         let mut seen = None;

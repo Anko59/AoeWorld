@@ -269,7 +269,7 @@ async fn subscribers_receive_snapshot_delta_and_reconnect_snapshot() {
         panic!("welcome");
     };
     service
-        .subscribe(id, 1, aoe_core::TileRect::from_xywh(0, 0, 64, 64))
+        .subscribe(id, 1, aoe_core::TileRect::from_xywh(0, 0, 64, 64), true)
         .await;
     service.tick().await;
     let initial = resource_message(&mut receiver);
@@ -321,7 +321,7 @@ async fn subscribers_receive_snapshot_delta_and_reconnect_snapshot() {
     let (sender, mut receiver) = tokio::sync::mpsc::channel(8);
     let (id, _) = service.register(Some(resume_token), sender).await;
     service
-        .subscribe(id, 1, aoe_core::TileRect::from_xywh(0, 0, 64, 64))
+        .subscribe(id, 1, aoe_core::TileRect::from_xywh(0, 0, 64, 64), true)
         .await;
     service.tick().await;
     let restored = resource_message(&mut receiver);
@@ -343,7 +343,7 @@ async fn resource_backpressure_keeps_the_session_and_publishes_once_there_is_roo
     let (sender, mut receiver) = tokio::sync::mpsc::channel(4);
     let (id, _) = service.register(None, sender).await;
     let region = aoe_core::TileRect::from_xywh(0, 0, 64, 64);
-    service.subscribe(id, 1, region).await;
+    service.subscribe(id, 1, region, true).await;
     service.tick().await;
     assert!(service.sessions.lock().await.get(&id).is_some());
     // The overflow is delivered by a background task, and resources wait for

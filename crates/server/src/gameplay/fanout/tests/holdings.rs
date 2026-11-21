@@ -24,7 +24,7 @@ async fn subscribe_and_resync_keep_land_scalars_and_send_independent_boundaries_
     let (id, _) = service.register(None, tx).await;
     for revision in 1..=2 {
         service
-            .subscribe(id, revision, TileRect::from_xywh(0, 0, 64, 64))
+            .subscribe(id, revision, TileRect::from_xywh(0, 0, 64, 64), true)
             .await;
         let mut area = 0;
         let mut boundaries = 0;

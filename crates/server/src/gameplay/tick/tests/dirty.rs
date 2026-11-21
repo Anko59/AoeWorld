@@ -48,6 +48,7 @@ async fn every_client_holds_the_full_conversion_of_its_view_each_tick() {
                     fixture.ids[2],
                     2,
                     super::scenario::view_region(TileCoord::new(190, 180)),
+                    true,
                 )
                 .await;
         }

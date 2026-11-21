@@ -12,6 +12,7 @@ async fn feudal_demo_rejects_dark_building_then_builds_and_researches_over_the_w
             session,
             1,
             TileRect::new(TileCoord::new(0, 0), TileCoord::new(256, 256)),
+            true,
         )
         .await;
     let GameplayServerMessage::Snapshot {

@@ -171,7 +171,7 @@ async fn a_subscribe_that_races_the_tick_still_learns_the_ticks_buildings() {
     let held = fixture.service.sessions.lock().await;
     let mut tick = Box::pin(fixture.service.tick());
     poll_once(&mut tick).await;
-    let mut subscribe = Box::pin(fixture.service.subscribe(session, 9, region));
+    let mut subscribe = Box::pin(fixture.service.subscribe(session, 9, region, true));
     poll_once(&mut subscribe).await;
     drop(held);
     tokio::join!(tick, subscribe);
@@ -225,6 +225,7 @@ async fn a_tick_skipped_for_an_over_limit_region_does_not_lose_buildings() {
         session.subscription = Some(crate::gameplay::Subscription {
             revision,
             region: aoe_core::TileRect::from_xywh(home.x + 25, home.y + 25, 30, 30),
+            unit_zoom: true,
         });
     }
     settle(&mut fixture, &mut clients, 3).await;
@@ -258,7 +259,7 @@ async fn a_primary_unit_inside_the_region_is_listed_once() {
     let (sender, mut receiver) = tokio::sync::mpsc::channel(256);
     let (session, _) = service.register(None, sender).await;
     let region = aoe_core::TileRect::from_xywh(0, 0, 128, 128);
-    service.subscribe(session, 1, region).await;
+    service.subscribe(session, 1, region, true).await;
     {
         let mut world = service.world.write().await;
         let to = aoe_core::WorldPosition::from_tile_center(TileCoord::new(60, 60)).unwrap();
@@ -297,7 +298,7 @@ async fn a_tick_skipped_for_a_full_queue_does_not_lose_buildings() {
     let (id, _) = fixture.service.join_slot(token, sender).await.unwrap();
     fixture
         .service
-        .subscribe(id, 1, view_region(fixture.placed[3]))
+        .subscribe(id, 1, view_region(fixture.placed[3]), true)
         .await;
     let mut client = Buildings::new();
     let drain = |client: &mut Buildings, receiver: &mut mpsc::Receiver<GameplayServerMessage>| {

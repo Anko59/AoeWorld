@@ -160,6 +160,7 @@ async fn village(url: &str, build: bool, full: bool) -> Result<(), Box<dyn std::
                                 128,
                                 128,
                             ),
+                            unit_zoom: false,
                         })?
                         .into(),
                     ))
@@ -194,6 +195,7 @@ async fn village(url: &str, build: bool, full: bool) -> Result<(), Box<dyn std::
                             aoe_protocol::encode_gameplay_client(&Client::Subscribe {
                                 revision: revision + 1,
                                 region: TileRect::from_xywh(at.x - 32, at.y - 32, 64, 64),
+                                unit_zoom: false,
                             })?
                             .into(),
                         ))

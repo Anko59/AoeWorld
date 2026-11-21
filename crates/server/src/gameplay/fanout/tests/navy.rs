@@ -225,6 +225,7 @@ async fn queued_transport_commands_apply_on_ticks_and_deliver_cargo_and_passenge
             session,
             1,
             TileRect::from_xywh(land.x - 2, land.y - 2, 8, 8),
+            true,
         )
         .await;
     tokio::task::yield_now().await;

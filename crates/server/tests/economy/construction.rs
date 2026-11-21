@@ -15,6 +15,7 @@ async fn villagers_build_a_house_a_mill_and_a_farm_over_the_wire() {
             id,
             1,
             TileRect::new(TileCoord::new(0, 0), TileCoord::new(256, 256)),
+            true,
         )
         .await;
     let GameplayServerMessage::Snapshot {

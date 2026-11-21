@@ -12,6 +12,7 @@ async fn feudal_military_trains_researches_and_resolves_ranged_combat_over_wire(
             session,
             1,
             TileRect::new(TileCoord::new(0, 0), TileCoord::new(256, 256)),
+            true,
         )
         .await;
     let GameplayServerMessage::Snapshot {

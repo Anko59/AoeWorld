@@ -80,6 +80,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         token: super::storage::stored_token(),
         revision: 0,
         sent_region: None,
+        sent_unit_zoom: false,
         subscribe_after: 0.0,
         next_sequence: 1,
         order_feedback: Default::default(),

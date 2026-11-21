@@ -87,11 +87,11 @@ async fn fixture() -> (
 async fn obsolete_subscriptions_do_no_fog_work() {
     let (service, id, mut rx) = fixture().await;
     let region = TileRect::from_xywh(0, 0, 512, 512);
-    service.subscribe(id, 1, region).await;
+    service.subscribe(id, 1, region, true).await;
     while rx.try_recv().is_ok() {}
     WORK.with(|work| work.set((0, 0)));
     for _ in 0..12 {
-        service.subscribe(id, 1, region).await;
+        service.subscribe(id, 1, region, true).await;
         assert!(matches!(
             rx.try_recv().unwrap(),
             GameplayServerMessage::Error { code: 409, .. }
@@ -119,7 +119,7 @@ async fn rate_limited_subscriptions_do_no_fog_work_and_accepted_cost_is_bounded(
         .subscription_times = std::collections::VecDeque::from(vec![std::time::Instant::now(); 10]);
     WORK.with(|work| work.set((0, 0)));
     for revision in 1..=12 {
-        service.subscribe(id, revision, region).await;
+        service.subscribe(id, revision, region, true).await;
         assert!(matches!(
             rx.try_recv().unwrap(),
             GameplayServerMessage::Error { code: 429, .. }
@@ -138,7 +138,7 @@ async fn rate_limited_subscriptions_do_no_fog_work_and_accepted_cost_is_bounded(
         .unwrap()
         .subscription_times
         .clear();
-    service.subscribe(id, 20, region).await;
+    service.subscribe(id, 20, region, true).await;
     assert_eq!(WORK.with(Cell::get), (1, (side * side) as usize));
     let mut saw_fog = false;
     while let Ok(message) = rx.try_recv() {
@@ -151,13 +151,13 @@ async fn rate_limited_subscriptions_do_no_fog_work_and_accepted_cost_is_bounded(
     assert!(saw_fog);
     WORK.with(|work| work.set((0, 0)));
     service
-        .subscribe(id, 21, TileRect::from_xywh(0, 0, side + 1, side))
+        .subscribe(id, 21, TileRect::from_xywh(0, 0, side + 1, side), true)
         .await;
     assert!(matches!(
         rx.try_recv().unwrap(),
         GameplayServerMessage::Error { code: 400, .. }
     ));
-    service.subscribe(u64::MAX, 1, region).await;
+    service.subscribe(u64::MAX, 1, region, true).await;
     assert_eq!(
         WORK.with(Cell::get),
         (0, 0),

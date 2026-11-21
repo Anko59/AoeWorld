@@ -19,7 +19,6 @@ fn queued_destinations_are_private_to_the_owning_viewer_even_with_fog_disabled()
     assert!(!own[0].is_attack_move(0));
     assert!(own[0].is_attack_move(1));
 }
-
 #[test]
 fn rally_is_private_in_fog_and_a_hundred_no_fog_viewers_share_one_building_map() {
     let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
@@ -46,6 +45,7 @@ fn rally_is_private_in_fog_and_a_hundred_no_fog_viewers_share_one_building_map()
             subscription: Subscription {
                 revision: 1,
                 region: TileRect::new(TileCoord::new(0, 0), TileCoord::new(256, 256)),
+                unit_zoom: true,
             },
             vision: None,
             fog_disabled: None,
@@ -79,7 +79,6 @@ fn rally_is_private_in_fog_and_a_hundred_no_fog_viewers_share_one_building_map()
         );
     }
 }
-
 #[tokio::test]
 async fn owned_buildings_stream_past_one_message_and_reconnect_without_oversized_frames() {
     use aoe_protocol::{GameplayServerMessage as M, MAX_ECONOMY_BUILDINGS, encode_gameplay_server};
@@ -110,7 +109,7 @@ async fn owned_buildings_stream_past_one_message_and_reconnect_without_oversized
         let (id, _) = service.register(None, sender).await;
         let mut held = BTreeMap::new();
         for revision in 1..=2 {
-            service.subscribe(id, revision, region).await;
+            service.subscribe(id, revision, region, true).await;
             for _ in 0..4 {
                 while let Ok(message) = rx.try_recv() {
                     encode_gameplay_server(&message)
@@ -177,7 +176,7 @@ async fn fog_disabled_enemy_buildings_follow_camera_and_reenable_removes_hidden_
             (2, TileRect::from_xywh(896, 896, 32, 32), far, near),
             (3, TileRect::from_xywh(32, 32, 32, 32), near, far),
         ] {
-            service.subscribe(id, revision, region).await;
+            service.subscribe(id, revision, region, true).await;
             let mut snapshot = false;
             while let Ok(message) = rx.try_recv() {
                 encode_gameplay_server(&message).expect("camera snapshots are bounded");
@@ -241,7 +240,7 @@ async fn pending_subscription_holds_all_revision_updates_until_snapshot() {
             })
             .unwrap();
     }
-    service.subscribe(id, 1, region).await;
+    service.subscribe(id, 1, region, true).await;
     for _ in 0..8 {
         assert!(matches!(receiver.try_recv().unwrap(), M::Error { .. }));
     }
@@ -265,7 +264,7 @@ async fn pending_subscription_holds_all_revision_updates_until_snapshot() {
     // Every following await takes an uncontended lock and completes inline.
     // The current-thread runtime therefore cannot poll the worker between
     // queuing revision 2 and delivering changes captured after its snapshot.
-    service.subscribe(id, 2, region).await;
+    service.subscribe(id, 2, region, true).await;
     {
         let mut world = service.world.write().await;
         world.set_fog_disabled(true);
@@ -423,6 +422,7 @@ fn session_views_reuse_the_same_bounded_worker_pool_across_ticks() {
             subscription: Subscription {
                 revision: 1,
                 region: TileRect::from_xywh(0, 0, 96, 96),
+                unit_zoom: true,
             },
             vision: Some(world.player_vision_revision(PlayerId(player))),
             viewer: PlayerId(player),

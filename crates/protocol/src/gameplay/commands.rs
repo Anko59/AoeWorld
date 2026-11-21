@@ -8,6 +8,9 @@ pub enum ClientMessage {
     Subscribe {
         revision: u64,
         region: TileRect,
+        /// The client draws single units here (sprite level of detail), not
+        /// markers or the map: the server's level of detail follows it (#978).
+        unit_zoom: bool,
     },
     MoveOrder {
         sequence: u64,

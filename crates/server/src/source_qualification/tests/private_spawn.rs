@@ -78,6 +78,7 @@ async fn private_source_spawn_cavalry_exits_certified_glade() {
             session,
             1,
             TileRect::from_xywh(start.x - 128, start.y - 128, 256, 256),
+            true,
         )
         .await;
     let GameplayServerMessage::Snapshot { units, .. } =

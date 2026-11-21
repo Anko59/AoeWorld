@@ -66,6 +66,8 @@ pub(super) struct Client {
     pub token: Option<ResumeToken>,
     pub revision: u64,
     pub sent_region: Option<TileRect>,
+    /// Whether the last sent view drew single units (`Subscribe::unit_zoom`).
+    pub sent_unit_zoom: bool,
     pub subscribe_after: f64,
     pub next_sequence: u64,
     pub order_feedback: map::feedback::OrderFeedback,
@@ -143,19 +145,25 @@ pub(super) fn subscribe(client: &mut Client) {
         return;
     }
     let region = requested_region(client);
+    let unit_zoom = crate::strategic::lod_for_viewport(client.camera.zoom, client.camera.viewport)
+        == crate::strategic::Lod::Sprites;
     let time = now();
-    if client.sent_region == Some(region) || time < client.subscribe_after {
+    if (client.sent_region == Some(region) && client.sent_unit_zoom == unit_zoom)
+        || time < client.subscribe_after
+    {
         return;
     }
     client.revision = client.revision.saturating_add(1);
     let message = GameplayClientMessage::Subscribe {
         revision: client.revision,
         region,
+        unit_zoom,
     };
     if let Ok(bytes) = encode_gameplay_client(&message)
         && network::send(client, &bytes)
     {
         client.sent_region = Some(region);
+        client.sent_unit_zoom = unit_zoom;
         // Leave headroom below the server's rolling ten-per-second window.
         client.subscribe_after = time + SUBSCRIBE_INTERVAL_MS;
     }

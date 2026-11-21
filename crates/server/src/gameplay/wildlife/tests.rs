@@ -52,7 +52,7 @@ async fn subscription_and_ticks_never_disclose_an_unseen_wolf_or_enemy() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(32);
     let (id, _) = service.register(None, tx).await;
     service
-        .subscribe(id, 1, TileRect::from_xywh(0, 0, 256, 256))
+        .subscribe(id, 1, TileRect::from_xywh(0, 0, 256, 256), true)
         .await;
     service.queue_hunt(id, 1, vec![villager], wolf).await;
     service.queue_attack(id, 2, scout, enemy).await;
@@ -95,7 +95,7 @@ async fn attack_orders_accept_a_visible_animal() {
     let (tx, mut rx) = tokio::sync::mpsc::channel(32);
     let (id, _) = service.register(None, tx).await;
     service
-        .subscribe(id, 1, TileRect::from_xywh(0, 0, 128, 128))
+        .subscribe(id, 1, TileRect::from_xywh(0, 0, 128, 128), true)
         .await;
     service.queue_attack(id, 1, scout, wolf).await;
     service.tick().await;
@@ -131,7 +131,7 @@ async fn leaving_sight_removes_enemy_and_wolf_and_resync_does_not_restore_them()
     let (tx, mut rx) = tokio::sync::mpsc::channel(32);
     let (id, _) = service.register(None, tx).await;
     service
-        .subscribe(id, 1, TileRect::from_xywh(0, 0, 128, 128))
+        .subscribe(id, 1, TileRect::from_xywh(0, 0, 128, 128), true)
         .await;
     let mut saw_wolf = false;
     while let Ok(m) = rx.try_recv() {
