@@ -51,6 +51,24 @@ fn attack_move_breaches_an_enemy_wall_and_finishes_the_original_order() {
 }
 
 #[test]
+fn attack_move_still_breaches_a_wall_with_an_enemy_visible_behind_it() {
+    let (mut world, _, _) = village();
+    world.set_fog_disabled(true);
+    let o = TileCoord::new(100, 100);
+    let wall = fort(&mut world, o, true)[0];
+    world.economy.buildings.get_mut(&wall).unwrap().hp = 32;
+    // A defender in the yard is in sight but unreachable until the gate falls.
+    militia(&mut world, 0, &[(105, 104)]);
+    let army = militia(&mut world, 1, &block(103, 111, 20));
+    let target = WorldPosition::from_tile_center(TileCoord::new(105, 104)).unwrap();
+    world
+        .issue_formation_move(PlayerId(1), &army, Formation::Box, target, true, true)
+        .unwrap();
+    advance(&mut world, 2_400);
+    assert_eq!(world.building(wall).map(|b| b.hp), None, "the gate stood");
+}
+
+#[test]
 fn attack_move_breaches_a_building_on_a_map_backed_collision_overlay() {
     let (package, pages, water) = fixture::flat_fixture(false);
     let mut world =

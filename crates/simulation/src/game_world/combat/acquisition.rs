@@ -1,5 +1,9 @@
 //! Idle acquisition and stance control; controller ownership is irrelevant.
-use super::{MELEE_RANGE_SUBUNITS, targeting::TargetArea, tick::Goal};
+use super::{
+    MELEE_RANGE_SUBUNITS,
+    targeting::{BuildingTargets, TargetArea},
+    tick::Goal,
+};
 use crate::{EconomyError, GameWorld, UnitKind, UnitTask};
 use aoe_core::{CombatStance, EntityId, PlayerId, WorldPosition};
 use std::ops::Bound::{Excluded, Unbounded};
@@ -52,6 +56,7 @@ impl GameWorld {
             source: super::tick::Goal::Unit(u.position, u.kind.collision_radius()),
             min,
             max: range,
+            sight: range,
             actor: id,
             ram: u.kind.is_ram(),
         };
@@ -152,7 +157,11 @@ impl GameWorld {
                 .attackers
                 .get(&id)
                 .copied()
-                .filter(|a| a.origin.is_some() && self.building(a.target).is_some());
+                .filter(|a| a.origin.is_some())
+                .and_then(|a| {
+                    self.building(a.target)
+                        .map(|b| (a, b.kind.is_obstacle_target()))
+                });
             // Offensive movement is ordinary movement plus aggression: a
             // marching attack-move member — a lone unit, a formation member or
             // a General's soldier — strikes what is already in its weapon's
@@ -166,6 +175,13 @@ impl GameWorld {
             {
                 continue;
             }
+            // A unit busy on a wall, gate or road looks for a better target
+            // once every few ticks, spread over units like the march scans.
+            if matches!(building_attack, Some((_, true)))
+                && !(self.tick.0 + u64::from(id.0)).is_multiple_of(self.config.ticks(4))
+            {
+                continue;
+            }
             let Some(mut area) = self.acquisition_area(&u) else {
                 continue;
             };
@@ -174,9 +190,26 @@ impl GameWorld {
                 let range = super::super::navy::attack_range(&self.unit_state_stats(&u));
                 area.max = area.max.min(range);
             }
+            let buildings = match building_attack {
+                Some((_, true)) => BuildingTargets::RecheckObstacle,
+                Some((_, false)) => BuildingTargets::None,
+                // A marcher can leave to pursue an isolated obstacle. Spread
+                // those wider looks out like the formation's periodic scans.
+                // A grouped soldier leaves wall work to its group's breach: its
+                // own look would pull it out of the formation and lose the
+                // order the wall stands in the way of.
+                None if self.in_breaching_group(id) => BuildingTargets::Ordinary,
+                None if marching
+                    && u.stance != CombatStance::StandGround
+                    && (self.tick.0 + u64::from(id.0)).is_multiple_of(self.config.ticks(4)) =>
+                {
+                    BuildingTargets::Marching
+                }
+                None => BuildingTargets::Unit,
+            };
             // A melee unit does not take on an enemy whose every spot is
             // taken: it would only stand and wait out of reach.
-            let probe = self.acquire_target(&area, building_attack.is_none());
+            let probe = self.acquire_target(&area, buildings);
             let target = probe.target;
             if target.is_none()
                 && !probe.sampled_hostile
@@ -186,14 +219,22 @@ impl GameWorld {
             {
                 self.sleep_quiet_acquisition(&u, &area);
             }
+            if buildings == BuildingTargets::RecheckObstacle && probe.preferred_in_sight {
+                self.end_attack(id, changed);
+            }
+            // A recheck that finds the obstacle already under attack keeps that
+            // attack: beginning it again would drop the way back to the march.
+            let target = target.filter(|&t| building_attack.is_none_or(|(a, _)| a.target != t));
             if let Some(target) = target.filter(|&target| self.attack_spot_free(id, target)) {
-                if building_attack.is_some() {
+                if matches!(building_attack, Some((_, false))) {
                     self.stop_movement(self.lookup[&id]);
                 }
                 self.begin_autonomous_attack(
                     id,
                     target,
-                    building_attack.and_then(|a| a.origin).unwrap_or(u.position),
+                    building_attack
+                        .and_then(|(attacker, _)| attacker.origin)
+                        .unwrap_or(u.position),
                 );
                 changed.push(id);
             }
@@ -227,7 +268,7 @@ impl GameWorld {
             return;
         };
         if let Some(target) = self
-            .acquire_target(&area, false)
+            .acquire_target(&area, BuildingTargets::None)
             .target
             .filter(|&target| self.attack_spot_free(id, target))
         {
@@ -241,16 +282,18 @@ impl GameWorld {
         let (_, _, los) = self.unit_observer(u)?;
         let stats = self.unit_state_stats(u);
         let range = super::super::navy::attack_range(&stats);
+        let sight = i64::from(los) * MELEE_RANGE_SUBUNITS;
         let max = if u.stance == CombatStance::StandGround {
-            range.min(i64::from(los) * MELEE_RANGE_SUBUNITS)
+            range.min(sight)
         } else {
-            i64::from(los) * MELEE_RANGE_SUBUNITS
+            sight
         };
         Some(TargetArea {
             player: u.player,
             source: Goal::Unit(u.position, u.kind.collision_radius()),
             min: i64::from(stats.min_range) * MELEE_RANGE_SUBUNITS,
             max,
+            sight,
             actor: u.id,
             ram: u.kind.is_ram(),
         })
@@ -263,7 +306,7 @@ impl GameWorld {
             return None;
         }
         let area = self.acquisition_area(&u)?;
-        self.acquire_target(&area, true).target
+        self.acquire_target(&area, BuildingTargets::Unit).target
     }
 
     pub(crate) fn begin_autonomous_attack(
