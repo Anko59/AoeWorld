@@ -155,7 +155,8 @@ impl GameWorld {
         // Fish belong to boats and Docks; a walking fisher earns a fraction of
         // a Farmer and would stand in for Farms while Food runs dry.
         !matches!(n.object, ObjectKind::DeepFish | ObjectKind::ShoreFish)
-            && WorldPosition::from_tile_center(n.tile).is_ok_and(|at| s.home.owns(at))
+            && WorldPosition::from_tile_center(n.tile)
+                .is_ok_and(|at| s.home.contains(at) && s.home.owns(at))
             && self.visibility(s.player, n.tile) != TileVisibility::Unexplored
             && self
                 .resource_remaining(n.id)

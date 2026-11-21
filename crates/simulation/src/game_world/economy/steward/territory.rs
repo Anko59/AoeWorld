@@ -102,6 +102,8 @@ impl GameWorld {
                 {
                     home.walking = Some(walking.clone());
                     home.walk_recheck = true;
+                    // Land connectivity is labelled over the walking zone.
+                    home.regions = None;
                     self.economy
                         .stewards
                         .controlled
@@ -175,8 +177,8 @@ impl GameWorld {
 }
 
 // Connectivity inside one Steward's territory. A job is only worth giving a
-// villager when a walk exists that never leaves the 100-tile circle (cut by its
-// siblings). Static ground is labelled once per territory and bridge change;
+// villager when a walk exists that never leaves the office's walking zone (cut
+// by its siblings and bounded by the 100-tile service box). Static ground is labelled once per territory and bridge change;
 // each query is then a few array reads, never a route search.
 #[derive(Debug)]
 pub(super) struct Regions {
@@ -262,7 +264,7 @@ impl GameWorld {
         let min = TileCoord::new(c.x - r, c.y - r);
         let mut labels = vec![0u16; (side * side) as usize];
         let inside = |tile: TileCoord| {
-            home.owns_water(WorldPosition::new(
+            home.owns(WorldPosition::new(
                 tile.x * FIXED_SUBUNITS_PER_TILE + FIXED_SUBUNITS_PER_TILE / 2,
                 tile.y * FIXED_SUBUNITS_PER_TILE + FIXED_SUBUNITS_PER_TILE / 2,
             )) && tile.x >= 0
