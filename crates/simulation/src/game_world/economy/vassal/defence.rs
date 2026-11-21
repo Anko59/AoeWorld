@@ -30,6 +30,11 @@ impl GameWorld {
         squads
     }
 
+    pub(crate) fn cancel_general_recall(&mut self, id: EntityId) {
+        self.economy.vassals.recalls.remove(&id);
+        self.economy.vassals.returns.remove(&id);
+    }
+
     pub(super) fn vassal_defend(
         &mut self,
         id: EntityId,
@@ -103,18 +108,23 @@ impl GameWorld {
             d.status.alert = threat.is_some();
         }
         if let Some(enemy) = threat {
-            let generals: Vec<_> = units
-                .iter()
-                .filter(|u| {
-                    u.kind == UnitKind::General
-                        && u.player == player
-                        && u.hp > 0
-                        && within(center, u.position, CALL_RADIUS)
-                        && !self.embarked(u.id)
-                        && !self.economy.vassals.recalls.contains_key(&u.id)
-                        && self.vassal_help_reachable(u, enemy.1)
+            let generals: Vec<_> = self
+                .economy
+                .generals
+                .armies
+                .keys()
+                .copied()
+                .filter(|g| {
+                    !self.economy.vassals.recalls.contains_key(g)
+                        && !self.embarked(*g)
+                        && self.unit(*g).is_some_and(|u| {
+                            u.player == player
+                                && u.hp > 0
+                                && within(center, u.position, CALL_RADIUS)
+                                && !self.general_has_owner_order(u)
+                                && self.vassal_help_reachable(&u, enemy.1)
+                        })
                 })
-                .map(|u| u.id)
                 .collect();
             for g in generals {
                 let Some(a) = self.economy.generals.armies.get(&g) else {

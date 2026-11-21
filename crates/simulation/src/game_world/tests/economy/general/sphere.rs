@@ -1,5 +1,4 @@
-//! A General's influence reaches 50 tiles: he commands no soldier and chooses
-//! no training building beyond it.
+//! A General commands the roster at any distance. Training still uses a local radius.
 use super::*;
 
 fn tiles_from(w: &GameWorld, a: EntityId, b: EntityId) -> i64 {
@@ -8,12 +7,11 @@ fn tiles_from(w: &GameWorld, a: EntityId, b: EntityId) -> i64 {
 }
 
 #[test]
-fn a_march_leads_only_soldiers_within_fifty_tiles() {
+fn a_march_leads_rostered_soldiers_beyond_fifty_tiles() {
     let (mut w, _) = setup();
     let near = soldier(&mut w, UnitKind::Militia, 100, 100);
     let far = soldier(&mut w, UnitKind::Militia, 101, 100);
     let g = soldier(&mut w, UnitKind::General, 103, 103);
-    // The straggler walked off after adoption.
     let index = w.lookup[&far];
     w.units[index].state.position = at(100, 170);
     assert!(tiles_from(&w, far, g) > 50);
@@ -21,15 +19,6 @@ fn a_march_leads_only_soldiers_within_fifty_tiles() {
     decide(&mut w);
     assert_eq!(w.general_status(g).unwrap().state, GeneralState::Marching);
     assert!(w.formation_destination_slot(near).is_some());
-    assert!(
-        w.formation_destination_slot(far).is_none(),
-        "no order reaches a soldier 70 tiles away"
-    );
-    // Back inside the sphere he is commanded again.
-    let index = w.lookup[&far];
-    w.units[index].state.position = at(110, 120);
-    w.economy.generals.armies.get_mut(&g).unwrap().routed = None;
-    decide(&mut w);
     assert!(w.formation_destination_slot(far).is_some());
 }
 
@@ -65,7 +54,7 @@ fn training_uses_only_buildings_within_fifty_tiles() {
 }
 
 #[test]
-fn solo_move_preserves_an_out_of_sphere_soldiers_existing_order() {
+fn solo_move_holds_rostered_soldiers_on_both_sides_of_the_training_radius() {
     for x in [152, 153] {
         let (mut w, _) = setup();
         let far = soldier(&mut w, UnitKind::Militia, 100, 100);
@@ -80,10 +69,10 @@ fn solo_move_preserves_an_out_of_sphere_soldiers_existing_order() {
         assert!(before.moving || before.planning);
         w.issue_general_move(PlayerId(0), g, at(130, 104)).unwrap();
         let after = w.unit(far).unwrap();
-        if x == 152 {
-            assert!(!after.moving && !after.planning, "50 tiles is inside");
-        } else {
-            assert_eq!(after, before, "51 tiles receives no command");
-        }
+        assert_eq!(w.general_controller(far), Some(g));
+        assert!(
+            !after.moving && !after.planning,
+            "rostered soldier at x={x}"
+        );
     }
 }

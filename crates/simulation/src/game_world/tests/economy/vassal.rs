@@ -1,10 +1,9 @@
 use super::*;
 use crate::{Age, Stockpile};
-#[path = "vassal/budget.rs"]
-mod budget;
-
 #[path = "vassal/bridging.rs"]
 mod bridging;
+#[path = "vassal/budget.rs"]
+mod budget;
 #[path = "vassal/domain.rs"]
 mod domain;
 #[path = "vassal/help.rs"]
@@ -166,15 +165,31 @@ fn vassal_calls_general_at_32_tiles_but_not_beyond_and_restores_march() {
         )
         .unwrap();
     let original = at(200, 130);
-    w.issue_move(near, original).unwrap();
+    w.general_march(near, original);
+    let ordered = w
+        .spawn_kind(PlayerId(0), UnitKind::General, at(116, 92))
+        .unwrap();
+    w.issue_player_formation_move(
+        PlayerId(0),
+        &[ordered],
+        aoe_core::Formation::Line,
+        original,
+        false,
+        false,
+    )
+    .unwrap();
+    assert!(w.general_has_owner_order(w.unit(ordered).unwrap()));
     let enemy = w
         .spawn_kind(PlayerId(1), UnitKind::Militia, at(97, 92))
         .unwrap();
     w.tick.0 = 20;
     w.advance_vassals(&mut Vec::new());
     assert!(w.vassal_status(v).unwrap().alert);
-    assert_ne!(w.economy.generals.armies[&near].destination, Some(original));
-    assert_eq!(w.economy.generals.armies[&far].destination, None);
+    let armies = &w.economy.generals.armies;
+    assert_ne!(armies[&near].destination, Some(original));
+    assert_eq!(armies[&far].destination, None);
+    assert_eq!(armies[&ordered].destination, Some(original));
+    assert_eq!(w.vassal_status(v).unwrap().responding, 1);
     w.remove_unit(enemy);
     advance(&mut w, 40);
     assert!(!w.vassal_status(v).unwrap().alert);

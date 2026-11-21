@@ -1,6 +1,8 @@
 import { expect } from "@playwright/test";
 import { test } from "../../../server.js";
 
+test.use({ video: { mode: "on", size: { width: 1280, height: 720 } } });
+
 test("Vassal panel shows work, switches Vassals and sends pause/resume", async ({
   page,
 }) => {

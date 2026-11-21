@@ -21,18 +21,32 @@ const ENGAGE_MEMBERS_PER_LOOK: usize = 128;
 const MELEE_SPOTS: usize = 8;
 /// Enemies in sight a member weighs per look, nearest first.
 const TARGETS_PER_MEMBER: usize = 3;
+/// Shared contacts only expand the local pursuit window around each soldier.
+const GENERAL_CONTACT_RANGE: i64 = 12 * FIXED_SUBUNITS_PER_TILE as i64;
+
+#[derive(Clone, Copy)]
+struct GeneralSight {
+    id: EntityId,
+    position: WorldPosition,
+    radius: i64,
+}
 
 /// A member as one look sees it: id, position, sight radius in subunits and
 /// its slot at the group destination.
 type Looker = (EntityId, WorldPosition, i64, Resume);
 /// What one look found: the owner, its members and the enemies near them.
-type Look = (PlayerId, Vec<Looker>, Vec<(EntityId, Goal)>);
+type Look = (
+    PlayerId,
+    Vec<Looker>,
+    Vec<(EntityId, Goal)>,
+    Option<GeneralSight>,
+);
 
 impl GameWorld {
     /// Every `ENGAGE_CADENCE` ticks an attack-move group makes one bounded
     /// look for enemies over its whole extent. A member breaks off only for an
-    /// enemy inside its own line of sight that it could fight now (a free
-    /// melee spot, or reach); it attacks alone and leaves the group, and the
+    /// local or shared sighting that it could fight now (a free melee spot,
+    /// or reach); it attacks alone and leaves the group, and the
     /// others keep marching. Its way back to its slot travels with the attack
     /// (see `Resume`).
     #[inline(never)] // a symbol of its own for the Callgrind stage counters
@@ -60,7 +74,7 @@ impl GameWorld {
             }
         }
         for leader in leaders {
-            let Some((player, lookers, enemies)) = self.formation_look(leader) else {
+            let Some((player, lookers, enemies, general)) = self.formation_look(leader) else {
                 continue;
             };
             let start = (self.tick.0 / self.config.ticks(ENGAGE_CADENCE)) as usize
@@ -72,11 +86,17 @@ impl GameWorld {
                     break;
                 }
                 let (id, at, sight, resume) = lookers[(start + n) % lookers.len()];
+                let general = general.filter(|g| self.general_controller(id) == Some(g.id));
                 let mut seen = enemies
                     .iter()
                     .filter_map(|&(enemy, goal)| {
                         let d = goal.distance_squared(at);
-                        (d <= sight * sight).then_some((d, enemy))
+                        (d <= sight * sight
+                            || general.is_some_and(|g| {
+                                d <= GENERAL_CONTACT_RANGE.pow(2)
+                                    && goal.distance_squared(g.position) <= g.radius * g.radius
+                            }))
+                        .then_some((d, enemy))
                     })
                     .collect::<Vec<_>>();
                 let breach = self.formations.get(&leader).and_then(|group| group.breach);
@@ -148,7 +168,18 @@ impl GameWorld {
         if lookers.is_empty() {
             return None;
         }
-        let margin = widest + 1;
+        let general = self
+            .general_controller(leader)
+            .and_then(|id| self.unit(id))
+            .and_then(|unit| {
+                let (_, _, sight) = self.unit_observer(&unit)?;
+                Some(GeneralSight {
+                    id: unit.id,
+                    position: unit.position,
+                    radius: i64::from(sight) * i64::from(FIXED_SUBUNITS_PER_TILE),
+                })
+            });
+        let margin = widest.max(if general.is_some() { 12 } else { 0 }) + 1;
         let area = TileRect::from_xywh(
             min.0 - margin,
             min.1 - margin,
@@ -165,7 +196,7 @@ impl GameWorld {
         } else if enemies.is_empty() {
             enemies = self.formation_enemy_buildings(player, area);
         }
-        (!enemies.is_empty()).then_some((player, lookers, enemies))
+        (!enemies.is_empty()).then_some((player, lookers, enemies, general))
     }
 
     /// Up to `ENGAGE_CANDIDATES` visible enemy units in `area`, inspecting at

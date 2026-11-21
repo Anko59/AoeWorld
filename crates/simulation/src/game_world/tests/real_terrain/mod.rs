@@ -7,6 +7,7 @@ mod armies;
 mod bridge_march;
 mod budget;
 mod crowded;
+mod general_control;
 mod general_followers;
 mod general_opposed;
 mod landscapes;

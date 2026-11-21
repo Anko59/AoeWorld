@@ -85,7 +85,7 @@ fn enemy_enters_open_gate() -> [u8; 32] {
             false,
         )
         .unwrap();
-    assert!(!world.formation_matches(&army, destination));
+    assert!(!world.formation_matches(&army, destination, false));
     assert!(
         army.iter()
             .all(|&id| !yard.contains(world.formation_destination_slot(id).unwrap().tile_floor()))
@@ -112,7 +112,7 @@ fn enemy_enters_open_gate() -> [u8; 32] {
             false,
         )
         .unwrap();
-    assert!(world.formation_matches(&army, destination));
+    assert!(world.formation_matches(&army, destination, false));
     advance(&mut world, 300);
     assert!(
         army.iter()
