@@ -75,6 +75,8 @@ mod explored;
 mod views;
 pub(crate) use explored::ExploredChunks;
 pub use views::HumanView;
+mod census;
+pub use census::StateCensus;
 mod change;
 mod land;
 mod observers;

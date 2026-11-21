@@ -14,7 +14,7 @@ pub use game_world::terrain_fixtures;
 pub use game_world::{ArmorClass, AttackBonus, BuildingGroup, ConversionTarget, RuleEffect};
 pub use game_world::{BrowserBuilding, BrowserContent, BrowserTech, BrowserUnit};
 pub use game_world::{HoldingSpan, LandControl};
-pub use game_world::{HumanView, TileVisibility};
+pub use game_world::{HumanView, StateCensus, TileVisibility};
 pub use game_world::{RestoreReport, SnapshotError, WORLD_SNAPSHOT_VERSION, WorldSnapshot};
 #[cfg(any(not(target_arch = "wasm32"), feature = "content-source"))]
 pub use game_world::{browser_content, browser_research_tooltips};
