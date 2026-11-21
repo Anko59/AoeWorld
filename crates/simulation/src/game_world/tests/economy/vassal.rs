@@ -1,10 +1,9 @@
 use super::*;
 use crate::{Age, Stockpile};
-#[path = "vassal/budget.rs"]
-mod budget;
-
 #[path = "vassal/bridging.rs"]
 mod bridging;
+#[path = "vassal/budget.rs"]
+mod budget;
 #[path = "vassal/domain.rs"]
 mod domain;
 #[path = "vassal/help.rs"]
@@ -148,33 +147,49 @@ fn vassal_keeps_economy_reserve_and_releases_on_ungarrison() {
 }
 
 #[test]
-fn vassal_calls_general_at_100_tiles_but_not_beyond_and_restores_march() {
+fn vassal_calls_general_at_32_tiles_but_not_beyond_and_restores_march() {
     let (mut w, v, _) = setup();
     let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
     let near = w
         .spawn_kind(
             PlayerId(0),
             UnitKind::General,
-            WorldPosition::new(192 * 1024, 92 * 1024),
+            WorldPosition::new(124 * 1024, 92 * 1024),
         )
         .unwrap();
     let far = w
         .spawn_kind(
             PlayerId(0),
             UnitKind::General,
-            WorldPosition::new(192 * 1024 + 1, 92 * 1024),
+            WorldPosition::new(124 * 1024 + 1, 92 * 1024),
         )
         .unwrap();
     let original = at(200, 130);
-    w.issue_move(near, original).unwrap();
+    w.general_march(near, original);
+    let ordered = w
+        .spawn_kind(PlayerId(0), UnitKind::General, at(116, 92))
+        .unwrap();
+    w.issue_player_formation_move(
+        PlayerId(0),
+        &[ordered],
+        aoe_core::Formation::Line,
+        original,
+        false,
+        false,
+    )
+    .unwrap();
+    assert!(w.general_has_owner_order(w.unit(ordered).unwrap()));
     let enemy = w
         .spawn_kind(PlayerId(1), UnitKind::Militia, at(97, 92))
         .unwrap();
     w.tick.0 = 20;
     w.advance_vassals(&mut Vec::new());
     assert!(w.vassal_status(v).unwrap().alert);
-    assert_ne!(w.economy.generals.armies[&near].destination, Some(original));
-    assert_eq!(w.economy.generals.armies[&far].destination, None);
+    let armies = &w.economy.generals.armies;
+    assert_ne!(armies[&near].destination, Some(original));
+    assert_eq!(armies[&far].destination, None);
+    assert_eq!(armies[&ordered].destination, Some(original));
+    assert_eq!(w.vassal_status(v).unwrap().responding, 1);
     w.remove_unit(enemy);
     advance(&mut w, 40);
     assert!(!w.vassal_status(v).unwrap().alert);
@@ -274,9 +289,9 @@ fn vassal_demo_stands_a_defensive_line_before_attack_and_general_response() {
 fn vassal_called_general_with_an_army_returns_to_the_saved_position() {
     let (mut w, v, _) = setup();
     let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
-    let origin = at(145, 92);
+    let origin = at(120, 92);
     for i in 0..12 {
-        w.spawn_kind(PlayerId(0), UnitKind::Knight, at(145 + i % 4, 94 + i / 4))
+        w.spawn_kind(PlayerId(0), UnitKind::Knight, at(120 + i % 4, 94 + i / 4))
             .unwrap();
     }
     let general = w
@@ -286,12 +301,12 @@ fn vassal_called_general_with_an_army_returns_to_the_saved_position() {
     advance(&mut w, 40);
     assert!(w.general_status(general).unwrap().army_size > 0);
     let enemy = w
-        .spawn_kind(PlayerId(1), UnitKind::Knight, at(110, 92))
+        .spawn_kind(PlayerId(1), UnitKind::Knight, at(100, 92))
         .unwrap();
     w.issue_stance(PlayerId(1), &[enemy], aoe_core::CombatStance::StandGround)
         .unwrap();
     advance(&mut w, 80);
-    assert!(w.vassal_status(v).unwrap().alert);
+    assert_eq!(w.vassal_status(v).unwrap().responding, 1);
     assert!(w.unit(general).unwrap().position.x < origin.x);
     w.remove_unit(enemy);
     advance(&mut w, 2_000);
@@ -355,18 +370,18 @@ fn vassal_reuses_existing_buildings_and_skips_obstructed_tower_sites() {
 fn vassal_called_idle_general_physically_returns_and_becomes_idle_again() {
     let (mut w, v, _) = setup();
     let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
-    let origin = at(145, 92);
+    let origin = at(120, 92);
     let general = w
         .spawn_kind(PlayerId(0), UnitKind::General, origin)
         .unwrap();
     let enemy = w
-        .spawn_kind(PlayerId(1), UnitKind::Knight, at(110, 92))
+        .spawn_kind(PlayerId(1), UnitKind::Knight, at(100, 92))
         .unwrap();
     w.set_fog_disabled(true);
     w.issue_stance(PlayerId(1), &[enemy], aoe_core::CombatStance::StandGround)
         .unwrap();
     advance(&mut w, 80);
-    assert!(w.vassal_status(v).unwrap().alert);
+    assert_eq!(w.vassal_status(v).unwrap().responding, 1);
     assert!(w.unit(general).unwrap().position.x < origin.x);
     w.remove_unit(enemy);
     advance(&mut w, 2_000);

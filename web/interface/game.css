@@ -274,6 +274,8 @@ html:has(#scene[data-order-mode=build]) #strategic-tokens button { pointer-event
 #vassal-panel .menu-slider { display:grid; grid-template-columns:47px minmax(24px,1fr) 34px; align-items:center; gap:3px; margin-bottom:1px; }
 #vassal-panel .menu-slider input { width:100%; margin-inline:0; }
 #vassal-jobs { list-style:none; margin:0 0 3px; padding:0; }
+#vassal-squads { list-style:none; margin:2px 0 0; padding:0; display:flex; flex-wrap:wrap; gap:0 6px; line-height:13px; min-width:0; }
+#vassal-squads[hidden] { display:none; }
 #vassal-jobs li { display:flex; align-items:center; gap:3px; min-height:13px; width:max-content; }
 #vassal-jobs .vassal-job { position:relative; line-height:0; }
 #vassal-jobs :is(.art-icon,.icon) { width:12px; height:12px; }

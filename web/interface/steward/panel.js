@@ -92,7 +92,8 @@ export function initVassal() {
     <label id="vassal-chooser" hidden>Vassal <select aria-label="Vassal"></select></label>
     <p id="vassal-status" role="status"></p>
     <ul id="vassal-jobs" aria-label="Vassal jobs"></ul>
-    <button id="vassal-development" type="button"></button>`);
+    <button id="vassal-development" type="button"></button>
+    <ul id="vassal-squads" aria-label="Defence squads" hidden></ul>`);
   const select = panel.querySelector('select');
   const [focus] = sliders(panel, [{
     label: 'Focus', max: 1, format: value => focuses[value], change: value => send(3 + value),
@@ -102,6 +103,7 @@ export function initVassal() {
   details.setAttribute('role', 'tooltip');
   document.body.append(details);
   const list = byId('vassal-jobs');
+  const squadList = byId('vassal-squads');
   let current, signature, roster, hovered, focused;
   const showDetails = () => {
     const row = hovered ?? focused;
@@ -126,7 +128,7 @@ export function initVassal() {
   byId('vassal-development').addEventListener('click', () => send(2));
   window.aoeVassal = {
     selected() { return panel.hidden ? 0 : Number(select.value); },
-    update(values, label, jobs = '') {
+    update(values, label, jobs = '', squads = '') {
       renderFields({ 'vassal-panel': { hidden: !values.length } });
       if (!values.length) {
         current = signature = hovered = focused = undefined;
@@ -144,7 +146,7 @@ export function initVassal() {
       if (select.value !== String(id)) select.value = String(id);
       focus.sync(focusValue, id !== current);
       current = id;
-      const key = `${id}:${enabled}:${alert}:${label}:${counts}:${jobs}`;
+      const key = `${id}:${enabled}:${alert}:${label}:${counts}:${jobs}:${squads}`;
       if (signature === key) return;
       signature = key;
       renderFields({
@@ -170,6 +172,13 @@ export function initVassal() {
         row.dataset.details = names.length ? [heading, ...names].join('\n') : '';
         row.setAttribute('aria-label', [heading, ...names].join(', '));
       });
+      renderFields({ 'vassal-squads': { hidden: squads.length === 0 } });
+      squadList.replaceChildren(...squads.split('\n').filter(Boolean).map(text => {
+        const row = document.createElement('li');
+        row.title = row.ariaLabel = text;
+        row.textContent = text.replace(/^(\w{1,3})\w* · /, '$1 ').replace(/ (attack|mov|hold)\w*/g, ' $1');
+        return row;
+      }));
       showDetails();
     },
   };

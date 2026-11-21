@@ -55,8 +55,8 @@ pub use economy::{
     PlayerEconomy, RallyPoint, RallyTarget, STEWARD_RULES, STEWARD_STALL_SECONDS, SquadKind,
     SquadStatus, StewardRules, StewardSettings, StewardStatus, StewardWait, StewardWork, Stockpile,
     TickPhase, TrainingEntry, UnitKind, UnitTask, VASSAL_LIMIT, VASSAL_RADIUS, VILLAGE_RULES,
-    VassalFocus, VassalJob, VassalJobs, VassalStatus, VassalWait, VillageRules, WorldLimits,
-    trainable_units,
+    VassalFocus, VassalJob, VassalJobs, VassalSquad, VassalStatus, VassalWait, VillageRules,
+    WorldLimits, trainable_units,
 };
 pub use facing::Facing;
 pub(crate) use facing::facing_for;

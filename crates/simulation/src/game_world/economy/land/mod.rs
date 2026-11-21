@@ -6,6 +6,7 @@ use aoe_core::{PlayerId, TileCoord};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 mod raster;
+pub(crate) mod walking;
 use raster::{coalesce, raster, raster_changed};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

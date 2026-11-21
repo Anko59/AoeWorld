@@ -35,13 +35,13 @@ its shared budgets.
 
 ### Exact rules (what is adopted, when TCs train, why it stops)
 
-**Territory.** A Steward's territory is the 100-tile circle around its Town Center,
-cut by its sibling Stewards: every point belongs to the nearest *active* Town Center
-of the same player (integer squared distance, ties to the lower Steward ID), so
-no villager, resource node or building ever has two Stewards. A Town Center is active
-while its Steward is garrisoned in it; an inactive Town Center claims nothing and its
-neighbour takes its area at the next pass. A building belongs to the Steward
-whose territory holds its centre, and must also lie wholly in the circle.
+**Territory.** Stewards divide land within 100 walking tiles of their active
+Town Centers. Terrain edges and completed bridges determine walking cost, and
+the lower Steward ID breaks ties. One Steward owns each connected patch of
+the same land resource. The shortest approach to any member chooses its
+owner. The zone refresh checks for terrain and office changes about once per
+game second. A building belongs to the Steward whose zone holds its centre,
+and its footprint must fit the planning radius.
 
 **Adoption.** Each pass a Steward scans its territory and adopts, in entity
 order, up to 100 of the owner's villagers: busy ones (gathering, farming,
@@ -61,7 +61,7 @@ and are confirmed by the server. When training is on, each complete Town Center 
 trains one villager per pass (within the original two-order support window per Steward) when the player
 has 50 food, until residents (every living villager in the territory, sheltered
 ones included) plus queued villagers reach the chosen cap. It stops, and the HUD says why,
-when: the census is incomplete (more than 1,024 units in the circle),
+when: the census is incomplete (more than 1,024 unit visits in one census),
 residents+queued reaches the chosen cap, no Town Center lies in the territory,
 food is short, or housing is full. The Steward builds Houses before population
 plus queued training fills the player's space, including when its workers are
@@ -156,7 +156,7 @@ reserved work point.
 An accepted manual override releases a managed worker immediately and protects
 its busy job until genuine idle. Previously unclaimed busy workers can still be
 adopted in place. Military, foreign workers and workers outside
-the circle are never adopted. Ejection/death/destruction deactivates management
+the zone are never adopted. Ejection/death/destruction deactivates management
 and releases its tags; current ordinary jobs can finish. Autonomous resource
 replacement and return targets stay within an active domain.
 
@@ -185,10 +185,10 @@ not demonstrate finished RTS performance or qualify the owner's hardware.
 
 ## Presentation and licensed graphics
 
-Selecting a completed owned Town Center shows the yellow territory of every owned
-Town Center; a solid outline is an active garrisoned Steward, a dashed circle an
-inactive domain. Where two active territories meet, each outline stops 0.4 tiles
-short of the equal-distance border, drawn as a double line. Selected managed villagers show “Managed by
+Selecting a completed owned Town Center shows yellow planning circles around
+owned Town Centers. Solid outlines mark active Stewards, and dashed circles
+mark inactive ones. The overlay shows nominal reach and geometric borders.
+Actual job ownership follows the server's walking zones. Selected managed villagers show “Managed by
 Steward”. Steward production is disabled while that Town Center has a queued or garrisoned Steward. Incoming Stewards also reserve its place on the server.
 An occupied Town Center also offers “Dismiss idle villagers”: it kills idle owned
 villagers in that Steward's territory that no Steward currently manages, including
@@ -235,7 +235,7 @@ orders; it does not divert a burst of busy farmers into optional repairs.
 
 ## Coastal work
 
-The same bounded spatial census includes owned Fishing Ships in the territory,
+The same bounded spatial census includes owned Fishing Ships within the coastal service area,
 with a separate fleet limit of 100; ships do not consume the villager cap.
 Busy fishing ships are adopted in place, and idle ships receive ordinary fish
 orders. Manual moves stay manual until real idle; foreign and outside ships

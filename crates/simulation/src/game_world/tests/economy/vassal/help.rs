@@ -11,7 +11,7 @@ fn vassal_calls_for_help_when_an_enemy_tower_attacks_its_territory() {
     w.issue_stance(PlayerId(0), &[soldier], aoe_core::CombatStance::StandGround)
         .unwrap();
     let general = w
-        .spawn_kind(PlayerId(0), UnitKind::General, at(190, 92))
+        .spawn_kind(PlayerId(0), UnitKind::General, at(118, 92))
         .unwrap();
     let tower = w
         .insert_building(

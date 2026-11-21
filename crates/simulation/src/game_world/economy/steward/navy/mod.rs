@@ -35,7 +35,7 @@ impl Fleet {
 impl GameWorld {
     fn steward_fish_known(&self, node: ResourceNode, s: &Snapshot) -> bool {
         matches!(node.object, ObjectKind::ShoreFish | ObjectKind::DeepFish)
-            && WorldPosition::from_tile_center(node.tile).is_ok_and(|at| s.home.owns(at))
+            && WorldPosition::from_tile_center(node.tile).is_ok_and(|at| s.home.owns_water(at))
             && self.visibility(s.player, node.tile) != TileVisibility::Unexplored
             && self.resource_remaining(node.id).is_some_and(|n| n > 0)
     }

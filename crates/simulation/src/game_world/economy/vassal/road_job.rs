@@ -2,22 +2,24 @@
 use super::super::placement::{distance_squared, perimeter};
 use super::plan::{Site, TIER_ROAD};
 use super::road_search::Search;
-use super::roads::{Out, STUB, TIER_GATE_ROAD, View, center_of, footprint_of};
+use super::roads::{Out, STUB, TIER_GATE_ROAD, View, center_of, footprint_of, trim_nodes};
 use super::*;
 #[derive(Debug)]
 pub(super) struct Network {
     pub(super) player: PlayerId,
     pub(super) avoid: BTreeSet<TileCoord>,
     pub(super) gate_tiles: BTreeSet<TileCoord>,
-    /// Tiles a route may end at: the joined nodes' edges and every road so far.
+    /// All castle entrances until the first route selects one. Thereafter
+    /// only tiles physically joined to that entrance.
     pub(super) goals: BTreeSet<TileCoord>,
+    pub(super) rooted: bool,
     pub(super) out: Vec<Site>,
     pub(super) roads: BTreeSet<TileCoord>,
     /// Own bridges already laid (even as foundations), by bank: the route
     /// uses them as they are instead of planning a parallel span.
     pub(super) fixed: BTreeMap<TileCoord, (TileCoord, u32)>,
-    /// Banks of spans this plan already lays.
-    pub(super) planned_spans: Vec<TileCoord>,
+    /// Spans already included in this plan, keyed by canonical bank order.
+    pub(super) planned_spans: BTreeSet<(TileCoord, TileCoord)>,
 }
 
 pub(super) struct Planner {
@@ -37,7 +39,10 @@ fn edge(r: TileRect, out: Out) -> Vec<TileCoord> {
     let c = center_of(r);
     perimeter(r)
         .into_iter()
-        .filter(|t| out.is_none_or(|o| (t.x - c.x) * o.0 + (t.y - c.y) * o.1 <= 0))
+        .filter(|t| {
+            let side = (r.min.x..r.max.x).contains(&t.x) || (r.min.y..r.max.y).contains(&t.y);
+            side && out.is_none_or(|o| (t.x - c.x) * o.0 + (t.y - c.y) * o.1 < 0)
+        })
         .collect()
 }
 impl Planner {
@@ -56,23 +61,21 @@ impl Planner {
             let c = center_of(r);
             (c.x - center.x).abs() <= reach && (c.y - center.y).abs() <= reach
         };
-        // Nodes: work points that already stand, then the planned gates.
-        let mut nodes: Vec<(TileRect, Out)> = [
-            BuildingKind::TownCenter,
-            BuildingKind::Mill,
-            BuildingKind::LumberCamp,
-            BuildingKind::MiningCamp,
-        ]
-        .into_iter()
-        .flat_map(|k| w.player_buildings_of(player, k))
-        .filter(|b| b.hp > 0 && b.is_complete() && in_domain(b.footprint))
-        .map(|b| (b.id, b.footprint))
-        .collect::<BTreeMap<_, _>>()
-        .into_values()
-        .map(|r| (r, None))
-        .collect();
-        let local = nodes.len();
+        // Keep slots for every gate and planned military production site.
+        // Fill the rest with the nearest operating work and production sites.
+        let mut production: BTreeSet<_> = planned
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s.kind,
+                    BuildingKind::Barracks | BuildingKind::ArcheryRange | BuildingKind::Stable
+                )
+            })
+            .map(footprint_of)
+            .map(|r| (r.min, r.max))
+            .collect();
         let mut stubs: Vec<(TileCoord, (i32, i32))> = Vec::new();
+        let mut nodes: Vec<(TileRect, Out, u8)> = Vec::new();
         for gate in planned.iter().filter(|s| s.kind.is_gate()) {
             let rect = footprint_of(gate);
             let c = center_of(rect);
@@ -82,10 +85,38 @@ impl Planner {
             } else {
                 (0, if c.y < center.y { -1 } else { 1 })
             };
-            nodes.push((rect, Some(out)));
+            nodes.push((rect, Some(out), TIER_GATE_ROAD));
             stubs.push((c, out));
         }
-        super::roads::trim_nodes(&mut nodes);
+        let mut standing: Vec<_> = [
+            BuildingKind::TownCenter,
+            BuildingKind::Mill,
+            BuildingKind::LumberCamp,
+            BuildingKind::MiningCamp,
+            BuildingKind::Barracks,
+            BuildingKind::ArcheryRange,
+            BuildingKind::Stable,
+            BuildingKind::SiegeWorkshop,
+            BuildingKind::Monastery,
+            BuildingKind::Dock,
+        ]
+        .into_iter()
+        .flat_map(|k| w.player_buildings_of(player, k))
+        .filter(|b| b.hp > 0 && b.is_complete() && in_domain(b.footprint))
+        .map(|b| (b.id, b.footprint))
+        .collect();
+        standing.sort_unstable_by_key(|(id, r)| (distance_squared(center, center_of(*r)), *id));
+        nodes.extend(
+            production
+                .iter()
+                .map(|&(min, max)| (TileRect::new(min, max), None, TIER_ROAD)),
+        );
+        for (_, r) in standing {
+            if production.insert((r.min, r.max)) {
+                nodes.push((r, None, TIER_ROAD));
+            }
+        }
+        trim_nodes(&mut nodes);
         // Footprints of every other planned building stay clear of roads.
         let avoid: BTreeSet<TileCoord> = planned
             .iter()
@@ -110,11 +141,12 @@ impl Planner {
             })
             .collect();
         let net = Network {
-            planned_spans: Vec::new(),
+            planned_spans: BTreeSet::new(),
             player,
             avoid,
             gate_tiles,
-            goals: perimeter(castle.footprint).into_iter().collect(),
+            goals: edge(castle.footprint, None).into_iter().collect(),
+            rooted: false,
             out: Vec::new(),
             roads: BTreeSet::new(),
             fixed: w
@@ -148,11 +180,7 @@ impl Planner {
         tail.extend(unfinished.into_iter().map(|tile| (tile, TIER_ROAD, true)));
         Some(Self {
             net,
-            remaining: nodes
-                .into_iter()
-                .enumerate()
-                .map(|(i, (r, o))| (r, o, if i < local { TIER_ROAD } else { TIER_GATE_ROAD }))
-                .collect(),
+            remaining: nodes,
             connected: vec![center_of(castle.footprint)],
             tail,
             tail_at: 0,
@@ -170,7 +198,6 @@ impl Planner {
                 if let Some(joined) = search.step(&mut view) {
                     if joined {
                         self.connected.push(center_of(search.node));
-                        view.goals.extend(search.edge.iter().copied());
                     }
                     self.search = None;
                 }
@@ -198,7 +225,7 @@ impl Planner {
                     .copied()
                     .filter(|t| !view.avoid.contains(t))
                     .collect::<Vec<_>>();
-                self.search = Some(Search::new(&view, &starts, node, edge, tier));
+                self.search = Some(Search::new(&view, &starts, node, tier));
             } else if let Some(&(tile, tier, unfinished)) = self.tail.get(self.tail_at) {
                 self.tail_at += 1;
                 if unfinished {

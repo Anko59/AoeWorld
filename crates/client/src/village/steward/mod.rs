@@ -242,8 +242,7 @@ pub(super) fn present(client: &Client, scale: f64) {
         } else if u.managed_by.is_some() {
             label = "Managed by Steward".into();
         } else if u.kind == UnitKind::Vassal {
-            label = "Garrison this Vassal in a Castle to fortify and defend its 24-tile territory"
-                .into();
+            label = "Garrison this Vassal in a Castle to fortify and defend its territory".into();
         } else if u.kind == UnitKind::Steward {
             label =
                 "Garrison in any owned Town Center without a Steward to manage its economy".into();
