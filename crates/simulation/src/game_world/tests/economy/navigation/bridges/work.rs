@@ -9,6 +9,7 @@ use std::{
 pub(crate) struct Counts {
     pub(crate) calls: usize,
     pub(crate) visits: usize,
+    pub(crate) ground_reads: usize,
     pub(crate) elapsed: Duration,
     pub(crate) terrain_reads: usize,
     pub(crate) max_tile_reads: usize,
@@ -61,6 +62,7 @@ pub(crate) fn take() -> Counts {
 pub(crate) struct Validation {
     start: Instant,
     pub(crate) visits: usize,
+    pub(crate) ground_reads: usize,
 }
 
 impl Validation {
@@ -68,6 +70,7 @@ impl Validation {
         Self {
             start: Instant::now(),
             visits: 0,
+            ground_reads: 0,
         }
     }
 }
@@ -78,6 +81,7 @@ impl Drop for Validation {
             let mut c = counts.get();
             c.calls += 1;
             c.visits += self.visits;
+            c.ground_reads += self.ground_reads;
             c.elapsed += self.start.elapsed();
             counts.set(c);
         });

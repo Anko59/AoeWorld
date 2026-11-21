@@ -2,6 +2,21 @@
 use super::*;
 use aoe_core::BridgeSpan;
 
+#[test]
+fn bridge_construction_rejects_dry_interior_before_composing_ground() {
+    use crate::game_world::economy::bridge::work;
+
+    let mut w = river_width(true, 30..34);
+    clear_nodes(&mut w, TileRect::from_xywh(26, 16, 12, 12));
+    let (from, far_bank) = (TileCoord::new(29, 20), TileCoord::new(34, 20));
+    work::take();
+    assert!(!w.bridge_site_valid(PlayerId(0), from, TileCoord::new(35, 20)));
+    assert_eq!(work::take().ground_reads, 0);
+
+    assert!(w.bridge_site_valid(PlayerId(0), from, far_bank));
+    assert_eq!(work::take().ground_reads, 6);
+}
+
 fn agrees(w: &GameWorld) {
     for rise in -5..=5 {
         for y in 15..30 {
