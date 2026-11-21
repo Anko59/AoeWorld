@@ -37,9 +37,10 @@ pathfinding, movement, combat and unit management may change whenever the
 result is equal or better. The PR says what changed and why, and regenerates
 the affected hashes, checkpoints and goldens. Identical replay hashes are not
 a merge requirement; determinism (the same input gives the same output at any
-worker count) is. Performance is judged against the whole scale ladder (#748):
-100 players with 100k units, then 1,000 with 1M, then 1,000 with 10M, in real
-time at every rung. 20 ticks/s and 30 FPS on the owner's save is the first rung.
+worker count) is. Performance follows the stages of #978: R1 real time at 10
+ticks/s and 30 FPS on the owner's save (61-75k units), then 250k, 1M and 2M
+units in real time on this machine; 1,000 seats and 10M units stay the ambition
+after R4.
 
 Credentials (API keys, tokens) are in the keyring, never in the repository or
 the default environment: look them up with `secret-tool` before concluding you

@@ -268,3 +268,67 @@ fn splitting_an_expanded_allowance_into_duplicates_cannot_bypass_the_ratchet() {
     expanded.entries.extend(allowance("s.used > 3", 1).entries);
     assert_eq!(ratchet::compare(&expanded, &base).len(), 1);
 }
+
+const MARKED: &str =
+    "/// A cell holds this many bodies.\n/// Record threshold: cell\nconst CELL_FULL: u8 = 4;\n";
+
+#[test]
+fn a_marked_threshold_against_one_records_field_is_not_a_cap() {
+    let source = format!(
+        "{MARKED}fn f(w: &W, cell: &Cell, i: usize) -> bool {{ \
+         cell.bodies >= CELL_FULL || w.cells[i].refused > CELL_FULL as u32 \
+         || cell.list.len() >= 2 * CELL_FULL }}"
+    );
+    assert!(kinds(&source).is_empty(), "{:?}", kinds(&source));
+}
+
+#[test]
+fn a_marked_threshold_against_world_state_is_still_a_cap() {
+    let source = format!(
+        "{MARKED}impl W {{ fn f(&mut self) -> bool {{ self.refused_this_tick >= CELL_FULL \
+         && self.cells.used == CELL_FULL }} fn g(&mut self, v: &[u8]) {{ \
+         let _ = v.iter().take(CELL_FULL as usize); self.spent = CELL_FULL; }} }}"
+    );
+    assert_eq!(
+        kinds(&source),
+        [
+            ("cmp", "self.refused_this_tick >= CELL_FULL".to_owned()),
+            ("cmp", "self.cells.used == CELL_FULL".to_owned()),
+            ("take", ".take(CELL_FULL)".to_owned()),
+            ("refill", "self.spent = CELL_FULL".to_owned()),
+        ]
+    );
+}
+
+#[test]
+fn only_the_exact_marker_line_marks_a_threshold() {
+    for doc in [
+        "/// Record threshold: world",
+        "/// Not a record threshold: cell",
+        "/// record threshold: cell",
+    ] {
+        let source = format!(
+            "{doc}\nconst CELL_FULL: u8 = 4;\nfn f(c: &C) -> bool {{ c.used >= CELL_FULL }}"
+        );
+        assert_eq!(
+            kinds(&source),
+            [("cmp", "c.used >= CELL_FULL".to_owned())],
+            "{doc}"
+        );
+    }
+}
+
+#[test]
+fn a_threshold_marked_in_one_file_is_accepted_in_another() {
+    let temp = tempfile::tempdir().unwrap();
+    let dir = temp.path().join("crates/simulation/src");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("limits.rs"), MARKED).unwrap();
+    fs::write(
+        dir.join("used.rs"),
+        "fn f(c: &C) -> bool { c.used >= CELL_FULL }",
+    )
+    .unwrap();
+    let found = scan(temp.path()).unwrap();
+    assert!(found.is_empty(), "{found:?}");
+}

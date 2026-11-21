@@ -133,3 +133,24 @@ sources: initial entries there must already exist at the base, never originate i
 To regenerate after a deliberate removal, delete the file and run `make architecture-check`: the
 failure prints the current findings in the file's format. Review the diff; it may only shrink.
 Whole-line shrinkage per phase is the phase's proof that it deleted its caps.
+
+## 5. Thresholds of one record
+
+Scale roadmap v2 (#978, rule 8) adds thresholds that bound one unit, one tile cell or one passage
+(a cell's capacity, a unit's refusal count, a passage's flow), never the world or the tick. Such a
+constant carries one line in its doc comment:
+
+```rust
+/// Bodies of this radius one cell holds at rest spacing.
+/// Record threshold: cell
+const CELL_CAPACITY: u8 = 4;
+```
+
+The marker is exactly `Record threshold:` followed by `unit`, `cell` or `passage`
+(`crates/harness/src/architecture/caps/record.rs`). The lint collects marked constants from every
+scoped file first, then accepts a marked constant only in a comparison whose other side is a
+field of one record: a field chain, or its `.len()`, that starts at a binding other than `self`
+(`cell.bodies`) or goes through an index (`self.cells[at].refused`). Everything else stays a
+finding: a marked constant compared with world or tick state (`self.refused_this_tick`,
+`self.cells.used`), used in `.take`, or assigned to a counter. A cap is never renamed or marked to
+get past the lint, and the allowlist still only shrinks.
