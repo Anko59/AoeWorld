@@ -6,6 +6,11 @@ import { initMapJobs } from '/map-jobs.js';
 import { initSkirmish } from '/start/skirmish.js';
 import { initSaves } from '/start/saves.js';
 import { initDevTools } from '/dev/tools.js';
+// The game module downloads and compiles behind the cinematic or the resume
+// probe. Without streaming compilation, or if this fails, the client fetches
+// the module itself when it starts and reports any failure there.
+const gameModule = typeof globalThis.WebAssembly?.compileStreaming === 'function'
+  ? WebAssembly.compileStreaming(fetch('/pkg/aoe_client_bg.wasm')).catch(() => undefined) : undefined;
 initDevTools();
 initInterface();
 initNavigation();
@@ -58,7 +63,7 @@ const cinematicFinished = sequence.resumeDecided.then(() => new Promise(resolve 
   observer.observe(document.body, { attributes: true, attributeFilter: ['data-start-state'] });
   ready();
 }));
-cinematicFinished.then(() => init()).catch(error => {
+cinematicFinished.then(async () => init({ module_or_path: await gameModule })).catch(error => {
   document.getElementById('connection').textContent = 'Unavailable';
   document.getElementById('unsupported').textContent = `Unable to start AoeWorld: ${error}`;
   sequence.error('The game could not connect. Reload the page to try again.');

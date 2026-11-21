@@ -64,10 +64,27 @@ fn capped_jobs(inherited: Option<&str>) -> usize {
 /// of serial work the members add up to, and the CI job's timeout matches.
 const SOURCE_BUDGET: Duration = Duration::from_secs(3600);
 
+/// A tier's nextest arguments: build and run only the packages that own its
+/// tests (the workspace run would also compile every other test binary, the
+/// harness's among them), with the reporter settings of [`ARGS`], and fail
+/// when the filter matches no test.
+pub(crate) fn tier_args<'a>(packages: &[&'a str], filter: &'a str) -> Vec<&'a str> {
+    let mut args = vec!["nextest", "run"];
+    for package in packages {
+        args.extend(["-p", package]);
+    }
+    args.extend(
+        ARGS.iter()
+            .filter(|arg| !matches!(**arg, "nextest" | "run" | "--workspace")),
+    );
+    args.extend(["--no-tests", "fail", "-E", filter]);
+    args
+}
+
 /// Run exactly the tests of [`tiers::SOURCE_QUALIFICATION`]; fail when none match.
 pub(crate) fn test_source_qualification() -> Result<(), ProcessError> {
     let include = tiers::include();
-    let args = [ARGS, &["--no-tests", "fail", "-E", include.as_str()]].concat();
+    let args = tier_args(tiers::SOURCE_QUALIFICATION_PACKAGES, include.as_str());
     let jobs = workspace_build_jobs();
     let environment = [("CARGO_BUILD_JOBS", jobs.as_str())];
     process::run_with_env("cargo", &args, &environment, SOURCE_BUDGET)
@@ -79,7 +96,7 @@ const EXHAUSTIVE_BUDGET: Duration = Duration::from_secs(1800);
 /// Run exactly the tests of [`tiers::EXHAUSTIVE`]; fail when none match.
 pub(crate) fn test_exhaustive() -> Result<(), ProcessError> {
     let include = tiers::include_exhaustive();
-    let args = [ARGS, &["--no-tests", "fail", "-E", include.as_str()]].concat();
+    let args = tier_args(tiers::EXHAUSTIVE_PACKAGES, include.as_str());
     let jobs = workspace_build_jobs();
     let environment = [("CARGO_BUILD_JOBS", jobs.as_str())];
     process::run_with_env("cargo", &args, &environment, EXHAUSTIVE_BUDGET)

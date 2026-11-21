@@ -111,7 +111,7 @@ pub struct Options {
     /// Names the run in the report and its file.
     #[arg(long, default_value = "full")]
     pub label: String,
-    #[arg(long, default_value = "aoeworld/sdk-python:1.15.0")]
+    #[arg(long, default_value = "aoeworld/sdk-python:1.15.0-sccache0.19.0")]
     pub bot_image: String,
     #[arg(long, default_value = "aoeworld/browser-tools:1.64.0")]
     pub browser_image: String,
