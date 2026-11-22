@@ -71,7 +71,7 @@ fn an_unsampled_enemy_still_requires_the_full_quiet_proof() {
     assert_eq!(world.combat_stats().targeting_scanned, BUCKET_WINDOW as u32);
     let source = world.unit(actor).unwrap();
     world.sleep_quiet_acquisition(&source, &area);
-    assert!(!world.skip_quiet_acquisition(actor));
+    assert!(!world.combat.quiet.resting(actor));
 }
 
 #[test]

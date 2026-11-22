@@ -1,4 +1,7 @@
-//! Empty threat regions sleep without changing rotation or shared budgets.
+//! Fighters with nothing near sleep out of the acquisition rotation and
+//! look again when another player's unit or building arrives near them. The
+//! work-sleep switch leaves them as they are, so the on and off worlds of
+//! these tests fight the same; each pairing also checks the economy around.
 use super::*;
 
 fn quiet(sleep: bool, count: i32) -> (GameWorld, Vec<EntityId>) {
@@ -32,7 +35,31 @@ fn an_idle_army_without_threats_stops_visiting_its_units() {
         visits += on.combat_stats().acquisition_checks;
     }
     assert!(visits < 128, "quiet army made {visits} unit visits");
-    assert_eq!(off.combat_stats().acquisition_checks, 64);
+    assert_eq!(on.combat_stats().acquisition_slept, 64);
+}
+
+/// A sleeping army larger than one pass of the rotation, and one fighter of
+/// another player walking up to its far end.
+#[test]
+fn an_arrival_is_looked_at_on_the_next_pass_not_when_the_rotation_comes_round() {
+    let (mut w, ids) = quiet(true, 1_024);
+    for _ in 0..60 {
+        w.advance();
+    }
+    assert_eq!(w.combat_stats().acquisition_slept, 1_024, "the army sleeps");
+    let last = *ids.last().unwrap();
+    let near = w.unit(last).unwrap().position.tile_floor();
+    let enemy = w
+        .spawn_militia(PlayerId(1), at(near.x + 2, near.y))
+        .unwrap();
+    let mut ticks = 0;
+    while w.combat.attackers.keys().all(|&id| id == enemy) && ticks < 40 {
+        w.advance();
+        ticks += 1;
+    }
+    // A sleeper woken by the arrival looks first; waiting for its rotation
+    // turn took 20 ticks here before (#978 2e).
+    assert!(ticks <= 3, "the army took {ticks} ticks to engage");
 }
 
 #[test]

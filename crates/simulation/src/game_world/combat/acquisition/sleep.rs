@@ -1,8 +1,12 @@
-//! Proven empty threat regions retain logical turns without polling units.
-//! Only a unit of another player entering a sleeper's chunks can end that
-//! proof, so a crossing or a spawn wakes the sleepers of other players only;
-//! a skipped turn charges the buckets' sizes at that tick, as a scan would.
-use super::super::targeting::{BUCKET_WINDOW, TargetArea};
+//! Fighters with nothing to fight leave the acquisition rotation (#978 4.1,
+//! slice 2e). A sleeper proved its look holds no unit or building of another
+//! player; only one of those entering its chunks can end that proof, so a
+//! crossing or a spawn wakes the sleepers of other players only, and those
+//! look on the next acquisition pass, before the rotation goes on. A fighter
+//! that cannot act (no-attack stance, scouting, embarked) waits parked for the
+//! order or stance change that wakes it. After a restore nobody sleeps: every
+//! fighter takes its turn once and those with nothing near sleep again.
+use super::super::targeting::TargetArea;
 use crate::{GameUnit, GameWorld};
 use aoe_core::{ChunkCoord, EntityId, PlayerId, TileRect};
 use std::collections::{BTreeMap, BTreeSet};
@@ -10,7 +14,6 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Debug)]
 struct Sleep {
     chunks: Vec<ChunkCoord>,
-    needed: u32,
     player: PlayerId,
     #[cfg(test)]
     source: GameUnit,
@@ -21,6 +24,10 @@ pub(crate) struct Quiet {
     jobs: BTreeMap<EntityId, Sleep>,
     chunks: BTreeMap<ChunkCoord, BTreeSet<EntityId>>,
     parked: BTreeSet<EntityId>,
+    /// Seekers neither asleep nor parked: the acquisition rotation.
+    pub(super) awake: BTreeSet<EntityId>,
+    /// Sleepers woken by an arrival near them: they look next.
+    pub(super) due: BTreeSet<EntityId>,
 }
 
 fn chunks(bounds: TileRect) -> impl Iterator<Item = ChunkCoord> {
@@ -37,15 +44,38 @@ fn chunks(bounds: TileRect) -> impl Iterator<Item = ChunkCoord> {
 }
 
 impl Quiet {
+    /// Asleep or parked: out of the rotation.
+    #[cfg(test)]
+    pub(crate) fn resting(&self, id: EntityId) -> bool {
+        self.jobs.contains_key(&id) || self.parked.contains(&id)
+    }
+
+    /// A seeker joins the rotation, unless it is resting already.
+    pub(crate) fn join(&mut self, id: EntityId) {
+        if !self.jobs.contains_key(&id) && !self.parked.contains(&id) {
+            self.awake.insert(id);
+        }
+    }
+
+    /// A seeker that died, left the map or stopped seeking leaves for good.
+    pub(crate) fn leave(&mut self, id: EntityId) {
+        self.wake(id);
+        self.awake.remove(&id);
+        self.due.remove(&id);
+    }
+
     #[inline]
     pub(crate) fn wake(&mut self, id: EntityId) {
         if self.jobs.is_empty() && self.parked.is_empty() {
             return;
         }
-        self.parked.remove(&id);
+        if self.parked.remove(&id) {
+            self.awake.insert(id);
+        }
         let Some(job) = self.jobs.remove(&id) else {
             return;
         };
+        self.awake.insert(id);
         for chunk in job.chunks {
             if let Some(ids) = self.chunks.get_mut(&chunk) {
                 ids.remove(&id);
@@ -56,12 +86,20 @@ impl Quiet {
         }
     }
 
+    /// Wakes a sleeper whose proof an arrival may have ended; it looks next.
+    fn alarm(&mut self, id: EntityId) {
+        if self.jobs.contains_key(&id) {
+            self.wake(id);
+            self.due.insert(id);
+        }
+    }
+
     pub(crate) fn wake_chunk(&mut self, chunk: ChunkCoord) {
         let Some(ids) = self.chunks.get(&chunk).cloned() else {
             return;
         };
         for id in ids {
-            self.wake(id);
+            self.alarm(id);
         }
     }
 
@@ -84,7 +122,7 @@ impl Quiet {
             .filter(|id| self.jobs.get(id).is_some_and(|job| job.player != arrival))
             .collect();
         for id in woken {
-            self.wake(id);
+            self.alarm(id);
         }
     }
 
@@ -94,7 +132,15 @@ impl Quiet {
         }
     }
 
+    /// Wakes everyone (sleep switched off, or a rule every proof read changed).
     pub(crate) fn clear(&mut self) {
+        let asleep = self
+            .jobs
+            .keys()
+            .chain(&self.parked)
+            .copied()
+            .collect::<Vec<_>>();
+        self.awake.extend(asleep);
         self.jobs.clear();
         self.chunks.clear();
         self.parked.clear();
@@ -103,19 +149,12 @@ impl Quiet {
     pub(super) fn park(&mut self, id: EntityId) {
         self.wake(id);
         self.parked.insert(id);
+        self.awake.remove(&id);
+        self.due.remove(&id);
     }
 }
 
 impl GameWorld {
-    /// What a scan of `chunks` charges to the shared target budget.
-    fn bucket_scan(&self, chunks: &[ChunkCoord]) -> u32 {
-        chunks
-            .iter()
-            .filter_map(|c| self.chunks.get(c))
-            .map(|b| b.len().min(BUCKET_WINDOW) as u32)
-            .sum()
-    }
-
     /// Any unit or building of another player in a touched chunk, hidden or
     /// out of range, keeps this query awake; sampled dense buckets cannot hide
     /// a threat. Read from the chunk summaries, never the units or tiles.
@@ -131,11 +170,10 @@ impl GameWorld {
         u: &GameUnit,
         area: &TargetArea,
     ) {
-        if self.economy.no_sleep || !self.quiet_region(u, area) {
+        if !self.quiet_region(u, area) {
             return;
         }
         let chunks: Vec<_> = chunks(area.bounds(self)).collect();
-        let needed = chunks.len() as u32 * BUCKET_WINDOW as u32;
         for chunk in &chunks {
             self.combat
                 .quiet
@@ -148,39 +186,35 @@ impl GameWorld {
             u.id,
             Sleep {
                 chunks,
-                needed,
                 player: u.player,
                 #[cfg(test)]
                 source: *u,
             },
         );
+        self.combat.quiet.awake.remove(&u.id);
+        self.combat.quiet.due.remove(&u.id);
     }
 
-    pub(in crate::game_world::combat) fn skip_quiet_acquisition(&mut self, id: EntityId) -> bool {
-        if self.economy.no_sleep {
-            self.combat.quiet.wake(id);
-            return false;
-        }
-        if self.combat.quiet.parked.contains(&id) {
-            self.combat.stats.acquisition_slept += 1;
-            return true;
-        }
-        let Some(job) = self.combat.quiet.jobs.get(&id) else {
-            return false;
-        };
-        // Preserve both the acquisition cursor and the shared targeting budget.
-        // Otherwise sleeping a friendly army changes another army's first hit.
-        let needed = job.needed;
-        let scanned = self.bucket_scan(&job.chunks);
-        if self.start_target_probe(id, needed).is_some() {
-            self.combat.stats.targeting_scanned += scanned;
-        }
-        self.combat.stats.acquisition_slept += 1;
-        true
+    /// Fighters asleep or parked, out of the rotation.
+    pub(in crate::game_world::combat) fn resting_seekers(&self) -> u32 {
+        (self.combat.quiet.jobs.len() + self.combat.quiet.parked.len()) as u32
     }
 
     #[cfg(test)]
     pub(in crate::game_world::combat) fn assert_quiet_acquisition(&self) {
+        let quiet = &self.combat.quiet;
+        let mut all = quiet.awake.clone();
+        for id in quiet.jobs.keys().chain(&quiet.parked) {
+            assert!(all.insert(*id), "missed wake: {id:?} asleep and awake");
+        }
+        assert_eq!(
+            all, self.combat.seekers,
+            "missed wake: rotation and seekers"
+        );
+        assert!(
+            quiet.due.is_subset(&quiet.awake),
+            "missed wake: a due sleeper"
+        );
         let mut units = crate::game_world::unit_index::ChunkPresence::default();
         for stored in self.units.iter() {
             if let Some(player) = stored.living_owner() {

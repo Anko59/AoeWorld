@@ -201,6 +201,7 @@ impl GameWorld {
         self.combat.healers.remove(&id);
         self.combat.healing.remove(id);
         self.combat.seekers.remove(&id);
+        self.combat.quiet.leave(id);
         self.combat.target_rounds.remove(&id);
         self.stop_gathering(id);
         self.cancel_hunt(id);
@@ -279,6 +280,7 @@ impl GameWorld {
         self.combat.healers.remove(&id);
         self.combat.healing.remove(id);
         self.combat.seekers.remove(&id);
+        self.combat.quiet.leave(id);
         self.combat.target_rounds.remove(&id);
         self.stop_gathering(id);
         self.economy.builders.remove(&id);

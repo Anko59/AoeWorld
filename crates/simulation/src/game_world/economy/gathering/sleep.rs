@@ -47,9 +47,10 @@ impl GatherTask {
 
 impl GameWorld {
     /// On by default. Off, every gatherer runs its full step each tick: the
-    /// replay oracle compares both settings hash for hash.
+    /// replay oracle compares both settings hash for hash. Fighters looking
+    /// for targets by event (`combat/acquisition/sleep.rs`) are how combat
+    /// works, not an exact shortcut, so this leaves them as they are.
     pub fn set_work_sleep(&mut self, enabled: bool) {
-        self.combat.quiet.clear();
         self.combat.healing.wake_all();
         self.economy
             .garrison_timers
