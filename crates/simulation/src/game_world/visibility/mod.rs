@@ -52,6 +52,8 @@ pub(crate) struct Vision {
     observers: observers::Observers,
     /// Building footprint tiles, for sight-gain and sight-loss events.
     building_at_tile: TileBuildings,
+    /// `building_at_tile` counted per chunk and owner (the sleep proof).
+    pub(crate) building_chunks: crate::game_world::unit_index::ChunkPresence,
     /// Planned sites reserve placement only for their own player.
     private_foundations: BTreeMap<(PlayerId, TileCoord), EntityId>,
     building_watchers: BTreeMap<EntityId, Watched>,
@@ -95,6 +97,18 @@ use watchers::Watched;
 impl GameWorld {
     pub(crate) fn building_at_tile(&self, tile: TileCoord) -> Option<EntityId> {
         self.vision.building_at_tile.get(&tile).copied()
+    }
+
+    /// `building_chunks` counted again from the tile index.
+    #[cfg(test)]
+    pub(crate) fn building_chunks_recount(&self) -> crate::game_world::unit_index::ChunkPresence {
+        let mut presence = crate::game_world::unit_index::ChunkPresence::default();
+        for (&tile, id) in &self.vision.building_at_tile {
+            if let Some(b) = self.economy.buildings.get(id) {
+                presence.add_tile(tile, b.player);
+            }
+        }
+        presence
     }
 
     pub fn visibility(&self, player: PlayerId, tile: TileCoord) -> TileVisibility {

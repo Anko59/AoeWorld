@@ -35,7 +35,7 @@ impl GameWorld {
                 building.bridge_span,
             );
         }
-        self.forget_building(id, building.footprint);
+        self.forget_building(id, building.player, building.footprint);
         if let Some(bucket) = self
             .economy
             .dropoffs

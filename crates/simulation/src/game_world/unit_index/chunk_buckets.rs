@@ -2,7 +2,8 @@
 //! in an occupied-bounds row-major array instead of an ordered map. A bucket's
 //! order is its insertion order with swap removals, exactly as before; only
 //! keyed reads ever happened, so nothing observes the storage order.
-use aoe_core::{ChunkCoord, EntityId};
+use super::ChunkPresence;
+use aoe_core::{ChunkCoord, EntityId, PlayerId};
 
 #[derive(Debug, Default)]
 pub(crate) struct ChunkBuckets {
@@ -12,6 +13,8 @@ pub(crate) struct ChunkBuckets {
     width: usize,
     buckets: Vec<Vec<EntityId>>,
     occupied: usize,
+    /// The living units of each bucket, counted by owner.
+    pub(crate) presence: ChunkPresence,
 }
 
 impl ChunkBuckets {
@@ -36,8 +39,17 @@ impl ChunkBuckets {
         self.occupied
     }
 
-    /// Appends `id` to the chunk's bucket and returns its slot there.
-    pub(crate) fn push(&mut self, chunk: ChunkCoord, id: EntityId) -> usize {
+    /// Appends `id` to the chunk's bucket and returns its slot there. `owner`
+    /// is the living unit's owner, `None` for a corpse.
+    pub(crate) fn push(
+        &mut self,
+        chunk: ChunkCoord,
+        id: EntityId,
+        owner: Option<PlayerId>,
+    ) -> usize {
+        if let Some(player) = owner {
+            self.presence.add(chunk, player);
+        }
         // Unit positions are on the map, so their chunks are never negative.
         debug_assert!(chunk.x >= 0 && chunk.y >= 0, "{chunk:?}");
         let (x, y) = (chunk.x.max(0) as usize, chunk.y.max(0) as usize);
@@ -49,12 +61,20 @@ impl ChunkBuckets {
         ids.len() - 1
     }
 
-    /// Removes the id at `slot`; returns the id the removal moved into that
-    /// slot (the bucket's last), if any.
-    pub(crate) fn swap_remove(&mut self, chunk: ChunkCoord, slot: usize) -> Option<EntityId> {
+    /// Removes the id at `slot` (`owner` as in `push`); returns the id the
+    /// removal moved into that slot (the bucket's last), if any.
+    pub(crate) fn swap_remove(
+        &mut self,
+        chunk: ChunkCoord,
+        slot: usize,
+        owner: Option<PlayerId>,
+    ) -> Option<EntityId> {
         let at = self.at(chunk)?;
         let ids = self.buckets.get_mut(at).filter(|ids| slot < ids.len())?;
         ids.swap_remove(slot);
+        if let Some(player) = owner {
+            self.presence.remove(chunk, player);
+        }
         self.occupied -= usize::from(ids.is_empty());
         ids.get(slot).copied()
     }

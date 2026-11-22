@@ -160,6 +160,9 @@ impl GameWorld {
         }
         if unit.death_tick.is_none() {
             self.change_unit_census(unit.player, Some(unit.kind), None, 1);
+            // The corpse stays in its bucket but no longer counts as present.
+            let bucket = self.units[index].bucket;
+            self.chunks.presence.remove(bucket, unit.player);
             if unit.kind.is_fire_line()
                 && self.has_researched(unit.player, crate::Tech::Incendiaries)
             {
@@ -266,7 +269,8 @@ impl GameWorld {
         let bucket = self.units[index].bucket;
         self.combat.quiet.wake(id);
         let slot = self.units[index].bucket_slot;
-        let displaced = self.chunks.swap_remove(bucket, slot);
+        let owner = self.units[index].living_owner();
+        let displaced = self.chunks.swap_remove(bucket, slot, owner);
         if let Some(displaced_index) = displaced.and_then(|id| self.lookup.get(&id).copied()) {
             self.units[displaced_index].bucket_slot = slot;
         }

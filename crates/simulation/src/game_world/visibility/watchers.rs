@@ -155,7 +155,12 @@ impl GameWorld {
         } else {
             self.combat.quiet.wake_area(footprint);
             for tile in footprint_tiles(footprint, span) {
-                self.vision.building_at_tile.insert(tile, id);
+                if let Some(old) = self.vision.building_at_tile.insert(tile, id)
+                    && let Some(owner) = self.economy.buildings.get(&old).map(|b| b.player)
+                {
+                    self.vision.building_chunks.remove_tile(tile, owner);
+                }
+                self.vision.building_chunks.add_tile(tile, player);
             }
         }
         if self.vision.disabled {
@@ -185,6 +190,7 @@ impl GameWorld {
     /// Buildings destroyed while fog was off stay queued for the flush.
     pub(crate) fn rebuild_building_sight_index(&mut self) {
         self.vision.building_at_tile.clear();
+        self.vision.building_chunks.clear();
         self.vision.private_foundations.clear();
         self.vision.building_watchers.clear();
         let buildings = self
@@ -197,7 +203,7 @@ impl GameWorld {
     }
 
     /// Queues a removed building for the next flush.
-    pub(crate) fn forget_building(&mut self, id: EntityId, footprint: TileRect) {
+    pub(crate) fn forget_building(&mut self, id: EntityId, player: PlayerId, footprint: TileRect) {
         self.combat.quiet.wake_area(footprint);
         self.vision.dirty_buildings.remove(&id);
         for y in footprint.min.y..footprint.max.y {
@@ -205,6 +211,7 @@ impl GameWorld {
                 let tile = TileCoord::new(x, y);
                 if self.vision.building_at_tile.get(&tile) == Some(&id) {
                     self.vision.building_at_tile.remove(&tile);
+                    self.vision.building_chunks.remove_tile(tile, player);
                 }
             }
         }

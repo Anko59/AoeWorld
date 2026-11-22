@@ -116,32 +116,14 @@ impl GameWorld {
             .sum()
     }
 
+    /// Any unit or building of another player in a touched chunk, hidden or
+    /// out of range, keeps this query awake; sampled dense buckets cannot hide
+    /// a threat. Read from the chunk summaries, never the units or tiles.
     fn quiet_region(&self, u: &GameUnit, area: &TargetArea) -> bool {
-        let bounds = area.bounds(self);
-        // A hidden or out-of-range enemy in a touched bucket keeps this query
-        // awake. In particular, sampled dense buckets cannot hide a threat.
-        for chunk in chunks(bounds) {
-            if self.chunks.get(&chunk).is_some_and(|bucket| {
-                bucket.iter().any(|id| {
-                    self.unit(*id)
-                        .is_some_and(|other| other.player != u.player && other.hp > 0)
-                })
-            }) {
-                return false;
-            }
-        }
-        for y in bounds.min.y..bounds.max.y {
-            for x in bounds.min.x..bounds.max.x {
-                if self
-                    .building_at_tile(aoe_core::TileCoord::new(x, y))
-                    .and_then(|id| self.economy.buildings.get(&id))
-                    .is_some_and(|b| b.player != u.player)
-                {
-                    return false;
-                }
-            }
-        }
-        true
+        chunks(area.bounds(self)).all(|chunk| {
+            !self.chunks.presence.others(chunk, u.player)
+                && !self.vision.building_chunks.others(chunk, u.player)
+        })
     }
 
     pub(in crate::game_world::combat) fn sleep_quiet_acquisition(
@@ -199,6 +181,22 @@ impl GameWorld {
 
     #[cfg(test)]
     pub(in crate::game_world::combat) fn assert_quiet_acquisition(&self) {
+        let mut units = crate::game_world::unit_index::ChunkPresence::default();
+        for stored in self.units.iter() {
+            if let Some(player) = stored.living_owner() {
+                units.add(stored.bucket, player);
+            }
+        }
+        assert_eq!(
+            units.normalized(),
+            self.chunks.presence.normalized(),
+            "missed wake: unit chunk summary"
+        );
+        assert_eq!(
+            self.building_chunks_recount().normalized(),
+            self.vision.building_chunks.normalized(),
+            "missed wake: building chunk summary"
+        );
         for &id in &self.combat.quiet.parked {
             let u = self.unit(id).expect("missed wake: inactive seeker removed");
             assert!(
