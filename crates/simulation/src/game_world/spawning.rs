@@ -109,7 +109,8 @@ impl GameWorld {
         }
         let bucket = ChunkCoord::from_position(position);
         self.combat.quiet.wake_chunk_for(bucket, state.player);
-        let bucket_slot = self.chunks.push(bucket, id);
+        let owner = state.death_tick.is_none().then_some(state.player);
+        let bucket_slot = self.chunks.push(bucket, id, owner);
         self.lookup.insert(id, self.units.len());
         self.units.push(StoredUnit {
             formation: None,
