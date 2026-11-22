@@ -10,14 +10,24 @@ use super::*;
 pub(crate) const STRIDE: u64 = 4;
 
 impl GameWorld {
-    /// Removes the movers that sit out this tick and returns them.
-    pub(crate) fn park_unseen_movers(&mut self, movers: &mut Vec<EntityId>) -> Vec<EntityId> {
+    /// Removes the movers that sit out this tick, or ride (`ride.rs`), and
+    /// returns them; riders moved this tick go to `changed`.
+    pub(crate) fn park_unseen_movers(
+        &mut self,
+        movers: &mut Vec<EntityId>,
+        changed: &mut Vec<EntityId>,
+    ) -> Vec<EntityId> {
         let mut parked = Vec::new();
         if self.vision.human_seats.is_empty() {
             return parked;
         }
         movers.retain(|&id| {
-            let park = self.park_unseen(id);
+            let rides = self
+                .lookup
+                .get(&id)
+                .copied()
+                .is_some_and(|index| self.ride(index, changed));
+            let park = rides || self.park_unseen(id);
             if park {
                 parked.push(id);
             }

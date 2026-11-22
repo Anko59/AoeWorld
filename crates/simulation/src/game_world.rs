@@ -141,8 +141,7 @@ pub(crate) struct StoredUnit {
     pub(crate) planner: Option<RoutePlanner>,
     pub(crate) last_movement_error: Option<GameWorldError>,
     pub(crate) next_hit_tick: u64, // no hit before this tick
-    /// Tick the unit last started waiting for a route: the fair pass serves
-    /// a player's longest-waiting units first.
+    /// Tick it last started waiting for a route (the fair pass serves first).
     pub(crate) planning_since: u64,
     /// The route it waits for had its whole fast attempt (see
     /// `route_scheduler::issue`); it now needs a search slot.
@@ -154,6 +153,7 @@ pub(crate) struct StoredUnit {
     pub(crate) route_caller: Option<&'static std::panic::Location<'static>>,
     /// Times this order's far group wait was renewed (`deadline`).
     pub(crate) route_renewals: u8,
+    pub(crate) ride: Option<formation::Ride>, // off-screen leg ride (`steering/ride.rs`)
 }
 #[derive(Debug)]
 pub struct GameWorld {
