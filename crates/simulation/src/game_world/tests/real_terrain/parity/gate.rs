@@ -14,7 +14,7 @@ const GATE: [&str; 2] = ["own_through", "enemy_through"];
 fn gate(look: Look, jitter: &mut Jitter) -> Vec<f64> {
     let mut world = build("river").world;
     let (a, b) = (PlayerId(1), PlayerId(2));
-    let edge = i32::try_from(world.config.width_tiles).unwrap();
+    let edge = world.config.width_tiles;
     // From inside the river (water tiles refuse a wall) to the map edge.
     for x in (84..edge).filter(|x| !(158..162).contains(x)) {
         let wall = TileRect::from_xywh(x, 150, 1, 1);
