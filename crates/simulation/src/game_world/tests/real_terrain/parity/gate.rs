@@ -9,8 +9,8 @@ const GATE: [&str; 2] = ["own_through", "enemy_through"];
 /// A palisade at y = 150 from the river to the map edge, with a gate
 /// at x 158 to 161, closes the south-east of the river fixture. Ten
 /// militia of player 1 march through their own gate; twenty of player 2
-/// then try to follow. Watched, both players are human seats; unwatched,
-/// only player 2 is, so the own column is off screen and the enemy on it.
+/// then try to follow. Since watching follows the screen (#978 step 3), the
+/// unwatched run has no client showing the gate, enemy included.
 fn gate(look: Look, jitter: &mut Jitter) -> Vec<f64> {
     let mut world = build("river").world;
     let (a, b) = (PlayerId(1), PlayerId(2));
@@ -47,10 +47,7 @@ fn gate(look: Look, jitter: &mut Jitter) -> Vec<f64> {
                 .unwrap()
         })
         .collect();
-    match look {
-        Look::Watched => world.set_human_seats(&[a, b]),
-        Look::Unwatched => world.set_human_seats(&[b]),
-    }
+    look.seat(&mut world, &[a, b]);
     world
         .issue_formation_move(a, &column, Formation::Line, center(160, 180), false, false)
         .unwrap();

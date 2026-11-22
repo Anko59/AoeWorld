@@ -4,16 +4,17 @@
 //! gets may depend on who looks; who wins a fight may not.
 use super::*;
 use crate::game_world::terrain_fixtures::build;
-use aoe_core::FIXED_SUBUNITS_PER_TILE;
+use aoe_core::{FIXED_SUBUNITS_PER_TILE, TileRect};
 
 mod fights;
 mod gate;
 
 const RUNS: u64 = 8;
 
-/// `Watched`: every player of the scene is a human seat, so all of it runs
-/// the full model. `Unwatched`: the only human seat is player 0, who owns
-/// nothing and sees nothing of it.
+/// `Watched`: every player of the scene is a human seat whose client shows
+/// the whole map at unit zoom, so all of it runs the full model.
+/// `Unwatched`: the only human seat is player 0, whose client shows a corner
+/// far from the scene.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Look {
     Watched,
@@ -23,10 +24,32 @@ enum Look {
 impl Look {
     fn seat(self, world: &mut GameWorld, players: &[PlayerId]) {
         match self {
-            Self::Watched => world.set_human_seats(players),
-            Self::Unwatched => world.set_human_seats(&[PlayerId(0)]),
+            Self::Watched => watch(world, players),
+            Self::Unwatched => {
+                world.set_human_seats(&[PlayerId(0)]);
+                world.set_human_views(&[crate::HumanView {
+                    player: PlayerId(0),
+                    region: TileRect::from_xywh(0, 0, 8, 8),
+                    unit_zoom: true,
+                }]);
+            }
         }
     }
+}
+
+/// `players` are human seats whose clients show the whole map at unit zoom.
+fn watch(world: &mut GameWorld, players: &[PlayerId]) {
+    world.set_human_seats(players);
+    let side = world.config.width_tiles.max(world.config.height_tiles);
+    let views: Vec<_> = players
+        .iter()
+        .map(|&player| crate::HumanView {
+            player,
+            region: TileRect::from_xywh(0, 0, side, side),
+            unit_zoom: true,
+        })
+        .collect();
+    world.set_human_views(&views);
 }
 
 /// Seeded start positions: a tile centre moved by up to half a tile on
