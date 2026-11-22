@@ -4,8 +4,10 @@ use super::packing::block_heading;
 use super::*;
 use crate::game_world::movement_step::settling::GIVE_UP_AFTER_TICKS;
 
+mod ride;
 mod speed;
 mod stride;
+pub(crate) use ride::Rides;
 
 /// How far a slot may drift from a member's target while its group waits for a route.
 const HOLD: i64 = 2 * 1024;

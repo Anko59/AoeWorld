@@ -8,6 +8,7 @@ use aoe_core::{FIXED_SUBUNITS_PER_TILE, TileRect};
 
 mod fights;
 mod gate;
+mod march;
 
 const RUNS: u64 = 8;
 

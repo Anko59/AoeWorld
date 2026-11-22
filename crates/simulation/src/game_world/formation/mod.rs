@@ -21,6 +21,7 @@ mod slots;
 mod steering;
 pub(crate) use path::step as group_step;
 pub(crate) use resume::Resume;
+pub(crate) use steering::Rides;
 
 const FRACTION: u64 = 1 << 32;
 

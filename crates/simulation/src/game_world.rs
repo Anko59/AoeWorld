@@ -141,8 +141,7 @@ pub(crate) struct StoredUnit {
     pub(crate) planner: Option<RoutePlanner>,
     pub(crate) last_movement_error: Option<GameWorldError>,
     pub(crate) next_hit_tick: u64, // no hit before this tick
-    /// Tick the unit last started waiting for a route: the fair pass serves
-    /// a player's longest-waiting units first.
+    /// Tick it last started waiting for a route (the fair pass serves first).
     pub(crate) planning_since: u64,
     /// The route it waits for had its whole fast attempt (see
     /// `route_scheduler::issue`); it now needs a search slot.
@@ -173,6 +172,7 @@ pub struct GameWorld {
     pub(crate) active_movers: IdSet,
     pub(crate) movement_scratch: movement_step::Scratch,
     pub(crate) yields: movement_step::Yields,
+    pub(crate) rides: formation::Rides, // off-screen rides (`steering/ride.rs`)
     pub(crate) collisions: movement_step::CollisionIndex,
     /// Derived clearance valid only while one sequential mover owns the turn.
     pub(crate) work_approach_clearance: Option<(EntityId, WorldPosition, bool)>,
@@ -185,8 +185,7 @@ pub struct GameWorld {
     pub(crate) terrain: Terrain,
     pub(crate) clearance: Mutex<clearance::Field>,
     /// Candidate resource nodes per generator chunk, built on the first
-    /// replacement search that touches the chunk and reused by later ones.
-    /// See `GameWorld::chunk_resource_nodes`.
+    /// replacement search there and reused (`GameWorld::chunk_resource_nodes`).
     pub(crate) resource_chunks: Mutex<crate::game_cache::ResourceCache>,
     pub(crate) planning_budget: u32,
     pub(crate) navigation_preparation_budget: Mutex<u32>,
@@ -239,6 +238,7 @@ impl GameWorld {
             active_movers: IdSet::default(),
             movement_scratch: Default::default(),
             yields: Default::default(),
+            rides: Default::default(),
             work_approach_clearance: None,
             melee_traffic_clearance: None,
             collisions: Default::default(),

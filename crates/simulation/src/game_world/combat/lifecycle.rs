@@ -276,6 +276,7 @@ impl GameWorld {
             self.units[displaced_index].bucket_slot = slot;
         }
         self.active_movers.remove(id);
+        self.rides.forget(id);
         self.combat.attackers.remove(&id);
         self.combat.healers.remove(&id);
         self.combat.healing.remove(id);

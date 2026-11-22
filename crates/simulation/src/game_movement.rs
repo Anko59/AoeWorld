@@ -54,7 +54,7 @@ impl GameWorld {
         let holding = self.hold_transforming_movers(&mut changed);
         self.active_movers.extend_into(&mut movers);
         self.active_movers.clear();
-        let mut parked = self.park_unseen_movers(&mut movers);
+        let mut parked = self.park_unseen_movers(&mut movers, &mut changed);
         parked.extend(holding);
         let mover_count = movers.len();
         let start = if mover_count == 0 {
