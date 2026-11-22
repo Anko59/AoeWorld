@@ -280,6 +280,7 @@ fn the_state_census_counts_contact_watch_and_movers() {
     assert_eq!((census.villagers, census.fighters), (0, 5));
     // No route navigation here: nothing waits for a search.
     assert_eq!((census.waiting, census.wait_p95_ticks), (0, 0));
+    assert_eq!((census.commuters, census.commuters_unwatched), (0, 0));
 }
 
 /// A panning client leaves one grace region behind, not one per subscription.

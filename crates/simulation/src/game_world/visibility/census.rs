@@ -33,6 +33,11 @@ pub struct StateCensus {
     /// so far (ticks): the census stand-in for order-to-first-step.
     pub waiting: u64,
     pub wait_p95_ticks: u64,
+    /// Villagers walking between a fixed patch (wood, gold, stone, berries:
+    /// no farm) and a drop-off, and those of them no screen shows: the
+    /// candidates of segments on shared commutes (#978 step 4a).
+    pub commuters: u64,
+    pub commuters_unwatched: u64,
 }
 
 impl GameWorld {
@@ -41,6 +46,14 @@ impl GameWorld {
         let mut census = StateCensus::default();
         let mut by_chunk = BTreeMap::<(i32, i32), Vec<(PlayerId, TileCoord, bool)>>::new();
         let mut waits = Vec::new();
+        let fixed: std::collections::BTreeSet<_> = self
+            .economy
+            .gatherers
+            .assignments()
+            .into_iter()
+            .filter(|&(_, _, farm)| farm.is_none())
+            .map(|(id, _, _)| id)
+            .collect();
         for (index, stored) in self.units.iter().enumerate() {
             let unit = &stored.state;
             if unit.hp == 0 {
@@ -62,7 +75,20 @@ impl GameWorld {
             }
             census.threats += u64::from(threat);
             census.seen += u64::from(self.seen_by_human_seat(index));
-            census.watched += u64::from(self.watched_tile(tile));
+            let watched = self.watched_tile(tile);
+            census.watched += u64::from(watched);
+            if stored.order.is_some()
+                && fixed.contains(&unit.id)
+                && matches!(
+                    unit.task,
+                    crate::UnitTask::Gathering
+                        | crate::UnitTask::Carrying
+                        | crate::UnitTask::Returning
+                )
+            {
+                census.commuters += 1;
+                census.commuters_unwatched += u64::from(!watched);
+            }
             by_chunk
                 .entry(chunk(tile))
                 .or_default()
