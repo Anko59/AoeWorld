@@ -115,6 +115,17 @@ impl Units {
         let values = &self.values;
         self.dirty.extend(values.iter().map(|u| u.state.id));
     }
+    /// Adds movement credit to the unit's order without journaling it: the
+    /// carried credit is not part of any published unit state, so a unit
+    /// that only banks a skipped step (`bank_rest`) is not republished.
+    /// Returns false when the unit has no order.
+    pub(crate) fn bank_speed_carry(&mut self, at: usize, credit: u64) -> bool {
+        let Some(order) = self.values[at].order.as_mut() else {
+            return false;
+        };
+        order.speed_carry = order.speed_carry.saturating_add(credit);
+        true
+    }
     pub(crate) fn push(&mut self, unit: StoredUnit) {
         self.dirty.insert(unit.state.id);
         self.values.push(unit);

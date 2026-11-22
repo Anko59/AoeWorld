@@ -157,9 +157,9 @@ impl GameWorld {
             group.members[member].carry = group.members[member].carry.saturating_add(credit);
             return true;
         }
-        let Some(mut order) = self.units[index].order else {
+        if self.units[index].order.is_none() {
             return false;
-        };
+        }
         let banked = match self.formations.get(&id) {
             Some(group) => group.pace.0,
             None => {
@@ -171,9 +171,7 @@ impl GameWorld {
                 .0
             }
         };
-        order.speed_carry = order.speed_carry.saturating_add(banked);
-        self.units[index].order = Some(order);
-        true
+        self.units.bank_speed_carry(index, banked)
     }
 }
 
