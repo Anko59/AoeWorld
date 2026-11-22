@@ -83,7 +83,7 @@ fn a_stopped_rider_does_not_jump_when_sent_on_again() {
     let mut rode = false;
     for _ in 0..400 {
         world.advance();
-        rode |= world.units[world.lookup[&id]].ride.is_some();
+        rode |= world.rides.riding(id);
     }
     assert!(rode, "the walker never rode");
     world.issue_stop(a, id).unwrap();

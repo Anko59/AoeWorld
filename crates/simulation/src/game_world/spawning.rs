@@ -121,7 +121,6 @@ impl GameWorld {
             bucket,
             bucket_slot,
             wildlife_slot: usize::MAX,
-            ride: None,
             route: VecDeque::new(),
             planner: None,
             last_movement_error: None,

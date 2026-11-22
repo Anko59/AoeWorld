@@ -13,6 +13,10 @@ use crate::game_world::{facing_for, interpolate};
 /// Reference ticks between two moves of a rider.
 pub(crate) const RIDE_TICKS: u64 = 16;
 
+/// The movers riding, by unit. Derived, never hashed or saved.
+#[derive(Debug, Default)]
+pub(crate) struct Rides(std::collections::BTreeMap<EntityId, Ride>);
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Ride {
     /// The tick from which the movement is owed.
@@ -25,24 +29,37 @@ pub(crate) struct Ride {
     leg: (WorldPosition, WorldPosition),
 }
 
+impl Rides {
+    /// A unit leaving the map leaves its ride.
+    pub(crate) fn forget(&mut self, id: EntityId) {
+        self.0.remove(&id);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn riding(&self, id: EntityId) -> bool {
+        self.0.contains_key(&id)
+    }
+}
+
 impl GameWorld {
     /// True when the mover at `index` rides this tick instead of stepping.
     pub(crate) fn ride(&mut self, index: usize, changed: &mut Vec<EntityId>) -> bool {
         let now = self.tick.0;
-        if let Some(ride) = self.units[index].ride.as_deref().copied() {
+        let id = self.units[index].state.id;
+        if let Some(&ride) = self.rides.0.get(&id) {
             // Checked every tick: an order, a stop, a view or something to
             // fight ends the ride at once, before any credit is applied.
             let same = self.units[index].order.is_some_and(|o| {
                 o.destination == ride.destination && (o.origin, o.waypoint) == ride.leg
             });
             if !same || self.units[index].formation.is_some() || !self.unseen_bystander(index) {
-                self.units.set_ride(index, None);
+                self.rides.0.remove(&id);
                 return false;
             }
             if now < ride.wake {
                 return true;
             }
-            self.units.set_ride(index, None);
+            self.rides.0.remove(&id);
             if !self.advance_ride(index, ride, changed) {
                 return false;
             }
@@ -56,7 +73,7 @@ impl GameWorld {
             destination: order.destination,
             leg: (order.origin, order.waypoint),
         };
-        self.units.set_ride(index, Some(ride));
+        self.rides.0.insert(id, ride);
         true
     }
 
