@@ -182,7 +182,7 @@ pub(super) fn base(name: &str) -> Fixture {
         commands: Vec::new(),
     }
 }
-pub(super) fn trees(w: &mut GameWorld, rect: TileRect) {
+pub(crate) fn trees(w: &mut GameWorld, rect: TileRect) {
     if let Terrain::Map { generator, overlay } = &mut w.terrain {
         for y in rect.min.y..rect.max.y {
             for x in rect.min.x..rect.max.x {

@@ -13,6 +13,7 @@ mod general_opposed;
 mod landscapes;
 mod lane_tests;
 mod metrics;
+mod parity;
 mod recovery_tests;
 mod terrain;
 mod unreachable_enemy;

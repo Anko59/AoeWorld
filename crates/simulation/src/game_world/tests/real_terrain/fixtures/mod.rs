@@ -17,7 +17,8 @@ pub(crate) use pages::flat_fixture;
 
 mod bridges;
 mod environment;
-use environment::{at, base, block, mixed, trees};
+pub(crate) use environment::trees;
+use environment::{at, base, block, mixed};
 
 pub struct Fixture {
     pub world: GameWorld,
