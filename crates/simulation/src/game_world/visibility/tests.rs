@@ -281,3 +281,28 @@ fn the_state_census_counts_contact_watch_and_movers() {
     // No route navigation here: nothing waits for a search.
     assert_eq!((census.waiting, census.wait_p95_ticks), (0, 0));
 }
+
+/// A panning client leaves one grace region behind, not one per subscription.
+#[test]
+fn a_panning_view_keeps_one_grace_region_and_it_expires() {
+    let mut world = GameWorld::new(WorldConfig::new(512, 512, Seed(1)).unwrap()).unwrap();
+    let view = |x| crate::HumanView {
+        player: PlayerId(0),
+        region: TileRect::from_xywh(x, 100, 40, 40),
+        unit_zoom: true,
+    };
+    for x in (0..400).step_by(20) {
+        world.set_human_views(&[view(x)]);
+        world.advance();
+    }
+    assert_eq!(world.vision.recent_views.len(), 1);
+    // The region left last is still watched; one left long ago is not.
+    assert!(world.watched_tile(TileCoord::new(370, 120)));
+    assert!(!world.watched_tile(TileCoord::new(100, 120)));
+    for _ in 0..world.config.ticks(40) {
+        world.set_human_views(&[view(380)]);
+        world.advance();
+    }
+    assert!(world.vision.recent_views.is_empty());
+    assert!(!world.watched_tile(TileCoord::new(340, 120)));
+}

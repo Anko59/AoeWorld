@@ -70,8 +70,9 @@ pub(crate) struct Vision {
     pub(crate) human_seats: Vec<PlayerId>,
     /// What those players' clients show (`views.rs`). Set by the host, never hashed.
     pub(crate) human_views: Vec<views::HumanView>,
-    /// Regions views at unit zoom left, watched until their tick (`views.rs`).
-    pub(crate) recent_views: Vec<(TileRect, u64)>,
+    /// Per player, the region its view at unit zoom left last, watched until
+    /// its tick (`views.rs`).
+    pub(crate) recent_views: Vec<(PlayerId, TileRect, u64)>,
 }
 
 mod batch;
