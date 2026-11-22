@@ -85,7 +85,13 @@ impl GameWorld {
         let unit = stored.state;
         let own = self.movement_speed(unit.kind, unit.player);
         let (speed, denominator) = self.road_speed(unit.kind, unit.position, own);
-        let elapsed = self.tick.0.saturating_sub(ride.since);
+        // Never more than one ride's worth: a ride left behind by a path this
+        // check does not see cannot credit idle ticks (review P1 on #1005).
+        let elapsed = self
+            .tick
+            .0
+            .saturating_sub(ride.since)
+            .min(ride.wake - ride.since);
         let mut credit = u128::from(order.speed_carry) + u128::from(speed) * u128::from(elapsed);
         let (mut popped, mut facing) = (0, unit.facing);
         loop {
