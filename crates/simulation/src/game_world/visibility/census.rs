@@ -1,14 +1,11 @@
 //! Diagnostics only (#978 slice 1c): how many units each state of the scale
 //! plan would hold today. Read-only, never hashed; a report samples it.
-use super::views::HumanView;
 use crate::GameWorld;
 use aoe_core::{PlayerId, SPATIAL_CHUNK_TILES, TileCoord};
 use std::collections::BTreeMap;
 
 /// The narrow contact radius of #978 4.3, in tiles.
 const NARROW_CONTACT_TILES: i32 = 16;
-/// The watched margin around a view at unit zoom, in tiles (#978 4.2).
-const WATCH_MARGIN_TILES: i32 = 16;
 
 /// Units by what the scale plan would do with them.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
@@ -16,9 +13,10 @@ pub struct StateCensus {
     pub units: u64,
     /// Units with a movement order.
     pub movers: u64,
-    /// Inside a human view at unit zoom, plus the margin.
+    /// Inside a human view at unit zoom, plus the margin: the full-model rule
+    /// since #978 step 3 (`views.rs`).
     pub watched: u64,
-    /// Today's full-model rule: a human seat owns or sees the unit's tile.
+    /// The rule before it: a human seat owns or sees the unit's tile.
     pub seen: u64,
     /// Attacking (a target) or on attack-move: the units that make contact.
     pub threats: u64,
@@ -64,7 +62,7 @@ impl GameWorld {
             }
             census.threats += u64::from(threat);
             census.seen += u64::from(self.seen_by_human_seat(index));
-            census.watched += u64::from(watched(&self.vision.human_views, tile));
+            census.watched += u64::from(self.watched_tile(tile));
             by_chunk
                 .entry(chunk(tile))
                 .or_default()
@@ -119,14 +117,4 @@ fn chunk(tile: TileCoord) -> (i32, i32) {
         tile.x.div_euclid(SPATIAL_CHUNK_TILES),
         tile.y.div_euclid(SPATIAL_CHUNK_TILES),
     )
-}
-
-fn watched(views: &[HumanView], tile: TileCoord) -> bool {
-    views.iter().any(|view| {
-        view.unit_zoom
-            && tile.x >= view.region.min.x - WATCH_MARGIN_TILES
-            && tile.x < view.region.max.x + WATCH_MARGIN_TILES
-            && tile.y >= view.region.min.y - WATCH_MARGIN_TILES
-            && tile.y < view.region.max.y + WATCH_MARGIN_TILES
-    })
 }

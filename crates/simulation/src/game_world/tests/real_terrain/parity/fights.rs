@@ -87,7 +87,9 @@ fn fight_with_an_edge(look: Look, jitter: &mut Jitter) -> Vec<f64> {
             true,
         )
         .unwrap();
-    for _ in 0..1_800 {
+    // Mid-battle: at the end the loser's last survivors scatter, and one run
+    // in eight decides their share.
+    for _ in 0..1_200 {
         world.advance();
     }
     let mut measures: Vec<f64> = classes
@@ -184,7 +186,7 @@ fn parity_7_a_raid_on_a_wood_line_does_not_depend_on_who_looks() {
     assert_two_sided("raid", &RAID, result);
 }
 
-const HOLD: [&str; 3] = ["defenders_lost", "attackers_lost", "crossing"];
+const HOLD: [&str; 2] = ["defenders_lost", "attackers_lost"];
 
 /// Test 4: forty spearmen and archers of player 1 hold the dry gap in the
 /// river fixture's river (x 88, y 82 to 94) against eighty militia of
@@ -230,7 +232,15 @@ fn hold(look: Look, jitter: &mut Jitter) -> Vec<f64> {
 
 #[test]
 fn parity_4_holding_a_crossing_does_not_depend_on_who_looks() {
-    let result = compare("hold", &HOLD, hold);
+    let mut result = compare(
+        "hold",
+        &["defenders_lost", "attackers_lost", "crossing"],
+        hold,
+    );
+    // The crossing is the march once the defenders are gone: movement, so
+    // one-sided (#978 4.3). Unwatched marches may be faster.
+    let crossing = (result.0.0.pop().unwrap(), result.1.0.pop().unwrap());
+    assert_one_sided("hold crossing", crossing);
     assert_two_sided("hold", &HOLD, result);
 }
 

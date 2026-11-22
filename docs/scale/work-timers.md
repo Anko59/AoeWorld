@@ -107,20 +107,23 @@ five awake visits over 160 ticks, versus 160 with sleep disabled.
 
 ## Idle military acquisition
 
-An idle fighter can sleep after proving that every spatial bucket its query
-touches contains no living hostile identities and that its building search rectangle
-contains no hostile structure. Hidden enemies and dense sampled buckets therefore
-cannot produce a false empty proof. Such regions wake on unit insertion, removal
-or bucket crossings, building placement/removal, source motion/orders/stance,
-source vision updates, and research. An unseen enemy already in a touched bucket
-keeps acquisition awake, so later sight gains need no separate polling deadline.
+An idle fighter can sleep after proving, from the per-chunk summaries of living
+units and building tiles by owner (#994), that no chunk its query touches holds a
+unit or building of another player. Hidden enemies and dense sampled buckets
+therefore cannot produce a false empty proof. Only another player's unit entering
+a touched chunk (a crossing or a spawn), a building placed there, the source's own
+motion, orders or stance, or research ends the proof (#993).
 
-Sleeping turns still advance the exact fair cursor and target-sampling round and
-charge the original logical targeting budget. Removing those turns would change
-which active fighter or tower acquires a target first. `acquisition_checks` counts
-actual unit visits; `acquisition_slept` counts turns whose empty query was replayed.
-The sleep-off oracle retains the original loop. Test builds verify each empty
-proof, source eligibility, spatial membership and charged bucket count.
+Since #978 slice 2e (#1001) a sleeper leaves the acquisition rotation: it takes no
+turn and charges no budget, and a sleeper woken by an arrival looks on the next
+pass, before the rotation goes on. This is not exact: which fighter acquires a
+target first changes. The work-sleep switch leaves combat as it is, so the
+economy's sleep-off oracle still compares like with like. `acquisition_checks`
+counts actual unit visits; `acquisition_slept` counts the fighters resting. Test
+builds verify each empty proof, the summaries against a full recount, and that the
+rotation, the sleepers and the parked fighters partition the seekers.
+
+The measurements below are from before #993 and #1001.
 
 The base General gate was measured on exact revision
 `70d6b53231bfd3f7cf2dd0d191cbf6722bd01d08`. Its five engagement shares were

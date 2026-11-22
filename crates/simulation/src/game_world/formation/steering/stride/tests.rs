@@ -60,9 +60,13 @@ fn unseen_movers_step_every_fourth_tick_and_cover_the_same_ground() {
 }
 
 #[test]
-fn a_mover_a_person_sees_steps_every_tick() {
+fn a_mover_on_a_screen_at_unit_zoom_steps_every_tick() {
     let (mut w, [walker, _]) = march(true);
-    w.set_fog_disabled(true);
+    w.set_human_views(&[crate::HumanView {
+        player: PlayerId(0),
+        region: aoe_core::TileRect::from_xywh(50, 40, 120, 40),
+        unit_zoom: true,
+    }]);
     let mut steps = 0;
     for _ in 0..40 {
         let before = w.unit(walker).unwrap().position;

@@ -1,6 +1,7 @@
-//! A mover no human seat sees steps on every `STRIDE`-th tick only and banks
-//! each skipped tick's movement in its carry, so it covers the same ground in
-//! fewer, longer steps. Fighters and anything a person can see step every tick.
+//! With a human seat, a mover no human client shows at unit zoom steps on
+//! every `STRIDE`-th tick only and banks each skipped tick's movement in its
+//! carry, so it covers the same ground in fewer, longer steps. Fighters and
+//! anything on a screen (`visibility/views.rs`) step every tick.
 //! A formation strides on its leader's phase, so an unseen group steps as one
 //! block, and its targets are prepared, on one tick in four.
 use super::*;
@@ -25,13 +26,10 @@ impl GameWorld {
         parked
     }
 
-    /// `unit_visible_to` for any human seat, read from the stored record.
+    /// On a human client's screen at unit zoom, or near it (`views.rs`).
     fn seen_by_a_person(&self, index: usize) -> bool {
         let unit = &self.units[index].state;
-        let tile = unit.position.tile_floor();
-        self.vision.human_seats.iter().any(|&player| {
-            unit.player == player || self.visibility(player, tile) == TileVisibility::Visible
-        }) && !self.embarked(unit.id)
+        self.watched_tile(unit.position.tile_floor()) && !self.embarked(unit.id)
     }
 
     /// Whether the unit at `index` sits out this tick: it is an unseen
@@ -46,7 +44,9 @@ impl GameWorld {
 
     /// No person sees the unit at `index` and it is not fighting. Fighters
     /// keep the full model: an attacker that moves in jumps strikes less often
-    /// (the first stride experiment lost 5-7% of kills per tick).
+    /// (the first stride experiment lost 5-7% of kills per tick). So does an
+    /// attack-mover with something to fight near (#978 4.3, "a target"), or
+    /// fights would depend on who looks (parity tests 3 and 4).
     pub(crate) fn unseen_bystander(&self, index: usize) -> bool {
         !self.vision.human_seats.is_empty()
             && !self
@@ -55,6 +55,31 @@ impl GameWorld {
                 .contains_key(&self.units[index].state.id)
             && self.units[index].state.attack_target.is_none()
             && !self.seen_by_a_person(index)
+            && !self.attack_mover_in_contact(index)
+    }
+
+    /// On attack-move, with a unit or building of another player in its
+    /// chunk or the eight around: the simple contact radius of #978 4.3
+    /// ("a target"). Off screen the stride tier changed how fights end
+    /// (parity tests 3 and 7), so these keep the full model until step 5.
+    /// Narrower radii (two and three rings of 8-tile cells, the own chunk)
+    /// left fight 3 apart.
+    fn attack_mover_in_contact(&self, index: usize) -> bool {
+        let unit = &self.units[index].state;
+        if self.offensive_continuation(unit.id).is_none() {
+            return false;
+        }
+        let at = self.units[index].bucket;
+        (-1..=1).any(|dy| {
+            (-1..=1).any(|dx| {
+                let chunk = aoe_core::ChunkCoord {
+                    x: at.x + dx,
+                    y: at.y + dy,
+                };
+                self.chunks.presence.others(chunk, unit.player)
+                    || self.vision.building_chunks.others(chunk, unit.player)
+            })
+        })
     }
 
     /// Whether every member the group steers sits out this tick; its targets
@@ -136,6 +161,22 @@ impl GameWorld {
         }
     }
 
+    /// Banks the slot walk the member `id` of `leader`'s group skips.
+    fn bank_slot_walk(&mut self, index: usize, id: EntityId, leader: EntityId) -> bool {
+        let unit = self.units[index].state;
+        let own = self.movement_speed(unit.kind, unit.player);
+        let road = self.road_speed(unit.kind, unit.position, own);
+        let Some(group) = self.formations.get_mut(&leader) else {
+            return false;
+        };
+        let Some(member) = group.member_index(id) else {
+            return false;
+        };
+        let credit = super::super::matched_speed(group.pace, road);
+        group.members[member].carry = group.members[member].carry.saturating_add(credit);
+        true
+    }
+
     /// Banks the movement the unit at `index` skips this tick.
     pub(crate) fn bank_rest(&mut self, index: usize, id: EntityId) -> bool {
         let unit = self.units[index].state;
@@ -145,23 +186,20 @@ impl GameWorld {
         if let Some(leader) = self.units[index].formation
             && (leader != id || self.units[index].order.is_none())
         {
-            let own = self.movement_speed(unit.kind, unit.player);
-            let road = self.road_speed(unit.kind, unit.position, own);
-            let Some(group) = self.formations.get_mut(&leader) else {
-                return false;
-            };
-            let Some(member) = group.member_index(id) else {
-                return false;
-            };
-            let credit = super::super::matched_speed(group.pace, road);
-            group.members[member].carry = group.members[member].carry.saturating_add(credit);
-            return true;
+            return self.bank_slot_walk(index, id, leader);
         }
         if self.units[index].order.is_none() {
             return false;
         }
         let banked = match self.formations.get(&id) {
-            Some(group) => group.pace.0,
+            Some(group) => {
+                let pace = group.pace.0;
+                // The leader carries its group's anchor on its order and also
+                // walks its own slot: it banks both, or it trails its group
+                // at a quarter of its pace (parity test 4).
+                self.bank_slot_walk(index, id, id);
+                pace
+            }
             None => {
                 self.road_speed(
                     unit.kind,
