@@ -3,8 +3,9 @@
 //! it is moved along its legs by the time that passed, with no proposal, sweep
 //! or step check. Its legs came from the route planner, clear of terrain and
 //! buildings; a ride stops on a tile that is no longer passable. It walks its
-//! last leg on the stride tier, so arriving is unchanged. Not saved: after a
-//! load a mover starts riding again on its next turn.
+//! last leg on the stride tier, so arriving is unchanged. A rider is checked
+//! every tick and anything that changes its order or what it may do ends the
+//! ride. Not saved: after a load a mover starts riding again on its turn.
 use super::*;
 use crate::game_path::segment_length;
 use crate::game_world::{facing_for, interpolate};
@@ -18,8 +19,10 @@ pub(crate) struct Ride {
     since: u64,
     /// The tick it is moved.
     wake: u64,
-    /// The order it rides; another order ends the ride.
+    /// The order it rides, and the leg it was on when the ride began or the
+    /// unit was last moved: anything else ends the ride.
     destination: WorldPosition,
+    leg: (WorldPosition, WorldPosition),
 }
 
 impl GameWorld {
@@ -27,6 +30,15 @@ impl GameWorld {
     pub(crate) fn ride(&mut self, index: usize, changed: &mut Vec<EntityId>) -> bool {
         let now = self.tick.0;
         if let Some(ride) = self.units[index].ride {
+            // Checked every tick: an order, a stop, a view or something to
+            // fight ends the ride at once, before any credit is applied.
+            let same = self.units[index].order.is_some_and(|o| {
+                o.destination == ride.destination && (o.origin, o.waypoint) == ride.leg
+            });
+            if !same || self.units[index].formation.is_some() || !self.unseen_bystander(index) {
+                self.units.set_ride(index, None);
+                return false;
+            }
             if now < ride.wake {
                 return true;
             }
@@ -42,17 +54,19 @@ impl GameWorld {
             since: now,
             wake: now + self.config.ticks(RIDE_TICKS),
             destination: order.destination,
+            leg: (order.origin, order.waypoint),
         };
         self.units.set_ride(index, Some(ride));
         true
     }
 
-    /// Lone, unwatched, nothing to fight near, and a leg before its last.
+    /// Lone, unwatched, nothing to fight near, and a leg before its last. A
+    /// planner planning further ahead may stay: the last known leg, where the
+    /// planner extends the route, is always stepped.
     fn rides(&self, index: usize) -> bool {
         let stored = &self.units[index];
         stored.formation.is_none()
             && !stored.route.is_empty()
-            && stored.planner.is_none()
             && stored.obstruction.is_none()
             && !stored.state.planning
             && !stored.state.kind.is_naval()
@@ -65,7 +79,7 @@ impl GameWorld {
     /// or a blocked tile): it then steps on the ordinary path.
     fn advance_ride(&mut self, index: usize, ride: Ride, changed: &mut Vec<EntityId>) -> bool {
         let stored = &self.units[index];
-        let Some(mut order) = stored.order.filter(|o| o.destination == ride.destination) else {
+        let Some(mut order) = stored.order else {
             return false;
         };
         let unit = stored.state;

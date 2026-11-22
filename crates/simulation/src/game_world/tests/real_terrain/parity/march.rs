@@ -67,3 +67,37 @@ fn parity_1_lone_movers_off_screen_arrive_no_later() {
         "a walker stood still {off} ticks off screen, {on} on"
     );
 }
+
+/// A rider stopped, left idle, then sent to the same place again walks on
+/// from where it stood: no ride survives the stop to credit the idle ticks.
+#[test]
+fn a_stopped_rider_does_not_jump_when_sent_on_again() {
+    let mut world = build("river").world;
+    let a = PlayerId(1);
+    let id = world
+        .spawn_kind(a, UnitKind::Villager, center(60, 112))
+        .unwrap();
+    Look::Unwatched.seat(&mut world, &[a]);
+    let goal = center(120, 112);
+    world.issue_move(id, goal).unwrap();
+    let mut rode = false;
+    for _ in 0..400 {
+        world.advance();
+        rode |= world.units[world.lookup[&id]].ride.is_some();
+    }
+    assert!(rode, "the walker never rode");
+    world.issue_stop(a, id).unwrap();
+    for _ in 0..200 {
+        world.advance();
+    }
+    let before = world.unit(id).unwrap().position;
+    world.issue_move(id, goal).unwrap();
+    for _ in 0..40 {
+        world.advance();
+        let now = world.unit(id).unwrap().position;
+        let jump = (i64::from(now.x - before.x))
+            .abs()
+            .max(i64::from(now.y - before.y).abs());
+        assert!(jump < 8 * 1024, "moved {jump} subunits from where it stood");
+    }
+}
