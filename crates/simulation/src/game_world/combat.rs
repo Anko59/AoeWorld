@@ -84,6 +84,10 @@ pub struct CombatStats {
     pub attack_searches: u32,
     /// Attackers that sat out this tick while their weapon recovered.
     pub attackers_rested: u32,
+    /// First blows struck this tick after a target came into reach, and the
+    /// ticks each waited since (the delay from contact to the first hit).
+    pub first_hits: u32,
+    pub first_hit_wait_ticks: u64,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -102,6 +106,8 @@ pub(crate) struct Attacker {
     pub(crate) swing_started: u64,
     /// An unwatched attacker waiting in reach for its weapon (`tick.rs`).
     pub(crate) rest: Option<tick::Rest>,
+    /// The tick its target came into reach, until its first blow there.
+    pub(crate) in_reach_since: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -360,6 +366,7 @@ impl GameWorld {
                 resume: None,
                 swing_started: 0,
                 rest: None,
+                in_reach_since: None,
             },
         );
         let state = &mut self.units[index].state;

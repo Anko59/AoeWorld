@@ -158,6 +158,9 @@ impl GameWorld {
             self.approach(id, index, attacker, goal, now, changed);
             if !self.can_strike_on_approach(id, &goal, distance, range) {
                 self.reset_native_swing(id, before.kind, changed);
+                if let Some(entry) = self.combat.attackers.get_mut(&id) {
+                    entry.in_reach_since = None;
+                }
                 return;
             }
         }
@@ -187,9 +190,18 @@ impl GameWorld {
             return;
         }
         let ready = self.weapon_ready(index, changed);
+        let mut since = (attacker.target == original_target)
+            .then_some(attacker.in_reach_since)
+            .flatten()
+            .or(Some(now));
         if ready {
             self.units[index].next_hit_tick = now + u64::from(self.attack_period_ticks(&before));
             self.strike(id, attacker.target, changed);
+            if let Some(since) = since.take().filter(|&since| since != u64::MAX) {
+                self.combat.stats.first_hits += 1;
+                self.combat.stats.first_hit_wait_ticks += now - since;
+            }
+            since = Some(u64::MAX);
         }
         let rest = (!ready
             && !approaching_slot
@@ -204,6 +216,8 @@ impl GameWorld {
         });
         if let Some(entry) = self.combat.attackers.get_mut(&id) {
             entry.rest = rest;
+            // `u64::MAX` once the first blow in this reach is struck.
+            entry.in_reach_since = since;
         }
         if let Some(&index) = self.lookup.get(&id)
             && self.units[index].state != before

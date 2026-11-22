@@ -81,7 +81,7 @@ fn at(x: i32, y: i32) -> WorldPosition {
 fn unseen_attackers_rest_between_shots_and_hit_as_often() {
     let (mut full, ids) = duel(false);
     let (mut resting, _) = duel(true);
-    let (mut rested, mut runner_hp) = (0, 0);
+    let (mut rested, mut runner_hp, mut first) = (0, 0, [0u32; 2]);
     for tick in 0..200 {
         if tick == 60 {
             resting.issue_move(ids[2], at(44, 90)).unwrap();
@@ -90,6 +90,8 @@ fn unseen_attackers_rest_between_shots_and_hit_as_often() {
         full.advance();
         resting.advance();
         rested += resting.combat_stats().attackers_rested;
+        first[0] += full.combat_stats().first_hits;
+        first[1] += resting.combat_stats().first_hits;
         assert_eq!(full.combat_stats().attackers_rested, 0);
         // The archers' duel is the same blow for blow.
         for &id in &ids[..2] {
@@ -98,6 +100,8 @@ fn unseen_attackers_rest_between_shots_and_hit_as_often() {
         }
     }
     assert!(rested > 100, "attackers rested {rested} times");
+    // Each archer strikes a first blow on its target once in reach.
+    assert!(first[0] >= 3 && first[1] >= 3, "first blows {first:?}");
     // The runner's moves wake its resting pursuer, which keeps hitting it.
     let hp = resting.unit(ids[2]).map_or(0, |u| u.hp);
     assert!(
