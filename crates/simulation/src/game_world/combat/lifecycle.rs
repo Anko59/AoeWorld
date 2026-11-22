@@ -264,7 +264,6 @@ impl GameWorld {
         let at = self.units[index].state.position;
         self.untrack_unit_at(id, at);
         let bucket = self.units[index].bucket;
-        self.combat.quiet.wake_chunk(bucket);
         self.combat.quiet.wake(id);
         let slot = self.units[index].bucket_slot;
         let displaced = self.chunks.swap_remove(bucket, slot);

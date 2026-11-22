@@ -1,14 +1,17 @@
 //! Proven empty threat regions retain logical turns without polling units.
+//! Only a unit of another player entering a sleeper's chunks can end that
+//! proof, so a crossing or a spawn wakes the sleepers of other players only;
+//! a skipped turn charges the buckets' sizes at that tick, as a scan would.
 use super::super::targeting::{BUCKET_WINDOW, TargetArea};
 use crate::{GameUnit, GameWorld};
-use aoe_core::{ChunkCoord, EntityId, TileRect};
+use aoe_core::{ChunkCoord, EntityId, PlayerId, TileRect};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug)]
 struct Sleep {
     chunks: Vec<ChunkCoord>,
     needed: u32,
-    scanned: u32,
+    player: PlayerId,
     #[cfg(test)]
     source: GameUnit,
 }
@@ -62,6 +65,29 @@ impl Quiet {
         }
     }
 
+    /// `unit` enters `chunk`: it wakes itself, and the chunk's sleepers of
+    /// every other player. Leaving a chunk cannot end a proof.
+    pub(crate) fn arrive(&mut self, chunk: ChunkCoord, unit: &GameUnit) {
+        self.wake(unit.id);
+        self.wake_chunk_for(chunk, unit.player);
+    }
+
+    /// Wakes the chunk's sleepers that `arrival` is a threat to: those of
+    /// every other player.
+    pub(crate) fn wake_chunk_for(&mut self, chunk: ChunkCoord, arrival: PlayerId) {
+        let Some(ids) = self.chunks.get(&chunk) else {
+            return;
+        };
+        let woken: Vec<_> = ids
+            .iter()
+            .copied()
+            .filter(|id| self.jobs.get(id).is_some_and(|job| job.player != arrival))
+            .collect();
+        for id in woken {
+            self.wake(id);
+        }
+    }
+
     pub(crate) fn wake_area(&mut self, area: TileRect) {
         for chunk in chunks(area) {
             self.wake_chunk(chunk);
@@ -81,6 +107,15 @@ impl Quiet {
 }
 
 impl GameWorld {
+    /// What a scan of `chunks` charges to the shared target budget.
+    fn bucket_scan(&self, chunks: &[ChunkCoord]) -> u32 {
+        chunks
+            .iter()
+            .filter_map(|c| self.chunks.get(c))
+            .map(|b| b.len().min(BUCKET_WINDOW) as u32)
+            .sum()
+    }
+
     fn quiet_region(&self, u: &GameUnit, area: &TargetArea) -> bool {
         let bounds = area.bounds(self);
         // A hidden or out-of-range enemy in a touched bucket keeps this query
@@ -118,11 +153,6 @@ impl GameWorld {
             return;
         }
         let chunks: Vec<_> = chunks(area.bounds(self)).collect();
-        let scanned = chunks
-            .iter()
-            .filter_map(|c| self.chunks.get(c))
-            .map(|b| b.len().min(BUCKET_WINDOW) as u32)
-            .sum();
         let needed = chunks.len() as u32 * BUCKET_WINDOW as u32;
         for chunk in &chunks {
             self.combat
@@ -137,7 +167,7 @@ impl GameWorld {
             Sleep {
                 chunks,
                 needed,
-                scanned,
+                player: u.player,
                 #[cfg(test)]
                 source: *u,
             },
@@ -158,7 +188,8 @@ impl GameWorld {
         };
         // Preserve both the acquisition cursor and the shared targeting budget.
         // Otherwise sleeping a friendly army changes another army's first hit.
-        let (needed, scanned) = (job.needed, job.scanned);
+        let needed = job.needed;
+        let scanned = self.bucket_scan(&job.chunks);
         if self.start_target_probe(id, needed).is_some() {
             self.combat.stats.targeting_scanned += scanned;
         }
@@ -202,13 +233,7 @@ impl GameWorld {
                 self.quiet_region(&u, &area),
                 "missed wake: threat near {id:?}"
             );
-            let scanned: u32 = job
-                .chunks
-                .iter()
-                .filter_map(|c| self.chunks.get(c))
-                .map(|b| b.len().min(BUCKET_WINDOW) as u32)
-                .sum();
-            assert_eq!(job.scanned, scanned, "missed wake: seeker bucket count");
+            assert_eq!(job.player, u.player, "missed wake: seeker owner");
             assert_eq!(
                 job.chunks,
                 chunks(area.bounds(self)).collect::<Vec<_>>(),
