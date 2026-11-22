@@ -44,3 +44,52 @@ fn pursuit_keeps_a_valid_firing_contact_when_the_target_changes_tile() {
         old.destination
     );
 }
+
+/// Two archers of players 1 and 2 shooting each other in place, and an
+/// archer of player 1 shooting a villager of player 2.
+fn duel() -> (GameWorld, [EntityId; 3]) {
+    let mut w = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
+    let a = w
+        .spawn_kind(PlayerId(1), UnitKind::Archer, at(40, 50))
+        .unwrap();
+    let b = w
+        .spawn_kind(PlayerId(2), UnitKind::Archer, at(44, 50))
+        .unwrap();
+    let c = w
+        .spawn_kind(PlayerId(1), UnitKind::Archer, at(40, 60))
+        .unwrap();
+    let runner = w
+        .spawn_kind(PlayerId(2), UnitKind::Villager, at(44, 60))
+        .unwrap();
+    w.issue_attack(PlayerId(1), a, b).unwrap();
+    w.issue_attack(PlayerId(2), b, a).unwrap();
+    w.issue_attack(PlayerId(1), c, runner).unwrap();
+    (w, [a, b, runner])
+}
+
+fn at(x: i32, y: i32) -> WorldPosition {
+    WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap()
+}
+
+#[test]
+fn the_first_blow_in_each_reach_is_counted_with_its_wait() {
+    let (mut w, ids) = duel();
+    let (mut first, mut waited, mut hits) = (0, 0, 0);
+    for tick in 0..200 {
+        if tick == 60 {
+            // Out of reach and back: its pursuer's next blow is a first one.
+            w.issue_move(ids[2], at(44, 90)).unwrap();
+        }
+        w.advance();
+        first += w.combat_stats().first_hits;
+        waited += w.combat_stats().first_hit_wait_ticks;
+        hits += w.combat_stats().hits;
+    }
+    // Three opening blows in reach, one more after the chase.
+    assert!(first >= 4, "{first} first blows");
+    assert!(hits > first, "{hits} hits for {first} first blows");
+    assert!(
+        waited < u64::from(first) * 20,
+        "{waited} ticks over {first}"
+    );
+}
