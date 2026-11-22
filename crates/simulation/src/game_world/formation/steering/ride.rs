@@ -29,7 +29,7 @@ impl GameWorld {
     /// True when the mover at `index` rides this tick instead of stepping.
     pub(crate) fn ride(&mut self, index: usize, changed: &mut Vec<EntityId>) -> bool {
         let now = self.tick.0;
-        if let Some(ride) = self.units[index].ride {
+        if let Some(ride) = self.units[index].ride.as_deref().copied() {
             // Checked every tick: an order, a stop, a view or something to
             // fight ends the ride at once, before any credit is applied.
             let same = self.units[index].order.is_some_and(|o| {

@@ -128,7 +128,7 @@ impl Units {
     }
     /// Sets the unit's ride without journaling it: a ride is not published.
     pub(crate) fn set_ride(&mut self, at: usize, ride: Option<crate::game_world::formation::Ride>) {
-        self.values[at].ride = ride;
+        self.values[at].ride = ride.map(Box::new);
     }
     pub(crate) fn push(&mut self, unit: StoredUnit) {
         self.dirty.insert(unit.state.id);

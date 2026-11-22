@@ -153,7 +153,7 @@ pub(crate) struct StoredUnit {
     pub(crate) route_caller: Option<&'static std::panic::Location<'static>>,
     /// Times this order's far group wait was renewed (`deadline`).
     pub(crate) route_renewals: u8,
-    pub(crate) ride: Option<formation::Ride>, // off-screen leg ride (`steering/ride.rs`)
+    pub(crate) ride: Option<Box<formation::Ride>>, // off-screen ride (`steering/ride.rs`)
 }
 #[derive(Debug)]
 pub struct GameWorld {
