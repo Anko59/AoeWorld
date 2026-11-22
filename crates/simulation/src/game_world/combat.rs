@@ -404,7 +404,7 @@ impl GameWorld {
                 .is_some_and(|u| u.kind == crate::UnitKind::Villager)
         {
             self.combat.seekers.remove(&id);
-            self.combat.quiet.wake(id);
+            self.combat.quiet.leave(id);
         }
     }
 

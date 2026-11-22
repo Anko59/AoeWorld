@@ -106,6 +106,7 @@ impl GameWorld {
         }
         if super::combat::acquisition::autonomous_kind(state.kind) {
             self.combat.seekers.insert(id);
+            self.combat.quiet.join(id);
         }
         let bucket = ChunkCoord::from_position(position);
         self.combat.quiet.wake_chunk_for(bucket, state.player);

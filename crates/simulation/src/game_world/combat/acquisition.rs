@@ -117,22 +117,35 @@ impl GameWorld {
     pub(super) fn advance_acquisition(&mut self, changed: &mut Vec<EntityId>) {
         #[cfg(test)]
         self.assert_quiet_acquisition();
+        self.combat.stats.acquisition_slept = self.resting_seekers();
+        // Sleepers an arrival woke look first, then the rotation of the
+        // awake goes on from its cursor.
+        let due: Vec<_> = std::mem::take(&mut self.combat.quiet.due)
+            .into_iter()
+            .collect();
         let cursor = self.combat.seeker_cursor;
-        let ids: Vec<_> = self
-            .combat
-            .seekers
+        let awake = &self.combat.quiet.awake;
+        let turns = awake
             .range((Excluded(cursor), Unbounded))
-            .chain(self.combat.seekers.range(..=cursor))
+            .chain(awake.range(..=cursor))
+            .filter(|id| due.binary_search(id).is_err())
             .copied()
             .take(MAX_ACQUISITIONS)
-            .collect();
-        for id in ids {
+            .map(|id| (id, false));
+        let ids: Vec<_> = due.iter().map(|&id| (id, true)).chain(turns).collect();
+        for (at, &(id, alarmed)) in ids.iter().enumerate() {
             if self.combat.stats.targeting_scanned >= super::targeting::MAX_TARGET_INSPECTIONS / 2 {
+                // The woken who did not get to look keep their place.
+                let left = ids[at..].iter().filter(|(_, alarmed)| *alarmed);
+                self.combat.quiet.due.extend(left.map(|&(id, _)| id));
                 break;
             }
-            self.combat.seeker_cursor = id;
-            if self.skip_quiet_acquisition(id) {
-                continue;
+            if alarmed {
+                if !self.combat.quiet.awake.contains(&id) {
+                    continue;
+                }
+            } else {
+                self.combat.seeker_cursor = id;
             }
             self.combat.stats.acquisition_checks += 1;
             let Some(u) = self.unit(id) else {
@@ -148,9 +161,7 @@ impl GameWorld {
             }
             if u.hp > 0 && (u.auto_scout || u.stance == CombatStance::NoAttack || self.embarked(id))
             {
-                if !self.economy.no_sleep {
-                    self.combat.quiet.park(id);
-                }
+                self.combat.quiet.park(id);
                 continue;
             }
             let building_attack = self

@@ -189,6 +189,7 @@ impl GameWorld {
                 self.combat.scalar_marches.insert(id);
                 if unit.kind == crate::UnitKind::Villager {
                     self.combat.seekers.insert(id);
+                    self.combat.quiet.join(id);
                 }
             }
             return Ok(moving);
