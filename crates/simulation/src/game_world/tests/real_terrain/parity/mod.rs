@@ -7,6 +7,7 @@ use crate::game_world::terrain_fixtures::build;
 use aoe_core::FIXED_SUBUNITS_PER_TILE;
 
 mod fights;
+mod gate;
 
 const RUNS: u64 = 8;
 
