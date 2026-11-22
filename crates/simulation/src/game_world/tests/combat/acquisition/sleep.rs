@@ -81,6 +81,29 @@ fn a_sleeping_source_wakes_on_orders_and_stance_changes() {
 }
 
 #[test]
+fn own_traffic_through_a_sleeping_region_leaves_it_asleep() {
+    let (mut on, _) = quiet(true, 16);
+    let (mut off, _) = quiet(false, 16);
+    for w in [&mut on, &mut off] {
+        for n in 0..8 {
+            // Staggered, so every walker crosses on a tick of its own.
+            let walker = w
+                .spawn_villager(PlayerId(0), at(60 + 4 * n, 96 + n))
+                .unwrap();
+            w.issue_move(walker, at(160, 96 + n)).unwrap();
+        }
+    }
+    let mut visits = 0;
+    for tick in 0..1_200 {
+        pair_tick(&mut on, &mut off, tick);
+        visits += on.combat_stats().acquisition_checks;
+    }
+    // Waking the army on every crossing of its chunk costs 16 visits each
+    // (178 in all here).
+    assert!(visits < 64, "own traffic made {visits} unit visits");
+}
+
+#[test]
 fn new_hostile_buildings_wake_sleeping_acquisition() {
     let (mut on, _) = quiet(true, 1);
     let (mut off, _) = quiet(false, 1);
