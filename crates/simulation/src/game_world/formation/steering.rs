@@ -79,7 +79,7 @@ impl GameWorld {
                 self.bank_group_rest(leader);
             }
         }
-        movers.retain(|&id| !self.park_unseen(id));
+        movers.retain(|&id| !self.park_unseen(id, true));
         scratch.group_phase = true;
         {
             let _span = self
