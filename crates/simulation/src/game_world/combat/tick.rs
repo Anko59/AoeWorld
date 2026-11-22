@@ -6,6 +6,17 @@ use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, TileRect, WorldPosition};
 #[cfg(test)]
 mod tests;
 
+/// With a human seat, an attacker no person sees, in reach while its weapon recovers,
+/// sits out the ticks before its next swing: nothing in its step can change
+/// while it, its target and its orders stay as they were. Any of those
+/// changing, or the swing falling due, gives it its full step again.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Rest {
+    until: u64,
+    own: WorldPosition,
+    goal: Goal,
+}
+
 /// What an attacker is walking to and hitting.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Goal {
@@ -59,6 +70,11 @@ impl GameWorld {
         self.combat.pursuit_cursor = None;
         self.prefetch_attack_searches(&ids, now);
         for id in ids {
+            if self.attacker_rests(id, now) {
+                self.combat.stats.attackers += 1;
+                self.combat.stats.attackers_rested += 1;
+                continue;
+            }
             self.step_attacker(id, now, changed);
         }
         if self.attack_search_room() > 0 && self.combat.position_searches > 0 {
@@ -69,6 +85,22 @@ impl GameWorld {
         self.advance_towers(changed);
         self.run_incendiary_blasts(changed);
         self.advance_healing(changed);
+    }
+
+    fn attacker_rests(&self, id: EntityId, now: u64) -> bool {
+        let Some(attacker) = self.combat.attackers.get(&id) else {
+            return false;
+        };
+        let (Some(rest), Some(&index)) = (attacker.rest, self.lookup.get(&id)) else {
+            return false;
+        };
+        let unit = &self.units[index];
+        now < rest.until
+            && unit.order.is_none()
+            && !unit.state.moving
+            && !unit.state.planning
+            && unit.state.position == rest.own
+            && self.attack_goal(attacker.target, unit.state.player) == Some(rest.goal)
     }
 
     fn step_attacker(&mut self, id: EntityId, now: u64, changed: &mut Vec<EntityId>) {
@@ -154,9 +186,24 @@ impl GameWorld {
             changed.push(id);
             return;
         }
-        if self.weapon_ready(index, changed) {
+        let ready = self.weapon_ready(index, changed);
+        if ready {
             self.units[index].next_hit_tick = now + u64::from(self.attack_period_ticks(&before));
             self.strike(id, attacker.target, changed);
+        }
+        let rest = (!ready
+            && !approaching_slot
+            && distance <= range * range
+            && self.units[index].order.is_none()
+            && !self.vision.human_seats.is_empty()
+            && !self.seen_by_a_person(index))
+        .then(|| Rest {
+            until: self.weapon_due(index),
+            own: before.position,
+            goal,
+        });
+        if let Some(entry) = self.combat.attackers.get_mut(&id) {
+            entry.rest = rest;
         }
         if let Some(&index) = self.lookup.get(&id)
             && self.units[index].state != before

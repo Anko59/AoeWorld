@@ -26,7 +26,7 @@ impl GameWorld {
     }
 
     /// `unit_visible_to` for any human seat, read from the stored record.
-    fn seen_by_a_person(&self, index: usize) -> bool {
+    pub(crate) fn seen_by_a_person(&self, index: usize) -> bool {
         let unit = &self.units[index].state;
         let tile = unit.position.tile_floor();
         self.vision.human_seats.iter().any(|&player| {

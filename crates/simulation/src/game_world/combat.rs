@@ -82,6 +82,8 @@ pub struct CombatStats {
     pub targeting_scanned: u32,
     /// Pursuit searches in the combat phase (order validation is separate).
     pub attack_searches: u32,
+    /// Attackers that sat out this tick while their weapon recovered.
+    pub attackers_rested: u32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -98,6 +100,8 @@ pub(crate) struct Attacker {
     pub(crate) resume: Option<super::formation::Resume>,
     /// Start tick of this native attack cycle, or zero before its wind-up.
     pub(crate) swing_started: u64,
+    /// An unwatched attacker waiting in reach for its weapon (`tick.rs`).
+    pub(crate) rest: Option<tick::Rest>,
 }
 
 #[derive(Debug)]
@@ -355,6 +359,7 @@ impl GameWorld {
                 origin: None,
                 resume: None,
                 swing_started: 0,
+                rest: None,
             },
         );
         let state = &mut self.units[index].state;
