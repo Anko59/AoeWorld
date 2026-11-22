@@ -6,7 +6,7 @@
 //! a client at unit zoom, plus `WATCH_MARGIN_TILES`. A region stays watched
 //! for `LEFT_VIEW_TICKS` after the view moves off it and `LEFT_ZOOM_TICKS`
 //! after its client leaves unit zoom, so a pan or one wheel notch out and
-//! back changes nothing. A human's own units off screen are not watched; a
+//! back changes nothing; each player keeps only the region it left last. A human's own units off screen are not watched; a
 //! seat with no subscription watches nothing.
 use crate::GameWorld;
 use aoe_core::{PlayerId, TileCoord, TileRect};
@@ -43,9 +43,21 @@ impl GameWorld {
                 LEFT_VIEW_TICKS
             };
             let until = now.saturating_add(self.config.ticks(grace));
-            self.vision.recent_views.push((view.region, until));
+            // One region per player, the one it left last: a panning client
+            // changes its view every subscription, and the regions it left
+            // before are covered by the margin of the next.
+            let recent = &mut self.vision.recent_views;
+            match recent
+                .iter_mut()
+                .find(|(owner, _, _)| *owner == view.player)
+            {
+                Some(kept) => *kept = (view.player, view.region, until),
+                None => recent.push((view.player, view.region, until)),
+            }
         }
-        self.vision.recent_views.retain(|&(_, until)| until > now);
+        self.vision
+            .recent_views
+            .retain(|&(_, _, until)| until > now);
     }
 
     pub fn human_views(&self) -> &[HumanView] {
@@ -64,8 +76,8 @@ impl GameWorld {
                 self.vision
                     .recent_views
                     .iter()
-                    .filter(|&&(_, until)| until > now)
-                    .map(|&(region, _)| region),
+                    .filter(|&&(_, _, until)| until > now)
+                    .map(|&(_, region, _)| region),
             )
             .any(|region| within_margin(region, tile))
     }
