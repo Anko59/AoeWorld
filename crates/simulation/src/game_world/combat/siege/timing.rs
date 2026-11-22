@@ -43,26 +43,6 @@ impl GameWorld {
         (started != 0).then_some(Tick(started))
     }
 
-    /// The first tick `weapon_ready` can start a swing or strike.
-    pub(in crate::game_world::combat) fn weapon_due(&self, index: usize) -> u64 {
-        let unit = &self.units[index];
-        let ready = unit.next_hit_tick;
-        let Some(delay) = native_attack_windup_millis(unit.state.kind) else {
-            return ready;
-        };
-        let delay = (delay * u64::from(self.config.tick_hz)).div_ceil(1_000);
-        let started = self
-            .combat
-            .attackers
-            .get(&unit.state.id)
-            .map_or(0, |a| a.swing_started);
-        if started == 0 || started.saturating_add(delay) < ready {
-            ready.saturating_sub(delay)
-        } else {
-            ready.max(started.saturating_add(delay))
-        }
-    }
-
     pub(in crate::game_world::combat) fn weapon_ready(
         &mut self,
         index: usize,

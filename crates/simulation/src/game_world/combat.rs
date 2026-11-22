@@ -82,8 +82,6 @@ pub struct CombatStats {
     pub targeting_scanned: u32,
     /// Pursuit searches in the combat phase (order validation is separate).
     pub attack_searches: u32,
-    /// Attackers that sat out this tick while their weapon recovered.
-    pub attackers_rested: u32,
     /// First blows struck this tick after a target came into reach, and the
     /// ticks each waited since (the delay from contact to the first hit).
     pub first_hits: u32,
@@ -104,9 +102,9 @@ pub(crate) struct Attacker {
     pub(crate) resume: Option<super::formation::Resume>,
     /// Start tick of this native attack cycle, or zero before its wind-up.
     pub(crate) swing_started: u64,
-    /// An unwatched attacker waiting in reach for its weapon (`tick.rs`).
-    pub(crate) rest: Option<tick::Rest>,
     /// The tick its target came into reach, until its first blow there.
+    /// Diagnostics only (`CombatStats::first_hits`): never read by play,
+    /// saved or hashed.
     pub(crate) in_reach_since: Option<u64>,
 }
 
@@ -365,7 +363,6 @@ impl GameWorld {
                 origin: None,
                 resume: None,
                 swing_started: 0,
-                rest: None,
                 in_reach_since: None,
             },
         );

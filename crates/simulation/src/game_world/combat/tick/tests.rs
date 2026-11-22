@@ -46,9 +46,8 @@ fn pursuit_keeps_a_valid_firing_contact_when_the_target_changes_tile() {
 }
 
 /// Two archers of players 1 and 2 shooting each other in place, and an
-/// archer of player 1 shooting a villager of player 2 that walks off, with
-/// player 0 as a far human seat when `watched`.
-fn duel(watched: bool) -> (GameWorld, [EntityId; 3]) {
+/// archer of player 1 shooting a villager of player 2.
+fn duel() -> (GameWorld, [EntityId; 3]) {
     let mut w = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
     let a = w
         .spawn_kind(PlayerId(1), UnitKind::Archer, at(40, 50))
@@ -65,11 +64,6 @@ fn duel(watched: bool) -> (GameWorld, [EntityId; 3]) {
     w.issue_attack(PlayerId(1), a, b).unwrap();
     w.issue_attack(PlayerId(2), b, a).unwrap();
     w.issue_attack(PlayerId(1), c, runner).unwrap();
-    if watched {
-        w.set_human_seats(&[PlayerId(0)]);
-        w.spawn_kind(PlayerId(0), UnitKind::Villager, at(200, 200))
-            .unwrap();
-    }
     (w, [a, b, runner])
 }
 
@@ -78,34 +72,24 @@ fn at(x: i32, y: i32) -> WorldPosition {
 }
 
 #[test]
-fn unseen_attackers_rest_between_shots_and_hit_as_often() {
-    let (mut full, ids) = duel(false);
-    let (mut resting, _) = duel(true);
-    let (mut rested, mut runner_hp, mut first) = (0, 0, [0u32; 2]);
+fn the_first_blow_in_each_reach_is_counted_with_its_wait() {
+    let (mut w, ids) = duel();
+    let (mut first, mut waited, mut hits) = (0, 0, 0);
     for tick in 0..200 {
         if tick == 60 {
-            resting.issue_move(ids[2], at(44, 90)).unwrap();
-            runner_hp = resting.unit(ids[2]).unwrap().hp;
+            // Out of reach and back: its pursuer's next blow is a first one.
+            w.issue_move(ids[2], at(44, 90)).unwrap();
         }
-        full.advance();
-        resting.advance();
-        rested += resting.combat_stats().attackers_rested;
-        first[0] += full.combat_stats().first_hits;
-        first[1] += resting.combat_stats().first_hits;
-        assert_eq!(full.combat_stats().attackers_rested, 0);
-        // The archers' duel is the same blow for blow.
-        for &id in &ids[..2] {
-            let hp = |w: &GameWorld| w.unit(id).map(|u| u.hp);
-            assert_eq!(hp(&full), hp(&resting), "hit points of {id:?} at {tick}");
-        }
+        w.advance();
+        first += w.combat_stats().first_hits;
+        waited += w.combat_stats().first_hit_wait_ticks;
+        hits += w.combat_stats().hits;
     }
-    assert!(rested > 100, "attackers rested {rested} times");
-    // Each archer strikes a first blow on its target once in reach.
-    assert!(first[0] >= 3 && first[1] >= 3, "first blows {first:?}");
-    // The runner's moves wake its resting pursuer, which keeps hitting it.
-    let hp = resting.unit(ids[2]).map_or(0, |u| u.hp);
+    // Three opening blows in reach, one more after the chase.
+    assert!(first >= 4, "{first} first blows");
+    assert!(hits > first, "{hits} hits for {first} first blows");
     assert!(
-        hp < runner_hp,
-        "the runner kept {hp} of {runner_hp} hit points"
+        waited < u64::from(first) * 20,
+        "{waited} ticks over {first}"
     );
 }
