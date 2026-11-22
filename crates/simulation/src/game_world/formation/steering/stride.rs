@@ -59,7 +59,11 @@ impl GameWorld {
     }
 
     /// On attack-move, with a unit or building of another player in its
-    /// chunk or the eight around (the simple contact radius of #978 4.3).
+    /// chunk or the eight around: the simple contact radius of #978 4.3
+    /// ("a target"). Off screen the stride tier changed how fights end
+    /// (parity tests 3 and 7), so these keep the full model until step 5.
+    /// Narrower radii (two and three rings of 8-tile cells, the own chunk)
+    /// left fight 3 apart.
     fn attack_mover_in_contact(&self, index: usize) -> bool {
         let unit = &self.units[index].state;
         if self.offensive_continuation(unit.id).is_none() {
@@ -157,6 +161,22 @@ impl GameWorld {
         }
     }
 
+    /// Banks the slot walk the member `id` of `leader`'s group skips.
+    fn bank_slot_walk(&mut self, index: usize, id: EntityId, leader: EntityId) -> bool {
+        let unit = self.units[index].state;
+        let own = self.movement_speed(unit.kind, unit.player);
+        let road = self.road_speed(unit.kind, unit.position, own);
+        let Some(group) = self.formations.get_mut(&leader) else {
+            return false;
+        };
+        let Some(member) = group.member_index(id) else {
+            return false;
+        };
+        let credit = super::super::matched_speed(group.pace, road);
+        group.members[member].carry = group.members[member].carry.saturating_add(credit);
+        true
+    }
+
     /// Banks the movement the unit at `index` skips this tick.
     pub(crate) fn bank_rest(&mut self, index: usize, id: EntityId) -> bool {
         let unit = self.units[index].state;
@@ -166,23 +186,20 @@ impl GameWorld {
         if let Some(leader) = self.units[index].formation
             && (leader != id || self.units[index].order.is_none())
         {
-            let own = self.movement_speed(unit.kind, unit.player);
-            let road = self.road_speed(unit.kind, unit.position, own);
-            let Some(group) = self.formations.get_mut(&leader) else {
-                return false;
-            };
-            let Some(member) = group.member_index(id) else {
-                return false;
-            };
-            let credit = super::super::matched_speed(group.pace, road);
-            group.members[member].carry = group.members[member].carry.saturating_add(credit);
-            return true;
+            return self.bank_slot_walk(index, id, leader);
         }
         if self.units[index].order.is_none() {
             return false;
         }
         let banked = match self.formations.get(&id) {
-            Some(group) => group.pace.0,
+            Some(group) => {
+                let pace = group.pace.0;
+                // The leader carries its group's anchor on its order and also
+                // walks its own slot: it banks both, or it trails its group
+                // at a quarter of its pace (parity test 4).
+                self.bank_slot_walk(index, id, id);
+                pace
+            }
             None => {
                 self.road_speed(
                     unit.kind,

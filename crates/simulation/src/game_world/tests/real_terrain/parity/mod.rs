@@ -11,10 +11,10 @@ mod gate;
 
 const RUNS: u64 = 8;
 
-/// `Watched`: every player of the scene is a human seat whose client shows
-/// the whole map at unit zoom, so all of it runs the full model.
-/// `Unwatched`: the only human seat is player 0, whose client shows a corner
-/// far from the scene.
+/// Both runs make every player of the scene a human seat, so automation
+/// treats them alike; only what the clients show differs. `Watched`: every
+/// client shows the whole map at unit zoom, so all of the scene runs the
+/// full model. `Unwatched`: every client shows a far corner.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Look {
     Watched,
@@ -23,33 +23,22 @@ enum Look {
 
 impl Look {
     fn seat(self, world: &mut GameWorld, players: &[PlayerId]) {
-        match self {
-            Self::Watched => watch(world, players),
-            Self::Unwatched => {
-                world.set_human_seats(&[PlayerId(0)]);
-                world.set_human_views(&[crate::HumanView {
-                    player: PlayerId(0),
-                    region: TileRect::from_xywh(0, 0, 8, 8),
-                    unit_zoom: true,
-                }]);
-            }
-        }
+        world.set_human_seats(players);
+        let side = world.config.width_tiles.max(world.config.height_tiles);
+        let region = match self {
+            Self::Watched => TileRect::from_xywh(0, 0, side, side),
+            Self::Unwatched => TileRect::from_xywh(0, 0, 8, 8),
+        };
+        let views: Vec<_> = players
+            .iter()
+            .map(|&player| crate::HumanView {
+                player,
+                region,
+                unit_zoom: true,
+            })
+            .collect();
+        world.set_human_views(&views);
     }
-}
-
-/// `players` are human seats whose clients show the whole map at unit zoom.
-fn watch(world: &mut GameWorld, players: &[PlayerId]) {
-    world.set_human_seats(players);
-    let side = world.config.width_tiles.max(world.config.height_tiles);
-    let views: Vec<_> = players
-        .iter()
-        .map(|&player| crate::HumanView {
-            player,
-            region: TileRect::from_xywh(0, 0, side, side),
-            unit_zoom: true,
-        })
-        .collect();
-    world.set_human_views(&views);
 }
 
 /// Seeded start positions: a tile centre moved by up to half a tile on
@@ -106,6 +95,15 @@ fn compare(
         );
     }
     (watched, unwatched)
+}
+
+/// One-sided, for movement (lower is better): unwatched no more than 10%
+/// worse than watched. Unwatched being better is expected (#978 4.3).
+fn assert_one_sided(name: &str, ((w, _), (u, _)): ((f64, f64), (f64, f64))) {
+    assert!(
+        u <= w + 0.10,
+        "{name}: unwatched {u:.3} against watched {w:.3}"
+    );
 }
 
 /// Two-sided: each difference under 10%, and under the larger of 3% and
