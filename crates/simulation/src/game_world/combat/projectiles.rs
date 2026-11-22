@@ -162,16 +162,20 @@ impl GameWorld {
         };
         self.combat.next_projectile = next;
         self.combat.projectiles.insert(shot.id, shot);
+        self.combat.impacts.insert((shot.impact, shot.id));
         true
     }
     pub(super) fn advance_projectiles(&mut self, changed: &mut Vec<EntityId>) {
-        let due: Vec<_> = self
-            .combat
-            .projectiles
-            .values()
-            .filter(|p| p.impact <= self.tick)
-            .map(|p| p.id)
-            .collect();
+        debug_assert_eq!(self.combat.impacts.len(), self.combat.projectiles.len());
+        let mut due = Vec::new();
+        while let Some(&(impact, id)) = self.combat.impacts.first()
+            && impact <= self.tick
+        {
+            self.combat.impacts.pop_first();
+            due.push(id);
+        }
+        // In identity order, as a scan of `projectiles` takes them.
+        due.sort_unstable();
         for id in due {
             if let Some(p) = self.combat.projectiles.remove(&id) {
                 if p.kind == ProjectileKind::Stone {

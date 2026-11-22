@@ -119,6 +119,8 @@ pub(crate) struct Combat {
     pub(crate) healers: BTreeSet<EntityId>,
     pub(crate) healing: castle::Rest,
     pub(crate) projectiles: BTreeMap<u64, Projectile>,
+    /// `projectiles` by impact tick, so a tick reads only those that land.
+    pub(crate) impacts: BTreeSet<(Tick, u64)>,
     pub(crate) next_projectile: u64,
     pub(crate) tower_ready: BTreeMap<EntityId, u64>,
     pub(crate) attackers: BTreeMap<EntityId, Attacker>,
@@ -167,6 +169,7 @@ impl Default for Combat {
             healers: Default::default(),
             healing: Default::default(),
             projectiles: Default::default(),
+            impacts: Default::default(),
             next_projectile: 0,
             tower_ready: Default::default(),
             attackers: Default::default(),
