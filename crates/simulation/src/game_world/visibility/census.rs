@@ -27,6 +27,14 @@ pub struct StateCensus {
     pub contact_simple: u64,
     /// The same within `NARROW_CONTACT_TILES`.
     pub contact_narrow: u64,
+    /// Villagers and soldiers (attack above zero), the denominators of
+    /// deliveries per villager-minute and hits per fighter-minute.
+    pub villagers: u64,
+    pub fighters: u64,
+    /// Movers waiting for a route, and the p95 of how long they have waited
+    /// so far (ticks): the census stand-in for order-to-first-step.
+    pub waiting: u64,
+    pub wait_p95_ticks: u64,
 }
 
 impl GameWorld {
@@ -34,6 +42,7 @@ impl GameWorld {
     pub fn state_census(&self) -> StateCensus {
         let mut census = StateCensus::default();
         let mut by_chunk = BTreeMap::<(i32, i32), Vec<(PlayerId, TileCoord, bool)>>::new();
+        let mut waits = Vec::new();
         for (index, stored) in self.units.iter().enumerate() {
             let unit = &stored.state;
             if unit.hp == 0 {
@@ -45,6 +54,14 @@ impl GameWorld {
                 || self.offensive_continuation(unit.id).is_some();
             census.units += 1;
             census.movers += u64::from(stored.order.is_some());
+            if unit.kind == crate::UnitKind::Villager {
+                census.villagers += 1;
+            } else if crate::game_world::combat::unit_combat(unit.kind).attack > 0 {
+                census.fighters += 1;
+            }
+            if self.waiting_for_route(index) {
+                waits.push(self.tick.0.saturating_sub(stored.planning_since));
+            }
             census.threats += u64::from(threat);
             census.seen += u64::from(self.seen_by_human_seat(index));
             census.watched += u64::from(watched(&self.vision.human_views, tile));
@@ -53,6 +70,12 @@ impl GameWorld {
                 .or_default()
                 .push((unit.player, tile, threat));
         }
+        census.waiting = waits.len() as u64;
+        waits.sort_unstable();
+        census.wait_p95_ticks = waits
+            .get((waits.len() * 95 / 100).min(waits.len().saturating_sub(1)))
+            .copied()
+            .unwrap_or(0);
         for (&(cx, cy), units) in &by_chunk {
             for &(player, tile, threat) in units {
                 let (mut simple, mut narrow) = (false, false);

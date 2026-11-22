@@ -277,4 +277,7 @@ fn the_state_census_counts_contact_watch_and_movers() {
     // The view plus its 16-tile margin holds the attacker and the near enemy.
     assert_eq!(census.watched, 2);
     assert_eq!(census.movers, 1);
+    assert_eq!((census.villagers, census.fighters), (0, 5));
+    // No route navigation here: nothing waits for a search.
+    assert_eq!((census.waiting, census.wait_p95_ticks), (0, 0));
 }
