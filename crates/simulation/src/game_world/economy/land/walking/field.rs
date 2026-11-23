@@ -1,9 +1,12 @@
 //! A bounded, exact weighted field over the shared region terrain.
 use super::{NEIGHBORS, ground::chunk_index, neighbors, pages};
 use crate::{GameWorld, Terrain};
-use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
+use aoe_core::{PlayerId, TileCoord, TileRect};
 use aoe_map::{CHUNK_TILES, MapRegionGround};
 use std::collections::BTreeSet;
+
+#[path = "repair.rs"]
+mod repair;
 
 const RADIUS: i32 = super::super::super::steward::STEWARD_RULES.radius_tiles;
 const ORTHOGONAL: u16 = 5;
@@ -40,7 +43,7 @@ impl TerrainKey {
                     .gate_tiles
                     .range(start..end)
                     .filter_map(|(&tile, _)| {
-                        (bounds.contains(tile) && !world.gate_allows_approach(player, tile))
+                        (bounds.contains(tile) && !world.gate_admits_owner(player, tile))
                             .then_some(tile)
                     }),
             )
@@ -76,6 +79,17 @@ impl Field {
     }
 
     pub(super) fn new(world: &GameWorld, terrain: TerrainKey) -> Option<Self> {
+        Self::build(world, terrain, None)
+    }
+
+    /// The field for `terrain`, repaired from `old` over the same box where
+    /// only a few edges changed (a wall, a gate, a bridge): the same costs as
+    /// [`Field::new`], without walking the whole box again.
+    pub(super) fn repaired(world: &GameWorld, terrain: TerrainKey, old: &Self) -> Option<Self> {
+        Self::build(world, terrain, Some(old))
+    }
+
+    fn build(world: &GameWorld, terrain: TerrainKey, old: Option<&Self>) -> Option<Self> {
         let bounds = terrain.bounds;
         let mut field = Self {
             center: center(terrain.origin),
@@ -122,7 +136,16 @@ impl Field {
             }
         };
         field.clip(&mut ground, overlay);
-        field.costs = Some(field.walk_costs(&ground));
+        let previous = old.filter(|old| {
+            old.terrain.origin == field.terrain.origin && old.terrain.bounds == bounds
+        });
+        field.costs = Some(
+            previous
+                .and_then(|old| {
+                    field.repair_costs(old.ground.as_ref()?, old.costs.as_ref()?, &ground)
+                })
+                .unwrap_or_else(|| field.walk_costs(&ground)),
+        );
         field.ground = Some(ground);
         Some(field)
     }
@@ -183,17 +206,26 @@ impl Field {
         for tile in tiles(origin) {
             costs[self.index(tile)] = self.straight_cost(tile);
         }
-        let width = bounds.width();
-        let steps = NEIGHBORS.map(|(dx, dy)| {
-            (
-                dy * width + dx,
-                if dx == 0 || dy == 0 {
-                    ORTHOGONAL
-                } else {
-                    DIAGONAL
-                },
-            )
-        });
+        self.relax(ground, &mut costs, wave);
+        costs
+    }
+
+    /// Each direction's slot offset and step cost.
+    fn steps(&self) -> [(i32, u16); 8] {
+        let width = self.terrain.bounds.width();
+        NEIGHBORS.map(|(dx, dy)| {
+            let step = if dx == 0 || dy == 0 {
+                ORTHOGONAL
+            } else {
+                DIAGONAL
+            };
+            (dy * width + dx, step)
+        })
+    }
+
+    /// Spreads the costs queued in `wave` (one list per cost) over `ground`.
+    fn relax(&self, ground: &[Option<u8>], costs: &mut [u16], mut wave: Vec<Vec<usize>>) {
+        let steps = self.steps();
         for distance in 0..=REACH {
             for from in std::mem::take(&mut wave[usize::from(distance)]) {
                 if costs[from] != distance {
@@ -213,13 +245,21 @@ impl Field {
                 }
             }
         }
-        costs
     }
 
     fn straight_cost(&self, tile: TileCoord) -> u16 {
         let dx = tile.x.abs_diff(self.center.x);
         let dy = tile.y.abs_diff(self.center.y);
         (dx.abs_diff(dy) * u32::from(ORTHOGONAL) + dx.min(dy) * u32::from(DIAGONAL)) as u16
+    }
+
+    fn tile(&self, slot: usize) -> TileCoord {
+        let bounds = self.terrain.bounds;
+        let width = bounds.width() as usize;
+        TileCoord::new(
+            bounds.min.x + (slot % width) as i32,
+            bounds.min.y + (slot / width) as i32,
+        )
     }
 
     fn index(&self, tile: TileCoord) -> usize {
@@ -243,11 +283,13 @@ impl Field {
             .or_else(|| neighbors(tile).filter_map(|t| self.cost(t)).min())
     }
 
-    pub(super) fn regions(&self, id: EntityId, walking: &super::Walking) -> Option<Vec<u32>> {
+    /// Region labels of the tiles `owned` (row by row over the box).
+    pub(super) fn regions(&self, owned: &[bool]) -> Option<Vec<u32>> {
         let ground = self.ground.as_ref()?;
-        let steps = tiles(self.terrain.bounds)
-            .zip(ground)
-            .map(|(tile, &mask)| mask.filter(|_| walking.owns(id, tile)))
+        let steps = ground
+            .iter()
+            .zip(owned)
+            .map(|(&mask, &mine)| mask.filter(|_| mine))
             .collect::<Vec<_>>();
         Some(aoe_map::clipped_region_labels(
             self.terrain.bounds.width() as usize,

@@ -29,7 +29,7 @@ impl OfficeField {
     ) -> Option<Self> {
         let cache = &world.economy.walking;
         let bounds = Field::bounds(world, origin);
-        let revision = cache.latest(bounds, player);
+        let revision = cache.latest(bounds);
         let mut reused = previous
             .filter(|old| old.revision == revision && old.active.field.terrain.origin == origin)
             .map(|old| &old.active);
@@ -44,6 +44,8 @@ impl OfficeField {
             });
             if let Some(reused) = reused {
                 reused.field.clone()
+            } else if let Some(old) = previous {
+                Arc::new(Field::repaired(world, terrain, &old.active.field)?)
             } else {
                 Arc::new(Field::new(world, terrain)?)
             }
@@ -76,7 +78,7 @@ impl OfficeField {
         })
     }
 
-    pub(super) fn current(&self, cache: &ZoneCache, player: PlayerId) -> bool {
-        self.revision == cache.latest(self.active.field.terrain.bounds, player)
+    pub(super) fn current(&self, cache: &ZoneCache) -> bool {
+        self.revision == cache.latest(self.active.field.terrain.bounds)
     }
 }

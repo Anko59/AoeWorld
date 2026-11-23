@@ -199,22 +199,6 @@ fn a_distant_bridge_leaves_a_zone_on_its_period() {
 }
 
 #[test]
-fn a_friendly_gate_toggle_leaves_its_owners_walking_zone_current() {
-    use aoe_core::{Seed, WorldConfig};
-
-    let mut world = GameWorld::new(WorldConfig::new(32, 32, Seed(1)).unwrap()).unwrap();
-    let owner = PlayerId(3);
-    let neighbor = PlayerId(7);
-    let source = TileRect::from_xywh(7, 12, 4, 4);
-    install(&mut world, owner, &[(EntityId(3), source)]);
-    install(&mut world, neighbor, &[(EntityId(7), source)]);
-    world.management_gate_toggled(TileRect::from_xywh(15, 12, 1, 4), owner);
-
-    assert!(refresh(&mut world, owner).is_none());
-    assert!(refresh(&mut world, neighbor).is_some());
-}
-
-#[test]
 fn walking_refresh_phases_survive_a_tick_rate_change() {
     use aoe_core::{Seed, WorldConfig};
 
@@ -272,7 +256,7 @@ fn removing_a_walking_source_reassigns_the_whole_patch() {
 }
 
 #[test]
-fn walking_fields_reuse_a_previously_seen_gate_state() {
+fn an_enemy_gate_keeps_a_walking_zone_out_open_or_closed() {
     use crate::BuildingKind;
     use aoe_core::{Seed, WorldConfig};
 
@@ -305,17 +289,65 @@ fn walking_fields_reuse_a_previously_seen_gate_state() {
     );
     assert!(!closed.owns(office, far));
 
+    // The gate opens only while its owner's units pass (#978: following it
+    // rebuilt every other player's zones around it on each toggle).
     world.restore_gate(gate, true);
-    let open = refresh(&mut world, player).unwrap();
-    assert!(open.owns(office, far));
+    assert!(refresh(&mut world, player).is_none_or(|open| {
+        !open.owns(office, far)
+            && Arc::ptr_eq(&closed.fields[0].active.field, &open.fields[0].active.field)
+    }));
+}
 
-    world.advance();
-    let closed_again = refresh(&mut world, player).unwrap();
-    assert!(!closed_again.owns(office, far));
-    assert!(Arc::ptr_eq(
-        &closed.fields[0].active.field,
-        &closed_again.fields[0].active.field
+#[test]
+fn a_repaired_walking_field_matches_a_fresh_one_as_walls_rise_and_fall() {
+    use crate::BuildingKind;
+
+    let mut world = build("river").world;
+    let player = PlayerId(0);
+    let origin = TileRect::from_xywh(20, 35, 4, 4);
+    let first = install(&mut world, player, &[(EntityId(1), origin)]);
+    let fresh = |world: &GameWorld| {
+        let bounds = Field::bounds(world, origin);
+        Field::new(world, field::TerrainKey::new(world, player, origin, bounds)).unwrap()
+    };
+    let same = |a: &Field, b: &Field| {
+        let bounds = b.terrain.bounds;
+        assert_eq!(a.terrain.bounds, bounds);
+        let differing = field::tiles(bounds)
+            .filter(|&tile| a.cost(tile) != b.cost(tile))
+            .count();
+        assert_eq!(differing, 0, "tiles whose walk cost differs");
+    };
+    let walls: Vec<_> = (28..48)
+        .filter_map(|y| {
+            world
+                .insert_building(
+                    player,
+                    BuildingKind::StoneWall,
+                    TileRect::from_xywh(30, y, 1, 1),
+                    true,
+                )
+                .ok()
+        })
+        .collect();
+    assert!(walls.len() > 10, "the fixture has land for the wall");
+    let walled = refresh(&mut world, player).unwrap();
+    assert!(!Arc::ptr_eq(
+        &first.fields[0].active.field,
+        &walled.fields[0].active.field
     ));
+    same(&walled.fields[0].active.field, &fresh(&world));
+
+    // Half the wall falls: a state no earlier field was built for.
+    for &id in walls.iter().step_by(2) {
+        world.remove_building(id);
+    }
+    let breached = refresh(&mut world, player).unwrap();
+    assert!(!Arc::ptr_eq(
+        &first.fields[0].active.field,
+        &breached.fields[0].active.field
+    ));
+    same(&breached.fields[0].active.field, &fresh(&world));
 }
 
 #[test]
@@ -349,4 +381,26 @@ fn walking_region_labels_respect_the_boundary_and_both_directions() {
         clipped_region_labels(3, &steps),
         [1, 0, 3, 4, 4, 0, 7, 7, 7]
     );
+}
+
+#[test]
+fn a_box_scan_of_ownership_matches_asking_tile_by_tile() {
+    let mut world = build("general-forest").world;
+    let player = PlayerId(0);
+    let sources = [
+        (EntityId(1), TileRect::from_xywh(61, 27, 4, 4)),
+        (EntityId(2), TileRect::from_xywh(97, 27, 4, 4)),
+        (EntityId(3), TileRect::from_xywh(80, 60, 4, 4)),
+    ];
+    let walking = install(&mut world, player, &sources);
+    let mut contested = 0;
+    for (index, &(id, _)) in sources.iter().enumerate() {
+        let bounds = walking.fields[index].active.field.terrain.bounds;
+        let scanned = walking.owned(index);
+        for (tile, mine) in field::tiles(bounds).zip(scanned) {
+            assert_eq!(mine, walking.owns(id, tile), "office {id:?} at {tile:?}");
+            contested += usize::from(!mine && walking.owner(tile).is_some());
+        }
+    }
+    assert!(contested > 0, "fixture: the boxes overlap");
 }

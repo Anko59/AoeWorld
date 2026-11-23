@@ -80,6 +80,18 @@ impl GameWorld {
             })
     }
 
+    /// An unlocked, complete gate of `player`'s own, open or closed. Management
+    /// zones read this rather than the open state: an enemy gate opens only
+    /// while its owner's units pass, and following it rebuilt every other
+    /// player's zones around it on each toggle (#978).
+    pub(crate) fn gate_admits_owner(&self, player: aoe_core::PlayerId, tile: TileCoord) -> bool {
+        self.building_at_tile(tile)
+            .and_then(|id| self.building(id))
+            .is_some_and(|b| {
+                b.kind.is_gate() && b.is_complete() && !b.gate_locked && b.player == player
+            })
+    }
+
     /// Bounded, rotating immutable cache hints for an adapter-owned worker.
     /// Reading hints never changes authoritative scheduling or budgets.
     pub fn navigation_preparation_tiles(&self, limit: usize) -> Vec<TileCoord> {
