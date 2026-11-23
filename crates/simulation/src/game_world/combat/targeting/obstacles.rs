@@ -2,15 +2,20 @@ use super::*;
 
 impl GameWorld {
     /// A narrow firing window or a partial bucket sample cannot rule out
-    /// other enemies in sight. Defer the fallback if the shared budget runs out.
-    pub(super) fn preferred_target_in_sight(&mut self, area: &TargetArea) -> Option<bool> {
+    /// other enemies in sight: this reads every visible enemy in sight.
+    pub(super) fn preferred_target_in_sight(&mut self, area: &TargetArea) -> bool {
         let sight = TargetArea {
             min: 0,
             max: area.sight,
             ..*area
         };
         let bounds = sight.bounds(self);
-        for y in bounds.min.y..bounds.max.y {
+        let rows = if self.enemy_buildings_near(bounds, sight.player) {
+            bounds.min.y..bounds.max.y
+        } else {
+            0..0
+        };
+        for y in rows {
             for x in bounds.min.x..bounds.max.x {
                 let tile = aoe_core::TileCoord::new(x, y);
                 if self
@@ -25,41 +30,29 @@ impl GameWorld {
                             && self.building_visible_to(sight.player, b.footprint)
                     })
                 {
-                    return Some(true);
+                    return true;
                 }
             }
         }
-        let inspections = self.troop_inspections_available();
-        let mut scanned = 0;
         for y in bounds.min.y.div_euclid(SPATIAL_CHUNK_TILES)
             ..=(bounds.max.y - 1).div_euclid(SPATIAL_CHUNK_TILES)
         {
             for x in bounds.min.x.div_euclid(SPATIAL_CHUNK_TILES)
                 ..=(bounds.max.x - 1).div_euclid(SPATIAL_CHUNK_TILES)
             {
-                let Some(bucket) = self.chunks.get(&ChunkCoord { x, y }) else {
-                    continue;
-                };
-                for &id in bucket {
-                    if scanned == inspections {
-                        self.combat.stats.targeting_scanned += scanned;
-                        return None;
-                    }
-                    scanned += 1;
-                    if self.unit(id).is_some_and(|u| {
+                let contacts = self.chunk_contacts(ChunkCoord { x, y }, sight.player);
+                if contacts.visible.iter().any(|&id| {
+                    self.unit(id).is_some_and(|u| {
                         u.player != sight.player
                             && u.hp > 0
                             && (!sight.ram || u.kind.is_siege())
                             && sight.accepts(Goal::Unit(u.position, u.kind.collision_radius()))
-                            && self.unit_visible_to(sight.player, id)
-                    }) {
-                        self.combat.stats.targeting_scanned += scanned;
-                        return Some(true);
-                    }
+                    })
+                }) {
+                    return true;
                 }
             }
         }
-        self.combat.stats.targeting_scanned += scanned;
-        Some(false)
+        false
     }
 }

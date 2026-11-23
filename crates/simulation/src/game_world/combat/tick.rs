@@ -42,6 +42,7 @@ impl Goal {
 impl GameWorld {
     pub(crate) fn advance_combat(&mut self, changed: &mut Vec<EntityId>) {
         self.combat.stats = Default::default();
+        self.combat.contacts.open();
         self.advance_projectiles(changed);
         let now = self.tick.0;
         while let Some(&(due, id)) = self.combat.dying.first() {
@@ -69,6 +70,7 @@ impl GameWorld {
         self.advance_towers(changed);
         self.run_incendiary_blasts(changed);
         self.advance_healing(changed);
+        self.combat.contacts.close();
     }
 
     fn step_attacker(&mut self, id: EntityId, now: u64, changed: &mut Vec<EntityId>) {

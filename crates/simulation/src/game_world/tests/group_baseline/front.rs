@@ -199,7 +199,8 @@ fn attack_move_front_engages_alone_while_the_rest_march_on() {
     assert!(front.group_pace * 100 >= front.speed * 90, "{front:?}");
     // Proportional cohesion clears at tick 319 (338 under the 7/8 hold); sight,
     // reach, participation, moving pace and all-survivor assertions stay fixed.
-    assert_eq!((front.cleared, front.engaged_total), (Some(319), 24));
+    // Uncapped looks and per-unit acquisition turns: tick 324.
+    assert_eq!((front.cleared, front.engaged_total), (Some(324), 24));
     // Every one of the 24 survives and stands at its slot.
     assert!(ids.iter().all(|&id| {
         w.unit(id).is_some_and(|u| u.hp > 0 && !u.moving)

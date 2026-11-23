@@ -101,11 +101,12 @@ fn attack_move_kills_ten_enemies_then_resumes_to_the_slots() {
     // Proportional cohesion and 1.5x catch-up shift contact; the wider engage
     // look (256 enemies, 128 members) clears the ten foes at tick 1154 (the melee cap counts every attacker);
     // members brushing through each other reach the foes in a looser block (1183).
-    assert_eq!((cleared, foes_alive), (Some(1183), 0));
+    // Uncapped looks (every member that sees a foe engages) clear them at 1137.
+    assert_eq!((cleared, foes_alive), (Some(1137), 0));
     assert_eq!((survivors, own_idle, still_moving), (60, 60, 0));
     // Keep all 60 arrivals; the engage look caps melee members per foe, so
-    // 34 strike (37 originally) while the ten foes fall sooner.
-    assert_eq!((at_destination, strikers.len()), (60, 38));
+    // 37 strike while the ten foes fall sooner.
+    assert_eq!((at_destination, strikers.len()), (60, 37));
     assert!(
         within_1 * 100 >= survivors * 95,
         "{within_1} of {survivors}"
@@ -118,11 +119,13 @@ fn forty_against_forty_melee_strike_count() {
     let (hits, alive) = melee_clash(10);
     // PR 10 first-contact probes and bounded repeats change participation and survivors.
     // Proportional cohesion meets the enemy front sooner (tick 129) with 45
-    // early strikers; all 80 still strike.
-    assert_eq!(hits, (Some(129), 46, 80));
+    // early strikers; all 80 still strike. Per-unit acquisition turns (no
+    // world-wide ration) shift one early striker: 45.
+    assert_eq!(hits, (Some(129), 45, 80));
     // The wider engage look sends more of the east army in at once: it loses
     // fewer men (12 survive) than when only 32 enemies were considered (10).
-    assert_eq!(alive, (0, 15));
+    // Per-unit acquisition turns over whole buckets: 14 survive.
+    assert_eq!(alive, (0, 14));
 }
 
 #[test]

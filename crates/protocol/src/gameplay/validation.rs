@@ -193,9 +193,6 @@ fn walk<S: Sink>(message: &ServerMessage, sink: &mut S) {
             if *revision == 0 {
                 whole(sink, name, "revision_nonzero", Class::Economy);
             }
-            if projectiles.len() > MAX_PROJECTILES {
-                whole(sink, name, "projectiles_bound", Class::Economy);
-            }
             if !sorted(projectiles, |p| p.id) {
                 whole(sink, name, "projectiles_sorted_by_id", Class::Economy);
             }

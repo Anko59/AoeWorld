@@ -31,7 +31,7 @@ pub use rally::{RallyPoint, RallyTarget};
 mod wildlife;
 pub use economy::*;
 pub use fog::FogState;
-pub use projectiles::{MAX_PROJECTILES, ProjectileKind, ProjectileState};
+pub use projectiles::{ProjectileKind, ProjectileState};
 pub use resources::{MAX_RESOURCE_CACHE, MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
 pub use wildlife::*;
 
@@ -300,7 +300,7 @@ pub enum ServerMessage {
     Projectiles {
         revision: u64,
         tick: Tick,
-        #[serde(deserialize_with = "projectiles::bounded_projectiles")]
+        /// Every visible shot in flight; a frame's size bounds the list.
         projectiles: Vec<ProjectileState>,
     },
     /// Complete queued-movement marker set for the current subscription.

@@ -1,4 +1,6 @@
-//! Spatial targeting with fixed work bounds, shared by troops and buildings.
+//! Spatial targeting shared by troops and buildings. A look reads the
+//! enemies of the chunks it touches (see `contacts`); nothing is rationed
+//! per tick.
 use super::tick::Goal;
 use crate::{BuildingKind, GameWorld, UnitKind};
 use aoe_core::{
@@ -6,13 +8,10 @@ use aoe_core::{
     WorldPosition,
 };
 
+pub(crate) mod contacts;
 mod obstacles;
 #[cfg(test)]
 mod tests;
-
-pub(super) const MAX_TARGET_INSPECTIONS: u32 = 16_384;
-pub(super) const BUCKET_WINDOW: usize = 128;
-pub(super) const MAX_QUERY_INSPECTIONS: u32 = 16 * BUCKET_WINDOW as u32;
 
 pub(super) struct TargetArea {
     pub player: PlayerId,
@@ -80,25 +79,17 @@ impl TargetArea {
 }
 
 impl GameWorld {
-    /// Leave the defensive half of the targeting work for buildings.
-    fn troop_inspections_available(&self) -> u32 {
-        (MAX_TARGET_INSPECTIONS / 2).saturating_sub(self.combat.stats.targeting_scanned)
-    }
-
-    /// One admission and sampling clock for full and sleeping target queries.
-    pub(in crate::game_world::combat) fn start_target_probe(
-        &mut self,
-        actor: EntityId,
-        needed: u32,
-    ) -> Option<u64> {
-        if MAX_TARGET_INSPECTIONS.saturating_sub(self.combat.stats.targeting_scanned) < needed {
-            return None;
-        }
-        // Actual probe turns, not global ticks, advance the bucket stride.
-        let round = self.combat.target_rounds.entry(actor).or_default();
-        let offset = *round;
-        *round = round.saturating_add(BUCKET_WINDOW as u64);
-        Some(offset)
+    /// Whether a building of another player has a tile in a chunk `bounds`
+    /// touches, from the chunk summaries: no tile is read where none can be.
+    pub(super) fn enemy_buildings_near(&self, bounds: TileRect, player: PlayerId) -> bool {
+        let size = SPATIAL_CHUNK_TILES;
+        (bounds.min.y.div_euclid(size)..=(bounds.max.y - 1).div_euclid(size)).any(|y| {
+            (bounds.min.x.div_euclid(size)..=(bounds.max.x - 1).div_euclid(size)).any(|x| {
+                self.vision
+                    .building_chunks
+                    .others(ChunkCoord { x, y }, player)
+            })
+        })
     }
 
     /// A live unit or building of another player, else `None`.
@@ -117,25 +108,13 @@ impl GameWorld {
             .map(|building| Goal::Building(building.footprint))
     }
 
-    /// Melee contact uses the fine movement cells, reserving the full bounded
-    /// sample before probing so troops leave the defensive half untouched.
+    /// Melee contact uses the fine movement cells around the attacker.
     pub(super) fn acquire_contact_target(&mut self, area: &TargetArea) -> Option<EntityId> {
         let Goal::Unit(at, _) = area.source else {
             return None;
         };
         let reach = i32::try_from(area.max).unwrap_or(i32::MAX);
-        let min =
-            WorldPosition::new(at.x.saturating_sub(reach), at.y.saturating_sub(reach)).tile_floor();
-        let max =
-            WorldPosition::new(at.x.saturating_add(reach), at.y.saturating_add(reach)).tile_floor();
         let naval = self.collisions.maximum_radii()[1] != 0;
-        let needed = (i64::from(max.x) - i64::from(min.x) + 1)
-            * (i64::from(max.y) - i64::from(min.y) + 1)
-            * 32
-            * if naval { 2 } else { 1 };
-        if i64::from(self.troop_inspections_available()) < needed {
-            return None;
-        }
         // Rotate on actual probes; global tick phases can hide crowded bodies.
         let round = self.combat.target_rounds.entry(area.actor).or_default();
         let salt = round.wrapping_add(u64::from(area.actor.0));
@@ -176,59 +155,32 @@ impl GameWorld {
         best.map(|(_, _, id)| id)
     }
 
-    /// Units precede structures. Stable (class, distance, id) ordering within
-    /// a rotating bounded sample; no sort/allocation proportional to a crowd.
+    /// Units precede structures, in stable (class, distance, id) order; no
+    /// sort or allocation proportional to a crowd.
     pub(super) fn acquire_target(
         &mut self,
         area: &TargetArea,
         buildings: BuildingTargets,
     ) -> TargetProbe {
         let bounds = area.bounds(self);
-        let chunks_x = (bounds.max.x - 1).div_euclid(SPATIAL_CHUNK_TILES)
-            - bounds.min.x.div_euclid(SPATIAL_CHUNK_TILES)
-            + 1;
-        let chunks_y = (bounds.max.y - 1).div_euclid(SPATIAL_CHUNK_TILES)
-            - bounds.min.y.div_euclid(SPATIAL_CHUNK_TILES)
-            + 1;
-        let needed = chunks_x as u32 * chunks_y as u32 * BUCKET_WINDOW as u32;
-        let Some(offset) = self.start_target_probe(area.actor, needed) else {
-            return TargetProbe::default();
-        };
         let mut result = TargetProbe::default();
         let mut best = None;
-        let mut complete = true;
-        let mut fully_sampled = true;
         for y in bounds.min.y.div_euclid(SPATIAL_CHUNK_TILES)
             ..=(bounds.max.y - 1).div_euclid(SPATIAL_CHUNK_TILES)
         {
             for x in bounds.min.x.div_euclid(SPATIAL_CHUNK_TILES)
                 ..=(bounds.max.x - 1).div_euclid(SPATIAL_CHUNK_TILES)
             {
-                let Some(bucket) = self.chunks.get(&ChunkCoord { x, y }) else {
-                    continue;
-                };
-                let count = bucket.len().min(BUCKET_WINDOW);
-                complete &= offset.saturating_add(count as u64) >= bucket.len() as u64;
-                fully_sampled &= count == bucket.len();
-                if count == 0 {
-                    continue;
-                }
-                let start =
-                    (offset.wrapping_add(u64::from(area.actor.0)) % bucket.len() as u64) as usize;
-                for n in 0..count {
-                    self.combat.stats.targeting_scanned += 1;
-                    let id = bucket[(start + n) % bucket.len()];
+                let contacts = self.chunk_contacts(ChunkCoord { x, y }, area.player);
+                result.sampled_hostile |= contacts.hostile;
+                for &id in &contacts.visible {
                     let Some(u) = self.unit(id) else {
                         continue;
                     };
-                    if u.player == area.player || u.hp == 0 {
-                        continue;
-                    }
-                    result.sampled_hostile = true;
-                    if self.embarked(id)
+                    if u.player == area.player
+                        || u.hp == 0
                         || !bounds.contains(u.position.tile_floor())
                         || !area.accepts(Goal::Unit(u.position, u.kind.collision_radius()))
-                        || !self.unit_visible_to(area.player, id)
                         || (area.ram && !u.kind.is_siege())
                     {
                         continue;
@@ -251,9 +203,8 @@ impl GameWorld {
             result.preferred_in_sight = true;
             return result;
         }
-        // In a dense crowd, give units one complete rotation before falling
-        // back to buildings. The actor continues probing while attacking one.
-        if buildings == BuildingTargets::None || !complete || self.economy.buildings.is_empty() {
+        // The actor continues probing for units while attacking a building.
+        if buildings == BuildingTargets::None || self.economy.buildings.is_empty() {
             return result;
         }
         let obstacle_area = TargetArea {
@@ -271,7 +222,12 @@ impl GameWorld {
         };
         let mut seen = std::collections::BTreeSet::new();
         let mut best = None;
-        for y in building_bounds.min.y..building_bounds.max.y {
+        let tiles = if self.enemy_buildings_near(building_bounds, area.player) {
+            building_bounds.min.y..building_bounds.max.y
+        } else {
+            0..0
+        };
+        for y in tiles {
             for x in building_bounds.min.x..building_bounds.max.x {
                 let Some(id) = self.building_at_tile(aoe_core::TileCoord::new(x, y)) else {
                     continue;
@@ -310,15 +266,11 @@ impl GameWorld {
             result.preferred_in_sight = true;
             return result;
         }
-        let needs_sight_proof = !fully_sampled || area.min > 0 || area.max < area.sight;
+        let needs_sight_proof = area.min > 0 || area.max < area.sight;
         if best.is_some() || buildings == BuildingTargets::RecheckObstacle {
-            let occupied = if needs_sight_proof {
-                self.preferred_target_in_sight(area)
-            } else {
-                Some(false)
-            };
-            result.preferred_in_sight = occupied == Some(true);
-            if occupied == Some(false) {
+            let occupied = needs_sight_proof && self.preferred_target_in_sight(area);
+            result.preferred_in_sight = occupied;
+            if !occupied {
                 result.target = best.map(|(_, _, _, id)| id);
             }
         }

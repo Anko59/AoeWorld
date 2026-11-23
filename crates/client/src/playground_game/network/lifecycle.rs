@@ -69,9 +69,6 @@ pub(super) fn record_shots(
             }
         }
     }
-    while particles.len() > aoe_protocol::MAX_PROJECTILES {
-        particles.pop_first();
-    }
     village
         .last_shot
         .retain(|_, launched| tick.saturating_sub(*launched) < 600);

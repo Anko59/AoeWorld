@@ -3,23 +3,10 @@ use crate::game_world::combat::tick::Goal;
 
 /// Ticks between an attack-move group's looks; groups are staggered by id.
 const ENGAGE_CADENCE: u64 = 4;
-/// Enemies one look collects; each member compares only against these.
-const ENGAGE_CANDIDATES: usize = 256;
-/// Spatial bucket entries one look may inspect, whatever the group's extent.
-const ENGAGE_INSPECTIONS: usize = 2_048;
-/// Entries of one spatial bucket a look inspects. Successive looks start one
-/// window further on, so adjacent windows cover the whole bucket in turn.
-const ENGAGE_BUCKET_WINDOW: usize = 128;
-/// Building tiles one look may read; a wider window rotates by rows.
-const ENGAGE_BUILDING_TILES: i32 = 1_024;
-/// Members one look may send into a fight; the others look again next time.
-const ENGAGE_PER_LOOK: usize = 16;
-/// Members one look examines, rotating through the group, so the cost of a
-/// look does not grow with the army while every member is seen every few seconds.
-const ENGAGE_MEMBERS_PER_LOOK: usize = 128;
 /// Melee members one enemy unit can hold at once.
 const MELEE_SPOTS: usize = 8;
-/// Enemies in sight a member weighs per look, nearest first.
+/// Enemies with a melee spot left that a member weighs per look, nearest
+/// first: each costs a spot check, so the work stays per member.
 const TARGETS_PER_MEMBER: usize = 3;
 /// Shared contacts only expand the local pursuit window around each soldier.
 const GENERAL_CONTACT_RANGE: i64 = 12 * FIXED_SUBUNITS_PER_TILE as i64;
@@ -31,24 +18,17 @@ struct GeneralSight {
     radius: i64,
 }
 
-/// A member as one look sees it: id, position, sight radius in subunits and
-/// its slot at the group destination.
-type Looker = (EntityId, WorldPosition, i64, Resume);
-/// What one look found: the owner, its members and the enemies near them.
-type Look = (
-    PlayerId,
-    Vec<Looker>,
-    Vec<(EntityId, Goal)>,
-    Option<GeneralSight>,
-);
+/// Visible enemies of one chunk, read once per group look and shared by
+/// every member whose sight touches the chunk.
+type Contacts = BTreeMap<ChunkCoord, Vec<(EntityId, Goal)>>;
 
 impl GameWorld {
-    /// Every `ENGAGE_CADENCE` ticks an attack-move group makes one bounded
-    /// look for enemies over its whole extent. A member breaks off only for an
-    /// local or shared sighting that it could fight now (a free melee spot,
-    /// or reach); it attacks alone and leaves the group, and the
-    /// others keep marching. Its way back to its slot travels with the attack
-    /// (see `Resume`).
+    /// Every `ENGAGE_CADENCE` ticks each attack-move group looks: every member
+    /// that sees an enemy it could fight now (a free melee spot, or reach)
+    /// breaks off and attacks it alone, and the others keep marching. Each
+    /// chunk near the group is read once per look, and only chunks where
+    /// another player is present at all. The way back to the slot travels with
+    /// the attack (see `Resume`).
     #[inline(never)] // a symbol of its own for the Callgrind stage counters
     pub(crate) fn engage_formations(&mut self, changed: &mut Vec<EntityId>) {
         let leaders = self
@@ -64,7 +44,7 @@ impl GameWorld {
             .collect::<Vec<_>>();
         // Melee fighters already on each enemy, whoever released them: a man
         // has eight spots around him, so more would only stand around him.
-        let mut fighting = std::collections::BTreeMap::<EntityId, usize>::new();
+        let mut fighting = BTreeMap::<EntityId, usize>::new();
         for &id in self.combat.attackers.keys().filter(|_| !leaders.is_empty()) {
             if let Some(unit) = self.unit(id)
                 && Self::uses_melee_position(unit.kind)
@@ -74,100 +54,21 @@ impl GameWorld {
             }
         }
         for leader in leaders {
-            let Some((player, lookers, enemies, general)) = self.formation_look(leader) else {
-                continue;
-            };
-            let start = (self.tick.0 / self.config.ticks(ENGAGE_CADENCE)) as usize
-                * ENGAGE_MEMBERS_PER_LOOK
-                % lookers.len();
-            let mut engaged = 0;
-            for n in 0..lookers.len().min(ENGAGE_MEMBERS_PER_LOOK) {
-                if engaged == ENGAGE_PER_LOOK {
-                    break;
-                }
-                let (id, at, sight, resume) = lookers[(start + n) % lookers.len()];
-                let general = general.filter(|g| self.general_controller(id) == Some(g.id));
-                let mut seen = enemies
-                    .iter()
-                    .filter_map(|&(enemy, goal)| {
-                        let d = goal.distance_squared(at);
-                        (d <= sight * sight
-                            || general.is_some_and(|g| {
-                                d <= GENERAL_CONTACT_RANGE.pow(2)
-                                    && goal.distance_squared(g.position) <= g.radius * g.radius
-                            }))
-                        .then_some((d, enemy))
-                    })
-                    .collect::<Vec<_>>();
-                let breach = self.formations.get(&leader).and_then(|group| group.breach);
-                seen.sort_unstable_by_key(|&(distance, enemy)| {
-                    (Some(enemy) != breach, distance, enemy)
-                });
-                // Checked one by one: an earlier member may just have taken
-                // the last free spot around the same enemy.
-                let melee = self
-                    .unit(id)
-                    .is_some_and(|u| Self::uses_melee_position(u.kind));
-                let target = seen
-                    .into_iter()
-                    .take(TARGETS_PER_MEMBER)
-                    .map(|(_, enemy)| enemy)
-                    .find(|&enemy| {
-                        // Buildings have a wider perimeter; their spots are
-                        // checked by `attack_spot_free` alone.
-                        (!melee
-                            || self.unit(enemy).is_none()
-                            || fighting.get(&enemy).copied().unwrap_or(0) < MELEE_SPOTS)
-                            && self.attack_spot_free(id, enemy)
-                    });
-                if let Some(target) = target {
-                    let queue = self.detached_waypoints(id);
-                    if self.issue_attack(player, id, target).is_err() {
-                        continue;
-                    }
-                    if melee {
-                        *fighting.entry(target).or_default() += 1;
-                    }
-                    if let Some(attacker) = self.combat.attackers.get_mut(&id) {
-                        attacker.resume = Some(resume);
-                    }
-                    if !queue.pending.is_empty() {
-                        self.move_queues.insert(id, queue);
-                    }
-                    changed.push(id);
-                    engaged += 1;
-                }
-            }
+            self.engage_group(leader, &mut fighting, changed);
         }
         self.advance_resumes(changed);
     }
 
-    /// The group's members with their sight, and the enemies within the
-    /// members' extent widened by the longest sight, or `None` when there is
-    /// nothing to fight.
-    fn formation_look(&self, leader: EntityId) -> Option<Look> {
-        let group = self.formations.get(&leader)?;
+    fn engage_group(
+        &mut self,
+        leader: EntityId,
+        fighting: &mut BTreeMap<EntityId, usize>,
+        changed: &mut Vec<EntityId>,
+    ) {
+        let Some(group) = self.formations.get(&leader) else {
+            return;
+        };
         let player = self.units[self.lookup[&leader]].state.player;
-        let mut lookers = Vec::with_capacity(group.members.len());
-        let (mut min, mut max) = ((i32::MAX, i32::MAX), (i32::MIN, i32::MIN));
-        let mut widest = 0;
-        for member in &group.members {
-            let Some(unit) = self.unit(member.id) else {
-                continue;
-            };
-            let Some((_, tile, los)) = self.unit_observer(&unit) else {
-                continue;
-            };
-            min = (min.0.min(tile.x), min.1.min(tile.y));
-            max = (max.0.max(tile.x), max.1.max(tile.y));
-            widest = widest.max(i32::from(los));
-            let resume = group.resume_at(member.goal);
-            let sight = i64::from(los) * i64::from(FIXED_SUBUNITS_PER_TILE);
-            lookers.push((member.id, unit.position, sight, resume));
-        }
-        if lookers.is_empty() {
-            return None;
-        }
         let general = self
             .general_controller(leader)
             .and_then(|id| self.unit(id))
@@ -179,85 +80,159 @@ impl GameWorld {
                     radius: i64::from(sight) * i64::from(FIXED_SUBUNITS_PER_TILE),
                 })
             });
-        let margin = widest.max(if general.is_some() { 12 } else { 0 }) + 1;
-        let area = TileRect::from_xywh(
-            min.0 - margin,
-            min.1 - margin,
-            max.0 - min.0 + 2 * margin + 1,
-            max.1 - min.1 + 2 * margin + 1,
-        )
-        .clamp(self.config.width_tiles, self.config.height_tiles);
-        let mut enemies = self.formation_enemies(leader, player, area);
-        if let Some(id) = group.breach
-            && let Some(b) = self.building(id)
-            && self.building_visible_to(player, b.footprint)
-        {
-            enemies.push((id, Goal::Building(b.footprint)));
-        } else if enemies.is_empty() {
-            enemies = self.formation_enemy_buildings(player, area);
-        }
-        (!enemies.is_empty()).then_some((player, lookers, enemies, general))
-    }
-
-    /// Up to `ENGAGE_CANDIDATES` visible enemy units in `area`, inspecting at
-    /// most `ENGAGE_INSPECTIONS` bucket entries. The window rotates per look
-    /// so neither a dense allied crowd nor a large enemy army hides anyone.
-    fn formation_enemies(
-        &self,
-        leader: EntityId,
-        player: PlayerId,
-        area: TileRect,
-    ) -> Vec<(EntityId, Goal)> {
-        let look = self.tick.0 / self.config.ticks(ENGAGE_CADENCE);
-        let mut out = Vec::new();
-        let mut budget = ENGAGE_INSPECTIONS;
-        for y in area.min.y / SPATIAL_CHUNK_TILES..=(area.max.y - 1) / SPATIAL_CHUNK_TILES {
-            for x in area.min.x / SPATIAL_CHUNK_TILES..=(area.max.x - 1) / SPATIAL_CHUNK_TILES {
-                let Some(ids) = self.chunks.get(&ChunkCoord { x, y }) else {
-                    continue;
-                };
-                let start = ((look * ENGAGE_BUCKET_WINDOW as u64 + u64::from(leader.0))
-                    % ids.len() as u64) as usize;
-                for n in 0..ids.len().min(ENGAGE_BUCKET_WINDOW).min(budget) {
-                    budget -= 1;
-                    let id = ids[(start + n) % ids.len()];
-                    let unit = self.units[self.lookup[&id]].state;
-                    if unit.hp > 0
-                        && unit.player != player
-                        && area.contains(unit.position.tile_floor())
-                        && !self.embarked(id)
-                        && self.unit_visible_to(player, id)
-                    {
-                        out.push((id, Goal::Unit(unit.position, unit.kind.collision_radius())));
-                        if out.len() == ENGAGE_CANDIDATES {
-                            return out;
-                        }
-                    }
+        let breach = group.breach.and_then(|id| {
+            let b = self.building(id)?;
+            self.building_visible_to(player, b.footprint)
+                .then_some((id, Goal::Building(b.footprint)))
+        });
+        let lookers: Vec<_> = group
+            .members
+            .iter()
+            .map(|m| (m.id, group.resume_at(m.goal)))
+            .collect();
+        let mut units = Contacts::new();
+        let mut buildings = Contacts::new();
+        for (id, resume) in lookers {
+            let Some(unit) = self.unit(id) else {
+                continue;
+            };
+            if unit.stance == aoe_core::CombatStance::NoAttack {
+                continue;
+            }
+            let Some((_, tile, los)) = self.unit_observer(&unit) else {
+                continue;
+            };
+            let general = general.filter(|g| self.general_controller(id) == Some(g.id));
+            let sight = i64::from(los) * i64::from(FIXED_SUBUNITS_PER_TILE);
+            let reach = sight.max(if general.is_some() {
+                GENERAL_CONTACT_RANGE
+            } else {
+                0
+            });
+            let sees = |goal: Goal| {
+                let d = goal.distance_squared(unit.position);
+                (d <= sight * sight
+                    || general.is_some_and(|g| {
+                        d <= GENERAL_CONTACT_RANGE.pow(2)
+                            && goal.distance_squared(g.position) <= g.radius * g.radius
+                    }))
+                .then_some(d)
+            };
+            let tiles = (reach / i64::from(FIXED_SUBUNITS_PER_TILE)) as i32 + 1;
+            let bounds =
+                TileRect::from_xywh(tile.x - tiles, tile.y - tiles, 2 * tiles + 1, 2 * tiles + 1)
+                    .clamp(self.config.width_tiles, self.config.height_tiles);
+            let mut seen = Vec::new();
+            if let Some((enemy, goal)) = breach
+                && let Some(d) = sees(goal)
+            {
+                seen.push((false, d, enemy));
+            }
+            for chunk in look_chunks(bounds) {
+                let contacts = units
+                    .entry(chunk)
+                    .or_insert_with(|| self.formation_unit_contacts(player, chunk));
+                seen.extend(contacts.iter().filter_map(|&(enemy, goal)| {
+                    sees(goal).map(|d| (Some(enemy) != breach.map(|b| b.0), d, enemy))
+                }));
+            }
+            if seen.is_empty() {
+                for chunk in look_chunks(bounds) {
+                    let contacts = buildings
+                        .entry(chunk)
+                        .or_insert_with(|| self.formation_building_contacts(player, chunk));
+                    seen.extend(
+                        contacts
+                            .iter()
+                            .filter_map(|&(enemy, goal)| sees(goal).map(|d| (true, d, enemy))),
+                    );
                 }
             }
+            if seen.is_empty() {
+                continue;
+            }
+            seen.sort_unstable();
+            seen.dedup();
+            // Checked one by one: an earlier member may just have taken
+            // the last free spot around the same enemy.
+            let melee = Self::uses_melee_position(unit.kind);
+            let target = seen
+                .into_iter()
+                .map(|(_, _, enemy)| enemy)
+                // Buildings have a wider perimeter; their spots are
+                // checked by `attack_spot_free` alone.
+                .filter(|enemy| {
+                    !melee
+                        || self.unit(*enemy).is_none()
+                        || fighting.get(enemy).copied().unwrap_or(0) < MELEE_SPOTS
+                })
+                .take(TARGETS_PER_MEMBER)
+                .find(|&enemy| self.attack_spot_free(id, enemy));
+            let Some(target) = target else {
+                continue;
+            };
+            let queue = self.detached_waypoints(id);
+            if self.issue_attack(player, id, target).is_err() {
+                continue;
+            }
+            if melee {
+                *fighting.entry(target).or_default() += 1;
+            }
+            if let Some(attacker) = self.combat.attackers.get_mut(&id) {
+                attacker.resume = Some(resume);
+            }
+            if !queue.pending.is_empty() {
+                self.move_queues.insert(id, queue);
+            }
+            changed.push(id);
         }
-        out
     }
 
-    /// Ordinary enemy buildings in a rotating band of visible tiles.
-    /// Only a member's own acquisition can rule out alternatives in its sight
-    /// before it stops for a wall, gate, or road.
-    fn formation_enemy_buildings(&self, player: PlayerId, area: TileRect) -> Vec<(EntityId, Goal)> {
-        let (width, height) = (area.width(), area.height());
-        if width <= 0 || height <= 0 {
+    /// Every visible living enemy unit in `chunk`; none at all is read where
+    /// the presence summary shows no other player.
+    fn formation_unit_contacts(
+        &self,
+        player: PlayerId,
+        chunk: ChunkCoord,
+    ) -> Vec<(EntityId, Goal)> {
+        if !self.chunks.presence.others(chunk, player) {
             return Vec::new();
         }
-        let rows = (ENGAGE_BUILDING_TILES / width).clamp(1, height);
-        let first = ((self.tick.0 / self.config.ticks(ENGAGE_CADENCE)) as i32 * rows) % height;
-        let mut out = Vec::<(EntityId, Goal)>::new();
-        for row in 0..rows {
-            let y = area.min.y + (first + row) % height;
-            for x in area.min.x..area.max.x {
+        let Some(ids) = self.chunks.get(&chunk) else {
+            return Vec::new();
+        };
+        ids.iter()
+            .filter_map(|&id| {
+                let unit = self.units[self.lookup[&id]].state;
+                (unit.hp > 0
+                    && unit.player != player
+                    && !self.embarked(id)
+                    && self.unit_visible_to(player, id))
+                .then_some((id, Goal::Unit(unit.position, unit.kind.collision_radius())))
+            })
+            .collect()
+    }
+
+    /// Ordinary visible enemy buildings with a tile in `chunk`; walls, gates
+    /// and roads are left to a member's own acquisition, which can rule out
+    /// alternatives in its sight before it stops for one.
+    fn formation_building_contacts(
+        &self,
+        player: PlayerId,
+        chunk: ChunkCoord,
+    ) -> Vec<(EntityId, Goal)> {
+        if !self.vision.building_chunks.others(chunk, player) {
+            return Vec::new();
+        }
+        let size = SPATIAL_CHUNK_TILES;
+        let mut out = BTreeMap::new();
+        for y in chunk.y * size..(chunk.y + 1) * size {
+            for x in chunk.x * size..(chunk.x + 1) * size {
                 let tile = TileCoord::new(x, y);
                 let Some(id) = self.building_at_tile(tile) else {
                     continue;
                 };
-                if out.iter().any(|&(seen, _)| seen == id) {
+                if out.contains_key(&id) {
                     continue;
                 }
                 if let Some(b) = self
@@ -265,13 +240,21 @@ impl GameWorld {
                     .filter(|b| b.player != player && b.hp > 0 && !b.kind.is_obstacle_target())
                     && self.visibility(player, tile) == TileVisibility::Visible
                 {
-                    out.push((id, Goal::Building(b.footprint)));
-                    if out.len() == ENGAGE_CANDIDATES {
-                        return out;
-                    }
+                    out.insert(id, Goal::Building(b.footprint));
                 }
             }
         }
-        out
+        out.into_iter().collect()
     }
+}
+
+/// The spatial chunks a tile rectangle touches.
+fn look_chunks(bounds: TileRect) -> impl Iterator<Item = ChunkCoord> {
+    let size = SPATIAL_CHUNK_TILES;
+    let (x0, y0) = (bounds.min.x.div_euclid(size), bounds.min.y.div_euclid(size));
+    let (x1, y1) = (
+        (bounds.max.x - 1).div_euclid(size),
+        (bounds.max.y - 1).div_euclid(size),
+    );
+    (y0..=y1).flat_map(move |y| (x0..=x1).map(move |x| ChunkCoord { x, y }))
 }

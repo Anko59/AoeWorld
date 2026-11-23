@@ -1,6 +1,5 @@
 use super::*;
 
-pub const MAX_PROJECTILES: usize = 4096;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ProjectileKind {
     Arrow,
@@ -20,11 +19,6 @@ pub struct ProjectileState {
     pub launched: Tick,
     pub impact: Tick,
     pub kind: ProjectileKind,
-}
-pub(super) fn bounded_projectiles<'de, D: Deserializer<'de>>(
-    d: D,
-) -> Result<Vec<ProjectileState>, D::Error> {
-    economy::bounded::<D, _, MAX_PROJECTILES>(d)
 }
 pub(super) fn valid_projectile(p: &ProjectileState, tick: Tick) -> bool {
     p.kind != ProjectileKind::Native(0)

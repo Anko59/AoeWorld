@@ -78,10 +78,11 @@ fn an_automatic_building_attack_yields_to_units_but_a_manual_target_is_kept() {
         if manual {
             w.issue_attack(PlayerId(0), a, house).unwrap();
         }
-        w.advance();
+        // An idle soldier looks on its own turn, one tick in four.
+        advance(&mut w, 4);
         assert_eq!(w.unit(a).unwrap().attack_target, Some(house));
         let enemy = w.spawn_villager(PlayerId(1), at(100, 102)).unwrap();
-        w.advance();
+        advance(&mut w, 4);
         assert_eq!(
             w.unit(a).unwrap().attack_target,
             Some(if manual { house } else { enemy })
@@ -171,7 +172,7 @@ fn defensive_pursuit_returns_to_its_origin_and_stance_groups_are_atomic() {
         .unwrap();
     w.issue_stance(PlayerId(1), &[b], CombatStance::NoAttack)
         .unwrap();
-    w.advance();
+    advance(&mut w, 4);
     assert_eq!(w.unit(a).unwrap().attack_target, Some(b));
     w.issue_move(b, at(115, 100)).unwrap();
     advance(&mut w, 400);
@@ -193,8 +194,6 @@ fn dense_crowds_have_bounded_target_work_and_cannot_hide_an_enemy_forever() {
     for _ in 0..50 {
         w.advance();
         let stats = w.combat_stats();
-        assert!(stats.acquisition_checks <= 128);
-        assert!(stats.targeting_scanned <= 16_384);
         assert!(stats.attack_searches <= 16);
         if w.unit(a).unwrap().attack_target == Some(enemy) {
             return;
@@ -328,4 +327,36 @@ fn a_castle_fires_at_an_approaching_unit_without_orders() {
         .unwrap();
     w.issue_move(enemy, at(108, 102)).unwrap();
     ticks_until(&mut w, 300, |w| w.unit(enemy).unwrap().hp < 100);
+}
+
+/// Far more idle soldiers than the former world-wide ration of 128 looks per
+/// tick: every one looks on its own turn, so all have a target in four ticks.
+#[test]
+fn each_idle_soldier_gets_its_own_four_tick_acquisition_turn() {
+    use aoe_core::CombatStance;
+    let mut w = world();
+    w.set_fog_disabled(true);
+    let archers: Vec<_> = (0..600)
+        .map(|_| {
+            w.spawn_kind(PlayerId(0), UnitKind::Archer, at(100, 100))
+                .unwrap()
+        })
+        .collect();
+    let enemy = w.spawn_villager(PlayerId(1), at(103, 100)).unwrap();
+    w.units[w.lookup[&enemy]].state.stance = CombatStance::NoAttack;
+    let mut turn = std::collections::BTreeMap::new();
+    for tick in 1..=4_u64 {
+        w.advance();
+        for &id in &archers {
+            if w.unit(id).unwrap().attack_target == Some(enemy) {
+                turn.entry(id).or_insert(tick);
+            }
+        }
+    }
+    assert_eq!(turn.len(), archers.len());
+    let phases: std::collections::BTreeSet<_> = turn
+        .iter()
+        .map(|(id, tick)| (tick + u64::from(id.0)) % 4)
+        .collect();
+    assert_eq!(phases.len(), 1, "{phases:?}");
 }

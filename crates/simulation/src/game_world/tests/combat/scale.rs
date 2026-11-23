@@ -104,19 +104,25 @@ fn crowd(units: u32, attackers: usize) -> GameWorld {
 }
 
 #[test]
-fn autonomous_combat_work_has_fixed_query_and_search_budgets() {
+fn autonomous_combat_looks_follow_each_units_own_cadence() {
     let mut worst = Vec::new();
     for units in [400, 6_000] {
         let mut world = crowd(units, 16);
         let mut peak = 0;
+        let mut checks = 0;
         for _ in 0..200 {
             world.advance();
             peak = peak.max(world.combat_stats().attackers);
+            checks += u64::from(world.combat_stats().acquisition_checks);
             assert!(world.combat_stats().hits <= world.combat_stats().attackers);
-            assert!(world.combat_stats().acquisition_checks <= 128);
-            assert!(world.combat_stats().targeting_scanned <= 16_384);
             assert!(world.combat_stats().attack_searches <= 16);
         }
+        // One look per seeker every fourth tick, plus the looks of sleepers
+        // an arrival woke: never a world-wide ration, never every tick.
+        assert!(
+            checks <= u64::from(units) * 200 / 4 * 2,
+            "{units}: {checks}"
+        );
         worst.push(peak);
     }
     // Default Aggressive acquisition intentionally replaces the former ceiling

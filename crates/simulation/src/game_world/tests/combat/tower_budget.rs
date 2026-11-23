@@ -1,4 +1,4 @@
-//! Defensive buildings keep firing while a huge army spends the unit scan budget.
+//! Defensive buildings keep firing beside a huge army that is looking for targets.
 use super::*;
 use crate::{BuildingKind, UnitKind};
 
@@ -85,7 +85,7 @@ fn town_center_range_is_measured_from_its_edge() {
 }
 
 #[test]
-fn a_hundred_garrisoned_town_centers_fire_while_an_army_spends_the_scan_budget() {
+fn a_hundred_garrisoned_town_centers_fire_beside_a_busy_army() {
     let mut world = busy_world(11_000);
     let spot = |gx: i32, gy: i32| (2 + gx * 6, 2 + gy * 6);
     let tcs: Vec<_> = (0..100)
@@ -101,7 +101,6 @@ fn a_hundred_garrisoned_town_centers_fire_while_an_army_spends_the_scan_budget()
     let mut fired = std::collections::BTreeSet::new();
     for _ in 0..150 {
         world.advance();
-        assert!(world.combat_stats().targeting_scanned <= 16_384);
         fired.extend(
             world
                 .projectiles()

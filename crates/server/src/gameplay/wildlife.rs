@@ -57,9 +57,6 @@ pub(super) fn projectiles_from<'a>(
                 ),
             }
         })
-        // Projectiles are shown, never simulated, on the client: a crowded
-        // battle shows the first `MAX_PROJECTILES` rather than failing the frame.
-        .take(aoe_protocol::MAX_PROJECTILES)
         .collect()
 }
 
