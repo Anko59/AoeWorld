@@ -126,6 +126,18 @@ impl Units {
         order.speed_carry = order.speed_carry.saturating_add(credit);
         true
     }
+    /// Mutable access that does not report the unit as changed, for writes
+    /// no client sees: its order, route, obstruction and planner. A caller
+    /// that may change `state` reports it with `report`. Every applied step
+    /// used to report its unit, so the server's frame converted about 21,600
+    /// units a tick on R1 to find about 4,400 changed (#978).
+    pub(crate) fn unreported(&mut self, at: usize) -> &mut StoredUnit {
+        &mut self.values[at]
+    }
+    /// Reports `id` as changed this tick (see `unreported`).
+    pub(crate) fn report(&mut self, id: EntityId) {
+        self.dirty.insert(id);
+    }
     pub(crate) fn push(&mut self, unit: StoredUnit) {
         self.dirty.insert(unit.state.id);
         self.values.push(unit);

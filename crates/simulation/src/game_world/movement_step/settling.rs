@@ -89,7 +89,8 @@ impl GameWorld {
     }
 
     pub(crate) fn record_obstruction_towards(&mut self, index: usize, goal: WorldPosition) {
-        let unit = &mut self.units[index];
+        // Obstruction bookkeeping is never sent to a client.
+        let unit = self.units.unreported(index);
         let obstruction = unit.obstruction.get_or_insert(Obstruction {
             goal,
             remaining: distance(unit.state.position, goal),
@@ -164,7 +165,7 @@ impl GameWorld {
         {
             return false;
         }
-        let Some(obstruction) = &mut self.units[index].obstruction else {
+        let Some(obstruction) = &mut self.units.unreported(index).obstruction else {
             return false;
         };
         if obstruction.search_tick == self.tick.0 {
@@ -175,7 +176,8 @@ impl GameWorld {
     }
 
     pub(crate) fn observe_unit_progress(&mut self, index: usize) {
-        let unit = &mut self.units[index];
+        // Obstruction bookkeeping only: not reported (`Units::unreported`).
+        let unit = self.units.unreported(index);
         if unit.order.is_none() && unit.formation.is_none() {
             unit.obstruction = None;
         } else if let Some(obstruction) = &mut unit.obstruction {

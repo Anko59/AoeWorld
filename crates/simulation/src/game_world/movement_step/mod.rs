@@ -404,7 +404,8 @@ impl GameWorld {
             return false;
         }
         self.census_apply(index, step.state.position);
-        let stored = &mut self.units[index];
+        // Reported only when its state changes: order and route are not seen.
+        let stored = self.units.unreported(index);
         let from = stored.state.position;
         let state_changed = stored.state != step.state;
         let previous_motion = (
@@ -431,6 +432,9 @@ impl GameWorld {
         }
         if step.pops > 0 {
             stored.route.pop_front();
+        }
+        if state_changed {
+            self.units.report(id);
         }
         if let Some(motion) = step.member {
             self.finish_formation_member(id, motion, from, step.state.position);
