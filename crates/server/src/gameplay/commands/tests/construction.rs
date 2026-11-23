@@ -146,3 +146,58 @@ fn a_large_builder_group_can_place_a_long_wall_in_one_order() {
     assert_eq!(result, CommandResult::Accepted);
     assert_eq!(world.buildings().count(), initial + 200);
 }
+
+#[tokio::test]
+async fn five_thousand_villagers_gather_in_two_list_orders_without_admission_refusal() {
+    use crate::gameplay::SlotSetup;
+    use aoe_core::{MAX_FORMATION_MEMBERS, PlayerId, TileCoord, WorldPosition};
+    use aoe_simulation::GameWorld;
+
+    let owner = PlayerId(0);
+    let (mut world, primary) = GameWorld::imperial_demo(Seed(7)).unwrap();
+    let villagers = (0..5_000)
+        .map(|i| {
+            let tile = TileCoord::new(130 + i % 100, 150 + i / 100);
+            let at = WorldPosition::from_tile_center(tile).unwrap();
+            world.spawn_villager(owner, at).unwrap()
+        })
+        .collect::<Vec<_>>();
+    let service = GameplayService::from_world_slots(
+        world,
+        vec![SlotSetup {
+            player: owner,
+            primary_unit_id: primary,
+            human: true,
+        }],
+        None,
+        None,
+    );
+    let (sender, mut receiver) = mpsc::channel(64);
+    let (session, _) = service.register(None, sender).await;
+    let chunks = villagers.chunks(MAX_FORMATION_MEMBERS).collect::<Vec<_>>();
+    assert_eq!(chunks.len(), 2);
+    for (i, ids) in chunks.iter().enumerate() {
+        service
+            .queue_gather_selection(session, i as u64 + 1, ids.to_vec(), 1)
+            .await;
+    }
+    service.settle_preparation().await;
+    service.tick().await;
+    let mut acks = 0;
+    while let Ok(message) = receiver.try_recv() {
+        if let GameplayServerMessage::CommandAck { result, .. } = message {
+            acks += 1;
+            // The resource may not exist on this map; admission must not refuse.
+            assert!(
+                !matches!(
+                    result,
+                    CommandResult::RejectedRateLimited
+                        | CommandResult::RejectedQueueFull
+                        | CommandResult::RejectedOrderTooLarge
+                ),
+                "{result:?}"
+            );
+        }
+    }
+    assert_eq!(acks, 2);
+}

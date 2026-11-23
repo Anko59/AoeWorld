@@ -32,16 +32,22 @@ pub(in super::super) fn interact(client: &mut Client, point: ScreenPoint) -> boo
         .filter(|unit| kind.admits(unit.kind))
         .map(|unit| unit.id)
         .collect();
-    for entity_id in ids {
+    for entity_ids in ids.chunks(aoe_core::MAX_FORMATION_MEMBERS) {
         let sequence = client.next_sequence;
-        send(
-            client,
+        let message = if let [entity_id] = entity_ids {
             Message::GarrisonOrder {
                 sequence,
-                entity_id,
+                entity_id: *entity_id,
                 building_id,
-            },
-        );
+            }
+        } else {
+            Message::GarrisonSelectionOrder {
+                sequence,
+                entity_ids: entity_ids.to_vec(),
+                building_id,
+            }
+        };
+        send(client, message);
     }
     client.village.garrison_cursor = false;
     let _ = client.canvas.set_attribute("data-order-mode", "");

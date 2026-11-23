@@ -69,6 +69,47 @@ pub(super) async fn read_requests(
                     .queue_attack_selection(session_id, sequence, entity_ids, target_id)
                     .await
             }
+            Ok(GameplayClientMessage::GatherSelectionOrder {
+                sequence,
+                entity_ids,
+                resource_id,
+            }) => {
+                service
+                    .queue_gather_selection(session_id, sequence, entity_ids, resource_id)
+                    .await
+            }
+            Ok(GameplayClientMessage::PatrolSelectionOrder {
+                sequence,
+                entity_ids,
+                destination,
+            }) => {
+                service
+                    .queue_patrol_selection(session_id, sequence, entity_ids, destination)
+                    .await
+            }
+            Ok(GameplayClientMessage::GarrisonSelectionOrder {
+                sequence,
+                entity_ids,
+                building_id,
+            }) => {
+                service
+                    .queue_garrison_selection(session_id, sequence, entity_ids, building_id)
+                    .await
+            }
+            Ok(GameplayClientMessage::GeneralMoveAloneSelectionOrder {
+                sequence,
+                entity_ids,
+                destination,
+            }) => {
+                service
+                    .queue_general_move_alone_selection(
+                        session_id,
+                        sequence,
+                        entity_ids,
+                        destination,
+                    )
+                    .await
+            }
             Ok(GameplayClientMessage::TrainBatchOrder {
                 sequence,
                 kind,
