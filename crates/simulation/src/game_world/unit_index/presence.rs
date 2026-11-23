@@ -4,42 +4,85 @@
 use aoe_core::{ChunkCoord, PlayerId, SPATIAL_CHUNK_TILES, TileCoord};
 use std::collections::BTreeMap;
 
+/// Side of the finer cells a second summary can count tile entries in
+/// (`add_cell_tile`): the 4 x 4 cells of a chunk.
+pub(crate) const PRESENCE_CELL_TILES: i32 = 8;
+
+type Counts = BTreeMap<ChunkCoord, Vec<(PlayerId, u32)>>;
+
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct ChunkPresence {
-    chunks: BTreeMap<ChunkCoord, Vec<(PlayerId, u32)>>,
+    chunks: Counts,
+}
+
+fn add(counts: &mut Counts, chunk: ChunkCoord, player: PlayerId) {
+    let players = counts.entry(chunk).or_default();
+    match players.iter_mut().find(|(p, _)| *p == player) {
+        Some((_, count)) => *count += 1,
+        None => players.push((player, 1)),
+    }
+}
+
+fn remove(counts: &mut Counts, chunk: ChunkCoord, player: PlayerId) {
+    let Some(players) = counts.get_mut(&chunk) else {
+        return;
+    };
+    let Some(at) = players.iter().position(|(p, _)| *p == player) else {
+        return;
+    };
+    players[at].1 -= 1;
+    if players[at].1 == 0 {
+        players.swap_remove(at);
+        if players.is_empty() {
+            counts.remove(&chunk);
+        }
+    }
 }
 
 impl ChunkPresence {
     pub(crate) fn add(&mut self, chunk: ChunkCoord, player: PlayerId) {
-        let players = self.chunks.entry(chunk).or_default();
-        match players.iter_mut().find(|(p, _)| *p == player) {
-            Some((_, count)) => *count += 1,
-            None => players.push((player, 1)),
-        }
+        add(&mut self.chunks, chunk, player);
     }
 
     pub(crate) fn remove(&mut self, chunk: ChunkCoord, player: PlayerId) {
-        let Some(players) = self.chunks.get_mut(&chunk) else {
-            return;
-        };
-        let Some(at) = players.iter().position(|(p, _)| *p == player) else {
-            return;
-        };
-        players[at].1 -= 1;
-        if players[at].1 == 0 {
-            players.swap_remove(at);
-            if players.is_empty() {
-                self.chunks.remove(&chunk);
-            }
-        }
+        remove(&mut self.chunks, chunk, player);
     }
 
     pub(crate) fn add_tile(&mut self, tile: TileCoord, player: PlayerId) {
-        self.add(tile_chunk(tile), player);
+        add(&mut self.chunks, tile_chunk(tile), player);
     }
 
     pub(crate) fn remove_tile(&mut self, tile: TileCoord, player: PlayerId) {
-        self.remove(tile_chunk(tile), player);
+        remove(&mut self.chunks, tile_chunk(tile), player);
+    }
+
+    /// `add_tile` for a summary kept per `PRESENCE_CELL_TILES` cell.
+    pub(crate) fn add_cell_tile(&mut self, tile: TileCoord, player: PlayerId) {
+        add(&mut self.chunks, tile_cell(tile), player);
+    }
+
+    pub(crate) fn remove_cell_tile(&mut self, tile: TileCoord, player: PlayerId) {
+        remove(&mut self.chunks, tile_cell(tile), player);
+    }
+
+    /// For a per-cell summary: whether any player but `player` is present in
+    /// a cell `rect` touches.
+    pub(crate) fn others_in_cells(&self, rect: aoe_core::TileRect, player: PlayerId) -> bool {
+        let size = PRESENCE_CELL_TILES;
+        (rect.min.y.div_euclid(size)..=(rect.max.y - 1).div_euclid(size)).any(|y| {
+            (rect.min.x.div_euclid(size)..=(rect.max.x - 1).div_euclid(size))
+                .any(|x| self.others(ChunkCoord { x, y }, player))
+        })
+    }
+
+    /// For a per-chunk summary: whether any player but `player` is present in
+    /// a chunk `rect` touches.
+    pub(crate) fn others_in_chunks(&self, rect: aoe_core::TileRect, player: PlayerId) -> bool {
+        let size = SPATIAL_CHUNK_TILES;
+        (rect.min.y.div_euclid(size)..=(rect.max.y - 1).div_euclid(size)).any(|y| {
+            (rect.min.x.div_euclid(size)..=(rect.max.x - 1).div_euclid(size))
+                .any(|x| self.others(ChunkCoord { x, y }, player))
+        })
     }
 
     /// Whether any player but `player` is present in `chunk`.
@@ -68,6 +111,40 @@ impl crate::game_world::StoredUnit {
     /// its bucket but not in the summary.
     pub(crate) fn living_owner(&self) -> Option<PlayerId> {
         self.state.death_tick.is_none().then_some(self.state.player)
+    }
+}
+
+/// The bit of `tile`'s cell among the 4 x 4 cells of `chunk`.
+pub(crate) fn cell_bit(chunk: ChunkCoord, tile: TileCoord) -> u16 {
+    let at = |v: i32, o: i32| (v - o * SPATIAL_CHUNK_TILES).clamp(0, SPATIAL_CHUNK_TILES - 1);
+    1 << (at(tile.y, chunk.y) / PRESENCE_CELL_TILES * 4 + at(tile.x, chunk.x) / PRESENCE_CELL_TILES)
+}
+
+/// The cells of `chunk` that `bounds` touches, as `cell_bit` numbers them.
+pub(crate) fn cell_mask(chunk: ChunkCoord, bounds: aoe_core::TileRect) -> u16 {
+    let (x0, y0) = (chunk.x * SPATIAL_CHUNK_TILES, chunk.y * SPATIAL_CHUNK_TILES);
+    if bounds.max.x <= x0
+        || bounds.max.y <= y0
+        || bounds.min.x >= x0 + SPATIAL_CHUNK_TILES
+        || bounds.min.y >= y0 + SPATIAL_CHUNK_TILES
+    {
+        return 0;
+    }
+    let lo = |v: i32, o: i32| (v - o).clamp(0, SPATIAL_CHUNK_TILES - 1) / PRESENCE_CELL_TILES;
+    let hi = |v: i32, o: i32| (v - 1 - o).clamp(0, SPATIAL_CHUNK_TILES - 1) / PRESENCE_CELL_TILES;
+    let mut mask = 0;
+    for y in lo(bounds.min.y, y0)..=hi(bounds.max.y, y0) {
+        for x in lo(bounds.min.x, x0)..=hi(bounds.max.x, x0) {
+            mask |= 1 << (y * 4 + x);
+        }
+    }
+    mask
+}
+
+fn tile_cell(tile: TileCoord) -> ChunkCoord {
+    ChunkCoord {
+        x: tile.x.div_euclid(PRESENCE_CELL_TILES),
+        y: tile.y.div_euclid(PRESENCE_CELL_TILES),
     }
 }
 

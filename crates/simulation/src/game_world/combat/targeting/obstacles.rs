@@ -40,15 +40,17 @@ impl GameWorld {
             for x in bounds.min.x.div_euclid(SPATIAL_CHUNK_TILES)
                 ..=(bounds.max.x - 1).div_euclid(SPATIAL_CHUNK_TILES)
             {
-                let contacts = self.chunk_contacts(ChunkCoord { x, y }, sight.player);
-                if contacts.visible.iter().any(|&id| {
-                    self.unit(id).is_some_and(|u| {
-                        u.player != sight.player
-                            && u.hp > 0
-                            && (!sight.ram || u.kind.is_siege())
-                            && sight.accepts(Goal::Unit(u.position, u.kind.collision_radius()))
+                let chunk = ChunkCoord { x, y };
+                let contacts = self.chunk_contacts(chunk, sight.player);
+                if contacts.cells & contacts::cell_mask(chunk, bounds) != 0
+                    && contacts.visible.iter().any(|c| {
+                        (!sight.ram || c.siege)
+                            && sight.accepts(Goal::Unit(c.position, c.radius))
+                            && self
+                                .unit(c.id)
+                                .is_some_and(|u| u.player != sight.player && u.hp > 0)
                     })
-                }) {
+                {
                     return true;
                 }
             }

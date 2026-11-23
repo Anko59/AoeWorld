@@ -79,19 +79,6 @@ impl TargetArea {
 }
 
 impl GameWorld {
-    /// Whether a building of another player has a tile in a chunk `bounds`
-    /// touches, from the chunk summaries: no tile is read where none can be.
-    pub(super) fn enemy_buildings_near(&self, bounds: TileRect, player: PlayerId) -> bool {
-        let size = SPATIAL_CHUNK_TILES;
-        (bounds.min.y.div_euclid(size)..=(bounds.max.y - 1).div_euclid(size)).any(|y| {
-            (bounds.min.x.div_euclid(size)..=(bounds.max.x - 1).div_euclid(size)).any(|x| {
-                self.vision
-                    .building_chunks
-                    .others(ChunkCoord { x, y }, player)
-            })
-        })
-    }
-
     /// A live unit or building of another player, else `None`.
     pub(crate) fn attack_goal(&self, target: EntityId, attacker: PlayerId) -> Option<Goal> {
         if let Some(unit) = self.unit(target) {
@@ -171,29 +158,25 @@ impl GameWorld {
             for x in bounds.min.x.div_euclid(SPATIAL_CHUNK_TILES)
                 ..=(bounds.max.x - 1).div_euclid(SPATIAL_CHUNK_TILES)
             {
-                let contacts = self.chunk_contacts(ChunkCoord { x, y }, area.player);
+                let chunk = ChunkCoord { x, y };
+                let contacts = self.chunk_contacts(chunk, area.player);
                 result.sampled_hostile |= contacts.hostile;
-                for &id in &contacts.visible {
-                    let Some(u) = self.unit(id) else {
-                        continue;
-                    };
-                    if u.player == area.player
-                        || u.hp == 0
-                        || !bounds.contains(u.position.tile_floor())
-                        || !area.accepts(Goal::Unit(u.position, u.kind.collision_radius()))
-                        || (area.ram && !u.kind.is_siege())
+                // No visible enemy in the part of the chunk this look covers.
+                if contacts.cells & contacts::cell_mask(chunk, bounds) == 0 {
+                    continue;
+                }
+                for c in &contacts.visible {
+                    let goal = Goal::Unit(c.position, c.radius);
+                    if !bounds.contains(c.position.tile_floor())
+                        || !area.accepts(goal)
+                        || (area.ram && !c.siege)
+                        || !self
+                            .unit(c.id)
+                            .is_some_and(|u| u.hp > 0 && u.player != area.player)
                     {
                         continue;
                     }
-                    let civilian = matches!(
-                        u.kind,
-                        UnitKind::Villager | UnitKind::FishingShip | UnitKind::TransportShip
-                    );
-                    let key = (
-                        u8::from(civilian),
-                        area.distance(Goal::Unit(u.position, u.kind.collision_radius())),
-                        id,
-                    );
+                    let key = (u8::from(c.civilian), area.distance(goal), c.id);
                     best = Some(best.map_or(key, |old| std::cmp::min(old, key)));
                 }
             }

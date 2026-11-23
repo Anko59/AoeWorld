@@ -1,5 +1,6 @@
 use super::*;
 use crate::game_world::combat::tick::Goal;
+use crate::game_world::unit_index::presence::{PRESENCE_CELL_TILES, cell_bit, cell_mask};
 
 /// Ticks between an attack-move group's looks; groups are staggered by id.
 const ENGAGE_CADENCE: u64 = 4;
@@ -18,9 +19,12 @@ struct GeneralSight {
     radius: i64,
 }
 
-/// Visible enemies of one chunk, read once per group look and shared by
-/// every member whose sight touches the chunk.
-type Contacts = BTreeMap<ChunkCoord, Vec<(EntityId, Goal)>>;
+/// Visible enemy units of one chunk, read once per group look and shared by
+/// every member whose sight touches the chunk, with the bits of the 8-tile
+/// cells (`presence::cell_bit`) that hold any.
+type Contacts = BTreeMap<ChunkCoord, (u16, Vec<(EntityId, Goal)>)>;
+/// Ordinary enemy buildings with a tile in one 8-tile cell.
+type BuildingContacts = BTreeMap<ChunkCoord, Vec<(EntityId, Goal)>>;
 
 impl GameWorld {
     /// Every `ENGAGE_CADENCE` ticks each attack-move group looks: every member
@@ -91,7 +95,7 @@ impl GameWorld {
             .map(|m| (m.id, group.resume_at(m.goal)))
             .collect();
         let mut units = Contacts::new();
-        let mut buildings = Contacts::new();
+        let mut buildings = BuildingContacts::new();
         for (id, resume) in lookers {
             let Some(unit) = self.unit(id) else {
                 continue;
@@ -128,19 +132,22 @@ impl GameWorld {
             {
                 seen.push((false, d, enemy));
             }
-            for chunk in look_chunks(bounds) {
-                let contacts = units
+            for chunk in look_chunks(bounds, SPATIAL_CHUNK_TILES) {
+                let (cells, contacts) = units
                     .entry(chunk)
                     .or_insert_with(|| self.formation_unit_contacts(player, chunk));
+                if *cells & cell_mask(chunk, bounds) == 0 {
+                    continue;
+                }
                 seen.extend(contacts.iter().filter_map(|&(enemy, goal)| {
                     sees(goal).map(|d| (Some(enemy) != breach.map(|b| b.0), d, enemy))
                 }));
             }
-            if seen.is_empty() {
-                for chunk in look_chunks(bounds) {
+            if seen.is_empty() && self.enemy_buildings_near(bounds, player) {
+                for cell in look_chunks(bounds, PRESENCE_CELL_TILES) {
                     let contacts = buildings
-                        .entry(chunk)
-                        .or_insert_with(|| self.formation_building_contacts(player, chunk));
+                        .entry(cell)
+                        .or_insert_with(|| self.formation_building_contacts(player, cell));
                     seen.extend(
                         contacts
                             .iter()
@@ -194,40 +201,45 @@ impl GameWorld {
         &self,
         player: PlayerId,
         chunk: ChunkCoord,
-    ) -> Vec<(EntityId, Goal)> {
+    ) -> (u16, Vec<(EntityId, Goal)>) {
+        let mut out = (0, Vec::new());
         if !self.chunks.presence.others(chunk, player) {
-            return Vec::new();
+            return out;
         }
         let Some(ids) = self.chunks.get(&chunk) else {
-            return Vec::new();
+            return out;
         };
-        ids.iter()
-            .filter_map(|&id| {
-                let unit = self.units[self.lookup[&id]].state;
-                (unit.hp > 0
-                    && unit.player != player
-                    && !self.embarked(id)
-                    && self.unit_visible_to(player, id))
-                .then_some((id, Goal::Unit(unit.position, unit.kind.collision_radius())))
-            })
-            .collect()
+        for &id in ids {
+            let unit = self.units[self.lookup[&id]].state;
+            if unit.hp > 0
+                && unit.player != player
+                && !self.embarked(id)
+                && self.unit_visible_to(player, id)
+            {
+                out.0 |= cell_bit(chunk, unit.position.tile_floor());
+                out.1
+                    .push((id, Goal::Unit(unit.position, unit.kind.collision_radius())));
+            }
+        }
+        out
     }
 
-    /// Ordinary visible enemy buildings with a tile in `chunk`; walls, gates
+    /// Ordinary visible enemy buildings with a tile in the 8-tile `cell`; walls, gates
     /// and roads are left to a member's own acquisition, which can rule out
     /// alternatives in its sight before it stops for one.
     fn formation_building_contacts(
         &self,
         player: PlayerId,
-        chunk: ChunkCoord,
+        cell: ChunkCoord,
     ) -> Vec<(EntityId, Goal)> {
-        if !self.vision.building_chunks.others(chunk, player) {
+        let size = PRESENCE_CELL_TILES;
+        let rect = TileRect::from_xywh(cell.x * size, cell.y * size, size, size);
+        if !self.enemy_buildings_near(rect, player) {
             return Vec::new();
         }
-        let size = SPATIAL_CHUNK_TILES;
         let mut out = BTreeMap::new();
-        for y in chunk.y * size..(chunk.y + 1) * size {
-            for x in chunk.x * size..(chunk.x + 1) * size {
+        for y in rect.min.y..rect.max.y {
+            for x in rect.min.x..rect.max.x {
                 let tile = TileCoord::new(x, y);
                 let Some(id) = self.building_at_tile(tile) else {
                     continue;
@@ -248,9 +260,9 @@ impl GameWorld {
     }
 }
 
-/// The spatial chunks a tile rectangle touches.
-fn look_chunks(bounds: TileRect) -> impl Iterator<Item = ChunkCoord> {
-    let size = SPATIAL_CHUNK_TILES;
+/// The squares of side `size` (spatial chunks or presence cells) that a tile
+/// rectangle touches.
+fn look_chunks(bounds: TileRect, size: i32) -> impl Iterator<Item = ChunkCoord> {
     let (x0, y0) = (bounds.min.x.div_euclid(size), bounds.min.y.div_euclid(size));
     let (x1, y1) = (
         (bounds.max.x - 1).div_euclid(size),
