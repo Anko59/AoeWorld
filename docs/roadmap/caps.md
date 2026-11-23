@@ -18,8 +18,9 @@ far view). Statuses and rules: [roadmap](../roadmap.md). Dates are 2026 (MM-DD).
 5. The perf gate (instructions per tick on replays, CI perf comment) is the guard, not the cap. Work still deferred is
    visible as a wait metric, never dropped silently.
 
-Route and movement budget caps go to the scale session's plan ([scale](scale.md), #978): removed once their cost is
-fixed. Everything else is in this lane.
+Every movement and route cap goes to the scale session ([scale](scale.md), #978; owner 11-23 "give it the movement
+caps"): route budgets are removed once their cost is fixed, the other movement caps as decided below. Combat, economy,
+orders, display and AI caps are in the landscape lane.
 
 ## Movement and routes
 
@@ -28,12 +29,12 @@ fixed. Everything else is in this lane.
 | Route work per tick, world-wide (16,384) | 11-23 x1 | PLANNED (scale) | `MAX_ROUTE_WORK_PER_TICK`, crates/simulation/src/lib.rs (#72). Units ordered across rivers and forests wait for a route; 11-19 bigger budgets cost +3.2% to +4.9% ([scale](scale.md)) | Remove once the cost per search is fixed (#978) |
 | Fast-route budget (65,536 per tick, 16,384 per player, 8,192 per order) | 11-23 x1 | PLANNED (scale) | crates/simulation/src/game_movement.rs (#566): short trips must never wait behind long searches; short trips queue when it is spent | Remove once the cost is fixed (#978) |
 | Far group routes (8,192 per tick) | 11-23 x1 | PLANNED (scale) | crates/simulation/src/game_world/route_scheduler/fast.rs (#716): a slice of the route budget reserved for formations marching far, so one army does not starve villagers | Goes with the route budget (#978) |
-| Route searches per player (2 near + 2 far) and route planners (64 per player, 2,048 shared) | 11-23 x1 | PLANNED: drop | route_scheduler.rs (#566, #716). Searches are new long searches in progress; planners are found routes extended leg by leg. Both only share the world budget fairly between players | Replace both with round-robin between players (no number); dropping them alone lets one player take the whole budget |
-| Local detours (4 per tick) | 11-23 x1 | PLANNED: fix, then drop | `local_refinement_left`, crates/simulation/src/game_map.rs: a small search around blocked neighbours; in a jam hundreds need one | Make the detour search cheap, then drop |
-| New resource after depletion (4 re-picks per tick) | 11-23 x1 | PLANNED: drop | Gathering re-pick budget; low impact | Drop |
-| Step-aside requests (8 per tick, 2 bodies each) | 11-23 x1 | PLANNED: drop | crates/simulation/src/game_world/movement_step/yielding.rs (#710): a blocked unit asks friends in its way to move; jams clear slowly | Drop the per-tick count; keep each unit's 120-tick wait before asking |
-| Lost formation member retries (8 tries, every 256 ticks) | 11-23 x1 | PLANNED: drop | crates/simulation/src/game_world/formation/detach.rs (#710): after 8 tries the soldier stays where it gave up | Drop the try count, keep the 12.8 s interval (one route per stranded soldier); real fix: stop members getting stranded |
-| Idle crowd spreading (32 per tick) | 11-23 x1 | PLANNED: drop | crates/simulation/src/game_world/spacing/idle.rs (#567) | Drop |
+| Route searches per player (2 near + 2 far) and route planners (64 per player, 2,048 shared) | 11-23 x1 | PLANNED (scale): drop | route_scheduler.rs (#566, #716). Searches are new long searches in progress; planners are found routes extended leg by leg. Both only share the world budget fairly between players | Replace both with round-robin between players (no number); dropping them alone lets one player take the whole budget |
+| Local detours (4 per tick) | 11-23 x1 | PLANNED (scale): fix, then drop | `local_refinement_left`, crates/simulation/src/game_map.rs: a small search around blocked neighbours; in a jam hundreds need one | Make the detour search cheap, then drop |
+| New resource after depletion (4 re-picks per tick) | 11-23 x1 | PLANNED (scale): drop | Gathering re-pick budget; low impact | Drop |
+| Step-aside requests (8 per tick, 2 bodies each) | 11-23 x1 | PLANNED (scale): drop | crates/simulation/src/game_world/movement_step/yielding.rs (#710): a blocked unit asks friends in its way to move; jams clear slowly | Drop the per-tick count; keep each unit's 120-tick wait before asking |
+| Lost formation member retries (8 tries, every 256 ticks) | 11-23 x1 | PLANNED (scale): drop | crates/simulation/src/game_world/formation/detach.rs (#710): after 8 tries the soldier stays where it gave up | Drop the try count, keep the 12.8 s interval (one route per stranded soldier); real fix: stop members getting stranded |
+| Idle crowd spreading (32 per tick) | 11-23 x1 | PLANNED (scale): drop | crates/simulation/src/game_world/spacing/idle.rs (#567) | Drop |
 
 ## Combat
 

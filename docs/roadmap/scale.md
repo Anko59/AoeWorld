@@ -11,7 +11,8 @@ references; the rows below stay as the record of what #865 tried and are not wor
 
 **Caps to remove once their cost is fixed (owner 11-23):** route work per tick (16,384), the fast-route budget
 (65,536, 16,384 per player), far group routes (8,192). They hold the tick today; each goes when #978 makes its work
-cheap. The other caps (route slots per player, combat, Steward, Vassal, orders, display) are in [caps](caps.md).
+cheap. The other movement caps (route searches and planners per player, local detours, step-aside, formation retries, idle
+spreading) are also this session's, decided in [caps](caps.md); combat, economy, orders and display caps are not.
 
 ## Scale queue (issue #865, agreed 11-16; closed 11-21, replaced by #978)
 
