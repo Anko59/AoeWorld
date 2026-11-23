@@ -9,6 +9,10 @@ Rungs: 0 measurement, 1 100k units, 2 500k, 3 2M, 4 clients (see issue 748).
 R2 250k, R3 1M, R4 2M in real time on this machine). Its State comment holds the current step and the frozen
 references; the rows below stay as the record of what #865 tried and are not worked any more.
 
+**Caps to remove once their cost is fixed (owner 11-23):** route work per tick (16,384), the fast-route budget
+(65,536, 16,384 per player), far group routes (8,192). They hold the tick today; each goes when #978 makes its work
+cheap. The other caps (route slots per player, combat, Steward, Vassal, orders, display) are in [caps](caps.md).
+
 ## Scale queue (issue #865, agreed 11-16; closed 11-21, replaced by #978)
 
 Worked in this order, one item at a time, by one session that records every result as a comment on issue #865.

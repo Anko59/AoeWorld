@@ -15,7 +15,7 @@ night and day briefs) and checked against `origin/dev` at `ec5bf2e15` (#857, 202
 - Update this file in the same change as every merge, drop and new owner ask. Never write DONE from a note alone.
 - Areas: [gameplay](roadmap/gameplay.md), [movement](roadmap/movement.md), [AI](roadmap/ai.md),
   [scale](roadmap/scale.md), [hierarchy](roadmap/hierarchy.md), [UI](roadmap/ui.md), [map](roadmap/map.md),
-  [harness](roadmap/harness.md), [standing rules](roadmap/rules.md).
+  [harness](roadmap/harness.md), [caps to remove](roadmap/caps.md), [standing rules](roadmap/rules.md).
 
 ## Ten highest-priority open items
 
@@ -29,6 +29,8 @@ Open items only, owner emphasis first (reconciled 2026-11-21 against `origin/dev
 6. Client frame rate in big games (53 ms median frame at 16.7k units) ([scale](roadmap/scale.md)).
 7. Vassal redesign (11-20): Vassals place foundations and villagers come to build, shared builder pool with far-view placement, Vassal and Steward cooperation; then trunk roads and bridges, General-call radius, walking zones ([hierarchy](roadmap/hierarchy.md)).
 8. Future of the movement rewrite and rung 2: decided by scale queue Q6 ([scale](roadmap/scale.md)).
+
+9. Remove caps and budgets (owner 11-23 "solve, not limit and hide"): measure all unlimited on the war replay, drop the free ones, fix then drop the rest; route budgets with the scale session ([caps](roadmap/caps.md)).
 
 Next after these: tooltips for all technologies, the cliff texture, far-view fixes, bottom-menu presenter (#937), rock footprints (#926, held).
 
