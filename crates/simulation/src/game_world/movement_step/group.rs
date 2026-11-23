@@ -179,7 +179,19 @@ impl GameWorld {
             if !terrain_clear {
                 proposed = group_step(from, motion.center, motion.budget);
             }
-            let position = self.avoid_unit_step(index, proposed);
+            // An unseen bystander's squad moves as one body even round terrain:
+            // other bodies never stop it, so it needs no sidestep, only ground.
+            let position = if self.unseen_bystander(index) {
+                if terrain_clear
+                    || self.group_static_step_clear(step.state.kind, from, proposed, false)
+                {
+                    proposed
+                } else {
+                    from
+                }
+            } else {
+                self.avoid_unit_step(index, proposed)
+            };
             step.member = Some(
                 Motion {
                     obstructed: motion.obstructed || !terrain_clear,
