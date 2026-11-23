@@ -87,9 +87,9 @@ export function commandSlots(commands, page = 0) {
   });
   // Delete and Cancel own a fixed cell: a button never moves under the cursor
   // because a trainable unit or a queue appeared before it in the list.
-  for (const command of unplaced.filter(command => command.place !== undefined)) {
-    const slot = command.place;
-    if (slots[slot]) continue;
+  for (const command of unplaced.filter(command => command.place)) {
+    const slot = command.place.find(slot => !slots[slot]);
+    if (slot === undefined) continue;
     slots[slot] = { ...command, key: command.key || gridKeys[slot] };
     unplaced.splice(unplaced.indexOf(command), 1);
   }

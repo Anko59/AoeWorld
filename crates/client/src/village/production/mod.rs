@@ -215,6 +215,12 @@ pub(in crate::playground::game) fn refresh_changed_queue(
 }
 
 pub(super) fn train(client: &mut Client, kind: UnitKind, batch: bool) {
+    // Managers are trained one at a time, whatever the modifier keys.
+    let batch = batch
+        && !matches!(
+            kind,
+            UnitKind::Vassal | UnitKind::General | UnitKind::Steward
+        );
     let Some(player) = client
         .village
         .players
