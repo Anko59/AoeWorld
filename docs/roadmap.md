@@ -27,12 +27,12 @@ Open items only, owner emphasis first (reconciled 2026-11-21 against `origin/dev
 4. Formation coherence on real terrain (11-20: huge lines for no reason) and Steward arrival 80-82% ([movement](roadmap/movement.md)).
 5. AIs that work enough to test the game (owner 11-20: strength waits for tournaments after features stabilise): late-game economy stall (70% idle villagers, no gold or stone) and armies that never leave home or counter-attack ([AI](roadmap/ai.md)).
 6. Client frame rate in big games (53 ms median frame at 16.7k units) ([scale](roadmap/scale.md)).
-7. Vassal redesign (11-20): Vassals place foundations and villagers come to build, shared builder pool with far-view placement, Vassal and Steward cooperation; then trunk roads and bridges, General-call radius, walking zones ([hierarchy](roadmap/hierarchy.md)).
+7. Steward and Vassal zones really in walking distance (membership and discovery are still a circle; 11-23), Vassal and Steward cooperation; Vassals without villagers is done (#962) ([hierarchy](roadmap/hierarchy.md)).
 8. Future of the movement rewrite and rung 2: decided by scale queue Q6 ([scale](roadmap/scale.md)).
 
 9. Remove caps and budgets (owner 11-23 "solve, not limit and hide"): measure all unlimited on the war replay, drop the free ones, fix then drop the rest; route budgets with the scale session ([caps](roadmap/caps.md)).
 
-Next after these: tooltips for all technologies, the cliff texture, far-view fixes, bottom-menu presenter (#937), rock footprints (#926, held).
+Next after these: the 11-22 UI regressions (Shift train bar, enemy foundation bars, activity panel scroll, bottom-menu width, road visibility, far-view training panel), saves forgetting depleted resources, shallows, rock footprints (#926, held). Done since 11-21: tech tooltips and icons, cliff texture, far-view drag, first zoom, wood markers (#969, #974), order lines (#931).
 
 ## Source conflicts resolved in this roadmap
 
