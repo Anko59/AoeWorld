@@ -220,6 +220,7 @@ impl WorldConfig {
 
     /// Ticks at this rate lasting as long as `reference` ticks at
     /// [`REFERENCE_HZ`], and at least one.
+    #[inline]
     pub fn ticks(&self, reference: u64) -> u64 {
         (reference * u64::from(self.tick_hz))
             .div_ceil(u64::from(REFERENCE_HZ))
@@ -228,12 +229,14 @@ impl WorldConfig {
 
     /// Reference ticks one tick at this rate lasts: what a counter of
     /// reference ticks adds per tick.
+    #[inline]
     pub fn reference_ticks_per_tick(&self) -> u16 {
         u16::try_from(REFERENCE_HZ.div_ceil(self.tick_hz.max(1))).unwrap_or(u16::MAX)
     }
 
     /// A per-tick work budget written at [`REFERENCE_HZ`], rescaled so the
     /// work done per second of game time is the same at this rate.
+    #[inline]
     pub fn scaled_budget(&self, per_tick: u32) -> u32 {
         let scaled = (u64::from(per_tick) * u64::from(REFERENCE_HZ))
             .div_ceil(u64::from(self.tick_hz.max(1)));
