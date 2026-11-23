@@ -41,11 +41,12 @@ fn viewport_query(world: World) -> usize {
 )]
 fn late_game(mut world: GameWorld) -> GameWorld {
     // Setup/warm-up is unmeasured. Disable its instrumentation, then count
-    // eight entire authoritative ticks, including all callees and allocations.
-    // One tick hid lazily built navigation: a cold portal build either fell in
-    // it or not, and dev's tick at 385 cost 141M against 168M over the eight.
+    // 64 entire authoritative ticks, including all callees and allocations.
+    // Shorter windows hid lazily built navigation: a cold build either fell
+    // in them or not (one tick: 141M against 168M over eight; eight ticks: a
+    // 430M region load doubled the row on #1011, -2.3% over 64).
     gungraun::client_requests::callgrind::start_instrumentation();
-    for _ in 0..8 {
+    for _ in 0..64 {
         world.advance();
     }
     gungraun::client_requests::callgrind::stop_instrumentation();
@@ -61,7 +62,7 @@ fn late_game(mut world: GameWorld) -> GameWorld {
     )
 )]
 fn late_game_x4(mut world: GameWorld) -> GameWorld {
-    // Four times the units of `late_game`, the same eight measured ticks:
+    // Four times the units of `late_game` over eight measured ticks:
     // the two rows together show cost per unit (#978 rule 7).
     gungraun::client_requests::callgrind::start_instrumentation();
     for _ in 0..8 {

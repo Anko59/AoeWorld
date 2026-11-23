@@ -30,8 +30,14 @@ pub enum DevFile {
 }
 
 /// Late-game ticks the instruction kernels count after the warm-up; part of
-/// the identity, since an eight-tick count is not comparable with one tick.
-pub const LATE_GAME_TICKS: usize = 8;
+/// the identity, since counts over different windows are not comparable.
+/// Sixty-four: a cold region load of about 430M instructions fell inside an
+/// eight-tick window on one side of a change and outside it on the other,
+/// doubling the row (+99.8% on #1011, -2.3% over 64 ticks).
+pub const LATE_GAME_TICKS: usize = 64;
+/// The four-times late game keeps eight ticks: sixty-four would count about
+/// 45G more instructions under Callgrind on every pull request.
+pub const LATE_GAME_X4_TICKS: usize = 8;
 
 /// The workload hashes the instruction kernels run, recorded in every
 /// `ci.json` so a later run can tell whether its counts are comparable.
@@ -41,6 +47,7 @@ pub fn identity() -> BTreeMap<String, String> {
         ("late_game", LATE_GAME.workload_hash()),
         ("late_game_ticks", LATE_GAME_TICKS.to_string()),
         ("late_game_x4", LATE_GAME_X4.workload_hash()),
+        ("late_game_x4_ticks", LATE_GAME_X4_TICKS.to_string()),
         ("target_distributed", TARGET_DISTRIBUTED.workload_hash()),
     ]
     .into_iter()
