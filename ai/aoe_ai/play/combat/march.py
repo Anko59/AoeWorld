@@ -18,9 +18,12 @@ def march(ctx, army, middle, goal, *, purpose="attack"):
     cells = {}
     for soldier in army:
         last = board.marched.get(soldier.id, -pause)
-        replace = recalling and (last < board.raid_started
-                                 or (soldier.attack_target is not None and ctx.tick - last >= pause))
-        if soldier.id in ctx.busy or not (replace or (soldier.idle and ctx.tick - last >= pause)):
+        # A soldier that is fighting is never re-ordered: a recall or a hop
+        # would walk it out of the fight it is winning.
+        if soldier.id in ctx.busy or soldier.attack_target is not None:
+            continue
+        replace = recalling and last < board.raid_started
+        if not (replace or (soldier.idle and ctx.tick - last >= pause)):
             continue
         x, y = soldier.tile
         independent = (purpose == "attack"
@@ -62,11 +65,12 @@ def march(ctx, army, middle, goal, *, purpose="attack"):
                 return
             members = soldiers[offset:offset + limit]
             ids = [u.id for u in members]
-            if len(ids) == 1 and not recalling:
-                ctx.order("move", ids[0], *target)
-            else:
-                ctx.order("formation_move", ids, *target, getattr(Formation, cfg.army_formation),
-                          attack_move=purpose == "attack")
+            # Only a march at the enemy is an attack-move. A recall or rally
+            # crosses our own ground, where  and  take
+            # over at contact; an attack-move on every recall cost the server
+            # about +10% of a tick (movement phase, per soldier-tick).
+            ctx.order("formation_move", ids, *target, getattr(Formation, cfg.army_formation),
+                      attack_move=purpose == "attack")
             for unit in members:
                 board.marched[unit.id] = ctx.tick
                 board.march_progress[unit.id] = (unit.tile, ctx.tick)

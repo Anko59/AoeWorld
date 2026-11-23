@@ -24,23 +24,57 @@ def observe(ctx):
         if not is_building and (getattr(event, "id", None) not in workers
                                 or attacker is None or attacker in wildlife):
             continue
-        tile = event.x, event.y
-        if board.raid_tile is None or board.raid_until <= ctx.tick or dist(board.raid_tile, tile) > cfg.defend_radius:
-            board.raid_started, board.raid_tile = ctx.tick, tile
-            board.attacking = False
-            board.attack_members.clear()
-            board.attack_target = board.march_goal = None
-            board.search_index = 0
-            board.counter_owner = None
-            board.counter_bearing = None
-            board.raid_reach.clear()
-        board.raid_until = ctx.tick + cfg.raid_hold_seconds * hz
-        if enemy is not None:
-            board.counter_owner = enemy.owner
-            if board.counter_bearing is None:
-                board.counter_bearing = enemy.tile[0] - ctx.home[0], enemy.tile[1] - ctx.home[1]
-            board.counter_until = board.raid_until + cfg.counter_seconds * hz
+        begin(ctx, (event.x, event.y), enemy)
         return
+
+
+def begin(ctx, tile, enemy):
+    """Start, or extend, the defence of the place `tile` where we were hit."""
+    board, cfg = ctx.board, ctx.config
+    if board.raid_tile is None or board.raid_until <= ctx.tick or dist(board.raid_tile, tile) > cfg.defend_radius:
+        board.raid_started, board.raid_tile = ctx.tick, tile
+        board.attacking = False
+        board.attack_members.clear()
+        board.attack_target = board.march_goal = None
+        board.search_index = 0
+        board.counter_owner = None
+        board.counter_bearing = None
+        board.raid_reach.clear()
+    board.raid_until = ctx.tick + cfg.raid_hold_seconds * ctx.world.tick_hz
+    if enemy is not None:
+        board.counter_owner = enemy.owner
+        if board.counter_bearing is None:
+            board.counter_bearing = enemy.tile[0] - ctx.home[0], enemy.tile[1] - ctx.home[1]
+        board.counter_until = board.raid_until + cfg.counter_seconds * ctx.world.tick_hz
+
+
+def watch_sites(ctx):
+    """Defend any of our buildings, camps and mills included, against armed
+    enemies standing at it, before they have damaged anything.
+
+    Checked at a fixed interval per bot; one grid of our buildings answers every
+    enemy, so the cost does not grow with soldiers or with the enemy count."""
+    board, cfg = ctx.board, ctx.config
+    if board.raid_until > ctx.tick or not ctx.enemies or board.cooling("site-watch", ctx.tick):
+        return
+    board.cool("site-watch", ctx.tick, cfg.site_watch_seconds * ctx.world.tick_hz)
+    near_site = near_any((b.center for b in ctx.buildings), cfg.site_guard_tiles)
+    # The base itself is `defend`'s ground; this covers camps and outposts.
+    threats = [e for e in ctx.enemies
+               if e.alive and getattr(e, "military", True) and near_site(e.tile)
+               and dist(e.tile, ctx.home) > cfg.defend_radius]
+    if not threats:
+        return
+    saved = board.raid_tile
+    board.raid_tile = nearest(threats, ctx.home, key=lambda e: e.tile).tile
+    found = reachable(ctx, threats)
+    if not found:
+        board.raid_tile = saved
+        return
+    enemy = nearest(found, ctx.home, key=lambda e: e.tile)
+    board.threat_until = ctx.tick + cfg.threat_seconds * ctx.world.tick_hz
+    board.bump("sites_threatened")
+    begin(ctx, enemy.tile, enemy)
 
 
 def reachable(ctx, visible):
