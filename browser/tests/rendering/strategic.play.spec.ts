@@ -427,15 +427,23 @@ test("far view keeps buildings and resource markers beyond the former row limits
     const sites = new Float64Array(3_000 * 10);
     const resources = new Float64Array(3_000 * 5);
     for (let i = 0; i < 3_000; i++) {
-      const x = 470 + i % 60, y = 470 + Math.floor(i / 60);
-      sites.set([i, x, y, x + 1, y + 1, i < 2_500 ? 5 : 1, 0xf54141, 0, -1, 1], i * 10);
+      const x = 470 + (i % 60),
+        y = 470 + Math.floor(i / 60);
+      sites.set(
+        [i, x, y, x + 1, y + 1, i < 2_500 ? 5 : 1, 0xf54141, 0, -1, 1],
+        i * 10,
+      );
       resources.set([2, x, y, i, 0], i * 5);
     }
     strategic.settlements(sites);
     strategic.resources(resources);
     strategic.frame([1000, 1000, 500, 500, 1280, 720, 0.03, 2]);
     const canvas = document.querySelector<HTMLElement>("#strategic-scene");
-    return [canvas?.dataset.fields, canvas?.dataset.borders, canvas?.dataset.resources];
+    return [
+      canvas?.dataset.fields,
+      canvas?.dataset.borders,
+      canvas?.dataset.resources,
+    ];
   });
   expect(counts).toEqual(["2500", "500", "3000"]);
 });

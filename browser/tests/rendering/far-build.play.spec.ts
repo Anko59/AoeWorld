@@ -192,7 +192,7 @@ test("far placement sends a row of orders while acknowledgements are outstanding
   await page.keyboard.down("Shift");
   try {
     for (let n = 0; n < 24; n++) {
-      await page.mouse.click(700 + n % 8 * 5, 320 + Math.floor(n / 8) * 6);
+      await page.mouse.click(700 + (n % 8) * 5, 320 + Math.floor(n / 8) * 6);
     }
   } finally {
     await page.keyboard.up("Shift");

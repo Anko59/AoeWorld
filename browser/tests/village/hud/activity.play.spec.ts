@@ -77,8 +77,12 @@ test("kingdom activity shows every type without scrollbars", async ({
         ),
         visible: [...rows.children].every((row) => {
           const rect = row.getBoundingClientRect();
-          return rect.top >= 0 && rect.left >= 0 &&
-            rect.bottom <= innerHeight && rect.right <= innerWidth;
+          return (
+            rect.top >= 0 &&
+            rect.left >= 0 &&
+            rect.bottom <= innerHeight &&
+            rect.right <= innerWidth
+          );
         }),
       };
     }, lod);

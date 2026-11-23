@@ -356,7 +356,7 @@ fn palisade_segments_cost_two_wood_each_and_take_six_seconds_per_tile() {
     // Too long, or any segment invalid: nothing is placed or charged.
     let before = world.canonical_hash();
     assert_eq!(
-        palisade(&mut world, &[builder], at(0, 10), at(100, 10)),
+        palisade(&mut world, &[builder], at(0, 10), at(1_100, 10)),
         Err(EconomyError::OrderTooLarge)
     );
     assert_eq!(
