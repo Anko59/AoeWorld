@@ -31,7 +31,15 @@ pub(crate) struct Cache {
     rebuilds: u64,
     sources: Vec<(PlayerId, TileCoord, i32)>,
     own_sources: BTreeMap<PlayerId, Vec<(PlayerId, TileCoord, i32)>>,
+    /// Each viewer's drawn influence and the sources it was drawn from, kept
+    /// across seconds: drawing was 94% of a report, and 83% of reports on the
+    /// owner's Anatolia 4 had the same sources as the viewer's previous one.
+    known: BTreeMap<PlayerId, Known>,
+    known_rasters: u64,
 }
+
+type Sources = Vec<(PlayerId, TileCoord, i32)>;
+type Known = (Sources, Arc<BTreeMap<i32, Vec<HoldingSpan>>>);
 
 fn radius(kind: BuildingKind) -> i32 {
     match kind {
@@ -151,7 +159,7 @@ impl GameWorld {
             // Enemy administrators/garrisons are private: never infer their
             // domains from live state. Building influence uses last sightings.
             sources.extend(own);
-            let known = raster(&sources, self.config.width_tiles, self.config.height_tiles);
+            let known = self.known_land(viewer, sources);
             for span in known.values().flatten() {
                 self.clip_land_span(viewer, *span, &mut shapes);
             }
@@ -172,6 +180,38 @@ impl GameWorld {
         }
         cache.viewers.entry(key).or_insert(report).clone()
     }
+    /// The viewer's drawn influence from `sources`, reused while they repeat.
+    fn known_land(
+        &self,
+        viewer: PlayerId,
+        sources: Sources,
+    ) -> Arc<BTreeMap<i32, Vec<HoldingSpan>>> {
+        let lock = || self.economy.land.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((drawn, rows)) = lock().known.get(&viewer)
+            && *drawn == sources
+        {
+            return rows.clone();
+        }
+        let rows = Arc::new(raster(
+            &sources,
+            self.config.width_tiles,
+            self.config.height_tiles,
+        ));
+        let mut cache = lock();
+        cache.known_rasters += 1;
+        cache.known.insert(viewer, (sources, rows.clone()));
+        rows
+    }
+
+    /// Influence drawings made for viewers, for tests and diagnostics.
+    pub fn land_known_rasters(&self) -> u64 {
+        self.economy
+            .land
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .known_rasters
+    }
+
     pub fn land_control_rebuilds(&self) -> u64 {
         self.economy
             .land

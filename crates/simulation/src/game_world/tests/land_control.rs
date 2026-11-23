@@ -118,3 +118,24 @@ fn hidden_enemy_construction_destruction_and_domains_do_not_change_remembered_la
     }
     assert_ne!(w.land_control(PlayerId(0)).shapes, before);
 }
+
+#[test]
+fn a_viewer_whose_known_buildings_did_not_change_keeps_its_drawn_influence() {
+    let mut world = GameWorld::new(WorldConfig::new(128, 128, Seed(7)).unwrap()).unwrap();
+    world
+        .place_town_center(PlayerId(0), TileCoord::new(30, 30))
+        .unwrap();
+    let first = world.land_control(PlayerId(0));
+    assert_eq!(world.land_known_rasters(), 1);
+    // A new second with the same remembered buildings: same report, no redraw.
+    world.tick = aoe_core::Tick(20);
+    assert_eq!(world.land_control(PlayerId(0)), first);
+    assert_eq!(world.land_known_rasters(), 1);
+    // A building the viewer knows of is added: its influence is redrawn.
+    world
+        .place_town_center(PlayerId(0), TileCoord::new(80, 30))
+        .unwrap();
+    world.tick = aoe_core::Tick(40);
+    assert!(world.land_control(PlayerId(0)).tiles > first.tiles);
+    assert_eq!(world.land_known_rasters(), 2);
+}
