@@ -148,3 +148,21 @@ impl IndexMut<std::ops::RangeFrom<usize>> for Units {
         units
     }
 }
+
+#[test]
+fn writes_no_client_sees_are_not_published_and_a_report_is() {
+    let mut world = world();
+    let walker = world.spawn_unit(PlayerId(0), at(10)).unwrap();
+    world.advance();
+    world.advance();
+    assert!(world.unit_changes().is_empty());
+    let index = world.lookup[&walker];
+    // Obstruction progress and an order alone are never sent to a client.
+    world.units.unreported(index).obstruction = None;
+    world.observe_unit_progress(index);
+    world.publish_unit_changes(&[]);
+    assert!(world.unit_changes().is_empty());
+    world.units.report(walker);
+    world.publish_unit_changes(&[]);
+    assert_eq!(world.unit_changes(), &[walker]);
+}
