@@ -23,7 +23,8 @@ struct Group {
     sources: BTreeMap<EntityId, TileRect>,
     walking: Option<Arc<Walking>>,
     membership_changed: bool,
-    /// A bridge changed the ground: looked at within a second, not a period.
+    /// A bridge changed the ground: looked at within a second, not a period;
+    /// cleared by that look.
     ground_changed: bool,
 }
 
@@ -58,7 +59,9 @@ impl Groups {
         }
     }
 
-    pub(in super::super::super) fn due(&self, tick: u64, tick_hz: u32) -> Vec<Key> {
+    /// The groups to look at this tick. A bridge's look is taken here, so a
+    /// group it left current returns to its period.
+    pub(in super::super::super) fn due(&mut self, tick: u64, tick_hz: u32) -> Vec<Key> {
         let hz = u64::from(tick_hz);
         let phase = tick % hz;
         let bucket = |offset: u64| ((offset * u64::from(REFERENCE_HZ)).div_ceil(hz)) as u32;
@@ -67,14 +70,15 @@ impl Groups {
         let first = if tick == 1 { 0 } else { bucket(phase) };
         let turn = tick / hz % REFRESH_SECONDS;
         self.0
-            .range((first, PlayerId(0))..(bucket(phase + 1), PlayerId(0)))
-            .filter(|((_, player), group)| {
-                tick == 1
+            .range_mut((first, PlayerId(0))..(bucket(phase + 1), PlayerId(0)))
+            .filter_map(|(&key, group)| {
+                let bridge = std::mem::take(&mut group.ground_changed);
+                (tick == 1
+                    || bridge
                     || group.membership_changed
-                    || group.ground_changed
-                    || u64::from(player.0) % REFRESH_SECONDS == turn
+                    || u64::from(key.1.0) % REFRESH_SECONDS == turn)
+                    .then_some(key)
             })
-            .map(|(&key, _)| key)
             .collect()
     }
 
@@ -101,7 +105,6 @@ impl Groups {
         if let Some(group) = self.0.get_mut(&key) {
             group.walking = Some(walking);
             group.membership_changed = false;
-            group.ground_changed = false;
         }
     }
 }

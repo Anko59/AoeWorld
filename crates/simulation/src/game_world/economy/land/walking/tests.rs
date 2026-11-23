@@ -173,6 +173,32 @@ fn a_new_office_refreshes_its_walking_zone_within_a_second() {
 }
 
 #[test]
+fn a_distant_bridge_leaves_a_zone_on_its_period() {
+    use aoe_core::{Seed, WorldConfig};
+
+    let mut world = GameWorld::new(WorldConfig::new(512, 512, Seed(1)).unwrap()).unwrap();
+    let period = world.config.tick_hz;
+    let player = PlayerId(3);
+    install(
+        &mut world,
+        player,
+        &[(EntityId(3), TileRect::from_xywh(7, 12, 4, 4))],
+    );
+    world.management_ground_changed(TileRect::from_xywh(400, 400, 4, 4));
+
+    // Looked at once for the bridge, then only on the player's turn (review
+    // F1/F2 on #1009: the bridge flag outlived a look that found nothing).
+    let mut looks = Vec::new();
+    for tick in 20..20 + 8 * u64::from(period) {
+        for (_, due) in world.economy.walking.stewards.due(tick, period) {
+            looks.push(tick);
+            refresh(&mut world, due);
+        }
+    }
+    assert_eq!(looks, [24, 64]);
+}
+
+#[test]
 fn a_friendly_gate_toggle_leaves_its_owners_walking_zone_current() {
     use aoe_core::{Seed, WorldConfig};
 
