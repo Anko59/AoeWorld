@@ -8,6 +8,11 @@ use super::*;
 
 /// Reference ticks between two steps of an unseen mover (`WorldConfig::ticks`).
 pub(crate) const STRIDE: u64 = 4;
+/// Reference ticks between two steps of an unseen group whose leader waits
+/// for its route: it only settles into its slots around a still anchor. On
+/// the owner's Anatolia 4 (99 AIs) about 70% of moving groups wait, and half
+/// of the group steering was spent on them (#978).
+pub(crate) const WAITING_STRIDE: u64 = 16;
 
 impl GameWorld {
     /// Removes the movers that sit out this tick, or ride (`ride.rs`), and
@@ -48,8 +53,20 @@ impl GameWorld {
         let id = self.units[index].state.id;
         let phase = self.units[index].formation.unwrap_or(id);
         !self.vision.human_seats.is_empty()
-            && !(self.tick.0 + u64::from(phase.0)).is_multiple_of(self.config.ticks(STRIDE))
+            && !(self.tick.0 + u64::from(phase.0))
+                .is_multiple_of(self.config.ticks(self.stride_of(phase)))
             && self.unseen_bystander(index)
+    }
+
+    /// The stride of the unit or group led by `phase`: longer for a group
+    /// whose leader waits for its route.
+    pub(super) fn stride_of(&self, phase: EntityId) -> u64 {
+        let waits = self.formations.contains_key(&phase)
+            && self
+                .lookup
+                .get(&phase)
+                .is_some_and(|&index| self.waiting_for_route(index));
+        if waits { WAITING_STRIDE } else { STRIDE }
     }
 
     /// No person sees the unit at `index` and it is not fighting. Fighters
@@ -70,7 +87,8 @@ impl GameWorld {
     /// members fight or walk on their own and never read those targets.
     pub(crate) fn group_sits_out(&self, leader: EntityId, group: &Group) -> bool {
         !self.vision.human_seats.is_empty()
-            && !(self.tick.0 + u64::from(leader.0)).is_multiple_of(self.config.ticks(STRIDE))
+            && !(self.tick.0 + u64::from(leader.0))
+                .is_multiple_of(self.config.ticks(self.stride_of(leader)))
             && group.members.iter().filter(|m| !m.detached).all(|m| {
                 self.lookup
                     .get(&m.id)
@@ -98,6 +116,11 @@ impl GameWorld {
         let Some(group) = self.formations.get(&leader) else {
             return;
         };
+        // A group waiting for its route holds a still anchor: its members'
+        // slots do not move, so their skipped walk is not banked.
+        if self.stride_of(leader) == WAITING_STRIDE {
+            return;
+        }
         let pace = group.pace;
         let mut credits = Vec::<((UnitKind, aoe_core::PlayerId, bool), u64)>::new();
         let mut members = Vec::with_capacity(group.members.len());

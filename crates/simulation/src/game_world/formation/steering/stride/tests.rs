@@ -75,3 +75,32 @@ fn a_mover_on_a_screen_at_unit_zoom_steps_every_tick() {
     }
     assert!(steps >= 36, "stepped on {steps} of 40 ticks");
 }
+
+#[test]
+fn an_unseen_group_waiting_for_its_route_steps_every_sixteenth_tick_and_banks_nothing() {
+    let (mut w, [_, member]) = march(true);
+    let leader = w.units[w.lookup[&member]].formation.unwrap();
+    assert_eq!(
+        w.stride_of(leader),
+        STRIDE,
+        "a routed group keeps the stride"
+    );
+    let index = w.lookup[&leader];
+    w.clear_planner(index);
+    w.units[index].route.clear();
+    w.units[index].state.planning = true;
+    assert!(w.waiting_for_route(index));
+    assert_eq!(w.stride_of(leader), WAITING_STRIDE);
+    let before: Vec<u64> = w.formations[&leader]
+        .members
+        .iter()
+        .map(|m| m.carry)
+        .collect();
+    w.bank_group_rest(leader);
+    let after: Vec<u64> = w.formations[&leader]
+        .members
+        .iter()
+        .map(|m| m.carry)
+        .collect();
+    assert_eq!(before, after, "a still anchor banks no slot walk");
+}
