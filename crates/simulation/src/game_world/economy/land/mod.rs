@@ -82,6 +82,8 @@ impl GameWorld {
             }
             sources.extend(self.steward_land_sources());
             sources.extend(self.vassal_land_sources());
+            // Kept sorted, so the next diff sorts only the new list.
+            sources.sort_unstable();
             if cache.epoch.is_none() || cache.sources != sources {
                 let (width, height) = (self.config.width_tiles, self.config.height_tiles);
                 if cache.epoch.is_none() {
