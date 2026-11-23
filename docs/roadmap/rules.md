@@ -21,4 +21,5 @@
 | Codex first for implementation; Sonnet or Haiku subagents otherwise; at most 4 Codex sessions | 11-09, 10-28 | owner |
 | Never end a turn with nothing running when the owner gave the machine | 11-05 | owner |
 | Scale work follows the steps of #978 in order (its State comment holds the current step and the frozen references); judge by growth, not by percent: work is worth doing when it stops a cost from growing with units, and a saving that does not and is under 5% at 61k is listed and skipped; every speed number comes with the service numbers; one line a day on #978 | 11-21 | owner, #978 (replaces the #865 queue of 11-16) |
+| Solve, not cap: never add a cap or budget as a fix; existing caps are removed per [caps](caps.md), each expensive one together with the fix of its cost | 11-23 | owner "We need to solve, not limit and hide" |
 | Experiment lane: `exp/...` branches with hooks on but no review, video or docs; two days to a first number; never merged as is; only a winner is redone as ordinary PRs | 11-16 | issue #865 rule 4, hooks kept on |
