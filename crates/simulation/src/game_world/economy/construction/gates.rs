@@ -3,7 +3,7 @@
 //! Planning admits an unlocked owner gate, or an unlocked currently open enemy
 //! gate. Collision opens on approach, and never closes through a living unit.
 use crate::{GameWorld, Terrain};
-use aoe_core::{TileCoord, TileRect};
+use aoe_core::{ChunkCoord, PlayerId, SPATIAL_CHUNK_TILES, TileCoord, TileRect, WorldRect};
 
 impl GameWorld {
     /// Locking changes planning admission immediately. Physical closing waits
@@ -68,6 +68,38 @@ impl GameWorld {
         self.collision_opened(rect);
     }
 
+    /// Whether a living unit on land in `query` is `owner`'s, or stands on
+    /// the gate itself. Read in place with an early exit: copying every unit
+    /// of the gate's chunk out of a general query was 40M of 640M main-thread
+    /// instructions a tick on the owner's Anatolia 4 (#978).
+    fn gate_wanted_open(&self, query: TileRect, rect: TileRect, owner: Option<PlayerId>) -> bool {
+        let Ok(area) = WorldRect::from_tiles(query) else {
+            return false;
+        };
+        let chunk = |tile: i32| tile.div_euclid(SPATIAL_CHUNK_TILES);
+        for y in chunk(query.min.y)..=chunk(query.max.y - 1) {
+            for x in chunk(query.min.x)..=chunk(query.max.x - 1) {
+                let Some(bucket) = self.chunks.get(&ChunkCoord { x, y }) else {
+                    continue;
+                };
+                for id in bucket {
+                    let Some(&index) = self.lookup.get(id) else {
+                        continue;
+                    };
+                    let unit = &self.units[index].state;
+                    if unit.hp > 0
+                        && area.contains(unit.position)
+                        && (Some(unit.player) == owner || rect.contains(unit.position.tile_floor()))
+                        && !self.embarked(unit.id)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
     pub(super) fn advance_gates(&mut self) {
         // Only the gate index is visited; `Pass::AdvanceGates` counts the
         // whole-building scan this replaced and stays at 0.
@@ -93,11 +125,7 @@ impl GameWorld {
                     (rect.max.y + 2).min(self.config.height_tiles),
                 ),
             );
-            let nearby = self.query(query).0;
-            let open = (!locked && nearby.iter().any(|u| u.hp > 0 && u.player == owner))
-                || nearby
-                    .iter()
-                    .any(|u| u.hp > 0 && rect.contains(u.position.tile_floor()));
+            let open = self.gate_wanted_open(query, rect, (!locked).then_some(owner));
             if open == self.economy.open_gates.contains(&id) {
                 continue;
             }

@@ -339,3 +339,54 @@ fn an_open_gate_and_the_unit_standing_on_it_survive_a_save() {
         "the unit on the gate is still there"
     );
 }
+
+#[test]
+fn a_gate_in_a_crowded_chunk_opens_only_for_its_owner_near_it() {
+    let (mut world, _, _) = village();
+    set_stock(&mut world, 1000, 1000, 0, 1000);
+    let worker = villager_at(&mut world, 99, 100);
+    let id = world
+        .issue_build(
+            PlayerId(0),
+            &[worker],
+            BuildingKind::PalisadeGate,
+            TileCoord::new(100, 100),
+            false,
+        )
+        .unwrap();
+    finish(&mut world, id, 700);
+    world
+        .issue_move(
+            worker,
+            WorldPosition::from_tile_center(TileCoord::new(80, 100)).unwrap(),
+        )
+        .unwrap();
+    advance(&mut world, 400);
+    // Enemies fill the gate's chunk, and one stands just outside the
+    // gate's reach: none of them opens it.
+    for n in 0..24 {
+        let at = TileCoord::new(97 + n % 8, 104 + n / 8);
+        world
+            .spawn_militia(PlayerId(1), WorldPosition::from_tile_center(at).unwrap())
+            .unwrap();
+    }
+    world
+        .spawn_militia(
+            PlayerId(1),
+            WorldPosition::from_tile_center(TileCoord::new(101, 102)).unwrap(),
+        )
+        .unwrap();
+    world.advance();
+    assert!(!world.tile_passable(TileCoord::new(101, 100)));
+    world
+        .spawn_militia(
+            PlayerId(0),
+            WorldPosition::from_tile_center(TileCoord::new(98, 99)).unwrap(),
+        )
+        .unwrap();
+    world.advance();
+    assert!(
+        world.tile_passable(TileCoord::new(101, 100)),
+        "an owned unit within two tiles opens it"
+    );
+}
