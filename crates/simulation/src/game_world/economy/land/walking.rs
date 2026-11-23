@@ -265,6 +265,8 @@ impl GameWorld {
         for page in pages(area, CHUNK_TILES) {
             cache.changed.entry(page).or_default().bridges = cache.revision;
         }
+        cache.stewards.ground_changed();
+        cache.vassals.ground_changed();
     }
 
     pub(in crate::game_world) fn management_barrier_changed(&mut self, area: TileRect) {

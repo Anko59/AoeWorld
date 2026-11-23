@@ -118,7 +118,7 @@ fn refresh(world: &mut GameWorld, player: PlayerId) -> Option<Arc<Walking>> {
 }
 
 #[test]
-fn changed_walking_zones_refresh_at_each_players_phase() {
+fn changed_walking_zones_refresh_once_a_period_at_each_players_phase() {
     use aoe_core::{Seed, WorldConfig};
 
     let mut world = GameWorld::new(WorldConfig::new(32, 32, Seed(1)).unwrap()).unwrap();
@@ -131,20 +131,45 @@ fn changed_walking_zones_refresh_at_each_players_phase() {
             &[(EntityId(u32::from(player.0)), source)],
         );
     }
-    world.management_ground_changed(source);
+    world.management_barrier_changed(source);
 
     let mut refreshed = Vec::new();
-    for tick in 20..40 {
+    for tick in 20..20 + 8 * u64::from(period) {
         for (_, player) in world.economy.walking.stewards.due(tick, period) {
             if refresh(&mut world, player).is_some() {
                 refreshed.push((tick, player));
             }
         }
     }
+    // One look every eight game seconds, in the second of the player's slot.
     assert_eq!(
         refreshed,
-        [(24, PlayerId(3)), (24, PlayerId(22)), (28, PlayerId(7))]
+        [(64, PlayerId(3)), (124, PlayerId(22)), (148, PlayerId(7))]
     );
+}
+
+#[test]
+fn a_new_office_refreshes_its_walking_zone_within_a_second() {
+    use aoe_core::{Seed, WorldConfig};
+
+    let mut world = GameWorld::new(WorldConfig::new(32, 32, Seed(1)).unwrap()).unwrap();
+    let period = world.config.tick_hz;
+    let player = PlayerId(7);
+    install(
+        &mut world,
+        player,
+        &[(EntityId(1), TileRect::from_xywh(7, 12, 4, 4))],
+    );
+    world.economy.walking.stewards.set(
+        player,
+        EntityId(2),
+        Some(TileRect::from_xywh(20, 12, 4, 4)),
+    );
+
+    let due: Vec<_> = (20..30)
+        .filter(|&tick| !world.economy.walking.stewards.due(tick, period).is_empty())
+        .collect();
+    assert_eq!(due, [28]);
 }
 
 #[test]
@@ -172,10 +197,11 @@ fn walking_refresh_phases_survive_a_tick_rate_change() {
     let source = TileRect::from_xywh(7, 12, 4, 4);
     install(&mut world, player, &[(EntityId(17), source)]);
     world.set_tick_hz(4);
-    world.management_ground_changed(source);
+    world.management_barrier_changed(source);
 
     let mut refreshed = Vec::new();
-    for tick in 40..44 {
+    // Game second 17 is player 17's turn of the eight-second period.
+    for tick in 68..72 {
         for (_, player) in world
             .economy
             .walking
@@ -187,7 +213,7 @@ fn walking_refresh_phases_survive_a_tick_rate_change() {
             }
         }
     }
-    assert_eq!(refreshed, [(43, player)]);
+    assert_eq!(refreshed, [(71, player)]);
 }
 
 #[test]
