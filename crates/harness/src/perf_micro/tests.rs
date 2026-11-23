@@ -351,10 +351,15 @@ fn missing_or_unusable_dev_reference_falls_back_with_a_reason() {
 #[test]
 fn both_late_game_kernels_count_the_ticks_the_identity_records() {
     let benches = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../simulation/benches");
-    let window = format!("for _ in 0..{} {{", dev::LATE_GAME_TICKS);
+    let window = |ticks: usize| format!("for _ in 0..{ticks} {{");
     // `instructions.rs` measures the late game and the four-times late game.
-    for (bench, kernels) in [("instructions.rs", 2), ("late_game_instructions.rs", 1)] {
+    for (bench, ticks, kernels) in [
+        ("instructions.rs", dev::LATE_GAME_TICKS, 1),
+        ("instructions.rs", dev::LATE_GAME_X4_TICKS, 1),
+        ("late_game_instructions.rs", dev::LATE_GAME_TICKS, 1),
+    ] {
         let text = std::fs::read_to_string(benches.join(bench)).unwrap();
+        let window = window(ticks);
         assert_eq!(text.matches(&window).count(), kernels, "{bench}: {window}");
     }
 }
