@@ -36,6 +36,8 @@ pub(crate) struct Village {
     pub pending_training: production::PendingTraining,
     pub build_admission: construction::strategic::Admission,
     pub here_orders: production::here::Batch,
+    /// Where the far view's "Units here" sends every unit it trains.
+    pub here_destination: Option<aoe_core::WorldPosition>,
     pub last_hud: f64,
     pub move_cursor: bool,
     pub garrison_cursor: bool,

@@ -80,7 +80,7 @@ test("Vassal panel shows work, switches Vassals and sends pause/resume", async (
   await expect(squads.getByRole("listitem")).toHaveText([
     "Inf 12 attack, 8 mov",
   ]);
-  await expect(page.getByRole("slider", { name: "Focus" })).toHaveAttribute(
+  await expect(page.getByRole("slider", { name: "Development priority" })).toHaveAttribute(
     "aria-valuetext",
     "Roads",
   );
@@ -151,7 +151,8 @@ test("Castle Vassal report and development toggle use the authoritative server",
       update(values, label, jobs, squads);
     };
   });
-  const focus = panel.getByRole("slider", { name: "Focus" });
+  const focus = panel.getByRole("slider", { name: "Development priority" });
+  await expect(focus).toHaveAccessibleDescription("Choose what the Vassal builds first: defences or roads.");
   await focus.press("End");
   await expect(focus).toHaveAttribute("aria-valuetext", "Roads");
   await focus.blur();

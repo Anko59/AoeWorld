@@ -179,7 +179,7 @@ fn missing_cliff_art_keeps_impassable_cells_visibly_rock_at_both_zooms() {
 }
 
 #[wasm_bindgen_test]
-fn road_ground_draws_the_pebbly_sheet_and_falls_back_to_the_native_road() {
+fn road_ground_draws_the_native_road_and_falls_back_to_dirt() {
     let frame = |page| GameFrame {
         stream: 0,
         atlas: crate::AtlasAddress { page, uv: [0.0; 4] },
@@ -195,13 +195,39 @@ fn road_ground_draws_the_pebbly_sheet_and_falls_back_to_the_native_road() {
     };
     assert_eq!(
         page(&art, 18),
-        Some(10),
-        "a road is not dirt or old cobbles"
+        Some(24),
+        "roads use the DE road sheet, not gravel"
     );
     assert_eq!(page(&art, 2), Some(2));
-    // Without the pebbly sheet the pack's own road, then dirt, still draw.
-    art.terrain[10] = Vec::new();
-    assert_eq!(page(&art, 18), Some(24));
     art.water_depth[4] = (Vec::new(), None);
     assert_eq!(page(&art, 18), Some(2));
+}
+
+#[wasm_bindgen_test]
+fn a_single_tile_de_road_keeps_its_full_width_at_detailed_zooms() {
+    use crate::surface_mesh::mix::fixture;
+    let mut terrain = fixture::terrain(0);
+    for tile in &mut terrain {
+        tile.material = if tile.position[0] == 0.5 { 18 } else { 2 };
+    }
+    let mut art = fixture::art();
+    let mut road = art.terrain[2][0];
+    road.atlas.page = 1;
+    art.water_depth[4].0.push(road);
+    for zoom in [0.1, 0.25, 0.5, 1.0, 3.0] {
+        let mut camera = fixture::camera(0);
+        camera.zoom = zoom;
+        let mut faces = projected_surface_triangles(&terrain, camera);
+        apply_terrain_textures(&mut faces, &art);
+        let road_faces: Vec<_> = faces
+            .iter()
+            .filter(|f| f.texture_tile[0] == 0 && !f.skirt)
+            .collect();
+        assert!(!road_faces.is_empty(), "zoom {zoom}");
+        for face in road_faces {
+            assert_eq!(face.material, 18, "zoom {zoom}");
+            assert_eq!(face.mix, [0; 6], "zoom {zoom}");
+            assert_eq!(face.texture_uv, Some(road.atlas), "zoom {zoom}");
+        }
+    }
 }

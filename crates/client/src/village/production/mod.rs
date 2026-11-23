@@ -6,7 +6,7 @@ use aoe_protocol::{
     CommandResult, GameplayBuildingState, GameplayPlayerState, Stockpile, UnitKind,
 };
 
-pub(in crate::playground::game) mod here;
+pub(crate) mod here;
 
 #[derive(Clone, Default)]
 pub(crate) struct PendingTraining {

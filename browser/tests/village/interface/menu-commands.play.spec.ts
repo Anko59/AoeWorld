@@ -1,5 +1,6 @@
 import { expect } from "@playwright/test";
 import { test } from "../../../server.js";
+import { playerState, productionFixture } from "../production/fixture.js";
 import { gameAssets } from "../../game-assets.js";
 import { fiveVillagerFixture } from "../fixtures/village.js";
 import { monitorCommands } from "../fixtures/menu-shortcuts.js";
@@ -218,4 +219,54 @@ test("mixed selection uses unit commands and foreign and wildlife cards clear th
   await expect(page.locator("#command-grid button")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(card).toHaveAttribute("data-type", "empty");
+});
+
+test("Shift batch training keeps the Barracks grid under the pointer", async ({ page }) => {
+  const { commands, update } = await productionFixture(page, [
+    { id: 20, kind: 6, x: 8190, y: 8187 },
+  ]);
+  update(playerState(0, 0, 4, 100));
+  const site = screen(8191.5, 8188.5);
+  await page.mouse.click(site.x, site.y);
+  const train = page.getByRole("button", { name: "Train Militia" });
+  await expect(train).toBeEnabled();
+  const grid = page.locator("#command-grid");
+  const layout = () => grid.locator("button:visible").evaluateAll(nodes => nodes.map(node => {
+    const { x, y, width, height } = node.getBoundingClientRect();
+    return [node.id, x, y, width, height];
+  }));
+  const original = await layout();
+  await train.hover();
+  await page.keyboard.down("Shift");
+  await expect(train.locator(".train-batch")).toBeVisible();
+  expect(await layout()).toEqual(original);
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect.poll(() => commands.filter(bytes => bytes[0] !== 1).length).toBeGreaterThan(0);
+  await expect(grid.locator("#train-steward")).toHaveCount(0);
+  // The queue adds Cancel in its own cell; no existing button moves.
+  await expect(grid.getByRole("button", { name: "Cancel" })).toBeVisible();
+  expect(await layout()).toEqual(expect.arrayContaining(original));
+  await page.keyboard.up("Shift");
+  await expect(train.locator(".train-batch")).toBeHidden();
+  expect(await layout()).toEqual(expect.arrayContaining(original));
+});
+
+test("only started foundations show progress, including the enemy's", async ({ page }) => {
+  const { update } = await productionFixture(page, [
+    { id: 20, kind: 6, x: 8190, y: 8187, complete: false, constructionProgress: 0 },
+    { id: 21, kind: 6, x: 8194, y: 8187, complete: false, constructionProgress: 250, player: 1 },
+  ]);
+  update();
+  const labels = page.locator("#construction-labels progress");
+  await expect(labels).toHaveCount(1);
+  await expect(labels).toHaveAttribute("value", "250");
+  const own = screen(8191.5, 8188.5);
+  await page.mouse.click(own.x, own.y);
+  await expect(page.locator("#selection")).toHaveAttribute("data-kind", "Barracks");
+  const enemy = screen(8195.5, 8188.5);
+  await page.mouse.click(enemy.x, enemy.y);
+  await expect(page.locator("#selection")).toHaveAttribute("data-owned", "false");
+  await expect(page.locator("#construction-progress")).toHaveAttribute("value", "250");
+  await expect(page.locator("#construction-progress")).toBeVisible();
 });
