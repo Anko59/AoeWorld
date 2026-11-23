@@ -71,6 +71,17 @@ fn bridge_order_has_bounded_builders_and_current_golden_wire() {
     assert_eq!(bytes, [24, 3, 1, 7, 58, 40, 68, 40, 1]);
     assert_eq!(decode_client(&bytes).unwrap(), order);
     assert_eq!(postcard::to_allocvec(&BuildingKind::Bridge).unwrap(), [20]);
+    let large = ClientMessage::BuildBridgeOrder {
+        sequence: 4,
+        builder_ids: (1..=10_000).map(EntityId).collect(),
+        from: TileCoord::new(29, 20),
+        to: TileCoord::new(34, 20),
+        queued: true,
+    };
+    assert_eq!(
+        decode_client(&encode_client(&large).unwrap()).unwrap(),
+        large
+    );
     let too_many = ClientMessage::BuildBridgeOrder {
         sequence: 1,
         builder_ids: vec![EntityId(7); MAX_BUILD_GROUP + 1],

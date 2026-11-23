@@ -257,14 +257,6 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 changed_buildings,
                 building_removals,
             }) if revision == client.revision => {
-                let Some(buildings) = merge_buildings(
-                    &client.village.buildings,
-                    &changed_buildings,
-                    &building_removals,
-                ) else {
-                    reconnect(&mut client, "protocol error; reconnect required");
-                    return;
-                };
                 if !client.presentation.receive(tick.0, now()) {
                     return;
                 }
@@ -275,26 +267,33 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     client.village.players.push(player);
                 }
 
-                let destroyed: Vec<_> = client
-                    .village
-                    .buildings
-                    .iter()
-                    .filter(|b| {
-                        building_removals.contains(&b.id)
-                            && (b.kind != aoe_protocol::BuildingKind::Farm
-                                || b.food_remaining.is_some_and(|food| food > 0))
-                    })
-                    .cloned()
-                    .collect();
                 client.village.rubble.retain(|(_, until)| *until > tick.0);
-                for b in destroyed {
-                    if client.village.rubble.len() < aoe_protocol::MAX_ECONOMY_BUILDINGS {
-                        let life = map::scene::rubble_ticks(&client, &b);
-                        client.village.rubble.push((b, tick.0.saturating_add(life)));
+                if !changed_buildings.is_empty() || !building_removals.is_empty() {
+                    let Some(buildings) = merge_buildings(
+                        &client.village.buildings,
+                        &changed_buildings,
+                        &building_removals,
+                    ) else {
+                        reconnect(&mut client, "protocol error; reconnect required");
+                        return;
+                    };
+                    for id in building_removals {
+                        let retained = &client.village.buildings;
+                        if let Ok(index) = retained.binary_search_by_key(&id, |b| b.id) {
+                            let b = &retained[index];
+                            if client.village.rubble.len() < aoe_protocol::MAX_ECONOMY_BUILDINGS
+                                && (b.kind != aoe_protocol::BuildingKind::Farm
+                                    || b.food_remaining.is_some_and(|food| food > 0))
+                            {
+                                let life = map::scene::rubble_ticks(&client, b);
+                                let b = b.clone();
+                                client.village.rubble.push((b, tick.0.saturating_add(life)));
+                            }
+                        }
                     }
+                    village::production::refresh_changed_queue(&mut client, &changed_buildings);
+                    map::scene::replace_buildings(&mut client, buildings);
                 }
-                village::production::refresh_changed_queue(&mut client, &changed_buildings);
-                map::scene::replace_buildings(&mut client, buildings);
                 for id in removals {
                     client.village.idle_villagers.remove(id);
                     client.village.idle_military.remove(id);
@@ -470,16 +469,28 @@ pub(super) fn merge_buildings(
     changed: &[aoe_protocol::GameplayBuildingState],
     removals: &[aoe_core::EntityId],
 ) -> Option<Vec<aoe_protocol::GameplayBuildingState>> {
-    let mut merged = retained
-        .iter()
-        .map(|b| (b.id, b))
-        .collect::<BTreeMap<_, _>>();
-    for id in removals {
-        merged.remove(id);
+    // All three wire lists are ordered by ID. Walk them once without building
+    // a second map of the entire kingdom for each group of changed sites.
+    let mut retained = retained.iter().peekable();
+    let mut changed = changed.iter().peekable();
+    let mut removals = removals.iter().copied().peekable();
+    let mut merged = Vec::with_capacity(retained.len().max(changed.len()));
+    while let Some(id) = retained
+        .peek()
+        .map(|b| b.id)
+        .into_iter()
+        .chain(changed.peek().map(|b| b.id))
+        .min()
+    {
+        let old = retained.next_if(|b| b.id == id);
+        while removals.next_if(|removed| *removed < id).is_some() {}
+        let removed = removals.next_if_eq(&id).is_some();
+        if let Some(building) = changed.next_if(|b| b.id == id).or(old.filter(|_| !removed)) {
+            if merged.len() == aoe_protocol::MAX_RETAINED_BUILDINGS {
+                return None;
+            }
+            merged.push(building.clone());
+        }
     }
-    for b in changed {
-        merged.insert(b.id, b);
-    }
-    (merged.len() <= aoe_protocol::MAX_RETAINED_BUILDINGS)
-        .then(|| merged.into_values().cloned().collect())
+    Some(merged)
 }

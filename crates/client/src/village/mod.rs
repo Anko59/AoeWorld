@@ -34,7 +34,7 @@ pub(crate) struct Village {
     pub buildings: Vec<GameplayBuildingState>,
     pub tick: u64,
     pub pending_training: production::PendingTraining,
-    pub build_admission: construction::strategic::Admission,
+    pub pending_far_builds: std::collections::BTreeSet<u64>,
     pub here_orders: production::here::Batch,
     pub last_hud: f64,
     pub move_cursor: bool,

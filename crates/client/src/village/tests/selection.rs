@@ -227,3 +227,11 @@ fn bottom_menu_combat_capabilities_follow_the_current_unit_stats() {
         assert!(!formation(unit));
     }
 }
+
+#[wasm_bindgen_test]
+fn selection_keeps_ten_thousand_units() {
+    let mut selection = Selection::default();
+    let units = (0..10_000).map(EntityId).collect::<Vec<_>>();
+    selection.units(units.clone());
+    assert_eq!(selection.units, units);
+}

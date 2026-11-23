@@ -41,11 +41,11 @@ pub const VERSION: u16 = 29;
 pub const MAX_MESSAGE: usize = 16 * 1_048_576;
 pub const MAX_SUBSCRIPTION_TILES: i32 = 512;
 pub const MAX_SUBSCRIBED_UNITS: usize = 65_536;
-pub const MAX_PENDING_COMMANDS_PER_CONNECTION: usize = 64;
+pub const MAX_PENDING_COMMANDS_PER_CONNECTION: usize = 2_048;
 /// Human command token-bucket burst, including rally and training orders. It
 /// covers a row of shift-placed buildings (one order each) at 70k-unit scale.
-pub const HUMAN_COMMAND_BURST: usize = 64;
-pub const MAX_PENDING_COMMANDS_GLOBAL: usize = 1_024;
+pub const HUMAN_COMMAND_BURST: usize = 1_024;
+pub const MAX_PENDING_COMMANDS_GLOBAL: usize = 16_384;
 pub const MAX_ACK_HISTORY: usize = 64;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

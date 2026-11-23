@@ -8,7 +8,9 @@ use aoe_core::{EntityId, WorldPosition};
 use aoe_protocol::{CommandResult, GameplayServerMessage};
 use std::time::Instant;
 
-/// Order budget of an AI slot (humans keep 10 per second, burst 20).
+const HUMAN_ORDERS_PER_SECOND: f64 = 256.0;
+
+/// Order admission for an AI slot.
 const AI_ORDERS_PER_SECOND: f64 = 100.0;
 const AI_ORDER_BURST: f64 = 200.0;
 const AI_PENDING_COMMANDS: usize = 256;

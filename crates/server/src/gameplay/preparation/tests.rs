@@ -176,7 +176,7 @@ async fn a_cold_order_waits_without_delaying_another_seat_or_the_tick() {
 }
 
 #[tokio::test]
-async fn a_join_burst_has_a_hard_tick_command_budget_and_serves_both_seats() {
+async fn a_ready_burst_drains_in_one_tick_for_both_seats() {
     use crate::gameplay::{GameplayService, SlotSetup};
     use aoe_core::{PlayerId, Seed, WorldConfig, WorldPosition};
     use aoe_simulation::GameWorld;
@@ -222,35 +222,9 @@ async fn a_join_burst_has_a_hard_tick_command_budget_and_serves_both_seats() {
         service.queue_stop(b, sequence, second).await;
     }
     service.tick().await;
-    let mut first_count = 0;
-    let mut second_count = 0;
-    while rx_a.try_recv().is_ok() {
-        first_count += 1;
-    }
-    while rx_b.try_recv().is_ok() {
-        second_count += 1;
-    }
-    assert_eq!(
-        first_count + second_count,
-        32,
-        "a join burst must leave orders for later ticks"
-    );
-    assert!(
-        first_count > 0 && second_count > 0,
-        "one seat monopolized the tick budget"
-    );
-    service.tick().await;
-    while rx_a.try_recv().is_ok() {
-        first_count += 1;
-    }
-    while rx_b.try_recv().is_ok() {
-        second_count += 1;
-    }
-    assert_eq!(
-        (first_count, second_count),
-        (18, 40),
-        "queued verdicts were lost"
-    );
+    let first_count = std::iter::from_fn(|| rx_a.try_recv().ok()).count();
+    let second_count = std::iter::from_fn(|| rx_b.try_recv().ok()).count();
+    assert_eq!((first_count, second_count), (18, 40));
 }
 
 #[tokio::test]

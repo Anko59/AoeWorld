@@ -27,35 +27,18 @@ extern "C" {
     );
 }
 
-/// The sites sent to the far view, at most [`MAX_SITES`]. Your own capitals
-/// come first, then the rest of your buildings (so a freshly built stable is
-/// never cut by a large foreign base), then everyone else's.
-pub(in super::super) fn site_buildings<'a>(
-    buildings: &'a [GameplayBuildingState],
-    owner: PlayerId,
-    explored: impl Fn(&GameplayBuildingState) -> bool + 'a,
-) -> impl Iterator<Item = &'a GameplayBuildingState> {
-    let rank = move |b: &GameplayBuildingState| match (b.player == owner, b.kind) {
-        (true, BuildingKind::TownCenter) => 0,
-        (true, BuildingKind::Castle) => 1,
-        (true, _) => 2,
-        _ => 3,
-    };
-    (0..4)
-        .flat_map(move |pass| buildings.iter().filter(move |b| rank(b) == pass))
-        .filter(move |b| {
-            // A finished road or bridge draws as a crossing instead; its
-            // foundation is a site marker like every other foundation.
-            !(matches!(b.kind, BuildingKind::Bridge | BuildingKind::Road)
-                && crate::strategic::far_crossing_visible(b.hp, b.construction))
-                && crate::strategic::far_building_visible(b.hp, b.construction)
-                && (b.player == owner || explored(b))
-        })
-        .take(MAX_SITES)
+/// Living, authorized sites. Completed crossings are carried by their own layer.
+pub(in super::super) fn site_buildings(
+    buildings: &[GameplayBuildingState],
+) -> impl Iterator<Item = &GameplayBuildingState> {
+    // Delivery already checked what the viewer knows, including remembered
+    // buildings outside the detailed fog subscription.
+    buildings.iter().filter(|b| {
+        !(matches!(b.kind, BuildingKind::Bridge | BuildingKind::Road)
+            && crate::strategic::far_crossing_visible(b.hp, b.construction))
+            && crate::strategic::far_building_visible(b.hp, b.construction)
+    })
 }
-
-/// Rows the far view takes (`2048 * 10` values in `settlements.js`).
-pub(in super::super) const MAX_SITES: usize = 2048;
 
 pub(in super::super) fn site_record(
     b: &GameplayBuildingState,
@@ -175,7 +158,7 @@ pub(in super::super) fn update(client: &Client) {
         if u.hp == 0 {
             continue;
         }
-        if u.kind == UnitKind::General && generals.len() < 256 {
+        if u.kind == UnitKind::General {
             generals.push(u);
         }
         if own && let Some(id) = u.commanded_by {
@@ -211,20 +194,15 @@ pub(in super::super) fn update(client: &Client) {
         .collect();
     let mut economy = Vec::new();
     let mut bridges = Vec::new();
-    let sites: Vec<_> = site_buildings(&client.village.buildings, owner, |b| {
-        client
-            .fog
-            .state(village::building_center(b).map(|n| n.floor() as i32))
-            > 0
-    })
-    .flat_map(|b| {
-        site_record(
-            b,
-            owner,
-            aoe_rendering::player_colour(b.player, owner, client.team_colour),
-        )
-    })
-    .collect();
+    let sites: Vec<_> = site_buildings(&client.village.buildings)
+        .flat_map(|b| {
+            site_record(
+                b,
+                owner,
+                aoe_rendering::player_colour(b.player, owner, client.team_colour),
+            )
+        })
+        .collect();
     for b in &client.village.buildings {
         if b.player == owner && b.hp > 0 {
             report_hit(b.last_hit, village::building_center(b), &mut last_alert);
@@ -234,7 +212,6 @@ pub(in super::super) fn update(client: &Client) {
         }
         if matches!(b.kind, BuildingKind::Bridge | BuildingKind::Road)
             && crate::strategic::far_crossing_visible(b.hp, b.construction)
-            && bridges.len() < 2048 * 5
         {
             bridges.extend([
                 f64::from(b.footprint.min.x),
@@ -244,7 +221,7 @@ pub(in super::super) fn update(client: &Client) {
                 b.kind as u8 as f64,
             ]);
         }
-        if b.player != owner || b.kind != BuildingKind::TownCenter || economy.len() >= 64 * 8 {
+        if b.player != owner || b.kind != BuildingKind::TownCenter {
             continue;
         }
         let p = village::building_center(b);
@@ -267,18 +244,12 @@ pub(in super::super) fn update(client: &Client) {
         ]);
     }
     let mut orders = Vec::new();
-    for q in client
-        .village
-        .move_queues
-        .iter()
-        .filter(|q| {
-            client
-                .units
-                .get(&q.entity_id)
-                .is_some_and(|u| u.kind == UnitKind::General && u.player == owner)
-        })
-        .take(256)
-    {
+    for q in client.village.move_queues.iter().filter(|q| {
+        client
+            .units
+            .get(&q.entity_id)
+            .is_some_and(|u| u.kind == UnitKind::General && u.player == owner)
+    }) {
         if let Some(p) = q.destinations.first() {
             let p = p.as_tiles();
             orders.extend([f64::from(q.entity_id.0), p[0], p[1]]);

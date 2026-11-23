@@ -175,3 +175,27 @@ test("disconnect clears an unacknowledged far build without requiring Welcome or
   await expect(page.locator("#far-building")).toContainText("not confirmed");
   await expect(page.locator("#far-building")).not.toContainText("Submitting");
 });
+
+test("far placement sends a row of orders while acknowledgements are outstanding", async ({
+  page,
+}) => {
+  await gameAssets(page, true);
+  await forceWebGl(page);
+  let received = 0;
+  await fiveVillagerFixture(page, (bytes) => {
+    if (bytes[0] === 8) received++;
+  });
+  await page.goto("/?play=1#x=8192&y=8192&zoom=.04");
+  await expect(page.locator("#connection")).toHaveText("connected");
+  await openTab(page, "build");
+  await page.locator('[aria-label="Building type"] [data-id="1"]').click();
+  await page.keyboard.down("Shift");
+  try {
+    for (let n = 0; n < 24; n++) {
+      await page.mouse.click(700 + n % 8 * 5, 320 + Math.floor(n / 8) * 6);
+    }
+  } finally {
+    await page.keyboard.up("Shift");
+  }
+  await expect.poll(() => received).toBe(24);
+});

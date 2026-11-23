@@ -87,7 +87,7 @@ pub(in super::super) fn update(client: &Client) {
         focus_elevation_meters: client.camera.focus_elevation_meters,
     };
     let heads = if overview {
-        Vec::new()
+        std::collections::HashMap::new()
     } else {
         // Reuse the displayed pose instead of rebuilding every world actor to
         // find the few selected health-bar anchors.
@@ -111,13 +111,13 @@ pub(in super::super) fn update(client: &Client) {
                     )
                 })
             })
-            .collect::<Vec<_>>()
+            .collect()
     };
     let head = |id, y| {
         heads
-            .iter()
-            .find(|(key, _)| *key == id)
-            .map_or(y - 42.0 * client.camera.zoom, |(_, top)| *top)
+            .get(&id)
+            .copied()
+            .unwrap_or(y - 42.0 * client.camera.zoom)
     };
     let mut values = vec![0.0; 15];
     values[13] = client.village.idle_villagers.len() as f64;
@@ -135,8 +135,9 @@ pub(in super::super) fn update(client: &Client) {
             f64::from(player.population_cap),
         ]);
     }
+    let selection: std::collections::HashSet<_> = client.selected.units.iter().copied().collect();
     for unit in client.units.values() {
-        let selected = client.selected.units.contains(&unit.id);
+        let selected = selection.contains(&unit.id);
         if unit.player == owner
             && matches!(unit.kind, UnitKind::Villager | UnitKind::FishingShip)
             && let Some(kind) = worker_resource(unit)
@@ -341,8 +342,8 @@ pub(in super::super) fn update(client: &Client) {
     village_update(&values, map::feedback::connection_label(client), &details);
     super::building_panel::update(client, panel_scale);
     let activity = crate::kingdom_activity::summarize(&client.village.buildings, owner);
-    let mut rows = vec![activity.more as f64];
-    for entry in activity.entries {
+    let mut rows = Vec::with_capacity(activity.len() * 5);
+    for entry in activity {
         rows.extend_from_slice(&[
             flag(entry.research),
             f64::from(entry.kind),

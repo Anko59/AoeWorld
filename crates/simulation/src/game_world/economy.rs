@@ -73,7 +73,7 @@ pub(crate) use market::MarketCommodity;
 pub use market::{MARKET_RULES, MarketPrices};
 
 /// Villagers one build order may assign to construction.
-pub const MAX_BUILD_GROUP: usize = 32;
+pub const MAX_BUILD_GROUP: usize = 16_384;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
