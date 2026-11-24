@@ -112,6 +112,11 @@ impl Origins {
         }))
     }
 
+    /// Patch cells held.
+    pub(super) fn len(&self) -> usize {
+        self.cells.len()
+    }
+
     /// One bit per tile of the `side`-square area at `origin`, set where the
     /// tile belongs to some forage, gold or stone patch. A clear bit proves
     /// `candidate_with` is `None` there without scanning the patch cells.
