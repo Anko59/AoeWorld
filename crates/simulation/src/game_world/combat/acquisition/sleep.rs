@@ -25,7 +25,7 @@ pub(crate) struct Quiet {
     chunks: BTreeMap<ChunkCoord, BTreeSet<EntityId>>,
     parked: BTreeSet<EntityId>,
     /// Seekers neither asleep nor parked: the acquisition rotation.
-    pub(super) awake: super::awake::Awake,
+    pub(super) awake: BTreeSet<EntityId>,
     /// Sleepers woken by an arrival near them: they look next.
     pub(super) due: BTreeSet<EntityId>,
 }
@@ -203,7 +203,7 @@ impl GameWorld {
     #[cfg(test)]
     pub(in crate::game_world::combat) fn assert_quiet_acquisition(&self) {
         let quiet = &self.combat.quiet;
-        let mut all = quiet.awake.set().clone();
+        let mut all = quiet.awake.clone();
         for id in quiet.jobs.keys().chain(&quiet.parked) {
             assert!(all.insert(*id), "missed wake: {id:?} asleep and awake");
         }
@@ -212,7 +212,7 @@ impl GameWorld {
             "missed wake: rotation and seekers"
         );
         assert!(
-            quiet.due.is_subset(quiet.awake.set()),
+            quiet.due.is_subset(&quiet.awake),
             "missed wake: a due sleeper"
         );
         let mut units = crate::game_world::unit_index::ChunkPresence::default();

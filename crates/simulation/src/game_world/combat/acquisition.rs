@@ -6,7 +6,6 @@ use super::{
 };
 use crate::{EconomyError, GameWorld, UnitKind, UnitTask};
 use aoe_core::{CombatStance, EntityId, PlayerId, WorldPosition};
-pub(crate) mod awake;
 mod share;
 pub(crate) mod sleep;
 
@@ -122,14 +121,17 @@ impl GameWorld {
         let due: Vec<_> = std::mem::take(&mut self.combat.quiet.due)
             .into_iter()
             .collect();
+        let period = self.config.ticks(4);
+        let tick = self.tick.0;
         let turns = self
             .combat
             .quiet
             .awake
-            .turn(self.tick.0, self.config.ticks(4))
-            .into_iter()
-            .filter(|id| due.binary_search(id).is_err())
-            .map(|id| (id, false));
+            .iter()
+            .filter(|id| {
+                (tick + u64::from(id.0)).is_multiple_of(period) && due.binary_search(id).is_err()
+            })
+            .map(|&id| (id, false));
         let ids: Vec<_> = due.iter().map(|&id| (id, true)).chain(turns).collect();
         for (id, alarmed) in ids {
             if alarmed && !self.combat.quiet.awake.contains(&id) {
