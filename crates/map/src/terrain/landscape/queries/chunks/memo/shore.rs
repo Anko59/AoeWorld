@@ -150,6 +150,35 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         Ok(shore)
     }
 
+    /// The water kind `(dx, dy)` from `position`; `window` is its offset
+    /// in, and the side of, an untagged water table.
+    #[inline(always)]
+    fn near_water(
+        &self,
+        position: TileCoord,
+        (wx, wy, side): (i64, i64, i64),
+        dx: i32,
+        dy: i32,
+    ) -> Result<Option<WaterKind>, EnvironmentPageError> {
+        let (Some(x), Some(y)) = (position.x.checked_add(dx), position.y.checked_add(dy)) else {
+            return Ok(None);
+        };
+        let near = TileCoord::new(x, y);
+        let index = if self.tagged {
+            Some(tagged_slot(near))
+        } else {
+            let (x, y) = (wx + i64::from(dx), wy + i64::from(dy));
+            ((0..side).contains(&x) && (0..side).contains(&y)).then(|| (y * side + x) as usize)
+        };
+        if let Some(index) = index
+            && let Some((at, (kind, _))) = self.water.borrow()[index]
+            && at == near
+        {
+            return Ok(Some(kind));
+        }
+        self.water(near)
+    }
+
     fn classify(&self, position: TileCoord) -> Result<Shore, EnvironmentPageError> {
         let Some(base) = self.base(position)? else {
             return Ok(Shore::None);
@@ -159,20 +188,10 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         }
         // Scans read hundreds of known kinds; take them straight from the
         // table and fall back to the full query only for a missing one.
-        let neighbor = |dx: i32, dy: i32| {
-            let (Some(x), Some(y)) = (position.x.checked_add(dx), position.y.checked_add(dy))
-            else {
-                return Ok(None);
-            };
-            let near = TileCoord::new(x, y);
-            if let Some(index) = self.water_index(near)
-                && let Some((at, (kind, _))) = self.water.borrow()[index]
-                && at == near
-            {
-                return Ok(Some(kind));
-            }
-            self.water(near)
-        };
+        let side = self.side + 2 * WATER_HALO;
+        let wx = i64::from(position.x) - i64::from(self.origin.x) + WATER_HALO;
+        let wy = i64::from(position.y) - i64::from(self.origin.y) + WATER_HALO;
+        let neighbor = |dx: i32, dy: i32| self.near_water(position, (wx, wy, side), dx, dy);
         let key = self.generator.shoreline_key();
         let step = |domain: u64, narrow: i64, wide: i64| {
             let value = shoreline::variation(key, domain, position, WIDTH_LATTICE_TILES);

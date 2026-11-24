@@ -44,8 +44,8 @@ pub(super) type ChunkMemo<'a> = Memo<'a, 1296, 2500>;
 pub(super) type SharedMemo<'a> = Memo<'a, SHARED_SLOTS, SHARED_SLOTS>;
 const SHARED_SIDE: i32 = 64;
 pub(super) const SHARED_SLOTS: usize = (SHARED_SIDE * SHARED_SIDE) as usize;
-/// Shared tables keep at most this many resource patch origins.
-const SHARED_ORIGINS: usize = 1024;
+/// Shared tables keep at most this many resource patch origins (a linear list).
+const SHARED_ORIGINS: usize = 64;
 
 /// Base tiles keep a two-tile halo. Water kinds keep seven more: the depth
 /// scan of a water tile reads water up to seven tiles away.
@@ -365,15 +365,12 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
     }
     /// Whether a patch may own the tile; `true` when it is not in the area.
     fn member(&self, position: TileCoord) -> bool {
-        let (origin, side) = if self.tagged {
-            let corner = |v: i32| v.div_euclid(SHARED_SIDE).saturating_mul(SHARED_SIDE);
-            (
-                TileCoord::new(corner(position.x), corner(position.y)),
-                SHARED_SIDE,
-            )
-        } else {
-            (self.origin, i32::try_from(self.side).unwrap_or(0))
-        };
+        // Shared tables keep their candidates and patch origins across points,
+        // so a per-area bitmap would only be rebuilt as points move.
+        if self.tagged {
+            return true;
+        }
+        let (origin, side) = (self.origin, i32::try_from(self.side).unwrap_or(0));
         let mut members = self.members.borrow_mut();
         if members
             .as_ref()
