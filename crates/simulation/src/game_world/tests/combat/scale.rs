@@ -115,7 +115,9 @@ fn autonomous_combat_looks_follow_each_units_own_cadence() {
             peak = peak.max(world.combat_stats().attackers);
             checks += u64::from(world.combat_stats().acquisition_checks);
             assert!(world.combat_stats().hits <= world.combat_stats().attackers);
-            assert!(world.combat_stats().attack_searches <= 16);
+            // At most one position search per attacker and tick (#978:
+            // no world-wide search limit).
+            assert!(world.combat_stats().attack_searches <= world.combat_stats().attackers);
         }
         // One look per seeker every fourth tick, plus the looks of sleepers
         // an arrival woke: never a world-wide ration, never every tick.
@@ -127,7 +129,7 @@ fn autonomous_combat_looks_follow_each_units_own_cadence() {
     }
     // Default Aggressive acquisition intentionally replaces the former ceiling
     // of sixteen explicit attackers plus their victims. Whole armies defend;
-    // spatial inspection and route-search work remain bounded above.
+    // spatial inspection stays bounded above, searches by the fighters.
     assert!(worst.iter().all(|peak| *peak > 32), "{worst:?}");
     let mut idle = crowd(6_000, 0);
     for player in [PlayerId(0), PlayerId(1)] {

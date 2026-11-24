@@ -171,19 +171,11 @@ fn a_trapped_archer_rejects_an_attack_outside_its_range() {
         }
     }
     let before = w.canonical_hash();
-    let budget = w.combat.position_searches;
     let error = w.issue_attack(PlayerId(0), archer, target).unwrap_err();
     assert!(
         error.to_string().contains("reachable attack position"),
         "{error}"
     );
-    assert_eq!(
-        w.combat.position_searches,
-        budget - 1,
-        "failed search consumes its work allowance"
-    );
-    // The allowance is the only hashed state a rejection may spend.
-    w.combat.position_searches = budget;
     assert_eq!(
         w.canonical_hash(),
         before,

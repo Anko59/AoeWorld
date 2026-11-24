@@ -61,8 +61,9 @@ outward repair; that exception is not a proof of collision-free packing of
 thousands of identical spawns. Domain-separated packed keys, recycled empty
 cell vectors and a dense entity-to-unit lookup reduce query/allocation cost.
 
-The world shares four local refinements of at most 306 nodes and four expensive
-attack-position searches of at most 8,192 nodes each per tick. Formations retain
+The world shares four local refinements of at most 306 nodes per tick; each due
+attacker runs its own bounded attack-position search, with no world-wide limit.
+Formations retain
 two local-search allowances while present. The existing fair static planner
 keeps its 16,384-work allowance; fast attempts keep 65,536 work globally and
 16,384 per player. Generated detours cannot grow a route beyond 512 points.

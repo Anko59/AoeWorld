@@ -35,19 +35,6 @@ fn vassal_owner_repeated_attack_releases_control() {
 }
 
 #[test]
-fn vassal_owner_deferred_attack_releases_control() {
-    let (mut w, _, _, id) = soldier();
-    let enemy = w
-        .spawn_kind(PlayerId(1), UnitKind::Knight, at(140, 100))
-        .unwrap();
-    while w.reserve_attack_search() {}
-    w.issue_attack(PlayerId(0), id, enemy).unwrap();
-    assert_eq!(w.vassal_controller(id), None);
-    advance(&mut w, 40);
-    assert_eq!(w.unit(id).unwrap().attack_target, Some(enemy));
-}
-
-#[test]
 fn vassal_preserves_idle_general_army_inside_its_territory() {
     let (mut w, v, _) = setup();
     let ids: Vec<_> = (0..12)
@@ -167,7 +154,7 @@ fn vassal_all_accepted_soldier_orders_release_and_keep_manual_control() {
         "queued move",
         "attack",
         "repeated attack",
-        "deferred attack",
+        "repeated attack",
         "stop",
         "stance",
         "formation move",
@@ -208,7 +195,7 @@ fn vassal_all_accepted_soldier_orders_release_and_keep_manual_control() {
             w.economy.stewards.automatic = false;
         }
         if command == 4 {
-            while w.reserve_attack_search() {}
+            w.issue_attack(PlayerId(0), id, enemy).unwrap();
         }
         match command {
             0 => {

@@ -91,7 +91,7 @@ fn an_automatic_building_attack_yields_to_units_but_a_manual_target_is_kept() {
 }
 
 #[test]
-fn an_attack_burst_shares_its_search_budget_and_repeated_targets_reuse_orders() {
+fn an_attack_burst_routes_every_attacker_at_once_and_repeated_targets_reuse_orders() {
     let mut w = world();
     let target = w.spawn_villager(PlayerId(1), at(200, 200)).unwrap();
     let ids = (0..32)
@@ -100,21 +100,16 @@ fn an_attack_burst_shares_its_search_budget_and_repeated_targets_reuse_orders() 
     for &id in &ids {
         w.issue_attack(PlayerId(0), id, target).unwrap();
     }
-    assert_eq!(w.combat.searches_used, 16);
     assert_eq!(w.combat.attackers.len(), 32);
-    let before = w.combat.searches_used;
+    assert!(
+        ids.iter().all(|id| w.movement_order(*id).is_some()),
+        "no attacker waits for another's search"
+    );
+    let before = w.combat.stats.attack_searches;
     for &id in &ids {
         w.issue_attack(PlayerId(0), id, target).unwrap();
     }
-    assert_eq!(w.combat.searches_used, before);
-    for _ in 0..40 {
-        w.advance();
-        assert!(w.combat.searches_used <= 16);
-    }
-    assert!(
-        ids.iter().all(|id| w.movement_order(*id).is_some()),
-        "deferred units must eventually receive their route"
-    );
+    assert_eq!(w.combat.stats.attack_searches, before);
 }
 
 #[test]
