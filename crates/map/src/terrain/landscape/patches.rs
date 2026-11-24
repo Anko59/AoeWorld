@@ -274,7 +274,20 @@ impl Patches {
         wildness_at: impl Fn(i64, i64) -> Result<u16, E>,
     ) -> Result<DensitySample, E> {
         let input = input_at(x, y)?;
-        let mut sample = self.try_density_sample(x, y, input, &wildness_at)?;
+        let sample = self.try_density_sample(x, y, input, &wildness_at)?;
+        Self::try_filter_singleton(x, y, input, sample, |nx, ny| {
+            self.try_density_sample(nx, ny, input_at(nx, ny)?, &wildness_at)
+        })
+    }
+    /// The singleton filter of [`Self::try_sample`] over unfiltered
+    /// neighbour densities, so a caller may share those between tiles.
+    pub fn try_filter_singleton<E>(
+        x: i32,
+        y: i32,
+        input: Input,
+        mut sample: DensitySample,
+        density_at: impl Fn(i32, i32) -> Result<DensitySample, E>,
+    ) -> Result<DensitySample, E> {
         if !sample.tree || input.mode != Mode::Forest {
             return Ok(sample);
         }
@@ -286,10 +299,7 @@ impl Patches {
                 let (Some(nx), Some(ny)) = (x.checked_add(dx), y.checked_add(dy)) else {
                     continue;
                 };
-                if self
-                    .try_density_sample(nx, ny, input_at(nx, ny)?, &wildness_at)?
-                    .tree
-                {
+                if density_at(nx, ny)?.tree {
                     return Ok(sample);
                 }
             }

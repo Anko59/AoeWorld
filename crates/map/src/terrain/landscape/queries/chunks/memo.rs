@@ -9,6 +9,11 @@ struct Entry {
     candidate: Option<Option<ResourceNode>>,
     dressing_roll: Option<u64>,
     landscape: Option<LandscapeSample>,
+    input: Option<crate::landscape_patches::Input>,
+    /// Unfiltered density, keyed by the explicit wildness it was read with.
+    density: Option<(Option<u16>, crate::landscape_patches::DensitySample)>,
+    reserved: Option<bool>,
+    reservations: Option<Reservations>,
 }
 
 /// One 192-tile cell and its wildness.
@@ -249,7 +254,38 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         }
         Ok(candidate)
     }
+    /// Reservations of a tile, computed once: callers keep them coordinate-stable.
+    pub(super) fn reservations_with(
+        &self,
+        position: TileCoord,
+        compute: impl FnOnce() -> Result<Reservations, EnvironmentPageError>,
+    ) -> Result<Reservations, EnvironmentPageError> {
+        let index = self.index(position);
+        if let Some(index) = index
+            && let Some(reservations) = self.entries.borrow()[index].reservations
+        {
+            return Ok(reservations);
+        }
+        let reservations = compute()?;
+        if let Some(index) = index {
+            self.entries.borrow_mut()[index].reservations = Some(reservations);
+        }
+        Ok(reservations)
+    }
     pub(super) fn reserved(&self, position: TileCoord) -> Result<bool, EnvironmentPageError> {
+        let index = self.index(position);
+        if let Some(index) = index
+            && let Some(reserved) = self.entries.borrow()[index].reserved
+        {
+            return Ok(reserved);
+        }
+        let reserved = self.reserved_uncached(position)?;
+        if let Some(index) = index {
+            self.entries.borrow_mut()[index].reserved = Some(reserved);
+        }
+        Ok(reserved)
+    }
+    fn reserved_uncached(&self, position: TileCoord) -> Result<bool, EnvironmentPageError> {
         for dy in -1..=1 {
             for dx in -1..=1 {
                 let Some(x) = position.x.checked_add(dx) else {
@@ -298,6 +334,41 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
             }
         }
         Ok(None)
+    }
+}
+
+impl<const N: usize, const W: usize> super::super::LandscapeCache for Memo<'_, N, W> {
+    fn base(&self, tile: TileCoord) -> Result<Tile, EnvironmentPageError> {
+        Memo::base(self, tile)?.ok_or(EnvironmentPageError::Invalid)
+    }
+    fn wildness(&self, cx: i64, cy: i64) -> Result<u16, EnvironmentPageError> {
+        Memo::wildness(self, cx, cy)
+    }
+    fn input(&self, tile: TileCoord) -> Option<crate::landscape_patches::Input> {
+        self.entries.borrow()[self.index(tile)?].input
+    }
+    fn set_input(&self, tile: TileCoord, input: crate::landscape_patches::Input) {
+        if let Some(index) = self.index(tile) {
+            self.entries.borrow_mut()[index].input = Some(input);
+        }
+    }
+    fn density(
+        &self,
+        tile: TileCoord,
+        explicit: Option<u16>,
+    ) -> Option<crate::landscape_patches::DensitySample> {
+        let (key, density) = self.entries.borrow()[self.index(tile)?].density?;
+        (key == explicit).then_some(density)
+    }
+    fn set_density(
+        &self,
+        tile: TileCoord,
+        explicit: Option<u16>,
+        density: crate::landscape_patches::DensitySample,
+    ) {
+        if let Some(index) = self.index(tile) {
+            self.entries.borrow_mut()[index].density = Some((explicit, density));
+        }
     }
 }
 

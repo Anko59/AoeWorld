@@ -152,11 +152,24 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         if base.material == crate::GroundMaterial::Ford {
             return Ok(Shore::None);
         }
-        let neighbor =
-            |dx: i32, dy: i32| match (position.x.checked_add(dx), position.y.checked_add(dy)) {
+        // Scans read hundreds of known kinds; take them straight from the
+        // halo and fall back to the full query only for a missing one.
+        let side = self.side + 2 * WATER_HALO;
+        let wx = i64::from(position.x) - i64::from(self.origin.x) + WATER_HALO;
+        let wy = i64::from(position.y) - i64::from(self.origin.y) + WATER_HALO;
+        let neighbor = |dx: i32, dy: i32| {
+            let (x, y) = (wx + i64::from(dx), wy + i64::from(dy));
+            if (0..side).contains(&x)
+                && (0..side).contains(&y)
+                && let Some((kind, _)) = self.water.borrow()[(y * side + x) as usize]
+            {
+                return Ok(Some(kind));
+            }
+            match (position.x.checked_add(dx), position.y.checked_add(dy)) {
                 (Some(x), Some(y)) => self.water(TileCoord::new(x, y)),
                 _ => Ok(None),
-            };
+            }
+        };
         let key = self.generator.shoreline_key();
         let step = |domain: u64, narrow: i64, wide: i64| {
             let value = shoreline::variation(key, domain, position, WIDTH_LATTICE_TILES);
@@ -173,14 +186,19 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
                     return Ok(Shore::None);
                 }
                 let reach = width(6, -350, 350);
-                let bank = width(23, 0, i64::MAX);
+                // The bank width matters only once river water is in reach.
+                let mut bank = None;
                 for (dx, dy, distance) in BAND {
                     if distance > reach {
                         break;
                     }
                     match neighbor(dx, dy)? {
                         None | Some(WaterKind::None) => {}
-                        Some(WaterKind::River) if distance <= bank => return Ok(Shore::Bank),
+                        Some(WaterKind::River)
+                            if distance <= *bank.get_or_insert_with(|| width(23, 0, i64::MAX)) =>
+                        {
+                            return Ok(Shore::Bank);
+                        }
                         Some(WaterKind::River) => {}
                         Some(_) => return Ok(Shore::Beach),
                     }
@@ -198,14 +216,16 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
                     return Ok(Shore::Deep);
                 }
                 // One tile, or two where the rim widens; never three.
-                let rim = width(7, 0, i64::MAX);
-                let medium = MEDIUM[step(8, -350, 350)];
+                // Both widths vary per tile; read each only when it decides.
+                let mut medium = None;
                 for (dx, dy, distance) in BAND {
-                    if distance > medium {
+                    if distance > MEDIUM[0]
+                        && distance > *medium.get_or_insert_with(|| MEDIUM[step(8, -350, 350)])
+                    {
                         break;
                     }
                     if neighbor(dx, dy)? == Some(WaterKind::None) {
-                        return Ok(if distance <= rim {
+                        return Ok(if distance <= width(7, 0, i64::MAX) {
                             Shore::Shallow
                         } else {
                             Shore::None

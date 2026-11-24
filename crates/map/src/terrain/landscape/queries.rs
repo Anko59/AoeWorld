@@ -7,7 +7,7 @@ mod chunks;
 mod wildness;
 use crate::historical_parcels::{LandUse, Parcels, SourceFractions};
 use crate::landscape_ecology::{Assessment, Reservations, assess};
-use crate::landscape_patches::{DensitySample, Patches};
+use crate::landscape_patches::{DensitySample, Input, Patches};
 use crate::{EnvironmentPageError, HistoricalLandUseObservation};
 use aoe_core::TileCoord;
 
@@ -26,6 +26,42 @@ pub struct LandscapeSample {
     pub density: DensitySample,
     pub historical_observation: Option<HistoricalLandUseObservation>,
     pub historical_land_use: LandUse,
+}
+
+/// Base tiles and cell wildness for one evaluation, plus per-tile values a
+/// bounded query shares between neighbouring tiles. Each shared value is a
+/// pure function of its tile (a density also of the centre's explicit
+/// wildness), so a hit returns exactly what recomputation would.
+pub(super) trait LandscapeCache {
+    fn base(&self, tile: TileCoord) -> Result<Tile, EnvironmentPageError>;
+    fn wildness(&self, cx: i64, cy: i64) -> Result<u16, EnvironmentPageError>;
+    fn input(&self, _tile: TileCoord) -> Option<Input> {
+        None
+    }
+    fn set_input(&self, _tile: TileCoord, _input: Input) {}
+    fn density(&self, _tile: TileCoord, _explicit: Option<u16>) -> Option<DensitySample> {
+        None
+    }
+    fn set_density(&self, _tile: TileCoord, _explicit: Option<u16>, _density: DensitySample) {}
+}
+
+/// Direct source reads with nothing shared.
+struct NoCache<'a> {
+    generator: &'a MapChunkGenerator,
+    cancelled: &'a dyn Fn() -> bool,
+}
+impl LandscapeCache for NoCache<'_> {
+    fn base(&self, tile: TileCoord) -> Result<Tile, EnvironmentPageError> {
+        if self.generator.provider.is_some() {
+            provider::sample_base_tile(self.generator, tile, self.cancelled)
+        } else {
+            Ok(self.generator.sample_base_tile(tile))
+        }
+    }
+    fn wildness(&self, cx: i64, cy: i64) -> Result<u16, EnvironmentPageError> {
+        self.generator
+            .landscape_cell_wildness(cx, cy, self.cancelled)
+    }
 }
 
 impl MapChunkGenerator {
@@ -62,14 +98,10 @@ impl MapChunkGenerator {
             policy_at,
             reservations,
             cancelled,
-            &|position| {
-                if self.provider.is_some() {
-                    provider::sample_base_tile(self, position, cancelled)
-                } else {
-                    Ok(self.sample_base_tile(position))
-                }
+            &NoCache {
+                generator: self,
+                cancelled,
             },
-            &|cx, cy| self.landscape_cell_wildness(cx, cy, cancelled),
         )
     }
 
@@ -79,12 +111,12 @@ impl MapChunkGenerator {
         policy_at: &dyn Fn(TileCoord, Tile) -> LandscapePolicy,
         reservations: &dyn Fn(TileCoord) -> Result<Reservations, EnvironmentPageError>,
         cancelled: &dyn Fn() -> bool,
-        base_at: &dyn Fn(TileCoord) -> Result<Tile, EnvironmentPageError>,
-        wildness_at: &dyn Fn(i64, i64) -> Result<u16, EnvironmentPageError>,
+        cache: &dyn LandscapeCache,
     ) -> Result<Option<(LandscapeSample, Tile)>, EnvironmentPageError> {
         if cancelled() {
             return Err(EnvironmentPageError::Cancelled);
         }
+        let base_at = &|tile: TileCoord| cache.base(tile);
         if !self.landscape_in_bounds(tile) {
             return Ok(None);
         }
@@ -98,32 +130,45 @@ impl MapChunkGenerator {
             cancelled,
             base_at,
         )?;
+        cache.set_input(tile, center.input);
         let explicit = policy_at(tile, base).wildness_per_thousand;
-        let density = patches.try_sample(
-            tile.x,
-            tile.y,
-            |x, y| {
-                let neighbor = TileCoord::new(x, y);
-                if neighbor == tile {
-                    return Ok(center.input);
-                }
-                if !self.landscape_in_bounds(neighbor) {
-                    let mut excluded = center.input;
-                    excluded.eligible = false;
-                    return Ok(excluded);
-                }
-                self.landscape_assessment(
+        let wildness = |cx, cy| explicit.map_or_else(|| cache.wildness(cx, cy), Ok);
+        // Neighbour inputs and raw densities are pure functions of their tile
+        // and of `explicit`, so a bounded query computes each one once.
+        let input_at = |neighbor: TileCoord| {
+            if let Some(input) = cache.input(neighbor) {
+                return Ok(input);
+            }
+            let input = self
+                .landscape_assessment(
                     neighbor,
                     policy_at,
                     &parcels,
                     reservations(neighbor)?,
                     cancelled,
                     base_at,
-                )
-                .map(|(assessment, _, _)| assessment.input)
-            },
-            |cx, cy| explicit.map_or_else(|| wildness_at(cx, cy), Ok),
-        )?;
+                )?
+                .0
+                .input;
+            cache.set_input(neighbor, input);
+            Ok(input)
+        };
+        let raw = patches.try_density_sample(tile.x, tile.y, center.input, &wildness)?;
+        cache.set_density(tile, explicit, raw);
+        let density = Patches::try_filter_singleton(tile.x, tile.y, center.input, raw, |x, y| {
+            let neighbor = TileCoord::new(x, y);
+            if !self.landscape_in_bounds(neighbor) {
+                let mut excluded = center.input;
+                excluded.eligible = false;
+                return patches.try_density_sample(x, y, excluded, &wildness);
+            }
+            if let Some(density) = cache.density(neighbor, explicit) {
+                return Ok(density);
+            }
+            let density = patches.try_density_sample(x, y, input_at(neighbor)?, &wildness)?;
+            cache.set_density(neighbor, explicit, density);
+            Ok(density)
+        })?;
         Ok(Some((
             LandscapeSample {
                 density,

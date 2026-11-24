@@ -40,13 +40,15 @@ impl<const N: usize, const W: usize> Composition<'_, N, W> {
         &self,
         position: TileCoord,
     ) -> Result<Reservations, EnvironmentPageError> {
-        let mut reservations = (self.reserved_at)(position);
-        reservations.resource_approach |= self.memo.reserved(position)?;
-        reservations.shore |= matches!(
-            self.memo.shore(position)?,
-            memo::Shore::Beach | memo::Shore::Bank
-        );
-        Ok(reservations)
+        self.memo.reservations_with(position, || {
+            let mut reservations = (self.reserved_at)(position);
+            reservations.resource_approach |= self.memo.reserved(position)?;
+            reservations.shore |= matches!(
+                self.memo.shore(position)?,
+                memo::Shore::Beach | memo::Shore::Bank
+            );
+            Ok(reservations)
+        })
     }
 
     pub(super) fn sample(
@@ -60,8 +62,7 @@ impl<const N: usize, const W: usize> Composition<'_, N, W> {
                 &|position, base| self.policy(position, base),
                 &|position| self.reservations(position),
                 self.cancelled,
-                &|at| memo.base(at)?.ok_or(EnvironmentPageError::Invalid),
-                &|cx, cy| memo.wildness(cx, cy),
+                memo,
             )
         })
     }
