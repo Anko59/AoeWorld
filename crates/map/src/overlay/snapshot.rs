@@ -67,6 +67,16 @@ impl ResourceOverlay {
             }
             let added = ResourceNode::starting_from_id(change.id);
             if let Some(node) = added {
+                // A starting-kit node whose tile became water when the map's
+                // rivers were regenerated (ford spacing, wading width) is
+                // dropped: the save still loads, without that one resource.
+                if !starting.starting_tile_fits(terrain, node)? {
+                    depleted_count += u64::from(change.remaining < node.initial_amount);
+                    removed_total +=
+                        u64::from(node.initial_amount - change.remaining.min(node.initial_amount));
+                    previous = Some(change.id);
+                    continue;
+                }
                 starting.insert_starting_resource(terrain, node)?;
             }
             let node = added
