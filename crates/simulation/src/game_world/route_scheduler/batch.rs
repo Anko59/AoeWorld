@@ -184,8 +184,18 @@ impl GameWorld {
         reserved: &mut Reserved,
     ) -> Option<Search> {
         let &index = self.lookup.get(&id)?;
-        let order = self.units[index].order?;
+        let mut order = self.units[index].order?;
         let kind = self.units[index].state.kind;
+        // A waypoint on a tile no route can start from (the water beside a
+        // bridge deck, #1040) moves just inside the passable tile the body
+        // overlaps; a planner from the old tile could never find a path.
+        let origin = self.route_origin(kind, order.waypoint);
+        if origin != order.waypoint {
+            self.clear_planner(index);
+            order.origin = origin;
+            order.waypoint = origin;
+            self.units[index].order = Some(order);
+        }
         let held = self.units[index].planner.as_ref();
         let holds_planner = usize::from(held.is_some());
         let holds_search = held.is_some_and(RoutePlanner::requires_search_slot);

@@ -226,6 +226,39 @@ impl GameWorld {
             })
     }
 
+    /// Where a route from `at` starts: `at` itself, or, when a land body
+    /// stands over the edge of a tile no route can start from (the water
+    /// beside a bridge deck, #1040), the nearest point just inside a
+    /// passable tile it overlaps. Otherwise every search from there fails.
+    pub(crate) fn route_origin(&self, kind: crate::UnitKind, at: WorldPosition) -> WorldPosition {
+        let passable = |tile: TileCoord| {
+            self.unit_tile_passable(kind, tile, &|| false)
+                .unwrap_or(false)
+        };
+        let here = at.tile_floor();
+        if kind.is_naval() || passable(here) {
+            return at;
+        }
+        let reach = i64::from(kind.terrain_radius()).pow(2);
+        let mut best = None;
+        for (dx, dy) in aoe_map::RegionChunk::STEP_OFFSETS {
+            let tile = TileCoord::new(here.x + dx, here.y + dy);
+            if !passable(tile) {
+                continue;
+            }
+            let inside = WorldPosition::new(
+                at.x.clamp(tile.x * 1024, tile.x * 1024 + 1023),
+                at.y.clamp(tile.y * 1024, tile.y * 1024 + 1023),
+            );
+            let (x, y) = (i64::from(inside.x - at.x), i64::from(inside.y - at.y));
+            let key = (x * x + y * y, tile.y, tile.x);
+            if key.0 <= reach && best.is_none_or(|(old, _)| key < old) {
+                best = Some((key, inside));
+            }
+        }
+        best.map_or(at, |(_, inside)| inside)
+    }
+
     #[track_caller]
     pub(crate) fn order_route(
         &mut self,
@@ -233,6 +266,7 @@ impl GameWorld {
         origin: WorldPosition,
         destination: WorldPosition,
     ) -> Result<OrderRoute, GameWorldError> {
+        let origin = self.route_origin(self.units[index].state.kind, origin);
         self.order_diagnostics.demand[self.order_diagnostics.issuer as usize].route_requests += 1;
         let caller = Some(std::panic::Location::caller());
         self.route_metrics.caller = caller;
