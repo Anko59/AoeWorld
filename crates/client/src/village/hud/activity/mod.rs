@@ -2,8 +2,6 @@
 use aoe_core::{EntityId, PlayerId};
 use aoe_protocol::{GameplayBuildingState, Tech, UnitKind};
 
-pub(crate) const MAX_ROWS: usize = 6;
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct Entry {
     pub research: bool,
@@ -14,16 +12,10 @@ pub(crate) struct Entry {
     active: bool,
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub(crate) struct Summary {
-    pub entries: Vec<Entry>,
-    pub more: usize,
-}
-
 /// Fixed type-indexed storage, independent of the number of buildings. Queued
 /// units count, but only a queue's head advances its type's progress bar.
 /// Show the furthest advanced producer; ties choose the lowest entity id.
-pub(crate) fn summarize(buildings: &[GameplayBuildingState], owner: PlayerId) -> Summary {
+pub(crate) fn summarize(buildings: &[GameplayBuildingState], owner: PlayerId) -> Vec<Entry> {
     let mut groups: [Option<Entry>; UnitKind::ALL.len() + Tech::ALL.len()] =
         [None; UnitKind::ALL.len() + Tech::ALL.len()];
     let mut add =
@@ -72,11 +64,7 @@ pub(crate) fn summarize(buildings: &[GameplayBuildingState], owner: PlayerId) ->
             );
         }
     }
-    let count = groups.iter().flatten().count();
-    Summary {
-        entries: groups.into_iter().flatten().take(MAX_ROWS).collect(),
-        more: count.saturating_sub(MAX_ROWS),
-    }
+    groups.into_iter().flatten().collect()
 }
 
 #[cfg(test)]

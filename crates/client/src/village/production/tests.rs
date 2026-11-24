@@ -121,7 +121,7 @@ fn pending_training_is_bounded_and_reconciles_acknowledgements_with_authoritativ
     pending.record(2, EntityId(3), UnitKind::Militia);
     pending.acknowledge(2, CommandResult::RejectedTrainingQueueFull, 11, 11);
     assert_eq!(pending.count(EntityId(3)), 0);
-    for sequence in 0..100 {
+    for sequence in 0..aoe_protocol::MAX_PENDING_COMMANDS_PER_CONNECTION as u64 + 36 {
         pending.record(sequence, EntityId(1), UnitKind::Militia);
     }
     assert!(!pending.can_send());

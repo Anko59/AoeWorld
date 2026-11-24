@@ -58,7 +58,7 @@ export function initViews(jump) {
     },
     armies(values) {
       let largest = null;
-      for (let at = 0; at + ARMY_FIELDS <= values.length && at < 256 * ARMY_FIELDS; at += ARMY_FIELDS) {
+      for (let at = 0; at + ARMY_FIELDS <= values.length; at += ARMY_FIELDS) {
         const row = values.slice(at, at + ARMY_FIELDS);
         if (row[3] !== 1 || row[5] < 0 || ![row[0], row[1], row[2], row[5]].every(Number.isFinite)) continue;
         if (!largest || row[5] > largest[5] || (row[5] === largest[5] && row[0] < largest[0])) largest = row;

@@ -249,7 +249,13 @@ fn walls_include_both_endpoints_and_refuse_unbounded_lines() {
             TileCoord::new(2, 2)
         ]
     );
-    assert!(wall_tiles(TileCoord::new(0, 0), TileCoord::new(64, 0)).is_none());
+    assert_eq!(
+        wall_tiles(TileCoord::new(0, 0), TileCoord::new(199, 0))
+            .unwrap()
+            .len(),
+        200
+    );
+    assert!(wall_tiles(TileCoord::new(0, 0), TileCoord::new(i32::MAX, 0)).is_none());
 }
 
 #[wasm_bindgen_test::wasm_bindgen_test]

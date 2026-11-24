@@ -3,10 +3,8 @@ use super::{Client, building_center, owner};
 use crate::playground::game::map;
 use crate::resource_state::ResourceStateCache;
 use aoe_core::{ScreenPoint, TileCoord};
-use aoe_map::ResourceKind;
 use aoe_protocol::UnitKind;
 
-const RESOURCE_MARKER_LIMIT: usize = 2048;
 pub(in super::super) fn values(client: &Client) -> Vec<f64> {
     super::rally::present(client);
     let scale = f64::from(client.canvas.client_width()) / f64::from(client.canvas.width());
@@ -65,8 +63,6 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
         );
     }
 
-    // Wood has its own budget so a dense stand cannot displace other deposits.
-    let mut marker_counts = [0; 2];
     // Strategic actors update at HUD cadence. Never build a detailed picking
     // scene for a distant overview.
     if crate::playground::game::strategic::active(client) {
@@ -79,18 +75,12 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
             .values()
             .flat_map(|chunk| chunk.resources().map(|(node, _)| *node));
         for node in client.resources.starting_nodes().chain(natural) {
-            if marker_counts == [RESOURCE_MARKER_LIMIT; 2] {
-                break;
-            }
-            let count = &mut marker_counts[usize::from(node.kind == ResourceKind::Wood)];
-            if *count >= RESOURCE_MARKER_LIMIT
-                || client.fog.state([node.tile.x, node.tile.y]) == 0
+            if client.fog.state([node.tile.x, node.tile.y]) == 0
                 || !client.resources.visible(node.id)
                 || !sent.insert(node.id)
             {
                 continue;
             }
-            *count += 1;
             values[7] += 1.0;
             resource_marker(&mut values, node);
         }
@@ -218,10 +208,6 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
         if highlighted && values[3] == 1.0 {
             values[3] = gather_cursor(node.object, node.kind);
         }
-        let count = &mut marker_counts[usize::from(node.kind == ResourceKind::Wood)];
-        if *count >= RESOURCE_MARKER_LIMIT && !highlighted {
-            continue;
-        }
         let Some((p, visible)) =
             crate::hud_visibility::resource_projection(client.camera, world, highlighted, || {
                 map::screen_position(client, world)
@@ -234,8 +220,7 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
             values[5] = p.y * scale;
             values[8] = (aoe_core::ISO_TILE_WIDTH * client.camera.zoom * scale).max(10.0);
         }
-        if visible && *count < RESOURCE_MARKER_LIMIT {
-            *count += 1;
+        if visible {
             values[7] += 1.0;
             resource_marker(&mut values, *node);
         }

@@ -260,7 +260,7 @@ fn queue_is_bounded_before_placing_or_charging_and_normal_build_replaces_it() {
             true,
         )
         .unwrap();
-    let full = 256; // the bound in `continuation.rs`
+    let full = 2_048; // the bound in `continuation.rs`
     world.economy.builders.get_mut(&builder).unwrap().queue = vec![first; full];
     let before = world.canonical_hash();
     assert_eq!(

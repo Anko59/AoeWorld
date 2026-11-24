@@ -4,10 +4,6 @@ use aoe_core::{FIXED_SUBUNITS_PER_TILE, ScreenPoint, WorldPosition};
 use aoe_protocol::{GameplayClientMessage as Message, UnitKind, encode_gameplay_client};
 
 pub(super) fn send(client: &mut Client, message: Message) -> bool {
-    client
-        .village
-        .build_admission
-        .sent(crate::playground::game::now());
     client.last_error = None;
     let sequence = client.next_sequence;
     client.next_sequence = sequence.saturating_add(1);
@@ -222,11 +218,17 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
     if let Some(target) = animal.or(enemy) {
         send_attack(client, attacks, target);
     }
-    let move_sequence = client.next_sequence;
-    if let Some(message) = super::selection_orders::movement(client, moves, destination, queued) {
-        send(client, message);
-        let blocker = map::feedback::blocker_at(client, destination.tile_floor());
-        client.order_feedback.record(move_sequence, blocker);
+    moves.sort_unstable();
+    moves.dedup();
+    for units in moves.chunks(aoe_core::MAX_FORMATION_MEMBERS) {
+        let sequence = client.next_sequence;
+        if let Some(message) =
+            super::selection_orders::movement(client, units.to_vec(), destination, queued)
+            && send(client, message)
+        {
+            let blocker = map::feedback::blocker_at(client, destination.tile_floor());
+            client.order_feedback.record(sequence, blocker);
+        }
     }
     if client.village.attack_move || client.village.patrol_move {
         super::waypoints::ping(client, destination);
@@ -278,24 +280,25 @@ fn send_attack(
     mut entity_ids: Vec<aoe_core::EntityId>,
     target_id: aoe_core::EntityId,
 ) {
-    let sequence = client.next_sequence;
-    let message = match entity_ids.len() {
-        0 => return,
-        1 => Message::AttackOrder {
-            sequence,
-            entity_id: entity_ids[0],
-            target_id,
-        },
-        _ => {
-            entity_ids.sort_unstable();
-            Message::AttackSelectionOrder {
+    entity_ids.sort_unstable();
+    entity_ids.dedup();
+    for ids in entity_ids.chunks(aoe_core::MAX_FORMATION_MEMBERS) {
+        let sequence = client.next_sequence;
+        let message = if let [entity_id] = ids {
+            Message::AttackOrder {
                 sequence,
-                entity_ids,
+                entity_id: *entity_id,
                 target_id,
             }
-        }
-    };
-    send(client, message);
+        } else {
+            Message::AttackSelectionOrder {
+                sequence,
+                entity_ids: ids.to_vec(),
+                target_id,
+            }
+        };
+        send(client, message);
+    }
 }
 
 pub(in super::super) fn focus_town_center(client: &mut Client, select: bool) {
@@ -333,7 +336,6 @@ fn military(client: &Client) -> Vec<aoe_core::EntityId> {
     let mut military = super::selection::owned_units(client)
         .filter(|unit| can_form(unit.kind))
         .map(|unit| unit.id)
-        .take(aoe_core::MAX_FORMATION_MEMBERS)
         .collect::<Vec<_>>();
     military.sort_unstable();
     military
@@ -350,19 +352,20 @@ pub(super) fn formation(client: &mut Client, index: u32) {
         return;
     };
     client.village.formation = form;
-    let unit_ids = military(client);
-    if unit_ids.len() > 1 {
-        send(
-            client,
-            Message::FormationOrder {
-                sequence: client.next_sequence,
-                unit_ids,
-                formation: form,
-                destination: None,
-                queued: false,
-                attack_move: false,
-            },
-        );
+    for unit_ids in military(client).chunks(aoe_core::MAX_FORMATION_MEMBERS) {
+        if unit_ids.len() > 1 {
+            send(
+                client,
+                Message::FormationOrder {
+                    sequence: client.next_sequence,
+                    unit_ids: unit_ids.to_vec(),
+                    formation: form,
+                    destination: None,
+                    queued: false,
+                    attack_move: false,
+                },
+            );
+        }
     }
 }
 

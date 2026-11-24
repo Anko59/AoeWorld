@@ -133,7 +133,6 @@ impl GameplayService {
             sessions: Arc::new(Mutex::new(BTreeMap::new())),
             slots,
             next_session: Arc::new(AtomicU64::new(1)),
-            command_cursor: Arc::default(),
             world_id,
             map_content_hash,
             map_metadata,

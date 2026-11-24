@@ -48,7 +48,7 @@ test("kingdom activity groups all owned queues, focuses a producer, and clears c
   await expect(panel).toBeHidden();
 });
 
-test("kingdom activity caps visible types and reports overflow", async ({
+test("kingdom activity shows every type without scrollbars", async ({
   page,
 }) => {
   await productionFixture(
@@ -63,11 +63,31 @@ test("kingdom activity caps visible types and reports overflow", async ({
     (1 << 2) | (1 << 14),
   );
   const panel = page.locator("#kingdom-activity");
-  await expect(panel.getByRole("button")).toHaveCount(6);
-  await expect(panel).toContainText("+2 more");
-  const bounds = await panel.boundingBox();
-  if (!bounds) throw new Error("Activity panel has no bounds");
-  expect(bounds.height).toBeLessThanOrEqual(280);
+  await expect(panel.getByRole("button")).toHaveCount(8);
+  for (const lod of ["sprites", "markers"]) {
+    const size = await panel.evaluate((node, level) => {
+      document.documentElement.dataset.lod = level;
+      const rows = node.querySelector(".activity-rows");
+      if (!rows) throw new Error("Activity rows are missing");
+      return {
+        scrolls: [node, rows].some(
+          (element) =>
+            element.scrollHeight > element.clientHeight ||
+            element.scrollWidth > element.clientWidth,
+        ),
+        visible: [...rows.children].every((row) => {
+          const rect = row.getBoundingClientRect();
+          return (
+            rect.top >= 0 &&
+            rect.left >= 0 &&
+            rect.bottom <= innerHeight &&
+            rect.right <= innerWidth
+          );
+        }),
+      };
+    }, lod);
+    expect(size).toEqual({ scrolls: false, visible: true });
+  }
 });
 
 test("kingdom activity stays above the far-view menus and uses the original panel frame", async ({

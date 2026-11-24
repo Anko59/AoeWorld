@@ -52,7 +52,6 @@ pub struct GameplayService {
     pub(super) sessions: Arc<Mutex<BTreeMap<u64, Session>>>,
     pub(super) slots: Arc<[Slot]>,
     next_session: Arc<AtomicU64>,
-    command_cursor: Arc<AtomicU64>,
     pub(super) world_id: u64,
     map_content_hash: Option<[u8; 32]>,
     map_metadata: Option<MapMetadata>,
@@ -109,6 +108,10 @@ enum PendingAction {
         destination: Option<WorldPosition>,
         queued: bool,
         attack_move: bool,
+    },
+    AutoScoutSelection {
+        unit_ids: Vec<EntityId>,
+        enabled: bool,
     },
     AutoScout {
         entity_id: EntityId,
@@ -372,7 +375,8 @@ impl GameplayService {
             .into_iter()
             .map(|state| (state.player, state))
             .collect::<BTreeMap<_, _>>();
-        let all_buildings = economy::subscription_buildings(&world, player, region);
+        let camera = (unit_zoom || session.ai).then_some(region);
+        let all_buildings = economy::subscription_buildings(&world, player, camera);
         let more_buildings = all_buildings.len() > aoe_protocol::MAX_ECONOMY_BUILDINGS;
         let buildings = all_buildings
             .into_iter()

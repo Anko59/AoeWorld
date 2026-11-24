@@ -155,6 +155,7 @@ fn deliver_tick(
         Buildings::Full(known, private) => {
             let in_view = |state: &aoe_protocol::GameplayBuildingState| {
                 !built.fog_disabled
+                    || (!subscription.unit_zoom && !session.ai)
                     || super::economy::building_in_camera(
                         state,
                         session.viewer,

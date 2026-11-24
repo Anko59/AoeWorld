@@ -111,8 +111,7 @@ impl Selection {
         self.building_id = Some(id);
         self.buildings = vec![id];
     }
-    pub fn units(&mut self, mut units: Vec<EntityId>) {
-        units.truncate(aoe_core::MAX_FORMATION_MEMBERS);
+    pub fn units(&mut self, units: Vec<EntityId>) {
         self.resource_id = None;
         self.units = units;
         self.building_id = None;
