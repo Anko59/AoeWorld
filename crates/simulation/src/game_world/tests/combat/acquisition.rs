@@ -111,6 +111,35 @@ fn an_attack_burst_routes_every_attacker_at_once_and_repeated_targets_reuse_orde
     assert_eq!(w.combat.stats.attack_searches, before);
 }
 
+/// A large order searches in the combat phase, side by side, not one unit
+/// after another inside the command; every attacker is routed that tick.
+#[test]
+fn a_large_attack_order_searches_in_the_combat_phase_and_routes_everyone() {
+    let mut w = world();
+    let target = w.spawn_villager(PlayerId(1), at(200, 200)).unwrap();
+    let ids = (0..600)
+        .map(|n| {
+            w.spawn_militia(PlayerId(0), at(10 + n % 30, 10 + n / 30))
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+    let before = w.combat.stats.attack_searches;
+    w.issue_player_attack(PlayerId(0), &ids, target).unwrap();
+    assert_eq!(
+        w.combat.stats.attack_searches, before,
+        "no search in the command"
+    );
+    assert!(
+        ids.iter()
+            .all(|id| w.unit(*id).unwrap().attack_target == Some(target))
+    );
+    w.advance();
+    assert!(
+        ids.iter().all(|id| w.movement_order(*id).is_some()),
+        "every attacker is routed in the first combat phase"
+    );
+}
+
 #[test]
 fn no_attack_suppresses_acquisition_and_retaliation_but_explicit_orders_work() {
     use aoe_core::CombatStance;
