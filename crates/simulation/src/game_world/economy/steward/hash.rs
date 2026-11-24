@@ -102,6 +102,7 @@ impl Economy {
                 h.update(&id.0.to_le_bytes());
                 h.update(&[u.tries]);
                 h.update(&u.retry_at.to_le_bytes());
+                h.update(&u.offer.to_le_bytes());
             }
             for (id, stall) in &home.stalls {
                 h.update(&id.0.to_le_bytes());

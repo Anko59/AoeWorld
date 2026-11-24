@@ -34,7 +34,7 @@ pub(crate) struct Home {
     pub(crate) center: WorldPosition,
     pub(crate) workers: BTreeSet<EntityId>,
     /// Idle villagers no work was found for, with their next retry.
-    unemployed: BTreeMap<EntityId, manager::Unemployed>,
+    unemployed: BTreeMap<EntityId, jobs::Unemployed>,
     pub(super) worker_after: Option<EntityId>,
     /// Villagers and boats of the player whose last stop lies in this zone,
     /// kept by events (placed on the map, stopped on a new tile, zone change).

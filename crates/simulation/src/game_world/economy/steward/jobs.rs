@@ -19,6 +19,16 @@ fn builder_limit(building: &crate::GameBuilding, starting_village: bool) -> usiz
     }
 }
 
+/// Failed job searches for one idle villager: each retry waits twice as long
+/// (one to 32 visits); after the second failure the villager is searched
+/// again only when the domain's `offer` differs from the one it failed on.
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct Unemployed {
+    pub(super) tries: u8,
+    pub(super) retry_at: u64,
+    pub(super) offer: u64,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(super) struct HeldJob {
     pub kind: ResourceKind,
@@ -26,6 +36,61 @@ pub(super) struct HeldJob {
 }
 
 impl GameWorld {
+    /// What a job search of this domain can find, as one number: the census
+    /// state, resource order, which buildings the stockpile pays for, the
+    /// housing need, the known buildings (finished or not, free paid Farms),
+    /// the discovered nodes and the managed head count. A failed search is
+    /// repeated only when this changes: a node discovered, a building placed,
+    /// finished or lost, a Farm freed, a zone change, a resource affordable.
+    pub(super) fn steward_offer(&self, s: &Snapshot) -> u64 {
+        let mix = |h: u64, v: u64| (h ^ v).wrapping_mul(0x0100_0000_01b3).rotate_left(17);
+        let mut h = mix(0xcbf2_9ce4_8422_2325, u64::from(s.complete));
+        if let Some(priority) = self.steward_priority(s.player, s.home.settings.weights) {
+            for kind in priority.kinds() {
+                h = mix(h, kind as u64);
+            }
+        }
+        if let Some(p) = self.player_economy(s.player) {
+            let a = p.stockpile;
+            for kind in [
+                BuildingKind::House,
+                BuildingKind::Mill,
+                BuildingKind::LumberCamp,
+                BuildingKind::MiningCamp,
+                BuildingKind::Farm,
+            ] {
+                let c = kind.rules().cost;
+                let paid =
+                    a.food >= c.food && a.wood >= c.wood && a.gold >= c.gold && a.stone >= c.stone;
+                h = mix(h, u64::from(paid));
+            }
+            let housing =
+                p.population_used as usize + s.global_queued + 2 >= p.population_cap as usize;
+            h = mix(h, u64::from(housing));
+        }
+        // Order-independent: a building or node joining or leaving changes
+        // the sum, a rotation of the same queue does not.
+        let mut set = 0u64;
+        for b in &s.buildings {
+            let free_farm = b.kind == BuildingKind::Farm
+                && b.food_remaining.is_some_and(|food| food > 0)
+                && self
+                    .economy
+                    .gatherers
+                    .count_target(super::super::gathering::WorkTarget::Farm(b.id))
+                    == 0;
+            let key =
+                u64::from(b.id.0) << 8 | u64::from(b.is_complete()) << 1 | u64::from(free_farm);
+            set = set.wrapping_add(mix(0x9e37_79b9_7f4a_7c15, key));
+        }
+        h = mix(h, set);
+        h = mix(h, s.home.resources.candidate_digest());
+        mix(
+            h,
+            self.economy.steward_homes[&s.steward].workers.len() as u64,
+        )
+    }
+
     /// Ordinary automatic construction borrows a worker, never its profession.
     pub(crate) fn steward_hold_job(&mut self, worker: EntityId) {
         if !self.economy.stewards.automatic {

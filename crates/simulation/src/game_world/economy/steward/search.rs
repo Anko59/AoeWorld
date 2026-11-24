@@ -25,6 +25,13 @@ impl Search {
         self.refused.remove(&worker);
     }
 
+    /// The discovered nodes, independent of their queue order.
+    pub(super) fn candidate_digest(&self) -> u64 {
+        self.candidates.iter().flatten().fold(0u64, |sum, node| {
+            sum.wrapping_add(node.id.wrapping_mul(0x9e37_79b9_7f4a_7c15).rotate_left(29))
+        })
+    }
+
     pub(super) fn clear_workers(&mut self) -> Vec<EntityId> {
         std::mem::take(&mut self.refused).into_keys().collect()
     }
