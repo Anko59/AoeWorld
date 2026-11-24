@@ -1,7 +1,8 @@
-//! Query-local lazy fixed halos. No generator mutation, global state, world
-//! array, or speculative source read. Chunk and one-off point entries die
-//! with their query; a thread's shared point tables are tagged by tile, so
-//! they serve later default-policy points with the same pure per-tile values.
+//! Lazy fixed halos. No generator mutation, world array, or speculative
+//! source read. Chunk and one-off point entries die with their query; the one
+//! piece of state that outlives a query is each thread's shared point tables,
+//! tagged by tile, which serve later default-policy points with the same pure
+//! per-tile values.
 use super::*;
 use std::cell::RefCell;
 
