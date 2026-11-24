@@ -377,6 +377,7 @@ mod detours;
 mod fairness;
 mod fights;
 mod freeze;
+mod guides;
 mod long_run;
 mod movement_ground;
 mod regions;

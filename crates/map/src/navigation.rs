@@ -21,6 +21,7 @@ pub use hierarchy::{NavigationSnapshot, NavigationStorage};
 pub use planner::{
     MAX_ROUTE_PLANNER_NODES, MAX_ROUTE_PLANNER_WORK, MAX_ROUTE_TILES, ROUTE_LEG_COMMIT_WORK,
     ROUTE_LEG_PROGRESS_TILES, RouteOriginPocket, RoutePlanner, RoutePlannerPoll, RouteTerrain,
+    route_neighbor_clear,
 };
 pub use regions::{
     ANY_PLAYER, LandBucket, MapRegionGround, RegionChunk, RegionGround, RegionReachability,

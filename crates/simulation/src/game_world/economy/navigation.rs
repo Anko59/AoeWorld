@@ -189,6 +189,29 @@ impl GameWorld {
             || !self.economy.gates.is_empty()
     }
 
+    /// `player`'s planner's directed edge test, with one terrain view for
+    /// every call (route_scheduler/fields.rs descents).
+    pub(crate) fn route_edges(
+        &self,
+        player: aoe_core::PlayerId,
+    ) -> Option<impl Fn(TileCoord, (i32, i32)) -> bool + '_> {
+        let Terrain::Map { generator, overlay } = &self.terrain else {
+            return None;
+        };
+        let allowance = std::sync::Mutex::new(0);
+        Some(move |from: TileCoord, offset: (i32, i32)| {
+            let terrain = preparation::LimitedMap {
+                generator,
+                allowance: &allowance,
+                denied: None,
+                world: self,
+                player,
+            };
+            aoe_map::route_neighbor_clear(&terrain, overlay, from, offset, &|| false)
+                .unwrap_or(false)
+        })
+    }
+
     pub(crate) fn route_origin_pocket(
         &self,
         kind: crate::UnitKind,

@@ -22,8 +22,11 @@ mod reconstruction;
 mod search;
 use reconstruction::{ReconstructionPhase, ReconstructionState};
 use search::SearchState;
+#[path = "planner/edges.rs"]
+mod edges;
 #[path = "planner/guidance.rs"]
 mod guidance;
+pub use edges::route_neighbor_clear;
 mod terrain;
 pub use terrain::RouteTerrain;
 

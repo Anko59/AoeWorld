@@ -55,6 +55,12 @@ impl TerrainKey {
             barriers,
         }
     }
+
+    /// More tiles no unit may stand on, e.g. buildings for a route guide.
+    pub(super) fn with_barriers(mut self, extra: impl IntoIterator<Item = TileCoord>) -> Self {
+        self.barriers.extend(extra);
+        self
+    }
 }
 
 #[derive(Debug)]

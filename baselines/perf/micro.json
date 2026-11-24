@@ -12,8 +12,8 @@
     "instructions::protocol::snapshot_encode": 206498,
     "instructions::simulation::advance": 721228,
     "instructions::simulation::distributed_ticks": 48681579,
-    "instructions::simulation::late_game": 6189477281,
-    "instructions::simulation::late_game_main": 4208907934,
+    "instructions::simulation::late_game": 9688085664,
+    "instructions::simulation::late_game_main": 7355139769,
     "instructions::simulation::late_game_x4": 6677857977,
     "instructions::simulation::late_game_x4_main": 5753676657,
     "instructions::simulation::smoke_ticks": 20112284,
@@ -25,8 +25,8 @@
     "instructions::protocol::snapshot_encode": 206498,
     "instructions::simulation::advance": 721238,
     "instructions::simulation::distributed_ticks": 48681579,
-    "instructions::simulation::late_game": 6189477281,
-    "instructions::simulation::late_game_main": 4208907934,
+    "instructions::simulation::late_game": 9688085664,
+    "instructions::simulation::late_game_main": 7355139769,
     "instructions::simulation::late_game_x4": 6677857977,
     "instructions::simulation::late_game_x4_main": 5753676657,
     "instructions::simulation::smoke_ticks": 20112284,
@@ -40,6 +40,14 @@
     "instructions::simulation::distributed_ticks": {
       "reason": "#1029 drops the combat search limits (16 pursuit and 4 position searches a tick; owner 11-23 caps decisions, 11-24: removing caps raises cost, accepted): every due attacker searches for its firing spot; on dev the limit left ~700 attackers unsearched and idle 4 s into a fight in the smoke population; R1 war replay -1.7% before #1026",
       "dev": 39451694
+    },
+    "instructions::simulation::late_game": {
+      "reason": "route guides (#978 6e): a waiting unit walks a shared guide to its destination chunk; R1 (owner's Anatolia 4, dev with #1038) route waiting 18,487 -> 10,357 (-44%), arrivals 13,229 -> 18,228 (+38%) at +14.5% instructions. In the procedural late_game kernel the extra is first-time chunk generation as marching formations keep moving instead of waiting (formation steering reads static clearance in new chunks); late_game_x4 -54%",
+      "dev": 6189477281
+    },
+    "instructions::simulation::late_game_main": {
+      "reason": "route guides (#978 6e): a waiting unit walks a shared guide to its destination chunk; R1 (owner's Anatolia 4, dev with #1038) route waiting 18,487 -> 10,357 (-44%), arrivals 13,229 -> 18,228 (+38%) at +14.5% instructions. In the procedural late_game kernel the extra is first-time chunk generation as marching formations keep moving instead of waiting (formation steering reads static clearance in new chunks); late_game_x4 -54%",
+      "dev": 4208907934
     }
   }
 }

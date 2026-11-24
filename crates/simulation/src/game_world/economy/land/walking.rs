@@ -19,6 +19,34 @@ use groups::Groups;
 use office::OfficeField;
 use patches::{Claim, PatchBlocks, PatchOwners};
 
+/// A walking-cost guide towards `origin` over `bounds`, with `player`'s walls
+/// and gates and every building as barriers, read by route guides
+/// (`route_scheduler/fields.rs`). Mud and later changes are not in it: a
+/// descent checks each step against the live ground.
+#[derive(Debug)]
+pub(crate) struct RouteGuide(Field);
+
+impl RouteGuide {
+    pub(crate) fn cost(&self, tile: TileCoord) -> Option<u16> {
+        self.0.cost(tile)
+    }
+}
+
+impl GameWorld {
+    pub(crate) fn route_guide(
+        &self,
+        player: PlayerId,
+        origin: TileRect,
+        bounds: TileRect,
+    ) -> Option<RouteGuide> {
+        // Buildings too: a descent into a house is a dead end.
+        let blocked = &self.economy.blocked_tiles;
+        let buildings = field::tiles(bounds).filter(|tile| blocked.contains(tile));
+        let terrain = field::TerrainKey::new(self, player, origin, bounds).with_barriers(buildings);
+        Field::new(self, terrain).map(RouteGuide)
+    }
+}
+
 const LOCALITY: i32 = 64;
 const NEIGHBORS: [(i32, i32); 8] = RegionChunk::STEP_OFFSETS;
 

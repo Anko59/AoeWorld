@@ -29,6 +29,7 @@ pub(crate) use gathering::WorkTarget;
 mod hash;
 mod land;
 mod limits;
+pub(crate) use land::walking::RouteGuide;
 pub use land::{HoldingSpan, LandControl};
 mod market;
 pub(crate) use limits::MAX_ECONOMY_PLAYERS;
