@@ -132,6 +132,9 @@ pub(crate) struct Combat {
     pub(crate) next_projectile: u64,
     pub(crate) tower_ready: BTreeMap<EntityId, u64>,
     pub(crate) attackers: BTreeMap<EntityId, Attacker>,
+    /// The attackers' targets, sorted, taken as each movement step starts:
+    /// a unit being chased keeps the full model like its pursuers.
+    pub(crate) chased: Vec<EntityId>,
     /// End ticks of stationary transitions, keyed by unit in its destination form.
     pub(crate) trebuchets_transforming: BTreeMap<EntityId, u64>,
     /// Units on attack-move legs that use individual routes.
@@ -181,6 +184,7 @@ impl Default for Combat {
             next_projectile: 0,
             tower_ready: Default::default(),
             attackers: Default::default(),
+            chased: Vec::new(),
             trebuchets_transforming: Default::default(),
             scalar_marches: Default::default(),
             patrols: Default::default(),

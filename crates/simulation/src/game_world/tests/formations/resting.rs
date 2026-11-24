@@ -84,3 +84,29 @@ fn rest_against_a_forest(watcher: Option<PlayerId>) {
         "members settled on members at rest ({watcher:?})"
     );
 }
+
+/// An unseen villager being chased keeps the full model like its pursuer;
+/// one walking beside it, unchased, still strides.
+#[test]
+fn an_unseen_unit_being_attacked_is_not_a_bystander() {
+    let mut w = wide_world();
+    w.set_human_seats(&[PlayerId(1)]);
+    let chased = w.spawn_villager(PlayerId(0), center(30, 50)).unwrap();
+    let beside = w.spawn_villager(PlayerId(0), center(30, 54)).unwrap();
+    let pursuer = w
+        .spawn_kind(PlayerId(2), UnitKind::Militia, center(24, 50))
+        .unwrap();
+    w.prepare_navigation(&|| false).unwrap();
+    w.issue_move(chased, center(70, 50)).unwrap();
+    w.issue_move(beside, center(70, 54)).unwrap();
+    w.issue_attack(PlayerId(2), pursuer, chased).unwrap();
+    w.advance_movement();
+    assert!(
+        !w.unseen_bystander(w.lookup[&chased]),
+        "the chased villager keeps the full model"
+    );
+    assert!(
+        w.unseen_bystander(w.lookup[&beside]),
+        "fixture: nobody watches"
+    );
+}
