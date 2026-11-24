@@ -48,7 +48,32 @@ impl GameWorld {
         if !self.query(footprint).0.is_empty() {
             return Err(EconomyError::InvalidFootprint);
         }
-        self.validate_footprint_ground(player, footprint)
+        self.validate_footprint_ground(player, footprint)?;
+        self.validate_dry_footprint(footprint)
+    }
+
+    /// DE: no building stands on shallows. Wall and road segments and gates
+    /// check the ground only, so they may still cross a ford; docks have their
+    /// own shore rule.
+    pub(super) fn validate_dry_footprint(&self, footprint: TileRect) -> Result<(), EconomyError> {
+        let Terrain::Map { generator, .. } = &self.terrain else {
+            return Ok(());
+        };
+        for y in footprint.min.y..footprint.max.y {
+            for x in footprint.min.x..footprint.max.x {
+                let shallow = generator
+                    .tile_at_with_cancel(TileCoord::new(x, y), &|| false)
+                    .map_err(GameWorldError::Environment)?
+                    .is_some_and(|t| {
+                        t.material == aoe_map::GroundMaterial::Ford
+                            || t.water == aoe_map::WaterKind::Shallow
+                    });
+                if shallow {
+                    return Err(EconomyError::InvalidFootprint);
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Terrain, resource and building checks only: ordered foundations may

@@ -77,4 +77,37 @@ impl GameWorld {
                 .collect()
         })
     }
+
+    /// Each player's remembered amounts, for a save: what a person last saw of
+    /// a node is not derivable from the live overlay once it changed unseen.
+    pub(crate) fn resource_memory_records(&self) -> Vec<(PlayerId, Vec<(u64, u16)>)> {
+        self.vision
+            .players
+            .iter()
+            .filter(|(_, vision)| !vision.resources.is_empty())
+            .map(|(player, vision)| {
+                (
+                    *player,
+                    vision
+                        .resources
+                        .iter()
+                        .map(|(id, left)| (*id, *left))
+                        .collect(),
+                )
+            })
+            .collect()
+    }
+
+    /// Seeds memory before current sight is rebuilt, so a node in view is
+    /// refreshed by the usual path and one out of view keeps its saved amount.
+    pub(crate) fn restore_resource_memory(&mut self, records: &[(PlayerId, Vec<(u64, u16)>)]) {
+        for (player, nodes) in records {
+            self.vision
+                .players
+                .entry(*player)
+                .or_default()
+                .resources
+                .extend(nodes.iter().copied());
+        }
+    }
 }

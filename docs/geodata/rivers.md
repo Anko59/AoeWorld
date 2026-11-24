@@ -94,11 +94,11 @@ stream, 1 m³/s 2.5 tiles, 10 m³/s 4, 100 m³/s 5.5, 1,000 m³/s 7, and the ten
 ceiling needs 100,000 m³/s. HydroRIVERS carries discharge but no Strahler order, so
 discharge is the only rank. A real width (`10 * sqrt(discharge)` metres) would give a
 Paris Large tile of 60 m nothing wider than three tiles, hiding the hierarchy.
-Streams up to 2.5 tiles wide (`MAX_WADEABLE_WIDTH_UNITS`, up to 1 m³/s, about 70%
-of the river length on Paris Large) are wadeable shallows: their tiles are `Ford`
+Streams up to 1.5 tiles wide (`MAX_WADEABLE_WIDTH_UNITS`, up to 0.215 m³/s) are
+wadeable shallows: their tiles are `Ford`
 material, drawn with the DE Shallows sheet, and passable wherever the surface is
 walkable (a steep ford stays blocking water). Where a wider channel also covers a
-tile, that channel must also permit wading. Rivers wider than 2.5 and up to 6 tiles
+tile, that channel must also permit wading. Rivers wider than 1.5 and up to 6 tiles
 (`MAX_FORD_WIDTH_UNITS`) receive periodic fords; wider main channels always block,
 even under a tributary crossing. Width is a gameplay proxy for depth, not an
 observation of historical ford sites. Source bends survive
@@ -113,7 +113,7 @@ clamped to the same one-to-ten-tile bank-to-bank rules. Neither shaping depends
 on chunks, evidence cells or query order. Current output regression pins are regenerated when composition deliberately changes.
 
 Fords span the whole drawn channel and five tiles of its length, repeating
-every 40 tiles of distance along the source reach. A reach shorter than that
+every 64 tiles of distance along the source reach (11-24: were 40, and streams up to 2.5 tiles were shallows end to end; the owner found too many shallows, and no building stands on one). A reach shorter than that
 gets a centred crossing. These are gameplay crossings, not observed bridges
 or historically documented fords. River and ford surfaces retain local land
 heights so kilometre-cell water levels cannot create artificial cliff steps
