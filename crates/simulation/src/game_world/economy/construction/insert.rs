@@ -143,7 +143,7 @@ impl GameWorld {
         bucket.insert(at, id);
         self.refresh_population_cap(player);
         self.index_new_building(id, player, footprint);
-        self.steward_building_added(id, player, footprint);
+        self.steward_building_added(id, player, kind, footprint);
         if complete {
             self.register_gate_footprint(id, kind, footprint);
             if kind.is_tower() || kind == BuildingKind::Castle {

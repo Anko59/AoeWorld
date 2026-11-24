@@ -442,6 +442,7 @@ impl GameWorld {
                 .retain(|worker, _| lookup.get(worker).is_some_and(|&i| units[i].state.hp > 0));
         }
         let offer = self.steward_offer(s);
+        s.offer = Some(offer);
         let after = s.home.worker_after;
         let split = after.map_or(0, |id| s.units.partition_point(|u| u.id <= id));
         let ids: Vec<_> = s.units[split..]
@@ -472,6 +473,7 @@ impl GameWorld {
             drop(span);
             s.avoid = None;
             if let Some(kind) = job {
+                s.forget_jobs();
                 self.economy.stewards.relocated.remove(&worker);
                 if let Some(home) = self.economy.steward_homes.get_mut(&id) {
                     home.unemployed.remove(&worker);

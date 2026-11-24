@@ -36,61 +36,6 @@ pub(super) struct HeldJob {
 }
 
 impl GameWorld {
-    /// What a job search of this domain can find, as one number: the census
-    /// state, resource order, which buildings the stockpile pays for, the
-    /// housing need, the known buildings (finished or not, free paid Farms),
-    /// the discovered nodes and the managed head count. A failed search is
-    /// repeated only when this changes: a node discovered, a building placed,
-    /// finished or lost, a Farm freed, a zone change, a resource affordable.
-    pub(super) fn steward_offer(&self, s: &Snapshot) -> u64 {
-        let mix = |h: u64, v: u64| (h ^ v).wrapping_mul(0x0100_0000_01b3).rotate_left(17);
-        let mut h = mix(0xcbf2_9ce4_8422_2325, u64::from(s.complete));
-        if let Some(priority) = self.steward_priority(s.player, s.home.settings.weights) {
-            for kind in priority.kinds() {
-                h = mix(h, kind as u64);
-            }
-        }
-        if let Some(p) = self.player_economy(s.player) {
-            let a = p.stockpile;
-            for kind in [
-                BuildingKind::House,
-                BuildingKind::Mill,
-                BuildingKind::LumberCamp,
-                BuildingKind::MiningCamp,
-                BuildingKind::Farm,
-            ] {
-                let c = kind.rules().cost;
-                let paid =
-                    a.food >= c.food && a.wood >= c.wood && a.gold >= c.gold && a.stone >= c.stone;
-                h = mix(h, u64::from(paid));
-            }
-            let housing =
-                p.population_used as usize + s.global_queued + 2 >= p.population_cap as usize;
-            h = mix(h, u64::from(housing));
-        }
-        // Order-independent: a building or node joining or leaving changes
-        // the sum, a rotation of the same queue does not.
-        let mut set = 0u64;
-        for b in &s.buildings {
-            let free_farm = b.kind == BuildingKind::Farm
-                && b.food_remaining.is_some_and(|food| food > 0)
-                && self
-                    .economy
-                    .gatherers
-                    .count_target(super::super::gathering::WorkTarget::Farm(b.id))
-                    == 0;
-            let key =
-                u64::from(b.id.0) << 8 | u64::from(b.is_complete()) << 1 | u64::from(free_farm);
-            set = set.wrapping_add(mix(0x9e37_79b9_7f4a_7c15, key));
-        }
-        h = mix(h, set);
-        h = mix(h, s.home.resources.candidate_digest());
-        mix(
-            h,
-            self.economy.steward_homes[&s.steward].workers.len() as u64,
-        )
-    }
-
     /// Ordinary automatic construction borrows a worker, never its profession.
     pub(crate) fn steward_hold_job(&mut self, worker: EntityId) {
         if !self.economy.stewards.automatic {
@@ -349,6 +294,7 @@ impl GameWorld {
             let started = self.steward_job_kind(worker, wanted, s, budget, work);
             s.farm_first = false;
             if started {
+                s.forget_jobs();
                 self.claim_steward_worker(s.steward, worker, wanted);
                 changed.push(worker);
                 reassigned = true;
@@ -369,25 +315,12 @@ impl GameWorld {
         }
     }
 
-    fn steward_help_foundation(
-        &mut self,
-        worker: EntityId,
-        only: Option<BuildingKind>,
-        s: &Snapshot,
-        budget: &mut Budget,
-        work: &mut StewardWork,
-    ) -> Option<ResourceKind> {
-        let from = self.unit(worker)?.position.tile_floor();
-        let starting_village = s.complete
-            && self.player_economy(s.player).is_some_and(|p| {
-                p.population_used as usize + s.global_queued >= p.population_cap as usize
-            })
-            && !self
-                .player_buildings_of(s.player, BuildingKind::Mill)
-                .any(|b| b.is_complete());
-        // Read live tasks: earlier assignments in this pass already occupy a
-        // place, even though the unit census predates those orders. A partial
-        // census must also count managed builders seen in an earlier slice.
+    /// Builders per building among the census and the managed workers it
+    /// has not seen yet (live tasks: this visit's earlier orders count).
+    pub(super) fn steward_attendance(&self, s: &mut Snapshot) -> BTreeMap<EntityId, usize> {
+        if let Some(attended) = &s.attendance {
+            return attended.clone();
+        }
         let mut attended = BTreeMap::<EntityId, usize>::new();
         let unseen = self.economy.steward_homes[&s.steward]
             .workers
@@ -399,6 +332,54 @@ impl GameWorld {
                 *attended.entry(task.building).or_default() += 1;
             }
         }
+        s.attendance = Some(attended.clone());
+        attended
+    }
+
+    /// The census's idle, unloaded villagers and their tiles, until a job is given.
+    fn steward_helpers<'a>(&self, s: &'a mut Snapshot) -> &'a [(EntityId, TileCoord)] {
+        if s.helpers.is_none() {
+            let helpers = s
+                .units
+                .iter()
+                .filter(|u| self.steward_worker_idle(u.id, s.steward))
+                .filter_map(|u| self.unit(u.id))
+                .filter(|live| live.carried.is_none())
+                .map(|live| (live.id, live.position.tile_floor()))
+                .collect();
+            s.helpers = Some(helpers);
+        }
+        s.helpers.as_deref().unwrap_or_default()
+    }
+
+    fn steward_help_foundation(
+        &mut self,
+        worker: EntityId,
+        only: Option<BuildingKind>,
+        s: &mut Snapshot,
+        budget: &mut Budget,
+        work: &mut StewardWork,
+    ) -> Option<ResourceKind> {
+        let _span = self.steward_span("steward_j_help_foundation");
+        let from = self.unit(worker)?.position.tile_floor();
+        let starting_village = match s.starting_village {
+            Some(starting) => starting,
+            None => {
+                let starting = s.complete
+                    && self.player_economy(s.player).is_some_and(|p| {
+                        p.population_used as usize + s.global_queued >= p.population_cap as usize
+                    })
+                    && !self
+                        .player_buildings_of(s.player, BuildingKind::Mill)
+                        .any(|b| b.is_complete());
+                s.starting_village = Some(starting);
+                starting
+            }
+        };
+        // Read live tasks: earlier assignments in this pass already occupy a
+        // place, even though the unit census predates those orders. A partial
+        // census must also count managed builders seen in an earlier slice.
+        let attended = self.steward_attendance(s);
         let mut unfinished: Vec<_> = s
             .buildings
             .iter()
@@ -438,21 +419,11 @@ impl GameWorld {
             }
             let footprint = self.building(building)?.footprint;
             let used = attended.get(&building).copied().unwrap_or(0);
-            let nearer = s
-                .units
+            let nearer = self
+                .steward_helpers(s)
                 .iter()
-                .filter(|u| {
-                    self.steward_worker_idle(u.id, s.steward)
-                        && self.unit(u.id).is_some_and(|live| {
-                            live.carried.is_none()
-                                && (
-                                    super::super::dropoff::ring_distance(
-                                        footprint,
-                                        live.position.tile_floor(),
-                                    ),
-                                    live.id,
-                                ) < (distance, worker)
-                        })
+                .filter(|&&(id, at)| {
+                    (super::super::dropoff::ring_distance(footprint, at), id) < (distance, worker)
                 })
                 .take(limit - used)
                 .count();

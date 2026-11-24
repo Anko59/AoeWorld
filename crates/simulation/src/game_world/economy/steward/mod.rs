@@ -46,6 +46,9 @@ pub(crate) struct Home {
     building_scan: snapshot::BuildingScan,
     pub(super) site_after: usize,
     pub(super) farm_after: Option<usize>,
+    /// The domain offer (`steward_offer`) at which every Farm and Mill slot
+    /// was tried without a site: no slot is tried again until it changes.
+    pub(super) farms_full: Option<u64>,
     pub(super) repair_after: Option<EntityId>,
     /// First tick at which another shortage rebalance may be tried.
     pub(super) rebalance_after: u64,
@@ -128,6 +131,7 @@ impl GameWorld {
                 building_scan: snapshot::BuildingScan::default(),
                 site_after: 0,
                 farm_after: None,
+                farms_full: None,
                 repair_after: None,
                 rebalance_after: 0,
                 rebalance_cursor: None,
@@ -271,6 +275,7 @@ impl GameWorld {
                     h.building_scan = snapshot::BuildingScan::default();
                     h.site_after = 0;
                     h.farm_after = None;
+                    h.farms_full = None;
                     (std::mem::take(&mut h.workers), refused)
                 })
                 .unwrap_or_default();

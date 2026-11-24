@@ -198,6 +198,7 @@ impl GameWorld {
         budget: &mut Budget,
         work: &mut StewardWork,
     ) -> Option<ResourceNode> {
+        let _span = self.steward_span("steward_j_camp_resource");
         let from = self.unit(worker)?.position.tile_floor();
         let anchors: Vec<_> = s
             .buildings
@@ -309,6 +310,7 @@ impl GameWorld {
         budget: &mut Budget,
         work: &mut StewardWork,
     ) -> Option<ResourceNode> {
+        let _span = self.steward_span("steward_j_resource");
         let ore = matches!(kind, ResourceKind::Gold | ResourceKind::Stone);
         if ore && s.ore_misses[kind as usize] {
             return None;

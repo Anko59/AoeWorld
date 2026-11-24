@@ -124,7 +124,7 @@ impl StewardSettings {
 }
 
 /// Replay-only inclusive spans around the parts of a Steward pass.
-pub const STEWARD_SPANS: [&str; 18] = [
+pub const STEWARD_SPANS: [&str; 28] = [
     "steward_walk",
     "steward_members",
     "steward_transfers",
@@ -139,6 +139,16 @@ pub const STEWARD_SPANS: [&str; 18] = [
     "steward_rebalance",
     "steward_idle",
     "steward_job",
+    "steward_census",
+    "steward_j_reclaim_farm",
+    "steward_j_food",
+    "steward_j_help_foundation",
+    "steward_j_build_local",
+    "steward_j_resource",
+    "steward_j_camp_resource",
+    "steward_members_copy",
+    "steward_building_sweep",
+    "steward_building_copy",
     "steward_farms",
     "steward_wood",
     "steward_retire",
