@@ -17,6 +17,23 @@ night and day briefs) and checked against `origin/dev` at `ec5bf2e15` (#857, 202
   [scale](roadmap/scale.md), [hierarchy](roadmap/hierarchy.md), [UI](roadmap/ui.md), [map](roadmap/map.md),
   [harness](roadmap/harness.md), [caps to remove](roadmap/caps.md), [standing rules](roadmap/rules.md).
 
+## Decisions blocking the 2M-unit target (owner to decide)
+
+Owner 11-24: "priority goes to any decisions we still have to take that block the 2m units objective". Raised 11-24, none
+decided yet; details and evidence in [scale](roadmap/scale.md).
+
+1. **Unseen-unit fidelity.** 2M units needs cheap simulation for units nobody watches (longer strides, analytic movers,
+   phase 7a). How far may an unwatched fight or march diverge from a watched one? Today's parity bound (0.10) keeps
+   shelving these: long stride for unseen groups was -14% but unwatched raids won 5% vs 31% watched.
+2. **Movement architecture past 500k.** The rewrite core was killed 11-14 (28,500 instructions per mover against a
+   2,000 gate); "decided by Q6" was never decided. Without a direction, rungs 2-3 have no plan.
+3. **Hierarchy engine.** Rung 3 (2M) is "via the hierarchy" (territory offices, rank ladders, intents and reports), still
+   a 10-31 brainstorm with no agreed design ([hierarchy](roadmap/hierarchy.md)).
+4. **Memory per unit.** 2M units in 14 GB with the OS and AIs leaves about 4 KB per unit; never set or measured. The
+   5x/10x benches (harness, 11-24) report RSS per unit.
+5. **Players and AI cost.** Python AIs cost about 47 ms CPU per decision (#942); 2M units with 99 AIs or with hundreds of
+   players decides whether AI decisions move into Rust.
+
 ## Ten highest-priority open items
 
 Open items only, owner emphasis first (reconciled 2026-11-21 against `origin/dev` at `40fc60a7e` and the open pull requests).
