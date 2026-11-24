@@ -31,14 +31,16 @@ impl Ground<'_> {
             .map(|b| b.id.0)
     }
 
-    /// Whether a completed gate stands in `[min, max)`.
-    fn gate_within(&self, min: TileCoord, max: TileCoord) -> bool {
+    /// The tiles of completed gates in `[min, max)`.
+    fn gates_within(&self, min: TileCoord, max: TileCoord) -> Vec<TileCoord> {
         self.world
             .economy
             .gate_tiles
             .range(TileCoord::new(min.x, i32::MIN)..TileCoord::new(max.x, i32::MIN))
             .filter(|(tile, _)| tile.y >= min.y && tile.y < max.y)
-            .any(|(_, &id)| self.complete_gate(id).is_some())
+            .filter(|(_, id)| self.complete_gate(**id).is_some())
+            .map(|(&tile, _)| tile)
+            .collect()
     }
 }
 
@@ -46,21 +48,15 @@ impl RegionGround for Ground<'_> {
     fn available(&self) -> bool {
         self.terrain.as_ref().is_none_or(RegionGround::available)
     }
+    /// The terrain's bulk capture; gates in or around the chunk are
+    /// classified tile by tile on top of it (`special_tiles`).
     fn chunk(&self, key: (i32, i32), size: (i32, i32)) -> Option<RegionChunk> {
-        let min = TileCoord::new(
-            key.0 * aoe_map::CHUNK_TILES - 1,
-            key.1 * aoe_map::CHUNK_TILES - 1,
-        );
-        let max = TileCoord::new(
-            min.x + aoe_map::CHUNK_TILES + 2,
-            min.y + aoe_map::CHUNK_TILES + 2,
-        );
-        if self.gate_within(min, max) {
-            return None;
-        }
         self.terrain
             .as_ref()
             .and_then(|ground| ground.chunk(key, size))
+    }
+    fn special_tiles(&self, min: TileCoord, max: TileCoord) -> Vec<TileCoord> {
+        self.gates_within(min, TileCoord::new(max.x + 1, max.y + 1))
     }
     fn tile(&self, tile: TileCoord) -> RegionTile {
         if let Some(gate) = self

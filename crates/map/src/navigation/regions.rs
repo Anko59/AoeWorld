@@ -57,6 +57,11 @@ pub trait RegionGround {
         None
     }
     fn tile(&self, tile: TileCoord) -> RegionTile;
+    /// Tiles in `min..=max` whose class the bulk `chunk` capture does not
+    /// carry (gates): the cells around them are classified one by one.
+    fn special_tiles(&self, _min: TileCoord, _max: TileCoord) -> Vec<TileCoord> {
+        Vec::new()
+    }
     /// Height edges and bridge decks between two 8-neighbour tiles.
     fn edge_clear(&self, from: TileCoord, to: TileCoord) -> bool;
     /// Clearance of an edge. Today's land predicate admits every radius;
