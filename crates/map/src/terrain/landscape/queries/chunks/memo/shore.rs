@@ -160,22 +160,29 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         dx: i32,
         dy: i32,
     ) -> Result<Option<WaterKind>, EnvironmentPageError> {
+        if Self::TAGGED {
+            if let (Some(x), Some(y)) = (position.x.checked_add(dx), position.y.checked_add(dy)) {
+                let near = TileCoord::new(x, y);
+                if let Some((at, (kind, _))) = self.water.borrow()[tagged_slot(near)]
+                    && at == near
+                {
+                    return Ok(Some(kind));
+                }
+            }
+        } else {
+            // An untagged slot only ever holds the tile its offset names.
+            let (x, y) = (wx + i64::from(dx), wy + i64::from(dy));
+            if (0..side).contains(&x)
+                && (0..side).contains(&y)
+                && let Some((_, (kind, _))) = self.water.borrow()[(y * side + x) as usize]
+            {
+                return Ok(Some(kind));
+            }
+        }
         let (Some(x), Some(y)) = (position.x.checked_add(dx), position.y.checked_add(dy)) else {
             return Ok(None);
         };
         let near = TileCoord::new(x, y);
-        let index = if Self::TAGGED {
-            Some(tagged_slot(near))
-        } else {
-            let (x, y) = (wx + i64::from(dx), wy + i64::from(dy));
-            ((0..side).contains(&x) && (0..side).contains(&y)).then(|| (y * side + x) as usize)
-        };
-        if let Some(index) = index
-            && let Some((at, (kind, _))) = self.water.borrow()[index]
-            && at == near
-        {
-            return Ok(Some(kind));
-        }
         self.water(near)
     }
 
