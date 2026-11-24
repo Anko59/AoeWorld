@@ -334,17 +334,29 @@ fn an_accepted_increase_is_gated_against_its_raised_baseline_not_the_dev_run() {
     );
     baseline.accepted_increase.insert(
         "instructions::simulation::late_game".into(),
-        "cap removed".into(),
+        Accepted {
+            reason: "cap removed".into(),
+            dev: 50,
+        },
     );
     assert_eq!(
         late(compare_with_dev(baseline.clone(), observed.clone(), Some(&dev)).unwrap()),
         Verdict::Pass
     );
     // The raised baseline still gates: +3% over it fails.
-    let mut over = observed;
+    let mut over = observed.clone();
     over.insert("instructions::simulation::late_game".into(), 104);
     assert_eq!(
-        late(compare_with_dev(baseline, over, Some(&dev)).unwrap()),
+        late(compare_with_dev(baseline.clone(), over, Some(&dev)).unwrap()),
+        Verdict::Regression
+    );
+    // After it lands, a later gain lowers dev to 60 with the baseline left at
+    // 100: the stale entry no longer hides a +72% regression over dev.
+    let later = dev_reference(60, dev::identity());
+    let mut regressed = observed;
+    regressed.insert("instructions::simulation::late_game".into(), 103);
+    assert_eq!(
+        late(compare_with_dev(baseline, regressed, Some(&later)).unwrap()),
         Verdict::Regression
     );
 }

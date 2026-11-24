@@ -50,13 +50,21 @@ struct Baseline {
     /// Fixed anchor for the creep guard. Refreshing `instructions` never moves
     /// it; only a deliberate, reviewed edit does.
     instruction_reference: BTreeMap<String, u64>,
-    /// Rows whose raised `instructions` a reviewed commit accepted, with the
-    /// reason (owner 11-24: removing a cap may cost instructions). While dev
-    /// still counts below that baseline, the row is gated against it, not
-    /// against the dev run; once dev reaches it the entry has no effect, and a
-    /// baseline refresh drops it.
+    /// Rows whose raised `instructions` a reviewed commit accepted (owner
+    /// 11-24: removing a cap may cost instructions). While the dev run still
+    /// counts what it counted when the increase was accepted (within the fail
+    /// margin), the row is gated against its baseline, not the dev run. Once
+    /// the increase lands, dev counts more and the entry has no effect (unless
+    /// a later gain takes dev back to that count); a baseline refresh drops it.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    accepted_increase: BTreeMap<String, String>,
+    accepted_increase: BTreeMap<String, Accepted>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+struct Accepted {
+    reason: String,
+    /// The dev run's count the increase was accepted over.
+    dev: u64,
 }
 
 fn metric(profile: &Value, tool: &str, name: &str, side: &str) -> Result<u64, Box<dyn Error>> {
@@ -265,13 +273,13 @@ fn compare_with_dev(
             } else {
                 FAIL_PERCENT
             };
-            let accepted = baseline.accepted_increase.contains_key(&name);
+            let accepted = baseline.accepted_increase.get(&name).map(|a| a.dev);
             let latest = dev
                 .and_then(|dev| {
                     let kernel = name.strip_prefix("instructions::").unwrap_or(&name);
                     Some((dev.instructions.get(kernel).copied()?, dev.run))
                 })
-                .filter(|&(count, _)| !accepted || count >= baseline.instructions[&name]);
+                .filter(|&(count, _)| accepted.is_none_or(|from| over(count, from, fail)));
             judge(
                 &format!("instructions::{name}"),
                 count,
