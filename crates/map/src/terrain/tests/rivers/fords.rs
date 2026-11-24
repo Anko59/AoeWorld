@@ -9,9 +9,9 @@ fn channel(width: i64) -> Vec<[i64; 7]> {
 fn medium_rivers_have_regular_visible_crossings_that_connect_both_banks() {
     for width in [3 * 256, 4 * 256, 6 * 256] {
         let generator = crossing_with_geometry(false, false, channel(width));
-        // Each interior 40-tile period contains both a full-width ford and
+        // Each interior 64-tile period contains both a full-width ford and
         // blocking water. Check all wet tiles across the warped channel.
-        for station in [40, 80, 120, 160, 200, 240] {
+        for station in [64, 128, 192] {
             let rows = (station - 4..=station + 2)
                 .filter(|y| {
                     let wet = (120..140)
@@ -29,7 +29,7 @@ fn medium_rivers_have_regular_visible_crossings_that_connect_both_banks() {
                 "width {width}, station {station}: {rows} ford rows"
             );
             let between = (120..140)
-                .map(|x| generator.tile_at(TileCoord::new(x, station - 21)).unwrap())
+                .map(|x| generator.tile_at(TileCoord::new(x, station - 33)).unwrap())
                 .filter(|t| t.water == WaterKind::River)
                 .collect::<Vec<_>>();
             assert!(!between.is_empty(), "the warped channel remains continuous");
@@ -89,13 +89,13 @@ fn a_diagonal_medium_river_routes_land_units_through_a_ford() {
 fn deep_main_channel_blocks_even_where_a_tributary_has_a_ford() {
     let mut segments = channel(7 * 256);
     segments.push([
-        60 * 256,
+        36 * 256,
         119 * 256,
         160 * 256,
         119 * 256,
         4 * 256,
         0,
-        100 * 256,
+        124 * 256,
     ]);
     let generator = crossing_with_geometry(false, false, segments);
     for y in 1..WIDTH - 1 {
@@ -110,7 +110,7 @@ fn deep_main_channel_blocks_even_where_a_tributary_has_a_ford() {
             .unwrap()
             .material,
         GroundMaterial::Ford,
-        "tributary station 40 remains a crossing away from the main river"
+        "tributary station 64 remains a crossing away from the main river"
     );
 }
 
@@ -132,13 +132,13 @@ fn ocean_never_inherits_river_fords() {
 #[test]
 fn ford_phase_survives_closely_segmented_meander() {
     // Vertices about one tile apart wiggle the six-tile river around its
-    // station-40 ford. Neighbouring pieces outside the ford band must not
+    // station-64 ford. Neighbouring pieces outside the ford band must not
     // veto the crossing: the phase belongs to the river, not to a piece.
-    let mut segments = vec![[130 * 256, -256, 130 * 256, 20 * 256, 6 * 256, 0, 21 * 256]];
+    let mut segments = vec![[130 * 256, -256, 130 * 256, 44 * 256, 6 * 256, 0, 45 * 256]];
     let wiggle = |y: i64| 130 * 256 + if y % 2 == 0 { 154 } else { -154 };
-    for y in 20..60 {
+    for y in 44..84 {
         segments.push([
-            if y == 20 { 130 * 256 } else { wiggle(y) },
+            if y == 44 { 130 * 256 } else { wiggle(y) },
             y * 256,
             wiggle(y + 1),
             (y + 1) * 256,
@@ -148,16 +148,16 @@ fn ford_phase_survives_closely_segmented_meander() {
         ]);
     }
     segments.push([
-        wiggle(60),
-        60 * 256,
+        wiggle(84),
+        84 * 256,
         130 * 256,
         258 * 256,
         6 * 256,
-        61 * 256,
+        85 * 256,
         259 * 256,
     ]);
     let generator = crossing_with_geometry(false, false, segments);
-    let ford_rows = (37..=40)
+    let ford_rows = (61..=64)
         .filter(|y| {
             let wet = (120..140)
                 .map(|x| generator.tile_at(TileCoord::new(x, *y)).unwrap())

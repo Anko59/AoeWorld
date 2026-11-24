@@ -126,8 +126,9 @@ fn reach_segments(
     let length_units = length * units;
     let sink = f64::from(reach.distance_to_sink_centimeters) / 100.0 * units;
     // Short reaches (including inter-lake streams) always contain a ford.
-    let end_station = if length_units < 10240.0 {
-        (sink / 10240.0).round() * 10240.0 - length_units / 2.0
+    let spacing = aoe_map::FORD_SPACING_UNITS as f64;
+    let end_station = if length_units < spacing {
+        (sink / spacing).round() * spacing - length_units / 2.0
     } else {
         sink
     };

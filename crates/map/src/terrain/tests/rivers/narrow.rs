@@ -190,14 +190,11 @@ fn a_narrow_stream_on_sloping_terrain_is_ford_on_every_tile() {
 }
 
 #[test]
-fn a_stream_up_to_two_and_a_half_tiles_is_one_continuous_ford() {
-    // 2.5 tiles is 1 m3/s: the streams above it are rivers. Without a single
-    // width limit a stream would alternate between wading and blocking stretches.
-    for (name, width) in [
-        ("one and a half", 384),
-        ("two", 512),
-        ("two and a half", 640),
-    ] {
+fn a_stream_up_to_one_and_a_half_tiles_is_one_continuous_ford() {
+    // 1.5 tiles is 0.215 m3/s: the streams above it cross at periodic fords.
+    // Without a single width limit a stream would alternate between wading and
+    // blocking stretches.
+    for (name, width) in [("one", 256), ("one and a half", 384)] {
         let generator = crossing_with_geometry(false, false, channel(130, -1, 130, 258, width));
         let tiles = composed(&generator);
         let river = tiles
@@ -214,5 +211,26 @@ fn a_stream_up_to_two_and_a_half_tiles_is_one_continuous_ford() {
             );
             assert!(point.terrain.passable, "{name} {:?}", point.tile);
         }
+    }
+}
+
+#[test]
+fn a_stream_wider_than_one_and_a_half_tiles_has_periodic_fords_between_blocking_water() {
+    for (name, width) in [("two", 512), ("two and a half", 640)] {
+        let generator = crossing_with_geometry(false, false, channel(130, -1, 130, 258, width));
+        let river = composed(&generator)
+            .into_iter()
+            .filter(|p| p.terrain.water == WaterKind::River)
+            .collect::<Vec<_>>();
+        let fords = river
+            .iter()
+            .filter(|p| p.terrain.material == GroundMaterial::Ford)
+            .count();
+        assert!(fords > 0, "{name}: fords remain");
+        assert!(
+            fords * 4 < river.len(),
+            "{name}: {fords} of {} river tiles are fords",
+            river.len()
+        );
     }
 }

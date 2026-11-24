@@ -40,7 +40,7 @@ neighboring source edges meet. Water 15002 is the light shallow sheet; optional
 periodic sheets add medium water 15016, deep water 15015 and marsh shallows
 15014. Generated river `Ford` crossings use the native Shallows sheet (AoK DAT
 terrain 4, `g_sha`, SLP 15014), with bank dirt visible beneath the marsh
-(docs/assets/landscape.md). This distinguishes wadeable water from blocking water. Narrow mapped streams up to 2.5 tiles wide are wadeable where the
+(docs/assets/landscape.md). This distinguishes wadeable water from blocking water. Narrow mapped streams up to 1.5 tiles wide are wadeable where the
 composed surface is walkable; a wider overlapping channel keeps the water
 blocking for land units. Ordinary shallow water remains impassable for land. A pack without an optional sheet draws the
 shallow sheet in its place. Catalog v12 selects natural rock ground 15033 and soft snow ground 15026,

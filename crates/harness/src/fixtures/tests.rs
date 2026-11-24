@@ -289,6 +289,7 @@ fn fixtures_load_a_small_save_and_reject_its_snapshot_version() {
         0, // town bells
         0, // explored chunks
         0, // building memory
+        0, // resource memory
     ];
     let byte_count = bytes.len();
     fs::write(saves.join("empty.json"), format!(r#"{{"id":"empty","name":"empty","saved_at":0,"tick":0,"game_seconds":0,"map_hash":"{hash}","opponents":0,"units":0,"buildings":0,"bytes":{byte_count},"save_ms":0}}"#)).unwrap();

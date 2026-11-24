@@ -302,6 +302,54 @@ fn dev_counts_gate_each_kernel_and_unlisted_kernels_use_the_baseline_only() {
 }
 
 #[test]
+fn an_accepted_increase_is_gated_against_its_raised_baseline_not_the_dev_run() {
+    let observed: BTreeMap<_, _> = [
+        "instructions::simulation::late_game",
+        "instructions::b",
+        "instructions::c",
+        "instructions::d",
+        "instructions::e",
+        "instructions::f",
+        "instructions::g",
+        "instructions::h",
+        "instructions::i",
+        "instructions::j",
+    ]
+    .into_iter()
+    .map(|name| (name.to_owned(), 100))
+    .collect();
+    let late = |rows: Vec<Comparison>| {
+        rows.into_iter()
+            .find(|row| row.metric.ends_with("late_game"))
+            .unwrap()
+            .verdict
+    };
+    // A cap removal raised late_game from dev's 50 to 100 in a reviewed commit.
+    let mut baseline = proposal(&observed, &BTreeMap::new()).unwrap();
+    let dev = dev_reference(50, dev::identity());
+    assert_eq!(
+        late(compare_with_dev(baseline.clone(), observed.clone(), Some(&dev)).unwrap()),
+        Verdict::Regression,
+        "unaccepted, +100% over dev fails"
+    );
+    baseline.accepted_increase.insert(
+        "instructions::simulation::late_game".into(),
+        "cap removed".into(),
+    );
+    assert_eq!(
+        late(compare_with_dev(baseline.clone(), observed.clone(), Some(&dev)).unwrap()),
+        Verdict::Pass
+    );
+    // The raised baseline still gates: +3% over it fails.
+    let mut over = observed;
+    over.insert("instructions::simulation::late_game".into(), 104);
+    assert_eq!(
+        late(compare_with_dev(baseline, over, Some(&dev)).unwrap()),
+        Verdict::Regression
+    );
+}
+
+#[test]
 fn missing_or_unusable_dev_reference_falls_back_with_a_reason() {
     let temp = tempfile::tempdir().expect("directory");
     let path = temp.path().join("dev-reference.json");

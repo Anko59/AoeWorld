@@ -3,17 +3,17 @@
 use crate::EnvironmentError;
 use serde::{Deserialize, Serialize};
 
-pub const FORD_SPACING_UNITS: i64 = 40 * 256;
+pub const FORD_SPACING_UNITS: i64 = 64 * 256;
 pub const FORD_HALF_LENGTH_UNITS: i64 = 5 * 256 / 2;
 pub const MAX_RIVER_SEGMENTS_PER_PAGE: usize = 1024;
 /// Narrowest drawn channel: a one-tile stream, the smallest kept discharge.
 pub const MIN_RIVER_WIDTH_UNITS: u16 = 256;
-/// Widest stream that is wadeable shallows rather than blocking water: 2.5
-/// tiles, which is 1 m³/s of discharge. Reach widths step at confluences, so a
+/// Widest stream that is wadeable shallows rather than blocking water: 1.5
+/// tiles, which is 0.215 m³/s of discharge. Reach widths step at confluences, so a
 /// limit inside a stream's own range would alternate wading and blocking
 /// stretches; discharge only grows downstream, so a stream stops being wadeable
 /// once, where it becomes a river.
-pub const MAX_WADEABLE_WIDTH_UNITS: u16 = 640;
+pub const MAX_WADEABLE_WIDTH_UNITS: u16 = 384;
 /// Small/medium rivers receive periodic crossings. Wider main channels stay
 /// blocking even where a tributary's ford overlaps them. Width is a gameplay
 /// proxy for depth; HydroRIVERS does not observe historical ford depths.
