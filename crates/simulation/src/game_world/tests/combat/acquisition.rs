@@ -330,9 +330,9 @@ fn a_castle_fires_at_an_approaching_unit_without_orders() {
 }
 
 /// Far more idle soldiers than the former world-wide ration of 128 looks per
-/// tick: all have a target within a second (20 ticks), each on its own phase.
+/// tick: all have a target within a second (20 ticks), the idle look turn.
 #[test]
-fn each_idle_soldier_gets_its_own_four_tick_acquisition_turn() {
+fn every_idle_soldier_finds_a_target_within_its_one_second_turn() {
     use aoe_core::CombatStance;
     let mut w = world();
     w.set_fog_disabled(true);

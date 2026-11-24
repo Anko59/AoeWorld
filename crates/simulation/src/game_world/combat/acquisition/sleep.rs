@@ -63,9 +63,10 @@ impl Quiet {
 
     #[inline]
     pub(crate) fn wake(&mut self, id: EntityId) {
-        // Every event that wakes a seeker also ends its idle cadence.
-        self.awake.activate(id);
+        // Every event that wakes a seeker also ends its idle cadence: back in
+        // the rotation first (as idle), then active.
         self.rouse(id);
+        self.awake.activate(id);
     }
 
     /// Out of sleep or parking, still idle: an arrival near it changes
@@ -298,5 +299,21 @@ impl GameWorld {
                 "missed wake: seeker range"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Quiet;
+    use aoe_core::EntityId;
+
+    #[test]
+    fn a_parked_seeker_woken_by_an_event_looks_on_the_active_turn() {
+        let mut quiet = Quiet::default();
+        let id = EntityId(7);
+        quiet.join(id);
+        quiet.park(id);
+        quiet.wake(id);
+        assert!(quiet.awake.is_active(id));
     }
 }

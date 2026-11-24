@@ -67,6 +67,11 @@ impl Awake {
     }
 
     #[cfg(test)]
+    pub(crate) fn is_active(&self, id: EntityId) -> bool {
+        self.active[active_slot(id)].contains(&id)
+    }
+
+    #[cfg(test)]
     pub(crate) fn set(&self) -> BTreeSet<EntityId> {
         self.active
             .iter()
