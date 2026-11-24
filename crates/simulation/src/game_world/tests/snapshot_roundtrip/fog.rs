@@ -74,3 +74,47 @@ fn saved_fog_retains_only_what_each_player_last_saw() {
     );
     assert!(restored.remembered_building(viewer, destroyed).is_none());
 }
+
+#[test]
+fn saved_fog_keeps_what_each_player_last_knew_of_resources() {
+    let (mut saved, _) = flat();
+    let (package, pages, water) = crate::game_world::tests::economy::fixture::flat_fixture(false);
+    let generator = package
+        .generator_with_environment(pages, water, Vec::new(), Vec::new())
+        .unwrap();
+    let mut found = None;
+    'search: for cy in 0..8 {
+        for cx in 0..8 {
+            for node in generator.chunk(cx, cy).unwrap().resources {
+                if node.kind != aoe_map::ResourceKind::Wood {
+                    continue;
+                }
+                let tile = TileCoord::new(node.tile.x + 1, node.tile.y);
+                if let Ok(at) = WorldPosition::from_tile_center(tile)
+                    && let Ok(id) = saved.spawn_villager(PlayerId(0), at)
+                {
+                    found = Some((node, id));
+                    break 'search;
+                }
+            }
+        }
+    }
+    let (node, watcher) = found.expect("wood with a free neighbour tile");
+    saved.deplete_resource(node.id, 5).unwrap();
+    let seen = node.initial_amount - 5;
+    saved.kill_unit(saved.lookup[&watcher]);
+    // Chopped further while nobody of the player looks.
+    saved.deplete_resource(node.id, 7).unwrap();
+    assert_eq!(
+        saved.known_resource_amounts(PlayerId(0)),
+        vec![(node.id, seen)]
+    );
+
+    let (restored, _) = roundtrip(&saved, flat().0);
+    assert_eq!(
+        restored.known_resource_amounts(PlayerId(0)),
+        vec![(node.id, seen)],
+        "the player still remembers the amount last seen, not the live one"
+    );
+    assert!(restored.known_resource_amounts(PlayerId(1)).is_empty());
+}

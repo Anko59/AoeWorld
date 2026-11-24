@@ -147,6 +147,7 @@ impl GameWorld {
             animals: self.animal_records(),
             explored: self.explored_records(),
             building_memory: self.building_memory_records(),
+            resource_memory: self.resource_memory_records(),
             town_bells: self.economy.town_bells.iter().copied().collect(),
         };
         Some(snapshot.retimed(self.config.tick_hz, REFERENCE_HZ))
@@ -238,6 +239,7 @@ impl GameWorld {
         }
         self.restore_general_recruits(&snapshot.buildings, &snapshot.units);
         self.restore_building_memory(&snapshot.building_memory);
+        self.restore_resource_memory(&snapshot.resource_memory);
         self.set_fog_disabled(snapshot.fog_disabled);
         self.resume_jobs(snapshot, &mut report);
         self.rebind_trade_units();
