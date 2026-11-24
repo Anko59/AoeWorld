@@ -243,6 +243,22 @@ fn buildings_stand_on_dry_ground_never_on_shallows() {
         world.validate_building_placement(player, BuildingKind::House, TileCoord::new(120, origin)),
         Ok(())
     );
+    // Gates sit in walls, which cross fords: a horizontal gate over one is fine.
+    let (gx, gy) = (30..210)
+        .flat_map(|y| (100..150).map(move |x| (x, y)))
+        .find(|&(x, y)| {
+            (x..x + 4).any(|x| is_ford(x, y))
+                && (x..x + 4).all(|x| world.tile_passable(TileCoord::new(x, y)))
+        })
+        .expect("a passable row of four tiles with a ford");
+    assert_eq!(
+        world.validate_building_placement(
+            player,
+            BuildingKind::PalisadeGate,
+            TileCoord::new(gx, gy)
+        ),
+        Ok(())
+    );
 }
 
 pub(super) fn banks(world: &GameWorld) -> (TileCoord, TileCoord, TileCoord, TileCoord) {

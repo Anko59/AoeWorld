@@ -64,6 +64,10 @@ impl GameWorld {
         }
         if kind != BuildingKind::Dock {
             self.validate_footprint_ground(player, footprint)?;
+            // Gates cross fords like the walls they sit in, either orientation.
+            if kind.is_gate() {
+                return Ok(());
+            }
             return self.validate_dry_footprint(footprint);
         }
         let Terrain::Map { generator, overlay } = &self.terrain else {
