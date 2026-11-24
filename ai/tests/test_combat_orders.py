@@ -10,36 +10,23 @@ from aoe_ai.blackboard import Blackboard
 from aoe_ai.config import Config
 from aoe_ai.context import Context
 from aoe_ai.play.combat import CombatManager
-from aoe_ai.play.combat import raid as raid_module
 from aoe_ai.play.combat.march import march
 from aoe_ai.play.military import MilitaryManager
 from test_logic import play
 from fakes import FakeClient, FakeWorld, base, building, decision, order_result, unit
 
 
-def raid_respond(ctx, army):
-    cm = CombatManager()
-    return raid_module.respond(ctx, army, cm.engage, cm.pull_back)
-
-
-def test_production_keeps_a_staging_rally_while_the_army_is_attacking():
+def test_recruits_rally_by_plain_walk_even_while_the_field_army_is_attacking():
     units, buildings = base(3)
+    recruit = unit(301, UnitKind.SPEARMAN, tile=(68, 55))
     barracks = building(600, BuildingKind.BARRACKS, tile=(68, 53))
-    barracks.rally_position = None
-    world = FakeWorld(units, buildings + [barracks])
-    board, client = Blackboard(attacking=True), FakeClient()
-    manager = MilitaryManager()
-    manager.rally(Context(client, decision(world), board, Config()))
+    world = FakeWorld(units + [recruit], buildings + [barracks])
+    board, client = Blackboard(attacking=True, attack_members={300}), FakeClient()
+    MilitaryManager().rally(Context(client, decision(world), board, Config()))
 
-    (structure, x, y), = client.named("set_rally")
-    assert structure == barracks.id
-    assert (x, y) != barracks.center
-    assert world.land_route(*barracks.center, x, y)
-
-    barracks.rally_position = (x, y)
-    client = FakeClient()
-    manager.rally(Context(client, decision(world), board, Config()))
-    assert client.named("set_rally") == []
+    (members, *_), = client.named("formation_move")
+    assert members == [recruit.id]
+    assert client.options_of("formation_move") == [{"attack_move": False}]
 
 
 def test_a_scattered_roster_keeps_staging_even_above_the_attack_threshold():
@@ -114,7 +101,7 @@ def test_nearby_fogged_building_is_not_assumed_destroyed():
     ctx = Context(client, decision(world), board, Config())
     CombatManager().step(ctx)
     assert board.attack_target == target.id
-    assert client.named("move")
+    assert client.named("formation_move")
     assert board.stats.get("targets_cleared", 0) == 0
 
 
@@ -124,8 +111,8 @@ def test_nearby_fogged_building_is_not_assumed_destroyed():
 def test_refused_attack_retargets_without_blacklisting_other_soldiers(result):
     units, buildings = base(3)
     soldiers = [unit(300 + i, UnitKind.SPEARMAN, tile=(120, 120)) for i in range(2)]
-    near = building(900, BuildingKind.HOUSE, tile=(130, 124), mine=False)
-    other = building(901, BuildingKind.HOUSE, tile=(140, 124), mine=False)
+    near = building(900, BuildingKind.HOUSE, tile=(124, 120), mine=False)
+    other = building(901, BuildingKind.HOUSE, tile=(125, 120), mine=False)
     world = FakeWorld(units + soldiers, buildings, enemy_buildings=[near, other])
     brain, client = Brain(), FakeClient()
     brain.board.attacking, brain.board.attack_launch_size = True, 2
@@ -150,14 +137,14 @@ def test_army_keeps_unseen_town_center_until_the_server_forgets_it():
     target = building(901, BuildingKind.TOWN_CENTER, tile=(98, 98), mine=False, visible=False)
     brain, client = play(FakeWorld(units + army, buildings, enemy_buildings=[target]))
     assert brain.board.attack_target == target.id
-    assert client.named("move")
+    assert client.named("formation_move")
     target.visible = True
     _, client = play(FakeWorld(units + army, buildings, enemy_buildings=[target]), brain=brain)
     assert any(args[1] == target.id for args in client.named("attack"))
     # Destruction/empty-footprint inspection is authoritative fog memory.
-    _, client = play(FakeWorld(units + army, buildings), brain=brain)
+    _, client = play(FakeWorld(units + army, buildings, tick=400), brain=brain)
     assert not client.named("attack")
-    assert client.named("move")
+    assert any(200 in args[0] for args in client.named("formation_move"))
 
 
 def test_two_defenders_still_pull_workers_back_from_ten_raiders():
@@ -173,7 +160,7 @@ def test_two_defenders_still_pull_workers_back_from_ten_raiders():
     world = FakeWorld(units + army, buildings, enemies=raiders)
     client, board, config = FakeClient(), Blackboard(), Config()
     ctx = Context(client, decision(world), board, config)
-    CombatManager().defend(ctx, army)
+    CombatManager().step(ctx)
     assert (worker.id, 56, 56) in client.named("move")
     assert client.named("attack"), "route budget must still leave room to defend"
     assert ctx._land_queries <= config.land_queries_per_decision // 4 + len(army)
@@ -218,11 +205,11 @@ def test_marching_an_army_uses_one_formation_and_keeps_stragglers_local():
     ctx = Context(client, decision(world), Blackboard(), Config())
     march(ctx, army, (60,60), (200,200))
     groups = client.named("formation_move")
-    assert len(groups) == 1 and groups[0][0] == list(range(300,314))
-    assert groups[0][3] == Formation.LINE
+    assert [group[0] for group in groups] == [[400], list(range(300,314))]
+    assert all(group[3] == Formation.LINE for group in groups)
     # The march is an attack-move, so soldiers answer enemies they meet.
-    assert client.options_of("formation_move") == [{"attack_move": True}]
-    assert len(client.named("move")) == 1 and client.named("move")[0][0] == 400
+    assert client.options_of("formation_move") == [{"attack_move": True}] * 2
+    assert not client.named("move")
     assert ctx.busy == {u.id for u in army}
     # The same idle report immediately afterwards must not reset the shared route.
     march(ctx, army, (60,60), (200,200))
@@ -270,7 +257,7 @@ def test_stationary_moving_army_recovers_after_the_stall_deadline(known_building
     for name, args in recovery:
         if name == "formation_move":
             recovered.update(args[0])
-        elif name in ("move", "stop"):
+        elif name == "stop":
             recovered.add(args[0])
     assert recovered == {soldier.id for soldier in army}
     # Once the accepted stop is reflected in the snapshot, recovery must resume
@@ -282,8 +269,6 @@ def test_stationary_moving_army_recovers_after_the_stall_deadline(known_building
     for name, args in resumed:
         if name == "formation_move":
             marching.update(args[0])
-        elif name == "move":
-            marching.add(args[0])
     assert marching == {soldier.id for soldier in army}
     if known_building:
         assert not board.cooling(f"target:{target.id}", deadline + config.march_pause_seconds * 20 + 10)
@@ -321,12 +306,12 @@ def raid(soldiers, *, tick=100, raider_visible=True):
                      enemies=[attacker] if raider_visible else []), hit
 
 
-def test_damage_to_a_town_center_recalls_a_distant_army_in_one_order():
+def test_damage_to_a_town_center_recalls_only_unengaged_soldiers():
     soldiers = [unit(300 + i, UnitKind.SPEARMAN, tile=(245, 220), task=UnitTask.MOVING)
                 for i in range(12)]
     for soldier in soldiers:
         soldier.moving = True
-        soldier.attack_target = 888
+    soldiers[0].attack_target = 888
     world, hit = raid(soldiers)
     client = FakeClient()
     board = Blackboard(attacking=True, attack_launch_size=len(soldiers))
@@ -334,9 +319,14 @@ def test_damage_to_a_town_center_recalls_a_distant_army_in_one_order():
     CombatManager().step(ctx)
 
     (members, x, y, _), = client.named("formation_move")
-    assert members == [u.id for u in soldiers]
+    assert members == [u.id for u in soldiers[1:]]
     assert x < soldiers[0].x and y < soldiers[0].y
-    assert client.options_of("formation_move") == [{"attack_move": False}], "disengage from the old target"
+    assert client.options_of("formation_move") == [{"attack_move": False}]
+    late = world.tick + 20 * Config().march_pause_seconds + 1
+    world.tick = late
+    client = FakeClient()
+    CombatManager().step(Context(client, decision(world), board, Config()))
+    assert not client.named("formation_move")
 
 
 def test_a_small_idle_group_engages_a_visible_enemy_away_from_home():
@@ -376,7 +366,8 @@ def test_each_spread_out_march_group_uses_one_route_query_for_its_hop():
     ctx = Context(client, decision(world), Blackboard(), Config(land_queries_per_decision=8))
     march(ctx, army, army[0].tile, (360, 60))
 
-    assert {args[0] for args in client.named("move")} == {u.id for u in army}
+    assert {ids[0] for ids, *_ in client.named("formation_move")} == {u.id for u in army}
+    assert all(option["attack_move"] for option in client.options_of("formation_move"))
     assert ctx._land_queries <= 8
 
 
@@ -428,5 +419,88 @@ def test_unreachable_raider_does_not_keep_defence_mode_alive():
     late = world.tick_hz * config.raid_hold_seconds + 1
     world.tick = first_until + late
     ctx = Context(client, decision(world), board, config)
-    assert not raid_respond(ctx, army)
+    assert not CombatManager().defend(ctx, army)
     assert board.raid_until == first_until
+
+
+def test_a_stalled_march_engages_instead_of_stopping_for_route_recovery():
+    workers, buildings = base(3)
+    soldier = unit(300, UnitKind.SPEARMAN, tile=(120, 120), task=UnitTask.MOVING)
+    soldier.moving = True
+    enemy = unit(801, UnitKind.ARCHER, tile=(126, 120), mine=False)
+    world = FakeWorld(workers + [soldier], buildings, tick=2_000, enemies=[enemy])
+    # The server can accept an attack even when the client has no exact terrain.
+    world.land_route = lambda *_: None
+    board = Blackboard(attacking=True, attack_launch_size=1)
+    board.march_progress[soldier.id] = (soldier.tile, 100)
+    client = FakeClient()
+
+    CombatManager().step(Context(client, decision(world), board, Config()))
+
+    assert client.named("attack") == [(soldier.id, enemy.id)]
+    assert not client.named("stop")
+
+
+@pytest.mark.parametrize("visible", [True, False])
+def test_a_marching_soldier_responds_to_damage_from_outside_contact_radius(visible):
+    workers, buildings = base(3)
+    soldier = unit(300, UnitKind.SPEARMAN, tile=(120, 120), task=UnitTask.MOVING)
+    soldier.moving = True
+    enemy = unit(801, UnitKind.ARCHER, tile=(130, 120), mine=False)
+    hit = SimpleNamespace(kind="under_attack", id=soldier.id, x=120, y=120,
+                          is_building=False, attacker=enemy.id)
+    world = FakeWorld(workers + [soldier], buildings, enemies=[enemy] if visible else [])
+    client = FakeClient()
+
+    CombatManager().step(Context(client, decision(world, [hit]), Blackboard(), Config()))
+
+    assert client.calls == ([("attack", (soldier.id, enemy.id))] if visible
+                            else [("stop", (soldier.id,))])
+
+
+def test_army_defends_a_lumber_camp_against_visible_raiders_before_damage():
+    workers, buildings = base(3)
+    camp = building(600, BuildingKind.LUMBER_CAMP, tile=(145, 150))
+    soldier = unit(300, UnitKind.SPEARMAN, tile=(115, 150), task=UnitTask.MOVING)
+    enemy = unit(800, UnitKind.MILITIA, tile=(148, 150), mine=False)
+    world = FakeWorld(workers + [soldier], buildings + [camp], enemies=[enemy])
+    client = FakeClient()
+    ctx = Context(client, decision(world), Blackboard(), Config())
+
+    CombatManager().step(ctx)
+
+    (members, x, _, _), = client.named("formation_move")
+    assert members == [soldier.id] and x > soldier.x
+    assert client.options_of("formation_move") == [{"attack_move": False}]
+    assert ctx.board.counter_owner == enemy.owner
+
+
+def test_dense_contact_can_redirect_the_whole_group_in_one_order():
+    workers, buildings = base(3)
+    soldiers = [unit(300 + i, UnitKind.SPEARMAN, tile=(120, 120), task=UnitTask.MOVING)
+                for i in range(64)]
+    soldiers[0].attack_target = 800
+    enemy = unit(800, UnitKind.ARCHER, tile=(126, 120), mine=False)
+    client = FakeClient()
+    ctx = Context(client, decision(FakeWorld(workers + soldiers, buildings, enemies=[enemy])),
+                  Blackboard(), Config())
+
+    CombatManager().step(ctx)
+
+    (members, x, y, _), = client.named("formation_move")
+    assert members == [u.id for u in soldiers[1:]] and (x, y) == enemy.tile
+    assert client.options_of("formation_move") == [{"attack_move": True}]
+
+
+def test_an_unarmed_visitor_at_a_camp_does_not_pull_the_army():
+    workers, buildings = base(3)
+    camp = building(600, BuildingKind.LUMBER_CAMP, tile=(145, 150))
+    soldier = unit(300, UnitKind.SPEARMAN, tile=(115, 150))
+    visitor = unit(800, UnitKind.VILLAGER, tile=(148, 150), mine=False)
+    visitor.military = False
+    world = FakeWorld(workers + [soldier], buildings + [camp], enemies=[visitor])
+    client = FakeClient()
+
+    CombatManager().step(Context(client, decision(world), Blackboard(), Config()))
+
+    assert not client.named("formation_move") and not client.named("attack")

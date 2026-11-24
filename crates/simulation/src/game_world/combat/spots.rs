@@ -60,14 +60,18 @@ impl GameWorld {
                 || !self.arrival_position_free(index))
     }
 
-    pub(super) fn melee_positions(
-        &self,
-        unit: &crate::GameUnit,
+    /// The legal melee spots round `goal`, nearest first. Each spot's checks
+    /// run only when the caller reaches it: most searches stop at the first
+    /// free one (#978). When no contact spot is legal (a target standing in
+    /// newly blocked ground), the spots of its full reach follow instead.
+    pub(super) fn melee_positions<'a>(
+        &'a self,
+        unit: &'a crate::GameUnit,
         range: i64,
-        goal: &Goal,
-    ) -> Vec<WorldPosition> {
+        goal: &'a Goal,
+    ) -> impl Iterator<Item = WorldPosition> + 'a {
         let id = unit.id;
-        let mut points = match goal {
+        let points = match goal {
             Goal::Building(rect) => perimeter_positions(*rect, unit.kind),
             Goal::Unit(at, target_radius) => {
                 let contact = (unit.kind.collision_radius() + target_radius + 8).min(range as i32);
@@ -80,8 +84,17 @@ impl GameWorld {
                 points
             }
         };
-        let vouched = std::cell::Cell::new(false);
-        let valid = |at: &WorldPosition| {
+        // Nearest first, ties by (y, x): a heap yields them in that order and
+        // a search that stops at the first free spot never sorts the rest.
+        let nearest = move |points: Vec<WorldPosition>| {
+            let mut heap = points
+                .into_iter()
+                .map(|at| std::cmp::Reverse((squared(unit.position, at), at.y, at.x, at)))
+                .collect::<std::collections::BinaryHeap<_>>();
+            std::iter::from_fn(move || heap.pop().map(|std::cmp::Reverse((.., at))| at))
+        };
+        let vouched = std::rc::Rc::new(std::cell::Cell::new(false));
+        let valid = move |at: &WorldPosition| {
             let at = *at;
             goal.distance_squared(at) <= range * range
                 && self.config.valid_ground_position(at)
@@ -93,18 +106,25 @@ impl GameWorld {
                 && self.ring_point_reachable(unit, at, &vouched)
         };
         // Nearest first, so a perimeter's certificate is the nearest point's.
-        points.sort_unstable_by_key(|&at| (squared(unit.position, at), at.y, at.x));
-        points.retain(valid);
-        // A target can stand inside newly blocked ground. Its contact ring
-        // is then obstructed too; use the nearest legal firing reach instead.
-        if points.is_empty()
-            && let Goal::Unit(at, _) = goal
-        {
-            points = circle_positions(*at, range as i32);
-            points.retain(valid);
-        }
-        points.sort_unstable_by_key(|&at| (squared(unit.position, at), at.y, at.x));
-        points
+        let found = std::rc::Rc::new(std::cell::Cell::new(false));
+        let seen = found.clone();
+        let reach = match goal {
+            Goal::Unit(at, _) => Some(*at),
+            Goal::Building(_) => None,
+        };
+        let valid_again = valid.clone();
+        nearest(points)
+            .filter(valid)
+            .inspect(move |_| seen.set(true))
+            .chain(
+                std::iter::once(())
+                    .filter_map(move |()| {
+                        let at = reach.filter(|_| !found.get())?;
+                        Some(nearest(circle_positions(at, range as i32)))
+                    })
+                    .flatten()
+                    .filter(valid_again),
+            )
     }
 
     /// Whether the attacker could fight `target` now: it is in reach, or it

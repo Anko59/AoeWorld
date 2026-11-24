@@ -211,6 +211,13 @@ class Config:
     combat_engage_tiles: int = 8
     combat_targets_per_cell: int = 12
     combat_engage_route_queries: int = 4
+    #: Soldiers of one cell meeting enemies get one attack-move group order
+    #: instead of one attack order each from this many members up.
+    combat_group_min: int = 16
+    #: Armed enemies this close to any of our buildings start a defence, and
+    #: the interval at which that is checked (per bot, not per world size).
+    site_guard_tiles: int = 12
+    site_watch_seconds: int = 2
     threat_seconds: int = 20
     raid_hold_seconds: int = 90
     raid_general_retry_seconds: int = 20
