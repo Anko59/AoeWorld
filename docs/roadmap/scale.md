@@ -14,6 +14,26 @@ references; the rows below stay as the record of what #865 tried and are not wor
 cheap. The other movement caps (route searches and planners per player, local detours, step-aside, formation retries, idle
 spreading) are also this session's, decided in [caps](caps.md); combat, economy, orders and display caps are not.
 
+## Reopened 11-24: closed for the wrong reason (owner: "think what's best for the game")
+
+Owner 11-24: experiments were rejected on gates and numbers; judge by what is best for the game. Three wrong reasons
+were found in the closures below: a baseline whose caps leave ~5,700 movers unserved (serving them reads as
+instructions), the synthetic late_game gate (cold chunk builds) deciding instead of R1, and the 5% rule discarding
+finished clean wins. Every result now reports service (waiting, arrivals, deliveries, kills) next to instructions;
+a service gain paid for by units that now walk is not a loss. Worked in this order, after slice 9a, on #978.
+
+| item | asked | status | evidence | next step |
+| --- | --- | --- | --- | --- |
+| A unit being attacked counts as fighting for the stride (landscape's parity_3 on `fix/fights-uncapped`) | 11-24 x1 | PLANNED | Without the 16-per-look cap, archers watched 0.739 vs unwatched 0.635 (bound 0.10); `unseen_bystander` exempts attackers and units with a target, not the chased | Attackers' unit targets collected once a tick count as fighters; landscape re-runs parity_3 |
+| Route guides (6e) by service | 11-24 x1 | PLANNED | Closed 11-23 on a self-set "waiting -1/3" line: R1 +4.0%, waiting -25%, arrivals +6.4%, deliveries flat, kills 345 to 320 | Explain the kills drop, then measure with the route budget removed |
+| Route work budget removed (bigger fair budget) | 11-19, 11-23, 11-24 | PLANNED | 65,536/tick: +4.9%, waiters -23%, attack wait p50 333 to 178 ticks; x2/x4 on 11-23: +6.1%/+11.8%, waiting -10%/-15%; the added cost is units walking. Owner 11-23 decision: remove once the cost is fixed ([caps](caps.md)) | Remove with 6e; judge on R1 ticks/s and service together |
+| Short trips never wait (#939, merged then reverted) | 11-19, 11-24 | PLANNED | Before #936: short deferrals 22,460 to 1,892, mean wait -16% at +0.9%. Reverted for late_game main +16% (synthetic, cold chunk builds) | Floor inside the parallel serve, measured on R1 first |
+| Parallel route serving, rounds 2-4 | 11-16, 11-24 | PLANNED | Main thread -9M at 6 workers; killed by late_game +8% to +23% (cold chunk builds); never run on R1 (`park/plan-serve-h`) | Re-measure on R1 |
+| Parallel decisions for slow movers (write-buffer stage 2) | 11-16, 11-24 | PLANNED | Killed by late_game +7.95%; never run on a real save (`perf/apply-write-buffer-stage2`) | Re-measure on R1 |
+| Small clean wins as one PR | 11-24 x1 | PLANNED | Each dropped under "best case under 5%", none changes play: foundation check in place -0.7% (built), terrain read inline -0.5% (built), collision re-sweep skip ~3-4%, near-reissued orders kept ~1.9% live, cheaper phase timers ~1.5% live | Build the unbuilt three, ship all five together |
+| Long stride for unseen groups (4c) retest | 11-24 x1 | PLANNED | Closed on parity: -14% but kills 341 to 288, unwatched raids 5% vs 31% watched; the chased-unit stride gap may be part of it | One retest after the chased-unit row |
+| Formation width ("huge lines", owner 11-20) | 11-20, 11-24 | PLANNED | Files from passage width cut single file -93% at +0.7%, but members aimed into buildings and stacked 17-37 a tile; routes hug obstacles | Clearance-weighted group route, then the wider block |
+
 ## Scale queue (issue #865, agreed 11-16; closed 11-21, replaced by #978)
 
 Worked in this order, one item at a time, by one session that records every result as a comment on issue #865.
