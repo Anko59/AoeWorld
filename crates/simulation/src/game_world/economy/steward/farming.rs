@@ -340,7 +340,16 @@ impl GameWorld {
             return false;
         }
         let rect = TileRect::from_xywh(tile.x, tile.y, rules.side, rules.depth);
-        if !s.home.covers(rect, 0)
+        // A slot under a known Farm, Mill or drop-off is refused by placement
+        // anyway: skip it before the terrain and occupancy checks.
+        let overlaps = |o: TileRect| {
+            o.min.x < rect.max.x
+                && rect.min.x < o.max.x
+                && o.min.y < rect.max.y
+                && rect.min.y < o.max.y
+        };
+        if s.buildings.iter().any(|b| overlaps(b.footprint))
+            || !s.home.covers(rect, 0)
             || self.validate_explored_footprint(s.player, rect).is_err()
             || self
                 .validate_building_placement(s.player, kind, tile)
