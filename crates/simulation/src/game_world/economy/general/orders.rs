@@ -159,7 +159,14 @@ impl GameWorld {
             {
                 continue;
             }
-            match self.issue_attack(player, id, target) {
+            // One unit is answered at once, an unreachable target refused;
+            // a larger order searches in the combat phase, side by side.
+            let issued = if ids.len() == 1 {
+                self.issue_attack(player, id, target)
+            } else {
+                self.issue_attack_in_combat_phase(player, id, target)
+            };
+            match issued {
                 Ok(()) => {
                     self.cancel_patrol(id);
                     self.discard_move_queue_for_order(id);
@@ -191,7 +198,7 @@ impl GameWorld {
         army.state = GeneralState::Fighting;
         let members: Vec<_> = army.members.iter().copied().collect();
         for member in members {
-            let _ = self.issue_attack(commander.player, member, target);
+            let _ = self.issue_attack_in_combat_phase(commander.player, member, target);
         }
     }
 

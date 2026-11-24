@@ -112,6 +112,56 @@ fn an_attack_burst_routes_every_attacker_at_once_and_repeated_targets_reuse_orde
     assert_eq!(w.combat.stats.attack_searches, before);
 }
 
+/// A large order searches in the combat phase, side by side, not one unit
+/// after another inside the command; every attacker is routed that tick, to
+/// the same spots as orders issued one by one (each reserves its spot first).
+#[test]
+fn a_large_attack_order_searches_in_the_combat_phase_and_routes_everyone() {
+    let army = |w: &mut GameWorld| {
+        let target = w.spawn_villager(PlayerId(1), at(60, 60)).unwrap();
+        let ids = (0..600)
+            .map(|n| {
+                w.spawn_militia(PlayerId(0), at(10 + n % 30, 10 + n / 30))
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        (target, ids)
+    };
+    let destinations = |w: &GameWorld, ids: &[EntityId]| {
+        ids.iter()
+            .map(|id| w.movement_order(*id).map(|o| o.destination))
+            .collect::<Vec<_>>()
+    };
+    let mut one_by_one = world();
+    let (target, ids) = army(&mut one_by_one);
+    for &id in &ids {
+        one_by_one.issue_attack(PlayerId(0), id, target).unwrap();
+    }
+    let mut w = world();
+    let (target, ids) = army(&mut w);
+    let before = w.combat.stats.attack_searches;
+    w.issue_player_attack(PlayerId(0), &ids, target).unwrap();
+    assert_eq!(
+        w.combat.stats.attack_searches, before,
+        "no search in the command"
+    );
+    assert!(
+        ids.iter()
+            .all(|id| w.unit(*id).unwrap().attack_target == Some(target))
+    );
+    w.advance();
+    let routed = destinations(&w, &ids);
+    assert!(
+        routed.iter().all(Option::is_some),
+        "every attacker is routed in the first combat phase"
+    );
+    assert_eq!(
+        routed,
+        destinations(&one_by_one, &ids),
+        "same spots as one by one"
+    );
+}
+
 #[test]
 fn no_attack_suppresses_acquisition_and_retaliation_but_explicit_orders_work() {
     use aoe_core::CombatStance;

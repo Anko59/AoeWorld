@@ -53,6 +53,10 @@ pub(crate) struct AttackSearch {
     pub(crate) far: bool,
     /// Unit congestion deferred this search.
     pub(crate) wait: Option<SearchWait>,
+    /// `destination` was chosen because its spot was free: an attacker
+    /// earlier in the same loop may since have taken it. Far tiles and a
+    /// crowd's preferred spot are never free by design.
+    pub(crate) free_spot: bool,
 }
 
 impl GameWorld {
@@ -64,14 +68,22 @@ impl GameWorld {
         id: EntityId,
         goal: &Goal,
     ) -> Result<AttackSearch, GameWorldError> {
-        // A search the tick prefetched on the phase snapshot is used as is;
-        // otherwise it runs here.
+        // A search the tick prefetched on the phase snapshot is used while
+        // its free spot is still free; an attacker earlier in this loop may
+        // have taken it, which the snapshot could not see, and then it runs
+        // here. Far tiles and a crowd's preferred spot are kept as computed.
         self.combat.stats.attack_searches += 1;
         let cached = self
             .combat
             .prefetched
             .remove(&id)
-            .filter(|(at, _)| at == goal)
+            .filter(|(at, search)| {
+                at == goal
+                    && (!search.free_spot
+                        || search
+                            .destination
+                            .is_none_or(|spot| self.interaction_point_free(id, spot)))
+            })
             .map(|(_, search)| search);
         #[cfg(test)]
         if cached.is_some() {
@@ -119,6 +131,7 @@ impl GameWorld {
                         destination: Some(at),
                         far: false,
                         wait: None,
+                        free_spot: true,
                     });
                 }
                 if free.len() == 4 {
@@ -130,6 +143,7 @@ impl GameWorld {
                     destination: None,
                     far: false,
                     wait: None,
+                    free_spot: false,
                 });
             };
             if free.is_empty() {
@@ -145,12 +159,14 @@ impl GameWorld {
                         destination: Some(nearest),
                         far: false,
                         wait: None,
+                        free_spot: false,
                     });
                 }
                 return Ok(AttackSearch {
                     destination: None,
                     far: false,
                     wait: Some(SearchWait::Crowded),
+                    free_spot: false,
                 });
             }
         }
@@ -204,6 +220,7 @@ impl GameWorld {
                         destination: Some(destination),
                         far: false,
                         wait: None,
+                        free_spot: true,
                     });
                 }
             }
@@ -272,12 +289,14 @@ impl GameWorld {
                 )?,
                 far: true,
                 wait: None,
+                free_spot: false,
             });
         }
         Ok(AttackSearch {
             destination: None,
             far: false,
             wait: None,
+            free_spot: false,
         })
     }
 

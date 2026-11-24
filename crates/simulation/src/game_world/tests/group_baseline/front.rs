@@ -46,8 +46,7 @@ struct Front {
     /// Distinct members that ever broke off to fight.
     engaged_total: usize,
     cleared: Option<u32>,
-    /// Approaches deferred because every melee spot was taken, or because
-    /// the tick's position-search budget was spent.
+    /// Approaches deferred because every melee spot was taken.
     waits: u64,
 }
 

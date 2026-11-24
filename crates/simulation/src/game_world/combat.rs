@@ -182,6 +182,29 @@ impl GameWorld {
         id: EntityId,
         target: EntityId,
     ) -> Result<(), EconomyError> {
+        self.issue_attack_searching(player, id, target, true)
+    }
+
+    /// `issue_attack` for one member of a larger order or a restored save:
+    /// the firing-position search runs in this tick's combat phase, where the
+    /// searches of a burst are computed side by side (`approach/prefetch.rs`)
+    /// instead of one after another inside the command (#978).
+    pub(crate) fn issue_attack_in_combat_phase(
+        &mut self,
+        player: aoe_core::PlayerId,
+        id: EntityId,
+        target: EntityId,
+    ) -> Result<(), EconomyError> {
+        self.issue_attack_searching(player, id, target, false)
+    }
+
+    fn issue_attack_searching(
+        &mut self,
+        player: aoe_core::PlayerId,
+        id: EntityId,
+        target: EntityId,
+        search_now: bool,
+    ) -> Result<(), EconomyError> {
         if self.building(id).is_some() {
             return self.issue_building_attack(player, id, target);
         }
@@ -231,6 +254,16 @@ impl GameWorld {
             && (!Self::uses_melee_position(unit.kind) || self.arrival_position_free(index))
         {
             self.stop_movement(index);
+        } else if !search_now {
+            self.stop_unit_orders(index);
+            if replaces_offensive {
+                self.move_queues.remove(&id);
+            }
+            self.begin_attack(id, target);
+            if let Some(attacker) = self.combat.attackers.get_mut(&id) {
+                attacker.repath_tick = self.tick.0;
+            }
+            return Ok(());
         } else {
             match self.attack_search(id, &goal) {
                 Ok(search) if search.destination.is_some() || search.wait.is_some() => {
