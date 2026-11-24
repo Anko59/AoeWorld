@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 mod rivers;
 pub use rivers::{
-    MAX_FORD_WIDTH_UNITS, MAX_RIVER_SEGMENTS_PER_PAGE, MAX_RIVER_WIDTH_UNITS,
+    FORD_SPACING_UNITS, MAX_FORD_WIDTH_UNITS, MAX_RIVER_SEGMENTS_PER_PAGE, MAX_RIVER_WIDTH_UNITS,
     MAX_WADEABLE_WIDTH_UNITS, MIN_RIVER_WIDTH_UNITS, RiverSegment,
 };
 
