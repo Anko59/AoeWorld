@@ -112,7 +112,7 @@ fn patched(
 }
 
 /// Every tile's class and directed edges read one by one.
-fn classified(ground: &dyn RegionGround, key: (i32, i32), size: (i32, i32)) -> Input {
+pub(super) fn classified(ground: &dyn RegionGround, key: (i32, i32), size: (i32, i32)) -> Input {
     let at = origin(key);
     let mut classes = Vec::with_capacity(CELLS);
     for y in at.y..at.y + CHUNK {

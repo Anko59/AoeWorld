@@ -410,6 +410,9 @@ mod churn;
 #[path = "tests/edges.rs"]
 mod edges;
 
+#[path = "tests/gated_bulk.rs"]
+mod gated_bulk;
+
 #[path = "tests/terrain.rs"]
 mod terrain;
 
