@@ -112,6 +112,42 @@ impl Origins {
         }))
     }
 
+    /// One bit per tile of the `side`-square area at `origin`, set where the
+    /// tile belongs to some forage, gold or stone patch. A clear bit proves
+    /// `candidate_with` is `None` there without scanning the patch cells.
+    pub(super) fn members(&mut self, origin: TileCoord, side: i32) -> Vec<u64> {
+        let area = usize::try_from(side).unwrap_or(0).pow(2);
+        let mut bits = vec![0_u64; area.div_ceil(64)];
+        let specs = [
+            (0, FORAGE_COLUMNS, FORAGE_ROWS),
+            (1, GOLD_COLUMNS, GOLD_ROWS),
+            (2, STONE_COLUMNS, STONE_ROWS),
+        ];
+        for (domain, columns, rows) in specs {
+            // Roots lie inside their cell and members within one tile of the
+            // root, so only cells touching the area grown by one tile count.
+            let cells = |start: i32, size: i32| {
+                start.saturating_sub(1).div_euclid(size)
+                    ..=start.saturating_add(side).div_euclid(size)
+            };
+            for y in cells(origin.y, rows) {
+                for x in cells(origin.x, columns) {
+                    let (root, _, count) = self.origin(domain, x, y, columns, rows);
+                    for &(dx, dy) in &PATCH_OFFSETS[..count] {
+                        let tx = i64::from(root.x.saturating_add(dx)) - i64::from(origin.x);
+                        let ty = i64::from(root.y.saturating_add(dy)) - i64::from(origin.y);
+                        let side = i64::from(side);
+                        if (0..side).contains(&tx) && (0..side).contains(&ty) {
+                            let index = (ty * side + tx) as usize;
+                            bits[index / 64] |= 1 << (index % 64);
+                        }
+                    }
+                }
+            }
+        }
+        bits
+    }
+
     fn origin(&mut self, domain: u8, x: i32, y: i32, columns: i32, rows: i32) -> Origin {
         if let Some((_, origin)) = self.cells.iter().find(|(cell, _)| *cell == (domain, x, y)) {
             return *origin;

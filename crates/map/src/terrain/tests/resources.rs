@@ -95,3 +95,38 @@ fn ore_clusters_are_scarce_even_on_fully_suitable_land() {
         );
     }
 }
+
+#[test]
+fn membership_bits_match_the_patch_scan_on_every_tile() {
+    let generator = MapChunkGenerator::new([23; 32], 5, 1024);
+    let key = detail_key(&generator);
+    let mut members = 0;
+    // Areas straddle forage, gold and stone cell edges, including negatives.
+    for (origin, side) in [
+        (TileCoord::new(-2, -2), 36),
+        (TileCoord::new(62, 190), 36),
+        (TileCoord::new(380, 94), 5),
+        (TileCoord::new(-70, 120), 36),
+    ] {
+        let bits = Origins::new(&generator).members(origin, side);
+        for y in 0..side {
+            for x in 0..side {
+                let tile = TileCoord::new(origin.x + x, origin.y + y);
+                let index = (y * side + x) as usize;
+                let set = bits[index / 64] & (1 << (index % 64)) != 0;
+                let expected = [
+                    (0, FORAGE_COLUMNS, FORAGE_ROWS),
+                    (1, GOLD_COLUMNS, GOLD_ROWS),
+                    (2, STONE_COLUMNS, STONE_ROWS),
+                ]
+                .into_iter()
+                .any(|(domain, columns, rows)| {
+                    patch_node(key, DOMAINS[domain], tile, columns, rows).is_some()
+                });
+                assert_eq!(set, expected, "{tile:?}");
+                members += usize::from(set);
+            }
+        }
+    }
+    assert!(members > 0);
+}
