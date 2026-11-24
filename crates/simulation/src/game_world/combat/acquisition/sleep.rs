@@ -26,8 +26,6 @@ pub(crate) struct Quiet {
     parked: BTreeSet<EntityId>,
     /// Seekers neither asleep nor parked: the acquisition rotation.
     pub(super) awake: super::awake::Awake,
-    /// Sleepers woken by an arrival near them: they look next.
-    pub(super) due: BTreeSet<EntityId>,
 }
 
 fn chunks(bounds: TileRect) -> impl Iterator<Item = ChunkCoord> {
@@ -61,11 +59,19 @@ impl Quiet {
     pub(crate) fn leave(&mut self, id: EntityId) {
         self.wake(id);
         self.awake.remove(&id);
-        self.due.remove(&id);
     }
 
     #[inline]
     pub(crate) fn wake(&mut self, id: EntityId) {
+        // Every event that wakes a seeker also ends its idle cadence.
+        self.awake.activate(id);
+        self.rouse(id);
+    }
+
+    /// Out of sleep or parking, still idle: an arrival near it changes
+    /// nothing about the seeker itself.
+    #[inline]
+    pub(crate) fn rouse(&mut self, id: EntityId) {
         if self.jobs.is_empty() && self.parked.is_empty() {
             return;
         }
@@ -86,11 +92,13 @@ impl Quiet {
         }
     }
 
-    /// Wakes a sleeper whose proof an arrival may have ended; it looks next.
+    /// Wakes a sleeper whose proof an arrival may have ended. A sleeper
+    /// stands idle, so it looks on its next idle turn, within a second, like
+    /// any idle soldier: a passing army does not make every sleeper near it
+    /// look on the same tick.
     fn alarm(&mut self, id: EntityId) {
         if self.jobs.contains_key(&id) {
-            self.wake(id);
-            self.due.insert(id);
+            self.rouse(id);
         }
     }
 
@@ -150,7 +158,6 @@ impl Quiet {
         self.wake(id);
         self.parked.insert(id);
         self.awake.remove(&id);
-        self.due.remove(&id);
     }
 }
 
@@ -192,7 +199,6 @@ impl GameWorld {
             },
         );
         self.combat.quiet.awake.remove(&u.id);
-        self.combat.quiet.due.remove(&u.id);
     }
 
     /// A fighter that enters the world (a spawn, a trained unit) with no other
@@ -227,17 +233,13 @@ impl GameWorld {
     #[cfg(test)]
     pub(in crate::game_world::combat) fn assert_quiet_acquisition(&self) {
         let quiet = &self.combat.quiet;
-        let mut all = quiet.awake.set().clone();
+        let mut all = quiet.awake.set();
         for id in quiet.jobs.keys().chain(&quiet.parked) {
             assert!(all.insert(*id), "missed wake: {id:?} asleep and awake");
         }
         assert_eq!(
             all, self.combat.seekers,
             "missed wake: rotation and seekers"
-        );
-        assert!(
-            quiet.due.is_subset(quiet.awake.set()),
-            "missed wake: a due sleeper"
         );
         let mut units = crate::game_world::unit_index::ChunkPresence::default();
         for stored in self.units.iter() {

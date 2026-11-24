@@ -374,7 +374,9 @@ impl GameWorld {
 
     #[inline(never)] // a symbol of its own for the Callgrind stage counters
     pub(crate) fn update_unit_vision(&mut self, id: EntityId) {
-        self.combat.quiet.wake(id);
+        // A new sight ends a sleep; whether the soldier is active is for the
+        // events that change what it does (a move, an order, a target).
+        self.combat.quiet.rouse(id);
         self.combat.healing.wake(id);
         let observer = self.unit(id).and_then(|u| self.unit_observer(&u));
         self.update_observer(id, observer);

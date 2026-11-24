@@ -13,7 +13,7 @@ pub(crate) mod sleep;
 /// Turns of four ticks between two looks of an idle soldier: once a
 /// reference second, a reaction well under the time an enemy needs to walk
 /// across its sight.
-const IDLE_TURNS: u64 = 5;
+const IDLE_TURNS: u64 = awake::IDLE_TICKS / awake::ACTIVE_TICKS;
 
 pub(crate) fn autonomous_kind(kind: UnitKind) -> bool {
     super::unit_combat(kind).attack > 0 && kind != UnitKind::Villager
@@ -121,41 +121,29 @@ impl GameWorld {
         #[cfg(test)]
         self.assert_quiet_acquisition();
         self.combat.stats.acquisition_slept = self.resting_seekers();
-        // Sleepers an arrival woke look at once; every other awake seeker
-        // looks on its own turn, however many there are: one tick in four
+        // Every awake seeker looks on its own turn, however many there are: one tick in four
         // while it marches, fights or is fought, one in twenty (a reference
-        // second, `IDLE_TURNS`) while it stands idle, phased by id so a mass
-        // spawn does not look all at once. Asleep ones cost nothing until an
-        // enemy enters their chunks.
-        let due: Vec<_> = std::mem::take(&mut self.combat.quiet.due)
-            .into_iter()
-            .collect();
+        // second) while it stands idle, phased by id so a mass spawn does not
+        // look all at once (`awake.rs` keeps each in buckets of its turn).
+        // Asleep ones cost nothing until an enemy enters their chunks.
         let period = self.config.ticks(4);
         let tick = self.tick.0;
-        let turns = self
-            .combat
-            .quiet
-            .awake
-            .turn(tick, period)
-            .into_iter()
-            .filter(|id| due.binary_search(id).is_err())
-            .map(|id| (id, false));
-        let ids: Vec<_> = due.iter().map(|&id| (id, true)).chain(turns).collect();
+        let ids = self.combat.quiet.awake.turn(tick, period);
         let idle_period = period * IDLE_TURNS;
-        for (id, alarmed) in ids {
-            if alarmed && !self.combat.quiet.awake.contains(&id) {
-                continue;
-            }
+        for id in ids {
             let Some(&index) = self.lookup.get(&id) else {
                 continue;
             };
             // Woken by an arrival or not, an idle soldier looks on its idle
             // turn: a mass spawn or a passing army does not make every
             // soldier near it look on the same tick.
-            if !(tick + u64::from(id.0)).is_multiple_of(idle_period)
-                && self.stands_idle(&self.units[index].state)
-            {
-                continue;
+            if self.stands_idle(&self.units[index].state) {
+                self.combat.quiet.awake.idle(id);
+                if !(tick + u64::from(id.0)).is_multiple_of(idle_period) {
+                    continue;
+                }
+            } else {
+                self.combat.quiet.awake.activate(id);
             }
             let u = self.units[index].state;
             self.combat.stats.acquisition_checks += 1;
