@@ -277,8 +277,13 @@ impl PatchOwners {
     pub(super) fn owner(&self, tile: TileCoord) -> Option<EntityId> {
         self.tiles.get(&page(tile, BLOCK_TILES))?[slot(tile)]
     }
+
+    /// The owners of the block holding `tile`, for scans that walk a box.
+    pub(super) fn block(&self, tile: TileCoord) -> Option<&[Option<EntityId>; CELLS]> {
+        self.tiles.get(&page(tile, BLOCK_TILES)).map(AsRef::as_ref)
+    }
 }
 
-fn slot(tile: TileCoord) -> usize {
+pub(super) fn slot(tile: TileCoord) -> usize {
     (tile.y.rem_euclid(BLOCK_TILES) * BLOCK_TILES + tile.x.rem_euclid(BLOCK_TILES)) as usize
 }

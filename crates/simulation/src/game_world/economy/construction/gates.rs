@@ -146,9 +146,6 @@ impl GameWorld {
             if let Some(gate) = self.building_mut(id) {
                 gate.gate_open = open;
             }
-            if !locked {
-                self.management_gate_toggled(rect, owner);
-            }
             if open {
                 self.collision_opened(rect);
             } else {

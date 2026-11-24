@@ -44,7 +44,6 @@ fn page(tile: TileCoord, side: i32) -> (i32, i32) {
 #[derive(Debug)]
 pub(in super::super) struct Walking {
     sources: Vec<(EntityId, TileRect)>,
-    player: PlayerId,
     fields: Vec<OfficeField>,
     nearby: BTreeMap<(i32, i32), Vec<usize>>,
     patch_owners: Arc<PatchOwners>,
@@ -107,7 +106,6 @@ impl Walking {
         );
         let mut walking = Self {
             sources,
-            player,
             fields,
             nearby,
             patch_owners,
@@ -169,10 +167,7 @@ impl Walking {
     fn current(&self, cache: &ZoneCache) -> bool {
         self.patch_revision == cache.patch_revision
             && (self.ground_revision == cache.revision
-                || self
-                    .fields
-                    .iter()
-                    .all(|field| field.current(cache, self.player)))
+                || self.fields.iter().all(|field| field.current(cache)))
     }
 
     pub(in super::super) fn offices(&self) -> impl Iterator<Item = EntityId> + '_ {
@@ -182,7 +177,47 @@ impl Walking {
     pub(in super::super) fn regions(&self, id: EntityId) -> Option<(TileRect, Vec<u32>)> {
         let index = self.index(id)?;
         let field = &self.fields[index].active.field;
-        Some((field.terrain.bounds, field.regions(id, self)?))
+        Some((field.terrain.bounds, field.regions(&self.owned(index))?))
+    }
+
+    /// Whether office `index` owns each tile of its box, row by row: `owns`
+    /// for every tile, with the rivals and patch blocks looked up once per
+    /// box and block instead of once per tile (#978).
+    fn owned(&self, index: usize) -> Vec<bool> {
+        let (id, field) = (self.sources[index].0, &self.fields[index].active.field);
+        let r = field.terrain.bounds;
+        let expanded = TileRect::from_xywh(r.min.x - 1, r.min.y - 1, r.width() + 2, r.height() + 2);
+        // A field with a cost at a tile is listed on that tile's page, so the
+        // offices listed on the box's pages are every candidate of its tiles.
+        let mut rivals = pages(expanded, LOCALITY)
+            .flat_map(|cell| self.nearby.get(&cell).into_iter().flatten().copied())
+            .filter(|&i| i != index)
+            .collect::<Vec<_>>();
+        rivals.sort_unstable();
+        rivals.dedup();
+        let rivals = rivals
+            .into_iter()
+            .map(|i| (self.sources[i].0, self.fields[i].active.field.as_ref()))
+            .collect::<Vec<_>>();
+        let mut block = (None, None);
+        field::tiles(r)
+            .map(|tile| {
+                let key = page(tile, BLOCK_TILES);
+                if block.0 != Some(key) {
+                    block = (Some(key), self.patch_owners.block(tile));
+                }
+                if let Some(owner) = block.1.and_then(|owners| owners[patches::slot(tile)]) {
+                    return owner == id;
+                }
+                field.cost(tile).is_some_and(|mine| {
+                    rivals.iter().all(|&(rival, other)| {
+                        other
+                            .cost(tile)
+                            .is_none_or(|theirs| (mine, id) < (theirs, rival))
+                    })
+                })
+            })
+            .collect()
     }
 
     fn candidates(&self, at: TileCoord) -> impl Iterator<Item = (EntityId, &Field)> {
@@ -227,24 +262,13 @@ pub(crate) struct ZoneCache {
 struct GroundRevision {
     barriers: u64,
     bridges: u64,
-    // An unlocked friendly gate admits its owner whether open or closed.
-    // Keep the two most recent distinct owners to answer any player's lookup.
-    foreign_gates: [Option<(PlayerId, u64)>; 2],
 }
 
 impl ZoneCache {
-    fn latest(&self, rect: TileRect, player: PlayerId) -> u64 {
+    fn latest(&self, rect: TileRect) -> u64 {
         pages(rect, CHUNK_TILES)
             .filter_map(|page| self.changed.get(&page))
-            .map(|change| {
-                let gates = change
-                    .foreign_gates
-                    .iter()
-                    .flatten()
-                    .find(|(owner, _)| *owner != player)
-                    .map_or(0, |&(_, revision)| revision);
-                change.barriers.max(change.bridges).max(gates)
-            })
+            .map(|change| change.barriers.max(change.bridges))
             .max()
             .unwrap_or(0)
     }
@@ -274,22 +298,6 @@ impl GameWorld {
         cache.revision += 1;
         for page in pages(area, CHUNK_TILES) {
             cache.changed.entry(page).or_default().barriers = cache.revision;
-        }
-    }
-
-    pub(in crate::game_world) fn management_gate_toggled(
-        &mut self,
-        area: TileRect,
-        owner: PlayerId,
-    ) {
-        let cache = &mut self.economy.walking;
-        cache.revision += 1;
-        for page in pages(area, CHUNK_TILES) {
-            let gates = &mut cache.changed.entry(page).or_default().foreign_gates;
-            if gates[0].is_some_and(|(previous, _)| previous != owner) {
-                gates[1] = gates[0];
-            }
-            gates[0] = Some((owner, cache.revision));
         }
     }
 
