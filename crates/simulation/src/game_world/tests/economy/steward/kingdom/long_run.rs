@@ -81,7 +81,6 @@ fn ten_minute_early_economy_keeps_workers_productive() {
             previous[index] = (moving, dest, kind.or(old_kind));
         }
         let work = w.steward_work();
-        assert!(work.orders <= 64 && work.resource_searches <= 8 && work.site_checks <= 32);
         assert!(work.unit_visits <= 1_024 && work.building_visits <= 2_048);
         assert!(work.resource_nodes <= 1_608 * work.resource_searches);
         assert!(work.resource_blocks <= 25 * work.resource_searches);

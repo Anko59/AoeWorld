@@ -20,6 +20,7 @@ pub use work::{VassalFocus, VassalJob, VassalJobs};
 pub const VASSAL_LIMIT: usize = 20;
 /// The domain a Vassal develops, fortifies and defends: a Steward's circle.
 pub const VASSAL_RADIUS: i32 = super::steward::STEWARD_RULES.radius_tiles;
+/// Ticks between two visits of one domain.
 const PASS_TICKS: u64 = 20;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -104,26 +105,20 @@ pub(crate) struct Manager {
     pub(super) manual: BTreeSet<EntityId>,
     recalls: BTreeMap<EntityId, Recall>,
     returns: BTreeMap<EntityId, WorldPosition>,
-    cursor: Option<EntityId>,
     plan_cursor: Option<EntityId>,
 }
 impl Manager {
-    fn scheduled_domain(&self, tick: u64) -> Option<EntityId> {
-        use std::ops::Bound::{Excluded, Unbounded};
-
-        let due = (0..self.domains.len()).take(8).len() as u64;
+    /// Every domain is visited once per `PASS_TICKS`: a Vassal acts as often
+    /// with one domain in the world as with a thousand. Domains take the
+    /// phases of the period in turn, so visits spread over its ticks.
+    fn scheduled(&self, tick: u64) -> Vec<EntityId> {
         let phase = tick % PASS_TICKS;
-        // Spend the existing visit budget across the period. As the budget is
-        // less than the period, consecutive boundaries differ by at most one.
-        if ((phase + 1) * due).div_ceil(PASS_TICKS) == (phase * due).div_ceil(PASS_TICKS) {
-            return None;
-        }
-        let cursor = self.cursor.unwrap_or(EntityId(0));
         self.domains
-            .range((Excluded(cursor), Unbounded))
-            .next()
-            .or_else(|| self.domains.first_key_value())
+            .keys()
+            .zip((0..PASS_TICKS).cycle())
+            .filter(|&(_, slot)| slot == phase)
             .map(|(&id, _)| id)
+            .collect()
     }
 }
 impl GameWorld {
@@ -210,9 +205,6 @@ impl GameWorld {
                 self.economy.vassals.controlled.remove(&soldier);
             }
         }
-        if self.economy.vassals.domains.is_empty() {
-            self.economy.vassals.cursor = None;
-        }
         self.finish_vassal_recall(id);
     }
     pub(crate) fn release_vassal_unit(&mut self, id: EntityId) {
@@ -239,8 +231,12 @@ impl GameWorld {
         if self.tick.0.is_multiple_of(PASS_TICKS) && !self.economy.vassals.returns.is_empty() {
             self.finish_vassal_returns();
         }
-        if let Some(id) = self.economy.vassals.scheduled_domain(self.tick.0) {
-            self.economy.vassals.cursor = Some(id);
+        for id in self.economy.vassals.scheduled(self.tick.0) {
+            self.visit_vassal(id, changed);
+        }
+    }
+    fn visit_vassal(&mut self, id: EntityId, changed: &mut Vec<EntityId>) {
+        {
             let d = &self.economy.vassals.domains[&id];
             if !self.building(d.castle).is_some_and(|b| {
                 b.hp > 0 && b.garrison.iter().any(|g| g.unit.id == id && g.unit.hp > 0)

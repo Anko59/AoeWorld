@@ -280,7 +280,7 @@ fn deterministic_manager_replays_orders_control_and_budget_counts() {
 }
 
 #[test]
-fn hundred_thousand_population_manager_work_stays_inside_its_world_budget() {
+fn hundred_thousand_population_every_domain_is_visited_once_a_period() {
     let mut w = GameWorld::new(WorldConfig::new(4096, 4096, Seed(7)).unwrap()).unwrap();
     w.set_fog_disabled(true);
     w.set_limits(crate::WorldLimits::for_match(100));
@@ -328,8 +328,8 @@ fn hundred_thousand_population_manager_work_stays_inside_its_world_budget() {
         w.unit_count() + w.buildings().map(|b| b.garrison.len()).sum::<usize>(),
         100_000
     );
-    // A period admits the fixed world-wide budget, rotated across owners.
-    // Each admitted domain also retains its own work limits.
+    // Each domain gets one visit a period on its own phase, however many
+    // exist; the visits spread over the period instead of bunching up.
     let started = std::time::Instant::now();
     let mut served = 0;
     for tick in 0..STEWARD_RULES.period_ticks {
@@ -338,18 +338,15 @@ fn hundred_thousand_population_manager_work_stays_inside_its_world_budget() {
         let cost = w.steward_work();
         let n = cost.domains;
         served += n;
-        assert!(n <= 1, "{cost:?}");
+        assert!(n <= 10, "{cost:?}");
         assert!(cost.unit_visits <= n * STEWARD_RULES.unit_visits_per_domain);
         assert!(cost.building_visits <= n * STEWARD_RULES.building_visits_per_domain);
-        assert!(cost.orders <= n * STEWARD_RULES.orders_per_domain);
-        assert!(cost.resource_searches <= n * STEWARD_RULES.resource_searches_per_domain);
-        assert!(cost.site_checks <= n * STEWARD_RULES.site_checks_per_domain);
     }
     eprintln!(
         "100 players, 100000 population, 100 Stewards: {served} domains in {:?}",
         started.elapsed()
     );
-    assert_eq!(served, STEWARD_RULES.domains_per_pass);
+    assert_eq!(served, 100);
 }
 
 #[test]

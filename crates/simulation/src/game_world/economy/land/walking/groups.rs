@@ -29,22 +29,28 @@ struct Group {
 }
 
 impl Groups {
+    /// Whether the player's offices changed: their published zones are then
+    /// stale until the group's next look, within a second.
     pub(in super::super::super) fn set(
         &mut self,
         player: PlayerId,
         office: EntityId,
         source: Option<TileRect>,
-    ) {
+    ) -> bool {
         let key = Self::key(player);
+        let mut changed = false;
         if let Some(rect) = source {
             let group = self.0.entry(key).or_default();
-            group.membership_changed |= group.sources.insert(office, rect) != Some(rect);
+            changed = group.sources.insert(office, rect) != Some(rect);
+            group.membership_changed |= changed;
         } else if let Some(group) = self.0.get_mut(&key) {
-            group.membership_changed |= group.sources.remove(&office).is_some();
+            changed = group.sources.remove(&office).is_some();
+            group.membership_changed |= changed;
             if group.sources.is_empty() {
                 self.0.remove(&key);
             }
         }
+        changed
     }
 
     pub(super) fn key(player: PlayerId) -> Key {

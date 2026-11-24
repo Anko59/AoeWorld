@@ -1,6 +1,6 @@
 //! Reuse every paid-for plot, then tile farms around nearby food drop-offs.
 use super::{
-    STEWARD_RULES, StewardWork,
+    StewardWork,
     construction::{FARM_DROPOFF_DISTANCE_SQUARED, FarmRepairSite},
     rules::Budget,
     snapshot::Snapshot,
@@ -96,20 +96,12 @@ impl GameWorld {
         if idle_builders.is_empty() && s.queued > 0 {
             return;
         }
-        // The entire repair phase gets at most half the remaining placement
-        // work. Idle reuse and new foundations keep their share even when
-        // several far crops have no legal Mill site.
-        let site_limit = budget.sites
-            + STEWARD_RULES
-                .site_checks_per_domain
-                .saturating_sub(budget.sites)
-                / 2;
         targets.sort_unstable_by_key(|&(farm, _, _)| farm);
         let split = s.home.repair_after.map_or(0, |after| {
             targets.partition_point(|&(farm, _, _)| farm <= after)
         });
         for &(farm, worker, near) in targets[split..].iter().chain(&targets[..split]) {
-            if !s.complete || budget.sites >= site_limit || !budget.support_available() {
+            if !s.complete || !budget.support_available() {
                 break;
             }
             s.home.repair_after = Some(farm);
@@ -120,17 +112,7 @@ impl GameWorld {
                 .iter()
                 .min_by_key(|&&(id, at)| (super::super::placement::distance_squared(at, near), id))
                 .map_or(worker, |&(id, _)| id);
-            if self.steward_mill_for_farm(
-                builder,
-                FarmRepairSite {
-                    farm,
-                    near,
-                    site_limit,
-                },
-                s,
-                budget,
-                work,
-            ) {
+            if self.steward_mill_for_farm(builder, FarmRepairSite { farm, near }, s, budget, work) {
                 self.claim_steward_worker(s.steward, builder, ResourceKind::Food);
                 changed.push(builder);
                 break;
@@ -194,9 +176,7 @@ impl GameWorld {
         farms.truncate(8);
         farms.sort_by_key(|b| (self.steward_crosses_water(from, b.2), b.0, b.1));
         for (_, farm, _) in farms {
-            if !budget.order(work) {
-                break;
-            }
+            budget.order(work);
             if self.issue_farm(s.player, worker, farm).is_ok() {
                 return true;
             }
@@ -292,9 +272,7 @@ impl GameWorld {
             |saved| saved % total,
         );
         for step in 0..total {
-            if !budget.site(work) {
-                return false;
-            }
+            budget.site(work);
             let candidate = (start + step) % total;
             s.home.farm_after = Some((candidate + 1) % total);
             if let Some(home) = self.economy.steward_homes.get_mut(&s.steward) {

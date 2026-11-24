@@ -4,8 +4,6 @@ use crate::Stockpile;
 /// New placements attempted per pass and total paid sites kept in flight.
 const ATTEMPTS_PER_PASS: usize = 8;
 const PIPELINE: usize = 24;
-/// Wall tiles one placement lays as a single line.
-const WALL_RUN: usize = 10;
 
 const RESERVE: Stockpile = Stockpile {
     food: 200,
@@ -209,14 +207,14 @@ impl GameWorld {
             if placed.contains(&tile) {
                 continue;
             }
-            // A wall extends along its side over the following deficits.
+            // A wall extends along its side over the following deficits, as
+            // far as the line runs straight and the paid sites in flight allow.
             let mut run = vec![tile];
             if kind.is_wall() || kind == BuildingKind::Road {
                 for next in sites.iter().skip(i + 1) {
                     let (k, t) = (&next.kind, &next.tile);
                     let last = run[run.len() - 1];
-                    if run.len() == WALL_RUN
-                        || open + run.len() >= PIPELINE
+                    if open + run.len() >= PIPELINE
                         || *k != kind
                         || (t.x - last.x).abs() + (t.y - last.y).abs() != 1
                         || (run.len() > 1

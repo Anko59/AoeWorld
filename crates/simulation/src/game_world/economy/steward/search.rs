@@ -155,8 +155,7 @@ impl GameWorld {
         // Fish belong to boats and Docks; a walking fisher earns a fraction of
         // a Farmer and would stand in for Farms while Food runs dry.
         !matches!(n.object, ObjectKind::DeepFish | ObjectKind::ShoreFish)
-            && WorldPosition::from_tile_center(n.tile)
-                .is_ok_and(|at| s.home.contains(at) && s.home.owns(at))
+            && WorldPosition::from_tile_center(n.tile).is_ok_and(|at| s.home.owns(at))
             && self.visibility(s.player, n.tile) != TileVisibility::Unexplored
             && self
                 .resource_remaining(n.id)
@@ -211,9 +210,7 @@ impl GameWorld {
                 )
             })
         }?;
-        if !budget.search(work) {
-            return None;
-        }
+        budget.search(work);
         let (id, origin) = (anchor.id, anchor.footprint.min);
         s.home.resources.dropoff_after[kind as usize] = Some(id);
         if let Some(home) = self.economy.steward_homes.get_mut(&s.steward) {
@@ -248,9 +245,7 @@ impl GameWorld {
         let Terrain::Map { generator, overlay } = &self.terrain else {
             return false;
         };
-        if !budget.search(work) {
-            return false;
-        }
+        budget.search(work);
         // Keep full caches from permanently hiding later live candidates.
         for kind in super::priority::KINDS {
             let mut candidates = std::mem::take(&mut s.home.resources.candidates[kind as usize]);
@@ -297,7 +292,7 @@ impl GameWorld {
         true
     }
 
-    /// Eight finder admissions also fund a bounded pool of cache inspections;
+    /// Each finder admission also funds a bounded pool of cache inspections;
     /// later workers can reuse known offers without another map query.
     pub(super) fn steward_resource(
         &mut self,
@@ -307,9 +302,6 @@ impl GameWorld {
         budget: &mut Budget,
         work: &mut StewardWork,
     ) -> Option<ResourceNode> {
-        if budget.orders >= STEWARD_RULES.orders_per_domain {
-            return None;
-        }
         let ore = matches!(kind, ResourceKind::Gold | ResourceKind::Stone);
         if ore && s.ore_misses[kind as usize] {
             return None;
@@ -321,9 +313,7 @@ impl GameWorld {
             {
                 return self.steward_offer_resource(worker, kind, Some(node), s, budget, work);
             }
-            if !budget.search(work) {
-                break;
-            }
+            budget.search(work);
             let mut counted = ResourceSearchWork::default();
             let nodes = self.nearest_resources_matching_counted::<CANDIDATES>(
                 from,

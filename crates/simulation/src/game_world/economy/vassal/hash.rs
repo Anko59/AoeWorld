@@ -11,7 +11,6 @@ impl Economy {
         }
         h.update(b"vassal-defense");
         h.update(&m.plan_cursor.map_or(u32::MAX, |id| id.0).to_le_bytes());
-        h.update(&m.cursor.map_or(u32::MAX, |id| id.0).to_le_bytes());
         h.update(&(m.manual.len() as u64).to_le_bytes());
         for id in &m.manual {
             h.update(&id.0.to_le_bytes());

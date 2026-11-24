@@ -3,11 +3,15 @@ use crate::{BuildingKind, GameBuilding, GameUnit, GameWorld, UnitKind};
 use aoe_core::{ChunkCoord, EntityId, PlayerId, SPATIAL_CHUNK_TILES};
 use std::collections::BTreeSet;
 
-/// A work budget splits discovery; it must never become a kingdom size limit.
+/// The domain's buildings: one sweep of the player's buildings when the
+/// domain starts or its zone changes, then kept by events (a new building is
+/// added when placed, a removed one drops out when read), never re-swept on
+/// every visit. A work budget splits the sweep; it is never a size limit.
 #[derive(Clone, Debug, Default)]
 pub(super) struct BuildingScan {
     pub after: Option<(BuildingKind, EntityId)>,
     pub known: BTreeSet<EntityId>,
+    pub swept: bool,
 }
 
 pub(super) struct Snapshot {
@@ -31,7 +35,7 @@ pub(super) struct Snapshot {
     pub ore_misses: [bool; 4],
 }
 impl GameWorld {
-    /// An owner may create a low-kind building behind a pending scan cursor.
+    /// A new building joins every domain covering it, sweep or not.
     pub(crate) fn steward_building_added(
         &mut self,
         id: EntityId,
@@ -39,11 +43,8 @@ impl GameWorld {
         footprint: aoe_core::TileRect,
     ) {
         for home in self.economy.steward_homes.values_mut() {
-            if home.player == player
-                && home.covers(footprint, 0)
-                && let Some(scan) = home.building_scan.as_mut()
-            {
-                scan.known.insert(id);
+            if home.player == player && home.covers(footprint, 0) {
+                home.building_scan.known.insert(id);
             }
         }
     }
@@ -116,27 +117,6 @@ impl GameWorld {
         }
         units.sort_unstable_by_key(|u| u.id);
         boats.sort_unstable_by_key(|u| u.id);
-        let mut scan = home.building_scan.clone().unwrap_or_default();
-        let cursor = scan.after;
-        let first_kind = cursor.map_or(BuildingKind::TownCenter, |(kind, _)| kind);
-        let mut candidates = self
-            .economy
-            .dropoffs
-            .range((player, first_kind)..=(player, BuildingKind::Road))
-            .flat_map(|((_, kind), ids)| {
-                let start = cursor
-                    .filter(|(previous, _)| previous == kind)
-                    .map_or(0, |(_, id)| {
-                        ids.partition_point(|candidate| *candidate <= id)
-                    });
-                ids[start..].iter().map(move |id| (*kind, *id))
-            })
-            .peekable();
-        let batch: Vec<_> = candidates
-            .by_ref()
-            .take(STEWARD_RULES.building_visits_per_domain)
-            .collect();
-        let complete_buildings = candidates.peek().is_none();
         let covers = |b: &crate::GameBuilding| {
             if b.kind == BuildingKind::Dock {
                 home.covers_shore(b.footprint, 0)
@@ -144,23 +124,54 @@ impl GameWorld {
                 home.covers(b.footprint, 0)
             }
         };
-        for (kind, id) in batch {
-            work.building_visits += 1;
-            scan.after = Some((kind, id));
-            if self.building(id).is_some_and(|b| covers(&b)) {
-                scan.known.insert(id);
+        let mut scan = home.building_scan.clone();
+        if !scan.swept {
+            let cursor = scan.after;
+            let first_kind = cursor.map_or(BuildingKind::TownCenter, |(kind, _)| kind);
+            let mut candidates = self
+                .economy
+                .dropoffs
+                .range((player, first_kind)..=(player, BuildingKind::Road))
+                .flat_map(|((_, kind), ids)| {
+                    let start = cursor
+                        .filter(|(previous, _)| previous == kind)
+                        .map_or(0, |(_, id)| {
+                            ids.partition_point(|candidate| *candidate <= id)
+                        });
+                    ids[start..].iter().map(move |id| (*kind, *id))
+                })
+                .peekable();
+            let batch: Vec<_> = candidates
+                .by_ref()
+                .take(STEWARD_RULES.building_visits_per_domain)
+                .collect();
+            let finished = candidates.peek().is_none();
+            for (kind, id) in batch {
+                work.building_visits += 1;
+                scan.after = Some((kind, id));
+                if self.building(id).is_some_and(|b| covers(&b)) {
+                    scan.known.insert(id);
+                }
+            }
+            if finished {
+                scan.after = None;
+                scan.swept = true;
             }
         }
         // Read current state, not stale queue/garrison copies from prior slices.
+        scan.known.retain(|id| {
+            self.building(*id)
+                .is_some_and(|b| b.player == player && covers(&b))
+        });
         let mut buildings: Vec<_> = scan
             .known
             .iter()
             .filter_map(|id| self.building(*id))
-            .filter(|b| b.player == player && covers(b))
             .map(|b| b.into_owned())
             .collect();
+        let complete_buildings = scan.swept;
         if let Some(h) = self.economy.steward_homes.get_mut(&id) {
-            h.building_scan = (!complete_buildings).then_some(scan);
+            h.building_scan = scan;
         }
         let queued = buildings
             .iter()

@@ -53,40 +53,27 @@ impl GameWorld {
             if !self.steward_boat_idle(boat.id) {
                 continue;
             }
-            // No known fish and no search admission means another boat cannot
-            // find a job this pass. Leave productive probes for land workers.
-            if s.home.navy.fish.is_empty()
-                && budget.searches >= STEWARD_RULES.resource_searches_per_domain
-            {
-                break;
-            }
-            if !budget.job() {
-                break;
-            }
             s.home.navy.after = Some(boat.id);
             if let Some(home) = self.economy.steward_homes.get_mut(&s.steward) {
                 home.navy.after = Some(boat.id);
             }
-            // Ships can discover the fish beside them immediately. The fixed
-            // finder and retained offers share the domain's eight admissions.
-            if budget.search(work) {
-                let mut counted = ResourceSearchWork::default();
-                let nodes = self.nearest_resources_matching_counted::<KNOWN_FISH>(
-                    boat.position.tile_floor(),
-                    ResourceKind::Food,
-                    10,
-                    None,
-                    |node| {
-                        self.steward_fish_known(*node, s)
-                            && self.node_has_work_slot(node.id, boat.id)
-                    },
-                    &mut counted,
-                );
-                work.resource_blocks += counted.blocks;
-                budget.queried_nodes(work, counted.nodes);
-                for node in nodes.into_iter().flatten() {
-                    self.steward_remember_fish(node, s, budget, work);
-                }
+            // Ships can discover the fish beside them immediately.
+            budget.search(work);
+            let mut counted = ResourceSearchWork::default();
+            let nodes = self.nearest_resources_matching_counted::<KNOWN_FISH>(
+                boat.position.tile_floor(),
+                ResourceKind::Food,
+                10,
+                None,
+                |node| {
+                    self.steward_fish_known(*node, s) && self.node_has_work_slot(node.id, boat.id)
+                },
+                &mut counted,
+            );
+            work.resource_blocks += counted.blocks;
+            budget.queried_nodes(work, counted.nodes);
+            for node in nodes.into_iter().flatten() {
+                self.steward_remember_fish(node, s, budget, work);
             }
             let mut fish = s.home.navy.fish.clone();
             fish.sort_by_key(|node| {
@@ -103,9 +90,7 @@ impl GameWorld {
                 if !self.node_has_work_slot(node.id, boat.id) {
                     continue;
                 }
-                if !budget.order(work) {
-                    break;
-                }
+                budget.order(work);
                 if self.issue_gather(s.player, boat.id, node.id).is_ok() {
                     self.claim_steward_worker(s.steward, boat.id, ResourceKind::Food);
                     changed.push(boat.id);

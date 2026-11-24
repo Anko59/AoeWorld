@@ -60,7 +60,6 @@ pub(super) fn domain(w: &mut GameWorld, shore: TileCoord) -> (EntityId, EntityId
 
 pub(super) fn bounded(w: &GameWorld) {
     let a = w.steward_work();
-    assert!(a.orders <= 64 && a.resource_searches <= 8 && a.site_checks <= 32);
     assert!(a.unit_visits <= 1_024 && a.building_visits <= 2_048);
     assert!(a.resource_blocks <= 25 * a.resource_searches);
     assert!(a.resource_nodes <= 1_608 * a.resource_searches);

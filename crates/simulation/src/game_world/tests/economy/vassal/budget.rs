@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn vassal_domains_are_spread_and_the_next_period_serves_waiting_domains() {
+fn vassal_domains_are_spread_and_each_is_visited_every_period() {
     let (mut w, first, _) = setup();
     let mut ids = vec![first];
     for x in (104..=200).step_by(12) {
@@ -24,7 +24,7 @@ fn vassal_domains_are_spread_and_the_next_period_serves_waiting_domains() {
         assert!(next.len() <= 1, "tick {tick} admitted {next:?}");
         visited.extend(next);
         if tick == 39 {
-            assert_eq!(visited, ids[..8]);
+            assert_eq!(visited, ids, "every domain is visited within one period");
         }
     }
     assert_eq!(visited, ids);

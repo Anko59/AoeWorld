@@ -165,13 +165,11 @@ fn distant_ore(
 fn bounded(work: crate::StewardWork) {
     // Extend with explicit finder block/node visits and a many-domain attack
     // when those real counters exist; no future metrics API is invented here.
+    // Orders, searches and site checks follow the events of each visit; only
+    // the census of a newly active domain keeps a per-visit bound.
     let rules = crate::STEWARD_RULES;
-    assert!(work.domains <= rules.domains_per_pass);
     assert!(work.unit_visits <= work.domains * rules.unit_visits_per_domain);
     assert!(work.building_visits <= work.domains * rules.building_visits_per_domain);
-    assert!(work.orders <= work.domains * rules.orders_per_domain);
-    assert!(work.resource_searches <= work.domains * rules.resource_searches_per_domain);
-    assert!(work.site_checks <= work.domains * rules.site_checks_per_domain);
 }
 
 fn discovers_and_deposits(kind: ResourceKind) {

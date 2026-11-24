@@ -1,31 +1,25 @@
-//! Deterministic work limits, independent of machine speed and wall time.
+//! Deterministic Steward rules, independent of machine speed and wall time.
+//! Work per visit follows events (idle villagers, arrivals, missing camps);
+//! no fixed count of orders, searches or sites bounds a visit.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StewardRules {
     pub radius_tiles: i32,
     pub max_villagers: usize,
-    /// Reference ticks per pass (`WorldConfig::ticks`): one second.
+    /// Reference ticks between two visits of one domain (`WorldConfig::ticks`):
+    /// one second, whatever the number of domains in the world.
     pub period_ticks: u64,
     /// Minimum productive job tenure before a shortage rebalance.
     pub worker_dwell_seconds: u64,
-    /// A small kingdom can visit several domains per second.
-    pub domains_per_pass: usize,
     pub unit_visits_per_domain: usize,
     pub building_visits_per_domain: usize,
-    pub orders_per_domain: usize,
-    pub resource_searches_per_domain: usize,
-    pub site_checks_per_domain: usize,
 }
 pub const STEWARD_RULES: StewardRules = StewardRules {
     radius_tiles: 100,
     max_villagers: 100,
     period_ticks: 20,
     worker_dwell_seconds: 20,
-    domains_per_pass: 8,
     unit_visits_per_domain: 1_024,
     building_visits_per_domain: 2_048,
-    orders_per_domain: 64,
-    resource_searches_per_domain: 8,
-    site_checks_per_domain: 32,
 };
 /// Counts for the most recent tick, including refused command attempts.
 /// Ordinary movement/pathfinding retains its own shared simulation budgets.
@@ -49,38 +43,25 @@ pub(super) struct Budget {
     pub orders: usize,
     pub searches: usize,
     pub sites: usize,
-    jobs: usize,
     node_credits: usize,
 }
 impl Budget {
+    /// Counts an order. A visit issues one per event it handles (an idle
+    /// villager, a missing camp or farm), never up to a fixed count.
     pub fn order(&mut self, work: &mut StewardWork) -> bool {
-        if self.orders >= STEWARD_RULES.orders_per_domain {
-            return false;
-        }
         self.orders += 1;
         work.orders += 1;
         true
     }
-    pub fn search(&mut self, work: &mut StewardWork) -> bool {
-        if self.searches >= STEWARD_RULES.resource_searches_per_domain {
-            return false;
-        }
+    pub fn search(&mut self, work: &mut StewardWork) {
         self.searches += 1;
-        // A fixed finder visits at most25 lists of64nodes, plus8 cache checks.
+        // A fixed finder visits at most 25 lists of 64 nodes, plus 8 cache checks.
         self.node_credits += 1_608;
         work.resource_searches += 1;
-        true
     }
     /// Failed productive probes are bounded too, even with no admitted order.
     pub fn support_available(&self) -> bool {
         self.orders < 2
-    }
-    pub fn job(&mut self) -> bool {
-        if self.jobs >= STEWARD_RULES.orders_per_domain {
-            return false;
-        }
-        self.jobs += 1;
-        true
     }
     /// Reuse unused finder allowance without granting another map query.
     pub fn inspect(&mut self, work: &mut StewardWork, count: usize) -> bool {
@@ -98,13 +79,9 @@ impl Budget {
             "bounded finder exceeded its allowance"
         );
     }
-    pub fn site(&mut self, work: &mut StewardWork) -> bool {
-        if self.sites >= STEWARD_RULES.site_checks_per_domain {
-            return false;
-        }
+    pub fn site(&mut self, work: &mut StewardWork) {
         self.sites += 1;
         work.site_checks += 1;
-        true
     }
 }
 /// Kingdom default weights for food, wood, gold and stone (45:30:15:10).

@@ -2,19 +2,6 @@ use super::super::Economy;
 impl Economy {
     pub(crate) fn hash_steward_manager(&self, h: &mut blake3::Hasher) {
         let m = &self.stewards;
-        h.update(
-            &m.cursor
-                .map_or(u32::MAX, |id| u32::from(id.0))
-                .to_le_bytes(),
-        );
-        if !m.last_domain.is_empty() {
-            h.update(b"steward-player-cursors");
-            h.update(&(m.last_domain.len() as u64).to_le_bytes());
-            for (player, domain) in &m.last_domain {
-                h.update(&player.0.to_le_bytes());
-                h.update(&domain.0.to_le_bytes());
-            }
-        }
         h.update(&(m.active.len() as u64).to_le_bytes());
         for id in &m.active {
             h.update(&id.0.to_le_bytes());
@@ -29,6 +16,10 @@ impl Economy {
         for (worker, owner) in &m.refusal_owners {
             h.update(&worker.0.to_le_bytes());
             h.update(&owner.0.to_le_bytes());
+        }
+        h.update(&(m.relocated.len() as u64).to_le_bytes());
+        for id in &m.relocated {
+            h.update(&id.0.to_le_bytes());
         }
         h.update(&(m.manual.len() as u64).to_le_bytes());
         for id in &m.manual {
@@ -57,16 +48,16 @@ impl Economy {
             home.navy.update_hash(h);
             h.update(&(home.scan_chunk as u64).to_le_bytes());
             h.update(&(home.scan_offset as u64).to_le_bytes());
-            if let Some(scan) = &home.building_scan {
-                h.update(b"building-census");
-                if let Some((kind, id)) = scan.after {
-                    h.update(&[kind as u8]);
-                    h.update(&id.0.to_le_bytes());
-                }
-                h.update(&(scan.known.len() as u64).to_le_bytes());
-                for id in &scan.known {
-                    h.update(&id.0.to_le_bytes());
-                }
+            let scan = &home.building_scan;
+            h.update(b"building-census");
+            h.update(&[u8::from(scan.swept)]);
+            if let Some((kind, id)) = scan.after {
+                h.update(&[kind as u8]);
+                h.update(&id.0.to_le_bytes());
+            }
+            h.update(&(scan.known.len() as u64).to_le_bytes());
+            for id in &scan.known {
+                h.update(&id.0.to_le_bytes());
             }
             h.update(&(home.site_after as u64).to_le_bytes());
             h.update(&[u8::from(home.farm_after.is_some())]);
@@ -100,6 +91,12 @@ impl Economy {
             h.update(&(home.workers.len() as u64).to_le_bytes());
             for id in &home.workers {
                 h.update(&id.0.to_le_bytes());
+            }
+            h.update(&(home.unemployed.len() as u64).to_le_bytes());
+            for (id, u) in &home.unemployed {
+                h.update(&id.0.to_le_bytes());
+                h.update(&[u.tries]);
+                h.update(&u.retry_at.to_le_bytes());
             }
             for (id, stall) in &home.stalls {
                 h.update(&id.0.to_le_bytes());
