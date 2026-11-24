@@ -242,8 +242,15 @@ fn assert_steward_transfer_arrivals(scenario: &str) {
                 failures[n].get_or_insert(error);
             }
             if let Some(unit) = scene.world.unit(id) {
-                arrivals[n] |=
-                    unit.hp > 0 && march::distance(unit.position, scene.goal) <= 2 * 1024;
+                // Delivered: at the destination's arrival point, or adopted by
+                // the destination Steward where the crowd let it stop (the
+                // fortieth villager can stop just over two tiles out).
+                let adopted = scene
+                    .world
+                    .steward_controller(id)
+                    .is_some_and(|steward| Some(steward) != scene.controller);
+                arrivals[n] |= unit.hp > 0
+                    && (adopted || march::distance(unit.position, scene.goal) <= 2 * 1024);
             }
         }
         if arrivals.iter().all(|v| *v) {
