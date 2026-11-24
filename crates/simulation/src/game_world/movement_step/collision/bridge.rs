@@ -45,13 +45,15 @@ impl GameWorld {
         };
         !overlay.blocks_tile(tile)
             && generator
-                .tile_and_node_with_cancel(tile, &|| false)
+                .water_at_with_cancel(tile, &|| false)
                 .ok()
                 .flatten()
-                .is_some_and(|(t, node)| {
-                    t.water != aoe_map::WaterKind::None
-                        && node.is_none_or(|n| !overlay.blocks_node(n))
-                })
+                .is_some_and(|water| water != aoe_map::WaterKind::None)
+            && generator
+                .walk_at_with_cancel(tile, &|| false)
+                .ok()
+                .flatten()
+                .is_some_and(|cell| cell.node.is_none_or(|n| !overlay.blocks_node(n)))
     }
 
     pub(in crate::game_world::movement_step) fn on_bridge_corridor(

@@ -86,18 +86,23 @@ impl GameWorld {
         {
             return Err(EconomyError::InvalidFootprint);
         }
-        let (mut land, mut water) = (false, false);
+        let (mut land, mut water_tiles) = (false, false);
         for y in footprint.min.y..footprint.max.y {
             for x in footprint.min.x..footprint.max.x {
                 let tile = TileCoord::new(x, y);
-                let sample = generator
-                    .tile_at_with_cancel(tile, &|| false)
+                // Water kind and walk data, never a composed tile.
+                let water = generator
+                    .water_at_with_cancel(tile, &|| false)
                     .map_err(GameWorldError::Environment)?
                     .ok_or(EconomyError::InvalidFootprint)?;
-                let wet = navigable(sample.water);
+                let wet = navigable(water);
                 if self.building_at_for(player, tile).is_some()
                     || overlay.blocks_tile(tile)
-                    || (!wet && !sample.passable)
+                    || (!wet
+                        && !generator
+                            .walk_at_with_cancel(tile, &|| false)
+                            .map_err(GameWorldError::Environment)?
+                            .is_some_and(|cell| cell.passable))
                     || generator
                         .object_at_with_cancel(tile, &|| false)
                         .map_err(GameWorldError::Environment)?
@@ -105,11 +110,11 @@ impl GameWorld {
                 {
                     return Err(EconomyError::InvalidFootprint);
                 }
-                water |= wet;
-                land |= !wet && sample.water == WaterKind::None;
+                water_tiles |= wet;
+                land |= !wet && water == WaterKind::None;
             }
         }
-        if land && water {
+        if land && water_tiles {
             Ok(())
         } else {
             Err(EconomyError::InvalidFootprint)
@@ -132,11 +137,11 @@ impl GameWorld {
         for y in footprint.min.y..footprint.max.y {
             for x in footprint.min.x..footprint.max.x {
                 let tile = TileCoord::new(x, y);
-                let sample = generator
-                    .tile_at_with_cancel(tile, &|| false)
+                let water = generator
+                    .water_at_with_cancel(tile, &|| false)
                     .map_err(GameWorldError::Environment)?
                     .ok_or(EconomyError::InvalidFootprint)?;
-                if !navigable(sample.water)
+                if !navigable(water)
                     || self.building_at_for(player, tile).is_some()
                     || self.economy.blocked_tiles.contains(&tile)
                     || overlay.blocks_tile(tile)
