@@ -1,6 +1,6 @@
 import { set } from '/interface/dom/update.js';
 
-function slider({ label, name = label, id, step = 1, max = 100, suffix = '', format, input: onInput, change: onChange }) {
+function slider({ label, name = label, hint, id, step = 1, max = 100, suffix = '', format, input: onInput, change: onChange }) {
   const row = document.createElement('label');
   row.className = 'menu-slider';
   const title = document.createElement('span');
@@ -12,6 +12,7 @@ function slider({ label, name = label, id, step = 1, max = 100, suffix = '', for
   input.step = String(step);
   if (id) input.id = id;
   input.setAttribute('aria-label', name);
+  if (hint) { row.title = hint; input.setAttribute('aria-description', hint); }
   const output = document.createElement('output');
   row.append(title, input, output);
   const paint = () => {

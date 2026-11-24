@@ -98,6 +98,12 @@ export function initBuildings() {
     render();
   };
   const grid = commandGrid(dispatch), rows = productionRows();
+  // Holding Shift trains a batch: the hint is an overlay on the same cells, so
+  // no button moves while the key is down.
+  const batch = held => { document.documentElement.toggleAttribute('data-batch', held); };
+  addEventListener('keydown', event => { if (event.key === 'Shift') batch(true); });
+  addEventListener('keyup', event => { if (event.key === 'Shift') batch(false); });
+  addEventListener('blur', () => batch(false));
   let foundationKey = '';
   artReady.then(() => { rendered = ''; render(); });
 

@@ -85,6 +85,14 @@ export function commandSlots(commands, page = 0) {
     slots[slot] = command;
     return false;
   });
+  // Delete and Cancel own a fixed cell: a button never moves under the cursor
+  // because a trainable unit or a queue appeared before it in the list.
+  for (const command of unplaced.filter(command => command.place)) {
+    const slot = command.place.find(slot => !slots[slot]);
+    if (slot === undefined) continue;
+    slots[slot] = { ...command, key: command.key || gridKeys[slot] };
+    unplaced.splice(unplaced.indexOf(command), 1);
+  }
   const available = slots.map((command, slot) => command ? -1 : slot).filter(slot => slot >= 0);
   for (const command of unplaced) {
     const researchSlot = command.research ? available.findIndex(slot => slot >= 5) : -1;
@@ -108,10 +116,11 @@ export function commandButtons() {
       buttons.set(entry.id, button);
     }
     const hasNote = entry.note !== undefined;
-    const signature = JSON.stringify([artLoaded, entry.icon, entry.label, entry.key, entry.badge, entry.cost, hasNote]);
+    const signature = JSON.stringify([artLoaded, entry.icon, entry.label, entry.key, entry.badge, entry.cost, hasNote, entry.batch]);
     if (button.dataset.artKey !== signature) {
       button.innerHTML = (entry.icon ? drawIcon(entry.icon) : '') +
         '<span class="command-label"></span><kbd></kbd><span class="trade-side" hidden></span>' +
+        (entry.batch ? '<b class="train-batch" aria-hidden="true">×5</b>' : '') +
         (hasNote ? '<small class="command-note"></small>' : '');
       const offset = entry.icon ? 1 : 0;
       const label = button.children[offset], shortcut = button.children[offset + 1], badge = button.children[offset + 2];

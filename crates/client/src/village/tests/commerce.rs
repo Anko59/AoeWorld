@@ -71,3 +71,24 @@ fn unit_report_is_independent_of_selection_and_names_missing_producers() {
         1.0
     );
 }
+
+#[wasm_bindgen_test]
+fn training_report_uses_a_free_producer_and_reports_only_the_current_upgrade() {
+    use aoe_protocol::{BuildingKind, ConstructionState};
+    let mut full = building(1);
+    full.kind = BuildingKind::Barracks;
+    full.training_queue = vec![training(UnitKind::Militia); aoe_protocol::MAX_TRAINING_QUEUE];
+    let mut free = building(2);
+    free.kind = BuildingKind::Barracks;
+    let mut future = building(3);
+    future.kind = BuildingKind::ArcheryRange;
+    future.construction = ConstructionState::UnderConstruction;
+    let mut player = player();
+    player.age = Age::Feudal;
+    player.researched = Tech::FeudalAge.bit() | Tech::ManAtArms.bit();
+    let data = report(&[full, free, future], Some(&player), PlayerId(0), u32::MAX);
+    let units = &data[data.len() - UnitKind::ALL.len()..];
+    assert_eq!(units[UnitKind::ManAtArms as usize], 1.0);
+    assert_eq!(units[UnitKind::Militia as usize], 0.0);
+    assert_eq!(units[UnitKind::Archer as usize], 12.0);
+}

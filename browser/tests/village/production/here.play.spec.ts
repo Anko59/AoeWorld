@@ -1,9 +1,23 @@
-import { expect } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { test } from "../../../server.js";
 import { playerState, productionFixture } from "./fixture.js";
 import { gameAssets } from "../../game-assets.js";
 import { fallbackTest, forceWebGl } from "../../rendering/backends.js";
 import { openTab } from "../../rendering/fixtures/cockpit-tabs.js";
+
+const destination = (page: Page) =>
+  page.getByRole("button", { name: "Set destination" });
+const recruit = (page: Page, kind: string) =>
+  page
+    .getByRole("group", { name: "Unit type" })
+    .getByRole("button", { name: kind, exact: true });
+async function setDestination(page: Page, y = 345) {
+  await destination(page).click();
+  await page.mouse.click(635, y);
+  await expect(page.locator("#units-here-status")).toContainText(
+    "Destination set",
+  );
+}
 
 fallbackTest(
   "Units here charges real resources, trains a soldier and persists its rally on the real server",
@@ -22,11 +36,9 @@ fallbackTest(
     );
     await expect(page.locator("#connection")).toHaveText("connected");
     await openTab(page, "train");
-    await page.locator('[aria-label="Unit type"] [data-id="2"]').click();
-    await openTab(page, "train");
+    await setDestination(page, 374);
     await page.getByLabel("Unit count").fill("3");
-    await page.getByRole("button", { name: "Units here", exact: true }).click();
-    await page.mouse.click(635, 374);
+    await recruit(page, "Militia").click();
     await expect(page.locator("#units-here-status")).toContainText(
       "Accepted 3",
     );
@@ -95,12 +107,10 @@ test("Units here shares ordinary training and rally orders across equally near e
   });
   await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
   await openTab(page, "train");
-  await page.locator('[aria-label="Unit type"] [data-id="2"]').click();
-  await openTab(page, "train");
+  await setDestination(page);
   await page.getByLabel("Unit count").fill("5");
-  await page.getByRole("button", { name: "Units here", exact: true }).click();
   const before = commands.length;
-  await page.mouse.click(635, 345);
+  await recruit(page, "Militia").click();
   await expect.poll(() => commands.filter((c) => c[0] === 5).length).toBe(5);
   const orders = commands.slice(before);
   expect(orders.filter((c) => c[0] === 5).map((c) => c[2])).toEqual([
@@ -112,11 +122,9 @@ test("Units here shares ordinary training and rally orders across equally near e
   expect(new Set(rallies.map((c) => JSON.stringify(c.slice(4)))).size).toBe(1);
   await expect(page.locator("#units-here-status")).toContainText("Accepted 5");
   await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
-  await page.getByRole("button", { name: "Units here", exact: true }).click();
+  await destination(page).click();
   await page.keyboard.press("Escape");
-  await expect(
-    page.getByRole("button", { name: "Units here", exact: true }),
-  ).toHaveAttribute("aria-pressed", "false");
+  await expect(destination(page)).toHaveAttribute("aria-pressed", "false");
 });
 
 test("Units here bounds human batches and displays accepted rather than planned training", async ({
@@ -135,14 +143,13 @@ test("Units here bounds human batches and displays accepted rather than planned 
   });
   await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
   await openTab(page, "train");
+  await setDestination(page);
   await page.getByLabel("Unit count").fill("50");
-  await page.getByRole("button", { name: "Units here", exact: true }).click();
+  await recruit(page, "Militia").click();
   await expect(page.locator("#units-here-status")).toContainText("1 to 10");
   expect(commands.filter((c) => c[0] === 5 || c[0] === 20)).toHaveLength(0);
-  await openTab(page, "train");
   await page.getByLabel("Unit count").fill("3");
-  await page.getByRole("button", { name: "Units here", exact: true }).click();
-  await page.mouse.click(635, 345);
+  await recruit(page, "Militia").click();
   await expect(page.locator("#units-here-status")).toHaveText(
     "Accepted 2 of 3 Militia.",
   );
@@ -166,9 +173,9 @@ test("Units here sends no training when the server rejects its rally", async ({
   });
   await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
   await openTab(page, "train");
+  await setDestination(page);
   await page.getByLabel("Unit count").fill("3");
-  await page.getByRole("button", { name: "Units here", exact: true }).click();
-  await page.mouse.click(635, 345);
+  await recruit(page, "Militia").click();
   await expect(page.locator("#units-here-status")).toHaveText(
     "Accepted 0 of 3 Militia.",
   );
@@ -188,12 +195,35 @@ test("Units here prioritizes the closest occupied queue over a farther idle prod
   });
   await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
   await openTab(page, "train");
-  await page.locator('[aria-label="Unit type"] [data-id="2"]').click();
-  await openTab(page, "train");
+  await setDestination(page);
   await page.getByLabel("Unit count").fill("1");
-  await page.getByRole("button", { name: "Units here", exact: true }).click();
-  await page.mouse.click(635, 345);
+  await recruit(page, "Militia").click();
   await expect(page.locator("#units-here-status")).toContainText("Accepted 1");
   expect(commands.filter((c) => c[0] === 5).map((c) => c[2])).toEqual([1]);
   expect(commands.filter((c) => c[0] === 20).map((c) => c[2])).toEqual([1]);
+});
+
+test("one destination and count apply to successive clicks for different units", async ({
+  page,
+}) => {
+  const { commands, update } = await productionFixture(page, [
+    { id: 1, kind: 0, x: 8182, y: 8186 },
+    { id: 2, kind: 6, x: 8191, y: 8186 },
+  ]);
+  update(playerState(0, 0, 4, 100));
+  await page.evaluate(() => {
+    location.hash = "x=8192.5&y=8192.5&zoom=.04";
+  });
+  await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
+  await openTab(page, "train");
+  await expect(recruit(page, "Militia")).toBeDisabled();
+  await setDestination(page);
+  await page.getByLabel("Unit count").fill("3");
+  await recruit(page, "Militia").click();
+  await recruit(page, "Villager").click();
+  const trains = () => commands.filter((c) => c[0] === 5).map((c) => c[3]);
+  await expect.poll(trains).toEqual([2, 2, 2, 0, 0, 0]);
+  const rallies = commands.filter((c) => c[0] === 20);
+  expect(rallies.map((c) => c[2])).toEqual([2, 1]);
+  expect(rallies[0]?.slice(3)).toEqual(rallies[1]?.slice(3));
 });

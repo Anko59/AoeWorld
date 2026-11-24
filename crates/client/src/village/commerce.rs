@@ -77,7 +77,7 @@ fn unit_code(
     use availability::Availability::{Construction, Ready, Requirement, Unavailable};
     let mut best: Option<(bool, bool, u8)> = None;
     for b in buildings {
-        if b.player != owner || b.hp == 0 {
+        if b.player != owner || b.hp == 0 || b.construction != ConstructionState::Complete {
             continue;
         }
         let code = if kind == UnitKind::Steward && production::has_steward(b) {
