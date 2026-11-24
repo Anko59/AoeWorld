@@ -26,6 +26,12 @@ impl GameWorld {
         if self.vision.human_seats.is_empty() {
             return parked;
         }
+        let mut chased = std::mem::take(&mut self.combat.chased);
+        chased.clear();
+        chased.extend(self.combat.attackers.values().map(|a| a.target));
+        chased.sort_unstable();
+        chased.dedup();
+        self.combat.chased = chased;
         movers.retain(|&id| {
             let rides = self
                 .lookup
@@ -69,16 +75,16 @@ impl GameWorld {
         if waits { WAITING_STRIDE } else { STRIDE }
     }
 
-    /// No person sees the unit at `index` and it is not fighting. Fighters
-    /// keep the full model: an attacker that moves in jumps strikes less often
-    /// (the first stride experiment lost 5-7% of kills per tick).
+    /// No person sees the unit at `index` and it is not fighting, attacking
+    /// or attacked. Fighters keep the full model: an attacker that moves in
+    /// jumps strikes less often (the first stride experiment lost 5-7% of
+    /// kills per tick), and so does one chasing a target that moves in jumps.
     pub(crate) fn unseen_bystander(&self, index: usize) -> bool {
+        let id = self.units[index].state.id;
         !self.vision.human_seats.is_empty()
-            && !self
-                .combat
-                .attackers
-                .contains_key(&self.units[index].state.id)
+            && !self.combat.attackers.contains_key(&id)
             && self.units[index].state.attack_target.is_none()
+            && self.combat.chased.binary_search(&id).is_err()
             && !self.seen_by_a_person(index)
     }
 
