@@ -1,11 +1,10 @@
 //! Position searches for the attacker phase, computed side by side.
 //!
-//! The searches of one tick are bounded by the shared position budget and
-//! are the largest cost of the phase. They only read the world, so those that
-//! the attacker loop is about to ask for are computed first, in parallel, on
-//! the state at the start of the loop. The loop then consumes them in
-//! canonical attacker order and charges the budget there, so the outcome
-//! never depends on the worker count.
+//! The searches of one tick are the largest cost of the phase. They only
+//! read the world, so those that the attacker loop is about to ask for are
+//! computed first, in parallel, on the state at the start of the loop. The
+//! loop then consumes them in canonical attacker order, so the outcome never
+//! depends on the worker count.
 use super::FAR_REUSE_TILES;
 use crate::GameWorld;
 use crate::game_world::combat::{MELEE_RANGE_SUBUNITS, tick::Goal};
@@ -29,45 +28,21 @@ impl GameWorld {
         if fighters.get(MIN_ATTACKERS - 1).is_none() {
             return;
         }
-        let room = self.attack_search_room() as usize;
-        let mut picked = Vec::with_capacity(room);
-        for &id in fighters {
-            if picked.len() == room {
-                break;
-            }
-            if self.combat.pursuit_floor.is_some_and(|floor| id <= floor) {
-                continue;
-            }
-            if let Some(goal) = self.search_goal(id, now) {
-                picked.push((id, goal));
-            }
-        }
+        let picked = fighters
+            .iter()
+            .filter_map(|&id| Some((id, self.search_goal(id, now)?)))
+            .collect::<Vec<_>>();
         if picked.get(MIN_PREFETCH - 1).is_none() {
             return;
         }
-        // Waves of at most the remaining position budget, so a search whose
-        // turn would come after the budget is spent is never run in vain.
-        let mut remaining = self.combat.position_searches as usize;
-        let mut at = 0;
-        while at < picked.len() {
-            let open = remaining > 0;
-            let wave = if open {
-                remaining.min(picked.len() - at)
-            } else {
-                picked.len() - at
-            };
-            let world = &*self;
-            let found =
-                crate::game_world::parallel::par_map_each(&picked[at..at + wave], |(id, goal)| {
-                    world.attack_search_core(*id, goal, open)
-                });
-            for (&(id, goal), outcome) in picked[at..at + wave].iter().zip(found) {
-                if let Ok(outcome) = outcome {
-                    remaining -= usize::from(outcome.spends);
-                    self.combat.prefetched.insert(id, (goal, open, outcome));
-                }
+        let world = &*self;
+        let found = crate::game_world::parallel::par_map_each(&picked, |(id, goal)| {
+            world.attack_search_core(*id, goal)
+        });
+        for (&(id, goal), search) in picked.iter().zip(found) {
+            if let Ok(search) = search {
+                self.combat.prefetched.insert(id, (goal, search));
             }
-            at += wave;
         }
     }
 
@@ -114,6 +89,6 @@ impl GameWorld {
                 return None;
             }
         }
-        (!far || !self.position_searches_closed()).then_some(goal)
+        Some(goal)
     }
 }

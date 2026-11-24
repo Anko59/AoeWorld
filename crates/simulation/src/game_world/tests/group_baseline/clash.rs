@@ -100,12 +100,15 @@ fn attack_move_kills_ten_enemies_then_resumes_to_the_slots() {
     // PR 10 first-contact probes and bounded repeats change clearing to tick 1174.
     // Proportional cohesion and 1.5x catch-up shift contact; the wider engage
     // look (256 enemies, 128 members) clears the ten foes at tick 1154 (the melee cap counts every attacker);
-    // members brushing through each other reach the foes in a looser block (1183).
-    assert_eq!((cleared, foes_alive), (Some(1183), 0));
+    // members brushing through each other reach the foes in a looser block (1183);
+    // with no world-wide attack search limit no member waits for another's
+    // search, and the ten fall sooner (1176, #978).
+    assert_eq!((cleared, foes_alive), (Some(1176), 0));
     assert_eq!((survivors, own_idle, still_moving), (60, 60, 0));
     // Keep all 60 arrivals; the engage look caps melee members per foe, so
-    // 34 strike (37 originally) while the ten foes fall sooner.
-    assert_eq!((at_destination, strikers.len()), (60, 38));
+    // 34 strike (37 originally) while the ten foes fall sooner; 36 once the
+    // search limit is gone, as the foes fall before more members reach them.
+    assert_eq!((at_destination, strikers.len()), (60, 36));
     assert!(
         within_1 * 100 >= survivors * 95,
         "{within_1} of {survivors}"

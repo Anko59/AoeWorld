@@ -104,7 +104,7 @@ fn crowd(units: u32, attackers: usize) -> GameWorld {
 }
 
 #[test]
-fn autonomous_combat_work_has_fixed_query_and_search_budgets() {
+fn autonomous_combat_work_is_bounded_by_its_queries_and_fighters() {
     let mut worst = Vec::new();
     for units in [400, 6_000] {
         let mut world = crowd(units, 16);
@@ -115,13 +115,15 @@ fn autonomous_combat_work_has_fixed_query_and_search_budgets() {
             assert!(world.combat_stats().hits <= world.combat_stats().attackers);
             assert!(world.combat_stats().acquisition_checks <= 128);
             assert!(world.combat_stats().targeting_scanned <= 16_384);
-            assert!(world.combat_stats().attack_searches <= 16);
+            // At most one position search per attacker and tick (#978:
+            // no world-wide search limit).
+            assert!(world.combat_stats().attack_searches <= world.combat_stats().attackers);
         }
         worst.push(peak);
     }
     // Default Aggressive acquisition intentionally replaces the former ceiling
     // of sixteen explicit attackers plus their victims. Whole armies defend;
-    // spatial inspection and route-search work remain bounded above.
+    // spatial inspection stays bounded above, searches by the fighters.
     assert!(worst.iter().all(|peak| *peak > 32), "{worst:?}");
     let mut idle = crowd(6_000, 0);
     for player in [PlayerId(0), PlayerId(1)] {

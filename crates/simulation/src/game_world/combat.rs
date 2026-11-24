@@ -37,7 +37,7 @@ mod towers;
 
 #[cfg(test)]
 pub(crate) use approach::FarAttack;
-pub(crate) use approach::{MAX_POSITION_SEARCHES_PER_TICK, SearchWait};
+pub(crate) use approach::SearchWait;
 pub use classes::unit_building_bonus;
 pub use conversion::{conversion_chance, convertible_building, convertible_unit};
 pub(crate) use hash::hash_hit;
@@ -108,7 +108,7 @@ pub(crate) struct Attacker {
     pub(crate) in_reach_since: Option<u64>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct Combat {
     /// Fraction above displayed HP, indexed by allocated identity. Shelter and
     /// transport preserve identities; allocation happens at spawn, never a hit.
@@ -119,11 +119,6 @@ pub(crate) struct Combat {
     pub(crate) tower_cursor: EntityId,
     pub(crate) tower_targets: BTreeMap<EntityId, EntityId>,
     pub(crate) target_rounds: BTreeMap<EntityId, u64>,
-    pub(crate) search_tick: u64,
-    pub(crate) searches_used: u32,
-    pub(crate) pursuit_cursor: Option<EntityId>,
-    /// Current phase's admission floor; cleared before returning to callers.
-    pub(crate) pursuit_floor: Option<EntityId>,
     pub(crate) healers: BTreeSet<EntityId>,
     pub(crate) healing: castle::Rest,
     pub(crate) projectiles: BTreeMap<u64, Projectile>,
@@ -149,58 +144,16 @@ pub(crate) struct Combat {
     pub(crate) blasts: Vec<(EntityId, aoe_core::PlayerId, aoe_core::WorldPosition)>,
     pub(crate) stats: CombatStats,
     telemetry: telemetry::Telemetry,
-    /// Expensive firing-position searches still allowed this tick.
-    pub(crate) position_searches: u32,
     /// Searches the attacker phase computed side by side on its starting
     /// state, consumed in attacker order and always empty between ticks:
-    /// their goal, whether the position budget was open, and the outcome.
-    pub(crate) prefetched: BTreeMap<EntityId, (tick::Goal, bool, approach::SearchOutcome)>,
-    /// Deferred approaches since the world began: (crowded, budget).
+    /// their goal and the outcome.
+    pub(crate) prefetched: BTreeMap<EntityId, (tick::Goal, approach::AttackSearch)>,
+    /// Approaches deferred by a crowd since the world began.
     #[cfg(test)]
-    pub(crate) waits: (u64, u64),
+    pub(crate) waits: u64,
     /// Prefetched searches the attacker loop used since the world began.
     #[cfg(test)]
     pub(crate) prefetch_used: u64,
-}
-
-impl Default for Combat {
-    fn default() -> Self {
-        Self {
-            hp_quarters: Vec::new(),
-            seekers: Default::default(),
-            quiet: Default::default(),
-            seeker_cursor: Default::default(),
-            tower_cursor: Default::default(),
-            tower_targets: Default::default(),
-            target_rounds: Default::default(),
-            search_tick: 0,
-            searches_used: 0,
-            pursuit_cursor: None,
-            pursuit_floor: None,
-            healers: Default::default(),
-            healing: Default::default(),
-            projectiles: Default::default(),
-            impacts: Default::default(),
-            next_projectile: 0,
-            tower_ready: Default::default(),
-            attackers: Default::default(),
-            chased: Vec::new(),
-            trebuchets_transforming: Default::default(),
-            scalar_marches: Default::default(),
-            patrols: Default::default(),
-            resuming: Default::default(),
-            dying: Default::default(),
-            blasts: Vec::new(),
-            stats: Default::default(),
-            telemetry: Default::default(),
-            position_searches: MAX_POSITION_SEARCHES_PER_TICK,
-            prefetched: Default::default(),
-            #[cfg(test)]
-            waits: (0, 0),
-            #[cfg(test)]
-            prefetch_used: 0,
-        }
-    }
 }
 
 impl Combat {
@@ -272,27 +225,11 @@ impl GameWorld {
         let range =
             super::navy::attack_range(&self.unit_stats(id).ok_or(EconomyError::UnknownEntity)?);
         let replaces_offensive = self.offensive_resume(id).is_some();
-        let search_before = (
-            self.combat.search_tick,
-            self.combat.searches_used,
-            self.combat.stats.attack_searches,
-        );
         let mut initial_far = None;
-        let mut retry_next_tick = false;
         if goal.distance_squared(unit.position) <= range * range
             && (!Self::uses_melee_position(unit.kind) || self.arrival_position_free(index))
         {
             self.stop_movement(index);
-        } else if !self.reserve_attack_search() {
-            self.stop_unit_orders(index);
-            if replaces_offensive {
-                self.move_queues.remove(&id);
-            }
-            self.begin_attack(id, target);
-            if let Some(attacker) = self.combat.attackers.get_mut(&id) {
-                attacker.repath_tick = self.tick.0;
-            }
-            return Ok(());
         } else {
             match self.attack_search(id, &goal) {
                 Ok(search) if search.destination.is_some() || search.wait.is_some() => {
@@ -305,21 +242,12 @@ impl GameWorld {
                             });
                         }
                     } else {
-                        // Crowding or a spent position budget defers the
-                        // approach; it is not proof that the target is unreachable.
+                        // Crowding defers the approach; it is not proof
+                        // that the target is unreachable.
                         self.stop_movement(index);
-                        retry_next_tick = search.wait == Some(SearchWait::Budget);
                     }
                 }
                 result => {
-                    // Rejected validation leaves the pursuit admission intact.
-                    // The expensive position search it ran still spends the
-                    // shared per-tick budget, so rejected orders stay bounded.
-                    (
-                        self.combat.search_tick,
-                        self.combat.searches_used,
-                        self.combat.stats.attack_searches,
-                    ) = search_before;
                     return match result {
                         Err(error) => Err(error.into()),
                         _ => Err(EconomyError::NoAttackPosition),
@@ -336,9 +264,6 @@ impl GameWorld {
         self.begin_attack(id, target);
         if let Some(entry) = self.combat.attackers.get_mut(&id) {
             entry.far = initial_far;
-            if retry_next_tick {
-                entry.repath_tick = self.tick.0.saturating_add(1);
-            }
         }
         Ok(())
     }

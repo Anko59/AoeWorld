@@ -287,7 +287,7 @@ fn a_congested_army_has_a_shared_local_search_budget() {
 }
 
 #[test]
-fn expensive_attack_searches_defer_orders_under_one_tick_budget() {
+fn every_attacker_of_a_burst_searches_at_most_once_a_tick_and_moves() {
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -317,7 +317,7 @@ fn expensive_attack_searches_defer_orders_under_one_tick_budget() {
     for &id in &ids {
         w.issue_attack(PlayerId(0), id, target).unwrap();
     }
-    assert!((1..=4).contains(&probe.0.load(Ordering::Relaxed)));
+    assert!((1..=ids.len()).contains(&probe.0.load(Ordering::Relaxed)));
     let starts = ids
         .iter()
         .map(|&id| w.unit(id).unwrap().position)
@@ -326,7 +326,7 @@ fn expensive_attack_searches_defer_orders_under_one_tick_budget() {
         probe.0.store(0, Ordering::Relaxed);
         w.advance();
         assert!(
-            probe.0.load(Ordering::Relaxed) <= 4,
+            probe.0.load(Ordering::Relaxed) <= ids.len(),
             "attack search burst at {tick}"
         );
         assert!(
@@ -338,7 +338,7 @@ fn expensive_attack_searches_defer_orders_under_one_tick_budget() {
         assert_ne!(
             w.unit(id).unwrap().position,
             before,
-            "deferred attacker {id:?} never moved"
+            "attacker {id:?} never moved"
         );
     }
 }

@@ -48,7 +48,7 @@ struct Front {
     cleared: Option<u32>,
     /// Approaches deferred because every melee spot was taken, or because
     /// the tick's position-search budget was spent.
-    waits: (u64, u64),
+    waits: u64,
 }
 
 fn showcase() -> (GameWorld, Vec<EntityId>, Vec<EntityId>) {

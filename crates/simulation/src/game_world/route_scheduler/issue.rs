@@ -34,8 +34,6 @@ impl GameWorld {
         let config = self.config;
         self.planning_budget = config.scaled_budget(crate::MAX_ROUTE_WORK_PER_TICK);
         self.local_refinement_left = config.scaled_budget(4);
-        self.combat.position_searches =
-            config.scaled_budget(super::super::combat::MAX_POSITION_SEARCHES_PER_TICK);
         *self
             .navigation_preparation_budget
             .get_mut()

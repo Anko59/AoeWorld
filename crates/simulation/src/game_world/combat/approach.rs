@@ -16,7 +16,6 @@ const REGION_PROOF_TILES: i64 = 400;
 /// Candidate tiles proven on the region layer per search, so a target in a
 /// sealed pocket costs a bounded number of proofs.
 const MAX_HIERARCHY_PROOFS: u32 = 4;
-pub(super) const MAX_ATTACK_SEARCHES_PER_TICK: u32 = 16;
 const NEIGHBOURS: [(i32, i32); 8] = [
     (0, -1),
     (-1, 0),
@@ -27,8 +26,9 @@ const NEIGHBOURS: [(i32, i32); 8] = [
     (-1, 1),
     (1, 1),
 ];
-/// Expensive position searches, shared by new orders and combat retries.
-pub(crate) const MAX_POSITION_SEARCHES_PER_TICK: u32 = 4;
+/// A melee attacker that finds every spot round its target taken waits
+/// only within this many tiles of its reach; farther off it walks up.
+const CROWD_WAIT_TILES: i64 = 4;
 /// A far firing tile is reused while the target keeps its tile and the
 /// attacker is farther than this: the local search could not meet it anyway.
 pub(crate) const FAR_REUSE_TILES: i64 = 64;
@@ -40,17 +40,10 @@ pub(crate) struct FarAttack {
     pub(crate) destination: WorldPosition,
 }
 
+/// Why a search found no firing tile yet: every free spot is taken.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SearchWait {
-    Budget,
     Crowded,
-}
-
-/// A search and whether it used one of the tick's bounded position searches.
-#[derive(Debug)]
-pub(crate) struct SearchOutcome {
-    pub(crate) search: AttackSearch,
-    pub(crate) spends: bool,
 }
 
 #[derive(Debug)]
@@ -58,51 +51,11 @@ pub(crate) struct AttackSearch {
     pub(crate) destination: Option<WorldPosition>,
     /// The local search hit its cap and the far fallback decided.
     pub(crate) far: bool,
-    /// Unit congestion or the shared budget deferred this search.
+    /// Unit congestion deferred this search.
     pub(crate) wait: Option<SearchWait>,
 }
 
 impl GameWorld {
-    pub(super) fn reserve_pursuit_search(&mut self, id: EntityId) -> bool {
-        if self.combat.pursuit_floor.is_some_and(|floor| id <= floor)
-            || !self.reserve_attack_search()
-        {
-            return false;
-        }
-        self.combat.pursuit_cursor = Some(id);
-        true
-    }
-
-    /// Pursuit searches the current tick still allows.
-    pub(super) fn attack_search_room(&self) -> u32 {
-        let spent = if self.combat.search_tick == self.tick.0 {
-            self.combat.searches_used
-        } else {
-            0
-        };
-        self.config
-            .scaled_budget(MAX_ATTACK_SEARCHES_PER_TICK)
-            .saturating_sub(spent)
-    }
-
-    /// Whether the tick has spent its bounded position searches.
-    pub(super) fn position_searches_closed(&self) -> bool {
-        self.combat.position_searches == 0
-    }
-
-    pub(crate) fn reserve_attack_search(&mut self) -> bool {
-        if self.combat.search_tick != self.tick.0 {
-            self.combat.search_tick = self.tick.0;
-            self.combat.searches_used = 0;
-        }
-        if self.attack_search_room() == 0 {
-            return false;
-        }
-        self.combat.searches_used += 1;
-        self.combat.stats.attack_searches += 1;
-        true
-    }
-
     /// Search outward from the attacker, prioritizing travel distance plus a
     /// lower bound on distance still needed to reach attack range. Reaching a
     /// tile proves connectivity; merely being passable near the target does not.
@@ -112,67 +65,35 @@ impl GameWorld {
         goal: &Goal,
     ) -> Result<AttackSearch, GameWorldError> {
         // A search the tick prefetched on the phase snapshot is used as is;
-        // otherwise it runs here. Either way the shared budget is charged
-        // here, in canonical attacker order. One computed as if the budget
-        // were spent is dropped while the real budget is still open: its
-        // wait would hold the attacker back for nothing.
-        let closed = self.position_searches_closed();
+        // otherwise it runs here.
+        self.combat.stats.attack_searches += 1;
         let cached = self
             .combat
             .prefetched
             .remove(&id)
-            .filter(|(at, open, _)| at == goal && (*open || closed))
-            .map(|(_, _, outcome)| outcome);
+            .filter(|(at, _)| at == goal)
+            .map(|(_, search)| search);
         #[cfg(test)]
         if cached.is_some() {
             self.combat.prefetch_used += 1;
         }
-        let outcome = match cached {
-            Some(outcome) => outcome,
-            None => self.attack_search_core(id, goal, !closed)?,
-        };
-        let search = if outcome.spends && self.position_searches_closed() {
-            AttackSearch {
-                destination: None,
-                far: false,
-                wait: Some(SearchWait::Budget),
-            }
-        } else {
-            if outcome.spends {
-                self.combat.position_searches -= 1;
-            }
-            outcome.search
+        let search = match cached {
+            Some(search) => search,
+            None => self.attack_search_core(id, goal)?,
         };
         #[cfg(test)]
-        match search.wait {
-            Some(SearchWait::Crowded) => self.combat.waits.0 += 1,
-            Some(SearchWait::Budget) => self.combat.waits.1 += 1,
-            None => {}
+        if search.wait == Some(SearchWait::Crowded) {
+            self.combat.waits += 1;
         }
         Ok(search)
     }
 
     /// The search itself, read-only so that several can run side by side.
-    /// `budget_open` is whether a bounded position search is still allowed;
-    /// a result that needed one says so in `spends`.
     pub(super) fn attack_search_core(
         &self,
         id: EntityId,
         goal: &Goal,
-        budget_open: bool,
-    ) -> Result<SearchOutcome, GameWorldError> {
-        let done = |search| {
-            Ok(SearchOutcome {
-                search,
-                spends: false,
-            })
-        };
-        let spent = |search| {
-            Ok(SearchOutcome {
-                search,
-                spends: true,
-            })
-        };
+    ) -> Result<AttackSearch, GameWorldError> {
         let unit = self.unit(id).ok_or(GameWorldError::UnknownEntity)?;
         let stats = self.unit_state_stats(&unit);
         let range = super::super::navy::attack_range(&stats);
@@ -187,7 +108,7 @@ impl GameWorld {
         let mut free = Vec::new();
         if let Some(points) = &melee {
             if points.is_empty() {
-                return done(AttackSearch {
+                return Ok(AttackSearch {
                     destination: None,
                     far: false,
                     wait: None,
@@ -201,7 +122,7 @@ impl GameWorld {
                 }
                 free.push(at);
                 if self.interaction_line_clear(unit.kind, unit.position, at) {
-                    return done(AttackSearch {
+                    return Ok(AttackSearch {
                         destination: Some(at),
                         far: false,
                         wait: None,
@@ -210,27 +131,25 @@ impl GameWorld {
             }
             if free.is_empty() {
                 // In a crowd the endpoint is a preference. Static route
-                // admission and physical sweeps still prove every step.
-                if self.crowded_melee_contact(id, goal) {
-                    return done(AttackSearch {
+                // admission and physical sweeps still prove every step. An
+                // attacker still far off walks up and chooses again there:
+                // the spots it saw taken may be free when it arrives.
+                let near = range + CROWD_WAIT_TILES * MELEE_RANGE_SUBUNITS;
+                if self.crowded_melee_contact(id, goal)
+                    || goal.distance_squared(unit.position) > near * near
+                {
+                    return Ok(AttackSearch {
                         destination: Some(points[0]),
                         far: false,
                         wait: None,
                     });
                 }
-                return done(AttackSearch {
+                return Ok(AttackSearch {
                     destination: None,
                     far: false,
                     wait: Some(SearchWait::Crowded),
                 });
             }
-        }
-        if !budget_open {
-            return done(AttackSearch {
-                destination: None,
-                far: false,
-                wait: Some(SearchWait::Budget),
-            });
         }
         if let Some(points) = &mut melee {
             free.extend(
@@ -283,7 +202,7 @@ impl GameWorld {
                     None
                 };
                 if let Some(destination) = destination {
-                    return spent(AttackSearch {
+                    return Ok(AttackSearch {
                         destination: Some(destination),
                         far: false,
                         wait: None,
@@ -344,7 +263,7 @@ impl GameWorld {
         if capped {
             // The bounded local search ran out before it met the target: a
             // far target. Pick the firing tile at the target instead.
-            return spent(AttackSearch {
+            return Ok(AttackSearch {
                 destination: self.far_attack_destination(
                     unit.kind,
                     unit.player,
@@ -357,7 +276,7 @@ impl GameWorld {
                 wait: None,
             });
         }
-        spent(AttackSearch {
+        Ok(AttackSearch {
             destination: None,
             far: false,
             wait: None,
