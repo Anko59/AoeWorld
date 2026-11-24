@@ -29,6 +29,10 @@ pub struct StateCensus {
     /// deliveries per villager-minute and hits per fighter-minute.
     pub villagers: u64,
     pub fighters: u64,
+    /// Villagers standing idle (no movement, gathering, building or garrison
+    /// order), and villagers a Steward manages: the Steward's service number.
+    pub idle_villagers: u64,
+    pub steward_villagers: u64,
     /// Movers waiting for a route, and the p95 of how long they have waited
     /// so far (ticks): the census stand-in for order-to-first-step.
     pub waiting: u64,
@@ -67,6 +71,17 @@ impl GameWorld {
             census.movers += u64::from(stored.order.is_some());
             if unit.kind == crate::UnitKind::Villager {
                 census.villagers += 1;
+                census.steward_villagers +=
+                    u64::from(self.economy.stewards.controlled.contains_key(&unit.id));
+                census.idle_villagers += u64::from(
+                    stored.order.is_none()
+                        && !unit.moving
+                        && !unit.planning
+                        && matches!(unit.task, crate::UnitTask::Idle)
+                        && !self.economy.gatherers.contains_key(&unit.id)
+                        && !self.economy.builders.contains_key(&unit.id)
+                        && !self.economy.garrison_orders.contains_key(&unit.id),
+                );
             } else if crate::game_world::combat::unit_combat(unit.kind).attack > 0 {
                 census.fighters += 1;
             }

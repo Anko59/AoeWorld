@@ -26,6 +26,11 @@ pub struct Options {
     /// that run; use it when comparing wall time across worker counts.
     #[arg(long)]
     no_parallel_census: bool,
+    /// Empty ticks run after the recording: the in-world managers (Steward,
+    /// Vassal, General) keep playing with no recorded commands, so their cost
+    /// can be followed past the recorded window. Hashes are not compared there.
+    #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(u32).range(0..=72_000))]
+    extend_ticks: u32,
     #[arg(long, default_value = ".cache/save-replay/report.json")]
     out: PathBuf,
 }
@@ -73,7 +78,12 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
         let mut fight = [0u64; 5];
         let mut timing_commands = BTreeMap::<String, (u64, u64)>::new();
         let mut queue_series = Vec::new();
-        for (index, tick) in recording.ticks.iter().enumerate() {
+        let last = recording.ticks.last().ok_or("empty replay")?;
+        let extended: Vec<_> = (1..=u64::from(options.extend_ticks))
+            .map(|n| aoe_server::replay::RecordedTick { tick: last.tick + n, commands: Vec::new(), views: last.views.clone(), hash: [0; 32] })
+            .collect();
+        let recorded = recording.ticks.len();
+        for (index, tick) in recording.ticks.iter().chain(&extended).enumerate() {
             commands += tick.commands.len();
             let hash = service.replay_step(tick, &mut |timing| {
                 total.push(timing.instructions);
@@ -100,7 +110,7 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
             timing_commands.clear();
             let movers = service.inspect_scale_world(|w| { progress.sample(w); let c = w.combat_stats(); fight[0] += u64::from(c.attackers); fight[1] += u64::from(c.hits); fight[2] += u64::from(c.attack_searches); fight[3] += u64::from(c.first_hits); fight[4] += c.first_hit_wait_ticks; w.order_mover_census() }).await;
             for (total, now) in census.iter_mut().zip(movers) { *total += now; }
-            if hash != tick.hash && divergence.is_none() { divergence = Some(tick.tick + 1); }
+            if index < recorded && hash != tick.hash && divergence.is_none() { divergence = Some(tick.tick + 1); }
             hashes.push(json!({"tick": tick.tick + 1, "hash": hex(&hash)}));
             // The queue every 100 ticks: one end-of-window snapshot is too
             // noisy to compare scheduler changes by.
@@ -119,6 +129,10 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
                     routes["waiting_share"] = json!(waiting as f64 / movers.max(1) as f64);
                     let census = w.state_census();
                     routes["census"] = json!(census);
+                    // Cumulative since the restore: buckets are differences.
+                    routes["tick"] = json!(w.tick().0);
+                    routes["steward_demand"] = json!(w.order_demand()[aoe_simulation::OrderIssuer::Steward as usize]);
+                    routes["vassal_demand"] = json!(w.order_demand()[aoe_simulation::OrderIssuer::Vassal as usize]);
                     routes["delivered_last_minute"] = json!(w.players().map(|p| w.recent_deliveries(p.player).iter().sum::<u64>()).sum::<u64>());
                     routes["delivered_per_villager_minute"] = json!(
                         routes["delivered_last_minute"].as_u64().unwrap_or(0) as f64
@@ -129,13 +143,14 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
             }
         }
         // Include zeros for phases absent from individual ticks in percentile summaries.
-        for series in phases.values_mut() { series.resize(recording.ticks.len(), 0); }
+        let all_ticks = recorded + extended.len();
+        for series in phases.values_mut() { series.resize(all_ticks, 0); }
         let phase_summary: BTreeMap<_, _> = phases.iter().map(|(name, series)| (*name, counts::summary(series))).collect();
         let phases_cpu_summary: BTreeMap<_, _> = phases_cpu.iter().map(|(name, series)| (*name, series.summary())).collect();
-        let ticks = recording.ticks.len() as f64;
+        let ticks = all_ticks as f64;
         let parallel_phase_mean: BTreeMap<_, _> = phases_parallel.iter().map(|(name, total)| (*name, *total as f64 / ticks)).collect();
         let parallel_sites: BTreeMap<_, _> = sites.iter().map(|(site, row)| (site.clone(), json!({"calls_per_tick": row.calls as f64 / ticks, "below_threshold_per_tick": row.below_threshold as f64 / ticks, "items_per_tick": row.items as f64 / ticks, "instructions_per_tick": row.instructions as f64 / ticks, "largest_task_instructions_per_tick": row.largest_task as f64 / ticks}))).collect();
-        let attribution = service.inspect_scale_world(|w| orders::report(w, &kinds, &census, recording.ticks.len())).await;
+        let attribution = service.inspect_scale_world(|w| orders::report(w, &kinds, &census, all_ticks)).await;
         // Route-scheduler state at the end of the window, read off-tick like
         // the mover census: the same counters the live probe reports, on a
         // window that repeats. No human seat sends orders in this recording.
@@ -150,7 +165,7 @@ fn once(options: &Options, recording: &Recording) -> Result<Value, String> {
         let combat_quality = json!({"attacker_ticks": fight[0], "hits": fight[1], "attack_searches": fight[2], "first_hits": fight[3], "first_hit_wait_ticks_mean": fight[4] as f64 / fight[3].max(1) as f64, "kills_in_window": last_kills.0 - first_kills.0, "losses_in_window": last_kills.1 - first_kills.1});
         Ok(json!({ "combat_quality": combat_quality, "parallel_phase_instructions_mean": parallel_phase_mean, "parallel_sites": parallel_sites, "order_attribution": attribution, "refused_commands": refused, "initial_hash": hex(&initial), "total_cpu_ms_per_tick": cpu.summary(), "total_wall_ms_per_tick": wall.summary(), "phases_cpu_ms": phases_cpu_summary, "total_instructions_per_tick": counts::summary(&total), "phases_instructions": phase_summary,
             "first_divergence_tick": divergence, "final_hash": hashes.last().ok_or("empty replay")?["hash"],
-            "movement_progress": progress.summary(recording.ticks.last().ok_or("empty replay")?.tick + 1),
+            "movement_progress": progress.summary(last.tick + extended.len() as u64 + 1),
             "navigation_calls": navigation_calls, "routes": routes, "queue_series": queue_series,
             "hashes": hashes, "raw": raw, "commands": commands, "restore": format!("{restored:?}") }))
     })

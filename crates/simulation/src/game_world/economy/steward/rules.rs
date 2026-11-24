@@ -122,3 +122,36 @@ impl StewardSettings {
             && self.weights.iter().any(|w| *w > 0)
     }
 }
+
+/// Replay-only inclusive spans around the parts of a Steward pass.
+pub const STEWARD_SPANS: [&str; 18] = [
+    "steward_walk",
+    "steward_members",
+    "steward_transfers",
+    "steward_release",
+    "steward_snapshot",
+    "steward_send_away",
+    "steward_adopt",
+    "steward_watchdog",
+    "steward_discover",
+    "steward_navy",
+    "steward_support",
+    "steward_rebalance",
+    "steward_idle",
+    "steward_job",
+    "steward_farms",
+    "steward_wood",
+    "steward_retire",
+    "steward_relocate",
+];
+
+impl crate::GameWorld {
+    pub(super) fn steward_span(
+        &self,
+        name: &'static str,
+    ) -> Option<Box<dyn aoe_map::NavigationSpan>> {
+        self.planning_probe
+            .as_ref()
+            .and_then(|probe| probe.movement_span(name))
+    }
+}

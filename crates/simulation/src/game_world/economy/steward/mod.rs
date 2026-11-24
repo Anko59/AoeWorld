@@ -17,6 +17,7 @@ mod snapshot;
 mod status;
 mod territory;
 mod watchdog;
+pub use rules::STEWARD_SPANS;
 pub use rules::{STEWARD_RULES, StewardRules, StewardSettings, StewardWork};
 pub use status::{StewardStatus, StewardWait};
 pub use watchdog::STEWARD_STALL_SECONDS;
@@ -312,15 +313,22 @@ impl GameWorld {
         self.economy.steward_homes.remove(&id);
     }
     fn active_steward(&self, id: EntityId) -> bool {
+        // The stored Town Center, not its projection: asked for every managed
+        // villager several times a visit, and projecting a training Town
+        // Center copies it. Only an unfinished foundation needs the clock.
         self.economy.stewards.active.contains(&id)
-            && self
-                .steward_town_center(id)
-                .and_then(|c| self.building(c))
-                .is_some_and(|b| {
+            && self.steward_town_center(id).is_some_and(|c| {
+                let houses = |b: &crate::GameBuilding| {
                     b.hp > 0
                         && b.is_complete()
                         && b.garrison.iter().any(|g| g.unit.id == id && g.unit.hp > 0)
-                })
+                };
+                match self.economy.buildings.get(&c) {
+                    Some(b) if b.is_complete() => houses(b),
+                    Some(_) => self.building(c).is_some_and(|b| houses(&b)),
+                    None => false,
+                }
+            })
     }
     /// The managing Steward's unit ID, only while this worker is in its active domain.
     pub fn steward_controller(&self, id: EntityId) -> Option<EntityId> {
@@ -336,7 +344,9 @@ impl GameWorld {
         (home.owns_resident(unit.kind, unit.position)
             && self.active_steward(steward)
             && self
-                .building(home.town_center?)
+                .economy
+                .buildings
+                .get(&home.town_center?)
                 .is_some_and(|b| b.player == unit.player))
         .then_some(steward)
     }

@@ -58,8 +58,8 @@ pub use general::{GeneralState, GeneralStatus, GeneralWork, SquadKind, SquadStat
 #[cfg(test)]
 pub(crate) use steward::steward_stall;
 pub use steward::{
-    STEWARD_RULES, STEWARD_STALL_SECONDS, StewardRules, StewardSettings, StewardStatus,
-    StewardWait, StewardWork,
+    STEWARD_RULES, STEWARD_SPANS, STEWARD_STALL_SECONDS, StewardRules, StewardSettings,
+    StewardStatus, StewardWait, StewardWork,
 };
 mod vassal;
 mod wall;
