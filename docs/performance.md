@@ -296,14 +296,14 @@ the gates must see parallel work). Each row is compared with its `instructions` 
 | below -3% | note asking for a refresh with `make perf-baseline-propose` |
 | more than +10% over `instruction_reference` | `REGRESSION` (creep guard), whatever the baseline says |
 
-`instruction_reference` is a fixed anchor per kernel, so many accepted small
-steps cannot add up. `make perf-baseline-propose` writes a proposal that keeps
-the committed reference; only a deliberate, reviewed edit of the reference (with
-the reason recorded here) moves it. Baselines are lowered or raised only in a
-reviewed commit. Allocation counts (DHAT) are no longer measured: no gate or
-comment used them, and DHAT roughly doubled the bench time. Elapsed-time rows
-(tick p50/p95, protocol pressure, scale and multi-thread workloads) stay
-informational and never gate; the Criterion `perf-timing` suite was removed.
+`instruction_reference` is a fixed anchor per kernel, so many accepted small steps cannot add up. `make
+perf-baseline-propose` writes a proposal that keeps the committed reference; only a deliberate, reviewed edit of the
+reference (with the reason recorded here) moves it. Baselines are lowered or raised only in a reviewed commit. On pull
+requests a row also fails above +3% of the latest passing dev run; a deliberate increase (owner 11-24, cap removals
+"would raise cost") raises the row's `instructions` (and `instruction_reference` if needed) and names it with its
+reason in `accepted_increase`: it is then gated against that baseline, not the dev run, until dev counts as much. A
+refresh drops it. Elapsed-time rows (tick p50/p95, protocol pressure, scale and multi-thread workloads) stay
+informational and never gate.
 
 Binaryen optimizes the WASM bundle before gzip
 size comparison. Reviewed baselines live in `baselines/perf/`;
