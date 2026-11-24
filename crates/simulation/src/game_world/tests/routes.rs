@@ -373,6 +373,7 @@ fn scheduling_budget_is_part_of_canonical_state() {
 
 mod continuity_tests;
 mod detours;
+mod edge_origin;
 #[path = "routes/fairness.rs"]
 mod fairness;
 mod fights;
