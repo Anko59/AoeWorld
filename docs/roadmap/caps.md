@@ -1,7 +1,7 @@
 # Roadmap: caps and budgets to remove
 
 Owner 11-23: "We need to solve, not limit and hide." Each cap below hides a cost or a design shortcut. The owner's
-decision per cap (11-23) is in the status cell; nothing here is started. Survey of 157 caps on dev of 11-22
+decision per cap (11-23) is in the status cell. Survey of 157 caps on dev of 11-22
 (`gates/movement-caps.json` plus per-tick budgets, rule structs, `.take(N)`, the Python AI config and the browser
 far view). Statuses and rules: [roadmap](../roadmap.md). Dates are 2026 (MM-DD).
 
@@ -52,9 +52,9 @@ orders, display and AI caps are in the landscape lane.
 
 | item | asked | status | evidence | next step |
 | --- | --- | --- | --- | --- |
-| Steward domains per second (8, world-wide) and work per visit (64 orders, 8 resource searches, 32 site checks) | 11-23 x1 | PLANNED: fix, then drop | crates/simulation/src/game_world/economy/steward/rules.rs (#571): with more than 8 towns each economy runs less than once a second; 11-20 AI economy diagnosis blames the same pass | Each domain on its own interval; work per visit follows events (villager idle, resource gone) instead of a full census; Vassal issuing went 21.5M to 3.8M instr per tick this way (11-21) |
-| Vassal domains per second (8, world-wide) | 11-23 x1 | PLANNED: drop | crates/simulation/src/game_world/economy/vassal/mod.rs (#721). Owner: Vassals "can act less, even much less than once a second, but it shouldn't change when I get more" | Per-domain interval, constant whatever the number of Vassals |
-| Wall tiles per placement (10) | 11-23 x1 | PLANNED: drop | crates/simulation/src/game_world/economy/vassal/development.rs | Drop |
+| Steward domains per second (8, world-wide) and work per visit (64 orders, 8 resource searches, 32 site checks) | 11-23 x1 | PARTIAL: in this PR | Each domain is visited once a second on its own phase; the per-visit order, search and site counts are gone. A domain's villagers are a member list kept by movement's tile changes and placement on the map; the unit census and building sweep run only after activation or a zone change. Idle villagers with no job retry on a doubling interval (1 to 32 s), are relocated at most once until they work, and the watchdog no longer stops workers waiting for a route. Fixed #1021. R1 replay (453c26853 vs clean dev 4d37e220a): 839M instr per tick (dev 480M); Stewards manage 13,819 moving villagers a tick (dev 64) and 22,333 accepted orders in 37 s (dev 260); orders replaced within 10 s 338 (dev 23). Owner 11-24: the cost was agreed | Profile the Steward pass (+220M issuer_steward) with call graphs; cut its cost per job |
+| Vassal domains per second (8, world-wide) | 11-23 x1 | PARTIAL: in this PR | Each Vassal domain is visited once a second on its own phase, whatever the number of Vassals; visits read the domain's member list (own units and visitors, kept by movement's tile changes) instead of querying the 201-tile box, which is queried only after activation or a zone change. R1 replay issuer_vassal 34.0M instr per tick (dev 15.4M) | A longer interval (owner: may act much less than once a second) |
+| Wall tiles per placement (10) | 11-23 x1 | PARTIAL: in this PR | Dropped: a wall run extends as far as the line is straight and the 24 paid sites in flight allow | Merge |
 | Steward villagers (100), Steward and Vassal radius (100 tiles), Vassal defenders (20) | 11-23 x1 | PLANNED: keep (design) | rules.rs, vassal/mod.rs (#571, #688) | Keep |
 | Not decided 11-23: Vassal placements per pass (8), sites in flight (24), towered work points (8), roads 64 nodes and 14-tile bridges, General 200 soldiers and 8 admissions per 0.5 s, builder next foundation (10 tiles, 4 tries), build order villagers (32), wall segments per order (64) | 11-23 | PLANNED | My read 11-23: keep sites in flight; drop the rest (General size is design) | Decide with the measurement of step 1 |
 

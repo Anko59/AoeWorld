@@ -119,7 +119,7 @@ fn foundations_get_a_few_nearby_helpers_instead_of_the_idle_group() {
 }
 
 #[test]
-fn a_partial_census_counts_builders_from_the_previous_slice() {
+fn a_crowded_box_counts_builders_from_earlier_visits_against_the_team_limit() {
     let (mut w, _, steward) = manager::active();
     w.set_fog_disabled(true);
     let old: Vec<_> = w.units().map(|u| u.id).collect();
@@ -177,10 +177,11 @@ fn a_partial_census_counts_builders_from_the_previous_slice() {
             .values()
             .filter(|task| task.building == foundation)
             .count();
-        assert_eq!(
-            count, 3,
-            "an incomplete census must not recruit a fresh team"
-        );
+        // Members are kept by events, so 1,200 soldiers in the box no longer
+        // leave the census partial: the three builders count against the
+        // starting-village team limit of a 2x2 House (2 * (2 + 2) + 4 = 12),
+        // which leaves room for all eight idle villagers and no more exist.
+        assert_eq!(count, 11, "three builders plus the eight idle villagers");
     }
     assert!(
         !w.building(foundation).unwrap().is_complete(),

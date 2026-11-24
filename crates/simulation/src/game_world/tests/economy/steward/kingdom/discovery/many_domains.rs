@@ -165,9 +165,7 @@ fn a_hundred_prepared_map_domains_rotate_real_resource_queries_inside_finder_bud
     let mut observed = BTreeSet::new();
     let mut search_total = 0;
     let mut node_total = 0;
-    let ticks = 2
-        * 100_usize.div_ceil(crate::STEWARD_RULES.domains_per_pass)
-        * crate::STEWARD_RULES.period_ticks as usize;
+    let ticks = 2 * crate::STEWARD_RULES.period_ticks as usize;
     for tick in 0..ticks {
         a.advance();
         b.advance();
@@ -189,14 +187,11 @@ fn a_hundred_prepared_map_domains_rotate_real_resource_queries_inside_finder_bud
                 observed.insert(*steward);
             }
         }
-        if tick + 1
-            == 100_usize.div_ceil(crate::STEWARD_RULES.domains_per_pass)
-                * crate::STEWARD_RULES.period_ticks as usize
-        {
+        if tick + 1 == crate::STEWARD_RULES.period_ticks as usize {
             assert_eq!(
                 observed.len(),
                 100,
-                "each player gets a pass within one rotation of the fixed budget"
+                "every domain gets its visit within one period, however many exist"
             );
         }
     }

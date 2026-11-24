@@ -64,6 +64,14 @@ impl GameWorld {
             }
             return;
         }
+        // A new Dock is bought for Food, like the boats it trains: it never
+        // takes a worker off a resource the kingdom needs more.
+        if !self
+            .steward_priority(s.player, s.home.settings.weights)
+            .is_some_and(|p| p.kinds()[0] == ResourceKind::Food)
+        {
+            return;
+        }
         let Some(worker) = self.steward_dock_builder(s, None) else {
             return;
         };
@@ -86,9 +94,7 @@ impl GameWorld {
         };
         let start = s.home.navy.site_after;
         for step in 0..81 {
-            if !budget.site(work) {
-                break;
-            }
+            budget.site(work);
             let candidate = (start + step) % 81;
             let next = (candidate + 1) % 81;
             s.home.navy.site_after = next;
@@ -109,9 +115,7 @@ impl GameWorld {
             {
                 continue;
             }
-            if !budget.order(work) {
-                break;
-            }
+            budget.order(work);
             if let Ok(id) = self.issue_build(s.player, &[worker], BuildingKind::Dock, tile, false) {
                 self.claim_steward_worker(s.steward, worker, ResourceKind::Food);
                 changed.push(worker);

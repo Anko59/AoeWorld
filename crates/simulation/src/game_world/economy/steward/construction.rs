@@ -9,7 +9,6 @@ struct PlacementSpec {
     near: TileCoord,
     max_dropoff_distance: Option<u64>,
     cursor: SiteCursor,
-    site_limit: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -21,7 +20,6 @@ enum SiteCursor {
 pub(super) struct FarmRepairSite {
     pub farm: EntityId,
     pub near: TileCoord,
-    pub site_limit: usize,
 }
 
 impl GameWorld {
@@ -43,7 +41,6 @@ impl GameWorld {
                 near,
                 max_dropoff_distance: None,
                 cursor: SiteCursor::Shared,
-                site_limit: STEWARD_RULES.site_checks_per_domain,
             },
             s,
             budget,
@@ -66,7 +63,6 @@ impl GameWorld {
                 near: repair.near,
                 max_dropoff_distance: Some(FARM_DROPOFF_DISTANCE_SQUARED),
                 cursor: SiteCursor::Farm(repair.farm),
-                site_limit: repair.site_limit,
             },
             s,
             budget,
@@ -87,7 +83,6 @@ impl GameWorld {
             near,
             max_dropoff_distance,
             cursor,
-            site_limit,
         } = site;
         if !s.complete {
             return false;
@@ -129,9 +124,7 @@ impl GameWorld {
                 (-radius - side, -radius - side),
             ];
             let (dx, dy) = offsets[candidate % 8];
-            if budget.sites >= site_limit || !budget.site(work) {
-                return false;
-            }
+            budget.site(work);
             self.steward_site_cursor(s, cursor, (candidate + 1) % 64);
             let tile = TileCoord::new(near.x + dx, near.y + dy);
             let rect = TileRect::from_xywh(tile.x, tile.y, side, kind.rules().depth);
@@ -146,9 +139,7 @@ impl GameWorld {
             {
                 continue;
             }
-            if !budget.order(work) {
-                return false;
-            }
+            budget.order(work);
             if let Ok(id) = self.issue_build(s.player, &[worker], kind, tile, false) {
                 self.steward_site_cursor(s, cursor, 0);
                 if let Some(b) = self.building(id) {
@@ -257,9 +248,7 @@ impl GameWorld {
         let index = (self.tick.0 / self.config.ticks(STEWARD_RULES.period_ticks)) as usize
             % candidates.len();
         let old = candidates[index];
-        if !budget.search(work) {
-            return;
-        }
+        budget.search(work);
         let mut searched = super::super::gathering::ResourceSearchWork::default();
         let nearby = self.nearest_resource_matching_counted(
             old.footprint.min,

@@ -11,7 +11,6 @@ impl Economy {
         }
         h.update(b"vassal-defense");
         h.update(&m.plan_cursor.map_or(u32::MAX, |id| id.0).to_le_bytes());
-        h.update(&m.cursor.map_or(u32::MAX, |id| id.0).to_le_bytes());
         h.update(&(m.manual.len() as u64).to_le_bytes());
         for id in &m.manual {
             h.update(&id.0.to_le_bytes());
@@ -24,7 +23,15 @@ impl Economy {
             for n in [d.center.x, d.center.y] {
                 h.update(&n.to_le_bytes());
             }
-            h.update(&[u8::from(d.development), d.status.focus as u8]);
+            h.update(&[
+                u8::from(d.development),
+                d.status.focus as u8,
+                u8::from(d.census),
+            ]);
+            h.update(&(d.members.len() as u64).to_le_bytes());
+            for unit in &d.members {
+                h.update(&unit.0.to_le_bytes());
+            }
             h.update(&(d.cursor as u64).to_le_bytes());
             h.update(&[u8::from(d.progress.is_some())]);
             if let Some((site, work, since)) = d.progress {

@@ -20,6 +20,7 @@ pub use work::{VassalFocus, VassalJob, VassalJobs};
 pub const VASSAL_LIMIT: usize = 20;
 /// The domain a Vassal develops, fortifies and defends: a Steward's circle.
 pub const VASSAL_RADIUS: i32 = super::steward::STEWARD_RULES.radius_tiles;
+/// Ticks between two visits of one domain.
 const PASS_TICKS: u64 = 20;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -64,6 +65,10 @@ pub(crate) struct Domain {
     player: PlayerId,
     center: TileCoord,
     walking: Option<std::sync::Arc<super::land::walking::Walking>>,
+    /// Every unit (own or foreign) on the domain's ground, kept by movement's
+    /// tile changes; one box sweep after activation or a zone change.
+    members: BTreeSet<EntityId>,
+    census: bool,
     soldiers: BTreeSet<EntityId>,
     development: bool,
     cursor: usize,
@@ -104,26 +109,22 @@ pub(crate) struct Manager {
     pub(super) manual: BTreeSet<EntityId>,
     recalls: BTreeMap<EntityId, Recall>,
     returns: BTreeMap<EntityId, WorldPosition>,
-    cursor: Option<EntityId>,
     plan_cursor: Option<EntityId>,
+    /// The domains each tracked unit stands in.
+    member_of: BTreeMap<EntityId, Vec<EntityId>>,
 }
 impl Manager {
-    fn scheduled_domain(&self, tick: u64) -> Option<EntityId> {
-        use std::ops::Bound::{Excluded, Unbounded};
-
-        let due = (0..self.domains.len()).take(8).len() as u64;
+    /// Every domain is visited once per `PASS_TICKS`: a Vassal acts as often
+    /// with one domain in the world as with a thousand. Domains take the
+    /// phases of the period in turn, so visits spread over its ticks.
+    fn scheduled(&self, tick: u64) -> Vec<EntityId> {
         let phase = tick % PASS_TICKS;
-        // Spend the existing visit budget across the period. As the budget is
-        // less than the period, consecutive boundaries differ by at most one.
-        if ((phase + 1) * due).div_ceil(PASS_TICKS) == (phase * due).div_ceil(PASS_TICKS) {
-            return None;
-        }
-        let cursor = self.cursor.unwrap_or(EntityId(0));
         self.domains
-            .range((Excluded(cursor), Unbounded))
-            .next()
-            .or_else(|| self.domains.first_key_value())
+            .keys()
+            .zip((0..PASS_TICKS).cycle())
+            .filter(|&(_, slot)| slot == phase)
             .map(|(&id, _)| id)
+            .collect()
     }
 }
 impl GameWorld {
@@ -150,6 +151,8 @@ impl GameWorld {
                 player,
                 center,
                 walking: None,
+                members: BTreeSet::new(),
+                census: false,
                 soldiers: BTreeSet::new(),
                 development: true,
                 cursor: 0,
@@ -205,13 +208,18 @@ impl GameWorld {
     }
     pub(crate) fn deactivate_vassal(&mut self, id: EntityId) {
         if let Some(d) = self.economy.vassals.domains.remove(&id) {
+            for unit in &d.members {
+                if let Some(list) = self.economy.vassals.member_of.get_mut(unit) {
+                    list.retain(|&domain| domain != id);
+                    if list.is_empty() {
+                        self.economy.vassals.member_of.remove(unit);
+                    }
+                }
+            }
             self.economy.walking.vassals.set(d.player, id, None);
             for soldier in d.soldiers {
                 self.economy.vassals.controlled.remove(&soldier);
             }
-        }
-        if self.economy.vassals.domains.is_empty() {
-            self.economy.vassals.cursor = None;
         }
         self.finish_vassal_recall(id);
     }
@@ -235,12 +243,17 @@ impl GameWorld {
     }
     pub(crate) fn advance_vassals(&mut self, changed: &mut Vec<EntityId>) {
         self.refresh_vassal_walk();
+        self.vassal_track_members();
         self.advance_vassal_plans();
         if self.tick.0.is_multiple_of(PASS_TICKS) && !self.economy.vassals.returns.is_empty() {
             self.finish_vassal_returns();
         }
-        if let Some(id) = self.economy.vassals.scheduled_domain(self.tick.0) {
-            self.economy.vassals.cursor = Some(id);
+        for id in self.economy.vassals.scheduled(self.tick.0) {
+            self.visit_vassal(id, changed);
+        }
+    }
+    fn visit_vassal(&mut self, id: EntityId, changed: &mut Vec<EntityId>) {
+        {
             let d = &self.economy.vassals.domains[&id];
             if !self.building(d.castle).is_some_and(|b| {
                 b.hp > 0 && b.garrison.iter().any(|g| g.unit.id == id && g.unit.hp > 0)
@@ -248,7 +261,7 @@ impl GameWorld {
                 self.deactivate_vassal(id);
                 return;
             }
-            let (center, player) = (d.center, d.player);
+            let (center, player, census) = (d.center, d.player, d.census);
             let walking = d.walking.clone();
             let stale: Vec<_> = d
                 .soldiers
@@ -269,10 +282,43 @@ impl GameWorld {
                 2 * VASSAL_RADIUS + 1,
             )
             .clamp(self.config.width_tiles, self.config.height_tiles);
-            let units = self.query(rect).0;
-            for u in units.iter().filter(|u| {
-                u.player == player && u.hp > 0 && owns(walking.as_deref(), id, center, u.position)
-            }) {
+            // The domain's own units and visitors: its member list, swept from
+            // the box only after activation or a zone change.
+            if !census {
+                let found = self
+                    .query(rect)
+                    .0
+                    .into_iter()
+                    .filter(|u| u.hp > 0 && owns(walking.as_deref(), id, center, u.position))
+                    .map(|u| u.id)
+                    .collect::<BTreeSet<_>>();
+                let old: Vec<_> = self.economy.vassals.domains[&id]
+                    .members
+                    .iter()
+                    .copied()
+                    .collect();
+                for unit in old.into_iter().filter(|u| !found.contains(u)) {
+                    self.vassal_set_member(unit, id, false);
+                }
+                for unit in found {
+                    self.vassal_set_member(unit, id, true);
+                }
+                if let Some(d) = self.economy.vassals.domains.get_mut(&id) {
+                    d.census = true;
+                }
+            }
+            let mut units = Vec::new();
+            let mut gone = Vec::new();
+            for &unit in &self.economy.vassals.domains[&id].members {
+                match self.unit(unit) {
+                    Some(u) if u.hp > 0 && !self.embarked(unit) => units.push(u),
+                    _ => gone.push(unit),
+                }
+            }
+            for unit in gone {
+                self.vassal_set_member(unit, id, false);
+            }
+            for u in units.iter().filter(|u| u.player == player) {
                 if self.vassal_controller(u.id).is_some()
                     || self.general_controller(u.id).is_some()
                     || self.economy.vassals.manual.contains(&u.id)
@@ -356,6 +402,9 @@ impl GameWorld {
             };
             for id in walking.offices() {
                 if let Some(domain) = self.economy.vassals.domains.get_mut(&id) {
+                    if domain.walking.is_none() || walking.zone_changed(id) {
+                        domain.census = false;
+                    }
                     domain.walking = Some(walking.clone());
                 }
             }
@@ -370,5 +419,73 @@ impl GameWorld {
             .values()
             .map(|d| (d.player, d.center, VASSAL_RADIUS))
             .collect()
+    }
+}
+
+impl GameWorld {
+    pub(crate) fn vassal_domains_exist(&self) -> bool {
+        !self.economy.vassals.domains.is_empty()
+    }
+
+    fn vassal_set_member(&mut self, unit: EntityId, domain: EntityId, member: bool) {
+        let m = &mut self.economy.vassals;
+        let Some(d) = m.domains.get_mut(&domain) else {
+            return;
+        };
+        let list = m.member_of.entry(unit).or_default();
+        if member {
+            d.members.insert(unit);
+            if !list.contains(&domain) {
+                list.push(domain);
+            }
+        } else {
+            d.members.remove(&unit);
+            list.retain(|&other| other != domain);
+        }
+        if list.is_empty() {
+            m.member_of.remove(&unit);
+        }
+    }
+
+    /// Units movement stepped onto a new tile (or placed on the map) join or
+    /// leave the domains whose ground that tile is; a box test first, so the
+    /// ownership lookup runs only near a domain.
+    fn vassal_track_members(&mut self) {
+        if self.economy.vassals.domains.is_empty() {
+            return;
+        }
+        let moved = self.economy.walking.moved.clone();
+        for id in moved {
+            let Some(u) = self.unit(id) else {
+                continue;
+            };
+            let tile = u.position.tile_floor();
+            let inside: Vec<_> = self
+                .economy
+                .vassals
+                .domains
+                .iter()
+                .filter(|&(&domain, d)| {
+                    d.census
+                        && (tile.x - d.center.x).abs() <= VASSAL_RADIUS
+                        && (tile.y - d.center.y).abs() <= VASSAL_RADIUS
+                        && owns(d.walking.as_deref(), domain, d.center, u.position)
+                })
+                .map(|(&domain, _)| domain)
+                .collect();
+            let before = self
+                .economy
+                .vassals
+                .member_of
+                .get(&id)
+                .cloned()
+                .unwrap_or_default();
+            for domain in before.iter().filter(|d| !inside.contains(d)) {
+                self.vassal_set_member(id, *domain, false);
+            }
+            for domain in inside {
+                self.vassal_set_member(id, domain, true);
+            }
+        }
     }
 }

@@ -72,9 +72,7 @@ impl GameWorld {
             .copied()
         {
             use super::super::gathering::WorkTarget;
-            if !budget.order(work) {
-                return None;
-            }
+            budget.order(work);
             let accepted = match job.target {
                 WorkTarget::Farm(farm) => self.issue_farm(s.player, worker, farm).is_ok(),
                 WorkTarget::Node(node) => self.issue_gather(s.player, worker, node).is_ok(),

@@ -225,11 +225,7 @@ fn run(threads: usize, domains: usize, unfinished_mills: bool) -> Observation {
                     previous[index] = now;
                 }
                 let work = w.steward_work();
-                assert!(
-                    work.orders <= 64 * domains
-                        && work.resource_searches <= 8 * domains
-                        && work.site_checks <= 32 * domains
-                );
+                assert!(work.domains <= domains);
                 assert!(
                     work.unit_visits <= 1_024 * domains && work.building_visits <= 2_048 * domains
                 );

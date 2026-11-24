@@ -48,10 +48,8 @@ impl GameWorld {
         let threat = units
             .iter()
             .filter(|u| {
-                u.player != player
-                    && u.hp > 0
-                    && self.vassal_owns(id, u.position)
-                    && self.unit_visible_to(player, u.id)
+                // `units` holds only the domain's ground (see the visit).
+                u.player != player && self.unit_visible_to(player, u.id)
             })
             .min_by_key(|u| u.id)
             .map(|u| (u.id, u.position))
@@ -74,7 +72,7 @@ impl GameWorld {
         } else {
             let victims = units
                 .iter()
-                .filter(|u| u.player == player && u.hp > 0 && self.vassal_owns(id, u.position))
+                .filter(|u| u.player == player)
                 .map(|u| u.id)
                 .collect();
             self.wolves_hunting(&victims)

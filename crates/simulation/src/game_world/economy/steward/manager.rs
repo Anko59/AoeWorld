@@ -5,7 +5,15 @@ use super::{
 use crate::{BuildingKind, GameWorld, UnitKind, UnitTask, VILLAGE_RULES};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, WorldPosition};
 use std::collections::BTreeMap;
-use std::ops::Bound::{Excluded, Unbounded};
+
+/// Failed job searches for one idle villager: each retry waits twice as long
+/// (one to 32 visits), so a domain without work does not search again every
+/// second for each of its idle villagers.
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct Unemployed {
+    pub(super) tries: u8,
+    pub(super) retry_at: u64,
+}
 
 /// A point just outside the TownCenter footprint, on the side facing `from`. The
 /// TownCenter centre itself lies inside its own footprint and cannot be walked to.
@@ -25,44 +33,25 @@ fn dist2(a: WorldPosition, b: WorldPosition) -> i64 {
 }
 
 impl Manager {
-    fn scheduled(&mut self, tick: u64, period: u64) -> Vec<EntityId> {
-        if self.active.is_empty() {
-            return Vec::new();
-        }
-        // The world-wide budget stays at `domains_per_pass` visits per period;
-        // rotating by owner gives every kingdom a turn before any kingdom's
-        // next domain, so the cost does not grow with the number of players.
-        let due = self.active.len().min(STEWARD_RULES.domains_per_pass) as u64;
+    /// Every active domain is visited once per `period`: how often a domain
+    /// acts does not depend on how many exist, and the cost of a tick grows
+    /// only with the number of domains. Domains take the phases of the period
+    /// in turn, so visits spread evenly over its ticks.
+    fn scheduled(&self, tick: u64, period: u64) -> Vec<EntityId> {
         let phase = tick % period;
-        let take = ((phase + 1) * due).div_ceil(period) - (phase * due).div_ceil(period);
-        let mut ids = Vec::with_capacity(take as usize);
-        for _ in 0..take {
-            let Some((&player, domains)) = self
-                .cursor
-                .and_then(|cursor| self.by_player.range((Excluded(cursor), Unbounded)).next())
-                .or_else(|| self.by_player.first_key_value())
-            else {
-                break;
-            };
-            let Some((&id, _)) = self
-                .last_domain
-                .get(&player)
-                .and_then(|&cursor| domains.range((Excluded(cursor), Unbounded)).next())
-                .or_else(|| domains.first_key_value())
-            else {
-                continue;
-            };
-            self.cursor = Some(player);
-            self.last_domain.insert(player, id);
-            ids.push(id);
-        }
-        ids
+        self.active
+            .iter()
+            .zip((0..period).cycle())
+            .filter(|&(_, slot)| slot == phase)
+            .map(|(&id, _)| id)
+            .collect()
     }
 }
 
 impl GameWorld {
     pub(crate) fn advance_stewards(&mut self, changed: &mut Vec<EntityId>) {
         self.refresh_steward_walk();
+        self.steward_track_members();
         let mut work = StewardWork::default();
         let period = self.config.ticks(STEWARD_RULES.period_ticks);
         let ids = self.economy.stewards.scheduled(self.tick.0, period);
@@ -91,6 +80,7 @@ impl GameWorld {
         for worker in finished {
             self.economy.stewards.transfers.remove(&worker);
         }
+        self.steward_arrivals(changed);
         let mut incoming = BTreeMap::new();
         for dest in self.economy.stewards.transfers.values() {
             *incoming.entry(*dest).or_default() += 1;
@@ -142,25 +132,72 @@ impl GameWorld {
             self.steward_refresh_farms(&mut snapshot, &mut budget, &mut work, changed);
             self.steward_refresh_wood(&mut snapshot, &mut budget, &mut work);
             self.steward_retire_lumber_camp(&mut snapshot, &mut budget, &mut work);
-            while discover && budget.searches < STEWARD_RULES.resource_searches_per_domain {
+            // Each idle villager this visit found no work for funds one more
+            // block of discovery: the sweep follows demand, not a fixed count.
+            for _ in 0..if discover { unemployed.len() } else { 0 } {
                 if !self.steward_discover(&mut snapshot, &mut budget, &mut work) {
                     break;
                 }
             }
-            // Idle villagers this plot could not employ go where a Steward has room.
-            self.steward_send_away(
+            // Idle villagers this plot failed to employ twice go where a
+            // Steward has room. A villager already relocated for want of work
+            // stays until it works again: two domains without work must not
+            // pass it back and forth.
+            let home = &self.economy.steward_homes[&id];
+            let relocated = &self.economy.stewards.relocated;
+            let leaving: Vec<_> = unemployed
+                .iter()
+                .copied()
+                .filter(|worker| {
+                    home.unemployed.get(worker).is_some_and(|u| u.tries >= 2)
+                        && !relocated.contains(worker)
+                })
+                .collect();
+            let sent = self.steward_send_away(
                 id,
-                &unemployed,
+                &leaving,
                 &mut budget,
                 &mut work,
                 &mut incoming,
                 changed,
             );
+            if let Some(home) = self.economy.steward_homes.get_mut(&id) {
+                for worker in &sent {
+                    home.unemployed.remove(worker);
+                }
+            }
+            self.economy.stewards.relocated.extend(sent);
             self.steward_publish_status(id, snapshot.villagers, wait);
             self.economy.stewards.ordering = None;
         }
         self.record_order_decisions(work.orders as u64);
         self.economy.stewards.work = work;
+    }
+    /// A transferred villager that stopped inside its destination belongs to
+    /// it on arrival, even when that domain filled while it walked (#1021):
+    /// the destination then manages it like any villager above its cap and
+    /// sends it on to a Steward with room, instead of leaving it unmanaged.
+    fn steward_arrivals(&mut self, changed: &mut Vec<EntityId>) {
+        let arrived: Vec<_> = self
+            .economy
+            .stewards
+            .transfers
+            .iter()
+            .filter(|(worker, dest)| {
+                self.unit(**worker).is_some_and(|u| {
+                    !u.moving && !u.planning && self.economy.steward_homes[dest].owns(u.position)
+                })
+            })
+            .map(|(worker, dest)| (*worker, *dest))
+            .collect();
+        for (worker, dest) in arrived {
+            self.economy.stewards.manual.remove(&worker);
+            let kind = self
+                .gathering_kind(worker)
+                .unwrap_or(aoe_map::ResourceKind::Food);
+            self.claim_steward_arrival(dest, worker, kind);
+            changed.push(worker);
+        }
     }
     /// Mirror the status into the TownCenter's occupant record, so a changed status
     /// reaches the owner like any other building change.
@@ -206,7 +243,7 @@ impl GameWorld {
             if b.kind != BuildingKind::TownCenter
                 || !b.is_complete()
                 || !s.home.covers(b.footprint, 1)
-                || b.rally_point.is_some_and(|r| !s.home.contains(r.position))
+                || b.rally_point.is_some_and(|r| !s.home.owns(r.position))
             {
                 continue;
             }
@@ -225,9 +262,10 @@ impl GameWorld {
                 wait = StewardWait::Population;
                 break;
             }
-            if !budget.support_available() || !budget.order(work) {
+            if !budget.support_available() {
                 break;
             }
+            budget.order(work);
             if self.issue_train(s.player, b.id, UnitKind::Villager).is_ok() {
                 s.queued += 1;
                 s.global_queued += 1;
@@ -249,9 +287,10 @@ impl GameWorld {
         work: &mut StewardWork,
         incoming: &mut BTreeMap<EntityId, usize>,
         changed: &mut Vec<EntityId>,
-    ) {
+    ) -> Vec<EntityId> {
+        let mut sent = Vec::new();
         let Some(player) = self.economy.steward_homes.get(&from).map(|h| h.player) else {
-            return;
+            return sent;
         };
         for &worker in workers {
             let Some(at) = self.unit(worker).map(|u| u.position) else {
@@ -260,9 +299,7 @@ impl GameWorld {
             let Some((dest, center)) = self.steward_with_room(player, from, at, incoming) else {
                 break;
             };
-            if !budget.order(work) {
-                break;
-            }
+            budget.order(work);
             if !matches!(self.issue_move(worker, center), Ok(true)) {
                 continue;
             }
@@ -272,7 +309,9 @@ impl GameWorld {
             self.economy.stewards.transfers.insert(worker, dest);
             *incoming.entry(dest).or_default() += 1;
             changed.push(worker);
+            sent.push(worker);
         }
+        sent
     }
     fn steward_with_room(
         &self,
@@ -316,9 +355,10 @@ impl GameWorld {
             {
                 break;
             }
-            if !budget.support_available() || !budget.order(work) {
+            if !budget.support_available() {
                 break;
             }
+            budget.order(work);
             let _ = self.issue_farm_reseed(s.player, b.id, true);
         }
     }
@@ -367,6 +407,14 @@ impl GameWorld {
         changed: &mut Vec<EntityId>,
     ) -> Vec<EntityId> {
         let mut unemployed = Vec::new();
+        let now = self.tick.0;
+        let period = self.config.ticks(STEWARD_RULES.period_ticks);
+        if let Some(home) = self.economy.steward_homes.get_mut(&id) {
+            let units = &self.units;
+            let lookup = &self.lookup;
+            home.unemployed
+                .retain(|worker, _| lookup.get(worker).is_some_and(|&i| units[i].state.hp > 0));
+        }
         let after = s.home.worker_after;
         let split = after.map_or(0, |id| s.units.partition_point(|u| u.id <= id));
         let ids: Vec<_> = s.units[split..]
@@ -375,14 +423,17 @@ impl GameWorld {
             .map(|u| u.id)
             .collect();
         for worker in ids {
-            if budget.orders >= STEWARD_RULES.orders_per_domain {
-                break;
-            }
             if !self.steward_worker_idle(worker, id) {
                 continue;
             }
-            if !budget.job() {
-                break;
+            // A villager no job was found for waits out its own retry
+            // interval instead of repeating the same failed search each visit.
+            if self.economy.steward_homes[&id]
+                .unemployed
+                .get(&worker)
+                .is_some_and(|u| u.retry_at > now)
+            {
+                continue;
             }
             if let Some(home) = self.economy.steward_homes.get_mut(&id) {
                 home.worker_after = Some(worker);
@@ -391,9 +442,18 @@ impl GameWorld {
             let job = self.steward_job(worker, s, budget, work);
             s.avoid = None;
             if let Some(kind) = job {
+                self.economy.stewards.relocated.remove(&worker);
+                if let Some(home) = self.economy.steward_homes.get_mut(&id) {
+                    home.unemployed.remove(&worker);
+                }
                 self.claim_steward_worker(id, worker, kind);
                 changed.push(worker);
-            } else if budget.searches < STEWARD_RULES.resource_searches_per_domain {
+            } else {
+                if let Some(home) = self.economy.steward_homes.get_mut(&id) {
+                    let entry = home.unemployed.entry(worker).or_default();
+                    entry.tries = entry.tries.saturating_add(1);
+                    entry.retry_at = now + (period << (entry.tries - 1).min(5));
+                }
                 // The search ran and found no work for this villager here.
                 unemployed.push(worker);
             }

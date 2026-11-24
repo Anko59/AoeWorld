@@ -402,3 +402,30 @@ fn arrival_and_adoption_do_not_open_a_second_transfer_into_the_same_slot() {
     }
     panic!("the reserved worker must arrive and be adopted");
 }
+
+#[test]
+fn a_villager_sent_to_a_steward_that_filled_meanwhile_is_not_left_idle_there() {
+    let (mut w, a, b, _) = transfer_fixture();
+    let original: Vec<_> = w
+        .units()
+        .filter(|u| w.steward_controller(u.id) == Some(a))
+        .map(|u| u.id)
+        .collect();
+    pass(&mut w);
+    let sent = *original
+        .iter()
+        .find(|id| w.steward_controller(**id).is_none())
+        .unwrap();
+    w.issue_steward_settings(PlayerId(0), b, settings([45, 30, 15, 10], 0, false))
+        .unwrap();
+    for _ in 0..150 {
+        pass(&mut w);
+    }
+    let unit = w.unit(sent).unwrap();
+    assert!(
+        w.steward_controller(sent).is_some() || unit.moving || unit.planning,
+        "the villager stands idle and unmanaged at {:?} (task {:?})",
+        unit.position.tile_floor(),
+        unit.task
+    );
+}

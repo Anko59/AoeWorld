@@ -1,6 +1,6 @@
 //! A mobile Steward's current TownCenter domain and budgeted economy.
 use crate::{EconomyError, GameWorld, UnitKind};
-use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, TileRect, WorldPosition};
+use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, WorldPosition};
 use aoe_map::ResourceKind;
 use std::collections::{BTreeMap, BTreeSet};
 mod adopt;
@@ -32,10 +32,17 @@ pub(crate) struct Home {
     pub(crate) town_center: Option<EntityId>,
     pub(crate) center: WorldPosition,
     pub(crate) workers: BTreeSet<EntityId>,
+    /// Idle villagers no work was found for, with their next retry.
+    unemployed: BTreeMap<EntityId, manager::Unemployed>,
     pub(super) worker_after: Option<EntityId>,
+    /// Villagers and boats of the player whose last stop lies in this zone,
+    /// kept by events (placed on the map, stopped on a new tile, zone change).
+    pub(super) members: BTreeSet<EntityId>,
+    /// The one census sweep after activation or a zone change has finished.
+    pub(super) census_done: bool,
     pub(super) scan_chunk: usize,
     pub(super) scan_offset: usize,
-    building_scan: Option<snapshot::BuildingScan>,
+    building_scan: snapshot::BuildingScan,
     pub(super) site_after: usize,
     pub(super) farm_after: Option<usize>,
     pub(super) repair_after: Option<EntityId>,
@@ -59,6 +66,14 @@ impl Home {
     pub(super) fn cap(&self) -> usize {
         usize::from(self.settings.cap).min(STEWARD_RULES.max_villagers)
     }
+    /// The zone changed: the unit and building sweeps start again from the
+    /// first chunk and the first building.
+    pub(super) fn restart_sweeps(&mut self) {
+        self.census_done = false;
+        (self.scan_chunk, self.scan_offset) = (0, 0);
+        self.building_scan.swept = false;
+        self.building_scan.after = None;
+    }
     pub(super) fn contains(&self, at: WorldPosition) -> bool {
         let dx = i64::from(at.x) - i64::from(self.center.x);
         let dy = i64::from(at.y) - i64::from(self.center.y);
@@ -79,14 +94,16 @@ pub(crate) struct Manager {
     pub(super) manual: BTreeSet<EntityId>,
     /// Worker -> destination until an automatic arrival is adopted or cancelled.
     pub(super) transfers: BTreeMap<EntityId, EntityId>,
-    pub(super) cursor: Option<PlayerId>,
-    pub(super) last_domain: BTreeMap<PlayerId, EntityId>,
+    /// Villagers sent to another domain for want of work, until they work.
+    pub(super) relocated: BTreeSet<EntityId>,
     /// Only set during an authoritative advance; never across an API boundary.
     pub(crate) automatic: bool,
     /// Issuing domain before a new worker has a controller. Transient within
     /// one admitted domain pass, including ordinary resource replacements.
     pub(super) ordering: Option<EntityId>,
     pub(super) work: StewardWork,
+    /// Each tracked unit's domain (if any) and the tile it was placed from.
+    pub(super) member_of: BTreeMap<EntityId, (Option<EntityId>, aoe_core::TileCoord)>,
 }
 impl GameWorld {
     pub(crate) fn register_steward(&mut self, id: EntityId) {
@@ -101,10 +118,13 @@ impl GameWorld {
                 town_center: None,
                 center: unit.position,
                 workers: BTreeSet::new(),
+                unemployed: BTreeMap::new(),
                 worker_after: None,
+                members: BTreeSet::new(),
+                census_done: false,
                 scan_chunk: 0,
                 scan_offset: 0,
-                building_scan: None,
+                building_scan: snapshot::BuildingScan::default(),
                 site_after: 0,
                 farm_after: None,
                 repair_after: None,
@@ -171,54 +191,6 @@ impl GameWorld {
         }
         Ok(())
     }
-    /// Kill idle, unclaimed own villagers in this active Steward's territory.
-    pub fn issue_steward_dismiss(
-        &mut self,
-        player: PlayerId,
-        steward: EntityId,
-    ) -> Result<(), EconomyError> {
-        let home = self
-            .economy
-            .steward_homes
-            .get(&steward)
-            .ok_or(EconomyError::UnknownEntity)?;
-        if home.player != player {
-            return Err(EconomyError::NotOwner);
-        }
-        if !self.active_steward(steward) {
-            return Err(EconomyError::InvalidTarget);
-        }
-        let center = home.center.tile_floor();
-        let r = STEWARD_RULES.radius_tiles;
-        let victims: Vec<_> = self
-            .query(
-                TileRect::from_xywh(center.x - r, center.y - r, 2 * r + 1, 2 * r + 1)
-                    .clamp(self.config.width_tiles, self.config.height_tiles),
-            )
-            .0
-            .into_iter()
-            .filter(|u| {
-                u.player == player
-                    && u.kind == UnitKind::Villager
-                    && u.hp > 0
-                    && matches!(u.task, crate::UnitTask::Idle | crate::UnitTask::Carrying)
-                    && !u.moving
-                    && !u.planning
-                    && !self.economy.gatherers.contains_key(&u.id)
-                    && !self.economy.builders.contains_key(&u.id)
-                    && !self.economy.garrison_orders.contains_key(&u.id)
-                    && home.owns(u.position)
-                    && self.steward_controller(u.id).is_none()
-            })
-            .map(|u| u.id)
-            .collect();
-        for id in victims {
-            if let Some(&index) = self.lookup.get(&id) {
-                self.kill_unit(index);
-            }
-        }
-        Ok(())
-    }
     pub fn steward_town_center(&self, id: EntityId) -> Option<EntityId> {
         self.economy
             .steward_homes
@@ -239,6 +211,7 @@ impl GameWorld {
             if h.town_center != town_center {
                 h.walking = None;
                 h.regions = None;
+                h.restart_sweeps();
             }
             h.town_center = town_center;
             if let Some(center) = center {
@@ -265,7 +238,6 @@ impl GameWorld {
                 members.remove(&id);
                 if members.is_empty() {
                     self.economy.stewards.by_player.remove(&player);
-                    self.economy.stewards.last_domain.remove(&player);
                 }
             }
             let (workers, refused) = self
@@ -291,14 +263,17 @@ impl GameWorld {
                     h.workers.extend(ships);
                     h.navy = navy::Fleet::default();
                     h.worker_after = None;
+                    h.unemployed.clear();
                     h.scan_chunk = 0;
                     h.scan_offset = 0;
-                    h.building_scan = None;
+                    h.census_done = false;
+                    h.building_scan = snapshot::BuildingScan::default();
                     h.site_after = 0;
                     h.farm_after = None;
                     (std::mem::take(&mut h.workers), refused)
                 })
                 .unwrap_or_default();
+            self.steward_release_members(id);
             for worker in workers {
                 self.economy.stewards.controlled.remove(&worker);
             }
@@ -309,7 +284,25 @@ impl GameWorld {
             }
         }
         if let Some((player, _)) = known {
-            self.economy.walking.stewards.set(player, id, footprint);
+            if self.economy.walking.stewards.set(player, id, footprint) {
+                // Until the player's zones are walked again (within a second),
+                // the old ones would still give a neighbour's land to a domain:
+                // ownership falls back to nearest-centre circles meanwhile.
+                let members: Vec<_> = self
+                    .economy
+                    .stewards
+                    .by_player
+                    .get(&player)
+                    .map(|m| m.keys().copied().collect())
+                    .unwrap_or_default();
+                for member in members {
+                    if let Some(home) = self.economy.steward_homes.get_mut(&member) {
+                        home.walking = None;
+                        home.regions = None;
+                        home.restart_sweeps();
+                    }
+                }
+            }
             self.refresh_steward_territory(player);
         }
     }
@@ -363,6 +356,7 @@ impl GameWorld {
     }
     pub(crate) fn forget_steward_worker(&mut self, id: EntityId) {
         self.economy.stewards.transfers.remove(&id);
+        self.economy.stewards.relocated.remove(&id);
         self.economy.stewards.manual.remove(&id);
         self.forget_steward_refusals(id);
         self.release_steward_worker(id);
@@ -386,6 +380,24 @@ impl GameWorld {
         steward: EntityId,
         worker: EntityId,
         kind: ResourceKind,
+    ) {
+        self.claim_steward(steward, worker, kind, false);
+    }
+    /// A transfer's arrival is claimed even above the owner's cap.
+    pub(super) fn claim_steward_arrival(
+        &mut self,
+        steward: EntityId,
+        worker: EntityId,
+        kind: ResourceKind,
+    ) {
+        self.claim_steward(steward, worker, kind, true);
+    }
+    fn claim_steward(
+        &mut self,
+        steward: EntityId,
+        worker: EntityId,
+        kind: ResourceKind,
+        over_cap: bool,
     ) {
         self.economy.stewards.transfers.remove(&worker);
         if self
@@ -418,7 +430,8 @@ impl GameWorld {
                 }
                 home.navy.ships.insert(worker);
             } else {
-                if !home.workers.contains(&worker) && home.workers.len() >= home.cap() {
+                if !over_cap && !home.workers.contains(&worker) && home.workers.len() >= home.cap()
+                {
                     return;
                 }
                 home.workers.insert(worker);

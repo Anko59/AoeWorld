@@ -100,6 +100,8 @@ impl GameWorld {
 
     pub(crate) fn insert_map_unit(&mut self, state: GameUnit, next_hit_tick: u64) {
         let (id, position) = (state.id, state.position);
+        // A unit placed on the map joins domains like one that stepped in.
+        self.management_tile_changed(id);
         if state.kind == UnitKind::Monk {
             self.combat.healers.insert(id);
             self.combat.healing.register(id);

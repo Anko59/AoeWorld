@@ -78,6 +78,18 @@ fn a_spent_tree_continues_its_productive_local_woodline() {
     let (mut w, steward, workers, _) = wood_realm(1);
     let worker = workers[0];
     reserves(&mut w, 30_000, 1_000, 30_000, 30_000);
+    // A wood-only mix: a coastal Dock for Food would otherwise borrow the
+    // only woodcutter of this fixture.
+    w.issue_steward_settings(
+        PlayerId(0),
+        steward,
+        crate::StewardSettings {
+            weights: [0, 100, 0, 0],
+            cap: 100,
+            training: false,
+        },
+    )
+    .unwrap();
     for _ in 0..3_000 {
         w.advance();
         if w.steward_controller(worker) == Some(steward)
@@ -120,9 +132,20 @@ fn a_spent_tree_continues_its_productive_local_woodline() {
         u64::from(tile.x.abs_diff(next.x)).pow(2) + u64::from(tile.y.abs_diff(next.y)).pow(2)
             <= radius * radius
     );
+    // A camp near the woodline may already stand (site checks are no longer
+    // rationed per visit, so it was built while the first tree was cut):
+    // remove it, so the spent tree really needs support construction.
+    let camps: Vec<_> = w
+        .player_buildings_of(PlayerId(0), BuildingKind::LumberCamp)
+        .map(|b| b.id)
+        .collect();
+    for camp in camps {
+        w.remove_building(camp);
+    }
     let mut repaired = false;
     let mut resumed = false;
     let mut idle = 0;
+    let mut gathered = false;
     for _ in 0..2_000 {
         w.advance();
         if let Some(job) = w.economy.builders.get(&worker) {
@@ -138,6 +161,7 @@ fn a_spent_tree_continues_its_productive_local_woodline() {
         } else {
             assert_eq!(w.gather_target(worker), Some(replacement));
             assert_eq!(w.gathering_kind(worker), Some(ResourceKind::Wood));
+            gathered = true;
             resumed |= repaired;
         }
         assert!(
@@ -146,7 +170,7 @@ fn a_spent_tree_continues_its_productive_local_woodline() {
         );
     }
     assert!(
-        repaired && resumed,
+        gathered && repaired && resumed,
         "support construction resumes the same productive woodline"
     );
 }

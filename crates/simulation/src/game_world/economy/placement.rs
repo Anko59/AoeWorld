@@ -129,12 +129,17 @@ impl GameWorld {
 
     /// Housing space from completed owned buildings, with saturating arithmetic.
     pub(super) fn refresh_population_cap(&mut self, player: PlayerId) {
-        // Only the player's own buildings, through the per-kind index: a
-        // whole-world scan here ran on every placement in a 100-seat world.
-        let cap = self
-            .player_buildings(player)
-            .filter(|building| building.is_complete())
-            .map(|building| u32::from(building.kind.rules().population_support))
+        // Only the player's own buildings of the kinds that house people,
+        // through the per-kind index: walls, roads and farms (most of a big
+        // kingdom) were summed at zero on every placement.
+        let cap = super::buildings::BUILDING_RULES
+            .iter()
+            .filter(|rules| rules.population_support > 0)
+            .flat_map(|rules| {
+                self.player_buildings_of(player, rules.kind)
+                    .filter(|building| building.is_complete())
+                    .map(|_| u32::from(rules.population_support))
+            })
             .fold(0_u32, u32::saturating_add);
         if let Some(state) = self.economy.players.get_mut(&player) {
             state.population_cap = cap;

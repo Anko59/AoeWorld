@@ -256,6 +256,9 @@ pub(crate) struct ZoneCache {
     patches: std::sync::Mutex<patches::PatchCatalog>,
     pub(in super::super) stewards: Groups,
     pub(in super::super) vassals: Groups,
+    /// Units that stepped onto another tile this tick, while any Steward or
+    /// Vassal domain exists: the only input of domain membership.
+    pub(in super::super) moved: Vec<EntityId>,
 }
 
 #[derive(Debug, Default)]
@@ -283,6 +286,12 @@ impl ZoneCache {
 }
 
 impl GameWorld {
+    /// Movement's tile change of one unit, kept only while domains exist.
+    pub(crate) fn management_tile_changed(&mut self, id: EntityId) {
+        if !self.economy.stewards.active.is_empty() || self.vassal_domains_exist() {
+            self.economy.walking.moved.push(id);
+        }
+    }
     pub(crate) fn management_ground_changed(&mut self, area: TileRect) {
         let cache = &mut self.economy.walking;
         cache.revision += 1;
