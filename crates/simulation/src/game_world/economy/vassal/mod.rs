@@ -265,10 +265,15 @@ impl GameWorld {
                 2 * VASSAL_RADIUS + 1,
             )
             .clamp(self.config.width_tiles, self.config.height_tiles);
-            let units = self.query(rect).0;
-            for u in units.iter().filter(|u| {
-                u.player == player && u.hp > 0 && owns(walking.as_deref(), id, center, u.position)
-            }) {
+            // The domain's own units and visitors, each ownership looked up
+            // once for recruitment, threats, victims and recent hits.
+            let units: Vec<_> = self
+                .query(rect)
+                .0
+                .into_iter()
+                .filter(|u| u.hp > 0 && owns(walking.as_deref(), id, center, u.position))
+                .collect();
+            for u in units.iter().filter(|u| u.player == player) {
                 if self.vassal_controller(u.id).is_some()
                     || self.general_controller(u.id).is_some()
                     || self.economy.vassals.manual.contains(&u.id)
