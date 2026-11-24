@@ -54,16 +54,16 @@ def test_far_rally_uses_short_land_hops_and_keeps_a_pause():
     world = lambda tick: FakeWorld(units + army, buildings, tick=tick,
                                    eco=economy(population=14, cap=30))
     brain, client = play(world(100))
-    moves = [a for a in client.named("move") if a[0] == 300]
+    moves = [(u, *a[1:3]) for a in client.named("formation_move") for u in a[0] if u == 300]
     assert len(moves) == 1
     from aoe_ai.geometry import dist
     assert dist((200, 55), moves[0][1:]) <= 48
     _, client = play(world(120), brain=brain)
-    assert [a for a in client.named("move") if a[0] == 300] == []
+    assert [a for a in client.named("formation_move") if 300 in a[0]] == []
     blocked = world(300)
     blocked.land_route = lambda *args: None
     _, client = play(blocked, brain=brain)
-    assert [a for a in client.named("move") if a[0] == 300] == []
+    assert [a for a in client.named("formation_move") if 300 in a[0]] == []
 
 
 def test_economy_chooses_resources_on_the_workers_land_component():

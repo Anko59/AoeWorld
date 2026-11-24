@@ -6,10 +6,10 @@ from __future__ import annotations
 import math
 from typing import Any, Optional
 
-from aoeworld import AnimalKind, AnimalTask, BuildingKind, UnitTask
+from aoeworld import AnimalKind, AnimalTask, BuildingKind, Formation, UnitTask
 
 from ...context import Context
-from ...geometry import Tile, centroid, clamp_tile, dist, nearest
+from ...geometry import Tile, centroid, clamp_tile, dist, near_any, nearest
 from . import raid
 from .march import march
 
@@ -19,7 +19,9 @@ class CombatManager:
         if ctx.home is None:
             return
         raid.observe(ctx)
+        raid.watch_sites(ctx)
         self.protect_workers(ctx)
+        self.answer_fire(ctx)
         self.recover_marches(ctx)
         army = [u for u in ctx.army if u.alive and u.id not in ctx.busy]
         mem = ctx.board
@@ -75,6 +77,29 @@ class CombatManager:
             field.extend(reinforcements)
         return field
 
+    def answer_fire(self, ctx: Context) -> None:
+        """A soldier hit on the march fights back, or halts when it cannot see
+        its attacker, instead of walking on while it is killed."""
+        hits = [e for e in ctx.events if e.kind == "under_attack" and not getattr(e, "is_building", False)]
+        if not hits:
+            return
+        soldiers = {u.id: u for u in ctx.army if u.alive}
+        enemies = {e.id: e for e in ctx.enemies}
+        for event in hits:
+            unit = soldiers.get(getattr(event, "id", None))
+            if unit is None or unit.id in ctx.busy or unit.attack_target is not None:
+                continue
+            attacker = enemies.get(getattr(event, "attacker", None))
+            if attacker is not None and attacker.alive and self.available_target(ctx, unit.id, attacker.id):
+                ctx.order("attack", unit.id, attacker.id)
+            elif unit.moving or unit.task == UnitTask.MOVING:
+                ctx.order("stop", unit.id)
+                ctx.board.marched[unit.id] = ctx.tick
+            else:
+                continue
+            ctx.board.march_progress.pop(unit.id, None)
+            ctx.board.bump("fire_answered")
+
     def recover_marches(self, ctx: Context) -> None:
         """Release accepted routes that stopped making observable progress.
 
@@ -86,9 +111,12 @@ class CombatManager:
         live = {u.id for u in ctx.army if u.alive}
         mem.march_progress = {i: p for i, p in mem.march_progress.items() if i in live}
         stall = ctx.config.march_stall_seconds * ctx.world.tick_hz
+        # Soldiers in contact with enemies are held up by the fight, not stuck.
+        contact = near_any((e.tile for e in ctx.enemies if e.alive), ctx.config.combat_engage_tiles) \
+            if ctx.enemies else (lambda tile: False)
         for unit in ctx.army:
             if ((not unit.moving and unit.task != UnitTask.MOVING)
-                    or unit.attack_target is not None or unit.id in ctx.busy):
+                    or unit.attack_target is not None or unit.id in ctx.busy or contact(unit.tile)):
                 mem.march_progress.pop(unit.id, None)
                 continue
             tile, since = mem.march_progress.get(unit.id, (unit.tile, ctx.tick))
@@ -153,12 +181,11 @@ class CombatManager:
                 if len(group) < cfg.combat_targets_per_cell:
                     group.append(enemy)
         origins = {}
+        picks: dict = {}
         limit = ctx.land_query_limit
         ctx.land_query_limit = min(limit, ctx._land_queries + cfg.combat_engage_route_queries)
         try:
             for unit in army:
-                if ctx.orders >= ctx.order_limit:
-                    return
                 if unit.attack_target is not None or unit.id in ctx.busy:
                     continue
                 cx, cy = (value // radius for value in unit.tile)
@@ -167,12 +194,30 @@ class CombatManager:
                            for enemy in cells.get((cx + dx, cy + dy), ())
                            if dist(unit.tile, enemy.tile) <= radius
                            and self.available_target(ctx, unit.id, enemy.id))
+                # A soldier already on the march is under attack-move: the
+                # server judges the attack, and only a refusal stops it.
+                walking = unit.moving or unit.task == UnitTask.MOVING
                 for target in sorted(targets, key=lambda enemy: (dist(unit.tile, enemy.tile), enemy.id)):
-                    if ctx.land_route(origin, target.tile) is not None:
-                        ctx.order("attack", unit.id, target.id)
+                    if walking or ctx.land_route(origin, target.tile) is not None:
+                        picks.setdefault((cx, cy), []).append((unit, target))
                         break
         finally:
             ctx.land_query_limit = limit
+        formation = getattr(Formation, cfg.army_formation)
+        for group in picks.values():
+            if len(group) >= cfg.combat_group_min:
+                # A dense contact is one attack-move order for the whole group.
+                goal = group[0][1].tile
+                for offset in range(0, len(group), cfg.march_group_members):
+                    if ctx.orders >= ctx.order_limit:
+                        return
+                    ctx.order("formation_move", [u.id for u, _ in group[offset:offset + cfg.march_group_members]],
+                              *goal, formation, attack_move=True)
+                continue
+            for unit, target in group:
+                if ctx.orders >= ctx.order_limit:
+                    return
+                ctx.order("attack", unit.id, target.id)
 
     def defend(self, ctx: Context, army: list) -> bool:
         """Engage enemies near home. True when the army is busy defending."""

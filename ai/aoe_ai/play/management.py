@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Any, Optional
 import math
 
-from aoeworld import BuildingKind, GeneralState, UnitKind, UnitTask, building_cost, building_size, train_seconds, unit_cost
+from aoeworld import BuildingKind, Formation, GeneralState, UnitKind, UnitTask, building_cost, building_size, train_seconds, unit_cost
 
 from . import buildorder
 from ..context import Context
@@ -389,14 +389,20 @@ class ManagementManager:
     def lead(self, ctx: Context, combat: Any) -> None:
         """March each General's army at the nearest known enemy building."""
         cfg = ctx.config
+        # A General whose soldiers are fighting stays with them: moving him
+        # would drag the army out of the fight it is in.
+        fighting = {u.commanded_by for u in ctx.led if u.attack_target is not None}
+        formation = getattr(Formation, cfg.army_formation)
         for general in (u for u in ctx.units if u.kind == UnitKind.GENERAL and u.alive):
+            if general.id in fighting:
+                continue
             if ctx.board.raid_until > ctx.tick:
                 target = ctx.board.raid_tile
                 key = f"recall-general:{general.id}"
                 if dist(general.tile, target) > cfg.defend_radius // 2 and not ctx.board.cooling(key, ctx.tick):
                     hop = ctx.land_hop(general.tile, target)
                     if hop != general.tile:
-                        ctx.order("move", general.id, *hop)
+                        ctx.order("formation_move", [general.id], *hop, formation, attack_move=True)
                         ctx.board.cool(key, ctx.tick, cfg.raid_general_retry_seconds * ctx.world.tick_hz)
                 continue
             if general.id in ctx.busy or general.general_state != GeneralState.IDLE or not general.idle:
@@ -418,5 +424,5 @@ class ManagementManager:
             hop = ctx.land_hop(general.tile, goal) if dist(general.tile, goal) > cfg.march_hop_tiles else goal
             if hop == general.tile:
                 continue
-            ctx.order("move", general.id, *ctx.unrefused(hop))
+            ctx.order("formation_move", [general.id], *ctx.unrefused(hop), formation, attack_move=True)
             ctx.board.bump("general_marches")

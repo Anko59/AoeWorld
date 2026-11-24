@@ -319,11 +319,12 @@ def test_a_refused_destination_is_not_chosen_again_for_the_rally_point():
     army = [unit(300, UnitKind.SPEARMAN, tile=(50, 50))]
     eco = economy(population=22, cap=40, age=Age.FEUDAL)
     brain, client = play(FakeWorld(units + army, buildings, eco=eco))
-    first = next(a for a in client.named("move") if a[0] == 300)
-    sequence = next(i + 1 for i, (n, a) in enumerate(client.calls) if n == "move" and a[0] == 300)
+    first = next(a for a in army_moves(client) if a[0] == 300)
+    sequence = next(i + 1 for i, (n, a) in enumerate(client.calls)
+                    if n == "formation_move" and 300 in a[0])
     refusal = order_result(sequence, CommandResult.REJECTED_INVALID_DESTINATION)
     _, client = play(FakeWorld(units + army, buildings, eco=eco), brain=brain, events=[refusal])
-    second = next(a for a in client.named("move") if a[0] == 300)
+    second = next(a for a in army_moves(client) if a[0] == 300)
     assert (first[1], first[2]) != (second[1], second[2])
 
 

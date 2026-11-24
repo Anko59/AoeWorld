@@ -81,7 +81,7 @@ def test_host_mode_plays_given_tokens_and_writes_a_report(server, secret, tmp_pa
 
 
 def test_scripted_raid_draws_the_field_army_home():
-    """The human raids home while the AI's field army besieges a third seat."""
+    """The reserve answers a raid while the siege force keeps its targets."""
     import http.client
     import json
     import urllib.parse
@@ -129,7 +129,9 @@ def test_scripted_raid_draws_the_field_army_home():
 
         class Defender(Brain):
             siege_id = None
-            returning = frozenset()
+            reserve = frozenset()
+            engaged_at_hit = frozenset()
+            reserve_fought = None
 
             def decide(self, client, turn):
                 world = turn.world
@@ -142,7 +144,9 @@ def test_scripted_raid_draws_the_field_army_home():
                                     if b.owner == 2 and b.visible and b.kind == aoeworld.BuildingKind.TOWN_CENTER), None)
                     if outpost and self.siege_id is None:
                         self.siege_id = outpost.id
-                        for soldier in soldiers:
+                        force = sorted(soldiers, key=lambda u: u.id)
+                        self.reserve = {u.id for u in force[12:]}
+                        for soldier in force[:12]:
                             client.attack(soldier.id, outpost.id)
                         report["besieged"] = turn.tick
                     if self.siege_id is not None:
@@ -150,7 +154,7 @@ def test_scripted_raid_draws_the_field_army_home():
                                     and u.attack_target == self.siege_id}
                         report["occupied"] = len(deployed)
                         if any(e.kind == "under_attack" and e.is_building for e in turn.events):
-                            self.returning = deployed
+                            self.engaged_at_hit = deployed
                             report["hit"] = turn.tick
                             report["occupied_at_hit"] = len(deployed)
                 if "raided" not in report:
@@ -159,8 +163,17 @@ def test_scripted_raid_draws_the_field_army_home():
                 self.absorb(ctx)
                 self.combat.step(ctx)
                 if "hit" in report and turn.tick <= report["hit"] + 140 * turn.world.tick_hz:
-                    returned = sum(u.id in self.returning and dist(u.tile, home) < 24 for u in soldiers)
-                    report["returned"] = max(report.get("returned", 0), returned)
+                    returned = [u for u in soldiers if u.id in self.reserve
+                                and (dist(u.tile, home) < 40 or u.attack_target is not None)]
+                    report["returned"] = max(report.get("returned", 0), len(returned))
+                    if self.reserve_fought is None:
+                        self.reserve_fought = set()
+                    fighting = {u.id for u in returned if u.attack_target is not None}
+                    self.reserve_fought.update(fighting)
+                    report["reserve_fighting"] = len(self.reserve_fought)
+                    report["reserve_size"] = len(self.reserve)
+                    if turn.tick == report["hit"]:
+                        report["siege_reordered_at_hit"] = len(self.engaged_at_hit & ctx.busy)
 
         class Raider(Brain):
             march_sequence = None
@@ -173,7 +186,7 @@ def test_scripted_raid_draws_the_field_army_home():
                     client.formation_move(self.raiders, *staging)
                     report["raider_staged"] = turn.tick
                 if "raided" not in report:
-                    if report.get("occupied", 0) < 18 or "raider_staged" not in report:
+                    if report.get("occupied", 0) < 10 or "raider_staged" not in report:
                         return
                     report["raided"] = turn.tick
                 if "targeted" in report:
@@ -232,6 +245,93 @@ def test_scripted_raid_draws_the_field_army_home():
 
     print(report, flush=True)
     assert all(bot["errors"] == 0 for bot in result["bots"]), result
-    assert "hit" in report and report["occupied_at_hit"] >= 12, report
-    assert report.get("returned", 0) >= 10, report
-    assert report["combat"][0][1] >= 3, report
+    assert "hit" in report and report["occupied_at_hit"] >= 10, report
+    assert report["siege_reordered_at_hit"] == 0, report
+    assert report.get("returned", 0) >= 8, report
+    assert report["reserve_fighting"] > 0, report
+    kills, losses = report["combat"][1]
+    assert kills > losses, report
+
+
+def test_scripted_ambush_gets_an_answer_from_the_marching_army():
+    """Exercise the bot, SDK, and actual orders on generated terrain."""
+    from aoe_ai import Brain
+    from aoe_ai.arena import ArenaServer, play
+    from aoe_ai.context import Context
+    from aoe_ai.geometry import centroid, dist
+    from aoe_ai.play.combat.march import march
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    binary = Path(os.environ.get("AOE_SERVER_BIN", root / "target" / "debug" / "aoe-server"))
+    cfg = Config(attack_army_size=24)
+    seen = {"marched": False, "attackers_ordered": False, "fighting": set(), "hits": 0}
+    initial = 18
+
+    with ArenaServer(binary, root) as arena:
+        import json
+        import urllib.request
+        from types import SimpleNamespace
+
+        from aoe_ai.arena import SECRET
+
+        def admin(path, payload=None):
+            req = urllib.request.Request(
+                arena.url + path, None if payload is None else json.dumps(payload).encode(),
+                headers={"x-aoeworld-admin-token": SECRET, "content-type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=30) as reply:
+                return json.load(reply)
+
+        setup = admin("/match", {
+            "slots": ["human", "ai"], "flat": {"tiles_per_side": 350, "seed": 7},
+            "seed": 7, "start_tiles": [[165, 175], [245, 175]],
+            "start_units": {"militia": initial},
+        })
+        info = SimpleNamespace(slots=[SimpleNamespace(**slot) for slot in setup["slots"]])
+        x, y = info.slots[0].start_tile
+        ambush = (x + 25, y + 12)
+
+        class Ambushers(Brain):
+            def decide(self, client, turn):
+                if seen["attackers_ordered"]:
+                    return
+                soldiers = turn.world.my_units(aoeworld.UnitKind.MILITIA)
+                if soldiers:
+                    client.formation_move([u.id for u in soldiers], *ambush, attack_move=True)
+                    seen["attackers_ordered"] = True
+
+        class Marchers(Brain):
+            def decide(self, client, turn):
+                ctx = Context(client, turn, self.board, self.config)
+                soldiers = [u for u in ctx.army if u.kind == aoeworld.UnitKind.MILITIA and u.alive]
+                if not soldiers:
+                    return
+                self.absorb(ctx)
+                seen["fighting"].update(u.id for u in soldiers if u.attack_target is not None)
+                ids = {u.id for u in soldiers}
+                seen["hits"] += sum(e.kind == "under_attack" and e.id in ids for e in ctx.events)
+                if not seen["marched"]:
+                    middle = centroid([u.tile for u in soldiers])
+                    goal = (ambush[0] - 14, ambush[1])
+                    march(ctx, soldiers, middle, goal)
+                    seen["marched"] = bool(ctx.orders)
+                    self.board.attacking = True
+                    self.board.attack_launch_size = initial
+                elif min(dist(u.tile, ambush) for u in soldiers) < 30:
+                    self.combat.step(ctx)
+                else:
+                    march(ctx, soldiers, soldiers[0].tile, ambush)
+
+        brains = [Ambushers(cfg), Marchers(cfg)]
+        result = play(arena.url, 2, 2.5, 350, 7, config=cfg, match_info=info,
+                      brain_factory=brains.__getitem__)
+        data = admin("/admin/match")["players"]
+        combat = [(p["kills"], p["losses"]) for p in data]
+
+    print({"ambush_combat": combat, "marchers_fighting": len(seen["fighting"]),
+           "marchers_initial": initial, "hits": seen["hits"]}, flush=True)
+    assert all(bot["errors"] == 0 for bot in result["bots"]), result
+    assert seen["marched"] and seen["hits"] > 0, seen
+    assert len(seen["fighting"]) >= initial // 2, seen
+    assert combat[1][0] > 0, combat

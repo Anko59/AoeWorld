@@ -56,7 +56,11 @@ def test_a_new_general_gets_train_and_mix_and_marches_a_big_army_at_the_enemy():
     brain, client = play(FakeWorld(units + [general], buildings, eco=rich(), enemy_buildings=[enemy]), config)
     assert (902, True) in client.named("general_train")
     assert client.named("general_mix")[0][0] == 902
-    assert any(args[0] == 902 for args in client.named("move"))
+    assert not any(args[0] == 902 for args in client.named("move"))
+    general_order, = (options for args, options in
+                      zip(client.named("formation_move"), client.options_of("formation_move"))
+                      if args[0] == [general.id])
+    assert general_order == {"attack_move": True}
 
 
 def test_soldiers_a_general_leads_get_no_orders_from_the_ai():
@@ -162,3 +166,29 @@ def test_a_researching_first_town_center_does_not_stop_villagers_at_the_others()
     _, client = play(world)
     assert (501, UnitKind.VILLAGER) in client.named("train")
     assert (500, UnitKind.VILLAGER) not in client.named("train")
+
+
+def test_a_general_recalls_by_attack_move_after_their_soldiers_finish_fighting():
+    from aoe_ai.context import Context
+    from fakes import FakeClient, decision
+
+    units, buildings = castle_base(soldiers=0)
+    general = unit(902, UnitKind.GENERAL, tile=(120, 120))
+    general.army_size, general.general_state = 40, GeneralState.MARCHING
+    fighter = unit(903, UnitKind.SPEARMAN, tile=(120, 119))
+    fighter.commanded_by, fighter.attack_target = general.id, 904
+    world = FakeWorld(units + [general, fighter], buildings, eco=rich())
+    brain, _ = play(world, Config())
+    brain.board.raid_tile, brain.board.raid_until = (53, 52), world.tick + 100
+    client = FakeClient()
+    ctx = Context(client, decision(world), brain.board, brain.config)
+
+    brain.management.lead(ctx, brain.combat)
+
+    assert not client.calls
+    fighter.attack_target = None
+    brain.management.lead(ctx, brain.combat)
+
+    (members, *_), = client.named("formation_move")
+    assert members == [general.id]
+    assert client.options_of("formation_move") == [{"attack_move": True}]
