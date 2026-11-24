@@ -29,7 +29,7 @@ pub(in super::super) enum Shore {
 const BAND_REACH: i32 = 3;
 pub(in super::super) const DEPTH_REACH: i32 = 7;
 const BAND_LIMIT: i32 = 50;
-const BAND: [(i32, i32, i32); 160] = band();
+static BAND: [(i32, i32, i32); 160] = band();
 /// Squared reach of a narrow, ordinary and wide band: one tile, two tiles or
 /// a knight's step, three tiles or a (3, 1) step.
 const REACH: [i32; 3] = [2, shoreline::RIVER_BANK_MAX_DISTANCE_SQUARED, 10];
@@ -188,7 +188,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
                 let reach = width(6, -350, 350);
                 // The bank width matters only once river water is in reach.
                 let mut bank = None;
-                for (dx, dy, distance) in BAND {
+                for (dx, dy, distance) in BAND.iter().copied() {
                     if distance > reach {
                         break;
                     }
@@ -218,7 +218,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
                 // One tile, or two where the rim widens; never three.
                 // Both widths vary per tile; read each only when it decides.
                 let mut medium = None;
-                for (dx, dy, distance) in BAND {
+                for (dx, dy, distance) in BAND.iter().copied() {
                     if distance > MEDIUM[0]
                         && distance > *medium.get_or_insert_with(|| MEDIUM[step(8, -350, 350)])
                     {
@@ -235,7 +235,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
                 Ok(Shore::Deep)
             }
             WaterKind::River => {
-                for (dx, dy, distance) in BAND {
+                for (dx, dy, distance) in BAND.iter().copied() {
                     if distance > REACH[0] {
                         break;
                     }

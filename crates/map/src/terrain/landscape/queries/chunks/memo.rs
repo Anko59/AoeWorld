@@ -50,6 +50,8 @@ pub(super) struct Memo<'a, const N: usize, const W: usize> {
     /// sampling its neighbors; a chunk shares those samples between tiles.
     probe_reach: bool,
     origins: RefCell<resources::Origins>,
+    /// Patch membership of the memo area, built on the first candidate query.
+    members: RefCell<Option<Vec<u64>>>,
 }
 
 impl<'a> PointMemo<'a> {
@@ -70,6 +72,7 @@ impl<'a> PointMemo<'a> {
             shores: RefCell::new([None; 25]),
             probe_reach: true,
             origins: RefCell::new(resources::Origins::new(generator)),
+            members: RefCell::new(None),
         }
     }
 }
@@ -92,6 +95,7 @@ impl<'a> ChunkMemo<'a> {
             shores: RefCell::new([None; 1296]),
             probe_reach: false,
             origins: RefCell::new(resources::Origins::new(generator)),
+            members: RefCell::new(None),
         }
     }
 }
@@ -245,6 +249,12 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         {
             return Ok(candidate);
         }
+        if let Some(index) = index
+            && !self.member(index)
+        {
+            self.entries.borrow_mut()[index].candidate = Some(None);
+            return Ok(None);
+        }
         let candidate = self
             .origins
             .borrow_mut()
@@ -271,6 +281,14 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
             self.entries.borrow_mut()[index].reservations = Some(reservations);
         }
         Ok(reservations)
+    }
+    fn member(&self, index: usize) -> bool {
+        let mut members = self.members.borrow_mut();
+        let bits = members.get_or_insert_with(|| {
+            let side = i32::try_from(self.side).unwrap_or(0);
+            self.origins.borrow_mut().members(self.origin, side)
+        });
+        bits[index / 64] & (1 << (index % 64)) != 0
     }
     pub(super) fn reserved(&self, position: TileCoord) -> Result<bool, EnvironmentPageError> {
         let index = self.index(position);
