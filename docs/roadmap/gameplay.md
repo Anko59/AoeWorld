@@ -48,6 +48,6 @@ Dates are 2026 (MM-DD); "xN" is how many separate times the owner asked.
 | Shift-queued attack-move, owner-controlled Generals, fog-off ownership | 11-09 | DONE | #800 |
 | Starting trees survive fog (bots at 0 wood) | 11-14 | DONE | #837 |
 | Natural and fair player starts | 11-09 | DONE | #810 |
-| River fords every 40 tiles | 11-12 | DONE | #801 |
+| River fords every 40 tiles (now 64, streams over 1.5 tiles only at fords) | 11-12 | DONE | #801; 11-24 in this PR |
 | War Galley DE bolt, ship auto-scout | 11-09, 11-06 | DONE | #767, #722 |
 | Single lone unit attack-move keeps intent and fights | 11-14 | DONE | #822, #840 |

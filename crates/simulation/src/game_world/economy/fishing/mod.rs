@@ -63,7 +63,8 @@ impl GameWorld {
             return self.validate_fish_trap_placement(player, footprint);
         }
         if kind != BuildingKind::Dock {
-            return self.validate_footprint_ground(player, footprint);
+            self.validate_footprint_ground(player, footprint)?;
+            return self.validate_dry_footprint(footprint);
         }
         let Terrain::Map { generator, overlay } = &self.terrain else {
             return Err(EconomyError::InvalidFootprint);

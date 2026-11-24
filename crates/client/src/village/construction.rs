@@ -124,6 +124,10 @@ pub(super) fn valid(client: &Client, kind: BuildingKind, origin: TileCoord) -> b
                     // A Fish Trap stands on open water only.
                     if kind == BuildingKind::FishTrap {
                         wet
+                    } else if t.material == aoe_map::GroundMaterial::Ford && !crosses_shallows(kind)
+                    {
+                        // DE: nothing but walls, roads and gates stands on shallows.
+                        false
                     } else {
                         t.passable
                             || (matches!(kind, BuildingKind::Dock | BuildingKind::Bridge) && wet)
@@ -146,6 +150,12 @@ pub(super) fn valid(client: &Client, kind: BuildingKind, origin: TileCoord) -> b
         },
     );
     valid && (kind != BuildingKind::Dock || land && water)
+}
+
+/// Wall and road segments and gates may cross a ford; the server's ground rule
+/// matches (`validate_dry_footprint`).
+fn crosses_shallows(kind: BuildingKind) -> bool {
+    kind.is_line() || kind.is_gate()
 }
 
 #[inline(never)]

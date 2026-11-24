@@ -209,6 +209,42 @@ fn ships_sail_along_shallows_while_land_units_wade_across_them() {
     assert_eq!(world.unit(walker).unwrap().position, at(east));
 }
 
+#[test]
+fn buildings_stand_on_dry_ground_never_on_shallows() {
+    let world = river_width(2 * 256);
+    let Terrain::Map { generator, .. } = world.terrain() else {
+        unreachable!()
+    };
+    let is_ford = |x: i32, y: i32| {
+        generator
+            .tile_at(TileCoord::new(x, y))
+            .is_some_and(|t| t.material == GroundMaterial::Ford && t.passable)
+    };
+    let origin = (30..210)
+        .find(|&y| {
+            let all_ford = (128..130).all(|x| (y..y + 2).all(|y| is_ford(x, y)));
+            let dry =
+                (120..122).all(|x| (y..y + 2).all(|y| world.tile_passable(TileCoord::new(x, y))));
+            all_ford && dry
+        })
+        .expect("a two-tile ford beside dry ground");
+    let player = PlayerId(0);
+    assert_eq!(
+        world.validate_building_placement(player, BuildingKind::House, TileCoord::new(128, origin)),
+        Err(EconomyError::InvalidFootprint),
+        "a house on shallows is refused"
+    );
+    // A footprint with a single shallow tile is refused too.
+    assert_eq!(
+        world.validate_building_placement(player, BuildingKind::House, TileCoord::new(127, origin)),
+        Err(EconomyError::InvalidFootprint)
+    );
+    assert_eq!(
+        world.validate_building_placement(player, BuildingKind::House, TileCoord::new(120, origin)),
+        Ok(())
+    );
+}
+
 pub(super) fn banks(world: &GameWorld) -> (TileCoord, TileCoord, TileCoord, TileCoord) {
     (20..230)
         .find_map(|y| {
