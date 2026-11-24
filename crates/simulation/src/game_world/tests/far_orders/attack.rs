@@ -176,9 +176,8 @@ fn a_far_firing_tile_is_found_once_and_reused_while_the_target_stays_put() {
     for _ in 0..40 {
         world.advance();
         assert_eq!(
-            world.combat.position_searches,
-            crate::game_world::combat::MAX_POSITION_SEARCHES_PER_TICK,
-            "a reused firing tile costs no search budget"
+            world.combat.stats.attack_searches, 0,
+            "a reused firing tile runs no search"
         );
     }
     for (id, order) in ids.iter().zip(orders) {
@@ -190,70 +189,31 @@ fn a_far_firing_tile_is_found_once_and_reused_while_the_target_stays_put() {
 }
 
 #[test]
-fn repeated_far_searches_are_capped_per_tick_and_deferred_ones_retry_next_tick() {
-    let (mut world, ids) = far_attackers(10);
-    let stale = TileCoord::new(0, 0);
-    for id in &ids {
-        let entry = world.combat.attackers.get_mut(id).expect("attacker");
-        entry.far = Some(crate::game_world::combat::FarAttack {
-            centre: stale,
-            destination: center(0, 0),
-        });
-        entry.repath_tick = 0;
+fn stale_and_first_far_searches_all_run_on_the_next_tick() {
+    for stale in [true, false] {
+        let (mut world, ids) = far_attackers(10);
+        let old = TileCoord::new(0, 0);
+        for id in &ids {
+            let entry = world.combat.attackers.get_mut(id).expect("attacker");
+            entry.far = stale.then_some(crate::game_world::combat::FarAttack {
+                centre: old,
+                destination: center(0, 0),
+            });
+            entry.repath_tick = 0;
+        }
+        world.advance();
+        let searched = ids
+            .iter()
+            .filter(|id| {
+                world.combat.attackers[*id]
+                    .far
+                    .is_some_and(|far| far.centre != old)
+            })
+            .count();
+        assert_eq!(
+            searched,
+            ids.len(),
+            "no attacker waits for another (stale {stale})"
+        );
     }
-    // Initial command admission shares the budget; measure a fresh tick.
-    world.refill_route_budgets();
-    world.advance();
-    let now = world.tick.0;
-    let deferred = |world: &GameWorld| {
-        ids.iter()
-            .filter(|id| world.combat.attackers[*id].repath_tick == now + 1)
-            .count()
-    };
-    assert_eq!(deferred(&world), 6, "only four searches fit in one tick");
-    let retry = ids
-        .iter()
-        .copied()
-        .filter(|id| world.combat.attackers[id].repath_tick == now + 1)
-        .collect::<Vec<_>>();
-    let searched = |world: &GameWorld, id: &EntityId| {
-        world.combat.attackers[id]
-            .far
-            .is_some_and(|far| far.centre != stale)
-    };
-    assert!(
-        retry.iter().all(|id| !searched(&world, id)),
-        "a deferred attacker was not searched yet"
-    );
-    world.advance();
-    // The four free searches of the next tick go to deferred attackers.
-    assert_eq!(
-        retry.iter().filter(|id| searched(&world, id)).count(),
-        4,
-        "deferred attackers are searched on the next tick"
-    );
-}
-
-#[test]
-fn first_far_searches_count_against_the_per_tick_budget() {
-    let (mut world, ids) = far_attackers(10);
-    for id in &ids {
-        let entry = world.combat.attackers.get_mut(id).expect("attacker");
-        entry.far = None;
-        entry.repath_tick = 0;
-    }
-    // Initial command admission shares the budget; measure a fresh tick.
-    world.refill_route_budgets();
-    world.advance();
-    let searched = ids
-        .iter()
-        .filter(|id| world.combat.attackers[*id].far.is_some())
-        .count();
-    assert_eq!(searched, 4, "first searches are capped like repeated ones");
-    world.advance();
-    let searched = ids
-        .iter()
-        .filter(|id| world.combat.attackers[*id].far.is_some())
-        .count();
-    assert_eq!(searched, 8, "the deferred ones follow on the next tick");
 }

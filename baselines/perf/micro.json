@@ -11,12 +11,12 @@
     "instructions::assets::palette_decode": 243938,
     "instructions::protocol::snapshot_encode": 206498,
     "instructions::simulation::advance": 721228,
-    "instructions::simulation::distributed_ticks": 39451694,
+    "instructions::simulation::distributed_ticks": 48681579,
     "instructions::simulation::late_game": 6189477281,
     "instructions::simulation::late_game_main": 4208907934,
     "instructions::simulation::late_game_x4": 6677857977,
     "instructions::simulation::late_game_x4_main": 5753676657,
-    "instructions::simulation::smoke_ticks": 12828840,
+    "instructions::simulation::smoke_ticks": 20112284,
     "instructions::simulation::viewport_query": 183030
   },
   "target_distributed_workload_hash": "68a0166d5342976e059eb2c5c0ab97ce2dfad5f3c6aeacef207c8d7618ee6d9c",
@@ -24,22 +24,22 @@
     "instructions::assets::palette_decode": 243938,
     "instructions::protocol::snapshot_encode": 206498,
     "instructions::simulation::advance": 721238,
-    "instructions::simulation::distributed_ticks": 39451694,
+    "instructions::simulation::distributed_ticks": 48681579,
     "instructions::simulation::late_game": 6189477281,
     "instructions::simulation::late_game_main": 4208907934,
     "instructions::simulation::late_game_x4": 6677857977,
     "instructions::simulation::late_game_x4_main": 5753676657,
-    "instructions::simulation::smoke_ticks": 12828840,
+    "instructions::simulation::smoke_ticks": 20112284,
     "instructions::simulation::viewport_query": 183030
   },
   "accepted_increase": {
     "instructions::simulation::smoke_ticks": {
-      "reason": "#1026 removes the engagement caps (owner 11-23 caps decisions; 11-24: removing caps raises cost): every soldier looks for enemies on its own turn; R1 war replay +0.2%, kills 357 -> 551",
-      "dev": 5383787
+      "reason": "#1029 drops the combat search limits (16 pursuit and 4 position searches a tick; owner 11-23 caps decisions, 11-24: removing caps raises cost, accepted): every due attacker searches for its firing spot; on dev the limit left ~700 attackers unsearched and idle 4 s into a fight in the smoke population; R1 war replay -1.7% before #1026",
+      "dev": 12828840
     },
     "instructions::simulation::distributed_ticks": {
-      "reason": "#1026 removes the engagement caps (owner 11-23 caps decisions; 11-24: removing caps raises cost): every soldier looks for enemies on its own turn; R1 war replay +0.2%, kills 357 -> 551",
-      "dev": 9866885
+      "reason": "#1029 drops the combat search limits (16 pursuit and 4 position searches a tick; owner 11-23 caps decisions, 11-24: removing caps raises cost, accepted): every due attacker searches for its firing spot; on dev the limit left ~700 attackers unsearched and idle 4 s into a fight in the smoke population; R1 war replay -1.7% before #1026",
+      "dev": 39451694
     }
   }
 }
