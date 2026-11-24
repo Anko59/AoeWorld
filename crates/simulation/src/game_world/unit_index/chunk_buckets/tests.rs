@@ -41,7 +41,9 @@ fn far_corner_presence_memory_is_bounded_on_a_16384_tile_map() {
             .map(|ids| ids.capacity() * std::mem::size_of::<EntityId>())
             .sum::<usize>();
     eprintln!("far-corner presence allocation: {bytes} bytes");
-    assert_eq!(bytes, 304, "presence allocation regression (64-bit target)");
+    // The presence summary is a hash map for constant-time reads per look
+    // (#1026), 8 bytes more than the tree it replaced.
+    assert_eq!(bytes, 312, "presence allocation regression (64-bit target)");
     assert_eq!(chunks.get(&far).unwrap().len(), 32);
     // Grow in every direction and retain slot order and empty reads.
     for (id, (x, y)) in [(510, 511), (511, 510), (512, 511), (511, 512)]

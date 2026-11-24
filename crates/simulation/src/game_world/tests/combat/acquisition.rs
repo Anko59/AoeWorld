@@ -78,11 +78,11 @@ fn an_automatic_building_attack_yields_to_units_but_a_manual_target_is_kept() {
         if manual {
             w.issue_attack(PlayerId(0), a, house).unwrap();
         }
-        // An idle soldier looks on its own turn, one tick in four.
-        advance(&mut w, 4);
+        // An idle soldier looks on its own turn, once a second (20 ticks).
+        advance(&mut w, 20);
         assert_eq!(w.unit(a).unwrap().attack_target, Some(house));
         let enemy = w.spawn_villager(PlayerId(1), at(100, 102)).unwrap();
-        advance(&mut w, 4);
+        advance(&mut w, 20);
         assert_eq!(
             w.unit(a).unwrap().attack_target,
             Some(if manual { house } else { enemy })
@@ -172,7 +172,7 @@ fn defensive_pursuit_returns_to_its_origin_and_stance_groups_are_atomic() {
         .unwrap();
     w.issue_stance(PlayerId(1), &[b], CombatStance::NoAttack)
         .unwrap();
-    advance(&mut w, 4);
+    advance(&mut w, 20);
     assert_eq!(w.unit(a).unwrap().attack_target, Some(b));
     w.issue_move(b, at(115, 100)).unwrap();
     advance(&mut w, 400);
@@ -233,7 +233,7 @@ fn idle_military_acquires_a_unit_before_a_closer_building() {
     )
     .unwrap();
     let enemy = w.spawn_villager(PlayerId(1), at(103, 102)).unwrap();
-    advance(&mut w, 10);
+    advance(&mut w, 20);
     assert_eq!(w.unit(soldier).unwrap().attack_target, Some(enemy));
 }
 
@@ -330,7 +330,7 @@ fn a_castle_fires_at_an_approaching_unit_without_orders() {
 }
 
 /// Far more idle soldiers than the former world-wide ration of 128 looks per
-/// tick: all have a target within four ticks.
+/// tick: all have a target within a second (20 ticks), each on its own phase.
 #[test]
 fn each_idle_soldier_gets_its_own_four_tick_acquisition_turn() {
     use aoe_core::CombatStance;
@@ -344,8 +344,11 @@ fn each_idle_soldier_gets_its_own_four_tick_acquisition_turn() {
         .collect();
     let enemy = w.spawn_villager(PlayerId(1), at(103, 100)).unwrap();
     w.units[w.lookup[&enemy]].state.stance = CombatStance::NoAttack;
+    // It must outlive the second, so every archer's look can find it.
+    w.units[w.lookup[&enemy]].state.max_hp = u16::MAX;
+    w.units[w.lookup[&enemy]].state.hp = u16::MAX;
     let mut turn = std::collections::BTreeMap::new();
-    for tick in 1..=4_u64 {
+    for tick in 1..=20_u64 {
         w.advance();
         for &id in &archers {
             if w.unit(id).unwrap().attack_target == Some(enemy) {
@@ -354,6 +357,6 @@ fn each_idle_soldier_gets_its_own_four_tick_acquisition_turn() {
         }
     }
     // Spawned with nobody near, the archers start asleep; the enemy's spawn
-    // wakes them all and they look on the next pass.
+    // wakes them and each looks on its idle turn within the second.
     assert_eq!(turn.len(), archers.len());
 }

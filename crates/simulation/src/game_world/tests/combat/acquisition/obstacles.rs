@@ -24,7 +24,7 @@ fn walls_gates_and_roads_can_be_attacked_automatically_when_alone() {
         let soldier = w.spawn_militia(OWN, at(100, 100)).unwrap();
         let target = obstacle(&mut w, kind);
         let hp = w.building(target).unwrap().hp;
-        advance(&mut w, 4);
+        advance(&mut w, 20);
         assert_eq!(
             w.unit(soldier).unwrap().attack_target,
             Some(target),
@@ -48,7 +48,7 @@ fn a_farther_house_outranks_each_obstacle_and_explicit_attacks_still_work() {
                 true,
             )
             .unwrap();
-        advance(&mut w, 4);
+        advance(&mut w, 20);
         assert_eq!(
             w.unit(soldier).unwrap().attack_target,
             Some(house),
@@ -69,7 +69,7 @@ fn an_obstacle_attack_yields_to_a_house_that_comes_into_sight() {
     let mut w = world();
     let soldier = w.spawn_militia(OWN, at(100, 100)).unwrap();
     let wall = obstacle(&mut w, BuildingKind::StoneWall);
-    advance(&mut w, 4);
+    advance(&mut w, 20);
     assert_eq!(w.unit(soldier).unwrap().attack_target, Some(wall));
     let house = w
         .insert_building(

@@ -101,12 +101,13 @@ fn attack_move_kills_ten_enemies_then_resumes_to_the_slots() {
     // Proportional cohesion and 1.5x catch-up shift contact; the wider engage
     // look (256 enemies, 128 members) clears the ten foes at tick 1154 (the melee cap counts every attacker);
     // members brushing through each other reach the foes in a looser block (1183).
-    // Uncapped looks (every member that sees a foe engages) clear them at 1137.
-    assert_eq!((cleared, foes_alive), (Some(1137), 0));
+    // Uncapped looks (every member that sees a foe engages) clear them at 1137;
+    // the idle foes look once a second (#1026): 1155.
+    assert_eq!((cleared, foes_alive), (Some(1155), 0));
     assert_eq!((survivors, own_idle, still_moving), (60, 60, 0));
     // Keep all 60 arrivals; the engage look caps melee members per foe, so
-    // 37 strike while the ten foes fall sooner.
-    assert_eq!((at_destination, strikers.len()), (60, 37));
+    // 32 strike (37 before idle foes looked once a second, #1026).
+    assert_eq!((at_destination, strikers.len()), (60, 32));
     assert!(
         within_1 * 100 >= survivors * 95,
         "{within_1} of {survivors}"

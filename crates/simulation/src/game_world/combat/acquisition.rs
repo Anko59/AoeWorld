@@ -6,8 +6,14 @@ use super::{
 };
 use crate::{EconomyError, GameWorld, UnitKind, UnitTask};
 use aoe_core::{CombatStance, EntityId, PlayerId, WorldPosition};
+pub(crate) mod awake;
 mod share;
 pub(crate) mod sleep;
+
+/// Turns of four ticks between two looks of an idle soldier: once a
+/// reference second, a reaction well under the time an enemy needs to walk
+/// across its sight.
+const IDLE_TURNS: u64 = 5;
 
 pub(crate) fn autonomous_kind(kind: UnitKind) -> bool {
     super::unit_combat(kind).attack > 0 && kind != UnitKind::Villager
@@ -116,8 +122,11 @@ impl GameWorld {
         self.assert_quiet_acquisition();
         self.combat.stats.acquisition_slept = self.resting_seekers();
         // Sleepers an arrival woke look at once; every other awake seeker
-        // looks on its own turn, one tick in four, however many there are.
-        // Asleep ones cost nothing until an enemy enters their chunks.
+        // looks on its own turn, however many there are: one tick in four
+        // while it marches, fights or is fought, one in twenty (a reference
+        // second, `IDLE_TURNS`) while it stands idle, phased by id so a mass
+        // spawn does not look all at once. Asleep ones cost nothing until an
+        // enemy enters their chunks.
         let due: Vec<_> = std::mem::take(&mut self.combat.quiet.due)
             .into_iter()
             .collect();
@@ -127,20 +136,29 @@ impl GameWorld {
             .combat
             .quiet
             .awake
-            .iter()
-            .filter(|id| {
-                (tick + u64::from(id.0)).is_multiple_of(period) && due.binary_search(id).is_err()
-            })
-            .map(|&id| (id, false));
+            .turn(tick, period)
+            .into_iter()
+            .filter(|id| due.binary_search(id).is_err())
+            .map(|id| (id, false));
         let ids: Vec<_> = due.iter().map(|&id| (id, true)).chain(turns).collect();
+        let idle_period = period * IDLE_TURNS;
         for (id, alarmed) in ids {
             if alarmed && !self.combat.quiet.awake.contains(&id) {
                 continue;
             }
-            self.combat.stats.acquisition_checks += 1;
-            let Some(u) = self.unit(id) else {
+            let Some(&index) = self.lookup.get(&id) else {
                 continue;
             };
+            // Woken by an arrival or not, an idle soldier looks on its idle
+            // turn: a mass spawn or a passing army does not make every
+            // soldier near it look on the same tick.
+            if !(tick + u64::from(id.0)).is_multiple_of(idle_period)
+                && self.stands_idle(&self.units[index].state)
+            {
+                continue;
+            }
+            let u = self.units[index].state;
+            self.combat.stats.acquisition_checks += 1;
             if (u.kind.is_naval() || u.kind == UnitKind::Villager)
                 && self.units[self.lookup[&id]].order.is_none()
             {
@@ -247,6 +265,16 @@ impl GameWorld {
                 }
             }
         }
+    }
+
+    /// Standing idle: no order, no target, not attacking, not attack-moving.
+    fn stands_idle(&self, u: &crate::GameUnit) -> bool {
+        matches!(u.task, UnitTask::Idle)
+            && !u.moving
+            && !u.planning
+            // An attacker always has its target set (`begin_attack`).
+            && u.attack_target.is_none()
+            && !self.combat.resuming.contains_key(&u.id)
     }
 
     /// A fighter whose target is gone looks for the next enemy at once

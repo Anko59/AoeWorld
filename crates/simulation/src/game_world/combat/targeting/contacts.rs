@@ -114,7 +114,8 @@ impl GameWorld {
             self.combat.stats.targeting_scanned += len as u32;
             let world = &*self;
             for &id in world.chunks.get(&chunk).into_iter().flatten() {
-                let Some(u) = world.unit(id) else {
+                // By reference: most entries are rejected on the owner alone.
+                let Some(u) = world.lookup.get(&id).map(|&at| &world.units[at].state) else {
                     continue;
                 };
                 if u.player != viewer
@@ -122,7 +123,7 @@ impl GameWorld {
                     && cell_bit(chunk, u.position.tile_floor()) & mask != 0
                     && !world.embarked(id)
                 {
-                    f(world, &contact(&u));
+                    f(world, &contact(u));
                 }
             }
             return;

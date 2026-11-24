@@ -170,7 +170,9 @@ impl GameWorld {
                         || !area.accepts(goal)
                         || (area.ram && !c.siege)
                         || !world
-                            .unit(c.id)
+                            .lookup
+                            .get(&c.id)
+                            .map(|&at| &world.units[at].state)
                             .is_some_and(|u| u.hp > 0 && u.player != area.player)
                         || !world.unit_visible_to(area.player, c.id)
                     {

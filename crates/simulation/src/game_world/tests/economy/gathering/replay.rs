@@ -138,13 +138,17 @@ fn gather_replay(sleep: bool) -> (Vec<String>, usize, bool) {
         }
         if block == 3 {
             let gold = world.unit(jobs[2].2).unwrap().position;
-            [(768, 0), (-768, 0), (0, 768), (0, -768), (1024, 1024)]
+            let raider = [(768, 0), (-768, 0), (0, 768), (0, -768), (1024, 1024)]
                 .into_iter()
                 .find_map(|(dx, dy)| {
                     let at = WorldPosition::new(gold.x + dx, gold.y + dy);
                     world.spawn_militia(PlayerId(1), at).ok()
                 })
                 .expect("room for the raider");
+            // Ordered at once: left to itself an idle soldier looks once a
+            // second, and the miner may have walked off to its camp by then.
+            let miner = jobs[2].2;
+            world.issue_attack(PlayerId(1), raider, miner).unwrap();
         }
         for _ in 0..100 {
             world.advance();

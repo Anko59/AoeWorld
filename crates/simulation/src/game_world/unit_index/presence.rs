@@ -2,13 +2,22 @@
 //! units of a bucket, or the building tiles of a chunk). The sleep proof of
 //! combat acquisition reads it instead of every unit and tile it covers.
 use aoe_core::{ChunkCoord, PlayerId, SPATIAL_CHUNK_TILES, TileCoord};
-use std::collections::BTreeMap;
 
 /// Side of the finer cells a second summary can count tile entries in
 /// (`add_cell_tile`): the 4 x 4 cells of a chunk.
 pub(crate) const PRESENCE_CELL_TILES: i32 = 8;
 
-type Counts = BTreeMap<ChunkCoord, Vec<(PlayerId, u32)>>;
+/// Keyed reads only, never iterated for a decision: a hash map makes each of
+/// the many per-look presence reads a constant-time probe.
+type Counts = std::collections::HashMap<
+    u64,
+    Vec<(PlayerId, u32)>,
+    std::hash::BuildHasherDefault<crate::game_world::movement_step::CellHasher>,
+>;
+
+fn key(chunk: ChunkCoord) -> u64 {
+    u64::from(chunk.x as u32) | (u64::from(chunk.y as u32) << 32)
+}
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct ChunkPresence {
@@ -16,7 +25,7 @@ pub(crate) struct ChunkPresence {
 }
 
 fn add(counts: &mut Counts, chunk: ChunkCoord, player: PlayerId) {
-    let players = counts.entry(chunk).or_default();
+    let players = counts.entry(key(chunk)).or_default();
     match players.iter_mut().find(|(p, _)| *p == player) {
         Some((_, count)) => *count += 1,
         None => players.push((player, 1)),
@@ -24,7 +33,7 @@ fn add(counts: &mut Counts, chunk: ChunkCoord, player: PlayerId) {
 }
 
 fn remove(counts: &mut Counts, chunk: ChunkCoord, player: PlayerId) {
-    let Some(players) = counts.get_mut(&chunk) else {
+    let Some(players) = counts.get_mut(&key(chunk)) else {
         return;
     };
     let Some(at) = players.iter().position(|(p, _)| *p == player) else {
@@ -34,7 +43,7 @@ fn remove(counts: &mut Counts, chunk: ChunkCoord, player: PlayerId) {
     if players[at].1 == 0 {
         players.swap_remove(at);
         if players.is_empty() {
-            counts.remove(&chunk);
+            counts.remove(&key(chunk));
         }
     }
 }
@@ -68,7 +77,7 @@ impl ChunkPresence {
     /// Players present in `chunk`.
     pub(crate) fn players(&self, chunk: ChunkCoord) -> impl Iterator<Item = PlayerId> + '_ {
         self.chunks
-            .get(&chunk)
+            .get(&key(chunk))
             .into_iter()
             .flatten()
             .map(|&(p, _)| p)
@@ -102,7 +111,7 @@ impl ChunkPresence {
     /// Whether any player but `player` is present in `chunk`.
     pub(crate) fn others(&self, chunk: ChunkCoord, player: PlayerId) -> bool {
         self.chunks
-            .get(&chunk)
+            .get(&key(chunk))
             .is_some_and(|players| players.iter().any(|&(p, _)| p != player))
     }
 
@@ -112,10 +121,18 @@ impl ChunkPresence {
 
     /// The counts in a form that ignores the order of players in a chunk.
     #[cfg(test)]
-    pub(crate) fn normalized(&self) -> BTreeMap<ChunkCoord, BTreeMap<PlayerId, u32>> {
+    pub(crate) fn normalized(
+        &self,
+    ) -> std::collections::BTreeMap<ChunkCoord, std::collections::BTreeMap<PlayerId, u32>> {
         self.chunks
             .iter()
-            .map(|(&chunk, players)| (chunk, players.iter().copied().collect()))
+            .map(|(&at, players)| {
+                let chunk = ChunkCoord {
+                    x: at as u32 as i32,
+                    y: (at >> 32) as u32 as i32,
+                };
+                (chunk, players.iter().copied().collect())
+            })
             .collect()
     }
 }
