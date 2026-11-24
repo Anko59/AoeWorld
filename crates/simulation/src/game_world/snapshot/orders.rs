@@ -90,7 +90,7 @@ impl GameWorld {
             } else if let Some(animal) = record.hunt {
                 self.issue_hunt(player, &[id], animal)
             } else if let Some(target) = record.unit.attack_target {
-                let result = self.issue_attack(player, id, target);
+                let result = self.issue_attack_in_combat_phase(player, id, target);
                 if let Some(attack) = self.combat.attackers.get_mut(&id) {
                     attack.resume = record.scalar_attack_move.map(|at| {
                         super::super::formation::Resume::new(
