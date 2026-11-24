@@ -4,6 +4,30 @@ use crate::UnitKind;
 use aoe_core::TileCoord;
 
 impl GameWorld {
+    /// The proposal's body sweep still holds: a plain lone mover (no group,
+    /// attack or obstruction record, on land) reads only the bodies in its
+    /// window, and none was written there since the proposals (#978).
+    pub(super) fn sweep_still_clear(&self, index: usize, to: WorldPosition) -> bool {
+        let stored = &self.units[index];
+        let unit = stored.state;
+        let quiet = stored.formation.is_none()
+            && stored.obstruction.is_none()
+            && unit.attack_target.is_none()
+            && !unit.kind.is_naval()
+            && self.collisions.quiet_since_proposals(
+                unit.position,
+                to,
+                unit.kind.collision_radius(),
+                false,
+            );
+        debug_assert!(
+            !quiet || self.collision_sweep(index, unit.position, to, false, false),
+            "a quiet window changed the sweep of unit {:?}",
+            unit.id
+        );
+        quiet
+    }
+
     /// Counts one ordered individual turn for the movement census.
     pub(crate) fn census_turn(&self) {
         if let Some(probe) = &self.planning_probe {
