@@ -266,7 +266,6 @@ impl GameWorld {
         origin: WorldPosition,
         destination: WorldPosition,
     ) -> Result<OrderRoute, GameWorldError> {
-        let origin = self.route_origin(self.units[index].state.kind, origin);
         self.order_diagnostics.demand[self.order_diagnostics.issuer as usize].route_requests += 1;
         let caller = Some(std::panic::Location::caller());
         self.route_metrics.caller = caller;
@@ -285,6 +284,12 @@ impl GameWorld {
                     (waypoint, route, planner, false, false)
                 }
                 Some(MapRoutePlan::Outcome(MovementOutcome::InvalidDestination)) => {
+                    // An origin over the edge of a tile no route starts from
+                    // (#1040) is retried once from the tile the body overlaps.
+                    let start = self.route_origin(kind, origin);
+                    if start != origin {
+                        return self.order_route(index, start, destination);
+                    }
                     return Err(GameWorldError::InvalidPosition);
                 }
                 Some(MapRoutePlan::Outcome(MovementOutcome::Unreachable)) => {
