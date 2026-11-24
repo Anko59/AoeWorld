@@ -66,7 +66,7 @@ def march(ctx, army, middle, goal, *, purpose="attack"):
             members = soldiers[offset:offset + limit]
             ids = [u.id for u in members]
             # Only a march at the enemy is an attack-move. A recall or rally
-            # crosses our own ground, where  and  take
+            # crosses our own ground, where `engage` and `answer_fire` take
             # over at contact; an attack-move on every recall cost the server
             # about +10% of a tick (movement phase, per soldier-tick).
             ctx.order("formation_move", ids, *target, getattr(Formation, cfg.army_formation),
