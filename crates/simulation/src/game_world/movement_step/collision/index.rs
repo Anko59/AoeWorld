@@ -9,7 +9,9 @@ use std::hash::Hasher;
 
 mod grid;
 mod neighborhood;
+mod stamps;
 pub(crate) use neighborhood::Neighborhood;
+use stamps::Stamps;
 
 const CELL_LIMIT: usize = 32;
 const NO_CELL: u32 = u32::MAX;
@@ -125,6 +127,13 @@ pub(crate) struct CollisionIndex {
     maximum_radii: [i32; 2],
     /// Land bodies per 2×2-tile cell.
     land_counts: LandCounts,
+    /// The tiles each layer wrote bodies to since this tick's movement
+    /// proposals (see `quiet_since_proposals`).
+    stamps: [Stamps; 2],
+    /// Proposals were made at least once, so `stamps` is being kept.
+    proposing: bool,
+    /// The global sweep inputs when the proposals were made.
+    at_proposals: ([i32; 2], bool),
 }
 
 #[derive(Debug)]
@@ -187,6 +196,7 @@ impl CollisionIndex {
             self.indices.resize(at + 1, usize::MAX);
         }
         self.indices[at] = index;
+        self.stamp(tile, naval);
         let cell = self.cells[usize::from(naval)].entry(tile);
         self.slots[at] = cell.len();
         cell.push(CellBody { id, at: position });
@@ -212,6 +222,9 @@ impl CollisionIndex {
         };
         if cell.get(slot).is_none_or(|body| body.id != id) {
             return;
+        }
+        if self.proposing {
+            self.stamps[usize::from(naval)].0.insert(key(tile));
         }
         if !naval {
             let (x, y) = coarse(tile);
@@ -247,6 +260,9 @@ impl CollisionIndex {
             && let Some(body) = cell.get_mut(slot).filter(|body| body.id == id)
         {
             body.at = position;
+            if self.proposing {
+                self.stamps[usize::from(naval)].0.insert(key(to));
+            }
         }
     }
 

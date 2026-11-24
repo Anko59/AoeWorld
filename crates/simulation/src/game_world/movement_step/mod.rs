@@ -126,11 +126,16 @@ impl GameWorld {
     /// Proposals in rotation order: entry `turn` belongs to
     /// `movers[(start + turn) % movers.len()]`.
     pub(crate) fn propose_steps_into(
-        &self,
+        &mut self,
         movers: &[EntityId],
         start: usize,
         scratch: &mut Scratch,
     ) {
+        self.collisions.begin_proposals();
+        self.propose_steps_on(movers, start, scratch);
+    }
+
+    fn propose_steps_on(&self, movers: &[EntityId], start: usize, scratch: &mut Scratch) {
         let count = movers.len();
         if count == 0 {
             scratch.proposals.clear();
@@ -207,7 +212,7 @@ impl GameWorld {
     #[cfg(all(test, not(target_arch = "wasm32")))]
     pub(crate) fn propose_steps(&self, movers: &[EntityId], start: usize) -> Vec<Option<FastStep>> {
         let mut scratch = Scratch::default();
-        self.propose_steps_into(movers, start, &mut scratch);
+        self.propose_steps_on(movers, start, &mut scratch);
         (0..movers.len())
             .map(|turn| scratch.take_step(turn))
             .collect()
@@ -393,13 +398,14 @@ impl GameWorld {
             // Terrain and buildings were proved by the proposal and cannot
             // change during the apply phase. Only earlier movers' new
             // positions can: re-sweep the bodies, not the static footprints.
-            || !self.collision_sweep(
-                index,
-                self.units[index].state.position,
-                step.state.position,
-                false,
-                false,
-            )
+            || !(self.sweep_still_clear(index, step.state.position)
+                || self.collision_sweep(
+                    index,
+                    self.units[index].state.position,
+                    step.state.position,
+                    false,
+                    false,
+                ))
         {
             return false;
         }
