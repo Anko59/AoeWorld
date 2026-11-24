@@ -136,6 +136,28 @@ impl MapChunkGenerator {
         self.base_water_with_cancel(tile, cancelled)
     }
 
+    /// Whether a tile is shallows: shallow water, or a ford (river water a
+    /// unit can wade). Equal to `material == Ford || water == Shallow` on the
+    /// composed tile, which marks a river tile passable exactly when it is a
+    /// ford; the answer comes from the walk data (a prepared map's snapshot)
+    /// and the physical water kind, so no tile is composed.
+    pub fn shallows_at_with_cancel(
+        &self,
+        tile: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<bool, EnvironmentPageError> {
+        if !self.water_possible_near(tile, 0, cancelled)? {
+            return Ok(false);
+        }
+        Ok(match self.water_at_with_cancel(tile, cancelled)? {
+            Some(WaterKind::Shallow) => true,
+            Some(WaterKind::River) => self
+                .walk_at_with_cancel(tile, cancelled)?
+                .is_some_and(|cell| cell.passable),
+            _ => false,
+        })
+    }
+
     /// The terrain and resource of one tile, memoized per generator. A hit
     /// still honours cancellation first; errors are never stored.
     pub(super) fn memoized_point(

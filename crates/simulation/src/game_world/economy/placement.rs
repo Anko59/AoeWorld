@@ -61,13 +61,11 @@ impl GameWorld {
         };
         for y in footprint.min.y..footprint.max.y {
             for x in footprint.min.x..footprint.max.x {
+                // Walk data and water kind only: a prepared map answers from
+                // its pages instead of composing every footprint tile.
                 let shallow = generator
-                    .tile_at_with_cancel(TileCoord::new(x, y), &|| false)
-                    .map_err(GameWorldError::Environment)?
-                    .is_some_and(|t| {
-                        t.material == aoe_map::GroundMaterial::Ford
-                            || t.water == aoe_map::WaterKind::Shallow
-                    });
+                    .shallows_at_with_cancel(TileCoord::new(x, y), &|| false)
+                    .map_err(GameWorldError::Environment)?;
                 if shallow {
                     return Err(EconomyError::InvalidFootprint);
                 }
