@@ -271,7 +271,6 @@ impl GameWorld {
         self.track_unit_step(id, previous, &state);
     }
 
-    /// `rect` grown by one tile and clipped to the map.
     /// The living units of `query(rect)`, read from the 1-tile collision
     /// cells instead of the 16-tile chunk buckets: a foundation checked every
     /// tick in a crowded town no longer copies every unit of its chunks
@@ -308,6 +307,7 @@ impl GameWorld {
         units
     }
 
+    /// `rect` grown by one tile and clipped to the map.
     fn clamp_around(&self, rect: TileRect) -> TileRect {
         TileRect::new(
             TileCoord::new((rect.min.x - 1).max(0), (rect.min.y - 1).max(0)),
