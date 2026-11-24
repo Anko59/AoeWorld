@@ -26,6 +26,8 @@ pub(crate) struct ChunkContacts {
     /// One bit per 8-tile cell of the chunk holding a visible enemy, so a
     /// look whose sight misses them all reads none of them.
     pub(crate) cells: u16,
+    /// One bit per cell holding a building tile of another player.
+    pub(crate) buildings: u16,
 }
 
 pub(crate) use crate::game_world::unit_index::presence::{cell_bit, cell_mask};
@@ -72,8 +74,43 @@ impl GameWorld {
         contacts
     }
 
+    /// `enemy_buildings_near` from the cell bits of the step's contacts: each
+    /// chunk's cells are asked once per combat step, not once per look.
+    pub(in crate::game_world::combat) fn building_cells_near(
+        &mut self,
+        bounds: TileRect,
+        player: PlayerId,
+    ) -> bool {
+        if !self.combat.contacts.live {
+            return self.enemy_buildings_near(bounds, player);
+        }
+        let size = SPATIAL_CHUNK_TILES;
+        for y in bounds.min.y.div_euclid(size)..=(bounds.max.y - 1).div_euclid(size) {
+            for x in bounds.min.x.div_euclid(size)..=(bounds.max.x - 1).div_euclid(size) {
+                let chunk = ChunkCoord { x, y };
+                if self.vision.building_chunks.others(chunk, player)
+                    && self.chunk_contacts(chunk, player).buildings & cell_mask(chunk, bounds) != 0
+                {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     fn read_chunk_contacts(&mut self, chunk: ChunkCoord, player: PlayerId) -> ChunkContacts {
         let mut out = ChunkContacts::default();
+        if self.vision.building_chunks.others(chunk, player) {
+            let (x0, y0) = (chunk.x * SPATIAL_CHUNK_TILES, chunk.y * SPATIAL_CHUNK_TILES);
+            let cell = crate::game_world::unit_index::presence::PRESENCE_CELL_TILES;
+            for bit in 0..16 {
+                let rect =
+                    TileRect::from_xywh(x0 + bit % 4 * cell, y0 + bit / 4 * cell, cell, cell);
+                if self.vision.building_cells.others_in_cells(rect, player) {
+                    out.buildings |= 1 << bit;
+                }
+            }
+        }
         if !self.chunks.presence.others(chunk, player) {
             return out;
         }

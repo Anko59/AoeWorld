@@ -6,6 +6,7 @@ use super::{
 };
 use crate::{EconomyError, GameWorld, UnitKind, UnitTask};
 use aoe_core::{CombatStance, EntityId, PlayerId, WorldPosition};
+pub(crate) mod awake;
 mod share;
 pub(crate) mod sleep;
 
@@ -121,17 +122,14 @@ impl GameWorld {
         let due: Vec<_> = std::mem::take(&mut self.combat.quiet.due)
             .into_iter()
             .collect();
-        let period = self.config.ticks(4);
-        let tick = self.tick.0;
         let turns = self
             .combat
             .quiet
             .awake
-            .iter()
-            .filter(|id| {
-                (tick + u64::from(id.0)).is_multiple_of(period) && due.binary_search(id).is_err()
-            })
-            .map(|&id| (id, false));
+            .turn(self.tick.0, self.config.ticks(4))
+            .into_iter()
+            .filter(|id| due.binary_search(id).is_err())
+            .map(|id| (id, false));
         let ids: Vec<_> = due.iter().map(|&id| (id, true)).chain(turns).collect();
         for (id, alarmed) in ids {
             if alarmed && !self.combat.quiet.awake.contains(&id) {
@@ -169,8 +167,8 @@ impl GameWorld {
             // a General's soldier — strikes what is already in its weapon's
             // reach instead of walking past it. The group's engage
             // look still decides who leaves the march to chase.
-            let marching = self.offensive_continuation(id).is_some()
-                && (u.moving || u.planning || matches!(u.task, UnitTask::Moving));
+            let marching = (u.moving || u.planning || matches!(u.task, UnitTask::Moving))
+                && self.offensive_continuation(id).is_some();
             if u.hp == 0
                 || ((u.moving || u.planning) && building_attack.is_none() && !marching)
                 || (!matches!(u.task, UnitTask::Idle) && building_attack.is_none() && !marching)

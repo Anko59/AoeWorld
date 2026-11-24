@@ -10,7 +10,7 @@ impl GameWorld {
             ..*area
         };
         let bounds = sight.bounds(self);
-        let rows = if self.enemy_buildings_near(bounds, sight.player) {
+        let rows = if self.building_cells_near(bounds, sight.player) {
             bounds.min.y..bounds.max.y
         } else {
             0..0

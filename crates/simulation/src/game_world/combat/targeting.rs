@@ -203,9 +203,10 @@ impl GameWorld {
         } else {
             bounds
         };
-        let mut seen = std::collections::BTreeSet::new();
+        // A few buildings at most: a list beats a tree for the repeats.
+        let mut seen = Vec::new();
         let mut best = None;
-        let tiles = if self.enemy_buildings_near(building_bounds, area.player) {
+        let tiles = if self.building_cells_near(building_bounds, area.player) {
             building_bounds.min.y..building_bounds.max.y
         } else {
             0..0
@@ -215,9 +216,10 @@ impl GameWorld {
                 let Some(id) = self.building_at_tile(aoe_core::TileCoord::new(x, y)) else {
                     continue;
                 };
-                if !seen.insert(id) {
+                if seen.contains(&id) {
                     continue;
                 }
+                seen.push(id);
                 let Some(b) = self
                     .building(id)
                     .filter(|b| b.player != area.player && b.hp > 0)
