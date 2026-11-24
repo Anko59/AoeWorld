@@ -92,8 +92,6 @@ pub(super) struct Memo<'a, const N: usize, const W: usize> {
     /// A point query asks the source whether any water is in reach before
     /// sampling its neighbors; a chunk shares those samples between tiles.
     probe_reach: bool,
-    /// Slots are addressed by tile modulo the shared window and tagged.
-    tagged: bool,
     tables: Hold<'a, Tables<N, W>>,
 }
 
@@ -119,7 +117,6 @@ impl<'a> PointMemo<'a> {
             side: 5,
             cancelled,
             probe_reach: true,
-            tagged: false,
             tables: Hold::Own(Tables::new(generator)),
         }
     }
@@ -144,7 +141,6 @@ impl<'a> SharedMemo<'a> {
             side: i64::from(SHARED_SIDE),
             cancelled,
             probe_reach: true,
-            tagged: true,
             tables: Hold::Lent(tables),
         }
     }
@@ -162,15 +158,17 @@ impl<'a> ChunkMemo<'a> {
             side: i64::from(CHUNK_TILES) + 4,
             cancelled,
             probe_reach: false,
-            tagged: false,
             tables: Hold::Own(Tables::new(generator)),
         }
     }
 }
 
 impl<const N: usize, const W: usize> Memo<'_, N, W> {
+    /// Shared tables address slots by tile modulo the window and tag them;
+    /// a compile-time choice, so chunk and one-off memos carry no tag tests.
+    const TAGGED: bool = N == SHARED_SLOTS;
     fn index(&self, position: TileCoord) -> Option<usize> {
-        if self.tagged {
+        if Self::TAGGED {
             let index = tagged_slot(position);
             let mut entries = self.entries.borrow_mut();
             if entries[index].at != Some(position) {
@@ -367,7 +365,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
     fn member(&self, position: TileCoord) -> bool {
         // Shared tables keep their candidates and patch origins across points,
         // so a per-area bitmap would only be rebuilt as points move.
-        if self.tagged {
+        if Self::TAGGED {
             return true;
         }
         let (origin, side) = (self.origin, i32::try_from(self.side).unwrap_or(0));
@@ -393,7 +391,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
     /// Store into a slot only while it still holds `position`.
     fn put(&self, index: usize, position: TileCoord, update: impl FnOnce(&mut Entry)) {
         let mut entries = self.entries.borrow_mut();
-        if !self.tagged || entries[index].at == Some(position) {
+        if !Self::TAGGED || entries[index].at == Some(position) {
             update(&mut entries[index]);
         }
     }

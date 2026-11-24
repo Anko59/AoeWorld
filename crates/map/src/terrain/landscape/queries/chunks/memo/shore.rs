@@ -62,7 +62,7 @@ const fn band() -> [(i32, i32, i32); 160] {
 
 impl<const N: usize, const W: usize> Memo<'_, N, W> {
     fn water_index(&self, position: TileCoord) -> Option<usize> {
-        if self.tagged {
+        if Self::TAGGED {
             return Some(tagged_slot(position));
         }
         let side = self.side + 2 * WATER_HALO;
@@ -164,7 +164,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
             return Ok(None);
         };
         let near = TileCoord::new(x, y);
-        let index = if self.tagged {
+        let index = if Self::TAGGED {
             Some(tagged_slot(near))
         } else {
             let (x, y) = (wx + i64::from(dx), wy + i64::from(dy));
