@@ -40,9 +40,79 @@ pub struct Input {
 /// Capture classes and all directed edges, including the border halo.
 /// Edge-only changes (cliffs/decks) participate in the fingerprint.
 pub(super) fn input(ground: &dyn RegionGround, key: (i32, i32), size: (i32, i32)) -> Input {
-    if let Some(input) = ground.chunk(key, size) {
-        return input;
+    let Some(base) = ground.chunk(key, size) else {
+        return classified(ground, key, size);
+    };
+    let at = origin(key);
+    let special = ground.special_tiles(
+        TileCoord::new(at.x - 1, at.y - 1),
+        TileCoord::new(at.x + CHUNK, at.y + CHUNK),
+    );
+    if special.is_empty() {
+        return base;
     }
+    let input = patched(ground, key, size, &base, &special);
+    debug_assert_eq!(
+        input.signature,
+        classified(ground, key, size).signature,
+        "a patched bulk capture differs from the per-tile one at {key:?}"
+    );
+    input
+}
+
+/// `base` with the cells within one tile of a `special` tile classified one
+/// by one, exactly as `classified` does: a gate changes only its own class,
+/// so only its own and its neighbours' edges can differ from the bulk read.
+fn patched(
+    ground: &dyn RegionGround,
+    key: (i32, i32),
+    size: (i32, i32),
+    base: &Input,
+    special: &[TileCoord],
+) -> Input {
+    let at = origin(key);
+    let inside =
+        |t: TileCoord| t.x >= at.x && t.y >= at.y && t.x < at.x + CHUNK && t.y < at.y + CHUNK;
+    let mut classes = base.classes.clone();
+    for &tile in special.iter().filter(|&&t| inside(t)) {
+        classes[index(tile)] = ground.tile(tile);
+    }
+    let class = |tile: TileCoord| {
+        if tile.x < 0 || tile.y < 0 || tile.x >= size.0 || tile.y >= size.1 {
+            RegionTile::Blocked
+        } else if inside(tile) {
+            classes[index(tile)]
+        } else {
+            ground.tile(tile)
+        }
+    };
+    let near = |t: TileCoord| {
+        special
+            .iter()
+            .any(|s| (s.x - t.x).abs() <= 1 && (s.y - t.y).abs() <= 1)
+    };
+    let mut edges: Vec<BucketEdges> = (0..CELLS).map(|cell| base.steps.at(cell)).collect();
+    for (cell, kind) in classes.iter().enumerate() {
+        let tile = TileCoord::new(at.x + cell as i32 % CHUNK, at.y + cell as i32 / CHUNK);
+        if !near(tile) {
+            continue;
+        }
+        edges[cell] = BucketEdges::default();
+        if *kind == RegionTile::Blocked {
+            continue;
+        }
+        for (bit, (dx, dy)) in NEIGHBOURS.into_iter().enumerate() {
+            let next = TileCoord::new(tile.x + dx, tile.y + dy);
+            if class(next) != RegionTile::Blocked {
+                edges[cell].set(bit, step_bucket(ground, &class, tile, next));
+            }
+        }
+    }
+    Input::tagged(classes, edges)
+}
+
+/// Every tile's class and directed edges read one by one.
+pub(super) fn classified(ground: &dyn RegionGround, key: (i32, i32), size: (i32, i32)) -> Input {
     let at = origin(key);
     let mut classes = Vec::with_capacity(CELLS);
     for y in at.y..at.y + CHUNK {
