@@ -109,11 +109,11 @@ fn full_fanout_reveals_a_foundation_only_after_work_even_with_fog_disabled() {
     assert!(has_plan(&private, owner));
     assert!(!has_plan(&private, other));
     assert!(
-        economy::subscription_buildings(&world, owner, views[0].subscription.region)
+        economy::subscription_buildings(&world, owner, Some(views[0].subscription.region))
             .contains_key(&plan)
     );
     assert!(
-        !economy::subscription_buildings(&world, other, views[1].subscription.region)
+        !economy::subscription_buildings(&world, other, Some(views[1].subscription.region))
             .contains_key(&plan)
     );
     world.advance();
@@ -122,7 +122,52 @@ fn full_fanout_reveals_a_foundation_only_after_work_even_with_fog_disabled() {
     assert!(has_plan(&public, owner));
     assert!(has_plan(&public, other));
     assert!(
-        economy::subscription_buildings(&world, other, views[1].subscription.region)
+        economy::subscription_buildings(&world, other, Some(views[1].subscription.region))
             .contains_key(&plan)
+    );
+}
+
+#[tokio::test]
+async fn strategic_subscription_delivers_foreign_buildings_outside_the_camera() {
+    use aoe_protocol::GameplayServerMessage;
+
+    let mut world = GameWorld::new(WorldConfig::new(1024, 1024, Seed(7)).unwrap()).unwrap();
+    world.set_fog_disabled(true);
+    let owner = PlayerId(0);
+    let primary = world
+        .initialize_village(owner, TileCoord::new(20, 20))
+        .unwrap();
+    let foreign = world
+        .place_town_center(PlayerId(1), TileCoord::new(900, 900))
+        .unwrap();
+    let service = super::super::super::GameplayService::from_scale_world(world, primary);
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(32);
+    let (session, _) = service.register(None, sender).await;
+    let region = TileRect::from_xywh(0, 0, 128, 128);
+    service.subscribe(session, 1, region, false).await;
+
+    let snapshot = std::iter::from_fn(|| receiver.try_recv().ok())
+        .find_map(|message| {
+            if let GameplayServerMessage::Snapshot { buildings, .. } = message {
+                Some(buildings)
+            } else {
+                None
+            }
+        })
+        .expect("strategic subscription snapshot");
+    assert!(snapshot.iter().any(|building| building.id == foreign));
+
+    let added = service
+        .world
+        .write()
+        .await
+        .place_town_center(PlayerId(1), TileCoord::new(920, 920))
+        .unwrap();
+    service.tick().await;
+    assert!(
+        std::iter::from_fn(|| receiver.try_recv().ok()).any(|message| {
+            matches!(message, GameplayServerMessage::Tick { changed_buildings, .. }
+            if changed_buildings.iter().any(|building| building.id == added))
+        })
     );
 }

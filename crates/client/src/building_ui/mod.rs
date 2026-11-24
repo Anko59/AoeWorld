@@ -282,7 +282,7 @@ pub fn wall_tiles(from: TileCoord, to: TileCoord) -> Option<Vec<TileCoord>> {
     let (mut x, mut y) = (i64::from(from.x), i64::from(from.y));
     let (x1, y1) = (i64::from(to.x), i64::from(to.y));
     let (dx, dy) = ((x1 - x).abs(), -(y1 - y).abs());
-    if dx.max(-dy) >= 64 {
+    if dx.max(-dy) >= aoe_simulation::MAX_WALL_SEGMENTS as i64 {
         return None;
     }
     let (sx, sy) = (if x < x1 { 1 } else { -1 }, if y < y1 { 1 } else { -1 });

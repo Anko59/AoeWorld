@@ -250,7 +250,7 @@ impl GameplayService {
             };
             let before = probe.read()?;
             let result = world.with_order_issuer(issuer, |w| {
-                w.record_order_decisions(1);
+                w.record_order_decisions(command.action.decision_count());
                 commands::apply(w, command.player, command.action.clone())
             });
             raw.push((issuer, result, probe.read()?.saturating_sub(before)));

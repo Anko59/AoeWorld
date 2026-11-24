@@ -1,21 +1,24 @@
 #kingdom-activity {
   position: fixed;
-  top: 64px;
   left: 12px;
   z-index: 6;
   display: flex;
   flex-direction: column;
-  width: 212px;
-  max-height: 280px;
+  --activity-top: 64px;
+  --activity-available: calc(100dvh - var(--activity-top) - var(--bottom, 208px) - 42px);
+  --activity-rows: max(1, round(down, calc(var(--activity-available) / 34px), 1));
+  --activity-columns: max(1, round(up, calc(var(--activity-types, 1) / var(--activity-rows)), 1));
+  box-sizing: border-box;
+  width: min(calc(100vw - 24px), calc(212px * var(--activity-columns)));
+  top: var(--activity-top);
   padding: 6px;
   font: 12px Georgia, serif;
 }
 html:is([data-lod=map],[data-lod=markers]) #kingdom-activity {
   /* Leave the two rows of view and layer controls within reach. */
-  top: 236px;
+  --activity-top: 236px;
   left: auto;
   right: 12px;
-  max-height: clamp(52px, calc(100vh - var(--bottom) - 244px), 280px);
 }
 #kingdom-activity h2 {
   margin: 0 0 5px;
@@ -27,14 +30,14 @@ html:is([data-lod=map],[data-lod=markers]) #kingdom-activity {
 .activity-rows {
   display: grid;
   gap: 2px;
-  overflow-y: auto;
+  grid-template-columns: repeat(var(--activity-columns), minmax(0, 1fr));
 }
 .activity-rows button {
   display: flex;
   align-items: center;
   gap: 6px;
   width: 100%;
-  height: 32px;
+  min-height: 32px;
   padding: 2px 4px;
   background: #211b16;
   border-color: #816c43;
@@ -42,7 +45,6 @@ html:is([data-lod=map],[data-lod=markers]) #kingdom-activity {
 }
 .activity-rows :is(.icon,.art-icon) { flex:none; width:26px; height:26px; }
 .activity-rows button>span:not(.icon):not(.art-icon) { flex:1; min-width:0; }
-.activity-rows b { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:500; }
+.activity-rows b { display:block; overflow-wrap:anywhere; font-size:12px; font-weight:500; }
 .activity-rows strong { font-size:12px; font-weight:500; font-variant-numeric:tabular-nums; }
 .activity-rows progress { display:block; width:100%; height:4px; margin-top:2px; accent-color:#c6aa69; }
-.activity-more { display:block; margin:4px 2px 0; text-align:right; font-size:10px; color:#e0c88e; }

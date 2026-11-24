@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 /// Foundations one villager may hold queued: a player at 70k-unit scale lays
 /// dozens at once. Still bounded, so a client cannot grow a queue without limit.
-const MAX_BUILD_QUEUE: usize = 256;
+const MAX_BUILD_QUEUE: usize = 2_048;
 const CONTINUE_RADIUS: i32 = 10;
 const CONTINUE_TRIES: usize = 4;
 

@@ -272,23 +272,21 @@ pub(super) fn buildings(
 pub(super) fn subscription_buildings(
     world: &GameWorld,
     player: PlayerId,
-    region: TileRect,
+    camera: Option<TileRect>,
 ) -> BTreeMap<EntityId, GameplayBuildingState> {
     if !world.fog_disabled() {
         return buildings(world, player);
     }
     world
         .buildings()
-        .filter(|b| {
-            b.player == player
-                || (!b.is_unstarted()
-                    && b.footprint.min.x < region.max.x
-                    && b.footprint.max.x > region.min.x
-                    && b.footprint.min.y < region.max.y
-                    && b.footprint.max.y > region.min.y)
+        .filter(|b| b.player == player || !b.is_unstarted())
+        .filter_map(|b| {
+            let state = wire_building_state(&b, None);
+            camera
+                .is_none_or(|region| building_in_camera(&state, player, region))
+                .then_some((state.id, state))
         })
         .take(aoe_protocol::MAX_ECONOMY_BUILDINGS + 1)
-        .map(|b| (b.id, wire_building_state(&b, None)))
         .collect()
 }
 

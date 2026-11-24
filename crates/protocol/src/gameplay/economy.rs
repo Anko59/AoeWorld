@@ -21,7 +21,7 @@ pub const MAX_ECONOMY_BUILDINGS: usize = 16_384;
 /// A complete retained view may span messages, up to 128 seats at 8,192 each.
 pub const MAX_RETAINED_BUILDINGS: usize = MAX_ECONOMY_PLAYERS * 8_192;
 /// Villagers one build order may name.
-pub const MAX_BUILD_GROUP: usize = 32;
+pub const MAX_BUILD_GROUP: usize = 16_384;
 pub const MAX_TRAINING_QUEUE: usize = 15;
 
 /// A Market commodity; wood, food and stone trade for gold.

@@ -29,7 +29,6 @@ fn selected_of(client: &Client, kind: UnitKind) -> Vec<EntityId> {
                 .get(id)
                 .is_some_and(|u| u.player == owner(client) && u.hp > 0 && u.kind == kind)
         })
-        .take(aoe_protocol::MAX_BUILD_GROUP)
         .collect()
 }
 
@@ -243,15 +242,6 @@ pub(in super::super) fn place(client: &mut Client, point: ScreenPoint, release: 
         return;
     }
     let far = crate::playground::game::strategic::active(client);
-    if far
-        && !client
-            .village
-            .build_admission
-            .ready(crate::playground::game::now())
-    {
-        strategic::wait();
-        return;
-    }
     let sequence = client.next_sequence;
     let builder_ids = if far {
         Vec::new()
@@ -260,6 +250,9 @@ pub(in super::super) fn place(client: &mut Client, point: ScreenPoint, release: 
     } else {
         builders(client)
     };
+    if !builder_group_fits(client, builder_ids.len()) {
+        return;
+    }
     let message = if kind == BuildingKind::Bridge {
         Message::BuildBridgeOrder {
             sequence,
@@ -286,9 +279,8 @@ pub(in super::super) fn place(client: &mut Client, point: ScreenPoint, release: 
             queued: shift,
         }
     };
-    send(client, message);
-    if far && client.last_error.is_none() {
-        client.village.build_admission.pending = Some(sequence);
+    if send(client, message) && far {
+        client.village.pending_far_builds.insert(sequence);
         strategic::submitting();
     }
     if shift {
@@ -297,6 +289,14 @@ pub(in super::super) fn place(client: &mut Client, point: ScreenPoint, release: 
     } else {
         cancel(client);
     }
+}
+
+fn builder_group_fits(client: &mut Client, count: usize) -> bool {
+    if count <= aoe_protocol::MAX_BUILD_GROUP {
+        return true;
+    }
+    client.status = "Select fewer workers for this building order.".into();
+    false
 }
 
 /// Foundations take precedence over gather/move; completed farms receive a farmer.
@@ -339,6 +339,9 @@ pub(super) fn interact(client: &mut Client, point: ScreenPoint) -> bool {
         matches!(b.kind, BuildingKind::Farm | BuildingKind::FishTrap),
     );
     if unfinished {
+        if !builder_group_fits(client, ids.len()) {
+            return true;
+        }
         let sequence = client.next_sequence;
         send(
             client,

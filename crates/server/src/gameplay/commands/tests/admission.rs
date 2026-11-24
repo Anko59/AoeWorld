@@ -4,11 +4,11 @@ use super::*;
 async fn shared_pages_cannot_expand_the_match_command_storage_budget() {
     let service = GameplayService::new(Seed(7));
     let mut receivers = Vec::new();
-    for _ in 0..53 {
+    for _ in 0..=MAX_PENDING_COMMANDS_GLOBAL / 256 {
         let (sender, receiver) = mpsc::channel(32);
         receivers.push(receiver);
         let (id, _) = service.register(None, sender).await;
-        for sequence in 1..=20 {
+        for sequence in 1..=256 {
             service.queue_stop(id, sequence, EntityId(0)).await;
         }
     }
@@ -33,7 +33,7 @@ async fn shared_pages_cannot_expand_the_match_command_storage_budget() {
             )
         })
         .count();
-    assert_eq!(rejected, 53 * 20 - MAX_PENDING_COMMANDS_GLOBAL);
+    assert_eq!(rejected, 32);
 }
 
 #[test]

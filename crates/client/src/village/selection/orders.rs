@@ -7,12 +7,10 @@ use aoe_protocol::GameplayClientMessage as Message;
 
 pub(super) fn movement(
     client: &Client,
-    mut unit_ids: Vec<EntityId>,
+    unit_ids: Vec<EntityId>,
     destination: WorldPosition,
     queued: bool,
 ) -> Option<Message> {
-    unit_ids.sort_unstable();
-    unit_ids.dedup();
     let sequence = client.next_sequence;
     let formation = client.village.formation;
     let attack_move = client.village.attack_move;
