@@ -191,7 +191,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         let side = self.side + 2 * WATER_HALO;
         let wx = i64::from(position.x) - i64::from(self.origin.x) + WATER_HALO;
         let wy = i64::from(position.y) - i64::from(self.origin.y) + WATER_HALO;
-        let neighbor = |dx: i32, dy: i32| self.near_water(position, (wx, wy, side), dx, dy);
+        let window = (wx, wy, side);
         let key = self.generator.shoreline_key();
         let step = |domain: u64, narrow: i64, wide: i64| {
             let value = shoreline::variation(key, domain, position, WIDTH_LATTICE_TILES);
@@ -214,7 +214,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
                     if distance > reach {
                         break;
                     }
-                    match neighbor(dx, dy)? {
+                    match self.near_water(position, window, dx, dy)? {
                         None | Some(WaterKind::None) => {}
                         Some(WaterKind::River)
                             if distance <= *bank.get_or_insert_with(|| width(23, 0, i64::MAX)) =>
@@ -246,7 +246,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
                     {
                         break;
                     }
-                    if neighbor(dx, dy)? == Some(WaterKind::None) {
+                    if self.near_water(position, window, dx, dy)? == Some(WaterKind::None) {
                         return Ok(if distance <= width(7, 0, i64::MAX) {
                             Shore::Shallow
                         } else {
@@ -261,7 +261,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
                     if distance > REACH[0] {
                         break;
                     }
-                    if neighbor(dx, dy)? == Some(WaterKind::None) {
+                    if self.near_water(position, window, dx, dy)? == Some(WaterKind::None) {
                         return Ok(Shore::Margin);
                     }
                 }
