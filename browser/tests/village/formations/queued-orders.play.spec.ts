@@ -5,6 +5,7 @@ import { fiveVillagerFixture } from "../fixtures/village.js";
 
 const stopOrder = 16;
 const patrolOrder = 40;
+const patrolSelectionOrder = 46;
 
 async function selection(page: Page, kind: string, group: boolean) {
   const orders: Buffer[] = [];
@@ -12,7 +13,11 @@ async function selection(page: Page, kind: string, group: boolean) {
   await fiveVillagerFixture(
     page,
     (bytes) => {
-      if ([2, stopOrder, 21, 29, 32, patrolOrder].includes(bytes[0] ?? -1))
+      if (
+        [2, stopOrder, 21, 29, 32, patrolOrder, patrolSelectionOrder].includes(
+          bytes[0] ?? -1,
+        )
+      )
         orders.push(bytes);
     },
     () => 0,
@@ -123,7 +128,7 @@ test("attack-move uses right clicks, ends on Shift release and cancels on Escape
   expect(orders).toHaveLength(6);
 });
 
-test("Patrol sends one order per selected fighter", async ({ page }) => {
+test("Patrol sends the whole selection as one list order", async ({ page }) => {
   const orders = await selection(page, "LightCavalry", true);
   const canvas = page.locator("#scene");
   const patrol = page.locator("#patrol-units");
@@ -134,9 +139,12 @@ test("Patrol sends one order per selected fighter", async ({ page }) => {
   await patrol.click();
   await expect(canvas).toHaveAttribute("data-order-mode", "patrol");
   await page.mouse.click(1100, 200, { button: "right" });
-  await expect.poll(() => orders.length).toBe(5);
-  expect(orders.map((order) => order[0])).toEqual(Array(5).fill(patrolOrder));
-  expect(orders.map((order) => order[2]).sort()).toEqual([2, 3, 4, 5, 6]);
+  await expect.poll(() => orders.length).toBe(1);
+  // This fixture's sequence and entity IDs each fit in one postcard byte.
+  const [command, , count, ...rest] = orders[0] ?? [];
+  expect(command).toBe(patrolSelectionOrder);
+  expect(count).toBe(5);
+  expect(rest.slice(0, 5).sort((a, b) => a - b)).toEqual([2, 3, 4, 5, 6]);
   await expect(canvas).toHaveAttribute("data-order-mode", "");
 });
 

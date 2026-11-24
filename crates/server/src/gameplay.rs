@@ -109,10 +109,8 @@ enum PendingAction {
         queued: bool,
         attack_move: bool,
     },
-    AutoScoutSelection {
-        unit_ids: Vec<EntityId>,
-        enabled: bool,
-    },
+    /// One selection order: the same order for each unit, acknowledged once.
+    Each(Vec<PendingAction>),
     AutoScout {
         entity_id: EntityId,
         enabled: bool,

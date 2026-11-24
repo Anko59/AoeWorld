@@ -215,11 +215,14 @@ quarter are borrowed from gathering; a borrowed worker returns to its resource
 when the foundation is done. Workers already building, fighting or hunting are
 excluded. Ties use entity ID. No selection or zoom change is needed.
 Feedback says Submitting until the ordinary server acknowledgement arrives.
-One build can be pending at a time. A connection reset clears its pending
-admission and reports that the previous order was not confirmed; inspect the
-site before retrying. The Build here icon retains its DOM node across HUD
-updates so a held pointer can complete its click. The client tracks outgoing commands against
-the human burst of 20 and refill of 10 per second; the server retains authority.
+Several builds can be pending at once (a shift-placed row sends one order per
+site); each acknowledgement clears its own entry. A connection reset clears the
+pending set and reports that the previous order was not confirmed; inspect the
+sites before retrying. The Build here icon retains its DOM node across HUD
+updates so a held pointer can complete its click. The client no longer keeps a
+far-build budget of its own: the server admits human orders at 256 per second
+with a burst of 1,024 (2,048 pending per connection, 16,384 server-wide), so a
+placed row of 100 buildings is never refused.
 Esc, right-click, focus loss and returning to near zoom cancel placement.
 
 ## First map arrival
