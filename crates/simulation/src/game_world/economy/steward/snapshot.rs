@@ -57,7 +57,12 @@ impl GameWorld {
         work: &mut StewardWork,
     ) -> Option<Snapshot> {
         self.steward_ensure_regions(id);
+        // The snapshot's copy of the domain leaves its member list behind.
+        let members = std::mem::take(&mut self.economy.steward_homes.get_mut(&id)?.members);
         let home = self.economy.steward_homes.get(&id)?.clone();
+        if let Some(h) = self.economy.steward_homes.get_mut(&id) {
+            h.members = members;
+        }
         let player = self.building(home.town_center?)?.player;
         // One census sweep after activation or a zone change; afterwards the
         // member list is kept by events and no visit walks the box again.
@@ -67,19 +72,15 @@ impl GameWorld {
         let mut gone = Vec::new();
         for &member in &self.economy.steward_homes[&id].members {
             match self.unit(member) {
-                Some(u)
-                    if u.player == player
-                        && u.hp > 0
-                        && !self.embarked(u.id)
-                        && home.owns_resident(u.kind, u.position) =>
-                {
+                // Membership follows every tile change and zone change, so
+                // a member stands on this domain's ground: no lookup again.
+                Some(u) if u.player == player && u.hp > 0 && !self.embarked(u.id) => {
                     if u.kind == UnitKind::FishingShip {
                         boats.push(u);
                     } else {
                         units.push(u);
                     }
                 }
-                Some(u) if u.hp > 0 && u.player == player && !self.embarked(u.id) => {}
                 _ => gone.push(member),
             }
         }
@@ -209,6 +210,22 @@ impl GameWorld {
         let count = width * (last.y - first.y + 1) as usize;
         let mut chunk = home.scan_chunk.min(count);
         let mut offset = home.scan_offset;
+        if (chunk, offset) == (0, 0) {
+            // A new sweep (activation or zone change): members off the
+            // domain's ground now leave before it starts adding.
+            let stale: Vec<_> = self.economy.steward_homes[&id]
+                .members
+                .iter()
+                .copied()
+                .filter(|m| {
+                    self.unit(*m)
+                        .is_none_or(|u| !home.owns_resident(u.kind, u.position))
+                })
+                .collect();
+            for unit in stale {
+                self.steward_set_member(unit, None, None);
+            }
+        }
         let mut visits = 0;
         let mut found = Vec::new();
         while chunk < count && visits < STEWARD_RULES.unit_visits_per_domain {
@@ -281,27 +298,20 @@ impl GameWorld {
             .unwrap_or_default();
         for unit in members {
             self.economy.stewards.member_of.remove(&unit);
-            self.economy.stewards.placed.insert(unit);
-        }
-    }
-
-    /// A villager or boat placed on the map (trained, released, spawned).
-    pub(crate) fn steward_unit_placed(&mut self, id: EntityId, kind: UnitKind) {
-        if matches!(kind, UnitKind::Villager | UnitKind::FishingShip) {
-            self.economy.stewards.placed.insert(id);
+            self.economy.walking.moved.push(unit);
         }
     }
 
     /// This tick's events: units placed on the map, and villagers and boats
-    /// that changed and now stand on a new tile, join the domain owning it
-    /// (a tile change, not every step, so the cost follows the walkers).
-    pub(super) fn steward_track_members(&mut self, changed: &[EntityId]) {
-        let placed = std::mem::take(&mut self.economy.stewards.placed);
+    /// that movement stepped onto a new tile, join the domain owning it. The
+    /// cost follows tile changes, never a scan of every changed unit.
+    pub(super) fn steward_track_members(&mut self) {
+        let moved = std::mem::take(&mut self.economy.walking.moved);
         if self.economy.stewards.by_player.is_empty() {
             // Without a domain there is nothing to join; activation sweeps.
             return;
         }
-        for &id in placed.iter().chain(changed) {
+        for &id in &moved {
             let Some(&index) = self.lookup.get(&id) else {
                 continue;
             };
@@ -312,14 +322,23 @@ impl GameWorld {
             let Some(domains) = self.economy.stewards.by_player.get(&u.player) else {
                 continue;
             };
+            // Domains still sweeping their box find their units themselves:
+            // after a load, that sweep is the one pass over each box.
+            if domains.keys().all(|d| {
+                self.economy
+                    .steward_homes
+                    .get(d)
+                    .is_none_or(|h| !h.census_done)
+            }) {
+                continue;
+            }
             let tile = u.position.tile_floor();
-            if !placed.contains(&id)
-                && self
-                    .economy
-                    .stewards
-                    .member_of
-                    .get(&id)
-                    .is_some_and(|&(_, at)| at == tile)
+            if self
+                .economy
+                .stewards
+                .member_of
+                .get(&id)
+                .is_some_and(|&(_, at)| at == tile)
             {
                 continue;
             }

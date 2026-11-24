@@ -96,8 +96,6 @@ pub(crate) struct Manager {
     pub(super) work: StewardWork,
     /// Each tracked unit's domain (if any) and the tile it was placed from.
     pub(super) member_of: BTreeMap<EntityId, (Option<EntityId>, aoe_core::TileCoord)>,
-    /// Villagers and boats placed on the map since the last tick.
-    pub(super) placed: BTreeSet<EntityId>,
 }
 impl GameWorld {
     pub(crate) fn register_steward(&mut self, id: EntityId) {

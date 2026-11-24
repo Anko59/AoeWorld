@@ -51,7 +51,7 @@ impl Manager {
 impl GameWorld {
     pub(crate) fn advance_stewards(&mut self, changed: &mut Vec<EntityId>) {
         self.refresh_steward_walk();
-        self.steward_track_members(changed);
+        self.steward_track_members();
         let mut work = StewardWork::default();
         let period = self.config.ticks(STEWARD_RULES.period_ticks);
         let ids = self.economy.stewards.scheduled(self.tick.0, period);

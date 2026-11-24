@@ -283,6 +283,7 @@ impl GameWorld {
         if previous_tile != tile {
             self.economy.gatherers.notify_walkers_at(tile);
             self.wake_queue_exits(tile);
+            self.management_tile_changed(id);
         }
         self.wake_construction_at(previous_tile);
         if previous_tile != tile {
