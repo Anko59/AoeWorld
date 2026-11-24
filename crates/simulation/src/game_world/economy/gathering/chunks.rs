@@ -148,12 +148,14 @@ impl GameWorld {
                             u64::from(node.tile.y.abs_diff(origin.y)),
                         );
                         let distance = dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy));
+                        // The rank test is a compare; `accept` may walk
+                        // tiles, so it runs only for a node that would place.
                         if distance > squared
                             || node.kind != kind
                             || Some(node.id) == exclude
+                            || (distance, node.id) >= score[last]
                             || !overlay.resource_available(*node)
                             || !accept(node)
-                            || (distance, node.id) >= score[last]
                         {
                             continue;
                         }
