@@ -66,8 +66,12 @@ fn formations_measure_warm_army_movement_and_route_searches() {
         // being discarded more eagerly than the stale case requires -- that is
         // the regression this pin exists to catch, so widen it only with a
         // reason, never to make a run pass.
+        //
+        // One more (202): a mover that waited walks a route guide to the
+        // destination chunk and searches only its last leg inside it
+        // (`route_scheduler/fields.rs`); with guides off the arm stays at 201.
         assert_eq!(metrics.orders, if grouped { 1 } else { 200 });
-        assert_eq!(metrics.searches_started, if grouped { 1 } else { 201 });
+        assert_eq!(metrics.searches_started, if grouped { 1 } else { 202 });
         if let Some(from) = from {
             let to = w.formation_anchor(ids[0]).unwrap();
             assert!(

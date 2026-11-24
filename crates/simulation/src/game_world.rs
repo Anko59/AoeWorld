@@ -146,8 +146,7 @@ pub(crate) struct StoredUnit {
     /// The route it waits for had its whole fast attempt (see
     /// `route_scheduler::issue`); it now needs a search slot.
     pub(crate) fast_route_tried: bool,
-    /// The last order this unit could not complete as unreachable: from where,
-    /// to where, and on which tick (see `route_scheduler::order`).
+    /// Last order refused as unreachable: from, to, tick (`route_scheduler::order`).
     pub(crate) unreachable_memo: Option<(TileCoord, TileCoord, u64)>,
     /// Diagnostics only: the call site that ordered the current route.
     pub(crate) route_caller: Option<&'static std::panic::Location<'static>>,
@@ -173,6 +172,7 @@ pub struct GameWorld {
     pub(crate) movement_scratch: movement_step::Scratch,
     pub(crate) yields: movement_step::Yields,
     pub(crate) rides: formation::Rides, // off-screen rides (`steering/ride.rs`)
+    pub(crate) route_guides: route_scheduler::RouteGuides, // `route_scheduler/fields.rs`
     pub(crate) collisions: movement_step::CollisionIndex,
     /// Derived clearance valid only while one sequential mover owns the turn.
     pub(crate) work_approach_clearance: Option<(EntityId, WorldPosition, bool)>,
@@ -184,8 +184,7 @@ pub struct GameWorld {
     pub(crate) destinations: spacing::Destinations,
     pub(crate) terrain: Terrain,
     pub(crate) clearance: Mutex<clearance::Field>,
-    /// Candidate resource nodes per generator chunk, built on the first
-    /// replacement search there and reused (`GameWorld::chunk_resource_nodes`).
+    /// Candidate resource nodes per generator chunk (`chunk_resource_nodes`).
     pub(crate) resource_chunks: Mutex<crate::game_cache::ResourceCache>,
     pub(crate) planning_budget: u32,
     pub(crate) navigation_preparation_budget: Mutex<u32>,
@@ -239,6 +238,7 @@ impl GameWorld {
             movement_scratch: Default::default(),
             yields: Default::default(),
             rides: Default::default(),
+            route_guides: Default::default(),
             work_approach_clearance: None,
             melee_traffic_clearance: None,
             collisions: Default::default(),

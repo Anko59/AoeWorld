@@ -16,6 +16,7 @@ mod attribution;
 mod batch;
 mod deadline;
 mod fast;
+mod fields;
 mod group_end;
 mod issue;
 mod metrics;
@@ -27,6 +28,9 @@ pub use accounting::RouteSchedulerStats;
 pub use attribution::{
     ROUTE_CATEGORIES, ROUTE_DISTANCES, ROUTE_FAILURES, RouteAttribution, RouteCaller, RouteClass,
 };
+#[cfg(test)]
+pub(crate) use fields::FIELD_CHUNK;
+pub(crate) use fields::RouteGuides;
 pub(crate) use metrics::{GroupWork, PlanningMeasurement};
 pub use metrics::{PLANNING_SPANS, PlanningProbe, RouteMetrics};
 pub use passes::{PASS_NAMES, PassCount};
@@ -60,11 +64,12 @@ pub(crate) fn far_route(from: aoe_core::TileCoord, to: aoe_core::TileCoord) -> b
 
 /// A fresh planner for `order`'s current leg.
 fn order_planner(order: &super::MovementOrder) -> RoutePlanner {
-    RoutePlanner::new(
-        order.waypoint.tile_floor(),
-        order.target_tile,
-        MAX_ROUTE_WORK_PER_ORDER,
-    )
+    leg_planner(order.waypoint.tile_floor(), order.target_tile)
+}
+
+/// A fresh planner for a leg from `from` to `to`.
+fn leg_planner(from: aoe_core::TileCoord, to: aoe_core::TileCoord) -> RoutePlanner {
+    RoutePlanner::new(from, to, MAX_ROUTE_WORK_PER_ORDER)
 }
 
 fn far_planner(planner: &RoutePlanner) -> bool {
@@ -203,6 +208,8 @@ impl GameWorld {
         }
         self.expire_route_waits(&expired, changed);
         self.route_queued.clear();
+        let mut budget = budget;
+        self.serve_from_fields(&mut waiting, &mut budget, changed);
         let reserved = self.serve_far_groups(&waiting, budget, changed);
         self.serve_waiting(waiting, budget - reserved, changed)
     }
