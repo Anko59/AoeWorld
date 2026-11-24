@@ -221,7 +221,9 @@ test("mixed selection uses unit commands and foreign and wildlife cards clear th
   await expect(card).toHaveAttribute("data-type", "empty");
 });
 
-test("Shift batch training keeps the Barracks grid under the pointer", async ({ page }) => {
+test("Shift batch training keeps the Barracks grid under the pointer", async ({
+  page,
+}) => {
   const { commands, update } = await productionFixture(page, [
     { id: 20, kind: 6, x: 8190, y: 8187 },
   ]);
@@ -231,10 +233,13 @@ test("Shift batch training keeps the Barracks grid under the pointer", async ({ 
   const train = page.getByRole("button", { name: "Train Militia" });
   await expect(train).toBeEnabled();
   const grid = page.locator("#command-grid");
-  const layout = () => grid.locator("button:visible").evaluateAll(nodes => nodes.map(node => {
-    const { x, y, width, height } = node.getBoundingClientRect();
-    return [node.id, x, y, width, height];
-  }));
+  const layout = () =>
+    grid.locator("button:visible").evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const { x, y, width, height } = node.getBoundingClientRect();
+        return [node.id, x, y, width, height];
+      }),
+    );
   const original = await layout();
   await train.hover();
   await page.keyboard.down("Shift");
@@ -242,7 +247,9 @@ test("Shift batch training keeps the Barracks grid under the pointer", async ({ 
   expect(await layout()).toEqual(original);
   await page.mouse.down();
   await page.mouse.up();
-  await expect.poll(() => commands.filter(bytes => bytes[0] !== 1).length).toBeGreaterThan(0);
+  await expect
+    .poll(() => commands.filter((bytes) => bytes[0] !== 1).length)
+    .toBeGreaterThan(0);
   await expect(grid.locator("#train-steward")).toHaveCount(0);
   // The queue adds Cancel in its own cell; no existing button moves.
   await expect(grid.getByRole("button", { name: "Cancel" })).toBeVisible();
@@ -252,10 +259,27 @@ test("Shift batch training keeps the Barracks grid under the pointer", async ({ 
   expect(await layout()).toEqual(expect.arrayContaining(original));
 });
 
-test("only started foundations show progress, including the enemy's", async ({ page }) => {
+test("only started foundations show progress, including the enemy's", async ({
+  page,
+}) => {
   const { update } = await productionFixture(page, [
-    { id: 20, kind: 6, x: 8190, y: 8187, complete: false, constructionProgress: 0 },
-    { id: 21, kind: 6, x: 8194, y: 8187, complete: false, constructionProgress: 250, player: 1 },
+    {
+      id: 20,
+      kind: 6,
+      x: 8190,
+      y: 8187,
+      complete: false,
+      constructionProgress: 0,
+    },
+    {
+      id: 21,
+      kind: 6,
+      x: 8194,
+      y: 8187,
+      complete: false,
+      constructionProgress: 250,
+      player: 1,
+    },
   ]);
   update();
   const labels = page.locator("#construction-labels progress");
@@ -263,10 +287,19 @@ test("only started foundations show progress, including the enemy's", async ({ p
   await expect(labels).toHaveAttribute("value", "250");
   const own = screen(8191.5, 8188.5);
   await page.mouse.click(own.x, own.y);
-  await expect(page.locator("#selection")).toHaveAttribute("data-kind", "Barracks");
+  await expect(page.locator("#selection")).toHaveAttribute(
+    "data-kind",
+    "Barracks",
+  );
   const enemy = screen(8195.5, 8188.5);
   await page.mouse.click(enemy.x, enemy.y);
-  await expect(page.locator("#selection")).toHaveAttribute("data-owned", "false");
-  await expect(page.locator("#construction-progress")).toHaveAttribute("value", "250");
+  await expect(page.locator("#selection")).toHaveAttribute(
+    "data-owned",
+    "false",
+  );
+  await expect(page.locator("#construction-progress")).toHaveAttribute(
+    "value",
+    "250",
+  );
   await expect(page.locator("#construction-progress")).toBeVisible();
 });

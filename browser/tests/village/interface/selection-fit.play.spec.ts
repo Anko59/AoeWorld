@@ -124,7 +124,9 @@ for (const [width, height] of [
   });
 }
 
-test("Steward and Vassal controls use the centre of the full-width bottom menu", async ({ page }) => {
+test("Steward and Vassal controls use the centre of the full-width bottom menu", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 3840, height: 2160 });
   await nativeMenu(page);
   await page.addScriptTag({
@@ -135,14 +137,24 @@ test("Steward and Vassal controls use the centre of the full-width bottom menu",
   const frame = await panel.boundingBox();
   expect(frame?.x).toBe(0);
   expect(frame?.width).toBe(3840);
-  for (const [state, selector] of [["tc", "#steward-controls"], ["castle", "#vassal-panel"]] as const) {
-    await page.evaluate(fn => Reflect.get(window, "__h")[fn](15, 15, true), state);
+  for (const [state, selector] of [
+    ["tc", "#steward-controls"],
+    ["castle", "#vassal-panel"],
+  ] as const) {
+    await page.evaluate(
+      (fn) => Reflect.get(window, "__h")[fn](15, 15, true),
+      state,
+    );
     const content = await page.locator("#selection-content").boundingBox();
     const controls = await page.locator(selector).boundingBox();
     if (!content || !controls) throw new Error("Management controls missing");
     // Wide, and clear of the right corner.
     expect(controls.width).toBeGreaterThanOrEqual(240);
-    expect(controls.x + controls.width).toBeLessThan(content.x + content.width * 0.8);
-    await page.locator("#bottom-panel").screenshot({ path: `../.cache/nosroll/wide-${state}.png` });
+    expect(controls.x + controls.width).toBeLessThan(
+      content.x + content.width * 0.8,
+    );
+    await page
+      .locator("#bottom-panel")
+      .screenshot({ path: `../.cache/nosroll/wide-${state}.png` });
   }
 });

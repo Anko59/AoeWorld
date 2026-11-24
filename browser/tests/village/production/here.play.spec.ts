@@ -5,14 +5,18 @@ import { gameAssets } from "../../game-assets.js";
 import { fallbackTest, forceWebGl } from "../../rendering/backends.js";
 import { openTab } from "../../rendering/fixtures/cockpit-tabs.js";
 
-
-const destination = (page: Page) => page.getByRole("button", { name: "Set destination" });
+const destination = (page: Page) =>
+  page.getByRole("button", { name: "Set destination" });
 const recruit = (page: Page, kind: string) =>
-  page.getByRole("group", { name: "Unit type" }).getByRole("button", { name: kind, exact: true });
+  page
+    .getByRole("group", { name: "Unit type" })
+    .getByRole("button", { name: kind, exact: true });
 async function setDestination(page: Page, y = 345) {
   await destination(page).click();
   await page.mouse.click(635, y);
-  await expect(page.locator("#units-here-status")).toContainText("Destination set");
+  await expect(page.locator("#units-here-status")).toContainText(
+    "Destination set",
+  );
 }
 
 fallbackTest(
@@ -120,9 +124,7 @@ test("Units here shares ordinary training and rally orders across equally near e
   await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
   await destination(page).click();
   await page.keyboard.press("Escape");
-  await expect(
-    destination(page),
-  ).toHaveAttribute("aria-pressed", "false");
+  await expect(destination(page)).toHaveAttribute("aria-pressed", "false");
 });
 
 test("Units here bounds human batches and displays accepted rather than planned training", async ({
@@ -201,13 +203,17 @@ test("Units here prioritizes the closest occupied queue over a farther idle prod
   expect(commands.filter((c) => c[0] === 20).map((c) => c[2])).toEqual([1]);
 });
 
-test("one destination and count apply to successive clicks for different units", async ({ page }) => {
+test("one destination and count apply to successive clicks for different units", async ({
+  page,
+}) => {
   const { commands, update } = await productionFixture(page, [
     { id: 1, kind: 0, x: 8182, y: 8186 },
     { id: 2, kind: 6, x: 8191, y: 8186 },
   ]);
   update(playerState(0, 0, 4, 100));
-  await page.evaluate(() => { location.hash = "x=8192.5&y=8192.5&zoom=.04"; });
+  await page.evaluate(() => {
+    location.hash = "x=8192.5&y=8192.5&zoom=.04";
+  });
   await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
   await openTab(page, "train");
   await expect(recruit(page, "Militia")).toBeDisabled();
@@ -215,9 +221,9 @@ test("one destination and count apply to successive clicks for different units",
   await page.getByLabel("Unit count").fill("3");
   await recruit(page, "Militia").click();
   await recruit(page, "Villager").click();
-  const trains = () => commands.filter(c => c[0] === 5).map(c => c[3]);
+  const trains = () => commands.filter((c) => c[0] === 5).map((c) => c[3]);
   await expect.poll(trains).toEqual([2, 2, 2, 0, 0, 0]);
-  const rallies = commands.filter(c => c[0] === 20);
-  expect(rallies.map(c => c[2])).toEqual([2, 1]);
+  const rallies = commands.filter((c) => c[0] === 20);
+  expect(rallies.map((c) => c[2])).toEqual([2, 1]);
   expect(rallies[0]?.slice(3)).toEqual(rallies[1]?.slice(3));
 });
