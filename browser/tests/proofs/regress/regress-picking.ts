@@ -43,7 +43,7 @@ export async function regressPickingProof(page: Page, url: string) {
     "gather",
   );
   await page.mouse.click(berry.x, berry.y, { button: "right" });
-  await expect.poll(() => commands.at(-1)?.[0]).toBe(4);
+  await expect.poll(() => commands.at(-1)?.[0]).toBe(45); // GatherSelectionOrder
   await page.screenshot({
     path: "../.cache/showcase/berries-behind-tc-order.png",
   });
