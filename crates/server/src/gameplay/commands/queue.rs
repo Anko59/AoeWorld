@@ -131,6 +131,77 @@ impl GameplayService {
         }
     }
 
+    /// One admitted order that applies to every unit of a selection.
+    async fn queue_each(&self, session_id: u64, sequence: u64, actions: Vec<PendingAction>) {
+        self.queue_command(session_id, sequence, PendingAction::Each(actions))
+            .await;
+    }
+
+    pub(crate) async fn queue_gather_selection(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        entity_ids: Vec<EntityId>,
+        resource_id: u64,
+    ) {
+        let actions = entity_ids
+            .into_iter()
+            .map(|entity_id| PendingAction::Gather {
+                entity_id,
+                resource_id,
+            })
+            .collect();
+        self.queue_each(session_id, sequence, actions).await;
+    }
+
+    pub(crate) async fn queue_patrol_selection(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        entity_ids: Vec<EntityId>,
+        destination: WorldPosition,
+    ) {
+        let actions = entity_ids
+            .into_iter()
+            .map(|id| PendingAction::Patrol(id, destination))
+            .collect();
+        self.queue_each(session_id, sequence, actions).await;
+    }
+
+    pub(crate) async fn queue_garrison_selection(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        entity_ids: Vec<EntityId>,
+        building_id: EntityId,
+    ) {
+        let actions = entity_ids
+            .into_iter()
+            .map(|entity_id| PendingAction::Garrison {
+                entity_id,
+                building_id,
+            })
+            .collect();
+        self.queue_each(session_id, sequence, actions).await;
+    }
+
+    pub(crate) async fn queue_general_move_alone_selection(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        entity_ids: Vec<EntityId>,
+        destination: WorldPosition,
+    ) {
+        let actions = entity_ids
+            .into_iter()
+            .map(|entity_id| PendingAction::GeneralMoveAlone {
+                entity_id,
+                destination,
+            })
+            .collect();
+        self.queue_each(session_id, sequence, actions).await;
+    }
+
     pub(crate) async fn queue_stop_selection(
         &self,
         session_id: u64,
@@ -148,19 +219,18 @@ impl GameplayService {
         unit_ids: Vec<EntityId>,
         enabled: bool,
     ) {
-        self.queue_command(
-            session_id,
-            sequence,
-            PendingAction::AutoScoutSelection { unit_ids, enabled },
-        )
-        .await;
+        let actions = unit_ids
+            .into_iter()
+            .map(|entity_id| PendingAction::AutoScout { entity_id, enabled })
+            .collect();
+        self.queue_each(session_id, sequence, actions).await;
     }
 }
 
 impl PendingAction {
     pub(in crate::gameplay) fn decision_count(&self) -> u64 {
         match self {
-            Self::AutoScoutSelection { unit_ids, .. } => unit_ids.len() as u64,
+            Self::Each(actions) => actions.len() as u64,
             _ => 1,
         }
     }

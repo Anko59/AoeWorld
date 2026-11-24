@@ -124,12 +124,20 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
             .filter(|unit| unit.kind == UnitKind::General)
             .map(|unit| unit.id)
             .collect();
-        for entity_id in generals {
+        for entity_ids in generals.chunks(aoe_core::MAX_FORMATION_MEMBERS) {
             let sequence = client.next_sequence;
-            let message = Message::GeneralOrder {
-                sequence,
-                entity_id,
-                command: aoe_protocol::GeneralCommand::MoveAlone { destination },
+            let message = if let [entity_id] = entity_ids {
+                Message::GeneralOrder {
+                    sequence,
+                    entity_id: *entity_id,
+                    command: aoe_protocol::GeneralCommand::MoveAlone { destination },
+                }
+            } else {
+                Message::GeneralMoveAloneSelectionOrder {
+                    sequence,
+                    entity_ids: entity_ids.to_vec(),
+                    destination,
+                }
             };
             send(client, message);
         }
@@ -149,6 +157,9 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
         .map(|a| a.id)
         .collect::<Vec<_>>();
     let mut attacks = Vec::new();
+    let mut patrols = Vec::new();
+    let mut gathers = Vec::new();
+    let mut hunts = Vec::new();
     let group_gathers = resource.is_some()
         && !queued
         && animal.is_none()
@@ -171,17 +182,9 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
         if group_gathers && unit.kind == UnitKind::Scout {
             continue;
         }
-        let sequence = client.next_sequence;
         if client.village.patrol_move {
             if can_choose_stance(unit.kind) {
-                send(
-                    client,
-                    Message::PatrolOrder {
-                        sequence,
-                        entity_id: id,
-                        destination,
-                    },
-                );
+                patrols.push(id);
             }
             continue;
         }
@@ -193,27 +196,35 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
             enemy.is_some(),
             resource.is_some(),
         );
-        let message = match (choice, animal.or(enemy), resource) {
-            (ClickOrder::Hunt, Some(target), _) => Message::HuntOrder {
+        match (choice, animal.or(enemy), resource) {
+            (ClickOrder::Hunt, Some(_), _) => hunts.push(id),
+            (ClickOrder::Attack, Some(_), _) => attacks.push(id),
+            (ClickOrder::Gather, _, Some(_)) => gathers.push(id),
+            _ => moves.push(id),
+        }
+    }
+    send_lists(client, patrols, |sequence, entity_ids| {
+        Message::PatrolSelectionOrder {
+            sequence,
+            entity_ids,
+            destination,
+        }
+    });
+    if let Some((resource_id, _)) = resource {
+        send_lists(client, gathers, |sequence, entity_ids| {
+            Message::GatherSelectionOrder {
                 sequence,
-                unit_ids: vec![id],
-                animal_id: target,
-            },
-            (ClickOrder::Attack, Some(_), _) => {
-                attacks.push(id);
-                continue;
-            }
-            (ClickOrder::Gather, _, Some((resource_id, _))) => Message::GatherOrder {
-                sequence,
-                entity_id: id,
+                entity_ids,
                 resource_id,
-            },
-            _ => {
-                moves.push(id);
-                continue;
             }
-        };
-        send(client, message);
+        });
+    }
+    if let Some(animal_id) = animal.or(enemy) {
+        send_lists(client, hunts, |sequence, unit_ids| Message::HuntOrder {
+            sequence,
+            unit_ids,
+            animal_id,
+        });
     }
     if let Some(target) = animal.or(enemy) {
         send_attack(client, attacks, target);
@@ -273,6 +284,21 @@ fn building_attack_at_pointer(client: &mut Client, point: ScreenPoint) -> bool {
     }
     send_attack(client, ids, target_id);
     true
+}
+
+/// One message per chunk of at most MAX_FORMATION_MEMBERS units. A single
+/// unit still uses the list message, so the server has one path per order.
+fn send_lists(
+    client: &mut Client,
+    mut ids: Vec<aoe_core::EntityId>,
+    message: impl Fn(u64, Vec<aoe_core::EntityId>) -> Message,
+) {
+    ids.sort_unstable();
+    ids.dedup();
+    for chunk in ids.chunks(aoe_core::MAX_FORMATION_MEMBERS) {
+        let sequence = client.next_sequence;
+        send(client, message(sequence, chunk.to_vec()));
+    }
 }
 
 fn send_attack(

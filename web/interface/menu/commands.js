@@ -21,6 +21,8 @@ const command = (id, label, art, order, key, props) => action(id, label, ['comma
 const entity = (id, label, kind, order, key, props) => action(id, label, ['entity', kind], order, key, props);
 const withCode = code => ({ disabled: code !== 1, reason: disabledReasons[code] });
 const byLine = (a, b) => a.slot - b.slot;
+// Managers are trained one at a time: Shift must never queue five Vassals.
+const singles = ['Vassal', 'General', 'Steward'];
 const formations = ['Line', 'Box', 'Staggered', 'Flank'];
 const stances = ['Aggressive', 'Defensive', 'Stand Ground', 'No Attack'];
 const ageNames = ['Dark Age', 'Feudal Age', 'Castle Age', 'Imperial Age'];
@@ -34,7 +36,7 @@ export function describeCommands(card, state, shelter, rules, { page, stance, fo
   const controls = {
     'move-units': [command('move-units', 'Move · choose a destination', ['move', 'move'], [3, 2], 'Q')],
     'stop-units': [command('stop-units', 'Stop selected units', ['stop', 'stop'], [3, 1], 'G')],
-    'delete-units': [command('delete-units', 'Delete', ['delete', 'delete'], [3, 4], 'Delete', { title: 'Delete (Del)' })],
+    'delete-units': [command('delete-units', 'Delete', ['delete', 'delete'], [3, 4], 'Delete', { title: 'Delete (Del)', place: [14, 12] })],
     'attack-move-units': [command('attack-move-units', 'Attack move', ['attack-move', 'soldier'], [6, 0], 'R')],
     'patrol-units': [command('patrol-units', 'Patrol between this position and the destination', ['patrol', 'move'], [6, 1], '')],
     'general-only-move': [entity('general-only-move', 'General only · move without the army', 'General', [8, 0], 'W')],
@@ -74,18 +76,18 @@ export function describeCommands(card, state, shelter, rules, { page, stance, fo
   if (shelter.bell) general.push(command('town-bell', 'Town Bell', ['town-bell', 'towncenter'], [15, 3], 'B'));
   const end = buildableKinds.length + techKinds.length;
   if (state.progress < 1000) return [...general,
-    command('cancel-construction', 'Cancel construction', ['cancel', 'delete'], [0, end], '')];
+    command('cancel-construction', 'Cancel construction', ['cancel', 'delete'], [0, end], '', { place: [13, 11] })];
   if (state.researching >= 0) general.push(command('cancel-research', 'Cancel research',
-    ['cancel', 'delete'], [0, end + 1], ''));
+    ['cancel', 'delete'], [0, end + 1], '', { place: [13, 11] }));
   if (training) general.push(command('cancel-training', 'Cancel',
-    ['cancel', 'delete'], [3, 3], '', { title: 'Cancel active training and refund its cost' }));
+    ['cancel', 'delete'], [3, 3], '', { title: 'Cancel active training and refund its cost', place: [13, 11] }));
   const train = state.training.flatMap((code, index) => {
     if (!code) return [];
     const kind = trainingKinds[index];
     const primary = state.primary === index;
     const { cost, slot } = rules.units[index];
     return [entity(primary ? 'train-villager' : 'train-' + id(kind), 'Train ' + names[kind],
-      kind, [1, index], primary ? 'Q' : '', { slot, cost: price(cost), ...withCode(code) })];
+      kind, [1, index], primary ? 'Q' : '', { slot, cost: price(cost), batch: !singles.includes(kind), ...withCode(code) })];
   }).sort(byLine);
   const research = state.researchAvailability.flatMap((code, index) => rules.techs[index].site !== state.kind ? [] : [
     action('research-' + id(techKinds[index]), 'Research ' + techName(techKinds[index]),

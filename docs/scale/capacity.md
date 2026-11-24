@@ -55,8 +55,8 @@ limit (it is not a bad site) and stops placing buildings for
 | Entity ids | u32, never reused | same | world | `EntityIdExhausted` | no (~10^6 in hours) |
 | Corpses | none (30 s, then removed) | same | - | - | - |
 | Farms | none beyond buildings; spent farms removed | same | - | - | - |
-| Wall segments per order (`MAX_WALL_SEGMENTS`) | 64 | 64 | order | now `RejectedOrderTooLarge` | per order |
-| Builders per order (`MAX_BUILD_GROUP`) | 32 | 32 | order | now `RejectedOrderTooLarge` | per order |
+| Wall segments per order (`MAX_WALL_SEGMENTS`) | 1,024 (was 64; #1020) | 1,024 | order | `RejectedOrderTooLarge` | per order |
+| Builders per order (`MAX_BUILD_GROUP`) | 16,384 (was 32; #1020) | 16,384 | order | `RejectedOrderTooLarge` | per order |
 | Training queue | 5 | 15 | building | `RejectedTrainingQueueFull` | per building |
 | Route work per tick (`MAX_ROUTE_WORK_PER_TICK`) | 16,384 | same | world, shared fairly per seat | orders wait (latency) | yes, by design |
 | Active route planners | 4,096 (64 per seat) | same | world | unit waits for a slot (latency) | can bind under heavy orders |

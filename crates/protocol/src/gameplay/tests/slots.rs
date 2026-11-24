@@ -48,3 +48,50 @@ fn large_selection_and_training_click_have_one_bounded_wire_form() {
     assert!(encode_client(&batch(6)).is_err());
     assert!(decode_client(&[43, 4, 0, 6, 40, 40, 40, 40, 40, 40]).is_err());
 }
+
+#[test]
+fn gather_patrol_garrison_and_general_walk_take_a_bounded_unit_list() {
+    let ids = |count: u32| (2..2 + count).map(EntityId).collect::<Vec<_>>();
+    let at = WorldPosition { x: 4096, y: 8192 };
+    let orders = |count| {
+        [
+            ClientMessage::GatherSelectionOrder {
+                sequence: 5,
+                entity_ids: ids(count),
+                resource_id: 9,
+            },
+            ClientMessage::PatrolSelectionOrder {
+                sequence: 5,
+                entity_ids: ids(count),
+                destination: at,
+            },
+            ClientMessage::GarrisonSelectionOrder {
+                sequence: 5,
+                entity_ids: ids(count),
+                building_id: EntityId(1),
+            },
+            ClientMessage::GeneralMoveAloneSelectionOrder {
+                sequence: 5,
+                entity_ids: ids(count),
+                destination: at,
+            },
+        ]
+    };
+    let variants = orders(2)
+        .iter()
+        .map(|message| encode_client(message).unwrap()[0])
+        .collect::<Vec<_>>();
+    assert_eq!(variants, [45, 46, 47, 48]);
+    for message in orders(aoe_core::MAX_FORMATION_MEMBERS as u32) {
+        assert_eq!(
+            decode_client(&encode_client(&message).unwrap()).unwrap(),
+            message
+        );
+    }
+    for message in orders(aoe_core::MAX_FORMATION_MEMBERS as u32 + 1) {
+        assert!(
+            encode_client(&message).is_err()
+                || decode_client(&encode_client(&message).unwrap()).is_err()
+        );
+    }
+}

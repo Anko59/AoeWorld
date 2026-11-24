@@ -84,7 +84,7 @@ export function initSteward() {
   }
 }
 
-const focuses = ['Fortify', 'Roads'];
+const focuses = ['Fortify', 'Roads'];  // Defences (towers, walls) first, or roads first.
 const jobGroups = ['Current', 'Planned', 'Finished'];
 
 export function initVassal() {
@@ -96,7 +96,8 @@ export function initVassal() {
     <ul id="vassal-squads" aria-label="Defence squads" hidden></ul>`);
   const select = panel.querySelector('select');
   const [focus] = sliders(panel, [{
-    label: 'Focus', max: 1, format: value => focuses[value], change: value => send(3 + value),
+    label: 'Builds first', name: 'Development priority', max: 1,
+    hint: 'Choose what the Vassal builds first: defences or roads.', format: value => focuses[value], change: value => send(3 + value),
   }]);
   byId('vassal-status').after(focus.row);
   const details = Object.assign(document.createElement('div'), { id: 'vassal-job-details', hidden: true });

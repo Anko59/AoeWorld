@@ -249,5 +249,6 @@ test("berries inside a Town Center footprint win selection and gather orders", a
     "gather",
   );
   await page.mouse.click(berry.x, berry.y, { button: "right" });
-  await expect.poll(() => commands.at(-1)?.[0]).toBe(4);
+  // GatherSelectionOrder: every gather goes out as one list order.
+  await expect.poll(() => commands.at(-1)?.[0]).toBe(45);
 });

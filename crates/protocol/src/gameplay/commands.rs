@@ -293,6 +293,32 @@ pub enum ClientMessage {
         vassal_id: EntityId,
         focus: super::VassalFocus,
     },
+    /// One click for a whole selection: every unit gathers the same resource.
+    GatherSelectionOrder {
+        sequence: u64,
+        #[serde(deserialize_with = "bounded_members")]
+        entity_ids: Vec<EntityId>,
+        resource_id: u64,
+    },
+    PatrolSelectionOrder {
+        sequence: u64,
+        #[serde(deserialize_with = "bounded_members")]
+        entity_ids: Vec<EntityId>,
+        destination: WorldPosition,
+    },
+    GarrisonSelectionOrder {
+        sequence: u64,
+        #[serde(deserialize_with = "bounded_members")]
+        entity_ids: Vec<EntityId>,
+        building_id: EntityId,
+    },
+    /// Generals walk alone; each leaves its army where it stands.
+    GeneralMoveAloneSelectionOrder {
+        sequence: u64,
+        #[serde(deserialize_with = "bounded_members")]
+        entity_ids: Vec<EntityId>,
+        destination: WorldPosition,
+    },
 }
 
 pub const MAX_TRAIN_BATCH: usize = 5;
@@ -322,6 +348,8 @@ pub(super) fn validate(message: &ClientMessage) -> Result<(), Error> {
         return Err(Error::InvalidEconomyState);
     }
     if let ClientMessage::PatrolOrder { destination, .. }
+    | ClientMessage::PatrolSelectionOrder { destination, .. }
+    | ClientMessage::GeneralMoveAloneSelectionOrder { destination, .. }
     | ClientMessage::MoveSelectionOrder { destination, .. } = message
         && (destination.x < 0 || destination.y < 0)
     {
@@ -348,6 +376,22 @@ pub(super) fn validate(message: &ClientMessage) -> Result<(), Error> {
     | ClientMessage::AutoScoutOrder { unit_ids, .. }
     | ClientMessage::MoveSelectionOrder { unit_ids, .. }
     | ClientMessage::AttackSelectionOrder {
+        entity_ids: unit_ids,
+        ..
+    }
+    | ClientMessage::GatherSelectionOrder {
+        entity_ids: unit_ids,
+        ..
+    }
+    | ClientMessage::PatrolSelectionOrder {
+        entity_ids: unit_ids,
+        ..
+    }
+    | ClientMessage::GarrisonSelectionOrder {
+        entity_ids: unit_ids,
+        ..
+    }
+    | ClientMessage::GeneralMoveAloneSelectionOrder {
         entity_ids: unit_ids,
         ..
     } = message
