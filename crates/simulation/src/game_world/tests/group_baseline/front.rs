@@ -46,9 +46,8 @@ struct Front {
     /// Distinct members that ever broke off to fight.
     engaged_total: usize,
     cleared: Option<u32>,
-    /// Approaches deferred because every melee spot was taken, or because
-    /// the tick's position-search budget was spent.
-    waits: (u64, u64),
+    /// Approaches deferred because every melee spot was taken.
+    waits: u64,
 }
 
 fn showcase() -> (GameWorld, Vec<EntityId>, Vec<EntityId>) {

@@ -81,8 +81,8 @@ obstruction policy is unpublished.
 * Keep all decisions integer and deterministic, with canonical tie breaks.
   Bound neighbour probes, candidate slots, local search and replanning per
   tick; defer excess work fairly. The implementation shares four local
-  refinements and four expensive attack-position searches per tick, including
-  command admission. Formations retain two local-search slots while present;
+  refinements per tick; attack-position searches run once per attacker when
+  due, with no world-wide limit (#978). Formations retain two local-search slots while present;
   movement and group rotation prevent a permanently favoured first actor.
   Local refinements retain at most 306 nodes in a 17-by-17 window plus exact
   endpoints/corner exits. Nodes are a quarter tile apart, covering a two-tile

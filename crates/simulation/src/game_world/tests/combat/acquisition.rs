@@ -91,7 +91,7 @@ fn an_automatic_building_attack_yields_to_units_but_a_manual_target_is_kept() {
 }
 
 #[test]
-fn an_attack_burst_shares_its_search_budget_and_repeated_targets_reuse_orders() {
+fn an_attack_burst_routes_every_attacker_at_once_and_repeated_targets_reuse_orders() {
     let mut w = world();
     let target = w.spawn_villager(PlayerId(1), at(200, 200)).unwrap();
     let ids = (0..32)
@@ -100,20 +100,65 @@ fn an_attack_burst_shares_its_search_budget_and_repeated_targets_reuse_orders() 
     for &id in &ids {
         w.issue_attack(PlayerId(0), id, target).unwrap();
     }
-    assert_eq!(w.combat.searches_used, 16);
     assert_eq!(w.combat.attackers.len(), 32);
-    let before = w.combat.searches_used;
+    assert!(
+        ids.iter().all(|id| w.movement_order(*id).is_some()),
+        "no attacker waits for another's search"
+    );
+    let before = w.combat.stats.attack_searches;
     for &id in &ids {
         w.issue_attack(PlayerId(0), id, target).unwrap();
     }
-    assert_eq!(w.combat.searches_used, before);
-    for _ in 0..40 {
-        w.advance();
-        assert!(w.combat.searches_used <= 16);
+    assert_eq!(w.combat.stats.attack_searches, before);
+}
+
+/// A large order searches in the combat phase, side by side, not one unit
+/// after another inside the command; every attacker is routed that tick, to
+/// the same spots as orders issued one by one (each reserves its spot first).
+#[test]
+fn a_large_attack_order_searches_in_the_combat_phase_and_routes_everyone() {
+    let army = |w: &mut GameWorld| {
+        let target = w.spawn_villager(PlayerId(1), at(60, 60)).unwrap();
+        let ids = (0..600)
+            .map(|n| {
+                w.spawn_militia(PlayerId(0), at(10 + n % 30, 10 + n / 30))
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        (target, ids)
+    };
+    let destinations = |w: &GameWorld, ids: &[EntityId]| {
+        ids.iter()
+            .map(|id| w.movement_order(*id).map(|o| o.destination))
+            .collect::<Vec<_>>()
+    };
+    let mut one_by_one = world();
+    let (target, ids) = army(&mut one_by_one);
+    for &id in &ids {
+        one_by_one.issue_attack(PlayerId(0), id, target).unwrap();
     }
+    let mut w = world();
+    let (target, ids) = army(&mut w);
+    let before = w.combat.stats.attack_searches;
+    w.issue_player_attack(PlayerId(0), &ids, target).unwrap();
+    assert_eq!(
+        w.combat.stats.attack_searches, before,
+        "no search in the command"
+    );
     assert!(
-        ids.iter().all(|id| w.movement_order(*id).is_some()),
-        "deferred units must eventually receive their route"
+        ids.iter()
+            .all(|id| w.unit(*id).unwrap().attack_target == Some(target))
+    );
+    w.advance();
+    let routed = destinations(&w, &ids);
+    assert!(
+        routed.iter().all(Option::is_some),
+        "every attacker is routed in the first combat phase"
+    );
+    assert_eq!(
+        routed,
+        destinations(&one_by_one, &ids),
+        "same spots as one by one"
     );
 }
 

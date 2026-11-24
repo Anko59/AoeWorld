@@ -56,16 +56,10 @@ impl GameWorld {
         // Melee retaliation created during this loop acts next tick;
         // projectile reactions and acquisition already join this snapshot.
         let ids = self.combat.attackers.keys().copied().collect::<Vec<_>>();
-        self.combat.pursuit_floor = self.combat.pursuit_cursor;
-        self.combat.pursuit_cursor = None;
         self.prefetch_attack_searches(&ids, now);
         for id in ids {
             self.step_attacker(id, now, changed);
         }
-        if self.attack_search_room() > 0 && self.combat.position_searches > 0 {
-            self.combat.pursuit_cursor = None;
-        }
-        self.combat.pursuit_floor = None;
         self.combat.prefetched.clear();
         self.advance_towers(changed);
         self.run_incendiary_blasts(changed);
@@ -241,17 +235,6 @@ impl GameWorld {
                 Some(order.destination)
             } else if let Some(far) = reusable {
                 Some(far.destination)
-            } else if (counts_as_far && self.combat.position_searches == 0)
-                || !self.reserve_pursuit_search(id)
-            {
-                // Over this tick's budget: keep walking and look again next tick.
-                if let Some(entry) = self.combat.attackers.get_mut(&id) {
-                    entry.repath_tick = now.saturating_add(1);
-                }
-                if self.units[index].state != before {
-                    changed.push(self.units[index].state.id);
-                }
-                return;
             } else {
                 let search = self.attack_search(id, &goal).ok();
                 let wait = search.as_ref().and_then(|s| s.wait);
@@ -259,14 +242,9 @@ impl GameWorld {
                     self.end_attack(id, changed);
                     return;
                 }
-                if let Some(wait) = wait {
-                    if wait == super::SearchWait::Budget
-                        && let Some(entry) = self.combat.attackers.get_mut(&id)
-                    {
-                        entry.repath_tick = now.saturating_add(1);
-                    }
-                    // Preserve the order and job. Crowding or a spent budget
-                    // is not proof that the target is unreachable.
+                if wait.is_some() {
+                    // Preserve the order and job. Crowding is not proof
+                    // that the target is unreachable.
                     if self.units[index].state != before {
                         changed.push(id);
                     }
