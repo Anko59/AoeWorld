@@ -52,11 +52,11 @@ pub use economy::{
     CarriedResource, ConstructionState, ConstructionWork, EconomyError, GameBuilding,
     GarrisonedUnit, GatherWork, GeneralState, GeneralStatus, GeneralWork, HoldingSpan, LandControl,
     LateGameSeat, LateGameSeeded, MARKET_RULES, MAX_BUILD_GROUP, MAX_WALL_SEGMENTS, MarketPrices,
-    PlayerEconomy, RallyPoint, RallyTarget, STEWARD_RULES, STEWARD_STALL_SECONDS, SquadKind,
-    SquadStatus, StewardRules, StewardSettings, StewardStatus, StewardWait, StewardWork, Stockpile,
-    TickPhase, TrainingEntry, UnitKind, UnitTask, VASSAL_LIMIT, VASSAL_RADIUS, VILLAGE_RULES,
-    VassalFocus, VassalJob, VassalJobs, VassalSquad, VassalStatus, VassalWait, VillageRules,
-    WorldLimits, trainable_units,
+    PlayerEconomy, RallyPoint, RallyTarget, STEWARD_RULES, STEWARD_SPANS, STEWARD_STALL_SECONDS,
+    SquadKind, SquadStatus, StewardRules, StewardSettings, StewardStatus, StewardWait, StewardWork,
+    Stockpile, TickPhase, TrainingEntry, UnitKind, UnitTask, VASSAL_LIMIT, VASSAL_RADIUS,
+    VILLAGE_RULES, VassalFocus, VassalJob, VassalJobs, VassalSquad, VassalStatus, VassalWait,
+    VillageRules, WorldLimits, trainable_units,
 };
 pub use facing::Facing;
 pub(crate) use facing::facing_for;

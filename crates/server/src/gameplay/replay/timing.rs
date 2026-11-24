@@ -84,6 +84,7 @@ fn names() -> impl Iterator<Item = &'static str> {
         .copied()
         .chain(["steward_economy"])
         .chain(aoe_simulation::ISSUER_SPANS)
+        .chain(aoe_simulation::STEWARD_SPANS)
 }
 pub(super) fn validate(count: u64, enabled: u64, running: u64) -> io::Result<u64> {
     if running == 0 || enabled != running {

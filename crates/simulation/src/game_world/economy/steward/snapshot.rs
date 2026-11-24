@@ -34,6 +34,15 @@ pub(super) struct Snapshot {
     /// Exhausted ore probes are shared by workers for this pass only.
     pub ore_misses: [bool; 4],
 }
+/// The kinds a Steward pass reads: drop-offs (Town Centers, camps, Mills,
+/// Docks), Houses and Farms. Villager training happens at Town Centers.
+fn steward_reads(kind: BuildingKind) -> bool {
+    matches!(
+        kind,
+        BuildingKind::House | BuildingKind::Farm | BuildingKind::Dock
+    ) || kind.rules().accepts.iter().any(|&accepts| accepts)
+}
+
 impl GameWorld {
     /// A new building joins every domain covering it, sweep or not.
     pub(crate) fn steward_building_added(
@@ -57,13 +66,40 @@ impl GameWorld {
         work: &mut StewardWork,
     ) -> Option<Snapshot> {
         self.steward_ensure_regions(id);
-        // The snapshot's copy of the domain leaves its member list behind.
-        let members = std::mem::take(&mut self.economy.steward_homes.get_mut(&id)?.members);
-        let home = self.economy.steward_homes.get(&id)?.clone();
-        if let Some(h) = self.economy.steward_homes.get_mut(&id) {
-            h.members = members;
-        }
-        let player = self.building(home.town_center?)?.player;
+        // The snapshot's copy of the domain leaves behind every per-worker
+        // record no pass reads from it (members, workers, retries, tenure,
+        // held jobs, stalls) and the building sweep, which is worked on in
+        // place: a visit copies a few fields, not the domain's collections.
+        let live = self.economy.steward_homes.get_mut(&id)?;
+        let kept = (
+            std::mem::take(&mut live.members),
+            std::mem::take(&mut live.workers),
+            std::mem::take(&mut live.unemployed),
+            std::mem::take(&mut live.assigned_at),
+            std::mem::take(&mut live.held_jobs),
+            std::mem::take(&mut live.stalls),
+            std::mem::take(&mut live.building_scan),
+        );
+        let home = live.clone();
+        let live = self.economy.steward_homes.get_mut(&id)?;
+        let mut scan;
+        (
+            live.members,
+            live.workers,
+            live.unemployed,
+            live.assigned_at,
+            live.held_jobs,
+            live.stalls,
+            scan,
+        ) = kept;
+        let Some(player) = home
+            .town_center
+            .and_then(|c| self.building(c))
+            .map(|b| b.player)
+        else {
+            self.economy.steward_homes.get_mut(&id)?.building_scan = scan;
+            return None;
+        };
         // One census sweep after activation or a zone change; afterwards the
         // member list is kept by events and no visit walks the box again.
         let complete_units = home.census_done || self.steward_census(id, &home, player, work);
@@ -96,7 +132,6 @@ impl GameWorld {
                 home.covers(b.footprint, 0)
             }
         };
-        let mut scan = home.building_scan.clone();
         if !scan.swept {
             let cursor = scan.after;
             let first_kind = cursor.map_or(BuildingKind::TownCenter, |(kind, _)| kind);
@@ -131,16 +166,31 @@ impl GameWorld {
             }
         }
         // Read current state, not stale queue/garrison copies from prior slices.
+        // Ownership, place, garrison and queue lengths are read from the
+        // stored building; only the kinds a pass reads are brought up to the
+        // phase clock and copied (walls, roads, towers and military
+        // buildings are counted for their garrisons, never copied).
+        let stored = &self.economy.buildings;
         scan.known.retain(|id| {
-            self.building(*id)
-                .is_some_and(|b| b.player == player && covers(&b))
+            stored
+                .get(id)
+                .is_some_and(|b| b.player == player && covers(b))
         });
-        let mut buildings: Vec<_> = scan
-            .known
-            .iter()
-            .filter_map(|id| self.building(*id))
-            .map(|b| b.into_owned())
-            .collect();
+        let mut buildings = Vec::new();
+        let mut garrisoned = 0;
+        for id in &scan.known {
+            let Some(b) = stored.get(id) else { continue };
+            garrisoned += b
+                .garrison
+                .iter()
+                .filter(|g| g.unit.kind == UnitKind::Villager && g.unit.hp > 0)
+                .count();
+            if steward_reads(b.kind)
+                && let Some(b) = self.building(*id)
+            {
+                buildings.push(b.into_owned());
+            }
+        }
         let complete_buildings = scan.swept;
         if let Some(h) = self.economy.steward_homes.get_mut(&id) {
             h.building_scan = scan;
@@ -150,18 +200,13 @@ impl GameWorld {
             .flat_map(|b| &b.training_queue)
             .filter(|entry| entry.kind == UnitKind::Villager)
             .count();
-        let villagers = units.len()
-            + buildings
-                .iter()
-                .flat_map(|b| &b.garrison)
-                .filter(|g| g.unit.kind == UnitKind::Villager && g.unit.hp > 0)
-                .count();
+        let villagers = units.len() + garrisoned;
         // Pending population is player-wide and changes while a census runs.
         let global_queued = self
             .economy
             .active_training
             .iter()
-            .filter_map(|id| self.building(*id))
+            .filter_map(|id| stored.get(id))
             .filter(|b| b.player == player)
             .map(|b| b.training_queue.len())
             .sum();

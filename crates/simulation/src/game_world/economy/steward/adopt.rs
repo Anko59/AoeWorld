@@ -115,3 +115,32 @@ impl GameWorld {
         Ok(())
     }
 }
+impl GameWorld {
+    pub(super) fn steward_worker_idle(&self, worker: EntityId, id: EntityId) -> bool {
+        // Cheap unit checks first: a busy villager never pays the
+        // controller lookup, which reads the domain and its Town Center.
+        if !self.unit(worker).is_some_and(|u| {
+            u.kind == UnitKind::Villager
+                && u.hp > 0
+                && !u.moving
+                && !u.planning
+                && matches!(u.task, crate::UnitTask::Idle | crate::UnitTask::Carrying)
+        }) || self.economy.builders.contains_key(&worker)
+            || self.economy.garrison_orders.contains_key(&worker)
+            || self.embarked(worker)
+        {
+            return false;
+        }
+        let controller = self.steward_controller(worker);
+        let waiting =
+            || {
+                self.economy.gatherers.get(&worker).is_some_and(|t| {
+                    t.phase == crate::game_world::economy::GatherPhase::WaitingDropoff
+                }) && controller == Some(id)
+            };
+        let home = &self.economy.steward_homes[&id];
+        (!self.economy.gatherers.contains_key(&worker) || waiting())
+            && controller.is_none_or(|v| v == id)
+            && (home.workers.contains(&worker) || home.workers.len() < home.cap())
+    }
+}

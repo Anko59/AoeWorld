@@ -2,7 +2,7 @@ use super::{
     Manager, STEWARD_RULES, StewardStatus, StewardWait, StewardWork, rules::Budget,
     snapshot::Snapshot,
 };
-use crate::{BuildingKind, GameWorld, UnitKind, UnitTask, VILLAGE_RULES};
+use crate::{BuildingKind, GameWorld, UnitKind, VILLAGE_RULES};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, WorldPosition};
 use std::collections::BTreeMap;
 
@@ -50,8 +50,12 @@ impl Manager {
 
 impl GameWorld {
     pub(crate) fn advance_stewards(&mut self, changed: &mut Vec<EntityId>) {
+        let span = self.steward_span("steward_walk");
         self.refresh_steward_walk();
+        drop(span);
+        let span = self.steward_span("steward_members");
         self.steward_track_members();
+        drop(span);
         let mut work = StewardWork::default();
         let period = self.config.ticks(STEWARD_RULES.period_ticks);
         let ids = self.economy.stewards.scheduled(self.tick.0, period);
@@ -61,6 +65,7 @@ impl GameWorld {
         }
         // A departure reserves its slot until arrival, even when the destination
         // is not among this pass's admitted domains.
+        let span = self.steward_span("steward_transfers");
         let finished: Vec<_> = self
             .economy
             .stewards
@@ -85,11 +90,13 @@ impl GameWorld {
         for dest in self.economy.stewards.transfers.values() {
             *incoming.entry(*dest).or_default() += 1;
         }
+        drop(span);
         for id in ids {
             if !self.active_steward(id) {
                 self.set_steward_town_center(id, None);
                 continue;
             }
+            let span = self.steward_span("steward_release");
             let workers: Vec<_> = self.economy.steward_homes[&id]
                 .workers
                 .iter()
@@ -102,7 +109,11 @@ impl GameWorld {
                 }
             }
             self.recheck_steward_walk(id, changed);
-            let Some(mut snapshot) = self.steward_snapshot(id, &mut work) else {
+            drop(span);
+            let span = self.steward_span("steward_snapshot");
+            let snapshot = self.steward_snapshot(id, &mut work);
+            drop(span);
+            let Some(mut snapshot) = snapshot else {
                 continue;
             };
             work.domains += 1;
@@ -116,22 +127,45 @@ impl GameWorld {
                 .copied()
                 .skip(cap)
                 .collect();
+            let span = self.steward_span("steward_send_away");
             self.steward_send_away(id, &excess, &mut budget, &mut work, &mut incoming, changed);
+            drop(span);
+            let span = self.steward_span("steward_adopt");
             self.steward_adopt(&snapshot);
+            drop(span);
+            let span = self.steward_span("steward_watchdog");
             self.steward_watchdog(&snapshot, changed);
+            drop(span);
             // Retain discovery progress even when all workers are productive.
             let discover = self.steward_needs_discovery(&snapshot);
             // One bounded sweep also finds coastal work when land workers are busy.
+            let span = self.steward_span("steward_discover");
             self.steward_discover(&mut snapshot, &mut budget, &mut work);
+            drop(span);
+            let span = self.steward_span("steward_navy");
             self.steward_navy(&mut snapshot, &mut budget, &mut work, changed);
+            drop(span);
+            let span = self.steward_span("steward_support");
             let wait = self.steward_train(&mut snapshot, &mut budget, &mut work);
             self.steward_house_for_busy(&mut snapshot, &mut budget, &mut work, changed);
             self.steward_reseeds(&snapshot, &mut budget, &mut work);
+            drop(span);
+            let span = self.steward_span("steward_rebalance");
             self.steward_rebalance(&mut snapshot, &mut budget, &mut work, changed);
+            drop(span);
+            let span = self.steward_span("steward_idle");
             let unemployed = self.steward_idle(id, &mut snapshot, &mut budget, &mut work, changed);
+            drop(span);
+            let span = self.steward_span("steward_farms");
             self.steward_refresh_farms(&mut snapshot, &mut budget, &mut work, changed);
+            drop(span);
+            let span = self.steward_span("steward_wood");
             self.steward_refresh_wood(&mut snapshot, &mut budget, &mut work);
+            drop(span);
+            let span = self.steward_span("steward_retire");
             self.steward_retire_lumber_camp(&mut snapshot, &mut budget, &mut work);
+            drop(span);
+            let span = self.steward_span("steward_relocate");
             // Each idle villager this visit found no work for funds one more
             // block of discovery: the sweep follows demand, not a fixed count.
             for _ in 0..if discover { unemployed.len() } else { 0 } {
@@ -167,6 +201,7 @@ impl GameWorld {
                 }
             }
             self.economy.stewards.relocated.extend(sent);
+            drop(span);
             self.steward_publish_status(id, snapshot.villagers, wait);
             self.economy.stewards.ordering = None;
         }
@@ -439,7 +474,9 @@ impl GameWorld {
                 home.worker_after = Some(worker);
             }
             s.avoid = self.economy.steward_homes[&id].stalls.get(&worker).copied();
+            let span = self.steward_span("steward_job");
             let job = self.steward_job(worker, s, budget, work);
+            drop(span);
             s.avoid = None;
             if let Some(kind) = job {
                 self.economy.stewards.relocated.remove(&worker);
@@ -459,27 +496,5 @@ impl GameWorld {
             }
         }
         unemployed
-    }
-    pub(super) fn steward_worker_idle(&self, worker: EntityId, id: EntityId) -> bool {
-        let waiting = self
-            .economy
-            .gatherers
-            .get(&worker)
-            .is_some_and(|t| t.phase == super::super::GatherPhase::WaitingDropoff)
-            && self.steward_controller(worker) == Some(id);
-        self.unit(worker).is_some_and(|u| {
-            u.kind == UnitKind::Villager
-                && u.hp > 0
-                && !u.moving
-                && !u.planning
-                && matches!(u.task, UnitTask::Idle | UnitTask::Carrying)
-                && !self.embarked(worker)
-        }) && (!self.economy.gatherers.contains_key(&worker) || waiting)
-            && !self.economy.builders.contains_key(&worker)
-            && !self.economy.garrison_orders.contains_key(&worker)
-            && self.steward_controller(worker).is_none_or(|v| v == id)
-            && (self.economy.steward_homes[&id].workers.contains(&worker)
-                || self.economy.steward_homes[&id].workers.len()
-                    < self.economy.steward_homes[&id].cap())
     }
 }
