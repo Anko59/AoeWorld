@@ -55,6 +55,7 @@ impl Chunk {
         Self { cells, nodes }
     }
 
+    #[inline(always)]
     fn cell(&self, index: usize) -> Option<WalkCell> {
         let cell = self.cells[index];
         (cell & PRESENT != 0).then(|| WalkCell {
@@ -130,6 +131,7 @@ impl Decoded {
 
     /// The cell at `index` of chunk `at`, decoding the chunk once it has been
     /// read often and the budget allows; otherwise straight from `view`.
+    #[inline(always)]
     pub(super) fn cell<'a>(
         &self,
         at: usize,

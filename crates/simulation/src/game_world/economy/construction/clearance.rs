@@ -113,11 +113,10 @@ impl GameWorld {
             return false;
         };
         let inside = self
-            .query(self.clamp_around(footprint))
-            .0
-            .into_iter()
             // Corpses neither block a foundation nor get walked off it.
-            .filter(|u| u.hp > 0 && overlaps(footprint, u))
+            .living_units_on_tiles(self.clamp_around(footprint))
+            .into_iter()
+            .filter(|u| overlaps(footprint, u))
             // This foundation's own builders never block it: pressed against
             // the edge they still work, and any on the footprint are lifted
             // off by `builder_leaves_foundation`.
@@ -273,6 +272,42 @@ impl GameWorld {
     }
 
     /// `rect` grown by one tile and clipped to the map.
+    /// The living units of `query(rect)`, read from the 1-tile collision
+    /// cells instead of the 16-tile chunk buckets: a foundation checked every
+    /// tick in a crowded town no longer copies every unit of its chunks
+    /// (#978). Corpses leave the cells at death. Same units, in id order
+    /// (exit tiles are handed out in that order).
+    fn living_units_on_tiles(&self, rect: TileRect) -> Vec<crate::GameUnit> {
+        let mut ids = Vec::new();
+        if rect.min.x < rect.max.x && rect.min.y < rect.max.y {
+            let max = TileCoord::new(rect.max.x - 1, rect.max.y - 1);
+            for naval in [false, true] {
+                self.collisions.census_any(rect.min, max, naval, |id, _| {
+                    ids.push(id);
+                    false
+                });
+            }
+        }
+        ids.sort_unstable();
+        ids.dedup();
+        let units = ids
+            .into_iter()
+            .filter_map(|id| self.unit(id))
+            .filter(|unit| unit.hp > 0 && !self.embarked(unit.id))
+            .collect::<Vec<_>>();
+        debug_assert_eq!(
+            units.iter().map(|u| u.id).collect::<Vec<_>>(),
+            self.query(rect)
+                .0
+                .iter()
+                .filter(|u| u.hp > 0)
+                .map(|u| u.id)
+                .collect::<Vec<_>>(),
+            "collision cells disagree with the chunk query over {rect:?}"
+        );
+        units
+    }
+
     fn clamp_around(&self, rect: TileRect) -> TileRect {
         TileRect::new(
             TileCoord::new((rect.min.x - 1).max(0), (rect.min.y - 1).max(0)),
