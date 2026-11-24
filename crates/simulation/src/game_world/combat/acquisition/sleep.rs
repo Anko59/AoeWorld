@@ -195,6 +195,30 @@ impl GameWorld {
         self.combat.quiet.due.remove(&u.id);
     }
 
+    /// A fighter that enters the world (a spawn, a trained unit) with no other
+    /// player anywhere near starts asleep: its first look could only prove
+    /// that again. An arrival near it wakes it as it would any sleeper.
+    pub(crate) fn sleep_new_seeker(&mut self, id: EntityId) {
+        let Some(u) = self.unit(id) else {
+            return;
+        };
+        if !super::autonomous_kind(u.kind)
+            || u.hp == 0
+            || u.auto_scout
+            || u.stance == aoe_core::CombatStance::NoAttack
+            || u.moving
+            || u.planning
+            || !matches!(u.task, crate::UnitTask::Idle)
+            || self.embarked(id)
+            || !self.combat.quiet.awake.contains(&id)
+        {
+            return;
+        }
+        if let Some(area) = self.acquisition_area(&u) {
+            self.sleep_quiet_acquisition(&u, &area);
+        }
+    }
+
     /// Fighters asleep or parked, out of the rotation.
     pub(in crate::game_world::combat) fn resting_seekers(&self) -> u32 {
         (self.combat.quiet.jobs.len() + self.combat.quiet.parked.len()) as u32

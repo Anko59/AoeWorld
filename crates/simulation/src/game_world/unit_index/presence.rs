@@ -65,6 +65,20 @@ impl ChunkPresence {
         remove(&mut self.chunks, tile_cell(tile), player);
     }
 
+    /// Players present in `chunk`.
+    pub(crate) fn players(&self, chunk: ChunkCoord) -> impl Iterator<Item = PlayerId> + '_ {
+        self.chunks
+            .get(&chunk)
+            .into_iter()
+            .flatten()
+            .map(|&(p, _)| p)
+    }
+
+    /// For a per-cell summary: the players present in the cell of `tile`.
+    pub(crate) fn players_at_cell(&self, tile: TileCoord) -> impl Iterator<Item = PlayerId> + '_ {
+        self.players(tile_cell(tile))
+    }
+
     /// For a per-cell summary: whether any player but `player` is present in
     /// a cell `rect` touches.
     pub(crate) fn others_in_cells(&self, rect: aoe_core::TileRect, player: PlayerId) -> bool {

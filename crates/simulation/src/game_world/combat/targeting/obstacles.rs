@@ -41,16 +41,20 @@ impl GameWorld {
                 ..=(bounds.max.x - 1).div_euclid(SPATIAL_CHUNK_TILES)
             {
                 let chunk = ChunkCoord { x, y };
-                let contacts = self.chunk_contacts(chunk, sight.player);
-                if contacts.cells & contacts::cell_mask(chunk, bounds) != 0
-                    && contacts.visible.iter().any(|c| {
-                        (!sight.ram || c.siege)
+                if !self.chunks.presence.others(chunk, sight.player) {
+                    continue;
+                }
+                let mut found = false;
+                self.each_enemy_contact(chunk, sight.player, bounds, |world, c| {
+                    found = found
+                        || ((!sight.ram || c.siege)
                             && sight.accepts(Goal::Unit(c.position, c.radius))
-                            && self
+                            && world
                                 .unit(c.id)
                                 .is_some_and(|u| u.player != sight.player && u.hp > 0)
-                    })
-                {
+                            && world.unit_visible_to(sight.player, c.id));
+                });
+                if found {
                     return true;
                 }
             }

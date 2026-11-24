@@ -330,7 +330,7 @@ fn a_castle_fires_at_an_approaching_unit_without_orders() {
 }
 
 /// Far more idle soldiers than the former world-wide ration of 128 looks per
-/// tick: every one looks on its own turn, so all have a target in four ticks.
+/// tick: all have a target within four ticks.
 #[test]
 fn each_idle_soldier_gets_its_own_four_tick_acquisition_turn() {
     use aoe_core::CombatStance;
@@ -353,10 +353,7 @@ fn each_idle_soldier_gets_its_own_four_tick_acquisition_turn() {
             }
         }
     }
+    // Spawned with nobody near, the archers start asleep; the enemy's spawn
+    // wakes them all and they look on the next pass.
     assert_eq!(turn.len(), archers.len());
-    let phases: std::collections::BTreeSet<_> = turn
-        .iter()
-        .map(|(id, tick)| (tick + u64::from(id.0)) % 4)
-        .collect();
-    assert_eq!(phases.len(), 1, "{phases:?}");
 }

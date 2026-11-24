@@ -159,26 +159,26 @@ impl GameWorld {
                 ..=(bounds.max.x - 1).div_euclid(SPATIAL_CHUNK_TILES)
             {
                 let chunk = ChunkCoord { x, y };
-                let contacts = self.chunk_contacts(chunk, area.player);
-                result.sampled_hostile |= contacts.hostile;
-                // No visible enemy in the part of the chunk this look covers.
-                if contacts.cells & contacts::cell_mask(chunk, bounds) == 0 {
+                // The presence summary proves a chunk of only own units.
+                if !self.chunks.presence.others(chunk, area.player) {
                     continue;
                 }
-                for c in &contacts.visible {
+                result.sampled_hostile = true;
+                self.each_enemy_contact(chunk, area.player, bounds, |world, c| {
                     let goal = Goal::Unit(c.position, c.radius);
                     if !bounds.contains(c.position.tile_floor())
                         || !area.accepts(goal)
                         || (area.ram && !c.siege)
-                        || !self
+                        || !world
                             .unit(c.id)
                             .is_some_and(|u| u.hp > 0 && u.player != area.player)
+                        || !world.unit_visible_to(area.player, c.id)
                     {
-                        continue;
+                        return;
                     }
                     let key = (u8::from(c.civilian), area.distance(goal), c.id);
                     best = Some(best.map_or(key, |old| std::cmp::min(old, key)));
-                }
+                });
             }
         }
         if let Some((_, _, id)) = best {
