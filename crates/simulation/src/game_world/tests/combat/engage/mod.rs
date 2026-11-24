@@ -175,3 +175,56 @@ pub(crate) fn army(
         })
         .collect()
 }
+
+/// What a measured fight came to: fighters that landed a hit, hits, kills,
+/// and the tick of each fighter's first hit (median and 95th percentile).
+#[derive(Debug)]
+pub(in crate::game_world::tests) struct FightMetrics {
+    pub engaged: usize,
+    pub fighters: usize,
+    pub hits: usize,
+    pub kills: usize,
+    pub first_hit_p50: Option<u64>,
+    pub first_hit_p95: Option<u64>,
+}
+
+/// Runs `ticks` ticks and counts the hits `fighters` land on `victims`.
+pub(in crate::game_world::tests) fn measure_fight(
+    world: &mut GameWorld,
+    fighters: &[EntityId],
+    victims: &[EntityId],
+    ticks: u64,
+) -> FightMetrics {
+    world.set_damage_observation(true);
+    let fighter_set: std::collections::BTreeSet<_> = fighters.iter().copied().collect();
+    let victim_set: std::collections::BTreeSet<_> = victims.iter().copied().collect();
+    let mut first_hits = BTreeMap::new();
+    let mut hits = 0;
+    for tick in 1..=ticks {
+        world.advance();
+        for hit in world.take_damage_observations() {
+            if fighter_set.contains(&hit.attacker) && victim_set.contains(&hit.target) {
+                first_hits.entry(hit.attacker).or_insert(tick);
+                hits += 1;
+            }
+        }
+    }
+    let kills = victims
+        .iter()
+        .filter(|&&id| world.unit(id).is_none_or(|u| u.hp == 0))
+        .count();
+    let mut first: Vec<u64> = first_hits.into_values().collect();
+    first.sort_unstable();
+    let quantile =
+        |p: usize| (!first.is_empty()).then(|| first[(first.len() * p).div_ceil(100) - 1]);
+    let metrics = FightMetrics {
+        engaged: first.len(),
+        fighters: fighters.len(),
+        hits,
+        kills,
+        first_hit_p50: quantile(50),
+        first_hit_p95: quantile(95),
+    };
+    eprintln!("fight metrics over {ticks} ticks: {metrics:?}");
+    metrics
+}

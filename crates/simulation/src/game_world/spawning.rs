@@ -135,5 +135,6 @@ impl GameWorld {
         self.track_unit_cell(&state);
         self.idle_spacing.insert(id, state.position.tile_floor());
         self.update_unit_vision(id);
+        self.sleep_new_seeker(id);
     }
 }

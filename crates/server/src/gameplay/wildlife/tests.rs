@@ -290,3 +290,30 @@ fn mangonel_volley_publishes_primary_and_secondary_dat_projectiles() {
     );
     assert!(shots.iter().all(|shot| shot.attacker == Some(shooter)));
 }
+
+#[test]
+fn a_visible_volley_sends_every_projectile_in_the_subscription() {
+    use aoe_simulation::UnitKind;
+    let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
+    world.set_fog_disabled(true);
+    let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
+    let archer = world
+        .spawn_kind(PlayerId(0), UnitKind::Archer, at(20, 20))
+        .unwrap();
+    let target = world.spawn_villager(PlayerId(1), at(23, 20)).unwrap();
+    world.issue_attack(PlayerId(0), archer, target).unwrap();
+    let shot = (0..80)
+        .find_map(|_| {
+            world.advance();
+            world.projectiles().next().copied()
+        })
+        .expect("the archer shoots");
+    let shots = vec![shot; 5_000];
+    let visible = super::projectiles_from(
+        &world,
+        shots.iter(),
+        TileRect::from_xywh(0, 0, 64, 64),
+        PlayerId(0),
+    );
+    assert_eq!(visible.len(), shots.len());
+}

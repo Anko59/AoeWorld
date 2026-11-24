@@ -15,6 +15,8 @@ fn an_army_order_naming_a_fallen_member_moves_the_living() {
     let dying = ids[5];
     let at = w.lookup[&dying];
     w.units[at].state.hp = 0;
+    // The direct write skips the events a death sends: wake it as they would.
+    w.combat.quiet.wake(dying);
     let start = ids
         .iter()
         .map(|&id| w.unit(id).map(|u| u.position))

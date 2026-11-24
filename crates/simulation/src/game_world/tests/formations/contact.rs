@@ -233,3 +233,40 @@ fn an_attack_move_member_that_cannot_fight_back_keeps_marching_when_hit() {
         );
     }
 }
+
+#[test]
+fn attack_move_group_engages_every_archer_on_the_same_look() {
+    let mut w = wide_world();
+    w.set_fog_disabled(true);
+    let ids: Vec<_> = (0..200)
+        .map(|n| {
+            w.spawn_kind(
+                PlayerId(0),
+                UnitKind::Archer,
+                center(65 + n % 14, 65 + n / 14),
+            )
+            .unwrap()
+        })
+        .collect();
+    w.issue_formation_move(
+        PlayerId(0),
+        &ids,
+        Formation::Box,
+        center(140, 71),
+        false,
+        true,
+    )
+    .unwrap();
+    for n in 0..300 {
+        w.spawn_villager(PlayerId(1), center(65 + n % 14, 65 + n / 14))
+            .unwrap();
+    }
+    w.tick.0 = (4 - u64::from(ids[0].0) % 4) % 4;
+    w.engage_formations(&mut Vec::new());
+    assert_eq!(
+        ids.iter()
+            .filter(|&&id| w.unit(id).unwrap().attack_target.is_some())
+            .count(),
+        ids.len()
+    );
+}

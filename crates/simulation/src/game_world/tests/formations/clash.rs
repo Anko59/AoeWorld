@@ -4,14 +4,19 @@
 use super::*;
 use aoe_core::Formation;
 
-/// Forty militia per side, five wide, as the measurement cohorts stand.
-fn cohort(w: &mut GameWorld, player: PlayerId, at: (i32, i32)) -> Vec<EntityId> {
-    (0..40)
+fn cohort(
+    w: &mut GameWorld,
+    player: PlayerId,
+    at: (i32, i32),
+    count: i32,
+    width: i32,
+) -> Vec<EntityId> {
+    (0..count)
         .map(|n| {
             w.spawn_kind(
                 player,
                 UnitKind::Militia,
-                center(at.0 + n % 5, at.1 + n / 5),
+                center(at.0 + n % width, at.1 + n / width),
             )
             .unwrap()
         })
@@ -41,8 +46,8 @@ fn clash(w: &mut GameWorld, ids: &[EntityId], ticks: u64) -> (Vec<u64>, u64) {
 fn an_attack_move_cohort_fights_an_equal_melee_force_instead_of_marching_through_it() {
     let mut w = wide_world();
     w.set_fog_disabled(true);
-    let ids = cohort(&mut w, PlayerId(0), (40, 40));
-    cohort(&mut w, PlayerId(1), (70, 40));
+    let ids = cohort(&mut w, PlayerId(0), (40, 40), 40, 5);
+    cohort(&mut w, PlayerId(1), (70, 40), 40, 5);
     // The objective sits past the enemy, as a player's attack-move does: the
     // order is a march, and the fight has to start on the way.
     w.issue_formation_move(
@@ -83,4 +88,26 @@ fn a_lone_attack_move_militia_fights_the_enemy_it_walks_into() {
         dealt[0] > 0,
         "a single unit's attack-move must fight what it meets"
     );
+}
+
+/// Two hundred militia a side on attack-move through each other.
+#[test]
+fn combat_metrics_for_two_hundred_attack_movers_on_each_side() {
+    let mut w = wide_world();
+    let left = cohort(&mut w, PlayerId(0), (40, 40), 200, 10);
+    let right = cohort(&mut w, PlayerId(1), (74, 40), 200, 10);
+    for (player, ids, goal) in [
+        (PlayerId(0), &left, center(95, 50)),
+        (PlayerId(1), &right, center(25, 50)),
+    ] {
+        w.issue_formation_move(player, ids, Formation::Line, goal, false, true)
+            .unwrap();
+    }
+    let ids: Vec<_> = left.into_iter().chain(right).collect();
+    let fight = super::super::combat::engage::measure_fight(&mut w, &ids, &ids, 1200);
+    // Before the uncapped looks (dev c8c9337): 400 of 400 engaged, 3,658
+    // hits, 344 kills, first hit p50 371 and p95 490.
+    assert!(fight.engaged * 100 >= fight.fighters * 95, "{fight:?}");
+    assert!(fight.hits > 3_000 && fight.kills > 300, "{fight:?}");
+    assert!(fight.first_hit_p95 <= Some(520), "{fight:?}");
 }

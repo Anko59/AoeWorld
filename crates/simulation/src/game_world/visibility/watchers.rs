@@ -159,8 +159,10 @@ impl GameWorld {
                     && let Some(owner) = self.economy.buildings.get(&old).map(|b| b.player)
                 {
                     self.vision.building_chunks.remove_tile(tile, owner);
+                    self.vision.building_cells.remove_cell_tile(tile, owner);
                 }
                 self.vision.building_chunks.add_tile(tile, player);
+                self.vision.building_cells.add_cell_tile(tile, player);
             }
         }
         if self.vision.disabled {
@@ -191,6 +193,7 @@ impl GameWorld {
     pub(crate) fn rebuild_building_sight_index(&mut self) {
         self.vision.building_at_tile.clear();
         self.vision.building_chunks.clear();
+        self.vision.building_cells.clear();
         self.vision.private_foundations.clear();
         self.vision.building_watchers.clear();
         let buildings = self
@@ -212,6 +215,7 @@ impl GameWorld {
                 if self.vision.building_at_tile.get(&tile) == Some(&id) {
                     self.vision.building_at_tile.remove(&tile);
                     self.vision.building_chunks.remove_tile(tile, player);
+                    self.vision.building_cells.remove_cell_tile(tile, player);
                 }
             }
         }

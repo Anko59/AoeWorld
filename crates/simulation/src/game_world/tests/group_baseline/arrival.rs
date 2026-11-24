@@ -103,8 +103,9 @@ fn a_sealed_member_does_not_hold_back_the_others_who_fight_on_arrival() {
             .all(|&id| tiles_between(w.unit(id).unwrap().position, to) <= 8)
     );
     // Proportional cohesion settles the healthy tail by tick 1362; mates who
-    // join the fight one of them sees walk to the enemy first.
-    assert_eq!((first, last), (Some(1286), Some(1362)));
+    // join the fight one of them sees walk to the enemy first. An idle mate
+    // looks once a second (#1026): 1363.
+    assert_eq!((first, last), (Some(1286), Some(1363)));
     // PR 10 permits legal blows on approach before the healthy tail settles.
     assert_eq!(
         (first_hit, healthy_arrivals.len(), foe_hp),

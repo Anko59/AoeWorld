@@ -159,8 +159,12 @@ fn two_players_meeting_on_a_one_tile_bridge() {
     // PR 8 keeps this passing and makes the pass faster than 3 s (60 ticks)
     // from the first meeting.
     assert_eq!((west_across, east_across, on_deck, moving), (3, 3, 0, 0));
+    // The crossing is unchanged; after it the idle militia of the two
+    // players see each other and close in. Each looks on its own turn, one
+    // tick in four, no longer every tick while fewer than 128 seekers wait
+    // world-wide (#1026): the last step comes 3 ticks later, 380.
     assert_eq!(
         (first_cross, all_across, last_move),
-        (Some(175), Some(231), 377)
+        (Some(175), Some(231), 380)
     );
 }

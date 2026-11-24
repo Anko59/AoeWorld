@@ -249,7 +249,8 @@ fn formations_attack_move_engages_visible_enemies_member_by_member_and_stops_rel
     // group to fight it (PR 10's legal early blow is tick 246, was 262; members look within their
     // own 4-tile sight, not a 13x13-tile window, which struck at tick 275). Once it died each one marched on again, as
     // a group of one with the same attack-move order and its own slot.
-    assert_eq!(first_hit, Some((246, 4)));
+    // The lone enemy stands idle and looks once a second (#1026): 248.
+    assert_eq!(first_hit, Some((248, 4)));
     assert!(w.unit(enemy).is_none_or(|u| u.hp == 0));
     assert!(
         ids.iter()

@@ -35,7 +35,7 @@ const MAIN_THREAD: &str = "_main";
 /// total and main thread, smoke and distributed ticks), protocol (1) and assets (1).
 const CASES: usize = 10;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct Baseline {
     version: u16,
     toolchain: String,
@@ -50,6 +50,21 @@ struct Baseline {
     /// Fixed anchor for the creep guard. Refreshing `instructions` never moves
     /// it; only a deliberate, reviewed edit does.
     instruction_reference: BTreeMap<String, u64>,
+    /// Rows whose raised `instructions` a reviewed commit accepted (owner
+    /// 11-24: removing a cap may cost instructions). While the dev run still
+    /// counts what it counted when the increase was accepted (within the fail
+    /// margin), the row is gated against its baseline, not the dev run. Once
+    /// the increase lands, dev counts more and the entry has no effect (unless
+    /// a later gain takes dev back to that count); a baseline refresh drops it.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    accepted_increase: BTreeMap<String, Accepted>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+struct Accepted {
+    reason: String,
+    /// The dev run's count the increase was accepted over.
+    dev: u64,
 }
 
 fn metric(profile: &Value, tool: &str, name: &str, side: &str) -> Result<u64, Box<dyn Error>> {
@@ -179,6 +194,7 @@ fn proposal(
             .iter()
             .map(|(name, value)| (name.clone(), reference.get(name).copied().unwrap_or(*value)))
             .collect(),
+        accepted_increase: BTreeMap::new(),
     })
 }
 
@@ -257,10 +273,13 @@ fn compare_with_dev(
             } else {
                 FAIL_PERCENT
             };
-            let latest = dev.and_then(|dev| {
-                let kernel = name.strip_prefix("instructions::").unwrap_or(&name);
-                Some((dev.instructions.get(kernel).copied()?, dev.run))
-            });
+            let accepted = baseline.accepted_increase.get(&name).map(|a| a.dev);
+            let latest = dev
+                .and_then(|dev| {
+                    let kernel = name.strip_prefix("instructions::").unwrap_or(&name);
+                    Some((dev.instructions.get(kernel).copied()?, dev.run))
+                })
+                .filter(|&(count, _)| accepted.is_none_or(|from| over(count, from, fail)));
             judge(
                 &format!("instructions::{name}"),
                 count,
