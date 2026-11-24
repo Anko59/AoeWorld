@@ -100,6 +100,7 @@ impl GameWorld {
 
     pub(crate) fn insert_map_unit(&mut self, state: GameUnit, next_hit_tick: u64) {
         let (id, position) = (state.id, state.position);
+        self.steward_unit_placed(id, state.kind);
         if state.kind == UnitKind::Monk {
             self.combat.healers.insert(id);
             self.combat.healing.register(id);

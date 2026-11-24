@@ -1,8 +1,9 @@
 //! A Steward takes over the owned villagers in its territory, busy ones
 //! included. Accepted owner overrides remain manual until real idle.
+use super::STEWARD_RULES;
 use super::snapshot::Snapshot;
-use crate::{GameUnit, GameWorld};
-use aoe_core::WorldPosition;
+use crate::{EconomyError, GameUnit, GameWorld, UnitKind};
+use aoe_core::{EntityId, PlayerId, TileRect, WorldPosition};
 use aoe_map::ResourceKind;
 
 impl GameWorld {
@@ -62,5 +63,55 @@ impl GameWorld {
         s.home
             .covers(building.footprint, 0)
             .then_some(ResourceKind::Wood)
+    }
+}
+impl GameWorld {
+    /// Kill idle, unclaimed own villagers in this active Steward's territory.
+    pub fn issue_steward_dismiss(
+        &mut self,
+        player: PlayerId,
+        steward: EntityId,
+    ) -> Result<(), EconomyError> {
+        let home = self
+            .economy
+            .steward_homes
+            .get(&steward)
+            .ok_or(EconomyError::UnknownEntity)?;
+        if home.player != player {
+            return Err(EconomyError::NotOwner);
+        }
+        if !self.active_steward(steward) {
+            return Err(EconomyError::InvalidTarget);
+        }
+        let center = home.center.tile_floor();
+        let r = STEWARD_RULES.radius_tiles;
+        let victims: Vec<_> = self
+            .query(
+                TileRect::from_xywh(center.x - r, center.y - r, 2 * r + 1, 2 * r + 1)
+                    .clamp(self.config.width_tiles, self.config.height_tiles),
+            )
+            .0
+            .into_iter()
+            .filter(|u| {
+                u.player == player
+                    && u.kind == UnitKind::Villager
+                    && u.hp > 0
+                    && matches!(u.task, crate::UnitTask::Idle | crate::UnitTask::Carrying)
+                    && !u.moving
+                    && !u.planning
+                    && !self.economy.gatherers.contains_key(&u.id)
+                    && !self.economy.builders.contains_key(&u.id)
+                    && !self.economy.garrison_orders.contains_key(&u.id)
+                    && home.owns(u.position)
+                    && self.steward_controller(u.id).is_none()
+            })
+            .map(|u| u.id)
+            .collect();
+        for id in victims {
+            if let Some(&index) = self.lookup.get(&id) {
+                self.kill_unit(index);
+            }
+        }
+        Ok(())
     }
 }

@@ -85,8 +85,10 @@ impl GameWorld {
                     if home.walking.is_none() || walking.zone_changed(id) {
                         home.walk_recheck = true;
                         home.regions = None;
-                        // The zone moved: sweep the buildings it now covers.
+                        // The zone moved: sweep the buildings and units it
+                        // now covers.
                         home.building_scan.swept = false;
+                        home.census_done = false;
                         self.economy
                             .stewards
                             .controlled

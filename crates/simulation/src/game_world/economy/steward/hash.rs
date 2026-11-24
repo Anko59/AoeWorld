@@ -46,6 +46,11 @@ impl Economy {
             }
             home.resources.update_hash(h);
             home.navy.update_hash(h);
+            h.update(&[u8::from(home.census_done)]);
+            h.update(&(home.members.len() as u64).to_le_bytes());
+            for id in &home.members {
+                h.update(&id.0.to_le_bytes());
+            }
             h.update(&(home.scan_chunk as u64).to_le_bytes());
             h.update(&(home.scan_offset as u64).to_le_bytes());
             let scan = &home.building_scan;

@@ -59,40 +59,19 @@ impl GameWorld {
         self.steward_ensure_regions(id);
         let home = self.economy.steward_homes.get(&id)?.clone();
         let player = self.building(home.town_center?)?.player;
-        let center = home.center.tile_floor();
-        let r = STEWARD_RULES.radius_tiles;
-        let first = ChunkCoord {
-            x: (center.x - r).div_euclid(SPATIAL_CHUNK_TILES),
-            y: (center.y - r).div_euclid(SPATIAL_CHUNK_TILES),
-        };
-        let last = ChunkCoord {
-            x: (center.x + r).div_euclid(SPATIAL_CHUNK_TILES),
-            y: (center.y + r).div_euclid(SPATIAL_CHUNK_TILES),
-        };
-        let width = (last.x - first.x + 1) as usize;
-        let count = width * (last.y - first.y + 1) as usize;
-        let mut chunk = home.scan_chunk.min(count);
-        let mut offset = home.scan_offset;
-        let start = (chunk, offset);
-        let mut visits = 0;
+        // One census sweep after activation or a zone change; afterwards the
+        // member list is kept by events and no visit walks the box again.
+        let complete_units = home.census_done || self.steward_census(id, &home, player, work);
         let mut units = Vec::new();
         let mut boats = Vec::new();
-        while chunk < count && visits < STEWARD_RULES.unit_visits_per_domain {
-            let key = ChunkCoord {
-                x: first.x + (chunk % width) as i32,
-                y: first.y + (chunk / width) as i32,
-            };
-            let bucket = self.chunks.get(&key).map_or(&[][..], Vec::as_slice);
-            while offset < bucket.len() && visits < STEWARD_RULES.unit_visits_per_domain {
-                let unit = self.unit(bucket[offset]);
-                visits += 1;
-                offset += 1;
-                if let Some(u) = unit
-                    && u.player == player
-                    && u.hp > 0
-                    && matches!(u.kind, UnitKind::Villager | UnitKind::FishingShip)
-                    && !self.embarked(u.id)
-                    && home.owns_resident(u.kind, u.position)
+        let mut gone = Vec::new();
+        for &member in &self.economy.steward_homes[&id].members {
+            match self.unit(member) {
+                Some(u)
+                    if u.player == player
+                        && u.hp > 0
+                        && !self.embarked(u.id)
+                        && home.owns_resident(u.kind, u.position) =>
                 {
                     if u.kind == UnitKind::FishingShip {
                         boats.push(u);
@@ -100,20 +79,12 @@ impl GameWorld {
                         units.push(u);
                     }
                 }
-            }
-            if offset >= bucket.len() {
-                chunk += 1;
-                offset = 0;
+                Some(u) if u.hp > 0 && u.player == player && !self.embarked(u.id) => {}
+                _ => gone.push(member),
             }
         }
-        work.unit_visits += visits;
-        let complete_units = chunk == count && start == (0, 0);
-        if let Some(h) = self.economy.steward_homes.get_mut(&id) {
-            (h.scan_chunk, h.scan_offset) = if chunk == count {
-                (0, 0)
-            } else {
-                (chunk, offset)
-            };
+        for member in gone {
+            self.steward_set_member(member, None, None);
         }
         units.sort_unstable_by_key(|u| u.id);
         boats.sort_unstable_by_key(|u| u.id);
@@ -210,5 +181,155 @@ impl GameWorld {
             offers: Default::default(),
             ore_misses: [false; 4],
         })
+    }
+}
+
+impl GameWorld {
+    /// Continues this domain's census sweep of its box (bounded per visit);
+    /// every owned villager and boat it meets becomes a member. True when the
+    /// sweep has finished.
+    fn steward_census(
+        &mut self,
+        id: EntityId,
+        home: &Home,
+        player: PlayerId,
+        work: &mut StewardWork,
+    ) -> bool {
+        let center = home.center.tile_floor();
+        let r = STEWARD_RULES.radius_tiles;
+        let first = ChunkCoord {
+            x: (center.x - r).div_euclid(SPATIAL_CHUNK_TILES),
+            y: (center.y - r).div_euclid(SPATIAL_CHUNK_TILES),
+        };
+        let last = ChunkCoord {
+            x: (center.x + r).div_euclid(SPATIAL_CHUNK_TILES),
+            y: (center.y + r).div_euclid(SPATIAL_CHUNK_TILES),
+        };
+        let width = (last.x - first.x + 1) as usize;
+        let count = width * (last.y - first.y + 1) as usize;
+        let mut chunk = home.scan_chunk.min(count);
+        let mut offset = home.scan_offset;
+        let mut visits = 0;
+        let mut found = Vec::new();
+        while chunk < count && visits < STEWARD_RULES.unit_visits_per_domain {
+            let key = ChunkCoord {
+                x: first.x + (chunk % width) as i32,
+                y: first.y + (chunk / width) as i32,
+            };
+            let bucket = self.chunks.get(&key).map_or(&[][..], Vec::as_slice);
+            while offset < bucket.len() && visits < STEWARD_RULES.unit_visits_per_domain {
+                visits += 1;
+                if let Some(u) = self.unit(bucket[offset])
+                    && u.player == player
+                    && u.hp > 0
+                    && matches!(u.kind, UnitKind::Villager | UnitKind::FishingShip)
+                    && home.owns_resident(u.kind, u.position)
+                {
+                    found.push((u.id, u.position.tile_floor()));
+                }
+                offset += 1;
+            }
+            if offset >= bucket.len() {
+                chunk += 1;
+                offset = 0;
+            }
+        }
+        work.unit_visits += visits;
+        for (unit, tile) in found {
+            self.steward_set_member(unit, Some(id), Some(tile));
+        }
+        let done = chunk == count;
+        if let Some(h) = self.economy.steward_homes.get_mut(&id) {
+            (h.scan_chunk, h.scan_offset) = if done { (0, 0) } else { (chunk, offset) };
+            h.census_done = done;
+        }
+        done
+    }
+
+    /// Records `unit` as a member of `domain` (or of none), placed from `tile`.
+    pub(super) fn steward_set_member(
+        &mut self,
+        unit: EntityId,
+        domain: Option<EntityId>,
+        tile: Option<aoe_core::TileCoord>,
+    ) {
+        let m = &mut self.economy.stewards;
+        let old = match tile {
+            Some(tile) => m.member_of.insert(unit, (domain, tile)),
+            None => m.member_of.remove(&unit),
+        };
+        if let Some((Some(previous), _)) = old
+            && Some(previous) != domain
+            && let Some(home) = self.economy.steward_homes.get_mut(&previous)
+        {
+            home.members.remove(&unit);
+        }
+        if let Some(domain) = domain
+            && let Some(home) = self.economy.steward_homes.get_mut(&domain)
+        {
+            home.members.insert(unit);
+        }
+    }
+
+    /// A domain that stops: its members look for their domain again.
+    pub(super) fn steward_release_members(&mut self, id: EntityId) {
+        let members = self
+            .economy
+            .steward_homes
+            .get_mut(&id)
+            .map(|h| std::mem::take(&mut h.members))
+            .unwrap_or_default();
+        for unit in members {
+            self.economy.stewards.member_of.remove(&unit);
+            self.economy.stewards.placed.insert(unit);
+        }
+    }
+
+    /// A villager or boat placed on the map (trained, released, spawned).
+    pub(crate) fn steward_unit_placed(&mut self, id: EntityId, kind: UnitKind) {
+        if matches!(kind, UnitKind::Villager | UnitKind::FishingShip) {
+            self.economy.stewards.placed.insert(id);
+        }
+    }
+
+    /// This tick's events: units placed on the map, and villagers and boats
+    /// that changed and now stand on a new tile, join the domain owning it
+    /// (a tile change, not every step, so the cost follows the walkers).
+    pub(super) fn steward_track_members(&mut self, changed: &[EntityId]) {
+        let placed = std::mem::take(&mut self.economy.stewards.placed);
+        if self.economy.stewards.by_player.is_empty() {
+            // Without a domain there is nothing to join; activation sweeps.
+            return;
+        }
+        for &id in placed.iter().chain(changed) {
+            let Some(&index) = self.lookup.get(&id) else {
+                continue;
+            };
+            let u = self.units[index].state;
+            if u.hp == 0 || !matches!(u.kind, UnitKind::Villager | UnitKind::FishingShip) {
+                continue;
+            }
+            let Some(domains) = self.economy.stewards.by_player.get(&u.player) else {
+                continue;
+            };
+            let tile = u.position.tile_floor();
+            if !placed.contains(&id)
+                && self
+                    .economy
+                    .stewards
+                    .member_of
+                    .get(&id)
+                    .is_some_and(|&(_, at)| at == tile)
+            {
+                continue;
+            }
+            let owner = domains.keys().copied().find(|d| {
+                self.economy
+                    .steward_homes
+                    .get(d)
+                    .is_some_and(|h| h.owns_resident(u.kind, u.position))
+            });
+            self.steward_set_member(id, owner, Some(tile));
+        }
     }
 }

@@ -66,6 +66,23 @@ impl GameWorld {
             };
             let stalls = &self.economy.steward_homes[&s.steward].stalls;
             let previous = stalls.get(&worker).copied();
+            // A worker waiting for its route is served by the route scheduler,
+            // not stalled: stopping it would only queue the same route again.
+            if unit.planning {
+                if let Some(p) = previous
+                    && let Some(home) = self.economy.steward_homes.get_mut(&s.steward)
+                {
+                    home.stalls.insert(
+                        worker,
+                        Stall {
+                            at: unit.position,
+                            since: now,
+                            ..p
+                        },
+                    );
+                }
+                continue;
+            }
             if unit.task != UnitTask::Moving {
                 // A stalled worker keeps its record (so strikes accumulate and the
                 // job pass can avoid the failed node) until it has worked on
