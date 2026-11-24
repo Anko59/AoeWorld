@@ -327,7 +327,7 @@ test("kingdom landscape keeps source relief, settlements and farms bounded and c
       }),
     );
     s.frame([8000, 8000, 4000, 4000, 1280, 720, 0.001, 2]);
-    const bounded = {
+    const drawn = {
       icons: Number(canvas.dataset.settlements),
       borders: Number(canvas.dataset.borders),
     };
@@ -357,8 +357,6 @@ test("kingdom landscape keeps source relief, settlements and farms bounded and c
       v.sort((a, b) => a - b)[Math.floor(v.length * p)] ?? 0;
     const budget = {
       inputFootprints: 3000,
-      acceptedCap: 2048,
-      iconCap: 192,
       terrainBytes: Number(canvas.dataset.terrainBytes),
       samples: paintTimes.length,
       paintP50Ms: percentile(paintTimes, 0.5),
@@ -382,7 +380,7 @@ test("kingdom landscape keeps source relief, settlements and farms bounded and c
       fields,
       owned,
       halo,
-      bounded,
+      drawn,
       budget,
       remaining: document.querySelectorAll("#strategic-settlements > *").length,
     };
@@ -399,12 +397,53 @@ test("kingdom landscape keeps source relief, settlements and farms bounded and c
   expect(result.owned).toBe(1);
   expect(result.halo.slice(0, 3).every((n) => n > 180)).toBe(true);
   expect(result.fields).toBe("1");
-  expect(result.bounded.icons).toBeLessThanOrEqual(192);
-  expect(result.bounded.borders).toBeLessThanOrEqual(2048);
+  expect(result.drawn.icons).toBeGreaterThan(0);
+  expect(result.drawn.borders).toBe(3000);
   expect(result.budget.terrainBytes).toBe(4 * 1024 * 1024);
   await test.info().attach("kingdom-render-budget", {
     body: JSON.stringify(result.budget, null, 2),
     contentType: "application/json",
   });
   expect(result.remaining).toBe(0);
+});
+
+test("far view keeps buildings and resource markers beyond the former row limits", async ({
+  page,
+}) => {
+  await page.route("**/strategic-test", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<canvas id="scene" style="width:1280px;height:720px"></canvas>',
+    }),
+  );
+  await page.goto("/strategic-test");
+  const counts = await page.evaluate(async () => {
+    // @ts-expect-error Served browser module, outside the tooling project.
+    const { initStrategic } = await import("/navigation/strategic.js");
+    const strategic = initStrategic(
+      { disabled: true, canvas: document.createElement("canvas"), revision: 0 },
+      { records: () => [], revision: () => 0 },
+    );
+    const sites = new Float64Array(3_000 * 10);
+    const resources = new Float64Array(3_000 * 5);
+    for (let i = 0; i < 3_000; i++) {
+      const x = 470 + (i % 60),
+        y = 470 + Math.floor(i / 60);
+      sites.set(
+        [i, x, y, x + 1, y + 1, i < 2_500 ? 5 : 1, 0xf54141, 0, -1, 1],
+        i * 10,
+      );
+      resources.set([2, x, y, i, 0], i * 5);
+    }
+    strategic.settlements(sites);
+    strategic.resources(resources);
+    strategic.frame([1000, 1000, 500, 500, 1280, 720, 0.03, 2]);
+    const canvas = document.querySelector<HTMLElement>("#strategic-scene");
+    return [
+      canvas?.dataset.fields,
+      canvas?.dataset.borders,
+      canvas?.dataset.resources,
+    ];
+  });
+  expect(counts).toEqual(["2500", "500", "3000"]);
 });

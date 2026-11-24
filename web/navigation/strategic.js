@@ -262,9 +262,6 @@ export function initStrategic(fog, actors) {
         cache.delete(key);
         cache.set(key, same ? old : { kind, world: [x, y] });
       }
-      for (const cache of knownResources) {
-        while (cache.size > 2048) { cache.delete(cache.keys().next().value); changed = true; }
-      }
       if (changed) refreshResources();
     },
     depleted(ids, begin, complete) {

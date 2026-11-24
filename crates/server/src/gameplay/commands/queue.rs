@@ -1,37 +1,15 @@
 //! Bounded command admission and asynchronous terrain readiness.
 use super::*;
-use std::sync::{Arc, Mutex};
-
-#[derive(Clone, Copy)]
-enum SelectionOrder {
-    AutoScout { enabled: bool },
-}
-
-enum Work {
-    Single(PendingAction),
-    Selection {
-        order: SelectionOrder,
-        units: std::vec::IntoIter<EntityId>,
-        result: Arc<Mutex<Option<CommandResult>>>,
-    },
-}
-
 pub(in crate::gameplay) struct QueuedCommand {
     sequence: u64,
-    work: Work,
+    action: PendingAction,
     pub(in crate::gameplay) prepared: Vec<super::super::preparation::Ready>,
 }
 
 pub(in crate::gameplay) struct PendingCommand {
     pub(in crate::gameplay) sequence: u64,
     pub(in crate::gameplay) action: PendingAction,
-    selection: Option<SelectionAck>,
     _prepared: Vec<super::super::preparation::Ready>,
-}
-
-struct SelectionAck {
-    result: Arc<Mutex<Option<CommandResult>>>,
-    last: bool,
 }
 
 impl QueuedCommand {
@@ -41,85 +19,12 @@ impl QueuedCommand {
             .all(|flag| flag.load(std::sync::atomic::Ordering::Acquire))
     }
 
-    /// Append scalar actions so each unit counts toward the existing budget.
-    /// Return the unconsumed selection to leave at the head of its queue.
-    pub(in crate::gameplay) fn take(
-        self,
-        session: u64,
-        budget: usize,
-        output: &mut Vec<(u64, PendingCommand)>,
-    ) -> Option<Self> {
-        match self.work {
-            Work::Single(action) => {
-                output.push((
-                    session,
-                    PendingCommand {
-                        sequence: self.sequence,
-                        action,
-                        selection: None,
-                        _prepared: self.prepared,
-                    },
-                ));
-                None
-            }
-            Work::Selection {
-                order,
-                mut units,
-                result,
-            } => {
-                let count = units.len().min(budget);
-                let last = count == units.len();
-                for (index, entity_id) in units.by_ref().take(count).enumerate() {
-                    let action = match order {
-                        SelectionOrder::AutoScout { enabled } => {
-                            PendingAction::AutoScout { entity_id, enabled }
-                        }
-                    };
-                    output.push((
-                        session,
-                        PendingCommand {
-                            sequence: self.sequence,
-                            action,
-                            selection: Some(SelectionAck {
-                                result: Arc::clone(&result),
-                                last: last && index + 1 == count,
-                            }),
-                            _prepared: Vec::new(),
-                        },
-                    ));
-                }
-                (!last).then_some(Self {
-                    sequence: self.sequence,
-                    work: Work::Selection {
-                        order,
-                        units,
-                        result,
-                    },
-                    prepared: self.prepared,
-                })
-            }
+    pub(in crate::gameplay) fn into_pending(self) -> PendingCommand {
+        PendingCommand {
+            sequence: self.sequence,
+            action: self.action,
+            _prepared: self.prepared,
         }
-    }
-}
-
-impl PendingCommand {
-    pub(in crate::gameplay) fn apply(
-        self,
-        world: &mut aoe_simulation::GameWorld,
-        player: aoe_core::PlayerId,
-    ) -> Option<CommandResult> {
-        let result = super::apply(world, player, self.action);
-        let Some(selection) = self.selection else {
-            return Some(result);
-        };
-        let mut aggregate = selection
-            .result
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        if aggregate.is_none() || result == CommandResult::Accepted {
-            *aggregate = Some(result);
-        }
-        selection.last.then_some(*aggregate).flatten()
     }
 }
 
@@ -130,56 +35,6 @@ impl GameplayService {
         sequence: u64,
         action: PendingAction,
     ) {
-        self.queue_work(session_id, sequence, Work::Single(action))
-            .await;
-    }
-
-    pub(crate) async fn queue_stop_selection(
-        &self,
-        session_id: u64,
-        sequence: u64,
-        units: Vec<EntityId>,
-    ) {
-        self.queue_command(session_id, sequence, PendingAction::StopSelection(units))
-            .await;
-    }
-
-    pub(crate) async fn queue_auto_scout_selection(
-        &self,
-        session_id: u64,
-        sequence: u64,
-        units: Vec<EntityId>,
-        enabled: bool,
-    ) {
-        self.queue_selection(
-            session_id,
-            sequence,
-            units,
-            SelectionOrder::AutoScout { enabled },
-        )
-        .await;
-    }
-
-    async fn queue_selection(
-        &self,
-        session_id: u64,
-        sequence: u64,
-        units: Vec<EntityId>,
-        order: SelectionOrder,
-    ) {
-        self.queue_work(
-            session_id,
-            sequence,
-            Work::Selection {
-                order,
-                units: units.into_iter(),
-                result: Arc::default(),
-            },
-        )
-        .await;
-    }
-
-    async fn queue_work(&self, session_id: u64, sequence: u64, work: Work) {
         let arena = crate::gameplay::arena::enabled();
         if arena {
             crate::gameplay::arena::note_order();
@@ -187,10 +42,7 @@ impl GameplayService {
         let now = Instant::now();
         let (current_tick, preparation) = {
             let world = self.world.read().await;
-            let request = match &work {
-                Work::Single(action) => crate::gameplay::preparation::Request::new(&world, action),
-                Work::Selection { .. } => None,
-            };
+            let request = crate::gameplay::preparation::Request::new(&world, &action);
             (world.tick(), request)
         };
         let mut sessions = self.sessions.lock().await;
@@ -204,13 +56,6 @@ impl GameplayService {
                 .sum::<usize>()
         };
         let class_pending = pending_of(sessions.get(&session_id).is_some_and(|s| s.ai));
-        // One budget scales with the number of hosted seats, so many AI
-        // connections do not exhaust a limit sized for a single human.
-        let global_limit = MAX_PENDING_COMMANDS_GLOBAL.max(
-            self.slots
-                .len()
-                .saturating_mul(MAX_PENDING_COMMANDS_PER_CONNECTION),
-        );
         let Some(session) = sessions.get_mut(&session_id) else {
             return;
         };
@@ -228,7 +73,7 @@ impl GameplayService {
                 (AI_ORDERS_PER_SECOND, AI_ORDER_BURST, AI_PENDING_COMMANDS)
             } else {
                 (
-                    10.0,
+                    HUMAN_ORDERS_PER_SECOND,
                     aoe_protocol::HUMAN_COMMAND_BURST as f64,
                     MAX_PENDING_COMMANDS_PER_CONNECTION,
                 )
@@ -241,7 +86,7 @@ impl GameplayService {
                 } else {
                     CommandResult::RejectedQueueFull
                 });
-            } else if class_pending >= global_limit {
+            } else if class_pending >= MAX_PENDING_COMMANDS_GLOBAL {
                 result = Some(CommandResult::RejectedQueueFull);
             } else {
                 let prepared = match preparation.filter(|request| request.owner == session.viewer) {
@@ -254,7 +99,7 @@ impl GameplayService {
                         session.command_tokens -= 1.0;
                         session.pending.push_back(QueuedCommand {
                             sequence,
-                            work,
+                            action,
                             prepared,
                         });
                     }
@@ -283,6 +128,40 @@ impl GameplayService {
             while session.acknowledgements.len() > MAX_ACK_HISTORY {
                 session.acknowledgements.pop_front();
             }
+        }
+    }
+
+    pub(crate) async fn queue_stop_selection(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        units: Vec<EntityId>,
+    ) {
+        self.queue_command(session_id, sequence, PendingAction::StopSelection(units))
+            .await;
+    }
+
+    pub(crate) async fn queue_auto_scout_selection(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        unit_ids: Vec<EntityId>,
+        enabled: bool,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::AutoScoutSelection { unit_ids, enabled },
+        )
+        .await;
+    }
+}
+
+impl PendingAction {
+    pub(in crate::gameplay) fn decision_count(&self) -> u64 {
+        match self {
+            Self::AutoScoutSelection { unit_ids, .. } => unit_ids.len() as u64,
+            _ => 1,
         }
     }
 }

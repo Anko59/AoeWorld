@@ -50,14 +50,14 @@ fn kingdom_activity_groups_all_owned_work_and_chooses_the_leading_active_produce
         total_ticks: 100,
     });
     let summary = summarize(&buildings, PlayerId(0));
-    assert_eq!(summary.entries.len(), 2);
-    let unit = summary.entries[0];
+    assert_eq!(summary.len(), 2);
+    let unit = summary[0];
     assert_eq!(
         (unit.count, unit.progress, unit.building),
         (3, 500, EntityId(2))
     );
     assert!(!unit.research);
-    let tech = summary.entries[1];
+    let tech = summary[1];
     assert!(tech.research);
     assert_eq!(
         (tech.kind, tech.count, tech.progress, tech.building),
@@ -68,17 +68,16 @@ fn kingdom_activity_groups_all_owned_work_and_chooses_the_leading_active_produce
 }
 
 #[test]
-fn kingdom_activity_bounds_output_and_ignores_destroyed_or_unfinished_buildings() {
+fn kingdom_activity_keeps_all_types_and_ignores_destroyed_or_unfinished_buildings() {
     let mut b = producer(1, &UnitKind::ALL[..8]);
     let summary = summarize(&[b.clone()], PlayerId(0));
-    assert_eq!(summary.entries.len(), MAX_ROWS);
-    assert_eq!(summary.more, 2);
+    assert_eq!(summary.len(), 8);
     b.hp = 0;
-    assert!(summarize(&[b.clone()], PlayerId(0)).entries.is_empty());
+    assert!(summarize(&[b.clone()], PlayerId(0)).is_empty());
     b.hp = 1000;
     b.construction = ConstructionState::UnderConstruction;
-    assert!(summarize(&[b], PlayerId(0)).entries.is_empty());
-    assert!(summarize(&[], PlayerId(0)).entries.is_empty());
+    assert!(summarize(&[b], PlayerId(0)).is_empty());
+    assert!(summarize(&[], PlayerId(0)).is_empty());
 }
 
 #[test]
@@ -89,7 +88,6 @@ fn kingdom_activity_only_advances_queue_heads_and_clamps_progress() {
     second.training_queue[0].progress_ticks = 10;
     let summary = summarize(&[first, second], PlayerId(0));
     let archers = summary
-        .entries
         .iter()
         .find(|e| e.kind == UnitKind::Archer as u8)
         .unwrap();
@@ -101,7 +99,6 @@ fn kingdom_activity_only_advances_queue_heads_and_clamps_progress() {
     let starting = producer(2, &[UnitKind::Archer]);
     let summary = summarize(&[queued, starting], PlayerId(0));
     let archers = summary
-        .entries
         .iter()
         .find(|e| e.kind == UnitKind::Archer as u8)
         .unwrap();
@@ -112,10 +109,7 @@ fn kingdom_activity_only_advances_queue_heads_and_clamps_progress() {
     );
     let mut full = producer(3, &[UnitKind::Villager]);
     full.training_queue[0].progress_ticks = u64::MAX;
-    assert_eq!(
-        summarize(&[full.clone()], PlayerId(0)).entries[0].progress,
-        1000
-    );
+    assert_eq!(summarize(&[full.clone()], PlayerId(0))[0].progress, 1000);
     full.training_queue[0].total_ticks = 0;
-    assert_eq!(summarize(&[full], PlayerId(0)).entries[0].progress, 0);
+    assert_eq!(summarize(&[full], PlayerId(0))[0].progress, 0);
 }

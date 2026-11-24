@@ -103,6 +103,15 @@ pub(in crate::gameplay) fn apply(
             ),
             None => world.issue_formation(player, &unit_ids, formation),
         },
+        PendingAction::AutoScoutSelection { unit_ids, enabled } => {
+            return selections::apply_each(
+                world,
+                player,
+                unit_ids
+                    .into_iter()
+                    .map(|entity_id| PendingAction::AutoScout { entity_id, enabled }),
+            );
+        }
         PendingAction::AutoScout { entity_id, enabled } => {
             world.issue_auto_scout(player, entity_id, enabled)
         }

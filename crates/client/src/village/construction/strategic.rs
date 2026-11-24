@@ -3,36 +3,6 @@ use super::*;
 use aoe_protocol::CommandResult;
 use wasm_bindgen::prelude::wasm_bindgen;
 
-/// Far builds keep their own small burst so other UI orders keep room.
-const FAR_BUILD_BURST: f64 = 20.0;
-
-/// Track all outgoing human commands, so far builds leave room for other UI orders.
-pub(crate) struct Admission {
-    tokens: f64,
-    last: f64,
-    pub pending: Option<u64>,
-}
-impl Default for Admission {
-    fn default() -> Self {
-        Self {
-            tokens: FAR_BUILD_BURST,
-            last: 0.0,
-            pending: None,
-        }
-    }
-}
-impl Admission {
-    pub fn ready(&mut self, time: f64) -> bool {
-        self.tokens = (self.tokens + (time - self.last).max(0.0) * 0.01).min(FAR_BUILD_BURST);
-        self.last = time;
-        self.tokens >= 1.0 && self.pending.is_none()
-    }
-    pub fn sent(&mut self, time: f64) {
-        self.ready(time);
-        self.tokens = (self.tokens - 1.0).max(0.0);
-    }
-}
-
 #[wasm_bindgen(inline_js = "
 export function far_build_preview(values, reason) { window.aoeNavigation?.strategic?.building?.preview(values, reason); }
 export function far_build_result(message) { window.aoeNavigation?.strategic?.building?.result(message); }
@@ -43,10 +13,9 @@ extern "C" {
 }
 
 pub(crate) fn acknowledge(client: &mut Client, sequence: u64, result: CommandResult) {
-    if client.village.build_admission.pending != Some(sequence) {
+    if !client.village.pending_far_builds.remove(&sequence) {
         return;
     }
-    client.village.build_admission.pending = None;
     far_build_result(if result == CommandResult::Accepted {
         "Accepted 1 building order. Queued for nearby villagers."
     } else {
@@ -55,9 +24,8 @@ pub(crate) fn acknowledge(client: &mut Client, sequence: u64, result: CommandRes
 }
 
 pub(crate) fn connection_reset(client: &mut Client) {
-    let pending = client.village.build_admission.pending.is_some();
-    client.village.build_admission = Admission::default();
-    if pending {
+    if !client.village.pending_far_builds.is_empty() {
+        client.village.pending_far_builds.clear();
         far_build_result(
             "Connection reset; the previous building order was not confirmed. Check the site before trying again.",
         );
@@ -140,7 +108,4 @@ pub(crate) fn chunks(client: &Client) -> Vec<(i32, i32)> {
 
 pub(crate) fn submitting() {
     far_build_result("Submitting building order…");
-}
-pub(crate) fn wait() {
-    far_build_result("Waiting for the server or command budget · try again shortly.");
 }

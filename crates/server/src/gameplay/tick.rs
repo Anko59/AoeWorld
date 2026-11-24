@@ -3,7 +3,7 @@ use super::fanout::{self, Built, View};
 use super::{GameplayService, PendingCommand, Session};
 use aoe_core::PlayerId;
 use aoe_protocol::GameplayServerMessage;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use tokio::sync::{OwnedMutexGuard, oneshot};
 
 type Intake = Vec<(u64, PlayerId, PendingCommand)>;
@@ -28,16 +28,22 @@ impl GameplayService {
     }
 
     fn intake(&self, sessions: &mut BTreeMap<u64, Session>) -> Intake {
-        let start = self.command_cursor.fetch_add(
-            MAX_COMMANDS_PER_TICK as u64,
-            std::sync::atomic::Ordering::Relaxed,
-        );
-        let mut commands = take_pending(sessions, start as usize);
-        commands.sort_by_key(|(session_id, command)| (*session_id, command.sequence));
+        let mut commands = Vec::new();
+        // Session IDs and accepted sequence numbers are already ordered.
+        // Drain each ready prefix so a command cannot overtake its own terrain work.
+        for (&id, session) in sessions.iter_mut() {
+            while session
+                .pending
+                .front()
+                .is_some_and(super::QueuedCommand::ready)
+            {
+                let Some(command) = session.pending.pop_front() else {
+                    break;
+                };
+                commands.push((id, session.viewer, command.into_pending()));
+            }
+        }
         commands
-            .into_iter()
-            .map(|(id, command)| (id, sessions[&id].viewer, command))
-            .collect()
     }
 
     async fn step(&self, overlap: bool) {
@@ -89,10 +95,9 @@ impl GameplayService {
                 };
                 let sequence = command.sequence;
                 let result = world.with_order_issuer(issuer, |w| {
-                    w.record_order_decisions(1);
-                    command.apply(w, player)
+                    w.record_order_decisions(command.action.decision_count());
+                    super::commands::apply(w, player, command.action)
                 });
-                let Some(result) = result else { continue };
                 let tick = world.tick();
                 acknowledgements.entry(session_id).or_default().push(
                     GameplayServerMessage::CommandAck {
@@ -244,67 +249,6 @@ impl GameplayService {
             let started = std::time::Instant::now();
             self.publish_resources().await;
             self.probe.phase("resources", started.elapsed());
-        }
-    }
-}
-
-/// A join burst cannot turn thousands of pending actions into one long tick.
-const MAX_COMMANDS_PER_TICK: usize = 32;
-fn take_pending(
-    sessions: &mut BTreeMap<u64, Session>,
-    start: usize,
-) -> Vec<(u64, super::PendingCommand)> {
-    let capacity = MAX_COMMANDS_PER_TICK;
-    // People are served before AI seats: at 100 seats a round-robin over every
-    // session gave a human one order every few ticks. Each class still rotates.
-    let rotated = |ai: bool| {
-        let class = sessions
-            .iter()
-            .filter(|(_, session)| session.ai == ai)
-            .map(|(id, _)| *id)
-            .collect::<Vec<_>>();
-        let len = class.len().max(1);
-        (0..class.len())
-            .map(|turn| class[(start + turn) % len])
-            .collect::<Vec<_>>()
-    };
-    let mut ids = rotated(false);
-    ids.extend(rotated(true));
-    let mut commands = Vec::new();
-    let mut deferred = BTreeSet::new();
-    if ids.is_empty() {
-        return commands;
-    }
-    // A selection order is one admitted command: it takes one slot of the
-    // tick's capacity and applies to all its units at once, like a single order.
-    let mut used = 0;
-    loop {
-        let before = used;
-        for &id in &ids {
-            if used == capacity {
-                return commands;
-            }
-            let Some(session) = sessions.get_mut(&id) else {
-                continue;
-            };
-            if deferred.contains(&id) {
-                continue;
-            }
-            if session
-                .pending
-                .front()
-                .is_some_and(super::QueuedCommand::ready)
-                && let Some(command) = session.pending.pop_front()
-            {
-                used += 1;
-                if let Some(remaining) = command.take(id, usize::MAX, &mut commands) {
-                    session.pending.push_front(remaining);
-                    deferred.insert(id);
-                }
-            }
-        }
-        if used == before {
-            return commands;
         }
     }
 }

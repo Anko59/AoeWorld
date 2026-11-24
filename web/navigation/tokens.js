@@ -10,7 +10,7 @@ const roles = ['Infantry', 'Archers', 'Cavalry', 'Siege', 'Scouts'];
 const waits = ['Training villagers', 'Census busy', 'At capacity', 'No Town Center', 'Food shortage', 'Housing shortage'];
 const teamColours = { blue:'#4191f5', red:'#f54141', green:'#32be41', yellow:'#f5dc28', cyan:'#28dcdc', purple:'#af41dc', grey:'#a0a0a0', orange:'#f59128' };
 
-// Retained nodes, bounded independently of world size. Coordinates and hit
+// Retained nodes for authorized reports. Coordinates and hit
 // boxes share the exact plane used for ordinary ground orders.
 export function initTokens() {
   const layer = document.createElement('div');
@@ -46,9 +46,9 @@ export function initTokens() {
     nodes.set(key, node); layer.append(node);
     return node;
   }
-  function rows(values, stride, cap) {
+  function rows(values, stride) {
     const result = [];
-    for (let at = 0; at + stride <= values.length && result.length < cap; at += stride) {
+    for (let at = 0; at + stride <= values.length; at += stride) {
       const row = Array.from(values.slice(at, at + stride));
       if (row.slice(0, 4).every(Number.isFinite)) result.push(row);
     }
@@ -68,8 +68,8 @@ export function initTokens() {
       layer.hidden = !value; if (!value) hits = [];
     },
     update(a, e, b, art = []) {
-      portraits = new Map(rows(art, 3, 256).map(([id, kind, rgb]) => [id, [kind, rgb]]));
-      armies = rows(a, ARMY_LAYOUT_FIELDS, 256); economy = rows(e, 13, 64); bridges = rows(b, 5, 2048);
+      portraits = new Map(rows(art, 3).map(([id, kind, rgb]) => [id, [kind, rgb]]));
+      armies = rows(a, ARMY_LAYOUT_FIELDS); economy = rows(e, 13); bridges = rows(b, 5);
       const next = economy.map(r => [r[0], r[2], r[3], r[7] === -1]).flat().join(',');
       if (next !== domainSignature) {
         domainSignature = next; domains.clear();
