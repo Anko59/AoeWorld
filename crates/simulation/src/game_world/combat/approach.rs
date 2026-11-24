@@ -178,24 +178,17 @@ impl GameWorld {
         let range = super::super::navy::attack_range(&stats);
         let min = i64::from(stats.min_range) * MELEE_RANGE_SUBUNITS;
         let origin = unit.position.tile_floor();
-        let mut melee =
+        let mut spots =
             Self::uses_melee_position(unit.kind).then(|| self.melee_positions(&unit, range, goal));
-        // Candidates are nearest first. Only the first four free ones get the
+        // Spots are nearest first. Only the first four free ones get the
         // cheap straight-line proof, so test them lazily: the rest are needed
         // only by the bounded search below, after its budget check.
-        let mut untested = 0;
         let mut free = Vec::new();
-        if let Some(points) = &melee {
-            if points.is_empty() {
-                return done(AttackSearch {
-                    destination: None,
-                    far: false,
-                    wait: None,
-                });
-            }
-            while untested < points.len() && free.len() < 4 {
-                let at = points[untested];
-                untested += 1;
+        let mut melee = None;
+        if let Some(points) = &mut spots {
+            let mut nearest = None;
+            for at in points.by_ref() {
+                nearest.get_or_insert(at);
                 if !self.interaction_point_free(id, at) {
                     continue;
                 }
@@ -207,13 +200,23 @@ impl GameWorld {
                         wait: None,
                     });
                 }
+                if free.len() == 4 {
+                    break;
+                }
             }
+            let Some(nearest) = nearest else {
+                return done(AttackSearch {
+                    destination: None,
+                    far: false,
+                    wait: None,
+                });
+            };
             if free.is_empty() {
                 // In a crowd the endpoint is a preference. Static route
                 // admission and physical sweeps still prove every step.
                 if self.crowded_melee_contact(id, goal) {
                     return done(AttackSearch {
-                        destination: Some(points[0]),
+                        destination: Some(nearest),
                         far: false,
                         wait: None,
                     });
@@ -232,14 +235,9 @@ impl GameWorld {
                 wait: Some(SearchWait::Budget),
             });
         }
-        if let Some(points) = &mut melee {
-            free.extend(
-                points[untested..]
-                    .iter()
-                    .copied()
-                    .filter(|&at| self.interaction_point_free(id, at)),
-            );
-            *points = free;
+        if let Some(points) = spots {
+            free.extend(points.filter(|&at| self.interaction_point_free(id, at)));
+            melee = Some(free);
         }
         let _span = self
             .planning_probe
