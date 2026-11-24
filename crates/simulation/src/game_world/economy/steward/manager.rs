@@ -6,15 +6,6 @@ use crate::{BuildingKind, GameWorld, UnitKind, VILLAGE_RULES};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, WorldPosition};
 use std::collections::BTreeMap;
 
-/// Failed job searches for one idle villager: each retry waits twice as long
-/// (one to 32 visits), so a domain without work does not search again every
-/// second for each of its idle villagers.
-#[derive(Clone, Copy, Debug, Default)]
-pub(super) struct Unemployed {
-    pub(super) tries: u8,
-    pub(super) retry_at: u64,
-}
-
 /// A point just outside the TownCenter footprint, on the side facing `from`. The
 /// TownCenter centre itself lies inside its own footprint and cannot be walked to.
 fn arrival_point(center: WorldPosition, from: WorldPosition) -> WorldPosition {
@@ -450,6 +441,8 @@ impl GameWorld {
             home.unemployed
                 .retain(|worker, _| lookup.get(worker).is_some_and(|&i| units[i].state.hp > 0));
         }
+        let offer = self.steward_offer(s);
+        s.offer = Some(offer);
         let after = s.home.worker_after;
         let split = after.map_or(0, |id| s.units.partition_point(|u| u.id <= id));
         let ids: Vec<_> = s.units[split..]
@@ -462,11 +455,12 @@ impl GameWorld {
                 continue;
             }
             // A villager no job was found for waits out its own retry
-            // interval instead of repeating the same failed search each visit.
+            // interval, and after its second failure searches again only
+            // once the domain offers something new (`steward_offer`).
             if self.economy.steward_homes[&id]
                 .unemployed
                 .get(&worker)
-                .is_some_and(|u| u.retry_at > now)
+                .is_some_and(|u| u.retry_at > now || (u.tries >= 2 && u.offer == offer))
             {
                 continue;
             }
@@ -479,6 +473,7 @@ impl GameWorld {
             drop(span);
             s.avoid = None;
             if let Some(kind) = job {
+                s.forget_jobs();
                 self.economy.stewards.relocated.remove(&worker);
                 if let Some(home) = self.economy.steward_homes.get_mut(&id) {
                     home.unemployed.remove(&worker);
@@ -490,6 +485,7 @@ impl GameWorld {
                     let entry = home.unemployed.entry(worker).or_default();
                     entry.tries = entry.tries.saturating_add(1);
                     entry.retry_at = now + (period << (entry.tries - 1).min(5));
+                    entry.offer = offer;
                 }
                 // The search ran and found no work for this villager here.
                 unemployed.push(worker);

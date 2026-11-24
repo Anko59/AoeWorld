@@ -123,21 +123,18 @@ impl GameWorld {
     pub(super) fn steward_reclaim_farm(
         &mut self,
         worker: EntityId,
-        s: &Snapshot,
+        s: &mut Snapshot,
         budget: &mut Budget,
         work: &mut StewardWork,
     ) -> bool {
+        let _span = self.steward_span("steward_j_reclaim_farm");
         let Some(unit) = self.unit(worker) else {
             return false;
         };
         let from = unit.position.tile_floor();
         // A completed farm's builder may still be retrying its work spot.
         // Preserve that farmer's claim as well as ordinary gather reservations.
-        let mut attended: BTreeSet<_> = s
-            .units
-            .iter()
-            .filter_map(|u| self.economy.builders.get(&u.id).map(|t| t.building))
-            .collect();
+        let mut attended: BTreeSet<_> = self.steward_attendance(s).into_keys().collect();
         attended.extend(
             self.economy.steward_homes[&s.steward]
                 .held_jobs
@@ -191,6 +188,7 @@ impl GameWorld {
         budget: &mut Budget,
         work: &mut StewardWork,
     ) -> bool {
+        let _span = self.steward_span("steward_j_food");
         if !s.complete {
             return false;
         }
@@ -245,7 +243,7 @@ impl GameWorld {
             })
             .map(|b| (b.id, b.footprint))
             .collect();
-        if anchors.is_empty() {
+        if anchors.is_empty() || s.offer.is_some_and(|o| s.home.farms_full == Some(o)) {
             return false;
         }
         // Search farm cells first. Expansion sites are eligible only once
@@ -317,6 +315,11 @@ impl GameWorld {
                 return true;
             }
         }
+        // Every slot failed: the next search waits for the domain to change.
+        s.home.farms_full = s.offer;
+        if let Some(home) = self.economy.steward_homes.get_mut(&s.steward) {
+            home.farms_full = s.offer;
+        }
         false
     }
 
@@ -337,7 +340,16 @@ impl GameWorld {
             return false;
         }
         let rect = TileRect::from_xywh(tile.x, tile.y, rules.side, rules.depth);
-        if !s.home.covers(rect, 0)
+        // A slot under a known Farm, Mill or drop-off is refused by placement
+        // anyway: skip it before the terrain and occupancy checks.
+        let overlaps = |o: TileRect| {
+            o.min.x < rect.max.x
+                && rect.min.x < o.max.x
+                && o.min.y < rect.max.y
+                && rect.min.y < o.max.y
+        };
+        if s.buildings.iter().any(|b| overlaps(b.footprint))
+            || !s.home.covers(rect, 0)
             || self.validate_explored_footprint(s.player, rect).is_err()
             || self
                 .validate_building_placement(s.player, kind, tile)

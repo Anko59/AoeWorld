@@ -171,11 +171,13 @@ fn a_new_shelter_behind_the_scan_cursor_still_counts_its_residents() {
         },
     )
     .unwrap();
+    // Houses outside the domain fill one visit's sweep (walls are not swept).
     for i in 0..crate::STEWARD_RULES.building_visits_per_domain + 1 {
+        let (x, y) = (i as i32 % 20, i as i32 / 20);
         w.insert_building(
             PlayerId(0),
-            BuildingKind::PalisadeWall,
-            aoe_core::TileRect::from_xywh(212 + i as i32 % 40, 4 + i as i32 / 40, 1, 1),
+            BuildingKind::House,
+            aoe_core::TileRect::from_xywh(212 + 2 * x, 4 + 2 * y, 2, 2),
             true,
         )
         .unwrap();

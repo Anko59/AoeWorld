@@ -33,6 +33,14 @@ pub(super) struct Snapshot {
     pub offers: [Vec<aoe_map::ResourceNode>; 4],
     /// Exhausted ore probes are shared by workers for this pass only.
     pub ore_misses: [bool; 4],
+    /// Per-visit memos of the job search, dropped whenever a job is given
+    /// (`forget_jobs`): builders per building, idle unloaded villagers with
+    /// their tiles, and the starting-village rule.
+    pub attendance: Option<std::collections::BTreeMap<EntityId, usize>>,
+    pub helpers: Option<Vec<(EntityId, aoe_core::TileCoord)>>,
+    pub starting_village: Option<bool>,
+    /// This visit's domain offer, once the job pass has computed it.
+    pub offer: Option<u64>,
 }
 /// The kinds a Steward pass reads: drop-offs (Town Centers, camps, Mills,
 /// Docks), Houses and Farms. Villager training happens at Town Centers.
@@ -43,14 +51,26 @@ fn steward_reads(kind: BuildingKind) -> bool {
     ) || kind.rules().accepts.iter().any(|&accepts| accepts)
 }
 
+impl Snapshot {
+    /// A job was given: builders, idle helpers and housing are read again.
+    pub fn forget_jobs(&mut self) {
+        (self.attendance, self.helpers, self.starting_village) = (None, None, None);
+    }
+}
+
 impl GameWorld {
-    /// A new building joins every domain covering it, sweep or not.
+    /// A new building of a kind the passes read joins every domain covering
+    /// it, sweep or not.
     pub(crate) fn steward_building_added(
         &mut self,
         id: EntityId,
         player: PlayerId,
+        kind: BuildingKind,
         footprint: aoe_core::TileRect,
     ) {
+        if !steward_reads(kind) {
+            return;
+        }
         for home in self.economy.steward_homes.values_mut() {
             if home.player == player && home.covers(footprint, 0) {
                 home.building_scan.known.insert(id);
@@ -102,7 +122,10 @@ impl GameWorld {
         };
         // One census sweep after activation or a zone change; afterwards the
         // member list is kept by events and no visit walks the box again.
+        let span = self.steward_span("steward_census");
         let complete_units = home.census_done || self.steward_census(id, &home, player, work);
+        drop(span);
+        let span = self.steward_span("steward_members_copy");
         let mut units = Vec::new();
         let mut boats = Vec::new();
         let mut gone = Vec::new();
@@ -132,6 +155,8 @@ impl GameWorld {
                 home.covers(b.footprint, 0)
             }
         };
+        drop(span);
+        let span = self.steward_span("steward_building_sweep");
         if !scan.swept {
             let cursor = scan.after;
             let first_kind = cursor.map_or(BuildingKind::TownCenter, |(kind, _)| kind);
@@ -139,6 +164,8 @@ impl GameWorld {
                 .economy
                 .dropoffs
                 .range((player, first_kind)..=(player, BuildingKind::Road))
+                // Walls, roads, towers and military buildings are never read.
+                .filter(|((_, kind), _)| steward_reads(*kind))
                 .flat_map(|((_, kind), ids)| {
                     let start = cursor
                         .filter(|(previous, _)| previous == kind)
@@ -156,7 +183,7 @@ impl GameWorld {
             for (kind, id) in batch {
                 work.building_visits += 1;
                 scan.after = Some((kind, id));
-                if self.building(id).is_some_and(|b| covers(&b)) {
+                if self.economy.buildings.get(&id).is_some_and(covers) {
                     scan.known.insert(id);
                 }
             }
@@ -167,9 +194,11 @@ impl GameWorld {
         }
         // Read current state, not stale queue/garrison copies from prior slices.
         // Ownership, place, garrison and queue lengths are read from the
-        // stored building; only the kinds a pass reads are brought up to the
-        // phase clock and copied (walls, roads, towers and military
-        // buildings are counted for their garrisons, never copied).
+        // stored building, which is brought up to the phase clock and copied.
+        // Only the kinds a pass reads are known: villagers garrisoned in a
+        // tower or castle do not count towards the domain's villagers.
+        drop(span);
+        let span = self.steward_span("steward_building_copy");
         let stored = &self.economy.buildings;
         scan.known.retain(|id| {
             stored
@@ -191,6 +220,7 @@ impl GameWorld {
                 buildings.push(b.into_owned());
             }
         }
+        drop(span);
         let complete_buildings = scan.swept;
         if let Some(h) = self.economy.steward_homes.get_mut(&id) {
             h.building_scan = scan;
@@ -226,6 +256,10 @@ impl GameWorld {
             farm_first: false,
             offers: Default::default(),
             ore_misses: [false; 4],
+            attendance: None,
+            helpers: None,
+            starting_village: None,
+            offer: None,
         })
     }
 }

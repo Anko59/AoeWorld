@@ -78,6 +78,7 @@ impl GameWorld {
         budget: &mut Budget,
         work: &mut StewardWork,
     ) -> bool {
+        let _span = self.steward_span("steward_j_build_local");
         let PlacementSpec {
             kind,
             near,

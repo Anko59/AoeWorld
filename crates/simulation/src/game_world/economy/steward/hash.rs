@@ -69,6 +69,7 @@ impl Economy {
             if let Some(site) = home.farm_after {
                 h.update(&(site as u64).to_le_bytes());
             }
+            h.update(&home.farms_full.unwrap_or(u64::MAX).to_le_bytes());
             h.update(&[u8::from(home.repair_after.is_some())]);
             if let Some(farm) = home.repair_after {
                 h.update(&farm.0.to_le_bytes());
@@ -102,6 +103,7 @@ impl Economy {
                 h.update(&id.0.to_le_bytes());
                 h.update(&[u.tries]);
                 h.update(&u.retry_at.to_le_bytes());
+                h.update(&u.offer.to_le_bytes());
             }
             for (id, stall) in &home.stalls {
                 h.update(&id.0.to_le_bytes());

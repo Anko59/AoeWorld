@@ -25,6 +25,13 @@ impl Search {
         self.refused.remove(&worker);
     }
 
+    /// The discovered nodes, independent of their queue order.
+    pub(super) fn candidate_digest(&self) -> u64 {
+        self.candidates.iter().flatten().fold(0u64, |sum, node| {
+            sum.wrapping_add(node.id.wrapping_mul(0x9e37_79b9_7f4a_7c15).rotate_left(29))
+        })
+    }
+
     pub(super) fn clear_workers(&mut self) -> Vec<EntityId> {
         std::mem::take(&mut self.refused).into_keys().collect()
     }
@@ -191,6 +198,7 @@ impl GameWorld {
         budget: &mut Budget,
         work: &mut StewardWork,
     ) -> Option<ResourceNode> {
+        let _span = self.steward_span("steward_j_camp_resource");
         let from = self.unit(worker)?.position.tile_floor();
         let anchors: Vec<_> = s
             .buildings
@@ -302,6 +310,7 @@ impl GameWorld {
         budget: &mut Budget,
         work: &mut StewardWork,
     ) -> Option<ResourceNode> {
+        let _span = self.steward_span("steward_j_resource");
         let ore = matches!(kind, ResourceKind::Gold | ResourceKind::Stone);
         if ore && s.ore_misses[kind as usize] {
             return None;
