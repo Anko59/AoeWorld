@@ -1,10 +1,15 @@
-//! Query-local lazy fixed halos. No generator mutation, global state, world
-//! array, or speculative source read. Entries die with one point or chunk.
+//! Lazy fixed halos. No generator mutation, world array, or speculative
+//! source read. Chunk and one-off point entries die with their query; the one
+//! piece of state that outlives a query is each thread's shared point tables,
+//! tagged by tile, which serve later default-policy points with the same pure
+//! per-tile values.
 use super::*;
 use std::cell::RefCell;
 
 #[derive(Clone, Copy, Default)]
 struct Entry {
+    /// The tile a tagged (shared) table slot currently holds.
+    at: Option<TileCoord>,
     base: Option<Tile>,
     candidate: Option<Option<ResourceNode>>,
     dressing_roll: Option<u64>,
@@ -14,6 +19,7 @@ struct Entry {
     density: Option<(Option<u16>, crate::landscape_patches::DensitySample)>,
     reserved: Option<bool>,
     reservations: Option<Reservations>,
+    shore: Option<Shore>,
 }
 
 /// One 192-tile cell and its wildness.
@@ -27,33 +33,77 @@ type CellWildness = ((i64, i64), u16);
 
 /// A water kind, with its dense provenance when no provider produced it.
 type MemoWater = (crate::WaterKind, Option<crate::terrain::Provenance>);
+/// A water slot's tile and kind.
+type TileWater = (TileCoord, MemoWater);
+/// Patch membership bits of one area: its origin and side.
+type Members = (TileCoord, i32, Vec<u64>);
 
 pub(super) type PointMemo<'a> = Memo<'a, 25, 361>;
 pub(super) type ChunkMemo<'a> = Memo<'a, 1296, 2500>;
+/// Tagged tables, one slot per tile of a 64-tile window: every read of one
+/// point evaluation lies within ten tiles of it, so no two collide.
+pub(super) type SharedMemo<'a> = Memo<'a, SHARED_SLOTS, SHARED_SLOTS>;
+const SHARED_SIDE: i32 = 64;
+pub(super) const SHARED_SLOTS: usize = (SHARED_SIDE * SHARED_SIDE) as usize;
+/// Shared tables keep at most this many resource patch origins (a linear list).
+const SHARED_ORIGINS: usize = 64;
 
 /// Base tiles keep a two-tile halo. Water kinds keep seven more: the depth
 /// scan of a water tile reads water up to seven tiles away.
 const WATER_HALO: i64 = shore::DEPTH_REACH as i64;
+
+/// The per-tile tables of a memo, owned by one query or lent by a thread.
+pub(super) struct Tables<const N: usize, const W: usize> {
+    entries: RefCell<Box<[Entry]>>,
+    cells: RefCell<[Option<CellWildness>; 16]>,
+    cliffs: RefCell<[Option<CliffCell>; CLIFF_CACHE_SIZE]>,
+    /// Water kinds by tile; the dense provenance spares a base tile a second sample.
+    water: RefCell<Box<[Option<TileWater>]>>,
+    origins: RefCell<resources::Origins>,
+    /// Patch membership of one area (its origin and side), built on demand.
+    members: RefCell<Option<Members>>,
+    /// Ground variety lattice corners, shared along the chunk's rows.
+    pub(super) corners: RefCell<variety::Corners>,
+}
+
+impl<const N: usize, const W: usize> Tables<N, W> {
+    pub(super) fn new(generator: &MapChunkGenerator) -> Self {
+        Self {
+            entries: RefCell::new(vec![Entry::default(); N].into_boxed_slice()),
+            cells: RefCell::new([None; 16]),
+            cliffs: RefCell::new([None; CLIFF_CACHE_SIZE]),
+            water: RefCell::new(vec![None; W].into_boxed_slice()),
+            origins: RefCell::new(resources::Origins::new(generator)),
+            members: RefCell::new(None),
+            corners: RefCell::new(variety::Corners::default()),
+        }
+    }
+}
+
+enum Hold<'a, T> {
+    Own(T),
+    Lent(&'a T),
+}
 
 pub(super) struct Memo<'a, const N: usize, const W: usize> {
     generator: &'a MapChunkGenerator,
     origin: TileCoord,
     side: i64,
     cancelled: &'a dyn Fn() -> bool,
-    entries: RefCell<[Entry; N]>,
-    cells: RefCell<[Option<CellWildness>; 16]>,
-    cliffs: RefCell<[Option<CliffCell>; CLIFF_CACHE_SIZE]>,
-    /// Water kinds; the dense provenance spares a base tile a second sample.
-    water: RefCell<[Option<MemoWater>; W]>,
-    shores: RefCell<[Option<Shore>; N]>,
     /// A point query asks the source whether any water is in reach before
     /// sampling its neighbors; a chunk shares those samples between tiles.
     probe_reach: bool,
-    origins: RefCell<resources::Origins>,
-    /// Patch membership of the memo area, built on the first candidate query.
-    members: RefCell<Option<Vec<u64>>>,
-    /// Ground variety lattice corners, shared along the chunk's rows.
-    pub(super) corners: RefCell<variety::Corners>,
+    tables: Hold<'a, Tables<N, W>>,
+}
+
+impl<const N: usize, const W: usize> std::ops::Deref for Memo<'_, N, W> {
+    type Target = Tables<N, W>;
+    fn deref(&self) -> &Tables<N, W> {
+        match &self.tables {
+            Hold::Own(tables) => tables,
+            Hold::Lent(tables) => tables,
+        }
+    }
 }
 
 impl<'a> PointMemo<'a> {
@@ -67,15 +117,32 @@ impl<'a> PointMemo<'a> {
             origin: TileCoord::new(center.x.saturating_sub(2), center.y.saturating_sub(2)),
             side: 5,
             cancelled,
-            entries: RefCell::new([Entry::default(); 25]),
-            cells: RefCell::new([None; 16]),
-            cliffs: RefCell::new([None; CLIFF_CACHE_SIZE]),
-            water: RefCell::new([None; 361]),
-            shores: RefCell::new([None; 25]),
             probe_reach: true,
-            origins: RefCell::new(resources::Origins::new(generator)),
-            members: RefCell::new(None),
-            corners: RefCell::new(variety::Corners::default()),
+            tables: Hold::Own(Tables::new(generator)),
+        }
+    }
+}
+
+impl<'a> SharedMemo<'a> {
+    /// A point memo over a thread's tables for this generator's default policy.
+    pub(super) fn shared(
+        generator: &'a MapChunkGenerator,
+        cancelled: &'a dyn Fn() -> bool,
+        tables: &'a Tables<SHARED_SLOTS, SHARED_SLOTS>,
+    ) -> Self {
+        {
+            let mut origins = tables.origins.borrow_mut();
+            if origins.len() > SHARED_ORIGINS {
+                *origins = resources::Origins::new(generator);
+            }
+        }
+        Self {
+            generator,
+            origin: TileCoord::new(0, 0),
+            side: i64::from(SHARED_SIDE),
+            cancelled,
+            probe_reach: true,
+            tables: Hold::Lent(tables),
         }
     }
 }
@@ -91,21 +158,28 @@ impl<'a> ChunkMemo<'a> {
             origin: TileCoord::new(origin.x.saturating_sub(2), origin.y.saturating_sub(2)),
             side: i64::from(CHUNK_TILES) + 4,
             cancelled,
-            entries: RefCell::new([Entry::default(); 1296]),
-            cells: RefCell::new([None; 16]),
-            cliffs: RefCell::new([None; CLIFF_CACHE_SIZE]),
-            water: RefCell::new([None; 2500]),
-            shores: RefCell::new([None; 1296]),
             probe_reach: false,
-            origins: RefCell::new(resources::Origins::new(generator)),
-            members: RefCell::new(None),
-            corners: RefCell::new(variety::Corners::default()),
+            tables: Hold::Own(Tables::new(generator)),
         }
     }
 }
 
 impl<const N: usize, const W: usize> Memo<'_, N, W> {
+    /// Shared tables address slots by tile modulo the window and tag them;
+    /// a compile-time choice, so chunk and one-off memos carry no tag tests.
+    const TAGGED: bool = N == SHARED_SLOTS;
     fn index(&self, position: TileCoord) -> Option<usize> {
+        if Self::TAGGED {
+            let index = tagged_slot(position);
+            let mut entries = self.entries.borrow_mut();
+            if entries[index].at != Some(position) {
+                entries[index] = Entry {
+                    at: Some(position),
+                    ..Entry::default()
+                };
+            }
+            return Some(index);
+        }
         let x = i64::from(position.x) - i64::from(self.origin.x);
         let y = i64::from(position.y) - i64::from(self.origin.y);
         ((0..self.side).contains(&x) && (0..self.side).contains(&y))
@@ -146,7 +220,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         }
         let result = evaluate()?;
         if let (Some(index), Some((sample, _))) = (index, result) {
-            self.entries.borrow_mut()[index].landscape = Some(sample);
+            self.put(index, position, |entry| entry.landscape = Some(sample));
         }
         Ok(result)
     }
@@ -164,7 +238,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
             position.y,
         ) ^ self.generator.procedural_seed.rotate_left(29);
         if let Some(index) = index {
-            self.entries.borrow_mut()[index].dressing_roll = Some(roll);
+            self.put(index, position, |entry| entry.dressing_roll = Some(roll));
         }
         roll
     }
@@ -209,7 +283,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         if let Some(index) = index
             && let Some(base) = result
         {
-            self.entries.borrow_mut()[index].base = Some(base);
+            self.put(index, position, |entry| entry.base = Some(base));
         }
         Ok(result)
     }
@@ -254,9 +328,9 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
             return Ok(candidate);
         }
         if let Some(index) = index
-            && !self.member(index)
+            && !self.member(position)
         {
-            self.entries.borrow_mut()[index].candidate = Some(None);
+            self.put(index, position, |entry| entry.candidate = Some(None));
             return Ok(None);
         }
         let candidate = self
@@ -264,7 +338,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
             .borrow_mut()
             .candidate_with(position, || self.base(position))?;
         if let Some(index) = index {
-            self.entries.borrow_mut()[index].candidate = Some(candidate);
+            self.put(index, position, |entry| entry.candidate = Some(candidate));
         }
         Ok(candidate)
     }
@@ -282,17 +356,45 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         }
         let reservations = compute()?;
         if let Some(index) = index {
-            self.entries.borrow_mut()[index].reservations = Some(reservations);
+            self.put(index, position, |entry| {
+                entry.reservations = Some(reservations)
+            });
         }
         Ok(reservations)
     }
-    fn member(&self, index: usize) -> bool {
+    /// Whether a patch may own the tile; `true` when it is not in the area.
+    fn member(&self, position: TileCoord) -> bool {
+        // Shared tables keep their candidates and patch origins across points,
+        // so a per-area bitmap would only be rebuilt as points move.
+        if Self::TAGGED {
+            return true;
+        }
+        let (origin, side) = (self.origin, i32::try_from(self.side).unwrap_or(0));
         let mut members = self.members.borrow_mut();
-        let bits = members.get_or_insert_with(|| {
-            let side = i32::try_from(self.side).unwrap_or(0);
-            self.origins.borrow_mut().members(self.origin, side)
-        });
-        bits[index / 64] & (1 << (index % 64)) != 0
+        if members
+            .as_ref()
+            .is_none_or(|(at, known, _)| (*at, *known) != (origin, side))
+        {
+            let bits = self.origins.borrow_mut().members(origin, side);
+            *members = Some((origin, side, bits));
+        }
+        let x = i64::from(position.x) - i64::from(origin.x);
+        let y = i64::from(position.y) - i64::from(origin.y);
+        let side = i64::from(side);
+        if !(0..side).contains(&x) || !(0..side).contains(&y) {
+            return true;
+        }
+        let index = (y * side + x) as usize;
+        members
+            .as_ref()
+            .is_some_and(|(_, _, bits)| bits[index / 64] & (1 << (index % 64)) != 0)
+    }
+    /// Store into a slot only while it still holds `position`.
+    fn put(&self, index: usize, position: TileCoord, update: impl FnOnce(&mut Entry)) {
+        let mut entries = self.entries.borrow_mut();
+        if !Self::TAGGED || entries[index].at == Some(position) {
+            update(&mut entries[index]);
+        }
     }
     pub(super) fn reserved(&self, position: TileCoord) -> Result<bool, EnvironmentPageError> {
         let index = self.index(position);
@@ -303,7 +405,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         }
         let reserved = self.reserved_uncached(position)?;
         if let Some(index) = index {
-            self.entries.borrow_mut()[index].reserved = Some(reserved);
+            self.put(index, position, |entry| entry.reserved = Some(reserved));
         }
         Ok(reserved)
     }
@@ -359,41 +461,13 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
     }
 }
 
-impl<const N: usize, const W: usize> super::super::LandscapeCache for Memo<'_, N, W> {
-    fn base(&self, tile: TileCoord) -> Result<Tile, EnvironmentPageError> {
-        Memo::base(self, tile)?.ok_or(EnvironmentPageError::Invalid)
-    }
-    fn wildness(&self, cx: i64, cy: i64) -> Result<u16, EnvironmentPageError> {
-        Memo::wildness(self, cx, cy)
-    }
-    fn input(&self, tile: TileCoord) -> Option<crate::landscape_patches::Input> {
-        self.entries.borrow()[self.index(tile)?].input
-    }
-    fn set_input(&self, tile: TileCoord, input: crate::landscape_patches::Input) {
-        if let Some(index) = self.index(tile) {
-            self.entries.borrow_mut()[index].input = Some(input);
-        }
-    }
-    fn density(
-        &self,
-        tile: TileCoord,
-        explicit: Option<u16>,
-    ) -> Option<crate::landscape_patches::DensitySample> {
-        let (key, density) = self.entries.borrow()[self.index(tile)?].density?;
-        (key == explicit).then_some(density)
-    }
-    fn set_density(
-        &self,
-        tile: TileCoord,
-        explicit: Option<u16>,
-        density: crate::landscape_patches::DensitySample,
-    ) {
-        if let Some(index) = self.index(tile) {
-            self.entries.borrow_mut()[index].density = Some((explicit, density));
-        }
-    }
+/// A tile's slot in the shared window.
+fn tagged_slot(position: TileCoord) -> usize {
+    (position.y.rem_euclid(SHARED_SIDE) * SHARED_SIDE + position.x.rem_euclid(SHARED_SIDE)) as usize
 }
 
+#[path = "memo/cache.rs"]
+mod cache;
 #[path = "memo/fishing.rs"]
 mod fishing;
 #[path = "memo/shore.rs"]

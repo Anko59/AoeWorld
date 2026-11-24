@@ -62,6 +62,9 @@ const fn band() -> [(i32, i32, i32); 160] {
 
 impl<const N: usize, const W: usize> Memo<'_, N, W> {
     fn water_index(&self, position: TileCoord) -> Option<usize> {
+        if Self::TAGGED {
+            return Some(tagged_slot(position));
+        }
         let side = self.side + 2 * WATER_HALO;
         let x = i64::from(position.x) - i64::from(self.origin.x) + WATER_HALO;
         let y = i64::from(position.y) - i64::from(self.origin.y) + WATER_HALO;
@@ -78,7 +81,8 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         }
         let index = self.water_index(position);
         if let Some(index) = index
-            && let Some((kind, _)) = self.water.borrow()[index]
+            && let Some((at, (kind, _))) = self.water.borrow()[index]
+            && at == position
         {
             return Ok(Some(kind));
         }
@@ -104,7 +108,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         if let Some(index) = index
             && let Some(water) = water
         {
-            self.water.borrow_mut()[index] = Some(water);
+            self.water.borrow_mut()[index] = Some((position, water));
         }
         Ok(water.map(|(kind, _)| kind))
     }
@@ -117,13 +121,14 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
     ) -> (WaterKind, crate::terrain::Provenance) {
         let index = self.water_index(position);
         if let Some(index) = index
-            && let Some((kind, Some(provenance))) = self.water.borrow()[index]
+            && let Some((at, (kind, Some(provenance)))) = self.water.borrow()[index]
+            && at == position
         {
             return (kind, provenance);
         }
         let water = self.generator.dense_water(position);
         if let Some(index) = index {
-            self.water.borrow_mut()[index] = Some((water.0, Some(water.1)));
+            self.water.borrow_mut()[index] = Some((position, (water.0, Some(water.1))));
         }
         water
     }
@@ -134,15 +139,51 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
     ) -> Result<Shore, EnvironmentPageError> {
         let index = self.index(position);
         if let Some(index) = index
-            && let Some(shore) = self.shores.borrow()[index]
+            && let Some(shore) = self.entries.borrow()[index].shore
         {
             return Ok(shore);
         }
         let shore = self.classify(position)?;
         if let Some(index) = index {
-            self.shores.borrow_mut()[index] = Some(shore);
+            self.put(index, position, |entry| entry.shore = Some(shore));
         }
         Ok(shore)
+    }
+
+    /// The water kind `(dx, dy)` from `position`; `window` is its offset
+    /// in, and the side of, an untagged water table.
+    #[inline(always)]
+    fn near_water(
+        &self,
+        position: TileCoord,
+        (wx, wy, side): (i64, i64, i64),
+        dx: i32,
+        dy: i32,
+    ) -> Result<Option<WaterKind>, EnvironmentPageError> {
+        if Self::TAGGED {
+            if let (Some(x), Some(y)) = (position.x.checked_add(dx), position.y.checked_add(dy)) {
+                let near = TileCoord::new(x, y);
+                if let Some((at, (kind, _))) = self.water.borrow()[tagged_slot(near)]
+                    && at == near
+                {
+                    return Ok(Some(kind));
+                }
+            }
+        } else {
+            // An untagged slot only ever holds the tile its offset names.
+            let (x, y) = (wx + i64::from(dx), wy + i64::from(dy));
+            if (0..side).contains(&x)
+                && (0..side).contains(&y)
+                && let Some((_, (kind, _))) = self.water.borrow()[(y * side + x) as usize]
+            {
+                return Ok(Some(kind));
+            }
+        }
+        let (Some(x), Some(y)) = (position.x.checked_add(dx), position.y.checked_add(dy)) else {
+            return Ok(None);
+        };
+        let near = TileCoord::new(x, y);
+        self.water(near)
     }
 
     fn classify(&self, position: TileCoord) -> Result<Shore, EnvironmentPageError> {
@@ -153,23 +194,11 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
             return Ok(Shore::None);
         }
         // Scans read hundreds of known kinds; take them straight from the
-        // halo and fall back to the full query only for a missing one.
+        // table and fall back to the full query only for a missing one.
         let side = self.side + 2 * WATER_HALO;
         let wx = i64::from(position.x) - i64::from(self.origin.x) + WATER_HALO;
         let wy = i64::from(position.y) - i64::from(self.origin.y) + WATER_HALO;
-        let neighbor = |dx: i32, dy: i32| {
-            let (x, y) = (wx + i64::from(dx), wy + i64::from(dy));
-            if (0..side).contains(&x)
-                && (0..side).contains(&y)
-                && let Some((kind, _)) = self.water.borrow()[(y * side + x) as usize]
-            {
-                return Ok(Some(kind));
-            }
-            match (position.x.checked_add(dx), position.y.checked_add(dy)) {
-                (Some(x), Some(y)) => self.water(TileCoord::new(x, y)),
-                _ => Ok(None),
-            }
-        };
+        let window = (wx, wy, side);
         let key = self.generator.shoreline_key();
         let step = |domain: u64, narrow: i64, wide: i64| {
             let value = shoreline::variation(key, domain, position, WIDTH_LATTICE_TILES);
@@ -192,7 +221,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
                     if distance > reach {
                         break;
                     }
-                    match neighbor(dx, dy)? {
+                    match self.near_water(position, window, dx, dy)? {
                         None | Some(WaterKind::None) => {}
                         Some(WaterKind::River)
                             if distance <= *bank.get_or_insert_with(|| width(23, 0, i64::MAX)) =>
@@ -224,7 +253,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
                     {
                         break;
                     }
-                    if neighbor(dx, dy)? == Some(WaterKind::None) {
+                    if self.near_water(position, window, dx, dy)? == Some(WaterKind::None) {
                         return Ok(if distance <= width(7, 0, i64::MAX) {
                             Shore::Shallow
                         } else {
@@ -239,7 +268,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
                     if distance > REACH[0] {
                         break;
                     }
-                    if neighbor(dx, dy)? == Some(WaterKind::None) {
+                    if self.near_water(position, window, dx, dy)? == Some(WaterKind::None) {
                         return Ok(Shore::Margin);
                     }
                 }

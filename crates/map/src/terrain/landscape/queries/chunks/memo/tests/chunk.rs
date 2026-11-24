@@ -75,10 +75,10 @@ fn production_chunk_matches_standalone_point_bytes_with_bounded_source_work() {
         }
     }
     let standalone_calls = source.calls.load(Ordering::Relaxed) - chunk_calls;
-    // Resource patches read base tiles lazily, so standalone points already
-    // share little; the chunk halo still reads each source tile at most once.
+    // Default points share one thread's tagged tables, so a chunk's worth of
+    // points reads each source tile once, like the chunk halo.
     assert!(
-        standalone_calls > chunk_calls,
+        standalone_calls <= chunk_calls,
         "point={standalone_calls} chunk={chunk_calls}"
     );
     assert_eq!(

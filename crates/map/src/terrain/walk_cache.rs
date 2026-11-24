@@ -102,6 +102,13 @@ pub(super) struct DerivedCaches {
     pub(super) pages: std::sync::Mutex<Option<PageMemo>>,
 }
 
+impl DerivedCaches {
+    /// The process-unique identity of these caches and their generator.
+    pub(super) fn id(&self) -> u64 {
+        self.id
+    }
+}
+
 impl Default for DerivedCaches {
     fn default() -> Self {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);

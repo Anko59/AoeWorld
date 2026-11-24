@@ -19,6 +19,14 @@ use crate::{
     NativeHeightBand, ObjectKind, ResourceKind, ResourceNode, ResourceVisualFamily, SurfaceKind,
 };
 
+type SharedTables = memo::Tables<{ memo::SHARED_SLOTS }, { memo::SHARED_SLOTS }>;
+
+thread_local! {
+    /// The default-policy point tables of this thread's latest generator.
+    static SHARED_POINTS: std::cell::RefCell<Option<(u64, Box<SharedTables>)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 impl MapChunkGenerator {
     /// Assemble an explicit candidate from source/base terrain. Policies and
     /// reservations must be stable world-coordinate functions, including across
@@ -161,14 +169,49 @@ impl MapChunkGenerator {
         position: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<super::LandscapePoint>, EnvironmentPageError> {
+        let reserved_at = |at| self.landscape_reservations_at(at);
+        let memoize_rocks = PHYSICAL && !SURFACE_ONLY && crate::terrain::point_memo::SLOTS > 0;
+        // Native builds keep one tagged table set per thread and generator,
+        // so neighbouring default points share every per-tile value. A
+        // nested query on the same thread, or the browser, uses its own halo.
+        if crate::terrain::point_memo::SLOTS > 0 {
+            let id = self.derived.id();
+            let shared = SHARED_POINTS.with(|cell| {
+                let Ok(mut slot) = cell.try_borrow_mut() else {
+                    return None;
+                };
+                if slot.as_ref().is_none_or(|(owner, _)| *owner != id) {
+                    *slot = Some((id, Box::new(memo::Tables::new(self))));
+                }
+                let (_, tables) = slot.as_ref()?;
+                let memo = memo::SharedMemo::shared(self, cancelled, tables);
+                let composition = Composition {
+                    generator: self,
+                    memo: &memo,
+                    policy_at: &crate::terrain::landscape_dispatch::default_policy,
+                    reserved_at: &reserved_at,
+                    cancelled,
+                    memoize_rocks,
+                };
+                Some(self.evaluate_landscape_point_with_memo::<
+                    SURFACE_ONLY,
+                    PHYSICAL,
+                    { memo::SHARED_SLOTS },
+                    { memo::SHARED_SLOTS },
+                >(position, &composition, None))
+            });
+            if let Some(point) = shared {
+                return point;
+            }
+        }
         let memo = memo::PointMemo::new(self, position, cancelled);
         let composition = Composition {
             generator: self,
             memo: &memo,
             policy_at: &crate::terrain::landscape_dispatch::default_policy,
-            reserved_at: &|at| self.landscape_reservations_at(at),
+            reserved_at: &reserved_at,
             cancelled,
-            memoize_rocks: PHYSICAL && !SURFACE_ONLY && crate::terrain::point_memo::SLOTS > 0,
+            memoize_rocks,
         };
         self.evaluate_landscape_point_with_memo::<SURFACE_ONLY, PHYSICAL, 25, 361>(
             position,
