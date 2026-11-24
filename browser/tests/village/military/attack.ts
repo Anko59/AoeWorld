@@ -101,20 +101,33 @@ export async function militaryAttack(
   await expect
     .poll(async () => task(page, archer.id), { timeout: 10_000 })
     .not.toBe("Attacking");
-  const target = (await actors(page)).find((a) => a.id === scout.id);
+  // The Scout runs, so a click at a position read a moment earlier can land
+  // on the ground and become a Move order. Re-read and click again until the
+  // Archer takes the attack; a Move never counts as Attacking.
+  let target = (await actors(page)).find((a) => a.id === scout.id);
   if (!target) throw new Error("Enemy Scout gone before the Archer's order");
-  await page.mouse.click(target.x, target.y, { button: "right" });
   await expect
-    .poll(async () => task(page, archer.id), {
-      timeout: 10_000,
-      message: "the No Attack Archer attacks only on the explicit order",
-    })
+    .poll(
+      async () => {
+        const current = (await actors(page)).find((a) => a.id === scout.id);
+        if (!current) return "Scout gone";
+        if ((await task(page, archer.id)) === "Attacking") return "Attacking";
+        target = current;
+        await page.mouse.click(current.x, current.y, { button: "right" });
+        await page.waitForTimeout(1_500);
+        return task(page, archer.id);
+      },
+      {
+        timeout: 15_000,
+        message: "the No Attack Archer attacks only on the explicit order",
+      },
+    )
     .toBe("Attacking");
   await expect
     .poll(
       async () =>
         !(await actors(page)).some(
-          (a) => a.id === scout.id && a.hp >= target.hp,
+          (a) => a.id === scout.id && a.hp >= (target?.hp ?? 0),
         ),
       {
         timeout: 20_000,
