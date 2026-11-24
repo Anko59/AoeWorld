@@ -1,6 +1,12 @@
 //! Deterministic Steward rules, independent of machine speed and wall time.
-//! Work per visit follows events (idle villagers, arrivals, missing camps);
-//! no fixed count of orders, searches or sites bounds a visit.
+//! The per-visit counts of orders (64), resource searches (8) and site checks
+//! (32) are gone: orders, searches and site checks follow the visit's idle
+//! villagers and missing camps. Bounds that remain: support actions (training,
+//! houses, reseeds, farm repair) run only while fewer than 2 orders were
+//! issued this visit (`support_available`); each search funds a fixed node
+//! allowance (`node_credits`, 1,608 nodes) for the finder and cached offers;
+//! a census or building sweep visits at most 1,024 units and 2,048 buildings
+//! per visit, and runs only after activation or a zone change.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StewardRules {
     pub radius_tiles: i32,

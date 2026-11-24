@@ -66,6 +66,14 @@ impl Home {
     pub(super) fn cap(&self) -> usize {
         usize::from(self.settings.cap).min(STEWARD_RULES.max_villagers)
     }
+    /// The zone changed: the unit and building sweeps start again from the
+    /// first chunk and the first building.
+    pub(super) fn restart_sweeps(&mut self) {
+        self.census_done = false;
+        (self.scan_chunk, self.scan_offset) = (0, 0);
+        self.building_scan.swept = false;
+        self.building_scan.after = None;
+    }
     pub(super) fn contains(&self, at: WorldPosition) -> bool {
         let dx = i64::from(at.x) - i64::from(self.center.x);
         let dy = i64::from(at.y) - i64::from(self.center.y);
@@ -203,9 +211,7 @@ impl GameWorld {
             if h.town_center != town_center {
                 h.walking = None;
                 h.regions = None;
-                h.census_done = false;
-                h.scan_chunk = 0;
-                h.scan_offset = 0;
+                h.restart_sweeps();
             }
             h.town_center = town_center;
             if let Some(center) = center {
@@ -293,7 +299,7 @@ impl GameWorld {
                     if let Some(home) = self.economy.steward_homes.get_mut(&member) {
                         home.walking = None;
                         home.regions = None;
-                        home.census_done = false;
+                        home.restart_sweeps();
                     }
                 }
             }

@@ -322,16 +322,8 @@ impl GameWorld {
             let Some(domains) = self.economy.stewards.by_player.get(&u.player) else {
                 continue;
             };
-            // Domains still sweeping their box find their units themselves:
-            // after a load, that sweep is the one pass over each box.
-            if domains.keys().all(|d| {
-                self.economy
-                    .steward_homes
-                    .get(d)
-                    .is_none_or(|h| !h.census_done)
-            }) {
-                continue;
-            }
+            // Applied during a census sweep too: a unit that steps past the
+            // sweep's cursor is still placed by its own tile change.
             let tile = u.position.tile_floor();
             if self
                 .economy

@@ -132,6 +132,16 @@ fn a_spent_tree_continues_its_productive_local_woodline() {
         u64::from(tile.x.abs_diff(next.x)).pow(2) + u64::from(tile.y.abs_diff(next.y)).pow(2)
             <= radius * radius
     );
+    // A camp near the woodline may already stand (site checks are no longer
+    // rationed per visit, so it was built while the first tree was cut):
+    // remove it, so the spent tree really needs support construction.
+    let camps: Vec<_> = w
+        .player_buildings_of(PlayerId(0), BuildingKind::LumberCamp)
+        .map(|b| b.id)
+        .collect();
+    for camp in camps {
+        w.remove_building(camp);
+    }
     let mut repaired = false;
     let mut resumed = false;
     let mut idle = 0;
@@ -159,10 +169,8 @@ fn a_spent_tree_continues_its_productive_local_woodline() {
                 .is_some_and(|left| left > 0)
         );
     }
-    // A camp near the woodline may already stand (site checks are no longer
-    // rationed per visit); support construction, when needed, resumes it.
     assert!(
-        gathered && (!repaired || resumed),
+        gathered && repaired && resumed,
         "support construction resumes the same productive woodline"
     );
 }

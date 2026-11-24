@@ -178,9 +178,10 @@ fn a_crowded_box_counts_builders_from_earlier_visits_against_the_team_limit() {
             .filter(|task| task.building == foundation)
             .count();
         // Members are kept by events, so 1,200 soldiers in the box no longer
-        // leave the census partial: the starting-village team limit for a
-        // 2x2 House (2 * (2 + 2) + 4) holds, counting the earlier builders.
-        assert!(count <= 12, "{count} builders exceed the team limit");
+        // leave the census partial: the three builders count against the
+        // starting-village team limit of a 2x2 House (2 * (2 + 2) + 4 = 12),
+        // which leaves room for all eight idle villagers and no more exist.
+        assert_eq!(count, 11, "three builders plus the eight idle villagers");
     }
     assert!(
         !w.building(foundation).unwrap().is_complete(),
