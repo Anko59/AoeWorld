@@ -178,7 +178,8 @@ fn sleeping_dense_friends_preserve_the_budget_of_an_active_battle() {
 #[should_panic(expected = "missed wake: seeker")]
 fn the_acquisition_detector_rejects_an_unannounced_source_change() {
     let (mut w, ids) = quiet(true, 1);
-    w.advance();
+    // Asleep after its first turn, within a second.
+    advance(&mut w, 20);
     w.units[w.lookup[&ids[0]]].state.stance = aoe_core::CombatStance::NoAttack;
     w.advance();
 }

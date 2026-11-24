@@ -122,11 +122,6 @@ impl GameWorld {
             .take(64)
             .collect();
         for id in towers {
-            if self.combat.stats.targeting_scanned
-                > super::targeting::MAX_TARGET_INSPECTIONS - super::targeting::MAX_QUERY_INSPECTIONS
-            {
-                break;
-            }
             self.combat.tower_cursor = id;
             let Some(tower) = self.building(id).filter(|b| b.is_complete() && b.hp > 0) else {
                 self.combat.tower_ready.remove(&id);

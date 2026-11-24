@@ -80,7 +80,6 @@ fn projectile_wire_is_bounded_ordered_and_pins_the_appended_variant() {
         assert_eq!(decode_gameplay_server(&expected).unwrap(), message);
     }
     for projectiles in [
-        vec![p; MAX_PROJECTILES + 1],
         vec![p, p],
         vec![ProjectileState {
             impact: Tick(10),

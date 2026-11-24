@@ -19,6 +19,8 @@ fn enemies(w: &mut GameWorld, count: i32, x: i32, y: i32, spacing: i32) -> Vec<E
                 )
                 .unwrap();
             w.units[w.lookup[&id]].state.stance = aoe_core::CombatStance::StandGround;
+            // A direct write skips the stance order's wake.
+            w.combat.quiet.wake(id);
             id
         })
         .collect()

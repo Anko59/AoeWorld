@@ -74,3 +74,26 @@ fn retiring_a_connection_detaches_and_drops_all_three_callbacks() {
         WebSocket::CLOSING | WebSocket::CLOSED
     ));
 }
+
+#[wasm_bindgen_test]
+fn a_large_native_volley_keeps_each_live_effect_until_it_expires() {
+    use aoe_core::{Tick, WorldPosition};
+    use aoe_protocol::{ProjectileKind, ProjectileState};
+    let mut village = super::village::Village::default();
+    let at = WorldPosition::new(1024, 1024);
+    let shots: Vec<_> = (0..5000)
+        .map(|id| ProjectileState {
+            id,
+            attacker: None,
+            from: at,
+            to: at,
+            launched: Tick(10),
+            impact: Tick(20),
+            kind: ProjectileKind::Native(676),
+        })
+        .collect();
+    super::lifecycle::record_shots(&mut village, &shots, 11, 20);
+    assert_eq!(village.projectile_particles.len(), shots.len());
+    super::lifecycle::record_shots(&mut village, &[], 60, 20);
+    assert!(village.projectile_particles.is_empty());
+}

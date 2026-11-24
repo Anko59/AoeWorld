@@ -10,7 +10,11 @@ mod fights;
 mod gate;
 mod march;
 
-const RUNS: u64 = 8;
+/// Sixteen runs: a fight scene can end in one of two outcomes (test 3: the
+/// archer duel is won by one side or the other), and with eight runs one
+/// run changing outcome moved a mean by 0.125, over the 10% bound alone
+/// (11-24: watched 2 of 8 against unwatched 3 of 8 lost duels).
+const RUNS: u64 = 16;
 
 /// Both runs make every player of the scene a human seat, so automation
 /// treats them alike; only what the clients show differs. `Watched`: every

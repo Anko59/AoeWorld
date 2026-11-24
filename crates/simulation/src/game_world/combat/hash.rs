@@ -26,7 +26,6 @@ impl Combat {
             hash.update(&id.0.to_le_bytes());
             hash.update(&round.to_le_bytes());
         }
-        hash.update(&self.seeker_cursor.0.to_le_bytes());
         hash.update(&self.tower_cursor.0.to_le_bytes());
         hash.update(&(self.seekers.len() as u64).to_le_bytes());
         for id in &self.seekers {

@@ -71,7 +71,7 @@ limit (it is not a bad site) and stops placing buildings for
 | Buildings in one message (`MAX_ECONOMY_BUILDINGS`) | 4,096 | 16,384 | message: own, seen and remembered buildings | remaining buildings arrive in bounded later deliveries |
 | Gameplay frame (`gameplay::MAX_MESSAGE`) | 1 MiB | 16 MiB | message | encode fails |
 | Units in one message (`MAX_SUBSCRIBED_UNITS`) | 16,384 | 65,536 | message (subscribed region) | Error 413 instead of a tick |
-| Projectiles in one message | 4,096 | same; the server sends the first 4,096 | message | trimmed (shown, never simulated, on the client) |
+| Projectiles in one message | no count limit | no count limit | message (16 MiB gameplay frame) | every projectile in view is sent and drawn |
 | Animals in one message | 4,096 | same | message | cannot pass the world's 3,200 at 100 seats |
 | Resource changes in one message | 65,536 | same | message: under fog the viewer's known changes | larger snapshots use explicit offset/total pages |
 | Session order queue | 64 human, 256 AI | same | session | `RejectedQueueFull` (a real queue) |

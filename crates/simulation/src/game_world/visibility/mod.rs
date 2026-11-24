@@ -54,6 +54,9 @@ pub(crate) struct Vision {
     building_at_tile: TileBuildings,
     /// `building_at_tile` counted per chunk and owner (the sleep proof).
     pub(crate) building_chunks: crate::game_world::unit_index::ChunkPresence,
+    /// The same building tiles per 8-tile cell, so a look can rule out the
+    /// part of a chunk outside its sight.
+    pub(crate) building_cells: crate::game_world::unit_index::ChunkPresence,
     /// Planned sites reserve placement only for their own player.
     private_foundations: BTreeMap<(PlayerId, TileCoord), EntityId>,
     building_watchers: BTreeMap<EntityId, Watched>,
@@ -112,6 +115,13 @@ impl GameWorld {
             }
         }
         presence
+    }
+
+    /// Whether a building of another player has a tile in an 8-tile cell
+    /// that `rect` touches; chunks are asked first, as most looks end there.
+    pub(crate) fn enemy_buildings_near(&self, rect: TileRect, player: PlayerId) -> bool {
+        self.vision.building_chunks.others_in_chunks(rect, player)
+            && self.vision.building_cells.others_in_cells(rect, player)
     }
 
     pub fn visibility(&self, player: PlayerId, tile: TileCoord) -> TileVisibility {
@@ -364,7 +374,9 @@ impl GameWorld {
 
     #[inline(never)] // a symbol of its own for the Callgrind stage counters
     pub(crate) fn update_unit_vision(&mut self, id: EntityId) {
-        self.combat.quiet.wake(id);
+        // A new sight ends a sleep; whether the soldier is active is for the
+        // events that change what it does (a move, an order, a target).
+        self.combat.quiet.rouse(id);
         self.combat.healing.wake(id);
         let observer = self.unit(id).and_then(|u| self.unit_observer(&u));
         self.update_observer(id, observer);

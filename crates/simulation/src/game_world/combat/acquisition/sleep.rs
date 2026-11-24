@@ -25,9 +25,7 @@ pub(crate) struct Quiet {
     chunks: BTreeMap<ChunkCoord, BTreeSet<EntityId>>,
     parked: BTreeSet<EntityId>,
     /// Seekers neither asleep nor parked: the acquisition rotation.
-    pub(super) awake: BTreeSet<EntityId>,
-    /// Sleepers woken by an arrival near them: they look next.
-    pub(super) due: BTreeSet<EntityId>,
+    pub(super) awake: super::awake::Awake,
 }
 
 fn chunks(bounds: TileRect) -> impl Iterator<Item = ChunkCoord> {
@@ -61,11 +59,20 @@ impl Quiet {
     pub(crate) fn leave(&mut self, id: EntityId) {
         self.wake(id);
         self.awake.remove(&id);
-        self.due.remove(&id);
     }
 
     #[inline]
     pub(crate) fn wake(&mut self, id: EntityId) {
+        // Every event that wakes a seeker also ends its idle cadence: back in
+        // the rotation first (as idle), then active.
+        self.rouse(id);
+        self.awake.activate(id);
+    }
+
+    /// Out of sleep or parking, still idle: an arrival near it changes
+    /// nothing about the seeker itself.
+    #[inline]
+    pub(crate) fn rouse(&mut self, id: EntityId) {
         if self.jobs.is_empty() && self.parked.is_empty() {
             return;
         }
@@ -86,11 +93,13 @@ impl Quiet {
         }
     }
 
-    /// Wakes a sleeper whose proof an arrival may have ended; it looks next.
+    /// Wakes a sleeper whose proof an arrival may have ended. A sleeper
+    /// stands idle, so it looks on its next idle turn, within a second, like
+    /// any idle soldier: a passing army does not make every sleeper near it
+    /// look on the same tick.
     fn alarm(&mut self, id: EntityId) {
         if self.jobs.contains_key(&id) {
-            self.wake(id);
-            self.due.insert(id);
+            self.rouse(id);
         }
     }
 
@@ -150,7 +159,6 @@ impl Quiet {
         self.wake(id);
         self.parked.insert(id);
         self.awake.remove(&id);
-        self.due.remove(&id);
     }
 }
 
@@ -192,7 +200,30 @@ impl GameWorld {
             },
         );
         self.combat.quiet.awake.remove(&u.id);
-        self.combat.quiet.due.remove(&u.id);
+    }
+
+    /// A fighter that enters the world (a spawn, a trained unit) with no other
+    /// player anywhere near starts asleep: its first look could only prove
+    /// that again. An arrival near it wakes it as it would any sleeper.
+    pub(crate) fn sleep_new_seeker(&mut self, id: EntityId) {
+        let Some(u) = self.unit(id) else {
+            return;
+        };
+        if !super::autonomous_kind(u.kind)
+            || u.hp == 0
+            || u.auto_scout
+            || u.stance == aoe_core::CombatStance::NoAttack
+            || u.moving
+            || u.planning
+            || !matches!(u.task, crate::UnitTask::Idle)
+            || self.embarked(id)
+            || !self.combat.quiet.awake.contains(&id)
+        {
+            return;
+        }
+        if let Some(area) = self.acquisition_area(&u) {
+            self.sleep_quiet_acquisition(&u, &area);
+        }
     }
 
     /// Fighters asleep or parked, out of the rotation.
@@ -203,17 +234,13 @@ impl GameWorld {
     #[cfg(test)]
     pub(in crate::game_world::combat) fn assert_quiet_acquisition(&self) {
         let quiet = &self.combat.quiet;
-        let mut all = quiet.awake.clone();
+        let mut all = quiet.awake.set();
         for id in quiet.jobs.keys().chain(&quiet.parked) {
             assert!(all.insert(*id), "missed wake: {id:?} asleep and awake");
         }
         assert_eq!(
             all, self.combat.seekers,
             "missed wake: rotation and seekers"
-        );
-        assert!(
-            quiet.due.is_subset(&quiet.awake),
-            "missed wake: a due sleeper"
         );
         let mut units = crate::game_world::unit_index::ChunkPresence::default();
         for stored in self.units.iter() {
@@ -272,5 +299,21 @@ impl GameWorld {
                 "missed wake: seeker range"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Quiet;
+    use aoe_core::EntityId;
+
+    #[test]
+    fn a_parked_seeker_woken_by_an_event_looks_on_the_active_turn() {
+        let mut quiet = Quiet::default();
+        let id = EntityId(7);
+        quiet.join(id);
+        quiet.park(id);
+        quiet.wake(id);
+        assert!(quiet.awake.is_active(id));
     }
 }

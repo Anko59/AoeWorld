@@ -249,3 +249,25 @@ fn inconsistent_combat_state_is_refused() {
     no_health.max_hp = 0;
     refused(tick_with(vec![no_health], vec![]));
 }
+
+#[test]
+fn projectile_view_round_trips_more_than_four_thousand_live_shots() {
+    use aoe_protocol::{ProjectileKind, ProjectileState};
+    let at = WorldPosition::new(2048, 2048);
+    let projectiles = (1..=5_000)
+        .map(|id| ProjectileState {
+            id,
+            attacker: Some(EntityId(1)),
+            from: at,
+            to: at,
+            launched: Tick(40),
+            impact: Tick(55),
+            kind: ProjectileKind::Arrow,
+        })
+        .collect();
+    round_trips(&GameplayServerMessage::Projectiles {
+        revision: 1,
+        tick: Tick(42),
+        projectiles,
+    });
+}

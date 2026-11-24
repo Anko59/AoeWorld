@@ -6,11 +6,15 @@ use super::{
 };
 use crate::{EconomyError, GameWorld, UnitKind, UnitTask};
 use aoe_core::{CombatStance, EntityId, PlayerId, WorldPosition};
-use std::ops::Bound::{Excluded, Unbounded};
+pub(crate) mod awake;
 mod share;
 pub(crate) mod sleep;
 
-pub(super) const MAX_ACQUISITIONS: usize = 128;
+/// Turns of four ticks between two looks of an idle soldier: once a
+/// reference second, a reaction well under the time an enemy needs to walk
+/// across its sight.
+const IDLE_TURNS: u64 = awake::IDLE_TICKS / awake::ACTIVE_TICKS;
+
 pub(crate) fn autonomous_kind(kind: UnitKind) -> bool {
     super::unit_combat(kind).attack > 0 && kind != UnitKind::Villager
 }
@@ -35,7 +39,6 @@ impl GameWorld {
             // four-tick acquisition cadence after a fighter has struck.
             || (self.units[index].next_hit_tick != 0
                 && !(self.tick.0 + u64::from(id.0)).is_multiple_of(self.config.ticks(4)))
-            || self.combat.stats.targeting_scanned >= super::targeting::MAX_TARGET_INSPECTIONS / 2
             || u.kind.is_naval()
             || !Self::uses_melee_position(u.kind)
         {
@@ -118,39 +121,32 @@ impl GameWorld {
         #[cfg(test)]
         self.assert_quiet_acquisition();
         self.combat.stats.acquisition_slept = self.resting_seekers();
-        // Sleepers an arrival woke look first, then the rotation of the
-        // awake goes on from its cursor.
-        let due: Vec<_> = std::mem::take(&mut self.combat.quiet.due)
-            .into_iter()
-            .collect();
-        let cursor = self.combat.seeker_cursor;
-        let awake = &self.combat.quiet.awake;
-        let turns = awake
-            .range((Excluded(cursor), Unbounded))
-            .chain(awake.range(..=cursor))
-            .filter(|id| due.binary_search(id).is_err())
-            .copied()
-            .take(MAX_ACQUISITIONS)
-            .map(|id| (id, false));
-        let ids: Vec<_> = due.iter().map(|&id| (id, true)).chain(turns).collect();
-        for (at, &(id, alarmed)) in ids.iter().enumerate() {
-            if self.combat.stats.targeting_scanned >= super::targeting::MAX_TARGET_INSPECTIONS / 2 {
-                // The woken who did not get to look keep their place.
-                let left = ids[at..].iter().filter(|(_, alarmed)| *alarmed);
-                self.combat.quiet.due.extend(left.map(|&(id, _)| id));
-                break;
-            }
-            if alarmed {
-                if !self.combat.quiet.awake.contains(&id) {
+        // Every awake seeker looks on its own turn, however many there are: one tick in four
+        // while it marches, fights or is fought, one in twenty (a reference
+        // second) while it stands idle, phased by id so a mass spawn does not
+        // look all at once (`awake.rs` keeps each in buckets of its turn).
+        // Asleep ones cost nothing until an enemy enters their chunks.
+        let period = self.config.ticks(4);
+        let tick = self.tick.0;
+        let ids = self.combat.quiet.awake.turn(tick, period);
+        let idle_period = period * IDLE_TURNS;
+        for id in ids {
+            let Some(&index) = self.lookup.get(&id) else {
+                continue;
+            };
+            // Woken by an arrival or not, an idle soldier looks on its idle
+            // turn: a mass spawn or a passing army does not make every
+            // soldier near it look on the same tick.
+            if self.stands_idle(&self.units[index].state) {
+                self.combat.quiet.awake.idle(id);
+                if !(tick + u64::from(id.0)).is_multiple_of(idle_period) {
                     continue;
                 }
             } else {
-                self.combat.seeker_cursor = id;
+                self.combat.quiet.awake.activate(id);
             }
+            let u = self.units[index].state;
             self.combat.stats.acquisition_checks += 1;
-            let Some(u) = self.unit(id) else {
-                continue;
-            };
             if (u.kind.is_naval() || u.kind == UnitKind::Villager)
                 && self.units[self.lookup[&id]].order.is_none()
             {
@@ -177,10 +173,10 @@ impl GameWorld {
             // Offensive movement is ordinary movement plus aggression: a
             // marching attack-move member — a lone unit, a formation member or
             // a General's soldier — strikes what is already in its weapon's
-            // reach instead of walking past it. The group's bounded engage
+            // reach instead of walking past it. The group's engage
             // look still decides who leaves the march to chase.
-            let marching = self.offensive_continuation(id).is_some()
-                && (u.moving || u.planning || matches!(u.task, UnitTask::Moving));
+            let marching = (u.moving || u.planning || matches!(u.task, UnitTask::Moving))
+                && self.offensive_continuation(id).is_some();
             if u.hp == 0
                 || ((u.moving || u.planning) && building_attack.is_none() && !marching)
                 || (!matches!(u.task, UnitTask::Idle) && building_attack.is_none() && !marching)
@@ -259,18 +255,25 @@ impl GameWorld {
         }
     }
 
-    /// A fighter whose target is gone looks for the next enemy at once, within
-    /// a reserved part of the scan budget, instead of waiting a turn among
-    /// every idle unit of the world for the rotating acquisition pass.
+    /// Standing idle: no order, no target, not attacking, not attack-moving.
+    fn stands_idle(&self, u: &crate::GameUnit) -> bool {
+        matches!(u.task, UnitTask::Idle)
+            && !u.moving
+            && !u.planning
+            // An attacker always has its target set (`begin_attack`).
+            && u.attack_target.is_none()
+            && !self.combat.resuming.contains_key(&u.id)
+    }
+
+    /// A fighter whose target is gone looks for the next enemy at once
+    /// instead of waiting for its acquisition turn.
     pub(super) fn next_target_after_kill(
         &mut self,
         id: EntityId,
         origin: WorldPosition,
         changed: &mut Vec<EntityId>,
     ) {
-        if self.combat.stats.targeting_scanned >= super::targeting::MAX_TARGET_INSPECTIONS * 3 / 4
-            || !autonomous_kind(self.unit(id).map_or(UnitKind::Villager, |u| u.kind))
-        {
+        if !autonomous_kind(self.unit(id).map_or(UnitKind::Villager, |u| u.kind)) {
             return;
         }
         let Some(u) = self.unit(id).filter(|u| {
