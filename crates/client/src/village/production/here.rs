@@ -100,17 +100,19 @@ pub(super) fn plan(
 
 #[wasm_bindgen(inline_js = "
 export function here_take(values) { const v = window.aoeNavigation?.production?.take(); if (v) values.set(v); }
+export function here_placed(ok) { window.aoeNavigation?.production?.placed(ok); }
 export function here_result(count) { window.aoeNavigation?.production?.result(count); }
 export function here_progress(count, done) { window.aoeNavigation?.production?.accepted(count, done); }
 ")]
 extern "C" {
     fn here_take(values: &mut [f64]);
+    fn here_placed(ok: bool);
     fn here_result(count: usize);
     fn here_progress(count: usize, done: bool);
 }
 
 pub(in super::super::super) fn click(client: &mut Client, point: ScreenPoint) -> bool {
-    if client.village.here_orders.active() || !crate::playground::game::strategic::active(client) {
+    if !crate::playground::game::strategic::active(client) {
         return false;
     }
     let mut values = [f64::NAN; 2];
@@ -118,9 +120,6 @@ pub(in super::super::super) fn click(client: &mut Client, point: ScreenPoint) ->
     if !values.iter().all(|v| v.is_finite()) {
         return false;
     }
-    let Some(kind) = UnitKind::ALL.get(values[0] as usize).copied() else {
-        return true;
-    };
     let world = crate::playground::game::strategic::world_at_screen(client, point);
     if !world.iter().all(|value| value.is_finite())
         || world[0] < 0.0
@@ -128,7 +127,7 @@ pub(in super::super::super) fn click(client: &mut Client, point: ScreenPoint) ->
         || world[0] >= f64::from(client.config.width_tiles)
         || world[1] >= f64::from(client.config.height_tiles)
     {
-        here_result(0);
+        here_placed(false);
         return true;
     }
     let Ok(position) = WorldPosition::from_i64(
@@ -137,10 +136,28 @@ pub(in super::super::super) fn click(client: &mut Client, point: ScreenPoint) ->
     ) else {
         return true;
     };
-    let position = client.config.snap_ground_position(position);
+    client.village.here_destination = Some(client.config.snap_ground_position(position));
+    here_placed(true);
+    true
+}
+
+/// Trains `count` of `unit` at the nearest eligible producers and rallies them
+/// to the stored destination.
+pub(in super::super::super) fn order(client: &mut Client, unit: usize, count: u32) {
+    let Some(kind) = UnitKind::ALL.get(unit).copied() else {
+        return;
+    };
+    let Some(position) = client.village.here_destination else {
+        here_result(0);
+        return;
+    };
+    if client.village.here_orders.active() {
+        here_result(0);
+        return;
+    }
     let request = HereRequest {
         kind,
-        count: (values[1] as usize).clamp(1, 10),
+        count: (count as usize).clamp(1, 10),
         position,
     };
     let player = owner(client);
@@ -182,7 +199,6 @@ pub(in super::super::super) fn click(client: &mut Client, point: ScreenPoint) ->
     }
     client.village.here_orders = batch;
     here_result(count);
-    true
 }
 
 pub(in super::super::super) fn acknowledge(

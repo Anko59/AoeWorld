@@ -205,3 +205,15 @@
 .training-tokens { display:flex; align-items:center; gap:2px; flex:1; min-width:0; white-space:nowrap; }
 #training-multi .unit-token { display:inline-flex; flex:none; width:18px; height:18px; padding:0; }
 .training-row .unit-token :is(.art-icon,.icon) { width:100%; height:100%; }
+/* Wide windows give the management controls room in the middle of the panel. */
+@media(min-width:1600px) {
+  #bottom-panel[data-frame=native] #selection-content:has(>#vassal-panel:not([hidden])):has(>#building-panel:not([hidden])) {
+    --building-columns:minmax(190px,min(30%,290px)) minmax(0,min(40%,700px)) minmax(280px,min(34%,480px)) minmax(0,1fr);
+    grid-template-areas:"card details manager ." "shelter queue manager .";
+  }
+  #bottom-panel[data-frame=native] #selection-content:has(>#steward-controls:not([hidden])):has(>#building-panel:not([hidden])) {
+    --building-columns:minmax(154px,min(26%,210px)) minmax(0,min(40%,700px)) minmax(260px,min(34%,440px)) minmax(0,1fr);
+    grid-template-areas:"card details manager ." "shelter report manager ." "shelter queue manager .";
+  }
+  #bottom-panel[data-frame=native] #selection-content>#steward-controls input[type=range] { width:140px; }
+}

@@ -8,6 +8,7 @@ export type ProductionBuilding = {
   y: number;
   player?: number;
   complete?: boolean;
+  constructionProgress?: number;
   queue?: number[];
   progress?: number;
   research?: number;
@@ -24,7 +25,7 @@ export function productionBuilding(b: ProductionBuilding) {
     ...sint(b.x + side),
     ...sint(b.y + side),
     b.complete === false ? 0 : 1,
-    ...uint(b.complete === false ? 200 : 1000),
+    ...uint(b.complete === false ? (b.constructionProgress ?? 200) : 1000),
     ...uint(1000),
     ...uint(1000),
     8,

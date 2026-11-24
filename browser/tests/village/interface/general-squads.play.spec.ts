@@ -129,7 +129,9 @@ test("General controls and the kingdom cockpit remain usable together at far zoo
     await openTab(page, "build");
     await page.locator('[aria-label="Building type"] [data-id="1"]').click();
     await openTab(page, "train");
-    await page.getByRole("button", { name: "Units here", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Set destination", exact: true })
+      .click();
     await page.keyboard.press("Escape");
     await expect(page.locator("#strategic-cockpit")).toBeVisible();
     await expect(page.locator("#general-squads")).toContainText("20/20");

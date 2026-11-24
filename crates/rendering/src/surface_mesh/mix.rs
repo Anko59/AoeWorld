@@ -8,7 +8,7 @@
 //! band centred on the tile edge, identical from both sides and at every zoom.
 //! Junctions retain every observation and evaluate cumulative weights in that
 //! same order, so omitted zero-share layers cannot change an edge colour.
-//! Displayed vertices only: no resident-world material map is built.
+//! Displayed vertices only: no resident-world map. Built roads (18) stay hard-edged.
 use super::*;
 pub(crate) mod support;
 mod thin;
@@ -75,7 +75,7 @@ impl ProjectedSurfaceTriangle {
 /// The displayed sheet and its forest-floor strength. Shallow water overlays
 /// ground; loaded deeper water completes the shore halo but keeps its own faces.
 pub(super) fn ground(sample: &SceneTerrain) -> Option<(u8, u16)> {
-    let appearance = sample.appearance?;
+    let appearance = sample.appearance.filter(|_| sample.material != 18)?;
     if sample.surface.water != 0 || appearance::water_material(sample.material) {
         return match sample.material {
             10 | 12 => Some((sample.material, 0)),
@@ -101,7 +101,7 @@ fn eligible(triangle: &ProjectedSurfaceTriangle) -> bool {
         // Neutral bank closures carry the same shared-edge coverage as the tops.
         && (!triangle.skirt || triangle.tint == 0)
         && triangle.tint <= 3
-        && triangle.texture_materials.is_some()
+        && triangle.texture_materials.is_some_and(|m| m != [18; 3])
 }
 
 fn vertex(point: SurfacePoint) -> [i32; 2] {

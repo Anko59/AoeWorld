@@ -60,8 +60,10 @@ pub(super) fn is_farm_field(material: u8) -> bool {
 fn blendable(triangle: &ProjectedSurfaceTriangle, wet: bool) -> bool {
     // A farm field is one material to its very edge. Its vertices read the
     // tile half a tile behind each corner, so blending would turn the far
-    // corner of an isolated field into the dirt around it.
+    // corner of an isolated field into the dirt around it. A built road keeps
+    // its own sheet to the edge for the same reason: it must stay readable.
     !is_farm_field(triangle.material)
+        && triangle.material != 18
         && !triangle.skirt
         && triangle.texture_materials.is_some()
         && water_material(triangle.material) == wet
@@ -317,11 +319,6 @@ fn terrain_group_all(
         if !art.foundation.0.is_empty() {
             return Some((16, &art.foundation.0, art.foundation.1));
         }
-    }
-    // A built road draws the pale pebbly sheet: the native worn cobbles read as
-    // old, and as part of the dirt where a track crosses a dirt patch.
-    if material == 18 && !art.terrain[10].is_empty() {
-        return Some((10, &art.terrain[10], art.terrain_topology[10]));
     }
     // Snow and rock own distinct native sheets; ice is an optional water sheet.
     // Missing forest art uses dirt uniformly: no 8×8 parity substitution.
