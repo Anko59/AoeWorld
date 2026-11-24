@@ -112,6 +112,18 @@ impl ResourceOverlay {
         self.collision_blocks_tile(tile)
     }
 
+    /// Whether a starting-kit node's tile is still passable empty ground.
+    pub(crate) fn starting_tile_fits(
+        &self,
+        terrain: &MapChunkGenerator,
+        node: ResourceNode,
+    ) -> Result<bool, ResourceOverlayError> {
+        Ok(!self.blocks_tile(node.tile)
+            && terrain
+                .tile_and_node_with_cancel(node.tile, &|| false)?
+                .is_some_and(|(tile, object)| tile.passable && object.is_none()))
+    }
+
     /// Startup insertion is part of the initial snapshot, not a depletion revision.
     pub fn insert_starting_resource(
         &mut self,

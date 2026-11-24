@@ -239,3 +239,30 @@ fn restore_and_deplete_keep_provider_errors_and_cancellation_distinct() {
     );
     assert_eq!(empty, ResourceOverlay::default());
 }
+
+#[test]
+fn a_starting_node_whose_tile_became_water_is_dropped_and_the_save_loads() {
+    let (terrain, _) = resource();
+    let tiles = || (0..128).flat_map(|y| (0..128).map(move |x| aoe_core::TileCoord::new(x, y)));
+    let dry = tiles()
+        .find(|t| {
+            terrain.object_at(*t).is_none() && terrain.tile_at(*t).is_some_and(|t| t.passable)
+        })
+        .unwrap();
+    let wet = tiles()
+        .find(|t| terrain.tile_at(*t).is_some_and(|t| !t.passable))
+        .unwrap();
+    let kind = crate::ResourceKind::Gold;
+    let mut overlay = ResourceOverlay::default();
+    overlay
+        .insert_starting_resource(&terrain, ResourceNode::starting(dry, kind).unwrap())
+        .unwrap();
+    // The same save on a map whose rivers were regenerated: the kit's tile is
+    // now water.
+    let mut snapshot = overlay.snapshot([4; 32]);
+    snapshot.changes[0].id = ResourceNode::starting(wet, kind).unwrap().id;
+    let restored = ResourceOverlay::from_snapshot(&snapshot, [4; 32], &terrain, &|| false)
+        .expect("the save loads without the drowned node");
+    assert_eq!(restored.starting_nodes().count(), 0);
+    assert!(!restored.blocks_tile(wet));
+}
