@@ -33,7 +33,13 @@
     "instructions::simulation::viewport_query": 183030
   },
   "accepted_increase": {
-    "instructions::simulation::smoke_ticks": "#1026 removes the engagement caps (owner 11-23 caps decisions; 11-24: removing caps raises cost): every soldier looks for enemies on its own turn; R1 war replay +0.2%, kills 357 -> 551",
-    "instructions::simulation::distributed_ticks": "#1026 removes the engagement caps (owner 11-23 caps decisions; 11-24: removing caps raises cost): every soldier looks for enemies on its own turn; R1 war replay +0.2%, kills 357 -> 551"
+    "instructions::simulation::smoke_ticks": {
+      "reason": "#1026 removes the engagement caps (owner 11-23 caps decisions; 11-24: removing caps raises cost): every soldier looks for enemies on its own turn; R1 war replay +0.2%, kills 357 -> 551",
+      "dev": 5383787
+    },
+    "instructions::simulation::distributed_ticks": {
+      "reason": "#1026 removes the engagement caps (owner 11-23 caps decisions; 11-24: removing caps raises cost): every soldier looks for enemies on its own turn; R1 war replay +0.2%, kills 357 -> 551",
+      "dev": 9866885
+    }
   }
 }
