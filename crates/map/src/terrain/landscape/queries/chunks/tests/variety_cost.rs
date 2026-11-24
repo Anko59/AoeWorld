@@ -52,7 +52,14 @@ fn chunk_sized_fixture_bounds_noise_and_lattice_work_for_every_material() {
                 for y in 32..32 + crate::CHUNK_TILES {
                     for x in -32..-32 + crate::CHUNK_TILES {
                         record(None);
-                        vary(17, TileCoord::new(x, y), material, band, use_);
+                        vary(
+                            17,
+                            TileCoord::new(x, y),
+                            material,
+                            band,
+                            use_,
+                            &mut Corners::default(),
+                        );
                         let (noise, lattice) = WORK.with(Cell::get);
                         assert!(noise <= cap, "{material:?} {band:?}: {noise} > {cap}");
                         assert_eq!(lattice, 4 * noise);
@@ -68,6 +75,39 @@ fn chunk_sized_fixture_bounds_noise_and_lattice_work_for_every_material() {
                 assert!(total.0 <= cap * 1024 && total.1 <= cap * 4096);
                 eprintln!("variety work {material:?} {band:?} {use_:?}: {total:?}");
             }
+        }
+    }
+}
+
+#[test]
+fn shared_corners_change_no_material_and_hash_far_fewer_corners() {
+    use GroundMaterial::*;
+    for material in [TemperateGrass, DryGrass, LushGrass, Sand, Rock] {
+        for band in [NativeHeightBand::Lowland, NativeHeightBand::Alpine] {
+            let mut corners = Corners::default();
+            record(None);
+            for y in 32..32 + crate::CHUNK_TILES {
+                for x in -32..-32 + crate::CHUNK_TILES {
+                    let tile = TileCoord::new(x, y);
+                    let shared = vary(17, tile, material, band, LandUse::Grazing, &mut corners);
+                    let (noise, lattice) = WORK.with(Cell::get);
+                    let fresh = vary(
+                        17,
+                        tile,
+                        material,
+                        band,
+                        LandUse::Grazing,
+                        &mut Corners::default(),
+                    );
+                    assert_eq!(shared, fresh, "{tile:?}");
+                    WORK.with(|c| c.set((noise, lattice)));
+                }
+            }
+            let (noise, lattice) = WORK.with(Cell::get);
+            assert!(
+                lattice * 2 < noise * 4,
+                "{material:?} {band:?}: {lattice} of {noise}"
+            );
         }
     }
 }

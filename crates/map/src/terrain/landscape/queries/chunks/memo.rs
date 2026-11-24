@@ -52,6 +52,8 @@ pub(super) struct Memo<'a, const N: usize, const W: usize> {
     origins: RefCell<resources::Origins>,
     /// Patch membership of the memo area, built on the first candidate query.
     members: RefCell<Option<Vec<u64>>>,
+    /// Ground variety lattice corners, shared along the chunk's rows.
+    pub(super) corners: RefCell<variety::Corners>,
 }
 
 impl<'a> PointMemo<'a> {
@@ -73,6 +75,7 @@ impl<'a> PointMemo<'a> {
             probe_reach: true,
             origins: RefCell::new(resources::Origins::new(generator)),
             members: RefCell::new(None),
+            corners: RefCell::new(variety::Corners::default()),
         }
     }
 }
@@ -96,6 +99,7 @@ impl<'a> ChunkMemo<'a> {
             probe_reach: false,
             origins: RefCell::new(resources::Origins::new(generator)),
             members: RefCell::new(None),
+            corners: RefCell::new(variety::Corners::default()),
         }
     }
 }

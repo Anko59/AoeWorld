@@ -15,7 +15,14 @@ fn field(seed: u64, material: GroundMaterial, band: NativeHeightBand) -> Vec<Gro
         .flat_map(|y| {
             (0..SIDE).map(move |x| {
                 let tile = TileCoord::new(4_013 + x, -9_107 + y);
-                vary(seed, tile, material, band, LandUse::Uncleared)
+                vary(
+                    seed,
+                    tile,
+                    material,
+                    band,
+                    LandUse::Uncleared,
+                    &mut Corners::default(),
+                )
             })
         })
         .collect()
@@ -197,7 +204,14 @@ fn variety_is_a_pure_function_of_seed_and_world_tile() {
         TileCoord::new(i32::MAX, i32::MAX),
         TileCoord::new(-1, 0),
     ] {
-        let varied = vary(SEEDS[2], tile, Sand, LOW, LandUse::Uncleared);
+        let varied = vary(
+            SEEDS[2],
+            tile,
+            Sand,
+            LOW,
+            LandUse::Uncleared,
+            &mut Corners::default(),
+        );
         assert!(matches!(varied, Sand | Gravel | Dirt));
     }
 }
@@ -209,7 +223,14 @@ fn worked_and_high_ground_is_more_worn_and_breaks_to_gravel() {
             .filter(|index| {
                 let tile = TileCoord::new(index % SIDE - 70, index / SIDE + 300);
                 !matches!(
-                    vary(SEEDS[0], tile, TemperateGrass, band, land_use),
+                    vary(
+                        SEEDS[0],
+                        tile,
+                        TemperateGrass,
+                        band,
+                        land_use,
+                        &mut Corners::default()
+                    ),
                     TemperateGrass | LushGrass
                 )
             })
@@ -261,7 +282,7 @@ fn all_high_band_grass_families_break_their_most_worn_patches_to_gravel() {
                         TileCoord::new(4_013 + index as i32 % SIDE, -9_107 + index as i32 / SIDE);
                     // Every family uses the same high-band wear bias and threshold; the
                     // most-worn class changes (lush grass formerly used worn grass).
-                    let worn = (wear(seed, tile) + 250) * 1000 / UNIT;
+                    let worn = (wear(seed, tile, &mut Corners::default()) + 250) * 1000 / UNIT;
                     let threshold = 770;
                     assert_eq!(*actual == Gravel, worn >= threshold, "{base:?} {tile:?}");
                 }
@@ -280,7 +301,14 @@ fn every_base_material_keeps_its_sampled_output() {
         for y in (0..SIDE).step_by(3) {
             for x in (0..SIDE).step_by(3) {
                 let tile = TileCoord::new(4_013 + x, -9_107 + y);
-                let varied = vary(SEEDS[0], tile, base, LOW, LandUse::Uncleared);
+                let varied = vary(
+                    SEEDS[0],
+                    tile,
+                    base,
+                    LOW,
+                    LandUse::Uncleared,
+                    &mut Corners::default(),
+                );
                 for byte in format!("{varied:?}").into_bytes() {
                     digest = (digest ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3);
                 }
@@ -305,8 +333,10 @@ fn high_band_gravel_share_is_identical_across_grass_families() {
                 for y in 0..128 {
                     for x in 0..128 {
                         let tile = TileCoord::new(4_013 + x, -9_107 + y);
-                        let gravel = [TemperateGrass, DryGrass, LushGrass]
-                            .map(|base| vary(seed, tile, base, band, land_use) == Gravel);
+                        let gravel = [TemperateGrass, DryGrass, LushGrass].map(|base| {
+                            vary(seed, tile, base, band, land_use, &mut Corners::default())
+                                == Gravel
+                        });
                         assert_eq!(
                             gravel, [gravel[0]; 3],
                             "seed {seed} {band:?} {land_use:?} {tile:?}"

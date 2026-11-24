@@ -219,6 +219,7 @@ impl MapChunkGenerator {
                 terrain.material,
                 appearance.height_band,
                 sample.historical_land_use,
+                &mut memo.corners.borrow_mut(),
             );
         }
         let rock = if self.loose_rocks && base.passable && base.water == crate::WaterKind::None {
