@@ -66,6 +66,18 @@ fn the_match_body_names_slots_rules_and_a_france_map() {
     // A new match's seat 0 can watch too, not only a saved game's human.
     let watched = options(&["--late-game", "--human-view", "200"]);
     assert_eq!(watched.human_view, Some(200));
+    // Long benchmark runs: a named save, a quiet server, no scripted march.
+    let bench = options(&[
+        "--late-game",
+        "--no-march",
+        "--save-as",
+        "bench5x",
+        "--nice",
+    ]);
+    assert!(bench.no_march && bench.nice);
+    assert_eq!(bench.save_as.as_deref(), Some("bench5x"));
+    assert!(Cli::try_parse_from(["scale-match", "--no-march"]).is_err());
+    assert!(Cli::try_parse_from(["scale-match", "--save-as", "a", "--save", "b"]).is_err());
 }
 
 #[test]

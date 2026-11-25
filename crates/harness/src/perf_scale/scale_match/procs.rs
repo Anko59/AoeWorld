@@ -142,3 +142,15 @@ pub(super) fn parse_stats_line(line: &str) -> Option<Container> {
         rss_mib: number.parse::<f64>().ok()? * scale,
     })
 }
+
+/// The release server's command, at nice 19 under `--nice`.
+pub(super) fn server_command(options: &Options, root: &std::path::Path) -> Command {
+    let server = root.join("target/release/aoe-server");
+    if options.nice {
+        let mut command = Command::new("nice");
+        command.args(["-n", "19"]).arg(server);
+        command
+    } else {
+        Command::new(server)
+    }
+}
