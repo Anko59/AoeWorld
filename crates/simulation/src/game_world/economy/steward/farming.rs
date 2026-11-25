@@ -354,7 +354,7 @@ impl GameWorld {
             || self
                 .validate_building_placement(s.player, kind, tile)
                 .is_err()
-            || !self.query(rect).0.is_empty()
+            || self.rect_has_unit(rect)
             || !self.steward_site_walkable(worker, rect, s)
             || !budget.order(work)
         {
