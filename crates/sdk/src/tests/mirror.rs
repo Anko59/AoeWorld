@@ -18,7 +18,7 @@
 //! - `insert_chunk(&mut self, (i32, i32), Result<CompactChunk, String>)`: a
 //!   failed fetch lets the chunk be requested again.
 //! - `world(&self) -> &World`.
-use crate::{Event, Mirror, UnitKind, UnitTask, World};
+use crate::{Mirror, UnitKind, UnitTask, World};
 use aoe_core::{EntityId, PlayerId, Tick, TileCoord, TileRect, WorldPosition};
 use aoe_protocol::{
     FogState, GameplayClientMessage, GameplayPlayerState, GameplayServerMessage as M,
