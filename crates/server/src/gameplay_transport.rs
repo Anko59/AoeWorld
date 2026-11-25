@@ -99,17 +99,28 @@ enum SendFailure {
     Write,
 }
 
-async fn send_socket<S>(sink: &mut S, message: GameplayServerMessage) -> Result<(), SendFailure>
-where
-    S: Sink<Message> + Unpin,
-{
-    let bytes = degrade::encode(message)?;
-    timeout(SEND_TIMEOUT, sink.send(Message::Binary(bytes.into())))
+/// Gives one socket operation [`SEND_TIMEOUT`] to finish.
+async fn within_send_timeout<E>(
+    operation: impl Future<Output = Result<(), E>>,
+) -> Result<(), SendFailure> {
+    timeout(SEND_TIMEOUT, operation)
         .await
         .map_err(|_| SendFailure::Timeout)?
         .map_err(|_| SendFailure::Write)
 }
 
+async fn send_socket<S>(sink: &mut S, message: GameplayServerMessage) -> Result<(), SendFailure>
+where
+    S: Sink<Message> + Unpin,
+{
+    let bytes = degrade::encode(message)?;
+    within_send_timeout(sink.send(Message::Binary(bytes.into()))).await
+}
+
+/// Writes the session's queue to its socket until the queue closes or a world
+/// reset has left. A tick queues several small frames for a client: the frames
+/// already waiting are handed to the socket one after the other and flushed
+/// once, so they leave in one write.
 async fn write_messages<S>(
     sink: &mut S,
     receiver: &mut mpsc::Receiver<GameplayServerMessage>,
@@ -117,9 +128,23 @@ async fn write_messages<S>(
 where
     S: Sink<Message> + Unpin,
 {
-    while let Some(message) = receiver.recv().await {
-        let reset = matches!(message, GameplayServerMessage::WorldReset { .. });
-        send_socket(sink, message).await?;
+    while let Some(first) = receiver.recv().await {
+        let mut queued = Some(first);
+        let mut reset = false;
+        while let Some(message) = queued {
+            reset = matches!(message, GameplayServerMessage::WorldReset { .. });
+            let bytes = degrade::encode(message)?;
+            within_send_timeout(sink.feed(Message::Binary(bytes.into()))).await?;
+            // The next frame leaves the bounded queue only now that the socket
+            // took this one, so what a slow peer has not taken stays queued.
+            // Nothing after a reset is taken.
+            queued = if reset {
+                None
+            } else {
+                receiver.try_recv().ok()
+            };
+        }
+        within_send_timeout(sink.flush()).await?;
         if reset {
             break;
         }

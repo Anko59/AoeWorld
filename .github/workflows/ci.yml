@@ -46,7 +46,7 @@ jobs:
 
   static:
     # `make preflight` as two parallel legs, both required (#388, docs/testing.md).
-    needs: select
+    # Always selected and reading nothing from `select`, it does not wait for it.
     strategy:
       fail-fast: false
       matrix: { part: [checks, unit] }

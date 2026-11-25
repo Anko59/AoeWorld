@@ -86,8 +86,12 @@ export function createCinematic(root, finish) {
     stop,
     start() {
       running = true;
-      if (!stills) shots.forEach(shot => {
+      // Posters and clips are requested here, so a visitor who has already
+      // seen the cinematic downloads neither.
+      shots.forEach(shot => {
         const video = videoOf(shot);
+        shot.querySelector('img').src = video.poster = video.dataset.poster;
+        if (stills) return;
         video.src = video.dataset.src;
         video.load();
       });

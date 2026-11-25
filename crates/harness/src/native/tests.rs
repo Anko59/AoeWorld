@@ -301,3 +301,30 @@ fn workspace_test_builds_never_exceed_two_compiler_jobs() {
     assert_eq!(capped_jobs(Some("0")), 1);
     assert_eq!(capped_jobs(Some("many")), 2);
 }
+
+#[test]
+fn a_tier_builds_only_its_own_packages_and_fails_when_nothing_matches() {
+    let args = super::tier_args(&["aoe-geodata", "aoe-map"], "test(=a)");
+    assert_eq!(
+        args,
+        [
+            "nextest",
+            "run",
+            "-p",
+            "aoe-geodata",
+            "-p",
+            "aoe-map",
+            "--locked",
+            "--no-fail-fast",
+            "--failure-output",
+            "final",
+            "--success-output",
+            "never",
+            "--no-tests",
+            "fail",
+            "-E",
+            "test(=a)"
+        ]
+    );
+    assert!(!args.contains(&"--workspace"));
+}
