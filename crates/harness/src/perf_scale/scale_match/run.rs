@@ -336,8 +336,11 @@ pub(super) fn run(options: &Options, saved: Option<Value>) -> Result<(), BoxErro
             .map_err(|e| format!("command recording incomplete: {e}"))?;
     }
     if let (Some(name), Some(human)) = (&options.save_as, human.as_ref()) {
-        let card = save::save_game(&server, human, name)?;
-        println!("scale-match: saved {card}");
+        // A failed save must not discard the run's report or its real failure.
+        match save::save_game(&server, human, name) {
+            Ok(card) => println!("scale-match: saved {card}"),
+            Err(error) => eprintln!("scale-match: --save-as {name} failed: {error}"),
+        }
     }
     let wall_seconds = run_started.elapsed().as_secs_f64();
     let _ = pull_ticks(&server, &mut cursor, &mut rows);

@@ -137,8 +137,7 @@ pub struct Options {
     #[arg(long, default_value_t = 1.0, requires = "late_game")]
     pub scale: f64,
     /// With `--late-game`, leave slot 0's seeded army where it stands (no scripted
-    /// marches): a growth run at 5x seeding would otherwise order tens of thousands
-    /// of soldiers in four formations, one `orders` phase of minutes.
+    /// marches), so only the AIs play a long growth run.
     #[arg(long, requires = "late_game")]
     pub no_march: bool,
     /// Save the running game under this name when the run ends, and whenever the file

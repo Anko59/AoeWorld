@@ -57,3 +57,21 @@ Hang diagnosis: run the server under `gdb -batch -ex run -ex 'thread apply all b
 - Walking-field panic with offices past a guide's box: fixed on `fix/walking-field-bounds`.
 - 4,500-tile maps: `Regions::connected` (unbounded search) inside a bot's formation order blocks the tick
   for minutes when the target is unreachable. Not fixed; the 4,500-tile game cannot run until it is.
+- Restore: the first 5x save (227,676 units, 109,331 buildings) fails to resume with "0 units and 2
+  buildings could not be placed"; restore is all-or-nothing. Fix in progress on `fix/restore-unplaced`.
+
+## What the first 5x run measured (2026-11-25)
+
+Anatolia 61633e71 (2,000 tiles), `--late-game --scale 28.5 --no-march`, 99 AIs, server at nice 19 under gdb on a
+loaded machine (ticks/s not representative):
+
+| minute | units | RSS | KB per unit |
+| ---: | ---: | ---: | ---: |
+| 0 | 264,601 | 1.79 GB | 6.8 |
+| 10 | 243,489 | 1.98 GB | 8.1 |
+| 34 | 228,808 | 1.78 GB | 7.8 |
+
+The AIs lose units to combat faster than they build, so seeding at 5x does not grow towards 370k; a 5x state
+needs AI economies that grow. At 7-8 KB per unit, 10x of the owner's game (about 740k units) needs 5.5-6 GB of
+server RSS: it fits on the 14 GB machine, after the 4,500-tile stall, the restore failure and growing AI
+economies are solved; `make scale-match` caps the harness container at 4 GiB, so 10x must run on the host.

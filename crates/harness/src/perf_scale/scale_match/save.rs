@@ -388,9 +388,6 @@ fn work(state: &Value) -> Value {
     })
 }
 
-#[cfg(test)]
-mod tests;
-
 /// `--save-as`: saves the game under the name in `<work>/save-now` (first line) when that file appears.
 pub(super) fn save_on_request(
     options: &super::Options,
@@ -413,3 +410,6 @@ pub(super) fn save_on_request(
         Err(error) => println!("scale-match: save failed: {error}"),
     }
 }
+
+#[cfg(test)]
+mod tests;
