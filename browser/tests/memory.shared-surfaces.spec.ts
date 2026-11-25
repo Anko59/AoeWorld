@@ -7,11 +7,14 @@ import { processMemory, type ProcessMemory } from "./memory/process.js";
 import { forceCanvas } from "./rendering/backends.js";
 import { coverageProfile, profileCoverage } from "./memory/coverage-profile.js";
 
-// Summed VmRSS of every Chromium process. 1 GiB until Playwright 1.65:
-// Chromium 159 peaks 0.6 MB over it on the same game (1,074,421,760 bytes,
-// 2026-11-25), so the browser's own share grew; the game's growth checks
-// below (16 MiB WASM, 64 MiB RSS swing) are unchanged.
-const CHROMIUM_RSS_BUDGET = 1040 * 1024 * 1024;
+// Summed VmRSS of every Chromium process. 1 GiB until Playwright 1.65, whose
+// Chromium 159 uses about 90 MB more on every backend for the same game
+// (2026-11-25, same spec: canvas 0.80 -> 0.89 GB, browser-defaults 0.95 ->
+// 1.04 GB, webgpu peaks 0.92-0.97 -> 0.94-1.06 GB locally; CI peaked at
+// 1,117,335,552 bytes under webgpu). The budget keeps the old ~10% headroom
+// over the observed peak; the game's growth checks below (16 MiB WASM, 64 MiB
+// RSS swing) are unchanged.
+const CHROMIUM_RSS_BUDGET = 1200 * 1024 * 1024;
 
 // Frame capture adds compositor readbacks and retained image buffers to the
 // workload being measured. Keep command/memory JSON, as in exploration.
