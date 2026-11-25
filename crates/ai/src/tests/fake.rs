@@ -4,8 +4,8 @@
 use std::cell::RefCell;
 
 use aoe_sdk::{
-    Age, AnimalKind, AnimalTask, BuildingKind, CombatStance, CommandResult, Event, Order,
-    ResourceKind, UnitKind, UnitTask, Visibility,
+    Age, BuildingKind, CombatStance, CommandResult, Event, Order, ResourceKind, UnitKind, UnitTask,
+    Visibility,
 };
 
 use crate::blackboard::Blackboard;
@@ -115,19 +115,6 @@ pub fn node(id: u64, kind: ResourceKind, tile: Tile) -> Node {
         y: tile.1,
         kind,
         remaining: 100,
-    }
-}
-
-pub fn animal(id: u32, tile: Tile) -> Animal {
-    Animal {
-        id,
-        kind: AnimalKind::Sheep,
-        x: tile.0,
-        y: tile.1,
-        hp: 7,
-        task: AnimalTask::Idle,
-        food_remaining: 100,
-        owner: None,
     }
 }
 
