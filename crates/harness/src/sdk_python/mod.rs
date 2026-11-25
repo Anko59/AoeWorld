@@ -70,6 +70,7 @@ const SITE: &str = "target/sdk-python/site";
 const RELEASE_WHEELS: &str = "target/wheels";
 const TEST_WHEELS: &str = "target/sdk-python/wheels";
 const SERVER: &str = "target/debug/aoe-server";
+const RELEASE_SERVER: &str = "target/release/aoe-server";
 const STEP_DEADLINE: Duration = Duration::from_secs(60 * 40);
 
 #[derive(Clone, Debug, Eq, PartialEq, clap::Subcommand)]
@@ -154,7 +155,7 @@ fn build_wheel(root: &Path, release: bool, out: &str) -> Result<PathBuf, Box<dyn
 }
 
 fn logic_test(root: &Path) -> Result<(), Box<dyn Error>> {
-    let (_, python_path) = prepare(root)?;
+    let (_, python_path) = prepare(root, false)?;
     let mut args = vec![
         "-m",
         "pytest",
@@ -231,7 +232,7 @@ fn select_targets(
 fn test(root: &Path, bindings_only: bool, only: &[String]) -> Result<(), Box<dyn Error>> {
     let searched = &TESTS[..if bindings_only { 1 } else { TESTS.len() }];
     let chosen = select_targets(root, searched, only)?;
-    let (server, python_path) = prepare(root)?;
+    let (server, python_path) = prepare(root, false)?;
     for (&(tests, project), picked) in searched.iter().zip(&chosen) {
         let selected: Vec<&str> = if only.is_empty() {
             vec![tests]
@@ -278,7 +279,8 @@ fn arena(root: &Path, args: &ArenaArgs, command: &str) -> Result<(), Box<dyn Err
     {
         return Err("--seeds takes comma-separated numbers".into());
     }
-    let (server, python_path) = prepare(root)?;
+    // The comparison measures CPU per decision: both sides in release builds.
+    let (server, python_path) = prepare(root, command == "compare")?;
     process::run_with_env(
         "python3",
         &[
@@ -305,18 +307,18 @@ fn arena(root: &Path, args: &ArenaArgs, command: &str) -> Result<(), Box<dyn Err
     Ok(())
 }
 
-/// Builds the server and a debug wheel, installs the wheel into a fresh
-/// directory and returns the server path and the `PYTHONPATH` for the AI.
-fn prepare(root: &Path) -> Result<(PathBuf, String), Box<dyn Error>> {
-    process::run(
-        "cargo",
-        &["build", "--locked", "-p", "aoe-server"],
-        STEP_DEADLINE,
-    )?;
-    let wheel = build_wheel(root, false, TEST_WHEELS)?;
+/// Builds the server and a wheel (debug, or both release), installs the wheel
+/// into a fresh directory and returns the server path and the `PYTHONPATH`.
+fn prepare(root: &Path, release: bool) -> Result<(PathBuf, String), Box<dyn Error>> {
+    let mut build = vec!["build", "--locked", "-p", "aoe-server"];
+    if release {
+        build.push("--release");
+    }
+    process::run("cargo", &build, STEP_DEADLINE)?;
+    let wheel = build_wheel(root, release, TEST_WHEELS)?;
     let site = root.join(SITE);
     install(&wheel, &site)?;
-    let server = root.join(SERVER);
+    let server = root.join(if release { RELEASE_SERVER } else { SERVER });
     // The wheel under test plus the example AI's sources, never an installed copy.
     let python_path = format!("{}:{}", site.display(), root.join(AI_SOURCE).display());
     Ok((server, python_path))
