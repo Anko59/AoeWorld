@@ -1,6 +1,6 @@
 use super::*;
 use crate::SourceCache;
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
 const HYDROLAKES_URL: &str =
     "https://data.hydrosheds.org/file/HydroLAKES/HydroLAKES_polys_v10.gdb.zip";
@@ -290,20 +290,15 @@ fn longitude_tag(longitude: i32) -> String {
 }
 
 fn head_bytes(url: &str) -> Result<u64, SourceCatalogError> {
-    let connector = ureq::native_tls::TlsConnector::new()
-        .map_err(|error| SourceCatalogError::Request(error.to_string()))?;
-    let agent = ureq::AgentBuilder::new()
-        .tls_connector(Arc::new(connector))
-        .timeout_connect(Duration::from_secs(15))
-        .timeout_read(Duration::from_secs(15))
-        .timeout_write(Duration::from_secs(15))
-        .build();
+    let agent = crate::source_cache::http_agent(Some(Duration::from_secs(15)));
     let response = agent
         .head(url)
         .call()
         .map_err(|error| SourceCatalogError::Request(error.to_string()))?;
     response
-        .header("Content-Length")
+        .headers()
+        .get("Content-Length")
+        .and_then(|value| value.to_str().ok())
         .ok_or(SourceCatalogError::InvalidSourceSize)
         .and_then(|bytes| {
             bytes

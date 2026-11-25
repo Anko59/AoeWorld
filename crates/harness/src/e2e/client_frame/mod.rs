@@ -235,7 +235,7 @@ pub(crate) fn run(options: Options) -> Result<()> {
             format!("{}:{}:ro", modules.display(), modules.display()),
             "-w".into(),
             root.join("browser").display().to_string(),
-            "aoeworld/browser-tools:1.64.0".into(),
+            "aoeworld/browser-tools:1.65.1".into(),
             "node".into(),
             "bench/frame.mjs".into(),
             root.join(&config).display().to_string(),

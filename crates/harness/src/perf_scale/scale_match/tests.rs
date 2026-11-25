@@ -255,7 +255,7 @@ fn the_browser_container_gets_the_pinned_image_the_server_url_and_the_script() {
     );
     assert!(args.contains(&"SCALE_BASE_URL=http://127.0.0.1:9100".to_owned()));
     assert!(args.contains(&"SCALE_SECONDS=180".to_owned()));
-    assert!(args.contains(&"aoeworld/browser-tools:1.64.0".to_owned()));
+    assert!(args.contains(&"aoeworld/browser-tools:1.65.1".to_owned()));
     assert_eq!(args.last().map(String::as_str), Some(browser::SCRIPT));
     assert!(args.windows(2).any(|pair| pair == ["-w", "/repo/browser"]));
 }

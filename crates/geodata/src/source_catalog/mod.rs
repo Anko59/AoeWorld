@@ -1,6 +1,6 @@
 use crate::{Provider, digest_hex};
 use serde::Deserialize;
-use std::{io::Read, sync::Arc};
+use std::io::Read;
 
 const POTENTIAL_BIOME_RECORD_URL: &str = "https://zenodo.org/api/records/3526620";
 const BIOME_RASTER: &str = "pnv_biome.type_biome00k_c_250m_s0..0cm_2000..2017_v0.2.tif";
@@ -44,18 +44,15 @@ impl ExpectedChecksum {
 
 /// Returns current HYDE release sources after resolving the provider catalog.
 pub fn hyde_sources() -> Result<Vec<KnownSource>, SourceCatalogError> {
-    let connector = ureq::native_tls::TlsConnector::new()
-        .map_err(|error| SourceCatalogError::Request(error.to_string()))?;
-    let agent = ureq::AgentBuilder::new()
-        .tls_connector(Arc::new(connector))
-        .build();
-    let response = agent
+    let agent = crate::source_cache::http_agent(None);
+    let mut response = agent
         .get(HYDE_DATASET_URL)
         .call()
         .map_err(|error| SourceCatalogError::Request(error.to_string()))?;
     let mut payload = String::new();
     response
-        .into_reader()
+        .body_mut()
+        .as_reader()
         .read_to_string(&mut payload)
         .map_err(SourceCatalogError::Io)?;
     parse_hyde_sources(&payload)
@@ -175,18 +172,15 @@ impl KnownSource {
 }
 
 pub fn potential_biome_sources() -> Result<Vec<KnownSource>, SourceCatalogError> {
-    let connector = ureq::native_tls::TlsConnector::new()
-        .map_err(|error| SourceCatalogError::Request(error.to_string()))?;
-    let agent = ureq::AgentBuilder::new()
-        .tls_connector(Arc::new(connector))
-        .build();
-    let response = agent
+    let agent = crate::source_cache::http_agent(None);
+    let mut response = agent
         .get(POTENTIAL_BIOME_RECORD_URL)
         .call()
         .map_err(|error| SourceCatalogError::Request(error.to_string()))?;
     let mut payload = String::new();
     response
-        .into_reader()
+        .body_mut()
+        .as_reader()
         .read_to_string(&mut payload)
         .map_err(SourceCatalogError::Io)?;
     parse_potential_biome_sources(&payload)

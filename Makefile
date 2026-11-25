@@ -4,7 +4,7 @@ ROOT := $(abspath .)
 UID := $(shell id -u)
 GID := $(shell id -g)
 TOOL_IMAGE := aoeworld/rust-tools:1.99.1-sccache0.19.0
-BROWSER_IMAGE := aoeworld/browser-tools:1.64.0
+BROWSER_IMAGE := aoeworld/browser-tools:1.65.1
 ORCH_IMAGE := aoeworld/orchestrator:1.99.1-sccache0.19.0
 ANALYSIS_IMAGE := aoeworld/analysis:0.19.4-sccache0.19.0
 # Callgrind benches: the client requests must find the image's Valgrind

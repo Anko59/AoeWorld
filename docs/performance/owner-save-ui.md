@@ -65,7 +65,7 @@ capital and offsets (32,16), (-32,-16), (0,0), selecting every 120 seconds.
 Far and WebGL2 stay at the capital with an owned actor selected.
 Runtime: Firefox **157.0**, Chromium **156.0.8078.47**, Playwright **1.64.1**.
 After the borrowed cache disappeared, Firefox was copied from the pinned
-`aoeworld/browser-tools:1.64.0` image into this checkout's ignored cache;
+`aoeworld/browser-tools:1.65.1` image into this checkout's ignored cache;
 its executable SHA-256 is
 `1f637a7cfe8f1a3ec814a7da7e38c360a3e3c39553b8c7245ac5d6643fd495eb`.
 The Firefox version remains the same across the replacement.
