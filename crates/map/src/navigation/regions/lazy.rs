@@ -6,6 +6,26 @@ use std::collections::{BTreeMap, BTreeSet};
 
 type Node = (u32, u16);
 
+/// What one frontier search has learned about where its start can go. A
+/// node that reaches an unreachable goal is unreachable too (one-way gates
+/// included: otherwise the goal would be reachable through it), and a start
+/// side that ran dry is the start's whole reach (#978: an unreachable target
+/// had every candidate re-explore the same landmass).
+#[derive(Default)]
+struct Reach {
+    known: BTreeMap<Node, bool>,
+    all: Option<BTreeSet<Node>>,
+}
+
+impl Reach {
+    fn answer(&self, node: Node) -> Option<bool> {
+        self.known
+            .get(&node)
+            .copied()
+            .or_else(|| self.all.as_ref().map(|all| all.contains(&node)))
+    }
+}
+
 fn squared(a: TileCoord, b: TileCoord) -> i64 {
     let (dx, dy) = (
         i64::from(a.x) - i64::from(b.x),
@@ -183,8 +203,26 @@ impl Regions {
         start: Node,
         goal: Node,
     ) -> bool {
-        self.connected_bounded(ground, player, start, goal, None)
+        self.connected_bounded(ground, player, start, goal, None, None)
             .unwrap_or(false)
+    }
+
+    /// `connected`, answered from and adding to what `reach` already knows.
+    fn connected_learning(
+        &mut self,
+        ground: &dyn RegionGround,
+        player: u32,
+        (start, goal): (Node, Node),
+        reach: &mut Reach,
+    ) -> bool {
+        if let Some(answer) = reach.answer(goal) {
+            return answer;
+        }
+        let answer = self
+            .connected_bounded(ground, player, start, goal, None, Some(&mut *reach))
+            .unwrap_or(false);
+        reach.known.insert(goal, answer);
+        answer
     }
 
     fn connected_bounded(
@@ -194,6 +232,7 @@ impl Regions {
         start: Node,
         goal: Node,
         mut remaining: Option<u32>,
+        reach: Option<&mut Reach>,
     ) -> Option<bool> {
         if !self.allowed_node(player, start, start) {
             return Some(false);
@@ -223,6 +262,7 @@ impl Regions {
             let Some((_, node)) = queues[side].pop_first() else {
                 break;
             };
+            self.stats.searched += 1;
             for next in self.adjacent(ground, player, node, start, side == 1) {
                 if seen[1 - side].contains(&next) {
                     return Some(true);
@@ -231,6 +271,18 @@ impl Regions {
                     let near = label::origin(self.key(next.0));
                     queues[side].insert((squared(near, ends[side]), next));
                 }
+            }
+        }
+        // Only a side that ran dry proves anything; unavailable ground does not.
+        if let Some(reach) = reach
+            && (queues[0].is_empty() || queues[1].is_empty())
+        {
+            let [forward, backward] = seen;
+            reach
+                .known
+                .extend(backward.into_iter().map(|node| (node, false)));
+            if queues[0].is_empty() {
+                reach.all = Some(forward);
             }
         }
         Some(false)
@@ -253,7 +305,7 @@ impl Regions {
         let Some(goal) = self.lazy_node(ground, to) else {
             return Some(false);
         };
-        self.connected_bounded(ground, player, start, goal, Some(limit))
+        self.connected_bounded(ground, player, start, goal, Some(limit), None)
     }
 
     pub(super) fn lazy_reachable(
@@ -280,8 +332,9 @@ impl Regions {
         target: TileCoord,
     ) -> Option<TileCoord> {
         let start = self.lazy_node(ground, from)?;
+        let mut reach = Reach::default();
         if let Some(goal) = self.lazy_node(ground, target)
-            && self.connected(ground, player, start, goal)
+            && self.connected_learning(ground, player, (start, goal), &mut reach)
         {
             return Some(target);
         }
@@ -292,7 +345,6 @@ impl Regions {
         let first = self.chunk_of(clamped)?;
         let mut queue = BTreeSet::from([(self.chunk_distance(first, target), first)]);
         let mut seen = BTreeSet::from([first]);
-        let mut known = BTreeMap::new();
         let mut best: Option<(i64, i64, i32, i32)> = None;
         while ground.available() {
             let Some((distance, chunk)) = queue.pop_first() else {
@@ -317,15 +369,7 @@ impl Regions {
             }
             candidates.sort_unstable();
             for (key, node) in candidates {
-                let reachable = match known.get(&node) {
-                    Some(&answer) => answer,
-                    None => {
-                        let answer = self.connected(ground, player, start, node);
-                        known.insert(node, answer);
-                        answer
-                    }
-                };
-                if reachable {
+                if self.connected_learning(ground, player, (start, node), &mut reach) {
                     best = Some(key);
                     break;
                 }

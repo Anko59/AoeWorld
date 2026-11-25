@@ -138,3 +138,25 @@ fn border_cells_match_a_full_scan_in_order() {
     assert_eq!(direct, scanned);
     assert_eq!(direct.len(), 124);
 }
+
+#[test]
+fn an_unreachable_landmass_is_explored_once_per_frontier() {
+    // A wall splits the map: the target lies deep in the far half, so every
+    // far chunk nearer to it than the wall is tried before the near side.
+    let mut grid = Grid::new(640, 64);
+    for y in 0..64 {
+        grid.set(TileCoord::new(320, y), RegionTile::Blocked);
+    }
+    let mut regions = Regions::new(640, 64, LandBucket::Small);
+    let (from, to) = (TileCoord::new(10, 10), TileCoord::new(630, 10));
+    assert_eq!(
+        regions.frontier(&grid, 0, from, to),
+        Some(TileCoord::new(319, 10))
+    );
+    // Each half is 20 chunk nodes: one search per half, not one per chunk.
+    let searched = regions.stats().searched;
+    assert!(
+        searched <= 100,
+        "the far half was re-explored: {searched} nodes"
+    );
+}

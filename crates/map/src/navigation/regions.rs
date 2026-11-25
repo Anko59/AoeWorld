@@ -96,6 +96,8 @@ pub struct RegionStats {
     pub unchanged: u64,
     pub super_rebuilds: u64,
     pub global_rebuilds: u64,
+    /// Region nodes a connectivity search expanded.
+    pub searched: u64,
 }
 
 #[derive(Clone, Debug)]
