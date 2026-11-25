@@ -51,15 +51,23 @@ the checkout at its Mac path. `colima.sh` uses it when no Colima VM exists:
 
 ```sh
 orb create ubuntu:noble aoeworld
-orb -m aoeworld sh -c 'sudo apt-get update && sudo apt-get install -y make git ripgrep gh docker.io'
+orb -m aoeworld sh -c 'sudo apt-get update && sudo apt-get install -y make git ripgrep docker.io'
 orb -m aoeworld sh -c 'sudo systemctl mask --now docker.socket docker.service'
 orb -m aoeworld sh -c 'sudo groupadd -g "$(stat -c %g /opt/orbstack-guest/run/docker.sock)" orbdocker && sudo usermod -aG orbdocker "$USER"'
 orb -m aoeworld sh -c 'echo "L+ /run/docker.sock - - - - /opt/orbstack-guest/run/docker.sock" | sudo tee /etc/tmpfiles.d/orbdocker.conf && sudo systemd-tmpfiles --create'
+orb -m aoeworld sh -c 'sudo install -m 0755 .agents/hooks/orb-mac.sh /usr/local/bin/aoe-mac && for n in gh claude aoe-mac-sign; do sudo ln -sf aoe-mac /usr/local/bin/$n; done'
+orb -m aoeworld sh -c 'sudo git config --system core.sshCommand "mac ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=40" && sudo git config --system gpg.format ssh && sudo git config --system gpg.ssh.program aoe-mac-sign && sudo git config --system user.signingkey mac && sudo git config --system commit.gpgsign true'
 .agents/hooks/harness.sh build
 ```
 
-OrbStack forwards the Mac's SSH agent into the machine. Only paths under
-`/Users` are visible to containers, so leave `TMPDIR` unset in the machine.
+The machine holds no login, token or key: `gh`, `claude`, `ssh` and commit
+signing run the Mac's own programs through OrbStack's `mac` command
+(`.agents/hooks/orb-mac.sh`), which keeps the directory, standard streams and
+exit status and passes the harness's variables. Signing uses the key the Mac's
+Git configuration names for the checkout. `AOE_GH_ACCOUNT=<login>` on a `make`
+command picks one of the Mac's `gh` accounts, for example the one with push
+access when the active account has none. Only paths under `/Users` are visible
+to containers, so leave `TMPDIR` unset in the machine.
 
 After that, work on the Mac as on Linux. `GNUmakefile` sends every `make` goal,
 with its command-line variables, to the VM; `.agents/hooks/harness.sh` sends
@@ -76,7 +84,7 @@ Limits:
 - The checkout must be under `$HOME`; nothing else is mounted in the VM.
 - Tokens are not forwarded, because a command line is visible to `ps`. For
   `make ship` and `make issue`, run `gh auth login` once inside `colima ssh`
-  (or `orb -m aoeworld`).
+  (an OrbStack machine uses the Mac's `gh` instead).
   The Mac has no `secret-tool` keyring; see [credentials](credentials.md).
 - `make ship` and `make duel` start agent command-line tools inside the VM, so
   install the ones you use there too.
