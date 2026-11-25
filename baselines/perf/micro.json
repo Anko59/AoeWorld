@@ -45,6 +45,10 @@
       "reason": "route guides (#978 6e): a waiting unit walks a shared guide to its destination chunk; R1 (owner's Anatolia 4, dev with #1038) route waiting 18,487 -> 10,357 (-44%), arrivals 13,229 -> 18,228 (+38%) at +14.5% instructions. In the procedural late_game kernel the extra is first-time chunk generation as marching formations keep moving instead of waiting (formation steering reads static clearance in new chunks); late_game_x4 -54%",
       "dev": 6189477281
     },
+    "instructions::simulation::late_game_x4_main": {
+      "reason": "#1062 builds the route guides a round needs on worker tasks before routing; owner 11-25: CI kernels do not reflect real games. R1 (owner's Anatolia 4) main thread -0.35%, play unchanged; the procedural kernel's +3.4% over the last dev run comes from its many first-time guide builds now waiting on workers. Accepted without a new measurement",
+      "dev": 2715527911
+    },
     "instructions::simulation::late_game_main": {
       "reason": "route guides (#978 6e): a waiting unit walks a shared guide to its destination chunk; R1 (owner's Anatolia 4, dev with #1038) route waiting 18,487 -> 10,357 (-44%), arrivals 13,229 -> 18,228 (+38%) at +14.5% instructions. In the procedural late_game kernel the extra is first-time chunk generation as marching formations keep moving instead of waiting (formation steering reads static clearance in new chunks); late_game_x4 -54%",
       "dev": 4208907934
