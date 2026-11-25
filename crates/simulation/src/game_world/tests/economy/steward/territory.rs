@@ -350,3 +350,37 @@ fn active_steward_domains_contribute_the_existing_radius_to_land_control() {
     );
     assert!(held.tiles > 30_000);
 }
+
+#[test]
+fn a_building_left_behind_by_a_moving_zone_leaves_the_domain_it_left() {
+    let (mut w, a_town_center) = setup();
+    let a = trained(&mut w, a_town_center);
+    w.issue_garrison(PlayerId(0), a, a_town_center).unwrap();
+    advance(&mut w, 2);
+    // East of the bisector (x = 122) a second Town Center will take over.
+    let house = w
+        .insert_building(
+            PlayerId(0),
+            BuildingKind::House,
+            aoe_core::TileRect::from_xywh(134, 106, 2, 2),
+            true,
+        )
+        .unwrap();
+    pass(&mut w);
+    pass(&mut w);
+    assert!(w.steward_known_buildings(a).contains(&house));
+    // Unchanged zone, later visits: still known without a recheck.
+    pass(&mut w);
+    assert!(w.steward_known_buildings(a).contains(&house));
+    let b_town_center = second_town_center(&mut w);
+    let b = trained(&mut w, b_town_center);
+    w.issue_garrison(PlayerId(0), b, b_town_center).unwrap();
+    for _ in 0..4 {
+        pass(&mut w);
+    }
+    assert!(
+        !w.steward_known_buildings(a).contains(&house),
+        "A still counts a house its zone gave to B"
+    );
+    assert!(w.steward_known_buildings(b).contains(&house));
+}

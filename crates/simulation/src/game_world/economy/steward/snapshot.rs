@@ -12,6 +12,10 @@ pub(super) struct BuildingScan {
     pub after: Option<(BuildingKind, EntityId)>,
     pub known: BTreeSet<EntityId>,
     pub swept: bool,
+    /// The region labels `known` was last checked against: labels are
+    /// replaced whenever the zone moves, so while they stay the same no
+    /// building's coverage has moved.
+    pub zone: Option<std::sync::Arc<super::territory::Regions>>,
 }
 
 pub(super) struct Snapshot {
@@ -200,11 +204,19 @@ impl GameWorld {
         drop(span);
         let span = self.steward_span("steward_building_copy");
         let stored = &self.economy.buildings;
+        // Docks are owned by distance to the rival centres, not by the zone,
+        // so only they are rechecked while the zone stays put (#978).
+        let same_zone = scan
+            .zone
+            .as_ref()
+            .zip(home.regions.as_ref())
+            .is_some_and(|(seen, now)| std::sync::Arc::ptr_eq(seen, now));
         scan.known.retain(|id| {
-            stored
-                .get(id)
-                .is_some_and(|b| b.player == player && covers(b))
+            stored.get(id).is_some_and(|b| {
+                b.player == player && ((same_zone && b.kind != BuildingKind::Dock) || covers(b))
+            })
         });
+        scan.zone = home.regions.clone();
         let mut buildings = Vec::new();
         let mut garrisoned = 0;
         for id in &scan.known {
@@ -421,5 +433,17 @@ impl GameWorld {
             });
             self.steward_set_member(id, owner, Some(tile));
         }
+    }
+}
+
+#[cfg(test)]
+impl GameWorld {
+    /// Test hook: the buildings a Steward's domain currently knows.
+    pub(crate) fn steward_known_buildings(&self, id: EntityId) -> Vec<EntityId> {
+        self.economy
+            .steward_homes
+            .get(&id)
+            .map(|h| h.building_scan.known.iter().copied().collect())
+            .unwrap_or_default()
     }
 }
