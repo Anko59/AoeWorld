@@ -43,9 +43,39 @@ pub(super) struct Stats {
     /// Ticks whose user-mode instructions were counted, and those instructions.
     counted_ticks: AtomicU64,
     tick_instructions: AtomicU64,
+    /// Wall time the tick's thread spends in each wait, by `Wait`.
+    waits: [Counter; 4],
+}
+
+/// The waits of the tick's thread that the seats cause, reported separately.
+#[derive(Clone, Copy)]
+pub(super) enum Wait {
+    /// Applying what was delivered to every seat.
+    Feed,
+    /// Taking in and asking for map chunks at a decision.
+    Chunks,
+    /// Joining the decisions of the previous tick.
+    Join,
+    /// Awaiting the terrain warm-ups the seats' orders launched.
+    Settle,
+}
+
+/// Times a wait was entered and the wall time it took.
+#[derive(Default)]
+struct Counter {
+    calls: AtomicU64,
+    nanos: AtomicU64,
 }
 
 impl Stats {
+    pub(super) fn wait(&self, wait: Wait, wall: std::time::Duration) {
+        let counter = &self.waits[wait as usize];
+        counter.calls.fetch_add(1, Ordering::Relaxed);
+        counter
+            .nanos
+            .fetch_add(wall.as_nanos() as u64, Ordering::Relaxed);
+    }
+
     pub(super) fn record(&self, cpu: std::time::Duration) {
         self.decisions.fetch_add(1, Ordering::Relaxed);
         self.cpu_nanos
@@ -124,12 +154,23 @@ impl GameplayService {
     }
 
     /// The Rust AI's cost over this match: decisions and their thread CPU
-    /// (worker threads), and per tick the work it adds to the tick's thread;
-    /// `instructions_per_tick` is null where no hardware counter is available.
+    /// (worker threads), and per tick what it costs the tick's thread: the CPU
+    /// of applying the delivery and, as wall time, each of its waits (`feed`,
+    /// `chunk_waits`, `join` of the decisions, `settle` of the terrain
+    /// warm-ups) with how often it was entered. `instructions_per_tick` is
+    /// null where no hardware counter is available.
     pub(crate) fn rust_ai_perf(&self) -> Value {
         let stats = &self.ai_seats.stats;
         let load = |value: &AtomicU64| value.load(Ordering::Relaxed);
         let per = |total: u64, count: u64| (count > 0).then(|| total as f64 / count as f64);
+        let ticks = load(&stats.tick_calls);
+        let wait = |wait: Wait| {
+            let counter = &stats.waits[wait as usize];
+            json!({
+                "calls": load(&counter.calls),
+                "wall_us_per_tick": per(load(&counter.nanos), ticks).map(|ns| ns / 1e3),
+            })
+        };
         json!({
             "decisions": load(&stats.decisions),
             "cpu_ms": load(&stats.cpu_nanos) as f64 / 1e6,
@@ -137,6 +178,10 @@ impl GameplayService {
                 "ticks": load(&stats.tick_calls),
                 "cpu_us_per_tick": per(load(&stats.tick_cpu_nanos), load(&stats.tick_calls)).map(|ns| ns / 1e3),
                 "instructions_per_tick": per(load(&stats.tick_instructions), load(&stats.counted_ticks)),
+                "feed": wait(Wait::Feed),
+                "chunk_waits": wait(Wait::Chunks),
+                "join": wait(Wait::Join),
+                "settle": wait(Wait::Settle),
             },
         })
     }

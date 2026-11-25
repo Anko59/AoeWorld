@@ -13,7 +13,25 @@
 //!
 //! Map chunks follow the same beat: fetched after one decision, inserted at
 //! the next. The order budget is the session's, refilled by game ticks.
-use super::Stats;
+//!
+//! What the seats cost the tick's thread is waiting, and each wait is as
+//! short as determinism allows (`Stats`, `Wait`, reported by `/admin/perf`):
+//! - `feed`: applying the delivery. It must happen on the tick, before the
+//!   decision reads the mirror.
+//! - `chunk_waits`: a seat whose chunks have all arrived takes them in on the
+//!   tick's thread, without waiting. One whose chunks are still loading
+//!   hands that step to its decision job (`chunks_late`): the step still runs
+//!   before the decision, in the same order, so the mirror the brain reads is
+//!   the same, but the wait is on a worker, not on the tick.
+//! - `join`: the decisions of tick `k` are awaited by tick `k + 1`, after tick
+//!   `k`'s fan-out and delivery have overlapped them. It cannot move later in
+//!   the tick: the subscriptions the seats send shape the views this tick
+//!   builds, and the orders must be queued before the next tick's intake.
+//! - `settle`: the terrain warm-ups of the orders just sent must be done
+//!   before the next intake, or the tick that applies an order would depend on
+//!   thread timing. The wait starts as late as that allows (`collect`, after
+//!   the world stepped) so it overlaps the tick's own work.
+use super::{Stats, Wait};
 use crate::{AppState, GameplayService, terrain_cache};
 use aoe_ai::{Brain, Config as AiConfig, Seat as OrderSeat};
 use aoe_core::{PlayerId, TileCoord};
@@ -21,7 +39,7 @@ use aoe_map::CompactChunk;
 use aoe_protocol::{GameplayClientMessage, GameplayServerMessage};
 use aoe_sdk::{Event, Mirror, Order, ViewPolicy};
 use rayon::prelude::*;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::{sync::mpsc, task::JoinHandle};
 
 /// Map chunks one seat asks for per decision.
@@ -40,6 +58,8 @@ pub(super) struct Seat {
     brain: Brain,
     next_sequence: u64,
     fetching: Vec<((i32, i32), Fetch)>,
+    /// The chunk step of this decision is left to the decision job.
+    chunks_late: bool,
 }
 
 #[derive(Default)]
@@ -49,6 +69,8 @@ pub(super) struct Inner {
     decision_ticks: u64,
     state: Option<AppState>,
     job: Option<JoinHandle<Decided>>,
+    /// The terrain warm-ups launched by the orders the last flush sent.
+    settling: Option<JoinHandle<()>>,
 }
 
 /// What a brain sends: wire requests, numbered like a client's.
@@ -88,6 +110,11 @@ impl Seat {
         }
     }
 
+    /// Whether every chunk asked for at the last decision has been loaded.
+    fn chunks_arrived(&self) -> bool {
+        self.fetching.iter().all(|(_, fetch)| fetch.is_finished())
+    }
+
     /// Takes in the chunks asked for at the last decision, then asks for more.
     async fn chunks(&mut self, state: &AppState) {
         for (chunk, fetch) in std::mem::take(&mut self.fetching) {
@@ -110,17 +137,13 @@ impl Seat {
     }
 }
 
-/// A chunk from the same source as the chunk route; a refused admission is
-/// retried, so the outcome does not depend on how busy the server is.
+/// A chunk from the same source as the chunk route. A busy preparation queue
+/// makes it wait its turn rather than be refused, so every fetch completes in
+/// bounded time and the outcome does not depend on how busy the server is.
 async fn fetch(state: &AppState, key: terrain_cache::Key) -> Result<CompactChunk, String> {
-    loop {
-        match crate::maps::terrain_chunk(state, key.clone(), false).await {
-            Err(axum::http::StatusCode::SERVICE_UNAVAILABLE) => {
-                tokio::time::sleep(Duration::from_millis(5)).await;
-            }
-            other => return other.map_err(|code| code.to_string()),
-        }
-    }
+    crate::maps::terrain_chunk_queued(state, key)
+        .await
+        .map_err(|code| code.to_string())
 }
 
 /// CPU time of the calling thread.
@@ -152,7 +175,16 @@ fn instructions() -> Option<perf_event::Counter> {
     Some(counter)
 }
 
-fn decide(mut seat: Seat, stats: &Stats) -> (Seat, Vec<GameplayClientMessage>) {
+fn decide(
+    mut seat: Seat,
+    stats: &Stats,
+    chunks: &(tokio::runtime::Handle, AppState),
+) -> (Seat, Vec<GameplayClientMessage>) {
+    if std::mem::take(&mut seat.chunks_late) {
+        // The chunks were still loading on the tick: wait for them here, on a
+        // worker, then ask for more, exactly as the tick would have.
+        chunks.0.block_on(seat.chunks(&chunks.1));
+    }
     let started = thread_cpu();
     let mut out = Orders {
         next: seat.next_sequence,
@@ -206,6 +238,7 @@ impl GameplayService {
                 brain: Brain::new(AiConfig::default()),
                 next_sequence: 1,
                 fetching: Vec::new(),
+                chunks_late: false,
             });
             seated += 1;
         }
@@ -227,30 +260,45 @@ impl GameplayService {
             return;
         }
         let mut inner = self.ai_seats.inner.lock().await;
-        // The seats' only work on the tick's thread: applying what was delivered.
-        let (cpu, counter) = (thread_cpu(), instructions());
+        let stats = self.ai_seats.stats.clone();
+        // The orders of the last flush launched terrain warm-ups: they must be
+        // done before the next tick takes its commands. Awaited here, after the
+        // world stepped, so they ran during the tick's own work.
+        if let Some(settling) = inner.settling.take() {
+            let started = Instant::now();
+            let _ = settling.await;
+            stats.wait(Wait::Settle, started.elapsed());
+        }
+        // The seats' work on the tick's thread: applying what was delivered.
+        let (started, cpu, counter) = (Instant::now(), thread_cpu(), instructions());
         for seat in &mut inner.seats {
             seat.feed();
         }
         let counted = counter.and_then(|mut c| c.disable().and_then(|()| c.read()).ok());
-        self.ai_seats
-            .stats
-            .record_tick(thread_cpu().saturating_sub(cpu), counted);
+        stats.record_tick(thread_cpu().saturating_sub(cpu), counted);
+        stats.wait(Wait::Feed, started.elapsed());
         if inner.decision_ticks == 0 || !tick.is_multiple_of(inner.decision_ticks) {
             return;
         }
         let Some(state) = inner.state.clone() else {
             return;
         };
+        let started = Instant::now();
         for seat in &mut inner.seats {
-            seat.chunks(&state).await;
+            if seat.chunks_arrived() {
+                seat.chunks(&state).await;
+            } else {
+                seat.chunks_late = true;
+            }
         }
+        stats.wait(Wait::Chunks, started.elapsed());
         let seats = std::mem::take(&mut inner.seats);
-        let stats = self.ai_seats.stats.clone();
+        let chunks = (tokio::runtime::Handle::current(), state);
+        let job_stats = stats.clone();
         inner.job = Some(tokio::task::spawn_blocking(move || {
             seats
                 .into_par_iter()
-                .map(|seat| decide(seat, &stats))
+                .map(|seat| decide(seat, &job_stats, &chunks))
                 .collect()
         }));
     }
@@ -269,7 +317,10 @@ impl GameplayService {
         let Some(job) = inner.job.take() else {
             return;
         };
-        let Ok(decided) = job.await else {
+        let started = Instant::now();
+        let joined = job.await;
+        self.ai_seats.stats.wait(Wait::Join, started.elapsed());
+        let Ok(decided) = joined else {
             tracing::error!("an AI decision failed; its seats stop");
             return;
         };
@@ -283,9 +334,12 @@ impl GameplayService {
             }
         }
         if sent {
-            // Orders wait for their terrain; settle it so the tick that takes
-            // them does not depend on thread timing.
-            self.settle_preparation().await;
+            // Orders wait for their terrain; it is settled before the tick
+            // that takes them so that tick does not depend on thread timing.
+            // Only the warm-ups launched by these orders (and what was
+            // already running) are awaited, and `collect` awaits them, not
+            // this call: they run meanwhile.
+            inner.settling = Some(tokio::spawn(self.launched_preparation().settled()));
         }
     }
 }

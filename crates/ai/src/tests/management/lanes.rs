@@ -102,7 +102,7 @@ fn test_obstructed_gate_footprint_drops_the_lane_and_next_lane_is_used() {
     let mut ctx = realm.ctx();
     step(&mut ctx);
     assert!(tape.orders().builds().is_empty());
-    assert!(ctx.board.fort_lanes.get(&center).is_none());
+    assert!(!ctx.board.fort_lanes.contains_key(&center));
     ctx.tick += 1200;
     step(&mut ctx);
     let second = ctx.board.fort_lanes[&center];
@@ -224,7 +224,7 @@ fn test_answered_unreachable_gate_edges_do_reject_the_lane() {
     let mut ctx = realm.ctx();
     step(&mut ctx);
     assert_eq!(ctx.board.fort_rejected[&center], BTreeSet::from([at]));
-    assert!(ctx.board.fort_lanes.get(&center).is_none());
+    assert!(!ctx.board.fort_lanes.contains_key(&center));
 }
 
 #[test]

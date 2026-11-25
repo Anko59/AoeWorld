@@ -1,16 +1,31 @@
 //! Management units and the buildings they need
 //! (`ai/aoe_ai/play/management.py`).
 //!
-//! Only the price of the first management units is here for now: research
-//! protects it from optional science. The expansion, castles, seating and
-//! generals come with the management task.
+//! * Castles (stone) host Vassals (defence, towers, walls, roads) and Generals.
+//! * A Steward garrisoned in a Town Center manages the villagers of a 100-tile
+//!   domain and builds Houses; one per Town Center.
+//! * A General leads up to 100 soldiers; with his Train button pressed he buys
+//!   them himself from the production buildings in his 50-tile sphere.
+//! * More Town Centers train more villagers and widen the Steward domains.
+//!
+//! Prices are saved ahead of army spending (`save_for_management`): a Steward
+//! costs 1,000 food and 1,000 gold, a General 800 and 800.
+//!
+//! The manager is split by concern: `building` (Town Centers and Castles),
+//! `units` (Stewards and Vassals) and `general` (Generals and their orders).
+mod building;
+mod general;
+mod units;
+
 use aoe_sdk::rules::unit_train_seconds;
 use aoe_sdk::{BuildingKind, UnitKind};
 
 use super::fortification::threat::threatened;
-use crate::context::Context;
+use crate::context::{Context, OrderBudgetExhausted};
 use crate::roster::price;
 use crate::view::Building;
+
+type Done = Result<(), OrderBudgetExhausted>;
 
 fn garrisoned(building: &Building, kind: UnitKind) -> bool {
     building.garrison.iter().any(|entry| entry.1 == kind)
@@ -87,4 +102,36 @@ pub fn funding_reserve(ctx: &Context<'_>) -> [u32; 4] {
         }
     }
     result
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ManagementManager {
+    /// Set by `place` when a reachability check had no budget to answer.
+    unanswered: bool,
+}
+
+impl ManagementManager {
+    /// One decision.
+    pub fn step(&mut self, ctx: &mut Context<'_>) -> Done {
+        let cfg = ctx.config;
+        if ctx.home.is_none() || ctx.economy.is_none() {
+            return Ok(());
+        }
+        if cfg.castles == 0
+            && cfg.stewards == 0
+            && cfg.vassals == 0
+            && cfg.generals == 0
+            && cfg.town_centers <= 1
+        {
+            return Ok(());
+        }
+        self.expand(ctx)?;
+        self.castles(ctx)?;
+        self.seat(ctx, UnitKind::Steward, BuildingKind::TownCenter)?;
+        self.seat(ctx, UnitKind::Vassal, BuildingKind::Castle)?;
+        self.recruit(ctx)?;
+        self.generals(ctx)?;
+        self.settings(ctx)?;
+        self.defenders(ctx)
+    }
 }

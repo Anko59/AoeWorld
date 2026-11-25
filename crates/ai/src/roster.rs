@@ -15,6 +15,11 @@ pub fn building_price(kind: BuildingKind) -> [u32; 4] {
     [s.food, s.wood, s.gold, s.stone]
 }
 
+/// `(width, height)` of a building's footprint in tiles.
+pub fn building_size(kind: BuildingKind) -> (i32, i32) {
+    (kind.side(), kind.depth())
+}
+
 /// The public technology tree, read once.
 pub fn technology_rows() -> &'static [Technology] {
     static ROWS: OnceLock<Vec<Technology>> = OnceLock::new();
