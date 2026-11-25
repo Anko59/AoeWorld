@@ -16,6 +16,8 @@ struct Entry {
     nodes: ChunkNodes,
     bytes: usize,
     touched: u64,
+    /// The stamp `order` files this entry under (at most `touched`).
+    filed: u64,
 }
 
 #[derive(Debug)]
@@ -44,12 +46,14 @@ impl ResourceCache {
         }
     }
 
+    /// A hit only restamps its entry: `order` keeps each key at the stamp it
+    /// was filed under, and eviction files a stale one again at its current
+    /// stamp, so the least recently used entry still leaves first without
+    /// two tree edits per hit (#978).
     pub(crate) fn get(&mut self, key: &Key) -> Option<ChunkNodes> {
         let entry = self.entries.get_mut(key)?;
-        self.order.remove(&(entry.touched, *key));
         self.clock += 1;
         entry.touched = self.clock;
-        self.order.insert((entry.touched, *key));
         Some(entry.nodes.clone())
     }
 
@@ -66,14 +70,23 @@ impl ResourceCache {
         }
         if let Some(old) = self.entries.remove(&key) {
             self.bytes -= old.bytes;
-            self.order.remove(&(old.touched, key));
+            self.order.remove(&(old.filed, key));
         }
         while self.bytes + bytes > self.limit {
-            let Some((_, key)) = self.order.pop_first() else {
+            let Some((filed, key)) = self.order.pop_first() else {
                 break;
             };
-            if let Some(old) = self.entries.remove(&key) {
-                self.bytes -= old.bytes;
+            match self.entries.get_mut(&key) {
+                Some(entry) if entry.touched != filed => {
+                    entry.filed = entry.touched;
+                    self.order.insert((entry.touched, key));
+                }
+                Some(_) => {
+                    if let Some(old) = self.entries.remove(&key) {
+                        self.bytes -= old.bytes;
+                    }
+                }
+                None => {}
             }
         }
         self.clock += 1;
@@ -84,6 +97,7 @@ impl ResourceCache {
                 nodes,
                 bytes,
                 touched: self.clock,
+                filed: self.clock,
             },
         );
         self.order.insert((self.clock, key));
