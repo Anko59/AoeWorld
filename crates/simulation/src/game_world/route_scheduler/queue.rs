@@ -87,7 +87,7 @@ impl GameWorld {
             }
             let reach = unit
                 .planner
-                .as_ref()
+                .as_deref()
                 .map_or(2, |p| usize::from(far_route(p.origin(), p.destination())));
             let cell = out
                 .cells
@@ -95,7 +95,7 @@ impl GameWorld {
                 .or_default();
             if unit
                 .planner
-                .as_ref()
+                .as_deref()
                 .is_some_and(RoutePlanner::requires_search_slot)
             {
                 cell.searches += 1;

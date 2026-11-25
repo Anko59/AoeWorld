@@ -82,7 +82,7 @@ impl GameWorld {
             .get(&unit.state.player)
             .copied()
             .unwrap_or_default();
-        let planner = unit.planner.as_ref().map(|planner| {
+        let planner = unit.planner.as_deref().map(|planner| {
             format!(
                 "work {} leg_work {} search {} continuation {} terminal {}",
                 planner.work(),

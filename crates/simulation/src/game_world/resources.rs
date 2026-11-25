@@ -201,7 +201,7 @@ impl GameWorld {
         let (mut cleared, mut gone) = (Vec::new(), Vec::new());
         for id in &self.collision_subscribers.planners {
             match self.lookup.get(id) {
-                Some(&index) if self.units[index].planner.as_ref().is_some_and(&invalid) => {
+                Some(&index) if self.units[index].planner.as_deref().is_some_and(&invalid) => {
                     cleared.push(index);
                 }
                 Some(_) => {}
@@ -252,7 +252,7 @@ impl GameWorld {
         for unit in self.units.oracle_slice() {
             let id = unit.state.id;
             assert!(
-                unit.planner.as_ref().is_none_or(|planner| {
+                unit.planner.as_deref().is_none_or(|planner| {
                     if opened {
                         !planner.opening_invalidates_proof(area)
                     } else {

@@ -17,7 +17,7 @@ impl GameWorld {
                 self.units[index].order.is_some()
                     && self.units[index]
                         .planner
-                        .as_ref()
+                        .as_deref()
                         .is_some_and(RoutePlanner::wants_lookahead)
             })
             .collect::<Vec<_>>();
@@ -66,7 +66,7 @@ impl GameWorld {
     /// A new leg search planned ahead would take a slot its player's waiting
     /// units queue for.
     fn lookahead_jumps_queue(&self, index: usize) -> bool {
-        self.units[index].planner.as_ref().is_some_and(|planner| {
+        self.units[index].planner.as_deref().is_some_and(|planner| {
             !planner.requires_search_slot()
                 && self.route_queued.contains(&(
                     self.units[index].state.player,
@@ -80,10 +80,10 @@ impl GameWorld {
         let own_search = usize::from(
             self.units[index]
                 .planner
-                .as_ref()
+                .as_deref()
                 .is_some_and(RoutePlanner::requires_search_slot),
         );
-        let far = self.units[index].planner.as_ref().is_some_and(|planner| {
+        let far = self.units[index].planner.as_deref().is_some_and(|planner| {
             crate::game_world::far_route(planner.origin(), planner.destination())
         });
         self.route_capacity_exhausted(self.units[index].state.player, own_planner, own_search, far)

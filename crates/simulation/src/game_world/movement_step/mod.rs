@@ -366,7 +366,7 @@ impl GameWorld {
         }
         let needs_search = stored
             .planner
-            .as_ref()
+            .as_deref()
             .is_none_or(|planner| !planner.has_route_continuation());
         if needs_search {
             // Only the fair per-player pass searches. A mover without a

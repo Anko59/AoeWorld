@@ -54,7 +54,7 @@ fn waits_without_planner(world: &GameWorld, id: EntityId) -> bool {
 fn holds_search(world: &GameWorld, id: EntityId) -> bool {
     world.units[world.lookup[&id]]
         .planner
-        .as_ref()
+        .as_deref()
         .is_some_and(aoe_map::RoutePlanner::requires_search_slot)
 }
 

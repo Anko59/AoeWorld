@@ -219,7 +219,7 @@ fn a_walking_unit_with_pending_lookahead_still_gets_a_pure_proposal() {
     assert!(
         world.units[index]
             .planner
-            .as_ref()
+            .as_deref()
             .unwrap()
             .wants_lookahead()
     );

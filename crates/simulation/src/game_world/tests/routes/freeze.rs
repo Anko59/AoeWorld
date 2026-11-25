@@ -49,7 +49,7 @@ fn a_refused_order_keeps_the_route_search_already_spent() {
     world.advance();
     let work = world.units[world.lookup[&id]]
         .planner
-        .as_ref()
+        .as_deref()
         .expect("searching")
         .work();
     assert!(work > 0);
@@ -59,7 +59,7 @@ fn a_refused_order_keeps_the_route_search_already_spent() {
 
     assert_eq!(error, GameWorldError::Unreachable);
     let unit = &world.units[world.lookup[&id]];
-    assert_eq!(unit.planner.as_ref().map(|p| p.work()), Some(work));
+    assert_eq!(unit.planner.as_deref().map(|p| p.work()), Some(work));
     assert_eq!(world.movement_order(id), order);
     assert_eq!(world.route_slots[&PlayerId(1)].searches, 1);
     assert_eq!(world.route_accounting_error(), None);
@@ -192,7 +192,7 @@ fn a_chase_does_not_restart_the_route_search_it_waits_for() {
         }
         world.planning_budget = 2_048;
         world.advance();
-        let Some(planner) = world.units[world.lookup[&attacker]].planner.as_ref() else {
+        let Some(planner) = world.units[world.lookup[&attacker]].planner.as_deref() else {
             break;
         };
         assert!(
@@ -221,7 +221,7 @@ fn collision_changes_elsewhere_keep_route_searches() {
     let work = |world: &GameWorld| {
         world.units[world.lookup[&id]]
             .planner
-            .as_ref()
+            .as_deref()
             .map(|p| p.work())
     };
     let before = work(&world).expect("searching");
@@ -238,7 +238,7 @@ fn collision_changes_elsewhere_keep_route_searches() {
     assert!(
         world.units[world.lookup[&id]]
             .planner
-            .as_ref()
+            .as_deref()
             .expect("searching")
             .touches(searched)
     );

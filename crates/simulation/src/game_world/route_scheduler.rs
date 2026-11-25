@@ -196,7 +196,7 @@ impl GameWorld {
                 && unit.route.is_empty()
                 && unit
                     .planner
-                    .as_ref()
+                    .as_deref()
                     .is_none_or(|planner| !planner.has_route_continuation())
             {
                 if self.route_wait_expired(index) {

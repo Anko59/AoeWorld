@@ -417,7 +417,7 @@ fn a_unit_crosses_3900_tiles_and_takes_the_distant_river_gateway() {
             eprintln!(
                 "return {tick} {:?} {:?}",
                 state.position.tile_floor(),
-                world.units[i].planner.as_ref().map(|p| (
+                world.units[i].planner.as_deref().map(|p| (
                     p.origin(),
                     p.work(),
                     p.leg_work(),
@@ -440,7 +440,7 @@ fn a_unit_crosses_3900_tiles_and_takes_the_distant_river_gateway() {
             state.position,
             world.movement_order(unit),
             world.units[index].route.len(),
-            world.units[index].planner.as_ref().map(|p| (
+            world.units[index].planner.as_deref().map(|p| (
                 p.work(),
                 p.leg_work(),
                 p.certified_destination(),
