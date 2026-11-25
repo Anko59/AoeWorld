@@ -5,12 +5,15 @@ use aoe_sdk::{Age, BuildingKind, CommandResult, EntityId, Event, Order};
 
 use crate::blackboard::{Blackboard, Tracked};
 use crate::config::Config;
-use crate::context::Context;
+use crate::context::{Context, OrderBudgetExhausted};
 use crate::geometry::dist;
+use crate::play::economy::{self, unemployed};
 use crate::play::fortification::threat::observe;
+use crate::play::{buildorder, constructor, market, military, research};
 use crate::roster::profile;
 use crate::seat::Seat;
 use crate::view::{Tile, View};
+use crate::worker_view::survey_workers;
 
 /// Refusals that mean "this target will never work for this unit".
 fn hopeless(result: CommandResult) -> bool {
@@ -71,9 +74,78 @@ fn peak(board: &mut Blackboard, name: &str, value: usize) {
     *entry = (*entry).max(value as u64);
 }
 
-/// The managers in priority order, each with its slice of the order budget.
-/// Later tasks port them and list their calls here.
-fn run_managers(_ctx: &mut Context<'_>) {}
+/// Run one manager with its slice of the order budget. Idle stages leave room
+/// for later work; a manager that spends its slice ends its work there
+/// (`OrderBudgetExhausted`).
+fn run(
+    ctx: &mut Context<'_>,
+    limit: u32,
+    action: impl FnOnce(&mut Context<'_>) -> Result<(), OrderBudgetExhausted>,
+) {
+    let total = ctx.config.orders_per_decision;
+    if ctx.orders >= total {
+        return;
+    }
+    ctx.order_limit = total.min(ctx.orders + limit);
+    let _ = action(ctx);
+}
+
+/// The managers in priority order, each with its slice of the order budget
+/// (`brain.py` `decide`). The managers of later tasks keep their slots as
+/// comments naming the Python call.
+fn run_managers(ctx: &mut Context<'_>) {
+    let config = ctx.config;
+    if ctx.late_economy && ctx.villagers.iter().any(unemployed) {
+        ctx.land_query_limit -= config.idle_land_query_reserve.min(ctx.land_query_limit / 2);
+    }
+    constructor::refresh(ctx);
+    if ctx.center.is_some()
+        && buildorder::imperial_ready(ctx)
+        && buildorder::imperial_requirement_kinds(ctx) < 2
+    {
+        run(ctx, 1, |c| constructor::production(c, None));
+        let wood = ctx.economy.as_ref().map_or(0, |e| e.wood);
+        let free = wood.saturating_sub(ctx.spent[1]);
+        ctx.spent[1] += buildorder::imperial_prerequisite_wood(ctx).min(free);
+    }
+    run(ctx, 2, research::step);
+    run(ctx, 1, market::step);
+    // run(14, self.combat.step)
+    // run(2, lambda c: self.management.lead(c, self.combat))
+    run(ctx, 2, military::rally);
+    // run(2, self.scouts.step)
+    run(ctx, 1, constructor::fund_market);
+    run(ctx, 1, economy::wood_dropoff);
+    // run(8, self.management.step)
+    run(ctx, 5, economy::produce);
+    run(ctx, 2, constructor::houses);
+    // run(1, self.fortifications.step)
+    if buildorder::unpaid_age_up_barracks(ctx)
+        || (ctx.feudal() && !ctx.castle() && buildorder::castle_requirement_kinds(ctx) < 2)
+    {
+        run(ctx, 1, |c| constructor::production(c, None));
+        ctx.spent[1] += buildorder::castle_prerequisite_wood(ctx);
+    }
+    let forming_army = buildorder::wants_castle_food(ctx)
+        && buildorder::stat(ctx, "army_peak") < u64::from(config.castle_army_min);
+    if forming_army {
+        run(ctx, 4, military::train);
+    }
+    ctx.land_query_limit = config.land_queries_per_decision;
+    run(ctx, 18, economy::work);
+    survey_workers(ctx);
+    run(ctx, 2, constructor::step);
+    if !forming_army {
+        let train_orders = if ctx.castle() {
+            config.army_train_orders
+        } else {
+            4
+        };
+        run(ctx, train_orders, military::train);
+    }
+    // run(1, self.naval.step)
+    // run(1, self.bridges.step)
+}
 
 /// Count a blow of ours landing: an enemy unit or building whose hit points
 /// fell since we last saw it, with a soldier of ours in range. A foundation

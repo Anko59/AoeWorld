@@ -8,12 +8,21 @@ use super::fake::{FakeWorld, Recorder, base, building, economy, order_result, so
 use crate::blackboard::Tracked;
 use crate::brain::Brain;
 use crate::config::Config;
+use crate::context::Context;
 use crate::view::Economy;
 
 pub fn decide(brain: &mut Brain, world: &FakeWorld, events: &[Event]) -> Recorder {
     let mut seat = Recorder::default();
     brain.decide(world, events, &mut seat);
     seat
+}
+
+/// `brain.absorb(ctx)` alone, as the Python tests call it: the verdicts and
+/// events of one decision, without the managers acting on the world.
+pub fn absorb(brain: &mut Brain, world: &FakeWorld, events: &[Event]) {
+    let mut seat = Recorder::default();
+    let mut ctx = Context::new(world, events, &mut brain.board, &brain.config, &mut seat);
+    crate::brain::absorb(&mut ctx);
 }
 
 pub fn tracked(name: &str, order: Order, tick: u64) -> Tracked {
@@ -138,7 +147,7 @@ fn an_accepted_order_is_forgotten_and_counted() {
         .board
         .tracked
         .insert(5, tracked("gather", gather(1, 7), 90));
-    decide(
+    absorb(
         &mut brain,
         &world,
         &[order_result(5, CommandResult::Accepted)],
@@ -158,7 +167,7 @@ fn a_refused_order_is_counted_by_result_and_by_order_kind() {
         .tracked
         .insert(5, tracked("gather", gather(1, 7), 90));
     let refusal = order_result(5, CommandResult::RejectedNotOwner);
-    decide(&mut brain, &world, &[refusal]);
+    absorb(&mut brain, &world, &[refusal]);
     assert!(brain.board.tracked.is_empty());
     assert_eq!(stat(&brain, "rejected"), Some(1));
     assert_eq!(stat(&brain, "rejected:RejectedNotOwner"), Some(1));

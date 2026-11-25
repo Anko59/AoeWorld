@@ -1,6 +1,7 @@
 //! One decision's view: the world, the budget and the order helpers
 //! (`ai/aoe_ai/context.py`).
 mod land;
+mod manager;
 
 use std::cell::OnceCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -29,7 +30,7 @@ pub type Cost = [u32; 4];
 pub struct Lines(Vec<(UnitKind, u32)>);
 
 impl Lines {
-    fn add(&mut self, line: UnitKind, count: u32) {
+    pub fn add(&mut self, line: UnitKind, count: u32) {
         match self.0.iter_mut().find(|(kind, _)| *kind == line) {
             Some((_, n)) => *n += count,
             None => self.0.push((line, count)),

@@ -16,6 +16,7 @@ pub mod roster;
 pub mod sdk_view;
 pub mod seat;
 pub mod view;
+pub mod worker_view;
 
 pub use brain::Brain;
 pub use config::Config;

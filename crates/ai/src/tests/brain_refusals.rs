@@ -3,7 +3,7 @@ use aoe_sdk::{
     BuildingKind, CommandResult as R, EntityId, Formation, Order, Tech, TileCoord, UnitKind,
 };
 
-use super::brain_absorb::{decide, tracked};
+use super::brain_absorb::{absorb, tracked};
 use super::fake::{FakeWorld, base, order_result, soldier, with_context};
 use crate::blackboard::{Blackboard, Plan};
 use crate::brain::{self, Brain};
@@ -19,10 +19,11 @@ fn world() -> FakeWorld {
     FakeWorld::new(units, buildings)
 }
 
-/// Send `order` under sequence 1 and refuse it with `result` in the next decision.
+/// Send `order` under sequence 1 and absorb its refusal with `result`, as
+/// `brain.absorb(ctx)` does in the Python tests.
 fn refused(brain: &mut Brain, name: &str, order: Order, result: R) {
     brain.board.tracked.insert(1, tracked(name, order, 90));
-    decide(brain, &world(), &[order_result(1, result)]);
+    absorb(brain, &world(), &[order_result(1, result)]);
 }
 
 fn gather(unit: u32, resource: u64) -> Order {
