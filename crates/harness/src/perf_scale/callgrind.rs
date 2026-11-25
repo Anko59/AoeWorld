@@ -3,17 +3,17 @@
 use std::collections::BTreeMap;
 
 /// Event counts in the order of the file's `events:` line.
-pub(super) type Cost = Vec<u64>;
+pub(crate) type Cost = Vec<u64>;
 
 #[derive(Debug, Default)]
-pub(super) struct Profile {
-    pub(super) events: Vec<String>,
+pub(crate) struct Profile {
+    pub(crate) events: Vec<String>,
     /// The `desc:` lines that describe the simulated caches.
-    pub(super) caches: Vec<String>,
-    pub(super) totals: Cost,
-    pub(super) own: BTreeMap<String, Cost>,
+    pub(crate) caches: Vec<String>,
+    pub(crate) totals: Cost,
+    pub(crate) own: BTreeMap<String, Cost>,
     /// Inclusive cost of the calls from the first function to the second.
-    pub(super) edges: BTreeMap<(String, String), Cost>,
+    pub(crate) edges: BTreeMap<(String, String), Cost>,
 }
 
 fn add(into: &mut Cost, cost: &[u64]) {
@@ -25,25 +25,26 @@ fn add(into: &mut Cost, cost: &[u64]) {
     }
 }
 
-/// `(12) name` defines id 12, `(12)` repeats it.
+/// `(12) name` defines id 12, `(12)` repeats it. With `--compress-strings=no`
+/// (Gungraun's setting) a name stands alone and may itself contain `(`.
 fn name_of(names: &mut BTreeMap<String, String>, spec: &str) -> String {
     let spec = spec.trim();
-    match spec.split_once(')') {
-        Some((id, rest)) => {
-            let id = id.trim_start_matches('(').to_owned();
+    let compressed = spec.strip_prefix('(').and_then(|rest| rest.split_once(')'));
+    match compressed {
+        Some((id, rest)) if !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()) => {
             let name = rest.trim();
             if name.is_empty() {
-                names.get(&id).cloned().unwrap_or_default()
+                names.get(id).cloned().unwrap_or_default()
             } else {
-                names.insert(id, name.to_owned());
+                names.insert(id.to_owned(), name.to_owned());
                 name.to_owned()
             }
         }
-        None => spec.to_owned(),
+        _ => spec.to_owned(),
     }
 }
 
-pub(super) fn parse(text: &str) -> Result<Profile, String> {
+pub(crate) fn parse(text: &str) -> Result<Profile, String> {
     let mut profile = Profile::default();
     let mut positions = 1;
     let (mut names, mut current, mut callee) = (BTreeMap::new(), String::new(), String::new());
@@ -99,14 +100,14 @@ fn plain(name: &str) -> &str {
 }
 
 /// Whether a function is `pattern`, written as its trailing path (`GameWorld>::step`).
-pub(super) fn is(name: &str, pattern: &str) -> bool {
+pub(crate) fn is(name: &str, pattern: &str) -> bool {
     plain(name).ends_with(pattern)
 }
 
 impl Profile {
     /// Inclusive cost of the functions named `pattern`: their own cost and
     /// that of everything they call. `None` when none ran.
-    pub(super) fn inclusive(&self, pattern: &str) -> Option<Cost> {
+    pub(crate) fn inclusive(&self, pattern: &str) -> Option<Cost> {
         let mut sum: Option<Cost> = None;
         for (name, cost) in self.own.iter().filter(|(name, _)| is(name, pattern)) {
             add(sum.get_or_insert_with(Vec::new), cost);
@@ -120,7 +121,7 @@ impl Profile {
     }
 
     /// Inclusive cost of the calls from `caller` to `callee`.
-    pub(super) fn edge(&self, caller: &str, callee: &str) -> Option<Cost> {
+    pub(crate) fn edge(&self, caller: &str, callee: &str) -> Option<Cost> {
         let mut sum: Option<Cost> = None;
         for ((from, to), cost) in &self.edges {
             if is(from, caller) && is(to, callee) {
@@ -130,7 +131,7 @@ impl Profile {
         sum
     }
 
-    pub(super) fn event(&self, name: &str) -> Result<usize, String> {
+    pub(crate) fn event(&self, name: &str) -> Result<usize, String> {
         self.events
             .iter()
             .position(|event| event == name)

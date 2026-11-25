@@ -305,27 +305,27 @@ requests a row also fails above +3% of the latest passing dev run; a deliberate 
 the dev run, until dev counts more. A refresh drops it. Elapsed-time rows (tick p50/p95, protocol pressure, scale and
 multi-thread workloads) stay informational and never gate.
 
+**Critical path (informational).** Owner 11-24: instructions must compare to wall time once work runs on workers. For
+each kernel run on workers, `make perf-ci` adds a row `<kernel>_critical` (`late_game_critical`,
+`late_game_x4_critical`) with no baseline that never fails, and its PR comment note gives the parts. Definition: the main
+thread's instructions plus, for each parallel phase, the busiest worker's instructions in that phase. A phase is one
+parallel call site: the jobs a worker starts from its idle loop (`wait_until_cold` at recursion level 1, so a nested
+job counts once in its parent), labelled by the last `aoe_` path in the job's type name; the work-stealing search and
+sleep are not phase work. Per label the maximum is over the whole measured window, so the figure is a lower bound of
+the sum of per-call maxima, never below the workers' total divided by their number. The numbers come from Callgrind's
+`--separate-threads=yes` files `callgrind.<kernel>.tN.pM.out` under `target/gungraun` (`perf_micro/critical.rs`); a
+kernel whose files are gone reports the row unavailable. The row can be gated only after a dev run sets its baseline.
+With one worker the helpers run inline on the main thread, so the critical path equals the main thread and the total
+(measured 2026-11-25 on `late_game`: 9,673,500,814 for all three). With four workers: main 7,367,750,783, critical path
+8,015,510,075 (four phases, 647,759,292), total 9,709,560,236.
+
 Binaryen optimizes the WASM bundle before gzip
 size comparison. Reviewed baselines live in `baselines/perf/`;
 `make perf-baseline-propose` writes proposed replacements to ignored reports
-without changing the baselines. The WASM size baseline was re-taken on
-2026-10-10 at 228410 B (from 217240 B, set by #6), the size of the tree that
-reverts #208 and #221: both existed only to fit a 5% gate that had 37 B left,
-one by moving WebGPU out of Rust. It was re-taken on 2026-10-11 at 236275 B,
-measured on `dev` ba5417c: the growth is merged product code (world-anchored
-terrain texels and their frame directory, #268), and the allowance left could
-not hold the next reviewed features. It was re-taken again on 2026-10-12 at
-248103 B, measured on `dev` 58dc3ec: ground blending with separate shader
-programs (#289, #294), water drawn by depth (#284) and four more ground sheets
-(#291) used the whole allowance, leaving `dev` itself at the cap. It was re-taken on
-2026-10-14 at 261677 B, measured on `dev` 7a143b5: rivers with banks and fords (#348, #350), blended
-shorelines (#349), play feedback (#361) and connected cliff walls (#370) put `dev` itself 1169 B over
-the cap, so every pull request failed the comparison. It was re-taken on 2026-10-17 at
-274135 B, measured on `dev` 3428ce55: the client batch of HUD (#434), setup-only maps (#451),
-visuals (#452) and village controls (#459) left `dev` 625 B under the cap, so the next client
-change would fail. It was re-taken on 2026-10-20 at 287702 B, measured on `dev` 33e7ede0
-after the Dark Age client batch left `dev` 139 B under the cap (growth measured on each
-pull request branch):
+without changing the baselines. The WASM size baseline is re-taken in a reviewed commit when merged product code
+leaves `dev` itself under the allowance (2026-10-10 at 228410 B, 10-11 at 236275 B, 10-12 at 248103 B, 10-14 at
+261677 B, 10-17 at 274135 B, 10-20 at 287702 B, each measured on `dev`). The growth that last re-take absorbed, by
+pull request branch:
 
 | Pull request | Change | Growth |
 |---|---|---|

@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::BTreeMap, error::Error, fs, path::Path};
 
+pub mod critical;
 pub mod dev;
 use dev::DevReference;
 
@@ -340,6 +341,52 @@ fn judge(
     row
 }
 
+/// Informational critical-path rows (`<kernel>_critical`) of the kernels run
+/// on worker threads, from the per-thread profiles Gungraun kept. They carry
+/// no baseline and never fail; a kernel whose profiles are missing says so.
+fn critical_rows(simulation: &Path) -> Vec<Comparison> {
+    let Ok(content) = fs::read_to_string(simulation) else {
+        return Vec::new();
+    };
+    let mut rows = Vec::new();
+    for line in content.lines().filter(|line| !line.trim().is_empty()) {
+        let Ok(item) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        let Some(module) = item["module_path"].as_str() else {
+            continue;
+        };
+        let split = item["profiles"]
+            .as_array()
+            .and_then(|profiles| profiles.iter().find(|p| p["tool"] == "Callgrind"))
+            .and_then(|p| p["summaries"]["parts"].as_array())
+            .is_some_and(|parts| parts.len() > 1);
+        if !split {
+            continue;
+        }
+        let root = Path::new(item["project_root"].as_str().unwrap_or("."));
+        let result = critical::locate(root, module)
+            .ok_or_else(|| "the per-thread Callgrind profiles are gone".to_owned())
+            .and_then(|dir| critical::read_dir(&dir));
+        let (observed, note) = match result {
+            Ok(critical) => (Some(critical.path()), critical.note()),
+            Err(reason) => (
+                None,
+                format!("informational: critical path unavailable: {reason}"),
+            ),
+        };
+        rows.push(Comparison {
+            metric: format!("instructions::{module}_critical"),
+            observed,
+            baseline: None,
+            threshold_percent: 0,
+            verdict: Verdict::Pass,
+            note: Some(note),
+        });
+    }
+    rows
+}
+
 /// The rows and the notes that say which references they were checked against.
 pub fn comparisons() -> Result<(Vec<Comparison>, Vec<String>), Box<dyn Error>> {
     comparisons_at(
@@ -375,10 +422,9 @@ fn comparisons_at(
             ),
         ),
     };
-    Ok((
-        compare_with_dev(baseline, observed, reference.as_ref())?,
-        vec![note],
-    ))
+    let mut rows = compare_with_dev(baseline, observed, reference.as_ref())?;
+    rows.extend(critical_rows(simulation));
+    Ok((rows, vec![note]))
 }
 
 #[cfg(test)]
