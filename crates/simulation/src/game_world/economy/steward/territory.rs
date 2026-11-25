@@ -219,6 +219,31 @@ impl Home {
 }
 
 impl GameWorld {
+    /// Labels every domain of this pass whose labels are stale, each on its
+    /// own task: labels are a pure function of the domain's walking zone, and
+    /// zones change only before the pass (`refresh_steward_walk`), so a visit
+    /// finds exactly the labels it would have built itself (#978).
+    pub(super) fn steward_prepare_regions(&mut self, ids: &[EntityId]) {
+        let mut stale: Vec<_> = ids
+            .iter()
+            .filter_map(|&id| {
+                let home = self.economy.steward_homes.get(&id)?;
+                let zone = home.walking.clone().filter(|_| home.regions.is_none())?;
+                Some((id, zone, None))
+            })
+            .collect();
+        crate::game_world::parallel::par_each_mut(&mut stale, |(id, zone, labels)| {
+            *labels = zone.regions(*id);
+        });
+        for (id, _, labels) in stale {
+            if let (Some(home), Some((bounds, labels))) =
+                (self.economy.steward_homes.get_mut(&id), labels)
+            {
+                home.regions = Some(Arc::new(Regions { bounds, labels }));
+            }
+        }
+    }
+
     pub(super) fn steward_ensure_regions(&mut self, id: EntityId) {
         let Some(home) = self.economy.steward_homes.get_mut(&id) else {
             return;
