@@ -323,7 +323,11 @@ impl GameWorld {
                     let f = s.footprint();
                     (f.min.x - footprint.min.x).abs() + (f.min.y - footprint.min.y).abs() < 24
                 });
-                if near || self.place_bridge_for(player, span).is_err() {
+                // A deck never crosses a structure another seat already stands on.
+                if near
+                    || self.site_has_building(footprint, Some(span), None)
+                    || self.place_bridge_for(player, span).is_err()
+                {
                     continue;
                 }
                 used.push(span);

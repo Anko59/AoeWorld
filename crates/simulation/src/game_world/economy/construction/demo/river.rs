@@ -163,17 +163,19 @@ impl GameWorld {
         player: PlayerId,
         span: BridgeSpan,
     ) -> Result<(), EconomyError> {
-        self.insert_building_shape(
+        let id = self.insert_building_shape(
             player,
             BuildingKind::Bridge,
             span.footprint(),
             true,
             Some(span),
         )?;
-        if let Terrain::Map { overlay, .. } = &mut self.terrain {
-            overlay
-                .add_bridge(span)
-                .map_err(|_| EconomyError::Capacity)?;
+        if let Terrain::Map { overlay, .. } = &mut self.terrain
+            && overlay.add_bridge(span).is_err()
+        {
+            // No deck, no bridge: a shell left behind would block its tiles.
+            self.remove_building(id);
+            return Err(EconomyError::Capacity);
         }
         for tile in span.tiles() {
             self.economy.blocked_tiles.remove(&tile);

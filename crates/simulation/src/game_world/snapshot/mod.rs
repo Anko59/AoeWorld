@@ -278,6 +278,10 @@ impl GameWorld {
         }
         if record.state != ConstructionState::Planned && self.start_foundation(id).is_err() {
             self.remove_building(id);
+            if record.kind == BuildingKind::Bridge && complete {
+                report.bridges_dropped += 1;
+                return;
+            }
             report.buildings_lost += 1;
             return;
         }

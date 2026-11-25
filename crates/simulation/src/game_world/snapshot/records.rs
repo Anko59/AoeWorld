@@ -205,6 +205,9 @@ pub struct RestoreReport {
     pub buildings: usize,
     pub units: usize,
     pub buildings_lost: usize,
+    /// Finished bridges whose deck cannot stand (it crosses another deck): a
+    /// seeding fault, dropped as the deckless shells they were, not a failure.
+    pub bridges_dropped: usize,
     pub units_lost: usize,
     pub jobs_resumed: usize,
     pub jobs_lost: usize,
