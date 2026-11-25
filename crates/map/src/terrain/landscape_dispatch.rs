@@ -12,6 +12,32 @@ pub struct LandscapePoint {
     pub decoration: Option<LandscapeDecoration>,
 }
 
+/// What a strategic raster reads of one composed tile. It holds no
+/// passability, the only composed terrain value that loose rocks change.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RasterSurface {
+    pub water: WaterKind,
+    pub water_provenance: Provenance,
+    pub historical_land_use: crate::historical_parcels::LandUse,
+    pub canopy_strength: u16,
+    pub material: GroundMaterial,
+    pub geographic_height_centimeters: i32,
+}
+
+impl From<&LandscapePoint> for RasterSurface {
+    fn from(point: &LandscapePoint) -> Self {
+        let terrain = &point.tile.terrain;
+        Self {
+            water: terrain.water,
+            water_provenance: terrain.water_provenance,
+            historical_land_use: point.historical_land_use,
+            canopy_strength: point.tile.appearance.canopy_strength,
+            material: terrain.material,
+            geographic_height_centimeters: terrain.geographic_height_centimeters,
+        }
+    }
+}
+
 impl MapChunkGenerator {
     /// Undecorated terrain for source constraints and placement.
     /// Walk queries use composed terrain, including loose rock footprints.
@@ -199,6 +225,22 @@ impl MapChunkGenerator {
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<LandscapePoint>, EnvironmentPageError> {
         self.evaluate_default_point::<false, false>(tile, cancelled)
+    }
+
+    /// The raster's projection of [`Self::landscape_surface_with_cancel`]: the
+    /// same composition, told that no rock covers the tile instead of looking
+    /// for one around nine tiles. Water, its provenance and the height come
+    /// from the base tile, canopy and land use from the landscape sample, and
+    /// the material is final before the composer asks for rocks.
+    pub fn raster_surface_with_cancel(
+        &self,
+        tile: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<RasterSurface>, EnvironmentPageError> {
+        let no_rocks = Some((false, false));
+        Ok(self
+            .evaluate_point_with_rocks::<true, true>(tile, no_rocks, cancelled)?
+            .map(|point| RasterSurface::from(&point)))
     }
 
     /// Shared start reservations: the starting glade always clears canopy,

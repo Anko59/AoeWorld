@@ -17,7 +17,7 @@ mod geometry;
 mod landscape_dispatch;
 mod point_memo;
 mod walk_cache;
-pub use landscape_dispatch::LandscapePoint;
+pub use landscape_dispatch::{LandscapePoint, RasterSurface};
 pub use walk_cache::{
     NavigationPhase, NavigationProbe, NavigationSpan, NavigationTarget, WALK_CACHE_MAX_BYTES,
     WalkCell,
@@ -202,8 +202,8 @@ impl MapChunkGenerator {
     }
 
     /// Share immutable landscape inputs while giving a bounded query worker
-    /// its own memo tables. Neighbor scans on separate raster bands must not
-    /// contend on, or evict, one another's direct-mapped water entries.
+    /// its own memo tables. Parallel neighbor scans must not contend on, or
+    /// evict, one another's direct-mapped water entries. Pages are not kept.
     pub fn fork_queries(&self) -> Self {
         let mut worker = self.clone();
         worker.river_queries = Arc::default();

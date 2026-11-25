@@ -74,15 +74,16 @@ axis, two zero bytes and one byte per sample: terrain class (grass, dry grass,
 forest, soil, sand, rock, snow, ice, shore, river, lake, ocean, cropland, pasture)
 in the low nibble and north-west relief shade in the high nibble, at most
 262,152 bytes.
-One raster is generated at a time off the async runtime on four bounded workers
-within 30 seconds,
+One raster is generated at a time off the async runtime within 30 seconds, a fine
+one on four bounded workers and a coarse one on a thread of its own,
 never partially, and the eight most recent rasters are cached. Coarse and fine
 rasters share the cache as `{hash}:coarse` and `{hash}`, so four maps keep both stages
 (at most 2 MiB). The client rejects any
 other shape and retains its coarse map on refinement failure (or its schematic
 map when neither stage succeeded); it requests no chunks for the map. Surface
 queries preserve the composed terrain while omitting final resource and decoration
-construction; shared canopy exclusions remain intact.
+construction; shared canopy exclusions remain intact. The raster's own query
+also omits loose rocks, which change only passability.
 Relief averages the unquantized directional slope with a mirrored separable
 box before encoding its shade. Its radius follows four elevation facets,
 bounded by a four-pixel minimum and one eighth of the raster axis (smaller
