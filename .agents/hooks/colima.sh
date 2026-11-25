@@ -1,18 +1,26 @@
 #!/bin/sh
 # macOS has no Linux kernel for the harness, its judge or its containers, so a
-# Mac runs them inside the Colima VM, which mounts the home directory at the
-# same path (docs/local-development.md). This runs one command there, in the
-# caller's directory, with the caller's stdin, exit status and the harness's
-# environment variables. Policy stays in `aoe-harness`.
+# Mac runs them inside a Linux VM that mounts the home directory at the same
+# path: the Colima VM, or else an OrbStack machine (docs/local-development.md).
+# This runs one command there, in the caller's directory, with the caller's
+# stdin, exit status and the harness's environment variables. Policy stays in
+# `aoe-harness`.
 #   colima.sh <command> [argument...]
 # AOE_COLIMA_MAKE_VARS names variables to append as NAME=value arguments.
+# AOE_ORB_MACHINE names the OrbStack machine (default aoeworld).
 set -u
 [ $# -gt 0 ] || { echo "usage: colima.sh <command> [argument...]" >&2; exit 2; }
 profile=${COLIMA_PROFILE:-default}
 case $profile in default) instance=colima ;; *) instance=colima-$profile ;; esac
 config=${COLIMA_HOME:-$HOME/.colima}/_lima/$instance/ssh.config
-if [ ! -f "$config" ]; then
-  echo "AoeWorld harness: no Colima VM '$profile' ($config is missing). Run: colima start --cpu 8 --memory 16 --disk 100" >&2
+machine=${AOE_ORB_MACHINE:-aoeworld}
+orb=$(command -v orb 2>/dev/null) || orb=$HOME/.orbstack/bin/orb
+if [ -f "$config" ]; then
+  backend=colima
+elif [ -x "$orb" ] && "$orb" list -q 2>/dev/null | grep -qx -- "$machine"; then
+  backend=orb
+else
+  echo "AoeWorld harness: no Colima VM '$profile' ($config is missing) and no OrbStack machine '$machine'. Run: colima start --cpu 8 --memory 16 --disk 100, or set up an OrbStack machine (docs/local-development.md)" >&2
   exit 2
 fi
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P) || exit 2
@@ -64,6 +72,10 @@ for name in ${AOE_COLIMA_MAKE_VARS:-}; do
   remote="$remote$(quote "$name=$value")"
 done
 
+if [ "$backend" = orb ]; then
+  "$orb" -m "$machine" sh -c "$remote"
+  exit $?
+fi
 ssh -o LogLevel=QUIET -F "$config" "lima-$instance" "$remote"
 status=$?
 if [ "$status" = 255 ]; then

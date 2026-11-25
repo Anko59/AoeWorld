@@ -290,6 +290,27 @@ fn the_branch_and_repository_come_from_full_refs_and_origin() {
     }
 }
 
+#[test]
+fn an_ssh_host_alias_in_origin_resolves_to_its_host_name() {
+    let ssh = |alias: &str| (alias == "github-perso").then(|| "github.com".to_owned());
+    for (url, expected) in [
+        (
+            "git@github-perso:Anko59/AoeWorld.git",
+            "git@github.com:Anko59/AoeWorld.git",
+        ),
+        ("github-perso:Anko59/AoeWorld", "github.com:Anko59/AoeWorld"),
+        (
+            "git@github.com:Anko59/AoeWorld.git",
+            "git@github.com:Anko59/AoeWorld.git",
+        ),
+        ("git@unknown:x/y.git", "git@unknown:x/y.git"),
+        ("https://github.com/x/y", "https://github.com/x/y"),
+        ("ssh://git@github-perso/x/y", "ssh://git@github-perso/x/y"),
+    ] {
+        assert_eq!(git::alias::resolve(url, ssh), expected, "{url}");
+    }
+}
+
 mod describe;
 mod duel;
 mod duel_extra;
