@@ -44,6 +44,23 @@ colima ssh -- sudo apt-get install -y make git ripgrep gh
 .agents/hooks/harness.sh build
 ```
 
+With OrbStack instead of Colima, use a Linux machine named `aoeworld`
+(`AOE_ORB_MACHINE` names another). It mounts `/Users` at the same path and
+reaches OrbStack's Docker engine through the guest socket, so containers see
+the checkout at its Mac path. `colima.sh` uses it when no Colima VM exists:
+
+```sh
+orb create ubuntu:noble aoeworld
+orb -m aoeworld sh -c 'sudo apt-get update && sudo apt-get install -y make git ripgrep gh docker.io'
+orb -m aoeworld sh -c 'sudo systemctl mask --now docker.socket docker.service'
+orb -m aoeworld sh -c 'sudo groupadd -g "$(stat -c %g /opt/orbstack-guest/run/docker.sock)" orbdocker && sudo usermod -aG orbdocker "$USER"'
+orb -m aoeworld sh -c 'echo "L+ /run/docker.sock - - - - /opt/orbstack-guest/run/docker.sock" | sudo tee /etc/tmpfiles.d/orbdocker.conf && sudo systemd-tmpfiles --create'
+.agents/hooks/harness.sh build
+```
+
+OrbStack forwards the Mac's SSH agent into the machine. Only paths under
+`/Users` are visible to containers, so leave `TMPDIR` unset in the machine.
+
 After that, work on the Mac as on Linux. `GNUmakefile` sends every `make` goal,
 with its command-line variables, to the VM; `.agents/hooks/harness.sh` sends
 every agent hook there, so Claude Code and the other runtimes are judged on a
@@ -58,7 +75,8 @@ Limits:
 
 - The checkout must be under `$HOME`; nothing else is mounted in the VM.
 - Tokens are not forwarded, because a command line is visible to `ps`. For
-  `make ship` and `make issue`, run `gh auth login` once inside `colima ssh`.
+  `make ship` and `make issue`, run `gh auth login` once inside `colima ssh`
+  (or `orb -m aoeworld`).
   The Mac has no `secret-tool` keyring; see [credentials](credentials.md).
 - `make ship` and `make duel` start agent command-line tools inside the VM, so
   install the ones you use there too.
