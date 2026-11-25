@@ -198,9 +198,12 @@ pub fn order_result(sequence: u64, result: CommandResult) -> Event {
 pub type RouteFn = Box<dyn Fn(Tile, Tile) -> Option<Vec<Tile>>>;
 pub type FrontierFn = Box<dyn Fn(Tile, Tile) -> Option<Tile>>;
 pub type BridgeSiteFn = Box<dyn Fn(Tile, Tile) -> Option<(Tile, Tile)>>;
+pub type SiteFn = Box<dyn Fn(BuildingKind, Tile, i32, i32) -> Option<Tile>>;
 
 /// `fakes.FakeWorld`. Fields are public so a test edits the world between decisions.
 pub struct FakeWorld {
+    /// Replaces `find_build_site` (kind, near, radius, gap); queries still land in `sites`.
+    pub site_fn: Option<SiteFn>,
     /// Replaces `land_route` (a query is still recorded in `route_queries`).
     pub route_fn: Option<RouteFn>,
     /// Replaces `land_frontier`.
@@ -237,6 +240,7 @@ pub struct FakeWorld {
 impl FakeWorld {
     pub fn new(units: Vec<Unit>, buildings: Vec<Building>) -> Self {
         Self {
+            site_fn: None,
             route_fn: None,
             frontier_fn: None,
             bridge_site_fn: None,
@@ -375,11 +379,14 @@ impl View for FakeWorld {
         &self,
         kind: BuildingKind,
         near: Tile,
-        _max_radius: i32,
-        _gap: i32,
+        max_radius: i32,
+        gap: i32,
     ) -> Option<Tile> {
         self.sites.borrow_mut().push((kind, near));
-        Some((near.0 + 3, near.1 + 3))
+        match &self.site_fn {
+            Some(site) => site(kind, near, max_radius, gap),
+            None => Some((near.0 + 3, near.1 + 3)),
+        }
     }
     fn find_bridge_site(&self, from: Tile, to: Tile) -> Option<(Tile, Tile)> {
         self.bridge_site_fn.as_ref().and_then(|site| site(from, to))

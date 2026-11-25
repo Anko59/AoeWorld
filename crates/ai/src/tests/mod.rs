@@ -10,6 +10,7 @@ mod context_land;
 mod context_orders;
 mod fake;
 mod geometry;
+mod management;
 mod play;
 mod roster;
 mod scouts;

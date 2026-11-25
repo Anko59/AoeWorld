@@ -189,3 +189,131 @@ async fn orders_from_one_view_land_on_one_fixed_tick_in_seat_order() {
         );
     }
 }
+
+// ----- review findings of slice 1 (#1080): F4 and F2 ---------------------------
+//
+// More of the interface these tests pin, for the implementer:
+// - F4: `crate::maps::terrain_chunk_queued(&AppState, terrain_cache::Key) ->
+//   Result<CompactChunk, StatusCode>` returns the same chunk as
+//   `maps::terrain_chunk(state, key, false)` but, when the preparation lanes
+//   are full, waits its turn in the queue instead of answering 503, and the
+//   seats' `fetch` calls it (no retry loop).
+// - F2: `rust_ai_perf()["tick_thread"]` keeps `ticks`, `cpu_us_per_tick` and
+//   `instructions_per_tick` and gains four sections, `feed`, `chunk_waits`,
+//   `join` and `settle`, each `{ "calls": u64, "wall_us_per_tick": f64 }`: the
+//   times the tick's thread entered that wait and the wall time spent in it per
+//   tick (null before the first tick).
+
+/// Lets the jobs holding the preparation lanes finish, also when a test fails.
+struct Release(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+impl Drop for Release {
+    fn drop(&mut self) {
+        self.0.store(true, std::sync::atomic::Ordering::Release);
+    }
+}
+
+/// Fills every background admission slot with a job that waits for `release`
+/// (more jobs than the 64 slots: the surplus is refused at once).
+async fn fill_preparation(gameplay: &GameplayService) -> Release {
+    use std::sync::{Arc, atomic::AtomicBool, atomic::Ordering};
+    let release = Release(Arc::new(AtomicBool::new(false)));
+    for _ in 0..80 {
+        let (gameplay, flag) = (gameplay.clone(), release.0.clone());
+        tokio::spawn(async move {
+            let _ = gameplay
+                .prepare_terrain(false, move || {
+                    while !flag.load(Ordering::Acquire) {
+                        std::thread::sleep(std::time::Duration::from_millis(1));
+                    }
+                })
+                .await;
+        });
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    release
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_seats_chunk_waits_in_the_queue_when_the_preparation_lanes_are_full() {
+    let state = match_state(7).await;
+    let gameplay = state.gameplay.read().await.clone();
+    let hash = state
+        .map_packages
+        .read()
+        .await
+        .keys()
+        .next()
+        .cloned()
+        .expect("the match's map package");
+    let key = crate::terrain_cache::Key {
+        content_hash: hash,
+        x: 0,
+        y: 0,
+    };
+    let release = fill_preparation(&gameplay).await;
+    assert_eq!(
+        crate::maps::terrain_chunk(&state, key.clone(), false).await,
+        Err(axum::http::StatusCode::SERVICE_UNAVAILABLE),
+        "the chunk route still refuses a full queue"
+    );
+    let queued = tokio::spawn({
+        let (state, key) = (state.clone(), key.clone());
+        async move { crate::maps::terrain_chunk_queued(&state, key).await }
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    assert!(
+        !queued.is_finished(),
+        "a seat's chunk waits for its turn: neither refused nor spinning to a verdict"
+    );
+    release.0.store(true, std::sync::atomic::Ordering::Release);
+    let chunk = tokio::time::timeout(std::time::Duration::from_secs(30), queued)
+        .await
+        .expect("the queued load completes in bounded time once the lanes drain")
+        .expect("the load task")
+        .expect("a chunk, not a refusal");
+    assert_eq!(
+        Ok(chunk),
+        crate::maps::terrain_chunk(&state, key, false).await,
+        "the same data as the chunk route"
+    );
+}
+
+#[tokio::test]
+async fn the_tick_threads_seat_costs_are_reported_separately() {
+    let (state, _) = play(AiRuntime::Rust, 7, 120, false).await;
+    let gameplay = state.gameplay.read().await.clone();
+    let perf = gameplay.rust_ai_perf();
+    let tick_thread = &perf["tick_thread"];
+    let ticks = tick_thread["ticks"].as_u64().expect("ticks");
+    assert!(ticks > 0);
+    for section in ["feed", "chunk_waits", "join", "settle"] {
+        let entry = &tick_thread[section];
+        assert!(
+            entry.is_object(),
+            "tick_thread.{section} is missing: {perf}"
+        );
+        assert!(entry["calls"].is_u64(), "{section}.calls: {perf}");
+        assert!(
+            entry["wall_us_per_tick"]
+                .as_f64()
+                .is_some_and(|us| us >= 0.0),
+            "{section}.wall_us_per_tick: {perf}"
+        );
+    }
+    assert_eq!(
+        tick_thread["feed"]["calls"].as_u64(),
+        Some(ticks),
+        "every tick applies what was delivered to the seats"
+    );
+    assert!(
+        tick_thread["join"]["calls"].as_u64().is_some_and(|n| n > 0),
+        "the decisions' join is counted: {perf}"
+    );
+    assert!(
+        tick_thread["chunk_waits"]["calls"]
+            .as_u64()
+            .is_some_and(|n| n > 0),
+        "the chunk waits are counted: {perf}"
+    );
+}
