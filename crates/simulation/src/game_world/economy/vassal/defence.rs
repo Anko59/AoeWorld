@@ -80,13 +80,13 @@ impl GameWorld {
         for soldier in soldiers {
             if let Some((wolf, _)) = wolves.first().filter(|_| threat.is_none()) {
                 self.record_vassal_decision();
-                let _ = self.issue_attack(player, soldier, *wolf);
+                let _ = self.issue_attack_in_combat_phase(player, soldier, *wolf);
                 changed.push(soldier);
                 continue;
             }
             if let Some(enemy) = threat {
                 self.record_vassal_decision();
-                let _ = self.issue_attack(player, soldier, enemy.0);
+                let _ = self.issue_attack_in_combat_phase(player, soldier, enemy.0);
             } else if self
                 .unit(soldier)
                 .is_some_and(|u| u.task == UnitTask::Attacking || !self.vassal_owns(id, u.position))
