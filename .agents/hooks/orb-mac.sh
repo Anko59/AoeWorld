@@ -1,5 +1,5 @@
 #!/bin/sh
-# Installed in the OrbStack machine as `gh`, `claude` and `aoe-mac-sign`
+# Installed in the OrbStack machine as `gh`, `claude`, `ssh` and `aoe-mac-sign`
 # (docs/local-development.md): runs the Mac's own command through OrbStack's
 # `mac`, so the machine holds no login, token or key. `mac` keeps the directory,
 # stdin, stdout and exit status but not the environment, so the harness's

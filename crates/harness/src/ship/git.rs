@@ -1,5 +1,6 @@
 //! The few Git facts `ship` needs, each from one plain `git` call.
 use std::{path::Path, process::Command};
+pub(crate) mod alias;
 pub(super) mod lease;
 mod own_push;
 mod patch;
@@ -59,10 +60,16 @@ pub(crate) fn branch(root: &Path) -> Result<String> {
         .ok_or_else(|| format!("HEAD points at {full}, not a branch"))
 }
 
+/// `origin`'s URL, with an SSH host alias resolved to its host name.
+fn origin_url(root: &Path) -> Result<String> {
+    let url = git(root, &["remote", "get-url", "origin"])?;
+    Ok(alias::resolve(&url, alias::ssh_hostname))
+}
+
 /// `owner/name` of `origin` on GitHub, so the pull request targets the
 /// repository the branch is pushed to, whatever other remotes exist.
 pub(crate) fn origin_repository(root: &Path) -> Result<String> {
-    let url = git(root, &["remote", "get-url", "origin"])?;
+    let url = origin_url(root)?;
     let path = url
         .strip_prefix("git@github.com:")
         .or_else(|| url.strip_prefix("https://github.com/"))
@@ -77,7 +84,7 @@ pub(crate) fn origin_repository(root: &Path) -> Result<String> {
 
 /// GitHub host and repository path encoded by origin, for host-qualified gh calls.
 pub(crate) fn origin_host_repository(root: &Path) -> Result<(String, String)> {
-    let url = git(root, &["remote", "get-url", "origin"])?;
+    let url = origin_url(root)?;
     let (host, path) = if let Some((user_host, path)) = url.split_once(':') {
         if user_host.contains('@') && !user_host.contains('/') {
             (
