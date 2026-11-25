@@ -209,7 +209,7 @@ impl Field {
             }
         }
         // Belongs to the office even though paths start at actual exits.
-        for tile in tiles(origin) {
+        for tile in tiles(origin).filter(|&tile| bounds.contains(tile)) {
             costs[self.index(tile)] = self.straight_cost(tile);
         }
         self.relax(ground, &mut costs, wave);

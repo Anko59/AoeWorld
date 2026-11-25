@@ -427,3 +427,19 @@ fn a_box_scan_of_ownership_matches_asking_tile_by_tile() {
     }
     assert!(contested > 0, "fixture: the boxes overlap");
 }
+
+#[test]
+fn a_field_over_bounds_that_cut_through_its_office_does_not_index_past_them() {
+    let world = build("river").world;
+    let player = PlayerId(0);
+    let origin = TileRect::from_xywh(20, 35, 4, 4);
+    // A route guide's box need not hold its whole office: this one stops short of its last row.
+    let bounds = TileRect::new(TileCoord::new(10, 30), TileCoord::new(22, 37));
+    let field = Field::new(
+        &world,
+        field::TerrainKey::new(&world, player, origin, bounds),
+    )
+    .unwrap();
+    assert!(field.cost(TileCoord::new(21, 36)).is_some());
+    assert_eq!(field.cost(TileCoord::new(21, 37)), None);
+}
