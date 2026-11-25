@@ -241,6 +241,8 @@ fn a_scout_survey_finds_nearby_deer_in_each_seeded_flat_village() {
     }
 }
 
+#[path = "tests/ai_seats.rs"]
+mod ai_seats;
 #[path = "tests/passes.rs"]
 mod passes;
 #[path = "tests/real_package.rs"]
