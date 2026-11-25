@@ -284,6 +284,44 @@ impl Field {
         (cost <= REACH).then_some(cost)
     }
 
+    /// The tiles, one tile wider, whose reach cost or ground step differs
+    /// from `old`'s over the same box (`Some(None)`: none), or `None` when
+    /// the two fields cover different boxes.
+    pub(super) fn changed_tiles(&self, old: &Self) -> Option<Option<TileRect>> {
+        if self.terrain.bounds != old.terrain.bounds
+            || self.center != old.center
+            || self.ground.is_some() != old.ground.is_some()
+        {
+            return None;
+        }
+        let reach = |field: &Self, slot: usize| {
+            let cost = field.costs.as_ref().map_or_else(
+                || field.straight_cost(field.tile(slot)),
+                |costs| costs[slot],
+            );
+            (cost <= REACH).then_some(cost)
+        };
+        let step = |field: &Self, slot: usize| field.ground.as_ref().map(|ground| ground[slot]);
+        let width = self.terrain.bounds.width() as usize;
+        let slots = width * self.terrain.bounds.height() as usize;
+        let mut span: Option<(usize, usize, usize, usize)> = None;
+        for slot in
+            (0..slots).filter(|&s| reach(self, s) != reach(old, s) || step(self, s) != step(old, s))
+        {
+            let (x, y) = (slot % width, slot / width);
+            span = Some(span.map_or((x, y, x, y), |(lx, ly, hx, hy)| {
+                (lx.min(x), ly.min(y), hx.max(x), hy.max(y))
+            }));
+        }
+        let min = self.terrain.bounds.min;
+        Some(span.map(|(lx, ly, hx, hy)| {
+            TileRect::new(
+                TileCoord::new(min.x + lx as i32 - 1, min.y + ly as i32 - 1),
+                TileCoord::new(min.x + hx as i32 + 2, min.y + hy as i32 + 2),
+            )
+        }))
+    }
+
     pub(super) fn approach_cost(&self, tile: TileCoord) -> Option<u16> {
         self.cost(tile)
             .or_else(|| neighbors(tile).filter_map(|t| self.cost(t)).min())

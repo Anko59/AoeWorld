@@ -152,21 +152,26 @@ impl Walking {
     }
 
     fn mark_changed_fields(&mut self, old: &Self) {
-        let changed = |before: &Self, after: &Self| {
-            before
-                .sources
-                .iter()
-                .zip(&before.fields)
-                .filter_map(|(&(id, _), field)| {
-                    let field = &field.active.field;
-                    after
-                        .index(id)
-                        .is_none_or(|i| !Arc::ptr_eq(field, &after.fields[i].active.field))
-                        .then_some(field.terrain.bounds)
-                })
-                .collect::<Vec<_>>()
-        };
-        for area in changed(old, self).into_iter().chain(changed(self, old)) {
+        // Only tiles whose reach or steps differ can move an owner or a
+        // region: a field rebuilt to the same costs moves no zone (#978).
+        let mut areas = Vec::new();
+        for (&(id, _), field) in old.sources.iter().zip(&old.fields) {
+            let before = &field.active.field;
+            match self.index(id).map(|i| &self.fields[i].active.field) {
+                Some(after) if Arc::ptr_eq(before, after) => {}
+                Some(after) => match after.changed_tiles(before) {
+                    Some(area) => areas.extend(area),
+                    None => areas.extend([before.terrain.bounds, after.terrain.bounds]),
+                },
+                None => areas.push(before.terrain.bounds),
+            }
+        }
+        for (&(id, _), field) in self.sources.iter().zip(&self.fields) {
+            if old.index(id).is_none() {
+                areas.push(field.active.field.terrain.bounds);
+            }
+        }
+        for area in areas {
             for page in pages(area, LOCALITY) {
                 for &index in self.nearby.get(&page).into_iter().flatten() {
                     let bounds = self.fields[index].active.field.terrain.bounds;

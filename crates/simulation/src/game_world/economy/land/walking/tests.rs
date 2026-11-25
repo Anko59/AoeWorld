@@ -62,6 +62,29 @@ fn a_local_walking_edit_reuses_the_other_offices_field() {
 }
 
 #[test]
+fn a_recomputed_field_with_the_same_costs_moves_no_overlapping_zone() {
+    let mut world = build("river").world;
+    let player = PlayerId(0);
+    // Boxes 30 tiles apart overlap almost entirely.
+    let sources = vec![
+        (EntityId(1), TileRect::from_xywh(20, 35, 4, 4)),
+        (EntityId(2), TileRect::from_xywh(50, 35, 4, 4)),
+    ];
+    let before = install(&mut world, player, &sources);
+    // A notice for ground that did not change rebuilds the field it falls
+    // in; its costs and steps come out the same, so no zone moved.
+    world.management_ground_changed(TileRect::from_xywh(21, 42, 1, 1));
+    let after = refresh(&mut world, player).unwrap();
+    assert!(!Arc::ptr_eq(
+        &before.fields[0].active.field,
+        &after.fields[0].active.field
+    ));
+    for (id, _) in &sources {
+        assert!(!after.zone_changed(*id), "office {id:?} re-labelled");
+    }
+}
+
+#[test]
 fn a_walking_zone_respects_walls_and_its_owners_gate() {
     use crate::BuildingKind;
     use aoe_core::{Seed, WorldConfig};
