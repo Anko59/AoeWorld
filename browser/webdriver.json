@@ -1,6 +1,6 @@
 {
   "goog:chromeOptions": {
-    "binary": "/ms-playwright/chromium-1248/chrome-linux64/chrome",
+    "binary": "/ms-playwright/chromium-1255/chrome-linux64/chrome",
     "args": [
       "--no-sandbox",
       "--remote-debugging-pipe",
