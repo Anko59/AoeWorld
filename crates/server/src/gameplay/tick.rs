@@ -61,12 +61,19 @@ impl GameplayService {
             }),
             None => self.intake(&mut *self.sessions.lock().await),
         };
+        // The seats send what their last decision made, after this tick's
+        // commands are fixed: those orders enter the next tick.
+        self.flush_ai_seats().await;
         self.probe.phase("sessions", started.elapsed());
         let started = std::time::Instant::now();
         let mut world = self.world.clone().write_owned().await;
         self.probe.phase("world_lock", started.elapsed());
         let started = std::time::Instant::now();
         let orders = pending.len();
+        // The tick this one starts at, for the AI seats' beat.
+        let barrier = world.tick().0;
+        let seats = self.ai_seats.sessions();
+        let seat_log = self.ai_seats.log_handle();
         let humans: Vec<_> = self
             .slots
             .iter()
@@ -88,17 +95,34 @@ impl GameplayService {
             let mut acknowledgements = BTreeMap::<u64, Vec<GameplayServerMessage>>::new();
             world.set_human_views(&views);
             for (session_id, player, command) in pending {
+                let in_process = seats.contains(&session_id);
                 let issuer = if humans.contains(&player) {
                     aoe_simulation::OrderIssuer::Player
+                } else if in_process {
+                    aoe_simulation::OrderIssuer::RustAi
                 } else {
                     aoe_simulation::OrderIssuer::PythonAi
                 };
                 let sequence = command.sequence;
+                let order = (in_process && seat_log.is_some())
+                    .then(|| serde_json::to_string(&command.action).unwrap_or_default());
                 let result = world.with_order_issuer(issuer, |w| {
                     w.record_order_decisions(command.action.decision_count());
                     super::commands::apply(w, player, command.action)
                 });
                 let tick = world.tick();
+                if let (Some(order), Some(log)) = (order, &seat_log) {
+                    crate::gameplay_match::record_applied(
+                        log,
+                        crate::gameplay_match::AppliedOrder {
+                            tick: tick.0,
+                            player,
+                            sequence,
+                            result,
+                            order,
+                        },
+                    );
+                }
                 acknowledgements.entry(session_id).or_default().push(
                     GameplayServerMessage::CommandAck {
                         sequence,
@@ -161,6 +185,7 @@ impl GameplayService {
                 .collect::<Vec<_>>()
         };
         self.probe.phase("sessions", started.elapsed());
+        self.collect_ai_seats(barrier).await;
         let fanout_started = std::time::Instant::now();
         let last = self.fanout_probe.take_last_frame();
         let built = tokio::task::spawn_blocking(move || {

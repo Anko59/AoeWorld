@@ -4,6 +4,7 @@ use crate::{
     error::{Result, SdkError},
     events::Event,
     http::Endpoint,
+    mirror::{Mirror, focus_policy},
     model::UnitKind,
     orders::Order,
     world::World,
@@ -33,8 +34,6 @@ const MAX_BUFFERED_EVENTS: usize = 4_096;
 const MAX_CHUNKS_IN_FLIGHT: usize = 4;
 /// Orders per second the writer will not exceed by default (the server allows 100).
 const ORDERS_PER_SECOND: usize = 90;
-const RESUBSCRIBE_MIN_TICKS: u64 = 20;
-const RESUBSCRIBE_DRIFT: i32 = 12;
 
 /// Which part of the map the slot asks the server to describe. Own units and
 /// buildings are always reported; the view bounds the *foreign* units, fog
@@ -91,7 +90,7 @@ pub struct Decision {
 }
 
 struct State {
-    world: World,
+    mirror: Mirror,
     events: Vec<Event>,
     closed: Option<String>,
 }
@@ -159,25 +158,16 @@ impl Client {
         let token = parse_token(slot_token)?;
         let endpoint = Endpoint::parse(url)?;
         let (mut socket, welcome) = join(&endpoint, token, options.connect_timeout).await?;
-        let mut world = World::from_welcome(&welcome)
-            .ok_or_else(|| SdkError::Closed("no welcome".to_owned()))?;
-        let tick_hz = world.tick_hz.max(1);
-        let first = initial_region(&world);
-        world.subscription = 1;
-        send_frame(
-            &mut socket,
-            &GameplayClientMessage::Subscribe {
-                revision: 1,
-                region: first,
-                unit_zoom: false,
-            },
-        )
-        .await?;
+        let mut mirror =
+            Mirror::new(&welcome).ok_or_else(|| SdkError::Closed("no welcome".to_owned()))?;
+        mirror.set_policy(options.view);
+        let tick_hz = mirror.world().tick_hz.max(1);
+        send_frame(&mut socket, &mirror.first_subscribe()).await?;
         let decision_ticks =
             ((tick_hz as f32 / options.decision_hz.max(0.05)).round() as u64).max(1);
         let shared = Arc::new(Shared {
             state: Mutex::new(State {
-                world,
+                mirror,
                 events: Vec::new(),
                 closed: None,
             }),
@@ -242,30 +232,13 @@ impl Client {
 
     /// Center the existing view on one tile, or restore the connection's view policy.
     pub fn focus_view(&self, tile: Option<TileCoord>) {
-        let view = tile.map_or(self.default_view, |tile| {
-            let (width, height) = match self.default_view {
-                ViewPolicy::Follow { max_side, .. } => (max_side, max_side),
-                ViewPolicy::Fixed(rect) => (rect.width(), rect.height()),
-            };
-            let (map_width, map_height) = self.shared.lock().world.map_size();
-            let bound = |span: i32, limit| {
-                span.clamp(16, aoe_protocol::MAX_SUBSCRIPTION_TILES)
-                    .min(limit)
-            };
-            let (width, height) = (bound(width, map_width), bound(height, map_height));
-            let x = tile.x.saturating_sub(width / 2).clamp(0, map_width - width);
-            let y = tile
-                .y
-                .saturating_sub(height / 2)
-                .clamp(0, map_height - height);
-            ViewPolicy::Fixed(TileRect::from_xywh(x, y, width, height))
-        });
-        self.set_view(view);
+        let map_size = self.shared.lock().mirror.world().map_size();
+        self.set_view(focus_policy(self.default_view, map_size, tile));
     }
 
     /// The current model without waiting for a decision point.
     pub fn world(&self) -> World {
-        self.shared.lock().world.clone()
+        self.shared.lock().mirror.world().clone()
     }
 
     /// Waits for the next decision point: one every `1 / decision_hz` seconds
@@ -282,11 +255,13 @@ impl Client {
                     return Err(SdkError::Closed(reason.clone()));
                 }
                 let mut last = self.last_decision.lock().unwrap_or_else(|e| e.into_inner());
-                let due = last.is_none_or(|last| state.world.tick >= last + self.decision_ticks);
-                if state.world.snapshot_seen && due {
-                    *last = Some(state.world.tick);
+                let world = state.mirror.world();
+                let due = last.is_none_or(|last| world.tick >= last + self.decision_ticks);
+                if world.snapshot_seen && due {
+                    *last = Some(world.tick);
+                    let world = world.clone();
                     return Ok(Decision {
-                        world: state.world.clone(),
+                        world,
                         events: std::mem::take(&mut state.events),
                     });
                 }
@@ -394,85 +369,12 @@ async fn next_message(socket: &mut Socket) -> Result<GameplayServerMessage> {
     }
 }
 
-/// Until the first snapshot tells where the slot's units are, look at a small
-/// window at the map's centre; own units are reported regardless.
-fn initial_region(world: &World) -> TileRect {
-    let side = world.width.min(world.height).clamp(1, 64);
-    TileRect::from_xywh(
-        (world.width - side) / 2,
-        (world.height - side) / 2,
-        side,
-        side,
-    )
-}
-
-/// The window the policy wants for the model as it stands.
-fn desired_region(world: &World, policy: ViewPolicy) -> Option<TileRect> {
-    match policy {
-        ViewPolicy::Fixed(region) => Some(region.clamp(world.width, world.height)),
-        ViewPolicy::Follow { padding, max_side } => {
-            let mut points = world
-                .units
-                .values()
-                .filter(|u| Some(u.player) == world.me && u.hp > 0 && u.kind != UnitKind::Scout)
-                .map(|u| u.position.tile_floor())
-                .chain(
-                    world
-                        .buildings
-                        .values()
-                        .filter(|b| Some(b.player) == world.me)
-                        .map(|b| TileCoord::new(b.footprint.min.x, b.footprint.min.y)),
-                )
-                .peekable();
-            points.peek()?;
-            let (mut min_x, mut min_y, mut max_x, mut max_y) =
-                (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
-            for point in points {
-                min_x = min_x.min(point.x);
-                min_y = min_y.min(point.y);
-                max_x = max_x.max(point.x);
-                max_y = max_y.max(point.y);
-            }
-            let max_side = max_side.clamp(16, aoe_protocol::MAX_SUBSCRIPTION_TILES);
-            let width = (max_x - min_x + 1 + 2 * padding).min(max_side);
-            let height = (max_y - min_y + 1 + 2 * padding).min(max_side);
-            let mut center = ((min_x + max_x) / 2, (min_y + max_y) / 2);
-            if max_x - min_x + 1 + 2 * padding > max_side
-                || max_y - min_y + 1 + 2 * padding > max_side
-            {
-                // Centering between a distant army and home describes empty
-                // ground: even buildings beside our soldiers appear fogged.
-                // Use the army's mean rather than its bounding box so fresh
-                // reinforcements at home do not pull the view off the front.
-                let (x, y, count) = world
-                    .my_units(None)
-                    .into_iter()
-                    .filter(|u| u.is_military() && u.alive())
-                    .fold((0_i64, 0_i64, 0_i64), |(x, y, n), u| {
-                        let tile = u.tile();
-                        (x + i64::from(tile.x), y + i64::from(tile.y), n + 1)
-                    });
-                if count > 0 {
-                    center = ((x / count) as i32, (y / count) as i32);
-                }
-            }
-            Some(
-                TileRect::from_xywh(center.0 - width / 2, center.1 - height / 2, width, height)
-                    .clamp(world.width, world.height),
-            )
-        }
-    }
-}
-
-fn drifted(a: TileRect, b: TileRect) -> bool {
-    (a.min.x - b.min.x).abs() > RESUBSCRIBE_DRIFT
-        || (a.min.y - b.min.y).abs() > RESUBSCRIBE_DRIFT
-        || (a.width() - b.width()).abs() > RESUBSCRIBE_DRIFT
-        || (a.height() - b.height()).abs() > RESUBSCRIBE_DRIFT
-}
-
 mod session;
 use session::run;
+
+// The inline tests reach the follow-view window through this module.
+#[cfg(test)]
+use crate::mirror::desired_region;
 
 #[cfg(test)]
 mod tests;

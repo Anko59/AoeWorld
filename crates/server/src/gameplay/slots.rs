@@ -141,6 +141,7 @@ impl GameplayService {
             resource_journal: Arc::new(std::sync::Mutex::new(resources::Journal::default())),
             fanout_probe: Arc::default(),
             human_views: Arc::default(),
+            ai_seats: Arc::default(),
             overlap: Arc::default(),
             preparation: Default::default(),
             paused: Arc::default(),
@@ -261,6 +262,7 @@ impl GameplayService {
                 resident_land: None,
                 vision_revision: None,
                 resource_vision_revision: None,
+                command_tick: None,
                 resident_resources: Vec::new(),
             },
         );

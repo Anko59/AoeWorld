@@ -77,6 +77,7 @@ help:
 	@echo '  make sdk-python      Build the aoeworld Python wheel for the AI SDK (docs/ai-sdk.md)'
 	@echo '  make ai-benchmark    Source-backed long-run AI measurements (AI_BENCHMARK_ARGS; docs/ai-scaling.md)'
 	@echo '  make ai-arena        Seeded fast lockstep AI matches, JSON (ARENA_SIZE, ARENA_BOTS, ARENA_MINUTES, ARENA_SEEDS)'
+	@echo '  make ai-compare      Python AI against Rust AI on the same seeds, gaps as JSON (COMPARE_SIZE, COMPARE_BOTS, COMPARE_MINUTES, COMPARE_SEEDS)'
 	@echo '  make sdk-python-test Test the Python bindings and the example AI against a local server'
 	@echo '  make sdk-python-logic-test  Run AI fake-world decision regressions'
 	@echo '  make scale-match     Real server at scale: 1 human + 99 Python AIs on a France-sized map (docs/scale/match.md)'

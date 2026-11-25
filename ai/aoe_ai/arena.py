@@ -68,8 +68,10 @@ def free_port() -> int:
 class ArenaServer:
     """A throw-away `aoe-server` in arena mode."""
 
-    def __init__(self, binary: Path, root: Path) -> None:
-        self.binary, self.root = binary, root
+    def __init__(self, binary: Path, root: Path, ai: str = "python") -> None:
+        """`ai` is the server's `AOE_AI_RUNTIME`: `rust` plays AI seats in the
+        server, `python` leaves them to the bots this driver hosts."""
+        self.binary, self.root, self.ai = binary, root, ai
         self.port = free_port()
         self.url = f"http://127.0.0.1:{self.port}"
         self.packages = tempfile.TemporaryDirectory(prefix="arena-maps-")
@@ -82,6 +84,7 @@ class ArenaServer:
             AOE_SIM_HZ=str(TICK_HZ),
             AOE_TICK_HZ=str(TICK_HZ),
             AOE_ARENA="1",
+            AOE_AI_RUNTIME=self.ai,
             AOE_MAP_PACKAGE_DIRECTORY=os.environ.get("AOE_ARENA_PACKAGES") or self.packages.name,
         )
         self.process = subprocess.Popen(

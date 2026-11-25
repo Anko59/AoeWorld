@@ -107,6 +107,7 @@ fn start_server(options: &Options, root: &Path, work: &Path) -> Result<Server, B
         .env("AOE_BUILD_SHA", git(&["rev-parse", "HEAD"]))
         .env("AOE_SIM_HZ", options.tick_hz().to_string())
         .env("AOE_TICK_HZ", options.tick_hz().to_string())
+        .env("AOE_AI_RUNTIME", options.ai_runtime())
         .stdout(Stdio::from(log.try_clone()?))
         .stderr(Stdio::from(log));
     procs::profile_env(options, &mut command)?;
@@ -117,7 +118,7 @@ fn start_server(options: &Options, root: &Path, work: &Path) -> Result<Server, B
     {
         command.env("AOE_ASSET_PACK", pack);
     }
-    if options.save.is_some() {
+    if options.save.is_some() && !options.rust_ai() {
         command.env(
             "AOE_AI_COMMAND",
             super::hosts::skirmish_command(options, root, work)?,
@@ -198,7 +199,7 @@ pub(super) fn run(options: &Options, saved: Option<Value>) -> Result<(), BoxErro
     // The first record of the new world is the start of the run.
     let _ = pull_ticks(&server, &mut cursor, &mut rows);
     rows.clear();
-    let no_bots = options.march_no_ai || saved.is_some();
+    let no_bots = options.march_no_ai || saved.is_some() || options.rust_ai();
     let mut hosts = if no_bots {
         Vec::new()
     } else {

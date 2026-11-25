@@ -89,6 +89,9 @@ pub(crate) enum Action {
     LogicTest,
     /// Play seeded lockstep AI matches against an arena server and print JSON (`make ai-arena`).
     Arena(ArenaArgs),
+    /// Play each seed once with the Python AI and once with the Rust AI on the
+    /// arena and print both measures and their gaps as JSON (`make ai-compare`).
+    Compare(ArenaArgs),
     /// Measure 30/60/120-minute development on a source-backed map.
     Benchmark(benchmark::BenchmarkArgs),
 }
@@ -121,7 +124,8 @@ pub(crate) fn run(action: Action) -> Result<(), Box<dyn Error>> {
             only,
         } => test(&root, bindings_only, &only)?,
         Action::LogicTest => logic_test(&root)?,
-        Action::Arena(args) => arena(&root, &args)?,
+        Action::Arena(args) => arena(&root, &args, "arena")?,
+        Action::Compare(args) => arena(&root, &args, "compare")?,
         Action::Benchmark(args) => benchmark::run(&root, &args)?,
     }
     Ok(())
@@ -264,8 +268,9 @@ fn test(root: &Path, bindings_only: bool, only: &[String]) -> Result<(), Box<dyn
     Ok(())
 }
 
-/// The AI arena: one fresh server and match per seed, results as JSON on stdout.
-fn arena(root: &Path, args: &ArenaArgs) -> Result<(), Box<dyn Error>> {
+/// The AI arena: one fresh server and match per seed, results as JSON on
+/// stdout. `command` is `arena` (Python bots) or `compare` (Python, then Rust).
+fn arena(root: &Path, args: &ArenaArgs, command: &str) -> Result<(), Box<dyn Error>> {
     if !args
         .seeds
         .split(',')
@@ -279,7 +284,7 @@ fn arena(root: &Path, args: &ArenaArgs) -> Result<(), Box<dyn Error>> {
         &[
             "-m",
             "aoe_ai",
-            "arena",
+            command,
             "--server-bin",
             &server.to_string_lossy(),
             "--bots",

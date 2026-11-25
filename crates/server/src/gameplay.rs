@@ -67,6 +67,8 @@ pub struct GameplayService {
     recording: Arc<std::sync::Mutex<Option<crate::replay::Recorder>>>,
     /// Each human session's latest admitted view: an input of the next tick.
     pub(super) human_views: Arc<std::sync::Mutex<BTreeMap<u64, aoe_simulation::HumanView>>>,
+    /// Rust AI seats played inside the server (`AOE_AI_RUNTIME=rust`).
+    pub(super) ai_seats: Arc<crate::gameplay_match::AiSeats>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -339,7 +341,10 @@ impl GameplayService {
         {
             session.subscription_times.pop_front();
         }
-        if session.subscription_times.len() >= 10 {
+        // An in-process seat resubscribes on game time; a wall-clock limit would
+        // make its view, and its decisions, depend on how fast the arena steps.
+        let in_process = session.command_tick.is_some();
+        if !in_process && session.subscription_times.len() >= 10 {
             let _ = session.sender.try_send(GameplayServerMessage::Error {
                 code: 429,
                 message: "subscription updates are rate limited".to_owned(),
@@ -358,7 +363,7 @@ impl GameplayService {
         }
         // At most ten admitted views per second, each at most 512x512 tiles
         // plus the fixed 256x256 overview, regardless of total map area.
-        session.subscription_times.push_back(now);
+        (!in_process).then(|| session.subscription_times.push_back(now));
         let viewer = session.viewer;
         let units = economy::query_units(&world, region, session.primary_unit_id, viewer);
         if units.len() > MAX_SUBSCRIBED_UNITS {

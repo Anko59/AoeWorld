@@ -367,22 +367,31 @@ pub(super) async fn chunk(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<CompactChunk>, StatusCode> {
-    let cache_key = terrain_cache::Key {
-        content_hash: content_hash.clone(),
-        x,
-        y,
-    };
-    if let Some(chunk) = state.terrain_cache.lock().await.get(&cache_key) {
-        return Ok(Json(chunk));
-    }
+    let cache_key = terrain_cache::Key { content_hash, x, y };
     let gameplay = state.gameplay.read().await.clone();
-    if let Some(chunk) = gameplay.initial_terrain_chunk(&cache_key) {
-        return Ok(Json(chunk));
-    }
     let human = match controller_token(&headers) {
         Some(token) => gameplay.is_human_token(token),
         None => false,
     };
+    terrain_chunk(&state, cache_key, human).await.map(Json)
+}
+
+/// One map chunk: from the caches, else generated. The chunk route and the
+/// AI seats played inside the server read it from here.
+pub(crate) async fn terrain_chunk(
+    state: &AppState,
+    cache_key: terrain_cache::Key,
+    human: bool,
+) -> Result<CompactChunk, StatusCode> {
+    let content_hash = cache_key.content_hash.clone();
+    let (x, y) = (cache_key.x, cache_key.y);
+    if let Some(chunk) = state.terrain_cache.lock().await.get(&cache_key) {
+        return Ok(chunk);
+    }
+    let gameplay = state.gameplay.read().await.clone();
+    if let Some(chunk) = gameplay.initial_terrain_chunk(&cache_key) {
+        return Ok(chunk);
+    }
     let package = state
         .map_packages
         .read()
@@ -396,7 +405,7 @@ pub(super) async fn chunk(
         return Err(StatusCode::NOT_FOUND);
     }
     let (_cancellation_guard, cancelled) = request_cancellation();
-    let provider = page_residency(&state, &package, cancelled.clone())
+    let provider = page_residency(state, &package, cancelled.clone())
         .await
         .map_err(|_| StatusCode::NOT_FOUND)?;
     let chunk = gameplay
@@ -420,7 +429,7 @@ pub(super) async fn chunk(
         .lock()
         .await
         .insert(cache_key, chunk.clone());
-    Ok(Json(chunk))
+    Ok(chunk)
 }
 
 pub(crate) async fn page_residency(
