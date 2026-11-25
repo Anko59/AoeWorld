@@ -19,18 +19,19 @@ night and day briefs) and checked against `origin/dev` at `ec5bf2e15` (#857, 202
 
 ## Decisions blocking the 2M-unit target (owner to decide)
 
-Owner 11-24: "priority goes to any decisions we still have to take that block the 2m units objective". Raised 11-24, none
-decided yet; details and evidence in [scale](roadmap/scale.md).
+Owner 11-24: "priority goes to any decisions we still have to take that block the 2m units objective". Raised 11-24;
+1, 3 and 4 decided 11-25, 2 and 5 still open; details and evidence in [scale](roadmap/scale.md).
 
-1. **Unseen-unit fidelity.** 2M units needs cheap simulation for units nobody watches (longer strides, analytic movers,
-   phase 7a). How far may an unwatched fight or march diverge from a watched one? Today's parity bound (0.10) keeps
-   shelving these: long stride for unseen groups was -14% but unwatched raids won 5% vs 31% watched.
+1. **Unseen-unit fidelity: decided 11-25.** Unwatched territory is played by its offices as groups ([hierarchy
+   spec](hierarchy/spec.md), section 6, office mode). Acceptance is plausibility on the 5x and 10x benches (kills within
+   about 20%, stock within about 15% over five minutes), not the 0.10 parity bound. This replaces #978's off-screen
+   design (its section 4.3, decision 5 and the parity bound); #978's rules, State comment and steps 6, 8 and 11 stay.
 2. **Movement architecture past 500k.** The rewrite core was killed 11-14 (28,500 instructions per mover against a
    2,000 gate); "decided by Q6" was never decided. Without a direction, rungs 2-3 have no plan.
-3. **Hierarchy engine.** Rung 3 (2M) is "via the hierarchy" (territory offices, rank ladders, intents and reports), still
-   a 10-31 brainstorm with no agreed design ([hierarchy](roadmap/hierarchy.md)).
-4. **Memory per unit.** 2M units in 14 GB with the OS and AIs leaves about 4 KB per unit; never set or measured. The
-   5x/10x benches (harness, 11-24) report RSS per unit.
+3. **Hierarchy engine: decided 11-25.** Specification agreed with the owner ([spec](hierarchy/spec.md),
+   [hierarchy](roadmap/hierarchy.md)); build order in its section 10, provinces first.
+4. **Memory per unit: target set 11-25.** 4 KB per unit (2M units in 14 GB with the OS and AIs). The 5x bench measures
+   7-8 KB per unit today; a heap profile of the 5x save comes first.
 5. **Players and AI cost.** Python AIs cost about 47 ms CPU per decision (#942); 2M units with 99 AIs or with hundreds of
    players decides whether AI decisions move into Rust.
 
