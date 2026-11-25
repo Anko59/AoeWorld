@@ -95,7 +95,7 @@ fn start_server(options: &Options, root: &Path, work: &Path) -> Result<Server, B
     fs::create_dir_all(&options.package_directory)?;
     let log = fs::File::create(work.join("server.log"))?;
     let address = format!("127.0.0.1:{}", options.port);
-    let mut command = Command::new(root.join("target/release/aoe-server"));
+    let mut command = procs::server_command(options, root);
     command
         .current_dir(root)
         .env("AOE_BIND", &address)
@@ -229,7 +229,9 @@ pub(super) fn run(options: &Options, saved: Option<Value>) -> Result<(), BoxErro
     });
     let late = options
         .late_game
-        .then(|| super::late::start(&server.address, &info, options.seed));
+        .then_some(())
+        .filter(|()| !options.no_march)
+        .map(|()| super::late::start(&server.address, &info, options.seed));
     println!("scale-match: all bots connected {connect_seconds:.1} s after the hosts started");
     let _ = pull_ticks(&server, &mut cursor, &mut rows);
     rows.clear();
@@ -273,6 +275,7 @@ pub(super) fn run(options: &Options, saved: Option<Value>) -> Result<(), BoxErro
             println!("recorded {} ticks", options.record_ticks);
             break;
         }
+        save::save_on_request(options, &server, human.as_ref(), &work);
         let seconds = run_started.elapsed().as_secs_f64();
         if seconds >= 60.0 * (minutes.windows.len() + 1) as f64 && seconds < wall.as_secs_f64() {
             phase_minutes.push(save::sample(
@@ -331,6 +334,10 @@ pub(super) fn run(options: &Options, saved: Option<Value>) -> Result<(), BoxErro
     if let Some(path) = &options.record_commands {
         aoe_server::replay::Recording::read(path)
             .map_err(|e| format!("command recording incomplete: {e}"))?;
+    }
+    if let (Some(name), Some(human)) = (&options.save_as, human.as_ref()) {
+        let card = save::save_game(&server, human, name)?;
+        println!("scale-match: saved {card}");
     }
     let wall_seconds = run_started.elapsed().as_secs_f64();
     let _ = pull_ticks(&server, &mut cursor, &mut rows);

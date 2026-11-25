@@ -124,8 +124,29 @@ fn import_pair(
 }
 
 /// A page of seat 0 in a new match watching `side` tiles around its units.
-pub(super) fn watch(server: &Server, side: i32) -> Result<Human, BoxError> {
-    Human::connect(&server.address, Some(side))
+pub(super) fn watch(server: &Server, side: Option<i32>) -> Result<Human, BoxError> {
+    Human::connect(&server.address, side)
+}
+
+/// `POST /saves` as the connected human; returns the save card.
+pub(super) fn save_game(server: &Server, human: &Human, name: &str) -> Result<Value, BoxError> {
+    let response = http::request(
+        &server.address,
+        "POST",
+        "/saves",
+        &[("X-AoeWorld-Controller-Token", &human.token)],
+        Some(&serde_json::to_vec(&json!({ "name": name }))?),
+        Duration::from_secs(30 * 60),
+    )?;
+    if response.status != 200 {
+        return Err(format!(
+            "POST /saves: {}: {}",
+            response.status,
+            String::from_utf8_lossy(&response.body)
+        )
+        .into());
+    }
+    Ok(serde_json::from_slice(&response.body)?)
 }
 
 /// A real human socket keeps the skirmish alive, without issuing any orders.
@@ -369,3 +390,26 @@ fn work(state: &Value) -> Value {
 
 #[cfg(test)]
 mod tests;
+
+/// `--save-as`: saves the game under the name in `<work>/save-now` (first line) when that file appears.
+pub(super) fn save_on_request(
+    options: &super::Options,
+    server: &Server,
+    human: Option<&Human>,
+    work: &std::path::Path,
+) {
+    let Some(human) = human.filter(|_| options.save_as.is_some()) else {
+        return;
+    };
+    let trigger = work.join("save-now");
+    let Ok(text) = std::fs::read_to_string(&trigger) else {
+        return;
+    };
+    let _ = std::fs::remove_file(&trigger);
+    let name = text.lines().next().unwrap_or("").trim();
+    let name = if name.is_empty() { "scale-match" } else { name };
+    match save_game(server, human, name) {
+        Ok(card) => println!("scale-match: saved {card}"),
+        Err(error) => println!("scale-match: save failed: {error}"),
+    }
+}

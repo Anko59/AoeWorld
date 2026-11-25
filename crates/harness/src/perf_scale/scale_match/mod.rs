@@ -136,6 +136,20 @@ pub struct Options {
     /// `--tiles` sets the map side.
     #[arg(long, default_value_t = 1.0, requires = "late_game")]
     pub scale: f64,
+    /// With `--late-game`, leave slot 0's seeded army where it stands (no scripted
+    /// marches): a growth run at 5x seeding would otherwise order tens of thousands
+    /// of soldiers in four formations, one `orders` phase of minutes.
+    #[arg(long, requires = "late_game")]
+    pub no_march: bool,
+    /// Save the running game under this name when the run ends, and whenever the file
+    /// `target/scale-match/save-now` appears (its first line names that save). Uses the
+    /// connected human's token; the save lands in `<package-directory>/saves`.
+    #[arg(long, conflicts_with = "save")]
+    pub save_as: Option<String>,
+    /// Run the server at nice 19 and the bot containers at low CPU shares, so a long
+    /// game does not disturb other measurements (instruction counts do not depend on load).
+    #[arg(long)]
+    pub nice: bool,
     /// Build the server with its sampling profiler and write a flame graph,
     /// folded stacks and top-N table into this directory (keep it in `.cache/`).
     #[arg(long)]

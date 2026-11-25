@@ -87,10 +87,11 @@ pub(super) fn start(
             )
             .into());
         }
-        let human = options
-            .human_view
-            .map(|side| save::watch(server, side))
-            .transpose()?;
+        let human = if options.human_view.is_some() || options.save_as.is_some() {
+            Some(save::watch(server, options.human_view)?)
+        } else {
+            None
+        };
         (serde_json::from_slice(&response.body)?, human, None)
     };
     Ok(result)

@@ -41,6 +41,9 @@ fn docker_python(
         .arg(format!("{0}:{0}", root.display()))
         .arg("-w")
         .arg(root);
+    if options.nice {
+        command.args(["--cpu-shares", "64"]);
+    }
     if !name.is_empty() {
         command.args(["--name", name]);
     }
