@@ -157,18 +157,22 @@ python -m aoe_ai match --url http://127.0.0.1:9000 --admin-token change-me-01234
 
 ## Skirmish from the browser
 
-The setup screen's **Opponents** setting (0 to 99) plays a match against the
-example AI without any command line. `make dev` builds the wheel, installs it
-into `target/dev-ai/site` and runs the server in the SDK image with
-`AOE_AI_COMMAND="python3 -m aoe_ai host"`. After the map job, the browser calls
-`POST /skirmish {"map_hash", "opponents"}` (controller token): the server
-builds the match (slot 0 human, the rest AI, standard starts), swaps it in and starts one host process per 13 AI slots, handing each
-its tokens on stdin. `GET /skirmish` reports the phase (`opening_map`,
-`placing_villages`, `starting_ai`, `connecting_ai`, `ready`, `failed`,
-`cancelled`, `stopped`) with measured counts. The hosts are killed by
-`POST /skirmish/stop` (Cancel, Quit to Main Menu), when another match or map
-replaces this one, when they exit, or when nobody has held the human seat
-for five minutes.
+The setup screen's **Opponents** setting (0 to 99) plays a match against the example AI without
+any command line. `make dev` builds the wheel, installs it into `target/dev-ai/site` and runs the
+server in the SDK image with `AOE_AI_COMMAND="python3 -m aoe_ai host"`. After the map job, the
+browser calls `POST /skirmish {"map_hash", "opponents"}` (controller token): the server builds
+the match (slot 0 human, the rest AI, standard starts), swaps it in and
+starts one host process per 13 AI slots, handing each its tokens on stdin. `GET /skirmish`
+reports the phase (`opening_map`, `placing_villages`, `starting_ai`, `connecting_ai`, `ready`,
+`failed`, `cancelled`, `stopped`) with measured counts. The hosts are killed by
+`POST /skirmish/stop` (Cancel, Quit to Main Menu), when another match or map replaces this one,
+when they exit, or when nobody has held the human seat for five minutes.
+
+`AOE_AI_RUNTIME=python|rust` (default `python`) picks where AI seats play (skirmish, `POST /match`,
+`AOE_ARENA=1` arena): `python` is the hosts above; `rust` plays every AI slot in the server (`aoe-ai`
+over an `aoe_sdk::Mirror`: the same fog-filtered messages and order path as a socket client), its orders
+entering two ticks after their view, so a seeded match is reproducible. Python stays the tournament client.
+`make ai-compare` plays each seed with both; `make scale-match SCALE_MATCH_ARGS="--ai rust"` uses Rust.
 
 ```sh
 AOE_PRESET_MAPS=qa/skirmish-presets.json DEV_PORT=8097 make dev   # France prepared at boot
@@ -443,32 +447,29 @@ could never kill (now stood down after 40 s without progress). The Feudal time
 on a flat map show neither finished RTS performance nor dedicated-hardware
 qualification.
 
-`python -m aoe_ai host --tokens-file` plays many existing slots in one process and writes a
-JSON report with per-bot drop and rejoin counters (the scale harness uses it).
+`python -m aoe_ai host --tokens-file` plays many existing slots in one process and
+writes a JSON report with per-bot drop and rejoin counters (the scale harness uses it).
 
 ## Tests and commands
 
-* `make sdk-python` builds the wheel (`target/wheels`); `make sdk-python-test`
-  builds the server and a wheel, then runs `pytest` for the bindings and the
-  example AI against a local server. Both run in the pinned
-  `aoeworld/sdk-python` image (`docker/sdk-python.Dockerfile`).
-* `cargo test -p aoe-sdk` (through `make test-unit`) tests the model, orders and
-  two bots on a local server; `crates/server/tests/slots.rs` and
-  `match_http.rs` test slot isolation, per-slot fog and `POST /match`.
+* `make sdk-python` builds the wheel (`target/wheels`); `make sdk-python-test` builds the server
+  and a wheel, then runs `pytest` for the bindings and the example AI against a local server.
+  Both run in the pinned `aoeworld/sdk-python` image (`docker/sdk-python.Dockerfile`).
+* `cargo test -p aoe-sdk` (through `make test-unit`) tests the model, orders and two bots on a
+  local server; `crates/server/tests/slots.rs` and `match_http.rs` test slot isolation,
+  per-slot fog and `POST /match`.
 
 ## Scale: one human and 99 AIs
 
-Design: a compact binary protocol (postcard, no JSON on the hot path); an
-interest-limited view per connection (own units always, foreign units, fog and
-wildlife only in the bot's window); per-player vision revisions and per-viewer
-economy and building views built once per tick; idle `Tick` messages dropped
-for AI slots (a heartbeat every half second); AI fog views at most once a
-second; one Rust runtime with two network threads for every connection of a
-Python process; `Fleet.wait` serving all bots from one Python thread. Capacities
-are sized per seat: 8,192 buildings and 65,536 gatherer, builder, hunter and projectile
-slots per seat ([capacities](scale/capacity.md)). A refused
-order says why: `REJECTED_WORLD_LIMIT` when a world capacity is reached,
-`REJECTED_ORDER_TOO_LARGE` for an oversized group or wall, and
+Design: a compact binary protocol (postcard, no JSON on the hot path); an interest-limited view
+per connection (own units always, foreign units, fog and wildlife only in the bot's window);
+per-player vision revisions and per-viewer economy and building views built once per tick; idle
+`Tick` messages dropped for AI slots (a heartbeat every half second); AI fog views at most once a
+second; one Rust runtime with two network threads for every connection of a Python process;
+`Fleet.wait` serving all bots from one Python thread. Capacities are sized per seat: 8,192
+buildings and 65,536 gatherer, builder, hunter and projectile slots per seat
+([capacities](scale/capacity.md)). A refused order says why: `REJECTED_WORLD_LIMIT` when a world
+capacity is reached, `REJECTED_ORDER_TOO_LARGE` for an oversized group or wall, and
 `REJECTED_QUEUE_FULL` only for a full order queue.
 
 Measured on the development machine (12 cores, shared with other work, release
@@ -483,16 +484,14 @@ process):
 | 60 game seconds | | 91 s wall, server 1.0 core, Python 0.29 core |
 | errors, closed connections | | 0 |
 
-Reading it honestly: connecting and serving 100 slots is cheap (the networking
-layer is not the bottleneck: 30 connected passive clients cost 0.05 core), but
-with 99 AIs issuing orders the single-threaded simulation tick did not keep
-20 Hz here (619 missed deadlines in 1,200 ticks, 0.66x real time); that cost is
-movement planning and gathering, which the simulation-scale work owns. Match
-creation spends about a second per village on site certification. The run
-covers a young economy (about four villagers each), so it demonstrates
-capacity and connection handling, not finished RTS performance or dedicated
-hardware qualification. Ad hoc scripts produced the numbers; they are
-not a gate.
+Reading it honestly: connecting and serving 100 slots is cheap (the networking layer is not the
+bottleneck: 30 connected passive clients cost 0.05 core), but with 99 AIs issuing orders the
+single-threaded simulation tick did not keep 20 Hz here (619 missed deadlines in 1,200 ticks, 0.66x
+real time); that cost is movement planning and gathering, which the simulation-scale work owns.
+Match creation spends about a second per village on site certification. The run covers a young
+economy (about four villagers each), so it demonstrates capacity and connection handling, not
+finished RTS performance or dedicated hardware qualification. Ad hoc scripts produced the numbers;
+they are not a gate.
 
 Limits: capacities and design are for 100 players; larger matches need larger
 maps (about 40x40 tiles per player) and a faster simulation tick. See

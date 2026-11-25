@@ -15,7 +15,7 @@ mod sampling;
 mod source_qualification;
 pub use gameplay::replay;
 mod terrain_cache;
-pub use config::{Config, SamplingProfile};
+pub use config::{AiRuntime, Config, SamplingProfile};
 pub use gameplay::{GameplayService, PersistedDepletion, ResourceLifecycleError, SlotInfo};
 pub use gameplay_match::MAX_MATCH_SLOTS;
 pub use gameplay_match::SAVE_VERSION;
@@ -89,6 +89,8 @@ pub struct AppState {
     tick_stats: Arc<gameplay_match::TickStats>,
     client_perf: Arc<Mutex<gameplay_match::admin::client_perf::Reports>>,
     skirmish: Arc<gameplay_match::Skirmish>,
+    /// Where AI seats are played (`AOE_AI_RUNTIME`).
+    ai_runtime: config::AiRuntime,
 }
 
 impl AppState {
@@ -123,6 +125,7 @@ impl AppState {
             tick_stats: Arc::default(),
             client_perf: Arc::default(),
             skirmish: Arc::new(gameplay_match::Skirmish::from_env(config.bind.port())),
+            ai_runtime: Config::ai_runtime_from_env().unwrap_or_default(),
         })
     }
 

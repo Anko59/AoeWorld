@@ -40,10 +40,10 @@ impl GameplayService {
             crate::gameplay::arena::note_order();
         }
         let now = Instant::now();
-        let (current_tick, preparation) = {
+        let (current_tick, tick_hz, preparation) = {
             let world = self.world.read().await;
             let request = crate::gameplay::preparation::Request::new(&world, &action);
-            (world.tick(), request)
+            (world.tick(), world.config().tick_hz, request)
         };
         let mut sessions = self.sessions.lock().await;
         // Humans and AI seats are counted apart: a hundred AI seats filling the
@@ -65,9 +65,17 @@ impl GameplayService {
         {
             result = Some(CommandResult::RejectedSequence);
         } else {
-            let elapsed = now
-                .duration_since(session.last_command_refill)
-                .as_secs_f64();
+            // A seat played in process is refilled by game time, so what it
+            // may send never depends on how fast the server runs.
+            let elapsed = match session.command_tick {
+                Some(last) => {
+                    session.command_tick = Some(current_tick.0);
+                    current_tick.0.saturating_sub(last) as f64 / f64::from(tick_hz.max(1))
+                }
+                None => now
+                    .duration_since(session.last_command_refill)
+                    .as_secs_f64(),
+            };
             // A person clicks; an AI issues a decision's worth of orders at once.
             let (refill, burst, queue) = if session.ai {
                 (AI_ORDERS_PER_SECOND, AI_ORDER_BURST, AI_PENDING_COMMANDS)

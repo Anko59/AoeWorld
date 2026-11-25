@@ -16,6 +16,9 @@ pub enum OrderIssuer {
     General,
     #[default]
     Automation,
+    /// A Rust AI seat played inside the server. It shares the last, unattributed
+    /// row of the per-issuer census arrays until those grow a row of their own.
+    RustAi,
 }
 
 #[derive(Clone, Copy, Debug, Default, serde::Serialize)]
@@ -64,7 +67,7 @@ type Source = (usize, Option<Site>, Site, usize);
 #[derive(Debug, Default)]
 pub(crate) struct OrderDiagnostics {
     pub issuer: OrderIssuer,
-    pub demand: [OrderDemand; 7],
+    pub demand: [OrderDemand; 8],
     /// Route-planner work (issue, fair pass, planning ahead) by the issuer of
     /// the unit's latest accepted order; the last row has no known issuer.
     route_work: [[u64; 3]; 8],
@@ -160,7 +163,7 @@ impl GameWorld {
         self.order_diagnostics.route_work[row][phase] += u64::from(spent);
     }
 
-    pub fn order_demand(&self) -> &[OrderDemand; 7] {
+    pub fn order_demand(&self) -> &[OrderDemand; 8] {
         &self.order_diagnostics.demand
     }
 
@@ -175,6 +178,7 @@ impl GameWorld {
             "vassal",
             "general",
             "rally_automation",
+            "rust_ai",
         ];
         self.order_diagnostics
             .sources

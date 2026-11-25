@@ -186,7 +186,7 @@ async fn scheduler(
     answer["order_demand"] = json!({
         "reassignment_seconds": 10,
         "sources": world.order_redundancy_sources(),
-        "issuers": (["player", "python_ai", "auto_scout", "steward", "vassal", "general", "rally_automation"]
+        "issuers": (["player", "python_ai", "auto_scout", "steward", "vassal", "general", "rally_automation", "rust_ai"]
             .into_iter().zip(world.order_demand()).collect::<BTreeMap<_, _>>())
     });
     answer["queue"] = queue_json(&world.route_queue_breakdown(), &humans);

@@ -78,6 +78,14 @@ def main(argv: list[str] | None = None) -> int:
     arena.add_argument("--tiles", type=int, default=300, help="map width in tiles (flat terrain)")
     arena.add_argument("--seeds", default="1,2,3,4,5", help="comma-separated seeds, one match each")
 
+    versus = sub.add_parser("compare", help="Python AI against Rust AI on the same seeded arena match; prints JSON")
+    versus.add_argument("--server-bin", required=True, help="the aoe-server binary")
+    versus.add_argument("--bots", type=int, default=2)
+    versus.add_argument("--minutes", type=float, default=20.0, help="game minutes per seed")
+    versus.add_argument("--tiles", type=int, default=300, help="map width in tiles (flat terrain)")
+    versus.add_argument("--seeds", default="1", help="comma-separated seeds, one match pair each")
+    versus.add_argument("--only", choices=("python", "rust"), help="play one side only")
+
     tour = sub.add_parser("tournament", help="free-for-all of drafts on the arena, scored by the admin API")
     tour.add_argument("--server-bin", required=True)
     tour.add_argument("--drafts", default="baseline,boom,fast_castle,generals,steward_scaler,balanced")
@@ -145,6 +153,16 @@ def main(argv: list[str] | None = None) -> int:
         results = run_seeds(Path(args.server_bin), root, seeds, args.bots, args.minutes, args.tiles)
         print(json.dumps({"results": results}, indent=1))
         return 1 if any(b["errors"] for r in results for b in r["bots"]) else 0
+    if args.command == "compare":
+        from pathlib import Path
+
+        from .compare import compare
+
+        root = Path(__file__).resolve().parents[2]
+        seeds = [int(seed) for seed in args.seeds.split(",") if seed]
+        report = compare(Path(args.server_bin), root, seeds, args.bots, args.minutes, args.tiles, args.only)
+        print(json.dumps(report, indent=1))
+        return 0
     if args.command == "match":
         if not args.admin_token:
             parser.error("--admin-token (or AOE_MATCH_TOKEN) is required to start a match")

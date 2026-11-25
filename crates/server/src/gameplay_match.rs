@@ -389,6 +389,7 @@ async fn start_match(
     };
     previous.retire(world_id).await;
     state.generation.fetch_add(1, Ordering::SeqCst);
+    play_ai_seats(&state, state.ai_runtime).await;
     Ok(Json(MatchResponse {
         world_id,
         content_hash: summary_hash,
@@ -401,6 +402,7 @@ async fn start_match(
 }
 
 pub(crate) mod admin;
+mod ai_seats;
 mod flat;
 mod late_game;
 mod pause;
@@ -411,6 +413,7 @@ pub use saves::SAVE_VERSION;
 mod seats;
 mod skirmish;
 mod stats;
+pub(crate) use ai_seats::{AiSeats, AppliedOrder, play_ai_seats, record as record_applied};
 pub use rules::{MatchError, MatchRules, StartUnits};
 pub(crate) use seats::fresh_seed;
 use seats::place_villages;

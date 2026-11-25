@@ -28,18 +28,9 @@ pub(super) async fn run(
     options: ConnectOptions,
     token: ResumeToken,
 ) {
-    let mut policy = options.view;
     let mut socket = socket;
     let reason = loop {
-        let ended = session(
-            socket,
-            &shared,
-            &mut commands,
-            &endpoint,
-            &options,
-            &mut policy,
-        )
-        .await;
+        let ended = session(socket, &shared, &mut commands, &endpoint, &options).await;
         if !ended.retry {
             break ended.reason;
         }
@@ -50,15 +41,7 @@ pub(super) async fn run(
         for sequence in ended.unsent {
             not_sent(&shared, sequence);
         }
-        let rejoined = rejoin(
-            &shared,
-            &mut commands,
-            &endpoint,
-            &options,
-            token,
-            &mut policy,
-        )
-        .await;
+        let rejoined = rejoin(&shared, &mut commands, &endpoint, &options, token).await;
         let away = lost_at.elapsed().as_micros() as u64;
         shared.reconnect_micros.fetch_add(away, Ordering::Relaxed);
         match rejoined {
@@ -79,7 +62,6 @@ async fn rejoin(
     endpoint: &Endpoint,
     options: &ConnectOptions,
     token: ResumeToken,
-    policy: &mut ViewPolicy,
 ) -> Option<Socket> {
     for attempt in 0..RECONNECT_ATTEMPTS {
         tokio::time::sleep(Duration::from_millis(250 * (1 << attempt.min(4)))).await;
@@ -89,31 +71,24 @@ async fn rejoin(
         while let Ok(command) = commands.try_recv() {
             match command {
                 Command::Close => return None,
-                Command::View(next) => *policy = next,
+                Command::View(next) => shared.lock().mirror.set_policy(next),
                 Command::Order(sequence, _) => not_sent(shared, sequence),
             }
         }
         let Ok((mut socket, welcome)) = join(endpoint, token, options.connect_timeout).await else {
             continue;
         };
-        let Some(mut world) = World::from_welcome(&welcome) else {
+        let Some(mut mirror) = Mirror::new(&welcome) else {
             continue;
         };
-        world.subscription = 1;
-        let first = initial_region(&world);
-        let subscribed = send_frame(
-            &mut socket,
-            &GameplayClientMessage::Subscribe {
-                revision: 1,
-                region: first,
-                unit_zoom: false,
-            },
-        )
-        .await;
-        if subscribed.is_err() {
+        mirror.set_policy(shared.lock().mirror.policy());
+        if send_frame(&mut socket, &mirror.first_subscribe())
+            .await
+            .is_err()
+        {
             continue;
         }
-        shared.lock().world = world;
+        shared.lock().mirror = mirror;
         shared.notify.notify_waiters();
         return Some(socket);
     }
@@ -126,12 +101,9 @@ async fn session(
     commands: &mut mpsc::UnboundedReceiver<Command>,
     endpoint: &Endpoint,
     options: &ConnectOptions,
-    policy: &mut ViewPolicy,
 ) -> Ended {
     let (chunk_tx, mut chunk_rx) = mpsc::unbounded_channel::<((i32, i32), Result<CompactChunk>)>();
     let mut in_flight = 0_usize;
-    let mut view = initial_region(&shared.lock().world);
-    let mut view_tick = 0_u64;
     let (mut window_start, mut window_sent) = (Instant::now(), 0_usize);
     let mut unsent = Vec::new();
     let (reason, retry) = loop {
@@ -147,33 +119,17 @@ async fn session(
                     Some(Err(error)) => break (format!("websocket error: {error}"), true),
                 };
                 let reset = matches!(message, GameplayServerMessage::WorldReset { .. });
-                let mut subscribe = None;
+                let subscribe;
                 let mut wanted = Vec::new();
                 {
                     let mut state = shared.lock();
-                    let events = state.world.apply(message);
+                    let events = state.mirror.apply(message);
                     state.events.extend(events);
                     let overflow = state.events.len().saturating_sub(MAX_BUFFERED_EVENTS);
                     state.events.drain(..overflow);
-                    let world = &mut state.world;
-                    if world.snapshot_seen
-                        && world.tick >= view_tick + RESUBSCRIBE_MIN_TICKS
-                        && let Some(want) = desired_region(world, *policy)
-                        && drifted(want, view)
-                    {
-                        view = want;
-                        view_tick = world.tick;
-                        world.subscription += 1;
-                        subscribe = Some((world.subscription, want));
-                    }
-                    if world.fog_dirty && options.fetch_terrain {
-                        world.fog_dirty = false;
-                        if let Some(hash) = world.map_hash {
-                            let chunks = world.fog.known_chunks();
-                            let fresh = Arc::make_mut(&mut world.catalog)
-                                .take_wanted(&chunks, MAX_CHUNKS_IN_FLIGHT.saturating_sub(in_flight));
-                            wanted = fresh.into_iter().map(|chunk| (hash, chunk)).collect();
-                        }
+                    subscribe = state.mirror.take_subscribe();
+                    if options.fetch_terrain {
+                        wanted = state.mirror.wanted_chunks(MAX_CHUNKS_IN_FLIGHT.saturating_sub(in_flight));
                     }
                 }
                 shared.notify.notify_waiters();
@@ -185,8 +141,8 @@ async fn session(
                         let _ = sender.send((chunk, endpoint.get_json::<CompactChunk>(&path).await));
                     });
                 }
-                if let Some((revision, region)) = subscribe
-                    && let Err(error) = send_frame(&mut socket, &GameplayClientMessage::Subscribe { revision, region, unit_zoom: false }).await
+                if let Some(subscribe) = subscribe
+                    && let Err(error) = send_frame(&mut socket, &subscribe).await
                 {
                     break (error.to_string(), true);
                 }
@@ -197,8 +153,7 @@ async fn session(
             command = commands.recv() => match command {
                 None | Some(Command::Close) => break ("closed by the client".to_owned(), false),
                 Some(Command::View(next)) => {
-                    *policy = next;
-                    view_tick = 0;
+                    shared.lock().mirror.set_policy(next);
                 }
                 Some(Command::Order(sequence, order)) => {
                     if window_start.elapsed() >= Duration::from_secs(1) {
@@ -225,14 +180,10 @@ async fn session(
             fetched = chunk_rx.recv() => {
                 let Some((chunk, result)) = fetched else { continue };
                 in_flight = in_flight.saturating_sub(1);
-                let mut state = shared.lock();
-                let world = &mut state.world;
-                let catalog = Arc::make_mut(&mut world.catalog);
-                match result.map_err(|error| error.to_string()).and_then(|data| catalog.insert(&data)) {
-                    Ok(()) => {}
-                    Err(_) => catalog.forget(chunk),
-                }
-                world.fog_dirty = true;
+                shared
+                    .lock()
+                    .mirror
+                    .insert_chunk(chunk, result.map_err(|error| error.to_string()));
             }
         }
     };

@@ -29,6 +29,8 @@ mod delete_tests;
 #[path = "commands/tests/detach.rs"]
 #[cfg(test)]
 mod detach_tests;
+#[path = "commands/dispatch.rs"]
+mod dispatch;
 #[path = "commands/formations.rs"]
 mod formations;
 pub(crate) use formations::SelectionMove;

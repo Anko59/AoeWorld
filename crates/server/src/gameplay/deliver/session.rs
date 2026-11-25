@@ -44,6 +44,9 @@ pub(crate) struct Session {
     /// lists alone (a new point of view, fog switched).
     pub(crate) rebuild_buildings: bool,
     pub(crate) resource_vision_revision: Option<u64>,
+    /// Set for a seat played in process: its order budget refills by game
+    /// ticks (the last one it was refilled on), not by the wall clock.
+    pub(crate) command_tick: Option<u64>,
     pub(crate) resident_resources: Vec<aoe_protocol::ResourceAmount>,
 }
 #[derive(Clone, Copy)]

@@ -128,10 +128,7 @@ impl Skirmish {
     fn advance(&self, id: u64, phase: Phase) -> bool {
         let mut inner = self.lock();
         let current = inner.status.id == id && inner.status.phase.active();
-        if current {
-            inner.status.phase = phase;
-        }
-        current
+        current.then(|| inner.status.phase = phase).is_some()
     }
 
     fn fail(&self, id: u64, phase: Phase, error: Option<String>) {
@@ -263,7 +260,8 @@ async fn start(
             format!("choose 0 to {MAX_OPPONENTS} opponents"),
         ));
     }
-    if request.opponents > 0 && state.skirmish.launch.is_none() {
+    let hosted = state.skirmish.launch.is_some() || state.ai_runtime == crate::AiRuntime::Rust;
+    if request.opponents > 0 && !hosted {
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             "AI opponents are not available on this server (start it with `make dev`)".to_owned(),
@@ -388,7 +386,9 @@ async fn prepare(
     };
     previous.retire(world_id).await;
     state.generation.fetch_add(1, Ordering::SeqCst);
-    if let Some(launch) = state.skirmish.launch.as_ref().filter(|_| opponents > 0) {
+    let rust = super::play_ai_seats(state, state.ai_runtime).await > 0;
+    let launch = state.skirmish.launch.as_ref();
+    if let Some(launch) = launch.filter(|_| opponents > 0 && !rust) {
         let fleet = launch.spawn(world_id, &tokens)?;
         let mut inner = state.skirmish.lock();
         if inner.status.id == id && inner.status.phase.active() {

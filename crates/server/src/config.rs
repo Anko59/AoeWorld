@@ -13,6 +13,16 @@ pub struct Config {
     pub geodata_cache_directory: PathBuf,
 }
 
+/// Where AI seats are played (`AOE_AI_RUNTIME`).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum AiRuntime {
+    /// Python hosts joining over the gameplay socket (tournaments use these).
+    #[default]
+    Python,
+    /// The Rust AI, inside the server process.
+    Rust,
+}
+
 /// The opt-in sampling profiler (`--features sampling-profiler`): where it
 /// writes, how long after start it begins and how many seconds it samples.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -92,6 +102,22 @@ impl Config {
             .map(str::to_owned)
             .collect();
         (!command.is_empty()).then_some(command)
+    }
+    /// `AOE_AI_RUNTIME=rust|python`: where AI seats are played. Unset or
+    /// `python`, every AI seat is a Python host joining over the socket; `rust`
+    /// plays them inside the server.
+    pub fn ai_runtime_from_env() -> Result<AiRuntime, String> {
+        Self::ai_runtime_from(env::var("AOE_AI_RUNTIME").ok().as_deref())
+    }
+
+    pub fn ai_runtime_from(value: Option<&str>) -> Result<AiRuntime, String> {
+        match value.map(str::trim) {
+            None | Some("" | "python") => Ok(AiRuntime::Python),
+            Some("rust") => Ok(AiRuntime::Rust),
+            Some(other) => Err(format!(
+                "AOE_AI_RUNTIME must be `rust` or `python`, not `{other}`"
+            )),
+        }
     }
     pub const DEFAULT_MAP_PACKAGE_DIRECTORY: &'static str = "local-assets/map-packages";
     pub const DEFAULT_GEODATA_CACHE_DIRECTORY: &'static str = ".cache/geodata";

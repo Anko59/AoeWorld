@@ -26,6 +26,9 @@ mod events;
 mod fog;
 mod http;
 mod lobby;
+// Beside the socket session it shares its world model and view following with.
+#[path = "client/mirror.rs"]
+mod mirror;
 mod model;
 mod orders;
 mod query;
@@ -44,6 +47,7 @@ pub use events::Event;
 pub use fog::FogMemory;
 pub use http::Endpoint;
 pub use lobby::{MatchInfo, MatchMap, SlotAssignment, SlotKind, start_match};
+pub use mirror::Mirror;
 pub use model::{
     Age, Animal, AnimalKind, AnimalTask, Building, BuildingKind, CarriedResource, CommandResult,
     ConstructionState, Economy, GarrisonUnitState, MarketPrices, Projectile, RallyPoint,

@@ -57,6 +57,19 @@ ai-arena: sdk-python-tools job-bootstrap
 ai-arena-steps:
 	@$(SDK_RUN) cargo run --locked -p aoe-harness -- sdk-python arena --size $(ARENA_SIZE) --bots $(ARENA_BOTS) --minutes $(ARENA_MINUTES) --seeds $(ARENA_SEEDS)
 
+# Python AI against Rust AI: each seed played once by each on the arena, measured
+# from the admin summary, gaps against the tolerance in ai/aoe_ai/compare.py.
+COMPARE_SIZE ?= 300
+COMPARE_BOTS ?= 2
+COMPARE_MINUTES ?= 20
+COMPARE_SEEDS ?= 1
+.PHONY: ai-compare ai-compare-steps
+ai-compare: sdk-python-tools job-bootstrap
+	@$(JOB_RUN) ai-compare -- make --no-print-directory ai-compare-steps COMPARE_SIZE=$(COMPARE_SIZE) COMPARE_BOTS=$(COMPARE_BOTS) COMPARE_MINUTES=$(COMPARE_MINUTES) COMPARE_SEEDS=$(COMPARE_SEEDS)
+
+ai-compare-steps:
+	@$(SDK_RUN) cargo run --locked -p aoe-harness -- sdk-python compare --size $(COMPARE_SIZE) --bots $(COMPARE_BOTS) --minutes $(COMPARE_MINUTES) --seeds $(COMPARE_SEEDS)
+
 # The real server at its promised scale (docs/scale/match.md): one human, 99 Python AIs, a
 # France-sized map, with the server's tick records and, with
 # `--browser`, the human's frame rate. SCALE_MATCH_ARGS passes harness flags, for example

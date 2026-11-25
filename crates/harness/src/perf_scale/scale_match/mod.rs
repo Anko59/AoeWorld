@@ -24,6 +24,15 @@ use super::BoxError;
 use clap::{Args, ValueEnum};
 use std::path::PathBuf;
 
+/// Who plays the AI seats: the server's `AOE_AI_RUNTIME`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum AiRuntime {
+    /// Python hosts joining over the gameplay socket.
+    Python,
+    /// The server itself, in process.
+    Rust,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 pub(crate) enum MapSource {
     /// A France-centred 1:30 request with no source layers (procedural terrain).
@@ -73,6 +82,9 @@ pub struct Options {
     /// Python host processes; the bots are split evenly among them.
     #[arg(long, default_value_t = 4)]
     pub hosts: usize,
+    /// Who plays the AI seats.
+    #[arg(long, value_enum, default_value_t = AiRuntime::Python)]
+    pub ai: AiRuntime,
     #[arg(long, value_enum, default_value_t = MapSource::Procedural)]
     pub map: MapSource,
     /// The package to open for `--map package` (64 hex digits).
@@ -165,6 +177,16 @@ impl Options {
     /// The rate this run's server steps at.
     pub(super) fn tick_hz(&self) -> u32 {
         self.tick_hz.unwrap_or(aoe_server::Config::DEFAULT_SIM_HZ)
+    }
+
+    /// The server plays the AI seats itself: no Python host is started.
+    pub(super) fn rust_ai(&self) -> bool {
+        self.ai == AiRuntime::Rust
+    }
+
+    /// The server's `AOE_AI_RUNTIME` value for this run.
+    pub(super) fn ai_runtime(&self) -> &'static str {
+        if self.rust_ai() { "rust" } else { "python" }
     }
 }
 

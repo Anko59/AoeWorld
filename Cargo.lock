@@ -86,6 +86,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "aoe-ai"
+version = "0.1.0"
+dependencies = [
+ "aoe-core",
+ "aoe-sdk",
+]
+
+[[package]]
 name = "aoe-assets"
 version = "0.1.0"
 dependencies = [
@@ -257,10 +265,12 @@ dependencies = [
 name = "aoe-server"
 version = "0.1.0"
 dependencies = [
+ "aoe-ai",
  "aoe-core",
  "aoe-map",
  "aoe-protocol",
  "aoe-scenario",
+ "aoe-sdk",
  "aoe-simulation",
  "axum",
  "futures-util",

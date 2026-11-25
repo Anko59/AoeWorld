@@ -100,6 +100,7 @@ async fn perf(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<
     let mut report = state.tick_stats.summary(state.tick_period);
     report["clients"] = state.client_perf.lock().await.recent();
     let service = state.gameplay.read().await.clone();
+    report["rust_ai"] = service.rust_ai_perf();
     report["gameplay_memory"] =
         serde_json::to_value(service.memory_usage().await).map_err(internal)?;
     report["terrain_cache"] =
