@@ -30,10 +30,28 @@ fn every_tier_member_names_a_test_function_at_its_module_path() {
     }
 }
 
+/// Every source-qualification member lives in one of the packages the tier
+/// builds (`aoe-server` and `aoe-simulation` today), so the scoped run cannot
+/// leave one out.
 #[test]
-fn the_source_qualification_tier_builds_only_the_server_package() {
-    // The member check above reads `crates/server/src`: the package list must agree.
-    assert_eq!(SOURCE_QUALIFICATION_PACKAGES, ["aoe-server"]);
+fn every_source_qualification_member_is_in_a_package_the_tier_builds() {
+    let crates = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let functions: Vec<String> = SOURCE_QUALIFICATION_PACKAGES
+        .iter()
+        .flat_map(|package| {
+            let directory = package
+                .strip_prefix("aoe-")
+                .expect("workspace package name");
+            test_functions_in(&crates.join(directory))
+        })
+        .collect();
+    for name in SOURCE_QUALIFICATION {
+        let function = name.rsplit_once("::").unwrap().1;
+        assert!(
+            functions.iter().any(|f| f == function),
+            "{name} lives outside {SOURCE_QUALIFICATION_PACKAGES:?}"
+        );
+    }
 }
 
 /// Every `#[test]` function under one crate directory's sources, by name.
@@ -87,14 +105,20 @@ fn collect_test_functions(dir: &Path, found: &mut Vec<String>) {
                 let source = fs::read_to_string(&path).unwrap();
                 let lines: Vec<&str> = source.lines().map(str::trim).collect();
                 for (index, line) in lines.iter().enumerate() {
-                    let Some(rest) = line.strip_prefix("fn ") else {
+                    let Some(rest) = line
+                        .strip_prefix("fn ")
+                        .or_else(|| line.strip_prefix("async fn "))
+                    else {
                         continue;
                     };
                     let preceding = lines[..index]
                         .iter()
                         .rev()
                         .take_while(|l| l.starts_with("#[") || l.starts_with("///"));
-                    if preceding.into_iter().any(|l| *l == "#[test]") {
+                    if preceding
+                        .into_iter()
+                        .any(|l| *l == "#[test]" || l.starts_with("#[tokio::test"))
+                    {
                         found.push(rest.split('(').next().unwrap().to_owned());
                     }
                 }
