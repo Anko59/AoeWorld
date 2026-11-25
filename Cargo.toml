@@ -13,6 +13,7 @@ members = [
   "crates/server",
   "crates/harness",
   "crates/sdk",
+  "crates/ai",
 ]
 
 exclude = ["crates/sdk-python"]

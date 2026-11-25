@@ -86,6 +86,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "aoe-ai"
+version = "0.1.0"
+dependencies = [
+ "aoe-core",
+ "aoe-sdk",
+]
+
+[[package]]
 name = "aoe-assets"
 version = "0.1.0"
 dependencies = [
