@@ -124,10 +124,11 @@ impl StewardSettings {
 }
 
 /// Replay-only inclusive spans around the parts of a Steward pass.
-pub const STEWARD_SPANS: [&str; 28] = [
+pub const STEWARD_SPANS: [&str; 29] = [
     "steward_walk",
     "steward_members",
     "steward_transfers",
+    "steward_regions",
     "steward_release",
     "steward_snapshot",
     "steward_send_away",

@@ -82,6 +82,9 @@ impl GameWorld {
             *incoming.entry(*dest).or_default() += 1;
         }
         drop(span);
+        let span = self.steward_span("steward_regions");
+        self.steward_prepare_regions(&ids);
+        drop(span);
         for id in ids {
             if !self.active_steward(id) {
                 self.set_steward_town_center(id, None);
