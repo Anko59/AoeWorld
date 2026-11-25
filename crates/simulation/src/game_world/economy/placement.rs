@@ -37,29 +37,19 @@ impl GameWorld {
             && !self.rect_has_unit(TileRect::new(tile, TileCoord::new(tile.x + 1, tile.y + 1)))
     }
 
-    /// `!query(rect).0.is_empty()`, stopping at the first unit: no ordered
-    /// copy of every unit in the rect's chunks just to see if one is there
-    /// (a one-tile check in a town read hundreds, #978).
+    /// Whether a living unit stands in `rect`, read from the collision cells
+    /// of its own tiles: the chunk buckets hold every unit of a 32-tile
+    /// chunk, thousands in a 5x town, and a one-tile check scanned them all
+    /// (#978). Corpses have left the cells, as for foundations
+    /// (`living_units_on_tiles`).
     pub(crate) fn rect_has_unit(&self, rect: TileRect) -> bool {
         if !rect.valid(self.config.width_tiles, self.config.height_tiles) {
             return false;
         }
-        let Ok(area) = aoe_core::WorldRect::from_tiles(rect) else {
-            return false;
-        };
-        let chunk = |at: i32| at.div_euclid(aoe_core::SPATIAL_CHUNK_TILES);
-        (chunk(rect.min.y)..=chunk(rect.max.y - 1)).any(|y| {
-            (chunk(rect.min.x)..=chunk(rect.max.x - 1)).any(|x| {
-                self.chunks
-                    .get(&aoe_core::ChunkCoord { x, y })
-                    .is_some_and(|bucket| {
-                        bucket.iter().any(|&id| {
-                            self.lookup.get(&id).is_some_and(|&index| {
-                                area.contains(self.units[index].state.position)
-                            }) && !self.embarked(id)
-                        })
-                    })
-            })
+        let max = TileCoord::new(rect.max.x - 1, rect.max.y - 1);
+        [false, true].into_iter().any(|naval| {
+            self.collisions
+                .census_any(rect.min, max, naval, |id, _| !self.embarked(id))
         })
     }
 
