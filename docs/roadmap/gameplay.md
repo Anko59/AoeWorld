@@ -5,6 +5,7 @@ Dates are 2026 (MM-DD); "xN" is how many separate times the owner asked.
 
 | item | asked | status | evidence | next step |
 | --- | --- | --- | --- | --- |
+| Gold piles contain more gold | 11-25 x1 | PLANNED | Owner 11-25, part of the long-game balance (gold too scarce) | Set the amount with the balance measurements on long AI games |
 | Regrowing forests: a forest patch cut but not removed regrows from its remaining trees and slowly retakes the land it once covered; a patch cut down completely is gone for good | 11-25 x1 | PLANNED | Owner 11-25; management offices manage their land's forests sustainably | Growth rules and rates, then office logic |
 | Wildlife and fish reproduce and regain their numbers after being partly hunted; complete removal is definitive; wildlife populations grow larger than today to allow it | 11-25 x1 | PLANNED | Owner 11-25: resources must be managed, and management offices know how to optimise that on their land | Population rules per species, then office logic |
 | Save and reload forgets which trees the player knows were chopped | 11-22 x1 | DONE (#1036) | Owner playtest 11-22 (Anatolia 4 converted, dev build play/21, 73.6k units). #924 saved building sightings only | #1036: per-player resource memory saved and restored with the fog memory (snapshot version 29); a rebuilt owner save needs a new save to carry it |
