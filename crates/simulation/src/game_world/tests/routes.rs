@@ -294,7 +294,7 @@ fn planner_slot_exhaustion_defers_a_new_order_without_rejecting_it() {
     assert!(
         world.units[world.lookup[&queued]]
             .planner
-            .as_ref()
+            .as_deref()
             .is_some_and(|planner| planner.has_route_continuation())
     );
     assert_eq!(world.active_planner_count, MAX_ROUTE_PLANNERS_PER_PLAYER);

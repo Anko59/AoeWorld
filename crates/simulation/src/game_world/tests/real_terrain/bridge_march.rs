@@ -57,7 +57,7 @@ pub(super) fn cross_fixture(
     for tick in 1..=limit {
         let root = &fixture.world.units[fixture.world.lookup[&fixture.primary]];
         let before = root.order;
-        let planner = root.planner.as_ref().map(|p| {
+        let planner = root.planner.as_deref().map(|p| {
             (
                 p.origin(),
                 p.destination(),
@@ -204,15 +204,18 @@ fn solo_three_bridges(formation: bool, slow: bool) {
     let mut failed = false;
     for tick in 1..=30_000 {
         let before = f.world.movement_order(g);
-        let planner = f.world.units[f.world.lookup[&g]].planner.as_ref().map(|p| {
-            (
-                p.origin(),
-                p.destination(),
-                p.certified_destination(),
-                p.work(),
-                p.leg_work(),
-            )
-        });
+        let planner = f.world.units[f.world.lookup[&g]]
+            .planner
+            .as_deref()
+            .map(|p| {
+                (
+                    p.origin(),
+                    p.destination(),
+                    p.certified_destination(),
+                    p.work(),
+                    p.leg_work(),
+                )
+            });
         f.world.advance();
         if !failed && f.world.movement_failure(g).is_some() {
             failed = true;

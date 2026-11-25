@@ -138,7 +138,7 @@ pub(crate) struct StoredUnit {
     pub(crate) bucket_slot: usize,
     pub(crate) wildlife_slot: usize,
     pub(crate) route: VecDeque<WorldPosition>,
-    pub(crate) planner: Option<RoutePlanner>,
+    pub(crate) planner: Option<Box<RoutePlanner>>,
     pub(crate) last_movement_error: Option<GameWorldError>,
     pub(crate) next_hit_tick: u64, // no hit before this tick
     /// Tick it last started waiting for a route (the fair pass serves first).

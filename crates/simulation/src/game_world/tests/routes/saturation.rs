@@ -88,7 +88,7 @@ fn short_orders_start_at_once_while_every_player_floods_hopeless_searches() {
                     world.fast_route_budget,
                     world.units[world.lookup[&pocket]]
                         .planner
-                        .as_ref()
+                        .as_deref()
                         .map(|p| p.work())
                 );
             } else if tick % 4 == 0 {

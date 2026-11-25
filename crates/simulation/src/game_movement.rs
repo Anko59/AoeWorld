@@ -383,7 +383,7 @@ impl GameWorld {
         // fairly between players before the units move.
         let needs_search = self.units[index]
             .planner
-            .as_ref()
+            .as_deref()
             .is_none_or(|planner| !planner.has_route_continuation());
         if needs_search {
             return SegmentAdvance::Planning;
@@ -477,7 +477,7 @@ impl GameWorld {
             let id = self.units[index].state.id;
             self.collision_subscribers.planners.insert(id);
         }
-        self.units[index].planner = planner;
+        self.units[index].planner = planner.map(Box::new);
     }
 
     pub(crate) fn take_planner(&mut self, index: usize) -> Option<RoutePlanner> {
@@ -489,7 +489,7 @@ impl GameWorld {
             self.active_route_searches = self.active_route_searches.saturating_sub(1);
         }
         self.count_route_slots(self.units[index].state.player, &planner, false);
-        Some(planner)
+        Some(*planner)
     }
 }
 

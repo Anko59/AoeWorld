@@ -357,7 +357,7 @@ fn repeated_waiting_goals_retain_search_progress_and_the_original_deadline() {
     assert!(
         w.units[index]
             .planner
-            .as_ref()
+            .as_deref()
             .is_some_and(|p| p.work() > 0)
     );
     let started = w.units[index].planning_since;

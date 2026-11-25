@@ -185,7 +185,7 @@ fn sustained_near_searches_cannot_starve_a_retained_far_search() {
     assert!(world.unit(far).unwrap().planning);
     let mut previous = world.units[world.lookup[&far]]
         .planner
-        .as_ref()
+        .as_deref()
         .unwrap()
         .work();
     // Reissue the near searches whenever they expire: pressure never subsides.
@@ -269,7 +269,7 @@ fn a_players_far_search_keeps_a_quarter_share_while_its_near_queue_is_busy() {
     );
     let budget = 80;
     world.serve_route_searches(budget, &mut Vec::new());
-    let spent = world.units[index].planner.as_ref().unwrap().work();
+    let spent = world.units[index].planner.as_deref().unwrap().work();
     assert!(
         spent >= budget / 4,
         "far route received only {spent} of {budget}"

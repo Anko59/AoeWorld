@@ -186,7 +186,7 @@ impl GameWorld {
         let &index = self.lookup.get(&id)?;
         let order = self.units[index].order?;
         let kind = self.units[index].state.kind;
-        let held = self.units[index].planner.as_ref();
+        let held = self.units[index].planner.as_deref();
         let holds_planner = usize::from(held.is_some());
         let holds_search = held.is_some_and(RoutePlanner::requires_search_slot);
         let far = self.waits_for_far_route(index);
