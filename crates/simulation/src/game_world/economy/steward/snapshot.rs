@@ -435,3 +435,15 @@ impl GameWorld {
         }
     }
 }
+
+#[cfg(test)]
+impl GameWorld {
+    /// Test hook: the buildings a Steward's domain currently knows.
+    pub(crate) fn steward_known_buildings(&self, id: EntityId) -> Vec<EntityId> {
+        self.economy
+            .steward_homes
+            .get(&id)
+            .map(|h| h.building_scan.known.iter().copied().collect())
+            .unwrap_or_default()
+    }
+}
