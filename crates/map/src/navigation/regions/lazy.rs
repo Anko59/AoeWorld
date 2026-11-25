@@ -359,12 +359,27 @@ impl Regions {
                 break;
             }
             self.load(ground, chunk);
+            // Only labels not already known unreachable can hold the answer:
+            // a chunk of an unreachable continent costs a look at its
+            // labels, not a sort of its every cell (#978).
+            let gates = &self.pending[&chunk].gates;
+            let open: Vec<bool> = std::iter::once(false)
+                .chain((1..=gates.len() as u16).map(|label| {
+                    gates[usize::from(label) - 1].is_none()
+                        && reach.answer((chunk, label)) != Some(false)
+                }))
+                .collect();
+            if !open.contains(&true) {
+                self.queue_neighbours(chunk, target, &mut queue, &mut seen);
+                continue;
+            }
             let at = label::origin(self.key(chunk));
             let mut candidates = Vec::new();
+            self.stats.frontier_cells += super::CELLS as u64;
             for cell in 0..super::CELLS {
                 let tile = TileCoord::new(at.x + cell as i32 % CHUNK, at.y + cell as i32 / CHUNK);
                 let label = self.pending[&chunk].labels.at(cell);
-                if label == 0 || self.pending[&chunk].gates[usize::from(label) - 1].is_some() {
+                if !open[usize::from(label)] {
                     continue;
                 }
                 let key = (squared(tile, target), squared(tile, from), tile.y, tile.x);
@@ -379,19 +394,30 @@ impl Regions {
                     break;
                 }
             }
-            let (cx, cy) = self.key(chunk);
-            for (dx, dy) in label::NEIGHBOURS {
-                let (x, y) = (cx + dx, cy + dy);
-                if x < 0 || y < 0 || x >= self.chunks_x || y >= self.chunks_y {
-                    continue;
-                }
-                let next = (y * self.chunks_x + x) as u32;
-                if seen.insert(next) {
-                    queue.insert((self.chunk_distance(next, target), next));
-                }
-            }
+            self.queue_neighbours(chunk, target, &mut queue, &mut seen);
         }
         best.map(|(_, _, y, x)| TileCoord::new(x, y))
+    }
+
+    /// Queues `chunk`'s unseen neighbours by their distance to `target`.
+    fn queue_neighbours(
+        &self,
+        chunk: u32,
+        target: TileCoord,
+        queue: &mut BTreeSet<(i64, u32)>,
+        seen: &mut BTreeSet<u32>,
+    ) {
+        let (cx, cy) = self.key(chunk);
+        for (dx, dy) in label::NEIGHBOURS {
+            let (x, y) = (cx + dx, cy + dy);
+            if x < 0 || y < 0 || x >= self.chunks_x || y >= self.chunks_y {
+                continue;
+            }
+            let next = (y * self.chunks_x + x) as u32;
+            if seen.insert(next) {
+                queue.insert((self.chunk_distance(next, target), next));
+            }
+        }
     }
 
     /// `lazy_frontier`'s answer from `all`, the start's whole reach: the

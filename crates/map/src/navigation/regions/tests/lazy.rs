@@ -206,3 +206,24 @@ fn a_known_reach_answers_a_far_frontier_without_reading_the_far_side() {
         "the frontier read {read} chunks of the far side"
     );
 }
+
+#[test]
+fn a_known_unreachable_side_is_crossed_without_scanning_its_tiles() {
+    // The start's side is the larger: the search's goal side runs dry first,
+    // so the whole far side is known unreachable before the ring crosses it.
+    let mut grid = Grid::new(640, 320);
+    for y in 0..320 {
+        grid.set(TileCoord::new(400, y), RegionTile::Blocked);
+    }
+    let mut regions = Regions::new(640, 320, LandBucket::Small);
+    let (from, to) = (TileCoord::new(10, 10), TileCoord::new(630, 300));
+    assert_eq!(
+        regions.frontier(&grid, 0, from, to),
+        Some(TileCoord::new(399, 300))
+    );
+    let cells = regions.stats().frontier_cells;
+    assert!(
+        cells <= 16 * 1024,
+        "the far side's tiles were scanned: {cells}"
+    );
+}
