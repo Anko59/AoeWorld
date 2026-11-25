@@ -16,7 +16,13 @@ fn repository() -> Result<String> {
         return Err("cannot read origin remote".into());
     }
     let remote = String::from_utf8(output.stdout)?;
-    parse_remote(remote.trim())
+    origin_repository(remote.trim(), crate::ship::git::alias::ssh_hostname)
+}
+
+/// `owner/name` of an origin, with an SSH host alias (`git@github-perso:…`)
+/// first resolved to the host it stands for, as `make ship` does.
+fn origin_repository(remote: &str, hostname: impl Fn(&str) -> Option<String>) -> Result<String> {
+    parse_remote(&crate::ship::git::alias::resolve(remote, hostname))
 }
 
 fn parse_remote(remote: &str) -> Result<String> {
@@ -182,6 +188,16 @@ mod tests {
         ] {
             assert!(parse_remote(remote).is_err(), "{remote}");
         }
+    }
+
+    #[test]
+    fn an_origin_through_an_ssh_host_alias_names_its_github_repository() {
+        let ssh = |alias: &str| (alias == "github-perso").then(|| "github.com".to_owned());
+        assert_eq!(
+            origin_repository("git@github-perso:Anko59/AoeWorld.git", ssh).expect("alias"),
+            "Anko59/AoeWorld"
+        );
+        assert!(origin_repository("git@elsewhere:Anko59/AoeWorld.git", ssh).is_err());
     }
 
     #[test]
