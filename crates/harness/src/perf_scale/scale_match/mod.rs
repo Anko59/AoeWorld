@@ -113,7 +113,7 @@ pub struct Options {
     pub label: String,
     #[arg(long, default_value = "aoeworld/sdk-python:1.15.0-sccache0.19.0")]
     pub bot_image: String,
-    #[arg(long, default_value = "aoeworld/browser-tools:1.64.0")]
+    #[arg(long, default_value = "aoeworld/browser-tools:1.65.1")]
     pub browser_image: String,
     /// Slot 0 is played by a scripted human that marches seeded mixed groups
     /// far across the map and follows every member (`march` in the report).

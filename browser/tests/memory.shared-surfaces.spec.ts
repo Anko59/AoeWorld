@@ -7,6 +7,15 @@ import { processMemory, type ProcessMemory } from "./memory/process.js";
 import { forceCanvas } from "./rendering/backends.js";
 import { coverageProfile, profileCoverage } from "./memory/coverage-profile.js";
 
+// Summed VmRSS of every Chromium process. 1 GiB until Playwright 1.65, whose
+// Chromium 159 uses about 90 MB more on every backend for the same game
+// (2026-11-25, same spec: canvas 0.80 -> 0.89 GB, browser-defaults 0.95 ->
+// 1.04 GB, webgpu peaks 0.92-0.97 -> 0.94-1.06 GB locally; CI peaked at
+// 1,117,335,552 bytes under webgpu). The budget keeps the old ~10% headroom
+// over the observed peak; the game's growth checks below (16 MiB WASM, 64 MiB
+// RSS swing) are unchanged.
+const CHROMIUM_RSS_BUDGET = 1200 * 1024 * 1024;
+
 // Frame capture adds compositor readbacks and retained image buffers to the
 // workload being measured. Keep command/memory JSON, as in exploration.
 test.use({ screenshot: "off", trace: "off" });
@@ -148,7 +157,7 @@ test("dense forest resize and camera cycles keep backing and WASM memory bounded
         rendererSamples,
         coverageProfile: await coverageProfile(page),
         webglCoverageBytes: coverageBytes,
-        rssBudgetBytes: 1024 * 1024 * 1024,
+        rssBudgetBytes: CHROMIUM_RSS_BUDGET,
         wasmBytes: samples,
         chromiumProcessMemory: residentSamples,
         limitation:
@@ -170,7 +179,7 @@ test("dense forest resize and camera cycles keep backing and WASM memory bounded
     );
     expect(
       Math.max(maximumBackingMemory.residentBytes, ...residentBytes),
-    ).toBeLessThanOrEqual(1024 * 1024 * 1024);
+    ).toBeLessThanOrEqual(CHROMIUM_RSS_BUDGET);
     expect(
       Math.max(...residentSteady) - Math.min(...residentSteady),
     ).toBeLessThanOrEqual(64 * 1024 * 1024);

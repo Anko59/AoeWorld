@@ -76,7 +76,9 @@ test("far construction spends real stock through the ordinary validated build or
   await page.goto("/?play=1#x=128&y=128&zoom=.04");
   await expect(page.locator("#connection")).toHaveText("connected");
   const population = page.locator("#population");
-  await expect(population).toHaveText(/^\d+\/\d+$/);
+  // Before the first village snapshot the HUD reads "0/0"; a cap of zero is
+  // not a measurement, so wait for the owner's real population cap.
+  await expect(population).toHaveText(/^\d+\/[1-9]\d*$/);
   const beforeCap = Number((await population.textContent())?.split("/")[1]);
   await openTab(page, "build");
   await page.locator('[aria-label="Building type"] [data-id="1"]').click();

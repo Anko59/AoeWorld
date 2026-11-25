@@ -2,7 +2,6 @@ use std::{
     fs::{self, OpenOptions},
     io::{self, Read, Write},
     path::{Path, PathBuf},
-    sync::Arc,
     sync::atomic::{AtomicBool, Ordering},
     thread,
     time::Duration,
@@ -11,6 +10,9 @@ use std::{
 mod digest;
 pub(crate) use digest::digest_hex;
 use digest::file_hashes;
+
+mod http;
+pub(crate) use http::agent as http_agent;
 
 mod known;
 
@@ -251,23 +253,16 @@ fn download_once(
     if offset == bytes {
         return Ok(());
     }
-    let connector = ureq::native_tls::TlsConnector::new()
-        .map_err(|error| CacheError::Download(error.to_string()))?;
-    let agent = ureq::AgentBuilder::new()
-        .tls_connector(Arc::new(connector))
-        .timeout_connect(Duration::from_secs(15))
-        .timeout_read(Duration::from_secs(15))
-        .timeout_write(Duration::from_secs(15))
-        .build();
+    let agent = http_agent(Some(Duration::from_secs(15)));
     let request = if offset == 0 {
         agent.get(url)
     } else {
-        agent.get(url).set("Range", &format!("bytes={offset}-"))
+        agent.get(url).header("Range", format!("bytes={offset}-"))
     };
-    let response = request
+    let mut response = request
         .call()
         .map_err(|error| CacheError::Download(error.to_string()))?;
-    let status = response.status();
+    let status = response.status().as_u16();
     if offset > 0 && status == 200 {
         fs::remove_file(partial)?;
         return Err(CacheError::Download(
@@ -281,7 +276,12 @@ fn download_once(
     }
     if offset > 0 {
         let expected_range = format!("bytes {offset}-{}/{bytes}", bytes - 1);
-        if response.header("Content-Range") != Some(expected_range.as_str()) {
+        if response
+            .headers()
+            .get("Content-Range")
+            .and_then(|value| value.to_str().ok())
+            != Some(expected_range.as_str())
+        {
             fs::remove_file(partial)?;
             return Err(CacheError::Download(
                 "provider returned an invalid ranged response".to_owned(),
@@ -289,7 +289,7 @@ fn download_once(
         }
     }
     let mut output = OpenOptions::new().create(true).append(true).open(partial)?;
-    let mut input = response.into_reader();
+    let mut input = response.body_mut().as_reader();
     let mut buffer = [0_u8; COPY_BUFFER_BYTES];
     let mut written = offset;
     loop {

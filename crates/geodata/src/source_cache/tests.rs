@@ -2,7 +2,10 @@ use super::*;
 use std::{
     io::{Read, Write},
     net::{TcpListener, TcpStream},
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     thread::{self, JoinHandle},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };

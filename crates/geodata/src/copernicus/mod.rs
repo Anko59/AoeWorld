@@ -10,10 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeSet,
     path::PathBuf,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
 
@@ -360,28 +357,23 @@ fn public_tile_source(
         "copernicus-dem-30m.s3.amazonaws.com"
     };
     let url = format!("https://{host}/{prefix}/{prefix}.tif");
-    let connector = ureq::native_tls::TlsConnector::new()
-        .map_err(|error| GeodataError::Source(error.to_string()))?;
-    let agent = ureq::AgentBuilder::new()
-        .tls_connector(Arc::new(connector))
-        .timeout_connect(Duration::from_secs(30))
-        .timeout_read(Duration::from_secs(30))
-        .timeout_write(Duration::from_secs(30))
-        .build();
+    let agent = crate::source_cache::http_agent(Some(Duration::from_secs(30)));
     let response = agent.head(&url).call();
     let response = match response {
-        Ok(response) if response.status() == 200 => response,
-        Err(ureq::Error::Status(404, _)) => return Ok(None),
+        Ok(response) if response.status().as_u16() == 200 => response,
+        Err(ureq::Error::StatusCode(404)) => return Ok(None),
         Err(error) => return Err(GeodataError::Source(error.to_string())),
         Ok(response) => {
             return Err(GeodataError::Source(format!(
                 "Copernicus HEAD returned HTTP {} for {url}",
-                response.status()
+                response.status().as_u16()
             )));
         }
     };
     let bytes = response
-        .header("Content-Length")
+        .headers()
+        .get("Content-Length")
+        .and_then(|value| value.to_str().ok())
         .ok_or_else(|| GeodataError::Source("Copernicus tile has no Content-Length".to_owned()))?
         .parse::<u64>()
         .map_err(|_| GeodataError::Source("Copernicus tile length is invalid".to_owned()))?;
@@ -391,7 +383,9 @@ fn public_tile_source(
         ));
     }
     let etag = response
-        .header("ETag")
+        .headers()
+        .get("ETag")
+        .and_then(|value| value.to_str().ok())
         .ok_or_else(|| GeodataError::Source("Copernicus tile has no ETag".to_owned()))?
         .trim_matches('"');
     if etag.len() != 32 || !etag.bytes().all(|byte| byte.is_ascii_hexdigit()) {
