@@ -1,4 +1,5 @@
 //! The managers, ported from `ai/aoe_ai/play`, one module each.
+pub mod bridges;
 pub mod buildorder;
 pub mod combat;
 pub mod constructor;

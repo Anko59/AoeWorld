@@ -7,8 +7,11 @@ use crate::blackboard::{Blackboard, Tracked};
 use crate::config::Config;
 use crate::context::{Context, OrderBudgetExhausted};
 use crate::geometry::dist;
+use crate::play::bridges::BridgeManager;
+use crate::play::combat::CombatManager;
 use crate::play::economy::{self, unemployed};
 use crate::play::fortification::threat::observe;
+use crate::play::scouting::ScoutManager;
 use crate::play::{buildorder, constructor, market, military, research};
 use crate::roster::profile;
 use crate::seat::Seat;
@@ -110,10 +113,10 @@ fn run_managers(ctx: &mut Context<'_>) {
     }
     run(ctx, 2, research::step);
     run(ctx, 1, market::step);
-    // run(14, self.combat.step)
+    run(ctx, 14, |c| CombatManager::default().step(c));
     // run(2, lambda c: self.management.lead(c, self.combat))
     run(ctx, 2, military::rally);
-    // run(2, self.scouts.step)
+    run(ctx, 2, |c| ScoutManager::default().step(c));
     run(ctx, 1, constructor::fund_market);
     run(ctx, 1, economy::wood_dropoff);
     // run(8, self.management.step)
@@ -144,7 +147,7 @@ fn run_managers(ctx: &mut Context<'_>) {
         run(ctx, train_orders, military::train);
     }
     // run(1, self.naval.step)
-    // run(1, self.bridges.step)
+    run(ctx, 1, |c| BridgeManager::default().step(c));
 }
 
 /// Count a blow of ours landing: an enemy unit or building whose hit points

@@ -196,15 +196,17 @@ pub fn order_result(sequence: u64, result: CommandResult) -> Event {
 /// The Python tests replace `world.land_route` and friends with a lambda; the
 /// fake world takes the same replacements as closures.
 pub type RouteFn = Box<dyn Fn(Tile, Tile) -> Option<Vec<Tile>>>;
+pub type FrontierFn = Box<dyn Fn(Tile, Tile) -> Option<Tile>>;
+pub type BridgeSiteFn = Box<dyn Fn(Tile, Tile) -> Option<(Tile, Tile)>>;
 
 /// `fakes.FakeWorld`. Fields are public so a test edits the world between decisions.
 pub struct FakeWorld {
     /// Replaces `land_route` (a query is still recorded in `route_queries`).
     pub route_fn: Option<RouteFn>,
     /// Replaces `land_frontier`.
-    pub frontier_fn: Option<Box<dyn Fn(Tile, Tile) -> Option<Tile>>>,
+    pub frontier_fn: Option<FrontierFn>,
     /// Replaces `find_bridge_site`.
-    pub bridge_site_fn: Option<Box<dyn Fn(Tile, Tile) -> Option<(Tile, Tile)>>>,
+    pub bridge_site_fn: Option<BridgeSiteFn>,
     /// Replaces `land_known`.
     pub known_fn: Option<Box<dyn Fn(Tile) -> bool>>,
     /// Replaces `visibility`.
