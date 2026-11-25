@@ -347,6 +347,11 @@ impl Regions {
         let mut seen = BTreeSet::from([first]);
         let mut best: Option<(i64, i64, i32, i32)> = None;
         while ground.available() {
+            // Once the start's whole reach is known, the answer lies in its
+            // own chunks: no chunk of the unreachable side is read (#978).
+            if let Some(all) = reach.all.take() {
+                return self.frontier_within(&all, from, target);
+            }
             let Some((distance, chunk)) = queue.pop_first() else {
                 break;
             };
@@ -383,6 +388,49 @@ impl Regions {
                 let next = (y * self.chunks_x + x) as u32;
                 if seen.insert(next) {
                     queue.insert((self.chunk_distance(next, target), next));
+                }
+            }
+        }
+        best.map(|(_, _, y, x)| TileCoord::new(x, y))
+    }
+
+    /// `lazy_frontier`'s answer from `all`, the start's whole reach: the
+    /// best non-gate tile of its nodes, their chunks visited nearest the
+    /// target first with the same tie-break.
+    fn frontier_within(
+        &self,
+        all: &BTreeSet<Node>,
+        from: TileCoord,
+        target: TileCoord,
+    ) -> Option<TileCoord> {
+        let mut chunks = BTreeMap::<u32, Vec<u16>>::new();
+        for &(chunk, label) in all {
+            chunks.entry(chunk).or_default().push(label);
+        }
+        let mut order: Vec<_> = chunks
+            .into_iter()
+            .map(|(chunk, labels)| (self.chunk_distance(chunk, target), chunk, labels))
+            .collect();
+        order.sort_unstable_by_key(|&(distance, chunk, _)| (distance, chunk));
+        let mut best: Option<(i64, i64, i32, i32)> = None;
+        for (distance, chunk, labels) in order {
+            if best.is_some_and(|(d, ..)| distance > d) {
+                break;
+            }
+            let pending = &self.pending[&chunk];
+            let at = label::origin(self.key(chunk));
+            for cell in 0..super::CELLS {
+                let label = pending.labels.at(cell);
+                if label == 0
+                    || pending.gates[usize::from(label) - 1].is_some()
+                    || !labels.contains(&label)
+                {
+                    continue;
+                }
+                let tile = TileCoord::new(at.x + cell as i32 % CHUNK, at.y + cell as i32 / CHUNK);
+                let key = (squared(tile, target), squared(tile, from), tile.y, tile.x);
+                if best.is_none_or(|b| key < b) {
+                    best = Some(key);
                 }
             }
         }

@@ -160,3 +160,49 @@ fn an_unreachable_landmass_is_explored_once_per_frontier() {
         "the far half was re-explored: {searched} nodes"
     );
 }
+
+struct Counted<'a> {
+    grid: &'a Grid,
+    chunks: Cell<u32>,
+}
+impl RegionGround for Counted<'_> {
+    fn tile(&self, tile: TileCoord) -> RegionTile {
+        self.grid.tile(tile)
+    }
+    fn edge_clear(&self, from: TileCoord, to: TileCoord) -> bool {
+        self.grid.edge_clear(from, to)
+    }
+    fn gate_owner(&self, gate: u32) -> u32 {
+        self.grid.gate_owner(gate)
+    }
+    fn chunk(&self, _: (i32, i32), _: (i32, i32)) -> Option<RegionChunk> {
+        self.chunks.set(self.chunks.get() + 1);
+        None
+    }
+}
+
+#[test]
+fn a_known_reach_answers_a_far_frontier_without_reading_the_far_side() {
+    // The start is walled into a 64-tile corner box of a 640-tile map; the
+    // target is in the far corner, 400 chunks of unreachable land away.
+    let mut grid = Grid::new(640, 640);
+    for i in 0..=64 {
+        grid.set(TileCoord::new(64, i), RegionTile::Blocked);
+        grid.set(TileCoord::new(i, 64), RegionTile::Blocked);
+    }
+    let ground = Counted {
+        grid: &grid,
+        chunks: Cell::new(0),
+    };
+    let mut regions = Regions::new(640, 640, LandBucket::Small);
+    let (from, to) = (TileCoord::new(10, 10), TileCoord::new(630, 630));
+    assert_eq!(
+        regions.frontier(&ground, 0, from, to),
+        Some(TileCoord::new(63, 63))
+    );
+    let read = ground.chunks.get();
+    assert!(
+        read <= 40,
+        "the frontier read {read} chunks of the far side"
+    );
+}
