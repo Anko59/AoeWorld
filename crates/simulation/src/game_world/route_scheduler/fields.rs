@@ -12,7 +12,7 @@
 use super::super::economy::RouteGuide;
 use super::GameWorld;
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect, WorldPosition};
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 
 /// Side of a destination chunk, in tiles; a field covers it and the eight
@@ -48,16 +48,76 @@ impl GameWorld {
         self.route_guides
             .asked
             .retain(|_, asked| now.saturating_sub(*asked) < keep);
+        let mut built = self.prebuild_guides(waiting);
         let players: Vec<_> = waiting.keys().copied().collect();
         for player in players {
             let ids = std::mem::take(waiting.entry(player).or_default());
             let left = ids
                 .into_iter()
-                .filter(|&id| !self.field_route(player, id, budget, changed))
+                .filter(|&id| !self.field_route(player, id, budget, &mut built, changed))
                 .collect();
             waiting.insert(player, left);
         }
         waiting.retain(|_, ids| !ids.is_empty());
+    }
+
+    /// The guide `id`'s route would walk down, or `None` when it keeps its
+    /// own search: naval, attacking, mid-search, between waypoints or
+    /// already in its destination chunk.
+    fn field_key(&self, player: PlayerId, id: EntityId) -> Option<Key> {
+        let unit = &self.units[*self.lookup.get(&id)?];
+        let order = unit.order?;
+        let from = unit.state.position.tile_floor();
+        let target = order.target_tile;
+        let chunk = |t: TileCoord| (t.x.div_euclid(FIELD_CHUNK), t.y.div_euclid(FIELD_CHUNK));
+        let own_search = unit.state.kind.is_naval()
+            || self.combat.attackers.contains_key(&id)
+            || unit.planner.is_some()
+            || order.waypoint.tile_floor() != from
+            || chunk(from) == chunk(target);
+        (!own_search).then_some((player, chunk(target)))
+    }
+
+    /// The tiles a guide to `key` covers: its chunk and the eight around it.
+    fn guide_area(&self, key: Key) -> TileRect {
+        let (cx, cy) = key.1;
+        TileRect::new(
+            TileCoord::new(
+                ((cx - 1) * FIELD_CHUNK).max(0),
+                ((cy - 1) * FIELD_CHUNK).max(0),
+            ),
+            TileCoord::new(
+                ((cx + 2) * FIELD_CHUNK).min(self.config.width_tiles),
+                ((cy + 2) * FIELD_CHUNK).min(self.config.height_tiles),
+            ),
+        )
+    }
+
+    /// The guides this round builds, each on its own task before any unit
+    /// is routed: whether a unit builds depends only on its own order and
+    /// on the marks of the units before it, and a guide reads only the
+    /// ground, which routing does not change (#978).
+    fn prebuild_guides(
+        &self,
+        waiting: &BTreeMap<PlayerId, Vec<EntityId>>,
+    ) -> BTreeMap<Key, Option<RouteGuide>> {
+        let guides = &self.route_guides;
+        let (mut marked, mut builds) = (BTreeSet::new(), Vec::new());
+        for (&player, ids) in waiting {
+            for key in ids.iter().filter_map(|&id| self.field_key(player, id)) {
+                let known =
+                    guides.guides.contains_key(&key) || builds.iter().any(|(k, _)| *k == key);
+                // The first request only marks the destination.
+                if known || (!guides.asked.contains_key(&key) && marked.insert(key)) {
+                    continue;
+                }
+                builds.push((key, None));
+            }
+        }
+        crate::game_world::parallel::par_each_mut(&mut builds, |(key, guide)| {
+            *guide = self.route_guide(key.0, guide_goal(*key), self.guide_area(*key));
+        });
+        builds.into_iter().collect()
     }
 
     fn field_route(
@@ -65,28 +125,17 @@ impl GameWorld {
         player: PlayerId,
         id: EntityId,
         budget: &mut u32,
+        built: &mut BTreeMap<Key, Option<RouteGuide>>,
         changed: &mut Vec<EntityId>,
     ) -> bool {
-        let Some(&index) = self.lookup.get(&id) else {
+        let Some(key) = self.field_key(player, id) else {
             return false;
         };
-        let unit = &self.units[index];
-        let Some(order) = unit.order else {
+        let index = self.lookup[&id];
+        let from = self.units[index].state.position.tile_floor();
+        let Some(target) = self.units[index].order.map(|order| order.target_tile) else {
             return false;
         };
-        let from = unit.state.position.tile_floor();
-        let target = order.target_tile;
-        let chunk = |t: TileCoord| (t.x.div_euclid(FIELD_CHUNK), t.y.div_euclid(FIELD_CHUNK));
-        // Already in the destination chunk, or a search under way: as today.
-        if unit.state.kind.is_naval()
-            || self.combat.attackers.contains_key(&id)
-            || unit.planner.is_some()
-            || order.waypoint.tile_floor() != from
-            || chunk(from) == chunk(target)
-        {
-            return false;
-        }
-        let key = (player, chunk(target));
         let now = self.tick.0;
         let field = match self.route_guides.guides.get_mut(&key) {
             Some((field, used)) => {
@@ -98,29 +147,15 @@ impl GameWorld {
                 if self.route_guides.asked.insert(key, now).is_none() {
                     return false;
                 }
-                let (cx, cy) = key.1;
-                let area = TileRect::new(
-                    TileCoord::new(
-                        ((cx - 1) * FIELD_CHUNK).max(0),
-                        ((cy - 1) * FIELD_CHUNK).max(0),
-                    ),
-                    TileCoord::new(
-                        ((cx + 2) * FIELD_CHUNK).min(self.config.width_tiles),
-                        ((cy + 2) * FIELD_CHUNK).min(self.config.height_tiles),
-                    ),
-                );
+                let area = self.guide_area(key);
                 // A guide reads each tile's cached step mask once.
                 let cost = (area.width() * area.height()) as u32;
                 // A build is never refused: it serves every later order
                 // to the chunk. It spends what is left of this tick.
                 *budget = budget.saturating_sub(cost);
-                let goal = TileRect::from_xywh(
-                    cx * FIELD_CHUNK,
-                    cy * FIELD_CHUNK,
-                    FIELD_CHUNK,
-                    FIELD_CHUNK,
-                );
-                let built = self.route_guide(player, goal, area);
+                let built = built
+                    .remove(&key)
+                    .unwrap_or_else(|| self.route_guide(player, guide_goal(key), area));
                 let Some(field) = built else {
                     return false;
                 };
@@ -129,10 +164,7 @@ impl GameWorld {
                 field
             }
         };
-        let (cx, cy) = key.1;
-        let goal =
-            TileRect::from_xywh(cx * FIELD_CHUNK, cy * FIELD_CHUNK, FIELD_CHUNK, FIELD_CHUNK);
-        let Some(tiles) = self.guide_descent(&field, player, from, goal) else {
+        let Some(tiles) = self.guide_descent(&field, player, from, guide_goal(key)) else {
             return false;
         };
         if tiles.len() < 2 {
@@ -156,6 +188,12 @@ impl GameWorld {
         changed.push(id);
         true
     }
+}
+
+/// The destination chunk of a guide to `key`.
+fn guide_goal(key: Key) -> TileRect {
+    let (cx, cy) = key.1;
+    TileRect::from_xywh(cx * FIELD_CHUNK, cy * FIELD_CHUNK, FIELD_CHUNK, FIELD_CHUNK)
 }
 
 impl GameWorld {
