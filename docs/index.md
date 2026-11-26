@@ -15,6 +15,7 @@
 - [AI SDK](ai-sdk.md)
 - [Local development](local-development.md)
 - [Testing](testing.md)
+- [CI selection](ci-selection.md): which jobs and tests a pull request runs, and why
 - [Gate registry](gates.md)
 - [Performance](performance.md)
 - [CI report page](ci-report.md): `make ci-report`
