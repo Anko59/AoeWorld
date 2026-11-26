@@ -49,6 +49,7 @@ impl GameWorld {
         }
         let player = self.unit(id).ok_or(EconomyError::UnknownEntity)?.player;
         if !self.animal_has_work_slot(a.id, a.kind, id)
+            || !self.walking_resource_reachable(id, a.position.tile_floor())
             || !self.resource_has_work_spot(id, a.position.tile_floor())
         {
             a = self
@@ -135,7 +136,9 @@ impl GameWorld {
         {
             return Err(EconomyError::InvalidResource);
         }
-        if self.economy.stewards.automatic && !self.managed_target_allowed(id, position(node.tile)?)
+        if self.economy.stewards.automatic
+            && (!self.managed_target_allowed(id, position(node.tile)?)
+                || !self.walking_resource_reachable(id, node.tile))
         {
             return Err(EconomyError::InvalidResource);
         }
@@ -280,7 +283,7 @@ impl GameWorld {
                 return self.retry_fishing_approach(id, task);
             }
             if task.farm.is_some()
-                || task.fish.is_some()
+                || (task.fish.is_some() && self.units[index].state.kind.is_naval())
                 || task.approach_failures >= MAX_APPROACH_FAILURES
             {
                 return false;
@@ -289,10 +292,24 @@ impl GameWorld {
             if task.animal.is_some() {
                 return self.replacement_animal(id, task);
             }
-            if self.replacement_resource(id, task) {
+            if task.fish.is_some() {
+                return self.replacement_fish(id, task);
+            }
+            let failed = task.tile;
+            if self.replacement_failed_resource(id, task) {
+                self.steward_note_failed_gather(id, failed, task.kind);
                 return true;
             }
-            return self.gather_traffic_blocked(id) && self.queue_resource_approach(id, task.tile);
+            // A certified worksite with nearby traffic can still clear.
+            // A disconnected patch never gets the same order again.
+            if self.gather_traffic_blocked(id)
+                && self.walking_resource_reachable(id, failed)
+                && self.queue_resource_approach(id, failed)
+            {
+                return true;
+            }
+            self.steward_note_failed_gather(id, failed, task.kind);
+            return false;
         }
         if task.phase == GatherPhase::Returning {
             let unit = self.units[index].state;
@@ -331,7 +348,6 @@ impl GameWorld {
         if task.phase == GatherPhase::Approaching {
             task.approach_failures = 0;
             task.retry_tick = 0;
-            task.work_tile = Some(tile);
             task.work_position = Some(self.units[index].state.position);
         }
         task.phase = GatherPhase::Gathering;

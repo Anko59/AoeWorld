@@ -176,15 +176,19 @@ impl GameWorld {
         tile: aoe_core::TileCoord,
         s: &Snapshot,
     ) -> bool {
-        self.unit(worker)
-            .is_none_or(|u| s.home.connects_tile(u.position.tile_floor(), tile))
+        self.unit(worker).is_some_and(|u| {
+            let from = u.position.tile_floor();
+            self.walking_resource_reachable_in(worker, tile, |contact| {
+                s.home.connects_contact(from, contact)
+            })
+        })
     }
 
     fn steward_node_eligible(&self, node: ResourceNode, worker: EntityId, s: &Snapshot) -> bool {
         self.steward_node_known(node, s)
             && s.avoid.is_none_or(|a| a.avoid_tile != Some(node.tile))
-            && self.steward_can_walk_to(worker, node.tile, s)
             && self.node_has_work_slot(node.id, worker)
+            && self.steward_can_walk_to(worker, node.tile, s)
     }
 
     /// A completed camp is useful existing knowledge when the worker has
@@ -312,9 +316,6 @@ impl GameWorld {
     ) -> Option<ResourceNode> {
         let _span = self.steward_span("steward_j_resource");
         let ore = matches!(kind, ResourceKind::Gold | ResourceKind::Stone);
-        if ore && s.ore_misses[kind as usize] {
-            return None;
-        }
         let from = self.unit(worker)?.position.tile_floor();
         for preference in if ore { 2..3 } else { 0..3 } {
             if preference == 1
@@ -374,7 +375,6 @@ impl GameWorld {
             if let Some(node) = self.steward_camp_resource(worker, kind, s, budget, work) {
                 return self.steward_offer_resource(worker, kind, Some(node), s, budget, work);
             }
-            s.ore_misses[kind as usize] = true;
             None
         } else {
             retained

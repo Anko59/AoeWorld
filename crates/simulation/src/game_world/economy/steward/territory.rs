@@ -11,6 +11,13 @@ fn d2(a: WorldPosition, b: WorldPosition) -> i64 {
     dx * dx + dy * dy
 }
 impl Home {
+    pub(super) fn connects_contact(&self, from: TileCoord, contact: TileCoord) -> bool {
+        self.regions.as_ref().is_none_or(|regions| {
+            let start = regions.label_near(from);
+            start == 0 || regions.label(contact) == start
+        })
+    }
+
     /// Inside the circle and not closer to (or tied but lower-ID than) another
     /// active town_center of the same player.
     pub(crate) fn owns(&self, at: WorldPosition) -> bool {

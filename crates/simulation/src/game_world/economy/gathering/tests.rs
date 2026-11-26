@@ -423,32 +423,33 @@ fn work_positions_follow_new_obstacles_and_current_bodies() {
 }
 
 #[test]
-fn replacement_reach_follows_closed_and_reopened_ground() {
+fn walking_resource_reach_follows_closed_and_reopened_ground() {
     let mut w = GameWorld::new(WorldConfig::new(128, 128, Seed(1)).unwrap()).unwrap();
-    let work = TileCoord::new(40, 40);
-    let near = TileCoord::new(41, 40);
-    assert!(
-        w.replacement_reach(UnitKind::Villager, work)
-            .tiles
-            .contains(&near)
-    );
-    let house = w
-        .insert_building(
-            PlayerId(0),
-            super::super::BuildingKind::House,
-            TileRect::from_xywh(41, 40, 2, 2),
-            true,
-        )
+    let player = PlayerId(0);
+    let worker = w
+        .spawn_villager(player, position(TileCoord::new(35, 40)).unwrap())
         .unwrap();
-    assert!(
-        !w.replacement_reach(UnitKind::Villager, work)
-            .tiles
-            .contains(&near)
-    );
-    w.remove_building(house);
-    assert!(
-        w.replacement_reach(UnitKind::Villager, work)
-            .tiles
-            .contains(&near)
-    );
+    let resource = TileCoord::new(40, 40);
+    assert!(w.walking_resource_reachable(worker, resource));
+    let mut walls = Vec::new();
+    for dy in -2..=2_i32 {
+        for dx in -2..=2_i32 {
+            if dx.abs() == 2 || dy.abs() == 2 {
+                walls.push(
+                    w.insert_building(
+                        player,
+                        crate::BuildingKind::PalisadeWall,
+                        TileRect::from_xywh(resource.x + dx, resource.y + dy, 1, 1),
+                        true,
+                    )
+                    .unwrap(),
+                );
+            }
+        }
+    }
+    assert!(!w.walking_resource_reachable(worker, resource));
+    for wall in walls {
+        w.remove_building(wall);
+    }
+    assert!(w.walking_resource_reachable(worker, resource));
 }

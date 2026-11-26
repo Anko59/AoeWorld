@@ -210,11 +210,13 @@ impl GameWorld {
         } else {
             let radius = super::super::VILLAGE_RULES.replacement_radius_tiles;
             self.nearest_resource_matching(old.tile, old.kind, radius, Some(old.id), |node| {
-                node.object == old.object && !self.tree_is_crowded(node, None)
+                node.object == old.object
+                    && !self.tree_is_crowded(node, None)
+                    && self.walking_resource_reachable(id, node.tile)
             })
             .or_else(|| {
                 self.nearest_resource_matching(old.tile, old.kind, radius, Some(old.id), |node| {
-                    node.object == old.object
+                    node.object == old.object && self.walking_resource_reachable(id, node.tile)
                 })
             })
         };

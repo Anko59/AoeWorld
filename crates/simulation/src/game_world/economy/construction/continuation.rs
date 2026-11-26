@@ -300,7 +300,11 @@ impl GameWorld {
                 ResourceKind::Stone,
             ]
             .into_iter()
-            .filter_map(|resource| self.nearest_resource(origin, resource, radius, None))
+            .filter_map(|resource| {
+                self.nearest_resource_matching(origin, resource, radius, None, |node| {
+                    self.walking_resource_reachable(builder, node.tile)
+                })
+            })
             .collect::<Vec<_>>();
             nodes.sort_unstable_by_key(|node| (distance_squared(origin, node.tile), node.id));
             for node in nodes {
@@ -321,7 +325,10 @@ impl GameWorld {
             _ => &[],
         };
         for resource in wanted {
-            if let Some(node) = self.nearest_resource(footprint.min, *resource, radius, None)
+            if let Some(node) =
+                self.nearest_resource_matching(footprint.min, *resource, radius, None, |node| {
+                    self.walking_resource_reachable(builder, node.tile)
+                })
                 && self.issue_gather(player, builder, node.id).is_ok()
             {
                 return;

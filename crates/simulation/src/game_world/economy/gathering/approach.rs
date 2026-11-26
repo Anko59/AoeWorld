@@ -2,6 +2,7 @@
 use super::*;
 use crate::game_world::movement_step::slots::{squared, within_work_reach};
 use aoe_core::FIXED_SUBUNITS_PER_TILE;
+use std::collections::BTreeMap;
 
 impl GameWorld {
     pub(crate) fn crowded_resource_approach(&self, id: EntityId) -> bool {
@@ -51,7 +52,7 @@ impl GameWorld {
         (self.node_has_work_slot(task.node, id)
             && (self.approach_resource(id, task.tile).is_ok()
                 || self.queue_resource_approach(id, task.tile)))
-            || self.replacement_resource(id, task)
+            || self.replacement_initial_resource(id, task)
     }
 
     /// Nearby friendly traffic can clear; an isolated static failure ends the job.
@@ -96,7 +97,66 @@ impl GameWorld {
     }
 
     pub(crate) fn resource_has_work_spot(&self, id: EntityId, target: TileCoord) -> bool {
-        !self.resource_work_positions(id, target, None).is_empty()
+        !self.resource_work_positions(id, target).is_empty()
+    }
+
+    /// A resource's tile is often blocked. Certify a contact point from the
+    /// worker's current position, ignoring traffic that can clear on arrival.
+    pub(crate) fn walking_resource_reachable(&self, id: EntityId, target: TileCoord) -> bool {
+        self.walking_resource_reachable_in(id, target, |_| true)
+    }
+
+    pub(in super::super) fn walking_resource_reachable_in(
+        &self,
+        id: EntityId,
+        target: TileCoord,
+        accepts_contact: impl Fn(TileCoord) -> bool,
+    ) -> bool {
+        let Some(unit) = self.unit(id) else {
+            return false;
+        };
+        if unit.kind.is_naval() {
+            return true;
+        }
+        let Some(bucket) = aoe_map::LandBucket::for_radius(unit.kind.collision_radius()) else {
+            return false;
+        };
+        let from = self.route_origin(unit.kind, unit.position).tile_floor();
+        if accepts_contact(from)
+            && self.at_work_position(id, target)
+            && self.interaction_static_clear(unit.kind, unit.position)
+        {
+            return true;
+        }
+        let points = self.static_work_positions(unit.kind, target);
+        points.contact_tiles.iter().copied().any(|tile| {
+            accepts_contact(tile)
+                && self
+                    .land_reachable(unit.player, bucket, from, tile)
+                    .unwrap_or(false)
+        })
+    }
+
+    fn walking_contact_reachable(
+        &self,
+        unit: crate::GameUnit,
+        at: aoe_core::WorldPosition,
+        checked: &mut BTreeMap<TileCoord, bool>,
+    ) -> bool {
+        if unit.kind.is_naval() {
+            return true;
+        }
+        *checked.entry(at.tile_floor()).or_insert_with(|| {
+            aoe_map::LandBucket::for_radius(unit.kind.collision_radius()).is_some_and(|bucket| {
+                self.land_reachable(
+                    unit.player,
+                    bucket,
+                    self.route_origin(unit.kind, unit.position).tile_floor(),
+                    at.tile_floor(),
+                )
+                .unwrap_or(false)
+            })
+        })
     }
 
     /// The closest free work position, the first one an approach tries.
@@ -106,7 +166,7 @@ impl GameWorld {
         target: TileCoord,
     ) -> Option<aoe_core::WorldPosition> {
         let unit = self.unit(id)?;
-        let points = self.resource_work_positions(id, target, None);
+        let points = self.resource_work_positions(id, target);
         points
             .iter()
             .copied()
@@ -118,7 +178,6 @@ impl GameWorld {
         &self,
         id: EntityId,
         target: TileCoord,
-        reached: Option<&[TileCoord]>,
     ) -> Vec<aoe_core::WorldPosition> {
         let Some(unit) = self.unit(id) else {
             return Vec::new();
@@ -141,9 +200,7 @@ impl GameWorld {
             candidates.push(unit.position);
         }
         let free = |at: aoe_core::WorldPosition| {
-            reached.is_none_or(|tiles| tiles.binary_search(&at.tile_floor()).is_ok())
-                && !self.destination_point_reserved(at, id)
-                && !self.position_occupied(index, at, true)
+            !self.destination_point_reserved(at, id) && !self.position_occupied(index, at, true)
         };
         candidates.retain(|&at| free(at));
         if !unit.kind.is_naval() {
@@ -153,13 +210,13 @@ impl GameWorld {
                         .ok()
                         .is_some_and(|at| self.friendly_contact_pressure_at(index, at, 11)));
             if candidates.is_empty() || compressed {
-                candidates.extend(points.outer.iter().copied().filter(|&at| {
-                    free(at)
-                        || (compressed
-                            && reached
-                                .is_none_or(|tiles| tiles.binary_search(&at.tile_floor()).is_ok())
-                            && self.work_point_clear(index, at))
-                }));
+                candidates.extend(
+                    points
+                        .outer
+                        .iter()
+                        .copied()
+                        .filter(|&at| free(at) || (compressed && self.work_point_clear(index, at))),
+                );
             }
         }
         // Sort the cheap, total distance key once. Callers inspect direct
@@ -181,18 +238,14 @@ impl GameWorld {
             let index = self.lookup[&id];
             points.retain(|&at| self.work_queue_point_clear(index, at));
         }
+        if self.economy.stewards.automatic {
+            let mut checked = BTreeMap::new();
+            points.retain(|&at| self.walking_contact_reachable(unit, at, &mut checked));
+        }
         points
             .into_iter()
             .take(8)
             .any(|at| self.issue_task_move(id, at).is_ok())
-    }
-
-    pub(crate) fn approach_resource(
-        &mut self,
-        id: EntityId,
-        target: TileCoord,
-    ) -> Result<(), EconomyError> {
-        self.approach_resource_in(id, target, None)
     }
 
     /// Traffic is temporary. Retry a valid fishing job at most once a second,
@@ -225,20 +278,33 @@ impl GameWorld {
         true
     }
 
+    pub(crate) fn approach_resource(
+        &mut self,
+        id: EntityId,
+        target: TileCoord,
+    ) -> Result<(), EconomyError> {
+        self.approach_resource_in(id, target, self.economy.stewards.automatic)
+    }
+
     pub(super) fn approach_resource_in(
         &mut self,
         id: EntityId,
         target: TileCoord,
-        reached: Option<&[TileCoord]>,
+        check_reach: bool,
     ) -> Result<(), EconomyError> {
-        let candidates = self.resource_work_positions(id, target, reached);
+        let candidates = self.resource_work_positions(id, target);
         let Some(unit) = self.unit(id) else {
             return Err(GameWorldError::Unreachable.into());
         };
         let mut failure = GameWorldError::Unreachable;
+        let mut checked = BTreeMap::new();
         for direct in [true, false] {
             for &at in &candidates {
                 if self.interaction_line_clear(unit.kind, unit.position, at) != direct {
+                    continue;
+                }
+                if check_reach && !direct && !self.walking_contact_reachable(unit, at, &mut checked)
+                {
                     continue;
                 }
                 match self.issue_task_move(id, at) {

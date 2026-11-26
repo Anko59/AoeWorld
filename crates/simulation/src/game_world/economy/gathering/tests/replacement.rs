@@ -26,6 +26,49 @@ pub(super) fn cleared_work_area(kind: ResourceKind) -> (GameWorld, ResourceNode)
 }
 
 #[test]
+fn failed_gold_trip_retargets_from_the_worker_side_of_a_closed_ring() {
+    let (mut world, old) = cleared_work_area(ResourceKind::Gold);
+    let alternative =
+        ResourceNode::starting(TileCoord::new(old.tile.x - 7, old.tile.y), old.kind).unwrap();
+    let Terrain::Map { generator, overlay } = &mut world.terrain else {
+        unreachable!()
+    };
+    overlay
+        .insert_starting_resource(generator, alternative)
+        .unwrap();
+    let worker = world
+        .spawn_villager(
+            PlayerId(0),
+            position(TileCoord::new(old.tile.x - 5, old.tile.y)).unwrap(),
+        )
+        .unwrap();
+    world.issue_gather(PlayerId(0), worker, old.id).unwrap();
+    for dy in -2..=2_i32 {
+        for dx in -2..=2_i32 {
+            if dx.abs() == 2 || dy.abs() == 2 {
+                world
+                    .insert_building(
+                        PlayerId(0),
+                        crate::BuildingKind::PalisadeWall,
+                        TileRect::from_xywh(old.tile.x + dx, old.tile.y + dy, 1, 1),
+                        true,
+                    )
+                    .unwrap();
+            }
+        }
+    }
+    let index = world.lookup[&worker];
+    world.stop_movement(index);
+    world.set_movement_error(index, Some(GameWorldError::Unreachable));
+    world.advance_gathering(&mut |_| true, &mut Vec::new());
+    assert_eq!(
+        world.gather_target(worker),
+        Some(alternative.id),
+        "the next job must be reachable from the worker, even if it is outside the old work area"
+    );
+}
+
+#[test]
 fn exhausted_workers_choose_from_the_used_dropoff_for_wood_gold_and_stone() {
     for kind in [ResourceKind::Wood, ResourceKind::Gold, ResourceKind::Stone] {
         let (mut world, old) = cleared_work_area(kind);
@@ -144,7 +187,6 @@ fn a_long_dropoff_trip_still_replaces_a_tree_in_the_reachable_work_area() {
     task.node = old.id;
     task.tile = old.tile;
     task.dropoff = Some(camp);
-    task.work_tile = Some(TileCoord::new(old.tile.x - 1, old.tile.y));
     assert!(
         world.resume_resource(worker, &mut task),
         "the search bound is local to the forest, not the long return trip"
@@ -212,7 +254,6 @@ fn steward_refreshes_lumber_camp_after_tree_depletion() {
     world.advance_garrisons(&mut Vec::new());
     let mut task = GatherTask::new(old.id, old.tile, ResourceKind::Wood, None);
     task.dropoff = Some(camp);
-    task.work_tile = Some(TileCoord::new(old.tile.x - 1, old.tile.y));
     let Terrain::Map { generator, overlay } = &mut world.terrain else {
         unreachable!()
     };
@@ -250,61 +291,6 @@ fn steward_refreshes_lumber_camp_after_tree_depletion() {
             .count(),
         2
     );
-}
-
-fn direct_work_reach(w: &GameWorld, kind: UnitKind, start: TileCoord) -> Vec<TileCoord> {
-    let mut seen = std::collections::BTreeSet::from([start]);
-    let mut queue = std::collections::VecDeque::from([start]);
-    while let Some(tile) = queue.pop_front() {
-        for (dx, dy) in [
-            (0, -1),
-            (-1, 0),
-            (1, 0),
-            (0, 1),
-            (-1, -1),
-            (1, -1),
-            (-1, 1),
-            (1, 1),
-        ] {
-            let next = TileCoord::new(tile.x + dx, tile.y + dy);
-            if seen.len() < 1024
-                && !seen.contains(&next)
-                && w.building_step_clear(tile, next)
-                && w.unit_step_clear(kind, tile, next).unwrap_or(false)
-            {
-                seen.insert(next);
-                queue.push_back(next);
-            }
-        }
-    }
-    seen.into_iter().collect()
-}
-
-#[test]
-fn work_reach_cache_matches_direct_edges_after_ground_changes() {
-    let mut w = GameWorld::new(WorldConfig::new(128, 128, Seed(1)).unwrap()).unwrap();
-    let check = |w: &GameWorld| {
-        for kind in [UnitKind::Villager, UnitKind::Militia, UnitKind::FishingShip] {
-            for start in [TileCoord::new(40, 40), TileCoord::new(42, 42)] {
-                assert_eq!(
-                    w.replacement_reach(kind, start).tiles,
-                    direct_work_reach(w, kind, start)
-                );
-            }
-        }
-    };
-    check(&w);
-    let house = w
-        .insert_building(
-            PlayerId(0),
-            crate::BuildingKind::House,
-            TileRect::from_xywh(41, 40, 2, 2),
-            true,
-        )
-        .unwrap();
-    check(&w);
-    w.remove_building(house);
-    check(&w);
 }
 
 #[test]
