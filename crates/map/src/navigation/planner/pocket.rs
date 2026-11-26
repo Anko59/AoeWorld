@@ -2,7 +2,8 @@
 //! Every neighbour probe spends the caller's current allowance; no batch can
 //! run thousands of uncharged terrain reads inside a one-work poll.
 use super::super::tile_hash::TileHasher;
-use super::search::{checked_walkable, neighbor_clear, neighbor_offset};
+use super::memo::Map;
+use super::search::{SearchRecord, checked_walkable, neighbor_clear, neighbor_offset};
 use super::{MAX_ROUTE_PLANNER_NODES, RoutePlanner, RouteTerrain, Terminal};
 use crate::{RegionReachability, ResourceOverlay};
 use aoe_core::TileCoord;
@@ -83,6 +84,7 @@ impl Proof {
         terrain: &dyn RouteTerrain,
         overlay: &ResourceOverlay,
         origin: TileCoord,
+        reached: Option<&Map<TileCoord, SearchRecord>>,
         remaining: &mut u32,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<bool>, Terminal> {
@@ -120,7 +122,11 @@ impl Proof {
             {
                 continue;
             }
-            if previous == origin || self.seen.len() >= POCKET_TILES {
+            // A tile the leg's own search reached is reached from its origin.
+            if previous == origin
+                || reached.is_some_and(|records| records.contains_key(&previous))
+                || self.seen.len() >= POCKET_TILES
+            {
                 return Ok(Some(false));
             }
             self.seen.insert(previous);
@@ -308,8 +314,16 @@ impl RoutePlanner {
     ) -> Result<bool, Terminal> {
         let before = *remaining;
         let destination = self.effective_destination();
+        let reached = self.search.as_ref().map(|search| &search.records);
         let proof = self.pocket.get_or_insert_with(|| Proof::new(destination));
-        let outcome = proof.poll(terrain, overlay, self.leg_origin, remaining, cancelled)?;
+        let outcome = proof.poll(
+            terrain,
+            overlay,
+            self.leg_origin,
+            reached,
+            remaining,
+            cancelled,
+        )?;
         let bounds = proof.bounds();
         self.work = self.work.saturating_add(before - *remaining);
         for corner in bounds {
