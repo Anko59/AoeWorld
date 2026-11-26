@@ -9,6 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 mod load;
+mod saved;
 
 #[cfg(test)]
 mod tests;
@@ -30,6 +31,12 @@ pub(crate) struct Options {
     /// Historical client artifact, served with this checkout's current map server.
     #[arg(long)]
     client_package_directory: Option<PathBuf>,
+    /// Time ordinary gameplay frames after restoring this ID from DIRECTORY/saves.
+    #[arg(long, conflicts_with = "compile_load")]
+    save_id: Option<String>,
+    /// Seconds per timed scene in the saved-game benchmark.
+    #[arg(long, requires = "save_id", default_value_t = 45, value_parser = clap::value_parser!(u32).range(10..=120))]
+    scene_seconds: u32,
 }
 
 /// Six eight-frame holds: near, pan, far, far pan, near, return.
@@ -159,13 +166,26 @@ pub(crate) fn run(options: Options) -> Result<()> {
     if package.content_hash_hex() != options.content_hash {
         return Err("package identity mismatch".into());
     }
-    let script = script(package.estimate.tiles_per_side)?;
+    let side = package.estimate.tiles_per_side;
     fs::create_dir_all(options.out.parent().ok_or("output needs a directory")?)?;
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let address = listener.local_addr()?;
     drop(listener);
+    let mut command = Command::new(root.join("target/release/aoe-server"));
+    if options.save_id.is_some() {
+        command
+            .env("AOE_ARENA", "1")
+            .env("AOE_SIM_HZ", "20")
+            .env("AOE_MATCH_TOKEN", saved::LOCAL_ADMIN_TOKEN)
+            .env("AOE_AI_RUNTIME", "rust");
+    }
+    let stdout = if options.save_id.is_some() {
+        Stdio::from(fs::File::create(options.out.with_extension("server.log"))?)
+    } else {
+        Stdio::null()
+    };
     let mut server = Server(
-        Command::new(root.join("target/release/aoe-server"))
+        command
             .env("AOE_BIND", address.to_string())
             .env("AOE_SCENARIO", "smoke")
             .env("AOE_ASSET_PACK", options.asset_pack.canonicalize()?)
@@ -174,7 +194,7 @@ pub(crate) fn run(options: Options) -> Result<()> {
                 options.package_directory.canonicalize()?,
             )
             .stdin(Stdio::null())
-            .stdout(Stdio::null())
+            .stdout(stdout)
             .stderr(Stdio::inherit())
             .spawn()?,
     );
@@ -188,6 +208,19 @@ pub(crate) fn run(options: Options) -> Result<()> {
         }
         std::thread::sleep(Duration::from_millis(50));
     }
+    let url = format!("http://{address}");
+    if let Some(save_id) = &options.save_id {
+        saved::run(
+            &options,
+            &root,
+            &client_package_directory,
+            &url,
+            side,
+            save_id,
+        )?;
+        return server.shutdown();
+    }
+    let script = script(side)?;
     let config = options.out.with_extension("input.json");
     fs::write(
         &config,
@@ -208,50 +241,7 @@ pub(crate) fn run(options: Options) -> Result<()> {
             load.live()?;
         }
         let output = options.out.with_extension(format!("run-{run}.json"));
-        let name = format!("aoeworld-client-frame-{}-{run}", std::process::id());
-        let _cleanup = BrowserContainer(name.clone());
-        let modules = root.join("browser/node_modules").canonicalize()?;
-        let mut args = vec![
-            "run".to_owned(),
-            "--rm".into(),
-            "--init".into(),
-            "--network".into(),
-            "host".into(),
-            "--ipc".into(),
-            "host".into(),
-            "--name".into(),
-            name,
-            "--user".into(),
-            format!(
-                "{}:{}",
-                nix::unistd::Uid::current(),
-                nix::unistd::Gid::current()
-            ),
-            "-e".into(),
-            format!("HOME={}/.cache/browser-home", root.display()),
-            "-v".into(),
-            format!("{}:{}", root.display(), root.display()),
-            "-v".into(),
-            format!("{}:{}:ro", modules.display(), modules.display()),
-            "-w".into(),
-            root.join("browser").display().to_string(),
-            "aoeworld/browser-tools:1.65.1".into(),
-            "node".into(),
-            "bench/frame.mjs".into(),
-            root.join(&config).display().to_string(),
-            root.join(&output).display().to_string(),
-            if run == 0 {
-                "record".into()
-            } else {
-                "no-record".into()
-            },
-        ];
-        args.splice(1..1, crate::jobs::cap_args());
-        crate::process::run(
-            "docker",
-            &args.iter().map(String::as_str).collect::<Vec<_>>(),
-            Duration::from_secs(900),
-        )?;
+        run_browser(&root, "frame.mjs", &config, &output, run)?;
         if let Some(load) = &mut compile_load {
             load.live()?;
         }
@@ -302,5 +292,59 @@ pub(crate) fn run(options: Options) -> Result<()> {
     if !repeatable {
         return Err("counter spread exceeds 1%".into());
     }
+    Ok(())
+}
+
+fn run_browser(
+    root: &std::path::Path,
+    driver: &str,
+    config: &std::path::Path,
+    output: &std::path::Path,
+    run: usize,
+) -> Result<()> {
+    let name = format!("aoeworld-client-frame-{}-{run}", std::process::id());
+    let _cleanup = BrowserContainer(name.clone());
+    let modules = root.join("browser/node_modules").canonicalize()?;
+    let mut args = vec![
+        "run".to_owned(),
+        "--rm".into(),
+        "--init".into(),
+        "--network".into(),
+        "host".into(),
+        "--ipc".into(),
+        "host".into(),
+        "--name".into(),
+        name,
+        "--user".into(),
+        format!(
+            "{}:{}",
+            nix::unistd::Uid::current(),
+            nix::unistd::Gid::current()
+        ),
+        "-e".into(),
+        format!("HOME={}/.cache/browser-home", root.display()),
+        "-v".into(),
+        format!("{}:{}", root.display(), root.display()),
+        "-v".into(),
+        format!("{}:{}:ro", modules.display(), modules.display()),
+        "-w".into(),
+        root.join("browser").display().to_string(),
+        "aoeworld/browser-tools:1.65.1".into(),
+        "node".into(),
+        format!("bench/{driver}"),
+        root.join(config).display().to_string(),
+        root.join(output).display().to_string(),
+        if run == 0 {
+            "record".into()
+        } else {
+            "no-record".into()
+        },
+    ];
+    args.splice(1..1, crate::jobs::cap_args());
+    crate::process::run(
+        "docker",
+        &args.iter().map(String::as_str).collect::<Vec<_>>(),
+        Duration::from_secs(900),
+    )?;
     Ok(())
 }

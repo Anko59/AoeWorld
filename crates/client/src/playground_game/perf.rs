@@ -38,6 +38,17 @@ pub(super) fn contour(stats: aoe_rendering::ContourStats) {
     );
 }
 
+/// Tag the enclosing decode/apply span, including superseded snapshots.
+#[cfg(feature = "frame-bench")]
+pub(super) fn tag_snapshot(message: Option<&aoe_protocol::GameplayServerMessage>) {
+    if matches!(
+        message,
+        Some(aoe_protocol::GameplayServerMessage::Snapshot { .. })
+    ) {
+        perf_mark(22);
+    }
+}
+
 pub(super) fn decode() -> (Scope, Scope) {
     (Scope::new(1), Scope::stage(0))
 }

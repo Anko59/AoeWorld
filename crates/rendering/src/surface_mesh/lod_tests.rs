@@ -34,6 +34,21 @@ fn variable_height_map(side: i32) -> Vec<SceneTerrain> {
 }
 
 #[wasm_bindgen_test]
+fn terrain_visibility_is_projected_once_across_detail_retries() {
+    let terrain = variable_height_map(256);
+    let camera = SceneCamera {
+        center: [128.0; 2],
+        zoom: 0.102,
+        viewport: [1280.0, 720.0],
+        focus_elevation_meters: 4.0,
+    };
+    VISIBILITY_CHECKS.set(0);
+    let triangles = projected_surface_triangles(&terrain, camera);
+    assert!(triangles.iter().any(|face| face.mode() == directory::TILED));
+    assert_eq!(VISIBILITY_CHECKS.get(), terrain.len());
+}
+
+#[wasm_bindgen_test]
 fn adjacent_farm_states_retain_both_nine_tile_footprints_at_sprite_zoom_steps() {
     let mut terrain = variable_height_map(256);
     for tile in &mut terrain {

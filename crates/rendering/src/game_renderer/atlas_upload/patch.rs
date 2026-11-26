@@ -59,11 +59,21 @@ impl GameRenderer {
         result.and_then(|value| finished.map(|()| value))
     }
 
-    /// Native uploads share the two-frame queue bound with rendering.
+    /// Native uploads share the queue bound with WebGPU rendering. WebGL
+    /// uploads wait for an idle draw queue before checking driver errors.
     pub fn atlas_updates_ready(&self) -> Result<bool, String> {
         match self {
             Self::WebGpu(renderer) => renderer.atlas_updates_ready(),
+            Self::WebGl(renderer) => Ok(renderer.atlas_updates_ready()),
             _ => Ok(true),
+        }
+    }
+
+    /// Give ready atlas work the next idle WebGL turn. Keep the last painted
+    /// pixels while the submitted draws retire.
+    pub fn prioritize_atlas_updates(&self) {
+        if let Self::WebGl(renderer) = self {
+            renderer.prioritize_atlas_updates();
         }
     }
     /// Updates an existing layer; geometry and the allocated layer budget stay fixed.

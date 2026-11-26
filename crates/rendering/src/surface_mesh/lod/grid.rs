@@ -1,65 +1,50 @@
 //! Bounded visible-cell indexing shared by fine and coarse mesh selection.
 use super::*;
 
-pub(super) fn grid_area(min: [i32; 2], max: [i32; 2], size: i32, limit: usize) -> Option<usize> {
-    if size <= 0 || min[0] > max[0] || min[1] > max[1] {
-        return None;
-    }
-    let size = i64::from(size);
-    let min_x = i64::from(min[0]).div_euclid(size);
-    let max_x = i64::from(max[0]).div_euclid(size);
-    let min_y = i64::from(min[1]).div_euclid(size);
-    let max_y = i64::from(max[1]).div_euclid(size);
-    let width = max_x - min_x + 1;
-    let height = max_y - min_y + 1;
-    if width <= 0 || height <= 0 {
-        return None;
-    }
-    let area = width.checked_mul(height)?;
-    (area <= limit as i64).then_some(area as usize)
-}
+#[cfg(test)]
+pub(super) use tests::VISIBILITY_CHECKS;
 
-pub(super) fn visible_grid(
+/// Fine visibility depends on the camera and source heights, never the mesh LOD.
+pub(super) fn visible_tiles(
     terrain: &[SceneTerrain],
     camera: &Camera,
-    viewport: [f64; 2],
-    size: i32,
-    limit: usize,
-) -> Result<Option<CellGrid>, ()> {
+) -> ([[i32; 2]; 2], Vec<bool>) {
     let mut min = [i32::MAX; 2];
     let mut max = [i32::MIN; 2];
-    for sample in terrain {
-        let tile = tile_key(sample.position);
-        if !fine_tile_visible(camera, *sample, tile, viewport) {
-            continue;
-        }
-        let cell = cell_key(tile, size);
-        for axis in 0..2 {
-            min[axis] = min[axis].min(cell[axis]);
-            max[axis] = max[axis].max(cell[axis]);
-        }
-        if grid_area(min, max, size, limit).is_none() {
-            return Err(());
-        }
-    }
-    if min[0] == i32::MAX {
-        return Ok(None);
-    }
-    let area = grid_area(min, max, size, limit).ok_or(())?;
+    let visible = terrain
+        .iter()
+        .map(|sample| {
+            let tile = tile_key(sample.position);
+            let intersects = fine_tile_visible(camera, *sample, tile, camera.viewport);
+            if intersects {
+                for axis in 0..2 {
+                    min[axis] = min[axis].min(tile[axis]);
+                    max[axis] = max[axis].max(tile[axis]);
+                }
+            }
+            intersects
+        })
+        .collect();
+    ([min, max], visible)
+}
+
+pub(super) fn visible_grid([min, max]: [[i32; 2]; 2], size: i32) -> Option<CellGrid> {
+    let (min, max) = (cell_key(min, size), cell_key(max, size));
+    let [width, height] =
+        [0, 1].map(|axis| (i64::from(max[axis]) - i64::from(min[axis])) / i64::from(size) + 1);
     // Reserve room for at least 2×2 art patches on coarse cells without raising
     // the existing triangle allocation bound. Heights still use one coarse cell.
-    if size > 1 && area > MAX_SURFACE_TRIANGLES / 8 {
-        return Err(());
-    }
-    let width = ((i64::from(max[0]) - i64::from(min[0])) / i64::from(size) + 1) as usize;
-    let height = ((i64::from(max[1]) - i64::from(min[1])) / i64::from(size) + 1) as usize;
-    debug_assert_eq!(width * height, area);
-    Ok(Some(CellGrid {
+    let limit = if size == 1 {
+        MAX_SURFACE_TRIANGLES
+    } else {
+        MAX_SURFACE_TILES.min(MAX_SURFACE_TRIANGLES / 8)
+    };
+    (width.checked_mul(height)? <= limit as i64).then_some(CellGrid {
         min,
         size,
-        width,
-        height,
-    }))
+        width: width as usize,
+        height: height as usize,
+    })
 }
 
 pub(super) fn fine_tile_visible(
@@ -68,8 +53,19 @@ pub(super) fn fine_tile_visible(
     tile: [i32; 2],
     viewport: [f64; 2],
 ) -> bool {
+    #[cfg(test)]
+    VISIBILITY_CHECKS.with(|checks| checks.set(checks.get() + 1));
     let heights = corner_heights(sample.surface.corner_game_height_levels);
     intersects_viewport(&projected_corners(camera, tile, 1, heights), viewport)
+}
+
+#[cfg(test)]
+mod tests {
+    thread_local! {
+        pub(in super::super) static VISIBILITY_CHECKS: std::cell::Cell<usize> = const {
+            std::cell::Cell::new(0)
+        };
+    }
 }
 
 pub(super) fn intersects_viewport(points: &[SurfacePoint; 4], viewport: [f64; 2]) -> bool {

@@ -1,4 +1,4 @@
-//! Opt-in driver: freezes authority, never part of the normal client artifact.
+//! Camera and observation hooks for the private client frame benchmark.
 use super::*;
 
 fn with_client<T>(f: impl FnOnce(&mut Client) -> Result<T, JsValue>) -> Result<T, JsValue> {
@@ -102,4 +102,21 @@ pub fn frame_bench_take() -> Vec<u64> {
 #[wasm_bindgen]
 pub fn frame_bench_names() -> String {
     aoe_rendering::frame_cost::NAMES.to_owned()
+}
+
+/// Sample the painted view once, outside the timed scene.
+#[wasm_bindgen]
+pub fn frame_bench_scene_counts() -> Result<Vec<u32>, JsValue> {
+    with_client(|client| {
+        let mut counts = vec![0, 0, 0];
+        for sprite in client.rendered_frame.benchmark_units() {
+            if let Some(unit) = client.units.get(&sprite.id).filter(|unit| unit.hp > 0) {
+                counts[0] += 1;
+                counts[2] += u32::from(unit.task == aoe_protocol::UnitTask::Attacking);
+            } else if sprite.kind.building_id().is_some() {
+                counts[1] += 1;
+            }
+        }
+        Ok(counts)
+    })
 }

@@ -7,6 +7,9 @@ not add work. No wall-clock timing or statistical CPU sampling contributes to
 the score. Keep the vector: bytes, triangles and API calls have different units
 and must not be added into an invented instruction or millisecond estimate.
 
+For wall-clock frame intervals during a fast pan and a crowded hold on a
+restored match, use the [saved-game mode](client-stutter.md).
+
 ## Run
 
 Original assets, generated packages, reports, screenshots and videos stay outside

@@ -99,7 +99,7 @@ client-frame-bench-steps: client-frame-bench-build
 
 .PHONY: client-frame-bench-browser-test
 client-frame-bench-browser-test: browser-deps
-	@$(BROWSER_RUN) node --test bench/counters_tests.mjs
+	@$(BROWSER_RUN) node --test bench/counters_tests.mjs bench/stutter_tests.mjs
 
 .PHONY: client-frame-bench-format
 client-frame-bench-format: browser-deps

@@ -286,6 +286,25 @@ async fn native_context_loss_during_patch_restores_resident_cells_and_presentati
     native.requests(&[2]).unwrap();
     native.accept(1, bytes[1].clone()).unwrap();
     lose_during_patch(&canvas);
+    let (changed, requests) = native
+        .update(&[2], &[], &[1], &mut art, &mut renderer)
+        .unwrap();
+    assert!(!changed && requests.is_empty());
+    assert!(art.resident[0].is_some() && art.resident[1].is_none());
+
+    // A submitted WebGL fence becomes observable on a later browser turn.
+    // Poll it as the live animation callback does before retrying the patch.
+    let aoe_rendering::GameRenderer::WebGl(gl) = &renderer else {
+        panic!("expected WebGL2");
+    };
+    for _ in 0..100 {
+        wait(10).await;
+        gl.check_health().unwrap();
+        if renderer.atlas_updates_ready().unwrap() {
+            break;
+        }
+    }
+    assert!(renderer.atlas_updates_ready().unwrap());
     assert!(
         native
             .update(&[2], &[], &[1], &mut art, &mut renderer)

@@ -53,13 +53,12 @@ export class AoeWebGl {
         this.onPageHide = event => { if (!event.persisted) this.dispose(); };
         window.addEventListener('pagehide', this.onPageHide);
     }
-
     initialize() {
         const gl = this.gl;
         // A restored context invalidates all sync objects from its lost lifetime.
         this.pendingFrames = [];
         this.frameError = null;
-        this.patching = this.patchesPending = false;
+        this.patching = this.patchesPending = this.drainingForAtlas = this.needsFrameValidation = false;
         this.bufferBytes = 0;
         this.atlasReady = false;
         this.shaders = [];
@@ -138,7 +137,6 @@ export class AoeWebGl {
             throw error;
         }
     }
-
     createCoverage() {
         const gl = this.gl;
         this.coverage = gl.createFramebuffer();
@@ -147,7 +145,6 @@ export class AoeWebGl {
         if (!this.coverage || !this.mask || !this.depth)
             throw new Error('WebGL2 coverage allocation failed');
     }
-
     releaseCoverage() {
         const gl = this.gl;
         if (this.coverage) gl.deleteFramebuffer(this.coverage);
@@ -157,7 +154,6 @@ export class AoeWebGl {
         this.coverageSize = [0, 0];
         this.coverageIdleFrames = 0;
     }
-
     resizeCoverage(width, height) {
         if (!width || !height) {
             this.releaseCoverage();
@@ -188,20 +184,17 @@ export class AoeWebGl {
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         this.coverageSize = [width, height];
     }
-
     get textureBytes() {
         // R8UI + DEPTH_COMPONENT24 (four-byte storage), shared by both effects.
         // Excludes the browser framebuffer and driver overhead.
         return this.disposed ? 0 : SIDE * SIDE * this.atlasPages * 4 +
             this.coverageSize[0] * this.coverageSize[1] * 5;
     }
-
     check() {
         if (this.disposed || this.gl.isContextLost()) throw new Error('WebGL2 context lost');
         const code = this.gl.getError();
         if (code !== this.gl.NO_ERROR) throw new Error('WebGL2 graphics error ' + code);
     }
-
     // getError() is one shared, destructive flag: an error seen while a submitted
     // frame is unfinished belongs to it, so latch it for health polling.
     latchSubmittedError() {
@@ -215,32 +208,38 @@ export class AoeWebGl {
         if (this.disposed) throw new Error('WebGL2 context lost');
         const gl = this.gl;
         if (gl.isContextLost()) return false;
-        let completed = false;
         try {
             while (this.pendingFrames.length) {
                 const sync = this.pendingFrames[0], status = gl.clientWaitSync(sync, 0, 0);
                 if (status === gl.TIMEOUT_EXPIRED) break;
                 if (status === gl.WAIT_FAILED) throw new Error('WebGL2 frame completion failed');
-                gl.deleteSync(sync); this.pendingFrames.shift(); completed = true;
+                gl.deleteSync(sync); this.pendingFrames.shift(); this.needsFrameValidation = true;
             }
-            if (completed) this.check();
+            // getError can wait for newer drawing even after the oldest fence signals.
+            if (this.needsFrameValidation && this.atlasUpdatesReady) {
+                this.check(); this.needsFrameValidation = false;
+            }
         } catch (error) { this.frameError = error; throw error; }
         return true;
     }
-
+    get atlasUpdatesReady() { return this.pendingFrames.length === 0; }
+    get frameBacklogged() {
+        return this.pendingFrames.length >= 2 ||
+            (!this.atlasUpdatesReady && (this.drainingForAtlas || this.needsFrameValidation));
+    }
+    prioritizeAtlasUpdates() { this.drainingForAtlas = !this.atlasUpdatesReady; }
     beginPatches() {
         if (this.patching) throw new Error('WebGL2 atlas batch already active');
         if (this.disposed) throw new Error('WebGL2 context lost');
+        if (this.atlasUpdatesReady) this.drainingForAtlas = false;
         this.latchSubmittedError(); this.patching = true; this.patchesPending = false;
     }
-
     finishPatches() {
         const pending = this.patchesPending;
         this.patching = this.patchesPending = false;
         try { if (pending) this.check(); }
         catch (error) { if (this.disposed || !this.gl.isContextLost()) throw error; }
     }
-
     validateSize(width, height) {
         if (!Number.isInteger(width) || !Number.isInteger(height) || width < 0 || height < 0 ||
             width > 4096 || height > 4096 ||
@@ -333,9 +332,12 @@ export class AoeWebGl {
             if (this.disposed || !gl.isContextLost()) throw error;
         }
     }
-
     render(instances, black, effects, start, end) {
-        if (!this.poll()) return false;
+        if (!this.poll() || this.frameBacklogged) return false;
+        if (this.drainingForAtlas) {
+            this.prioritizeAtlasUpdates();
+            return false;
+        }
         if (!this.atlasReady) throw new Error('WebGL2 atlas not uploaded');
         if (instances.byteLength % STRIDE !== 0 || instances.byteLength > MAX_BYTES) {
             throw new Error('WebGL2 instance-buffer limit exceeded');
@@ -347,7 +349,6 @@ export class AoeWebGl {
             this.releaseCoverage();
             return false;
         }
-        if (this.pendingFrames.length >= 2) return false;
         const count = instances.byteLength / STRIDE;
         const words = new DataView(instances.buffer, instances.byteOffset, instances.byteLength);
         // Shared Rust normalization selects hover, or units AND occluders.
@@ -457,7 +458,6 @@ export class AoeWebGl {
         gl.vertexAttribIPointer(6, 4, gl.UNSIGNED_INT, STRIDE, base + 96);
         this.instanceOffset = first;
     }
-
     dispose() {
         if (this.disposed) return;
         const gl = this.gl;

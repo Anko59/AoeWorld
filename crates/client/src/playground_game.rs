@@ -248,7 +248,12 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         // Keep input, networking and the HUD live while the overview covers the scene.
         let draw = perf::Scope::new(2);
         let mut native_requests = Vec::new();
-        if !controls::navigation::overview_active() && !strategic::render(&mut client) {
+        let backlogged =
+            matches!(&client.renderer, GameRenderer::WebGl(gl) if gl.frame_backlogged());
+        if !controls::navigation::overview_active()
+            && !strategic::render(&mut client)
+            && !backlogged
+        {
             let live = client
                 .presentation
                 .live_tick(time)
@@ -283,7 +288,11 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             let resources = map::scene_resources(&client);
             let mut required =
                 aoe_rendering::scene_native_frames(&client.art, &units, camera, time as usize);
+            #[cfg(feature = "frame-bench")]
+            let terrain_plan = perf::Scope::stage(3);
             required.extend(scene.terrain_plan(&mut client.art).required());
+            #[cfg(feature = "frame-bench")]
+            drop(terrain_plan);
             required.extend(aoe_rendering::scene_resource_native_frames(
                 &client.art,
                 &resources,

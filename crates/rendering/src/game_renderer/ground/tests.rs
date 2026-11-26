@@ -117,51 +117,6 @@ fn native_farm_without_de_art_keeps_its_imported_crop_sheet() {
 }
 
 #[wasm_bindgen_test]
-fn foundation_painting_rejects_distant_buildings_and_visits_visible_samples_once() {
-    let art = crate::surface_mesh::mix::fixture::art();
-    let mut tiles: Vec<_> = (0..100)
-        .flat_map(|y| {
-            (0..100).map(move |x| SceneTerrain {
-                position: [f64::from(x) + 0.5, f64::from(y) + 0.5],
-                material: 0,
-                elevation_meters: 0.0,
-                surface: SceneTerrainSurface::flat(0.0),
-                appearance: None,
-            })
-        })
-        .collect();
-    let mut units: Vec<_> = (0..200)
-        .map(|i| {
-            let mut unit = test_unit(SceneUnitKind::House);
-            unit.position = [1000.0 + f64::from(i) * 4.0; 2];
-            unit
-        })
-        .collect();
-    SAMPLE_VISITS.set(0);
-    let started = js_sys::Date::now();
-    apply_building_foundations(&mut tiles, &art, &units);
-    wasm_bindgen_test::console_log!(
-        "10,000 samples, 200 distant foundations: {} ms, {} sample predicates",
-        js_sys::Date::now() - started,
-        SAMPLE_VISITS.get()
-    );
-    assert_eq!(
-        SAMPLE_VISITS.get(),
-        0,
-        "offscreen foundations need only bounds rejection"
-    );
-    units.push(test_unit(SceneUnitKind::House));
-    SAMPLE_VISITS.set(0);
-    apply_building_foundations(&mut tiles, &art, &units);
-    assert_eq!(
-        SAMPLE_VISITS.get(),
-        tiles.len(),
-        "one sample scan for the visible foundation"
-    );
-    assert!(tiles.iter().any(|tile| tile.material == 2));
-}
-
-#[wasm_bindgen_test]
 fn farm_crop_uvs_keep_both_triangle_halves_when_the_apron_blends() {
     let mut art = crate::surface_mesh::mix::fixture::art();
     art.buildings[5] = vec![art.terrain[2][0]];
@@ -498,3 +453,5 @@ fn an_isolated_farm_keeps_its_crops_to_the_far_corner() {
     }
     assert_eq!(checked, 18);
 }
+
+mod density;
