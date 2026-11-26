@@ -1,16 +1,23 @@
+import { initKnownLand } from '/navigation/minimap/known.js';
+
 // One strategic raster and fixed working buffers, independent of explored area.
+// The mask is kept for its readers and never shown: the known land is, and the
+// plain terrain image only while the fog is off.
 export function initFogMap(svg) {
   const layer = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
   layer.id = 'minimap-fog';
   for (const name of ['width', 'height']) layer.setAttribute(name, '256');
   layer.setAttribute('pointer-events', 'none');
-  document.getElementById('minimap-terrain').after(layer);
+  layer.style.visibility = 'hidden';
+  const terrain = document.getElementById('minimap-terrain');
+  terrain.after(layer);
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 256;
   canvas.style.display = 'block';
   layer.append(canvas);
   const context = canvas.getContext('2d');
   const data = context?.createImageData(256, 256);
+  const known = initKnownLand(terrain, data?.data);
   const previous = new Uint32Array(65536);
   let previousLength = -1, previousDisabled = null;
   layer.setAttribute('data-working-bytes', String(previous.byteLength + (data?.data.byteLength ?? 0)));
@@ -24,6 +31,8 @@ export function initFogMap(svg) {
     draw.disabled = disabled;
     draw.revision++;
     layer.style.display = disabled ? 'none' : '';
+    terrain.style.visibility = disabled ? '' : 'hidden';
+    known.fogged(disabled);
     svg.dataset.fog = disabled ? 'disabled' : 'enabled';
     if (disabled || !context || !data) return;
     for (let at = 3; at < data.data.length; at += 4) data.data[at] = 255;
@@ -31,10 +40,12 @@ export function initFogMap(svg) {
     context.putImageData(data, 0, 0);
   };
   draw.canvas = canvas;
+  draw.land = known.land;
   draw.explored = (x, y) => draw.disabled || (x >= 0 && x < 1 && y >= 0 && y < 1
     && data?.data[(Math.floor(y * 256) * 256 + Math.floor(x * 256)) * 4 + 3] < 255);
   draw.revision = 0;
   draw.disabled = false;
   draw(false, []);
+  draw.land(null);
   return draw;
 }

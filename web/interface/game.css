@@ -123,6 +123,15 @@ dialog>button { width:100%; display:block; margin:9px 0; padding:10px; }
 
 #map-navigation .icon { width:18px; height:18px; }
 #minimap-primary { opacity:0; }
+/* The chart is what fog hides the land with; fog off shows the plain map. */
+#minimap-map[data-fog=disabled] #minimap-chart { display:none; }
+/* Screen-pixel strokes of one diamond, whatever the layout stretches; a tick is the first dash of a map line. */
+#minimap-border { --border:1px; }
+#minimap.expanded #minimap-border { --border:1.7px; }
+#minimap-border path { vector-effect:non-scaling-stroke; stroke-width:calc(var(--wide) * var(--border)); }
+#minimap-border .tick { stroke-dasharray:calc(var(--long) * var(--border)) 9999px; stroke-dashoffset:calc(-2 * var(--border)); }
+/* Zoomed land fills the whole rectangle unless the native menu clips it to the diamond. */
+#minimap:not([data-minimap-zoom="1"]) #minimap-border { display:none; }
 #scene[data-command-cursor=move] { cursor:url('/interface/cursors.svg') 12 12, crosshair; }
 #scene[data-command-cursor=gather] { cursor:url('/interface/gather.svg') 12 12, pointer; }
 #scene[data-command-cursor=gather][data-gather-kind=fish] { cursor:url('/interface/cursor-fish.svg') 12 12, pointer; }
