@@ -44,6 +44,15 @@ impl RouteTerrain for LimitedMap<'_> {
             _ => None,
         }
     }
+    fn route_tile_known(&self, overlay: &ResourceOverlay, tile: TileCoord) -> Option<bool> {
+        match &self.world.terrain {
+            crate::Terrain::Map { overlay: live, .. } if std::ptr::eq(overlay, live) => self
+                .world
+                .known_route_mask(self.generator, tile)
+                .map(|mask| mask & aoe_map::STEP_MASK_WALKABLE != 0),
+            _ => None,
+        }
+    }
     fn route_walkable(
         &self,
         overlay: &ResourceOverlay,
@@ -127,22 +136,30 @@ impl crate::GameWorld {
         offset: (i32, i32),
     ) -> Option<bool> {
         let index = aoe_map::step_index(offset)?;
-        let mask = match self.economy.step_masks.mask(from) {
-            aoe_map::StepMask::Known(mask) => mask,
-            aoe_map::StepMask::Slow => return None,
+        Some(self.known_route_mask(generator, from)? & (1 << index) != 0)
+    }
+
+    /// `from`'s kept mask: its eight steps and its own ground.
+    pub(super) fn known_route_mask(
+        &self,
+        generator: &MapChunkGenerator,
+        from: TileCoord,
+    ) -> Option<u16> {
+        match self.economy.step_masks.mask(from) {
+            aoe_map::StepMask::Known(mask) => Some(mask),
+            aoe_map::StepMask::Slow => None,
             aoe_map::StepMask::Unknown => {
                 let mask = self.step_mask(generator, from);
                 let config = self.config;
                 self.economy
                     .step_masks
                     .store(config.width_tiles, config.height_tiles, from, mask);
-                mask?
+                mask
             }
-        };
-        Some(mask & (1 << index) != 0)
+        }
     }
 
-    fn step_mask(&self, generator: &MapChunkGenerator, from: TileCoord) -> Option<u8> {
+    fn step_mask(&self, generator: &MapChunkGenerator, from: TileCoord) -> Option<u16> {
         let crate::Terrain::Map { overlay, .. } = &self.terrain else {
             return None;
         };
@@ -162,7 +179,12 @@ impl crate::GameWorld {
             generator,
             world: self,
         };
-        let mut mask = 0;
+        let walkable = ground.route_walkable(overlay, from, &|| false).ok()?;
+        let mut mask = if walkable {
+            aoe_map::STEP_MASK_WALKABLE
+        } else {
+            0
+        };
         for index in 0..8u8 {
             let offset = [
                 (-1, -1),

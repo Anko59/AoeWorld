@@ -70,6 +70,10 @@ impl RouteTerrain for MemoTerrain<'_> {
         self.inner.route_neighbor_known(overlay, from, offset)
     }
 
+    fn route_tile_known(&self, overlay: &ResourceOverlay, tile: TileCoord) -> Option<bool> {
+        self.inner.route_tile_known(overlay, tile)
+    }
+
     fn route_walkable(
         &self,
         overlay: &ResourceOverlay,

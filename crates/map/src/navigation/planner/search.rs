@@ -260,6 +260,9 @@ pub(super) fn checked_walkable(
     if cancelled() {
         return Err(Terminal::Environment(EnvironmentPageError::Cancelled));
     }
+    if let Some(walkable) = terrain.route_tile_known(overlay, tile) {
+        return Ok(walkable);
+    }
     Ok(terrain.route_walkable(overlay, tile, cancelled)?)
 }
 

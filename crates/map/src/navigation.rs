@@ -28,7 +28,7 @@ pub use regions::{
     ANY_PLAYER, LandBucket, MapRegionGround, RegionChunk, RegionGround, RegionReachability,
     RegionStats, RegionTile, Regions, clipped_region_labels,
 };
-pub use step_masks::{RouteStepMasks, StepMask, step_index};
+pub use step_masks::{RouteStepMasks, STEP_MASK_WALKABLE, StepMask, step_index};
 
 pub const ORTHOGONAL_COST: u32 = 1_024;
 pub const DIAGONAL_COST: u32 = 1_448;

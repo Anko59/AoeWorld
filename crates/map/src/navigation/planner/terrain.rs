@@ -48,6 +48,12 @@ pub trait RouteTerrain {
         None
     }
 
+    /// A kept answer whether `tile` is walkable on `overlay`, exactly as
+    /// `route_walkable` would read it; `None` reads the ground.
+    fn route_tile_known(&self, _overlay: &ResourceOverlay, _tile: TileCoord) -> Option<bool> {
+        None
+    }
+
     fn route_overlay_edge_clear(
         &self,
         overlay: &ResourceOverlay,

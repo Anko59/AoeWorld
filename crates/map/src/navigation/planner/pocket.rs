@@ -2,7 +2,7 @@
 //! Every neighbour probe spends the caller's current allowance; no batch can
 //! run thousands of uncharged terrain reads inside a one-work poll.
 use super::super::tile_hash::TileHasher;
-use super::search::{checked_walkable, neighbor_offset};
+use super::search::{checked_walkable, neighbor_clear, neighbor_offset};
 use super::{MAX_ROUTE_PLANNER_NODES, RoutePlanner, RouteTerrain, Terminal};
 use crate::{RegionReachability, ResourceOverlay};
 use aoe_core::TileCoord;
@@ -32,30 +32,6 @@ pub(super) struct RegionPocket {
 #[cfg(test)]
 #[path = "pocket/tests/regions.rs"]
 mod region_tests;
-
-fn step_allowed(
-    terrain: &dyn RouteTerrain,
-    overlay: &ResourceOverlay,
-    from: TileCoord,
-    offset: (i32, i32),
-    cancelled: &dyn Fn() -> bool,
-) -> Result<bool, Terminal> {
-    let (dx, dy) = offset;
-    let next = TileCoord::new(from.x + dx, from.y + dy);
-    if dx != 0 && dy != 0 {
-        let horizontal = TileCoord::new(from.x + dx, from.y);
-        let vertical = TileCoord::new(from.x, from.y + dy);
-        if !(checked_walkable(terrain, overlay, horizontal, cancelled)?
-            && checked_walkable(terrain, overlay, vertical, cancelled)?
-            && terrain.route_overlay_edge_clear(overlay, from, horizontal, cancelled)?
-            && terrain.route_overlay_edge_clear(overlay, from, vertical, cancelled)?)
-        {
-            return Ok(false);
-        }
-    }
-    Ok(checked_walkable(terrain, overlay, next, cancelled)?
-        && terrain.route_overlay_edge_clear(overlay, from, next, cancelled)?)
-}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct Proof {
@@ -140,7 +116,7 @@ impl Proof {
             let previous = TileCoord::new(tile.x - dx, tile.y - dy);
             if self.seen.contains(&previous)
                 || !checked_walkable(terrain, overlay, previous, cancelled)?
-                || !step_allowed(terrain, overlay, previous, (dx, dy), cancelled)?
+                || !neighbor_clear(terrain, overlay, previous, (dx, dy), cancelled)?
             {
                 continue;
             }
