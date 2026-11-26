@@ -105,6 +105,19 @@ fn shares(faces: &[ProjectedSurfaceTriangle]) -> BTreeMap<[i32; 2], u8> {
 }
 
 #[wasm_bindgen_test]
+fn a_displayed_triangle_keeps_its_quad_when_its_sibling_is_ineligible() {
+    // One tile, two triangles; only one stays eligible, so the fourth patch
+    // corner of the displayed triangle has no other source.
+    let terrain = vec![sample(0, 0, 0)];
+    let mut faces = mesh(&terrain, 1.0);
+    faces.retain(|face| !face.skirt);
+    assert_eq!(faces.len(), 2);
+    faces[1].appearance &= !1;
+    mix::assign(&mut faces, &terrain);
+    assert_eq!(faces[0].mix, [0; 6], "a uniform tile does not mix");
+}
+
+#[wasm_bindgen_test]
 fn every_pair_of_land_materials_mixes_across_its_border() {
     let frame = |material: u8| GameFrame {
         stream: 0,
