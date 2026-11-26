@@ -70,7 +70,7 @@ ai-compare: sdk-python-tools job-bootstrap
 ai-compare-steps:
 	@$(SDK_RUN) cargo run --locked -p aoe-harness -- sdk-python compare --size $(COMPARE_SIZE) --bots $(COMPARE_BOTS) --minutes $(COMPARE_MINUTES) --seeds $(COMPARE_SEEDS)
 
-# The real server at its promised scale (docs/scale/match.md): one human, 99 Python AIs, a
+# The real server at its promised scale (docs/scale/match.md): one human, 99 AIs (the server's Rust seats by default), a
 # France-sized map, with the server's tick records and, with
 # `--browser`, the human's frame rate. SCALE_MATCH_ARGS passes harness flags, for example
 # `SCALE_MATCH_ARGS="--players 4 --tiles 500 --map flat --minutes 1 --out reports/scale/x.json --no-summary" make scale-match`.

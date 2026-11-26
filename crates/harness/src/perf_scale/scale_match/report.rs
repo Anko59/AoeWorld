@@ -222,6 +222,7 @@ fn ms(value: &Value, key: &str) -> String {
 /// The generated block of `docs/scale/match.md` for one report.
 pub(super) fn markdown(report: &Value) -> String {
     let (config, setup, run) = (&report["config"], &report["setup"], &report["run"]);
+    let rust = config["ai"] == json!("rust");
     let (tick, advance, fan) = (
         &run["tick_ms"],
         &run["advance_ms"],
@@ -230,7 +231,7 @@ pub(super) fn markdown(report: &Value) -> String {
     let mut text = format!(
         "## Latest run: {label}\n\n\
          Revision `{revision}`{dirty}, {players} players ({humans} human), {tiles} x {tiles} tiles \
-         ({map}), {minutes:.1} min of play, {hosts} Python host process(es).\n\n\
+         ({map}), {minutes:.1} min of play, {players_ai}.\n\n\
          | | |\n|---|---|\n\
          | tick total p50 / p95 / p99 / max (ms) | {t50} / {t95} / {t99} / {tmax} |\n\
          | `advance` (simulation) p50 / p95 (ms) | {a50} / {a95} |\n\
@@ -256,7 +257,11 @@ pub(super) fn markdown(report: &Value) -> String {
         tiles = config["tiles"],
         map = setup["map_kind"].as_str().unwrap_or("?"),
         minutes = run["wall_seconds"].as_f64().unwrap_or(0.0) / 60.0,
-        hosts = config["hosts"],
+        players_ai = if rust {
+            "the server's Rust AI seats".to_owned()
+        } else {
+            format!("{} Python host process(es)", config["hosts"])
+        },
         t50 = ms(tick, "p50_ms"),
         t95 = ms(tick, "p95_ms"),
         t99 = ms(tick, "p99_ms"),
@@ -284,8 +289,52 @@ pub(super) fn markdown(report: &Value) -> String {
         create = setup["match_create_seconds"],
         connect = setup["bots_connect_seconds"],
     );
-    let bots = &report["bots"];
-    text.push_str(&format!(
+    if rust {
+        text.push_str(&rust_seats_line(report));
+    } else {
+        text.push_str(&bots_line(&report["bots"]));
+    }
+    if let Some(browser) = report.get("browser").filter(|b| !b.is_null()) {
+        text.push_str(&format!("\nBrowser: {}\n", browser_line(browser)));
+    }
+    text.push_str("\nPer minute (tick p50 / p95 ms, missed, units at end):\n\n| min | p50 | p95 | missed | units |\n|---|---|---|---|---|\n");
+    for window in report["per_minute"].as_array().into_iter().flatten() {
+        text.push_str(&format!(
+            "| {} | {} | {} | {} | {} |\n",
+            window["minute"],
+            ms(&window["tick_ms"], "p50_ms"),
+            ms(&window["tick_ms"], "p95_ms"),
+            window["missed_ticks"],
+            window["units_last"],
+        ));
+    }
+    text
+}
+
+/// The in-process seats' cost from the last `/admin/perf` sample: decisions,
+/// CPU per decision, and what the tick's thread waited on per tick (µs).
+fn rust_seats_line(report: &Value) -> String {
+    let seats = report["phases_per_minute"]
+        .as_array()
+        .and_then(|rows| rows.iter().rev().find(|row| !row["rust_ai"].is_null()))
+        .map_or(Value::Null, |row| row["rust_ai"].clone());
+    let decisions = seats["decisions"].as_u64().unwrap_or(0);
+    let per_decision = seats["cpu_ms"].as_f64().unwrap_or(0.0) / decisions.max(1) as f64;
+    let thread = &seats["tick_thread"];
+    let wait = |name: &str| ms(&thread[name], "wall_us_per_tick");
+    format!(
+        "\nRust AI seats at the end: {decisions} decisions, {per_decision:.2} ms CPU per decision; \
+         tick thread {} µs CPU per tick, waits per tick (µs): feed {}, chunks {}, join {}, settle {}.\n",
+        ms(thread, "cpu_us_per_tick"),
+        wait("feed"),
+        wait("chunk_waits"),
+        wait("join"),
+        wait("settle"),
+    )
+}
+
+fn bots_line(bots: &Value) -> String {
+    format!(
         "\nBots at the end: {} reporting, {} villagers, {} soldiers, {} buildings, {} errors, \
          {} accepted and {} rejected orders. Sessions: {} dropped and rejoined ({} drops, {} rejoins, \
          {} s away in all), {} permanently lost. {} in Feudal Age; {} build orders sent, {} \
@@ -306,22 +355,7 @@ pub(super) fn markdown(report: &Value) -> String {
         bots["build_orders"],
         bots["buildings_completed"],
         bots["build_rejections"],
-    ));
-    if let Some(browser) = report.get("browser").filter(|b| !b.is_null()) {
-        text.push_str(&format!("\nBrowser: {}\n", browser_line(browser)));
-    }
-    text.push_str("\nPer minute (tick p50 / p95 ms, missed, units at end):\n\n| min | p50 | p95 | missed | units |\n|---|---|---|---|---|\n");
-    for window in report["per_minute"].as_array().into_iter().flatten() {
-        text.push_str(&format!(
-            "| {} | {} | {} | {} | {} |\n",
-            window["minute"],
-            ms(&window["tick_ms"], "p50_ms"),
-            ms(&window["tick_ms"], "p95_ms"),
-            window["missed_ticks"],
-            window["units_last"],
-        ));
-    }
-    text
+    )
 }
 
 pub(super) fn browser_line(browser: &Value) -> String {
@@ -378,7 +412,8 @@ pub(super) fn phase_minute(perf: Option<Value>, routes: Option<Value>, seconds: 
     };
     let mut row = json!({"seconds": crate::perf_scale::stats::round(seconds),
         "tick_rate": perf["tick_rate"], "missed_ticks": perf["missed_ticks"],
-        "missed_total": perf["missed_total"], "units": perf["gameplay_memory"]["units"]});
+        "missed_total": perf["missed_total"], "units": perf["gameplay_memory"]["units"],
+        "rust_ai": perf["rust_ai"]});
     for (name, phase) in perf["phases"].as_object().into_iter().flatten() {
         let ms = |key: &str| {
             phase[key]
