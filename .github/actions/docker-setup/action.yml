@@ -7,7 +7,8 @@ inputs:
     description: >-
       'true' switches the daemon to the containerd image store (required for
       BuildKit cache export with the default docker driver), exposes the
-      Actions cache runtime and sets DOCKER_BUILD_CACHE for Make.
+      Actions cache runtime and sets DOCKER_BUILD_CACHE for Make (and
+      DOCKER_BUILD_CACHE_SAVE on dev, the only ref that may export layers).
     default: 'true'
 runs:
   using: composite
@@ -39,6 +40,8 @@ runs:
         # fall back to uncached (still correct) builds instead.
         if docker info --format '{{json .DriverStatus}}' | grep -q io.containerd.snapshotter; then
           echo 'DOCKER_BUILD_CACHE=type=gha,version=2' >> "$GITHUB_ENV"
+          # Layers are exported only on dev: a pull request run reads the cache and never writes it.
+          echo "DOCKER_BUILD_CACHE_SAVE=${{ github.ref == 'refs/heads/dev' && '1' || '' }}" >> "$GITHUB_ENV"
         else
           echo '::warning::containerd image store unavailable; image builds are uncached'
         fi
