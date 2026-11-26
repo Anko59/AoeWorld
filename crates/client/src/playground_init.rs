@@ -75,7 +75,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         pan_motion: Default::default(),
         terrain_ahead: [0.0; 2],
         rendered_frame: super::map::render_cache::RenderFrameCache::default(),
-        terrain_chunks: BTreeMap::new(),
+        terrain_chunks: Default::default(),
         terrain_height_bounds: None,
         terrain_bounds: Default::default(),
         terrain_resident_height_bounds: None,

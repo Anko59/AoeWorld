@@ -188,7 +188,7 @@ pub(super) async fn client_with_backend(scene: &PreparedScene, backend: Option<&
         pan_motion: Default::default(),
         terrain_ahead: [0.0; 2],
         rendered_frame: Default::default(),
-        terrain_chunks: BTreeMap::new(),
+        terrain_chunks: Default::default(),
         terrain_height_bounds: None,
         terrain_bounds: Default::default(),
         terrain_resident_height_bounds: None,

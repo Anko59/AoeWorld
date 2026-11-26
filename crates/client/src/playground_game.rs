@@ -4,7 +4,7 @@ use aoe_protocol::{
     GAMEPLAY_VERSION, GameplayClientMessage, GameplayUnitState, ResumeToken, encode_gameplay_client,
 };
 use aoe_rendering::{GameArt, GameRenderer, SceneCamera};
-use map::CachedChunk;
+use map::{CachedChunk, ChunkTable};
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 use web_sys::{Document, HtmlCanvasElement, WebSocket};
@@ -65,7 +65,7 @@ pub(super) struct Client {
     pub pan_motion: PanMotion,
     pub terrain_ahead: [f64; 2],
     pub rendered_frame: map::render_cache::RenderFrameCache<map::scene::PreparedScene>,
-    pub terrain_chunks: BTreeMap<(i32, i32), CachedChunk>,
+    pub terrain_chunks: ChunkTable<CachedChunk>,
     pub terrain_height_bounds: Option<(i16, i16)>,
     pub terrain_bounds: map::heights::MapHeightBounds,
     pub terrain_resident_height_bounds: Option<(i16, i16)>,
@@ -198,8 +198,10 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         controls::edge_pan(&mut client, delta_ms);
         let center = client.camera.center;
         client.terrain_ahead = client.pan_motion.observe(center, time);
+        #[cfg(feature = "frame-bench")]
         let terrain = perf::Scope::stage(3);
         map::scene::advance_terrain(&mut client);
+        #[cfg(feature = "frame-bench")]
         drop(terrain);
         client.capture.current_view = false;
         let canvas = matches!(&client.renderer, GameRenderer::Canvas { .. });
@@ -215,6 +217,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         let detailed_view =
             !controls::navigation::overview_active() && !strategic::render(&mut client);
         let scene = if detailed_view && !backlogged {
+            #[cfg(feature = "frame-bench")]
             let _terrain = perf::Scope::stage(3);
             map::scene::prepare_frame(&client)
         } else {
@@ -306,7 +309,10 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                             rendered_frame.invalidate();
                         }
                     }
-                    Err(error) => client.status = format!("Native art unavailable: {error:?}"),
+                    Err(error) => {
+                        web_sys::console::error_1(&error);
+                        client.status = "Native art unavailable".to_owned();
+                    }
                 }
             }
             drop(streaming);

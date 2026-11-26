@@ -1,8 +1,8 @@
 //! Schedule world-space terrain meshes for the current and approaching view.
+use super::super::eviction::sort_chunks;
 use super::*;
 use aoe_core::TileCoord;
 use aoe_rendering::{chunk_surface_halo, chunk_surface_triangles};
-use std::collections::BTreeMap;
 
 type Coordinate = (i32, i32);
 
@@ -14,7 +14,7 @@ const RETAINED_BYTES: usize = 20 * 1024 * 1024;
 #[derive(Default)]
 pub(in super::super::super) struct PatchCache {
     size: i32,
-    patches: BTreeMap<Coordinate, Patch>,
+    patches: ChunkTable<Patch>,
 }
 
 struct Patch {
@@ -43,14 +43,11 @@ impl Patch {
         for y in first[1]..=last[1] {
             for x in first[0]..=last[0] {
                 if let Some(chunk) = client.terrain_chunks.get(&(x, y)) {
-                    tiles.extend(
-                        chunk
-                            .scene_tiles()
-                            .filter(|(at, _, _)| support.contains(*at))
-                            .map(|(at, tile, appearance)| {
-                                terrain_scene_sample(at, tile, appearance)
-                            }),
-                    );
+                    for (at, tile, appearance) in chunk.scene_tiles() {
+                        if support.contains(at) {
+                            tiles.push(terrain_scene_sample(at, tile, appearance));
+                        }
+                    }
                 }
             }
         }
@@ -111,13 +108,9 @@ impl PatchCache {
             };
             // Finish base coverage before spending a turn on refinements.
             let priority = (patch.is_some(), !visible);
-            jobs.push((
-                priority,
-                chunk_distance_for(key, camera, client.config),
-                key,
-            ));
+            jobs.push((priority, chunk_distance_for(key, camera), key));
         }
-        jobs.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)).then(a.2.cmp(&b.2)));
+        sort_chunks(&mut jobs);
         let started = super::super::super::now();
         let mut visible_updated = false;
         for (index, ((refined, prefetch), _, key)) in
@@ -145,10 +138,10 @@ impl PatchCache {
             .keys()
             .copied()
             .filter(|&key| !heights::patch_may_intersect(client, client.camera, key))
-            .map(|key| (chunk_distance_for(key, ahead, client.config), key))
+            .map(|key| ((false, false), chunk_distance_for(key, ahead), key))
             .collect::<Vec<_>>();
-        distant.sort_unstable_by(|a, b| b.0.total_cmp(&a.0).then(b.1.cmp(&a.1)));
-        for (_, key) in distant {
+        sort_chunks(&mut distant);
+        for (_, _, key) in distant.into_iter().rev() {
             if bytes <= RETAINED_BYTES {
                 break;
             }
@@ -169,7 +162,7 @@ impl PatchCache {
         }
     }
 
-    pub(in super::super) fn source_evicted(&mut self, chunks: &BTreeMap<Coordinate, CachedChunk>) {
+    pub(in super::super) fn source_evicted(&mut self, chunks: &ChunkTable<CachedChunk>) {
         let retired: Vec<_> = self
             .patches
             .keys()

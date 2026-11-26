@@ -1,11 +1,15 @@
-use super::{CachedChunk, Camera, chunk_distance_for, chunk_resident_bytes, heights};
-use aoe_core::WorldConfig;
-use std::collections::BTreeMap;
+use super::{CachedChunk, Camera, ChunkTable, chunk_distance_for, chunk_resident_bytes, heights};
+
+type RankedChunk = ((bool, bool), f64, (i32, i32));
+
+#[inline(never)]
+pub(super) fn sort_chunks(chunks: &mut [RankedChunk]) {
+    chunks.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)).then(a.2.cmp(&b.2)));
+}
 
 pub(crate) fn evict_distant_chunks_with_limits(
-    chunks: &mut BTreeMap<(i32, i32), CachedChunk>,
+    chunks: &mut ChunkTable<CachedChunk>,
     camera: Camera,
-    config: WorldConfig,
     maximum_chunks: usize,
     maximum_bytes: usize,
     preferred: &[(i32, i32)],
@@ -17,20 +21,17 @@ pub(crate) fn evict_distant_chunks_with_limits(
     // Membership only: a sorted compact list avoids a second coordinate tree.
     let mut preferred = preferred.to_vec();
     preferred.sort_unstable();
-    preferred.dedup();
-    let mut coordinates = chunks.keys().copied().collect::<Vec<_>>();
-    coordinates.sort_by(|left, right| {
-        let left_distance = chunk_distance_for(*left, camera, config);
-        let right_distance = chunk_distance_for(*right, camera, config);
-        preferred
-            .binary_search(left)
-            .is_ok()
-            .cmp(&preferred.binary_search(right).is_ok())
-            .then_with(|| right_distance.total_cmp(&left_distance))
-            .then(right.cmp(left))
-    });
+    let mut candidates: Vec<_> = chunks
+        .keys()
+        .copied()
+        .map(|key| {
+            let offscreen = preferred.binary_search(&key).is_err();
+            ((offscreen, false), chunk_distance_for(key, camera), key)
+        })
+        .collect();
+    sort_chunks(&mut candidates);
     let mut removed = false;
-    for coordinate in coordinates {
+    for (_, _, coordinate) in candidates.into_iter().rev() {
         if chunks.len() <= maximum_chunks && cached_bytes <= maximum_bytes {
             break;
         }

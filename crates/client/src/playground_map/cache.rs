@@ -9,6 +9,10 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{RequestInit, Response};
 
+#[path = "cache/table.rs"]
+mod table;
+pub(crate) use table::ChunkTable;
+
 #[derive(Clone, Debug)]
 pub(crate) struct CachedChunk(LandscapeChunk);
 

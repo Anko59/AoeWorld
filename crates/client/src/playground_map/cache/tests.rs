@@ -172,25 +172,18 @@ fn cache_eviction_applies_owned_byte_limit_and_releases_all_metadata() {
             .unwrap(),
     );
     let limit = chunk_resident_bytes(&near);
-    let mut chunks = std::collections::BTreeMap::from([
-        ((0, 0), near),
-        ((1, 1), CachedChunk::from(landscape())),
-    ]);
-    let config = aoe_core::WorldConfig::new(50, 50, aoe_core::Seed(1)).unwrap();
+    let mut chunks = ChunkTable::default();
+    for (key, chunk) in [((0, 0), near), ((1, 1), CachedChunk::from(landscape()))] {
+        chunks.insert(key, chunk);
+    }
     let camera = Camera {
         center: [1.5, 1.5],
         zoom: 1.0,
         viewport: [800.0, 600.0],
         focus_elevation_meters: 0.0,
     };
-    let (removed, _) = evict_distant_chunks_with_limits(
-        &mut chunks,
-        camera,
-        config,
-        MAX_CACHED_CHUNKS,
-        limit,
-        &[],
-    );
+    let (removed, _) =
+        evict_distant_chunks_with_limits(&mut chunks, camera, MAX_CACHED_CHUNKS, limit, &[]);
     assert!(removed);
     assert_eq!(chunks.len(), 1);
     assert!(chunks.contains_key(&(0, 0)));
@@ -222,4 +215,20 @@ fn unsupported_and_malformed_payloads_do_not_enter_cache() {
         };
         assert!(CachedChunk::decode(&compact).is_err(), "accepted {payload}");
     }
+}
+
+#[wasm_bindgen_test]
+fn resident_table_keeps_coordinate_order_across_out_of_order_updates() {
+    let mut table = ChunkTable::default();
+    for (key, value) in [((2, -1), 1), ((-3, 7), 2), ((2, -5), 3), ((2, -1), 4)] {
+        table.insert(key, value);
+    }
+    assert_eq!(
+        table.keys().copied().collect::<Vec<_>>(),
+        [(-3, 7), (2, -5), (2, -1)]
+    );
+    assert_eq!(table.remove(&(2, -5)), Some(3));
+    assert_eq!(table.remove(&(2, -5)), None);
+    assert_eq!(table.values().copied().collect::<Vec<_>>(), [2, 4]);
+    assert_eq!(table.get(&(2, -1)), Some(&4));
 }

@@ -25,12 +25,12 @@ async fn a_complete_ground_patch_can_paint_before_material_refinement() {
         .scene(&client)
         .expect("base patch already covers the view");
     assert!(
-        cache.patches[&(0, 0)].dirty,
+        cache.patches.get(&(0, 0)).unwrap().dirty,
         "material refinement is still queued"
     );
     let height = base.height(camera.center).unwrap();
     assert!(cache.advance(&client, camera));
-    assert!(!cache.patches[&(0, 0)].dirty);
+    assert!(!cache.patches.get(&(0, 0)).unwrap().dirty);
     assert_eq!(
         cache.scene(&client).unwrap().height(camera.center),
         Some(height)
@@ -94,14 +94,41 @@ async fn prepares_visible_chunks_over_turns_and_reuses_mesh_when_camera_moves() 
     }
     let before = cache.scene(&client).unwrap();
     assert!(!before.triangles.is_empty());
-    let identity = cache.patches[&(3, 3)].faces.as_ptr();
+    let identity = cache.patches.get(&(3, 3)).unwrap().faces.as_ptr();
     client.camera.center[0] += 0.25;
     assert!(!cache.advance(&client, client.camera));
     let after = cache.scene(&client).unwrap();
-    assert_eq!(cache.patches[&(3, 3)].faces.as_ptr(), identity);
+    assert_eq!(cache.patches.get(&(3, 3)).unwrap().faces.as_ptr(), identity);
     assert_ne!(
         before.triangles[0].points[0].screen,
         after.triangles[0].points[0].screen
     );
+    client.canvas.remove();
+}
+
+#[wasm_bindgen_test]
+async fn evicted_sources_invalidate_neighboring_patches_without_discarding_them() {
+    let camera = Camera::new([32.0, 16.0], [320.0; 2]);
+    let fixture = PreparedScene::new(camera, vec![]);
+    let mut client = super::super::review_tests::client(&fixture).await;
+    let source = aoe_map::MapChunkGenerator::new([1; 32], 1, 64);
+    let mut cache = PatchCache {
+        size: 1,
+        ..Default::default()
+    };
+    for key in [(0, 0), (1, 0)] {
+        client.terrain_chunks.insert(key, flat_chunk(&source, key));
+    }
+    for key in [(0, 0), (1, 0)] {
+        cache
+            .patches
+            .insert(key, Patch::build(&client, key, 1, true));
+    }
+    let neighbor = cache.patches.get(&(1, 0)).unwrap().faces.as_ptr();
+    client.terrain_chunks.remove(&(0, 0));
+    cache.source_evicted(&client.terrain_chunks);
+    assert!(cache.patches.get(&(0, 0)).is_none());
+    assert!(cache.patches.get(&(1, 0)).unwrap().dirty);
+    assert_eq!(cache.patches.get(&(1, 0)).unwrap().faces.as_ptr(), neighbor);
     client.canvas.remove();
 }

@@ -13,7 +13,7 @@ use web_sys::AbortController;
 
 #[path = "playground_map/cache.rs"]
 mod cache;
-pub(crate) use cache::CachedChunk;
+pub(crate) use cache::{CachedChunk, ChunkTable};
 #[path = "playground_map/eviction.rs"]
 mod eviction;
 #[path = "playground_map/heights.rs"]
@@ -419,7 +419,7 @@ fn visible_chunks(client: &mut Client) -> Vec<Request<Option<AbortController>>> 
     update.started
 }
 
-fn chunk_distance_for((x, y): (i32, i32), camera: Camera, _config: aoe_core::WorldConfig) -> f64 {
+fn chunk_distance_for((x, y): (i32, i32), camera: Camera) -> f64 {
     let center_x = f64::from(x * CHUNK_TILES + CHUNK_TILES / 2) - camera.center[0];
     let center_y = f64::from(y * CHUNK_TILES + CHUNK_TILES / 2) - camera.center[1];
     center_x.mul_add(center_x, center_y * center_y)
@@ -430,7 +430,6 @@ fn evict_distant_chunks(client: &mut Client) {
     let (removed, _) = evict_distant_chunks_with_limits(
         &mut client.terrain_chunks,
         client.camera,
-        client.config,
         MAX_CACHED_CHUNKS,
         MAX_CACHED_CHUNK_BYTES,
         &preferred,
