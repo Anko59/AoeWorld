@@ -64,7 +64,10 @@ void main() {
     vShade = 0.0;
     vFog = 1.0;
     if (color.w < 0.0) {
-        uint corner = min(vertex, 2u);
+        // The second triangle of a surface packet is degenerate. Skip its
+        // atlas directory and varyings before they reach the software driver.
+        if (vertex >= 3u) { gl_Position = vec4(2,2,2,1); return; }
+        uint corner = vertex;
         if ((pages.z & 2147483648u) != 0u) {
             const float levels[4] = float[4](0.0, 0.45, 0.725, 1.0);
             vFog = levels[(pages.z >> (24u + corner * 2u)) & 3u];
@@ -156,9 +159,11 @@ flat in vec4 vRect3;
 in float vShade;
 in float vFog;
 out vec4 result;
+// Coverage reuses the alpha/discard rules and has no colour attachment.
+const bool coverageOnly = false;
 vec4 ownerSample(vec2 uv, uint page) {
     vec4 base = textureLod(atlas, vec3(uv, float(page)), 0.0);
-    if ((vPages.w & 64u) == 0u) return base;
+    if (coverageOnly || (vPages.w & 64u) == 0u) return base;
     vec4 mask = floor(textureLod(atlas, vec3(uv, float(page < 5u ? page + 3u : page + 1u)), 0.0) * 255.0 + .5);
     if (mask.g == 0.0) return base;
     float foreground = mask.g * 255.0, background = mask.b * (255.0 - mask.g);
@@ -196,6 +201,8 @@ vec4 terrainSample(vec2 uv, uint page, vec4 rect, vec2 dx, vec2 dy) {
         vec2 inward = mix(uv, rect.xy + rect.zw * .5, 2.0 / min(extent.x, extent.y));
         center = textureLod(atlas, vec3(inward, float(page)), 0.0);
     }
+    // The terrain filter preserves the repaired centre alpha exactly.
+    if (coverageOnly) return center;
     vec2 px = dx * size, py = dy * size;
     float footprint = max(dot(px,px), dot(py,py));
     if (!(all(lessThanEqual(abs(rect),vec4(3.402823e38))) && all(lessThanEqual(abs(uv),vec2(3.402823e38))) && all(lessThanEqual(abs(dx),vec2(3.402823e38))) && all(lessThanEqual(abs(dy),vec2(3.402823e38))) && footprint > 1.5625 && footprint <= 3.402823e38)) return center;
@@ -221,13 +228,13 @@ vec4 sheet(uint material) {
 
 // Euclidean remainder over the whole signed range, in defined unsigned arithmetic.
 uint wrap(int value, uint period) {
+    if (value >= 0) return uint(value) % period;
     return ((uint(value) ^ 2147483648u) % period + period - 2147483648u % period) % period;
 }
 Layer tiledLayer(vec4 header, ivec2 tile, vec2 local, vec2 gx, vec2 gy) {
     uint columns = uint(header.z), rows = uint(header.w);
     vec2 at_local=local,at_gx=gx,at_gy=gy;
-    uint hash = uint(tile.x) * 7u + uint(tile.y) * 13u;
-    uint index = (hash > 2147483648u ? ~hash + 1u : hash) % uint(max(header.y, 1.0));
+    uint index;
     if ((columns & 32768u) != 0u) {
         uvec2 grid=uvec2(columns & 31u,rows & 31u);
         uvec2 period=uvec2((columns >> 5u) & 511u,(rows >> 5u) & 511u);
@@ -239,6 +246,9 @@ Layer tiledLayer(vec4 header, ivec2 tile, vec2 local, vec2 gx, vec2 gy) {
         at_gx=vec2(gx.x+gx.y,gx.y-gx.x)*scale;at_gy=vec2(gy.x+gy.y,gy.y-gy.x)*scale;
     } else if (columns > 0u && rows > 0u) {
         index = wrap(tile.x, columns) * rows + (rows - wrap(tile.y, rows)) % rows;
+    } else {
+        uint hash = uint(tile.x) * 7u + uint(tile.y) * 13u;
+        index = (hash > 2147483648u ? ~hash + 1u : hash) % uint(max(header.y, 1.0));
     }
     uint entry = uint(header.x) + 2u * index;
     vec4 a = directory(entry), b = directory(entry + 1u);
@@ -312,6 +322,7 @@ float junctionWater(uint word) {
 }
 vec4 shaded(vec4 texel, vec4 color, uint tint, uint appearance) {
     if (texel.a <= 0.0) discard;
+    if (coverageOnly) return texel;
     if (tint == 4u) {
         return vec4(mix(texel.rgb, vec3(.14901961,.44313726,.74509805), .14), texel.a);
     }
@@ -334,6 +345,17 @@ vec4 shaded(vec4 texel, vec4 color, uint tint, uint appearance) {
         return vec4(floor(clamp(texel.rgb * 255.0 * factor, vec3(0), vec3(255)) + .5) / 255.0, texel.a);
     }
     return texel * color;
+}
+vec4 sampleLayer(Layer layer, bool filtered) {
+    return terrainSample(layer.uv, layer.page, layer.rect,
+        filtered ? layer.dx : vec2(0), filtered ? layer.dy : vec2(0));
+}
+vec4 terrainColour(vec4 texel) {
+    // vTint carries wear and slope shade above its five tint bits.
+    vec4 worn = shaded(texel, vColor, vTint % 32u, vPages.w);
+    if (coverageOnly) return worn;
+    float lit = 1.0 + vShade * .04;
+    return vec4(worn.rgb * (vec3(1) - vec3(.20, .32, .38) * (float((vTint / 32u) % 16u) / 15.0)) * lit * vFog, worn.a);
 }
 void main() {
     vec2 dx = dFdx(vUv), dy = dFdy(vUv);
@@ -369,6 +391,12 @@ void main() {
         local = vec2(.5 + .5 * (inside.x - inside.y), .5 * (inside.x + inside.y));
         gx = vec2(.5 * (dx.x - dx.y), .5 * (dx.x + dx.y));
         gy = vec2(.5 * (dy.x - dy.y), .5 * (dy.x + dy.y));
+    }
+    if (!blend && !mixing) {
+        Layer layer = Layer(vUv, vPages.x, vRect, dx, dy);
+        if (tiled) layer = tiledLayer(vRect, tile, local, gx, gy);
+        result = terrainColour(sampleLayer(layer, landscape));
+        return;
     }
     bool single = !blend || (landscape && !mixing && (vWeights.y <= 0.0 || vWeights.y >= 1.0));
     bool bedOnly = blend && single && vWeights.y >= 1.0;
@@ -434,15 +462,11 @@ void main() {
         }
         if (weight <= 0.0) continue;
         if (tiled) layer = tiledLayer(header, tile, local, gx, gy);
-        vec4 sampled = landscape ? terrainSample(layer.uv, layer.page, layer.rect, layer.dx, layer.dy)
-                                : terrainSample(layer.uv, layer.page, layer.rect, vec2(0), vec2(0));
-        if (mixing) sampled = mixed(sampled, material, vPages.w, vTint % 32u);
+        vec4 sampled = sampleLayer(layer, landscape);
+        if (mixing && !coverageOnly) sampled = mixed(sampled, material, vPages.w, vTint % 32u);
         if (single) texel = sampled; else texel += sampled * weight;
     }
-    // vTint carries wear and slope shade above its five tint bits.
-    vec4 worn = shaded(texel, vColor, vTint % 32u, vPages.w);
-    float lit = 1.0 + vShade * .04;
-    result = vec4(worn.rgb * (vec3(1) - vec3(.20, .32, .38) * (float((vTint / 32u) % 16u) / 15.0)) * lit * vFog, worn.a);
+    result = terrainColour(texel);
 }`;
 
 // Registered directly with wasm-bindgen so both local modules are packaged.

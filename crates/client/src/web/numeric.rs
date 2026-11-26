@@ -10,7 +10,9 @@ use wasm_bindgen::prelude::wasm_bindgen;
 const bits = new DataView(new ArrayBuffer(8));
 export function set_coordinates(document, x, y) {
   const element = document.getElementById('world-position');
-  if (element) element.textContent = exact_fixed(x, 1) + ', ' + exact_fixed(y, 1);
+  if (!element) return;
+  const value = exact_fixed(x, 1) + ', ' + exact_fixed(y, 1);
+  if (element.textContent !== value) element.textContent = value;
 }
 export function exact_fixed(value, digits) {
     if (!Number.isInteger(digits) || digits < 0 || digits > 20) {

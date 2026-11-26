@@ -1,5 +1,5 @@
-// Coverage effects specialize the shared sprite vertex program. No scene work
-// or extra instance upload: final depth/painter coverage decides every contour.
+// Coverage effects specialize the shared sprite shaders. Final depth and
+// visible alpha determine where the contour pass paints.
 export function coverageShaders([vertex, fragment]) {
     const contourVertex = vertex.replace('void main()', 'void spriteVertex()') + `
 void main() {
@@ -10,6 +10,7 @@ void main() {
     // the shader compiler eliminates terrain colour, tint and owner-ramp work.
     const mask = fragment.replace('out vec4 result;',
         'vec4 result;\nlayout(location=1) out highp uint coverage;')
+        .replace('const bool coverageOnly = false;', 'const bool coverageOnly = true;')
         .replace('void main()', 'void worldColour()') + `
 void main() {
     // A solid face always writes depth. Textured faces must still run their

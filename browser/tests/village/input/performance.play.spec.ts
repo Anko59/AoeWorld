@@ -259,6 +259,35 @@ test("normal HUD work follows visible actors while selected offscreen actors and
       );
   await expect.poll(async () => (await actors()).length).toBeLessThan(10);
   await expect(page.locator("#idle-villager-count")).toHaveText("1002");
+  const sceneChecks = await page.evaluate(
+    () =>
+      new Promise<number>((resolve) => {
+        const { strategic } = Reflect.get(window, "aoeNavigation") as {
+          strategic: { cinematic: () => boolean };
+        };
+        const hud = Reflect.get(window, "aoeInterface") as {
+          numeric: (values: Float64Array, status: string) => void;
+        };
+        const { cinematic } = strategic;
+        const { numeric } = hud;
+        let calls = 0;
+        let updates = 0;
+        strategic.cinematic = () => {
+          calls++;
+          return cinematic();
+        };
+        hud.numeric = (values, status) => {
+          numeric(values, status);
+          if (++updates === 2) {
+            strategic.cinematic = cinematic;
+            hud.numeric = numeric;
+            resolve(calls);
+          }
+          calls = 0;
+        };
+      }),
+  );
+  expect(sceneChecks).toBeLessThan(120);
   const population = await page.locator("#population").textContent();
   await selectWorker(page);
   await page.evaluate(() => {
