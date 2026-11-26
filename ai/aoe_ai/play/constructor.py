@@ -167,7 +167,7 @@ class Constructor:
         buildings Feudal Age asks for."""
         if len(ctx.villagers) < 8 or ctx.board.cooling("age-buildings", ctx.tick):
             return
-        for kind in (BuildingKind.LUMBER_CAMP, BuildingKind.MILL):
+        for kind in buildorder.OPENING_DROPOFFS:
             if self.total(ctx, kind) == 0:
                 builder = self.builder_near(ctx, ctx.home)
                 tile = self.camp_site_hint(ctx, kind)

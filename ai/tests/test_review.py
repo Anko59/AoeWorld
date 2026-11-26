@@ -1,9 +1,12 @@
 """Regression tests for review findings: hit proof, refused approach tiles,
 the per-decision job cap and abandoned foundations."""
 
+import pytest
+
 from aoeworld import Age, BuildingKind, CommandResult, Tech, UnitKind, UnitTask
 
 from aoe_ai import Brain
+from aoe_ai.context import Context
 from aoe_ai.play.economy import MAX_ASSIGN_PER_DECISION
 
 from fakes import FakeClient, FakeWorld, base, building, decision, economy, order_result, unit
@@ -382,21 +385,34 @@ def test_a_rejected_house_site_does_not_block_the_next_candidate():
     assert [args[2:] for args in client.named("build") if args[1] == BuildingKind.HOUSE] == [alternate]
 
 
-def test_housing_recovery_does_not_open_new_dock_sites():
-    from aoe_ai.context import Context
+# Bridges use a separate bank-to-bank query and build_bridge order.
+@pytest.mark.parametrize("kind_name", [
+    name for name in dir(BuildingKind)
+    if isinstance(getattr(BuildingKind, name), BuildingKind) and name != "BRIDGE"
+])
+def test_each_building_kind_retries_an_alternate_site_after_refusal(kind_name):
+    kind = getattr(BuildingKind, kind_name)
+    units, buildings = base(4)
+    world = FakeWorld(units, buildings, eco=economy(food=2000, wood=2000, gold=2000, stone=2000))
+    rejected, alternate = (53, 53), (54, 53)
 
-    units, buildings = base(14)
-    world = FakeWorld(units, buildings, eco=economy(wood=250, population=15, cap=15))
-    nearest, alternate = (53, 53), (54, 53)
-
-    def sites(kind, x, y, max_radius, gap, excluded=()):
-        assert kind == BuildingKind.DOCK
-        return next((site for site in (nearest, alternate) if site not in excluded), None)
+    def sites(requested, x, y, max_radius, gap, avoid=()):
+        assert requested == kind
+        return next((site for site in (rejected, alternate) if site not in avoid), None)
 
     world.find_build_site = sites
-    brain, client = Brain(), FakeClient()
-    brain.board.bad_sites.add((str(BuildingKind.DOCK), *nearest))
-    ctx = Context(client, decision(world), brain.board, brain.config)
+    brain = Brain()
+    first = Context(FakeClient(), decision(world), brain.board, brain.config)
+    assert brain.constructor.place(first, kind, first.home, [first.villagers[0]])
+    assert first.client.named("build") == [([first.villagers[0].id], kind, *rejected)]
 
-    assert not brain.constructor.place(ctx, BuildingKind.DOCK, ctx.home, [ctx.villagers[0]])
-    assert client.named("build") == []
+    world.tick += world.tick_hz
+    refusal = order_result(1, CommandResult.REJECTED_UNREACHABLE)
+    retry = Context(FakeClient(), decision(world, events=[refusal]), brain.board, brain.config)
+    brain.absorb(retry)
+    assert not brain.board.plans
+    assert retry.spent == [0, 0, 0, 0]
+    other_kind = BuildingKind.BARRACKS if kind == BuildingKind.HOUSE else BuildingKind.HOUSE
+    brain.board.bad_sites.add((str(other_kind), *alternate))
+    assert brain.constructor.place(retry, kind, retry.home, [retry.villagers[0]])
+    assert retry.client.named("build") == [([retry.villagers[0].id], kind, *alternate)]

@@ -12,6 +12,8 @@ from aoeworld import BuildingKind, Tech, building_cost
 
 from ..context import Context
 
+OPENING_DROPOFFS = (BuildingKind.LUMBER_CAMP, BuildingKind.MILL)
+
 #: At least two different kinds of these must stand before Feudal Age.
 FEUDAL_REQUIREMENT = (
     BuildingKind.BARRACKS,
@@ -126,6 +128,18 @@ def farm_wood_reserve(ctx: Context) -> int:
                  or (ctx.center is not None and ctx.center.researching == Tech.FEUDAL_AGE))
     return ctx.config.wood_reserve + (building_cost(BuildingKind.BARRACKS)[1]
                                       if advancing and not placed else 0)
+
+
+def fleet_wood_reserve(ctx: Context) -> int:
+    """Keep housing and the unpaid land opening ahead of optional fishing."""
+    if ctx.feudal:
+        # Brain has already budgeted the Feudal production prerequisites.
+        return ctx.config.wood_reserve
+    return ctx.config.wood_reserve + sum(
+        building_cost(kind)[1]
+        for kind in (*OPENING_DROPOFFS, BuildingKind.BARRACKS)
+        if not planned_count(ctx, kind)
+    )
 
 
 def imperial_prerequisite_wood(ctx):
