@@ -3,8 +3,8 @@ use aoe_core::{EntityId, PlayerId, WorldConfig, WorldPosition};
 use aoe_protocol::GameplayUnitState;
 use aoe_rendering::{GameArt, GameRenderer};
 use std::collections::BTreeMap;
+use wasm_bindgen::JsCast;
 use wasm_bindgen_test::wasm_bindgen_test;
-
 #[path = "budget.rs"]
 mod budget;
 #[path = "fishing.rs"]

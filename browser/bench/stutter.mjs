@@ -39,15 +39,19 @@ try {
   report.chromium = browser.version();
   report.logical_cpus = availableParallelism();
   const errors = [];
+  let networkChanges = 0;
   page.on("pageerror", (error) => {
     errors.push(error.stack ?? String(error));
     process.stderr.write(`${errors.at(-1)}\n`);
   });
   page.on("console", (message) => {
-    if (message.type() === "error") process.stderr.write(`${message.text()}\n`);
+    if (message.type() !== "error") return;
+    if (message.text().includes("ERR_NETWORK_CHANGED")) networkChanges++;
+    process.stderr.write(`${message.text()} ${message.location().url ?? ""}\n`);
   });
   page.on("requestfailed", (request) => {
     const failure = request.failure()?.errorText;
+    if (failure === "net::ERR_NETWORK_CHANGED") networkChanges++;
     if (failure !== "net::ERR_ABORTED") {
       process.stderr.write(`${failure} ${new URL(request.url()).pathname}\n`);
     }
@@ -155,7 +159,7 @@ try {
   ].map((point) => point.map((n) => n * input.side));
   report.pan = pan;
 
-  async function scene(name, center, path) {
+  async function warmScene(name, center) {
     const [x, y] = center;
     // Each case gets a fresh client at its starting pose. This also avoids
     // dragging the pan's in-flight requests and native cache into the hold.
@@ -186,6 +190,19 @@ try {
       null,
       { timeout: 120000 },
     );
+  }
+
+  async function scene(name, center, path) {
+    const changesBeforeWarmup = networkChanges;
+    try {
+      await warmScene(name, center);
+    } catch (error) {
+      if (networkChanges === changesBeforeWarmup) throw error;
+      process.stderr.write(
+        `Retrying ${name} warmup after Chromium network change\n`,
+      );
+      await warmScene(name, center);
+    }
     report.renderer = await page.getAttribute("#playground", "data-renderer");
     report.webgl_device = await page.locator("#scene").evaluate((canvas) => {
       const gl = canvas.getContext("webgl2");

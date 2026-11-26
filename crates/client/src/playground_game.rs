@@ -136,6 +136,8 @@ pub(super) fn retry_refused_view(client: &mut Client, time: f64) {
 }
 
 pub(super) fn subscribe(client: &mut Client) {
+    #[cfg(feature = "frame-bench")]
+    let _subscription = perf::Scope::new(42);
     if client.primary.is_none()
         || client
             .socket
@@ -221,6 +223,8 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     let next = callback.clone();
     *callback.borrow_mut() = Some(Closure::new(move |time: f64| {
         perf::perf_mark(0);
+        #[cfg(feature = "frame-bench")]
+        let _frame = perf::Scope::new(41);
         let mut client = shared.borrow_mut();
         if let Err(error) = recovery::check(&client.renderer) {
             match recovery::restart(&client.renderer, Some(client.camera), &error) {
@@ -316,6 +320,8 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 Vec::new()
             };
             drop(culling);
+            #[cfg(feature = "frame-bench")]
+            let streaming_detail = perf::Scope::new(55);
             let streaming = perf::Scope::stage(0);
             let Client {
                 native,
@@ -336,6 +342,8 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 }
             }
             drop(streaming);
+            #[cfg(feature = "frame-bench")]
+            drop(streaming_detail);
             let grid = client.grid;
             let animation = time as usize;
             let result = if coverage.ready(&client.art, &required)

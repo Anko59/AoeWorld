@@ -1,5 +1,5 @@
 use super::*;
-use aoe_protocol::{GameplayServerMessage, decode_gameplay_server};
+use aoe_protocol::GameplayServerMessage;
 use js_sys::Uint8Array;
 use web_sys::{Event, MessageEvent};
 
@@ -132,9 +132,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 return;
             }
         };
-        let message = decode_gameplay_server(&bytes);
-        #[cfg(feature = "frame-bench")]
-        super::perf::tag_snapshot(message.as_ref().ok());
+        let message = super::perf::decode_message(&bytes);
         match message {
             Ok(GameplayServerMessage::Welcome {
                 width_tiles,
@@ -217,6 +215,8 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 players,
                 buildings,
             }) if revision >= client.revision => {
+                #[cfg(feature = "frame-bench")]
+                let _apply = perf::Scope::new(46);
                 if !client.presentation.receive(tick.0, now()) {
                     return;
                 }

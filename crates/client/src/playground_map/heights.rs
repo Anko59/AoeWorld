@@ -1,4 +1,7 @@
 use super::*;
+use wasm_bindgen::JsCast;
+use wasm_bindgen_futures::JsFuture;
+use web_sys::Response;
 
 const INITIAL_TERRAIN_HEIGHT_MARGIN_LEVELS: f64 = 40.0;
 // Compact height metadata is independent of the 512 decoded-chunk cache.

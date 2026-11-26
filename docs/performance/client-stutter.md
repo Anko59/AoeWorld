@@ -37,9 +37,15 @@ that overlap it. Nested spans are assigned once, with specific work such as
 WebGL uploads and main-thread garbage collection taking priority over their
 parent phase. The category with the most exclusive time supplies the reported
 cause.
-Uncovered time is reported as unattributed. The raw frame spans also break down
-terrain samples, foundations, mesh construction and decoration. The sibling
-Chrome traces retain the original browser events.
+The raw frame spans also break down terrain preparation, subscription sends,
+wire decoding, snapshot application, chunk decoding and installation, and
+native art streaming. The sibling Chrome traces retain JavaScript and WASM
+callback envelopes, renderer tasks and compositor events. Awaiting animation
+dispatch is measured between a traced request and its matching callback.
+Recorded main-thread work takes priority over that interval, including
+synchronous GPU command waits and pixel readbacks. Use the neighboring GPU and
+scheduler trace events to investigate delayed dispatch. Uncovered time stays
+unattributed. Each stall reports the fraction covered by the observed spans.
 
 Keep the per-frame JSON, Chrome traces, browser recording and terminal log.
 The report includes the input and WASM digests, browser version and renderer.
@@ -84,3 +90,22 @@ WebGL validation in long crowded-hold callbacks fell from 13.76 seconds to
 About 1.84 seconds of the worst 1.86-second after pan interval fell outside
 instrumented stages. One-minute host load at the start of the pan
 was 24.18 before and 19.64 after. For the hold it was 17.51 before and 12.67 after.
+
+## Fast-pan attribution
+
+The instrumented round-one client reproduced a 793.4 ms pan p99 and a
+1,776.3 ms maximum. It submitted 19 scenes across 248 animation callbacks.
+Observed trace or client spans cover every interval above 100 ms in this
+capture. The longest interval includes 1,698.3 ms with an outstanding
+animation-frame request and no recorded renderer main-thread task. The trace
+shows 1.4 s of overlapping GPU context work followed by 586.5 ms on the GPU
+command thread. Those spans locate the wait and the concurrent GPU work.
+The next-longest interval includes 1,130.2 ms waiting synchronously for GPU
+commands and 249.9 ms preparing terrain.
+
+Across pan intervals over 50 ms, 21.64 s fell in terrain preparation
+and 10.51 s awaiting animation dispatch. Wire decoding took 0.79 s, snapshot
+application 0.15 s, texture uploads 0.025 s and buffer uploads 0.004 s.
+A separate crowded-hold stall spent 1.20 of 1.23 seconds in synchronous
+browser pixel readback as the fine minimap arrived. The trace retains main
+and GPU thread wall times and CPU times where Chromium supplies them.

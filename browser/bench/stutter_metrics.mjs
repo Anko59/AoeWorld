@@ -3,9 +3,20 @@ const minuteMs = 60_000;
 // Divide the interval at span boundaries so a GL call or collection inside a
 // renderer span is counted once. Spans are in increasing priority order.
 const priority = [
+  "animation_dispatch_wait",
+  "browser_task",
   "browser_main",
+  "js_callback",
+  "wasm_callback",
+  "pan_driver",
+  "frame_body",
   "render",
   "update",
+  "subscription_send",
+  "chunk_requests",
+  "chunk_decode",
+  "chunk_install",
+  "native_streaming",
   "interpolation",
   "culling",
   "ui",
@@ -14,10 +25,15 @@ const priority = [
   "fog_and_packets",
   "socket_decode_apply",
   "snapshot",
+  "network_decode",
+  "snapshot_apply",
   "buffer_upload",
+  "buffer_allocation",
   "texture_upload",
   "webgl_validation",
   "shader_compile",
+  "gpu_command_wait",
+  "gpu_readback",
   "gc",
 ];
 
@@ -76,7 +92,8 @@ export function summarize(frames) {
         exclusive_ms[name] > (exclusive_ms[largest] ?? 0) ? name : largest,
       "unattributed",
     );
-    return [{ index, ms: frame.ms, cause, exclusive_ms }];
+    const attributed_fraction = 1 - (exclusive_ms.unattributed ?? 0) / frame.ms;
+    return [{ index, ms: frame.ms, cause, exclusive_ms, attributed_fraction }];
   });
   function threshold(ms) {
     const selected = stalls.filter((frame) => frame.ms > ms);
