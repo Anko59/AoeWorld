@@ -90,8 +90,10 @@ pub(super) fn headline(data: &Data) -> String {
             change.unwrap_or_default()
         ));
     }
-    if let (Some(bytes), Some(limit)) = (last.rows.get("wasm_gzip"), data.bundle.last()) {
-        let share = *bytes as f64 * 100.0 / limit.limit as f64;
+    let bundle = data.standing.iter().find(|row| row.row == "wasm_gzip");
+    if let (Some(bytes), Some(gate)) = (last.rows.get("wasm_gzip"), bundle) {
+        let limit = floor_at(gate.baseline, gate.limit_percent) - 1;
+        let share = *bytes as f64 * 100.0 / limit as f64;
         clauses.push(format!(
             "the client bundle is {} bytes, {share:.0}% of its limit",
             grouped(*bytes)

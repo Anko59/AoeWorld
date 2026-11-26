@@ -1,3 +1,4 @@
+use crate::ci_report::BundleLimit;
 use crate::ci_report::comments::{DevSide, Observation};
 use crate::ci_report::history::{Accepted, Event, EventKind, Version};
 use crate::ci_report::series::{
@@ -164,7 +165,7 @@ fn baseline(row: &str, now: u64, reference: u64) -> Version {
 fn state_at(value: u64) -> State {
     let observed = [observation(4, &[("a::x", value)])];
     let found = dev_points(&commits(6), &observed);
-    standing(&found, &baseline("a::x", 1_000, 1_000), None)[0].state
+    standing(&found, &[baseline("a::x", 1_000, 1_000)], &[])[0].state
 }
 
 #[test]
@@ -184,7 +185,7 @@ fn a_gated_row_passes_warns_fails_or_asks_for_a_new_baseline() {
 fn a_row_over_its_fixed_reference_fails_whatever_its_baseline_says() {
     let observed = [observation(4, &[("a::x", 1_000)])];
     let found = dev_points(&commits(6), &observed);
-    let rows = standing(&found, &baseline("a::x", 1_000, 800), None);
+    let rows = standing(&found, &[baseline("a::x", 1_000, 800)], &[]);
     assert_eq!(rows[0].state, State::Fails);
 }
 
@@ -195,7 +196,7 @@ fn a_kernel_with_a_main_thread_row_allows_ten_percent_on_its_total() {
     let mut base = baseline("a::k", 1_000, 1_000);
     base.instructions.insert("a::k_main".into(), 1_000);
     base.reference.insert("a::k_main".into(), 1_000);
-    let rows = standing(&found, &base, None);
+    let rows = standing(&found, &[base], &[]);
     let state = |row: &str| rows.iter().find(|r| r.row == row).unwrap().state;
     assert_eq!(rows[0].limit_percent, 10);
     assert_eq!(state("a::k"), State::Warns);
@@ -217,7 +218,12 @@ fn standing_reports_the_accepted_level_the_day_change_and_the_bundle() {
             reason: String::new(),
         },
     );
-    let rows = standing(&found, &base, Some(400));
+    let limit = BundleLimit {
+        position: 0,
+        baseline: 400,
+        limit: 499,
+    };
+    let rows = standing(&found, &[base], &[limit]);
     let micro = &rows[0];
     assert_eq!(
         (micro.row.as_str(), micro.now, micro.baseline),
@@ -231,4 +237,20 @@ fn standing_reports_the_accepted_level_the_day_change_and_the_bundle() {
         ("wasm_gzip", 25)
     );
     assert_eq!(bundle.state, State::Passes, "500 is exactly 25% over 400");
+}
+
+#[test]
+fn a_baseline_committed_after_the_measured_commit_is_not_applied_to_it() {
+    // The comment names commit 4; a redefinition landed at commit 6 since.
+    let observed = [observation(4, &[("a::x", 1_000)])];
+    let found = dev_points(&commits(8), &observed);
+    let mut newer = baseline("a::x", 5_000, 5_000);
+    newer.position = 6;
+    let older = baseline("a::x", 1_000, 1_000);
+    let rows = standing(&found, &[older.clone(), newer.clone()], &[]);
+    assert_eq!((rows[0].baseline, rows[0].state), (1_000, State::Passes));
+    let later = [observation(7, &[("a::x", 5_000)])];
+    let found = dev_points(&commits(8), &later);
+    let rows = standing(&found, &[older, newer], &[]);
+    assert_eq!((rows[0].baseline, rows[0].state), (5_000, State::Passes));
 }

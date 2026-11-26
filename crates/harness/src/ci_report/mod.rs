@@ -90,12 +90,7 @@ pub(super) struct Sources {
 pub(super) fn assemble(sources: Sources) -> Data {
     let dev = series::dev_points(&sources.commits, &sources.observations);
     let events = history::events(&sources.micro);
-    let wasm = sources.bundle.last().map(|limit| limit.baseline);
-    let standing = sources
-        .micro
-        .last()
-        .map(|latest| series::standing(&dev, latest, wasm))
-        .unwrap_or_default();
+    let standing = series::standing(&dev, &sources.micro, &sources.bundle);
     let ci_runs = timing::runs(&sources.observations);
     let mut data = Data {
         generated_at: sources.now,

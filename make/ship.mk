@@ -197,7 +197,7 @@ export TIMELINE_DAYS
 timeline: job-bootstrap
 	@'$(HARNESS_TARGET_CACHE)/debug/aoe-harness' timeline
 
-# The CI numbers over time as one offline page (docs/performance.md, "CI report page").
+# The CI numbers over time as one offline page (docs/ci-report.md).
 # GitHub reads go through gh: AOE_GH_ACCOUNT=<login> picks the Mac's account.
 .PHONY: ci-report
 ci-report: job-bootstrap

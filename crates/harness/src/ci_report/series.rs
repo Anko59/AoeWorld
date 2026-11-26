@@ -1,6 +1,7 @@
 //! The `dev` series: one point per `dev` commit that a pull request was
 //! compared with, the lines they make (restarted where a row was
 //! redefined), every move of 2% or more, and where each gated row stands.
+use super::BundleLimit;
 use super::calendar;
 use super::comments::Observation;
 use super::history::{Event, EventKind, Version};
@@ -256,38 +257,74 @@ fn value_at<'a>(points: &'a [DevPoint], row: &str, not_after: Option<i64>) -> Op
         })
 }
 
-/// Where each gated row stands on the latest measured commit that has it;
-/// the client bundle (`wasm_baseline`, its committed gzip size) comes last.
+/// The limits a row is judged against: the baseline files as the commit of
+/// the measurement had them (`dev` may have moved on since the comment).
+struct Gate {
+    baseline: u64,
+    reference: Option<u64>,
+    fail: u8,
+    instructions: bool,
+    accepted_from: Option<u64>,
+}
+
+fn instruction_gate(versions: &[Version], row: &str, position: usize) -> Option<Gate> {
+    let in_force = versions
+        .iter()
+        .rev()
+        .find(|version| version.position <= position)?;
+    let split = in_force.instructions.contains_key(&format!("{row}_main"));
+    Some(Gate {
+        baseline: *in_force.instructions.get(row)?,
+        reference: in_force.reference.get(row).copied(),
+        fail: if split {
+            PARALLEL_TOTAL_PERCENT
+        } else {
+            FAIL_PERCENT
+        },
+        instructions: true,
+        accepted_from: in_force.accepted.get(row).map(|accepted| accepted.dev),
+    })
+}
+
+fn bundle_gate(bundle: &[BundleLimit], position: usize) -> Option<Gate> {
+    let in_force = bundle
+        .iter()
+        .rev()
+        .find(|limit| limit.position <= position)?;
+    Some(Gate {
+        baseline: in_force.baseline,
+        reference: None,
+        fail: THRESHOLD_PERCENT,
+        instructions: false,
+        accepted_from: None,
+    })
+}
+
+/// Where each gated row stands on the latest measured commit that has it,
+/// against the baselines committed at that commit; the client bundle comes last.
 pub(super) fn standing(
     points: &[DevPoint],
-    baselines: &Version,
-    wasm_baseline: Option<u64>,
+    versions: &[Version],
+    bundle: &[BundleLimit],
 ) -> Vec<Standing> {
-    let mut rows = Vec::new();
-    let mut gated: Vec<(&str, u64, Option<u64>, u8, bool)> = baselines
-        .instructions
+    let mut names: Vec<&str> = versions
         .iter()
-        .map(|(row, &baseline)| {
-            let split = baselines.instructions.contains_key(&format!("{row}_main"));
-            let fail = if split {
-                PARALLEL_TOTAL_PERCENT
-            } else {
-                FAIL_PERCENT
-            };
-            (
-                row.as_str(),
-                baseline,
-                baselines.reference.get(row).copied(),
-                fail,
-                true,
-            )
-        })
+        .flat_map(|version| version.instructions.keys().map(String::as_str))
         .collect();
-    if let Some(baseline) = wasm_baseline {
-        gated.push(("wasm_gzip", baseline, None, THRESHOLD_PERCENT, false));
-    }
-    for (row, baseline, reference, fail, instructions) in gated {
+    names.sort_unstable();
+    names.dedup();
+    names.push("wasm_gzip");
+    let mut rows = Vec::new();
+    for row in names {
         let Some(latest) = value_at(points, row, None) else {
+            continue;
+        };
+        let gate = if row == "wasm_gzip" {
+            bundle_gate(bundle, latest.position)
+        } else {
+            instruction_gate(versions, row, latest.position)
+        };
+        let Some(gate) = gate else {
             continue;
         };
         let now = latest.rows[row];
@@ -296,13 +333,19 @@ pub(super) fn standing(
         rows.push(Standing {
             row: row.to_owned(),
             now,
-            baseline,
-            over_percent: percent(now, baseline),
-            limit_percent: fail,
-            reference,
-            accepted_from: baselines.accepted.get(row).map(|accepted| accepted.dev),
+            baseline: gate.baseline,
+            over_percent: percent(now, gate.baseline),
+            limit_percent: gate.fail,
+            reference: gate.reference,
+            accepted_from: gate.accepted_from,
             day_change: earlier.map(|point| percent(now, point.rows[row])),
-            state: judge(now, baseline, reference, fail, instructions),
+            state: judge(
+                now,
+                gate.baseline,
+                gate.reference,
+                gate.fail,
+                gate.instructions,
+            ),
         });
     }
     rows
