@@ -39,6 +39,14 @@ pub use passes::{PASS_NAMES, PassCount};
 pub(crate) use passes::{Pass, Passes};
 pub use queue::{ROUTE_REACH, ROUTE_REQUESTERS, RouteQueueBreakdown, RouteQueueCell};
 
+/// Work one search is given each tick it waits. Every waiting search gets
+/// this slice every tick, never refused or queued, so a route of a few
+/// thousand tiles is found in its first tick, while a hopeless search
+/// spreads its whole order bound (12.8M) over about 200 ticks instead of
+/// stalling one tick for seconds (5x replay: 95G instructions in one tick).
+/// Record threshold: unit
+pub(crate) const ROUTE_SLICE_WORK: u32 = 65_536;
+
 /// Work between two looks for a region proof the planner asks for mid-leg.
 /// A search still runs to its whole allowance in one tick; it is polled in
 /// steps of this so a connectivity question the region layer can answer is
@@ -323,7 +331,7 @@ impl GameWorld {
             let allowance = if share == 0 {
                 0
             } else {
-                (share / remaining).clamp(1, MAX_ROUTE_WORK_PER_ORDER)
+                (share / remaining).clamp(1, ROUTE_SLICE_WORK)
             };
             let search = self.prepare_search(player, id, allowance, reserved);
             visits.push((id, far, search.as_ref().map(|_| searches.len())));

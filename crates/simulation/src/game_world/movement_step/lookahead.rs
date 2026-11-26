@@ -1,5 +1,5 @@
 //! Retained planning ahead shares the unused fair-pass work allowance.
-use crate::{GameWorld, MAX_ROUTE_WORK_PER_ORDER};
+use crate::GameWorld;
 use aoe_core::EntityId;
 use aoe_map::RoutePlanner;
 
@@ -25,7 +25,8 @@ impl GameWorld {
             if budget == 0 {
                 break;
             }
-            let share = (budget / (wanting.len() - turn) as u32).clamp(1, MAX_ROUTE_WORK_PER_ORDER);
+            let share = (budget / (wanting.len() - turn) as u32)
+                .clamp(1, crate::game_world::route_scheduler::ROUTE_SLICE_WORK);
             let Some(mut planner) = self.take_planner(index) else {
                 continue;
             };
