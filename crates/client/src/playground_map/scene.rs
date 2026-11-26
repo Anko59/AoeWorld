@@ -57,7 +57,13 @@ pub(in super::super) fn prepare(client: &Client) -> Rc<PreparedScene> {
         *client.terrain_scene.borrow_mut() = Some(scene.clone());
         return scene;
     }
+    #[cfg(feature = "frame-bench")]
+    let samples = super::super::perf::Scope::new(30);
     let mut terrain = scene_terrain(client);
+    #[cfg(feature = "frame-bench")]
+    drop(samples);
+    #[cfg(feature = "frame-bench")]
+    let foundations_stage = super::super::perf::Scope::new(31);
     let foundation_view = foundations::view_bounds(&terrain, &client.art);
     let foundations = client
         .village
@@ -82,11 +88,21 @@ pub(in super::super) fn prepare(client: &Client) -> Rc<PreparedScene> {
         .collect::<Vec<_>>();
     aoe_rendering::apply_building_foundations(&mut terrain, &client.art, &units);
     roads::paint(&mut terrain, &client.village.buildings);
+    #[cfg(feature = "frame-bench")]
+    drop(foundations_stage);
+    #[cfg(feature = "frame-bench")]
+    let mesh = super::super::perf::Scope::new(32);
     let mut scene = PreparedScene::new(client.camera, terrain);
+    #[cfg(feature = "frame-bench")]
+    drop(mesh);
     scene.actor_extents = Some(client.art.scene_actor_extents());
     scene.foundations = foundations;
     scene.foundation_view = foundation_view;
+    #[cfg(feature = "frame-bench")]
+    let dressing = super::super::perf::Scope::new(33);
     scene.decorations = decorations::for_scene(client, &scene);
+    #[cfg(feature = "frame-bench")]
+    drop(dressing);
     let scene = Rc::new(scene);
     *client.terrain_scene.borrow_mut() = Some(scene.clone());
     scene

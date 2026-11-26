@@ -39,6 +39,26 @@ test("excludes nested work from its parent and leaves residual time visible", ()
   assert.equal(measured.over_50.causes.terrain, 1);
 });
 
+test("attributes terrain preparation requested by the HUD to terrain", () => {
+  const report = summarize([
+    {
+      ms: 110,
+      spans: [
+        [0, 100, "ui"],
+        [5, 90, "terrain_mesh"],
+        [15, 25, "gc"],
+      ],
+    },
+  ]);
+  assert.deepEqual(report.stalls[0].exclusive_ms, {
+    ui: 15,
+    terrain: 75,
+    gc: 10,
+    unattributed: 10,
+  });
+  assert.deepEqual(report.over_100.causes, { terrain: 1 });
+});
+
 test("chooses a populated town with active combat over an isolated army", () => {
   const entity = (x, y, kind, task, category = "unit") => ({
     position: { x, y },

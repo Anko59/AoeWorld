@@ -95,14 +95,35 @@ pub fn apply_building_foundations(
     if foundations.is_empty() {
         return;
     }
-    // Visit each displayed sample once. The last footprint wins over every
-    // apron, independent of unit order, so neighbouring dirt cannot erase crops.
+    let mut keys = crate::WorldKeyIndex::default();
+    let mut buckets = Vec::<Vec<usize>>::new();
+    for (index, foundation) in foundations.iter().enumerate() {
+        let first =
+            foundation_bucket([0, 1].map(|axis| (foundation.lower[axis] - 1.0).max(min[axis])));
+        let last =
+            foundation_bucket([0, 1].map(|axis| (foundation.upper[axis] + 1.0).min(max[axis])));
+        for y in first[1]..=last[1] {
+            for x in first[0]..=last[0] {
+                let slot = keys.entry([x, y]);
+                if slot == buckets.len() {
+                    buckets.push(Vec::new());
+                }
+                buckets[slot].push(index);
+            }
+        }
+    }
+    // Bucket entries retain source order. The last footprint still wins over
+    // every apron, so neighbouring dirt cannot erase crops.
     for tile in terrain {
         if tile.surface.water != 0 || matches!(tile.material, 5 | 10) {
             continue;
         }
+        let Some(slot) = keys.get(foundation_bucket(tile.position)) else {
+            continue;
+        };
         let (mut footprint, mut apron) = (None, None);
-        for foundation in &foundations {
+        for &index in &buckets[slot] {
+            let foundation = &foundations[index];
             #[cfg(test)]
             tests::SAMPLE_VISITS.with(|count| count.set(count.get() + 1));
             if foundation.contains(tile.position, 0.0) {
@@ -126,6 +147,10 @@ pub fn apply_building_foundations(
             };
         }
     }
+}
+
+fn foundation_bucket(position: [f64; 2]) -> [i32; 2] {
+    position.map(|axis| (axis / 8.0).floor() as i32)
 }
 
 struct Foundation {

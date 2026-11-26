@@ -21,9 +21,21 @@ const priority = [
   "gc",
 ];
 
+// Picking and HUD work can build terrain outside the normal render span.
+const terrainPhases = new Set([
+  "terrain_samples",
+  "terrain_foundations",
+  "terrain_mesh",
+  "terrain_decoration",
+]);
+
 function exclusive({ ms, spans }) {
   const clipped = spans
-    .map(([a, b, kind]) => [Math.max(0, a), Math.min(ms, b), kind])
+    .map(([a, b, kind]) => [
+      Math.max(0, a),
+      Math.min(ms, b),
+      terrainPhases.has(kind) ? "terrain" : kind,
+    ])
     .filter(([a, b, kind]) => a < b && priority.includes(kind));
   const boundaries = [
     ...new Set([0, ms, ...clipped.flatMap(([a, b]) => [a, b])]),

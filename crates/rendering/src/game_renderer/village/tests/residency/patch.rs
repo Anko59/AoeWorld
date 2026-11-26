@@ -38,6 +38,11 @@ export function hold_fences(bridge) {
  gl.clientWaitSync = () => gl.TIMEOUT_EXPIRED;
  return () => { gl.clientWaitSync = wait; };
 }
+export function finish_oldest_fence(bridge) {
+ const gl = bridge.gl, wait = gl.clientWaitSync, first = bridge.pendingFrames[0];
+ gl.clientWaitSync = sync => sync === first ? gl.ALREADY_SIGNALED : gl.TIMEOUT_EXPIRED;
+ return () => { gl.clientWaitSync = wait; };
+}
 export function finish_patch_observation(bridge) {
  const state = observations.get(bridge), gl = bridge.gl;
  gl.getError = state.query; gl.texSubImage3D = state.patch;
@@ -47,6 +52,7 @@ export function finish_patch_observation(bridge) {
 extern "C" {
     fn wait_submitted_frame(bridge: &wasm_bindgen::JsValue) -> js_sys::Promise;
     fn hold_fences(bridge: &wasm_bindgen::JsValue) -> js_sys::Function;
+    fn finish_oldest_fence(bridge: &wasm_bindgen::JsValue) -> js_sys::Function;
     fn inject_completed_error(bridge: &wasm_bindgen::JsValue);
     fn observe_patch_errors(bridge: &wasm_bindgen::JsValue, fail: bool);
     fn finish_patch_observation(bridge: &wasm_bindgen::JsValue) -> Vec<u32>;
@@ -228,5 +234,106 @@ async fn pending_frame_error_stays_latched_through_atlas_patch() {
         "the frame error must stay latched"
     );
     release.call0(&wasm_bindgen::JsValue::NULL).unwrap();
+    canvas.remove();
+}
+
+#[wasm_bindgen_test]
+async fn webgl_frame_validation_does_not_wait_for_newer_submissions() {
+    let (mut renderer, canvas) = renderer().await;
+    let crate::GameRenderer::WebGl(gl) = &renderer else {
+        panic!("expected WebGL2");
+    };
+    let bridge = gl.test_bridge().clone();
+    let draw = |renderer: &mut crate::GameRenderer| {
+        renderer.render_world(
+            &art(),
+            &[],
+            &[],
+            &[unit(SceneUnitKind::actor(0))],
+            SceneCamera {
+                viewport: [128.0; 2],
+                ..camera()
+            },
+            0,
+            false,
+        )
+    };
+    assert!(draw(&mut renderer).unwrap());
+    let release = hold_fences(&bridge);
+    assert!(draw(&mut renderer).unwrap());
+    release.call0(&wasm_bindgen::JsValue::NULL).unwrap();
+
+    let release = finish_oldest_fence(&bridge);
+    observe_patch_errors(&bridge, false);
+    health(&renderer).unwrap();
+    assert_eq!(finish_patch_observation(&bridge), [0, 0]);
+    assert!(!draw(&mut renderer).unwrap());
+
+    release.call0(&wasm_bindgen::JsValue::NULL).unwrap();
+    wasm_bindgen_futures::JsFuture::from(wait_submitted_frame(&bridge))
+        .await
+        .unwrap();
+    observe_patch_errors(&bridge, false);
+    health(&renderer).unwrap();
+    assert_eq!(finish_patch_observation(&bridge), [1, 0]);
+    assert!(draw(&mut renderer).unwrap());
+    canvas.remove();
+}
+
+#[wasm_bindgen_test]
+async fn native_patch_batch_gets_an_idle_turn_without_querying_an_unfinished_frame() {
+    let (mut renderer, canvas) = renderer().await;
+    let crate::GameRenderer::WebGl(gl) = &renderer else {
+        panic!("expected WebGL2");
+    };
+    let bridge = gl.test_bridge().clone();
+    let draw = |renderer: &mut crate::GameRenderer| {
+        renderer.render_world(
+            &art(),
+            &[],
+            &[],
+            &[unit(SceneUnitKind::actor(0))],
+            SceneCamera {
+                viewport: [128.0; 2],
+                ..camera()
+            },
+            0,
+            false,
+        )
+    };
+    assert!(renderer.atlas_updates_ready().unwrap());
+    assert!(draw(&mut renderer).unwrap());
+    let release = hold_fences(&bridge);
+    assert!(!renderer.atlas_updates_ready().unwrap());
+    renderer.prioritize_atlas_updates();
+    observe_patch_errors(&bridge, false);
+    assert!(!draw(&mut renderer).unwrap());
+    assert_eq!(finish_patch_observation(&bridge), [0, 0]);
+
+    release.call0(&wasm_bindgen::JsValue::NULL).unwrap();
+    wasm_bindgen_futures::JsFuture::from(wait_submitted_frame(&bridge))
+        .await
+        .unwrap();
+    health(&renderer).unwrap();
+    assert!(renderer.atlas_updates_ready().unwrap());
+    assert!(!draw(&mut renderer).unwrap());
+    observe_patch_errors(&bridge, false);
+    renderer
+        .with_game_atlas_updates(|renderer| {
+            renderer.update_game_atlas(8, [2, 2], [1, 1], &[100, 80, 20, 255])
+        })
+        .unwrap();
+    assert_eq!(finish_patch_observation(&bridge), [1, 0]);
+    assert!(draw(&mut renderer).unwrap());
+
+    // If the requested art is no longer needed when the fence retires,
+    // skipping one idle draw still leaves the next draw free to proceed.
+    renderer.prioritize_atlas_updates();
+    wasm_bindgen_futures::JsFuture::from(wait_submitted_frame(&bridge))
+        .await
+        .unwrap();
+    health(&renderer).unwrap();
+    assert!(!draw(&mut renderer).unwrap());
+    assert!(draw(&mut renderer).unwrap());
     canvas.remove();
 }

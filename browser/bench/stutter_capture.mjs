@@ -19,6 +19,10 @@ export function capture({ name, seconds, pan, zoom }) {
     [11, [18, "sprites_and_submission"]],
     [12, [19, "ui"]],
     [13, [20, "fog_and_packets"]],
+    [30, [37, "terrain_samples"]],
+    [31, [38, "terrain_foundations"]],
+    [32, [39, "terrain_mesh"]],
+    [33, [40, "terrain_decoration"]],
   ]);
   const starts = new Map();
   const frames = [];

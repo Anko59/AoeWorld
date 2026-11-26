@@ -248,7 +248,12 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         // Keep input, networking and the HUD live while the overview covers the scene.
         let draw = perf::Scope::new(2);
         let mut native_requests = Vec::new();
-        if !controls::navigation::overview_active() && !strategic::render(&mut client) {
+        let backlogged =
+            matches!(&client.renderer, GameRenderer::WebGl(gl) if gl.frame_backlogged());
+        if !controls::navigation::overview_active()
+            && !strategic::render(&mut client)
+            && !backlogged
+        {
             let live = client
                 .presentation
                 .live_tick(time)

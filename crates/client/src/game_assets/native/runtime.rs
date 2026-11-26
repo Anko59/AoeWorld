@@ -41,9 +41,21 @@ impl NativeFrames {
         if self.failed {
             return Ok((false, Vec::new()));
         }
-        let result = renderer.with_game_atlas_updates(|renderer| {
+        let mut update = |renderer: &mut aoe_rendering::GameRenderer| {
             self.update_ready(required, prefetch, keep, art, renderer)
-        });
+        };
+        let result = renderer
+            .atlas_updates_ready()
+            .map_err(error)
+            .and_then(|ready| {
+                if ready {
+                    renderer.with_game_atlas_updates(update)
+                } else {
+                    // Keep fetching and protecting visible frames while the draw
+                    // queue retires, without opening a driver-validation batch.
+                    update(renderer)
+                }
+            });
         if result.is_err() {
             self.failed = true;
         }
@@ -177,6 +189,15 @@ impl NativeFrames {
             .copied()
             .filter(|&id| self.cache.lookup(u64::from(id)).is_none())
             .collect();
+        if !renderer.atlas_updates_ready().map_err(error)?
+            && (self.directory_pending
+                || missing.iter().any(|&id| {
+                    let chunk = self.cells[id as usize - 1].location.chunk;
+                    self.encoded[chunk as usize].is_some()
+                }))
+        {
+            renderer.prioritize_atlas_updates();
+        }
         let requests = self
             .requests(&missing)?
             .into_iter()

@@ -46,27 +46,22 @@ pub fn projected_surface_triangles(
         viewport: scene_camera.viewport,
         focus_elevation_meters: scene_camera.focus_elevation_meters,
     };
+    let (bounds, visible) = visible_tiles(terrain, &camera);
+    if bounds[0][0] > bounds[1][0] {
+        return Vec::new();
+    }
     let mut size = 1;
     let (grid, cells, bank_cells, tops, skirts) = loop {
         let grid = loop {
-            match visible_grid(
-                terrain,
-                &camera,
-                scene_camera.viewport,
-                size,
-                if size == 1 {
-                    MAX_SURFACE_TRIANGLES
-                } else {
-                    MAX_SURFACE_TILES
-                },
-            ) {
-                Ok(Some(grid)) => break grid,
-                Ok(None) => return Vec::new(),
-                Err(()) if size < i32::MAX / 2 => size *= 2,
-                Err(()) => return Vec::new(),
+            if let Some(grid) = visible_grid(bounds, size) {
+                break grid;
             }
+            if size >= i32::MAX / 2 {
+                return Vec::new();
+            }
+            size *= 2;
         };
-        let (cells, bank_cells) = sampled_cells(terrain, &camera, scene_camera.viewport, grid);
+        let (cells, bank_cells) = sampled_cells(terrain, &visible, grid);
         let (tops, skirts) = budget::surface_counts(&cells, grid);
         if size == 1 && tops + skirts > MAX_SURFACE_TRIANGLES {
             size = 2;
@@ -394,8 +389,7 @@ fn texture_mode(triangulation: u8, order: u8) -> u8 {
 #[inline(never)]
 fn sampled_cells(
     terrain: &[SceneTerrain],
-    camera: &Camera,
-    viewport: [f64; 2],
+    visible: &[bool],
     grid: CellGrid,
 ) -> (Vec<Option<CellSample>>, Vec<Option<CellSample>>) {
     let size = grid.size;
@@ -410,12 +404,13 @@ fn sampled_cells(
     } else {
         Vec::new()
     };
-    for sample in terrain {
+    for (sample, &visible) in terrain.iter().zip(visible) {
         let tile = tile_key(sample.position);
-        let Some(index) = grid_index(grid, cell_key(tile, size)) else {
+        let cell = cell_key(tile, size);
+        let Some(index) = grid_index(grid, cell) else {
             continue;
         };
-        let center = cell_center(cell_key(tile, size), size);
+        let center = cell_center(cell, size);
         let sample_center = [f64::from(tile[0]) + 0.5, f64::from(tile[1]) + 0.5];
         let dx = sample_center[0] - center[0];
         let dy = sample_center[1] - center[1];
@@ -432,7 +427,7 @@ fn sampled_cells(
         if sample.appearance.is_some() {
             landscape::retain_best(&mut owners[index], candidate);
         }
-        if fine_tile_visible(camera, *sample, tile, viewport) {
+        if visible {
             landscape::retain_best(&mut cells[index], candidate);
         }
     }

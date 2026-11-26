@@ -22,6 +22,12 @@ extern "C" {
     fn begin_patches(this: &GlBridge) -> Result<(), JsValue>;
     #[wasm_bindgen(method, catch, js_name = finishPatches)]
     fn finish_patches(this: &GlBridge) -> Result<(), JsValue>;
+    #[wasm_bindgen(method, getter, js_name = atlasUpdatesReady)]
+    fn atlas_updates_ready(this: &GlBridge) -> bool;
+    #[wasm_bindgen(method, getter, js_name = frameBacklogged)]
+    fn frame_backlogged(this: &GlBridge) -> bool;
+    #[wasm_bindgen(method, js_name = prioritizeAtlasUpdates)]
+    fn prioritize_atlas_updates(this: &GlBridge);
     #[wasm_bindgen(method, catch)]
     fn poll(this: &GlBridge) -> Result<bool, JsValue>;
     #[wasm_bindgen(method, catch)]
@@ -82,12 +88,25 @@ impl WebGlRenderer {
         self.bridge.poll().map(|_| ()).map_err(error)
     }
 
+    /// Check whether a new frame must wait for drawing already in the queue.
+    pub fn frame_backlogged(&self) -> bool {
+        self.bridge.frame_backlogged()
+    }
+
     pub(super) fn begin_patches(&self) -> Result<(), String> {
         self.bridge.begin_patches().map_err(error)
     }
 
     pub(super) fn finish_patches(&self) -> Result<(), String> {
         self.bridge.finish_patches().map_err(error)
+    }
+
+    pub(super) fn atlas_updates_ready(&self) -> bool {
+        self.bridge.atlas_updates_ready()
+    }
+
+    pub(super) fn prioritize_atlas_updates(&self) {
+        self.bridge.prioritize_atlas_updates();
     }
 
     pub(super) fn contour_stats(&self) -> ContourStats {
