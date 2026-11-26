@@ -337,8 +337,6 @@ vec4 shaded(vec4 texel, vec4 color, uint tint, uint appearance) {
 }
 void main() {
     vec2 dx = dFdx(vUv), dy = dFdy(vUv);
-    vec2 dx2 = dFdx(vUv2), dy2 = dFdy(vUv2);
-    vec2 dx3 = dFdx(vUv3), dy3 = dFdy(vUv3);
     if (vSolid == 64u) {
         vec2 q = vUv / vRect.xy;
         float distance = abs(dot(q, q) - 1.0) / max(.0001, 2.0 * length(vUv / (vRect.xy * vRect.xy)));
@@ -347,18 +345,17 @@ void main() {
     }
     if (vSolid == 0u) {
         if ((vPages.w & 128u) != 0u && dot(abs((vUv - vRect.xy) / vRect.zw - .5), vec2(1)) > .5) discard;
-        vec4 texel = ownerSample(vUv, vPages.x);
         // Quad pages.w bit 0 marks nearest-sampled terrain, not an object.
-        if ((vPages.w & 1u) == 0u) {
-            vec4 average = boxAverage(vUv, vPages.x, vRect, dx, dy);
-            if (average.a >= 0.0) texel = average;
-        }
+        vec4 texel = (vPages.w & 1u) == 0u ? boxAverage(vUv, vPages.x, vRect, dx, dy) : vec4(-1.0);
+        if (texel.a < 0.0) texel = ownerSample(vUv, vPages.x);
         if (texel.a <= 0.0) discard;
         if (vColor.r > 1.0) texel.r = min(texel.r, 1.0 / vColor.r);
         result = texel * vColor;
         return;
     }
     if (vSolid == 2u) { result = vec4(vColor.rgb * (1.0 + vShade * .04) * vFog, vColor.a); return; }
+    vec2 dx2 = dFdx(vUv2), dy2 = dFdy(vUv2);
+    vec2 dx3 = dFdx(vUv3), dy3 = dFdy(vUv3);
     bool blend = (vSolid & 3u) == 3u;
     bool landscape = (vPages.w & 1u) != 0u, mixing = vSolid >= 8u, junction = vSolid >= 24u;
     bool tiled = (vSolid & 4u) != 0u;

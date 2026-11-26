@@ -371,3 +371,22 @@ async fn webgl_contours_return_after_context_loss_with_live_coverage() {
         assert!(stats.effect_frames > round && stats.plain_frames == 0);
     }
 }
+
+#[wasm_bindgen_test]
+fn webgl_transparent_terrain_preserves_the_coverage_of_objects_behind_it() {
+    let (canvas, mut renderer) = target(&effect_atlas());
+    let actor = body(0).with_unit_contour(Some([0, 0, 255]));
+    let mut face = super::triangle(
+        [[64.0, 40.0], [112.0, 40.0], [87.0, 94.0]],
+        [0.0; 3],
+        [1.0; 3],
+    );
+    face.texture_uv = Some(crate::AtlasAddress {
+        page: 0,
+        uv: [16.0 / 2048.0, 0.0, 16.0 / 2048.0, 16.0 / 2048.0],
+    });
+    let mut face = super::instance(&face);
+    face.depths = [2.0; 4];
+    render(&mut renderer, &mut [actor, blocker(4), face]);
+    assert_pixel(&canvas, 87, 64, [0, 0, 255, 255]);
+}

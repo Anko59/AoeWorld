@@ -12,8 +12,9 @@ void main() {
         'vec4 result;\nlayout(location=1) out highp uint coverage;')
         .replace('void main()', 'void worldColour()') + `
 void main() {
-    // Ground never discards. It still writes depth and clears the mask here.
-    if (vSolid != 0u && vSolid != 64u) { coverage = 0u; return; }
+    // A solid face always writes depth. Textured faces must still run their
+    // alpha discard before they can replace coverage from farther objects.
+    if (vSolid == 2u) { coverage = 0u; return; }
     worldColour();
     bool body = vSolid == 0u && result.a >= .8;
     coverage = (body && (vPages.w & 4u) != 0u ? 1u : 0u)

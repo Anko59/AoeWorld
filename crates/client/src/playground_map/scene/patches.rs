@@ -25,10 +25,10 @@ struct Patch {
 }
 
 impl Patch {
-    fn build(client: &Client, key: Coordinate, size: i32) -> Self {
+    fn build(client: &Client, key: Coordinate, size: i32, refined: bool) -> Self {
         let origin = [key.0 * CHUNK_TILES, key.1 * CHUNK_TILES];
         let region = TileRect::from_xywh(origin[0], origin[1], CHUNK_TILES, CHUNK_TILES);
-        let halo = chunk_surface_halo(size);
+        let halo = chunk_surface_halo(size, refined);
         let support = TileRect::from_xywh(
             origin[0] - halo,
             origin[1] - halo,
@@ -64,7 +64,7 @@ impl Patch {
         drop(foundation_stage);
         #[cfg(feature = "frame-bench")]
         let mesh = super::super::super::perf::Scope::new(32);
-        let faces = chunk_surface_triangles(&tiles, region, size);
+        let faces = chunk_surface_triangles(&tiles, region, size, refined);
         #[cfg(feature = "frame-bench")]
         drop(mesh);
         tiles.retain(|tile| {
@@ -78,7 +78,7 @@ impl Patch {
             tiles,
             faces,
             foundations: foundation_view,
-            dirty: false,
+            dirty: !refined,
         }
     }
 
@@ -101,26 +101,34 @@ impl PatchCache {
             if patch.is_some_and(|p| !p.dirty) {
                 continue;
             }
-            let visible = heights::resident_may_be_visible(client, key);
-            if visible || heights::may_be_visible_from(client, ahead, key) {
-                let priority = 2 * u8::from(patch.is_some()) + u8::from(!visible);
-                let camera = if visible { client.camera } else { ahead };
-                jobs.push((
-                    priority,
-                    chunk_distance_for(key, camera, client.config),
-                    key,
-                ));
-            }
+            let visible = heights::patch_may_intersect(client, client.camera, key);
+            let camera = if visible {
+                client.camera
+            } else if heights::patch_may_intersect(client, ahead, key) {
+                ahead
+            } else {
+                continue;
+            };
+            // Finish base coverage before spending a turn on refinements.
+            let priority = (patch.is_some(), !visible);
+            jobs.push((
+                priority,
+                chunk_distance_for(key, camera, client.config),
+                key,
+            ));
         }
         jobs.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)).then(a.2.cmp(&b.2)));
         let started = super::super::super::now();
         let mut visible_updated = false;
-        for (index, (priority, _, key)) in jobs.into_iter().take(MAX_PREPARATIONS).enumerate() {
+        for (index, ((refined, prefetch), _, key)) in
+            jobs.into_iter().take(MAX_PREPARATIONS).enumerate()
+        {
             if index > 0 && super::super::super::now() - started >= PREPARATION_MS {
                 break;
             }
-            self.patches.insert(key, Patch::build(client, key, size));
-            visible_updated |= priority % 2 == 0;
+            self.patches
+                .insert(key, Patch::build(client, key, size, refined));
+            visible_updated |= !prefetch;
         }
         self.evict(client, ahead);
         visible_updated
@@ -136,7 +144,7 @@ impl PatchCache {
             .patches
             .keys()
             .copied()
-            .filter(|&key| !heights::resident_may_be_visible(client, key))
+            .filter(|&key| !heights::patch_may_intersect(client, client.camera, key))
             .map(|key| (chunk_distance_for(key, ahead, client.config), key))
             .collect::<Vec<_>>();
         distant.sort_unstable_by(|a, b| b.0.total_cmp(&a.0).then(b.1.cmp(&a.1)));
@@ -185,14 +193,15 @@ impl PatchCache {
     }
 
     pub(super) fn scene(&self, client: &Client) -> Option<PreparedScene> {
-        let visible = heights::visible_residents(client);
-        if visible.iter().any(|key| !self.patches.contains_key(key)) {
-            return None;
-        }
+        let patches = client
+            .terrain_chunks
+            .keys()
+            .filter(|&&key| heights::patch_may_intersect(client, client.camera, key))
+            .map(|key| self.patches.get(key))
+            .collect::<Option<Vec<_>>>()?;
         let mut terrain = Vec::new();
         let mut faces = Vec::new();
-        for key in visible {
-            let patch = &self.patches[&key];
+        for patch in patches {
             terrain.extend_from_slice(&patch.tiles);
             faces.extend(patch.faces.iter().filter_map(|face| {
                 let mut face = *face;
@@ -209,7 +218,7 @@ fn radius(size: i32) -> i32 {
     if size == 0 {
         return 0;
     }
-    chunk_surface_halo(size)
+    chunk_surface_halo(size, true)
         .unsigned_abs()
         .div_ceil(CHUNK_TILES as u32) as i32
 }

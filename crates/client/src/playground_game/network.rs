@@ -360,7 +360,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 super::map::fog::minimap(&client, &state);
                 let was_disabled = client.fog.disabled();
                 if client.fog.apply(state) {
-                    client.rendered_frame.clear();
+                    client.rendered_frame.invalidate();
                     if was_disabled != client.fog.disabled() {
                         client.terrain_scene.borrow_mut().take();
                     }
@@ -379,7 +379,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     let hz = client.config.tick_hz;
                     record_shots(&mut client.village, &projectiles, tick.0, hz);
                     client.village.projectiles = projectiles;
-                    client.rendered_frame.clear();
+                    client.rendered_frame.invalidate();
                 }
             }
             Ok(GameplayServerMessage::WildlifeState {

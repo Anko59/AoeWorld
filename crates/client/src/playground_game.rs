@@ -212,15 +212,22 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         let mut native_requests = Vec::new();
         let backlogged =
             matches!(&client.renderer, GameRenderer::WebGl(gl) if gl.frame_backlogged());
-        let scene = if !controls::navigation::overview_active()
-            && !strategic::render(&mut client)
-            && !backlogged
-        {
+        let detailed_view =
+            !controls::navigation::overview_active() && !strategic::render(&mut client);
+        let scene = if detailed_view && !backlogged {
             let _terrain = perf::Scope::stage(3);
             map::scene::prepare_frame(&client)
         } else {
             None
         };
+        #[cfg(feature = "frame-bench")]
+        if detailed_view {
+            if backlogged {
+                perf::perf_mark(60);
+            } else if scene.is_none() {
+                perf::perf_mark(61);
+            }
+        }
         if let Some(scene) = scene {
             let live = client
                 .presentation
@@ -307,9 +314,13 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             drop(streaming_detail);
             let grid = client.grid;
             let animation = time as usize;
-            let result = if coverage.ready(&client.art, &required)
-                && client.native.as_ref().is_none_or(|native| native.ready())
-            {
+            let asset_ready = coverage.ready(&client.art, &required)
+                && client.native.as_ref().is_none_or(|native| native.ready());
+            #[cfg(feature = "frame-bench")]
+            if !asset_ready {
+                perf::perf_mark(63);
+            }
+            let result = if asset_ready {
                 map::render_cache::render_if_changed(
                     &mut client,
                     &scene,

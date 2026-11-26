@@ -1,9 +1,13 @@
 use super::*;
 
-/// Include the broad relief fit, its incident vertex cells and the support
-/// ring used to close cliffs. Adjacent patches use the same world samples.
-pub fn chunk_surface_halo(size: i32) -> i32 {
-    ((20_u32.div_ceil(size as u32) as i32).max(2) + 1) * size
+/// The base mesh needs neighboring height samples and the cliff support ring.
+/// A refined patch also needs the broad relief fit and its incident vertices.
+pub fn chunk_surface_halo(size: i32, refined: bool) -> i32 {
+    if refined {
+        ((20_u32.div_ceil(size as u32) as i32).max(2) + 1) * size
+    } else {
+        2 * size
+    }
 }
 
 /// Build one aligned map chunk, with its surroundings supplying edge data.
@@ -12,8 +16,9 @@ pub fn chunk_surface_triangles(
     terrain: &[SceneTerrain],
     region: TileRect,
     size: i32,
+    refined: bool,
 ) -> Vec<ProjectedSurfaceTriangle> {
-    let halo = chunk_surface_halo(size);
+    let halo = chunk_surface_halo(size, refined);
     let bounds = [
         [region.min.x - halo, region.min.y - halo],
         [region.max.x + halo - 1, region.max.y + halo - 1],
@@ -37,5 +42,6 @@ pub fn chunk_surface_triangles(
         &Camera::new([0.0; 2], [0.0; 2]),
         samples,
         Some(region),
+        refined,
     )
 }

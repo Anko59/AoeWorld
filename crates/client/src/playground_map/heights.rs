@@ -386,27 +386,79 @@ pub(super) fn chunk_may_be_visible(
     coordinate: (i32, i32),
     bounds: (i16, i16),
 ) -> bool {
-    let x0 = f64::from(coordinate.0 * CHUNK_TILES);
-    let y0 = f64::from(coordinate.1 * CHUNK_TILES);
-    let x1 = f64::from(((coordinate.0 + 1) * CHUNK_TILES).min(config.width_tiles));
-    let y1 = f64::from(((coordinate.1 + 1) * CHUNK_TILES).min(config.height_tiles));
-    let points = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
-    let mut minimum = [f64::INFINITY; 2];
-    let mut maximum = [f64::NEG_INFINITY; 2];
-    for height in [bounds.0, bounds.1] {
-        for point in points {
-            let screen = camera.world_to_screen_at_height(point, f64::from(height));
-            minimum[0] = minimum[0].min(screen.x);
-            minimum[1] = minimum[1].min(screen.y);
-            maximum[0] = maximum[0].max(screen.x);
-            maximum[1] = maximum[1].max(screen.y);
+    let min = [coordinate.0 * CHUNK_TILES, coordinate.1 * CHUNK_TILES];
+    let max = [
+        (min[0] + CHUNK_TILES).min(config.width_tiles),
+        (min[1] + CHUNK_TILES).min(config.height_tiles),
+    ];
+    projected_chunk_intersects(camera, min, max, bounds, 8.0)
+}
+
+pub(super) fn patch_may_intersect(client: &Client, camera: Camera, key: (i32, i32)) -> bool {
+    let probes = &client.terrain_bounds.probes;
+    let Some(mut bounds) = probes.get(&key).copied() else {
+        return true;
+    };
+    let min = [key.0 * CHUNK_TILES, key.1 * CHUNK_TILES];
+    let max = min.map(|value| value + CHUNK_TILES);
+    // Include the maximum half-tile presentation offsets at banks and rims.
+    // The whole chunk also covers coarse cells at partial map edges.
+    let margin = 0.5 * aoe_core::ISO_TILE_WIDTH * camera.zoom;
+    if !chunk_overlaps_horizontal(camera, min, max, margin) {
+        return false;
+    }
+    // At a partial map edge, a coarse vertex beyond the source may use the
+    // patch's average height. The resident range bounds that average too.
+    if max[0] > client.config.width_tiles || max[1] > client.config.height_tiles {
+        bounds = client.terrain_resident_height_bounds.unwrap_or(bounds);
+    }
+    // A coarse corner can take heights from adjacent chunks, and a closing
+    // face can join either side of the boundary.
+    for y in key.1 - 1..=key.1 + 1 {
+        for x in key.0 - 1..=key.0 + 1 {
+            if let Some(&(low, high)) = probes.get(&(x, y)) {
+                bounds.0 = bounds.0.min(low);
+                bounds.1 = bounds.1.max(high);
+            }
         }
     }
-    let margin = 8.0 * aoe_core::ISO_TILE_WIDTH * camera.zoom;
-    maximum[0] >= -margin
-        && maximum[1] >= -margin
-        && minimum[0] <= camera.viewport[0] + margin
-        && minimum[1] <= camera.viewport[1] + margin
+    chunk_overlaps_vertical(camera, min, max, bounds, margin)
+}
+
+fn projected_chunk_intersects(
+    camera: Camera,
+    min: [i32; 2],
+    max: [i32; 2],
+    bounds: (i16, i16),
+    margin_tiles: f64,
+) -> bool {
+    let margin = margin_tiles * aoe_core::ISO_TILE_WIDTH * camera.zoom;
+    chunk_overlaps_horizontal(camera, min, max, margin)
+        && chunk_overlaps_vertical(camera, min, max, bounds, margin)
+}
+
+fn chunk_overlaps_horizontal(camera: Camera, min: [i32; 2], max: [i32; 2], margin: f64) -> bool {
+    let [x0, y0] = min.map(f64::from);
+    let [x1, y1] = max.map(f64::from);
+    camera.world_to_screen([x1, y0]).x >= -margin
+        && camera.world_to_screen([x0, y1]).x <= camera.viewport[0] + margin
+}
+
+fn chunk_overlaps_vertical(
+    camera: Camera,
+    min: [i32; 2],
+    max: [i32; 2],
+    (low, high): (i16, i16),
+    margin: f64,
+) -> bool {
+    camera
+        .world_to_screen_at_height(max.map(f64::from), f64::from(low))
+        .y
+        >= -margin
+        && camera
+            .world_to_screen_at_height(min.map(f64::from), f64::from(high))
+            .y
+            <= camera.viewport[1] + margin
 }
 
 pub(super) fn defer_failed_chunks(client: &mut Client) {

@@ -38,6 +38,7 @@ export function capture({ name, seconds, pan, zoom }) {
   let spans = [],
     begin,
     painted = 0,
+    waiting,
     first,
     done = false;
   function span(start, end, category) {
@@ -122,6 +123,7 @@ export function capture({ name, seconds, pan, zoom }) {
             ms: now - begin,
             spans,
             painted: current - painted,
+            waiting,
             terrain_builds: Number(terrainBuilds),
             chunks_pending: Number(canvas.dataset.chunksPending),
           });
@@ -134,7 +136,11 @@ export function capture({ name, seconds, pan, zoom }) {
         begin = now;
         spans = [];
         painted = current;
+        waiting = undefined;
       }
+      if (section === 60) waiting = "gpu_queue";
+      if (section === 61) waiting = "terrain";
+      if (section === 63) waiting = "native_art";
       if (section === 22 && starts.has(4)) starts.get(4)[1] = "snapshot";
       const spec = bySection.get(section);
       if (spec) starts.set(spec[0], [now, spec[1]]);

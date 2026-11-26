@@ -46,6 +46,9 @@ Recorded main-thread work takes priority over that interval, including
 synchronous GPU command waits and pixel readbacks. Use the neighboring GPU and
 scheduler trace events to investigate delayed dispatch. Uncovered time stays
 unattributed. Each stall reports the fraction covered by the observed spans.
+The frame records also identify when the detailed renderer is waiting for a
+GPU queue slot, a visible terrain mesh or native art. These states explain
+callbacks that do not submit pixels independently of their timing spans.
 
 Keep the per-frame JSON, Chrome traces, browser recording and terminal log.
 The report includes the input and WASM digests, browser version and renderer.
@@ -115,5 +118,8 @@ The prep queue serves the visible view and then a position projected along
 the camera motion. Each turn limits the time spent preparing chunks and keeps
 ready terrain while edge data or foundation changes are rebuilt. A shared
 halo keeps heights and material transitions continuous across chunk edges.
+New patches first supply native ground and edge geometry. Relief and
+material blending refine those same surfaces after the visible and predicted
+views have their meshes.
 The subscription covers a margin around the current view and sends a
 replacement from a separate browser task when that margin is crossed.

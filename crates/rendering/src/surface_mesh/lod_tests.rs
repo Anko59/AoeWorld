@@ -299,7 +299,8 @@ fn minimum_zoom_keeps_the_previous_levels_jagged_shore_and_ground_sheet() {
 fn adjacent_prepared_patches_share_world_heights_and_project_to_the_new_camera() {
     let terrain = variable_height_map(96);
     let patches = [[0, 32], [32, 64]].map(|[lo, hi]| {
-        let faces = chunk_surface_triangles(&terrain, TileRect::from_xywh(lo, 32, hi - lo, 32), 4);
+        let faces =
+            chunk_surface_triangles(&terrain, TileRect::from_xywh(lo, 32, hi - lo, 32), 4, true);
         assert!(!faces.is_empty());
         assert!(faces.iter().all(|face| (lo..hi).contains(&face.tile[0])));
         faces

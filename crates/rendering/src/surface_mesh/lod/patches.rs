@@ -102,13 +102,12 @@ pub(super) fn plan(
             };
             // Include the incident-cell halo at each patch's boundary. An
             // interior border also marks its patch even if no corner sees it.
-            for dy in -1..=1 {
-                for dx in -1..=1 {
-                    let (Some(x), Some(y)) = (tile[0].checked_add(dx), tile[1].checked_add(dy))
-                    else {
-                        continue;
-                    };
-                    if let Some(index) = grid_index(patch_grid, cell_key([x, y], patch_grid.size)) {
+            let side = patch_grid.size;
+            let first = cell_key(tile.map(|value| value.saturating_sub(1)), side);
+            let last = cell_key(tile.map(|value| value.saturating_add(1)), side);
+            for y in (first[1]..=last[1]).step_by(side as usize) {
+                for x in (first[0]..=last[0]).step_by(side as usize) {
+                    if let Some(index) = grid_index(patch_grid, [x, y]) {
                         masks[index] |= bit;
                     }
                 }
