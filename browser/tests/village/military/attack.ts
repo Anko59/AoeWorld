@@ -92,7 +92,7 @@ export async function militaryAttack(
   await expect(page.locator("#unit-combat")).toContainText("Attack 5");
   await expect(page.locator("#unit-combat")).toContainText("Range 5");
   // No Attack leaves the Archer only explicit orders, so an Attacking task
-  // and Scout damage after the click both come from the order.
+  // and damage to the target after the click both come from the order.
   await page.locator("#stance-no-attack").click();
   const archer = (await actors(page)).find(
     (a) => a.owned && a.kind === "Archer",
@@ -101,21 +101,30 @@ export async function militaryAttack(
   await expect
     .poll(async () => task(page, archer.id), { timeout: 10_000 })
     .not.toBe("Attacking");
-  // The Scout runs, so a click at a position read a moment earlier can land
-  // on the ground and become a Move order. Re-read and click again until the
-  // Archer takes the attack; a Move never counts as Attacking.
-  let target = (await actors(page)).find((a) => a.id === scout.id);
-  if (!target) throw new Error("Enemy Scout gone before the Archer's order");
+  // The raid is a live fight, not a chase: the enemy Scout trades blows with the player's
+  // own Scout and is often dead (CI traces: both Dying within seconds), while the Militia
+  // keeps raiding. So order the attack on a living raider read just now, preferring the
+  // Scout, and re-read before every click: a unit moves between a read and the click, and a
+  // click that lands on the ground becomes a Move order, which never counts as Attacking.
+  let ordered: Actor | undefined;
   await expect
     .poll(
       async () => {
-        const current = (await actors(page)).find((a) => a.id === scout.id);
-        if (!current) return "Scout gone";
         if ((await task(page, archer.id)) === "Attacking") return "Attacking";
-        target = current;
-        await page.mouse.click(current.x, current.y, { button: "right" });
-        await page.waitForTimeout(1_500);
-        return task(page, archer.id);
+        const raiders = (await actors(page)).filter(
+          (a) => !a.owned && a.hp > 0 && a.task !== "Dying",
+        );
+        ordered = raiders.find((a) => a.id === scout.id) ?? raiders[0];
+        if (!ordered) return "No living raider in view";
+        await page.mouse.click(ordered.x, ordered.y, { button: "right" });
+        // Wait for the Archer to take the order rather than for a fixed time.
+        return expect
+          .poll(() => task(page, archer.id), { timeout: 1_500 })
+          .toBe("Attacking")
+          .then(
+            () => "Attacking",
+            () => task(page, archer.id),
+          );
       },
       {
         timeout: 15_000,
@@ -127,11 +136,12 @@ export async function militaryAttack(
     .poll(
       async () =>
         !(await actors(page)).some(
-          (a) => a.id === scout.id && a.hp >= (target?.hp ?? 0),
+          (a) => a.id === ordered?.id && a.hp >= (ordered?.hp ?? 0),
         ),
       {
         timeout: 20_000,
-        message: "the ordered Archer damages the enemy Scout",
+        message:
+          "the ordered Archer damages the enemy it was ordered to attack",
       },
     )
     .toBe(true);
