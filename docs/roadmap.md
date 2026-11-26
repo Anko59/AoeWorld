@@ -37,32 +37,36 @@ Owner 11-24: "priority goes to any decisions we still have to take that block th
 
 ## Ten highest-priority open items
 
-Open items only, owner emphasis first (reconciled 2026-11-26 against `origin/dev` at `85b614561`, the open pull
-requests and the owner playtest of 11-25).
+Open items only, owner emphasis first (reconciled 2026-11-26 against `origin/dev` at `84acf02f2`, the open pull
+requests, the owner playtest of 11-25 and the owner's feedback of 11-26).
 
 Last playtest, 11-25 (play25, dev 2d7ae70aa, 99 Python AIs): the converted Anatolia 5 save was "absolutely
 unplayable" (client under 1 FPS, route caps, fords changed by #1036) and was dropped; a new France game was "a
-pleasure, still nearly no lag" at 63.5k units and 6.0 ticks/s, until the client crashed and leaked memory.
+pleasure, still nearly no lag" at 63.5k units and 6.0 ticks/s, until the client crashed and leaked memory. Owner
+11-26: fights and AIs are "in a good state and not priority" (AI armies that walk without engaging went from about 90%
+to 30% of the time); client stutter, not average frame rate, is what frustrates.
 
 1. Client stability: a terrain panic crashed the client on repeat (fix on `client/panic-message`), and the WebGPU tab
    grows about 90 MB a minute until Firefox runs out of memory ([UI](roadmap/ui.md)).
 2. Route caps and the route queue (owner 11-25: "The route caps are still not removed so I can't do shit"; asked since
-   11-05): route caps off is shipping on #978 at +71% instructions per tick, never-moved units 10,429 to 3,709 on R1;
-   then groups share one route ([scale](roadmap/scale.md), [movement](roadmap/movement.md)).
-3. Server lag in big late games: 11-25 France 6.0 ticks/s at 63.5k units (60% of real time at 10 Hz), up from 11-19's
-   4.0 at 61.5k; target real time at 10 Hz. Worked on #978; the next owner game is the first with the Rust AI and
-   without route caps, so measure it again ([scale](roadmap/scale.md)).
-4. Armies near enemies not engaging (11-19: up to 2/3 idle in a fight, stuck behind allies; attack-move stops at enemy
-   buildings with "destination blocked") ([gameplay](roadmap/gameplay.md), [movement](roadmap/movement.md)).
-5. Formation coherence on real terrain (11-20, 11-22: huge lines) and Steward arrival 80-82% ([movement](roadmap/movement.md)).
-6. AIs that work enough to test the game: on 11-25 they grew to 6.6k population and Imperial Age but 9 of the 10
-   largest kept their armies at home; the Rust AI is the default since #1092 ([AI](roadmap/ai.md)).
-7. Client frame rate in big games: 28 FPS at 37.8k units on France, under 1 FPS on Anatolia 5 ([scale](roadmap/scale.md)).
-8. Builders sent to unreachable foundations keep searching (about 1M failed searches on Anatolia 5, also on a fresh
-   map) ([gameplay](roadmap/gameplay.md)).
-9. Steward and Vassal zones really in walking distance (membership and discovery are still a circle; 11-23), Vassal and
+   11-05): route caps off is shipping on #978 (#1096) at +71% instructions per tick, never-moved units 10,429 to 3,709
+   on R1 ([scale](roadmap/scale.md), [caps](roadmap/caps.md)).
+3. Movement simplified and its cost brought back down (owner 11-26): keep planners across building placement, shared
+   paths per player and destination chunk, then delete the route queue ([movement](roadmap/movement.md), #978).
+4. Server lag in big late games: 11-25 France 6.0 ticks/s at 63.5k units (60% of real time at 10 Hz), up from 11-19's
+   4.0 at 61.5k; target real time at 10 Hz. The next owner game is the first with the Rust AI and without route caps,
+   so measure it again ([scale](roadmap/scale.md)).
+5. Wasted unit work the owner saw: attack-move paths around enemy buildings instead of destroying them; Steward
+   villagers gather resources they cannot reach; builders sent to unreachable foundations or to one an enemy stands
+   on, dozens at a time ([gameplay](roadmap/gameplay.md)).
+6. Client stutter in crowded views and fast pans: measure long frames, not the average (28 FPS average at 37.8k units
+   on France) ([scale](roadmap/scale.md)).
+7. Formation coherence on real terrain (11-20, 11-22: huge lines) and Steward arrival 80-82% ([movement](roadmap/movement.md)).
+8. Steward and Vassal zones really in walking distance (membership and discovery are still a circle; 11-23), Vassal and
    Steward cooperation ([hierarchy](roadmap/hierarchy.md)).
-10. Remove the other caps and budgets (owner 11-23 "solve, not limit and hide") ([caps](roadmap/caps.md)).
+9. Remove the other caps and budgets (owner 11-23 "solve, not limit and hide") ([caps](roadmap/caps.md)).
+10. Fights and AIs, not a priority (owner 11-26): own engaged armies stack too tightly; AIs rarely leave their base
+    after the early game ([gameplay](roadmap/gameplay.md), [AI](roadmap/ai.md)).
 
 Next after these: rock footprints (#926, held only while the owner needed the Anatolia 4 save, which the owner no longer
 plays), the 11-22 UI items still open (far-view training panel and activity panel in DE style, road texture and enemy
