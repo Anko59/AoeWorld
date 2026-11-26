@@ -104,17 +104,19 @@ The `61633e71` package that scale docs cite was made by the generator before #10
 
 CI cannot cache 7 GB of sources (the repository's 10 GB cache is shared with the
 build caches and already full), so it caches the package. The `game-map` workflow
-generates it on `dev` (a push that changes the request or the page-writing code,
-and twice a week to keep the cache from expiring) and saves it under a key made of
+generates it on `dev` (started by hand, see below) and saves it under a key made of
 the request file and a hash of that code. A job uses
 `./.github/actions/game-map-restore` and then
 `make game-map GAME_MAP_ARGS='--no-fetch --soft'`. A pull request that changes the
 page-writing code finds no exact key and gets the package of `dev`'s generator
 (`exact` is `false`: say so next to its numbers). Open problem (2026-11-26): the first
 warm run fetched the 6.0 GB overview stack in about 4 minutes, then
-`data.hydrosheds.org` (HydroLAKES, HydroRIVERS) answered HTTP 403 to the GitHub runner,
-so no package was saved and consumers see "map unavailable"; the failure step prints
-what the runner gets from those two URLs. Sources and packages are never
+`data.hydrosheds.org` (HydroLAKES, HydroRIVERS) answered HTTP 403 (a Cloudflare challenge) to the GitHub
+runner, so no package was saved and consumers see "map unavailable"; the failure step prints
+what the runner gets from those two URLs. The owner's decision on how the map reaches CI is pending, and
+CI does not attempt provider downloads that the provider refuses: the workflow has only the
+`workflow_dispatch` trigger (no push, no schedule). Start it by hand once the map can be fetched or seeded;
+until then consumers keep `--no-fetch --soft`. Sources and packages are never
 workflow artifacts or release assets: see [licences](licences.md).
 
 ## Terrain, history, and compatibility limits

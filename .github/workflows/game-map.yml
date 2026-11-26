@@ -3,19 +3,10 @@ name: AoeWorld game map cache
 # Warms the Actions cache with the owner's Anatolia map package (qa/anatolia-map.json) so that no job
 # fetches third-party geodata at pull-request time. Caches only: one source layer is CC BY-SA 4.0 and
 # redistribution (a release asset or a workflow artifact) is the owner's decision (docs/geodata/licences.md).
+# Manual only: data.hydrosheds.org refuses GitHub runners (HTTP 403) and the owner has not yet decided how the
+# map reaches CI, so no push or schedule starts a job that can only fail; start it by hand once it can be fetched or seeded.
 on:
-  schedule:
-    # Twice a week: the cache is evicted after 7 days without access, and a weekly run sits on that edge.
-    - cron: '17 4 * * 1,4'
   workflow_dispatch:
-  push:
-    branches: [dev]
-    paths:
-      - qa/anatolia-map.json
-      - crates/geodata/**
-      - crates/map/**
-      - .github/workflows/game-map.yml
-      - .github/actions/game-map-restore/**
 
 permissions:
   contents: read
