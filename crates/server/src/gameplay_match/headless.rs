@@ -5,7 +5,7 @@
 //! `launch` and `install`, and leaves the loop to the caller: every call of
 //! `HeadlessMatch::tick` is one `GameplayService::tick`, whenever the caller
 //! wants it. Every slot is an AI seat played by the Rust AI in process.
-use super::{MatchRules, install, launch};
+use super::{MatchRules, StartUnits, install, launch};
 use crate::{AiRuntime, AppState, Config, GameplayService};
 use std::path::PathBuf;
 
@@ -20,6 +20,10 @@ pub struct HeadlessPlan {
     pub seats: usize,
     /// Seeds the village layout, as `seed` of `POST /match`.
     pub seed: u64,
+    /// The late-game recipe (`late_game.rs`) at this scale in percent (0 and
+    /// 100 keep the owner's shapes), seeded around every village before the
+    /// first tick. `None` is a fresh start.
+    pub late_game_percent: Option<u32>,
     /// Keep the orders the seats had applied (`HeadlessMatch::order_log`). It
     /// costs one serialization per order on the tick path: off, a run is timed
     /// as a live server runs.
@@ -59,7 +63,16 @@ impl HeadlessMatch {
             .get(&plan.map_hash)
             .cloned()
             .ok_or_else(|| HeadlessError(format!("no map package {}", plan.map_hash)))?;
-        let rules = MatchRules::default().with_seed(plan.seed);
+        let rules = match plan.late_game_percent {
+            None => MatchRules::default(),
+            Some(percent) => MatchRules::new(Some(StartUnits {
+                late_game: true,
+                late_game_scale: percent,
+                ..StartUnits::default()
+            }))
+            .map_err(|error| HeadlessError(error.to_string()))?,
+        }
+        .with_seed(plan.seed);
         let launched = launch(&state, package, vec![false; plan.seats], rules)
             .await
             .map_err(|(_, message)| HeadlessError(message))?;

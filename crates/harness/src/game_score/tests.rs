@@ -1,11 +1,12 @@
 use super::judge::{self, Comparison};
-use super::measure::{Counters, Digest, Measurement};
-use super::{Options, Plan, report, resolve_hash, worker_counts};
+use super::measure::{Digest, Measurement};
+use super::scenarios::{self, LATE, NATURAL};
+use super::windows::{Cost, Efficiency, Minute, Service, WindowReport};
+use super::{Options, Plan, counts_for, resolve_hash, worker_counts};
 use clap::Parser;
-use serde_json::json;
 use std::path::PathBuf;
 
-fn digest(tick: u64, hash: &str, units: u64) -> Digest {
+pub(super) fn digest(tick: u64, hash: &str, units: u64) -> Digest {
     Digest {
         tick,
         hash: hash.to_owned(),
@@ -14,30 +15,58 @@ fn digest(tick: u64, hash: &str, units: u64) -> Digest {
     }
 }
 
-fn run(workers: usize, digests: Vec<Digest>) -> Measurement {
+pub(super) fn hashes(list: &[(u64, &str)]) -> Vec<Digest> {
+    list.iter()
+        .map(|(tick, hash)| digest(*tick, hash, 40))
+        .collect()
+}
+
+pub(super) fn window(id: &str, from: u64, to: u64) -> WindowReport {
+    let service = Service::default();
+    let cost = Cost {
+        tick_seconds: 2.0,
+        ..Cost::default()
+    };
+    WindowReport {
+        id: id.to_owned(),
+        from_tick: from,
+        to_tick: to,
+        service,
+        cost,
+        efficiency: Efficiency::default(),
+    }
+}
+
+pub(super) fn minute(index: u64) -> Minute {
+    Minute {
+        minute: index,
+        from_tick: (index - 1) * 600,
+        to_tick: index * 600,
+        service: Service::default(),
+        cost: Cost::default(),
+    }
+}
+
+/// A run of the `natural` scenario at `workers`, with `digests`.
+pub(super) fn run(workers: usize, digests: Vec<Digest>) -> Measurement {
     Measurement {
+        scenario: "natural".to_owned(),
         workers,
         ticks: 100,
         seats: 3,
         setup_seconds: 1.5,
         tick_seconds: 2.0,
+        native_seconds: 4.5,
         ticks_per_second: 50.0,
         slowest_tick: 2,
-        tick_ms: json!({ "max_ms": 31.0 }),
         peak_memory_mib: 210,
-        counters: Counters::default(),
-        samples: Vec::new(),
+        windows: vec![window("whole", 0, 100)],
+        series: vec![minute(1)],
         digests,
         order_count: None,
         order_log_hash: None,
         order_log_file: None,
     }
-}
-
-fn hashes(list: &[(u64, &str)]) -> Vec<Digest> {
-    list.iter()
-        .map(|(tick, hash)| digest(*tick, hash, 40))
-        .collect()
 }
 
 #[test]
@@ -96,15 +125,15 @@ fn the_first_differing_order_is_named_with_its_tick() {
 }
 
 #[test]
-fn the_game_is_the_same_when_hashes_and_orders_agree_and_counters_are_only_reported() {
+fn the_game_is_the_same_when_hashes_and_orders_agree_and_numbers_are_only_reported() {
     let base = run(1, hashes(&[(0, "a"), (10, "b")]));
     let mut other = run(4, hashes(&[(0, "a"), (10, "b")]));
     let same = judge::compare(&base, &other, (None, None));
-    assert!(same.holds() && same.same_counters && same.same_orders.is_none());
-    other.counters.route_searches = 7;
-    let counters = judge::compare(&base, &other, (None, None));
-    assert!(counters.holds(), "counters never decide the verdict");
-    assert!(!counters.same_counters);
+    assert!(same.holds() && same.same_numbers && same.same_orders.is_none());
+    other.windows[0].service.planning.route_searches = 7;
+    let numbers = judge::compare(&base, &other, (None, None));
+    assert!(numbers.holds(), "numbers never decide the verdict");
+    assert!(!numbers.same_numbers);
     let orders: Vec<String> = vec!["5 1 1 Accepted move".to_owned()];
     let other_orders: Vec<String> = vec!["5 1 1 Accepted stop".to_owned()];
     let apart = judge::compare(
@@ -117,53 +146,25 @@ fn the_game_is_the_same_when_hashes_and_orders_agree_and_counters_are_only_repor
 }
 
 #[test]
-fn the_table_names_every_number_in_plain_words_one_column_per_run() {
-    let one = run(1, hashes(&[(0, "a"), (10, "b")]));
-    let four = run(4, hashes(&[(0, "a"), (10, "x")]));
-    let verdict = judge::Verdict {
-        holds: false,
-        against: vec![judge::compare(&one, &four, (None, None))],
-        diagnosis: None,
-    };
-    let table = report::table("game score, early game", &[one, four], &verdict);
-    for words in [
-        "1 worker",
-        "4 workers",
-        "ticks per second",
-        "slowest tick was tick number",
-        "peak memory (MiB)",
-        "units alive at the end",
-        "villagers standing idle at the end",
-        "movers waiting for a route, at the end",
-        "wait for a route, 95th percentile (ticks), worst sample",
-        "route orders given",
-        "route searches started",
-        "route orders answered when given",
-        "route answers taken from the cache",
-        "hits landed",
-        "kills / losses",
-        "resources delivered in the last game minute",
-        "DIFFERENT GAMES, first differing tick 10",
-    ] {
-        assert!(table.contains(words), "missing {words:?} in\n{table}");
-    }
-    assert!(
-        !table.contains("scoreboard"),
-        "that word names another page"
-    );
+fn wall_time_and_memory_are_not_numbers_of_the_game() {
+    let base = run(1, hashes(&[(0, "a")]));
+    let mut slower = run(4, hashes(&[(0, "a")]));
+    slower.windows[0].cost.tick_seconds = 9.0;
+    slower.windows[0].cost.peak_memory_mib = 9_000;
+    slower.series[0].cost.tick_seconds = 9.0;
+    assert!(judge::compare(&base, &slower, (None, None)).same_numbers);
 }
 
-#[test]
-fn a_comparison_of_equal_runs_reads_as_a_pass_in_words() {
-    let base = run(1, hashes(&[(0, "a")]));
-    let comparison: Comparison = judge::compare(&base, &run(4, hashes(&[(0, "a")])), (None, None));
-    let verdict = judge::Verdict {
-        holds: true,
-        against: vec![comparison],
-        diagnosis: None,
-    };
-    let table = report::table("title", &[base], &verdict);
-    assert!(table.contains("1 worker and 4 workers: the same hash at every hashed tick"));
+pub(super) fn verdict(base: &Measurement, other: &Measurement) -> (judge::Verdict, Comparison) {
+    let comparison = judge::compare(base, other, (None, None));
+    (
+        judge::Verdict {
+            holds: comparison.holds(),
+            against: vec![comparison.clone()],
+            diagnosis: None,
+        },
+        comparison,
+    )
 }
 
 #[derive(Parser)]
@@ -172,27 +173,102 @@ struct Cli {
     options: Options,
 }
 
-#[test]
-fn a_childs_plan_comes_back_the_same_through_the_command_line() {
-    let plan = Plan {
+fn plan(scenario: &str) -> Plan {
+    Plan {
         package_directory: PathBuf::from("packages here"),
         map_hash: "ab".repeat(32),
+        scenario: scenario.to_owned(),
         seats: 7,
         ticks: 123,
         seed: 9,
+        late_percent: Some(25),
         workers: 3,
         hash_every: 4,
-        sample_every: 0,
+        sample_every: 5,
         record_orders: false,
-    };
-    let out = PathBuf::from("out/run.json");
-    let args = plan.child_args(&out);
-    assert_eq!(args[0], "game-score");
-    let cli =
-        Cli::try_parse_from(std::iter::once("test".to_owned()).chain(args.into_iter().skip(1)))
-            .expect("the child's own arguments parse");
-    assert_eq!(cli.options.child, Some(out));
-    assert_eq!(cli.options.plan(&plan.map_hash, 3), plan);
+    }
+}
+
+#[test]
+fn a_childs_plan_comes_back_the_same_through_the_command_line() {
+    for scenario in ["natural", "late"] {
+        let plan = plan(scenario);
+        let out = PathBuf::from("out/run.json");
+        let args = plan.child_args(&out);
+        assert_eq!(args[0], "game-score");
+        let cli =
+            Cli::try_parse_from(std::iter::once("test".to_owned()).chain(args.into_iter().skip(1)))
+                .expect("the child's own arguments parse");
+        assert_eq!(cli.options.child, Some(out));
+        let found = scenarios::find(scenario).expect("scenario");
+        assert_eq!(cli.options.plan(found, &plan.map_hash, 3), plan);
+    }
+}
+
+#[test]
+fn a_plan_without_flags_takes_everything_from_its_scenario() {
+    let cli = Cli::try_parse_from(["test"]).expect("the defaults parse");
+    assert_eq!(cli.options.scenario, None);
+    let natural = cli.options.plan(&NATURAL, "hash", 1);
+    assert_eq!(
+        (
+            natural.ticks,
+            natural.hash_every,
+            natural.sample_every,
+            natural.late_percent
+        ),
+        (
+            NATURAL.ticks,
+            NATURAL.hash_every,
+            NATURAL.sample_every,
+            None
+        )
+    );
+    let late = cli.options.plan(&LATE, "hash", 1);
+    assert_eq!(late.ticks, LATE.ticks);
+    let flags = Cli::try_parse_from([
+        "test",
+        "--scenario",
+        "late",
+        "--ticks",
+        "99",
+        "--late-percent",
+        "5",
+        "--hash-every",
+        "3",
+    ])
+    .expect("flags parse");
+    let plan = flags.options.plan(&LATE, "hash", 1);
+    assert_eq!(
+        (plan.ticks, plan.late_percent, plan.hash_every),
+        (99, Some(5), 3)
+    );
+    assert_eq!(plan.sample_every, LATE.sample_every);
+}
+
+#[test]
+fn no_scenario_flag_plays_the_pull_request_set_and_a_flag_plays_one() {
+    let all = Cli::try_parse_from(["test"]).expect("parse");
+    let ids: Vec<_> = all
+        .options
+        .scenarios()
+        .expect("set")
+        .iter()
+        .map(|s| s.id)
+        .collect();
+    assert_eq!(ids, ["natural", "late"]);
+    let one = Cli::try_parse_from(["test", "--scenario", "late"]).expect("parse");
+    let ids: Vec<_> = one
+        .options
+        .scenarios()
+        .expect("one")
+        .iter()
+        .map(|s| s.id)
+        .collect();
+    assert_eq!(ids, ["late"]);
+    let wrong = Cli::try_parse_from(["test", "--scenario", "battle"]).expect("parse");
+    let error = wrong.options.scenarios().expect_err("no such scenario");
+    assert!(error.to_string().contains("battle"), "{error}");
 }
 
 #[test]
@@ -206,6 +282,16 @@ fn defaults_play_one_worker_against_this_machines_cores() {
     assert_eq!(worker_counts(&[2, 2], 6).expect("counts"), vec![2, 2]);
     assert_eq!(worker_counts(&[0], 0).expect("counts"), vec![1]);
     assert!(worker_counts(&[], 6).is_err());
+}
+
+#[test]
+fn a_scenario_that_is_not_the_same_game_at_every_count_is_played_twice_at_its_own() {
+    assert_eq!(counts_for(&NATURAL, &[1, 4]), vec![1, 4]);
+    let fixed = scenarios::Scenario {
+        fixed_workers: Some(2),
+        ..scenarios::LATE
+    };
+    assert_eq!(counts_for(&fixed, &[1, 4]), vec![2, 2]);
 }
 
 #[test]
@@ -230,25 +316,34 @@ fn the_only_package_of_a_directory_is_the_default_and_a_choice_is_never_guessed(
 
 #[test]
 fn a_difference_is_replayed_at_every_tick_through_the_one_after_it_first_showed() {
-    let cli = Cli::try_parse_from(["test", "--ticks", "900", "--no-orders"]).expect("parse");
+    let plan = Plan {
+        ticks: 900,
+        record_orders: false,
+        workers: 1,
+        ..plan("natural")
+    };
     let base = run(1, hashes(&[(0, "a"), (40, "b")]));
     let other = run(4, hashes(&[(0, "a"), (40, "x")]));
     let failed = judge::compare(&base, &other, (None, None));
-    let replay = super::replay_plan(&cli.options, "hash", &failed);
+    let replay = plan.replay(&failed);
     assert_eq!(
         (replay.ticks, replay.hash_every, replay.workers),
         (41, 1, 1)
     );
     assert!(!replay.record_orders, "the replay keeps what the run kept");
+    assert_eq!(replay.scenario, plan.scenario);
     let same = judge::compare(&base, &base, (None, None));
-    assert_eq!(super::replay_plan(&cli.options, "hash", &same).ticks, 900);
+    assert_eq!(plan.replay(&same).ticks, 900);
 }
 
 #[test]
 fn an_order_logged_at_a_tick_is_replayed_through_the_call_that_applies_it() {
     // Orders logged at tick 37 are applied while the world goes from tick 37
     // to 38, so a replay of 37 ticks would never apply them.
-    let cli = Cli::try_parse_from(["test", "--ticks", "900"]).expect("parse");
+    let plan = Plan {
+        ticks: 900,
+        ..plan("natural")
+    };
     let base = run(1, hashes(&[(0, "a"), (40, "b")]));
     let other = run(4, hashes(&[(0, "a"), (40, "x")]));
     let (a, b) = (
@@ -257,9 +352,12 @@ fn an_order_logged_at_a_tick_is_replayed_through_the_call_that_applies_it() {
     );
     let failed = judge::compare(&base, &other, (Some(a.as_slice()), Some(b.as_slice())));
     assert_eq!(failed.first_differing_tick, Some(37));
-    assert_eq!(super::replay_plan(&cli.options, "hash", &failed).ticks, 38);
-    let last = Cli::try_parse_from(["test", "--ticks", "37"]).expect("parse");
-    assert_eq!(super::replay_plan(&last.options, "hash", &failed).ticks, 37);
+    assert_eq!(plan.replay(&failed).ticks, 38);
+    let last = Plan {
+        ticks: 37,
+        ..plan.clone()
+    };
+    assert_eq!(last.replay(&failed).ticks, 37);
 }
 
 #[test]

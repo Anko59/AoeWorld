@@ -33,7 +33,7 @@ pub(super) struct Comparison {
     pub same_hashes: bool,
     /// `None` when a run kept no order log.
     pub same_orders: Option<bool>,
-    pub same_counters: bool,
+    pub same_numbers: bool,
     pub first_differing_tick: Option<u64>,
     pub hashes: Option<DigestDifference>,
     pub orders: Option<OrderDifference>,
@@ -155,7 +155,7 @@ pub(super) fn compare(
         workers: other.workers,
         same_hashes: hashes.is_none(),
         same_orders: orders.as_ref().map(Option::is_none),
-        same_counters: base.counters == other.counters,
+        same_numbers: base.numbers() == other.numbers(),
         first_differing_tick,
         hashes,
         orders: orders.flatten(),

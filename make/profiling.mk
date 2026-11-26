@@ -64,9 +64,9 @@ match-bench-steps:
 	@$(MAKE) --no-print-directory analysis-tools
 	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e $(call MOUNT_QUOTE,CARGO_TARGET_DIR=$(ROOT)/.cache/match-bench/target) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo run --release --locked -p aoe-harness -- match-bench $(MATCH_BENCH_ARGS)
 
-# The game score (docs/scale/game-score.md): a real game on a real map, played by the Rust AI in process,
+# The game score (docs/scale/game-score.md): real games on a real map, played by the Rust AI in process,
 # measured, and replayed at 1 and N workers to check that both play the same game. GAME_SCORE_ARGS passes
-# harness flags, e.g. "--ticks 1000 --workers 1,4" or "--package-directory .cache/game-score/packages --map-hash <hash>".
+# harness flags, e.g. "--scenario late --workers 1,4" or "--package-directory .cache/game-score/packages --map-hash <hash>".
 .PHONY: game-score game-score-admitted game-score-steps
 game-score: resource-bootstrap
 	@$(RESOURCE_LONG) game-score -- $(MAKE) --no-print-directory game-score-admitted

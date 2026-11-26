@@ -21,18 +21,26 @@ pub(super) fn run(plan: &Plan, out: &Path) -> Result<Measurement, BoxError> {
 }
 
 /// Plays `plan` again at its worker count and at `other_workers`, to find
-/// the exact first tick where the two differ (`plan` hashes every tick).
+/// the exact first tick where the two differ (`plan` hashes every tick). The
+/// files are named from `prefix`.
 pub(super) fn diagnose(
     plan: &Plan,
     other_workers: usize,
     directory: &Path,
+    prefix: &str,
 ) -> Result<Comparison, BoxError> {
-    let base = run(plan, &directory.join("diagnosis-base.json"))?;
+    let base = run(
+        plan,
+        &directory.join(format!("{prefix}diagnosis-base.json")),
+    )?;
     let other = Plan {
         workers: other_workers,
         ..plan.clone()
     };
-    let other = run(&other, &directory.join("diagnosis-other.json"))?;
+    let other = run(
+        &other,
+        &directory.join(format!("{prefix}diagnosis-other.json")),
+    )?;
     let (base_orders, other_orders) = (judge::read_orders(&base), judge::read_orders(&other));
     Ok(judge::compare(
         &base,

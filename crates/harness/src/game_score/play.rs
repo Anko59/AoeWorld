@@ -1,9 +1,12 @@
-//! The child process: one match at one worker count. It starts the match
-//! through the server's headless seam, ticks it, hashes it on the way and
-//! writes its `Measurement` where the parent asked.
+//! The child process: one scenario at one worker count. It starts the match
+//! through the server's headless seam, ticks it, lets the recorder read the
+//! world after every tick and writes its `Measurement` where the parent asked.
+use super::counters::Recorder;
 use super::measure::{self, Measurement};
+use super::scenarios::{self, Scenario};
+use super::windows::{self, Record};
 use super::{BoxError, Plan};
-use crate::perf_scale::stats::{Series, memory};
+use crate::perf_scale::stats::memory;
 use aoe_server::{HeadlessMatch, HeadlessPlan};
 use std::{fs, path::Path, time::Duration, time::Instant};
 
@@ -16,7 +19,8 @@ pub(super) fn run(plan: &Plan, out: &Path) -> Result<(), BoxError> {
         .worker_threads(plan.workers.max(2))
         .enable_all()
         .build()?;
-    let measurement = runtime.block_on(play(plan, out))?;
+    let scenario = scenarios::find(&plan.scenario)?;
+    let measurement = runtime.block_on(play(plan, scenario, out))?;
     fs::write(out, serde_json::to_string_pretty(&measurement)? + "\n")?;
     Ok(())
 }
@@ -26,60 +30,67 @@ pub(super) fn orders_path(out: &Path) -> std::path::PathBuf {
     out.with_extension("orders.txt")
 }
 
-async fn play(plan: &Plan, out: &Path) -> Result<Measurement, BoxError> {
+async fn play(plan: &Plan, scenario: &Scenario, out: &Path) -> Result<Measurement, BoxError> {
     let started = Instant::now();
     let game = HeadlessMatch::start(&HeadlessPlan {
         package_directory: plan.package_directory.clone(),
         map_hash: plan.map_hash.clone(),
         seats: plan.seats,
         seed: plan.seed,
+        late_game_percent: scenario.late_percent(plan.late_percent),
         record_orders: plan.record_orders,
     })
     .await?;
     let setup_seconds = started.elapsed().as_secs_f64();
     let gameplay = game.gameplay();
+    let tick_hz = gameplay
+        .inspect_scale_world(|world| world.config().tick_hz)
+        .await;
+    let mut recorder = Recorder::new(plan.seats, tick_hz);
+    let sampled = scenario.sample_ticks(plan.ticks, plan.sample_every);
     let hash_every = plan.hash_every.max(1);
-    let mut digests = vec![gameplay.inspect_scale_world(measure::digest).await];
-    let mut samples = Vec::new();
-    let mut tick_ms = Series::default();
+    let mut digests = Vec::new();
+    gameplay
+        .inspect_scale_world(|world| {
+            recorder.start(world);
+            digests.push(measure::digest(world));
+        })
+        .await;
     let mut tick_time = Duration::ZERO;
-    let mut hits = 0_u64;
     for n in 1..=plan.ticks {
         let begun = Instant::now();
         game.tick().await;
         let spent = begun.elapsed();
         tick_time += spent;
-        tick_ms.push_ms(spent.as_nanos());
-        // The engine overwrites a tick's hits at the next tick: sum them here.
-        hits += u64::from(
-            gameplay
-                .inspect_scale_world(|world| world.combat_stats().hits)
-                .await,
-        );
-        if n % hash_every == 0 || n == plan.ticks {
-            digests.push(gameplay.inspect_scale_world(measure::digest).await);
-        }
-        if plan.sample_every > 0 && n % plan.sample_every == 0 {
-            let seats = plan.seats;
-            samples.push(
-                gameplay
-                    .inspect_scale_world(|world| measure::sample(world, seats))
-                    .await,
-            );
-        }
-        if n % 100 == 0 {
+        let hash = n % hash_every == 0 || n == plan.ticks;
+        let sample = sampled.contains(&n);
+        let digest = gameplay
+            .inspect_scale_world(|world| {
+                recorder.tick(world, spent);
+                if sample {
+                    recorder.sample(world);
+                }
+                hash.then(|| measure::digest(world))
+            })
+            .await;
+        digests.extend(digest);
+        if n % 500 == 0 {
             eprintln!(
-                "game score: {} workers, tick {n} of {}, {:.1} ms per tick so far",
+                "game score: {} {} workers, tick {n} of {}, {:.1} ms per tick so far",
+                scenario.id,
                 plan.workers,
                 plan.ticks,
                 tick_time.as_secs_f64() * 1e3 / n as f64
             );
         }
     }
-    let seats = plan.seats;
-    let counters = gameplay
-        .inspect_scale_world(|world| measure::counters(world, seats, hits, &samples))
-        .await;
+    let record = Record {
+        rows: &recorder.rows,
+        samples: &recorder.samples,
+        events: &recorder.events,
+    };
+    let windows = windows::windows(record, &scenario.spans_for(plan.ticks))?;
+    let series = windows::series(record, plan.ticks)?;
     let (order_count, order_log_hash, order_log_file) = if plan.record_orders {
         let lines = game.order_log();
         let file = orders_path(out);
@@ -92,18 +103,24 @@ async fn play(plan: &Plan, out: &Path) -> Result<Measurement, BoxError> {
         (None, None, None)
     };
     let tick_seconds = tick_time.as_secs_f64();
+    let milliseconds: Vec<f64> = recorder
+        .rows
+        .iter()
+        .map(|row| row.nanos as f64 / 1e6)
+        .collect();
     Ok(Measurement {
+        scenario: scenario.id.to_owned(),
         workers: plan.workers,
         ticks: plan.ticks,
         seats: plan.seats,
         setup_seconds,
         tick_seconds,
+        native_seconds: started.elapsed().as_secs_f64(),
         ticks_per_second: plan.ticks as f64 / tick_seconds.max(1e-9),
-        slowest_tick: slowest_tick(&tick_ms.0),
-        tick_ms: tick_ms.summary(),
+        slowest_tick: slowest_tick(&milliseconds),
         peak_memory_mib: memory()["peak_rss_mib"].as_u64().unwrap_or(0),
-        counters,
-        samples,
+        windows,
+        series,
         digests,
         order_count,
         order_log_hash,
