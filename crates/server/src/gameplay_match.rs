@@ -1,6 +1,6 @@
 //! Hosting a match: several seats on one map, each with its own village.
 use crate::gameplay::SlotSetup;
-use crate::{AppState, GameplayService, map_store, maps};
+use crate::{AiRuntime, AppState, GameplayService, map_store, maps};
 use aoe_core::{PlayerId, TileCoord};
 use aoe_map::{EnvironmentPageProvider, MAP_SCHEMA_VERSION, MapPackage, MapRequest};
 use aoe_protocol::ResumeToken;
@@ -242,6 +242,74 @@ pub(crate) fn routes() -> axum::Router<AppState> {
         .merge(routes::routes())
 }
 
+/// A match built but not yet running, with what `POST /match` reports of it.
+pub(crate) struct Launched {
+    pub(crate) service: GameplayService,
+    pub(crate) seeded_units: u64,
+    pub(crate) content_hash: String,
+    pub(crate) tiles_per_side: u64,
+}
+
+/// What `POST /match` and the headless match share: the package's page
+/// residency, the world built off the async runtime, and the package kept
+/// under its hash, where the seats fetch their map chunks.
+pub(crate) async fn launch(
+    state: &AppState,
+    package: MapPackage,
+    humans: Vec<bool>,
+    rules: MatchRules,
+) -> Result<Launched, (StatusCode, String)> {
+    let (_guard, cancelled) = maps::request_cancellation();
+    let provider = maps::page_residency(state, &package, cancelled.clone()).await?;
+    let (content_hash, tiles_per_side) =
+        (package.content_hash_hex(), package.estimate.tiles_per_side);
+    let stored = package.clone();
+    let directory = state.map_package_directory.clone();
+    let (service, seeded_units) = tokio::task::spawn_blocking(move || {
+        GameplayService::from_match_rules_stored(
+            package,
+            provider.map(|value| value as Arc<dyn EnvironmentPageProvider>),
+            &humans,
+            &rules,
+            &AtomicUsize::new(0),
+            &|| cancelled.load(Ordering::Acquire),
+            directory.as_deref(),
+        )
+    })
+    .await
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "match task failed".to_owned(),
+        )
+    })?
+    .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))?;
+    state
+        .map_packages
+        .write()
+        .await
+        .insert(content_hash.clone(), stored);
+    Ok(Launched {
+        service,
+        seeded_units,
+        content_hash,
+        tiles_per_side,
+    })
+}
+
+/// Makes `service` the running match: the previous one retires, and with the
+/// Rust runtime every AI slot is seated in process.
+pub(crate) async fn install(state: &AppState, service: GameplayService, runtime: AiRuntime) {
+    let world_id = service.world_id();
+    let previous = {
+        let mut active = state.gameplay.write().await;
+        std::mem::replace(&mut *active, service)
+    };
+    previous.retire(world_id).await;
+    state.generation.fetch_add(1, Ordering::SeqCst);
+    play_ai_seats(state, runtime).await;
+}
+
 async fn start_match(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -312,40 +380,17 @@ async fn start_match(
             ));
         }
     };
-    let (_guard, cancelled) = maps::request_cancellation();
-    let provider = maps::page_residency(&state, &package, cancelled.clone()).await?;
     let humans = request
         .slots
         .iter()
         .map(|kind| *kind == SlotKind::Human)
         .collect::<Vec<_>>();
-    let (summary_hash, tiles) = (package.content_hash_hex(), package.estimate.tiles_per_side);
-    let stored = package.clone();
-    let directory = state.map_package_directory.clone();
-    let (service, seeded_units) = tokio::task::spawn_blocking(move || {
-        GameplayService::from_match_rules_stored(
-            package,
-            provider.map(|value| value as Arc<dyn EnvironmentPageProvider>),
-            &humans,
-            &rules,
-            &AtomicUsize::new(0),
-            &|| cancelled.load(Ordering::Acquire),
-            directory.as_deref(),
-        )
-    })
-    .await
-    .map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "match task failed".to_owned(),
-        )
-    })?
-    .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))?;
-    state
-        .map_packages
-        .write()
-        .await
-        .insert(summary_hash.clone(), stored);
+    let Launched {
+        service,
+        seeded_units,
+        content_hash: summary_hash,
+        tiles_per_side: tiles,
+    } = launch(&state, package, humans, rules).await?;
     let world = service.world.read().await;
     let land_masses = measure_start_environment
         .then(|| world.terrain().land_masses(world.config()))
@@ -383,13 +428,7 @@ async fn start_match(
     drop(world);
     let partial_starting_kits = service.partial_starting_kits();
     let world_id = service.world_id();
-    let previous = {
-        let mut active = state.gameplay.write().await;
-        std::mem::replace(&mut *active, service)
-    };
-    previous.retire(world_id).await;
-    state.generation.fetch_add(1, Ordering::SeqCst);
-    play_ai_seats(&state, state.ai_runtime).await;
+    install(&state, service, state.ai_runtime).await;
     Ok(Json(MatchResponse {
         world_id,
         content_hash: summary_hash,
@@ -404,6 +443,7 @@ async fn start_match(
 pub(crate) mod admin;
 mod ai_seats;
 mod flat;
+mod headless;
 mod late_game;
 mod pause;
 pub(crate) mod routes;
@@ -414,6 +454,7 @@ mod seats;
 mod skirmish;
 mod stats;
 pub(crate) use ai_seats::{AiSeats, AppliedOrder, play_ai_seats, record as record_applied};
+pub use headless::{HeadlessError, HeadlessMatch, HeadlessPlan};
 pub use rules::{MatchError, MatchRules, StartUnits};
 pub(crate) use seats::fresh_seed;
 use seats::place_villages;

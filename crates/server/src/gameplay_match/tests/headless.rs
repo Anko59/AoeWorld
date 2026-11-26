@@ -1,0 +1,104 @@
+//! The headless match: `POST /match` without HTTP, a socket or a clock.
+//!
+//! The interface these tests pin, for the implementer:
+//! - `HeadlessMatch::start(&HeadlessPlan)` loads the plan's package directory,
+//!   builds a match of `seats` AI slots on the package named by `map_hash`
+//!   (seed `seed`), with the same `launch` and `install` that `POST /match`
+//!   runs, and seats every slot with the Rust AI.
+//! - `HeadlessMatch::tick()` is one `GameplayService::tick`.
+//! - `HeadlessMatch::order_log()` has one line per order the seats had applied
+//!   when the plan says `record_orders`.
+use super::*;
+use aoe_map::{MAP_SCHEMA_VERSION, MapPackage, MapRequest, Ratio};
+
+/// A small synthetic package stored in a fresh directory, and its hash.
+fn stored_package() -> (tempfile::TempDir, String) {
+    let request = MapRequest {
+        requested_side_meters: 1_000,
+        compression: Ratio::new(1, 1).expect("ratio"),
+        ..MapRequest::default()
+    };
+    let package = MapPackage::new(MAP_SCHEMA_VERSION, request, Vec::new()).expect("package");
+    let directory = tempfile::tempdir().expect("directory");
+    map_store::persist(Some(directory.path()), &package).expect("package stored");
+    (directory, package.content_hash_hex())
+}
+
+fn plan(directory: &tempfile::TempDir, hash: &str, seed: u64) -> HeadlessPlan {
+    HeadlessPlan {
+        package_directory: directory.path().to_owned(),
+        map_hash: hash.to_owned(),
+        seats: 3,
+        seed,
+        record_orders: true,
+    }
+}
+
+/// The match at `seed`, ticked `ticks` times: its order log, world hash and tick.
+async fn played(seed: u64, ticks: u32) -> (Vec<String>, [u8; 32], u64) {
+    let (directory, hash) = stored_package();
+    let game = HeadlessMatch::start(&plan(&directory, &hash, seed))
+        .await
+        .expect("a headless match on a stored package");
+    for _ in 0..ticks {
+        game.tick().await;
+    }
+    let (hash, tick) = game
+        .gameplay()
+        .inspect_scale_world(|world| (world.canonical_hash(), world.tick().0))
+        .await;
+    (game.order_log(), hash, tick)
+}
+
+#[tokio::test]
+async fn every_slot_is_an_ai_seat_and_each_call_is_one_tick() {
+    let (directory, hash) = stored_package();
+    let game = HeadlessMatch::start(&plan(&directory, &hash, 7))
+        .await
+        .expect("a headless match");
+    let slots = game.gameplay().slot_infos().await;
+    assert_eq!(slots.len(), 3);
+    assert!(slots.iter().all(|slot| !slot.human), "a slot is a person's");
+    let before = game
+        .gameplay()
+        .inspect_scale_world(|world| world.tick().0)
+        .await;
+    for _ in 0..150 {
+        game.tick().await;
+    }
+    let (after, units) = game
+        .gameplay()
+        .inspect_scale_world(|world| (world.tick().0, world.unit_count()))
+        .await;
+    assert_eq!(after, before + 150);
+    assert!(units > 0);
+    let log = game.order_log();
+    assert!(!log.is_empty(), "the seats gave no orders");
+    let seated: std::collections::BTreeSet<_> = log
+        .iter()
+        .filter_map(|line| line.split(' ').nth(1))
+        .collect();
+    assert!(seated.is_subset(&["0", "1", "2"].into()), "{seated:?}");
+}
+
+#[tokio::test]
+async fn one_seed_gives_one_match_and_another_seed_another() {
+    let first = played(7, 150).await;
+    let second = played(7, 150).await;
+    assert!(!first.0.is_empty());
+    assert_eq!(first.0, second.0, "the order logs differ");
+    assert_eq!(first.1, second.1, "the world hashes differ");
+    let other = played(8, 150).await;
+    assert_ne!(first.1, other.1, "the seed changed nothing");
+}
+
+#[tokio::test]
+async fn a_package_that_is_not_in_the_directory_is_refused_by_name() {
+    let (directory, _) = stored_package();
+    let missing = "ab".repeat(32);
+    let error = HeadlessMatch::start(&plan(&directory, &missing, 7))
+        .await
+        .err()
+        .expect("a package that is not stored");
+    assert!(error.to_string().contains(&missing), "{error}");
+}
