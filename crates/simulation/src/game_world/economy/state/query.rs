@@ -3,9 +3,25 @@ use super::super::{BuildingKind, GameBuilding};
 use crate::GameWorld;
 use aoe_core::{EntityId, PlayerId};
 
+#[cfg(test)]
+thread_local! {
+    /// Buildings read on this thread through the queries below.
+    static READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+impl GameWorld {
+    /// Buildings read on this thread so far, by walk or by id.
+    pub(crate) fn building_reads(&self) -> usize {
+        READS.with(std::cell::Cell::get)
+    }
+}
+
 impl GameWorld {
     pub fn buildings(&self) -> impl Iterator<Item = std::borrow::Cow<'_, GameBuilding>> {
         self.economy.buildings.values().map(|b| {
+            #[cfg(test)]
+            READS.with(|reads| reads.set(reads.get() + 1));
             self.economy
                 .queues
                 .project(self.economy.construction.project(b))
@@ -38,6 +54,8 @@ impl GameWorld {
     }
     pub fn building(&self, id: EntityId) -> Option<std::borrow::Cow<'_, GameBuilding>> {
         self.economy.buildings.get(&id).map(|b| {
+            #[cfg(test)]
+            READS.with(|reads| reads.set(reads.get() + 1));
             self.economy
                 .queues
                 .project(self.economy.construction.project(b))

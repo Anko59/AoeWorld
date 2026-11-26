@@ -59,6 +59,10 @@ pub(crate) struct Vision {
     pub(crate) building_cells: crate::game_world::unit_index::ChunkPresence,
     /// Planned sites reserve placement only for their own player.
     private_foundations: BTreeMap<(PlayerId, TileCoord), EntityId>,
+    /// Buildings with a footprint tile that `building_at_tile` does not give
+    /// to them: a bridge off the axes, a building another one was put over.
+    /// Seeing such a tile is no event. Derived, never hashed.
+    part_indexed: BTreeSet<EntityId>,
     building_watchers: BTreeMap<EntityId, Watched>,
     /// Buildings changed or newly watched since the last memory refresh
     /// (`memory.rs`). Derived, never hashed.
@@ -242,30 +246,6 @@ impl GameWorld {
             b.player == player
                 || (!b.is_unstarted() && self.building_visible_to(player, b.footprint))
         })
-    }
-
-    /// Authoritative last observations, including buildings destroyed unseen.
-    pub fn known_buildings(&self, player: PlayerId) -> Vec<GameBuilding> {
-        if self.vision.disabled {
-            return self
-                .buildings()
-                .filter(|b| !b.is_unstarted() || b.player == player)
-                .map(|b| b.into_owned())
-                .collect();
-        }
-        let mut known = self
-            .vision
-            .players
-            .get(&player)
-            .map(|v| v.remembered.clone())
-            .unwrap_or_default();
-        for building in self.buildings().filter(|b| {
-            b.player == player
-                || (!b.is_unstarted() && self.building_visible_to(player, b.footprint))
-        }) {
-            known.insert(building.id, building.into_owned());
-        }
-        known.into_values().collect()
     }
 
     /// Chunk count, current visible tile count and total tile touches, for

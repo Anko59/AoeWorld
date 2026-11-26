@@ -1,6 +1,7 @@
 use super::*;
 use crate::{Tech, TileVisibility, UnitKind};
 mod foundations;
+mod known;
 mod placement;
 
 fn at(x: i32, y: i32) -> WorldPosition {
