@@ -225,7 +225,10 @@ impl RoutePlanner {
     /// True when any tile of `area` is part of this planner's retained
     /// state: a searched tile, a tile being reconstructed, or a tile of the
     /// planned route not yet emitted. A planner that does not touch a newly
-    /// blocked area stays exact; one that does must be planned again.
+    /// blocked area stays exact; one that does must be planned again. Its
+    /// portal search and guidance are coarse, per chunk: a building in a
+    /// chunk they crossed does not restart it (#978: 57M of 152M discarded
+    /// route work in 240 ticks of R1); its leg searches read today's ground.
     pub fn touches(&self, area: aoe_core::TileRect) -> bool {
         let inside = |tile: TileCoord| {
             tile.x >= area.min.x
@@ -244,18 +247,6 @@ impl RoutePlanner {
             .resolution
             .as_ref()
             .is_some_and(|resolution| resolution.touches(area))
-            || self
-                .hierarchy
-                .as_ref()
-                .is_some_and(|search| search.touches(area))
-            || self.guidance.iter().any(|tile| {
-                let x = tile.x.div_euclid(crate::CHUNK_TILES) * crate::CHUNK_TILES;
-                let y = tile.y.div_euclid(crate::CHUNK_TILES) * crate::CHUNK_TILES;
-                x < area.max.x
-                    && y < area.max.y
-                    && x + crate::CHUNK_TILES > area.min.x
-                    && y + crate::CHUNK_TILES > area.min.y
-            })
         {
             return true;
         }

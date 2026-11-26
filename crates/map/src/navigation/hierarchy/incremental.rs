@@ -79,27 +79,6 @@ impl Search {
         }
     }
 
-    pub(crate) fn touches(&self, area: aoe_core::TileRect) -> bool {
-        let overlaps = |tile: TileCoord| {
-            let key = chunk_of(tile);
-            let (x, y) = (key.0 * CHUNK_TILES, key.1 * CHUNK_TILES);
-            x < area.max.x
-                && y < area.max.y
-                && x + CHUNK_TILES > area.min.x
-                && y + CHUNK_TILES > area.min.y
-        };
-        overlaps(self.origin)
-            || overlaps(self.destination)
-            || self.chunks.iter().any(|key| overlaps(grid::tile(*key, 0)))
-            || self
-                .preparing
-                .is_some_and(|key| overlaps(grid::tile(key, 0)))
-            || self
-                .best
-                .keys()
-                .any(|node| matches!(node,Node::Portal(tile) if overlaps(*tile)))
-    }
-
     pub(crate) fn preparation_tiles(&self) -> Vec<TileCoord> {
         let mut tiles = vec![self.origin, self.destination];
         tiles.extend(self.heap.iter().take(4).filter_map(|entry| match entry.2 {
