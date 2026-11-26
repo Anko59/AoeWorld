@@ -1,6 +1,8 @@
 mod dispatch;
 
-use crate::{agents, assets, e2e, gates, jobs, ledger, native, perf_scale, qa, review, ship};
+use crate::{
+    agents, assets, e2e, game_map, gates, jobs, ledger, native, perf_scale, qa, review, ship,
+};
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -42,6 +44,8 @@ enum Command {
         report: bool,
     },
     GatesDocs,
+    /// Make sure the owner's pinned map package exists locally; print its hash and directory (`make game-map`).
+    GameMap(game_map::Options),
     ScopeCheck {
         #[arg(long)]
         revision: Option<String>,

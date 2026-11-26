@@ -1,9 +1,9 @@
 use super::{Command, DevCommand};
 use crate::{
-    agents, architecture, assets, coverage, dev, e2e, format_commands, fuzz, gates, hooks, jobs,
-    ledger, native, perf, perf_comment, perf_hardware, perf_micro, perf_pressure, perf_scale,
-    perf_size, perf_soak, perf_stress, policy, process, qa, qa_mcp, release, release_promotion,
-    release_publish, repo_policy, review, ship, timeline, wasm_test,
+    agents, architecture, assets, coverage, dev, e2e, format_commands, fuzz, game_map, gates,
+    hooks, jobs, ledger, native, perf, perf_comment, perf_hardware, perf_micro, perf_pressure,
+    perf_scale, perf_size, perf_soak, perf_stress, policy, process, qa, qa_mcp, release,
+    release_promotion, release_publish, repo_policy, review, ship, timeline, wasm_test,
 };
 use std::{
     path::{Path, PathBuf},
@@ -57,6 +57,7 @@ pub(super) fn run(
         Command::DocsCheck => gates::docs_check(Path::new("."))?,
         Command::CheckFixtures { report } => crate::fixtures::run(report)?,
         Command::GatesDocs => gates::docs_generate(Path::new("."))?,
+        Command::GameMap(options) => game_map::run(options)?,
         Command::ScopeCheck { revision } => {
             gates::scopes::inspect(Path::new("."), revision.as_deref())?
         }

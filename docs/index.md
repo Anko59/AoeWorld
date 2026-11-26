@@ -19,6 +19,7 @@
 - [Performance](performance.md)
 - [Assets](assets.md)
 - [Geographic map workflow](geodata/workflow.md)
+- [Geodata sources and licences](geodata/licences.md)
 - [Release](release.md)
 - [QA](qa.md)
 - [Troubleshooting](troubleshooting.md)

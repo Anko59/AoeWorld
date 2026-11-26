@@ -1,0 +1,66 @@
+name: AoeWorld game map cache
+
+# Warms the Actions cache with the owner's Anatolia map package (qa/anatolia-map.json) so that no job
+# fetches third-party geodata at pull-request time. Caches only: one source layer is CC BY-SA 4.0 and
+# redistribution (a release asset or a workflow artifact) is the owner's decision (docs/geodata/licences.md).
+on:
+  schedule:
+    # Twice a week: the cache is evicted after 7 days without access, and a weekly run sits on that edge.
+    - cron: '17 4 * * 1,4'
+  workflow_dispatch:
+  push:
+    branches: [dev]
+    paths:
+      - qa/anatolia-map.json
+      - crates/geodata/**
+      - crates/map/**
+      - .github/workflows/game-map.yml
+      - .github/actions/game-map-restore/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: game-map
+  cancel-in-progress: false
+
+jobs:
+  warm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+      - id: map
+        uses: ./.github/actions/game-map-restore
+        with:
+          fallback: 'false'
+      - name: Cache is warm
+        if: steps.map.outputs.exact == 'true'
+        run: echo "::notice::game map cache already holds ${{ steps.map.outputs.cache-key }}; the restore touched it to keep it alive"
+      - name: Free disk for the sources
+        if: steps.map.outputs.exact != 'true'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - if: steps.map.outputs.exact != 'true'
+        uses: ./.github/actions/docker-setup
+        with:
+          cache: 'false'
+      - name: Fetch the sources and generate the package
+        if: steps.map.outputs.exact != 'true'
+        run: |
+          start=$(date +%s)
+          make game-map | tee game-map.log
+          echo "generation took $(( $(date +%s) - start )) s" | tee -a game-map.log
+          du -sh .cache/geodata .cache/game-map/packages | tee -a game-map.log
+      - name: Save the package to the cache
+        if: steps.map.outputs.exact != 'true'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        with:
+          path: .cache/game-map/packages
+          key: ${{ steps.map.outputs.cache-key }}
+      - if: always() && hashFiles('game-map.log') != ''
+        run: |
+          { echo '### Game map'; echo '```'; cat game-map.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
