@@ -71,13 +71,26 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
+  # The advisory database moves without a push: only a timer sees a new advisory
+  # against an unchanged dev (the push jobs run `make deny` too, but only on pushes).
+  dependency-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: dev
+      - uses: ./.github/actions/docker-setup
+      - run: make bootstrap
+      - run: make deny
+
   # Pushes to dev already run the functional tiers (coverage, exhaustive,
   # qualification, the Python AI games, the sharded e2e) in ci.yml; the nightly
-  # keeps only what no push runs: the long fuzz, scaling and soak.
+  # keeps what no push runs (the long fuzz, scaling and soak) and the advisory audit.
   # File one comment for the run’s failures.
   triage:
     if: always()
-    needs: [parser-fuzz, target-performance, network-soak]
+    needs: [parser-fuzz, target-performance, network-soak, dependency-audit]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     concurrency:
