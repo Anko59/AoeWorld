@@ -99,6 +99,8 @@ the defaults are `.cache/geodata` and `.cache/game-map/packages`; share them
 between worktrees by passing absolute paths. Measured on 2026-11-26 (Apple
 silicon, OrbStack): 9 sources, 6.87 GB to download in about 9 minutes, 7.0 GB on
 disk, generation about 20 s from a warm cache, package 66 MiB in 1,901 files.
+The `61633e71` package that scale docs cite was made by the generator before #1036
+(river channel sampling); the same request now gives another hash.
 
 CI cannot cache 7 GB of sources (the repository's 10 GB cache is shared with the
 build caches and already full), so it caches the package. The `game-map` workflow
