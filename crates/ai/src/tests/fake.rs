@@ -4,8 +4,8 @@
 use std::cell::RefCell;
 
 use aoe_sdk::{
-    Age, BuildingKind, CombatStance, CommandResult, Event, Order, ResourceKind, UnitKind, UnitTask,
-    Visibility,
+    Age, AnimalKind, AnimalTask, BuildingKind, CombatStance, CommandResult, EntityId, Event,
+    Formation, Order, ResourceKind, TileCoord, UnitKind, UnitTask, Visibility,
 };
 
 use crate::blackboard::Blackboard;
@@ -59,6 +59,47 @@ pub fn unit_of(id: u32, kind: UnitKind, tile: Tile) -> Unit {
 
 pub fn soldier(id: u32, tile: Tile) -> Unit {
     unit_of(id, UnitKind::Spearman, tile)
+}
+
+/// `fakes.unit(task=...)`: the unit with `task`; it is idle only when the task is.
+pub fn with_task(unit: Unit, task: UnitTask) -> Unit {
+    Unit {
+        task,
+        idle: task == UnitTask::Idle,
+        ..unit
+    }
+}
+
+/// A soldier of ours on the march: task `Moving`, `moving` set, not idle.
+pub fn marching(id: u32, tile: Tile) -> Unit {
+    Unit {
+        moving: true,
+        ..with_task(soldier(id, tile), UnitTask::Moving)
+    }
+}
+
+/// `fakes.animal`: an idle, wild animal with 7 hit points and `food` meat.
+pub fn animal(id: u32, tile: Tile, kind: AnimalKind, food: u16) -> Animal {
+    Animal {
+        id,
+        kind,
+        x: tile.0,
+        y: tile.1,
+        hp: 7,
+        task: AnimalTask::Idle,
+        food_remaining: food,
+        owner: None,
+    }
+}
+
+/// An `under_attack` event about `target`, hit at `at`.
+pub fn under_attack(target: u32, attacker: Option<u32>, building: bool, at: Tile) -> Event {
+    Event::UnderAttack {
+        target: EntityId(target),
+        attacker: attacker.map(EntityId),
+        building,
+        tile: TileCoord::new(at.0, at.1),
+    }
 }
 
 /// A foreign unit (`mine=False`, owner 1).
@@ -152,8 +193,29 @@ pub fn order_result(sequence: u64, result: CommandResult) -> Event {
     Event::OrderResult { sequence, result }
 }
 
+/// The Python tests replace `world.land_route` and friends with a lambda; the
+/// fake world takes the same replacements as closures.
+pub type RouteFn = Box<dyn Fn(Tile, Tile) -> Option<Vec<Tile>>>;
+pub type FrontierFn = Box<dyn Fn(Tile, Tile) -> Option<Tile>>;
+pub type BridgeSiteFn = Box<dyn Fn(Tile, Tile) -> Option<(Tile, Tile)>>;
+pub type SiteFn = Box<dyn Fn(BuildingKind, Tile, i32, i32) -> Option<Tile>>;
+
 /// `fakes.FakeWorld`. Fields are public so a test edits the world between decisions.
 pub struct FakeWorld {
+    /// Replaces `find_build_site` (kind, near, radius, gap); queries still land in `sites`.
+    pub site_fn: Option<SiteFn>,
+    /// Replaces `land_route` (a query is still recorded in `route_queries`).
+    pub route_fn: Option<RouteFn>,
+    /// Replaces `land_frontier`.
+    pub frontier_fn: Option<FrontierFn>,
+    /// Replaces `find_bridge_site`.
+    pub bridge_site_fn: Option<BridgeSiteFn>,
+    /// Replaces `land_known`.
+    pub known_fn: Option<Box<dyn Fn(Tile) -> bool>>,
+    /// Replaces `visibility`.
+    pub visibility_fn: Option<Box<dyn Fn(Tile) -> Visibility>>,
+    /// Replaces `passable`.
+    pub passable_fn: Option<Box<dyn Fn(Tile) -> Option<bool>>>,
     pub tick: u64,
     pub tick_hz: u32,
     pub me: Option<u16>,
@@ -178,6 +240,13 @@ pub struct FakeWorld {
 impl FakeWorld {
     pub fn new(units: Vec<Unit>, buildings: Vec<Building>) -> Self {
         Self {
+            site_fn: None,
+            route_fn: None,
+            frontier_fn: None,
+            bridge_site_fn: None,
+            known_fn: None,
+            visibility_fn: None,
+            passable_fn: None,
             tick: 100,
             tick_hz: 20,
             me: Some(0),
@@ -202,10 +271,25 @@ impl FakeWorld {
     }
 
     fn known(&self, tile: Tile) -> bool {
-        0 <= tile.0 && tile.0 < self.size.0 && 0 <= tile.1 && tile.1 < self.size.1
+        match &self.known_fn {
+            Some(known) => known(tile),
+            None => 0 <= tile.0 && tile.0 < self.size.0 && 0 <= tile.1 && tile.1 < self.size.1,
+        }
     }
 
-    fn straight(from: Tile, to: Tile) -> Vec<Tile> {
+    /// The route without recording a query: the replacement, else a straight walk.
+    fn route(&self, from: Tile, to: Tile) -> Option<Vec<Tile>> {
+        if self.disconnected {
+            return None;
+        }
+        match &self.route_fn {
+            Some(route) => route(from, to),
+            None => Some(Self::straight(from, to)),
+        }
+    }
+
+    /// The default `land_route`: one step at a time, diagonals first.
+    pub fn straight(from: Tile, to: Tile) -> Vec<Tile> {
         let (mut x, mut y) = from;
         let mut path = vec![(x, y)];
         while (x, y) != to {
@@ -262,6 +346,9 @@ impl View for FakeWorld {
             .collect()
     }
     fn visibility(&self, tile: Tile) -> Visibility {
+        if let Some(visibility) = &self.visibility_fn {
+            return visibility(tile);
+        }
         if self.known(tile) {
             Visibility::Visible
         } else {
@@ -269,35 +356,40 @@ impl View for FakeWorld {
         }
     }
     fn passable(&self, tile: Tile) -> Option<bool> {
-        self.known(tile).then_some(true)
+        match &self.passable_fn {
+            Some(passable) => passable(tile),
+            None => self.known(tile).then_some(true),
+        }
     }
     fn land_known(&self, tile: Tile) -> bool {
         self.known(tile)
     }
     fn land_route(&self, from: Tile, to: Tile) -> Option<Vec<Tile>> {
         self.route_queries.borrow_mut().push((from, to));
-        (!self.disconnected).then(|| Self::straight(from, to))
+        self.route(from, to)
     }
     fn land_frontier(&self, from: Tile, to: Tile) -> Option<Tile> {
         self.frontier_queries.borrow_mut().push((from, to));
-        if self.disconnected {
-            None
-        } else {
-            Self::straight(from, to).last().copied()
+        match &self.frontier_fn {
+            Some(frontier) => frontier(from, to),
+            None => self.route(from, to)?.last().copied(),
         }
     }
     fn find_build_site(
         &self,
         kind: BuildingKind,
         near: Tile,
-        _max_radius: i32,
-        _gap: i32,
+        max_radius: i32,
+        gap: i32,
     ) -> Option<Tile> {
         self.sites.borrow_mut().push((kind, near));
-        Some((near.0 + 3, near.1 + 3))
+        match &self.site_fn {
+            Some(site) => site(kind, near, max_radius, gap),
+            None => Some((near.0 + 3, near.1 + 3)),
+        }
     }
-    fn find_bridge_site(&self, _from: Tile, _to: Tile) -> Option<(Tile, Tile)> {
-        None
+    fn find_bridge_site(&self, from: Tile, to: Tile) -> Option<(Tile, Tile)> {
+        self.bridge_site_fn.as_ref().and_then(|site| site(from, to))
     }
 }
 
@@ -305,6 +397,83 @@ impl View for FakeWorld {
 #[derive(Default)]
 pub struct Recorder {
     pub orders: Vec<Order>,
+}
+
+/// One `formation_move`: members, destination, formation, `attack_move`.
+pub type Group = (Vec<u32>, Tile, Formation, bool);
+
+impl Recorder {
+    /// `client.named("attack")`: (soldier, target) in the order sent.
+    pub fn attacks(&self) -> Vec<(u32, u32)> {
+        self.orders
+            .iter()
+            .filter_map(|o| match o {
+                Order::Attack { unit, target } => Some((unit.0, target.0)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `client.named("move")`: (unit, destination) in the order sent.
+    pub fn moves(&self) -> Vec<(u32, Tile)> {
+        self.orders
+            .iter()
+            .filter_map(|o| match o {
+                Order::Move { unit, to } => Some((unit.0, (to.x, to.y))),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `client.named("stop")`.
+    pub fn stops(&self) -> Vec<u32> {
+        self.orders
+            .iter()
+            .filter_map(|o| match o {
+                Order::Stop { unit } => Some(unit.0),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `client.named("formation_move")` with its `attack_move` option.
+    pub fn formation_moves(&self) -> Vec<Group> {
+        self.orders
+            .iter()
+            .filter_map(|o| match o {
+                Order::FormationMove {
+                    units,
+                    formation,
+                    to,
+                    attack_move,
+                    ..
+                } => Some((
+                    units.iter().map(|u| u.0).collect(),
+                    (to.x, to.y),
+                    *formation,
+                    *attack_move,
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `client.named("build_bridge")`: (builders, from, to).
+    pub fn bridges(&self) -> Vec<(Vec<u32>, Tile, Tile)> {
+        self.orders
+            .iter()
+            .filter_map(|o| match o {
+                Order::BuildBridge {
+                    builders, from, to, ..
+                } => Some((
+                    builders.iter().map(|u| u.0).collect(),
+                    (from.x, from.y),
+                    (to.x, to.y),
+                )),
+                _ => None,
+            })
+            .collect()
+    }
 }
 
 impl Seat for Recorder {

@@ -89,6 +89,8 @@ impl Preparation {
     pub(super) fn close(&self) {
         self.cancelled.store(true, Ordering::Release);
         self.workers.close();
+        // Callers queued for a slot (`submit_queued`) stop waiting.
+        self.slots.close();
     }
 
     pub(super) fn chunks(generator: &MapChunkGenerator, tiles: &[TileCoord]) -> BTreeSet<Key> {
@@ -183,6 +185,18 @@ impl Preparation {
 #[cfg(test)]
 mod tests;
 
+/// Terrain warm-ups that were running at one moment.
+pub(crate) struct Launched(Vec<Ready>);
+
+impl Launched {
+    /// Returns once every one of them has finished.
+    pub(crate) async fn settled(self) {
+        while !self.0.iter().all(|ready| ready.load(Ordering::Acquire)) {
+            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+        }
+    }
+}
+
 impl super::GameplayService {
     /// Returns once every terrain warm-up launched so far has finished, so
     /// each command accepted before the call is applied by the next tick.
@@ -195,6 +209,18 @@ impl super::GameplayService {
         while self.preparation.busy() {
             tokio::time::sleep(std::time::Duration::from_millis(1)).await;
         }
+    }
+
+    /// The warm-ups running now, to be awaited later with `Launched::settled`.
+    /// Unlike `settle_preparation`, it does not wait for warm-ups launched
+    /// after this call.
+    pub(crate) fn launched_preparation(&self) -> Launched {
+        let pending = self.preparation.pending.lock();
+        Launched(
+            pending
+                .map(|pending| pending.values().filter_map(Weak::upgrade).collect())
+                .unwrap_or_default(),
+        )
     }
 
     pub(crate) fn install_initial_terrain(&self, cache: crate::terrain_cache::TerrainCache) {

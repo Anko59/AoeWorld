@@ -34,7 +34,8 @@ def _call(port: int, method: str, path: str, body: Optional[dict] = None) -> dic
 def run(binary: Path, root: Path, name: str, bots: int, seconds: float, map_hash: str,
         packages: str, villagers: int = 0, seed: int = 1) -> dict:
     port = free_port()
-    env = dict(os.environ, AOE_BIND=f"127.0.0.1:{port}", AOE_MATCH_TOKEN=SECRET, AOE_MAP_PACKAGE_DIRECTORY=packages)
+    env = dict(os.environ, AOE_BIND=f"127.0.0.1:{port}", AOE_MATCH_TOKEN=SECRET, AOE_MAP_PACKAGE_DIRECTORY=packages,
+               AOE_AI_RUNTIME="python")  # the Python bots play the AI slots
     server = subprocess.Popen([str(binary)], cwd=root, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         for _ in range(100):

@@ -383,6 +383,25 @@ pub(crate) async fn terrain_chunk(
     cache_key: terrain_cache::Key,
     human: bool,
 ) -> Result<CompactChunk, StatusCode> {
+    load_chunk(state, cache_key, Some(human)).await
+}
+
+/// The same chunk as `terrain_chunk(.., false)`, for the AI seats: when the
+/// preparation lanes are full it waits its turn in the queue instead of being
+/// refused (503), so a seat's load completes once the jobs ahead of it have.
+pub(crate) async fn terrain_chunk_queued(
+    state: &AppState,
+    cache_key: terrain_cache::Key,
+) -> Result<CompactChunk, StatusCode> {
+    load_chunk(state, cache_key, None).await
+}
+
+/// `human` is the route's lane; `None` queues in the background lane.
+async fn load_chunk(
+    state: &AppState,
+    cache_key: terrain_cache::Key,
+    human: Option<bool>,
+) -> Result<CompactChunk, StatusCode> {
     let content_hash = cache_key.content_hash.clone();
     let (x, y) = (cache_key.x, cache_key.y);
     if let Some(chunk) = state.terrain_cache.lock().await.get(&cache_key) {
@@ -408,22 +427,24 @@ pub(crate) async fn terrain_chunk(
     let provider = page_residency(state, &package, cancelled.clone())
         .await
         .map_err(|_| StatusCode::NOT_FOUND)?;
-    let chunk = gameplay
-        .prepare_terrain(human, move || {
-            let generator = if let Some(provider) = provider {
-                package
-                    .generator_with_page_provider(provider)
-                    .map_err(|_| StatusCode::NOT_FOUND)?
-            } else {
-                package.generator()
-            };
-            let scene = generator
-                .landscape_chunk_with_cancel(x, y, &|| cancelled.load(Ordering::Acquire))
-                .map_err(|_| StatusCode::NOT_FOUND)?;
-            CompactChunk::encode(&scene).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
-        })
-        .await
-        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)??;
+    let work = move || -> Result<CompactChunk, StatusCode> {
+        let generator = if let Some(provider) = provider {
+            package
+                .generator_with_page_provider(provider)
+                .map_err(|_| StatusCode::NOT_FOUND)?
+        } else {
+            package.generator()
+        };
+        let scene = generator
+            .landscape_chunk_with_cancel(x, y, &|| cancelled.load(Ordering::Acquire))
+            .map_err(|_| StatusCode::NOT_FOUND)?;
+        CompactChunk::encode(&scene).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+    };
+    let prepared = match human {
+        Some(human) => gameplay.prepare_terrain(human, work).await,
+        None => gameplay.prepare_terrain_queued(work).await,
+    };
+    let chunk = prepared.map_err(|_| StatusCode::SERVICE_UNAVAILABLE)??;
     state
         .terrain_cache
         .lock()

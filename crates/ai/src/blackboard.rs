@@ -73,8 +73,8 @@ pub struct Blackboard {
     pub march_progress: BTreeMap<u32, (Tile, u64)>,
     /// villager id -> (resource node, tick) of its last gather order
     pub gather_sent: BTreeMap<u32, (u64, u64)>,
-    /// scout id -> the waypoint it was last sent to
-    pub scout_sent: BTreeMap<u32, usize>,
+    /// scout id -> tick of its last move order
+    pub scout_sent: BTreeMap<u32, u64>,
     pub scout_targets: BTreeMap<u32, Tile>,
     pub scout_progress: BTreeMap<u32, (Tile, u64)>,
     pub home: Option<Tile>,
@@ -229,7 +229,12 @@ impl Default for Blackboard {
 
 impl Blackboard {
     pub fn bump(&mut self, name: &str) {
-        *self.stats.entry(name.to_owned()).or_insert(0) += 1;
+        self.bump_by(name, 1);
+    }
+
+    /// `bump(name, n)` of the Python blackboard.
+    pub fn bump_by(&mut self, name: &str, count: u64) {
+        *self.stats.entry(name.to_owned()).or_insert(0) += count;
     }
 
     /// Whether `name` is cooling at `tick` (it holds until its last tick).

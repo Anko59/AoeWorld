@@ -29,6 +29,34 @@ impl Preparation {
             &self.slots
         };
         let slot: OwnedSemaphorePermit = slots.clone().try_acquire_owned().map_err(|_| ())?;
+        self.enqueue(human, slot, work)
+    }
+
+    /// Background work that waits for a free admission slot instead of being
+    /// refused: the semaphore serves waiters in arrival order, so the wait is
+    /// bounded by the jobs ahead. For callers that cannot drop or retry (the
+    /// AI seats' chunks): the answer then never depends on how busy the
+    /// lanes are.
+    pub(super) async fn submit_queued<T: Send + 'static>(
+        &self,
+        work: impl FnOnce() -> T + Send + 'static,
+    ) -> Result<oneshot::Receiver<T>, ()> {
+        if self.cancelled.load(Ordering::Acquire) {
+            return Err(());
+        }
+        let slot = self.slots.clone().acquire_owned().await.map_err(|_| ())?;
+        self.enqueue(false, slot, work)
+    }
+
+    fn enqueue<T: Send + 'static>(
+        &self,
+        human: bool,
+        slot: OwnedSemaphorePermit,
+        work: impl FnOnce() -> T + Send + 'static,
+    ) -> Result<oneshot::Receiver<T>, ()> {
+        if self.cancelled.load(Ordering::Acquire) {
+            return Err(());
+        }
         let (tx, rx) = oneshot::channel();
         let cancelled = self.cancelled.clone();
         let queued = std::time::Instant::now();
@@ -79,6 +107,13 @@ impl Preparation {
     ) -> Result<T, ()> {
         self.submit(human, work)?.await.map_err(|_| ())
     }
+
+    pub(super) async fn terrain_queued<T: Send + 'static>(
+        &self,
+        work: impl FnOnce() -> T + Send + 'static,
+    ) -> Result<T, ()> {
+        self.submit_queued(work).await?.await.map_err(|_| ())
+    }
 }
 
 impl super::super::GameplayService {
@@ -88,5 +123,14 @@ impl super::super::GameplayService {
         work: impl FnOnce() -> T + Send + 'static,
     ) -> Result<T, ()> {
         self.preparation.terrain(human, work).await
+    }
+
+    /// `prepare_terrain` for background work that waits its turn when the
+    /// lanes are full, rather than being refused.
+    pub(crate) async fn prepare_terrain_queued<T: Send + 'static>(
+        &self,
+        work: impl FnOnce() -> T + Send + 'static,
+    ) -> Result<T, ()> {
+        self.preparation.terrain_queued(work).await
     }
 }

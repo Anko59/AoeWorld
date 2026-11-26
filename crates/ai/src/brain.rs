@@ -7,8 +7,14 @@ use crate::blackboard::{Blackboard, Tracked};
 use crate::config::Config;
 use crate::context::{Context, OrderBudgetExhausted};
 use crate::geometry::dist;
+use crate::play::bridges::BridgeManager;
+use crate::play::combat::CombatManager;
 use crate::play::economy::{self, unemployed};
+use crate::play::fortification::FortificationManager;
 use crate::play::fortification::threat::observe;
+use crate::play::management::ManagementManager;
+use crate::play::naval::NavalManager;
+use crate::play::scouting::ScoutManager;
 use crate::play::{buildorder, constructor, market, military, research};
 use crate::roster::profile;
 use crate::seat::Seat;
@@ -91,8 +97,7 @@ fn run(
 }
 
 /// The managers in priority order, each with its slice of the order budget
-/// (`brain.py` `decide`). The managers of later tasks keep their slots as
-/// comments naming the Python call.
+/// (`brain.py` `decide`).
 fn run_managers(ctx: &mut Context<'_>) {
     let config = ctx.config;
     if ctx.late_economy && ctx.villagers.iter().any(unemployed) {
@@ -110,16 +115,18 @@ fn run_managers(ctx: &mut Context<'_>) {
     }
     run(ctx, 2, research::step);
     run(ctx, 1, market::step);
-    // run(14, self.combat.step)
-    // run(2, lambda c: self.management.lead(c, self.combat))
+    run(ctx, 14, |c| CombatManager::default().step(c));
+    run(ctx, 2, |c| {
+        ManagementManager::default().lead(c, &CombatManager::default())
+    });
     run(ctx, 2, military::rally);
-    // run(2, self.scouts.step)
+    run(ctx, 2, |c| ScoutManager::default().step(c));
     run(ctx, 1, constructor::fund_market);
     run(ctx, 1, economy::wood_dropoff);
-    // run(8, self.management.step)
+    run(ctx, 8, |c| ManagementManager::default().step(c));
     run(ctx, 5, economy::produce);
     run(ctx, 2, constructor::houses);
-    // run(1, self.fortifications.step)
+    run(ctx, 1, |c| FortificationManager::default().step(c));
     if buildorder::unpaid_age_up_barracks(ctx)
         || (ctx.feudal() && !ctx.castle() && buildorder::castle_requirement_kinds(ctx) < 2)
     {
@@ -143,8 +150,8 @@ fn run_managers(ctx: &mut Context<'_>) {
         };
         run(ctx, train_orders, military::train);
     }
-    // run(1, self.naval.step)
-    // run(1, self.bridges.step)
+    run(ctx, 1, |c| NavalManager::default().step(c));
+    run(ctx, 1, |c| BridgeManager::default().step(c));
 }
 
 /// Count a blow of ours landing: an enemy unit or building whose hit points

@@ -161,7 +161,16 @@ def main(argv: list[str] | None = None) -> int:
         root = Path(__file__).resolve().parents[2]
         seeds = [int(seed) for seed in args.seeds.split(",") if seed]
         report = compare(Path(args.server_bin), root, seeds, args.bots, args.minutes, args.tiles, args.only)
+        full = root / "reports" / "ai" / "compare.json"
+        full.parent.mkdir(parents=True, exist_ok=True)
+        full.write_text(json.dumps(report, indent=1))
+        # Stdout keeps the measures and gaps; per-seat counters and checkpoint
+        # details stay in the file.
+        for run in report["runs"]:
+            for side in ("python", "rust"):
+                run[side] = {k: v for k, v in run[side].items() if k not in ("counters", "detail")}
         print(json.dumps(report, indent=1))
+        print(f"full report: {full}")
         return 0
     if args.command == "match":
         if not args.admin_token:

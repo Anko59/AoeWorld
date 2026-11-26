@@ -89,6 +89,10 @@ impl Fleet {
                 .env("AOE_BIND", address.to_string())
                 .env("AOE_SCENARIO", "smoke")
                 .env("AOE_MAP_PACKAGE_DIRECTORY", fixture.directory.path())
+                // The browser specs script the AI endpoints and expect a server
+                // without AI players: the Python runtime with no host command.
+                .env("AOE_AI_RUNTIME", "python")
+                .env_remove("AOE_AI_COMMAND")
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::inherit())

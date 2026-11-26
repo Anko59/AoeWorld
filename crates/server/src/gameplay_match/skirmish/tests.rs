@@ -16,6 +16,9 @@ fn state(launch: Option<Launch>) -> AppState {
     };
     let mut state = AppState::new(&config, "skirmish-test").expect("state");
     state.skirmish = Arc::new(Skirmish::new(launch));
+    // These tests cover the Python hosts the skirmish launches; the Rust AI's
+    // seats are covered in `gameplay_match/tests/ai_seats.rs`.
+    state.ai_runtime = crate::config::AiRuntime::Python;
     state
 }
 
@@ -129,6 +132,13 @@ async fn refusals_name_the_reason() {
     let idle = status(&state).await;
     assert!(!idle.ai_available);
     assert_eq!((idle.phase, idle.max_opponents), (Phase::Idle, 99));
+}
+
+#[tokio::test]
+async fn opponents_are_available_without_a_host_command_when_the_server_plays_them() {
+    let mut state = state(None);
+    state.ai_runtime = crate::config::AiRuntime::Rust;
+    assert!(status(&state).await.ai_available);
 }
 
 #[tokio::test]

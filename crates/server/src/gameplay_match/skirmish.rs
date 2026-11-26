@@ -167,7 +167,7 @@ async fn status(state: &AppState) -> Status {
     let skirmish = &state.skirmish;
     let mut inner = skirmish.lock();
     let mut status = inner.status.clone();
-    status.ai_available = skirmish.launch.is_some();
+    status.ai_available = skirmish.launch.is_some() || state.ai_runtime == crate::AiRuntime::Rust;
     status.max_opponents = MAX_OPPONENTS;
     status.paused = gameplay.paused();
     status.ai_hosts = inner.fleet.as_mut().map_or(0, |fleet| fleet.hosts());

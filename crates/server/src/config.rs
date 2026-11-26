@@ -17,9 +17,9 @@ pub struct Config {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum AiRuntime {
     /// Python hosts joining over the gameplay socket (tournaments use these).
-    #[default]
     Python,
-    /// The Rust AI, inside the server process.
+    /// The Rust AI, inside the server process: the default for ordinary games.
+    #[default]
     Rust,
 }
 
@@ -104,16 +104,16 @@ impl Config {
         (!command.is_empty()).then_some(command)
     }
     /// `AOE_AI_RUNTIME=rust|python`: where AI seats are played. Unset or
-    /// `python`, every AI seat is a Python host joining over the socket; `rust`
-    /// plays them inside the server.
+    /// `rust`, the server plays them itself; `python`, every AI seat is a
+    /// Python host (`AOE_AI_COMMAND`) joining over the socket.
     pub fn ai_runtime_from_env() -> Result<AiRuntime, String> {
         Self::ai_runtime_from(env::var("AOE_AI_RUNTIME").ok().as_deref())
     }
 
     pub fn ai_runtime_from(value: Option<&str>) -> Result<AiRuntime, String> {
         match value.map(str::trim) {
-            None | Some("" | "python") => Ok(AiRuntime::Python),
-            Some("rust") => Ok(AiRuntime::Rust),
+            None | Some("" | "rust") => Ok(AiRuntime::Rust),
+            Some("python") => Ok(AiRuntime::Python),
             Some(other) => Err(format!(
                 "AOE_AI_RUNTIME must be `rust` or `python`, not `{other}`"
             )),

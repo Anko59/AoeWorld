@@ -31,6 +31,8 @@ def server(tmp_path_factory):
         os.environ,
         AOE_BIND=f"127.0.0.1:{port}",
         AOE_MATCH_TOKEN=SECRET,
+        # These tests drive AI slots with Python bots: the server must not play them.
+        AOE_AI_RUNTIME="python",
         AOE_TICK_HZ="60",
         AOE_MAP_PACKAGE_DIRECTORY=str(packages),
     )

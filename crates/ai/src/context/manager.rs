@@ -17,6 +17,11 @@ impl Context<'_> {
         self.land_queries
     }
 
+    /// Build-site queries spent so far this decision.
+    pub fn site_queries(&self) -> u32 {
+        self.site_queries
+    }
+
     pub fn focus_view(&mut self, tile: Option<Tile>) {
         self.seat.focus_view(tile);
     }
