@@ -41,9 +41,11 @@ fn flaky_playwright_failure_selects_one_case_project_and_escaped_title() {
             "--test-list=/reports/assigned.txt".into(),
         ],
         &failures[0],
+        "../.cache/playwright-results/retry-1-2",
     )
     .unwrap();
     assert!(!args.iter().any(|arg| arg.starts_with("--test-list")));
+    assert!(args.contains(&"--output=../.cache/playwright-results/retry-1-2".to_owned()));
     assert!(args.ends_with(&failures[0].selector()));
 }
 
@@ -151,7 +153,7 @@ fn flaky_playwright_orchestration_gives_listed_cases_two_reruns_and_others_one()
                 calls += 1;
                 if calls > 1 {
                     assert!(args.iter().any(|arg| arg == "--project=webgpu"));
-                    assert_eq!(args.len(), 4);
+                    assert_eq!(args.len(), 5);
                 }
                 if calls >= pass_on {
                     return Ok((true, successful_report()));

@@ -13,6 +13,9 @@ mod identity;
 mod record;
 use identity::Identity;
 
+/// Playwright's output directory, relative to `browser/` (`outputDir` in its config).
+const RESULTS: &str = "../.cache/playwright-results";
+
 /// Most failed tests (timeouts included) of one run that still earn the unlisted one retry.
 const MAX_FLAKY_FAILURES: usize = 3;
 
@@ -208,12 +211,15 @@ fn check_exit(success: bool, value: &Value) -> Result<()> {
     Ok(())
 }
 
-fn retry_args(original: &[String], case: &Case) -> Result<Vec<String>> {
+fn retry_args(original: &[String], case: &Case, output: &str) -> Result<Vec<String>> {
     let separator = original
         .iter()
         .position(|arg| arg == REPORTER)
         .ok_or("missing JSON reporter")?;
     let mut args = original[..=separator].to_vec();
+    // A Playwright run empties its output directory first: the rerun writes its own, inside
+    // the run's, so the traces of the failed first attempt survive for the flaky record.
+    args.push(format!("--output={output}"));
     // Initial spec filters and sharding apply once; select exactly this failed case.
     args.extend(case.selector());
     Ok(args)
@@ -324,7 +330,8 @@ fn resolve(
             attempt_number += 1;
             let report =
                 report.with_extension(format!("retry-{}-{attempt_number}.json", index + 1));
-            let (success, value) = run_attempt(&retry_args(args, case)?, &report)?;
+            let output = format!("{RESULTS}/retry-{}-{attempt_number}", index + 1);
+            let (success, value) = run_attempt(&retry_args(args, case, &output)?, &report)?;
             let selected = diagnostics::checked(&value, cases(&value))?;
             diagnostics::checked(&value, check_exit(success, &value))?;
             let [selected] = selected.as_slice() else {

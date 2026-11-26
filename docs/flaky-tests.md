@@ -48,7 +48,9 @@ request, but it is never silent. The rule, in `crates/harness/src/e2e/quarantine
 
 - After a completed failure of a test (an assertion in an `expect` step; never a setup
   or fixture failure, a worker exit or a test timeout), the harness reruns exactly that
-  test once, on its own project. Playwright's own retry count stays zero.
+  test once, on its own project. Playwright's own retry count stays zero. The rerun writes
+  its traces to `.cache/playwright-results/retry-<n>-<attempt>`, so the failed first
+  attempt keeps its trace (the CI artifact `e2e-<shard>-diagnostics` holds both).
 - More than three failed tests in one run (timeouts counted) are a broken change, not a
   flake: nothing unlisted is retried.
 - It passes the rerun: the job passes, and the test is recorded as flaky (below).
