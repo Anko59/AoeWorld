@@ -357,3 +357,46 @@ def test_a_refused_house_site_does_not_stop_the_village_building_houses():
     builds = [a for name, a in client.calls if name == "build"]
     assert builds, "the village still builds"
     assert all((str(a[1]), a[2], a[3]) != refused for a in builds)
+
+
+def test_a_rejected_house_site_does_not_block_the_next_candidate():
+    units, buildings = base(14)
+    world = FakeWorld(units, buildings, eco=economy(wood=100, population=15, cap=15))
+    blocked, alternate = (53, 53), (54, 53)
+    find_site = world.find_build_site
+
+    def sites(kind, x, y, max_radius, gap, excluded=()):
+        if kind == BuildingKind.HOUSE:
+            return next((site for site in (blocked, alternate) if site not in excluded), None)
+        return find_site(kind, x, y, max_radius, gap)
+
+    world.find_build_site = sites
+    brain, client = play(world)
+    sequence, initial = next((i, args) for i, (name, args) in enumerate(client.calls, 1)
+                             if name == "build" and args[1] == BuildingKind.HOUSE)
+    assert initial[2:] == blocked
+
+    world.tick += world.tick_hz
+    refusal = order_result(sequence, CommandResult.REJECTED_UNREACHABLE)
+    _, client = play(world, brain=brain, events=[refusal])
+    assert [args[2:] for args in client.named("build") if args[1] == BuildingKind.HOUSE] == [alternate]
+
+
+def test_housing_recovery_does_not_open_new_dock_sites():
+    from aoe_ai.context import Context
+
+    units, buildings = base(14)
+    world = FakeWorld(units, buildings, eco=economy(wood=250, population=15, cap=15))
+    nearest, alternate = (53, 53), (54, 53)
+
+    def sites(kind, x, y, max_radius, gap, excluded=()):
+        assert kind == BuildingKind.DOCK
+        return next((site for site in (nearest, alternate) if site not in excluded), None)
+
+    world.find_build_site = sites
+    brain, client = Brain(), FakeClient()
+    brain.board.bad_sites.add((str(BuildingKind.DOCK), *nearest))
+    ctx = Context(client, decision(world), brain.board, brain.config)
+
+    assert not brain.constructor.place(ctx, BuildingKind.DOCK, ctx.home, [ctx.villagers[0]])
+    assert client.named("build") == []
