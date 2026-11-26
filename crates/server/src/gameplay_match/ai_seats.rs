@@ -45,6 +45,19 @@ pub(super) struct Stats {
     tick_instructions: AtomicU64,
     /// Wall time the tick's thread spends in each wait, by `Wait`.
     waits: [Counter; 4],
+    /// Each seat's own counters (the Python AI's `board.stats`), by session.
+    seats:
+        std::sync::Mutex<std::collections::BTreeMap<u64, std::collections::BTreeMap<String, u64>>>,
+}
+
+impl Stats {
+    /// Keeps the latest counters of a seat's brain, for `/admin/perf`.
+    pub(super) fn counters(&self, session: u64, stats: &std::collections::BTreeMap<String, u64>) {
+        self.seats
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .insert(session, stats.clone());
+    }
 }
 
 /// The waits of the tick's thread that the seats cause, reported separately.
@@ -183,6 +196,7 @@ impl GameplayService {
                 "join": wait(Wait::Join),
                 "settle": wait(Wait::Settle),
             },
+            "seats": stats.seats.lock().unwrap_or_else(|error| error.into_inner()).values().collect::<Vec<_>>(),
         })
     }
 }

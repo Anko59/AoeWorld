@@ -83,7 +83,7 @@ pub struct Options {
     #[arg(long, default_value_t = 4)]
     pub hosts: usize,
     /// Who plays the AI seats.
-    #[arg(long, value_enum, default_value_t = AiRuntime::Python)]
+    #[arg(long, value_enum, default_value_t = AiRuntime::Rust)]
     pub ai: AiRuntime,
     #[arg(long, value_enum, default_value_t = MapSource::Procedural)]
     pub map: MapSource,

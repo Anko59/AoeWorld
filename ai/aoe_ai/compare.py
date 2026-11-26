@@ -74,6 +74,8 @@ class Samples:
             for checkpoint in CHECKPOINTS:
                 if minute >= checkpoint and checkpoint not in seen["counts"]:
                     seen["counts"][checkpoint] = {"villagers": villagers, "army": len(soldiers)}
+                    seen.setdefault("detail", {})[checkpoint] = {
+                        "buildings": player["buildings"], "resources": player["resources"], "units": units}
             home = seen["home"]
             if home and len(soldiers) >= ATTACK_SOLDIERS:
                 centre = (sum(x for x, _ in soldiers) / len(soldiers), sum(y for _, y in soldiers) / len(soldiers))
@@ -103,6 +105,7 @@ class Samples:
         out = {key: mean(p.get(key) for p in players)
                for key in ("feudal_minute", "castle_minute", "first_attack_minute")}
         out["attackers"] = sum("first_attack_minute" in p for p in players)
+        out["detail"] = [p.get("detail", {}) for p in players]
         for checkpoint in CHECKPOINTS:
             for count in ("villagers", "army"):
                 out[f"{count}_{checkpoint}"] = mean(p["counts"].get(checkpoint, {}).get(count) for p in players)
@@ -128,6 +131,7 @@ def run_python(binary: Path, root: Path, seed: int, bots: int, minutes: float, s
     calls = sum(b.calls for b in brains)
     out["cpu_ms_per_decision"] = round(1000 * sum(b.cpu for b in brains) / calls, 3) if calls else None
     out["decisions"] = calls
+    out["counters"] = [dict(b.board.stats) for b in brains]
     out["wall_seconds"] = result["wall_seconds"]
     return out
 
@@ -147,6 +151,7 @@ def run_rust(binary: Path, root: Path, seed: int, bots: int, minutes: float, siz
     out["cpu_ms_per_decision"] = round(cost.get("cpu_ms", 0) / decisions, 3) if decisions else None
     out["decisions"] = decisions
     out["tick_thread"] = cost.get("tick_thread")
+    out["counters"] = cost.get("seats")
     out["wall_seconds"] = round(time.monotonic() - started, 1)
     return out
 
@@ -155,7 +160,7 @@ def gaps(python: dict, rust: dict) -> dict:
     """Rust minus Python per measure, and whether each is within ``TOLERANCE``."""
     out = {}
     for key, value in python.items():
-        if key in ("cpu_ms_per_decision", "decisions", "wall_seconds", "attackers", "tick_thread"):
+        if key in ("cpu_ms_per_decision", "decisions", "wall_seconds", "attackers", "tick_thread", "detail", "counters"):
             continue
         other = rust.get(key)
         measure = key.rsplit("_", 1)[0] if key.split("_")[-1].isdigit() else key

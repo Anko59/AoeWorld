@@ -16,6 +16,9 @@ fn state(launch: Option<Launch>) -> AppState {
     };
     let mut state = AppState::new(&config, "skirmish-test").expect("state");
     state.skirmish = Arc::new(Skirmish::new(launch));
+    // These tests cover the Python hosts the skirmish launches; the Rust AI's
+    // seats are covered in `gameplay_match/tests/ai_seats.rs`.
+    state.ai_runtime = crate::config::AiRuntime::Python;
     state
 }
 

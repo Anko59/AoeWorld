@@ -157,22 +157,22 @@ python -m aoe_ai match --url http://127.0.0.1:9000 --admin-token change-me-01234
 
 ## Skirmish from the browser
 
-The setup screen's **Opponents** setting (0 to 99) plays a match against the example AI without
-any command line. `make dev` builds the wheel, installs it into `target/dev-ai/site` and runs the
-server in the SDK image with `AOE_AI_COMMAND="python3 -m aoe_ai host"`. After the map job, the
-browser calls `POST /skirmish {"map_hash", "opponents"}` (controller token): the server builds
-the match (slot 0 human, the rest AI, standard starts), swaps it in and
-starts one host process per 13 AI slots, handing each its tokens on stdin. `GET /skirmish`
+The setup screen's **Opponents** setting (0 to 99) plays a match against the AI without any command
+line; by default the server plays the AI slots itself (`AOE_AI_RUNTIME`, below). For `python`, `make dev`
+installs the wheel into `target/dev-ai/site` and runs the server in the SDK image with
+`AOE_AI_COMMAND="python3 -m aoe_ai host"`. After the map job, the browser calls `POST /skirmish
+{"map_hash", "opponents"}` (controller token): the server builds the match (slot 0 human, the rest AI,
+standard starts), swaps it in and seats the Rust AI, or starts one Python host per 13 AI slots. `GET /skirmish`
 reports the phase (`opening_map`, `placing_villages`, `starting_ai`, `connecting_ai`, `ready`,
 `failed`, `cancelled`, `stopped`) with measured counts. The hosts are killed by
 `POST /skirmish/stop` (Cancel, Quit to Main Menu), when another match or map replaces this one,
 when they exit, or when nobody has held the human seat for five minutes.
 
-`AOE_AI_RUNTIME=python|rust` (default `python`) picks where AI seats play (skirmish, `POST /match`,
-`AOE_ARENA=1` arena): `python` is the hosts above; `rust` plays every AI slot in the server (`aoe-ai`
-over an `aoe_sdk::Mirror`: the same fog-filtered messages and order path as a socket client), its orders
-entering two ticks after their view, so a seeded match is reproducible. Python stays the tournament client.
-`make ai-compare` plays each seed with both; `make scale-match SCALE_MATCH_ARGS="--ai rust"` uses Rust.
+`AOE_AI_RUNTIME=rust|python` (default `rust`) picks where AI seats play (skirmish, `POST /match`,
+`AOE_ARENA=1` arena): `rust` plays every AI slot in the server (`aoe-ai` over an `aoe_sdk::Mirror`: the
+same fog-filtered messages and order path as a socket client), its orders entering two ticks after their
+view, so a seeded match is reproducible; `python` is the hosts above, the tournament client. `make
+ai-compare` plays each seed with both; `make scale-match SCALE_MATCH_ARGS="--ai python"` uses Python.
 
 ```sh
 AOE_PRESET_MAPS=qa/skirmish-presets.json DEV_PORT=8097 make dev   # France prepared at boot

@@ -70,9 +70,11 @@ async fn play(runtime: AiRuntime, seed: u64, ticks: u32, overlapped: bool) -> (A
 }
 
 #[test]
-fn the_runtime_setting_names_rust_or_python_and_defaults_to_python() {
+fn the_runtime_setting_names_rust_or_python_and_defaults_to_rust() {
     use crate::Config;
-    assert_eq!(Config::ai_runtime_from(None), Ok(AiRuntime::Python));
+    assert_eq!(Config::ai_runtime_from(None), Ok(AiRuntime::Rust));
+    assert_eq!(Config::ai_runtime_from(Some("")), Ok(AiRuntime::Rust));
+    assert_eq!(AiRuntime::default(), AiRuntime::Rust);
     assert_eq!(
         Config::ai_runtime_from(Some("python")),
         Ok(AiRuntime::Python)

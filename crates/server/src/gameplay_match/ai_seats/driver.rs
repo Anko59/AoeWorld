@@ -194,6 +194,7 @@ fn decide(
     };
     let events = std::mem::take(&mut seat.events);
     seat.brain.decide(seat.mirror.world(), &events, &mut out);
+    stats.counters(seat.session, &seat.brain.board.stats);
     seat.next_sequence = out.next;
     seat.events.extend(out.refused);
     if let Some(tile) = out.focus {
