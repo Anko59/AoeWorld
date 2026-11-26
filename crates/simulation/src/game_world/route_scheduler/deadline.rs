@@ -123,15 +123,18 @@ impl GameWorld {
         let to = planner
             .certified_destination()
             .unwrap_or(planner.destination());
-        match self.land_reachable(player, bucket, from, to) {
-            Ok(true) => {
+        // Bounded: an unbounded query floods the whole reachable continent
+        // before it can say no (5.7 ms a refused farm on the 5x replay, 87G
+        // instructions in one tick). Unknown is left to the search.
+        match self.land_reachable_bounded(player, bucket, from, to) {
+            Ok(reach) if reach.is_reachable() => {
                 planner.confirm_reachable_destination(from, to);
                 false
             }
-            Err(_) => false,
+            Ok(aoe_map::RegionReachability::Unknown) | Err(_) => false,
             // A requested tile in a pocket beside a mine or a wall is still
             // served from next to it, once refinement certifies that tile.
-            Ok(false) => {
+            Ok(_) => {
                 planner.certified_destination().is_some()
                     || !self.pocket_beside_frontier(player, bucket, from, to)
             }
