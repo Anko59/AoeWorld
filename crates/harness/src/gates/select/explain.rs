@@ -34,12 +34,12 @@ pub(crate) fn markdown(
     parts: &[String],
     unit: &UnitScope,
 ) -> String {
-    let mut out = String::from("## CI selection\n\n| job | decision |\n|---|---|\n");
+    let mut out = String::from("## CI selection\n\n| job | runs | why |\n|---|---|---|\n");
     for (job, runs) in jobs {
         let reason = reasons.get(job).map_or("", String::as_str);
         out.push_str(&format!(
-            "| `{job}` | {} {reason} |\n",
-            if *runs { "**run**:" } else { "skip:" }
+            "| `{job}` | {} | {reason} |\n",
+            if *runs { "**yes**" } else { "no" }
         ));
     }
     out.push_str(&format!("\n{}\n", scope_line(parts, unit)));

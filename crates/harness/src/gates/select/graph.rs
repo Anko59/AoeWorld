@@ -70,6 +70,10 @@ impl Graph {
         let mut outside = Vec::new();
         for dir in &rules.outside_workspace {
             let manifest = format!("{dir}/Cargo.toml");
+            // A crate that no longer exists owns no path.
+            if !root.join(&manifest).is_file() {
+                continue;
+            }
             outside.push((dir.clone(), affected::metadata_json(root, Some(&manifest))?));
         }
         let mut graph = Self::from_metadata(&workspace, &outside)?;

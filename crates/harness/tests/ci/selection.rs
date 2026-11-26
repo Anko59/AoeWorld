@@ -25,6 +25,30 @@ fn dispatch_base_and_cadence_are_recomputed_by_both_cli_commands() {
         include_bytes!("../../../../gates/registry.json"),
     )
     .unwrap();
+    fs::write(
+        root.join("gates/ci-rules.json"),
+        include_bytes!("../../../../gates/ci-rules.json"),
+    )
+    .unwrap();
+    // The selection reads the crate graph: a one-crate workspace is enough.
+    fs::create_dir_all(root.join("crates/fixture/src")).unwrap();
+    fs::write(
+        root.join("Cargo.toml"),
+        "[workspace]\nmembers = [\"crates/fixture\"]\nresolver = \"3\"\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("crates/fixture/Cargo.toml"),
+        "[package]\nname = \"fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )
+    .unwrap();
+    fs::write(root.join("crates/fixture/src/lib.rs"), "").unwrap();
+    let lock = Command::new("cargo")
+        .current_dir(root)
+        .args(["generate-lockfile", "--offline"])
+        .output()
+        .unwrap();
+    assert!(lock.status.success(), "{lock:?}");
     fs::create_dir(root.join("docs")).unwrap();
     fs::write(root.join("docs/fixture.md"), "base\n").unwrap();
     git(root, &["add", "."]);

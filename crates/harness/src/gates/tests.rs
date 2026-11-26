@@ -470,6 +470,12 @@ fn explain_prints_one_line_per_job_and_the_summary_is_a_table() {
     assert!(text.contains("test-unit: 1 of"), "{text}");
     let markdown = explain(&manifest, true);
     assert!(markdown.starts_with("## CI selection"));
-    assert!(markdown.contains("| `e2e` | skip:"), "{markdown}");
-    assert!(markdown.contains("| `static` | **run**:"), "{markdown}");
+    assert!(
+        markdown.contains("| `e2e` | no | skipped because"),
+        "{markdown}"
+    );
+    assert!(
+        markdown.contains("| `static` | **yes** | runs"),
+        "{markdown}"
+    );
 }
