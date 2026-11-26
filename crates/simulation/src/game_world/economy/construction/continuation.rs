@@ -196,6 +196,10 @@ impl GameWorld {
             else {
                 continue;
             };
+            if self.foundation_has_other_blocker(target, builder) {
+                self.economy.dispatch.sites.entry(target).or_insert(None);
+                continue;
+            }
             let walking = match self.approach_building(builder, footprint, 0) {
                 Err(crate::GameWorldError::Unreachable) => continue,
                 result => result.is_ok(),
@@ -236,6 +240,7 @@ impl GameWorld {
             if (building.kind == BuildingKind::FishTrap) != fishing
                 || self.economy.builders.assigned_count(target)
                     >= self.automatic_builder_limit(&building)
+                || self.foundation_has_other_blocker(target, builder)
                 || steward.is_some_and(|id| {
                     !self.economy.steward_homes[&id].connects(from, building.footprint)
                 })

@@ -116,16 +116,17 @@ impl GameWorld {
     fn observe_vassal_progress(&mut self, id: EntityId, work: &super::work::Workload) {
         let previous = self.economy.vassals.domains[&id].progress;
         // Other sites can keep progressing while this paid site never gets a
-        // builder. Give confirmed disconnections first claim on the watchdog.
+        // builder. Watch sites already blocked by terrain or a foreign unit first.
         let observed = work
             .open
             .iter()
             .find(|(site, _)| {
                 self.economy.builders.assigned_count(*site) == 0
-                    && self.building(*site).is_some_and(|b| {
-                        self.validate_foundation_reach(b.player, &[], b.footprint)
-                            == Err(EconomyError::Movement(crate::GameWorldError::Unreachable))
-                    })
+                    && (self.foreign_foundation_blocker(*site)
+                        || self.building(*site).is_some_and(|b| {
+                            self.validate_foundation_reach(b.player, &[], b.footprint)
+                                == Err(EconomyError::Movement(crate::GameWorldError::Unreachable))
+                        }))
             })
             .or_else(|| {
                 work.open.iter().find(|(id, _)| {

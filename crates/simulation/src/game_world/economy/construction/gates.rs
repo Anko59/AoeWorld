@@ -181,7 +181,7 @@ impl GameWorld {
         let id = self.insert_building(player, kind, footprint, false)?;
         self.charge(player, cost);
         self.step_builders_aside(&builders, id);
-        if builders.is_empty() {
+        if builders.is_empty() || self.foreign_foundation_blocker(id) {
             self.queue_foundations(&[id], None);
         } else if !self.assign_build_orders(&builders, &[id], queued) {
             let _ = self.issue_cancel_construction(player, id);

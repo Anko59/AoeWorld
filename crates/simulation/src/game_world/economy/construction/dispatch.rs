@@ -137,7 +137,7 @@ impl GameWorld {
         let tile = footprint.min;
         let need = self.automatic_builder_limit(&b);
         let assigned = self.economy.builders.assigned_count(id);
-        if assigned >= need || capacity == 0 {
+        if assigned >= need || capacity == 0 || self.clear_foundation(id, changed).is_some() {
             return (0, 0);
         }
         let area =

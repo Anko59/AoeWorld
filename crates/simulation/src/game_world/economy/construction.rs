@@ -175,7 +175,7 @@ impl GameWorld {
         let id = self.insert_building(player, kind, footprint, false)?;
         self.charge(player, cost);
         self.step_builders_aside(&builders, id);
-        if builders.is_empty() {
+        if builders.is_empty() || self.foreign_foundation_blocker(id) {
             self.queue_foundations(&[id], None);
         } else if !self.assign_build_orders(&builders, &[id], queued) {
             let _ = self.issue_cancel_construction(player, id);
@@ -206,6 +206,9 @@ impl GameWorld {
         }
         if state.is_complete() && state.hp == state.max_hp {
             return Err(EconomyError::AlreadyComplete);
+        }
+        if self.foundation_has_blocker(building) {
+            return Err(EconomyError::InvalidFootprint);
         }
         if self.assign_builders(&builders, |_| building) {
             Ok(())
@@ -431,14 +434,23 @@ impl GameWorld {
             if self.building(building).is_some_and(|b| b.is_complete()) {
                 self.repair_building(building, count);
                 self.sleep_construction(building, count, false);
-            } else if self.foundation_occupied(building) {
-                // Units on the footprint are stepping aside; builders wait.
-                self.sleep_construction(building, count, true);
-            } else if let Some(state) = self.add_work(building, count) {
-                self.wake_construction(building);
-                completed.insert(building, state);
             } else {
-                self.sleep_construction(building, count, false);
+                match self.clear_foundation(building, &mut touched) {
+                    Some(clearance::Obstruction::Foreign) => {
+                        self.suspend_occupied_foundation(building, &mut touched);
+                    }
+                    Some(clearance::Obstruction::Clearing) => {
+                        self.sleep_construction(building, count, true);
+                    }
+                    None => {
+                        if let Some(state) = self.add_work(building, count) {
+                            self.wake_construction(building);
+                            completed.insert(building, state);
+                        } else {
+                            self.sleep_construction(building, count, false);
+                        }
+                    }
+                }
             }
             self.update_building_vision(building);
         }

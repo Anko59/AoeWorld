@@ -6,19 +6,25 @@ use std::collections::BTreeMap;
 
 /// Exact nearest raster tile. Monotonic raster coordinates put every subrange
 /// inside the rectangle of its endpoints, so a distant half can be skipped.
-fn nearest_segment(line: TileLine, tile: TileCoord) -> usize {
-    fn lower_bound(line: TileLine, tile: TileCoord, (first, last): (usize, usize)) -> (u64, usize) {
-        let (a, b) = (line.tile(first), line.tile(last));
+fn nearest_segment(line: TileLine, tile: TileCoord, open: &[usize]) -> usize {
+    fn lower_bound(
+        line: TileLine,
+        tile: TileCoord,
+        open: &[usize],
+        (first, last): (usize, usize),
+    ) -> (u64, usize) {
+        let (a, b) = (line.tile(open[first]), line.tile(open[last]));
         let nearest = TileCoord::new(
             tile.x.clamp(a.x.min(b.x), a.x.max(b.x)),
             tile.y.clamp(a.y.min(b.y), a.y.max(b.y)),
         );
-        (distance_squared(tile, nearest), first)
+        (distance_squared(tile, nearest), open[first])
     }
 
     fn search(
         line: TileLine,
         tile: TileCoord,
+        open: &[usize],
         (first, last): (usize, usize),
         bound: (u64, usize),
         best: &mut (u64, usize),
@@ -33,19 +39,22 @@ fn nearest_segment(line: TileLine, tile: TileCoord) -> usize {
         let mid = first + (last - first) / 2;
         let a = (first, mid);
         let b = (mid + 1, last);
-        let (a_dist, b_dist) = (lower_bound(line, tile, a), lower_bound(line, tile, b));
+        let (a_dist, b_dist) = (
+            lower_bound(line, tile, open, a),
+            lower_bound(line, tile, open, b),
+        );
         if a_dist <= b_dist {
-            search(line, tile, a, a_dist, best);
-            search(line, tile, b, b_dist, best);
+            search(line, tile, open, a, a_dist, best);
+            search(line, tile, open, b, b_dist, best);
         } else {
-            search(line, tile, b, b_dist, best);
-            search(line, tile, a, a_dist, best);
+            search(line, tile, open, b, b_dist, best);
+            search(line, tile, open, a, a_dist, best);
         }
     }
 
-    let range = (0, line.count() - 1);
-    let mut best = (u64::MAX, 0);
-    search(line, tile, range, lower_bound(line, tile, range), &mut best);
+    let range = (0, open.len() - 1);
+    let mut best = (u64::MAX, open[0]);
+    search(line, tile, open, range, lower_bound(line, tile, open, range), &mut best);
     best.1
 }
 
@@ -107,6 +116,17 @@ impl GameWorld {
             self.remember_visible_buildings();
             return Ok(ids);
         }
+        let (open, blocked): (Vec<_>, Vec<_>) = (0..ids.len())
+            .partition(|&segment| !self.foreign_foundation_blocker(ids[segment]));
+        let blocked = blocked
+            .into_iter()
+            .map(|segment| ids[segment])
+            .collect::<Vec<_>>();
+        self.queue_foundations(&blocked, None);
+        if open.is_empty() {
+            self.remember_visible_buildings();
+            return Ok(ids);
+        }
         if kind.is_wall() {
             // Visit only the segments builders occupy. When a step leads to a
             // later segment it is visited again in the original placement order.
@@ -121,6 +141,9 @@ impl GameWorld {
             }
             while let Some((segment, mut local)) = inside.pop_first() {
                 local.sort_unstable();
+                if open.binary_search(&segment).is_err() {
+                    continue;
+                }
                 self.step_builders_aside(&local, ids[segment]);
                 for id in local {
                     if let Some(next) = self
@@ -134,13 +157,14 @@ impl GameWorld {
             }
         }
         let assigned = if queued {
-            self.assign_build_orders(&builders, &ids, true)
+            let targets = open.iter().map(|&segment| ids[segment]).collect::<Vec<_>>();
+            self.assign_build_orders(&builders, &targets, true)
         } else {
             let targets: BTreeMap<_, _> = builders
                 .iter()
                 .map(|&id| {
                     let tile = self.unit(id).map_or(from, |u| u.position.tile_floor());
-                    (id, ids[nearest_segment(line, tile)])
+                    (id, ids[nearest_segment(line, tile, &open)])
                 })
                 .collect();
             self.assign_builders(&builders, |builder| targets[&builder])

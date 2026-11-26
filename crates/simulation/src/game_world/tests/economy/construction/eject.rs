@@ -238,3 +238,47 @@ fn a_corpse_on_a_foundation_stays_dying_and_does_not_stall_the_house() {
         "a corpse does not occupy the foundation"
     );
 }
+
+#[test]
+fn a_hostile_blocker_releases_the_crew_and_prevents_extra_builders_until_clear() {
+    let (mut world, _, _) = village();
+    let player = PlayerId(0);
+    let origin = at(100, 100);
+    fixture::survey(&mut world, player, origin, 8);
+    let first = villager_at(&mut world, 98, 100);
+    let extra = villager_at(&mut world, 98, 101);
+    let house = world
+        .issue_build(player, &[first], BuildingKind::House, origin, false)
+        .unwrap();
+    assert_eq!(world.economy.builders.get(&first).unwrap().building, house);
+    let enemy = world
+        .spawn_villager(
+            PlayerId(1),
+            WorldPosition::from_tile_center(at(105, 100)).unwrap(),
+        )
+        .unwrap();
+    // Model a blocker found on an already staffed foundation after a restore.
+    let index = world.lookup[&enemy];
+    let from = world.units[index].state.position.tile_floor();
+    world.units[index].state.position = WorldPosition::from_tile_center(origin).unwrap();
+    let state = world.units[index].state;
+    world.track_unit_step(enemy, from, &state);
+    assert!(world.issue_construct(player, &[extra], house).is_err());
+    assert!(world.movement_order(extra).is_none());
+    advance(&mut world, 180);
+    assert!(!world.economy.builders.contains_key(&first));
+    assert!(
+        !world
+            .economy
+            .builders
+            .values()
+            .any(|job| job.building == house)
+    );
+    assert!(world.movement_order(first).is_none());
+    assert_eq!(world.building(house).unwrap().work_done, 0);
+    assert!(world.issue_construct(player, &[extra], house).is_err());
+
+    world.remove_unit(enemy);
+    world.issue_construct(player, &[extra], house).unwrap();
+    finish(&mut world, house);
+}
