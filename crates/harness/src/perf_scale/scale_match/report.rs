@@ -236,7 +236,7 @@ pub(super) fn markdown(report: &Value) -> String {
          | tick total p50 / p95 / p99 / max (ms) | {t50} / {t95} / {t99} / {tmax} |\n\
          | `advance` (simulation) p50 / p95 (ms) | {a50} / {a95} |\n\
          | orders, views and fan-out p50 / p95 (ms) | {f50} / {f95} |\n\
-         | missed ticks (late start or over 50 ms) | {missed} of {ticks} ({rate:.1}%) |\n\
+         | missed ticks (late start or over one tick period) | {missed} of {ticks} ({rate:.1}%) |\n\
          | game speed (1.0 = real time) | {factor} |\n\
          | units at start / end / max | {u0} / {u1} / {umax} |\n\
          | of which seeded by `start_units` | {seeded} |\n\

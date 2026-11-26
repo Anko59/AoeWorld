@@ -2,7 +2,7 @@
 
 `make scale-match` is the end-to-end proof harness for the promised scale: one
 human in the browser, 99 AI opponents, a France map at 1:30 (16,000 x 16,000
-two-metre tiles), about 100,000 units, and the server holding 20 Hz (50 ms per
+two-metre tiles), about 100,000 units, and the server holding 10 Hz (100 ms per
 tick) for a long session. It runs the real `aoe-server` release binary, so it
 re-runs as the simulation and fan-out optimisations land; the headless
 component benchmark (`make perf-scale`, [measurements](measurements.md)) stays
@@ -166,10 +166,12 @@ row) must be 0; the match response carries the same counter.
 
 * **tick total** is the whole server tick: applying orders, `advance`, and
   building every session's view (fan-out). `advance` is the simulation alone;
-  `orders, views and fan-out` is the difference. A **missed tick** started over
-  50 ms late or took over 50 ms. The server skips missed intervals rather than
-  catching up, so a slow server runs the game slower than real time: `game
-  speed` is ticks per second / 20 (1.0 holds real time).
+  `orders, views and fan-out` is the difference. A **missed tick** started more
+  than one tick period late or took longer than one (100 ms at the default
+  10 Hz). The server skips missed intervals rather than catching up, so a slow
+  server runs the game slower than real time: `game speed` is ticks per second
+  divided by the tick rate (1.0 holds real time). Runs before 11-26 below were
+  at 20 Hz (50 ms).
 * Server CPU is the process; the bots' CPU and memory are the containers'.
   Everything shares the development machine (12 cores) with whatever else is
   running; the report records the machine's core count only, so note the load
@@ -345,7 +347,7 @@ Revision `85b614561c1c51c8b7df73d25826685d126da4fb` (dirty tree), 100 players (1
 | tick total p50 / p95 / p99 / max (ms) | 4.1 / 37.0 / 246.3 / 2462.9 |
 | `advance` (simulation) p50 / p95 (ms) | 2.2 / 12.7 |
 | orders, views and fan-out p50 / p95 (ms) | 1.4 / 23.7 |
-| missed ticks (late start or over 50 ms) | 363 of 5523 (6.6%) |
+| missed ticks (late start or over one tick period) | 363 of 5523 (6.6%) |
 | game speed (1.0 = real time) | 0.919 |
 | units at start / end / max | 400 / 761 / 761 |
 | of which seeded by `start_units` | 0 |

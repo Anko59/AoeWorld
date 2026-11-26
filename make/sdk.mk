@@ -73,7 +73,7 @@ ai-compare-steps:
 # The real server at its promised scale (docs/scale/match.md): one human, 99 AIs (the server's Rust seats by default), a
 # France-sized map, with the server's tick records and, with
 # `--browser`, the human's frame rate. SCALE_MATCH_ARGS passes harness flags, for example
-# `SCALE_MATCH_ARGS="--players 4 --tiles 500 --map flat --minutes 1 --out reports/scale/x.json --no-summary" make scale-match`.
+# `make scale-match SCALE_MATCH_ARGS="--players 4 --tiles 500 --map flat --minutes 1 --out reports/scale/x.json --no-summary"`.
 # The harness runs in the orchestrator image (it starts sibling bot and browser containers);
 # the wheel is built by the same target, and `--browser` needs `make build-wasm` first.
 .PHONY: scale-match scale-match-steps scale-match-smoke scale-match-smoke-steps
