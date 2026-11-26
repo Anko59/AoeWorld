@@ -85,8 +85,13 @@ fn the_route_make_target_and_workflow_reach_the_triage() {
         .filter_map(|line| line.strip_prefix("  ")?.strip_suffix(':'))
         .filter(|name| !name.starts_with(' '))
         .collect();
-    // parser-fuzz, target-performance and network-soak: the jobs no push runs.
-    assert!(jobs.len() >= 3, "{jobs:?}");
+    // parser-fuzz, target-performance, network-soak and the dependency audit:
+    // what no push runs, or what a new advisory can fail without one.
+    assert!(jobs.len() >= 4, "{jobs:?}");
+    assert!(
+        workflow.contains("run: make deny"),
+        "the advisory audit runs on the nightly timer"
+    );
     for job in jobs {
         assert!(
             needs
