@@ -27,6 +27,18 @@ active leg. Numbered flags and connecting lines show the authoritative queue
 for selected units. Plain orders and Stop replace or clear it. A blocked leg
 is skipped when reached; later valid destinations still execute deterministically.
 
+Right-click on the minimap or the whole map sends the selection to that point,
+as a right-click on empty ground does: units move, attack-move or patrol,
+Shift or Ctrl queues, Alt moves a General alone, and production buildings set
+a ground rally, which also ends an order left armed. It never attacks, gathers,
+garrisons, repairs, trades or unloads, never moves the camera, and does nothing
+outside the world. While an order is armed (Move, Attack move, Patrol, General
+alone) the left button orders too if an own living unit or sheep is selected;
+otherwise it ends that order and jumps. Rings mark the latest eight orders on
+the map; Stop clears them. With a building placement or a far-view production
+destination armed, a right-click anywhere on the map only cancels it. Cancelling
+a placement also ends every other armed order.
+
 Selected production buildings show their rally flag in every renderer, even
 without optional flag art or beyond explored terrain. A local pack's original
 hammer and sword cursors indicate construction/repair and hunting/attack;

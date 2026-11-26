@@ -39,28 +39,15 @@ pub(in super::super) fn cancel_move_mode(client: &mut Client) {
     let _ = client.canvas.set_attribute("data-order-mode", "");
 }
 
+fn shows(client: &Client, mode: &str) -> bool {
+    client.canvas.get_attribute("data-order-mode").as_deref() == Some(mode)
+}
+
 pub(in super::super) fn stop(client: &mut Client) {
     client.village.garrison_cursor = false;
     cancel_move_mode(client);
     super::waypoints::clear_order_pings();
-    let owned = client
-        .selected
-        .units
-        .iter()
-        .copied()
-        .filter(|id| {
-            client
-                .units
-                .get(id)
-                .is_some_and(|u| u.player == owner(client) && u.hp > 0)
-                || client.village.animals.iter().any(|a| {
-                    a.id == *id
-                        && a.kind == aoe_protocol::AnimalKind::Sheep
-                        && a.hp > 0
-                        && a.owner == Some(owner(client))
-                })
-        })
-        .collect::<Vec<_>>();
+    let owned = super::selection::commanded(client);
     for unit_ids in owned.chunks(aoe_core::MAX_FORMATION_MEMBERS) {
         send(
             client,
@@ -78,6 +65,11 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
         && ((contextual && building_attack_at_pointer(client, point))
             || (client.selected.building_id.is_some() && super::rally::at_pointer(client, point)))
     {
+        // A building took the press: it must not leave a General to walk alone.
+        client.village.general_only = false;
+        if shows(client, "general-move") {
+            cancel_move_mode(client);
+        }
         return;
     }
     let forced_move = queued || client.village.move_cursor;
@@ -105,25 +97,67 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
         client.status = "terrain unavailable at pointer".into();
         return;
     };
-    if world[0] < 0.0
-        || world[1] < 0.0
-        || world[0] >= f64::from(client.config.width_tiles)
-        || world[1] >= f64::from(client.config.height_tiles)
-    {
-        return;
+    if let Some(destination) = destination(client, world) {
+        let resource = resource.map(|(id, _)| id);
+        give(client, destination, queued, animal, enemy, resource);
     }
-    let Ok(destination) = WorldPosition::from_i64(
-        (world[0] * f64::from(FIXED_SUBUNITS_PER_TILE)).round() as i64,
-        (world[1] * f64::from(FIXED_SUBUNITS_PER_TILE)).round() as i64,
-    ) else {
-        return;
+}
+
+/// The orders a right-click on empty ground gives, at a point that may be far
+/// off the screen: nothing is picked there. True when a unit order was sent.
+pub(in super::super) fn at_world(client: &mut Client, world: [f64; 2], queued: bool) -> bool {
+    let Some(destination) = destination(client, world) else {
+        return false;
     };
-    let destination = client.config.snap_ground_position(destination);
+    if client.selected.units.is_empty()
+        && client.selected.building_id.is_some()
+        && super::rally::at_ground(client, destination)
+    {
+        super::construction::cancel(client);
+        return false;
+    }
+    client.village.unload_cursor = false;
+    if shows(client, "unload") {
+        let _ = client.canvas.set_attribute("data-order-mode", "");
+    }
+    if !queued {
+        client.village.garrison_cursor = false;
+    }
+    give(client, destination, queued, None, None, None)
+}
+
+/// The ground a click orders to; none outside the world or for NaN.
+fn destination(client: &Client, world: [f64; 2]) -> Option<WorldPosition> {
+    let size = [client.config.width_tiles, client.config.height_tiles];
+    let inside = |(at, tiles): (f64, i32)| (0.0..f64::from(tiles)).contains(&at);
+    if !world.into_iter().zip(size).all(inside) {
+        return None;
+    }
+    ground(client, world)
+}
+
+pub(super) fn ground(client: &Client, world: [f64; 2]) -> Option<WorldPosition> {
+    let [x, y] = world.map(|v| (v * f64::from(FIXED_SUBUNITS_PER_TILE)).round() as i64);
+    let position = WorldPosition::from_i64(x, y).ok()?;
+    Some(client.config.snap_ground_position(position))
+}
+
+/// Orders the selection, also against what the click picked; true when a unit
+/// was sent to the destination.
+fn give(
+    client: &mut Client,
+    destination: WorldPosition,
+    queued: bool,
+    animal: Option<aoe_core::EntityId>,
+    enemy: Option<aoe_core::EntityId>,
+    resource: Option<u64>,
+) -> bool {
     if std::mem::take(&mut client.village.general_only) && !queued {
         let generals: Vec<_> = super::selection::owned_units(client)
             .filter(|unit| unit.kind == UnitKind::General)
             .map(|unit| unit.id)
             .collect();
+        let mut sent = false;
         for entity_ids in generals.chunks(aoe_core::MAX_FORMATION_MEMBERS) {
             let sequence = client.next_sequence;
             let message = if let [entity_id] = entity_ids {
@@ -139,10 +173,10 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
                     destination,
                 }
             };
-            send(client, message);
+            sent |= send(client, message);
         }
         cancel_move_mode(client);
-        return;
+        return sent;
     }
     let mut moves = client
         .village
@@ -203,14 +237,14 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
             _ => moves.push(id),
         }
     }
-    send_lists(client, patrols, |sequence, entity_ids| {
+    let mut sent = send_lists(client, patrols, |sequence, entity_ids| {
         Message::PatrolSelectionOrder {
             sequence,
             entity_ids,
             destination,
         }
     });
-    if let Some((resource_id, _)) = resource {
+    if let Some(resource_id) = resource {
         send_lists(client, gathers, |sequence, entity_ids| {
             Message::GatherSelectionOrder {
                 sequence,
@@ -225,9 +259,7 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
             unit_ids,
             animal_id,
         });
-    }
-    if let Some(target) = animal.or(enemy) {
-        send_attack(client, attacks, target);
+        send_attack(client, attacks, animal_id);
     }
     moves.sort_unstable();
     moves.dedup();
@@ -237,6 +269,7 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
             super::selection_orders::movement(client, units.to_vec(), destination, queued)
             && send(client, message)
         {
+            sent = true;
             let blocker = map::feedback::blocker_at(client, destination.tile_floor());
             client.order_feedback.record(sequence, blocker);
         }
@@ -247,6 +280,7 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
     if !queued {
         cancel_move_mode(client);
     }
+    sent
 }
 
 /// Enemy clicks command defensive weapons; other clicks can still set rallies.
@@ -292,13 +326,15 @@ fn send_lists(
     client: &mut Client,
     mut ids: Vec<aoe_core::EntityId>,
     message: impl Fn(u64, Vec<aoe_core::EntityId>) -> Message,
-) {
+) -> bool {
     ids.sort_unstable();
     ids.dedup();
+    let mut sent = false;
     for chunk in ids.chunks(aoe_core::MAX_FORMATION_MEMBERS) {
         let sequence = client.next_sequence;
-        send(client, message(sequence, chunk.to_vec()));
+        sent |= send(client, message(sequence, chunk.to_vec()));
     }
+    sent
 }
 
 fn send_attack(

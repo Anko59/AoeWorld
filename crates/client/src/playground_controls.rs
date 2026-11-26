@@ -139,7 +139,14 @@ pub(super) fn edge_pan(client: &mut Client, delta_ms: f64) {
     pan(client, [edge[0] * scale, edge[1] * scale]);
 }
 
+/// Alt moves a selected General alone, leaving his army in place.
+fn general_alone(client: &mut Client, alt: bool) {
+    let village = &mut client.village;
+    village.general_only = alt && !village.attack_move && !village.patrol_move;
+}
+
 pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
+    navigation::install(shared.clone());
     let canvas = shared.borrow().canvas.clone();
     let restored = shared.clone();
     let onrestored = Closure::<dyn FnMut(Event)>::new(move |_| {
@@ -162,9 +169,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         }
         if event.button() == 2 {
             // Ctrl also queues: Firefox opens its menu on Shift+right-click.
-            // Alt moves a selected General alone, leaving his army in place.
-            client.village.general_only =
-                event.alt_key() && !client.village.attack_move && !client.village.patrol_move;
+            general_alone(&mut client, event.alt_key());
             super::village::orders::at_pointer(
                 &mut client,
                 target,

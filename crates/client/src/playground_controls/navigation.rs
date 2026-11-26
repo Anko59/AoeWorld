@@ -1,5 +1,7 @@
-use super::{Client, map, pan, pixel_scale, position_at};
-use wasm_bindgen::prelude::wasm_bindgen;
+use super::{Client, general_alone, map, pan, pixel_scale, position_at};
+use crate::playground::game::village::{construction, orders, selection};
+use std::{cell::RefCell, rc::Rc};
+use wasm_bindgen::{JsCast, closure::Closure, prelude::wasm_bindgen};
 
 // UI navigation stays bounded and never widens the detailed terrain subscription.
 #[wasm_bindgen(inline_js = "
@@ -9,6 +11,7 @@ export function navigation_frame(state) {
   if (output) state.set(output, 11);
 }
 export function navigation_present(state) { window.aoeNavigation?.present(state); }
+export function navigation_bind(callback) { window.aoeNavigation?.bindOrders?.(callback); }
 export function navigation_interrupt(state) {
   const pose = window.aoeNavigation?.strategic?.interrupt();
   if (pose) state.set(pose);
@@ -56,6 +59,7 @@ export function gameplay_key(event) {
 extern "C" {
     fn navigation_frame(state: &mut [f64]);
     fn navigation_present(state: &[f64]);
+    fn navigation_bind(callback: &js_sys::Function);
     fn navigation_interrupt(state: &mut [f64]);
     pub(in super::super) fn overview_active() -> bool;
     pub(in super::super) fn camera_fragment(state: &mut [f64]);
@@ -79,6 +83,54 @@ extern "C" {
 
 pub(super) fn map_changed(hash: Option<[u8; 32]>) {
     navigation_map(hash.as_ref().map_or(&[], |hash| hash.as_slice()));
+}
+
+type Press = dyn FnMut(f64, f64, bool, bool, bool) -> u32;
+
+// Minimap presses enter through this callback, as they happen.
+#[inline(never)]
+pub(super) fn install(shared: Rc<RefCell<Client>>) {
+    let callback = Closure::<Press>::new(move |x, y, left, queued, alt| {
+        press(&mut shared.borrow_mut(), [x, y], left, queued, alt)
+    });
+    navigation_bind(callback.as_ref().unchecked_ref());
+    callback.forget();
+}
+
+/// What the map does with a press: 0 drags or jumps, 1 shows nothing, and 2, 3
+/// and 4 ping a move, an attack-move and a patrol. NaN is outside the world.
+fn press(client: &mut Client, world: [f64; 2], left: bool, queued: bool, alt: bool) -> u32 {
+    let placing = client.village.placement.is_some();
+    if left {
+        if placing || !client.village.move_cursor {
+            return 0;
+        }
+        if selection::commanded(client).is_empty() {
+            orders::cancel_move_mode(client);
+            return 0;
+        }
+    } else if placing {
+        construction::cancel(client);
+        return 1;
+    }
+    if world.iter().any(|value| value.is_nan()) {
+        return 1;
+    }
+    if !left {
+        general_alone(client, alt);
+    }
+    let ping = if client.village.patrol_move {
+        4
+    } else if client.village.attack_move {
+        3
+    } else {
+        2
+    };
+    if orders::at_world(client, world, queued) {
+        ping
+    } else {
+        1
+    }
 }
 
 pub(super) fn interrupt_reveal(client: &mut Client) {

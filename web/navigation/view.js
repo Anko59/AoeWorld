@@ -1,8 +1,8 @@
-import { aggregateActors, actorColour, minimapProject, minimapWorldPoint } from '/minimap.js';
+import { aggregateActors, actorColour, minimapOrderPoint, minimapProject, minimapWorldPoint } from '/minimap.js';
 
 // Terrain/fog are retained SVG images. Only their transform and occupied actor
 // pixels change; neither zoom nor panning regenerates a world raster.
-export function initMinimapView(svg, panel, jump) {
+export function initMinimapView(svg, panel, jump, order) {
   const layer = document.getElementById('minimap-view');
   const entities = document.getElementById('minimap-entities');
   const indicator = document.getElementById('minimap-zoom');
@@ -58,8 +58,10 @@ export function initMinimapView(svg, panel, jump) {
     update(world, camera);
   }, { passive: false });
   svg.addEventListener('pointerdown', event => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 && event.button !== 2) return;
     event.preventDefault();
+    const point = minimapOrderPoint(svg.getBoundingClientRect(), event.clientX, event.clientY, world, state(), svg.getAttribute('preserveAspectRatio') === 'none');
+    if (order?.(point, world, event) || event.button === 2) return;
     dragging = { id: event.pointerId, x: event.clientX, y: event.clientY, center: [...center], moved: false };
     svg.setPointerCapture(event.pointerId);
   });
@@ -80,6 +82,7 @@ export function initMinimapView(svg, panel, jump) {
     dragging = null;
     svg.releasePointerCapture(event.pointerId);
   });
+  svg.addEventListener('contextmenu', event => event.preventDefault());
   const cancel = () => { dragging = null; };
   for (const name of ['pointercancel', 'lostpointercapture']) svg.addEventListener(name, cancel);
   window.addEventListener('blur', cancel);

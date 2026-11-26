@@ -101,7 +101,7 @@ export function initProduction() {
     if (armed && event.key === 'Escape') { event.preventDefault(); cancel('Order cancelled.'); }
   });
   document.addEventListener('pointerdown', event => {
-    if (armed && event.button === 2 && event.target === document.getElementById('scene')) {
+    if (armed && event.button === 2 && event.target instanceof Element && event.target.closest('#scene,#minimap-map')) {
       event.preventDefault(); event.stopImmediatePropagation(); cancel('Order cancelled.');
     }
   }, true);
