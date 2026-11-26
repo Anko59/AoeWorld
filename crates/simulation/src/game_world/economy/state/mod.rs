@@ -43,6 +43,8 @@ pub(crate) struct Economy {
     pub(crate) land: std::sync::Mutex<super::land::Cache>,
     pub(crate) walking: super::land::walking::ZoneCache,
     pub(crate) census: std::sync::Mutex<census::Cache>,
+    /// Living villagers on the map, used by foundation placement.
+    pub(crate) villagers: BTreeMap<PlayerId, BTreeSet<EntityId>>,
     pub(crate) vassals: super::vassal::Manager,
     pub(crate) generals: super::general::Manager,
     pub(crate) stewards: steward::Manager,

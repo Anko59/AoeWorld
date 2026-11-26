@@ -159,6 +159,7 @@ impl GameWorld {
             self.combat.trebuchets_transforming.remove(&unit.id);
         }
         if unit.death_tick.is_none() {
+            self.forget_foundation_worker(unit);
             self.change_unit_census(unit.player, Some(unit.kind), None, 1);
             // The corpse stays in its bucket but no longer counts as present.
             let bucket = self.units[index].bucket;
@@ -261,6 +262,7 @@ impl GameWorld {
             return;
         };
         let unit = self.units[index].state;
+        self.forget_foundation_worker(unit);
         if unit.hp > 0 {
             self.change_unit_census(unit.player, Some(unit.kind), None, 1);
         }

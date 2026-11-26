@@ -100,6 +100,13 @@ impl GameWorld {
 
     pub(crate) fn insert_map_unit(&mut self, state: GameUnit, next_hit_tick: u64) {
         let (id, position) = (state.id, state.position);
+        if state.kind == UnitKind::Villager && state.hp > 0 {
+            self.economy
+                .villagers
+                .entry(state.player)
+                .or_default()
+                .insert(id);
+        }
         // A unit placed on the map joins domains like one that stepped in.
         self.management_tile_changed(id);
         if state.kind == UnitKind::Monk {

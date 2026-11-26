@@ -177,6 +177,7 @@ impl GameWorld {
         let footprint = TileRect::from_xywh(origin.x, origin.y, r.depth, r.side);
         self.validate_explored_footprint(player, footprint)?;
         self.validate_footprint_ground(player, footprint)?;
+        self.validate_foundation_reach(player, &builders, footprint)?;
         let id = self.insert_building(player, kind, footprint, false)?;
         self.charge(player, cost);
         self.step_builders_aside(&builders, id);

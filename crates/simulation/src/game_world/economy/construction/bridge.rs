@@ -76,6 +76,7 @@ impl GameWorld {
         if snapped.is_none() {
             self.validate_bridge_placement(player, span)?;
         }
+        self.validate_foundation_reach(player, &builders, rect)?;
         let id =
             self.insert_building_shape(player, BuildingKind::Bridge, rect, false, Some(span))?;
         self.charge(player, cost);

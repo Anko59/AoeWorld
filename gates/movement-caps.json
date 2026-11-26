@@ -62,7 +62,6 @@
     {"count":1,"expr":"MAX_HIERARCHY_PROOFS","file":"crates/simulation/src/game_world/combat/approach.rs","kind":"use"},
     {"count":1,"expr":"MAX_FORMATION_MEMBERS","file":"crates/simulation/src/game_world/combat/lifecycle.rs","kind":"use"},
     {"count":1,"expr":".take(64)","file":"crates/simulation/src/game_world/combat/towers.rs","kind":"take"},
-    {"count":1,"expr":".take(APPROACH_TILE_TRIES)","file":"crates/simulation/src/game_world/economy/construction.rs","kind":"take"},
     {"count":1,"expr":"MAX_APPROACH_ATTEMPTS","file":"crates/simulation/src/game_world/economy/construction.rs","kind":"use"},
     {"count":1,"expr":"MAX_BUILD_GROUP","file":"crates/simulation/src/game_world/economy/construction.rs","kind":"use"},
     {"count":1,"expr":"COMPLETION_VISITS","file":"crates/simulation/src/game_world/economy/construction/continuation.rs","kind":"use"},

@@ -115,14 +115,27 @@ impl GameWorld {
 
     fn observe_vassal_progress(&mut self, id: EntityId, work: &super::work::Workload) {
         let previous = self.economy.vassals.domains[&id].progress;
-        let Some((building, tile, done)) = work.open.iter().find_map(|(id, job)| {
-            if !previous.is_some_and(|(site, _, _)| site == *id)
-                && self.economy.builders.assigned_count(*id) == 0
-            {
-                return None;
-            }
-            self.building(*id).map(|b| (*id, job.tile, b.work_done))
-        }) else {
+        // Other sites can keep progressing while this paid site never gets a
+        // builder. Give confirmed disconnections first claim on the watchdog.
+        let observed = work
+            .open
+            .iter()
+            .find(|(site, _)| {
+                self.economy.builders.assigned_count(*site) == 0
+                    && self.building(*site).is_some_and(|b| {
+                        self.validate_foundation_reach(b.player, &[], b.footprint)
+                            == Err(EconomyError::Movement(crate::GameWorldError::Unreachable))
+                    })
+            })
+            .or_else(|| {
+                work.open.iter().find(|(id, _)| {
+                    previous.is_some_and(|(site, _, _)| site == *id)
+                        || self.economy.builders.assigned_count(*id) > 0
+                })
+            });
+        let Some((building, tile, done)) =
+            observed.and_then(|&(id, job)| self.building(id).map(|b| (id, job.tile, b.work_done)))
+        else {
             if let Some(domain) = self.economy.vassals.domains.get_mut(&id) {
                 domain.progress = None;
             }

@@ -196,7 +196,10 @@ impl GameWorld {
             else {
                 continue;
             };
-            let walking = self.approach_building(builder, footprint, 0).is_ok();
+            let walking = match self.approach_building(builder, footprint, 0) {
+                Err(crate::GameWorldError::Unreachable) => continue,
+                result => result.is_ok(),
+            };
             self.economy.builders.insert(
                 builder,
                 BuildTask {
@@ -226,7 +229,6 @@ impl GameWorld {
             self.steward_controller(builder)
         };
         let mut candidates = self.economy.foundations.nearest(player, from);
-        let mut nearest = None;
         while let Some(target) = candidates.next(&self.economy.foundations) {
             let Some(building) = self.building(target).filter(|b| !b.is_complete()) else {
                 continue;
@@ -240,21 +242,9 @@ impl GameWorld {
             {
                 continue;
             }
-            nearest.get_or_insert(target);
             if self.assign_builders(&[builder], |_| target) {
                 return true;
             }
-        }
-        if let Some(target) = nearest {
-            self.economy.builders.insert(
-                builder,
-                BuildTask {
-                    building: target,
-                    attempts: 1,
-                    queue: Vec::new(),
-                },
-            );
-            return true;
         }
         false
     }

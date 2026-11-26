@@ -81,8 +81,10 @@ impl GameWorld {
         }
         // Validate every segment before placing any, so a refusal changes nothing.
         for tile in line.tiles() {
-            self.validate_explored_footprint(player, rect(tile))?;
-            self.validate_footprint_ground(player, rect(tile))?;
+            let footprint = rect(tile);
+            self.validate_explored_footprint(player, footprint)?;
+            self.validate_footprint_ground(player, footprint)?;
+            self.validate_foundation_reach(player, &builders, footprint)?;
         }
         let ids = self.count_housing_once(|world| {
             let mut ids = Vec::with_capacity(line.count());
