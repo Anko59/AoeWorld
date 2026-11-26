@@ -3,7 +3,7 @@
 //! poll prepares a cold chunk; one that wants to is polled again alone after
 //! the others, so every result is a function of the world as the batch began
 //! and of the batch order, never of the thread count.
-use super::{attribution, far_planner, issue::NO_SLOT_ROUTE_WORK};
+use super::{attribution, far_planner};
 use crate::game_movement::FAST_ROUTE_WORK;
 use crate::game_world::{MovementOrder, parallel::par_each_mut};
 use crate::{GameWorld, GameWorldError, UnitKind};
@@ -48,13 +48,11 @@ impl Search {
 /// its search, if it got one).
 pub(super) type Batch = (Vec<Search>, Vec<(EntityId, bool, Option<usize>)>);
 
-/// The planners and search slots a batch's prepared searches hold until it
-/// finishes. Serially a search's planner is stored back before the next unit
-/// is admitted; here every planner is taken first, so each search holds what
-/// it would store, and the ordinary capacity check sees it.
+/// The planners a batch's prepared searches hold until it finishes, as
+/// (player, far class): every planner is taken first, so each search counts
+/// what it would store and the planner and search counts stay exact.
 #[derive(Default)]
-/// Slots a batch holds: (player, far class, held by a fast attempt).
-pub(super) struct Reserved(Vec<(PlayerId, bool, bool)>);
+pub(super) struct Reserved(Vec<(PlayerId, bool)>);
 
 impl GameWorld {
     /// One waiting unit's search with at most `allowance` work of the fair
@@ -150,28 +148,8 @@ impl GameWorld {
 
     /// Gives back what a batch's searches held, before they finish.
     fn release(&mut self, reserved: Reserved) {
-        for (player, far, _) in reserved.0 {
+        for (player, far) in reserved.0 {
             self.hold_search_slot(player, far, false);
-        }
-    }
-
-    /// The work of `player`'s next fast attempt of class `far`. Serially,
-    /// the batch's earlier fast attempts mostly ended before it was sized, so
-    /// their slots do not count. A unit whose allowance is short of it waits
-    /// for the next round, when their unused work is back: a cut attempt left
-    /// searches unfinished that the serial pass completed.
-    fn fast_attempt(&self, player: PlayerId, far: bool, reserved: &Reserved) -> u32 {
-        let batch = reserved
-            .0
-            .iter()
-            .filter(|&&held| held == (player, far, true))
-            .count();
-        if self.route_capacity_exhausted(player, batch, batch, far)
-            || self.route_queued.contains(&(player, far))
-        {
-            NO_SLOT_ROUTE_WORK
-        } else {
-            FAST_ROUTE_WORK
         }
     }
 
@@ -186,21 +164,13 @@ impl GameWorld {
         let &index = self.lookup.get(&id)?;
         let order = self.units[index].order?;
         let kind = self.units[index].state.kind;
-        let held = self.units[index].planner.as_deref();
-        let holds_planner = usize::from(held.is_some());
-        let holds_search = held.is_some_and(RoutePlanner::requires_search_slot);
         let far = self.waits_for_far_route(index);
         // A retained zero/partial-work planner still owes its full fast
         // attempt after an exhausted issue-time budget; retention is no proof
         // that the attempt ran. This matters with resumable reverse proofs.
         let fast = !self.units[index].fast_route_tried
-            && self.fast_route_allowance(player) >= self.fast_attempt(player, far, reserved);
+            && self.fast_route_allowance(player) >= FAST_ROUTE_WORK;
         if !fast && allowance == 0 {
-            return None;
-        }
-        if !holds_search && !fast && self.route_capacity_exhausted(player, holds_planner, 0, far) {
-            self.route_queued.insert((player, far));
-            self.route_metrics.slot_refusals += 1;
             return None;
         }
         let mut planner = self
@@ -209,12 +179,11 @@ impl GameWorld {
         let fresh = planner.work() == 0;
         let class = far_planner(&planner);
         self.hold_search_slot(player, class, true);
-        reserved.0.push((player, class, fast));
+        reserved.0.push((player, class));
         self.reuse_region_endpoint_proof(&mut planner, kind, player);
         let fast = fast.then(|| {
-            let fast = self.fast_attempt(player, far, reserved);
-            self.charge_fast_route(player, fast);
-            (fast, true)
+            self.charge_fast_route(player, FAST_ROUTE_WORK);
+            (FAST_ROUTE_WORK, true)
         });
         Some(Search {
             index,
@@ -242,15 +211,31 @@ impl GameWorld {
             None => search.allowance,
         }
         .saturating_sub(spent);
-        self.poll_route_planner_limited(
-            &mut search.planner,
-            budget,
-            &|| false,
-            search.kind,
-            search.player,
-            preparations,
-            Some(&search.denied),
-        )
+        // In steps, answering region proofs between them (`REGION_PROOF_STEP`).
+        let mut left = budget;
+        loop {
+            let step = left.min(super::REGION_PROOF_STEP);
+            let before = search.planner.work();
+            let poll = self.poll_route_planner_limited(
+                &mut search.planner,
+                step,
+                &|| false,
+                search.kind,
+                search.player,
+                preparations,
+                Some(&search.denied),
+            );
+            let spent = search.planner.work().saturating_sub(before);
+            left -= spent.min(left);
+            if !matches!(poll, RoutePlannerPoll::Pending)
+                || spent < step
+                || left == 0
+                || search.denied.load(Ordering::Relaxed)
+            {
+                return poll;
+            }
+            self.reuse_region_endpoint_proof(&mut search.planner, search.kind, search.player);
+        }
     }
 
     /// Charges what the search spent and acts on its result; returns the fair
@@ -262,7 +247,6 @@ impl GameWorld {
             player,
             kind,
             order,
-            far,
             fast,
             mut planner,
             fresh,
@@ -338,15 +322,6 @@ impl GameWorld {
                 Some(GameWorldError::InvalidPosition)
             }
             RoutePlannerPoll::Pending => {
-                if fast && self.route_capacity_exhausted(player, 0, 0, far) {
-                    // No slot: keep only the compact continuation, if any.
-                    self.route_metrics.yielded += 1;
-                    planner.abandon_leg_search();
-                    if !planner.requires_search_slot() {
-                        self.store_planner(index, Some(planner));
-                    }
-                    return spent;
-                }
                 self.store_planner(index, Some(planner));
                 return spent;
             }

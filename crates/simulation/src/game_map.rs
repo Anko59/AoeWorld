@@ -59,7 +59,6 @@ impl GameWorld {
             order_diagnostics: Default::default(),
             route_metrics: Default::default(),
             planning_probe: None,
-            route_queued: Default::default(),
         })
     }
 
@@ -135,7 +134,6 @@ impl GameWorld {
             order_diagnostics: Default::default(),
             route_metrics: Default::default(),
             planning_probe: None,
-            route_queued: Default::default(),
         })
     }
 
@@ -193,7 +191,6 @@ impl GameWorld {
             order_diagnostics: Default::default(),
             route_metrics: Default::default(),
             planning_probe: None,
-            route_queued: Default::default(),
         })
     }
 }

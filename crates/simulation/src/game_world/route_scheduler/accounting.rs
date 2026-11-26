@@ -1,9 +1,8 @@
 //! What the route scheduler holds, recounted from the units themselves: the
 //! stored per-player and world counters must always equal this recount, and
 //! the server logs it so a stalled player shows up in a live match.
-use super::{MAX_ROUTE_PLANNERS_PER_PLAYER, MAX_ROUTE_SEARCHES_PER_PLAYER, RouteSlots};
+use super::RouteSlots;
 use crate::GameWorld;
-use crate::game_movement::{MAX_ACTIVE_ROUTE_PLANNERS, MAX_ACTIVE_ROUTE_SEARCHES};
 use aoe_core::PlayerId;
 use std::collections::BTreeMap;
 
@@ -27,10 +26,6 @@ pub struct RouteSchedulerStats {
     pub oldest_wait_ticks: u64,
     pub busiest_player_planners: usize,
     pub busiest_player_searches: usize,
-    pub players_at_planner_cap: usize,
-    pub players_at_search_cap: usize,
-    /// True when the world-wide planner or search bound is reached.
-    pub world_capacity_exhausted: bool,
     /// Planners held by units that are not active movers: nothing serves them.
     pub orphan_planners: usize,
     /// Debug description of the longest-waiting unit, for the server log.
@@ -114,8 +109,6 @@ impl GameWorld {
             planners: self.active_planner_count,
             searches: self.active_route_searches,
             metrics,
-            world_capacity_exhausted: self.active_planner_count >= MAX_ACTIVE_ROUTE_PLANNERS
-                || self.active_route_searches >= MAX_ACTIVE_ROUTE_SEARCHES,
             ..RouteSchedulerStats::default()
         };
         for id in self.active_movers.iter() {
@@ -148,12 +141,6 @@ impl GameWorld {
         for slots in self.route_slots.values() {
             stats.busiest_player_planners = stats.busiest_player_planners.max(slots.planners);
             stats.busiest_player_searches = stats.busiest_player_searches.max(slots.searches);
-            stats.players_at_planner_cap +=
-                usize::from(slots.planners >= MAX_ROUTE_PLANNERS_PER_PLAYER);
-            stats.players_at_search_cap += usize::from(
-                slots.class_searches(false) >= MAX_ROUTE_SEARCHES_PER_PLAYER
-                    || slots.class_searches(true) >= MAX_ROUTE_SEARCHES_PER_PLAYER,
-            );
         }
         stats
     }

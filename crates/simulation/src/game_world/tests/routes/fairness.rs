@@ -4,8 +4,10 @@
 //! make a shifted goal cheaper to reject, changing the intended search pressure.
 use super::*;
 
-/// Half a tick's fair budget, set before an order in these tests.
-pub(super) const FAIR_ROUTE_WORK_RESERVE: u32 = crate::MAX_ROUTE_WORK_PER_TICK / 2;
+/// A tight fair budget these tests set by hand (half the old 16,384 a
+/// tick): the tick has no world budget any more, but a budget the fair pass
+/// is given is still shared between players and searches.
+pub(super) const FAIR_ROUTE_WORK_RESERVE: u32 = 8_192;
 /// Ring radius: the sealed ground (139 x 139 tiles) is larger than the
 /// planner's sealed-destination proof recognises, and its centre is a far
 /// route (more than `NEAR_ROUTE_TILES`) from outside, exercising the far
@@ -60,17 +62,15 @@ fn one_players_route_flood_never_delays_another_players_order() {
         );
         flood.push(id);
     }
-    for _ in 0..5 {
-        world.advance();
-    }
+    world.advance();
     assert!(
         flood
             .iter()
             .all(|id| world.unit(*id).expect("unit").planning)
     );
-    assert!(world.route_slots[&PlayerId(1)].searches <= MAX_ROUTE_SEARCHES_PER_PLAYER);
 
-    // Later orders of other players get no issue-time work: the fair share alone serves them.
+    // Orders of other players issued while the flood still searches are
+    // served by the same fair pass, in their first tick.
     for player in [PlayerId(0), PlayerId(2)] {
         let x = 60 + i32::from(player.0) * 40;
         let id = world
@@ -96,28 +96,7 @@ fn one_players_route_flood_never_delays_another_players_order() {
     }
 }
 
-#[test]
-fn a_players_own_sealed_searches_do_not_block_other_players_slots() {
-    let mut world = sealed_ring_world(512, 250, 250);
-    for raw in 0..8 {
-        let id = world
-            .spawn_unit(PlayerId(1), beside_ring(250, 250, raw))
-            .expect("unit");
-        world.planning_budget = FAIR_ROUTE_WORK_RESERVE;
-        world
-            .issue_task_move(id, tile_position(250, 250))
-            .expect("accepted");
-    }
-    world.advance();
-    assert_eq!(
-        world.route_slots[&PlayerId(1)].searches,
-        MAX_ROUTE_SEARCHES_PER_PLAYER
-    );
-    assert!(!world.route_capacity_exhausted(PlayerId(0), 0, 0, false));
-    assert!(world.route_capacity_exhausted(PlayerId(1), 0, 0, true));
-}
-
-/// Both of the player's search slots are held by hopeless searches; its next
+/// Two hopeless searches of the player run; its next
 /// short order is answered by its fast attempt and walks at once (it used to
 /// wait until one of those searches had proven hopeless).
 #[test]
@@ -134,10 +113,6 @@ fn a_short_order_never_waits_for_slots_held_by_hopeless_searches() {
         sealed.push(id);
     }
     world.advance();
-    assert_eq!(
-        world.route_slots[&PlayerId(1)].searches,
-        MAX_ROUTE_SEARCHES_PER_PLAYER
-    );
     let next = world
         .spawn_unit(PlayerId(1), tile_position(20, 20))
         .expect("next unit");
@@ -277,22 +252,40 @@ fn a_players_far_search_keeps_a_quarter_share_while_its_near_queue_is_busy() {
     assert!(world.route_metrics.fair_work <= u64::from(budget));
 }
 
-/// A big army's player holds more route continuations than its share (the
-/// owner held 97 to 154 with no search). While the world is far from its
-/// bound it borrows and its next order may search; a busy world refuses it.
+/// No route caps (owner 11-25): every waiting search of a player is polled
+/// every tick; none waits for another's slot or a share of a tick budget.
 #[test]
-fn a_player_over_its_planner_share_borrows_while_the_world_has_room() {
-    use crate::game_world::route_scheduler::{RouteSlots, SHARED_ROUTE_PLANNERS};
+fn every_waiting_search_advances_every_tick() {
     let mut world = sealed_ring_world(512, 250, 250);
-    let busy = RouteSlots {
-        planners: MAX_ROUTE_PLANNERS_PER_PLAYER + 90,
-        searches: 0,
-        far_searches: 0,
+    let ids = (0..10)
+        .map(|raw| {
+            let id = world
+                .spawn_unit(PlayerId(1), beside_ring(250, 250, raw))
+                .expect("unit");
+            world
+                .issue_task_move(id, tile_position(250, 250))
+                .expect("accepted");
+            id
+        })
+        .collect::<Vec<_>>();
+    world.advance();
+    let work = |world: &GameWorld, id: EntityId| {
+        world.units[world.lookup[&id]]
+            .planner
+            .as_deref()
+            .map(aoe_map::RoutePlanner::work)
     };
-    world.route_slots.insert(PlayerId(0), busy);
-    world.active_planner_count = 1_000;
-    assert!(!world.route_capacity_exhausted(PlayerId(0), 0, 0, false));
-    world.active_planner_count = SHARED_ROUTE_PLANNERS;
-    assert!(world.route_capacity_exhausted(PlayerId(0), 0, 0, false));
-    assert!(!world.route_capacity_exhausted(PlayerId(1), 0, 0, false));
+    let mut before: Vec<_> = ids.iter().map(|&id| work(&world, id)).collect();
+    for _ in 0..3 {
+        world.advance();
+        let now: Vec<_> = ids.iter().map(|&id| work(&world, id)).collect();
+        for (id, (was, is)) in ids.iter().zip(before.iter().zip(&now)) {
+            // Searching on, a search spent work this tick; or it ended.
+            if let (Some(was), Some(is)) = (was, is) {
+                let waiting = world.waiting_for_route(world.lookup[id]);
+                assert!(!waiting || is > was, "a waiting search was not polled");
+            }
+        }
+        before = now;
+    }
 }

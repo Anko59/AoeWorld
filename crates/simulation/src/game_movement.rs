@@ -9,13 +9,6 @@ use aoe_map::{RoutePlanner, RoutePlannerPoll};
 use std::collections::VecDeque;
 
 const MAX_WAYPOINTS_PER_TICK: usize = 4_096;
-/// World-wide bound on compact proven route continuations; each player also
-/// has its own share (`route_scheduler`), so this bound is memory only.
-pub(crate) const MAX_ACTIVE_ROUTE_PLANNERS: usize = 4_096;
-/// World-wide bound on planners retaining sparse search frontiers. A player
-/// holds at most `MAX_ROUTE_SEARCHES_PER_PLAYER` near and as many far ones,
-/// so 100 seats fit.
-pub(crate) const MAX_ACTIVE_ROUTE_SEARCHES: usize = 400;
 /// Work of one order's fast attempt: a route proven with this much work (or
 /// a destination proven unreachable) is answered at once, with no search slot
 /// and no queue. Nearly every order of a real match fits (the gather and
@@ -24,13 +17,12 @@ pub(crate) const MAX_ACTIVE_ROUTE_SEARCHES: usize = 400;
 /// to ground it cannot reach costs before it is given up (`approach_if_hard`),
 /// and with armies in the field 16,384 saturated the world's fast budget.
 pub(crate) const FAST_ROUTE_WORK: u32 = 8_192;
-/// World-wide work of fast attempts per tick, separate from the fair budget
-/// that serves the searches holding slots, so slow searches never delay a
-/// short order and short orders never starve a slow search.
-pub(crate) const MAX_FAST_ROUTE_WORK_PER_TICK: u32 = 65_536;
-/// One player's share of that budget per tick: a client that floods orders
-/// spends its own share, never the other players' fast attempts.
-pub(crate) const MAX_FAST_ROUTE_WORK_PER_PLAYER: u32 = 2 * FAST_ROUTE_WORK;
+/// No limit (owner 11-25: the route caps go; #978). Kept as a name so the
+/// budget arithmetic reads the same; it is never reached.
+pub(crate) const MAX_FAST_ROUTE_WORK_PER_TICK: u32 = u32::MAX;
+/// No limit (owner 11-25: the route caps go; #978). Kept as a name so the
+/// budget arithmetic reads the same; it is never reached.
+pub(crate) const MAX_FAST_ROUTE_WORK_PER_PLAYER: u32 = u32::MAX;
 
 impl GameWorld {
     /// Moves every active mover once and returns the ids it touched, in

@@ -111,9 +111,8 @@ pub struct RouteAttribution {
     pub group_pool_work: u64,
     /// Member detours that found no slot and rejoined their group instead.
     pub detours_declined: u64,
-    /// Of those: its player had no fast allowance left this tick, or no slot.
+    /// Of those: its player had no fast allowance left this tick.
     pub detours_without_fast: u64,
-    pub detours_at_capacity: u64,
     /// The latest 1 to 4 Ki failures: caller, kind, ends, reason, work.
     pub samples: std::collections::VecDeque<String>,
 }

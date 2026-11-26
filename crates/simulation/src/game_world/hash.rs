@@ -165,11 +165,6 @@ impl GameWorld {
                 .to_le_bytes(),
         );
         hash.update(&self.fast_route_budget.to_le_bytes());
-        hash.update(&(self.route_queued.len() as u64).to_le_bytes());
-        for (player, far) in &self.route_queued {
-            hash.update(&player.0.to_le_bytes());
-            hash.update(&[u8::from(*far)]);
-        }
         hash.update(&(self.fast_route_spent.len() as u64).to_le_bytes());
         for (player, spent) in &self.fast_route_spent {
             hash.update(&player.0.to_le_bytes());

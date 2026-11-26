@@ -3,7 +3,9 @@
 use super::*;
 use aoe_map::{MapPackage, MapRequest};
 
-const UNITS: usize = 1_800;
+// Enough that over 1,024 still move after issue: without route caps a
+// fast attempt refuses orders to unreachable ground at once (#978).
+const UNITS: usize = 3_200;
 const TICKS: usize = 160;
 
 fn lcg(state: &mut u64) -> u64 {

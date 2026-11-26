@@ -4,17 +4,14 @@
 //! search slots. Now every order is first polled with `FAST_ROUTE_WORK` from
 //! a per-tick world budget of its own (`MAX_FAST_ROUTE_WORK_PER_TICK`): a
 //! route, or a proof that there is none, is answered at once with no slot and
-//! no queue. Only an order its fast attempt cannot settle needs a slot, and
-//! one that gets none keeps no frontier.
+//! no queue. An order its fast attempt cannot settle keeps its frontier and
+//! searches on, a slice every tick (no slots since #978).
 use crate::game_movement::{
     FAST_ROUTE_WORK, MAX_FAST_ROUTE_WORK_PER_PLAYER, MAX_FAST_ROUTE_WORK_PER_TICK,
 };
 use crate::{GameWorld, MAX_ROUTE_WORK_PER_ORDER, UnitKind};
 use aoe_core::{PlayerId, TileCoord};
 use aoe_map::{MovementOutcome, RoutePlanner, RoutePlannerPoll};
-
-/// Work of a fast attempt whose frontier no slot could keep.
-pub(crate) const NO_SLOT_ROUTE_WORK: u32 = FAST_ROUTE_WORK / 2;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum MapRoutePlan {
@@ -59,20 +56,7 @@ impl GameWorld {
         kind: UnitKind,
         player: PlayerId,
     ) -> (RoutePlannerPoll, bool) {
-        let far = super::far_planner(planner);
-        // An attempt that fails with no slot to keep its frontier is thrown
-        // away. In the frozen match that was 3.9 attempts of 8,192 work a tick,
-        // 70% of all route work; yet orders settle with under 4,096 or need
-        // far more (found by work: 1.3 million, 4,676 and 111,508 for under
-        // 1,024, up to 4,096 and above; 99% of the failures under 4,096 too).
-        let attempt = if self.route_capacity_exhausted(player, 0, 0, far)
-            || self.route_queued.contains(&(player, far))
-        {
-            NO_SLOT_ROUTE_WORK
-        } else {
-            FAST_ROUTE_WORK
-        };
-        let allowance = self.fast_route_allowance(player).min(attempt);
+        let allowance = self.fast_route_allowance(player).min(FAST_ROUTE_WORK);
         if allowance == 0 {
             return (RoutePlannerPoll::Pending, false);
         }
@@ -98,7 +82,7 @@ impl GameWorld {
         self.route_metrics
             .attribution
             .work(kind, from, to, 0, spent);
-        (result, allowance == attempt)
+        (result, allowance == FAST_ROUTE_WORK)
     }
 
     pub(super) fn charge_fast_route(&mut self, player: PlayerId, work: u32) {
@@ -180,15 +164,7 @@ impl GameWorld {
         match result {
             RoutePlannerPoll::Pending => {
                 self.route_metrics.deferred(origin, destination);
-                let far = super::far_route(origin, destination);
-                if self.route_capacity_exhausted(player, 0, 0, far)
-                    || self.route_queued.contains(&(player, far))
-                {
-                    self.route_metrics.deferred_without_slot += 1;
-                    Some(MapRoutePlan::Pending(None, full))
-                } else {
-                    Some(MapRoutePlan::Pending(Some(planner), full))
-                }
+                Some(MapRoutePlan::Pending(Some(planner), full))
             }
             RoutePlannerPoll::Path(path) => {
                 self.route_metrics.solved_at_issue += 1;

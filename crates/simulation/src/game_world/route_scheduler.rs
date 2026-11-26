@@ -1,11 +1,11 @@
 //! Fair route-search scheduling. Every tick the search budget is shared
 //! between the *players* that have a unit waiting for a route, in a rotating
-//! player order, and inside a player between its waiting units. Search memory
-//! (retained frontiers) is bounded per player, so one player's flood of
-//! orders, or one search that cannot finish, delays only that player's own
-//! orders and never another player's, and only for a bounded time (`deadline`).
+//! player order, and inside a player between its waiting units. There are no
+//! search slots or tick budgets (#978): every waiting search is polled every
+//! tick, on the workers, up to its order's own bound, so one player's flood
+//! of orders, or one search that cannot finish, never holds back another
+//! order.
 use super::GameWorld;
-use crate::game_movement::{MAX_ACTIVE_ROUTE_PLANNERS, MAX_ACTIVE_ROUTE_SEARCHES};
 use crate::{GameWorldError, MAX_ROUTE_WORK_PER_ORDER};
 use aoe_core::{EntityId, PlayerId};
 use aoe_map::RoutePlanner;
@@ -29,6 +29,8 @@ pub use attribution::{
     ROUTE_CATEGORIES, ROUTE_DISTANCES, ROUTE_FAILURES, RouteAttribution, RouteCaller, RouteClass,
 };
 #[cfg(test)]
+pub(crate) use deadline::NEAR_ROUTE_ANSWER_TICKS;
+#[cfg(test)]
 pub(crate) use fields::FIELD_CHUNK;
 pub(crate) use fields::RouteGuides;
 pub(crate) use metrics::{GroupWork, PlanningMeasurement};
@@ -36,28 +38,19 @@ pub use metrics::{PLANNING_SPANS, PlanningProbe, RouteMetrics};
 pub use passes::{PASS_NAMES, PassCount};
 pub(crate) use passes::{Pass, Passes};
 pub use queue::{ROUTE_REACH, ROUTE_REQUESTERS, RouteQueueBreakdown, RouteQueueCell};
-#[cfg(test)]
-pub(crate) use {deadline::NEAR_ROUTE_ANSWER_TICKS, issue::NO_SLOT_ROUTE_WORK};
 
-/// Retained search frontiers one player may hold at once.
-pub(crate) const MAX_ROUTE_SEARCHES_PER_PLAYER: usize = 2;
-/// Compact route continuations one player is guaranteed to hold at once.
-pub(crate) const MAX_ROUTE_PLANNERS_PER_PLAYER: usize = 64;
-/// Beyond its share a player borrows continuations while the world holds
-/// fewer than this, half the memory bound; the rest stays for the players
-/// under their share. In the owner's late game (1,649 population) player 0
-/// held 97 to 154 continuations with no search at all, so none of its
-/// waiting orders could take a slot while the world held 1,000 of 4,096.
-pub(crate) const SHARED_ROUTE_PLANNERS: usize = MAX_ACTIVE_ROUTE_PLANNERS / 2;
-/// A route whose ends are farther apart than this (Chebyshev tiles) searches
-/// in its player's far slots. A scout riding across the map, or an army sent
-/// to sealed-off ground, searches for minutes; in a 99-AI match such searches
-/// held both of a player's slots while its villagers' trips of a few dozen
-/// tiles waited behind them. Near and far searches now have slots of their
-/// own, `MAX_ROUTE_SEARCHES_PER_PLAYER` each.
+/// Work between two looks for a region proof the planner asks for mid-leg.
+/// A search still runs to its whole allowance in one tick; it is polled in
+/// steps of this so a connectivity question the region layer can answer is
+/// never left to the planner's own portal flood.
+pub(crate) const REGION_PROOF_STEP: u32 = 16_384;
+/// A route whose ends are farther apart than this (Chebyshev tiles) is far:
+/// it is served in its own class, after the near ones, so a scout riding
+/// across the map or an army sent to sealed-off ground never goes before a
+/// villager's trip of a few dozen tiles.
 pub(crate) const NEAR_ROUTE_TILES: i32 = 64;
 
-/// True when a route from `from` to `to` uses its player's far slots.
+/// True when a route from `from` to `to` is far.
 pub(crate) fn far_route(from: aoe_core::TileCoord, to: aoe_core::TileCoord) -> bool {
     (from.x - to.x).abs().max((from.y - to.y).abs()) > NEAR_ROUTE_TILES
 }
@@ -111,38 +104,7 @@ pub(crate) struct RouteSlots {
     pub(crate) far_searches: usize,
 }
 
-impl RouteSlots {
-    /// Searches held in the slots of the class `far` names.
-    pub(crate) fn class_searches(&self, far: bool) -> usize {
-        if far {
-            self.far_searches
-        } else {
-            self.searches - self.far_searches
-        }
-    }
-}
-
 impl GameWorld {
-    /// True when `player` may not start one more planner of the given kind
-    /// (a search of a far route when `far`): its own share is used up, or the
-    /// world-wide memory bound is reached. `own_*` discount the planner the
-    /// unit already holds (of the same class).
-    pub(crate) fn route_capacity_exhausted(
-        &self,
-        player: PlayerId,
-        own_planner: usize,
-        own_search: usize,
-        far: bool,
-    ) -> bool {
-        let slots = self.route_slots.get(&player).copied().unwrap_or_default();
-        let world = self.active_planner_count.saturating_sub(own_planner);
-        (slots.planners.saturating_sub(own_planner) >= MAX_ROUTE_PLANNERS_PER_PLAYER
-            && world >= SHARED_ROUTE_PLANNERS)
-            || slots.class_searches(far).saturating_sub(own_search) >= MAX_ROUTE_SEARCHES_PER_PLAYER
-            || world >= MAX_ACTIVE_ROUTE_PLANNERS
-            || self.active_route_searches.saturating_sub(own_search) >= MAX_ACTIVE_ROUTE_SEARCHES
-    }
-
     /// True while the unit's order waits for its route search: a repath
     /// now would throw that search away and start it again.
     pub(crate) fn waiting_for_route(&self, index: usize) -> bool {
@@ -207,7 +169,6 @@ impl GameWorld {
             }
         }
         self.expire_route_waits(&expired, changed);
-        self.route_queued.clear();
         let mut budget = budget;
         self.serve_from_fields(&mut waiting, &mut budget, changed);
         let reserved = self.serve_far_groups(&waiting, budget, changed);
@@ -356,16 +317,9 @@ impl GameWorld {
         reserved: &mut batch::Reserved,
         (searches, visits): &mut batch::Batch,
     ) -> u32 {
-        let holders = ids
-            .iter()
-            .filter(|id| self.units[self.lookup[*id]].planner.is_some())
-            .count();
-        let slots = self.route_slots.get(&player).copied().unwrap_or_default();
-        let free = MAX_ROUTE_SEARCHES_PER_PLAYER.saturating_sub(slots.class_searches(far));
-        let takers = holders + free.min(ids.len() - holders);
         for (position, &id) in ids.iter().enumerate() {
             // Even an empty fair share permits a unit's one fast attempt.
-            let remaining = takers.saturating_sub(position).max(1) as u32;
+            let remaining = (ids.len() - position) as u32;
             let allowance = if share == 0 {
                 0
             } else {

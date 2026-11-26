@@ -3,9 +3,9 @@ use super::{GameWorld, far_planner, far_route};
 use aoe_core::{EntityId, PlayerId};
 use std::collections::BTreeMap;
 
-/// Part of the tick's fair budget reserved for far formation routes (at most
-/// half of it), shared by their carriers; what they leave goes to the fair pass.
-pub(crate) const GROUP_FAR_ROUTE_WORK_PER_TICK: u32 = 8_192;
+/// No limit (owner 11-25: the route caps go; #978). Kept as a name so the
+/// budget arithmetic reads the same; it is never reached.
+pub(crate) const GROUP_FAR_ROUTE_WORK_PER_TICK: u32 = u32::MAX;
 
 impl GameWorld {
     pub(super) fn serve_fast_near_routes(

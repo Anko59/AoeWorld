@@ -38,7 +38,7 @@ mod resources;
 mod snapshot;
 pub use snapshot::{RestoreReport, SnapshotError, WORLD_SNAPSHOT_VERSION, WorldSnapshot};
 mod route_scheduler;
-pub(crate) use route_scheduler::{Pass, far_route};
+pub(crate) use route_scheduler::Pass;
 mod spacing;
 mod spawning;
 mod unit_index;
@@ -200,9 +200,6 @@ pub struct GameWorld {
     pub(crate) active_route_searches: usize,
     pub(crate) partial_kits: u64,
     pub(crate) route_slots: BTreeMap<PlayerId, route_scheduler::RouteSlots>,
-    /// (player, far) classes whose units waited for a slot in the last fair
-    /// pass: an order issued or planned ahead later does not jump that queue.
-    pub(crate) route_queued: BTreeSet<(PlayerId, bool)>,
     pub(crate) group_work: std::sync::Arc<route_scheduler::GroupWork>,
     pub(crate) order_diagnostics: orders::diagnostics::OrderDiagnostics,
     pub(crate) route_metrics: route_scheduler::RouteMetrics,
@@ -263,7 +260,6 @@ impl GameWorld {
             order_diagnostics: Default::default(),
             route_metrics: Default::default(),
             planning_probe: None,
-            route_queued: BTreeSet::new(),
             idle_spacing: Default::default(),
             passes: Default::default(),
             collision_subscribers: Default::default(),
