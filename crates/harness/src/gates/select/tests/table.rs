@@ -71,8 +71,16 @@ const ROWS: &[Row] = &[
     Row {
         change: "crates/ai (the Rust AI) only",
         paths: &["crates/ai/src/lib.rs"],
-        jobs: &["e2e", "target-performance"],
+        jobs: &["e2e", "target-performance", "fuzz-smoke"],
         unit: Some(&["aoe-ai", "aoe-server", "aoe-sdk", "aoe-harness"]),
+        parts: &["checks", "unit"],
+        perf_smoke: true,
+    },
+    Row {
+        change: "crates/server (the bindings' tests run a built server)",
+        paths: &["crates/server/src/lib.rs"],
+        jobs: &["e2e", "target-performance", "fuzz-smoke"],
+        unit: Some(&["aoe-server", "aoe-sdk", "aoe-ai", "aoe-harness"]),
         parts: &["checks", "unit"],
         perf_smoke: true,
     },
@@ -127,14 +135,19 @@ const ROWS: &[Row] = &[
     },
     Row {
         change: "crates/sdk-python (outside the workspace)",
-        paths: &[
-            "crates/sdk-python/src/lib.rs",
-            "crates/sdk-python/Cargo.toml",
-        ],
+        paths: &["crates/sdk-python/src/lib.rs"],
         jobs: &["fuzz-smoke"],
         unit: Some(&[]),
         parts: &["light"],
         perf_smoke: false,
+    },
+    Row {
+        change: "a manifest or lock file of a crate outside the workspace",
+        paths: &["crates/sdk-python/Cargo.toml", "fuzz/Cargo.lock"],
+        jobs: ALL_NARROWED,
+        unit: None,
+        parts: &["checks", "unit"],
+        perf_smoke: true,
     },
     Row {
         change: "fuzz targets (outside the workspace)",
@@ -161,12 +174,20 @@ const ROWS: &[Row] = &[
         perf_smoke: false,
     },
     Row {
-        change: "harness ship",
-        paths: &["crates/harness/src/ship/run.rs"],
+        change: "harness review",
+        paths: &["crates/harness/src/review/trusted.rs"],
         jobs: &[],
         unit: Some(&["aoe-harness"]),
         parts: &["checks", "unit"],
         perf_smoke: false,
+    },
+    Row {
+        change: "harness ship (git, gh and JSON helpers that e2e, perf_comment and the unit leg use)",
+        paths: &["crates/harness/src/ship/git.rs"],
+        jobs: ALL_NARROWED,
+        unit: None,
+        parts: &["checks", "unit"],
+        perf_smoke: true,
     },
     Row {
         change: "harness module no rule narrows (selection itself)",
@@ -279,7 +300,7 @@ const ROWS: &[Row] = &[
     Row {
         change: "mixed: client and ai crates",
         paths: &["crates/client/src/lib.rs", "crates/ai/src/lib.rs"],
-        jobs: &["browser", "e2e", "target-performance"],
+        jobs: ALL_NARROWED,
         unit: Some(&[
             "aoe-client",
             "aoe-ai",

@@ -8,7 +8,10 @@
       "crates": ["aoe-assets", "aoe-client", "aoe-protocol", "aoe-server", "aoe-simulation"],
       "tests": false
     },
-    "fuzz-smoke": { "crates": ["aoeworld-fuzz", "aoeworld-python"], "tests": false }
+    "fuzz-smoke": {
+      "crates": ["aoe-server", "aoeworld-fuzz", "aoeworld-python"],
+      "tests": false
+    }
   },
   "static_parts": {
     "light": ["fmt-check", "structure-check", "architecture-check", "docs-check"],
@@ -24,14 +27,15 @@
         ".dsh/**", ".pi/**", "skills/**", "docs/agent-engineering.md", "docs/agent-runtimes.md"
       ]
     },
-    { "effect": "outside-workspace", "globs": [] },
     {
       "effect": "everything",
       "globs": [
         ".github/**", "make/**", "gates/**", "Makefile", "GNUmakefile", "Cargo.toml",
-        "Cargo.lock", "rust-toolchain.toml", "docker/**", ".dockerignore", "crates/*/Cargo.toml"
+        "Cargo.lock", "rust-toolchain.toml", "docker/**", ".dockerignore", "crates/*/Cargo.toml",
+        "crates/sdk-python/Cargo.lock", "fuzz/Cargo.toml", "fuzz/Cargo.lock"
       ]
     },
+    { "effect": "outside-workspace", "globs": [] },
     { "effect": "checks", "globs": ["deny.toml"] },
     { "effect": "static", "globs": [".gitignore", "ai/**"] },
     { "effect": "reads", "globs": ["browser/**", "web/**"], "jobs": ["browser", "e2e"] },
@@ -61,7 +65,7 @@
     {
       "globs": [
         "crates/harness/src/agents/**",
-        "crates/harness/src/ship/**", "crates/harness/src/review/**",
+        "crates/harness/src/review/**",
         "crates/harness/src/ledger/**", "crates/harness/src/roadmap/**",
         "crates/harness/src/timeline/**", "crates/harness/src/input_json/**",
         "crates/harness/src/architecture.rs", "crates/harness/src/architecture/**",
