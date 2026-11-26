@@ -114,6 +114,8 @@ pub(crate) struct AiSeats {
     /// Sessions played in process.
     sessions: std::sync::Mutex<BTreeSet<u64>>,
     log: Arc<std::sync::Mutex<Vec<AppliedOrder>>>,
+    /// Keep the log in a live build too (`HeadlessPlan::record_orders`).
+    record_orders: AtomicBool,
     stats: Arc<Stats>,
 }
 
@@ -125,10 +127,15 @@ impl AiSeats {
             .clone()
     }
 
-    /// The applied-order log, kept only in test builds: a live match would
-    /// serialize every AI order on the tick path for nobody to read.
+    /// The applied-order log, kept only in test builds and in a headless
+    /// match that asked for it: a live match would serialize every AI order on
+    /// the tick path for nobody to read.
     pub(crate) fn log_handle(&self) -> Option<Arc<std::sync::Mutex<Vec<AppliedOrder>>>> {
-        cfg!(test).then(|| self.log.clone())
+        (cfg!(test) || self.record_orders.load(Ordering::Relaxed)).then(|| self.log.clone())
+    }
+
+    pub(super) fn record_orders(&self, on: bool) {
+        self.record_orders.store(on, Ordering::Relaxed);
     }
 
     fn add_session(&self, id: u64) {
@@ -149,7 +156,6 @@ pub(crate) fn record(log: &std::sync::Mutex<Vec<AppliedOrder>>, order: AppliedOr
 
 impl GameplayService {
     /// Every order an in-process seat had applied, in application order.
-    #[cfg(test)]
     pub(crate) fn ai_order_log(&self) -> Vec<AppliedOrder> {
         self.ai_seats
             .log
