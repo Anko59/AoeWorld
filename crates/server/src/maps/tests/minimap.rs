@@ -132,6 +132,18 @@ mod relief;
 #[path = "minimap_dump.rs"]
 mod dump;
 
+#[path = "minimap_sources.rs"]
+mod sources;
+
+#[path = "minimap_reference.rs"]
+mod reference;
+
+#[path = "minimap_pages.rs"]
+mod pages;
+
+#[path = "minimap_pools.rs"]
+mod pools;
+
 #[test]
 fn raster_axis_and_bytes_are_capped_for_every_map_size() {
     assert_eq!(MAX_MINIMAP_SAMPLES_PER_AXIS, 512);

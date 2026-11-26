@@ -150,9 +150,10 @@ impl MapChunkGenerator {
         )
     }
 
-    /// The exact composed land surface without constructing resource or dressing
-    /// objects. Strategic rasters consume only this projection; gameplay keeps
-    /// the complete point query. Shared exclusions still determine canopy.
+    /// The exact composed land surface, loose rocks included, without resource or
+    /// dressing objects; gameplay keeps the complete point query. Strategic
+    /// rasters read `raster_surface_with_cancel` and tests compare it with this
+    /// one. Shared exclusions still determine canopy.
     pub fn landscape_surface_with_cancel(
         &self,
         position: TileCoord,
@@ -167,6 +168,20 @@ impl MapChunkGenerator {
     >(
         &self,
         position: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<super::LandscapePoint>, EnvironmentPageError> {
+        self.evaluate_point_with_rocks::<SURFACE_ONLY, PHYSICAL>(position, None, cancelled)
+    }
+
+    /// The default-policy point with known loose-rock flags (anchor, covered);
+    /// `None` searches for the rocks that cover the tile.
+    pub(in crate::terrain) fn evaluate_point_with_rocks<
+        const SURFACE_ONLY: bool,
+        const PHYSICAL: bool,
+    >(
+        &self,
+        position: TileCoord,
+        rocks: Option<(bool, bool)>,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<super::LandscapePoint>, EnvironmentPageError> {
         let reserved_at = |at| self.landscape_reservations_at(at);
@@ -198,7 +213,7 @@ impl MapChunkGenerator {
                     PHYSICAL,
                     { memo::SHARED_SLOTS },
                     { memo::SHARED_SLOTS },
-                >(position, &composition, None))
+                >(position, &composition, rocks))
             });
             if let Some(point) = shared {
                 return point;
@@ -216,7 +231,7 @@ impl MapChunkGenerator {
         self.evaluate_landscape_point_with_memo::<SURFACE_ONLY, PHYSICAL, 25, 361>(
             position,
             &composition,
-            None,
+            rocks,
         )
     }
 
@@ -397,33 +412,6 @@ impl MapChunkGenerator {
             provider::sample_base_tile(self, position, cancelled).map(Some)
         } else {
             Ok(Some(self.sample_base_tile(position)))
-        }
-    }
-
-    /// Raw source PNV class at a tile, from the same field the base biome uses.
-    /// Missing vegetation fields return `None`; page failures propagate.
-    pub(in crate::terrain) fn source_biome_class_with_cancel(
-        &self,
-        position: TileCoord,
-        cancelled: &dyn Fn() -> bool,
-    ) -> Result<Option<u8>, EnvironmentPageError> {
-        if cancelled() {
-            return Err(EnvironmentPageError::Cancelled);
-        }
-        if self.provider.is_none() {
-            return Ok(self
-                .biome
-                .as_ref()
-                .and_then(|biome| biome.class_at(position, self.width_tiles)));
-        }
-        let axis = self
-            .provider_environment
-            .as_ref()
-            .ok_or(EnvironmentPageError::Invalid)?
-            .vegetation_samples_per_axis();
-        match axis {
-            Some(axis) => provider::sample_biome_class(self, axis, position, cancelled),
-            None => Ok(None),
         }
     }
 

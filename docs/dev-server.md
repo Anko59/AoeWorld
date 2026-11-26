@@ -63,8 +63,8 @@ an empty directory and removes the old one. Preparing needs the geodata cache
 and takes minutes the first time; `maps ready n/m` counts completed presets,
 and `make dev-server` serves each completed map's minimap raster before it
 returns (the server computes it on the first request within 30 s and answers
-503 past that, which a client never retries; `warm.rs`), so "ready" means a
-skirmish can start.
+503 past that; the client keeps its coarse or schematic map and asks again
+every 5 s; `warm.rs`), so "ready" means a skirmish starts with its terrain map.
 
 ## Who uses it
 

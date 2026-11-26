@@ -97,7 +97,7 @@ pub(super) struct DerivedCaches {
     pub(super) point: std::sync::Mutex<super::point_memo::PointMemo>,
     pub(super) walk: std::sync::Mutex<WalkCache>,
     pub(super) portals: std::sync::Mutex<crate::navigation::PortalCache>,
-    /// Only a navigation preparation worker keeps one: its own few recent
+    /// Only a navigation or raster worker keeps one: its own few recent
     /// pages, so per-tile reads skip the shared provider's lock and LRU.
     pub(super) pages: std::sync::Mutex<Option<PageMemo>>,
 }

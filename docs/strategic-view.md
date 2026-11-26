@@ -230,10 +230,14 @@ Esc, right-click, focus loss and returning to near zoom cancel placement.
 The client first requests `/maps/{hash}/minimap/coarse`, a complete raster of
 up to 64 samples per axis, then refines it through the ordinary minimap endpoint
 at up to 512 samples. Both use the same composed surface, land-use and river
-queries. They omit final resource and decorative objects while preserving
-the shared exclusions that determine canopy.
-Four bounded native workers fill disjoint row bands with independent query
-memos, preserving row-major output. They share immutable source inputs.
+queries. They omit final resource and decorative objects, and loose rocks,
+which change passability only, while preserving the shared exclusions that
+determine canopy.
+Native workers fill square blocks of at most 64 samples per side, each with its
+own query memos and recent source pages, preserving row-major output. Fine
+rasters share four threads and start in turn; a later one never pauses one that
+has started. A coarse raster has one thread of its own, so fine rasters that
+still compute in the background do not delay it.
 Each raster retains its 30-second limit and shares the eight-entry cache (coarse and fine count separately).
 A failed refinement keeps the coarse terrain visible and retries the fine map.
 World replacement cancels both stages and clears their images and timing data.

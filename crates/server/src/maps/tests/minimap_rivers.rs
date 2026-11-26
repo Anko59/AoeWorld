@@ -6,7 +6,7 @@ fn river_fixture(corrected: bool) -> MapChunkGenerator {
     river_network_fixture(corrected, Vec::new(), 2)
 }
 
-fn river_network_fixture(
+pub(super) fn river_network_fixture(
     corrected: bool,
     extra: Vec<aoe_map::RiverSegment>,
     biome: u8,
@@ -207,7 +207,7 @@ fn cited_set_land_reach_is_not_redrawn_by_the_minimap_footprint() {
     );
 }
 
-fn vertical(tile_x: i32, width_tiles: u16) -> aoe_map::RiverSegment {
+pub(super) fn vertical(tile_x: i32, width_tiles: u16) -> aoe_map::RiverSegment {
     aoe_map::RiverSegment {
         start: [tile_x * 256, 0],
         end: [tile_x * 256, 2048 * 256],

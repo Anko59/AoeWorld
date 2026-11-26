@@ -19,7 +19,8 @@ fn dump_stored_minimap_rasters_when_packages_are_available() {
         let start = std::time::Instant::now();
         let raster = package_minimap(&package, provider.clone(), &|| false).expect("server raster");
         let elapsed = start.elapsed();
-        eprintln!("minimap {hash}: {elapsed:?}");
+        let loads = provider.as_ref().map(|pages| pages.verified_page_loads());
+        eprintln!("minimap {hash}: {elapsed:?}, page loads {loads:?}");
         std::fs::write(
             output.join(format!("current-{hash}.seconds")),
             elapsed.as_secs_f64().to_string(),

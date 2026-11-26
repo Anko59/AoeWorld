@@ -72,8 +72,8 @@ pub use terrain::{
     LandscapeAppearance, LandscapeChunk, LandscapeDecoration, LandscapePoint, LandscapePolicy,
     LandscapeResource, LandscapeSample, LandscapeTile, MapChunkGenerator, NativeExposure,
     NativeHeightBand, NavigationPhase, NavigationProbe, NavigationSpan, NavigationTarget,
-    ObjectKind, Provenance, ResourceKind, ResourceNode, ResourceVisualFamily, SurfaceDiagonal,
-    SurfaceKind, Tile, TileSurface, WALK_CACHE_MAX_BYTES, WalkCell, WaterKind,
+    ObjectKind, Provenance, RasterSurface, ResourceKind, ResourceNode, ResourceVisualFamily,
+    SurfaceDiagonal, SurfaceKind, Tile, TileSurface, WALK_CACHE_MAX_BYTES, WalkCell, WaterKind,
 };
 pub use wire::{CHUNK_FORMAT_VERSION, CompactChunk, CompactChunkError, MAX_DECODED_CHUNK_BYTES};
 

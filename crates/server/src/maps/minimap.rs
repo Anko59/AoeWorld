@@ -1,14 +1,12 @@
 //! One bounded strategic raster per map package, sampled from the same
 //! composed landscape query that produces terrain chunks. It is presentation
 //! data for the minimap and whole-map overview, never a gameplay input.
-use aoe_core::TileCoord;
 use aoe_map::{
-    EnvironmentPageError, GroundMaterial, LandscapePoint, MapChunkGenerator, MapPackage, WaterKind,
+    EnvironmentPageError, GroundMaterial, MapChunkGenerator, MapPackage, RasterSurface, WaterKind,
 };
-use rayon::prelude::*;
 use std::{
     collections::{BTreeSet, VecDeque},
-    sync::{Arc, LazyLock},
+    sync::Arc,
     time::Duration,
 };
 
@@ -41,6 +39,8 @@ const MINIMAP_WARP_MARGIN_TILES: i32 = 3;
 /// Summed per-axis rise, in per-mille, that changes the shade by one step.
 const SHADE_STEP_PER_MILLE: i64 = 25;
 
+#[path = "minimap_blocks.rs"]
+mod blocks;
 #[path = "minimap_relief.rs"]
 mod relief;
 
@@ -119,24 +119,24 @@ pub(crate) fn minimap_tile(tiles_per_side: u64, samples: u16, index: u16) -> Opt
 
 /// Class of one composed landscape point: water first, then canopy, then
 /// the composed ground material.
-pub(crate) fn classify(point: &LandscapePoint) -> MinimapClass {
-    let terrain = &point.tile.terrain;
-    match terrain.water {
+pub(crate) fn classify(surface: impl Into<RasterSurface>) -> MinimapClass {
+    let surface = surface.into();
+    match surface.water {
         WaterKind::Ocean => return MinimapClass::Ocean,
         WaterKind::Lake => return MinimapClass::Lake,
         WaterKind::River => return MinimapClass::River,
         WaterKind::Shallow => return MinimapClass::Shore,
         WaterKind::None => {}
     }
-    match point.historical_land_use {
+    match surface.historical_land_use {
         aoe_map::historical_parcels::LandUse::Crop => return MinimapClass::Cropland,
         aoe_map::historical_parcels::LandUse::Grazing => return MinimapClass::Pasture,
         _ => {}
     }
-    if point.tile.appearance.canopy_strength > 0 {
+    if surface.canopy_strength > 0 {
         return MinimapClass::Forest;
     }
-    match terrain.material {
+    match surface.material {
         GroundMaterial::TemperateGrass | GroundMaterial::LushGrass | GroundMaterial::WornGrass => {
             MinimapClass::Grass
         }
@@ -155,39 +155,13 @@ pub(crate) fn classify(point: &LandscapePoint) -> MinimapClass {
     }
 }
 
-/// Class of the dry land around an omitted stream: the first dry sample on a
-/// ring beyond the stream's bank, so a desert or a snowfield keeps its own
-/// colour. Grass only where no dry land is within reach.
-fn surrounding_land_class(
-    generator: &MapChunkGenerator,
-    tile: TileCoord,
-    reach: i32,
-    cancelled: &(dyn Fn() -> bool + Sync),
-) -> Result<MinimapClass, MinimapError> {
-    for distance in [reach, reach * 2] {
-        for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
-            let probe = TileCoord::new(
-                tile.x.saturating_add(dx * distance),
-                tile.y.saturating_add(dy * distance),
-            );
-            let Some(point) = generator
-                .landscape_surface_with_cancel(probe, cancelled)
-                .map_err(MinimapError::Page)?
-            else {
-                continue;
-            };
-            if point.tile.terrain.water == WaterKind::None {
-                return Ok(classify(&point));
-            }
-        }
-    }
-    Ok(MinimapClass::Grass)
-}
-
 /// Deterministic raster of the composed landscape: `MINIMAP_HEADER_BYTES`
 /// then row-major bytes, class in the low nibble and relief shade in the high
 /// nibble. Performs exactly `samples²` point queries and allocates at most
-/// `MAX_MINIMAP_BYTES` plus at most 24 bytes of scratch per sample.
+/// `MAX_MINIMAP_BYTES` plus at most 24 bytes of scratch per sample, beside the
+/// fixed query memos of each worker. A worker also pins its last 32 source
+/// pages while it runs: at most 4 × 32 for all fine rasters together and 32
+/// for a coarse one, on top of those the page source keeps resident.
 #[cfg(test)]
 pub(crate) fn minimap_raster(
     generator: &MapChunkGenerator,
@@ -219,86 +193,13 @@ pub(crate) fn minimap_raster_at_samples(
         return Err(MinimapError::EmptyMap);
     }
     let side = usize::from(samples);
-    let geometry = generator.has_river_geometry();
-    static WORKERS: LazyLock<Option<rayon::ThreadPool>> =
-        LazyLock::new(|| rayon::ThreadPoolBuilder::new().num_threads(4).build().ok());
-    let workers = WORKERS
-        .as_ref()
-        .ok_or(MinimapError::Page(EnvironmentPageError::Unavailable))?;
-    let mut points = vec![(MinimapClass::Grass, 0); side * side];
-    let band_rows = side.div_ceil(4);
-    workers.install(|| {
-        points
-            .par_chunks_mut(side * band_rows)
-            .enumerate()
-            .try_for_each(|(band, band_points)| {
-                let generator = generator.fork_queries();
-                for (y, row) in band_points.chunks_mut(side).enumerate() {
-                    let y = (band * band_rows + y) as u16;
-                    let tile_y =
-                        minimap_tile(tiles_per_side, samples, y).ok_or(MinimapError::OutsideMap)?;
-                    for (x, output) in row.iter_mut().enumerate() {
-                        let x = x as u16;
-                        let tile_x = minimap_tile(tiles_per_side, samples, x)
-                            .ok_or(MinimapError::OutsideMap)?;
-                        let point = generator
-                            .landscape_surface_with_cancel(
-                                TileCoord::new(tile_x, tile_y),
-                                cancelled,
-                            )
-                            .map_err(MinimapError::Page)?
-                            .ok_or(MinimapError::OutsideMap)?;
-                        let mut class = classify(&point);
-                        // A cited land correction is authoritative at this raster sample.
-                        // Ordinary dry sample centres still discover subpixel rivers.
-                        let corrected_land = point.tile.terrain.water == WaterKind::None
-                            && point.tile.terrain.water_provenance
-                                == aoe_map::Provenance::HistoricallyCorrected;
-                        let footprint = (tiles_per_side.div_ceil(u64::from(samples)) * 181)
-                            .div_ceil(256) as i32;
-                        let tile = TileCoord::new(tile_x, tile_y);
-                        if class == MinimapClass::River && geometry {
-                            // Physical water counts only where a drawn river is nearby.
-                            // Rivers without source geometry keep their tile width.
-                            if !generator
-                                .river_within_with_cancel(
-                                    tile,
-                                    footprint + MINIMAP_WARP_MARGIN_TILES,
-                                    MINIMAP_MIN_RIVER_WIDTH_UNITS,
-                                    cancelled,
-                                )
-                                .map_err(MinimapError::Page)?
-                            {
-                                class = surrounding_land_class(
-                                    &generator,
-                                    tile,
-                                    footprint + MINIMAP_WARP_MARGIN_TILES + 2,
-                                    cancelled,
-                                )?;
-                            }
-                        } else if geometry
-                            && !corrected_land
-                            && !matches!(
-                                class,
-                                MinimapClass::Ocean | MinimapClass::Lake | MinimapClass::River
-                            )
-                            && generator
-                                .river_within_with_cancel(
-                                    tile,
-                                    footprint,
-                                    MINIMAP_MIN_RIVER_WIDTH_UNITS,
-                                    cancelled,
-                                )
-                                .map_err(MinimapError::Page)?
-                        {
-                            class = MinimapClass::River;
-                        }
-                        *output = (class, point.tile.terrain.geographic_height_centimeters);
-                    }
-                }
-                Ok(())
-            })
-    })?;
+    let points = blocks::Sampler {
+        generator,
+        tiles_per_side,
+        samples,
+        cancelled,
+    }
+    .run()?;
     let (classes, heights): (Vec<_>, Vec<_>) = points.into_iter().unzip();
     let spacing_millimeters = (u128::from(tiles_per_side)
         * u128::from(geographic_millimeters_per_tile.max(1))

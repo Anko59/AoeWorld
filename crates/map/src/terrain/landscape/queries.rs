@@ -248,6 +248,33 @@ impl MapChunkGenerator {
             None => Ok(None),
         }
     }
+
+    /// Raw source PNV class at a tile, from the same field the base biome uses.
+    /// Missing vegetation fields return `None`; page failures propagate.
+    pub(in crate::terrain) fn source_biome_class_with_cancel(
+        &self,
+        position: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<u8>, EnvironmentPageError> {
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        if self.provider.is_none() {
+            return Ok(self
+                .biome
+                .as_ref()
+                .and_then(|biome| biome.class_at(position, self.width_tiles)));
+        }
+        let axis = self
+            .provider_environment
+            .as_ref()
+            .ok_or(EnvironmentPageError::Invalid)?
+            .vegetation_samples_per_axis();
+        match axis {
+            Some(axis) => provider::sample_biome_class(self, axis, position, cancelled),
+            None => Ok(None),
+        }
+    }
 }
 
 #[path = "queries/tests.rs"]
