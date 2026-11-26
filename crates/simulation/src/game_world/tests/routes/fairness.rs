@@ -54,7 +54,7 @@ fn one_players_route_flood_never_delays_another_players_order() {
         let id = world
             .spawn_unit(PlayerId(1), beside_ring(250, 250, raw))
             .expect("flood unit");
-        world.planning_budget = FAIR_ROUTE_WORK_RESERVE;
+        world.planning_budget = Some(FAIR_ROUTE_WORK_RESERVE);
         assert!(
             world
                 .issue_task_move(id, tile_position(250, 250))
@@ -76,7 +76,7 @@ fn one_players_route_flood_never_delays_another_players_order() {
         let id = world
             .spawn_unit(player, tile_position(x, 60))
             .expect("player unit");
-        world.planning_budget = FAIR_ROUTE_WORK_RESERVE;
+        world.planning_budget = Some(FAIR_ROUTE_WORK_RESERVE);
         assert!(
             world
                 .issue_move(id, tile_position(x + 30, 90))
@@ -155,7 +155,7 @@ fn sustained_near_searches_cannot_starve_a_retained_far_search() {
         .spawn_unit(PlayerId(2), tile_position(200, 100))
         .unwrap();
     world.issue_task_move(far, tile_position(200, 200)).unwrap();
-    world.planning_budget = FAIR_ROUTE_WORK_RESERVE;
+    world.planning_budget = Some(FAIR_ROUTE_WORK_RESERVE);
     world.advance();
     assert!(world.unit(far).unwrap().planning);
     let mut previous = world.units[world.lookup[&far]]
@@ -170,7 +170,7 @@ fn sustained_near_searches_cannot_starve_a_retained_far_search() {
                 world.issue_task_move(*id, tile_position(200, 200)).unwrap();
             }
         }
-        world.planning_budget = FAIR_ROUTE_WORK_RESERVE;
+        world.planning_budget = Some(FAIR_ROUTE_WORK_RESERVE);
         let fair_before = world.route_metrics.fair_work;
         world.advance();
         let unit = &world.units[world.lookup[&far]];
@@ -193,8 +193,8 @@ fn sustained_near_searches_cannot_starve_a_retained_far_search() {
 #[test]
 fn a_players_far_search_keeps_a_quarter_share_while_its_near_queue_is_busy() {
     let mut world = world();
-    world.fast_route_budget = 0;
-    world.planning_budget = 0;
+    world.fast_route_budget = Some(0);
+    world.planning_budget = Some(0);
     let player = PlayerId(0);
     for raw in 0..20 {
         let origin = TileCoord::new(20, 20 + raw);

@@ -179,8 +179,8 @@ impl GameWorld {
         self.expire_route_waits(&expired, changed);
         let mut budget = budget;
         self.serve_from_fields(&mut waiting, &mut budget, changed);
-        let reserved = self.serve_far_groups(&waiting, budget, changed);
-        self.serve_waiting(waiting, budget - reserved, changed)
+        let spent = self.serve_far_groups(&waiting, changed);
+        self.serve_waiting(waiting, budget.saturating_sub(spent), changed)
     }
 
     /// Shares `budget` between the players of `waiting` in a rotating order,

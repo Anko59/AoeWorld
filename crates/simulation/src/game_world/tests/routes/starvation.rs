@@ -127,7 +127,7 @@ fn hopeless_near_searches_do_not_starve_the_routes_of_their_player() {
 #[test]
 fn a_search_restarted_by_ground_changes_still_answers_in_bounded_time() {
     let mut world = sealed_near_world();
-    world.fast_route_budget = 0;
+    world.fast_route_budget = Some(0);
     let hopeless = hopeless_orders(&mut world, PlayerId(3));
     let area = aoe_core::TileRect::new(
         TileCoord::new(CX, CY - RADIUS - 2),
@@ -135,8 +135,8 @@ fn a_search_restarted_by_ground_changes_still_answers_in_bounded_time() {
     );
     for _ in 0..10 {
         world.collision_closed(area);
-        world.planning_budget = 1;
-        world.fast_route_budget = 0;
+        world.planning_budget = Some(1);
+        world.fast_route_budget = Some(0);
         world.advance();
         assert!(
             hopeless
@@ -276,8 +276,8 @@ fn repeated_waiting_goals_retain_search_progress_and_the_original_deadline() {
     let mut w = sealed_near_world();
     // Region proofs now answer sealed destinations immediately. A connected
     // detour with a small first allowance leaves a real frontier to retain.
-    w.fast_route_budget = 256;
-    w.planning_budget = 0;
+    w.fast_route_budget = Some(256);
+    w.planning_budget = Some(0);
     let id = detour_orders(&mut w, PlayerId(0), 1)[0];
     let other = w.spawn_unit(PlayerId(0), tile_position(182, 190)).unwrap();
     assert_eq!(w.issue_task_move(other, tile_position(180, 210)), Ok(true));

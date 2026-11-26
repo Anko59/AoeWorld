@@ -168,8 +168,8 @@ impl GameWorld {
         // A retained zero/partial-work planner still owes its full fast
         // attempt after an exhausted issue-time budget; retention is no proof
         // that the attempt ran. This matters with resumable reverse proofs.
-        let fast = !self.units[index].fast_route_tried
-            && self.fast_route_allowance(player) >= FAST_ROUTE_WORK;
+        let fast =
+            !self.units[index].fast_route_tried && self.fast_route_allowance() >= FAST_ROUTE_WORK;
         if !fast && allowance == 0 {
             return None;
         }
@@ -182,7 +182,7 @@ impl GameWorld {
         reserved.0.push((player, class));
         self.reuse_region_endpoint_proof(&mut planner, kind, player);
         let fast = fast.then(|| {
-            self.charge_fast_route(player, FAST_ROUTE_WORK);
+            self.charge_fast_route(FAST_ROUTE_WORK);
             (FAST_ROUTE_WORK, true)
         });
         Some(Search {
@@ -262,9 +262,8 @@ impl GameWorld {
         let (from, to) = (planner.origin(), planner.destination());
         let spent = if let Some((allowance, full)) = fast {
             // Charged in full when prepared: give back what it did not use.
-            self.fast_route_budget += allowance.saturating_sub(spent);
-            if let Some(used) = self.fast_route_spent.get_mut(&player) {
-                *used = used.saturating_sub(allowance.saturating_sub(spent));
+            if let Some(left) = &mut self.fast_route_budget {
+                *left = left.saturating_add(allowance.saturating_sub(spent));
             }
             if planner.certified_destination().is_some() {
                 self.route_metrics

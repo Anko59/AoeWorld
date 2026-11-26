@@ -1,5 +1,4 @@
 use super::*;
-use crate::MAX_ROUTE_WORK_PER_TICK;
 use aoe_map::{
     ENVIRONMENT_PAGE_SAMPLES, ElevationPage, EnvironmentPage, EnvironmentPageError,
     EnvironmentPageKey, EnvironmentPageProvider, FieldPyramid, PreparedEnvironment, PyramidLevel,
@@ -241,7 +240,7 @@ fn resumed_provider_failure_is_a_typed_stopped_reason() {
     });
     world.units[index].state.moving = true;
     world.active_movers.insert(id);
-    world.planning_budget = 1;
+    world.planning_budget = Some(1);
 
     world.advance();
     assert!(world.units[index].state.planning);
@@ -264,7 +263,7 @@ fn scheduling_budget_is_part_of_canonical_state() {
     let first = GameWorld::new(config).expect("first world");
     let mut second = GameWorld::new(config).expect("second world");
     assert_eq!(first.canonical_hash(), second.canonical_hash());
-    second.planning_budget = 1;
+    second.planning_budget = Some(1);
     assert_ne!(first.canonical_hash(), second.canonical_hash());
 }
 
@@ -290,7 +289,7 @@ fn a_short_clear_trip_walks_straight_when_the_fast_budget_is_spent() {
     let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).expect("tile");
     let near = world.spawn_unit(PlayerId(0), at(10, 10)).expect("spawn");
     let far = world.spawn_unit(PlayerId(0), at(10, 20)).expect("spawn");
-    world.fast_route_budget = 0;
+    world.fast_route_budget = Some(0);
     assert!(world.issue_move(near, at(14, 12)).expect("short trip"));
     assert!(world.issue_move(far, at(60, 20)).expect("long trip"));
     let near = world.unit(near).expect("unit");
@@ -312,7 +311,7 @@ fn a_mover_waiting_for_its_route_is_counted_as_waiting() {
     world.terrain = flat_map_terrain();
     let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).expect("tile");
     let far = world.spawn_unit(PlayerId(0), at(10, 20)).expect("spawn");
-    world.fast_route_budget = 0;
+    world.fast_route_budget = Some(0);
     assert!(world.issue_move(far, at(60, 20)).expect("long trip"));
     assert_eq!(world.order_mover_census().iter().sum::<u64>(), 1);
     assert_eq!(world.order_waiting_census().iter().sum::<u64>(), 1);

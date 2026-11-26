@@ -252,8 +252,7 @@ impl GameWorld {
             self.formations.insert(replacement, group);
         }
         let origin = self.units[index].state.position;
-        let player = self.units[index].state.player;
-        let fast_left = self.fast_route_allowance(player) > 0;
+        let fast_left = self.fast_route_allowance() > 0;
         let previous = self.take_planner(index);
         let Ok((waypoint, route, planner, planning, fast_tried)) =
             self.order_route(index, origin, goal)

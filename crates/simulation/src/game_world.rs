@@ -186,12 +186,12 @@ pub struct GameWorld {
     pub(crate) clearance: Mutex<clearance::Field>,
     /// Candidate resource nodes per generator chunk (`chunk_resource_nodes`).
     pub(crate) resource_chunks: Mutex<crate::game_cache::ResourceCache>,
-    pub(crate) planning_budget: u32,
+    /// No route budget in play (#978): each search takes its own slice. A
+    /// test may hold the next fair pass to this much work.
+    pub(crate) planning_budget: Option<u32>,
     pub(crate) navigation_preparation_budget: Mutex<u32>,
-    /// Work left this tick for fast attempts (`FAST_ROUTE_WORK` each).
-    pub(crate) fast_route_budget: u32,
-    /// Fast-attempt work each player spent this tick.
-    pub(crate) fast_route_spent: BTreeMap<PlayerId, u32>,
+    /// As `planning_budget`, for this tick's fast attempts (`Some(0)` skips).
+    pub(crate) fast_route_budget: Option<u32>,
     pub(crate) navigation_cache: NavigationCache,
     /// Land regions over the planner's ground: a cache, never hashed.
     pub(crate) regions: Mutex<[Option<aoe_map::Regions>; 3]>,
@@ -247,10 +247,9 @@ impl GameWorld {
             waypoint_order: 0,
             formations: BTreeMap::new(),
             destinations: spacing::Destinations::default(),
-            planning_budget: crate::MAX_ROUTE_WORK_PER_TICK,
+            planning_budget: None,
             navigation_preparation_budget: Mutex::new(crate::MAX_NAV_PREPARATIONS_PER_TICK),
-            fast_route_budget: crate::game_movement::MAX_FAST_ROUTE_WORK_PER_TICK,
-            fast_route_spent: BTreeMap::new(),
+            fast_route_budget: None,
             navigation_cache: NavigationCache::default(),
             regions: Mutex::new(std::array::from_fn(|_| None)),
             resource_chunks: Mutex::new(Default::default()),

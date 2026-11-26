@@ -83,7 +83,7 @@ fn short_orders_start_at_once_while_every_player_floods_hopeless_searches() {
             if world.movement_order(pocket).is_some() {
                 assert!(
                     tick - pocket_sent[&pocket] <= 3,
-                    "tick {tick}: a pocket order still searches: fast_tried={}, fast_budget={}, planner_work={:?}",
+                    "tick {tick}: a pocket order still searches: fast_tried={}, fast_budget={:?}, planner_work={:?}",
                     world.units[world.lookup[&pocket]].fast_route_tried,
                     world.fast_route_budget,
                     world.units[world.lookup[&pocket]]
@@ -124,8 +124,6 @@ fn short_orders_start_at_once_while_every_player_floods_hopeless_searches() {
         } else {
             world.advance();
         }
-        // Every player's fast share is whole again for the next tick.
-        assert!(world.fast_route_spent.is_empty());
         let stats = world.route_scheduler_stats();
         assert!(stats.waiting_units <= flood.len() + pocketed.len() + 20);
     }

@@ -2,7 +2,7 @@
 //! first proven leg from one tick of work and plans the rest as it is used.
 use super::*;
 
-/// One simulation tick of planner work (`MAX_ROUTE_WORK_PER_TICK`).
+/// One tick of planner work, as the world route budget was before #978.
 const TICK_WORK: u32 = 16_384;
 const WIDTH: i32 = 4_096;
 const ROW: i32 = 10;

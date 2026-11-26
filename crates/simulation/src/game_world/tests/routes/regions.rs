@@ -80,7 +80,7 @@ fn a_certified_frontier_route_survives_the_disconnected_requested_goal() {
     let id = world
         .spawn_villager(PlayerId(0), WorldPosition::from_tile_center(from).unwrap())
         .unwrap();
-    world.fast_route_budget = 0;
+    world.fast_route_budget = Some(0);
     // An area order: a contact order to disconnected ground is refused when
     // issued (#978), while an area order is served from a certified tile.
     world
@@ -204,7 +204,7 @@ fn sealed_near_searches_are_answered_by_regions_even_with_one_work_per_tick() {
             world.economy.blocked_tiles.insert(tile);
         }
     }
-    world.fast_route_budget = 0;
+    world.fast_route_budget = Some(0);
     let target = WorldPosition::from_tile_center(TileCoord::new(128, 128)).unwrap();
     let ids: Vec<_> = (0..6)
         .map(|n| {
@@ -223,8 +223,8 @@ fn sealed_near_searches_are_answered_by_regions_even_with_one_work_per_tick() {
         })
         .collect();
     for _ in 0..10 {
-        world.planning_budget = 1;
-        world.fast_route_budget = 0;
+        world.planning_budget = Some(1);
+        world.fast_route_budget = Some(0);
         world.advance();
     }
     for id in ids {
@@ -272,7 +272,7 @@ fn confirmed_regions_do_not_repeat_a_destination_pocket_flood() {
     let id = world
         .spawn_unit(PlayerId(0), WorldPosition::from_tile_center(from).unwrap())
         .unwrap();
-    world.fast_route_budget = 0;
+    world.fast_route_budget = Some(0);
     assert!(
         world
             .issue_task_move(id, WorldPosition::from_tile_center(target).unwrap())
@@ -328,7 +328,7 @@ fn far_search_reuses_region_connectivity_before_flooding_the_destination() {
     let id = world
         .spawn_villager(PlayerId(0), WorldPosition::from_tile_center(from).unwrap())
         .unwrap();
-    world.fast_route_budget = 0;
+    world.fast_route_budget = Some(0);
     assert!(
         world
             .issue_task_move(id, WorldPosition::from_tile_center(target).unwrap())

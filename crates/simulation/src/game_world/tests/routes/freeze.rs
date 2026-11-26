@@ -9,7 +9,7 @@ use super::*;
 
 /// Sends `id` into the sealed ring at `(cx, cy)`: a search with no route.
 fn send_into_ring(world: &mut GameWorld, id: EntityId, cx: i32, cy: i32) {
-    world.planning_budget = FAIR_ROUTE_WORK_RESERVE;
+    world.planning_budget = Some(FAIR_ROUTE_WORK_RESERVE);
     assert!(
         world
             .issue_move(id, tile_position(cx, cy))
@@ -116,7 +116,7 @@ fn refused_orders_to_sealed_off_explorers_never_freeze_a_players_army() {
         .collect::<Vec<_>>();
     world.advance();
     for &id in &army {
-        world.planning_budget = 0;
+        world.planning_budget = Some(0);
         world
             .issue_move(id, tile_position(160, 300))
             .expect("accepted");
@@ -178,7 +178,7 @@ fn a_chase_does_not_restart_the_route_search_it_waits_for() {
     let attacker = world
         .spawn_unit(PlayerId(1), tile_position(500, 500 - 201))
         .expect("attacker");
-    world.planning_budget = FAIR_ROUTE_WORK_RESERVE;
+    world.planning_budget = Some(FAIR_ROUTE_WORK_RESERVE);
     world
         .issue_attack(PlayerId(1), attacker, target)
         .expect("attack accepted");
@@ -190,7 +190,7 @@ fn a_chase_does_not_restart_the_route_search_it_waits_for() {
             let x = 499 + (tick / 5) % 3;
             let _ = world.issue_move(target, tile_position(x, 500));
         }
-        world.planning_budget = 2_048;
+        world.planning_budget = Some(2_048);
         world.advance();
         let Some(planner) = world.units[world.lookup[&attacker]].planner.as_deref() else {
             break;
@@ -216,7 +216,7 @@ fn collision_changes_elsewhere_keep_route_searches() {
         .spawn_unit(PlayerId(1), beside_ring(500, 500, 0))
         .expect("unit");
     send_into_ring(&mut world, id, 500, 500);
-    world.planning_budget = 2_048;
+    world.planning_budget = Some(2_048);
     world.advance();
     let work = |world: &GameWorld| {
         world.units[world.lookup[&id]]
@@ -284,7 +284,7 @@ fn cancelling_a_proven_sealed_entrance_allows_a_fresh_move() {
     // One hundred players share the fair budget; no issue-time fast work
     // is left. Serve their searches without moving the stacked test units.
     let mut units = Vec::new();
-    world.fast_route_budget = 0;
+    world.fast_route_budget = Some(0);
     for player in 0..100 {
         let id = world
             .spawn_unit(PlayerId(player), tile_position(198, 200))
@@ -296,7 +296,7 @@ fn cancelling_a_proven_sealed_entrance_allows_a_fresh_move() {
     }
     let id = units[0];
     for _ in 0..7 {
-        world.serve_route_searches(MAX_ROUTE_WORK_PER_TICK, &mut Vec::new());
+        world.serve_route_searches(u32::MAX, &mut Vec::new());
     }
     assert!(world.movement_order(id).is_none());
     assert_eq!(

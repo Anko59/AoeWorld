@@ -77,6 +77,14 @@ impl Metrics {
             self.max_tick_path_work <= count as u64 * 128 + 1024,
             "{self:?}"
         );
+        // No tick budget (#978): each unit takes at most its fast attempt
+        // and one slice each for its waiting search and its plan-ahead.
+        let per_unit = u64::from(crate::game_movement::FAST_ROUTE_WORK)
+            + 2 * u64::from(crate::game_world::route_scheduler::ROUTE_SLICE_WORK);
+        assert!(
+            self.max_tick_route_work <= count as u64 * per_unit,
+            "{self:?}"
+        );
     }
 }
 

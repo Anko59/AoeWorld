@@ -153,7 +153,7 @@ fn waiting_fixture() -> (GameWorld, EntityId) {
 #[test]
 fn proposal_defers_search_to_the_fair_pass_even_with_budget_and_slots() {
     let (mut world, id) = waiting_fixture();
-    assert!(world.planning_budget > 0);
+    assert_ne!(world.planning_budget, Some(0));
     let proposal = world.propose_steps(&[id], 0).pop().unwrap().unwrap();
     assert!(world.apply_step(proposal, &mut Vec::new(), &mut Vec::new()));
     assert!(world.unit(id).unwrap().planning);
@@ -164,7 +164,7 @@ fn proposal_defers_search_to_the_fair_pass_even_with_budget_and_slots() {
 #[test]
 fn proposed_wait_records_the_tick_it_started() {
     let (mut world, id) = waiting_fixture();
-    world.planning_budget = 0;
+    world.planning_budget = Some(0);
     let proposal = world.propose_steps(&[id], 0).pop().unwrap().unwrap();
     assert!(world.apply_step(proposal, &mut Vec::new(), &mut Vec::new()));
     assert_eq!(world.units[world.lookup[&id]].planning_since, 17);

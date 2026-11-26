@@ -240,7 +240,7 @@ fn build(players: u16, scale: u16) -> Result<GameWorld, Box<dyn std::error::Erro
                     .iter()
                     .filter(|n| world.resource_has_work_spot(id, n.tile))
                     .count();
-                return Err(format!("seat {seat}, villager {index} ({id:?}): all {} gather targets refused: {failure:?}; {free_slots} free targets, {free_spots} with work tiles; {} active planners, {} planning budget", nodes.len(), world.active_planner_count, world.planning_budget).into());
+                return Err(format!("seat {seat}, villager {index} ({id:?}): all {} gather targets refused: {failure:?}; {free_slots} free targets, {free_spots} with work tiles; {} active planners, {:?} planning budget", nodes.len(), world.active_planner_count, world.planning_budget).into());
             }
         }
         for (index, building) in production.into_iter().enumerate() {

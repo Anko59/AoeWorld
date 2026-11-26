@@ -76,9 +76,9 @@ fn run(case: &str, count: usize, limit: u32) {
     match case {
         "river" => {
             result.assert_arrival_and_work(count);
-            // No per-tick route budget (#978): each search gets its own slice,
-            // so the tick total is not bounded here. Without the wait the
-            // detour lost its one reversal and arrives 11 ticks sooner.
+            // No tick budget (#978): route work is bounded per unit by
+            // `assert_arrival_and_work`. Without the wait the detour lost its
+            // one reversal and arrives 11 ticks sooner.
             assert_eq!((result.max_stuck_ticks, result.oscillations), (0, 0));
             assert_eq!(result.oscillation_causes, causes(0, 0, 0, 0));
             assert_eq!(

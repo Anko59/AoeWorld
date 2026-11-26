@@ -155,7 +155,7 @@ impl GameWorld {
         self.idle_spacing.update_hash(&mut hash);
         hash.update(&(self.active_planner_count as u64).to_le_bytes());
         hash.update(&(self.active_route_searches as u64).to_le_bytes());
-        hash.update(&self.planning_budget.to_le_bytes());
+        hash.update(&self.planning_budget.unwrap_or(u32::MAX).to_le_bytes());
         hash.update(&self.local_refinement_left.to_le_bytes());
         hash.update(
             &self
@@ -164,12 +164,7 @@ impl GameWorld {
                 .unwrap_or_else(|error| error.into_inner())
                 .to_le_bytes(),
         );
-        hash.update(&self.fast_route_budget.to_le_bytes());
-        hash.update(&(self.fast_route_spent.len() as u64).to_le_bytes());
-        for (player, spent) in &self.fast_route_spent {
-            hash.update(&player.0.to_le_bytes());
-            hash.update(&spent.to_le_bytes());
-        }
+        hash.update(&self.fast_route_budget.unwrap_or(u32::MAX).to_le_bytes());
         self.terrain.update_mutable_state_hash(&mut hash);
         hash.update(&self.next_entity_id.to_le_bytes());
         self.economy.update_hash(&mut hash, self.tick.0);

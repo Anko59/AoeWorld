@@ -192,7 +192,8 @@ fn planned_route(
     Ok(route)
 }
 
-/// The simulation's shared route work per tick (`MAX_ROUTE_WORK_PER_TICK`).
+/// One tick of planner work for this qualification's route, as the world
+/// route budget was before #978 (each search now has its own slice).
 const PLANNER_TICK_WORK: u32 = 16_384;
 
 fn supported_country(package: &MapPackage) -> bool {

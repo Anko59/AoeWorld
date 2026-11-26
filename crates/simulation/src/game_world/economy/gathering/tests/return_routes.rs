@@ -114,8 +114,8 @@ fn source_pocket_rejection_matches_normal_orders_at_every_budget_boundary() {
         ] {
             reference.refill_route_budgets();
             filtered.refill_route_budgets();
-            reference.fast_route_budget = budget;
-            filtered.fast_route_budget = budget;
+            reference.fast_route_budget = Some(budget);
+            filtered.fast_route_budget = Some(budget);
             let expected = reference.issue_task_move(worker, position(to).unwrap());
             let rejected = filtered.reject_known_unreachable_task_move(worker, to, Some(&pocket));
             let actual = if rejected {

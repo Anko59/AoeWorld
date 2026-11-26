@@ -73,7 +73,7 @@ impl GameWorld {
             self.remember_unreachable(index, tile);
             return true;
         }
-        let allowance = self.fast_route_allowance(unit.player);
+        let allowance = self.fast_route_allowance();
         let work = match self.navigation_cache.peek(
             (unit.kind.is_naval(), unit.player),
             origin,
@@ -111,7 +111,7 @@ impl GameWorld {
                 aoe_map::MovementOutcome::Unreachable,
             );
         }
-        self.charge_fast_route(unit.player, work);
+        self.charge_fast_route(work);
         self.units[index].route_renewals = 0;
         let caller = Some(std::panic::Location::caller());
         self.units[index].route_caller = caller;

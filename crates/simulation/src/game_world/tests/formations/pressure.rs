@@ -314,7 +314,10 @@ fn formations_thousands_of_members_share_one_search_with_bounded_local_work() {
         rebuilds += u32::from(rebuilt);
         assert!(
             after.fair_work + after.lookahead_work - before.fair_work - before.lookahead_work
-                <= u64::from(crate::MAX_ROUTE_WORK_PER_TICK)
+                // Each unit's search and plan-ahead take a slice each.
+                <= ids.len() as u64
+                    * 2
+                    * u64::from(crate::game_world::route_scheduler::ROUTE_SLICE_WORK)
         );
     }
     eprintln!("thousands peak work: {peak:?} rebuilds={rebuilds}");

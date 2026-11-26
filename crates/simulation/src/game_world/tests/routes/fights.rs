@@ -67,7 +67,7 @@ fn a_fight_order_never_takes_another_players_share() {
     let enemy = PlayerId(4);
     let other = PlayerId(5);
 
-    world.fast_route_budget = 0;
+    world.fast_route_budget = Some(0);
     let soldier = world
         .spawn_kind(fighter, UnitKind::Militia, tile_position(220, WALL_Y - 12))
         .expect("soldier");
@@ -79,7 +79,7 @@ fn a_fight_order_never_takes_another_players_share() {
         .expect("attack accepted");
     let neighbour = across_the_wall(&mut world, other, 0);
     for _ in 0..40 {
-        world.fast_route_budget = 0;
+        world.fast_route_budget = Some(0);
         world.advance();
     }
     assert!(

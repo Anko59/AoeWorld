@@ -26,9 +26,6 @@ pub(crate) const MAX_ROUTE_WORK_PER_ORDER: u32 = aoe_map::MAX_ROUTE_PLANNER_WORK
 // Eight executions keep global guidance ahead of the existing movement
 // lookahead while bounding cold preparation across every player's planners.
 pub(crate) const MAX_NAV_PREPARATIONS_PER_TICK: u32 = 8;
-/// No limit (owner 11-25: the route caps go; #978). Kept as a name so the
-/// budget arithmetic reads the same; it is never reached.
-pub(crate) const MAX_ROUTE_WORK_PER_TICK: u32 = u32::MAX;
 
 use aoe_core::{CHUNK_SIZE, EntityId, PlayerId, Position, Region, Tick};
 use aoe_scenario::Scenario;

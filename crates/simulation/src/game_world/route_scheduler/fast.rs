@@ -3,10 +3,6 @@ use super::{GameWorld, far_planner, far_route};
 use aoe_core::{EntityId, PlayerId};
 use std::collections::BTreeMap;
 
-/// No limit (owner 11-25: the route caps go; #978). Kept as a name so the
-/// budget arithmetic reads the same; it is never reached.
-pub(crate) const GROUP_FAR_ROUTE_WORK_PER_TICK: u32 = u32::MAX;
-
 impl GameWorld {
     pub(super) fn serve_fast_near_routes(
         &mut self,
@@ -18,9 +14,6 @@ impl GameWorld {
         let mut batch = Vec::new();
         let mut reserved = super::batch::Reserved::default();
         for turn in 0..players.len() {
-            if self.fast_route_budget == 0 {
-                break;
-            }
             let player = players[(start + turn) % players.len()];
             for &id in &waiting[&player] {
                 let Some(&index) = self.lookup.get(&id) else {
@@ -46,15 +39,14 @@ impl GameWorld {
         self.run_searches(batch, reserved, changed);
     }
 
-    /// Far formation routes get a reserved part of `budget` before the fair
-    /// pass; returns the work spent from it. With
-    /// 99 AIs the fair share per player was a few hundred work a tick, a
-    /// quarter of it for far routes, and far routes got 0.03% of all fair
-    /// work: no probe group found its route within 3,600 ticks.
+    /// Far formation routes are served before the fair pass, each carrier
+    /// its own `ROUTE_SLICE_WORK` a tick like every other search; returns the
+    /// work spent. With 99 AIs the fair share per
+    /// player was once a few hundred work a tick, and no probe group found
+    /// its route within 3,600 ticks.
     pub(super) fn serve_far_groups(
         &mut self,
         waiting: &BTreeMap<PlayerId, Vec<EntityId>>,
-        budget: u32,
         changed: &mut Vec<EntityId>,
     ) -> u32 {
         let carriers: Vec<(PlayerId, EntityId)> = waiting
@@ -66,25 +58,12 @@ impl GameWorld {
                 })
             })
             .collect();
-        if carriers.is_empty() {
-            return 0;
+        let mut spent = 0_u32;
+        for (player, id) in carriers {
+            let work = self.search_waiting_route(player, id, super::ROUTE_SLICE_WORK, changed);
+            spent = spent.saturating_add(work);
+            self.route_metrics.attribution.group_pool_work += u64::from(work);
         }
-        let reserved = self
-            .config
-            .scaled_budget(GROUP_FAR_ROUTE_WORK_PER_TICK)
-            .min(budget / 2);
-        let mut budget = reserved;
-        let start = (self.tick.0 % carriers.len() as u64) as usize;
-        for turn in 0..carriers.len() {
-            if budget == 0 {
-                break;
-            }
-            let (player, id) = carriers[(start + turn) % carriers.len()];
-            let share = (budget / (carriers.len() - turn) as u32).max(1);
-            let spent = self.search_waiting_route(player, id, share, changed);
-            budget -= spent.min(budget);
-            self.route_metrics.attribution.group_pool_work += u64::from(spent);
-        }
-        reserved - budget
+        spent
     }
 }
