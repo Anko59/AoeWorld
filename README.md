@@ -184,7 +184,7 @@ Details: [local development](docs/local-development.md), [assets](docs/assets.md
 | `G` | Toggle the grid |
 | `Delete` | Delete the selected entities |
 | `Esc` | Clear the selection |
-| `Space` | Jump to the latest alert |
+| `Space` | Jump to the latest attack alert, a star on the minimap |
 | `End` | Jump to your army |
 | `Ctrl` / `Shift` + `F1`–`F4` | Save / recall a camera bookmark |
 | `F1`–`F6` (strategic view) | Switch layers: ownership, armies, economy, threats, resources, roads and bridges |

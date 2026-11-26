@@ -6,10 +6,12 @@ use web_sys::{Event, MessageEvent};
 #[cfg(test)]
 mod tests;
 
+#[path = "network/alerts.rs"]
+pub(super) mod alerts;
 #[path = "network/lifecycle.rs"]
 mod lifecycle;
 pub(super) use lifecycle::merge_buildings;
-use lifecycle::{clear_world, reconnect, record_shots};
+use lifecycle::{clear_world, leave_rubble, reconnect, record_shots};
 
 pub(super) struct ConnectionCallbacks {
     socket: WebSocket,
@@ -278,6 +280,13 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 if !client.presentation.receive(tick.0, now()) {
                     return;
                 }
+                alerts::tell(
+                    &client,
+                    tick.0,
+                    &changed_units,
+                    &changed_buildings,
+                    &building_removals,
+                );
                 client.village.tick = tick.0;
                 client.village.pending_training.observe(tick.0);
                 for player in changed_players {
@@ -295,20 +304,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                         reconnect(&mut client, "protocol error; reconnect required");
                         return;
                     };
-                    for id in building_removals {
-                        let retained = &client.village.buildings;
-                        if let Ok(index) = retained.binary_search_by_key(&id, |b| b.id) {
-                            let b = &retained[index];
-                            if client.village.rubble.len() < aoe_protocol::MAX_ECONOMY_BUILDINGS
-                                && (b.kind != aoe_protocol::BuildingKind::Farm
-                                    || b.food_remaining.is_some_and(|food| food > 0))
-                            {
-                                let life = map::scene::rubble_ticks(&client, b);
-                                let b = b.clone();
-                                client.village.rubble.push((b, tick.0.saturating_add(life)));
-                            }
-                        }
-                    }
+                    leave_rubble(&mut client, &building_removals, tick.0);
                     village::production::refresh_changed_queue(&mut client, &changed_buildings);
                     map::scene::replace_buildings(&mut client, buildings);
                 }

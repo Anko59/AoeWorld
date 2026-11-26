@@ -8,10 +8,9 @@ use std::collections::BTreeMap;
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen(
-    inline_js = "export function strategic_update(a, e, b, c, w, o, s, counts, sites, land, commerce) { const v = window.aoeNavigation?.strategic; v?.receive(a, e, b, c, w, o); v?.cockpit?.(s, counts); v?.settlements?.(sites); v?.holdings?.(land); v?.commerce?.(commerce); } export function strategic_alert(t, x, y) { window.aoeNavigation?.views?.alert(t, x, y); }"
+    inline_js = "export function strategic_update(a, e, b, c, w, o, s, counts, sites, land, commerce) { const v = window.aoeNavigation?.strategic; v?.receive(a, e, b, c, w, o); v?.cockpit?.(s, counts); v?.settlements?.(sites); v?.holdings?.(land); v?.commerce?.(commerce); }"
 )]
 extern "C" {
-    fn strategic_alert(tick: f64, x: f64, y: f64);
     fn strategic_update(
         armies: &[f64],
         economy: &[f64],
@@ -64,15 +63,6 @@ pub(in super::super) fn site_record(
     ]
 }
 
-fn report_hit(hit: Option<aoe_protocol::HitState>, position: [f64; 2], newest: &mut [f64; 3]) {
-    if let Some(hit) = hit {
-        let tick = hit.tick.0 as f64;
-        if !newest[0].is_finite() || tick > newest[0] {
-            *newest = [tick, position[0], position[1]];
-        }
-    }
-}
-
 // [id, world x/y, owned, selected, size (-1 unknown), state, stance,
 //  first authoritative order x/y (NaN absent), actual counts * 5, portrait kind, RGB].
 pub(in super::super) fn army_record(
@@ -121,7 +111,6 @@ pub(in super::super) fn update(client: &Client) {
     let mut membership = BTreeMap::<EntityId, ArmyKinds>::new();
     let mut contacts = Vec::new();
     let mut workers = Vec::new();
-    let mut last_alert = [f64::NAN; 3];
     let mut summary = vec![f64::NAN; 13];
     let player = client.village.players.iter().find(|p| p.player == owner);
     if let Some(p) = player {
@@ -145,9 +134,6 @@ pub(in super::super) fn update(client: &Client) {
     for u in client.units.values() {
         let p = u.position.as_tiles();
         let own = u.player == owner;
-        if own {
-            report_hit(u.last_hit, p, &mut last_alert);
-        }
         if !own && client.fog.state(p.map(|n| n.floor() as i32)) != 2 {
             continue;
         }
@@ -204,9 +190,6 @@ pub(in super::super) fn update(client: &Client) {
         })
         .collect();
     for b in &client.village.buildings {
-        if b.player == owner && b.hp > 0 {
-            report_hit(b.last_hit, village::building_center(b), &mut last_alert);
-        }
         if !crate::strategic::far_building_visible(b.hp, b.construction) {
             continue;
         }
@@ -283,5 +266,4 @@ pub(in super::super) fn update(client: &Client) {
         &land,
         &village::commerce::commerce(client),
     );
-    strategic_alert(last_alert[0], last_alert[1], last_alert[2]);
 }

@@ -33,6 +33,8 @@ pub(crate) struct Village {
     pub holdings: Vec<aoe_protocol::HoldingSpan>,
     pub holdings_complete: bool,
     pub buildings: Vec<GameplayBuildingState>,
+    /// What the player lately ordered away, at which tick.
+    pub deleted: std::collections::BTreeMap<aoe_core::EntityId, u64>,
     pub tick: u64,
     pub pending_training: production::PendingTraining,
     pub pending_far_builds: std::collections::BTreeSet<u64>,

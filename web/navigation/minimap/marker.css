@@ -31,3 +31,18 @@
 #minimap-entities { visibility:hidden; pointer-events:none; }
 #minimap-marks { pointer-events:none; }
 #minimap-marks path { paint-order:stroke; stroke-linejoin:round; }
+
+/* Attacks and orders, over the marks and the frame, under the view's marker.
+   A star is hollow: the fight stays visible. */
+#minimap-pings, #minimap-alerts { pointer-events:none; fill:none; }
+:is(.alert-ink,.ping-ink) { stroke:#0d0a06; stroke-opacity:.92; stroke-width:3.75px; }
+path.alert-ink { stroke-width:5px; }
+:is(.alert-core,.ping-core) { stroke:#ff5a1f; stroke-width:1.75px; }
+path.alert-core { stroke-width:3px; }
+.alert-line { stroke:#fffbe8; stroke-width:1.25px; }
+.alert-ring { opacity:0; }
+.alert-ring circle { vector-effect:non-scaling-stroke; }
+[data-minimap-ping=move] .ping-core { stroke:#fffbe8; }
+[data-minimap-ping=patrol] .ping-core { stroke:#f2cf50; }
+/* Read out, never seen. */
+#minimap-news { position:absolute; left:0; top:0; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }

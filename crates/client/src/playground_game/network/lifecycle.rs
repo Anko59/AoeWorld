@@ -64,6 +64,24 @@ pub(super) fn clear_world(client: &mut Client) {
     capture::update(client);
 }
 
+/// What removed buildings leave, from their last known state.
+pub(super) fn leave_rubble(client: &mut Client, removals: &[EntityId], tick: u64) {
+    for id in removals {
+        let retained = &client.village.buildings;
+        if let Ok(index) = retained.binary_search_by_key(id, |b| b.id) {
+            let b = &retained[index];
+            if client.village.rubble.len() < aoe_protocol::MAX_ECONOMY_BUILDINGS
+                && (b.kind != aoe_protocol::BuildingKind::Farm
+                    || b.food_remaining.is_some_and(|food| food > 0))
+            {
+                let life = map::scene::rubble_ticks(client, b);
+                let b = b.clone();
+                client.village.rubble.push((b, tick.saturating_add(life)));
+            }
+        }
+    }
+}
+
 /// Remembers when each shooter last released, so its animation can be phased
 /// to the shot. Entries of idle shooters expire after half a minute.
 pub(super) fn record_shots(

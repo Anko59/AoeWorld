@@ -1,7 +1,7 @@
 import { ARMY_FIELDS } from '/navigation/tokens.js';
 import { icon, entityIcon } from '/interface/ui-art.js';
 // Camera bookmarks live for this world. Gameplay targets come only from the
-// authorized army reports and actual damage events, never inferred threats.
+// authorized army reports and the minimap's alerts, never inferred threats.
 export function initViews(jump) {
   const nav = document.createElement('nav');
   nav.id = 'strategic-views'; nav.hidden = true;
@@ -68,7 +68,7 @@ export function initViews(jump) {
     alert(tick, x, y) {
       if (![tick, x, y].every(Number.isFinite) || tick < 0 || tick <= alertTick) return;
       alertTick = tick; alert = [x, y]; alertButton.disabled = false;
-      alertButton.title = 'Last observed damage to your units or buildings';
+      alertButton.title = 'Last attack on your units or buildings out of view (Space)';
     },
     reset() {
       slots.fill(null); recall.forEach((node, i) => { delete node.dataset.saved; node.title = `Empty · click to save this view (Ctrl+F${i + 1}); recall with Shift+F${i + 1}`; });
