@@ -210,7 +210,12 @@ impl Snapshot {
 mod tests;
 
 pub fn static_checks(root: &Path, kind: Kind) -> Result<()> {
-    checks::run(root, kind)
+    checks::run(root, kind, true)
+}
+
+/// The static checks that compile nothing: what CI's `light` leg runs when no Rust code changed.
+pub fn static_checks_without_compilers(root: &Path) -> Result<()> {
+    checks::run(root, Kind::Working, false)
 }
 
 pub fn inspect(root: &Path, revision: Option<&str>) -> Result<()> {

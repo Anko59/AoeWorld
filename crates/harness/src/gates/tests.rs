@@ -1,14 +1,39 @@
 use super::*;
+use std::sync::OnceLock;
 
 fn registry() -> Registry {
     Registry::parse(include_bytes!("../../../../gates/registry.json")).expect("registry")
+}
+fn rules() -> Rules {
+    Rules::parse(
+        include_bytes!("../../../../gates/ci-rules.json"),
+        Some(&registry()),
+    )
+    .expect("ci rules")
+}
+/// The real crate graph, without sources: these tests do not exercise the mention rule.
+fn graph() -> &'static Graph {
+    static GRAPH: OnceLock<Graph> = OnceLock::new();
+    GRAPH.get_or_init(|| {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        Graph::load(&root, &rules(), false).expect("crate graph")
+    })
 }
 fn classify(paths: &[String]) -> Impact {
     super::classify(&registry(), paths)
 }
 fn selection(revision: String, base: Option<String>, paths: Vec<String>) -> Selection {
     let pull_request = base.is_some();
-    super::selection(&registry(), revision, base, paths, pull_request).expect("selection")
+    super::selection(
+        &registry(),
+        &rules(),
+        graph(),
+        revision,
+        base,
+        paths,
+        pull_request,
+    )
+    .expect("selection")
 }
 
 #[test]
@@ -120,6 +145,11 @@ fn documentation_gate_rejects_drift_and_missing_local_links() {
         include_bytes!("../../../../gates/registry.json"),
     )
     .expect("fixture registry");
+    fs::write(
+        root.join("gates/ci-rules.json"),
+        include_bytes!("../../../../gates/ci-rules.json"),
+    )
+    .expect("fixture ci rules");
     let registry =
         parse(&fs::read(root.join("gates/registry.json")).expect("registry")).expect("parsed");
     fs::write(root.join("docs/gates.md"), table(&registry)).expect("generated docs");
@@ -130,6 +160,16 @@ fn documentation_gate_rejects_drift_and_missing_local_links() {
     .expect("guide");
     fs::write(root.join("gates/flaky.json"), "[]").expect("quarantine");
     docs_check(root).expect("valid docs");
+    fs::write(root.join("gates/ci-rules.json"), "{}").expect("broken rules");
+    assert!(
+        docs_check(root).is_err(),
+        "broken ci rules fail the documentation gate"
+    );
+    fs::write(
+        root.join("gates/ci-rules.json"),
+        include_bytes!("../../../../gates/ci-rules.json"),
+    )
+    .expect("repaired rules");
     fs::write(root.join("docs/nested/guide.md"), "[missing](gone.md)").expect("broken link");
     assert!(docs_check(root).is_err());
     fs::write(root.join("docs/nested/guide.md"), "[gates](../gates.md)").expect("repaired link");
@@ -191,90 +231,6 @@ fn impact_accepts_git_base_and_rejects_unknown_ref() {
     assert!(impact(Some("this-ref-does-not-exist"), Vec::new()).is_err());
 }
 
-fn selected_job_members(registry: &Registry, selection: &Selection) -> BTreeSet<String> {
-    registry
-        .jobs
-        .iter()
-        .filter(|(job, _)| selection.jobs.get(*job) == Some(&true))
-        .flat_map(|(_, members)| members.iter().cloned())
-        .collect()
-}
-
-#[test]
-fn ci_selection_rejects_unexecuted_nightly_and_weekly_dependencies() {
-    let original = registry();
-    let docs = vec!["docs/testing.md".to_owned()];
-    let control = super::selection(&original, "a".repeat(40), None, docs.clone(), false)
-        .expect("normal docs selection");
-    assert!(control.jobs["static"]);
-    assert!(!control.jobs["target-performance"]);
-    let executed = selected_job_members(&original, &control);
-    assert!(control.gates.iter().all(|gate| executed.contains(gate)));
-    for dependency in ["perf-full", "perf-stress"] {
-        let mut changed = original.clone();
-        changed
-            .gates
-            .iter_mut()
-            .find(|gate| gate.id == "docs-check")
-            .expect("docs gate")
-            .requires = vec![dependency.into()];
-        let suites = changed.classify(&docs).suites;
-        let plan = changed
-            .plan(Cadence::Ci, &suites)
-            .expect("valid dependency graph");
-        assert!(plan.gates.contains(&dependency.to_owned()));
-        let error = super::selection(&changed, "a".repeat(40), None, docs.clone(), false)
-            .expect_err("unexecuted prerequisite must not be promised")
-            .to_string();
-        assert!(error.contains("without selected executing jobs"), "{error}");
-        assert!(error.contains(dependency), "{error}");
-    }
-}
-
-#[test]
-fn ci_selection_execution_coverage_is_the_union_of_selected_jobs() {
-    let mut changed = registry();
-    changed
-        .gates
-        .iter_mut()
-        .find(|gate| gate.id == "docs-check")
-        .expect("docs gate")
-        .requires = vec!["perf-instructions".into(), "browser-check".into()];
-    let docs = vec!["docs/testing.md".to_owned()];
-    let selected = super::selection(&changed, "a".repeat(40), None, docs.clone(), false)
-        .expect("covered prerequisites select their executing jobs");
-    for job in ["static", "browser", "target-performance"] {
-        assert!(selected.jobs[job], "{job}");
-    }
-    let executed = selected_job_members(&changed, &selected);
-    assert!(selected.gates.iter().all(|gate| executed.contains(gate)));
-    let plan = changed
-        .plan(Cadence::Ci, &changed.classify(&docs).suites)
-        .unwrap();
-    assert_eq!(
-        selected.gates, plan.gates,
-        "coverage validation must not drop gates"
-    );
-    assert_eq!(selected.jobs, plan.jobs);
-    for path in [
-        None,
-        Some("docs/testing.md"),
-        Some("crates/assets/src/slp.rs"),
-        Some("web/index.html"),
-        Some("unknown/file"),
-        Some("AGENTS.md"),
-    ] {
-        let paths = path.into_iter().map(str::to_owned).collect();
-        let selected = super::selection(&changed, "a".repeat(40), None, paths, false)
-            .expect("all selected gates have executing coverage");
-        let executed = selected_job_members(&changed, &selected);
-        assert!(
-            selected.gates.iter().all(|gate| executed.contains(gate)),
-            "{path:?}"
-        );
-    }
-}
-
 #[test]
 fn pull_requests_skip_coverage_and_pushes_keep_it() {
     let code = vec!["crates/map/src/terrain.rs".to_owned()];
@@ -291,8 +247,16 @@ fn pull_requests_skip_coverage_and_pushes_keep_it() {
 #[test]
 fn a_pull_request_whose_base_cannot_be_resolved_still_skips_coverage() {
     // No resolved base and no paths: everything else is selected, as on a push.
-    let unresolved =
-        super::selection(&registry(), "a".repeat(40), None, Vec::new(), true).expect("selection");
+    let unresolved = super::selection(
+        &registry(),
+        &rules(),
+        graph(),
+        "a".repeat(40),
+        None,
+        Vec::new(),
+        true,
+    )
+    .expect("selection");
     assert_eq!(unresolved.jobs.get("native-coverage"), Some(&false));
     for job in ["static", "browser", "target-performance", "fuzz-smoke"] {
         assert_eq!(unresolved.jobs.get(job), Some(&true), "{job}");
@@ -310,9 +274,16 @@ fn the_e2e_job_is_selected_exactly_when_test_e2e_is() {
         Vec::new(),
     ] {
         for (base, pull_request) in [(Some("b".repeat(40)), true), (None, false)] {
-            let manifest =
-                super::selection(&registry, "a".repeat(40), base, paths.clone(), pull_request)
-                    .expect("selection");
+            let manifest = super::selection(
+                &registry,
+                &rules(),
+                graph(),
+                "a".repeat(40),
+                base,
+                paths.clone(),
+                pull_request,
+            )
+            .expect("selection");
             let e2e = manifest.gates.contains(&"test-e2e".to_owned());
             assert_eq!(manifest.jobs["e2e"], e2e, "{paths:?}");
         }
@@ -325,12 +296,10 @@ fn the_aggregate_requires_the_e2e_job_and_all_its_shards_to_succeed() {
     assert!(selected.jobs["e2e"]);
     let manifest = serde_json::to_string(&selected).expect("manifest");
     let mut results = BTreeMap::from([("select".to_owned(), "success".to_owned())]);
-    results.extend(
-        selected
-            .jobs
-            .keys()
-            .map(|job| (job.clone(), "success".to_owned())),
-    );
+    results.extend(selected.jobs.iter().map(|(job, runs)| {
+        let outcome = if *runs { "success" } else { "skipped" };
+        (job.clone(), outcome.to_owned())
+    }));
     let accepted = |results: &BTreeMap<String, String>| {
         check_selection(
             &manifest,
@@ -370,4 +339,137 @@ fn a_failed_select_job_is_named_not_reported_as_a_parse_error() {
         );
         assert!(!error.contains("EOF while parsing"), "{error}");
     }
+}
+
+fn gate_members(registry: &Registry, selection: &Selection) -> BTreeSet<String> {
+    registry
+        .jobs
+        .iter()
+        .filter(|(job, _)| selection.jobs.get(*job) == Some(&true))
+        .flat_map(|(_, members)| members.iter().cloned())
+        .collect()
+}
+
+#[test]
+fn the_manifest_lists_only_gates_that_a_selected_job_executes() {
+    let registry = registry();
+    for paths in [
+        vec!["docs/testing.md"],
+        vec!["ai/aoe_ai/client.py"],
+        vec!["crates/client/src/lib.rs"],
+        vec!["crates/sdk-python/src/lib.rs"],
+        vec!["deny.toml"],
+        vec!["Cargo.lock"],
+        Vec::new(),
+    ] {
+        let paths: Vec<String> = paths.into_iter().map(str::to_owned).collect();
+        let manifest = selection("a".repeat(40), Some("b".repeat(40)), paths.clone());
+        let members = gate_members(&registry, &manifest);
+        assert!(
+            manifest.gates.iter().all(|gate| members.contains(gate)),
+            "{paths:?}"
+        );
+        let unique: BTreeSet<_> = manifest.gates.iter().collect();
+        assert_eq!(unique.len(), manifest.gates.len(), "{paths:?}");
+    }
+}
+
+#[test]
+fn a_change_without_rust_code_lists_only_the_checks_that_compile_nothing() {
+    let docs = selection(
+        "a".repeat(40),
+        Some("b".repeat(40)),
+        vec!["docs/guide-without-readers.md".into()],
+    );
+    assert_eq!(
+        docs.gates,
+        [
+            "architecture-check",
+            "docs-check",
+            "fmt-check",
+            "structure-check"
+        ]
+    );
+    assert_eq!(docs.static_parts, ["light"]);
+    let client = selection(
+        "a".repeat(40),
+        Some("b".repeat(40)),
+        vec!["crates/client/src/lib.rs".into()],
+    );
+    for gate in [
+        "lint",
+        "deny",
+        "build-wasm",
+        "test-unit",
+        "browser-check",
+        "test-wasm",
+        "test-e2e",
+        "perf-ci",
+        "perf-instructions",
+        "perf-wasm-size",
+    ] {
+        assert!(client.gates.contains(&gate.to_owned()), "{gate}");
+    }
+    assert!(!client.gates.contains(&"perf-smoke".to_owned()));
+    assert!(!client.gates.contains(&"fuzz-smoke".to_owned()));
+    let position = |gate: &str| client.gates.iter().position(|g| g == gate);
+    assert!(
+        position("lint") < position("test-unit"),
+        "{:?}",
+        client.gates
+    );
+    assert!(
+        position("test-unit") < position("test-wasm"),
+        "{:?}",
+        client.gates
+    );
+}
+
+#[test]
+fn the_manifest_names_every_job_with_its_reason_and_rejects_a_forged_one() {
+    let expected = selection(
+        "a".repeat(40),
+        Some("b".repeat(40)),
+        vec!["docs/guide.md".into()],
+    );
+    assert_eq!(
+        expected.jobs.keys().collect::<Vec<_>>(),
+        expected.reasons.keys().collect::<Vec<_>>()
+    );
+    let mut forged = serde_json::to_value(&expected).expect("manifest");
+    forged["reasons"]["e2e"] = serde_json::json!("runs because someone said so");
+    let results: BTreeMap<_, _> = std::iter::once(("select".to_owned(), "success"))
+        .chain(
+            expected
+                .jobs
+                .iter()
+                .map(|(job, runs)| (job.clone(), if *runs { "success" } else { "skipped" })),
+        )
+        .collect();
+    let results = serde_json::to_string(&results).expect("results");
+    let genuine = serde_json::to_string(&expected).expect("manifest");
+    check_selection(&genuine, &results, &expected).expect("the genuine manifest");
+    assert!(check_selection(&forged.to_string(), &results, &expected).is_err());
+}
+
+#[test]
+fn explain_prints_one_line_per_job_and_the_summary_is_a_table() {
+    let manifest = selection(
+        "a".repeat(40),
+        Some("b".repeat(40)),
+        vec!["crates/geodata/src/lib.rs".into()],
+    );
+    let text = explain(&manifest, false);
+    for job in manifest.jobs.keys() {
+        assert!(
+            text.lines()
+                .any(|line| line.starts_with(&format!("{job}: "))),
+            "{job}: {text}"
+        );
+    }
+    assert!(text.contains("test-unit: 1 of"), "{text}");
+    let markdown = explain(&manifest, true);
+    assert!(markdown.starts_with("## CI selection"));
+    assert!(markdown.contains("| `e2e` | skip:"), "{markdown}");
+    assert!(markdown.contains("| `static` | **run**:"), "{markdown}");
 }

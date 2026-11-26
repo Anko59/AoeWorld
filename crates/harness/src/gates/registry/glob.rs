@@ -2,7 +2,7 @@ use super::helpers::{valid_path, valid_pattern};
 
 /// Segment-aware glob: * and ? never cross /; a whole ** segment matches
 /// zero or more segments. DP bounds work; Unicode ? matches one scalar value.
-pub(super) fn glob(pattern: &str, path: &str) -> bool {
+pub(crate) fn glob(pattern: &str, path: &str) -> bool {
     if !valid_pattern(pattern) || !valid_path(path) {
         return false;
     }

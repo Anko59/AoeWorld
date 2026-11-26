@@ -29,13 +29,30 @@ fn independent_prerequisite_selects_its_executing_job_without_broadening_suites(
 
 #[test]
 fn registry_evidence_change_invalidates_same_revision_selection() {
-    use crate::gates::{check_selection, selection};
+    use crate::gates::{
+        check_selection,
+        select::{Graph, Rules},
+        selection,
+    };
     let original = registry();
     let mut changed = original.clone();
     changed.gates[0].evidence.push_str(" reviewed change");
     let paths = paths(&["docs/testing.md"]);
-    let old = selection(&original, "a".repeat(40), None, paths.clone(), false).unwrap();
-    let new = selection(&changed, "a".repeat(40), None, paths, false).unwrap();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let rules = Rules::load(&root, &original).unwrap();
+    let graph = Graph::load(&root, &rules, false).unwrap();
+    let revision = "a".repeat(40);
+    let old = selection(
+        &original,
+        &rules,
+        &graph,
+        revision.clone(),
+        None,
+        paths.clone(),
+        false,
+    )
+    .unwrap();
+    let new = selection(&changed, &rules, &graph, revision, None, paths, false).unwrap();
     assert_eq!(old.gates, new.gates);
     assert_ne!(old.registry_hash, new.registry_hash);
     let mut results = BTreeMap::from([("select".to_owned(), "success")]);
@@ -143,13 +160,12 @@ fn the_static_job_runs_both_preflight_halves_and_only_dev_pushes_save_the_cache(
     use clap::ValueEnum;
     let workflow = workflow();
     let block = workflow_job(&workflow, "static");
-    let matrix = block
-        .split_once("part: [")
-        .and_then(|(_, rest)| rest.split_once(']'))
-        .map(|(legs, _)| legs)
-        .expect("part matrix");
-    let mut legs: Vec<&str> = matrix.split(", ").collect();
-    legs.sort_unstable();
+    // `select` names the legs (`static_parts`) and the unit scope; a leg is one of the
+    // halves below.
+    assert!(block.contains("part: '${{ fromJSON(needs.select.outputs.static_parts) }}'"));
+    assert!(block.contains("AOE_UNIT_SCOPE: '${{ needs.select.outputs.unit_scope }}'"));
+    assert!(block.contains("needs: select"));
+    let legs = ["checks", "light", "unit"];
     // The legs are exactly the halves `preflight --part` knows besides `all`.
     let mut halves: Vec<String> = PreflightPart::value_variants()
         .iter()
@@ -157,14 +173,14 @@ fn the_static_job_runs_both_preflight_halves_and_only_dev_pushes_save_the_cache(
         .map(|part| part.to_possible_value().unwrap().get_name().to_owned())
         .collect();
     halves.sort_unstable();
-    assert_eq!(legs, halves);
+    assert_eq!(legs.to_vec(), halves);
     assert!(block.contains("run: make preflight-${{ matrix.part }}"));
     assert!(block.contains("fail-fast: false"));
     let makefile = std::fs::read_to_string(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Makefile"),
     )
     .expect("Makefile");
-    for leg in &legs {
+    for leg in legs {
         assert!(
             makefile.contains(&format!("\npreflight-{leg}:"))
                 && makefile.contains(&format!("preflight --part {leg}\n")),

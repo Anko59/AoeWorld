@@ -144,6 +144,14 @@ pub(crate) fn test_unit(select: Option<String>) -> Result<(), ProcessError> {
             None
         }
     });
+    test_unit_selection(selection)
+}
+
+/// [`test_unit`] for a selection already made: CI's select job decides it once for the
+/// pull request, and the unit leg runs what the manifest says.
+pub(crate) fn test_unit_selection(
+    selection: Option<affected::Selection>,
+) -> Result<(), ProcessError> {
     let Some(selection) = selection else {
         return run_scope(None);
     };

@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "outside_workspace": ["crates/sdk-python", "fuzz"],
+  "jobs": {
+    "browser": { "crates": ["aoe-client", "aoe-rendering"], "tests": true },
+    "e2e": { "crates": ["aoe-client", "aoe-server"], "tests": false },
+    "target-performance": {
+      "crates": ["aoe-assets", "aoe-client", "aoe-protocol", "aoe-server", "aoe-simulation"],
+      "tests": false
+    },
+    "fuzz-smoke": { "crates": ["aoeworld-fuzz", "aoeworld-python"], "tests": false }
+  },
+  "static_parts": {
+    "light": ["fmt-check", "structure-check", "architecture-check", "docs-check"],
+    "checks": ["lint", "deny", "build-wasm"],
+    "unit": ["test-unit", "perf-smoke"]
+  },
+  "perf_smoke_crates": ["aoe-protocol", "aoe-server", "aoe-simulation"],
+  "paths": [
+    {
+      "effect": "harness",
+      "globs": [
+        "AGENTS.md", "**/AGENTS.md", "CLAUDE.md", ".claude/**", ".agents/**", ".codex/**",
+        ".dsh/**", ".pi/**", "skills/**", "docs/agent-engineering.md", "docs/agent-runtimes.md"
+      ]
+    },
+    { "effect": "outside-workspace", "globs": [] },
+    {
+      "effect": "everything",
+      "globs": [
+        ".github/**", "make/**", "gates/**", "Makefile", "GNUmakefile", "Cargo.toml",
+        "Cargo.lock", "rust-toolchain.toml", "docker/**", ".dockerignore", "crates/*/Cargo.toml"
+      ]
+    },
+    { "effect": "checks", "globs": ["deny.toml"] },
+    { "effect": "static", "globs": [".gitignore", "ai/**"] },
+    { "effect": "reads", "globs": ["browser/**", "web/**"], "jobs": ["browser", "e2e"] },
+    { "effect": "reads", "globs": ["baselines/**"], "jobs": ["target-performance"] },
+    {
+      "effect": "reads",
+      "globs": [
+        "docs/**", "README.md", "LICENSE", "THIRD_PARTY.md", "qa/**", "reports/**", "crates/**/*.md"
+      ]
+    }
+  ],
+  "harness_modules": [
+    {
+      "globs": ["crates/harness/src/e2e.rs", "crates/harness/src/e2e/**"],
+      "jobs": ["e2e"]
+    },
+    { "globs": ["crates/harness/src/browser_ports/**"], "jobs": ["browser", "e2e"] },
+    { "globs": ["crates/harness/src/wasm_test/**"], "jobs": ["browser"] },
+    {
+      "globs": ["crates/harness/src/perf*.rs", "crates/harness/src/perf*/**"],
+      "jobs": ["target-performance"]
+    },
+    {
+      "globs": ["crates/harness/src/fuzz/**", "crates/harness/src/sdk_python/**"],
+      "jobs": ["fuzz-smoke"]
+    },
+    {
+      "globs": [
+        "crates/harness/src/agents/**",
+        "crates/harness/src/ship/**", "crates/harness/src/review/**",
+        "crates/harness/src/ledger/**", "crates/harness/src/roadmap/**",
+        "crates/harness/src/timeline/**", "crates/harness/src/input_json/**",
+        "crates/harness/src/architecture.rs", "crates/harness/src/architecture/**",
+        "crates/harness/src/policy.rs", "crates/harness/src/repo_policy.rs",
+        "crates/harness/src/coverage/**", "crates/harness/src/release*.rs",
+        "crates/harness/src/release*/**", "crates/harness/src/qa*.rs",
+        "crates/harness/src/qa*/**", "crates/harness/src/quality_metrics/**",
+        "crates/harness/src/fixtures/**", "crates/harness/tests/**",
+        "crates/harness/examples/**"
+      ],
+      "jobs": []
+    }
+  ]
+}

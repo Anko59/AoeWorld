@@ -1,7 +1,7 @@
 //! Executable gate policy: strict selection and dependency-first cadence plans.
 mod fingerprint;
-mod glob;
-mod helpers;
+pub(crate) mod glob;
+pub(crate) mod helpers;
 use glob::glob;
 use helpers::*;
 
@@ -339,6 +339,34 @@ impl Registry {
         result
     }
 
+    /// `selected` gates, dependency-first with lexicographic tie breaking. A prerequisite
+    /// outside `selected` is not run, so it does not hold a gate back.
+    pub(crate) fn dependency_order(&self, selected: &BTreeSet<String>) -> Result<Vec<String>> {
+        let graph: BTreeMap<_, _> = self
+            .gates
+            .iter()
+            .map(|g| (g.id.clone(), g.requires.clone()))
+            .collect();
+        let mut remaining = selected.clone();
+        let mut done = BTreeSet::new();
+        let mut gates = Vec::new();
+        while !remaining.is_empty() {
+            let next = remaining
+                .iter()
+                .find(|id| {
+                    graph[*id]
+                        .iter()
+                        .all(|d| done.contains(d) || !selected.contains(d))
+                })
+                .cloned()
+                .ok_or("unresolved gate plan")?;
+            remaining.remove(&next);
+            done.insert(next.clone());
+            gates.push(next);
+        }
+        Ok(gates)
+    }
+
     pub(crate) fn plan(&self, cadence: Cadence, suites: &BTreeSet<String>) -> Result<Plan> {
         self.validate()?;
         let known = self.suites.iter().map(|s| s.id.clone()).collect();
@@ -377,19 +405,7 @@ impl Registry {
             .map(|g| g.id.clone())
             .collect();
         let selected = dependency_closure(&seeds, &graph);
-        let mut remaining = selected.clone();
-        let mut done = BTreeSet::new();
-        let mut gates = Vec::new();
-        while !remaining.is_empty() {
-            let next = remaining
-                .iter()
-                .find(|id| graph[*id].iter().all(|d| done.contains(d)))
-                .cloned()
-                .ok_or("unresolved gate plan")?;
-            remaining.remove(&next);
-            done.insert(next.clone());
-            gates.push(next);
-        }
+        let gates = self.dependency_order(&selected)?;
         let jobs = self
             .jobs
             .iter()

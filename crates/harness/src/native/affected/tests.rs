@@ -193,3 +193,31 @@ fn the_real_workspace_has_no_doctests_for_the_harness_binary() {
     assert!(!libs.contains(&"aoe-harness".to_owned()), "{libs:?}");
     assert!(libs.contains(&"aoe-protocol".to_owned()), "{libs:?}");
 }
+
+#[test]
+fn a_literal_sibling_below_a_directory_does_not_select_the_crate_but_a_dynamic_name_does() {
+    let mut packages = workspace();
+    packages[1].text = "include_str!(\"../../../docs/geodata/other.json\")".into();
+    let selection = select(&packages, &files(&["docs/geodata/reference-matrix.json"]));
+    assert_eq!(selection.packages(), Some(vec![]));
+    packages[1].text = "format!(\"docs/geodata/{name}.json\")".into();
+    let selection = select(&packages, &files(&["docs/geodata/reference-matrix.json"]));
+    assert_eq!(selection, crates(&["map"], &["server", "simulation"]));
+    packages[1].text = "Path::new(\"docs/geodata-old\")".into();
+    let selection = select(&packages, &files(&["docs/geodata/reference-matrix.json"]));
+    assert_eq!(selection.packages(), Some(vec![]));
+}
+
+#[test]
+fn a_selection_survives_json_so_the_select_job_can_hand_it_to_a_leg() {
+    for selection in [
+        crates(&["map"], &["server", "simulation"]),
+        Selection::All {
+            total: 6,
+            reason: "Cargo.lock".into(),
+        },
+    ] {
+        let json = serde_json::to_string(&selection).unwrap();
+        assert_eq!(serde_json::from_str::<Selection>(&json).unwrap(), selection);
+    }
+}

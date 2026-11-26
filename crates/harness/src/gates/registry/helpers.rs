@@ -16,7 +16,7 @@ pub(super) fn valid_path(path: &str) -> bool {
             .all(|s| !s.is_empty() && s != "." && s != "..")
 }
 
-pub(super) fn valid_pattern(pattern: &str) -> bool {
+pub(crate) fn valid_pattern(pattern: &str) -> bool {
     valid_path(pattern)
         && !pattern.contains(['[', ']', '{', '}', '(', ')', '|', '^', '$', '+'])
         && pattern.split('/').all(|s| !s.contains("**") || s == "**")
