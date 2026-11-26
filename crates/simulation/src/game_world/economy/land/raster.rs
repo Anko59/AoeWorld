@@ -57,32 +57,69 @@ pub(super) fn raster_changed(
     width: i32,
     height: i32,
 ) {
+    redraw(rows, &changed_sources(old, new), new, width, height);
+}
+
+/// The sources only one of the lists has, removed or added. One that moves or
+/// changes hands is both.
+pub(super) fn changed_sources(
+    old: &[(PlayerId, TileCoord, i32)],
+    new: &[(PlayerId, TileCoord, i32)],
+) -> Sources {
     let (before, after) = (sorted(old), sorted(new));
-    let mut dirty = BTreeMap::<i32, Vec<(i32, i32)>>::new();
-    let mut mark = |&(_, c, r): &(PlayerId, TileCoord, i32)| {
-        for y in (c.y - r).max(0)..=(c.y + r).min(height - 1) {
-            if let Some(span) = span_of(c, r, y, width) {
-                dirty.entry(y).or_default().push(span);
-            }
-        }
-    };
+    let mut changed = Sources::new();
     let (mut a, mut b) = (0, 0);
     while a < before.len() || b < after.len() {
         match (before.get(a), after.get(b)) {
             (Some(x), Some(y)) if x == y => (a, b) = (a + 1, b + 1),
             (Some(x), Some(y)) if x < y => {
-                mark(x);
+                changed.push(*x);
                 a += 1;
             }
             (Some(x), None) => {
-                mark(x);
+                changed.push(*x);
                 a += 1;
             }
             (_, Some(y)) => {
-                mark(y);
+                changed.push(*y);
                 b += 1;
             }
             (None, None) => break,
+        }
+    }
+    changed
+}
+
+/// Whether `changed` is more than a quarter of `new` by width, the diameter of
+/// a disc: it is also the rows a whole drawing adds events for. The quarter is
+/// a choice, not a measurement.
+pub(super) fn over_a_quarter(
+    changed: &[(PlayerId, TileCoord, i32)],
+    new: &[(PlayerId, TileCoord, i32)],
+) -> bool {
+    let width = |sources: &[(PlayerId, TileCoord, i32)]| {
+        sources
+            .iter()
+            .map(|&(_, _, r)| 2 * i64::from(r) + 1)
+            .sum::<i64>()
+    };
+    4 * width(changed) > width(new)
+}
+
+/// `raster_changed`, given the `changed_sources` of the two lists.
+pub(super) fn redraw(
+    rows: &mut BTreeMap<i32, Vec<HoldingSpan>>,
+    changed: &[(PlayerId, TileCoord, i32)],
+    new: &[(PlayerId, TileCoord, i32)],
+    width: i32,
+    height: i32,
+) {
+    let mut dirty = BTreeMap::<i32, Vec<(i32, i32)>>::new();
+    for &(_, c, r) in changed {
+        for y in (c.y - r).max(0)..=(c.y + r).min(height - 1) {
+            if let Some(span) = span_of(c, r, y, width) {
+                dirty.entry(y).or_default().push(span);
+            }
         }
     }
     for windows in dirty.values_mut() {

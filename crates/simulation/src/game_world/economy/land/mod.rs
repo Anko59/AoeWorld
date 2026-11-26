@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 mod raster;
 pub(crate) mod walking;
-use raster::{coalesce, raster, raster_changed};
+use raster::{changed_sources, coalesce, over_a_quarter, raster, raster_changed, redraw};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HoldingSpan {
@@ -36,6 +36,8 @@ pub(crate) struct Cache {
     /// owner's Anatolia 4 had the same sources as the viewer's previous one.
     known: BTreeMap<PlayerId, Known>,
     known_rasters: u64,
+    /// Those of them that drew every source.
+    full_rasters: u64,
 }
 
 type Sources = Vec<(PlayerId, TileCoord, i32)>;
@@ -182,36 +184,61 @@ impl GameWorld {
         }
         cache.viewers.entry(key).or_insert(report).clone()
     }
-    /// The viewer's drawn influence from `sources`, reused while they repeat.
+    /// The viewer's drawn influence from `sources`, reused while they repeat
+    /// and redrawn only where a changed source reaches, or whole when over a
+    /// quarter of their width changed. The drawing leaves the cache while it is
+    /// edited outside the lock: a racing report of the viewer draws its own.
     fn known_land(
         &self,
         viewer: PlayerId,
         sources: Sources,
     ) -> Arc<BTreeMap<i32, Vec<HoldingSpan>>> {
         let lock = || self.economy.land.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some((drawn, rows)) = lock().known.get(&viewer)
-            && *drawn == sources
-        {
-            return rows.clone();
-        }
-        let rows = Arc::new(raster(
-            &sources,
-            self.config.width_tiles,
-            self.config.height_tiles,
-        ));
+        let (width, height) = (self.config.width_tiles, self.config.height_tiles);
+        let kept = {
+            let mut cache = lock();
+            if let Some((drawn, rows)) = cache.known.get(&viewer)
+                && *drawn == sources
+            {
+                return rows.clone();
+            }
+            cache.known.remove(&viewer)
+        };
+        let edited = kept.and_then(|(drawn, mut rows)| {
+            let changed = changed_sources(&drawn, &sources);
+            if over_a_quarter(&changed, &sources) {
+                return None;
+            }
+            // Rows another report still reads are copied, never edited.
+            redraw(Arc::make_mut(&mut rows), &changed, &sources, width, height);
+            Some(rows)
+        });
+        let full = edited.is_none();
+        let rows = edited.unwrap_or_else(|| Arc::new(raster(&sources, width, height)));
         let mut cache = lock();
         cache.known_rasters += 1;
+        cache.full_rasters += u64::from(full);
         cache.known.insert(viewer, (sources, rows.clone()));
         rows
     }
 
-    /// Influence drawings made for viewers, for tests and diagnostics.
+    /// Influence drawings made for viewers, whole or only where a source
+    /// changed, for tests and diagnostics.
     pub fn land_known_rasters(&self) -> u64 {
         self.economy
             .land
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .known_rasters
+    }
+
+    /// Those of them that drew every source, a viewer's first included.
+    pub fn land_full_rasters(&self) -> u64 {
+        self.economy
+            .land
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .full_rasters
     }
 
     pub fn land_control_rebuilds(&self) -> u64 {

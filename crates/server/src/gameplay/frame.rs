@@ -3,8 +3,12 @@
 use aoe_core::{EntityId, PlayerId, Tick, TileRect};
 use aoe_protocol::{GameplayUnitState, MAX_SUBSCRIBED_UNITS};
 use aoe_simulation::GameWorld;
+use index::SlotIndex;
 use rayon::prelude::*;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
+
+#[path = "frame/index.rs"]
+mod index;
 
 const ABSENT: u32 = u32::MAX;
 const PART: usize = 1 << 12;
@@ -90,7 +94,7 @@ pub(super) struct UnitFrame {
     /// Whether the slot's unit is in its owner's lists.
     listed: Vec<bool>,
     rank: Vec<usize>,
-    index: HashMap<EntityId, u32>,
+    index: SlotIndex,
     own: BTreeMap<PlayerId, Owned>,
     free: Vec<u32>,
     tick: Tick,
@@ -166,8 +170,8 @@ impl UnitFrame {
             .iter()
             .zip(&converted)
             .map(|(id, converted)| {
-                let (Some(&slot), Some((state, Some(rank), true))) =
-                    (frame.index.get(id), converted)
+                let (Some(slot), Some((state, Some(rank), true))) =
+                    (frame.index.get(*id), converted)
                 else {
                     return false;
                 };
@@ -179,8 +183,8 @@ impl UnitFrame {
             .collect::<Vec<_>>();
         // Remove old list entries first: swap-removal may assign their ranks
         // to another changed id in this same batch.
-        for (id, kept) in changes.iter().zip(&kept) {
-            if let Some(&slot) = frame.index.get(id) {
+        for ((id, converted), kept) in changes.iter().zip(&converted).zip(&kept) {
+            if let Some(slot) = frame.index.get(*id) {
                 if !kept {
                     let owner = PlayerId(frame.owner[slot as usize]);
                     if let Some(own) = frame.own.get_mut(&owner) {
@@ -188,8 +192,9 @@ impl UnitFrame {
                     }
                     frame.listed[slot as usize] = false;
                 }
-                if world.unit(*id).is_none() {
-                    frame.index.remove(id);
+                // Nothing to convert: the unit is gone from the world.
+                if converted.is_none() {
+                    frame.index.remove(*id);
                     frame.free.push(slot);
                 }
             }
@@ -199,7 +204,7 @@ impl UnitFrame {
                 continue;
             };
             frame.converted += 1;
-            let slot = if let Some(&slot) = frame.index.get(id) {
+            let slot = if let Some(slot) = frame.index.get(*id) {
                 if *frame.state(slot) != state {
                     frame.changed.insert(slot);
                 }
@@ -248,7 +253,7 @@ impl UnitFrame {
             owner: Vec::with_capacity(count),
             listed: vec![false; count],
             rank: (0..count).collect(),
-            index: HashMap::with_capacity(count),
+            index: SlotIndex::default(),
             own: BTreeMap::new(),
             free: Vec::new(),
             tick: world.tick(),
@@ -341,7 +346,7 @@ impl UnitFrame {
         keys.clear();
         world.collect_chunk_unit_ids(lens.region, ids);
         for id in ids.iter() {
-            let slot = self.index.get(id).copied().unwrap_or(ABSENT);
+            let slot = self.index[id];
             if slot == ABSENT || (own_complete && self.owner[slot as usize] == lens.viewer.0) {
                 continue;
             }
@@ -351,7 +356,7 @@ impl UnitFrame {
             }
         }
         if !economy {
-            let slot = self.index.get(&lens.primary).copied().unwrap_or(ABSENT);
+            let slot = self.index[&lens.primary];
             if slot != ABSENT && visible(self.state(slot)) {
                 keys.push(key(lens.primary, slot));
             }
