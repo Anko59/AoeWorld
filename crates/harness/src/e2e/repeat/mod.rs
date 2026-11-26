@@ -3,12 +3,9 @@
 //! `e2e-repeat` workflow because a local run cannot be trusted on a busy machine.
 //!
 //! It never uses the quarantine and never retries: every attempt counts as it ends.
-use super::{
-    BrowserContainer, SERVER_BINARY, browser_run_deadline, command, filter, quarantine, servers,
-    stderr_tail,
-};
+use super::{BrowserContainer, SERVER_BINARY, command, filter, quarantine, servers, stderr_tail};
 use crate::process::{self, CaptureExit};
-use std::{path::Path, process::Command};
+use std::{path::Path, process::Command, time::Duration};
 
 mod report;
 #[cfg(test)]
@@ -17,6 +14,11 @@ mod tests;
 const REPORTS: &str = "reports/e2e";
 const DEFAULT_REPEAT: u32 = 30;
 const MAX_REPEAT: u32 = 200;
+/// The whole run, 90 minutes: the workflow's 120-minute job also builds the stack first.
+/// The suite's own 40-minute bound would cut a long repeat off with no tally. Playwright
+/// writes its report at the end, so a run that hits this bound has no partial result: split
+/// it into several dispatches.
+const DEADLINE: Duration = Duration::from_secs(90 * 60);
 
 type Failure = Box<dyn std::error::Error>;
 
@@ -147,9 +149,22 @@ pub(super) fn run() -> Result<(), Failure> {
     let outcome = attempt(&args, &options);
     // A server that died mid-run explains failures that no test caused.
     let alive = fleet.check_alive();
-    fleet.shutdown()?;
+    // A dead server is reaped already; the fleet's drop kills what is left.
+    let shutdown = if alive.is_ok() {
+        fleet.shutdown()
+    } else {
+        Ok(())
+    };
     let summary = outcome?;
-    alive?;
+    if let Err(error) = alive {
+        println!("{}", summary.markdown());
+        return Err(format!(
+            "the game server died during the run, so attempts after its death count as \
+             failures: {error}"
+        )
+        .into());
+    }
+    shutdown?;
     verdict(&summary)
 }
 
@@ -162,7 +177,7 @@ fn attempt(args: &[String], options: &Options) -> Result<report::Summary, Failur
     let mut retained = crate::ship::JsonOutput::create(&path, "Playwright")?;
     let mut docker = Command::new("docker");
     docker.args(args);
-    let deadline = browser_run_deadline();
+    let deadline = DEADLINE;
     let captured = process::capture_command_retaining_stdout(
         docker,
         deadline,
@@ -175,8 +190,10 @@ fn attempt(args: &[String], options: &Options) -> Result<report::Summary, Failur
         CaptureExit::Success | CaptureExit::Failed(Some(1))
     ) {
         return Err(format!(
-            "e2e-repeat unavailable: {:?}\n{}",
+            "e2e-repeat unavailable: {:?} (deadline {} minutes; a longer run has no tally, \
+             split it)\n{}",
             captured.exit,
+            DEADLINE.as_secs() / 60,
             stderr_tail(&captured.stderr)
         )
         .into());

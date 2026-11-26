@@ -179,6 +179,26 @@ fn a_run_where_nothing_ran_proves_nothing() {
 }
 
 #[test]
+fn a_skipped_test_beside_a_passing_one_proves_nothing() {
+    let mut report = report_of(&[("passed", "2026-01-01T00:00:01Z", "")]);
+    let spec = report["suites"][0]["suites"][0]["specs"][0].clone();
+    let mut skipped = spec;
+    skipped["title"] = "skipped".into();
+    skipped["tests"][0]["results"][0]["status"] = "skipped".into();
+    report["suites"][0]["suites"][0]["specs"]
+        .as_array_mut()
+        .unwrap()
+        .push(skipped);
+    let summary = report::summarize(&report, 1, None).unwrap();
+    assert!(
+        summary
+            .incomplete()
+            .unwrap()
+            .contains("group skipped [webgpu] never ran")
+    );
+}
+
+#[test]
 fn a_report_with_global_errors_is_refused() {
     let report = json!({"errors": [{"message": "Cannot find module"}], "suites": []});
     let error = report::summarize(&report, 3, None).unwrap_err();

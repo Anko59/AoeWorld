@@ -32,8 +32,10 @@ failures, the passes that close the run and one character per attempt in start o
 (`.` passed, `F` failed, `T` timed out, `I` interrupted, `S` skipped), then the first
 error line of each failure. The artifact `e2e-repeat-<project>` holds `repeat.json` (the
 same tally), `repeat.md`, the Playwright report and the traces of failed attempts. The
-job fails when any attempt fails, when a test has fewer attempts than asked, or when no
-test ran (the spec does not run on that project).
+job fails when any attempt fails, when a test has fewer attempts than asked, when a test
+never ran (all attempts skipped) or when no test ran (the spec does not run on that
+project). The run is cut off after 90 minutes and then has no tally, because Playwright
+writes its report at the end: split a long repeat into several dispatches.
 
 `make test-e2e-repeat` is refused to agents like the other whole suites: dispatch the
 workflow instead.

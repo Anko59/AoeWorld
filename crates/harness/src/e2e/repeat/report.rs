@@ -52,11 +52,18 @@ impl Summary {
         self.tests.iter().map(|test| test.failed).sum()
     }
 
-    /// Why the run proves nothing, if it does not: no test ran, or a test has fewer
-    /// attempts than the run asked for (a worker died, the run was cut short).
+    /// Why the run proves nothing, if it does not: no test ran, a test never ran (all its
+    /// attempts skipped), or a test has fewer attempts than the run asked for (a worker
+    /// died, the run was cut short).
     pub(super) fn incomplete(&self) -> Option<String> {
         if self.tests.iter().all(|test| test.passed + test.failed == 0) {
             return Some("no test ran: check that the spec runs on the project".into());
+        }
+        if let Some(test) = self.tests.iter().find(|t| t.passed + t.failed == 0) {
+            return Some(format!(
+                "{} [{}] never ran: every attempt was skipped",
+                test.title, test.project
+            ));
         }
         self.tests.iter().find_map(|test| {
             (test.attempts() != self.repeat).then(|| {
