@@ -36,6 +36,18 @@ pub trait RouteTerrain {
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError>;
 
+    /// A kept answer for the step a search takes from `from` by `offset`
+    /// on `overlay`, exactly as `route_neighbor_clear` would read it; `None`
+    /// reads the ground.
+    fn route_neighbor_known(
+        &self,
+        _overlay: &ResourceOverlay,
+        _from: TileCoord,
+        _offset: (i32, i32),
+    ) -> Option<bool> {
+        None
+    }
+
     fn route_overlay_edge_clear(
         &self,
         overlay: &ResourceOverlay,

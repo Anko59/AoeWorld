@@ -88,6 +88,7 @@ impl GameWorld {
         for cache in &mut self.economy.movement_ground {
             cache.get_mut().unwrap_or_else(|e| e.into_inner()).clear();
         }
+        self.economy.step_masks.clear();
         self.economy.work_positions.clear();
         self.clearance
             .get_mut()
@@ -119,6 +120,7 @@ impl GameWorld {
         for cache in &mut self.economy.movement_ground {
             cache.get_mut().unwrap_or_else(|e| e.into_inner()).clear();
         }
+        self.economy.step_masks.clear();
         self.regions_changed_everywhere();
         self.economy.work_positions.clear();
         self.clearance
@@ -183,6 +185,7 @@ impl GameWorld {
                 .unwrap_or_else(|e| e.into_inner())
                 .invalidate(area);
         }
+        self.economy.step_masks.invalidate(area);
         self.economy.gatherers.notify_walker_ground(area);
         self.wake_queue_ground(area);
         self.navigation_cache.invalidate(area);

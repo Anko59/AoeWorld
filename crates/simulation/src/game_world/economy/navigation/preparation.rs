@@ -31,6 +31,19 @@ impl RouteTerrain for LimitedMap<'_> {
             true
         }
     }
+    fn route_neighbor_known(
+        &self,
+        overlay: &ResourceOverlay,
+        from: TileCoord,
+        offset: (i32, i32),
+    ) -> Option<bool> {
+        match &self.world.terrain {
+            crate::Terrain::Map { overlay: live, .. } if std::ptr::eq(overlay, live) => {
+                self.world.known_route_step(self.generator, from, offset)
+            }
+            _ => None,
+        }
+    }
     fn route_walkable(
         &self,
         overlay: &ResourceOverlay,
@@ -66,5 +79,105 @@ impl RouteTerrain for LimitedMap<'_> {
         cancelled: &dyn Fn() -> bool,
     ) -> Result<u32, EnvironmentPageError> {
         self.generator.route_step_cost(from, to, cancelled)
+    }
+}
+
+/// The live ground with no gate: what every player's search reads away from
+/// gates, so one step mask serves them all.
+struct GroundOnly<'a> {
+    generator: &'a MapChunkGenerator,
+    world: &'a crate::GameWorld,
+}
+impl RouteTerrain for GroundOnly<'_> {
+    fn route_walkable(
+        &self,
+        _: &ResourceOverlay,
+        tile: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<bool, EnvironmentPageError> {
+        self.world
+            .unit_tile_passable(crate::UnitKind::Villager, tile, cancelled)
+    }
+    fn route_edge_clear(
+        &self,
+        from: TileCoord,
+        to: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<bool, EnvironmentPageError> {
+        self.generator.route_edge_clear(from, to, cancelled)
+    }
+    fn route_step_cost(
+        &self,
+        from: TileCoord,
+        to: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<u32, EnvironmentPageError> {
+        self.generator.route_step_cost(from, to, cancelled)
+    }
+}
+
+impl crate::GameWorld {
+    /// The live overlay's step from `from` by `offset`, from the kept step
+    /// masks; a tile near a gate (whose admission is per player) or whose
+    /// ground cannot be read answers `None`, and the caller reads the ground.
+    pub(super) fn known_route_step(
+        &self,
+        generator: &MapChunkGenerator,
+        from: TileCoord,
+        offset: (i32, i32),
+    ) -> Option<bool> {
+        let index = aoe_map::step_index(offset)?;
+        let mask = match self.economy.step_masks.mask(from) {
+            aoe_map::StepMask::Known(mask) => mask,
+            aoe_map::StepMask::Slow => return None,
+            aoe_map::StepMask::Unknown => {
+                let mask = self.step_mask(generator, from);
+                let config = self.config;
+                self.economy
+                    .step_masks
+                    .store(config.width_tiles, config.height_tiles, from, mask);
+                mask?
+            }
+        };
+        Some(mask & (1 << index) != 0)
+    }
+
+    fn step_mask(&self, generator: &MapChunkGenerator, from: TileCoord) -> Option<u8> {
+        let crate::Terrain::Map { overlay, .. } = &self.terrain else {
+            return None;
+        };
+        // Every tile a step from `from` reads lies within one tile of it.
+        let gate_near = !self.economy.gate_tiles.is_empty()
+            && (-1..=1).any(|dy| {
+                (-1..=1).any(|dx| {
+                    self.economy
+                        .gate_tiles
+                        .contains_key(&TileCoord::new(from.x + dx, from.y + dy))
+                })
+            });
+        if gate_near {
+            return None;
+        }
+        let ground = GroundOnly {
+            generator,
+            world: self,
+        };
+        let mut mask = 0;
+        for index in 0..8u8 {
+            let offset = [
+                (-1, -1),
+                (0, -1),
+                (1, -1),
+                (-1, 0),
+                (1, 0),
+                (-1, 1),
+                (0, 1),
+                (1, 1),
+            ][usize::from(index)];
+            if aoe_map::route_neighbor_clear(&ground, overlay, from, offset, &|| false).ok()? {
+                mask |= 1 << index;
+            }
+        }
+        Some(mask)
     }
 }

@@ -271,6 +271,12 @@ pub(super) fn neighbor_clear(
     offset: (i32, i32),
     cancelled: &dyn Fn() -> bool,
 ) -> Result<bool, Terminal> {
+    if let Some(clear) = terrain.route_neighbor_known(overlay, tile, offset) {
+        if cancelled() {
+            return Err(Terminal::Environment(EnvironmentPageError::Cancelled));
+        }
+        return Ok(clear);
+    }
     let (dx, dy) = offset;
     let next = TileCoord::new(tile.x + dx, tile.y + dy);
     // Pure predicates: evaluate the cheap destination test first and stop at

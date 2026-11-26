@@ -61,6 +61,15 @@ impl RouteTerrain for MemoTerrain<'_> {
         self.inner.route_generator()
     }
 
+    fn route_neighbor_known(
+        &self,
+        overlay: &ResourceOverlay,
+        from: TileCoord,
+        offset: (i32, i32),
+    ) -> Option<bool> {
+        self.inner.route_neighbor_known(overlay, from, offset)
+    }
+
     fn route_walkable(
         &self,
         overlay: &ResourceOverlay,

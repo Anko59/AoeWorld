@@ -33,6 +33,9 @@ pub(crate) struct Economy {
     /// Physical tile/edge answers shared across movers, separately for land
     /// and water. Collision changes invalidate only affected chunks.
     pub(crate) movement_ground: [std::sync::Mutex<aoe_map::RouteGroundCache>; 2],
+    /// The land steps a leg search may take from each tile, shared by every
+    /// player's search away from gates; forgotten with `movement_ground`.
+    pub(crate) step_masks: aoe_map::RouteStepMasks,
     pub(crate) land: std::sync::Mutex<super::land::Cache>,
     pub(crate) walking: super::land::walking::ZoneCache,
     pub(crate) census: std::sync::Mutex<census::Cache>,
