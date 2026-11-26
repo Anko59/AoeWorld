@@ -320,15 +320,19 @@ impl GameWorld {
         }
     }
 
-    pub(crate) fn plan_world_route_ahead(
+    /// Planning ahead that prepares cold chunks only from `preparations`, as
+    /// `poll_route_planner_limited` polls.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn plan_world_route_ahead_limited(
         &self,
         planner: &mut RoutePlanner,
         budget: u32,
         cancelled: &dyn Fn() -> bool,
         kind: crate::UnitKind,
         player: aoe_core::PlayerId,
+        preparations: &std::sync::Mutex<u32>,
+        denied: Option<&std::sync::atomic::AtomicBool>,
     ) {
-        let _measurement = self.measure_planning();
         if kind.is_naval() {
             planner.plan_ahead(
                 &super::fishing::navigation::NavalNavigation::new(self),
@@ -342,8 +346,8 @@ impl GameWorld {
             Terrain::Map { generator, overlay } => planner.plan_ahead(
                 &preparation::LimitedMap {
                     generator,
-                    allowance: &self.navigation_preparation_budget,
-                    denied: None,
+                    allowance: preparations,
+                    denied,
                     world: self,
                     player,
                 },
