@@ -1,0 +1,47 @@
+name: Restore the game map
+description: >-
+  Restore the owner's Anatolia map package from the Actions cache that .github/workflows/game-map.yml
+  warms on dev. The package is keyed by the request file and by a hash of the generator's code. Then
+  run `make game-map GAME_MAP_ARGS='--no-fetch --soft'`: it finds the package, or prints
+  "map unavailable" and exits 0 so a cold cache never fails a pull request. Packages and sources
+  are cached only, never uploaded as artifacts or release assets (docs/geodata/licences.md).
+inputs:
+  fallback:
+    description: >-
+      'true' also accepts the package of an older generator (a pull request that changes map
+      generation then gets dev's map and `exact` is 'false'). The warming workflow passes 'false'.
+    default: 'true'
+outputs:
+  exact:
+    description: "'true' when the package was made by exactly this checkout's generator code."
+    value: ${{ steps.restore.outputs.cache-hit }}
+  matched-key:
+    description: The cache key that matched, empty on a miss.
+    value: ${{ steps.restore.outputs.cache-matched-key }}
+  cache-key:
+    description: The exact cache key of this checkout.
+    value: ${{ steps.names.outputs.exact }}
+runs:
+  using: composite
+  steps:
+    # The key is the request file plus the code that writes package pages: the geodata crate and the
+    # map crate's package, environment and page modules, plus the schema and recipe constants. Runtime
+    # chunk and navigation code in crates/map is left out on purpose: it changes with most map pull
+    # requests and does not change a package, and every new key costs a 6.9 GB source download.
+    - id: names
+      shell: bash
+      run: |
+        recipe="$(grep -h 'pub const \(MAP_SCHEMA_VERSION\|GENERATION_RECIPE_VERSION\)' crates/map/src/lib.rs | sha256sum | cut -c1-8)"
+        prefix="game-map-${{ hashFiles('qa/anatolia-map.json') }}-"
+        echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+        echo "exact=${prefix}${recipe}-${{ hashFiles('crates/geodata/src/**', 'crates/geodata/Cargo.toml', 'crates/map/Cargo.toml', 'crates/map/src/package.rs', 'crates/map/src/package/**', 'crates/map/src/environment.rs', 'crates/map/src/environment/**', 'crates/map/src/request.rs', 'crates/map/src/water.rs', 'crates/map/src/biome.rs', 'crates/map/src/biome_rules.rs', 'crates/map/src/land_use.rs', 'crates/map/src/land_use/**') }}" >> "$GITHUB_OUTPUT"
+    - id: restore
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae
+      with:
+        path: .cache/game-map/packages
+        key: ${{ steps.names.outputs.exact }}
+        restore-keys: ${{ inputs.fallback == 'true' && steps.names.outputs.prefix || '' }}
+    - shell: bash
+      run: |
+        echo "game-map cache hit=${{ steps.restore.outputs.cache-hit }} matched=${{ steps.restore.outputs.cache-matched-key }}"
+        du -sh .cache/game-map/packages 2>/dev/null || true

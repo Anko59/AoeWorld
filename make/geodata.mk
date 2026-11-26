@@ -51,3 +51,12 @@ map-source-scale-qualify: orchestrator-tools job-bootstrap
 
 map-source-scale-qualify-steps:
 	@$(SOURCE_QUAL_RUN) cargo run --release --locked -p aoe-harness -- source-qualify --scale-only --package-directory '$(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY)' --content-hash '$(AOE_SOURCE_QUAL_CONTENT_HASH)' $(SOURCE_QUAL_SCALE_ARGS)
+
+# The owner's pinned map (qa/anatolia-map.json): reuse the package, or fetch sources and generate it.
+# GAME_MAP_ARGS: --no-fetch (never download), --soft (report "map unavailable" with exit 0).
+game-map: orchestrator-tools job-bootstrap
+	@$(JOB_RUN) game-map -- make --no-print-directory game-map-steps
+
+game-map-steps:
+	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
+	@$(GEODATA_RUN) cargo run --locked -p aoe-harness -- game-map $(GAME_MAP_ARGS)

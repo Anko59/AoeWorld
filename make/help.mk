@@ -24,6 +24,7 @@ help:
 	@echo '  make ledger          Which model did what with measured results (docs/models.md)'
 	@echo '  make usage           What is left of each provider, and the last 7 days of the ledger'
 	@echo '  make geodata-bootstrap Acquire the configured overview source stack'
+	@echo '  make game-map        Make sure the owner\'s Anatolia map package exists; print its hash and directory (docs/geodata/licences.md)'
 	@echo '  make geodata-verify  Verify cached overview inputs without network access'
 	@echo '  AOE_MAP_REQUEST=... make map-estimate  Estimate a map request'
 	@echo '  AOE_MAP_REQUEST=... AOE_MAP_PACKAGE=... make map-generate  Create a self-contained package'

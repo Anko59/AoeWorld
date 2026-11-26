@@ -13,6 +13,7 @@ mod disk;
 mod e2e;
 mod fixtures;
 mod fuzz;
+mod game_map;
 mod gates;
 mod hooks;
 mod input_json;

@@ -77,6 +77,42 @@ bounded game pages. Terrain then derives water, cliffs and ramps, biome and
 resource placement from those package inputs; the deterministic seed changes
 detail placement without moving source-backed relief.
 
+## The owner's pinned map (`make game-map`)
+
+Owner, 2026-11-26: "all of it on real maps that are really in the game, no more
+synthetic maps that are just used for CI". The map is the owner's Anatolia:
+[`qa/anatolia-map.json`](../../qa/anatolia-map.json), centre 39 N 34 E, 960 km a
+side, 240:1 (2,000 tiles), year 600, seed 1, `circa600_v1`.
+
+```sh
+AOE_GEODATA_CACHE=/abs/geodata AOE_MAP_PACKAGE=/abs/packages make game-map
+```
+
+prints `hash=`, `request=`, `directory=`, `manifest=` and `source=` (`existing` or
+`generated`). A package already published for the request is reused as it is.
+Otherwise the target runs the worker's `bootstrap` (3 tries, 30 s apart), then
+`map-generate` and `map-verify`. `GAME_MAP_ARGS` takes `--no-fetch` (never
+download: the package, or the cached sources, or "map unavailable") and `--soft`
+(print "map unavailable: <reason>" and write `UNAVAILABLE` beside the packages,
+exit 0, so a cold cache does not fail a pull request). Without the two variables
+the defaults are `.cache/geodata` and `.cache/game-map/packages`; share them
+between worktrees by passing absolute paths. Measured on 2026-11-26 (Apple
+silicon, OrbStack): 9 sources, 6.87 GB to download in about 9 minutes, 7.0 GB on
+disk, generation about 20 s from a warm cache, package 66 MiB in 1,901 files.
+The `61633e71` package that scale docs cite was made by the generator before #1036
+(river channel sampling); the same request now gives another hash.
+
+CI cannot cache 7 GB of sources (the repository's 10 GB cache is shared with the
+build caches and already full), so it caches the package. The `game-map` workflow
+generates it on `dev` (a push that changes the request or the page-writing code,
+and twice a week to keep the cache from expiring) and saves it under a key made of
+the request file and a hash of that code. A job uses
+`./.github/actions/game-map-restore` and then
+`make game-map GAME_MAP_ARGS='--no-fetch --soft'`. A pull request that changes the
+page-writing code finds no exact key and gets the package of `dev`'s generator
+(`exact` is `false`: say so next to its numbers). Sources and packages are never
+workflow artifacts or release assets: see [licences](licences.md).
+
 ## Terrain, history, and compatibility limits
 
 The current overview pipeline uses ETOPO elevation, Natural Earth coastline,
