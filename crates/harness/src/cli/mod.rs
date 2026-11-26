@@ -99,6 +99,8 @@ enum Command {
     TestWasm,
     TestWasmFocused,
     TestE2e,
+    /// Repeat chosen specs on chosen projects and tally passes against failures per test.
+    E2eRepeat,
     /// Regenerate duration-balanced E2E shard weights from Playwright JSON reports.
     E2eDurations(e2e::shard::DurationsArgs),
     /// Join the shards' evidence into `reports/e2e/pass.json`.

@@ -211,6 +211,9 @@ contains global errors; those diagnostics name the affected cases and global
 error lines too. A retry error retains unresolved initial-run failures alongside
 the retry diagnostics. Original JSON reports retain the complete evidence.
 
+The proof that a flaky browser test is fixed is `make test-e2e-repeat`, run by the
+`e2e-repeat` workflow ([flaky tests](flaky-tests.md)).
+
 `make test-wasm` runs the client browser integration tests and the
 client and rendering library `wasm-bindgen-test` cases in pinned headless
 Chromium through a disposable ChromeDriver container. On failure it retries the

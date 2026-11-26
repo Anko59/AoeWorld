@@ -138,14 +138,24 @@ test-e2e: resource-bootstrap
 test-e2e-admitted: job-bootstrap
 	@$(MAKE) --no-print-directory test-e2e-steps
 
+# Repeats AOE_E2E_REPEAT_SPECS on AOE_E2E_REPEAT_PROJECTS, AOE_E2E_REPEAT times each, and tallies
+# passes against failures per test: the proof that a flaky test is fixed (workflow e2e-repeat).
+test-e2e-repeat: resource-bootstrap
+	@$(RESOURCE_LONG) test-e2e-repeat -- $(MAKE) --no-print-directory test-e2e-repeat-admitted
+
+.PHONY: test-e2e-repeat-admitted
+test-e2e-repeat-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory test-e2e-steps E2E_HARNESS_COMMAND=e2e-repeat
+
 # A package root named by AOE_MAP_PACKAGE_DIRECTORY may lie outside the worktree:
 # resolve it on the host and mount it at the same path, or the container cannot read it.
 E2E_PACKAGES := $(if $(strip $(AOE_MAP_PACKAGE_DIRECTORY)),$(realpath $(AOE_MAP_PACKAGE_DIRECTORY)))
 E2E_PACKAGES_ENV := $(if $(E2E_PACKAGES),$(call BIND_MOUNT,$(E2E_PACKAGES),$(E2E_PACKAGES)) -e $(call MOUNT_QUOTE,AOE_MAP_PACKAGE_DIRECTORY=$(E2E_PACKAGES)))
+E2E_HARNESS_COMMAND ?= test-e2e
 test-e2e-steps:
 	@$(MAKE) --no-print-directory disk-precheck build-wasm browser-deps orchestrator-tools
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
-	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_E2E_WORKERS -e AOE_E2E_PORT_RANGE -e AOE_E2E_SPECS $(E2E_PACKAGES_ENV) -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- test-e2e
+	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_E2E_WORKERS -e AOE_E2E_PORT_RANGE -e AOE_E2E_SPECS -e AOE_E2E_REPEAT_SPECS -e AOE_E2E_REPEAT_PROJECTS -e AOE_E2E_REPEAT $(E2E_PACKAGES_ENV) -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- $(E2E_HARNESS_COMMAND)
 
 # Keep the focused memory investigation serial within this command, including nested builds.
 # Every child keeps its normal resource admission and checks.

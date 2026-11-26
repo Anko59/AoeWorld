@@ -174,6 +174,7 @@ fn agents_run_focused_checks_and_need_a_lease_for_whole_suites() {
             "make test-e2e AOE_E2E_SPECS='a.spec.ts b.spec.ts'",
         );
         denied(&fixture, role, "make test-e2e");
+        denied(&fixture, role, "make test-e2e-repeat");
         denied(&fixture, role, "make test-e2e AOE_E2E_SPECS='a b c d e f'");
         denied(&fixture, role, "make lease AOE_LEASE_TARGET=test-unit");
     }

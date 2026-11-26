@@ -78,6 +78,7 @@ DOCKER_RUN := \
 .PHONY: \
   test-wasm \
   test-e2e \
+  test-e2e-repeat \
   test-creator-source \
   test-geographic-matrix \
   deny \
