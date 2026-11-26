@@ -135,6 +135,13 @@ async fn refusals_name_the_reason() {
 }
 
 #[tokio::test]
+async fn opponents_are_available_without_a_host_command_when_the_server_plays_them() {
+    let mut state = state(None);
+    state.ai_runtime = crate::config::AiRuntime::Rust;
+    assert!(status(&state).await.ai_available);
+}
+
+#[tokio::test]
 async fn a_skirmish_places_every_village_starts_its_hosts_and_stop_ends_them() {
     // A host that never connects: the match waits in ConnectingAi.
     let launch = Launch {

@@ -3,7 +3,7 @@
 //! The interface these tests pin, for the implementer:
 //! - `crate::config::AiRuntime { Python, Rust }` (`Debug`, `PartialEq`, `Copy`)
 //!   and `Config::ai_runtime_from(Option<&str>) -> Result<AiRuntime, String>`,
-//!   the parser behind `Config::ai_runtime_from_env`; unset means `Python`.
+//!   the parser behind `Config::ai_runtime_from_env`; unset means `Rust`.
 //! - `crate::gameplay_match::play_ai_seats(&AppState, AiRuntime) -> usize`
 //!   seats every non-human slot of the state's current match in process and
 //!   returns how many; with `Python` it seats none. The current match then
