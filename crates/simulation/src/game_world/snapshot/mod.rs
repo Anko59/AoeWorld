@@ -190,10 +190,12 @@ impl GameWorld {
         let mut report = RestoreReport::default();
         // Identities are placed one at a time at their own number: buildings
         // first (a sheltered unit needs its building), then units.
-        for record in &snapshot.buildings {
-            self.expect_id(record.id);
-            self.restore_building(record, &mut report);
-        }
+        self.count_housing_once(|world| {
+            for record in &snapshot.buildings {
+                world.expect_id(record.id);
+                world.restore_building(record, &mut report);
+            }
+        });
         for record in &snapshot.units {
             self.expect_id(record.unit.id);
             self.restore_unit(record, &mut report);

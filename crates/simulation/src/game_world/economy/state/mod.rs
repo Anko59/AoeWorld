@@ -26,6 +26,10 @@ pub(crate) struct TickWork {
     pub(crate) builder_slept: usize,
     /// Occupant entries actually visited by garrison healing.
     pub(crate) garrison_units: usize,
+    /// Cumulative buildings read by counts of a player's population space, and
+    /// training buildings looked at when a player's population changed.
+    pub(crate) housing_reads: usize,
+    pub(crate) training_reads: usize,
 }
 
 #[derive(Debug, Default)]
@@ -58,6 +62,9 @@ pub(crate) struct Economy {
     pub(crate) transport_journeys: BTreeMap<EntityId, super::super::navy::Journey>,
     pub(crate) embarked: BTreeMap<EntityId, EntityId>,
     pub(crate) players: BTreeMap<PlayerId, PlayerEconomy>,
+    /// Owners whose population space is counted when the bulk load under way
+    /// ends (`GameWorld::count_housing_once`); `None` outside one.
+    pub(crate) housing_due: Option<BTreeSet<PlayerId>>,
     pub(crate) market_recovery: super::market::MarketRecovery,
     pub(crate) income: BTreeMap<PlayerId, income::Income>,
     pub(crate) buildings: BTreeMap<EntityId, GameBuilding>,
@@ -101,4 +108,29 @@ pub(crate) struct Economy {
     pub(crate) construction: super::construction::ConstructionTimers,
     pub(crate) depletions: Vec<aoe_map::Depletion>,
     pub(crate) limits: WorldLimits,
+}
+
+/// Test-only work accounting, kept here: the architecture check reads a file
+/// only up to its first test-only item.
+impl Economy {
+    #[cfg_attr(not(test), allow(unused_variables))]
+    pub(super) fn note_housing_read(&mut self, player: PlayerId) {
+        #[cfg(test)]
+        {
+            self.tick_work.housing_reads += super::buildings::BUILDING_RULES
+                .iter()
+                .filter(|rules| rules.population_support > 0)
+                .filter_map(|rules| self.dropoffs.get(&(player, rules.kind)))
+                .map(Vec::len)
+                .sum::<usize>();
+        }
+    }
+
+    #[cfg_attr(not(test), allow(unused_variables))]
+    pub(super) fn note_training_reads(&mut self, queues: usize) {
+        #[cfg(test)]
+        {
+            self.tick_work.training_reads += queues;
+        }
+    }
 }
