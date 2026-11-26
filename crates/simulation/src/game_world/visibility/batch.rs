@@ -1,5 +1,5 @@
-//! Observer changes made during a movement tick, applied per player in
-//! parallel. A player's sight is touched only by that player's changes, so
+//! Observer changes made during a movement tick or as fog returns, applied per
+//! player in parallel. A player's sight is touched only by its own changes, so
 //! each player's changes run in order on its own `PlayerVision` as one task.
 //! That task also decides its building-watch events, which read only its own
 //! sight; the shared watcher sets are then written in the same per-player
@@ -14,6 +14,9 @@ use crate::Terrain;
 use crate::game_world::parallel::par_each_mut;
 use aoe_core::PlayerId;
 use std::collections::BTreeMap;
+
+/// Changes that returning fog queues before it applies them.
+pub(super) const FOG_SLICE: usize = 65_536;
 
 struct Job {
     player: PlayerId,
@@ -56,7 +59,50 @@ impl GameWorld {
         self.apply_vision_changes(changes);
     }
 
-    /// Queues the changes while a movement tick runs, otherwise applies them now.
+    /// The disc of every unit, building and living owned animal, in that order,
+    /// when fog returns. Slices of `slice` changes bound the queue whatever the
+    /// population. They skip `flush_vision_batch`, which is a measured stage of
+    /// the tick.
+    pub(super) fn observe_all(&mut self, slice: usize) {
+        self.begin_vision_batch();
+        let units = self.units().map(|u| u.id).collect::<Vec<_>>();
+        let buildings = self.buildings().map(|b| b.id).collect::<Vec<_>>();
+        for id in units {
+            self.update_unit_vision(id);
+            self.apply_full_slice(slice);
+        }
+        for id in buildings {
+            self.update_building_vision(id);
+            self.apply_full_slice(slice);
+        }
+        let animals = self
+            .animals()
+            .filter(|a| a.hp > 0)
+            .filter_map(|a| {
+                a.owner
+                    .map(|p| (a.id, p, a.position.tile_floor(), a.kind.rules().los_tiles))
+            })
+            .collect::<Vec<_>>();
+        for (id, p, tile, los) in animals {
+            self.update_observer(id, Some((p, tile, los)));
+            self.apply_full_slice(slice);
+        }
+        // Closes the batch; a full last slice leaves nothing to apply.
+        if let Some(rest) = self.vision.batch.take().filter(|rest| !rest.is_empty()) {
+            self.apply_vision_changes(rest);
+        }
+    }
+
+    /// Applies the queue once it holds `slice` changes; the batch stays open.
+    fn apply_full_slice(&mut self, slice: usize) {
+        let queue = self.vision.batch.as_mut();
+        if let Some(full) = queue.filter(|queue| queue.len() >= slice) {
+            let changes = std::mem::take(full);
+            self.apply_vision_changes(changes);
+        }
+    }
+
+    /// Queues the changes while a batch is open, otherwise applies them now.
     pub(super) fn submit_vision_changes(&mut self, changes: Vec<Change>) {
         match self.vision.batch.as_mut() {
             Some(batch) => batch.extend(changes),

@@ -2,6 +2,8 @@ use super::{PlayerVision, TileVisibility};
 use crate::{GameBuilding, GameWorld};
 use aoe_core::{EntityId, PlayerId, Seed, TileCoord, TileRect, WorldConfig};
 
+mod fog_cycle;
+
 #[test]
 fn empty_visibility_chunks_are_retired_but_exploration_persists() {
     let mut vision = PlayerVision::default();
