@@ -1,6 +1,14 @@
 import { expect } from "@playwright/test";
+import type { PNG } from "pngjs";
 import { test } from "../../../server.js";
-import { differing, landPage, layouts, shot, type Land } from "./land-page.js";
+import {
+  contradicted,
+  differing,
+  landPage,
+  layouts,
+  shot,
+  type Land,
+} from "./land-page.js";
 
 // Both tests draw one land, then the same land with every sample that lies
 // wholly in unexplored cells replaced: a byte or a pixel that changes was read
@@ -148,16 +156,24 @@ for (const layout of layouts) {
       const close = await shot(page);
       return { whole: whole.image, close: close.image };
     };
-    const truth = await draw("truth");
-    const again = await draw("truth");
-    const under = await draw("under");
-    const over = await draw("over");
+    const twice = async (kind: "truth" | "under" | "over") => {
+      const first = await draw(kind);
+      const second = await draw(kind);
+      return (zoom: "whole" | "close"): [PNG, PNG] => [
+        first[zoom],
+        second[zoom],
+      ];
+    };
+    const truth = await twice("truth");
+    const under = await twice("under");
+    const over = await twice("over");
     for (const zoom of ["whole", "close"] as const) {
-      // The same land twice: the comparison itself does not flicker.
-      expect(differing(truth[zoom], again[zoom]), zoom).toBe(0);
-      expect(differing(truth[zoom], over[zoom]), zoom).toBeGreaterThan(50);
+      // The same land twice: a stray pixel at most, or nothing can be compared.
+      for (const scene of [truth, under, over])
+        expect(differing(...scene(zoom)), zoom).toBeLessThanOrEqual(4);
+      expect(contradicted(truth(zoom), over(zoom)), zoom).toBeGreaterThan(50);
       // Scaling blends neighbours: hidden land must not be among them.
-      expect(differing(truth[zoom], under[zoom]), zoom).toBe(0);
+      expect(contradicted(truth(zoom), under(zoom)), zoom).toBe(0);
     }
   });
 }

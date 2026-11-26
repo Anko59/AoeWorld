@@ -46,7 +46,10 @@ test("the 256 mask keeps its contracts beside the composed land", async ({
       await land.frames(1);
     }
     const after = bytes();
-    fog(false, new Uint32Array(65536).map((_, at) => at | (1 << 16)));
+    fog(
+      false,
+      new Uint32Array(65536).map((_, at) => at | (1 << 16)),
+    );
     const full = mask();
     const composed = land.composed();
     const painted = getComputedStyle(fog.canvas).visibility;

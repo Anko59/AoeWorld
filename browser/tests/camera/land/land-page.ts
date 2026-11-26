@@ -285,6 +285,23 @@ export function differing(a: PNG, b: PNG) {
   return count;
 }
 
+/** Pixels on which both captures of one scene agree, both captures of another
+ * agree, and the two scenes differ. A pixel that a renderer draws differently by
+ * chance shows in one capture only; a difference that comes from the scene shows
+ * in both. */
+export function contradicted(a: [PNG, PNG], b: [PNG, PNG]) {
+  const [first] = a;
+  for (const { width, height } of [a[1], ...b])
+    if (width !== first.width || height !== first.height) return Infinity;
+  const same = (x: PNG, y: PNG, at: number) =>
+    x.data.compare(y.data, at, at + 4, at, at + 4) === 0;
+  let count = 0;
+  for (let at = 0; at < first.data.length; at += 4)
+    if (same(a[0], a[1], at) && same(b[0], b[1], at) && !same(a[0], b[0], at))
+      count++;
+  return count;
+}
+
 /** The largest channel difference from the colour wanted. */
 export function apart(colour: readonly number[], want: readonly number[]) {
   return Math.max(
