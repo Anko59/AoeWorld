@@ -124,7 +124,6 @@
     {"count":1,"expr":"(1024 + 2 * budget) * length <= dot","file":"crates/simulation/src/game_world/movement_step/contact.rs","kind":"cmp"},
     {"count":1,"expr":"budget == 0","file":"crates/simulation/src/game_world/movement_step/contact.rs","kind":"cmp"},
     {"count":1,"expr":"budget == 0","file":"crates/simulation/src/game_world/movement_step/lookahead.rs","kind":"cmp"},
-    {"count":1,"expr":"budget -=","file":"crates/simulation/src/game_world/movement_step/lookahead.rs","kind":"refill"},
     {"count":2,"expr":"self.local_refinement_left <= reserve","file":"crates/simulation/src/game_world/movement_step/refinement.rs","kind":"cmp"},
     {"count":2,"expr":"self.local_refinement_left -=","file":"crates/simulation/src/game_world/movement_step/refinement.rs","kind":"refill"},
     {"count":1,"expr":".take(4)","file":"crates/simulation/src/game_world/movement_step/refinement.rs","kind":"take"},
