@@ -51,8 +51,15 @@ pub const HUMAN_COMMAND_BURST: usize = 1_024;
 pub const MAX_PENDING_COMMANDS_GLOBAL: usize = 16_384;
 pub const MAX_ACK_HISTORY: usize = 64;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ResumeToken(pub [u8; 24]);
+
+/// A token is a seat's credential: no log, error or panic may print it.
+impl fmt::Debug for ResumeToken {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("ResumeToken(..)")
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct UnitState {

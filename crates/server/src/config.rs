@@ -86,9 +86,11 @@ impl Config {
     pub fn arena_from_env() -> bool {
         env::var("AOE_ARENA").is_ok_and(|value| value == "1")
     }
+    /// The variable of the hosting secret, which no AI host inherits.
+    pub(crate) const MATCH_TOKEN: &str = "AOE_MATCH_TOKEN";
     /// `AOE_MATCH_TOKEN`: the secret that enables `POST /match`.
     pub(crate) fn match_admin_token_from_env() -> Option<String> {
-        env::var("AOE_MATCH_TOKEN")
+        env::var(Self::MATCH_TOKEN)
             .ok()
             .filter(|value| value.len() >= 16)
     }

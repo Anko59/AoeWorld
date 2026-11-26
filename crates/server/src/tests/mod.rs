@@ -3,6 +3,7 @@ use aoe_scenario::SMOKE;
 use std::{net::SocketAddr, time::Duration};
 
 mod admin;
+mod authority;
 mod cache;
 mod france_march;
 mod pause;

@@ -1,5 +1,6 @@
 //! Hosting a match: several seats on one map, each with its own village.
 use crate::gameplay::SlotSetup;
+use crate::gameplay_transport::same_secret;
 use crate::{AiRuntime, AppState, GameplayService, map_store, maps};
 use aoe_core::{PlayerId, TileCoord};
 use aoe_map::{EnvironmentPageProvider, MAP_SCHEMA_VERSION, MapPackage, MapRequest};
@@ -13,7 +14,7 @@ use std::sync::{
 };
 
 /// Header carrying the match-hosting secret (`AOE_MATCH_TOKEN`).
-pub(crate) const ADMIN_TOKEN_HEADER: &str = "x-aoeworld-admin-token";
+const ADMIN_TOKEN_HEADER: &str = "x-aoeworld-admin-token";
 
 /// Upper bound on seats of one match (the simulation's player capacity).
 pub const MAX_MATCH_SLOTS: usize = aoe_protocol::MAX_ECONOMY_PLAYERS;
@@ -213,14 +214,19 @@ fn hex(token: ResumeToken) -> String {
     token.0.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+/// Whether a request presents the hosting secret, for every route that needs it.
+pub(crate) fn presents_secret(state: &AppState, headers: &HeaderMap) -> bool {
+    let secret = state.match_admin_token.as_deref();
+    let given = headers
+        .get(ADMIN_TOKEN_HEADER)
+        .and_then(|value| value.to_str().ok());
+    secret
+        .zip(given)
+        .is_some_and(|(secret, given)| same_secret(secret.as_bytes(), given.as_bytes()))
+}
+
 fn authorize(state: &AppState, headers: &HeaderMap) -> Result<(), (StatusCode, String)> {
-    let allowed = state.match_admin_token.as_deref().is_some_and(|secret| {
-        headers
-            .get(ADMIN_TOKEN_HEADER)
-            .and_then(|value| value.to_str().ok())
-            .is_some_and(|given| given == secret)
-    });
-    if allowed {
+    if presents_secret(state, headers) {
         Ok(())
     } else {
         Err((

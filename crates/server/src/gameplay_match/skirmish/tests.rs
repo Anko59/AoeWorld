@@ -3,6 +3,8 @@ use aoe_map::{MAP_SCHEMA_VERSION, MapPackage, MapRequest, Ratio};
 use aoe_protocol::GameplayServerMessage;
 use axum::http::HeaderValue;
 
+mod hosts;
+
 fn state(launch: Option<Launch>) -> AppState {
     let config = crate::Config {
         bind: "127.0.0.1:0".parse().expect("address"),

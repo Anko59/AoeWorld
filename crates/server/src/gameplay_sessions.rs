@@ -1,4 +1,5 @@
 use crate::GameplayService;
+use crate::gameplay_transport::same_token;
 use aoe_protocol::{GameplayServerMessage, ResumeToken};
 
 impl GameplayService {
@@ -52,7 +53,7 @@ impl GameplayService {
     pub fn is_human_token(&self, token: ResumeToken) -> bool {
         self.slots
             .iter()
-            .any(|slot| slot.human && slot.token == token)
+            .any(|slot| slot.human && same_token(slot.token, token))
     }
 
     pub(super) async fn send_to(&self, session_id: u64, message: GameplayServerMessage) {
