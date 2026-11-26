@@ -25,12 +25,12 @@ CI uses the same caps and immediate admission; each job has its own runner. `mak
 | lint | `make lint` | fmt-check | native | [Stop, Commit, Pr, Ci, Nightly, Preflight] | 600 | — | Clippy exit status |
 | deny | `make deny` | — | native | [Stop, Commit, Pr, Ci, Nightly, Preflight] | 600 | — | Cargo advisory, source, license, and bans audit |
 | test-unit | `make test-unit` | lint | native | [Pr, Ci, Nightly] | 900 | — | native unit, integration, and doctest results |
-| coverage | `make coverage` | test-unit, build-wasm | native | [Ci, Nightly] | 3600 | yes | LCOV production-line counts and JSON report |
+| coverage | `make coverage` | test-unit, build-wasm | native | [Ci] | 3600 | yes | LCOV production-line counts and JSON report |
 | fuzz-smoke | `make fuzz-smoke` | test-unit | native, assets, release | [Pr, Ci, Nightly] | 1800 | — | 512 bounded libFuzzer runs per parser and JSON report |
 | fuzz-nightly | `make fuzz-nightly` | fuzz-smoke | native, assets, release | [Nightly] | 5400 | — | 300-second libFuzzer campaign per parser and JSON report |
-| browser-check | `make browser-check` | — | browser | [Stop, Commit, Pr, Ci, Nightly] | 600 | — | TypeScript, ESLint, and Prettier results |
+| browser-check | `make browser-check` | — | browser | [Stop, Commit, Pr, Ci] | 600 | — | TypeScript, ESLint, and Prettier results |
 | test-wasm | `make test-wasm` | test-unit, browser-check, build-wasm | browser | [Pr, Ci, Nightly] | 1800 | — | wasm-bindgen-test in pinned Chromium and JSON report |
-| test-e2e | `make test-e2e` | test-unit, browser-check, build-wasm | browser | [Pr, Ci, Nightly] | 2400 | yes | Playwright result and screenshots |
+| test-e2e | `make test-e2e` | test-unit, browser-check, build-wasm | browser | [Pr, Ci] | 2400 | yes | Playwright result and screenshots |
 | perf-smoke | `make perf-smoke` | test-unit | native | [Pr, Ci, Nightly] | 600 | yes | versioned synthetic JSON report |
 | perf-ci | `make perf-ci` | perf-smoke, perf-instructions, perf-wasm-size | performance | [Pr, Ci, Nightly] | 1800 | yes | target counts and baseline comparisons |
 | perf-scale-smoke | `make perf-scale-smoke` | — | performance | [Nightly] | 900 | yes | 4-player, 2,000-unit, 50-tick run of the scale benchmark writing valid JSON |
@@ -61,9 +61,9 @@ CI uses the same caps and immediate admission; each job has its own runner. `mak
 | perf-full | `make perf-full` | perf-instructions, perf-wasm-size, perf-smoke | performance | [Nightly] | 3600 | yes | population and sparse-world scaling counts and existing comparisons |
 | test-memory-source | `make test-memory-source` | build-wasm, browser-check | browser, assets | [Qualification] | 3600 | — | activated real-pack source map shared-surface browser route |
 | test-creator-source | `make test-creator-source` | build-wasm, browser-check, test-unit | browser | [Qualification] | 5400 | — | overview and detailed source maps across restart |
-| test-source-qualification | `make test-source-qualification` | test-unit | native | [Ci, Nightly, Qualification] | 3600 | — | slow offline source-qualification movement and package tests, plus the full-scale navigation and economy measurements, that test-unit excludes |
-| test-exhaustive | `make test-exhaustive` | test-unit | native | [Ci, Nightly] | 1800 | — | 16-seed landscape sweeps and full-axis geodata round-trips that test-unit runs on two seeds or reduced axes |
-| sdk-python-test | `make sdk-python-test` | test-unit | native, ai | [Ci, Nightly] | 3600 | — | pytest results of the Python bindings, the example AI decision logic, the standard start and a seeded Dark-to-Feudal game between bots on the AI arena (five seeds) |
+| test-source-qualification | `make test-source-qualification` | test-unit | native | [Ci, Qualification] | 3600 | — | slow offline source-qualification movement and package tests, plus the full-scale navigation and economy measurements, that test-unit excludes |
+| test-exhaustive | `make test-exhaustive` | test-unit | native | [Ci] | 1800 | — | 16-seed landscape sweeps and full-axis geodata round-trips that test-unit runs on two seeds or reduced axes |
+| sdk-python-test | `make sdk-python-test` | test-unit | native, ai | [Ci] | 3600 | — | pytest results of the Python bindings, the example AI decision logic, the standard start and a seeded Dark-to-Feudal game between bots on the AI arena (five seeds) |
 | sdk-python-bindings | `make sdk-python-bindings` | test-unit | native | [Pr, Ci] | 1200 | — | pytest results of the Python bindings against a local server, without the AI games |
 | test-geographic-matrix | `make test-geographic-matrix` | test-unit | browser | [Qualification] | 5400 | — | prepared and verified fixed overview source regions |
 | test-geographic-visuals | `make test-geographic-visuals` | build-wasm, browser-check, test-unit | browser | [Qualification] | 5400 | — | water and Alpine source packages on WebGPU and Canvas |

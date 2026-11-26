@@ -148,7 +148,8 @@ impl World {
     }
     /// A top-left tile for a new building near `(x, y)`: explored, walkable,
     /// clear of resources and buildings, with `gap` free tiles around it.
-    #[pyo3(signature = (kind, x, y, max_radius=24, gap=1))]
+    /// Top-left tiles in `avoid` (sites the server refused) are never returned.
+    #[pyo3(signature = (kind, x, y, max_radius=24, gap=1, avoid=None))]
     fn find_build_site(
         &self,
         kind: BuildingKind,
@@ -156,9 +157,15 @@ impl World {
         y: i32,
         max_radius: i32,
         gap: i32,
+        avoid: Option<Vec<(i32, i32)>>,
     ) -> Option<(i32, i32)> {
+        let avoid: Vec<TileCoord> = avoid
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(x, y)| TileCoord::new(x, y))
+            .collect();
         self.inner
-            .find_build_site(kind.into(), TileCoord::new(x, y), max_radius, gap)
+            .find_build_site(kind.into(), TileCoord::new(x, y), max_radius, gap, &avoid)
             .map(|tile| (tile.x, tile.y))
     }
     fn __repr__(&self) -> String {

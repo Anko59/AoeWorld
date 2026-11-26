@@ -12,5 +12,6 @@ mod fake;
 mod geometry;
 mod management;
 mod play;
+mod recorder;
 mod roster;
 mod scouts;

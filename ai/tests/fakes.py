@@ -111,9 +111,12 @@ class FakeWorld:
     def animals(self):
         return list(self._animals)
 
-    def find_build_site(self, kind, x, y, max_radius=24, gap=1):
+    def find_build_site(self, kind, x, y, max_radius=24, gap=1, avoid=()):
         self.sites.append((kind, x, y))
-        return (x + 3, y + 3)
+        site = (x + 3, y + 3)
+        while site in avoid:  # like the SDK: the next site along the row
+            site = (site[0] + 1, site[1])
+        return site
 
 
 class FakeClient:

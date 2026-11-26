@@ -288,7 +288,8 @@ until_tick=None, max_decisions=None) -> RunSummary`, `world`, `closed`, `close_r
 `my_buildings(kind, complete_only)`, `known_enemy_buildings()`, `building(id)`,
 `town_center()`, `unfinished_buildings()`, `animals()`, `resources(kind)`,
 `nearest_resource(kind, x, y)`, `visibility(x, y)`, `passable(x, y)`,
-`find_build_site(kind, x, y, max_radius, gap)`.
+`find_build_site(kind, x, y, max_radius, gap, avoid)`; `avoid` lists top-left tiles
+the server refused, which are never returned.
 
 `Unit`, `Building`, `ResourceNode`, `Animal`, `Economy` (stockpile, population,
 `age`, `researched`, market prices, `can_afford`) and `Event` are read-only
@@ -420,8 +421,7 @@ attacker. These are SDK observations, not privileged simulation state.
 `ai/tests/test_full_game.py` plays seeds 1-5 on a 300-tile flat map, two bots, up
 to 30 game minutes, and requires per bot: Feudal Age, at least ten soldiers at
 once (`SOLDIERS`) and, per match, one landed blow (an enemy's health fell with
-our soldiers within 12 tiles). `sdk-python-test`, which blocks `ci` and
-`nightly`, runs it because all five seeds passed on the revision that
+our soldiers within 12 tiles). `sdk-python-test`, which blocks `ci`, runs it because all five seeds passed on the revision that
 introduced it (development machine, shared, so wall times only indicate):
 
 | seed | Feudal minute (bot 0 / 1) | army peak (0 / 1) | blows landed (0 / 1) | wall |

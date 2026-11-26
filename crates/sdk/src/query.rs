@@ -195,13 +195,16 @@ impl World {
     /// A tile for a new `kind` building near `near`, or `None`: every footprint
     /// tile explored exactly (not inferred from the overview), walkable and
     /// free of resources and known buildings, with
-    /// `gap` free tiles around so villagers can still pass.
+    /// `gap` free tiles around so villagers can still pass. A top-left tile in
+    /// `avoid` is never returned: a caller whose nearest site was refused asks
+    /// again without it and gets the next one, not the same one forever.
     pub fn find_build_site(
         &self,
         kind: BuildingKind,
         near: TileCoord,
         max_radius: i32,
         gap: i32,
+        avoid: &[TileCoord],
     ) -> Option<TileCoord> {
         if kind == BuildingKind::Bridge {
             return None;
@@ -225,7 +228,7 @@ impl World {
                     }
                     let origin = TileCoord::new(near.x + dx, near.y + dy);
                     let rect = TileRect::from_xywh(origin.x, origin.y, side, depth);
-                    if self.site_is_free(kind, rect, gap, &blocked) {
+                    if !avoid.contains(&origin) && self.site_is_free(kind, rect, gap, &blocked) {
                         return Some(origin);
                     }
                 }

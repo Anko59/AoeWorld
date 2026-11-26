@@ -85,7 +85,8 @@ fn the_route_make_target_and_workflow_reach_the_triage() {
         .filter_map(|line| line.strip_prefix("  ")?.strip_suffix(':'))
         .filter(|name| !name.starts_with(' '))
         .collect();
-    assert!(jobs.len() >= 4, "{jobs:?}");
+    // parser-fuzz, target-performance and network-soak: the jobs no push runs.
+    assert!(jobs.len() >= 3, "{jobs:?}");
     for job in jobs {
         assert!(
             needs
@@ -237,4 +238,119 @@ fn closed_nightly_issue_warns_and_cli_succeeds() {
         "{error}"
     );
     assert!(!stub.calls().contains("<comment>"));
+}
+
+fn run_jobs() -> String {
+    serde_json::json!({"jobs": [
+        {"id": 11, "name": "parser", "conclusion": "success",
+         "html_url": "https://github.com/project/checkout/actions/runs/123/job/11", "steps": []},
+        {"id": 22, "name": "full-functional", "conclusion": "failure",
+         "html_url": "https://github.com/project/checkout/actions/runs/123/job/22",
+         "steps": [
+            {"name": "Run make preflight", "number": 5, "conclusion": "success"},
+            {"name": "Run make sdk-python-test", "number": 7, "conclusion": "failure"},
+            {"name": "Run make test-e2e", "number": 8, "conclusion": "skipped"}
+         ]}
+    ]})
+    .to_string()
+}
+
+const JOB_LOG: &str = "\
+2026-11-26T11:40:30.1Z PASS [   0.2s] (1/9) crate a::ok\n\
+2026-11-26T11:40:31.2Z         FAIL [   0.4s] (2/9) aoe-server map_worker::slow_start\n\
+2026-11-26T11:40:32.3Z FAILED ai/tests/test_full_game.py::test_bots_reach_feudal - AssertionError: {'seed': 4}\n\
+2026-11-26T11:40:32.4Z FAILED ai/tests/test_full_game.py::test_bots_reach_feudal - AssertionError: {'seed': 4}\n\
+2026-11-26T11:40:33.5Z error: python3 exited with Some(1); log: reports/process/python3.log\n\
+2026-11-26T11:40:33.6Z ##[error]Process completed with exit code 2.\n";
+
+#[test]
+fn a_failing_job_names_its_step_its_failing_tests_and_links_the_log() {
+    let mut stub = Stub::new(&serde_json::json!([]));
+    stub.set("GH_JOBS_JSON", &run_jobs());
+    stub.set("GH_JOB_LOG", JOB_LOG);
+    triage(
+        &stub.root,
+        &needs(&[("parser", "success"), ("full-functional", "failure")]),
+        Some("123"),
+    )
+    .unwrap();
+    let calls = stub.calls();
+    assert!(
+        calls.contains("<repos/project/checkout/actions/runs/123/jobs?per_page=100>"),
+        "{calls}"
+    );
+    assert!(
+        calls.contains("<repos/project/checkout/actions/jobs/22/logs>"),
+        "{calls}"
+    );
+    assert!(
+        !calls.contains("actions/jobs/11/logs"),
+        "only failing jobs have their log read"
+    );
+    let body = stub.bodies();
+    assert!(
+        body.contains("- [ ] `full-functional` failed at step `Run make sdk-python-test`: https://github.com/project/checkout/actions/runs/123/job/22#step:7:1"),
+        "{body}"
+    );
+    assert!(
+        body.contains("`FAIL [   0.4s] (2/9) aoe-server map_worker::slow_start`"),
+        "{body}"
+    );
+    assert!(body.contains("`FAILED ai/tests/test_full_game.py::test_bots_reach_feudal - AssertionError: {'seed': 4}`"), "{body}");
+    assert_eq!(
+        body.matches("test_bots_reach_feudal").count(),
+        1,
+        "a repeated line is listed once"
+    );
+    assert!(
+        body.contains("`error: python3 exited with Some(1); log: reports/process/python3.log`"),
+        "{body}"
+    );
+    assert!(
+        !body.contains("##[error]") && !body.contains("PASS"),
+        "{body}"
+    );
+}
+
+#[test]
+fn failure_lines_are_capped_and_cannot_break_the_markdown() {
+    let log: String = (0..40)
+        .map(|n| {
+            format!(
+                "2026-11-26T11:40:30.1Z FAILED test_{n} `x` {}\n",
+                "y".repeat(400)
+            )
+        })
+        .collect();
+    let lines = failure_lines(&log);
+    assert_eq!(lines.len(), FAILURE_LINES);
+    for line in lines {
+        assert!(
+            line.chars().count() <= LINE_CHARS && !line.contains('`'),
+            "{line}"
+        );
+    }
+    assert!(failure_lines("nothing wrong here\n").is_empty());
+}
+
+#[test]
+fn a_run_the_api_cannot_describe_still_gets_the_plain_line() {
+    let mut stub = Stub::new(&serde_json::json!([]));
+    stub.set("GH_JOBS_JSON", "not json");
+    triage(&stub.root, &needs(&[("parser", "failure")]), Some("123")).unwrap();
+    assert!(
+        stub.bodies().contains("- [ ] `parser` failed\n"),
+        "{}",
+        stub.bodies()
+    );
+    // A job the run does not list, and a run without an id, keep the plain line too.
+    stub.set("GH_JOBS_JSON", &run_jobs());
+    triage(&stub.root, &needs(&[("other", "failure")]), Some("123")).unwrap();
+    triage(&stub.root, &needs(&[("full-functional", "failure")]), None).unwrap();
+    let bodies = stub.bodies();
+    assert!(bodies.contains("- [ ] `other` failed\n"), "{bodies}");
+    assert!(
+        bodies.contains("- [ ] `full-functional` failed\n"),
+        "{bodies}"
+    );
 }

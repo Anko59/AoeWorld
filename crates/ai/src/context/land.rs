@@ -81,6 +81,17 @@ impl Context<'_> {
             return None;
         }
         self.site_queries += 1;
-        self.world.find_build_site(kind, near, max_radius, gap)
+        // A site the server refused stays refused: ask for the next nearest,
+        // or the one nearest refused site would answer every search.
+        let name = format!("{kind:?}");
+        let avoid: Vec<Tile> = self
+            .board
+            .bad_sites
+            .iter()
+            .filter(|(refused, ..)| *refused == name)
+            .map(|&(_, x, y)| (x, y))
+            .collect();
+        self.world
+            .find_build_site(kind, near, max_radius, gap, &avoid)
     }
 }

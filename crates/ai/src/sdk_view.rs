@@ -86,8 +86,10 @@ impl View for World {
         near: Tile,
         max_radius: i32,
         gap: i32,
+        avoid: &[Tile],
     ) -> Option<Tile> {
-        World::find_build_site(self, kind, coord(near), max_radius, gap).map(tile)
+        let avoid: Vec<_> = avoid.iter().map(|&tile| coord(tile)).collect();
+        World::find_build_site(self, kind, coord(near), max_radius, gap, &avoid).map(tile)
     }
     fn find_bridge_site(&self, from: Tile, to: Tile) -> Option<(Tile, Tile)> {
         World::find_bridge_site(self, coord(from), coord(to)).map(|(a, b)| (tile(a), tile(b)))

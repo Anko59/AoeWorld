@@ -81,7 +81,7 @@ transitively (`cargo metadata`). A file outside every crate (root `Cargo.toml`,
 workspace; a change under `web/`, `browser/` and `docs/` only runs no Rust unit
 tests and says so. The first and last lines of the run, and so the gate
 evidence, show `test-unit: N of M crates (changed: a, b; dependents: c, d)`.
-CI (`GITHUB_ACTIONS=true`), nightly, a plain `make test-unit` and `AOE_TEST_ALL=1`
+CI (`GITHUB_ACTIONS=true`), a plain `make test-unit` and `AOE_TEST_ALL=1`
 always run the full suite.
 
 For local iteration, `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation
@@ -135,16 +135,16 @@ cheap navigation test cannot reach that threshold, and their cross-worker
 property is checked post-merge only.
 
 The tier is a `qualification` gate (`gates/registry.json`), so it must run
-post-merge or nightly; a PR that changes walkability, pathing or source
+post-merge; a PR that changes walkability, pathing or source
 qualification should also run it locally. The tests stay byte-identical.
 
 **Exhaustive tier (#388).** `make test-unit` also excludes, and
 `make test-exhaustive` runs exactly (`--no-tests fail`), the tests listed in
 `EXHAUSTIVE` in the same `tiers.rs`: the 16-seed landscape sweeps and the
 full 1024-axis geodata preparations and round-trips. The `exhaustive` gate has
-the `ci` and `nightly` cadences (it blocks both, like `coverage`; it is not
+the `ci` cadence (it blocks it, like `coverage`; it is not
 source qualification, so it has no `qualification` cadence) and a CI job like
-`qualification` (pushes to `dev` and `main`, nightly, never pull requests); a
+`qualification` (pushes to `dev` and `main`, never pull requests); a
 harness test checks every listed name is a real `#[test]` function. Where a
 test sweeps seeds or axes, a fast variant of the same assertion stays in
 `make test-unit`, so a gate change or a regression visible on two seeds is
