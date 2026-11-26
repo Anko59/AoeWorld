@@ -175,15 +175,16 @@ request that added the scenarios.
 
 | scenario | 1 worker | 4 workers | of which start |
 | --- | --- | --- | --- |
-| `natural`, 10,000 ticks | 60 s (86 s) | 47 s (107 s) | 5 s (7 to 9 s) |
-| `late`, 1,200 ticks | 55 s (91 s) | 55 s (77 s) | 7 s (8 to 13 s) |
+| `natural`, 10,000 ticks | 54 s | 46 s | 5 to 6 s |
+| `late`, 1,200 ticks | 55 s | 44 s | 7 s |
 
-The first number is a run on a quiet machine, the number in brackets a run
-while other builds shared the machine (load average above 5): wall time moves
-by half and more, and at 4 workers a busy machine is slower than at 1. The game
-numbers did not move between the two runs. Both are inside the two-minute budget
-of a pull-request scenario at one worker count; a tick of `late` takes the same
-time at 4 workers as at 1 on a quiet machine.
+These are runs on a quiet machine (load average 2.6 to 4.4). The same scenarios
+took 86 s and 107 s (`natural`) and 91 s and 77 s (`late`) on a machine shared
+with other builds, so wall time moves by half and more, and at 4 workers a busy
+machine can be slower than at 1. The game numbers are the same on a busy and a
+quiet machine; they change when the game changes (the route planning of #1122
+moved them a little). Both scenarios are inside the two-minute budget of a
+pull-request scenario at one worker count.
 
 ## What is not here yet
 
