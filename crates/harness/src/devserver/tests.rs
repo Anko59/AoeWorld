@@ -12,6 +12,7 @@ use std::{
     thread,
 };
 
+pub(crate) mod clock;
 mod decisions;
 mod fingerprint;
 mod lock;

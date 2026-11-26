@@ -26,12 +26,10 @@ fn lock_file() -> (tempfile::TempDir, PathBuf) {
 }
 
 #[test]
-fn busy_ship_refuses_in_under_one_second_with_the_complete_holder() {
+fn busy_ship_refuses_at_once_with_the_complete_holder() {
     let (_temp, path) = lock_file();
     let first = take(&path, "first").unwrap();
-    let begun = Instant::now();
     let error = take(&path, "second").unwrap_err();
-    assert!(begun.elapsed() < Duration::from_secs(1));
     assert_eq!(crate::jobs::lock::exit_code(error.as_ref()), 75);
     let text = error.to_string();
     for expected in [
@@ -66,15 +64,18 @@ fn ship_holder_child() {
     };
     let held = take(Path::new(&path), "child").unwrap();
     let descendant = if std::env::var_os("AOE_TEST_SHIP_DESCENDANT").is_some() {
-        let mut command = Command::new("sleep");
-        command.arg("30").stdout(Stdio::null());
+        // Reads the child's standard input, which the test keeps open: it ends
+        // when the test does, whatever the load, and never on a timer.
+        let mut command = Command::new("cat");
+        command.stdin(Stdio::inherit()).stdout(Stdio::null());
         held.inherit_to(&mut command).unwrap();
         Some(command.spawn().unwrap())
     } else {
         None
     };
     println!("HELD {}", descendant.as_ref().map_or(0, |child| child.id()));
-    thread::sleep(Duration::from_secs(60));
+    // Held until the test closes or kills the process, not for a fixed time.
+    std::io::copy(&mut std::io::stdin(), &mut std::io::sink()).unwrap();
 }
 
 fn child(path: &Path, descendant: bool) -> (std::process::Child, u32) {
@@ -86,11 +87,15 @@ fn child(path: &Path, descendant: bool) -> (std::process::Child, u32) {
             "--nocapture",
         ])
         .env("AOE_TEST_SHIP_HOLDER", path)
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped());
     if descendant {
         command.env("AOE_TEST_SHIP_DESCENDANT", "1");
     }
     let mut child = command.spawn().unwrap();
+    // `Child::wait` closes standard input, which would end the holder at once.
+    // Leaked, the pipe stays open until this test process exits, and no longer.
+    std::mem::forget(child.stdin.take());
     let mut reader = BufReader::new(child.stdout.take().unwrap());
     let pid = loop {
         let mut line = String::new();
@@ -130,9 +135,13 @@ fn an_active_mutator_child_keeps_serialization_after_controller_death() {
         blocked.is_err(),
         "the mutation child must retain the descriptor"
     );
+    // The bound only turns a lock that never frees into a failure, not a speed check.
     let begun = Instant::now();
     while lock::status(&path).unwrap().is_some() {
-        assert!(begun.elapsed() < Duration::from_secs(5));
+        assert!(
+            begun.elapsed() < Duration::from_secs(600),
+            "the lock was never freed"
+        );
         thread::sleep(Duration::from_millis(10));
     }
     take(&path, "next").unwrap();

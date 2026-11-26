@@ -8,6 +8,7 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 #[cfg(unix)]
@@ -26,6 +27,32 @@ struct Fingerprint {
     changed_nanoseconds: i64,
 }
 
+/// How close to "now" a file's times can be before they prove nothing. The
+/// kernel stamps files with a coarse clock that ticks every few milliseconds
+/// (a second or two on some file systems), so two writes of the same length
+/// within one tick keep all five fingerprint values. Git calls such a file
+/// "racily clean" and does not trust it (#1099).
+const FILE_CLOCK_TICK: Duration = Duration::from_secs(2);
+
+impl Fingerprint {
+    /// The later of the modification and status-change times.
+    fn latest(&self) -> SystemTime {
+        let (seconds, nanoseconds) = (self.modified_seconds, self.modified_nanoseconds)
+            .max((self.changed_seconds, self.changed_nanoseconds));
+        match u64::try_from(seconds) {
+            Ok(seconds) => {
+                UNIX_EPOCH + Duration::new(seconds, nanoseconds.clamp(0, 999_999_999) as u32)
+            }
+            Err(_) => UNIX_EPOCH,
+        }
+    }
+
+    /// Whether a write after the hashing could still carry this fingerprint.
+    fn racily_clean(&self, now: SystemTime) -> bool {
+        now < self.latest() + FILE_CLOCK_TICK
+    }
+}
+
 #[derive(Clone, Copy)]
 struct CachedHashes {
     fingerprint: Fingerprint,
@@ -35,6 +62,13 @@ struct CachedHashes {
 static VERIFIED_HASHES: OnceLock<Mutex<HashMap<PathBuf, CachedHashes>>> = OnceLock::new();
 
 pub(super) fn file_hashes(path: &Path) -> Result<FileHashes, CacheError> {
+    file_hashes_at(path, &SystemTime::now)
+}
+
+/// `file_hashes`, with `now` read once the file is hashed: a fingerprint that
+/// is not older than the file clock's tick by then is not remembered, in memory
+/// or beside the object, so the next call hashes again.
+fn file_hashes_at(path: &Path, now: &dyn Fn() -> SystemTime) -> Result<FileHashes, CacheError> {
     let before = fingerprint(path)?;
     let cache = VERIFIED_HASHES.get_or_init(|| Mutex::new(HashMap::new()));
     if let Some(cached) = cache
@@ -72,8 +106,10 @@ pub(super) fn file_hashes(path: &Path) -> Result<FileHashes, CacheError> {
     if fingerprint(path)? != before {
         return Err(CacheError::Integrity("file changed while hashing"));
     }
-    write_stamp(path, &before, &hashes);
-    remember(path, before, hashes);
+    if !before.racily_clean(now()) {
+        write_stamp(path, &before, &hashes);
+        remember(path, before, hashes);
+    }
     Ok(hashes)
 }
 
@@ -225,10 +261,48 @@ mod tests {
         ));
         fs::write(&path, b"abc").expect("initial file");
         let initial = file_hashes(&path).expect("initial digests");
-        assert_eq!(initial, file_hashes(&path).expect("cached digests"));
+        assert_eq!(initial, file_hashes(&path).expect("repeated digests"));
+        // Same length, written at once: the fingerprint may not have moved, which
+        // is why a file this young is never remembered.
         fs::write(&path, b"def").expect("changed file");
         assert_ne!(initial, file_hashes(&path).expect("changed digests"));
         fs::remove_file(path).expect("remove file");
+    }
+
+    #[test]
+    fn a_file_younger_than_the_file_clock_tick_is_hashed_again_never_remembered() {
+        let sequence = NEXT_FILE.fetch_add(1, Ordering::Relaxed);
+        let root = std::env::temp_dir().join(format!(
+            "aoe-geodata-racy-{}-{sequence}",
+            std::process::id()
+        ));
+        fs::create_dir_all(root.join("objects")).expect("objects");
+        let path = root.join("objects/seed");
+        fs::write(&path, b"abc").expect("seed");
+        let written = fingerprint(&path).expect("fingerprint").latest();
+        let remembered = || {
+            VERIFIED_HASHES
+                .get_or_init(|| Mutex::new(HashMap::new()))
+                .lock()
+                .expect("cache")
+                .contains_key(&path)
+        };
+        // Hashed in the very tick it was written: nothing is kept.
+        file_hashes_at(&path, &|| written).expect("racy digests");
+        file_hashes_at(&path, &|| {
+            written + FILE_CLOCK_TICK - Duration::from_nanos(1)
+        })
+        .expect("racy digests");
+        assert!(
+            !remembered(),
+            "a racily clean fingerprint stays out of the cache"
+        );
+        assert!(!root.join("verified").exists(), "and has no stamp");
+        // A tick later, nothing can still be racing it.
+        file_hashes_at(&path, &|| written + FILE_CLOCK_TICK).expect("settled digests");
+        assert!(remembered());
+        assert!(root.join("verified/seed").is_file());
+        fs::remove_dir_all(root).expect("cleanup");
     }
 
     #[test]
@@ -244,7 +318,9 @@ mod tests {
         let name = digest_hex(&file_hashes(&temporary).expect("seed digests").0);
         let path = root.join("objects").join(&name);
         fs::rename(&temporary, &path).expect("name by digest");
-        let first = file_hashes(&path).expect("first digests");
+        // Hashed long after its last write, as a downloaded object is.
+        let settled = SystemTime::now() + FILE_CLOCK_TICK;
+        let first = file_hashes_at(&path, &|| settled).expect("first digests");
         assert!(root.join("verified").join(&name).is_file());
         // A new process starts with an empty in-memory cache.
         VERIFIED_HASHES
@@ -254,9 +330,8 @@ mod tests {
             .clear();
         let fingerprint = fingerprint(&path).expect("fingerprint");
         assert_eq!(stamped_hashes(&path, &fingerprint), Some(first));
-        // Same length, new bytes: the status-change time moves, the stamp misses.
-        std::thread::sleep(std::time::Duration::from_millis(20));
-        fs::write(&path, b"abd").expect("rewrite");
+        // New bytes of another length: the fingerprint moves, the stamp misses.
+        fs::write(&path, b"abdc").expect("rewrite");
         let changed = self::fingerprint(&path).expect("changed fingerprint");
         assert_eq!(stamped_hashes(&path, &changed), None);
         assert_ne!(first, file_hashes(&path).expect("recomputed"));

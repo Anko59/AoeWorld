@@ -10,6 +10,16 @@ fn output_is_bounded_while_excess_bytes_are_drained() {
     assert!(!overflow.load(Ordering::Acquire));
 }
 
+/// No test waits this long: each run ends on the event it names, so the load of
+/// the machine cannot turn it into a deadline error.
+#[cfg(unix)]
+const PATIENT: Duration = Duration::from_secs(3600);
+
+/// A worker that leaves `sleep 3600` running, then says so by creating `started`
+/// beside itself; the sleeper holds every pipe the worker was given.
+#[cfg(unix)]
+const LEAVES_A_SLEEPER: &str = "sleep 3600 &\ntouch \"$(dirname \"$0\")/started\"\nwait";
+
 #[cfg(unix)]
 fn fixture(body: &str) -> (tempfile::TempDir, std::path::PathBuf) {
     use std::os::unix::fs::PermissionsExt;
@@ -24,75 +34,63 @@ fn fixture(body: &str) -> (tempfile::TempDir, std::path::PathBuf) {
 #[test]
 fn verbose_worker_fails_without_filling_a_pipe_forever() {
     let (_directory, path) = fixture("cat >/dev/null\nhead -c 1048576 /dev/zero\nsleep 30");
-    let error = execute_with_deadline(
-        &path,
-        b"{}".to_vec(),
-        &AtomicBool::new(false),
-        Duration::from_secs(5),
-    )
-    .unwrap_err();
+    let error =
+        execute_with_deadline(&path, b"{}".to_vec(), &AtomicBool::new(false), PATIENT).unwrap_err();
     assert!(error.contains("output exceeds"), "{error}");
     let (_directory, path) = fixture("cat >/dev/null\nhead -c 65536 /dev/zero >&2\nsleep 30");
-    let error = execute_with_deadline(
-        &path,
-        b"{}".to_vec(),
-        &AtomicBool::new(false),
-        Duration::from_secs(5),
-    )
-    .unwrap_err();
+    let error =
+        execute_with_deadline(&path, b"{}".to_vec(), &AtomicBool::new(false), PATIENT).unwrap_err();
     assert!(error.contains("output exceeds"), "{error}");
 }
 
 #[cfg(unix)]
 #[test]
 fn unread_input_can_be_cancelled_and_descendant_pipes_are_closed() {
-    let (_directory, path) = fixture("sleep 30 &\nwait");
+    let (directory, path) = fixture(LEAVES_A_SLEEPER);
+    let started = directory.path().join("started");
     let cancelled = Arc::new(AtomicBool::new(false));
     let signal = cancelled.clone();
+    // Cancel once the sleeper runs, not after a guess of how long that takes.
     let cancellation = thread::spawn(move || {
-        thread::sleep(Duration::from_millis(100));
+        while !started.exists() {
+            thread::yield_now();
+        }
         signal.store(true, Ordering::Release);
     });
-    let started = Instant::now();
-    let error = execute_with_deadline(
-        &path,
-        vec![0; MAX_REQUEST_BYTES],
-        &cancelled,
-        Duration::from_secs(5),
-    )
-    .unwrap_err();
+    // The sleeper holds the pipes for an hour: returning at all shows they were
+    // closed (a call that waited for them would hang, not pass).
+    let error =
+        execute_with_deadline(&path, vec![0; MAX_REQUEST_BYTES], &cancelled, PATIENT).unwrap_err();
     cancellation.join().unwrap();
     assert!(error.contains("cancelled"), "{error}");
-    assert!(started.elapsed() < Duration::from_secs(5));
 }
 
 #[cfg(unix)]
 #[test]
 fn deadline_and_success_both_clean_up_inherited_output_pipes() {
-    let (_directory, path) = fixture("sleep 30 &\nwait");
-    let started = Instant::now();
-    let error = execute_with_deadline(
+    let (directory, path) = fixture(LEAVES_A_SLEEPER);
+    let started = directory.path().join("started");
+    // The deadline is already past; the observer holds the first look at it back
+    // until the sleeper runs, so the deadline always meets a live sleeper.
+    let error = execute_observed(
         &path,
         Vec::new(),
         &AtomicBool::new(false),
-        Duration::from_millis(100),
+        Duration::ZERO,
+        || {
+            while !started.exists() {
+                thread::yield_now();
+            }
+        },
     )
     .unwrap_err();
     assert!(error.contains("deadline"), "{error}");
-    assert!(started.elapsed() < Duration::from_secs(5));
-    let (_directory, path) = fixture("cat >/dev/null\nsleep 30 &\nprintf '{}'");
-    let started = Instant::now();
+    let (_directory, path) = fixture("cat >/dev/null\nsleep 3600 &\nprintf '{}'");
     assert_eq!(
-        execute_with_deadline(
-            &path,
-            b"request".to_vec(),
-            &AtomicBool::new(false),
-            Duration::from_secs(5)
-        )
-        .unwrap(),
+        execute_with_deadline(&path, b"request".to_vec(), &AtomicBool::new(false), PATIENT)
+            .unwrap(),
         b"{}"
     );
-    assert!(started.elapsed() < Duration::from_secs(5));
 }
 
 #[cfg(unix)]

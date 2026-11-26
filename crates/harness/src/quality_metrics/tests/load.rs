@@ -5,7 +5,11 @@ use std::process::Command;
 fn compile_load_child_role() {
     if std::env::var_os("AOE_QUALITY_LOAD_CHILD").is_some() {
         eprintln!("Compiling controlled quality load");
-        std::thread::sleep(std::time::Duration::from_secs(30));
+        // Alive until the test reaps its process group, however long that takes:
+        // a timer would end it early on a loaded machine.
+        loop {
+            std::thread::park();
+        }
     }
 }
 #[test]

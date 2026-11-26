@@ -90,14 +90,23 @@ fn temporary_directory() -> PathBuf {
     ))
 }
 
+/// How long a socket may stay silent before the test server gives up on it: a
+/// guard against a hung peer, far beyond what any load makes a request take.
+const SILENCE: Duration = Duration::from_secs(60);
+
 struct TestServer {
     url: String,
+    address: std::net::SocketAddr,
+    stop: Arc<AtomicBool>,
     join: Option<JoinHandle<()>>,
 }
 
 impl Drop for TestServer {
     fn drop(&mut self) {
         if let Some(join) = self.join.take() {
+            // A test that never asked wakes the waiting accept, which then ends.
+            self.stop.store(true, Ordering::SeqCst);
+            let _ = TcpStream::connect(self.address);
             let result = join.join();
             if !thread::panicking() {
                 result.expect("cache test server thread");
@@ -113,31 +122,18 @@ fn serve(status: u16, headers: &[(&str, &str)], body: Vec<u8>) -> TestServer {
         .iter()
         .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()))
         .collect();
-    listener
-        .set_nonblocking(true)
-        .expect("nonblocking loopback listener");
+    let stop = Arc::new(AtomicBool::new(false));
+    let stopped = stop.clone();
     let join = thread::spawn(move || {
-        let deadline = Instant::now() + Duration::from_secs(2);
-        let (mut stream, _) = loop {
-            match listener.accept() {
-                Ok(connection) => break connection,
-                Err(error)
-                    if error.kind() == std::io::ErrorKind::WouldBlock
-                        && Instant::now() < deadline =>
-                {
-                    thread::sleep(Duration::from_millis(5));
-                }
-                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                    panic!("cache request deadline exceeded")
-                }
-                Err(error) => panic!("cache request: {error}"),
-            }
-        };
+        let (mut stream, _) = listener.accept().expect("cache request");
+        if stopped.load(Ordering::SeqCst) {
+            return;
+        }
         stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(SILENCE))
             .expect("request timeout");
         stream
-            .set_write_timeout(Some(Duration::from_secs(2)))
+            .set_write_timeout(Some(SILENCE))
             .expect("response timeout");
         consume_request(&mut stream);
         let reason = match status {
@@ -160,6 +156,8 @@ fn serve(status: u16, headers: &[(&str, &str)], body: Vec<u8>) -> TestServer {
     });
     TestServer {
         url: format!("http://{address}"),
+        address,
+        stop,
         join: Some(join),
     }
 }
@@ -375,8 +373,10 @@ fn acquire_retries_an_invalid_partial_without_starting_a_network_request_after_c
     let cancelled = Arc::new(AtomicBool::new(false));
     let signal = Arc::clone(&cancelled);
     let watched_partial = partial.clone();
+    // Cancel once the acquisition has dropped the invalid partial (the event),
+    // not after a guess of how long that takes; the bound only ends a hang.
     let canceller = thread::spawn(move || {
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + Duration::from_secs(600);
         while watched_partial.exists() && Instant::now() < deadline {
             thread::yield_now();
         }

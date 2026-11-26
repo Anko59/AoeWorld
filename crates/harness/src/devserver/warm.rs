@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 pub(crate) const BUDGET: Duration = Duration::from_secs(10 * 60);
 /// One request may run as long as the server's own budget plus its slack.
 const REQUEST: Duration = Duration::from_secs(120);
-const RETRY: Duration = Duration::from_secs(2);
+pub(crate) const RETRY: Duration = Duration::from_secs(2);
 
 /// The fields that name a map in a request: its centre and its side.
 fn key(request: &Value) -> [Option<&Value>; 3] {
@@ -45,23 +45,52 @@ pub(crate) fn completed(jobs: &str, wanted: &Value) -> Vec<String> {
     hashes
 }
 
+/// The time the warm-up reads and spends. The tests replace it, so that a slow
+/// raster is a jump of the clock and a retry pause costs no real time: what
+/// they check then holds on any machine, however loaded.
+pub(crate) trait Clock {
+    fn now(&self) -> Instant;
+    fn pause(&self, time: Duration);
+}
+
+pub(crate) struct Wall;
+
+impl Clock for Wall {
+    fn now(&self) -> Instant {
+        Instant::now()
+    }
+    fn pause(&self, time: Duration) {
+        std::thread::sleep(time);
+    }
+}
+
 /// Request the raster of one map until the server has served it, retrying a
 /// 503 (budget spent) or silence; any other status is final.
 pub(crate) fn raster(port: u16, hash: &str, budget: Duration) -> Result<Duration, String> {
-    let started = Instant::now();
+    raster_on(&Wall, port, hash, budget)
+}
+
+pub(crate) fn raster_on(
+    clock: &dyn Clock,
+    port: u16,
+    hash: &str,
+    budget: Duration,
+) -> Result<Duration, String> {
+    let started = clock.now();
+    let elapsed = || clock.now().saturating_duration_since(started);
     let path = format!("/maps/{hash}/minimap");
     let mut last = "no answer".to_owned();
-    while started.elapsed() < budget {
-        let patience = REQUEST.min(budget.saturating_sub(started.elapsed()));
+    while elapsed() < budget {
+        let patience = REQUEST.min(budget.saturating_sub(elapsed()));
         match process::http_status(port, &path, patience) {
-            Some(200) => return Ok(started.elapsed()),
+            Some(200) => return Ok(elapsed()),
             Some(503) => last = "503 (its time budget ran out)".into(),
             Some(status) => {
                 return Err(format!("map {hash}: GET {path} answered {status}"));
             }
             None => last = "no answer in time".into(),
         }
-        std::thread::sleep(RETRY.min(budget.saturating_sub(started.elapsed())));
+        clock.pause(RETRY.min(budget.saturating_sub(elapsed())));
     }
     Err(format!(
         "map {hash}: the minimap raster was not served within {} s (last: {last})",

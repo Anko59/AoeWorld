@@ -354,14 +354,19 @@ pub(crate) fn ensure_play(root: &Path, settings: &Settings) -> Result<bool> {
 /// skirmish does not pay for it under the server's 30 s budget (warm.rs). A
 /// failure is reported, not fatal: the server itself is up.
 fn warm_presets(port: u16, wanted: &[serde_json::Value]) {
-    warm_presets_for(port, wanted, warm::BUDGET);
+    warm_presets_on(&warm::Wall, port, wanted, warm::BUDGET);
 }
 
-fn warm_presets_for(port: u16, wanted: &[serde_json::Value], budget: Duration) {
-    let deadline = Instant::now() + budget;
+fn warm_presets_on(
+    clock: &dyn warm::Clock,
+    port: u16,
+    wanted: &[serde_json::Value],
+    budget: Duration,
+) {
+    let deadline = clock.now() + budget;
     let mut warmed = BTreeSet::new();
     loop {
-        let left = deadline.saturating_duration_since(Instant::now());
+        let left = deadline.saturating_duration_since(clock.now());
         if left.is_zero() {
             eprintln!(
                 "dev-server: warning: maps are still being prepared or warmed after {} s",
@@ -379,10 +384,11 @@ fn warm_presets_for(port: u16, wanted: &[serde_json::Value], budget: Duration) {
             .flatten()
             .find(|hash| !warmed.contains(*hash))
         {
-            match warm::raster(
+            match warm::raster_on(
+                clock,
                 port,
                 hash,
-                deadline.saturating_duration_since(Instant::now()),
+                deadline.saturating_duration_since(clock.now()),
             ) {
                 Ok(took) => {
                     eprintln!(
@@ -404,9 +410,7 @@ fn warm_presets_for(port: u16, wanted: &[serde_json::Value], budget: Duration) {
         if completed.iter().all(|hashes| !hashes.is_empty()) {
             return;
         }
-        thread::sleep(
-            Duration::from_secs(5).min(deadline.saturating_duration_since(Instant::now())),
-        );
+        clock.pause(Duration::from_secs(5).min(deadline.saturating_duration_since(clock.now())));
     }
 }
 
