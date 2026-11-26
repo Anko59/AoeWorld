@@ -229,3 +229,34 @@ fn the_workflow_runs_only_when_dispatched_and_leaves_the_logic_to_make() {
         assert!(!line.contains("${{"), "{line}");
     }
 }
+
+#[test]
+fn the_workflow_uses_only_functions_github_expressions_have() {
+    // GitHub refuses a workflow file that calls another function (there is no `replace`),
+    // and reports it only as a failed run on push.
+    const KNOWN: [&str; 8] = [
+        "contains",
+        "startsWith",
+        "endsWith",
+        "format",
+        "join",
+        "toJSON",
+        "fromJSON",
+        "hashFiles",
+    ];
+    let text = workflow();
+    for expression in text.split("${{").skip(1) {
+        let expression = expression.split("}}").next().unwrap();
+        let mut name = String::new();
+        for character in expression.chars() {
+            if character.is_ascii_alphanumeric() || character == '_' {
+                name.push(character);
+                continue;
+            }
+            if character == '(' && !name.is_empty() {
+                assert!(KNOWN.contains(&name.as_str()), "unknown function {name}");
+            }
+            name.clear();
+        }
+    }
+}

@@ -24,10 +24,11 @@ name with `--ref`:
 
 ```sh
 gh workflow run e2e-repeat.yml --ref <branch> \
-  -f specs=tests/rendering/far-build.play.spec.ts:66 -f projects=webgpu,browser-defaults -f repeat=30
+  -f specs=tests/rendering/far-build.play.spec.ts:66 \
+  -f 'projects=["webgpu","browser-defaults"]' -f repeat=30
 ```
 
-Each project runs on its own runner. The job summary lists, per test, the passes, the
+Each project of the JSON array runs on its own runner. The job summary lists, per test, the passes, the
 failures, the passes that close the run and one character per attempt in start order
 (`.` passed, `F` failed, `T` timed out, `I` interrupted, `S` skipped), then the first
 error line of each failure. The artifact `e2e-repeat-<project>` holds `repeat.json` (the

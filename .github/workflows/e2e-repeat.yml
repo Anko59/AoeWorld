@@ -1,10 +1,10 @@
 name: AoeWorld e2e repeat
 
 # Proof that a flaky browser test is fixed: runs chosen specs many times on GitHub
-# runners and reports passes against failures per test in the job summary (docs/testing.md).
+# runners and reports passes against failures per test in the job summary (docs/flaky-tests.md).
 # The logic is `make test-e2e-repeat` (crates/harness/src/e2e/repeat); this file only
 # decides where it runs. Dispatch it on a branch:
-#   gh workflow run e2e-repeat.yml --ref <branch> -f specs=tests/a.spec.ts:66 -f projects=webgpu -f repeat=30
+#   gh workflow run e2e-repeat.yml --ref <branch> -f specs=tests/a.spec.ts:66 -f 'projects=["webgpu"]' -f repeat=30
 on:
   workflow_dispatch:
     inputs:
@@ -12,8 +12,8 @@ on:
         description: 'Spec files under browser/tests, space or comma separated; tests/<path>.spec.ts[:line]'
         required: true
       projects:
-        description: 'Playwright projects, comma separated; one runner each'
-        default: webgpu
+        description: 'Playwright projects as a JSON array, one runner each'
+        default: '["webgpu"]'
       repeat:
         description: 'Attempts per test, 1 to 200'
         default: '30'
@@ -29,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: ${{ fromJSON(format('["{0}"]', replace(replace(inputs.projects, ' ', ''), ',', '","'))) }}
+        project: ${{ fromJSON(inputs.projects) }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: ./.github/actions/docker-setup
