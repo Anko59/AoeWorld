@@ -79,6 +79,61 @@ test("F4: the last positive weight remains visible after attempting an all-zero 
   await expect(page.locator("#steward-setting-3 + output")).toHaveText("10");
 });
 
+test("a late echo of an earlier order does not undo a newer edit", async ({
+  page,
+}) => {
+  await page.route("**/steward-settings-fixture", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<main id="selection-content"></main>',
+    }),
+  );
+  await page.goto("/steward-settings-fixture");
+  // Orders reach the server and come back a frame or more later, here only
+  // when the test delivers them.
+  await page.evaluate(async () => {
+    const source = "/interface/steward/panel.js";
+    const { initSteward } = await import(source);
+    initSteward();
+    const api = window.aoeSteward;
+    api.update([], "Steward settings", [17, 45, 30, 15, 10, 100, 0]);
+    const sent: number[][] = [];
+    Reflect.set(window, "sentSteward", sent);
+    Reflect.set(window, "aoeBuildings", {
+      command(action: number, code: number) {
+        if (action !== 18 || code !== 0) throw new Error("Unexpected order");
+        sent.push(Array.from(api.settings()));
+      },
+    });
+  });
+  const echo = (index: number) =>
+    page.evaluate((index) => {
+      const sent = Reflect.get(window, "sentSteward") as number[][];
+      window.aoeSteward.update([], "Steward settings", [17, ...sent[index]!]);
+    }, index);
+  const cap = page.getByLabel("Villager cap", { exact: true });
+  const training = page.getByLabel("Train villagers and fishing ships", {
+    exact: true,
+  });
+  await page.getByLabel("Wood weight", { exact: true }).press("End");
+  await cap.press("ArrowLeft");
+  await echo(0);
+  await expect(cap).toHaveValue("99");
+  await training.check();
+  await echo(1);
+  await expect(training).toBeChecked();
+  await echo(2);
+  expect(await page.evaluate(() => Reflect.get(window, "sentSteward"))).toEqual(
+    [
+      [45, 100, 15, 10, 100, 0],
+      [45, 100, 15, 10, 99, 0],
+      [45, 100, 15, 10, 99, 1],
+    ],
+  );
+  await expect(cap).toHaveValue("99");
+  await expect(training).toBeChecked();
+});
+
 test("training portraits retain wire slots and append the Steward's real King icon", async ({
   page,
 }) => {
