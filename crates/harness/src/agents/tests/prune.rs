@@ -105,6 +105,30 @@ fn wrong_home_or_keep_deletes_nothing() {
 }
 
 #[test]
+fn a_macs_judges_are_pruned_by_the_same_rule_and_apart_from_the_linux_ones() {
+    let (_temp, home) = home();
+    let mac = home.join("darwin-arm64");
+    for directory in [&home, &mac] {
+        for n in [1, 2, 3] {
+            judge(directory, &hash(n), u32::from(n) * HOUR);
+        }
+    }
+    assert_eq!(prune(&mac, &hash(1)).unwrap(), 1);
+    assert!(mac.join(hash(2)).is_dir() && !mac.join(hash(3)).exists());
+    assert!(
+        home.join(hash(3)).is_dir(),
+        "the Linux judges are untouched"
+    );
+    assert_eq!(prune(&home, &hash(1)).unwrap(), 1);
+    assert!(mac.join(hash(2)).is_dir(), "the Mac's judges are untouched");
+    let other = home.join("source");
+    for n in [1, 2, 3] {
+        judge(&other, &hash(n), u32::from(n) * HOUR);
+    }
+    assert_eq!(prune(&other, &hash(1)).unwrap(), 0);
+}
+
+#[test]
 fn a_second_pruner_finds_nothing_left_to_do() {
     let (_temp, home) = home();
     judge(&home, &hash(1), 5 * HOUR);

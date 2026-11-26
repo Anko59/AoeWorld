@@ -42,8 +42,12 @@ pub(crate) fn run_here(gate: &str, argv: &[String], env: &JobEnv) -> Result<i32>
 }
 
 pub(crate) fn print_status(root: &Path, env: &JobEnv) -> Result<()> {
-    let available =
-        crate::resources::policy::available_kib(&std::fs::read_to_string("/proc/meminfo")?)?;
+    let Some(meminfo) = crate::resources::policy::meminfo()? else {
+        // Held inside the VM by its own kernel: from here a held slot may look free.
+        println!("memory, long-job and build slots are the Linux VM's: run `make load-status`");
+        return Ok(());
+    };
+    let available = crate::resources::policy::available_kib(&meminfo)?;
     println!(
         "MemAvailable: {available} KiB (admission floor: {} KiB)",
         crate::resources::policy::FLOOR_KIB

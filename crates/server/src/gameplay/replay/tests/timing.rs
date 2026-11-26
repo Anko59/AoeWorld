@@ -46,6 +46,14 @@ fn multiplexed_or_unavailable_counts_are_rejected_without_scaling() {
     assert_eq!(validate(1234, 100, 100).unwrap(), 1234);
 }
 
+#[cfg(not(target_os = "linux"))]
+#[test]
+fn outside_linux_there_is_no_hardware_counter_to_open() {
+    let error = Probe::open().unwrap_err().to_string();
+    assert!(error.contains("no hardware instruction counter"), "{error}");
+    assert!(counter::running().is_none());
+}
+
 #[test]
 #[ignore = "requires a hardware PMU; run make save-replay-counter-check"]
 fn hardware_counter_is_user_only_thread_local_and_fully_scheduled() {

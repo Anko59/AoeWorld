@@ -10,10 +10,20 @@ fn judge_name(name: &str) -> bool {
     hash.len() == 40 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
+/// The judges' directory, or a Mac's own one inside it (`darwin-<arch>`).
+fn judges_home(home: &Path) -> bool {
+    let named = |path: &Path| path.file_name().is_some_and(|n| n == "aoe-agent-hook");
+    let mac = || {
+        let name = home.file_name().and_then(|n| n.to_str());
+        name.is_some_and(|n| n.starts_with("darwin-")) && home.parent().is_some_and(named)
+    };
+    named(home) || mac()
+}
+
 /// Keep the freshly installed judge and the newest other completed judge.
 /// An invalid home/keep, a symlink or an unrelated entry is never removed.
 pub(crate) fn built(home: &Path, keep: &str) -> io::Result<usize> {
-    if home.file_name().is_none_or(|n| n != "aoe-agent-hook")
+    if !judges_home(home)
         || !judge_name(keep)
         || !home.join(keep).join(BINARY).is_file()
         || !fs::symlink_metadata(home).is_ok_and(|m| m.is_dir())
@@ -71,7 +81,7 @@ pub(crate) fn clean_target_with(
 
 /// Dispatched after install, inside the launcher's flock and pinned tool image.
 pub(crate) fn execute(home: &Path, keep: &str) -> io::Result<()> {
-    if home.file_name().is_none_or(|n| n != "aoe-agent-hook")
+    if !judges_home(home)
         || !judge_name(keep)
         || !home.join(keep).join(BINARY).is_file()
         || !fs::symlink_metadata(home).is_ok_and(|m| m.is_dir())

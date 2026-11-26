@@ -2,6 +2,7 @@ mod bash;
 mod disk;
 mod dispatch;
 mod hooks;
+mod mac;
 mod parse_failures;
 mod prune;
 mod runtimes;

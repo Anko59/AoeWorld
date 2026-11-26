@@ -8,8 +8,17 @@
 #   harness.sh exec duel|ship|ship-status|describe-check|review|review-floor|level-floor|level-stats|review-pr|issue|next|ledger|usage|roadmap|roadmap-check|compare|dev-server|dev-server-status|dev-server-stop|showcase|showcase-check|showcase-narrate|showcase-session|nightly-triage|carry-review|update-prs|metrics
 #   harness.sh build
 set -u
-# A Mac runs the launcher, the judge and its containers inside the Colima VM.
-[ "$(uname -s)" != Darwin ] || exec "$(dirname -- "$0")/colima.sh" "$0" "$@"
+# A Mac runs the launcher, the judge and its containers inside its Linux VM,
+# except the ship commands it was asked to run itself (mac-judge.sh).
+platform=
+if [ "$(uname -s)" = Darwin ]; then
+  hooks=$(dirname -- "$0") native=
+  [ "${1:-}" != exec ] || native=$("$hooks/mac-judge.sh" goals)
+  case " $native " in
+    *" ${2:-none} "*) platform=darwin-$(uname -m) ;;
+    *) exec "$hooks/colima.sh" "$0" "$@" ;;
+  esac
+fi
 probe=crates/harness/src/agents/runtime.rs
 case ${1:-} in
   build) runtime=claude event=build ;;
@@ -49,14 +58,21 @@ if resolved=$(git -C "$root" rev-parse refs/remotes/origin/dev "refs/remotes/ori
   [ -n "$inputs" ] || exit 2
   key=$(printf '%s\n' "$inputs" | git -C "$root" hash-object --stdin) || exit 2
   judge="origin/dev $revision"
+elif [ -n "$platform" ]; then
+  echo "AoeWorld harness: origin/dev has no $probe, and a Mac builds its judge from origin/dev only. Run: git fetch origin dev" >&2
+  exit 1
 else
   # Bootstrap: the committed HEAD, never uncommitted edits to the judge.
   revision=$(git -C "$root" rev-parse HEAD) || exit 2
   key=bootstrap-$(git -C "$root" rev-parse HEAD:crates/harness) || exit 2
   judge="bootstrap from this checkout's HEAD (non-authoritative)"
 fi
-binary="$common/aoe-agent-hook/$key/aoe-harness"
-if [ ! -x "$binary" ] || [ "$event" = build ]; then
+binary="$common/aoe-agent-hook/${platform:+$platform/}$key/aoe-harness"
+if [ -n "$platform" ]; then
+  [ -x "$binary" ] || "$hooks/mac-judge.sh" build "$root" "$revision" "$common/aoe-agent-hook/$platform" "$key" >&2 || exit 1
+  # The VM mounts only the home directory, and judges work trees made here.
+  case ${TMPDIR:-} in "$HOME"/*) ;; *) TMPDIR=$HOME/.cache/aoe-ship-tmp && export TMPDIR && mkdir -p "$TMPDIR" || exit 1 ;; esac
+elif [ ! -x "$binary" ] || [ "$event" = build ]; then
   mkdir -p "$common/aoe-agent-hook" || exit 2
   if ! flock "$common/aoe-agent-hook/build.lock" sh -c '[ -x "$1" ] && [ "$2" != build ] || make -C "$3" --no-print-directory agent-hook-build AGENT_HOOK_REVISION="$4" AGENT_HOOK_OUTPUT="$1"' \
     sh "$binary" "$event" "$root" "$revision" >&2; then
@@ -67,7 +83,7 @@ fi
 # agent-hook-build installs and cleans output before the build.lock is released.
 [ "$event" = build ] && exit 0
 if [ "$event" = exec ]; then
-  echo "harness: judge $judge" >&2
+  echo "harness: judge $judge${platform:+ ($platform)}" >&2
   # A review reads its policy from the judge's own commit, never a later fetch.
   case $key in
     bootstrap-*) unset AOE_JUDGE_REV ;;

@@ -6,6 +6,7 @@
 # stdin, exit status and the harness's environment variables. Policy stays in
 # `aoe-harness`.
 #   colima.sh <command> [argument...]
+#   colima.sh --backend    prints colima or orb
 # AOE_COLIMA_MAKE_VARS names variables to append as NAME=value arguments.
 # AOE_ORB_MACHINE names the OrbStack machine (default aoeworld).
 set -u
@@ -23,6 +24,7 @@ else
   echo "AoeWorld harness: no Colima VM '$profile' ($config is missing) and no OrbStack machine '$machine'. Run: colima start --cpu 8 --memory 16 --disk 100, or set up an OrbStack machine (docs/local-development.md)" >&2
   exit 2
 fi
+[ "$1" != --backend ] || { echo "$backend"; exit 0; }
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P) || exit 2
 case $here in
   "$HOME"/*) ;;

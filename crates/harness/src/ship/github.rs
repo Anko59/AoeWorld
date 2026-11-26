@@ -2,6 +2,7 @@
 //! branch, on origin's repository), the description, and the
 //! showcase video probe.
 use super::{Evidence, Options, Result, describe, git, levels::Levels};
+pub(super) mod account;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -360,7 +361,7 @@ pub(crate) fn direct_merge(call: &[String], error: &str) -> Option<Vec<String>> 
 }
 
 pub(crate) fn gh(root: &Path, args: &[&str]) -> Result<String> {
-    let output = Command::new("gh").current_dir(root).args(args).output()?;
+    let output = account::gh()?.current_dir(root).args(args).output()?;
     if !output.status.success() {
         return Err(format!(
             "gh {}: {}",

@@ -7,7 +7,7 @@ use std::{
     collections::HashSet,
     io::{Read, Write},
     path::Path,
-    process::{Command, Stdio},
+    process::Stdio,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -143,7 +143,7 @@ fn marked_body(body: &str, title: &str) -> Result<String> {
 }
 
 fn gh_call(root: &Path, _host: &str, args: &[&str], input: Option<&[u8]>) -> Result<String> {
-    let mut command = Command::new("gh");
+    let mut command = super::github::account::gh()?;
     command
         .current_dir(root)
         .args(args)
@@ -177,7 +177,7 @@ fn gh_call(root: &Path, _host: &str, args: &[&str], input: Option<&[u8]>) -> Res
 
 fn open_issues(root: &Path, host: &str, repository: &str) -> Result<Vec<Issue>> {
     let endpoint = format!("repos/{repository}/issues?state=open&per_page=100");
-    let mut child = Command::new("gh")
+    let mut child = super::github::account::gh()?
         .current_dir(root)
         .args(["api", "--hostname", host, "--paginate", &endpoint])
         .env_remove("GH_HOST")

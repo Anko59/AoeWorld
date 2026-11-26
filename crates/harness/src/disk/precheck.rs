@@ -115,13 +115,18 @@ pub(crate) fn free_bytes(path: &Path) -> Result<u64> {
     let mut existing = absolute.as_path();
     loop {
         match nix::sys::statvfs::statvfs(existing) {
-            Ok(stat) => return Ok(stat.blocks_available().saturating_mul(stat.fragment_size())),
+            Ok(stat) => return Ok(available(stat.blocks_available(), stat.fragment_size())),
             Err(nix::errno::Errno::ENOENT) => {
                 existing = existing.parent().ok_or("no existing filesystem ancestor")?;
             }
             Err(error) => return Err(error.into()),
         }
     }
+}
+
+/// The integer types of a file system's counts differ between Linux and macOS.
+pub(super) fn available(blocks: impl Into<u64>, fragment: impl Into<u64>) -> u64 {
+    blocks.into().saturating_mul(fragment.into())
 }
 
 fn largest_targets(root: &Path) -> Result<Vec<(u64, PathBuf)>> {
