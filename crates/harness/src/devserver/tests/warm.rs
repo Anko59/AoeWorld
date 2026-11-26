@@ -99,7 +99,9 @@ fn a_raster_that_never_comes_fails_within_its_budget() {
         &FakeClock::new(),
         server.port,
         "abc",
-        Duration::from_millis(1500),
+        // Real socket timeouts come from the budget left: keep them long. Only the
+        // fake clock runs down, one retry pause per scripted 503.
+        Duration::from_secs(60),
     )
     .unwrap_err();
     assert!(error.contains("not served within"), "{error}");
