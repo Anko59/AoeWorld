@@ -150,7 +150,11 @@ class Context:
         if self._site_queries >= self.config.site_queries_per_decision:
             return None
         self._site_queries += 1
-        return self.world.find_build_site(*args)
+        # A site the server refused stays refused: ask for the next nearest, or
+        # the one nearest refused site would answer every search.
+        name = str(args[0])
+        avoid = [(x, y) for kind, x, y in self.board.bad_sites if kind == name]
+        return self.world.find_build_site(*args, avoid)
 
     def settlement_distance(self, tile):
         known = self.board.settlements[1]

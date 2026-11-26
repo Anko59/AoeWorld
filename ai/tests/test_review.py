@@ -340,3 +340,20 @@ def test_no_villager_is_queued_without_food_or_room():
     for eco in (economy(food=40), economy(food=500, population=10, cap=10)):
         _, client = play(FakeWorld(units, buildings, eco=eco))
         assert client.named("train") == []
+
+
+def test_a_refused_house_site_does_not_stop_the_village_building_houses():
+    """Seed 4 of the arena: two refused sites were the nearest four searches
+    could find, so the bot sat at 15 of 15 population with 1,800 food unspent."""
+    units, buildings = base(8)
+    world = FakeWorld(units, buildings, eco=economy(wood=100, population=11, cap=15))
+    brain, client = play(world)
+    first = next(a for name, a in client.calls if name == "build")
+    refused = (str(first[1]), first[2], first[3])
+    brain.board.plans.clear()
+    brain.board.builders.clear()
+    brain.board.bad_sites.add(refused)
+    _, client = play(FakeWorld(units, buildings, eco=economy(wood=100, population=11, cap=15)), brain=brain)
+    builds = [a for name, a in client.calls if name == "build"]
+    assert builds, "the village still builds"
+    assert all((str(a[1]), a[2], a[3]) != refused for a in builds)

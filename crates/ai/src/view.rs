@@ -316,6 +316,7 @@ pub trait View {
         near: Tile,
         max_radius: i32,
         gap: i32,
+        avoid: &[Tile],
     ) -> Option<Tile>;
     fn find_bridge_site(&self, from: Tile, to: Tile) -> Option<(Tile, Tile)>;
 }

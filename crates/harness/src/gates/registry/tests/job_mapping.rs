@@ -216,12 +216,20 @@ fn the_qualification_job_runs_after_merge_and_never_on_pull_requests() {
         registry.jobs["qualification"],
         ["test-source-qualification"]
     );
+    // The nightly does not repeat it: a serial copy of the push jobs failed
+    // every night for two weeks while the same tier ran on every push.
     let nightly = std::fs::read_to_string(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../.github/workflows/nightly.yml"),
     )
     .expect("nightly workflow");
-    assert!(nightly.contains("run: make test-source-qualification"));
+    assert!(!nightly.contains("make test-source-qualification"));
+    let nightly_plan = registry.plan(Cadence::Nightly, &impact.suites).unwrap();
+    assert!(
+        !nightly_plan
+            .gates
+            .contains(&"test-source-qualification".into())
+    );
 }
 
 #[test]
@@ -239,11 +247,15 @@ fn the_exhaustive_job_runs_after_merge_and_never_on_pull_requests() {
     );
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let nightly = std::fs::read_to_string(root.join(".github/workflows/nightly.yml")).unwrap();
-    assert!(nightly.contains("run: make test-exhaustive"));
     let workflow = std::fs::read_to_string(root.join(".github/workflows/ci.yml")).unwrap();
     assert!(workflow.contains("run: make test-exhaustive"));
     assert!(workflow.contains("run: make sdk-python-test"));
-    assert!(nightly.contains("run: make sdk-python-test"));
+    // Pushes to dev run the tier; the nightly keeps no copy of it.
+    let nightly_plan = registry.plan(Cadence::Nightly, &impact.suites).unwrap();
+    for gate in ["test-exhaustive", "sdk-python-test"] {
+        assert!(!nightly.contains(&format!("make {gate}")), "{gate}");
+        assert!(!nightly_plan.gates.contains(&gate.into()), "{gate}");
+    }
 }
 
 #[test]

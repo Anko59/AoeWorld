@@ -21,6 +21,8 @@ case "$1" in
   --version) printf 'gh version 2.100.0\n' ;;
   api) case "$*" in
     *'/actions/workflows/ci.yml/runs?'*) printf '{"workflow_runs":[]}' ;;
+    *'/actions/runs/'*'/jobs'*) printf '%s' "${GH_JOBS_JSON-}" ;;
+    *'/actions/jobs/'*'/logs'*) printf '%s' "${GH_JOB_LOG-}" ;;
     *) printf '%s' "$GH_LIST_JSON" ;;
   esac ;;
   issue) case "$2" in
@@ -123,6 +125,8 @@ impl Stub {
         stub.unset("GH_VIEW_BODY");
         stub.unset("GH_VIEW_RESPONSES");
         stub.unset("GH_OPEN_PR");
+        stub.unset("GH_JOBS_JSON");
+        stub.unset("GH_JOB_LOG");
         stub.set(
             "GH_VIEW_JSON",
             r#####"{"state":"OPEN","body":"#### Game findings (owned by the game session)\n","updatedAt":"2026-10-14T00:00:00Z"}"#####,

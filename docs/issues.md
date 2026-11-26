@@ -43,4 +43,4 @@ blocking issue to be resolved, never on a person.
 
 ## Review follow-ups and nightly triage
 
-Ship posts one bounded comment per destination for confirmed or disputed review findings: game paths go to #575 and other paths to #576, as configured in `gates/issues.json`. Nightly triage posts one comment on #574 listing failed jobs, and posts nothing when none failed. Filing failures, including closed issues, warn and do not fail ship or nightly; file those follow-ups by hand.
+Ship posts one bounded comment per destination for confirmed or disputed review findings: game paths go to #575 and other paths to #576, as configured in `gates/issues.json`. Nightly triage posts one comment on #574 listing failed jobs, and posts nothing when none failed. For each failed job the comment names the first failed step with a link to that step's log, then quotes up to five failing tests or errors from the log (`FAIL`, `FAILED`, a Playwright failure or an `error:` line); when GitHub cannot describe the run it keeps the plain `failed` line. Filing failures, including closed issues, warn and do not fail ship or nightly; file those follow-ups by hand.

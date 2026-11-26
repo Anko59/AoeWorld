@@ -51,13 +51,13 @@ fn dock_build_sites_accept_explored_river_lake_and_ocean_banks() {
     ] {
         let world = shoreline(water, false, true);
         assert_eq!(
-            world.find_build_site(BuildingKind::Dock, bank, 0, 1),
+            world.find_build_site(BuildingKind::Dock, bank, 0, 1, &[]),
             Some(bank),
             "{water:?}"
         );
         assert!(
             world
-                .find_build_site(BuildingKind::Barracks, bank, 0, 0)
+                .find_build_site(BuildingKind::Barracks, bank, 0, 0, &[])
                 .is_none()
         );
     }
@@ -69,7 +69,7 @@ fn dock_build_sites_reject_footprints_entirely_on_land_or_water() {
     for origin in [TileCoord::new(8, 10), TileCoord::new(20, 10)] {
         assert!(
             world
-                .find_build_site(BuildingKind::Dock, origin, 0, 0)
+                .find_build_site(BuildingKind::Dock, origin, 0, 0, &[])
                 .is_none()
         );
     }
@@ -82,7 +82,7 @@ fn dock_build_sites_reject_loaded_but_unexplored_banks() {
         let world = shoreline(WaterKind::River, ford, explored);
         assert!(
             world
-                .find_build_site(BuildingKind::Dock, bank, 0, 0)
+                .find_build_site(BuildingKind::Dock, bank, 0, 0, &[])
                 .is_none()
         );
     }
@@ -93,7 +93,28 @@ fn dock_build_sites_accept_explored_wadeable_marsh_banks() {
     let bank = TileCoord::new(14, 10);
     let world = shoreline(WaterKind::River, true, true);
     assert_eq!(
-        world.find_build_site(BuildingKind::Dock, bank, 0, 0),
+        world.find_build_site(BuildingKind::Dock, bank, 0, 0, &[]),
         Some(bank)
+    );
+}
+
+#[test]
+fn a_build_site_in_the_avoid_list_is_skipped_for_the_next_nearest() {
+    let bank = TileCoord::new(14, 10);
+    let world = shoreline(WaterKind::River, false, true);
+    assert_eq!(
+        world.find_build_site(BuildingKind::Dock, bank, 3, 0, &[]),
+        Some(bank)
+    );
+    let next = world
+        .find_build_site(BuildingKind::Dock, bank, 3, 0, &[bank])
+        .expect("another bank tile within three tiles");
+    assert_ne!(next, bank);
+    assert!(next.x.abs_diff(bank.x) <= 3 && next.y.abs_diff(bank.y) <= 3);
+    assert!(
+        world
+            .find_build_site(BuildingKind::Dock, bank, 0, 0, &[bank])
+            .is_none(),
+        "a radius-0 search has nothing else to offer"
     );
 }

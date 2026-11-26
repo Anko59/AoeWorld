@@ -188,3 +188,24 @@ fn build_site_searches_stop_at_the_per_decision_limit() {
         (BuildingKind::LumberCamp, (80, 50))
     );
 }
+
+#[test]
+fn a_refused_build_site_is_never_offered_again_so_the_next_nearest_is() {
+    let world = world();
+    let mut board = Blackboard::default();
+    board.bad_sites.insert(("House".to_owned(), 83, 53));
+    board.bad_sites.insert(("Barracks".to_owned(), 84, 53));
+    let (sites, _) = with_context(&world, &[], &mut board, &Config::default(), |ctx| {
+        (
+            ctx.find_build_site(BuildingKind::House, (80, 50), 24, 1),
+            ctx.find_build_site(BuildingKind::House, (80, 50), 24, 0),
+        )
+    });
+    // The fake's nearest site is (83, 53): refused for a House, so the next.
+    assert_eq!(sites.0, Some((84, 53)), "a refused House site is skipped");
+    assert_eq!(sites.1, Some((84, 53)), "whatever the gap asked for");
+    let (barracks, _) = with_context(&world, &[], &mut board, &Config::default(), |ctx| {
+        ctx.find_build_site(BuildingKind::Barracks, (80, 50), 24, 1)
+    });
+    assert_eq!(barracks, Some((83, 53)), "a refusal is per building kind");
+}
