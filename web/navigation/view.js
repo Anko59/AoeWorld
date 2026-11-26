@@ -1,8 +1,22 @@
 import { aggregateActors, actorColour, minimapOrderPoint, minimapProject, minimapWorldPoint } from '/minimap.js';
+import { initLocator } from '/navigation/minimap/locator.js';
+import { initMarks } from '/navigation/minimap/marks.js';
+
+// The drawn map in page px, its letterboxing left out; null while it is hidden.
+function drawnMap(bounds, stretch) {
+  const edge = Math.min(bounds.width, bounds.height);
+  if (!(edge > 0)) return null;
+  const [width, height] = stretch ? [bounds.width, bounds.height] : [edge, edge];
+  const inset = [(bounds.width - width) / 2, (bounds.height - height) / 2];
+  return { width, height, stretch, inset, origin: [bounds.left + inset[0], bounds.top + inset[1]] };
+}
 
 // Terrain/fog are retained SVG images. Only their transform and occupied actor
 // pixels change; neither zoom nor panning regenerates a world raster.
 export function initMinimapView(svg, panel, jump, order) {
+  const locator = initLocator(document.getElementById('minimap-marker'));
+  const drawMarks = initMarks(document.getElementById('minimap-marks'));
+  let ground = null, frame = null;
   const layer = document.getElementById('minimap-view');
   const entities = document.getElementById('minimap-entities');
   const indicator = document.getElementById('minimap-zoom');
@@ -16,7 +30,8 @@ export function initMinimapView(svg, panel, jump, order) {
     if (node.getAttribute(key) !== value) node.setAttribute(key, value);
   }
   function render() {
-    const next = [world, center, zoom, side, revision].flat().join(',');
+    locator.draw(ground, world, state());
+    const next = [world, center, zoom, side, revision, frame?.width, frame?.height, frame?.inset].flat().join(',');
     if (signature === next) return;
     signature = next;
     const p = minimapProject(center, world);
@@ -42,10 +57,12 @@ export function initMinimapView(svg, panel, jump, order) {
       for (const [key, value] of Object.entries(values)) attribute(node, key, value);
     }
     for (const [key, node] of nodes) if (!live.has(key)) { node.remove(); nodes.delete(key); }
+    drawMarks(actors, world, state(), frame);
   }
   function reset() { zoom = 1; follow = true; update(world, camera); }
-  function update(size, position) {
-    world = size; camera = position;
+  // `seen`: the four unclamped ground corners of the screen, null for none.
+  function update(size, position, seen = ground) {
+    world = size; camera = position; ground = seen;
     if (follow) center = zoom === 1 ? world.map(v => v / 2) : [...camera];
     render();
   }
@@ -93,9 +110,13 @@ export function initMinimapView(svg, panel, jump, order) {
   function resize() {
     const bounds = svg.getBoundingClientRect();
     side = Math.max(1, Math.floor(Math.min(bounds.width, bounds.height)));
+    frame = drawnMap(bounds, svg.getAttribute('preserveAspectRatio') === 'none');
+    locator.place(frame);
     render();
   }
   new ResizeObserver(resize).observe(svg);
+  // A CSS zoom of the menu keeps the map's own size, so no observer need fire.
+  window.addEventListener('resize', resize);
   resize();
   return { update, reset, state, records: () => actors, revision: () => revision,
     actors(values) {

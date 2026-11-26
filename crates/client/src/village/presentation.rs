@@ -53,9 +53,11 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
     }
     for b in &client.village.buildings {
         values[6] += 1.0;
+        // The building bit, with the same local ownership bit as a unit's.
+        let kind = if b.player == owner { 9.0 } else { 1.0 };
         actor_marker(
             &mut values,
-            1.0,
+            kind,
             building_center(b),
             b.player,
             owner,

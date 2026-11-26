@@ -35,7 +35,6 @@ export function initNavigation() {
   const toggle = document.getElementById('overview-toggle');
   const title = document.getElementById('minimap-title');
   const image = document.getElementById('minimap-terrain');
-  const camera = document.getElementById('minimap-camera');
   const primary = document.getElementById('minimap-primary');
   const viewport = document.getElementById('minimap-viewport');
   const fog = initFogMap(svg);
@@ -173,6 +172,7 @@ export function initNavigation() {
     if (rasterUrl) URL.revokeObjectURL(rasterUrl);
     rasterUrl = null;
     stopPanning();
+    view.update(world, center, null);
     view.reset();
     view.actors([]);
     strategic.reset();
@@ -314,20 +314,18 @@ export function initNavigation() {
       world = [Math.max(1, state[0]), Math.max(1, state[1])];
       center = [state[2], state[3]];
       views.present(state);
-      view.update(world, center);
+      const across = state[6] / (256 * state[8]), down = state[7] / (128 * state[8]);
+      const ground = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([x, y]) =>
+        [center[0] + x * across + y * down, center[1] - x * across + y * down]);
+      view.update(world, center, ground);
       datum('worldWidth', world[0]);
       datum('worldHeight', world[1]);
       datum('cameraX', center[0]);
       datum('cameraY', center[1]);
       datum('zoom', state[8]);
-      marker(camera, center);
       marker(primary, [state[4], state[5]]);
-      const points = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([x, y]) => {
-        const dx = x * state[6] / (256 * state[8]);
-        const dy = y * state[7] / (128 * state[8]);
-        return [Math.max(0, Math.min(256, (center[0] + dx + dy) / world[0] * 256)),
-          Math.max(0, Math.min(256, (center[1] - dx + dy) / world[1] * 256))].join(',');
-      });
+      const points = ground.map(point => point.map((value, axis) =>
+        Math.max(0, Math.min(256, value / world[axis] * 256))).join(','));
       attribute(viewport, 'points', points.join(' '));
     },
     frame(state) {
