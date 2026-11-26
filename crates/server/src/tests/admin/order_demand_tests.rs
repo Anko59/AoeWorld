@@ -20,6 +20,10 @@ async fn route_demand_reports_movers_and_supersessions_inside_ten_seconds() {
         assert_eq!(status, 200);
         assert_eq!(body["units"], 2);
         assert_eq!(body["movers"], 1);
+        let failures = &body["order_demand"]["route_failures_by_issuer"];
+        assert_eq!(failures["rust_ai"], 0);
+        assert_eq!(failures["unattributed"], 0);
+        assert_eq!(failures.as_object().unwrap().len(), 9);
         let service = server.state.gameplay.read().await.clone();
         service
             .world

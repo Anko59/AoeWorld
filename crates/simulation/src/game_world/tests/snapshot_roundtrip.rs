@@ -408,3 +408,44 @@ fn a_save_resumes_at_the_same_game_time_at_another_rate() {
     };
     assert_eq!(queue(&again), queue(&snapshot));
 }
+
+#[test]
+fn route_failure_issuer_survives_queueing_but_is_unknown_after_restore() {
+    use crate::OrderIssuer;
+
+    let (mut live, _) = flat();
+    let origin = TileCoord::new(20, 20);
+    let target = TileCoord::new(120, 20);
+    let position = |tile| WorldPosition::from_tile_center(tile).unwrap();
+    let id = live.spawn_unit(PlayerId(0), position(origin)).unwrap();
+    live.fast_route_budget = Some(0);
+    assert_eq!(
+        live.with_order_issuer(OrderIssuer::RustAi, |w| w.issue_move(id, position(target))),
+        Ok(true)
+    );
+    let snapshot = live.snapshot([0; 32]).unwrap();
+    let (mut restored, _) = flat();
+    restored.fast_route_budget = Some(0);
+    restored
+        .restore_snapshot(&snapshot, [0; 32], &|| false)
+        .unwrap();
+
+    for (world, expected) in [
+        (&mut live, [0, 0, 0, 0, 0, 0, 0, 1, 0]),
+        (&mut restored, [0, 0, 0, 0, 0, 0, 0, 0, 1]),
+    ] {
+        let index = world.lookup[&id];
+        assert!(world.waiting_for_route(index));
+        // Exhaust the planner on its next poll without changing the queued order.
+        world.store_planner(index, Some(aoe_map::RoutePlanner::new(origin, target, 0)));
+        world.with_order_issuer(OrderIssuer::General, |w| w.advance());
+        assert_eq!(
+            world.movement_failure(id),
+            Some(GameWorldError::PathBudgetExceeded)
+        );
+        assert_eq!(
+            world.order_route_failures().map(|(_, count)| count),
+            expected
+        );
+    }
+}

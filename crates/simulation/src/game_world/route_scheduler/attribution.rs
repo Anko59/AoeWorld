@@ -3,7 +3,7 @@
 //! fair budget is saturated; these split work and outcomes by unit category
 //! and straight distance, name the call sites whose searches fail, and count
 //! formation orders ended by the wait bound apart from single units.
-use crate::UnitKind;
+use crate::{GameWorld, OrderIssuer, UnitKind};
 use aoe_core::TileCoord;
 use std::collections::BTreeMap;
 use std::panic::Location;
@@ -80,6 +80,7 @@ pub struct RouteAttribution {
     /// `[category][distance]`.
     pub classes: [[RouteClass; 4]; 4],
     pub callers: BTreeMap<String, RouteCaller>,
+    failures_by_issuer: [u64; 9],
     /// Formation orders (the carrier's wait) ended by the wait bound, and the
     /// members they took with them; single units ended by it.
     pub group_orders_expired: u64,
@@ -130,6 +131,34 @@ fn caller_key(caller: Caller) -> String {
     )
 }
 
+impl GameWorld {
+    /// Terminal route failures by issuing authority. Restored searches have
+    /// no original issuer and are counted separately.
+    pub fn order_route_failures(&self) -> [(&'static str, u64); 9] {
+        let names = [
+            "player",
+            "python_ai",
+            "auto_scout",
+            "steward",
+            "vassal",
+            "general",
+            "rally_automation",
+            "rust_ai",
+            "unattributed",
+        ];
+        std::array::from_fn(|i| {
+            (
+                names[i],
+                self.route_metrics.attribution.failures_by_issuer[i],
+            )
+        })
+    }
+
+    pub(crate) fn current_route_issuer(&self) -> Option<OrderIssuer> {
+        (!self.order_diagnostics.restoring_jobs).then_some(self.order_diagnostics.issuer)
+    }
+}
+
 impl RouteAttribution {
     fn class(&mut self, kind: UnitKind, from: TileCoord, to: TileCoord) -> &mut RouteClass {
         &mut self.classes[category(kind)][distance(from, to)]
@@ -177,7 +206,9 @@ impl RouteAttribution {
         work: u32,
         reason: usize,
         at: Caller,
+        issuer: Option<OrderIssuer>,
     ) {
+        self.failures_by_issuer[issuer.map_or(8, |source| source as usize)] += 1;
         let small = (1_024..4_096).contains(&work);
         let class = self.class(kind, from, to);
         class.failed += 1;

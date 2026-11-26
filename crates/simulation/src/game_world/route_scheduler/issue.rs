@@ -136,6 +136,7 @@ impl GameWorld {
         }
         self.route_metrics.orders += 1;
         let caller = self.route_metrics.caller;
+        let issuer = self.current_route_issuer();
         self.route_metrics
             .attribution
             .order(kind, origin, destination, caller);
@@ -146,7 +147,7 @@ impl GameWorld {
             self.route_metrics.stuck += 1;
             self.route_metrics
                 .attribution
-                .failed(kind, origin, destination, 0, 0, caller);
+                .failed(kind, origin, destination, 0, 0, caller, issuer);
             return Some(MapRoutePlan::Outcome(MovementOutcome::Unreachable));
         }
         let allowance = self.fast_route_allowance();
@@ -168,10 +169,15 @@ impl GameWorld {
         let reason = super::attribution::failure_reason(&result);
         let fail = |world: &mut Self| {
             world.route_metrics.failed(work);
-            world
-                .route_metrics
-                .attribution
-                .failed(kind, origin, destination, work, reason, caller);
+            world.route_metrics.attribution.failed(
+                kind,
+                origin,
+                destination,
+                work,
+                reason,
+                caller,
+                issuer,
+            );
         };
         let settled = |world: &mut Self, outcome: MovementOutcome| {
             world.cache_route(&planner, kind, player, &outcome);

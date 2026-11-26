@@ -200,10 +200,16 @@ impl GameWorld {
         self.route_metrics.sample("stuck", kind, &sample);
         self.route_metrics.failed(work);
         let (from, to) = (sample.origin(), sample.destination());
-        let caller = self.units[index].route_caller;
-        self.route_metrics
-            .attribution
-            .failed(kind, from, to, work, 0, caller);
+        let unit = &self.units[index];
+        self.route_metrics.attribution.failed(
+            kind,
+            from,
+            to,
+            work,
+            0,
+            unit.route_caller,
+            unit.route_issuer,
+        );
         if self.units[index].formation == Some(id) {
             let nearest = self
                 .land_frontier(self.units[index].state.player, bucket, from, to)

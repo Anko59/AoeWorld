@@ -67,6 +67,7 @@ type Source = (usize, Option<Site>, Site, usize);
 #[derive(Debug, Default)]
 pub(crate) struct OrderDiagnostics {
     pub issuer: OrderIssuer,
+    pub restoring_jobs: bool,
     pub demand: [OrderDemand; 8],
     /// Route-planner work (issue, fair pass, planning ahead) by the issuer of
     /// the unit's latest accepted order; the last row has no known issuer.

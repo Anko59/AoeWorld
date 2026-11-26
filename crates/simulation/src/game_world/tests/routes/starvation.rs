@@ -308,3 +308,49 @@ fn repeated_waiting_goals_retain_search_progress_and_the_original_deadline() {
         requests
     );
 }
+
+#[test]
+fn route_failure_issuer_counts_an_issue_time_refusal_once() {
+    let mut world = sealed_near_world();
+    let id = world
+        .spawn_unit(PlayerId(3), tile_position(CX, CY - RADIUS - 1))
+        .unwrap();
+    assert_eq!(
+        world.with_order_issuer(crate::OrderIssuer::Steward, |w| {
+            w.issue_task_move(id, tile_position(CX, CY))
+        }),
+        Err(GameWorldError::Unreachable)
+    );
+    assert_eq!(
+        world.order_route_failures().map(|(_, count)| count),
+        [0, 0, 0, 1, 0, 0, 0, 0, 0]
+    );
+}
+
+#[test]
+fn route_failure_issuer_counts_a_queued_region_proof_once() {
+    use crate::OrderIssuer;
+
+    let mut world = sealed_near_world();
+    let id = world
+        .spawn_unit(PlayerId(3), tile_position(CX, CY - RADIUS - 1))
+        .unwrap();
+    world.fast_route_budget = Some(0);
+    world.planning_budget = Some(0);
+    assert_eq!(
+        world.with_order_issuer(OrderIssuer::PythonAi, |w| {
+            w.issue_move(id, tile_position(CX, CY))
+        }),
+        Ok(true)
+    );
+    assert!(world.waiting_for_route(world.lookup[&id]));
+    world.with_order_issuer(OrderIssuer::General, |w| w.advance());
+    assert_eq!(
+        world.movement_failure(id),
+        Some(GameWorldError::Unreachable)
+    );
+    assert_eq!(
+        world.order_route_failures().map(|(_, count)| count),
+        [0, 1, 0, 0, 0, 0, 0, 0, 0]
+    );
+}

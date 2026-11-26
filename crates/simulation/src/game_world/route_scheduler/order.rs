@@ -196,7 +196,9 @@ impl GameWorld {
         let dy = i64::from(waypoint.y) - i64::from(origin.y);
         let stationary = kind.is_trebuchet() && self.trebuchet_transforming(id);
         self.set_movement_error(index, None);
+        let issuer = self.current_route_issuer();
         let unit = &mut self.units[index];
+        unit.route_issuer = issuer;
         unit.obstruction = None;
         unit.state.previous_position = origin;
         if !stationary {
