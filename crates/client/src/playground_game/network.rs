@@ -85,6 +85,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             let _ = old.close();
         }
         client.status = "connecting".to_owned();
+        lifecycle::set_controller_ready(&client, false);
         client.order_feedback.clear();
         client.village.pending_training.clear();
         client.village.here_orders = Default::default();
@@ -163,6 +164,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.primary = Some(primary_unit_id);
                 client.token = Some(resume_token);
                 storage::save_token(Some(resume_token));
+                lifecycle::set_controller_ready(&client, true);
                 client.status = "connected".to_owned();
                 // A new connection clears connection errors; an order rejection
                 // stays until the next order rather than the next snapshot.
@@ -406,6 +408,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.camera.focus_elevation_meters = 0.0;
                 client.token = None;
                 storage::save_token(None);
+                lifecycle::set_controller_ready(&client, false);
                 controls::map_changed(None);
                 client.status = "map changed; reconnecting".to_owned();
             }
@@ -455,6 +458,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             lifecycle::record_close(client, &event);
             client.status = "reconnecting".to_owned();
             client.socket = None;
+            lifecycle::set_controller_ready(client, false);
         }
     });
     socket.set_onclose(Some(onclose.as_ref().unchecked_ref()));

@@ -1,6 +1,7 @@
 import { expect } from "@playwright/test";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
+import { forceCanvas } from "../rendering/backends.js";
 
 const cases = [
   { saved: { id: 987654 }, status: 404 },
@@ -18,6 +19,9 @@ for (const { saved, status } of cases) {
   }) => {
     expect((await request.post("/maps/reset")).status()).toBe(204);
     await gameAssets(page);
+    const fallback = "submission" in saved && status === 404;
+    // The fallback replaces #scene before the controller connects.
+    if (fallback) await forceCanvas(page);
     await page.addInitScript(
       (saved) =>
         localStorage.setItem(
@@ -27,9 +31,11 @@ for (const { saved, status } of cases) {
       saved,
     );
     const keys: (string | undefined)[] = [];
-    await page.route("**/maps/jobs/987654", (route) =>
-      route.fulfill({ status: 404, body: "Unknown job" }),
-    );
+    let jobReads = 0;
+    await page.route("**/maps/jobs/987654", (route) => {
+      jobReads++;
+      return route.fulfill({ status: 404, body: "Unknown job" });
+    });
     await page.route("**/maps/jobs", async (route) => {
       if (route.request().method() !== "POST")
         return route.fulfill({ json: [] });
@@ -46,6 +52,11 @@ for (const { saved, status } of cases) {
     await page
       .getByRole("button", { name: "Single Player", exact: true })
       .click();
+    if (fallback)
+      await expect(page.locator("#playground")).toHaveAttribute(
+        "data-renderer",
+        "canvas2d",
+      );
     await expect(page.locator("#scene")).toHaveAttribute(
       "data-connected",
       "true",
@@ -55,6 +66,7 @@ for (const { saved, status } of cases) {
     ).toBeEnabled();
     await expect(page.locator("#setup-status")).not.toContainText("Connecting");
     expect(keys).toEqual("submission" in saved ? [saved.submission.key] : []);
+    expect(jobReads).toBe("id" in saved ? 1 : 0);
     expect(
       await page.evaluate(() =>
         localStorage.getItem("aoeworld.map-creation-job"),

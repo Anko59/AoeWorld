@@ -1,6 +1,15 @@
 //! Persistent connection diagnostics and world replacement.
 use super::*;
 
+pub(super) fn set_controller_ready(client: &Client, ready: bool) {
+    if let Some(playground) = client.document.get_element_by_id("playground") {
+        let _ = playground.set_attribute(
+            "data-controller-ready",
+            if ready { "true" } else { "false" },
+        );
+    }
+}
+
 pub(super) fn record_close(client: &mut Client, event: &Event) {
     village::construction::strategic::connection_reset(client);
     let reason = js_sys::Reflect::get(&event, &JsValue::from_str("reason"))
