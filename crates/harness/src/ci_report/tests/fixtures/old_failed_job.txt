@@ -1,0 +1,30 @@
+<!-- aoe-perf-comment -->
+## CI performance numbers (informational)
+
+The `target-performance` job of [run 38659873414](https://github.com/Anko59/AoeWorld/actions/runs/38659873414) measured revision `49e14ac729e3a5bc94b4291122e93660a4d74683` against the latest successful `dev` run [38642286053](https://github.com/Anko59/AoeWorld/actions/runs/38642286053) (revision `ea5a1def8acf14d03149f7a2fd66cacdce5fa892`).
+
+Informational only: failing checks stay the checks, and this comment never gates a merge.
+
+| Metric | dev | this PR | Δ | Note |
+|---|---:|---:|---:|---|
+| Optimized WASM raw (bytes) | 616796 | 616796 | +0 (+0.0%) | deterministic |
+| Optimized WASM gzip (bytes) | 265980 | 265980 | +0 (+0.0%) | deterministic; baseline 261677, cap 274760 |
+| Instructions: assets::palette_decode | 238987 | 238987 | +0 (+0.0%) | deterministic |
+| Instructions: protocol::snapshot_encode | 207527 | 207527 | +0 (+0.0%) | deterministic |
+| Instructions: simulation::advance | 675830 | 675830 | +0 (+0.0%) | deterministic |
+| Instructions: simulation::viewport_query | 270014 | 270014 | +0 (+0.0%) | deterministic |
+
+Timing rows appear only when this PR's value lies outside the band spanned by `dev` itself across its last 3 successful runs — their [min, max] widened by 25% of that range (`crates/harness/src/perf_comment/noise.json`); tick times and protocol latencies vary with scheduling on shared runners.
+
+instruction counts unchanged: timing differences are most likely runner noise
+
+Job durations of run 38659873414 (setup, compile and gates per job):
+
+| CI job | Duration |
+|---|---:|
+| select | 1m35s |
+| static (failure) | 16m00s |
+| fuzz-smoke | 2m34s |
+| target-performance | 4m03s |
+
+**Not measured here:** real frame rate. CI renders in software; the 1920×1080 check is dedicated-hardware qualification only ([docs/performance.md](docs/performance.md)).

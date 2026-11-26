@@ -6,6 +6,7 @@
 | Simpler, faster tests; net-negative lines | 10-27, 11-13 x2 | PARTIAL | #845, #847, #799, #797 and the 10-27 wave (#582 to #604) | Keep deleting; no gate may block a justified behaviour change |
 | Release evidence job: coverage ran 60+ minutes and failed 90 dev runs | 11-13 | PARTIAL | #808, #818, #841 | Issue #956: split the coverage job and move it to a nightly (harness session) |
 | Update issue 748 body and #745 body from this roadmap | 11-16 | IN FLIGHT `roadmap/cleanup-11-21` | Issue 748 body is the 11-09 snapshot, #745 body is the 11-09 list | This cleanup rewrites the #748 body as a pointer to docs/roadmap.md; update the #745 body next |
+| A make command for the CI report page: counts, times and reliability over time | 11-26 | IN FLIGHT `harness/ci-report` | Owner 11-26: "I want a make command to get the report page that you gave me earlier"; `make ci-report` ([CI report page](../ci-report.md)) | Merge it, then flip this row to DONE with its PR number |
 | Replay recorder for live matches | 11-09 | PLANNED | See [scale](scale.md) | |
 
 ## Done or dropped

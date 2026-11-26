@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>AoeWorld CI report</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff; --fg: #1b1f24; --muted: #5b6470; --line: #d9dde3; --panel: #f5f7fa;
+  --ok: #15803d; --warn: #b45309; --bad: #b91c1c;
+  --s0: #0b6bcb; --s1: #c2410c; --s2: #15803d; --s3: #a21caf;
+  --s4: #0e7490; --s5: #be123c; --s6: #4d7c0f; --s7: #6b7280;
+  --h1: #fef3c7; --h2: #fed7aa; --h3: #fecaca;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111418; --fg: #e6e9ed; --muted: #9aa4b0; --line: #2f353d; --panel: #1a1f25;
+    --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+    --s0: #60a5fa; --s1: #fb923c; --s2: #4ade80; --s3: #e879f9;
+    --s4: #22d3ee; --s5: #fb7185; --s6: #a3e635; --s7: #9ca3af;
+    --h1: #3b3417; --h2: #4a2f17; --h3: #4c1d1d;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+main { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; display: flex; flex-direction: column; gap: 32px; }
+header, section { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+h1 { margin: 0; font-size: 26px; font-weight: 600; }
+h2 { margin: 0; font-size: 18px; font-weight: 600; text-wrap: balance; }
+h3 { margin: 12px 0 0; font-size: 15px; font-weight: 600; }
+p { margin: 0; }
+.lede { max-width: 72ch; font-size: 16px; }
+.lede b { font-variant-numeric: tabular-nums; }
+.note, .quiet, .empty { color: var(--muted); font-size: 13px; line-height: 1.45; max-width: 84ch; }
+.warn { color: var(--warn); }
+a { color: inherit; text-underline-offset: 2px; }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+code { font-size: 0.92em; }
+.chart { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; list-style: none; color: var(--muted); font-size: 13px; }
+.legend li { display: flex; align-items: center; gap: 6px; }
+.sw { width: 14px; height: 3px; border-radius: 2px; background: var(--s0); }
+.plot { position: relative; }
+.plot svg { display: block; width: 100%; height: auto; overflow: visible; touch-action: pan-y; }
+.plot svg.narrow { display: none; }
+@media (max-width: 639px) { .plot svg.wide { display: none; } .plot svg.narrow { display: block; } }
+.grid { stroke: var(--line); stroke-width: 1; }
+.base { stroke: var(--muted); stroke-width: 1; }
+.ax, .gl, .mk { fill: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.mk { fill: var(--fg); font-weight: 600; }
+.mark, .guide { stroke: var(--muted); stroke-width: 1; }
+.cross { stroke: var(--fg); stroke-width: 1; opacity: 0.5; }
+.hit { fill: transparent; }
+.line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.dot { stroke: none; }
+.s0 { stroke: var(--s0); fill: var(--s0); } .s1 { stroke: var(--s1); fill: var(--s1); }
+.s2 { stroke: var(--s2); fill: var(--s2); } .s3 { stroke: var(--s3); fill: var(--s3); }
+.s4 { stroke: var(--s4); fill: var(--s4); } .s5 { stroke: var(--s5); fill: var(--s5); }
+.s6 { stroke: var(--s6); fill: var(--s6); } .s7 { stroke: var(--s7); fill: var(--s7); }
+.line.s0, .line.s1, .line.s2, .line.s3, .line.s4, .line.s5, .line.s6, .line.s7 { fill: none; }
+.sw.s0 { background: var(--s0); } .sw.s1 { background: var(--s1); } .sw.s2 { background: var(--s2); } .sw.s3 { background: var(--s3); }
+.sw.s4 { background: var(--s4); } .sw.s5 { background: var(--s5); } .sw.s6 { background: var(--s6); } .sw.s7 { background: var(--s7); }
+.sw { stroke: none; }
+.tip {
+  position: absolute; top: 24px; z-index: 2; max-width: min(320px, 90%); padding: 8px 10px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; font-size: 12px;
+  line-height: 1.4; white-space: pre-line; pointer-events: none; overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+.tip[hidden] { display: none; }
+.events { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.events b { display: inline-block; min-width: 1.4em; color: var(--fg); }
+.scroll { overflow-x: auto; }
+.tall { max-height: 460px; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 12px 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; text-align: left; }
+th { color: var(--muted); font-weight: 600; white-space: nowrap; }
+td.n, th.n { text-align: right; white-space: nowrap; }
+.up { color: var(--bad); } .down { color: var(--ok); }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px; white-space: nowrap; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.pill.passes::before { background: var(--ok); } .pill.warns::before { background: var(--warn); }
+.pill.fails::before { background: var(--bad); } .pill.new-baseline-due::before { background: var(--warn); }
+.heat td.h1 { background: var(--h1); } .heat td.h2 { background: var(--h2); } .heat td.h3 { background: var(--h3); }
+details { color: var(--muted); font-size: 13px; line-height: 1.5; }
+details summary { cursor: pointer; color: var(--fg); }
+details p { margin-top: 8px; max-width: 84ch; }
+@media print { .tall { max-height: none; } .tip { display: none; } }
+</style>
+</head>
+<body>
+<main>
+{{BODY}}
+</main>
+<script>
+(function () {
+  document.querySelectorAll('figure.chart').forEach(function (figure) {
+    var holder = figure.querySelector('script.tips');
+    var plot = figure.querySelector('.plot');
+    var tip = plot && plot.querySelector('.tip');
+    if (!holder || !tip) return;
+    var tips = JSON.parse(holder.textContent);
+    function show(event) {
+      var svg = event.target.ownerSVGElement;
+      if (!svg) return;
+      var box = svg.getBoundingClientRect();
+      var scale = Number(svg.dataset.w) / box.width;
+      var xs = svg.dataset.xs.split(',').map(Number);
+      var at = (event.clientX - box.left) * scale;
+      var best = 0;
+      for (var i = 1; i < xs.length; i++) if (Math.abs(xs[i] - at) < Math.abs(xs[best] - at)) best = i;
+      var cross = svg.querySelector('.cross');
+      cross.setAttribute('x1', xs[best]);
+      cross.setAttribute('x2', xs[best]);
+      cross.style.display = '';
+      tip.textContent = tips[best][1];
+      tip.hidden = false;
+      var left = xs[best] / scale + 12;
+      if (left + tip.offsetWidth > box.width) left = xs[best] / scale - 12 - tip.offsetWidth;
+      tip.style.left = Math.max(0, left) + 'px';
+    }
+    function hide() {
+      tip.hidden = true;
+      plot.querySelectorAll('.cross').forEach(function (line) { line.style.display = 'none'; });
+    }
+    plot.querySelectorAll('.hit').forEach(function (hit) {
+      hit.addEventListener('pointermove', show);
+      hit.addEventListener('pointerdown', show);
+      hit.addEventListener('pointerleave', hide);
+    });
+  });
+})();
+</script>
+</body>
+</html>

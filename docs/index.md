@@ -17,6 +17,7 @@
 - [Testing](testing.md)
 - [Gate registry](gates.md)
 - [Performance](performance.md)
+- [CI report page](ci-report.md): `make ci-report`
 - [Assets](assets.md)
 - [Geographic map workflow](geodata/workflow.md)
 - [Release](release.md)

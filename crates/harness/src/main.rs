@@ -2,6 +2,7 @@ mod agents;
 mod architecture;
 mod assets;
 mod browser_ports;
+mod ci_report;
 mod cli;
 #[cfg(test)]
 #[allow(dead_code)]

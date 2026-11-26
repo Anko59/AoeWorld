@@ -70,6 +70,7 @@ pub(super) fn run(
         }
         Command::Impact { base, paths } => gates::impact(base.as_deref(), paths)?,
         Command::CiSelect => gates::ci_select()?,
+        Command::CiReport => crate::ci_report::run(Path::new("."))?,
         Command::CiCheck => gates::ci_check()?,
         Command::CiDispatchStatus => gates::dispatch_status::run()?,
         Command::Fmt => format_commands(false)?,
