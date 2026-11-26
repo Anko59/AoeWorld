@@ -4,7 +4,7 @@ Owner, 2026-11-26: "I need a better test run policy, where PRs that touch differ
 different tests. So everything doesn't run all the time."
 
 A pull request runs the jobs, the unit tests and the static checks its change can break, and the `select` job says why.
-A push to `dev` and the nightly run everything. The code is `crates/harness/src/gates/select/`; the data is
+A push to `dev` runs everything; the nightly runs its own long jobs and does not use the selection. The code is `crates/harness/src/gates/select/`; the data is
 [`gates/ci-rules.json`](../gates/ci-rules.json); `make ci-select` writes the manifest and
 [testing](testing.md) describes the jobs.
 
@@ -60,7 +60,7 @@ Unit scope is the changed crates plus every crate that depends on them, edges of
 | `browser/tests/**` only | browser, e2e | target-performance, fuzz-smoke | harness (its tests read the directory) | light, unit |
 | `deny.toml` | none | all | none | checks |
 
-`native-coverage`, `qualification` and `exhaustive` run on pushes and the nightly only, never on a pull request.
+`native-coverage`, `qualification` and `exhaustive` run on pushes to `dev` only, never on a pull request.
 
 The **static legs** are the matrix of the `static` job: `light` (`make preflight-light`: format, structure, architecture
 and documentation checks, no compile), `checks` (`make preflight-checks`: those plus `deny`, the wasm build and
@@ -77,7 +77,7 @@ changes the base); it counts commits only, so commit before reading it.
 
 ## Safety net
 
-Pushes to `dev` and the nightly select everything: with no base there is no changed path, and no changed path selects
+Pushes to `dev` select everything: with no base there is no changed path, and no changed path selects
 everything. `required` keeps its name and its rule: it recomputes the manifest at the checked-out revision, compares
 it field by field (reasons, legs and unit scope included) and accepts a skipped job only when the manifest
 deselected it. `AOE_TEST_ALL=1` forces the whole workspace in any leg, and an unreadable `AOE_UNIT_SCOPE` is an error.

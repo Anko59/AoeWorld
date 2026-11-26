@@ -174,6 +174,14 @@ const ROWS: &[Row] = &[
         perf_smoke: false,
     },
     Row {
+        change: "harness ci_report (the CI report page)",
+        paths: &["crates/harness/src/ci_report/page.rs"],
+        jobs: &[],
+        unit: Some(&["aoe-harness"]),
+        parts: &["checks", "unit"],
+        perf_smoke: false,
+    },
+    Row {
         change: "harness review",
         paths: &["crates/harness/src/review/trusted.rs"],
         jobs: &[],

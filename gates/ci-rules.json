@@ -64,7 +64,7 @@
     },
     {
       "globs": [
-        "crates/harness/src/agents/**",
+        "crates/harness/src/agents/**", "crates/harness/src/ci_report/**",
         "crates/harness/src/review/**",
         "crates/harness/src/ledger/**", "crates/harness/src/roadmap/**",
         "crates/harness/src/timeline/**", "crates/harness/src/input_json/**",
