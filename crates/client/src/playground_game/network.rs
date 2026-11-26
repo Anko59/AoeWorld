@@ -130,7 +130,10 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 return;
             }
         };
-        match decode_gameplay_server(&bytes) {
+        let message = decode_gameplay_server(&bytes);
+        #[cfg(feature = "frame-bench")]
+        super::perf::tag_snapshot(message.as_ref().ok());
+        match message {
             Ok(GameplayServerMessage::Welcome {
                 width_tiles,
                 height_tiles,

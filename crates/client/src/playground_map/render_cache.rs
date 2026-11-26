@@ -99,6 +99,11 @@ impl<S> Default for RenderFrameCache<S> {
 }
 
 impl<S> RenderFrameCache<S> {
+    #[cfg(feature = "frame-bench")]
+    pub(crate) fn benchmark_units(&self) -> &[SceneUnit] {
+        self.previous.as_ref().map_or(&[], |frame| &frame.units)
+    }
+
     pub(crate) fn prefetch_ready(&self) -> bool {
         self.previous
             .as_ref()

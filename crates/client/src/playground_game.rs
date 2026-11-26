@@ -283,7 +283,11 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             let resources = map::scene_resources(&client);
             let mut required =
                 aoe_rendering::scene_native_frames(&client.art, &units, camera, time as usize);
+            #[cfg(feature = "frame-bench")]
+            let terrain_plan = perf::Scope::stage(3);
             required.extend(scene.terrain_plan(&mut client.art).required());
+            #[cfg(feature = "frame-bench")]
+            drop(terrain_plan);
             required.extend(aoe_rendering::scene_resource_native_frames(
                 &client.art,
                 &resources,
