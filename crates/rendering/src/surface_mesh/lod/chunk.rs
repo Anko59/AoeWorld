@@ -45,3 +45,46 @@ pub fn chunk_surface_triangles(
         refined,
     )
 }
+
+// A unit-sized textured subdivision can use the source shore exactly while
+// sharing the coarser cell's geometry. Limit this scratch lookup to wet patches.
+pub(super) struct ShoreMaterials<'a> {
+    keys: crate::WorldKeyIndex,
+    samples: Vec<&'a SceneTerrain>,
+}
+
+impl<'a> ShoreMaterials<'a> {
+    pub(super) fn new(terrain: &'a [SceneTerrain], region: TileRect) -> Option<Self> {
+        let sources = terrain.iter().filter(|sample| {
+            let [x, y] = tile_key(sample.position);
+            region.contains(TileCoord::new(x, y))
+        });
+        if !sources.clone().any(Self::wet) {
+            return None;
+        }
+        let mut shore = Self {
+            keys: crate::WorldKeyIndex::default(),
+            samples: Vec::new(),
+        };
+        for sample in sources {
+            if shore.keys.entry(tile_key(sample.position)) == shore.samples.len() {
+                shore.samples.push(sample);
+            }
+        }
+        Some(shore)
+    }
+
+    fn wet(sample: &SceneTerrain) -> bool {
+        sample.surface.water != 0 || appearance::water_material(sample.material)
+    }
+
+    pub(super) fn preserve(&self, tile: [i32; 2], sample: &mut SceneTerrain) {
+        if let Some(source) = self.keys.get(tile).map(|index| self.samples[index])
+            && (Self::wet(source) || Self::wet(sample))
+        {
+            sample.material = source.material;
+            sample.appearance = source.appearance;
+            sample.surface.water = source.surface.water;
+        }
+    }
+}

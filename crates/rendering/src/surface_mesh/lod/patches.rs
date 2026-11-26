@@ -64,6 +64,7 @@ pub(super) fn plan(
     divisions: i32,
     cells: &[Option<CellSample>],
     base: usize,
+    preserve_shore: bool,
 ) -> Patches {
     let patch_grid = CellGrid {
         min: grid.min,
@@ -114,18 +115,22 @@ pub(super) fn plan(
             }
         }
     }
+    const WATER: u32 = (1 << 5) | (1 << 10) | (1 << 12);
     let mixed = masks
         .into_iter()
-        .map(|mask| mask & ((1 << 4) | (1 << 7)) != 0 && mask.count_ones() > 1)
+        .map(|mask| {
+            (mask & ((1 << 4) | (1 << 7)) != 0 && mask.count_ones() > 1)
+                || (preserve_shore && mask & WATER != 0 && mask & !WATER != 0)
+        })
         .collect::<Vec<_>>();
-    let (mut crop_boundaries, mut mountain_boundaries) = (0, 0);
+    let (mut crop_boundaries, mut material_boundaries) = (0, 0);
     let full = (patch_grid.size as usize).saturating_pow(2);
     for (index, mixed) in mixed.iter().enumerate() {
         let counts = crop_patches.get(index).copied().unwrap_or_default();
         let tile = grid_cell(patch_grid, index);
         if grid_index(grid, cell_key(tile, grid.size)).is_some_and(|i| cells[i].is_some()) {
             crop_boundaries += usize::from(counts != [0; 2] && !counts.contains(&full));
-            mountain_boundaries += usize::from(counts == [0; 2] && *mixed);
+            material_boundaries += usize::from(counts == [0; 2] && *mixed);
         }
     }
     let (crop_refinement, crop_extra) = refinement(
@@ -147,7 +152,7 @@ pub(super) fn plan(
     }
     let (refinement, _) = refinement(
         patch_grid.size,
-        mountain_boundaries,
+        material_boundaries,
         MAX_SURFACE_TRIANGLES.saturating_sub(base.saturating_add(crop_extra)),
     );
     Patches {

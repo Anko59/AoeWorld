@@ -116,7 +116,10 @@ fn mesh_surfaces(
         tiles as usize * (2 * (divisions * divisions) as usize + 2)
     });
     let mut result = Vec::with_capacity(capacity.min(MAX_SURFACE_TRIANGLES));
-    let patches = patches::plan(terrain, grid, divisions, &cells, base);
+    let patches = patches::plan(terrain, grid, divisions, &cells, base, region.is_some());
+    let shore = region
+        .filter(|_| size > 1)
+        .and_then(|rect| chunk::ShoreMaterials::new(terrain, rect));
     let corner_shades = refined.then(|| shade::mesh_shades(&cells, grid, coarse_heights.as_ref()));
     for (slot_index, candidate) in cells.iter().enumerate() {
         let Some(candidate) = candidate else {
@@ -144,6 +147,11 @@ fn mesh_surfaces(
         };
         for (texture_tile, step, farm) in patches.tiles(tile, divisions) {
             let mut sample = sample;
+            if step == 1
+                && let Some(shore) = &shore
+            {
+                shore.preserve(texture_tile, &mut sample);
+            }
             if let Some(material) = farm {
                 sample.material = material;
                 sample.appearance = None;

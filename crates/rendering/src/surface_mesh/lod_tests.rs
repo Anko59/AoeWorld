@@ -330,3 +330,43 @@ fn adjacent_prepared_patches_share_world_heights_and_project_to_the_new_camera()
         assert_eq!(point.screen, camera.world_to_screen_at_height([x, y], z));
     }
 }
+
+#[wasm_bindgen_test]
+fn streamed_unit_faces_keep_the_source_river_until_refinement() {
+    let mut terrain = variable_height_map(8);
+    for tile in &mut terrain {
+        tile.elevation_meters = 0.0;
+        tile.surface = SceneTerrainSurface::flat(0.0);
+        tile.appearance = Some(crate::SceneTerrainAppearance {
+            palette: 5,
+            canopy_strength: 0,
+            floor_strength: 0,
+            exposure: 0,
+            height_band: 0,
+        });
+        // A one-tile river occupies only part of each coarse cell.
+        if tile_key(tile.position)[0] == 3 {
+            tile.material = 11;
+            tile.surface.water = 3;
+        }
+    }
+    let region = aoe_core::TileRect::from_xywh(0, 0, 8, 8);
+    for (size, refined) in [(2, false), (2, true), (4, false), (4, true)] {
+        let faces = chunk_surface_triangles(&terrain, region, size, refined);
+        let mut river_faces = 0;
+        for face in faces.iter().filter(|face| !face.skirt) {
+            let [x, _] = face.texture_tile;
+            assert_eq!(
+                appearance::water_material(face.material),
+                x == 3,
+                "river faces follow source tiles regardless of refinement: {:?}",
+                face.texture_tile
+            );
+            river_faces += usize::from(x == 3);
+        }
+        assert_eq!(
+            river_faces, 16,
+            "both faces of every river tile remain visible"
+        );
+    }
+}

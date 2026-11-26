@@ -123,3 +123,35 @@ material blending refine those same surfaces after the visible and predicted
 views have their meshes.
 The subscription covers a margin around the current view and sends a
 replacement from a separate browser task when that margin is crossed.
+
+## France 11 round two
+
+The matched 45-second captures use the same locally restored France 11 save,
+map, art, 1280 by 720 backing and Chromium 159 with ANGLE SwiftShader. The
+scenes ran at tick 297818 with 63,379 units and 32,658 buildings in the save.
+Both captures used the same separate France terrain crash fix.
+
+| Scene | Build | P50 ms | P99 ms | Max ms | >50 ms/min | >100 ms/min | Callbacks | Submissions |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Fast pan | Before | 124.6 | 927.6 | 1927.4 | 209.8 | 203.2 | 292 | 18 |
+| Fast pan | After | 36.5 | 1385.9 | 1719.7 | 231.0 | 120.8 | 442 | 13 |
+| Crowded hold | Before | 16.7 | 201.3 | 378.6 | 251.9 | 84.0 | 1758 | 13 |
+| Crowded hold | After | 16.7 | 101.9 | 180.4 | 263.9 | 29.3 | 2089 | 16 |
+
+World-space terrain patches start ahead of the moving camera and spread their
+construction over animation callbacks. The base mesh keeps source shorelines
+while material and relief refinement catches up. View changes schedule their
+subscription sends in a separate browser task. WebGL2 reuses instance buffers
+and waits for outstanding draws before allocating new storage.
+
+Fast-pan terrain work in intervals over 50 ms fell from 19.56 to 4.84 seconds.
+Waiting for animation dispatch rose from 13.24 to 24.64 seconds. The observed
+spans covered all 153 baseline and 91 final pan intervals above 100 ms. The
+longest final interval included 1,665.7 ms waiting for dispatch and overlapped
+a 1,498.6 ms Chromium GPU raster task. The next-longest interval overlapped
+1,719.4 ms in GPU context switching.
+
+Both fast-pan targets remain unmet. One-minute load at pan start was 18.72
+before and 14.46 after. Hold load was 14.55 before and 8.80 after. Chromium
+reported a network change during the final pan that interrupted 20 chunk
+requests. The callback and submission counts reflect the recorded run.

@@ -58,6 +58,7 @@ export class AoeWebGl {
         // A restored context invalidates all sync objects from its lost lifetime.
         this.pendingFrames = [];
         this.frameError = null;
+        this.waitingForStorage = false;
         this.patching = this.patchesPending = this.drainingForAtlas = this.needsFrameValidation = false;
         this.worldBytes = 0;
         this.atlasReady = false;
@@ -230,8 +231,11 @@ export class AoeWebGl {
                 gl.deleteSync(sync); this.pendingFrames.shift(); this.needsFrameValidation = true;
             }
             // getError can wait for newer drawing even after the oldest fence signals.
-            if (this.needsFrameValidation && this.atlasUpdatesReady) {
-                this.check(); this.needsFrameValidation = false;
+            if (this.atlasUpdatesReady) {
+                this.waitingForStorage = false;
+                if (this.needsFrameValidation) {
+                    this.check(); this.needsFrameValidation = false;
+                }
             }
         } catch (error) { this.frameError = error; throw error; }
         return true;
@@ -239,7 +243,8 @@ export class AoeWebGl {
     get atlasUpdatesReady() { return this.pendingFrames.length === 0; }
     get frameBacklogged() {
         return this.pendingFrames.length >= 2 ||
-            (!this.atlasUpdatesReady && (this.drainingForAtlas || this.needsFrameValidation));
+            (!this.atlasUpdatesReady &&
+             (this.drainingForAtlas || this.waitingForStorage || this.needsFrameValidation));
     }
     prioritizeAtlasUpdates() { this.drainingForAtlas = !this.atlasUpdatesReady; }
     beginPatches() {
@@ -364,6 +369,14 @@ export class AoeWebGl {
             return false;
         }
         const count = instances.byteLength / STRIDE;
+        // Allocation validation is synchronous. Keep existing storage while
+        // an earlier frame is in flight, then retry the latest complete view.
+        if (!this.atlasUpdatesReady &&
+            (instances.byteLength > this.worldBytes ||
+             (effects && (!this.coverage || contours.byteLength > this.contourBytes)))) {
+            this.waitingForStorage = true;
+            return false;
+        }
         // Shared Rust normalization selects hover, or units AND occluders.
         // An unoccluded unit needs no coverage backing or second pass.
         if (effects) {

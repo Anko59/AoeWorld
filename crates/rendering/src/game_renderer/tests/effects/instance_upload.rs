@@ -178,3 +178,27 @@ fn webgl_world_render_retains_and_reuses_instance_staging() {
     };
     assert_eq!(gl.staging.as_ptr(), memory);
 }
+
+#[wasm_bindgen_test]
+fn webgl_defers_new_storage_until_outstanding_work_retires() {
+    let (canvas, mut renderer) = target(&atlas(&[[255; 4]]));
+    let observer = watch_gl_instance_uploads(renderer.test_bridge());
+    let original = bodies();
+    assert!(renderer.render(&mut [original[0]]).unwrap());
+    assert_eq!(uploads(&observer), [0, 112]);
+    let mut expanded = [original[0], original[1]];
+    expanded[1].color = [0.0, 0.0, 1.0, 1.0];
+
+    // A sync created in this browser task cannot signal to script within it.
+    let mut pending = expanded;
+    assert!(!renderer.render(&mut pending).unwrap());
+    assert!(
+        uploads(&observer).is_empty(),
+        "an outstanding draw owns the storage"
+    );
+    super::webgl_complete_frame(renderer.test_bridge());
+
+    render(&mut renderer, &mut expanded);
+    assert_eq!(uploads(&observer), [0, 224]);
+    assert_pixel(&canvas, 64, 64, [0, 0, 255, 255]);
+}
