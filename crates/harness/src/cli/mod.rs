@@ -66,6 +66,8 @@ enum Command {
         paths: Vec<String>,
     },
     CiSelect,
+    /// Build `reports/ci/index.html` and `data.json`: the CI numbers over time, from the CI performance comments and the Actions API.
+    CiReport,
     CiCheck,
     CiDispatchStatus,
     Fmt,

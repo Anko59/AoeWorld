@@ -399,7 +399,7 @@ alone only measures, so `make perf-baseline-propose` still works when the size
 grew.
 
 On pull requests whose `target-performance` job ran, CI posts one informational
-performance comment and rewrites it in place on later runs (`make perf-comment`).
+performance comment and rewrites it in place on later runs (`make perf-comment`); `make ci-report` charts those numbers over time ([CI report page](ci-report.md)).
 It shows the optimized WASM size as `baseline …, cap …` (the cap is the size
 gate's own comparison threshold applied to `baselines/perf/wasm.json`) and the
 pinned kernels' instruction counts as deterministic rows with the gate's warning, failure or refresh note. Tick and

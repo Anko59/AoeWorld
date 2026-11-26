@@ -1,0 +1,50 @@
+<!-- aoe-perf-comment -->
+## CI performance numbers (informational)
+
+The `target-performance` job of [run 45604793989](https://github.com/Anko59/AoeWorld/actions/runs/45604793989) measured revision `4032e9d30648c821c5fe806ec5f4f6aa92260ab7` against the latest `dev` run whose `target-performance` job passed [45597921186](https://github.com/Anko59/AoeWorld/actions/runs/45597921186) (revision `0922a8fdbc8bbe1e864a22f28fc1013abd0ef747`).
+
+This comment never gates a merge. `make perf-ci` does: instruction rows warn above +1% of their baseline and fail above +3% (or +10% of the fixed reference); timing rows are informational.
+
+| Metric | dev | this PR | Δ | Note |
+|---|---:|---:|---:|---|
+| Optimized WASM raw (bytes) | 1045308 | 1045308 | +0 (+0.0%) | deterministic |
+| Optimized WASM gzip (bytes) | 455290 | 455290 | +0 (+0.0%) | deterministic; baseline 375952, cap 469940 |
+| Instructions: assets::palette_decode | 243938 | 243938 | +0 (+0.0%) | deterministic |
+| Instructions: protocol::snapshot_encode | 206498 | 206498 | +0 (+0.0%) | deterministic |
+| Instructions: simulation::advance | 721228 | 721228 | +0 (+0.0%) | deterministic |
+| Instructions: simulation::distributed_ticks | 49648035 | 49508967 | −139068 (−0.3%) | deterministic; warning +1.7% over baseline 48681579 (fails above +3%) |
+| Instructions: simulation::late_game | 9696224729 | 9773830466 | +77605737 (+0.8%) | deterministic |
+| Instructions: simulation::late_game_critical | 8003635405 | 8060231460 | +56596055 (+0.7%) | deterministic; informational, not gated until a dev run sets its baseline: critical path 8060231460 = main thread 7436660622 + busiest worker per phase 623570838 over 4 phases (4 workers, total over all threads 9773830466) |
+| Instructions: simulation::late_game_main | 7359226820 | 7436660622 | +77433802 (+1.1%) | deterministic; warning +1.1% over baseline 7355139769 (fails above +3%) |
+| Instructions: simulation::late_game_x4 | 3068466698 | 3080209105 | +11742407 (+0.4%) | deterministic; improved -53.9%: refresh the baseline with make perf-baseline-propose |
+| Instructions: simulation::late_game_x4_critical | 2843761484 | 2850150322 | +6388838 (+0.2%) | deterministic; informational, not gated until a dev run sets its baseline: critical path 2850150322 = main thread 2732545943 + busiest worker per phase 117604379 over 4 phases (4 workers, total over all threads 3080209105) |
+| Instructions: simulation::late_game_x4_main | 2717316460 | 2732545943 | +15229483 (+0.6%) | deterministic; improved -52.5%: refresh the baseline with make perf-baseline-propose |
+| Instructions: simulation::smoke_ticks | 20590852 | 20545610 | −45242 (−0.2%) | deterministic; warning +2.2% over baseline 20112284 (fails above +3%) |
+| Instructions: simulation::viewport_query | 183229 | 183229 | +0 (+0.0%) | deterministic |
+| Tick p50, late-game (ns) | 13710421 | 9206700 | −4503721 (−32.8%) | timing, noisy runner |
+| Tick p95, late-game (ns) | 17988095 | 12381684 | −5606411 (−31.2%) | timing, noisy runner |
+| Tick p50, smoke (ns) | 838658 | 707520 | −131138 (−15.6%) | timing, noisy runner |
+| Tick p95, smoke (ns) | 1216908 | 881704 | −335204 (−27.5%) | timing, noisy runner |
+| Tick p50, target-distributed (ns) | 5151606 | 3683243 | −1468363 (−28.5%) | timing, noisy runner |
+| Tick p95, target-distributed (ns) | 6026095 | 4042056 | −1984039 (−32.9%) | timing, noisy runner |
+| Tick p50, target-hotspot (ns) | 11917042 | 8643999 | −3273043 (−27.5%) | timing, noisy runner |
+| Tick p95, target-hotspot (ns) | 13122490 | 9304919 | −3817571 (−29.1%) | timing, noisy runner |
+
+Timing rows appear only when this PR's value lies outside the band spanned by `dev` itself across its last 5 runs whose `target-performance` job passed — their [min, max] widened by 25% of that range (`crates/harness/src/perf_comment/noise.json`); tick times and protocol latencies vary with scheduling on shared runners.
+
+Job durations of run 45604793989 (setup, compile and gates per job):
+
+| CI job | Duration |
+|---|---:|
+| select | 2m22s |
+| browser | 16m56s |
+| static (unit) | 15m26s |
+| fuzz-smoke | 6m26s |
+| target-performance | 52m44s |
+| e2e (4) | 25m37s |
+| static (checks) | 6m34s |
+| e2e (1) | 31m27s |
+| e2e (2) | 24m44s |
+| e2e (3) | 30m22s |
+
+**Not measured here:** real frame rate. CI renders in software; the 1920×1080 check is dedicated-hardware qualification only ([docs/performance.md](docs/performance.md)).

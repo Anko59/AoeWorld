@@ -1,0 +1,29 @@
+<!-- aoe-perf-comment -->
+## CI performance numbers (informational)
+
+The `target-performance` job of [run 39472486345](https://github.com/Anko59/AoeWorld/actions/runs/39472486345) measured revision `7d1a5fa2398206f81aefc26ac65b40591b20d43b`, but no recent successful `dev` run uploaded a `performance-report` artifact: `dev` values are missing below and only this pull request's absolute numbers show.
+
+Informational only: failing checks stay the checks, and this comment never gates a merge.
+
+| Metric | dev | this PR | Δ | Note |
+|---|---:|---:|---:|---|
+| Optimized WASM raw (bytes) | — | 657814 | — | deterministic |
+| Optimized WASM gzip (bytes) | — | 287110 | — | deterministic; baseline 274135, cap 287841 |
+| Instructions: assets::palette_decode | — | 238987 | — | deterministic |
+| Instructions: protocol::snapshot_encode | — | 207518 | — | deterministic |
+| Instructions: simulation::advance | — | 675830 | — | deterministic |
+| Instructions: simulation::viewport_query | — | 270014 | — | deterministic |
+
+No timing rows: only 0 successful `dev` runs with a `performance-report` artifact found, and comparing against dev's own variance needs at least 3. A fixed band would flag pure runner noise.
+
+Job durations of run 39472486345 (setup, compile and gates per job):
+
+| CI job | Duration |
+|---|---:|
+| select | 1m58s |
+| static (checks) | 4m56s |
+| target-performance | 4m43s |
+| browser | 6m25s |
+| fuzz-smoke | 3m34s |
+
+**Not measured here:** real frame rate. CI renders in software; the 1920×1080 check is dedicated-hardware qualification only ([docs/performance.md](docs/performance.md)).

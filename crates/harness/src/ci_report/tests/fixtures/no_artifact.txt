@@ -1,0 +1,17 @@
+<!-- aoe-perf-comment -->
+## CI performance numbers (informational)
+
+[Run 40488728501](https://github.com/Anko59/AoeWorld/actions/runs/40488728501) uploaded no `performance-report` artifact (the `target-performance` job may have failed or been skipped); nothing was measured for this pull request.
+
+Informational only: failing checks stay the checks, and this comment never gates a merge.
+
+Job durations of run 40488728501 (setup, compile and gates per job):
+
+| CI job | Duration |
+|---|---:|
+| select | 1m54s |
+| browser | 5m19s |
+| fuzz-smoke | 4m07s |
+| target-performance | 3m44s |
+
+**Not measured here:** real frame rate. CI renders in software; the 1920×1080 check is dedicated-hardware qualification only ([docs/performance.md](docs/performance.md)).

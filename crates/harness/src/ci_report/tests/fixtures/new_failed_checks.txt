@@ -1,0 +1,36 @@
+<!-- aoe-perf-comment -->
+## CI performance numbers (informational)
+
+The `target-performance` job of [run 41517073370](https://github.com/Anko59/AoeWorld/actions/runs/41517073370) measured revision `ab5e7035916642ccbb858b7f5ca1f33d6e73968e` against the latest `dev` run whose `target-performance` job passed [41514582750](https://github.com/Anko59/AoeWorld/actions/runs/41514582750) (revision `65a48281dc08d307951c005a79a22e4aa890f94f`).
+
+This comment never gates a merge. `make perf-ci` does: instruction rows warn above +1% of their baseline and fail above +3% (or +10% of the fixed reference); timing rows are informational.
+
+| Metric | dev | this PR | Δ | Note |
+|---|---:|---:|---:|---|
+| Optimized WASM raw (bytes) | 859794 | 859794 | +0 (+0.0%) | deterministic |
+| Optimized WASM gzip (bytes) | 373598 | 373598 | +0 (+0.0%) | deterministic; baseline 302817, cap 378521 |
+| Instructions: assets::palette_decode | 243938 | 243938 | +0 (+0.0%) | deterministic |
+| Instructions: protocol::snapshot_encode | 206498 | 206498 | +0 (+0.0%) | deterministic |
+| Instructions: simulation::advance | 721228 | 721228 | +0 (+0.0%) | deterministic |
+| Instructions: simulation::distributed_ticks | 8903211 | 8903211 | +0 (+0.0%) | deterministic; improved -13.8%: refresh the baseline with make perf-baseline-propose |
+| Instructions: simulation::late_game | 230749422 | 230739313 | −10109 (−0.0%) | deterministic; improved -4.1%: refresh the baseline with make perf-baseline-propose |
+| Instructions: simulation::smoke_ticks | 5022162 | 5022172 | +10 (+0.0%) | deterministic; improved -4.8%: refresh the baseline with make perf-baseline-propose |
+| Instructions: simulation::viewport_query | 183229 | 183229 | +0 (+0.0%) | deterministic |
+| Pressure snapshot latency p50 (µs) | 8480 | 12783 | +4303 (+50.7%) | timing, noisy runner |
+
+Timing rows appear only when this PR's value lies outside the band spanned by `dev` itself across its last 5 runs whose `target-performance` job passed — their [min, max] widened by 25% of that range (`crates/harness/src/perf_comment/noise.json`); tick times and protocol latencies vary with scheduling on shared runners.
+
+Job durations of run 41517073370 (setup, compile and gates per job):
+
+| CI job | Duration |
+|---|---:|
+| select | 1m43s |
+| target-performance | 18m16s |
+| e2e (3) | 20m47s |
+| fuzz-smoke | 3m23s |
+| static (checks) (failure) | 19m20s |
+| browser | 10m49s |
+| e2e (2) | 10m04s |
+| e2e (1) | 25m31s |
+
+**Not measured here:** real frame rate. CI renders in software; the 1920×1080 check is dedicated-hardware qualification only ([docs/performance.md](docs/performance.md)).
