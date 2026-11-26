@@ -229,7 +229,7 @@ fn the_only_package_of_a_directory_is_the_default_and_a_choice_is_never_guessed(
 }
 
 #[test]
-fn a_difference_is_replayed_at_every_tick_up_to_where_it_first_showed() {
+fn a_difference_is_replayed_at_every_tick_through_the_one_after_it_first_showed() {
     let cli = Cli::try_parse_from(["test", "--ticks", "900", "--no-orders"]).expect("parse");
     let base = run(1, hashes(&[(0, "a"), (40, "b")]));
     let other = run(4, hashes(&[(0, "a"), (40, "x")]));
@@ -237,11 +237,29 @@ fn a_difference_is_replayed_at_every_tick_up_to_where_it_first_showed() {
     let replay = super::replay_plan(&cli.options, "hash", &failed);
     assert_eq!(
         (replay.ticks, replay.hash_every, replay.workers),
-        (40, 1, 1)
+        (41, 1, 1)
     );
     assert!(!replay.record_orders, "the replay keeps what the run kept");
     let same = judge::compare(&base, &base, (None, None));
     assert_eq!(super::replay_plan(&cli.options, "hash", &same).ticks, 900);
+}
+
+#[test]
+fn an_order_logged_at_a_tick_is_replayed_through_the_call_that_applies_it() {
+    // Orders logged at tick 37 are applied while the world goes from tick 37
+    // to 38, so a replay of 37 ticks would never apply them.
+    let cli = Cli::try_parse_from(["test", "--ticks", "900"]).expect("parse");
+    let base = run(1, hashes(&[(0, "a"), (40, "b")]));
+    let other = run(4, hashes(&[(0, "a"), (40, "x")]));
+    let (a, b) = (
+        vec!["37 1 1 Accepted move".to_owned()],
+        vec!["37 1 1 Accepted stop".to_owned()],
+    );
+    let failed = judge::compare(&base, &other, (Some(a.as_slice()), Some(b.as_slice())));
+    assert_eq!(failed.first_differing_tick, Some(37));
+    assert_eq!(super::replay_plan(&cli.options, "hash", &failed).ticks, 38);
+    let last = Cli::try_parse_from(["test", "--ticks", "37"]).expect("parse");
+    assert_eq!(super::replay_plan(&last.options, "hash", &failed).ticks, 37);
 }
 
 #[test]

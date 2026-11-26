@@ -124,10 +124,14 @@ impl Plan {
 }
 
 /// The replay that finds the exact first tick where `failed` differs: the
-/// base run's plan, hashed at every tick up to the coarse difference.
+/// base run's plan, hashed at every tick up to the coarse difference. One tick
+/// more than that tick: an order logged at tick T is applied by the call that
+/// makes tick T + 1, and its effect shows only then.
 fn replay_plan(options: &Options, hash: &str, failed: &Comparison) -> Plan {
     Plan {
-        ticks: failed.first_differing_tick.unwrap_or(options.ticks),
+        ticks: failed
+            .first_differing_tick
+            .map_or(options.ticks, |tick| (tick + 1).min(options.ticks)),
         hash_every: 1,
         ..options.plan(hash, failed.base_workers)
     }
