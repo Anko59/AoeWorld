@@ -275,7 +275,7 @@ pub(super) fn request_candidates(client: &mut Client, budget: usize) -> Vec<(i32
         (client.camera.center[0].floor() as i32).div_euclid(CHUNK_TILES),
         (client.camera.center[1].floor() as i32).div_euclid(CHUNK_TILES),
     ));
-    candidates
+    let mut requested: Vec<_> = candidates
         .iter()
         .copied()
         .filter(|coordinate| {
@@ -290,7 +290,35 @@ pub(super) fn request_candidates(client: &mut Client, budget: usize) -> Vec<(i32
                         }))
         })
         .take(budget)
-        .collect()
+        .collect();
+    let ahead = ahead_camera(client);
+    if requested.len() < budget && ahead.center != client.camera.center {
+        let candidates = candidate_chunks(
+            ahead,
+            client.config,
+            client.terrain_bounds.levels.unwrap_or((i16::MIN, i16::MAX)),
+            MAX_HEIGHT_PROBES,
+        );
+        for key in candidates {
+            if !client.terrain_chunks.contains_key(&key)
+                && !requested.contains(&key)
+                && may_be_visible_from(client, ahead, key)
+            {
+                requested.push(key);
+                if requested.len() == budget {
+                    break;
+                }
+            }
+        }
+    }
+    requested
+}
+
+pub(crate) fn ahead_camera(client: &Client) -> Camera {
+    Camera {
+        center: client.terrain_ahead,
+        ..client.camera
+    }
 }
 
 pub(in super::super) fn settle_counts(client: &mut Client) -> super::super::capture::ChunkCounts {
@@ -332,13 +360,15 @@ pub(in super::super) fn settle_counts(client: &mut Client) -> super::super::capt
 }
 
 pub(super) fn resident_may_be_visible(client: &Client, coordinate: (i32, i32)) -> bool {
+    may_be_visible_from(client, client.camera, coordinate)
+}
+
+pub(super) fn may_be_visible_from(client: &Client, camera: Camera, coordinate: (i32, i32)) -> bool {
     client
         .terrain_bounds
         .probes
         .get(&coordinate)
-        .is_none_or(|bounds| {
-            chunk_may_be_visible(client.camera, client.config, coordinate, *bounds)
-        })
+        .is_none_or(|bounds| chunk_may_be_visible(camera, client.config, coordinate, *bounds))
 }
 
 pub(super) fn visible_residents(client: &Client) -> Vec<(i32, i32)> {

@@ -109,3 +109,11 @@ application 0.15 s, texture uploads 0.025 s and buffer uploads 0.004 s.
 A separate crowded-hold stall spent 1.20 of 1.23 seconds in synchronous
 browser pixel readback as the fine minimap arrived. The trace retains main
 and GPU thread wall times and CPU times where Chromium supplies them.
+
+The live client now reuses world-space chunk meshes while the camera pans.
+The prep queue serves the visible view and then a position projected along
+the camera motion. Each turn limits the time spent preparing chunks and keeps
+ready terrain while edge data or foundation changes are rebuilt. A shared
+halo keeps heights and material transitions continuous across chunk edges.
+The subscription covers a margin around the current view and sends a
+replacement from a separate browser task when that margin is crossed.

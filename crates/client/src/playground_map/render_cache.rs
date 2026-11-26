@@ -104,6 +104,10 @@ impl<S> RenderFrameCache<S> {
         self.previous.as_ref().map_or(&[], |frame| &frame.units)
     }
 
+    pub(super) fn last_scene(&self) -> Option<Rc<S>> {
+        self.previous.as_ref().map(|frame| frame.scene.clone())
+    }
+
     pub(crate) fn prefetch_ready(&self) -> bool {
         self.previous
             .as_ref()

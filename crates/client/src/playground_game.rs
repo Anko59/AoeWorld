@@ -1,3 +1,4 @@
+use crate::camera_demand::{self, PanMotion};
 use aoe_core::{Camera, EntityId, ScreenPoint, TileRect, WorldConfig};
 use aoe_protocol::{
     GAMEPLAY_VERSION, GameplayClientMessage, GameplayUnitState, ResumeToken, encode_gameplay_client,
@@ -25,6 +26,9 @@ mod memory;
 mod network;
 #[path = "playground_game/perf.rs"]
 mod perf;
+#[path = "playground_game/subscription.rs"]
+mod subscription;
+use subscription::{retry_refused_view, subscribe, subscribed_to_view, subscription_due};
 #[path = "playground_game/recovery.rs"]
 mod recovery;
 #[path = "playground_status.rs"]
@@ -57,6 +61,9 @@ pub(super) struct Client {
     pub resources: crate::resource_state::ResourceStateCache,
     pub fog: crate::fog::Fog,
     pub terrain_scene: RefCell<Option<Rc<map::scene::PreparedScene>>>,
+    terrain_patches: map::scene::PatchCache,
+    pub pan_motion: PanMotion,
+    pub terrain_ahead: [f64; 2],
     pub rendered_frame: map::render_cache::RenderFrameCache<map::scene::PreparedScene>,
     pub terrain_chunks: BTreeMap<(i32, i32), CachedChunk>,
     pub terrain_height_bounds: Option<(i16, i16)>,
@@ -112,65 +119,6 @@ pub(super) fn resize(client: &mut Client) {
     }
 }
 
-const SUBSCRIBE_INTERVAL_MS: f64 = 150.0;
-const SUBSCRIBE_RETRY_MS: f64 = 1_100.0;
-
-fn requested_region(client: &Client) -> TileRect {
-    let visible = map::terrain_visible_tiles(client);
-    let width = visible.width().clamp(1, 512);
-    let height = visible.height().clamp(1, 512);
-    TileRect::from_xywh(
-        visible.min.x + (visible.width() - width) / 2,
-        visible.min.y + (visible.height() - height) / 2,
-        width,
-        height,
-    )
-    .clamp(client.config.width_tiles, client.config.height_tiles)
-}
-
-/// Sending a view does not mean the server accepted it: send the current
-/// camera again after a full rate window, even while the camera is stationary.
-pub(super) fn retry_refused_view(client: &mut Client, time: f64) {
-    client.sent_region = None;
-    client.subscribe_after = time + SUBSCRIBE_RETRY_MS;
-}
-
-pub(super) fn subscribe(client: &mut Client) {
-    #[cfg(feature = "frame-bench")]
-    let _subscription = perf::Scope::new(42);
-    if client.primary.is_none()
-        || client
-            .socket
-            .as_ref()
-            .is_none_or(|socket| socket.ready_state() != WebSocket::OPEN)
-    {
-        return;
-    }
-    let region = requested_region(client);
-    let unit_zoom = crate::strategic::lod_for_viewport(client.camera.zoom, client.camera.viewport)
-        == crate::strategic::Lod::Sprites;
-    let time = now();
-    if (client.sent_region == Some(region) && client.sent_unit_zoom == unit_zoom)
-        || time < client.subscribe_after
-    {
-        return;
-    }
-    client.revision = client.revision.saturating_add(1);
-    let message = GameplayClientMessage::Subscribe {
-        revision: client.revision,
-        region,
-        unit_zoom,
-    };
-    if let Ok(bytes) = encode_gameplay_client(&message)
-        && network::send(client, &bytes)
-    {
-        client.sent_region = Some(region);
-        client.sent_unit_zoom = unit_zoom;
-        // Leave headroom below the server's rolling ten-per-second window.
-        client.subscribe_after = time + SUBSCRIBE_INTERVAL_MS;
-    }
-}
-
 pub(super) fn position_at(client: &Client, id: EntityId) -> [f64; 2] {
     let Some(state) = client.units.get(&id) else {
         return [0.0, 0.0];
@@ -221,6 +169,12 @@ pub(super) fn send_order(client: &mut Client, point: ScreenPoint, queued: bool) 
 fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     let callback = Rc::new(RefCell::new(None::<Closure<dyn FnMut(f64)>>));
     let next = callback.clone();
+    let subscription_client = Rc::downgrade(&shared);
+    let subscription = Closure::<dyn FnMut()>::new(move || {
+        if let Some(client) = subscription_client.upgrade() {
+            subscribe(&mut client.borrow_mut());
+        }
+    });
     *callback.borrow_mut() = Some(Closure::new(move |time: f64| {
         perf::perf_mark(0);
         #[cfg(feature = "frame-bench")]
@@ -242,7 +196,11 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         client.last_frame = time;
         client.resources.expire_effects(time);
         controls::edge_pan(&mut client, delta_ms);
-        subscribe(&mut client);
+        let center = client.camera.center;
+        client.terrain_ahead = client.pan_motion.observe(center, time);
+        let terrain = perf::Scope::stage(3);
+        map::scene::advance_terrain(&mut client);
+        drop(terrain);
         client.capture.current_view = false;
         let canvas = matches!(&client.renderer, GameRenderer::Canvas { .. });
         drop(update);
@@ -254,10 +212,16 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         let mut native_requests = Vec::new();
         let backlogged =
             matches!(&client.renderer, GameRenderer::WebGl(gl) if gl.frame_backlogged());
-        if !controls::navigation::overview_active()
+        let scene = if !controls::navigation::overview_active()
             && !strategic::render(&mut client)
             && !backlogged
         {
+            let _terrain = perf::Scope::stage(3);
+            map::scene::prepare_frame(&client)
+        } else {
+            None
+        };
+        if let Some(scene) = scene {
             let live = client
                 .presentation
                 .live_tick(time)
@@ -276,9 +240,6 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 })
                 .collect();
             client.art.building_clocks = clocks;
-            let terrain = perf::Scope::stage(3);
-            let scene = map::scene::prepare(&client);
-            drop(terrain);
             let interpolation = perf::Scope::stage(1);
             let units = map::scene::units(&client, &scene);
             drop(interpolation);
@@ -289,7 +250,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 viewport: client.camera.viewport,
                 focus_elevation_meters: client.camera.focus_elevation_meters,
             };
-            let resources = map::scene_resources(&client);
+            let resources = map::scene_resources_for(&client, &scene);
             let mut required =
                 aoe_rendering::scene_native_frames(&client.art, &units, camera, time as usize);
             #[cfg(feature = "frame-bench")]
@@ -419,6 +380,16 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         drop(ui);
         drop(ui_stage);
         let surface_fixture = client.surface_fixture;
+        if subscription_due(&client)
+            && let Some(window) = web_sys::window()
+        {
+            // A view change is sent in its own event-loop turn. The WebSocket
+            // response can apply only after this animation callback returns.
+            let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+                subscription.as_ref().unchecked_ref(),
+                0,
+            );
+        }
         drop(client);
         for request in native_requests {
             request.spawn();

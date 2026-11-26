@@ -2,9 +2,12 @@
 use aoe_protocol::{BuildingKind, ConstructionState, GameplayBuildingState};
 use aoe_rendering::SceneTerrain;
 
-pub(super) fn paint(terrain: &mut [SceneTerrain], buildings: &[GameplayBuildingState]) {
+pub(super) fn paint<'a>(
+    terrain: &mut [SceneTerrain],
+    buildings: impl IntoIterator<Item = &'a GameplayBuildingState>,
+) {
     let roads: std::collections::BTreeSet<_> = buildings
-        .iter()
+        .into_iter()
         .filter(|b| b.kind == BuildingKind::Road && b.construction == ConstructionState::Complete)
         .map(|b| (b.footprint.min.x, b.footprint.min.y))
         .collect();

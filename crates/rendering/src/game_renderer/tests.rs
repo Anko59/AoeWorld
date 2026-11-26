@@ -16,7 +16,7 @@ mod grid;
 mod landscape;
 #[path = "tests/species.rs"]
 mod species;
-fn synthetic_art() -> GameArt {
+pub(super) fn synthetic_art() -> GameArt {
     let frame = GameFrame {
         stream: 0,
         atlas: crate::AtlasAddress {

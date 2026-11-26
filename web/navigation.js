@@ -169,7 +169,9 @@ export function initNavigation() {
     fog(false, []);
     panel.dataset.mapHash = hash;
     rasterState('pending');
-    delete panel.dataset.coarseMs; delete panel.dataset.fineMs; rasterUrl = null;
+    delete panel.dataset.coarseMs; delete panel.dataset.fineMs;
+    if (rasterUrl) URL.revokeObjectURL(rasterUrl);
+    rasterUrl = null;
     stopPanning();
     view.reset();
     view.actors([]);
@@ -202,19 +204,29 @@ export function initNavigation() {
       if (!raster) throw new Error('Invalid minimap raster');
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = raster.samples;
-      const context = canvas.getContext('2d');
+      // Decoding already produces CPU pixels. Encode from a CPU backing so
+      // publishing the minimap cannot wait on the world's WebGL command queue.
+      const context = canvas.getContext('2d', { willReadFrequently: true });
       if (!context) throw new Error('Minimap drawing context unavailable');
       context.putImageData(new ImageData(raster.rgba, raster.samples, raster.samples), 0, 0);
-      const url = canvas.toDataURL();
-      await drawRaster(url, controller.signal);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve));
       if (!current()) return false;
-      rasterUrl = url;
-      strategic.terrain(canvas, raster);
-      samples = raster.samples;
-      rasterState(stage === 'coarse' ? 'coarse' : 'ready');
-      panel.dataset[`${stage}Ms`] = (performance.now() - started).toFixed(1);
-      overview(expanded);
-      return true;
+      if (!blob) throw new Error('Minimap raster could not be encoded');
+      const url = URL.createObjectURL(blob);
+      try {
+        await drawRaster(url, controller.signal);
+        if (!current()) return false;
+        if (rasterUrl) URL.revokeObjectURL(rasterUrl);
+        rasterUrl = url;
+        strategic.terrain(canvas, raster);
+        samples = raster.samples;
+        rasterState(stage === 'coarse' ? 'coarse' : 'ready');
+        panel.dataset[`${stage}Ms`] = (performance.now() - started).toFixed(1);
+        overview(expanded);
+        return true;
+      } finally {
+        if (rasterUrl !== url) URL.revokeObjectURL(url);
+      }
     }
     try {
       if (!samples) {

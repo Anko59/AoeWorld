@@ -3,7 +3,6 @@
 const VERTEX = `#version 300 es
 precision highp float;
 precision highp int;
-const bool groundMixing = false;
 layout(location=0) in vec4 positionRadius;
 layout(location=1) in vec4 color;
 layout(location=2) in vec4 uv;
@@ -113,7 +112,7 @@ void main() {
                     }
                     vWeights = vec3(1.0 - floorStrength, floorStrength, 0);
                     uint mode = uint(terrainBlend0.z);
-                    if (groundMixing && tiled && mode != 0u) {
+                    if (tiled && mode != 0u) {
                         uint share = uint(terrainBlend1[corner]);
                         vWeights = vec3(float(share & 255u) / 255.0, float(share >> 8u) / 255.0, floorStrength);
                         if (mode == 3u) {
@@ -142,7 +141,6 @@ void main() {
 const FRAGMENT = `#version 300 es
 precision highp float;
 precision highp int;
-const bool groundMixing = false;
 uniform highp sampler2DArray atlas;
 in vec4 vColor;
 in vec2 vUv;
@@ -362,7 +360,7 @@ void main() {
     }
     if (vSolid == 2u) { result = vec4(vColor.rgb * (1.0 + vShade * .04) * vFog, vColor.a); return; }
     bool blend = (vSolid & 3u) == 3u;
-    bool landscape = (vPages.w & 1u) != 0u, mixing = groundMixing && vSolid >= 8u, junction = groundMixing && vSolid >= 24u;
+    bool landscape = (vPages.w & 1u) != 0u, mixing = vSolid >= 8u, junction = vSolid >= 24u;
     bool tiled = (vSolid & 4u) != 0u;
     vec2 inside = vec2(0), local = vec2(0), gx = vec2(0), gy = vec2(0);
     ivec2 tile = ivec2(0);
@@ -452,6 +450,5 @@ void main() {
 
 // Registered directly with wasm-bindgen so both local modules are packaged.
 export function terrainShaders() {
-    const variant = source => source.replace("groundMixing = false", "groundMixing = true");
-    return [[VERTEX, FRAGMENT], [variant(VERTEX), variant(FRAGMENT)]];
+    return [VERTEX, FRAGMENT];
 }

@@ -19,7 +19,7 @@ export class AoeWebGl {
         if (!gl) throw new Error('WebGL2 unavailable');
         this.gl = gl;
         this.canvas = canvas;
-        this.bufferBytes = 0;
+        this.worldBytes = 0;
         this.atlasReady = false;
         this.atlasPages = 8;
         this.disposed = false;
@@ -59,10 +59,13 @@ export class AoeWebGl {
         this.pendingFrames = [];
         this.frameError = null;
         this.patching = this.patchesPending = this.drainingForAtlas = this.needsFrameValidation = false;
-        this.bufferBytes = 0;
+        this.worldBytes = 0;
         this.atlasReady = false;
         this.shaders = [];
         this.programs = [];
+        this.contourBuffer = null;
+        this.contourVao = null;
+        this.contourBytes = 0;
         try {
             if (gl.getParameter(gl.MAX_TEXTURE_SIZE) < SIDE ||
                 gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS) < 1 ||
@@ -101,23 +104,11 @@ export class AoeWebGl {
                 gl.uniform1i(gl.getUniformLocation(program, 'atlas'), 0);
                 gl.uniform1i(gl.getUniformLocation(program, 'mask'), 1);
             }
-            this.vao = gl.createVertexArray();
+            this.maskScale = gl.getUniformLocation(this.programs[2], 'maskScale');
             this.buffer = gl.createBuffer();
             this.texture = gl.createTexture();
-            if (!this.vao || !this.buffer || !this.texture) {
-                throw new Error('WebGL2 resource allocation failed');
-            }
-            gl.bindVertexArray(this.vao);
-            gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-            for (let slot = 0; slot < 6; slot++) {
-                gl.enableVertexAttribArray(slot);
-                gl.vertexAttribPointer(slot, 4, gl.FLOAT, false, STRIDE, slot * 16);
-                gl.vertexAttribDivisor(slot, 1);
-            }
-            gl.enableVertexAttribArray(6);
-            gl.vertexAttribIPointer(6, 4, gl.UNSIGNED_INT, STRIDE, 96);
-            gl.vertexAttribDivisor(6, 1);
-            this.instanceOffset = 0;
+            if (!this.buffer || !this.texture) throw new Error('WebGL2 resource allocation failed');
+            this.vao = this.instanceLayout(this.buffer);
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
             gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -137,6 +128,21 @@ export class AoeWebGl {
             throw error;
         }
     }
+    instanceLayout(buffer) {
+        const gl = this.gl, vao = gl.createVertexArray();
+        if (!vao) throw new Error('WebGL2 instance layout allocation failed');
+        gl.bindVertexArray(vao);
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+        for (let slot = 0; slot < 6; slot++) {
+            gl.enableVertexAttribArray(slot);
+            gl.vertexAttribPointer(slot, 4, gl.FLOAT, false, STRIDE, slot * 16);
+            gl.vertexAttribDivisor(slot, 1);
+        }
+        gl.enableVertexAttribArray(6);
+        gl.vertexAttribIPointer(6, 4, gl.UNSIGNED_INT, STRIDE, 96);
+        gl.vertexAttribDivisor(6, 1);
+        return vao;
+    }
     createCoverage() {
         const gl = this.gl;
         this.coverage = gl.createFramebuffer();
@@ -144,12 +150,19 @@ export class AoeWebGl {
         this.depth = gl.createRenderbuffer();
         if (!this.coverage || !this.mask || !this.depth)
             throw new Error('WebGL2 coverage allocation failed');
+        this.contourBuffer = gl.createBuffer();
+        if (!this.contourBuffer) throw new Error('WebGL2 contour buffer allocation failed');
+        this.contourVao = this.instanceLayout(this.contourBuffer);
     }
     releaseCoverage() {
         const gl = this.gl;
         if (this.coverage) gl.deleteFramebuffer(this.coverage);
         if (this.mask) gl.deleteTexture(this.mask);
         if (this.depth) gl.deleteRenderbuffer(this.depth);
+        if (this.contourVao) gl.deleteVertexArray(this.contourVao);
+        if (this.contourBuffer) gl.deleteBuffer(this.contourBuffer);
+        this.contourVao = this.contourBuffer = null;
+        this.contourBytes = 0;
         this.coverage = this.mask = this.depth = null;
         this.coverageSize = [0, 0];
         this.coverageIdleFrames = 0;
@@ -184,6 +197,7 @@ export class AoeWebGl {
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         this.coverageSize = [width, height];
     }
+    get bufferBytes() { return this.worldBytes + this.contourBytes; }
     get textureBytes() {
         // R8UI + DEPTH_COMPONENT24 (four-byte storage), shared by both effects.
         // Excludes the browser framebuffer and driver overhead.
@@ -332,7 +346,7 @@ export class AoeWebGl {
             if (this.disposed || !gl.isContextLost()) throw error;
         }
     }
-    render(instances, black, effects, start, end) {
+    render(instances, contours, black, effects, start, end) {
         if (!this.poll() || this.frameBacklogged) return false;
         if (this.drainingForAtlas) {
             this.prioritizeAtlasUpdates();
@@ -350,7 +364,6 @@ export class AoeWebGl {
             return false;
         }
         const count = instances.byteLength / STRIDE;
-        const words = new DataView(instances.buffer, instances.byteOffset, instances.byteLength);
         // Shared Rust normalization selects hover, or units AND occluders.
         // An unoccluded unit needs no coverage backing or second pass.
         if (effects) {
@@ -365,10 +378,10 @@ export class AoeWebGl {
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.bindVertexArray(this.vao);
         gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-        if (instances.byteLength > this.bufferBytes) {
+        if (instances.byteLength > this.worldBytes) {
             gl.bufferData(gl.ARRAY_BUFFER, instances.byteLength, gl.DYNAMIC_DRAW);
             this.check();
-            this.bufferBytes = instances.byteLength;
+            this.worldBytes = instances.byteLength;
             start = 0; end = instances.byteLength; // Growth/restoration invalidates every byte.
         }
         if (end > start) gl.bufferSubData(gl.ARRAY_BUFFER, start, instances.subarray(start, end));
@@ -390,7 +403,10 @@ export class AoeWebGl {
         gl.clearDepth(1);
         gl.clearColor(...clear);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-        this.drawWorld(words, count);
+        // Branch on the existing packet tags in the shader. One ordered
+        // instanced draw keeps interleaved shoreline and actor pixels intact.
+        gl.useProgram(this.programs[0]);
+        gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
         if (effects) {
             // Coverage/depth only: the default framebuffer already owns the
             // full-resolution world colour and depth used by the contour pass.
@@ -398,7 +414,8 @@ export class AoeWebGl {
             gl.viewport(0, 0, ...this.coverageSize);
             gl.clearBufferuiv(gl.COLOR, 1, [0, 0, 0, 0]);
             gl.clear(gl.DEPTH_BUFFER_BIT);
-            this.drawWorld(words, count, true);
+            gl.useProgram(this.programs[1]);
+            gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count);
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
             gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
             gl.activeTexture(gl.TEXTURE1);
@@ -406,9 +423,16 @@ export class AoeWebGl {
             gl.depthFunc(gl.GEQUAL);
             gl.depthMask(false);
             gl.useProgram(this.programs[2]);
-            gl.uniform2f(gl.getUniformLocation(this.programs[2], 'maskScale'),
+            gl.uniform2f(this.maskScale,
                 this.coverageSize[0] / this.canvas.width, this.coverageSize[1] / this.canvas.height);
-            this.drawContours(words, count);
+            gl.bindVertexArray(this.contourVao);
+            gl.bindBuffer(gl.ARRAY_BUFFER, this.contourBuffer);
+            if (contours.byteLength > this.contourBytes) {
+                this.contourBytes = Math.max(contours.byteLength, Math.min(MAX_BYTES, this.contourBytes * 2));
+                gl.bufferData(gl.ARRAY_BUFFER, this.contourBytes, gl.DYNAMIC_DRAW);
+            }
+            gl.bufferSubData(gl.ARRAY_BUFFER, 0, contours);
+            gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, contours.byteLength / STRIDE);
             gl.bindTexture(gl.TEXTURE_2D, null);
             gl.activeTexture(gl.TEXTURE0);
         }
@@ -420,44 +444,6 @@ export class AoeWebGl {
         return true;
     }
 
-    drawWorld(words, count, coverage = false) {
-        const gl = this.gl;
-        // Contiguous runs preserve painter/depth/alpha order in both passes,
-        // including sprites between mixed faces. Reuse the one instance upload.
-        for (let first = 0; first < count;) {
-            const mixed = mixing(words, first);
-            let end = first + 1;
-            while (end < count && mixing(words, end) === mixed) end++;
-            gl.useProgram(this.programs[(mixed ? 1 : 0) + (coverage ? 3 : 0)]);
-            this.offset(first);
-            gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, end - first);
-            first = end;
-        }
-    }
-
-    drawContours(words, count) {
-        // The contour shader rejects terrain and unrelated objects. Submit
-        // only eligible runs from the same buffer, preserving painter order
-        // without a second packet allocation/upload or forest-wide vertex work.
-        for (let first = 0; first < count;) {
-            if (!contour(words, first)) { first++; continue; }
-            let end = first + 1;
-            while (end < count && contour(words, end)) end++;
-            this.offset(first);
-            this.gl.drawArraysInstanced(this.gl.TRIANGLES, 0, 6, end - first);
-            first = end;
-        }
-    }
-
-    offset(first) {
-        if (this.instanceOffset === first) return;
-        const gl = this.gl, base = first * STRIDE;
-        for (let slot = 0; slot < 6; slot++) {
-            gl.vertexAttribPointer(slot, 4, gl.FLOAT, false, STRIDE, base + slot * 16);
-        }
-        gl.vertexAttribIPointer(6, 4, gl.UNSIGNED_INT, STRIDE, base + 96);
-        this.instanceOffset = first;
-    }
     dispose() {
         if (this.disposed) return;
         const gl = this.gl;
@@ -475,26 +461,9 @@ export class AoeWebGl {
         this.atlasPixels = null;
         this.atlasMemory = null;
         this.disposed = true;
-        this.bufferBytes = 0;
+        this.worldBytes = 0;
         // Deleting objects leaves the context and driver caches alive until GC.
         // Retire this owner's context now, including after failed initialization.
         if (!gl.isContextLost()) gl.getExtension('WEBGL_lose_context')?.loseContext();
     }
-}
-
-// Sprite112 graphics tags, mirrored by web/draw.rs. Unsigned conversion has
-// Rust's saturating f32-cast semantics; generated packets are small integers.
-function contour(words, instance) {
-    const at = instance * STRIDE;
-    return !(words.getFloat32(at + 28, true) < 0) &&
-        (words.getUint32(at + 108, true) & 56) !== 0;
-}
-
-function mixing(words, instance) {
-    const at = instance * STRIDE;
-    const uint = value => Math.max(0, Math.min(4294967295, Math.trunc(value))) || 0;
-    return words.getFloat32(at + 28, true) === -3 &&
-        uint(words.getFloat32(at + 24, true)) % 8 === 6 &&
-        (words.getUint32(at + 108, true) & 1) !== 0 &&
-        uint(words.getFloat32(at + 72, true)) !== 0;
 }

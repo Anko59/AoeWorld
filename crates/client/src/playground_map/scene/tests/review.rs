@@ -53,13 +53,11 @@ async fn a_refused_view_is_sent_again_after_the_rate_window() {
     assert_eq!(client.subscribe_after, 2_100.0);
     client.canvas.remove();
 }
-
 #[wasm_bindgen_test]
 fn review_f1_passable_center_contacts_source_ground_below_the_cliff() {
     let scene = contact_scene();
     assert_eq!(scene.height([282.5, 603.5]), Some(78.5));
 }
-
 #[wasm_bindgen_test]
 fn review_f1_rim_cannot_cover_the_neighboring_passable_center() {
     let scene = contact_scene();
@@ -88,7 +86,6 @@ fn review_f1_rim_cannot_cover_the_neighboring_passable_center() {
         }
     }
 }
-
 #[wasm_bindgen_test]
 async fn review_f1_unit_dto_stays_on_source_ground_instead_of_cliff_top() {
     let scene = contact_scene();
@@ -187,6 +184,9 @@ pub(super) async fn client_with_backend(scene: &PreparedScene, backend: Option<&
         resources: Default::default(),
         fog: Default::default(),
         terrain_scene: RefCell::new(None),
+        terrain_patches: Default::default(),
+        pan_motion: Default::default(),
+        terrain_ahead: [0.0; 2],
         rendered_frame: Default::default(),
         terrain_chunks: BTreeMap::new(),
         terrain_height_bounds: None,

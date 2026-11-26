@@ -46,6 +46,7 @@ extern "C" {
     fn render(
         this: &GlBridge,
         instances: &[u8],
+        contours: &[u8],
         black: bool,
         effects: bool,
         start: usize,
@@ -80,6 +81,8 @@ pub struct WebGlRenderer {
     source_atlas: Vec<u8>,
     stats: ContourStats,
     upload: InstanceUpload,
+    pub(super) staging: Vec<Sprite>,
+    contours: Vec<Sprite>,
 }
 
 impl WebGlRenderer {
@@ -155,6 +158,17 @@ impl WebGlRenderer {
 
     pub(super) fn staging_bytes(&self) -> usize {
         self.upload.resident_bytes()
+            + (self.staging.capacity() + self.contours.capacity()) * INSTANCE_BYTES
+    }
+
+    pub(super) fn render_staged(
+        &mut self,
+        mut instances: Vec<Sprite>,
+        fog_active: bool,
+    ) -> Result<bool, String> {
+        let result = self.render_with_clear(&mut instances, fog_active);
+        self.staging = instances;
+        result
     }
 
     pub(super) fn new(canvas: &HtmlCanvasElement) -> Result<Self, String> {
@@ -164,6 +178,8 @@ impl WebGlRenderer {
             source_atlas: Vec::new(),
             stats: ContourStats::default(),
             upload: InstanceUpload::default(),
+            staging: Vec::new(),
+            contours: Vec::new(),
         })
     }
 
@@ -216,10 +232,26 @@ impl WebGlRenderer {
         // JS uploads the changed range synchronously and never retains its view.
         // The bounded Rust snapshot advances only when a frame is accepted.
         let bytes = bytemuck::cast_slice(sprites);
+        self.contours.clear();
+        if depth.effects() {
+            self.contours.extend(
+                sprites
+                    .iter()
+                    .filter(|sprite| sprite.effect_candidate())
+                    .copied(),
+            );
+        }
         let changed = self.upload.changed(bytes);
         let presented = self
             .bridge
-            .render(bytes, black, depth.effects(), changed.start, changed.end)
+            .render(
+                bytes,
+                bytemuck::cast_slice(&self.contours),
+                black,
+                depth.effects(),
+                changed.start,
+                changed.end,
+            )
             .map_err(error)?;
         if presented {
             self.upload.commit(bytes, changed);

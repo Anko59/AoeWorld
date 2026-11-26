@@ -29,7 +29,7 @@ mod streaming;
 pub use directory::{
     terrain_directory_rows, write_terrain_directory, write_terrain_directory_page,
 };
-pub use lod::projected_surface_triangles;
+pub use lod::{chunk_surface_halo, chunk_surface_triangles, projected_surface_triangles};
 pub use prepared::PreparedTerrain;
 pub use streaming::scene_terrain_frames;
 
@@ -83,6 +83,27 @@ pub struct ProjectedSurfaceTriangle {
 }
 
 impl ProjectedSurfaceTriangle {
+    /// Reproject cached world-space ground using the current live camera.
+    pub fn project_to(&mut self, camera: Camera) {
+        for point in &mut self.points {
+            let [x, y, height] = point.world;
+            point.screen = camera.world_to_screen_at_height([x, y], height);
+        }
+    }
+
+    /// Conservative test for overlap with the backing viewport.
+    pub fn intersects_viewport(&self, [width, height]: [f64; 2]) -> bool {
+        [(0.0, width), (0.0, height)]
+            .into_iter()
+            .enumerate()
+            .all(|(axis, (lo, hi))| {
+                let points = self
+                    .points
+                    .map(|point| [point.screen.x, point.screen.y][axis]);
+                points.iter().any(|point| *point >= lo) && points.iter().any(|point| *point <= hi)
+            })
+    }
+
     pub(crate) fn mode(&self) -> u8 {
         self.texture_mode & 7
     }

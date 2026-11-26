@@ -43,3 +43,39 @@ pub(super) fn in_view(key: &FoundationKey, bounds: Option<[[f64; 2]; 2]>) -> boo
         (0..2).all(|axis| key.1[axis] >= min[axis] && key.1[axis] <= max[axis])
     })
 }
+
+pub(super) fn invalidate_changed_patches(
+    patches: &mut super::PatchCache,
+    before: &[aoe_protocol::GameplayBuildingState],
+    after: &[aoe_protocol::GameplayBuildingState],
+) {
+    let mut before = before.iter().peekable();
+    let mut after = after.iter().peekable();
+    while let Some(id) = before
+        .peek()
+        .map(|b| b.id)
+        .into_iter()
+        .chain(after.peek().map(|b| b.id))
+        .min()
+    {
+        let previous = before.next_if(|b| b.id == id);
+        let next = after.next_if(|b| b.id == id);
+        if let (Some(a), Some(b)) = (previous, next)
+            && a.kind == b.kind
+            && a.age == b.age
+            && a.footprint == b.footprint
+            && a.construction == b.construction
+            && (a.construction == aoe_protocol::ConstructionState::Complete
+                || a.progress_permille == b.progress_permille)
+        {
+            continue;
+        }
+        let previous = previous.map(foundation_key);
+        let next = next.map(foundation_key);
+        if previous != next {
+            for key in previous.into_iter().chain(next) {
+                patches.foundations_changed(key);
+            }
+        }
+    }
+}

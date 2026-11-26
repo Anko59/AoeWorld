@@ -1,7 +1,9 @@
 use super::*;
-use aoe_core::Camera;
+use aoe_core::{Camera, TileCoord, TileRect};
 mod banks;
 mod budget;
+mod chunk;
+pub use chunk::{chunk_surface_halo, chunk_surface_triangles};
 mod cliffs;
 mod grid;
 use grid::*;
@@ -69,16 +71,51 @@ pub fn projected_surface_triangles(
         }
         break (grid, cells, bank_cells, tops, skirts);
     };
-    let coarse_heights = (size > 1).then(|| shared_coarse_heights(terrain, &cells, grid));
-    let mut result = Vec::with_capacity(MAX_SURFACE_TRIANGLES);
     let divisions = budget::subdivisions(&cells, grid, skirts);
-    let patches = patches::plan(
-        terrain,
+    let samples = MeshSamples {
         grid,
+        cells,
+        bank_cells,
+        tops,
+        skirts,
         divisions,
-        &cells,
-        tops * (divisions * divisions) as usize + skirts,
-    );
+    };
+    mesh_surfaces(terrain, &camera, samples, None)
+}
+
+struct MeshSamples {
+    grid: CellGrid,
+    cells: Vec<Option<CellSample>>,
+    bank_cells: Vec<Option<CellSample>>,
+    tops: usize,
+    skirts: usize,
+    divisions: i32,
+}
+
+fn mesh_surfaces(
+    terrain: &[SceneTerrain],
+    camera: &Camera,
+    samples: MeshSamples,
+    region: Option<TileRect>,
+) -> Vec<ProjectedSurfaceTriangle> {
+    let MeshSamples {
+        grid,
+        cells,
+        bank_cells,
+        tops,
+        skirts,
+        divisions,
+    } = samples;
+    let size = grid.size;
+    let coarse_heights = (size > 1).then(|| shared_coarse_heights(terrain, &cells, grid));
+    let base = tops * (divisions * divisions) as usize + skirts;
+    let capacity = region.map_or(base, |rect| {
+        let tiles = rect.width().unsigned_abs().div_ceil(size as u32)
+            * rect.height().unsigned_abs().div_ceil(size as u32);
+        tiles as usize * (2 * (divisions * divisions) as usize + 2)
+    });
+    let mut result = Vec::with_capacity(capacity.min(MAX_SURFACE_TRIANGLES));
+    let patches = patches::plan(terrain, grid, divisions, &cells, base);
     // Directional slope shade per cell, from the heights the mesh displays.
     let ground = cells
         .iter()
@@ -115,6 +152,9 @@ pub fn projected_surface_triangles(
             continue;
         };
         let tile = grid_cell(grid, slot_index);
+        if region.is_some_and(|rect| !rect.contains(TileCoord::new(tile[0], tile[1]))) {
+            continue;
+        }
         let sample = candidate.sample;
         let heights = displayed_heights(sample, tile, grid, coarse_heights.as_ref());
         let lattice = {
@@ -156,7 +196,7 @@ pub fn projected_surface_triangles(
                     f64::from(y) / f64::from(size),
                 );
             }
-            let corners = projected_corners(&camera, texture_tile, step, patch_heights);
+            let corners = projected_corners(camera, texture_tile, step, patch_heights);
             // Bilinear in the cell, so subdivided patches and neighbouring
             // cells compute the same value on every shared corner or edge.
             let mut codes = [0_i8; 4];
@@ -225,7 +265,7 @@ pub fn projected_surface_triangles(
             {
                 append_edge_skirt(
                     &mut result,
-                    &camera,
+                    camera,
                     tile,
                     size,
                     SkirtSurface { sample, heights },
@@ -247,12 +287,12 @@ pub fn projected_surface_triangles(
     appearance::assign_materials(&mut result, terrain);
     floor::assign(&mut result, terrain);
     mix::assign(&mut result, terrain);
-    cliffs::sculpt(&mut result, &cells, grid, &camera);
+    cliffs::sculpt(&mut result, &cells, grid, camera);
     // Material support belongs to the original integer vertices. Bevel their
     // presentation only after the ground and water sheets have been assigned.
     if !bank_cells.is_empty() {
         for triangle in result.iter_mut().filter(|t| !t.skirt) {
-            banks::round(&mut triangle.points, &bank_cells, grid, &camera);
+            banks::round(&mut triangle.points, &bank_cells, grid, camera);
         }
     }
     // Painter order is an average-depth approximation. Picking below uses the

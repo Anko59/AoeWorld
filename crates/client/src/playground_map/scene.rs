@@ -10,6 +10,9 @@ pub(in super::super) use unit_scene::units;
 mod bridges;
 #[path = "scene/foundations.rs"]
 mod foundations;
+#[path = "scene/patches.rs"]
+mod patches;
+pub(in super::super) use patches::PatchCache;
 #[path = "scene/projectiles.rs"]
 mod projectiles;
 #[path = "scene/roads.rs"]
@@ -46,7 +49,45 @@ pub(crate) struct PreparedScene {
     bucket_width: f64,
 }
 
+fn streamed_patches(client: &Client) -> bool {
+    client.map_content_hash.is_some() && !client.surface_fixture
+}
+
+pub(in super::super) fn advance_terrain(client: &mut Client) {
+    if !streamed_patches(client) || super::super::strategic::active(client) {
+        return;
+    }
+    let mut patches = std::mem::take(&mut client.terrain_patches);
+    if patches.advance(client, heights::ahead_camera(client)) {
+        client.terrain_scene.get_mut().take();
+    }
+    client.terrain_patches = patches;
+}
+
+pub(in super::super) fn prepare_frame(client: &Client) -> Option<Rc<PreparedScene>> {
+    if !streamed_patches(client) {
+        return Some(prepare(client));
+    }
+    if let Some(scene) = client.terrain_scene.borrow().as_ref()
+        && scene.camera == client.camera
+    {
+        return Some(scene.clone());
+    }
+    let mut scene = client.terrain_patches.scene(client)?;
+    finish_scene(client, &mut scene);
+    let scene = Rc::new(scene);
+    *client.terrain_scene.borrow_mut() = Some(scene.clone());
+    Some(scene)
+}
+
 pub(in super::super) fn prepare(client: &Client) -> Rc<PreparedScene> {
+    if streamed_patches(client) && !super::super::strategic::active(client) {
+        return client
+            .rendered_frame
+            .last_scene()
+            .or_else(|| client.terrain_scene.borrow().clone())
+            .unwrap_or_else(|| Rc::new(PreparedScene::new(client.camera, Vec::new())));
+    }
     if let Some(scene) = client.terrain_scene.borrow().as_ref()
         && scene.camera == client.camera
     {
@@ -72,10 +113,38 @@ pub(in super::super) fn prepare(client: &Client) -> Rc<PreparedScene> {
         .map(foundation_key)
         .filter(|key| foundations::in_view(key, foundation_view))
         .collect::<Vec<_>>();
-    let units = client
-        .village
-        .buildings
-        .iter()
+    paint_foundations(client, &mut terrain, foundation_view);
+    #[cfg(feature = "frame-bench")]
+    drop(foundations_stage);
+    #[cfg(feature = "frame-bench")]
+    let mesh = super::super::perf::Scope::new(32);
+    let mut scene = PreparedScene::new(client.camera, terrain);
+    #[cfg(feature = "frame-bench")]
+    drop(mesh);
+    scene.foundations = foundations;
+    scene.foundation_view = foundation_view;
+    finish_scene(client, &mut scene);
+    let scene = Rc::new(scene);
+    *client.terrain_scene.borrow_mut() = Some(scene.clone());
+    scene
+}
+
+fn finish_scene(client: &Client, scene: &mut PreparedScene) {
+    scene.actor_extents = Some(client.art.scene_actor_extents());
+    #[cfg(feature = "frame-bench")]
+    let _dressing = super::super::perf::Scope::new(33);
+    scene.decorations = decorations::for_scene(client, scene);
+}
+
+fn paint_foundations(client: &Client, terrain: &mut [SceneTerrain], view: Option<[[f64; 2]; 2]>) {
+    let buildings = client.village.buildings.iter().filter(|building| {
+        let center = super::super::village::building_center(building);
+        view.is_none_or(|[min, max]| {
+            (0..2).all(|axis| center[axis] >= min[axis] && center[axis] <= max[axis])
+        })
+    });
+    let units = buildings
+        .clone()
         .filter(|building| building.kind != aoe_protocol::BuildingKind::Road)
         .map(|building| aoe_rendering::SceneUnit {
             kind: building_kind(building),
@@ -86,26 +155,8 @@ pub(in super::super) fn prepare(client: &Client) -> Rc<PreparedScene> {
             elevation_meters: 0.0,
         })
         .collect::<Vec<_>>();
-    aoe_rendering::apply_building_foundations(&mut terrain, &client.art, &units);
-    roads::paint(&mut terrain, &client.village.buildings);
-    #[cfg(feature = "frame-bench")]
-    drop(foundations_stage);
-    #[cfg(feature = "frame-bench")]
-    let mesh = super::super::perf::Scope::new(32);
-    let mut scene = PreparedScene::new(client.camera, terrain);
-    #[cfg(feature = "frame-bench")]
-    drop(mesh);
-    scene.actor_extents = Some(client.art.scene_actor_extents());
-    scene.foundations = foundations;
-    scene.foundation_view = foundation_view;
-    #[cfg(feature = "frame-bench")]
-    let dressing = super::super::perf::Scope::new(33);
-    scene.decorations = decorations::for_scene(client, &scene);
-    #[cfg(feature = "frame-bench")]
-    drop(dressing);
-    let scene = Rc::new(scene);
-    *client.terrain_scene.borrow_mut() = Some(scene.clone());
-    scene
+    aoe_rendering::apply_building_foundations(terrain, &client.art, &units);
+    roads::paint(terrain, buildings);
 }
 
 /// Building updates are the only foundation mutations. Compare the cached key
@@ -114,6 +165,15 @@ pub(in super::super) fn replace_buildings(
     client: &mut Client,
     buildings: Vec<aoe_protocol::GameplayBuildingState>,
 ) {
+    if streamed_patches(client) {
+        foundations::invalidate_changed_patches(
+            &mut client.terrain_patches,
+            &client.village.buildings,
+            &buildings,
+        );
+        client.village.buildings = buildings;
+        return;
+    }
     let changed = client
         .terrain_scene
         .get_mut()
@@ -176,12 +236,6 @@ impl PreparedScene {
     }
 
     pub(super) fn new(camera: Camera, terrain: Vec<SceneTerrain>) -> Self {
-        #[cfg(feature = "frame-bench")]
-        {
-            use aoe_rendering::frame_cost::{Counter, add};
-            add(Counter::SceneBuilds, 1);
-            add(Counter::ProjectedTiles, terrain.len());
-        }
         let triangles = aoe_rendering::projected_surface_triangles(
             &terrain,
             SceneCamera {
@@ -191,6 +245,20 @@ impl PreparedScene {
                 focus_elevation_meters: camera.focus_elevation_meters,
             },
         );
+        Self::from_triangles(camera, terrain, triangles)
+    }
+
+    fn from_triangles(
+        camera: Camera,
+        terrain: Vec<SceneTerrain>,
+        triangles: Vec<ProjectedSurfaceTriangle>,
+    ) -> Self {
+        #[cfg(feature = "frame-bench")]
+        {
+            use aoe_rendering::frame_cost::{Counter, add};
+            add(Counter::SceneBuilds, 1);
+            add(Counter::ProjectedTiles, terrain.len());
+        }
         let bucket_width = triangles
             .iter()
             .filter(|triangle| !triangle.skirt)

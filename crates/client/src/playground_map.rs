@@ -34,7 +34,7 @@ pub(super) mod render_cache;
 mod resources;
 #[path = "playground_map/scene.rs"]
 pub(crate) mod scene;
-pub(super) use resources::scene_resources;
+pub(super) use resources::{scene_resources, scene_resources_for};
 #[path = "playground_map/decorations.rs"]
 mod decorations;
 #[path = "playground_map/feedback.rs"]
@@ -58,6 +58,8 @@ pub(super) fn cache_status(client: &Client) -> String {
 }
 
 pub(super) fn clear_terrain_cache(client: &mut Client) {
+    client.terrain_patches = Default::default();
+    client.pan_motion = Default::default();
     client.terrain_scene.borrow_mut().take();
     client.terrain_chunks.clear();
     client.capture.failures.clear();
@@ -154,6 +156,7 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
                     client.terrain_bounds.failures.chunks.remove(&(x, y));
                     include_chunk_height_bounds(&mut client, &chunk);
                     client.terrain_chunks.insert((x, y), chunk);
+                    client.terrain_patches.chunk_arrived((x, y));
                     client.terrain_scene.borrow_mut().take();
                     initialize_altitude_focus(&mut client);
                     evict_distant_chunks(&mut client);
@@ -433,6 +436,9 @@ fn evict_distant_chunks(client: &mut Client) {
         &preferred,
     );
     if removed {
+        client
+            .terrain_patches
+            .source_evicted(&client.terrain_chunks);
         client.terrain_scene.borrow_mut().take();
         refresh_chunk_height_bounds(client);
     }

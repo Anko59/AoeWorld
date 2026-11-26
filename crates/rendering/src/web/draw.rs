@@ -31,8 +31,7 @@ pub(super) fn write_draw_ranges(instances: &[Sprite], ranges: &mut Vec<(Range<u3
 pub(super) fn write_contour_ranges(instances: &[Sprite], ranges: &mut Vec<Range<u32>>) {
     ranges.clear();
     for (index, sprite) in instances.iter().enumerate() {
-        let eligible = sprite.color[3] >= 0.0 && sprite.pages[3] & 56 != 0;
-        if !eligible {
+        if !sprite.effect_candidate() {
             continue;
         }
         let index = index as u32;

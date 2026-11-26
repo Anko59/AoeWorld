@@ -372,7 +372,8 @@ impl GameRenderer {
             ]);
             let mut instances = match self {
                 Self::WebGpu(renderer) => std::mem::take(&mut renderer.staging),
-                _ => Vec::new(),
+                Self::WebGl(renderer) => std::mem::take(&mut renderer.staging),
+                _ => unreachable!(),
             };
             instances.clear();
             let fog_span = perf::Stage::new(6);
@@ -415,7 +416,7 @@ impl GameRenderer {
                     renderer.staging = instances;
                     result
                 }
-                Self::WebGl(renderer) => renderer.render_with_clear(&mut instances, fog_active),
+                Self::WebGl(renderer) => renderer.render_staged(instances, fog_active),
                 _ => unreachable!(),
             };
         }

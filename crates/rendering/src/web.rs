@@ -58,6 +58,10 @@ impl Sprite {
 
     pub(crate) const PLAYER_MASK: u32 = 64;
 
+    pub(crate) fn effect_candidate(&self) -> bool {
+        self.color[3] >= 0.0 && self.pages[3] & 56 != 0
+    }
+
     pub(crate) fn with_owner(mut self, visual: crate::SceneUnitVisual) -> Self {
         if let Some(colour) = visual.colour() {
             self.pages[3] |= Self::PLAYER_MASK;
