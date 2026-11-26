@@ -2,6 +2,7 @@
 import { MAX_MINIMAP_BYTES, decodeMinimap } from '/minimap.js';
 import { initStrategic } from '/navigation/strategic.js';
 import { initMinimapView } from '/navigation/view.js';
+import { initMinimapOrders } from '/navigation/minimap/orders.js';
 import { initFogMap } from '/navigation/fog.js';
 import { initViews } from '/navigation/views.js';
 
@@ -123,7 +124,8 @@ export function initNavigation() {
   document.addEventListener('visibilitychange', () => { if (document.hidden) stopPanning(); });
   document.addEventListener('focusin', event => { if (editable(event.target)) stopPanning(); });
 
-  const view = initMinimapView(svg, panel, point => { if (point) pending = point; });
+  const orders = initMinimapOrders(svg);
+  const view = initMinimapView(svg, panel, point => { if (point) pending = point; }, orders.press);
   const views = initViews(([x, y, zoom]) => {
     const hash = `x=${x}&y=${y}&zoom=${zoom}`;
     // Panning and H can move the camera while leaving this fragment intact.
@@ -284,6 +286,7 @@ export function initNavigation() {
       return members;
     },
     fog,
+    bindOrders: orders.bind,
     actors: view.actors,
     resources: strategic.resources,
     strategic,

@@ -472,5 +472,7 @@ async fn road_ground_paints_only_complete_tiles_and_remains_selectable() {
     client.canvas.remove();
 }
 
+#[path = "../../../village/tests/minimap_orders.rs"]
+mod minimap_orders;
 #[path = "resource_picking.rs"]
 mod resource_picking;

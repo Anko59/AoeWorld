@@ -84,9 +84,12 @@ pub(super) fn arm(client: &mut Client, kind: BuildingKind) {
     let _ = client.canvas.set_attribute("data-order-mode", "build");
 }
 
+/// Ends a placement and every other armed cursor with the one on the screen.
 #[inline(never)]
 pub(in super::super) fn cancel(client: &mut Client) {
+    client.village.clear_move_cursor();
     client.village.garrison_cursor = false;
+    client.village.unload_cursor = false;
     client.village.far_placement = false;
     client.village.placement = None;
     client.village.repeat_placement = false;

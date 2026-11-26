@@ -4,7 +4,7 @@ use crate::playground::game::{map, position_of};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen(
-    inline_js = "export function waypoints_update(v) { window.aoeWaypoints?.(v); } export function order_ping(x, y) { window.aoeOrderPing?.(x, y); } export function clear_order_pings() { document.querySelectorAll('.order-ping').forEach(node => node.remove()); }"
+    inline_js = "export function waypoints_update(v) { window.aoeWaypoints?.(v); } export function order_ping(x, y) { window.aoeOrderPing?.(x, y); } export function clear_order_pings() { document.querySelectorAll('.order-ping,[data-minimap-ping]').forEach(node => node.remove()); }"
 )]
 extern "C" {
     fn waypoints_update(values: &[f64]);

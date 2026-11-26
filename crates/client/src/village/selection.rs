@@ -12,6 +12,29 @@ pub(super) fn owned_units(client: &super::Client) -> impl Iterator<Item = &Gamep
         .filter(move |unit| unit.player == player && unit.hp > 0)
 }
 
+/// The selected living units and sheep this player can order.
+pub(in super::super) fn commanded(client: &super::Client) -> Vec<EntityId> {
+    let player = super::owner(client);
+    client
+        .selected
+        .units
+        .iter()
+        .copied()
+        .filter(|id| {
+            client
+                .units
+                .get(id)
+                .is_some_and(|u| u.player == player && u.hp > 0)
+                || client.village.animals.iter().any(|a| {
+                    a.id == *id
+                        && a.kind == aoe_protocol::AnimalKind::Sheep
+                        && a.hp > 0
+                        && a.owner == Some(player)
+                })
+        })
+        .collect()
+}
+
 /// Updated only by authoritative snapshots, unit deltas and removals.
 #[derive(Default)]
 pub(crate) struct IdleFinder {

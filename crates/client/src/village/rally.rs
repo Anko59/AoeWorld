@@ -1,7 +1,7 @@
 //! Rally input and the selected building's authoritative flag.
 use super::{Client, owner};
 use crate::playground::game::map;
-use aoe_core::{FIXED_SUBUNITS_PER_TILE, ScreenPoint, WorldPosition};
+use aoe_core::{ScreenPoint, WorldPosition};
 use aoe_protocol::{GameplayClientMessage as Message, RallyTarget};
 
 /// Every selected training building of the owner takes the same rally, not
@@ -31,13 +31,9 @@ pub(super) fn at_pointer(client: &mut Client, point: ScreenPoint) -> bool {
     let Some(world) = map::world_at_screen(client, point) else {
         return true;
     };
-    let Ok(position) = WorldPosition::from_i64(
-        (world[0] * f64::from(FIXED_SUBUNITS_PER_TILE)).round() as i64,
-        (world[1] * f64::from(FIXED_SUBUNITS_PER_TILE)).round() as i64,
-    ) else {
+    let Some(position) = super::orders::ground(client, world) else {
         return true;
     };
-    let position = client.config.snap_ground_position(position);
     let animal = super::picking::actor(client, point)
         .filter(|a| a.1)
         .map(|a| a.0);
@@ -57,6 +53,20 @@ pub(super) fn at_pointer(client: &mut Client, point: ScreenPoint) -> bool {
     } else {
         RallyTarget::Ground(position)
     };
+    set(client, ids, target);
+    true
+}
+
+/// A rally on the ground, whatever stands on it. False when no selected
+/// building trains units.
+pub(super) fn at_ground(client: &mut Client, position: WorldPosition) -> bool {
+    let ids = rally_buildings(&client.village.buildings, &client.selected, owner(client));
+    let found = !ids.is_empty();
+    set(client, ids, RallyTarget::Ground(position));
+    found
+}
+
+fn set(client: &mut Client, ids: Vec<aoe_core::EntityId>, target: RallyTarget) {
     for building_id in ids {
         let sequence = client.next_sequence;
         super::orders::send(
@@ -68,7 +78,6 @@ pub(super) fn at_pointer(client: &mut Client, point: ScreenPoint) -> bool {
             },
         );
     }
-    true
 }
 
 pub(in super::super) fn marker(client: &Client) -> Option<aoe_rendering::SceneResource> {
