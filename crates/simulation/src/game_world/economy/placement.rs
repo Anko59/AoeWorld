@@ -5,6 +5,18 @@ use std::collections::{BTreeSet, VecDeque};
 
 mod removal;
 
+/// The outermost bulk load under way. Its end counts the owners it touched,
+/// also when the load fails or unwinds: no later count is left waiting.
+struct HousingBatch<'a>(&'a mut GameWorld);
+
+impl Drop for HousingBatch<'_> {
+    fn drop(&mut self) {
+        for player in self.0.economy.housing_due.take().unwrap_or_default() {
+            self.0.refresh_population_cap(player);
+        }
+    }
+}
+
 impl GameWorld {
     /// Player orders need tile-exact exploration of the entire footprint.
     /// Check knowledge before terrain/occupancy to avoid probing black ground.
@@ -148,8 +160,29 @@ impl GameWorld {
         self.insert_building(player, BuildingKind::TownCenter, footprint, true)
     }
 
+    /// Runs a bulk load (a restore, a seeded start) and counts the population
+    /// space of each owner it touched once, at its end. A count per building
+    /// reads all the owner's houses again: the square of a town's size.
+    /// A load inside a load leaves its owners to the outer one.
+    pub(in crate::game_world) fn count_housing_once<R>(
+        &mut self,
+        load: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        if self.economy.housing_due.is_some() {
+            return load(self);
+        }
+        self.economy.housing_due = Some(BTreeSet::new());
+        let batch = HousingBatch(self);
+        load(&mut *batch.0)
+    }
+
     /// Housing space from completed owned buildings, with saturating arithmetic.
     pub(super) fn refresh_population_cap(&mut self, player: PlayerId) {
+        if let Some(due) = &mut self.economy.housing_due {
+            due.insert(player);
+            return;
+        }
+        self.economy.note_housing_read(player);
         // Only the player's own buildings of the kinds that house people,
         // through the per-kind index: walls, roads and farms (most of a big
         // kingdom) were summed at zero on every placement.

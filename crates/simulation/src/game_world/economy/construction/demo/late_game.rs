@@ -72,6 +72,15 @@ impl GameWorld {
         center: TileCoord,
         seat: &LateGameSeat,
     ) -> Result<LateGameSeeded, EconomyError> {
+        self.count_housing_once(|world| world.seed_seat(player, center, seat))
+    }
+
+    fn seed_seat(
+        &mut self,
+        player: PlayerId,
+        center: TileCoord,
+        seat: &LateGameSeat,
+    ) -> Result<LateGameSeeded, EconomyError> {
         let mut seeded = LateGameSeeded::default();
         let ages: &[Tech] = match seat.age {
             Age::Dark => &[],
@@ -141,6 +150,8 @@ impl GameWorld {
                 next_site = cursor;
             }
         }
+        // Counted when the load ends; this keeps a seat counted even when no
+        // building of it found room.
         self.refresh_population_cap(player);
         seeded.wall_tiles = self.seed_wall_arcs(player, center, seat.wall_tiles)?;
         let mut workers = Vec::new();

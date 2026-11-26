@@ -46,6 +46,12 @@ impl GameWorld {
     }
 
     pub(crate) fn wake_player_training(&mut self, player: PlayerId) {
+        // No queue sleeps before the first tick: restoring a unit must not
+        // copy and walk its owner's whole list of busy buildings. In play
+        // some queue nearly always sleeps, so this rarely returns there.
+        if self.economy.queues.training.clocks.is_empty() {
+            return;
+        }
         let population = self.training_has_population(player);
         let ids = self
             .economy
@@ -54,6 +60,7 @@ impl GameWorld {
             .get(&player)
             .cloned()
             .unwrap_or_default();
+        self.economy.note_training_reads(ids.len());
         for id in ids {
             // The step reads availability, not the population count. Waking
             // an unchanged later-id queue during training would remove its
