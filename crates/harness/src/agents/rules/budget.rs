@@ -33,6 +33,8 @@ pub(crate) const SUITES: &[&str] = &[
     "release-build",
     // It runs test-unit, test-wasm and test-e2e one after another.
     "test-client-memory",
+    // Dozens of repeated browser runs: the `e2e-repeat` workflow runs them on GitHub.
+    "test-e2e-repeat",
 ];
 /// Focused targets: allowed with a bounded filter, leased like a suite otherwise.
 pub(crate) const FOCUSED: &[&str] = &[

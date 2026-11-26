@@ -67,6 +67,7 @@ help:
 	@echo '  make dev-server      Build and keep one dev server tracking origin/dev, with preset maps (-status, -stop; docs/dev-server.md)'
 	@echo '  make compare         Screenshot bookmarked cameras on the build before and after the change (docs/showcase.md)'
 	@echo '  make test-e2e        Launch a disposable server and pinned Chromium'
+	@echo '  make test-e2e-repeat Repeat AOE_E2E_REPEAT_SPECS on AOE_E2E_REPEAT_PROJECTS AOE_E2E_REPEAT times; passes vs failures per test'
 	@echo '  make test-client-memory  Serial native, WASM and focused E2E (AOE_E2E_SPECS required)'
 	@echo '  AOE_POLISH_SOURCE_URL=... AOE_POLISH_SOURCE_HASH=... make test-memory-source  Qualify an activated real-pack source map route'
 	@echo '  AOE_GEODATA_CACHE=... make test-creator-source  Qualify overview and detailed source maps across restart'

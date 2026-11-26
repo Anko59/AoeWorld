@@ -9,6 +9,7 @@ mod filter;
 pub(crate) mod landscape;
 mod matrix;
 mod quarantine;
+mod repeat;
 mod servers;
 pub(crate) mod shard;
 mod source;
@@ -118,6 +119,10 @@ pub fn country_probe(args: &CountryProbeArgs) -> Result<(), Box<dyn std::error::
 
 pub fn run_source() -> Result<(), Box<dyn std::error::Error>> {
     source::run()
+}
+
+pub fn run_repeat() -> Result<(), Box<dyn std::error::Error>> {
+    repeat::run()
 }
 
 pub fn run_matrix() -> Result<(), Box<dyn std::error::Error>> {

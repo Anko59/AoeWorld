@@ -1,0 +1,54 @@
+name: AoeWorld e2e repeat
+
+# Proof that a flaky browser test is fixed: runs chosen specs many times on GitHub
+# runners and reports passes against failures per test in the job summary (docs/testing.md).
+# The logic is `make test-e2e-repeat` (crates/harness/src/e2e/repeat); this file only
+# decides where it runs. Dispatch it on a branch:
+#   gh workflow run e2e-repeat.yml --ref <branch> -f specs=tests/a.spec.ts:66 -f projects=webgpu -f repeat=30
+on:
+  workflow_dispatch:
+    inputs:
+      specs:
+        description: 'Spec files under browser/tests, space or comma separated; tests/<path>.spec.ts[:line]'
+        required: true
+      projects:
+        description: 'Playwright projects, comma separated; one runner each'
+        default: webgpu
+      repeat:
+        description: 'Attempts per test, 1 to 200'
+        default: '30'
+
+permissions:
+  contents: read
+
+jobs:
+  repeat:
+    name: repeat (${{ matrix.project }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJSON(format('["{0}"]', replace(replace(inputs.projects, ' ', ''), ',', '","'))) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: ./.github/actions/docker-setup
+      - run: make bootstrap
+      - run: make test-e2e-repeat
+        env:
+          AOE_E2E_REPEAT_SPECS: ${{ inputs.specs }}
+          AOE_E2E_REPEAT_PROJECTS: ${{ matrix.project }}
+          AOE_E2E_REPEAT: ${{ inputs.repeat }}
+      - if: always()
+        run: cat reports/e2e/repeat.md >> "$GITHUB_STEP_SUMMARY" || true
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: e2e-repeat-${{ matrix.project }}
+          path: |
+            reports/e2e/repeat*
+            .cache/playwright-results/
+            reports/process/
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: ignore
