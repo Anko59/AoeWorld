@@ -7,6 +7,7 @@
 | Release evidence job: coverage ran 60+ minutes and failed 90 dev runs | 11-13 | PARTIAL | #808, #818, #841 | Issue #956: split the coverage job and move it to a nightly (harness session) |
 | Update issue 748 body and #745 body from this roadmap | 11-16 | IN FLIGHT `roadmap/cleanup-11-21` | Issue 748 body is the 11-09 snapshot, #745 body is the 11-09 list | This cleanup rewrites the #748 body as a pointer to docs/roadmap.md; update the #745 body next |
 | Replay recorder for live matches | 11-09 | PLANNED | See [scale](scale.md) | |
+| The performance comment measures real play on real maps (arrival, movement, planning, fights, deaths, chokes, resources over time, unit management, early to late game), no more synthetic CI maps | 11-26 | IN FLIGHT `harness/game-score` | Step 1: `make game-score` plays the early game, Rust AIs on every seat, through `aoe_server::HeadlessMatch`, and replays it at 1 and N workers ([game score](../scale/game-score.md)) | Counters and the middle, late and economy scenarios; then the Callgrind child, battle and march; then the CI job and the comment; then the gate |
 
 ## Done or dropped
 

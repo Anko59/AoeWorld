@@ -10,7 +10,7 @@ pub(crate) mod save_replay;
 pub(crate) mod scale_match;
 mod server;
 pub(crate) mod stages;
-mod stats;
+pub(crate) mod stats;
 #[cfg(test)]
 mod tests;
 mod world;
