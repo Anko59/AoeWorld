@@ -108,14 +108,25 @@ fn vertex(point: SurfacePoint) -> [i32; 2] {
     [point.world[0].floor() as i32, point.world[1].floor() as i32]
 }
 
+fn quad_corners(points: [[i32; 2]; 3]) -> [[i32; 2]; 4] {
+    let bounds = [0, 1].map(|axis| {
+        points.iter().fold([i32::MAX, i32::MIN], |bounds, point| {
+            [bounds[0].min(point[axis]), bounds[1].max(point[axis])]
+        })
+    });
+    [[0, 0], [1, 0], [1, 1], [0, 1]].map(|corner| [bounds[0][corner[0]], bounds[1][corner[1]]])
+}
+
 pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[SceneTerrain]) {
     let mut keys = crate::WorldKeyIndex::default();
     let mut support: Vec<[(u8, u16); 4]> = Vec::new();
     let mut water_visible = false;
     for triangle in triangles.iter().filter(|triangle| eligible(triangle)) {
         water_visible |= appearance::water_material(triangle.material);
-        for point in triangle.points {
-            if keys.entry(vertex(point)) == support.len() {
+        // Its four axis-aligned patch corners: the sibling may be ineligible.
+        let points = triangle.points.map(vertex);
+        for corner in points.into_iter().chain(quad_corners(points)) {
+            if keys.entry(corner) == support.len() {
                 support.push([(MISSING, 0); 4]);
             }
         }
@@ -163,17 +174,8 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
             .map(|point| support[keys.get(vertex(point)).expect("displayed mix vertex")]);
         // Both triangles span the same axis-aligned patch bounds. Inspect all
         // four quad corners, never frequency counts from a triangle's third vertex.
-        let points = triangle.points.map(vertex);
-        let bounds = [0, 1].map(|axis| {
-            points.iter().fold([i32::MAX, i32::MIN], |bounds, point| {
-                [bounds[0].min(point[axis]), bounds[1].max(point[axis])]
-            })
-        });
-        let mut quad = [[0, 0], [1, 0], [1, 1], [0, 1]].map(|corner| {
-            support[keys
-                .get([bounds[0][corner[0]], bounds[1][corner[1]]])
-                .expect("displayed quad corner")]
-        });
+        let mut quad = quad_corners(triangle.points.map(vertex))
+            .map(|corner| support[keys.get(corner).expect("displayed quad corner")]);
         // Loaded depth completes a shallow band's halo without starting a
         // new blend at a direct land/deep-water boundary.
         let shallow = quad.iter().flatten().any(|cell| matches!(cell.0, 10 | 12));
@@ -240,10 +242,8 @@ pub(super) fn assign(triangles: &mut [ProjectedSurfaceTriangle], terrain: &[Scen
             // Shore mixing reaches pure shallows at the inner quad edge. Pin
             // its four shared vertices so the next native depth face starts
             // with that same sheet, rather than an abrupt darker depth band.
-            for corner in [[0, 0], [1, 0], [1, 1], [0, 1]] {
-                let index = keys
-                    .get([bounds[0][corner[0]], bounds[1][corner[1]]])
-                    .expect("displayed shore depth vertex");
+            for corner in quad_corners(triangle.points.map(vertex)) {
+                let index = keys.get(corner).expect("displayed shore depth vertex");
                 shore_depths[index] = shore_depths[index].min(over);
             }
         }
