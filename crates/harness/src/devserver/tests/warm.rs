@@ -1,8 +1,9 @@
 //! A map is ready once its minimap raster has been served: the server answers
 //! 503 when computing it outruns its budget, and the client never retries.
+use super::clock::FakeClock;
 use crate::devserver::{
     process::http_status,
-    warm::{completed, maps, raster},
+    warm::{RETRY, completed, maps, raster, raster_on},
 };
 use serde_json::{Value, json};
 use std::{
@@ -76,9 +77,11 @@ fn the_status_is_read_from_a_reply_larger_than_one_read() {
 #[test]
 fn a_raster_that_ran_out_of_budget_is_asked_for_again() {
     let server = Scripted::answering(&[503, 503, 200], "[]");
-    let took = raster(server.port, "abc", Duration::from_secs(30)).expect("served");
+    let clock = FakeClock::new();
+    let took = raster_on(&clock, server.port, "abc", Duration::from_secs(30)).expect("served");
     assert_eq!(server.rasters_asked(), 3);
-    assert!(took >= Duration::from_secs(4), "two retries wait: {took:?}");
+    assert_eq!(clock.pauses(), [RETRY, RETRY], "each 503 waits one retry");
+    assert_eq!(took, RETRY * 2, "the raster took the two waits");
 }
 
 #[test]
@@ -92,7 +95,13 @@ fn a_map_the_server_does_not_have_fails_at_once_naming_the_status() {
 #[test]
 fn a_raster_that_never_comes_fails_within_its_budget() {
     let server = Scripted::answering(&[503], "[]");
-    let error = raster(server.port, "abc", Duration::from_millis(1500)).unwrap_err();
+    let error = raster_on(
+        &FakeClock::new(),
+        server.port,
+        "abc",
+        Duration::from_millis(1500),
+    )
+    .unwrap_err();
     assert!(error.contains("not served within"), "{error}");
     assert!(error.contains("503"), "{error}");
 }

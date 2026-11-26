@@ -1,5 +1,6 @@
 //! The job list changes while a raster request is in flight.
-use super::warm_presets_for;
+use super::warm_presets_on;
+use crate::devserver::tests::clock::FakeClock;
 use serde_json::json;
 use std::{
     io::{Read, Write},
@@ -9,6 +10,8 @@ use std::{
     time::Duration,
 };
 
+/// `raster_delay` is how long each raster request takes on the fake clock, which
+/// is all the time there is: nothing sleeps and the load of the machine is moot.
 fn warmed_before_return(budget: Duration, raster_delay: Duration) -> Vec<String> {
     let a = json!({"center_latitude_e7": 1, "center_longitude_e7": 2,
         "requested_side_meters": 30_000});
@@ -18,6 +21,8 @@ fn warmed_before_return(budget: Duration, raster_delay: Duration) -> Vec<String>
     let port = listener.local_addr().unwrap().port();
     let rasters = Arc::new(Mutex::new(Vec::new()));
     let seen = rasters.clone();
+    let clock = Arc::new(FakeClock::new());
+    let slow = clock.clone();
     let wanted = [a.clone(), b.clone()];
     let server = thread::spawn(move || {
         for mut stream in listener.incoming().flatten() {
@@ -39,7 +44,7 @@ fn warmed_before_return(budget: Duration, raster_delay: Duration) -> Vec<String>
             } else {
                 let hash = request.split('/').nth(2).unwrap().to_owned();
                 seen.lock().unwrap().push(hash);
-                thread::sleep(raster_delay);
+                slow.advance(raster_delay);
                 String::new()
             };
             let _ = write!(
@@ -49,7 +54,7 @@ fn warmed_before_return(budget: Duration, raster_delay: Duration) -> Vec<String>
             );
         }
     });
-    warm_presets_for(port, &wanted, budget);
+    warm_presets_on(&*clock, port, &wanted, budget);
     let warmed = rasters.lock().unwrap().clone();
     crate::devserver::process::http_get(port, "/stop");
     server.join().unwrap();
@@ -59,7 +64,7 @@ fn warmed_before_return(budget: Duration, raster_delay: Duration) -> Vec<String>
 #[test]
 fn a_preset_completed_during_another_raster_is_warmed_before_ready() {
     assert_eq!(
-        warmed_before_return(Duration::from_secs(2), Duration::ZERO),
+        warmed_before_return(Duration::from_secs(600), Duration::ZERO),
         ["aa", "bb"]
     );
 }
@@ -72,7 +77,7 @@ fn an_expired_overall_deadline_starts_no_more_raster_requests() {
 #[test]
 fn a_slow_raster_cannot_restart_the_overall_budget_for_the_next_map() {
     assert_eq!(
-        warmed_before_return(Duration::from_millis(500), Duration::from_secs(1)),
+        warmed_before_return(Duration::from_secs(600), Duration::from_secs(601)),
         ["aa"]
     );
 }

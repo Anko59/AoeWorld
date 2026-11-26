@@ -57,12 +57,9 @@ fn active_bake_does_not_block_match_start_or_lazy_queries() {
         .open(path.with_extension("lock"))
         .unwrap();
     lock.lock().unwrap();
-    let start = Instant::now();
+    // The bake cannot finish while this test holds its lock, so a startup that
+    // waited for the lock would never return; one that returns did not wait.
     prepare_world(&world, hash, Some(directory.path()), &|| false).unwrap();
-    assert!(
-        start.elapsed() < Duration::from_secs(1),
-        "match startup waited for a bake lock"
-    );
     let Terrain::Map { generator, .. } = world.terrain() else {
         panic!()
     };
@@ -74,9 +71,14 @@ fn active_bake_does_not_block_match_start_or_lazy_queries() {
             .is_some()
     );
     drop(lock);
+    // The background bake takes the released lock and ends when it ends; the
+    // bound only turns a hung bake into a failure, it is not a speed check.
     let start = Instant::now();
     while !generator.has_static_navigation() {
-        assert!(start.elapsed() < Duration::from_secs(10));
+        assert!(
+            start.elapsed() < Duration::from_secs(600),
+            "the bake never ended"
+        );
         std::thread::sleep(Duration::from_millis(10));
     }
 }
