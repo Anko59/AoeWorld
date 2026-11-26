@@ -199,6 +199,9 @@ pub struct GameWorld {
     pub(crate) active_planner_count: usize,
     pub(crate) active_route_searches: usize,
     pub(crate) partial_kits: u64,
+    /// The order being routed needs its exact contact point (a task's work
+    /// or build spot), not an area: reaching a nearby tile instead is no use.
+    pub(crate) routing_contact: bool,
     pub(crate) route_slots: BTreeMap<PlayerId, route_scheduler::RouteSlots>,
     pub(crate) group_work: std::sync::Arc<route_scheduler::GroupWork>,
     pub(crate) order_diagnostics: orders::diagnostics::OrderDiagnostics,
@@ -255,6 +258,7 @@ impl GameWorld {
             active_planner_count: 0,
             active_route_searches: 0,
             partial_kits: 0,
+            routing_contact: false,
             route_slots: BTreeMap::new(),
             group_work: Default::default(),
             order_diagnostics: Default::default(),

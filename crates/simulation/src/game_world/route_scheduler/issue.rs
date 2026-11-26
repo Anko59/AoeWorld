@@ -117,6 +117,21 @@ impl GameWorld {
         }
     }
 
+    /// A near contact order (a task's work or build spot; reaching a tile
+    /// beside it is no use) is asked of the region layer before any search:
+    /// one the regions prove disconnected is refused without one (#978).
+    pub(crate) fn contact_route_disconnected(
+        &self,
+        planner: &mut RoutePlanner,
+        kind: UnitKind,
+        player: PlayerId,
+    ) -> bool {
+        !kind.is_naval()
+            && !super::far_route(planner.origin(), planner.destination())
+            && aoe_map::LandBucket::for_radius(kind.collision_radius())
+                .is_some_and(|bucket| self.near_route_disconnected(player, bucket, planner))
+    }
+
     pub(crate) fn next_map_route(
         &mut self,
         origin: TileCoord,
@@ -132,6 +147,16 @@ impl GameWorld {
         self.route_metrics
             .attribution
             .order(kind, origin, destination, caller);
+        let mut planner = RoutePlanner::new(origin, destination, MAX_ROUTE_WORK_PER_ORDER);
+        // An area order keeps its search: refinement may serve it from the
+        // nearest reachable tile.
+        if self.routing_contact && self.contact_route_disconnected(&mut planner, kind, player) {
+            self.route_metrics.stuck += 1;
+            self.route_metrics
+                .attribution
+                .failed(kind, origin, destination, 0, 0, caller);
+            return Some(MapRoutePlan::Outcome(MovementOutcome::Unreachable));
+        }
         let allowance = self.fast_route_allowance(player);
         if let Some((outcome, work)) =
             self.navigation_cache
@@ -146,7 +171,6 @@ impl GameWorld {
             return Some(MapRoutePlan::Outcome(outcome));
         }
         self.order_diagnostics.demand[self.order_diagnostics.issuer as usize].route_searches += 1;
-        let mut planner = RoutePlanner::new(origin, destination, MAX_ROUTE_WORK_PER_ORDER);
         let (result, full) = self.poll_fast_route(&mut planner, kind, player);
         let work = planner.work();
         let reason = super::attribution::failure_reason(&result);

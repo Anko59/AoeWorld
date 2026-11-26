@@ -38,7 +38,8 @@ fn sealed_near_world() -> GameWorld {
     world
 }
 
-/// Orders into the sealed ground that no fast attempt can settle.
+/// Orders into the sealed ground that no fast attempt can settle. A contact
+/// order the region layer proves disconnected is refused when issued (#978).
 fn hopeless_orders(world: &mut GameWorld, player: PlayerId) -> Vec<EntityId> {
     let out = RADIUS + 1;
     [(0, -out), (0, out)]
@@ -47,7 +48,10 @@ fn hopeless_orders(world: &mut GameWorld, player: PlayerId) -> Vec<EntityId> {
             let id = world
                 .spawn_unit(player, tile_position(CX + dx, CY + dy))
                 .expect("unit");
-            assert_eq!(world.issue_task_move(id, tile_position(CX, CY)), Ok(true));
+            assert_eq!(
+                world.issue_task_move(id, tile_position(CX, CY)),
+                Err(GameWorldError::Unreachable)
+            );
             id
         })
         .collect()
@@ -110,7 +114,6 @@ fn hopeless_near_searches_do_not_starve_the_routes_of_their_player() {
     for id in hopeless {
         let unit = world.unit(id).expect("unit");
         assert!(world.movement_order(id).is_none(), "{stats:?}");
-        assert!(world.movement_failure(id).is_some());
         assert_eq!(unit.task, crate::UnitTask::Idle);
         assert!(!unit.planning && !unit.moving);
     }

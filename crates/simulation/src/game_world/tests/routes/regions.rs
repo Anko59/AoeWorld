@@ -81,8 +81,10 @@ fn a_certified_frontier_route_survives_the_disconnected_requested_goal() {
         .spawn_villager(PlayerId(0), WorldPosition::from_tile_center(from).unwrap())
         .unwrap();
     world.fast_route_budget = 0;
+    // An area order: a contact order to disconnected ground is refused when
+    // issued (#978), while an area order is served from a certified tile.
     world
-        .issue_task_move(id, WorldPosition::from_tile_center(target).unwrap())
+        .issue_move(id, WorldPosition::from_tile_center(target).unwrap())
         .unwrap();
     let index = world.lookup[&id];
     let mut planner = world.take_planner(index).unwrap();
@@ -212,7 +214,11 @@ fn sealed_near_searches_are_answered_by_regions_even_with_one_work_per_tick() {
                     WorldPosition::from_tile_center(TileCoord::new(84, 124 + n)).unwrap(),
                 )
                 .unwrap();
-            assert!(world.issue_task_move(id, target).unwrap());
+            // Refused when issued: the region layer proves it disconnected.
+            assert_eq!(
+                world.issue_task_move(id, target),
+                Err(GameWorldError::Unreachable)
+            );
             id
         })
         .collect();
@@ -225,10 +231,6 @@ fn sealed_near_searches_are_answered_by_regions_even_with_one_work_per_tick() {
         assert!(
             world.movement_order(id).is_none(),
             "{id:?} still searches sealed ground"
-        );
-        assert_eq!(
-            world.movement_failure(id),
-            Some(GameWorldError::Unreachable)
         );
     }
 }

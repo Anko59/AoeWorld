@@ -178,9 +178,16 @@ fn stalled_food(
         let next = resource_stock(w, ResourceKind::Food);
         deposits += next.saturating_sub(food);
         assert_eq!(next, food);
-        assert_eq!(
-            assigned(w, remote, workers, ResourceKind::Food),
-            workers.len(),
+        // Every worker stays in the managed group. A farmer the Steward hands
+        // a fresh job while every drop-off is sealed off is released from it
+        // at once, as route answers are now instant (#978); none gathers
+        // anything else.
+        assert!(
+            workers
+                .iter()
+                .all(|id| w.steward_controller(*id) == Some(remote)
+                    && w.gathering_kind(*id)
+                        .is_none_or(|kind| kind == ResourceKind::Food)),
             "{:?}",
             workers
                 .iter()
@@ -400,13 +407,14 @@ fn stalled_remote_food_jobs_do_not_count_as_income_without_deposits() {
         ),
         20
     );
+    // All 20 stay managed; one sealed-off farmer was released from its job
+    // (see `stalled_food`).
     assert_eq!(
-        assigned(
-            &stalled.w,
-            stalled.remote,
-            &stalled.remote_workers,
-            ResourceKind::Food
-        ),
+        stalled
+            .remote_workers
+            .iter()
+            .filter(|id| stalled.w.steward_controller(**id) == Some(stalled.remote))
+            .count(),
         20
     );
     assert_eq!(
