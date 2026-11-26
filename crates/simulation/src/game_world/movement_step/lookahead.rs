@@ -1,5 +1,5 @@
 //! Retained planning ahead shares the unused fair-pass work allowance.
-use crate::{GameWorld, MAX_ROUTE_WORK_PER_ORDER};
+use crate::GameWorld;
 use aoe_core::EntityId;
 use aoe_map::RoutePlanner;
 
@@ -25,10 +25,8 @@ impl GameWorld {
             if budget == 0 {
                 break;
             }
-            if self.planner_capacity_exhausted(index) || self.lookahead_jumps_queue(index) {
-                continue;
-            }
-            let share = (budget / (wanting.len() - turn) as u32).clamp(1, MAX_ROUTE_WORK_PER_ORDER);
+            let share = (budget / (wanting.len() - turn) as u32)
+                .clamp(1, crate::game_world::route_scheduler::ROUTE_SLICE_WORK);
             let Some(mut planner) = self.take_planner(index) else {
                 continue;
             };
@@ -37,15 +35,21 @@ impl GameWorld {
             let certified_before = planner.certified_destination();
             let probe = self.planning_probe.clone();
             let span = probe.as_ref().and_then(|p| p.movement_span("plan_ahead"));
-            self.reuse_region_endpoint_proof(&mut planner, kind, self.units[index].state.player);
-            self.plan_world_route_ahead(
-                &mut planner,
-                share,
-                &|| false,
-                kind,
-                self.units[index].state.player,
-            );
-            self.reuse_region_endpoint_proof(&mut planner, kind, self.units[index].state.player);
+            let player = self.units[index].state.player;
+            let mut left = share;
+            loop {
+                self.reuse_region_endpoint_proof(&mut planner, kind, player);
+                let step = left.min(crate::game_world::route_scheduler::REGION_PROOF_STEP);
+                let before = planner.work();
+                self.plan_world_route_ahead(&mut planner, step, &|| false, kind, player);
+                let spent = planner.work().saturating_sub(before);
+                left -= spent.min(left);
+                // Short of its step, the planner stopped by itself.
+                if spent < step || left == 0 {
+                    break;
+                }
+            }
+            self.reuse_region_endpoint_proof(&mut planner, kind, player);
             drop(span);
             if certified_before.is_none() && planner.certified_destination().is_some() {
                 self.route_metrics
@@ -61,31 +65,5 @@ impl GameWorld {
             budget -= spent.min(budget);
             self.store_planner(index, Some(planner));
         }
-    }
-
-    /// A new leg search planned ahead would take a slot its player's waiting
-    /// units queue for.
-    fn lookahead_jumps_queue(&self, index: usize) -> bool {
-        self.units[index].planner.as_deref().is_some_and(|planner| {
-            !planner.requires_search_slot()
-                && self.route_queued.contains(&(
-                    self.units[index].state.player,
-                    crate::game_world::far_route(planner.origin(), planner.destination()),
-                ))
-        })
-    }
-
-    fn planner_capacity_exhausted(&self, index: usize) -> bool {
-        let own_planner = usize::from(self.units[index].planner.is_some());
-        let own_search = usize::from(
-            self.units[index]
-                .planner
-                .as_deref()
-                .is_some_and(RoutePlanner::requires_search_slot),
-        );
-        let far = self.units[index].planner.as_deref().is_some_and(|planner| {
-            crate::game_world::far_route(planner.origin(), planner.destination())
-        });
-        self.route_capacity_exhausted(self.units[index].state.player, own_planner, own_search, far)
     }
 }

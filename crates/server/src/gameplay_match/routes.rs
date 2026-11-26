@@ -118,7 +118,6 @@ pub(crate) fn attribution_json(a: &RouteAttribution) -> Value {
         "group_pool_work": a.group_pool_work,
         "detours_declined": a.detours_declined,
         "detours_without_fast": a.detours_without_fast,
-        "detours_at_capacity": a.detours_at_capacity,
         "samples_1_4ki": a.samples,
     })
 }
@@ -152,14 +151,12 @@ pub fn scheduler_json(stats: &RouteSchedulerStats, tick: u64) -> Value {
         "waiting_without_planner": stats.waiting_without_planner,
         "waiting_players": stats.waiting_players,
         "oldest_wait_ticks": stats.oldest_wait_ticks,
-        "players_at_search_cap": stats.players_at_search_cap,
         "most_waiting": stats.most_waiting,
         "most_waiting_player": stats.most_waiting_player.map(|p| p.0),
         "orders": m.orders, "fast_work": m.issue_work, "fair_work": m.fair_work,
         "lookahead_work": m.lookahead_work, "found": m.found, "failed": m.failed,
         "cache_hits": m.cache_hits, "solved_at_issue": m.solved_at_issue, "fast_path": m.fast_path,
-        "expired": m.expired, "stuck": m.stuck, "slot_refusals": m.slot_refusals,
-        "deferred_without_slot": m.deferred_without_slot,
+        "expired": m.expired, "stuck": m.stuck,
         "deferred_by_distance": DEFERRED_DISTANCES.iter().zip(m.deferred_by_distance)
             .map(|(name, n)| ((*name).to_owned(), json!(n)))
             .collect::<serde_json::Map<String, Value>>(),

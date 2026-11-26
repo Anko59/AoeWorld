@@ -8,6 +8,7 @@ mod ground_cache;
 mod hierarchy;
 mod planner;
 mod regions;
+mod step_masks;
 mod tile_hash;
 pub use field::{WalkingField, walking_field};
 pub use ground_cache::RouteGroundCache;
@@ -27,6 +28,7 @@ pub use regions::{
     ANY_PLAYER, LandBucket, MapRegionGround, RegionChunk, RegionGround, RegionReachability,
     RegionStats, RegionTile, Regions, clipped_region_labels,
 };
+pub use step_masks::{RouteStepMasks, STEP_MASK_WALKABLE, StepMask, step_index};
 
 pub const ORTHOGONAL_COST: u32 = 1_024;
 pub const DIAGONAL_COST: u32 = 1_448;

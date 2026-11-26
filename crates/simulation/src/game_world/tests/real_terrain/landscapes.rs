@@ -76,19 +76,18 @@ fn run(case: &str, count: usize, limit: u32) {
     match case {
         "river" => {
             result.assert_arrival_and_work(count);
-            assert!(result.max_tick_route_work <= 24_576, "{result:?}");
-            assert_eq!((result.max_stuck_ticks, result.oscillations), (0, 1));
-            // Current-output split of the 3 reversals by cause.
-            assert_eq!(result.oscillation_causes, causes(0, 0, 0, 1));
-            // Region witnesses remove duplicate proof work; physical output pins stay fixed.
+            // No tick budget (#978): route work is bounded per unit by
+            // `assert_arrival_and_work`. Without the wait the detour lost its
+            // one reversal and arrives 11 ticks sooner.
+            assert_eq!((result.max_stuck_ticks, result.oscillations), (0, 0));
+            assert_eq!(result.oscillation_causes, causes(0, 0, 0, 0));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (5707, 54775, 2997429)
+                (5696, 54899, 2987476)
             );
         }
         "long" => {
             result.assert_arrival_and_work(count);
-            assert!(result.max_tick_route_work <= 16_384, "{result:?}");
             // Ordinary offensive squads and ownership-neutral selection slots
             // intentionally change this current-output pin, within the same
             // arrival, speed, membership, exact-slot and bounded-work limits.

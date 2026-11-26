@@ -101,7 +101,7 @@ impl GameWorld {
                     return true;
                 }
                 task.failed_dropoffs.insert(tile);
-                if self.fast_route_allowance(unit.player) == 0 {
+                if self.fast_route_allowance() == 0 {
                     // Untried candidates keep the job: the rest of this
                     // perimeter or any later building's.
                     let failed = &task.failed_dropoffs;

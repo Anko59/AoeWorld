@@ -368,7 +368,7 @@ fn exhausted_global_planning_budget_defers_a_map_segment_instead_of_moving() {
         speed_carry: 0,
     });
     world.active_movers.insert(id);
-    world.planning_budget = 0;
+    world.planning_budget = Some(0);
 
     world.advance();
 
@@ -421,7 +421,7 @@ fn terminal_search_limit_stops_a_segment_after_resumable_polling() {
         speed_carry: 0,
     });
     world.active_movers.insert(id);
-    world.planning_budget = 1;
+    world.planning_budget = Some(1);
 
     world.advance();
 

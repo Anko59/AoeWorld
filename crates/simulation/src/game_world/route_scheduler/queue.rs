@@ -27,12 +27,11 @@ pub const ROUTE_REACH: [&str; 3] = ["near", "far", "unplanned"];
 pub struct RouteQueueCell {
     pub waits: Vec<u64>,
     pub active: usize,
-    /// Units of this class that hold a retained search frontier, and so one of
-    /// their player's `MAX_ROUTE_SEARCHES_PER_PLAYER` slots of that reach
-    /// class: waiting or already walking. Who holds the cap, not who wants it.
+    /// Units of this class that hold a retained search frontier: waiting or
+    /// already walking.
     pub searches: usize,
     /// Waiting units whose one fast attempt per leg is already spent, so only
-    /// a search slot can still answer them.
+    /// their search can still answer them.
     pub fast_tried: usize,
     /// Waiting units that queue in their player's *far* slot class. `reach`
     /// cannot say this for a unit with no planner, and that is most of them.

@@ -38,7 +38,7 @@ mod resources;
 mod snapshot;
 pub use snapshot::{RestoreReport, SnapshotError, WORLD_SNAPSHOT_VERSION, WorldSnapshot};
 mod route_scheduler;
-pub(crate) use route_scheduler::{Pass, far_route};
+pub(crate) use route_scheduler::Pass;
 mod spacing;
 mod spawning;
 mod unit_index;
@@ -186,12 +186,12 @@ pub struct GameWorld {
     pub(crate) clearance: Mutex<clearance::Field>,
     /// Candidate resource nodes per generator chunk (`chunk_resource_nodes`).
     pub(crate) resource_chunks: Mutex<crate::game_cache::ResourceCache>,
-    pub(crate) planning_budget: u32,
+    /// No route budget in play (#978): each search takes its own slice. A
+    /// test may hold the next fair pass to this much work.
+    pub(crate) planning_budget: Option<u32>,
     pub(crate) navigation_preparation_budget: Mutex<u32>,
-    /// Work left this tick for fast attempts (`FAST_ROUTE_WORK` each).
-    pub(crate) fast_route_budget: u32,
-    /// Fast-attempt work each player spent this tick.
-    pub(crate) fast_route_spent: BTreeMap<PlayerId, u32>,
+    /// As `planning_budget`, for this tick's fast attempts (`Some(0)` skips).
+    pub(crate) fast_route_budget: Option<u32>,
     pub(crate) navigation_cache: NavigationCache,
     /// Land regions over the planner's ground: a cache, never hashed.
     pub(crate) regions: Mutex<[Option<aoe_map::Regions>; 3]>,
@@ -199,10 +199,10 @@ pub struct GameWorld {
     pub(crate) active_planner_count: usize,
     pub(crate) active_route_searches: usize,
     pub(crate) partial_kits: u64,
+    /// The order being routed needs its exact contact point (a task's work
+    /// or build spot), not an area: reaching a nearby tile instead is no use.
+    pub(crate) routing_contact: bool,
     pub(crate) route_slots: BTreeMap<PlayerId, route_scheduler::RouteSlots>,
-    /// (player, far) classes whose units waited for a slot in the last fair
-    /// pass: an order issued or planned ahead later does not jump that queue.
-    pub(crate) route_queued: BTreeSet<(PlayerId, bool)>,
     pub(crate) group_work: std::sync::Arc<route_scheduler::GroupWork>,
     pub(crate) order_diagnostics: orders::diagnostics::OrderDiagnostics,
     pub(crate) route_metrics: route_scheduler::RouteMetrics,
@@ -247,10 +247,9 @@ impl GameWorld {
             waypoint_order: 0,
             formations: BTreeMap::new(),
             destinations: spacing::Destinations::default(),
-            planning_budget: crate::MAX_ROUTE_WORK_PER_TICK,
+            planning_budget: None,
             navigation_preparation_budget: Mutex::new(crate::MAX_NAV_PREPARATIONS_PER_TICK),
-            fast_route_budget: crate::game_movement::MAX_FAST_ROUTE_WORK_PER_TICK,
-            fast_route_spent: BTreeMap::new(),
+            fast_route_budget: None,
             navigation_cache: NavigationCache::default(),
             regions: Mutex::new(std::array::from_fn(|_| None)),
             resource_chunks: Mutex::new(Default::default()),
@@ -258,12 +257,12 @@ impl GameWorld {
             active_planner_count: 0,
             active_route_searches: 0,
             partial_kits: 0,
+            routing_contact: false,
             route_slots: BTreeMap::new(),
             group_work: Default::default(),
             order_diagnostics: Default::default(),
             route_metrics: Default::default(),
             planning_probe: None,
-            route_queued: BTreeSet::new(),
             idle_spacing: Default::default(),
             passes: Default::default(),
             collision_subscribers: Default::default(),

@@ -1,5 +1,5 @@
 use crate::{
-    GameWorld, GameWorldError, MAX_ROUTE_WORK_PER_ORDER, MAX_ROUTE_WORK_PER_TICK, MovementOrder,
+    GameWorld, GameWorldError, MAX_ROUTE_WORK_PER_ORDER, MovementOrder,
     game_path::next_waypoint,
     game_path::segment_length,
     game_world::{facing_for, interpolate},
@@ -9,13 +9,6 @@ use aoe_map::{RoutePlanner, RoutePlannerPoll};
 use std::collections::VecDeque;
 
 const MAX_WAYPOINTS_PER_TICK: usize = 4_096;
-/// World-wide bound on compact proven route continuations; each player also
-/// has its own share (`route_scheduler`), so this bound is memory only.
-pub(crate) const MAX_ACTIVE_ROUTE_PLANNERS: usize = 4_096;
-/// World-wide bound on planners retaining sparse search frontiers. A player
-/// holds at most `MAX_ROUTE_SEARCHES_PER_PLAYER` near and as many far ones,
-/// so 100 seats fit.
-pub(crate) const MAX_ACTIVE_ROUTE_SEARCHES: usize = 400;
 /// Work of one order's fast attempt: a route proven with this much work (or
 /// a destination proven unreachable) is answered at once, with no search slot
 /// and no queue. Nearly every order of a real match fits (the gather and
@@ -24,13 +17,6 @@ pub(crate) const MAX_ACTIVE_ROUTE_SEARCHES: usize = 400;
 /// to ground it cannot reach costs before it is given up (`approach_if_hard`),
 /// and with armies in the field 16,384 saturated the world's fast budget.
 pub(crate) const FAST_ROUTE_WORK: u32 = 8_192;
-/// World-wide work of fast attempts per tick, separate from the fair budget
-/// that serves the searches holding slots, so slow searches never delay a
-/// short order and short orders never starve a slow search.
-pub(crate) const MAX_FAST_ROUTE_WORK_PER_TICK: u32 = 65_536;
-/// One player's share of that budget per tick: a client that floods orders
-/// spends its own share, never the other players' fast attempts.
-pub(crate) const MAX_FAST_ROUTE_WORK_PER_PLAYER: u32 = 2 * FAST_ROUTE_WORK;
 
 impl GameWorld {
     /// Moves every active mover once and returns the ids it touched, in
@@ -45,7 +31,7 @@ impl GameWorld {
         let mut changed = Vec::new();
         // One tick budget in all: what issued orders left of it (at least the
         // reserve) is shared here; orders issued later this tick get none.
-        let fair_budget = std::mem::take(&mut self.planning_budget);
+        let fair_budget = self.planning_budget.take().unwrap_or(u32::MAX);
         let lookahead_budget = self.serve_route_searches(fair_budget, &mut changed);
         let mut scratch = std::mem::take(&mut self.movement_scratch);
         // Take movers in id order. The loop replaces them with `still_moving`.
@@ -395,7 +381,6 @@ impl GameWorld {
                 MAX_ROUTE_WORK_PER_ORDER,
             )
         });
-        let work_before = planner.work();
         let result = self.poll_world_route_planner(
             &mut planner,
             0,
@@ -403,7 +388,6 @@ impl GameWorld {
             self.units[index].state.kind,
             self.units[index].state.player,
         );
-        self.refund_unused_planning(0, work_before, &planner);
         match result {
             RoutePlannerPoll::Path(path) => {
                 let mut route = VecDeque::from(path.tiles);
@@ -450,16 +434,6 @@ impl GameWorld {
                 SegmentAdvance::Stopped(Some(GameWorldError::Environment(error)))
             }
         }
-    }
-
-    /// A planner rarely needs its whole share for one leg; what it did not
-    /// spend returns to the tick budget for the movers after it.
-    fn refund_unused_planning(&mut self, budget: u32, work_before: u32, planner: &RoutePlanner) {
-        let spent = planner.work().saturating_sub(work_before);
-        self.planning_budget = self
-            .planning_budget
-            .saturating_add(budget.saturating_sub(spent))
-            .min(self.config.scaled_budget(MAX_ROUTE_WORK_PER_TICK));
     }
 
     pub(crate) fn clear_planner(&mut self, index: usize) {

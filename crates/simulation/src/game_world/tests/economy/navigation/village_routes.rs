@@ -121,8 +121,8 @@ fn distant_order_reaches(target: TileCoord, initial_budget: u32) {
         world.unit(scout).unwrap().position.tile_floor(),
         TileCoord::new(8192, 8192)
     );
-    world.planning_budget = initial_budget;
-    world.fast_route_budget = initial_budget;
+    world.planning_budget = Some(initial_budget);
+    world.fast_route_budget = Some(initial_budget);
     let destination = WorldPosition::from_tile_center(target).unwrap();
     assert_eq!(world.issue_move(scout, destination), Ok(true));
     let index = world.lookup[&scout];
@@ -148,22 +148,22 @@ fn distant_order_reaches(target: TileCoord, initial_budget: u32) {
 
 #[test]
 fn village_scout_reaches_review_destination_7892_8042() {
-    distant_order_reaches(TileCoord::new(7892, 8042), crate::MAX_ROUTE_WORK_PER_TICK);
+    distant_order_reaches(TileCoord::new(7892, 8042), u32::MAX);
 }
 
 #[test]
 fn village_scout_reaches_review_destination_7680_7936() {
-    distant_order_reaches(TileCoord::new(7680, 7936), crate::MAX_ROUTE_WORK_PER_TICK);
+    distant_order_reaches(TileCoord::new(7680, 7936), u32::MAX);
 }
 
 #[test]
 fn village_scout_reaches_opposite_quadrant_8492_8342() {
-    distant_order_reaches(TileCoord::new(8492, 8342), crate::MAX_ROUTE_WORK_PER_TICK);
+    distant_order_reaches(TileCoord::new(8492, 8342), u32::MAX);
 }
 
 #[test]
 fn village_scout_reaches_opposite_quadrant_8704_8448() {
-    distant_order_reaches(TileCoord::new(8704, 8448), crate::MAX_ROUTE_WORK_PER_TICK);
+    distant_order_reaches(TileCoord::new(8704, 8448), u32::MAX);
 }
 
 #[test]
@@ -183,7 +183,7 @@ fn uniform_incremental_route_detours_around_the_center_without_corner_cutting() 
     advance(&mut world, 200);
     assert_eq!(world.unit(scout).unwrap().position.tile_floor(), start);
     let target = TileCoord::new(footprint.max.x + 2, start.y);
-    world.planning_budget = 1;
+    world.planning_budget = Some(1);
     world
         .issue_move(scout, WorldPosition::from_tile_center(target).unwrap())
         .unwrap();
@@ -209,7 +209,7 @@ fn gathering_and_returning_continue_through_the_shared_incremental_planner() {
     let (mut world, node, id) = resource_world(ResourceKind::Wood);
     world.initialize_village(PlayerId(0), node.tile).unwrap();
     let before = world.player_economy(PlayerId(0)).unwrap().stockpile.wood;
-    world.planning_budget = 1;
+    world.planning_budget = Some(1);
     world.issue_gather(PlayerId(0), id, node.id).unwrap();
     let mut returning = false;
     for _ in 0..6000 {

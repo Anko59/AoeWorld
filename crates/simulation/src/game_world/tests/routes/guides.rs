@@ -62,8 +62,8 @@ fn the_second_wait_for_a_chunk_walks_a_guide_and_an_attacker_keeps_its_search() 
     let target = w
         .spawn_kind(PlayerId(1), UnitKind::Villager, at(175, 50))
         .unwrap();
-    w.planning_budget = 1;
-    w.fast_route_budget = 0;
+    w.planning_budget = Some(1);
+    w.fast_route_budget = Some(0);
     w.issue_move(first, at(170, 45)).unwrap();
     w.issue_move(second, at(180, 40)).unwrap();
     w.issue_attack(PlayerId(0), attacker, target).unwrap();

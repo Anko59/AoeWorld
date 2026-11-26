@@ -53,7 +53,27 @@ impl GameWorld {
         if !self.has_route_navigation() {
             return false;
         }
-        let allowance = self.fast_route_allowance(unit.player);
+        // As a task move would: refused by the region layer, with no search
+        // and no charge, once the tile itself admits the unit.
+        if self
+            .unit_tile_passable(unit.kind, tile, &|| false)
+            .unwrap_or(false)
+            && self.route_tile_admitted(unit.player, tile)
+            && self.contact_route_disconnected(
+                // Only asked, never polled: it needs no work bound.
+                &mut aoe_map::RoutePlanner::new(origin, tile, 0),
+                unit.kind,
+                unit.player,
+            )
+        {
+            let caller = Some(std::panic::Location::caller());
+            self.units[index].route_renewals = 0;
+            self.units[index].route_caller = caller;
+            self.route_metrics.caller = caller;
+            self.remember_unreachable(index, tile);
+            return true;
+        }
+        let allowance = self.fast_route_allowance();
         let work = match self.navigation_cache.peek(
             (unit.kind.is_naval(), unit.player),
             origin,
@@ -91,7 +111,7 @@ impl GameWorld {
                 aoe_map::MovementOutcome::Unreachable,
             );
         }
-        self.charge_fast_route(unit.player, work);
+        self.charge_fast_route(work);
         self.units[index].route_renewals = 0;
         let caller = Some(std::panic::Location::caller());
         self.units[index].route_caller = caller;
@@ -152,17 +172,19 @@ impl GameWorld {
         // The current planner is set aside, not dropped: its slot is free
         // while the new route is planned, and it comes back if that fails.
         let previous = self.take_planner(index);
-        let (waypoint, route, planner, planning, fast_tried) =
-            match self.order_route(index, origin, destination) {
-                Ok(route) => route,
-                Err(error) => {
-                    self.store_planner(index, previous);
-                    if error == GameWorldError::Unreachable {
-                        self.remember_unreachable(index, destination.tile_floor());
-                    }
-                    return Err(error);
+        self.routing_contact = matches!(precision, GoalPrecision::Contact);
+        let routed = self.order_route(index, origin, destination);
+        self.routing_contact = false;
+        let (waypoint, route, planner, planning, fast_tried) = match routed {
+            Ok(route) => route,
+            Err(error) => {
+                self.store_planner(index, previous);
+                if error == GameWorldError::Unreachable {
+                    self.remember_unreachable(index, destination.tile_floor());
                 }
-            };
+                return Err(error);
+            }
+        };
         self.pack_for_move(index);
         self.demand_accepted(id);
         let speed_carry = self.units[index].order.map_or(0, |order| order.speed_carry);

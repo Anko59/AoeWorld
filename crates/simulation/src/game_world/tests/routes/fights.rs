@@ -58,106 +58,6 @@ fn holds_search(world: &GameWorld, id: EntityId) -> bool {
         .is_some_and(aoe_map::RoutePlanner::requires_search_slot)
 }
 
-/// The slot a search frees goes to the fight, not to the economy order that
-/// has waited longer. Before this, the attacker lost every slot to the older
-/// gather trips and stood still until its wait bound ended its order.
-#[test]
-fn a_waiting_fight_takes_the_next_search_slot_before_an_older_economy_trip() {
-    let mut world = walled_world();
-    let player = PlayerId(3);
-    let enemy = PlayerId(4);
-
-    // Both of this player's near search slots, held by economy orders.
-    world.fast_route_budget = 0;
-    let holders = [
-        across_the_wall(&mut world, player, 0),
-        across_the_wall(&mut world, player, 1),
-    ];
-    world.planning_budget = 0;
-    world.advance();
-    assert_eq!(
-        world.route_slots[&player].class_searches(false),
-        MAX_ROUTE_SEARCHES_PER_PLAYER,
-        "the near search cap must actually be reached, or this test says \
-         nothing about what happens at it"
-    );
-    assert!(
-        holders.iter().all(|&id| holds_search(&world, id)),
-        "the economy orders are the slot holders"
-    );
-
-    // Older economy orders queue for a slot behind them.
-    let economy = (2..8)
-        .map(|n| {
-            world.fast_route_budget = 0;
-            world.planning_budget = 0;
-            let id = across_the_wall(&mut world, player, n);
-            world.advance();
-            id
-        })
-        .collect::<Vec<_>>();
-
-    // Then a fight order that also needs a slot: a soldier whose target sits
-    // on the far side of the wall.
-    let soldier = world
-        .spawn_kind(player, UnitKind::Militia, tile_position(220, WALL_Y - 12))
-        .expect("soldier");
-    let target = world
-        .spawn_kind(enemy, UnitKind::Militia, tile_position(220, WALL_Y + 12))
-        .expect("target");
-    world.fast_route_budget = 0;
-    world.planning_budget = 0;
-    world
-        .issue_attack(player, soldier, target)
-        .expect("attack accepted");
-    world.advance();
-
-    assert!(
-        waits_without_planner(&world, soldier),
-        "the fight order must be waiting with no planner, as 67 of 75 were \
-         in the replayed window: {:?}",
-        world.units[world.lookup[&soldier]]
-    );
-    assert!(
-        world.units[world.lookup[&soldier]]
-            .state
-            .attack_target
-            .is_some(),
-        "and it must be classified as a fight"
-    );
-    let soldier_since = world.units[world.lookup[&soldier]].planning_since;
-    let older = economy
-        .iter()
-        .copied()
-        .filter(|&id| {
-            waits_without_planner(&world, id)
-                && world.units[world.lookup[&id]].planning_since < soldier_since
-        })
-        .collect::<Vec<_>>();
-    assert!(
-        older.len() >= 3,
-        "at least three economy orders must be waiting and older than the \
-         fight, or age ordering would have served the fight anyway: {} of {}",
-        older.len(),
-        economy.len()
-    );
-
-    // Free one slot. Only one unit can take it.
-    world
-        .issue_stop(player, holders[0])
-        .expect("stop one holder");
-    world.fast_route_budget = 0;
-    world.advance();
-
-    assert!(
-        holds_search(&world, soldier),
-        "the freed slot went to an older economy trip instead of the fight; \
-         slots {:?}",
-        world.route_slots.get(&player)
-    );
-    assert_eq!(world.route_accounting_error(), None);
-}
-
 /// Fights are preferred inside a player's own queue only: a player with a
 /// fight must not take search work away from another player's economy.
 #[test]
@@ -167,7 +67,7 @@ fn a_fight_order_never_takes_another_players_share() {
     let enemy = PlayerId(4);
     let other = PlayerId(5);
 
-    world.fast_route_budget = 0;
+    world.fast_route_budget = Some(0);
     let soldier = world
         .spawn_kind(fighter, UnitKind::Militia, tile_position(220, WALL_Y - 12))
         .expect("soldier");
@@ -179,7 +79,7 @@ fn a_fight_order_never_takes_another_players_share() {
         .expect("attack accepted");
     let neighbour = across_the_wall(&mut world, other, 0);
     for _ in 0..40 {
-        world.fast_route_budget = 0;
+        world.fast_route_budget = Some(0);
         world.advance();
     }
     assert!(

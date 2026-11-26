@@ -47,14 +47,10 @@ pub struct RouteMetrics {
     pub fast_path: u64,
     /// Orders that had to wait for the fair pass, by straight distance.
     pub deferred_by_distance: [u64; 5],
-    /// Deferred orders that got no planner (no slot) when issued.
-    pub deferred_without_slot: u64,
     /// Work spent: at issue, in the fair pass, and planning ahead.
     pub issue_work: u64,
     pub fair_work: u64,
     pub lookahead_work: u64,
-    /// Fair-pass polls refused a slot.
-    pub slot_refusals: u64,
     /// Searches that found their first leg, by the work it took.
     pub found: [u64; WORK_BUCKETS],
     /// Searches that ended without a route, by the work they spent.
@@ -63,7 +59,6 @@ pub struct RouteMetrics {
     pub stuck: u64,
     /// Orders ended by the bound on their wait for an answer.
     pub expired: u64,
-    pub yielded: u64,
     /// Near routes given up on for the closest reachable tile.
     pub approached: u64,
     /// The latest searches that ended stuck or needed 64 Ki work or more.
@@ -117,8 +112,8 @@ impl fmt::Display for RouteMetrics {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "orders={} starts={} group_members={} group_path={} group_path_writes={} group_collision={} at_issue={} cache_hits={} fast={} deferred={:?} no_slot={} \
-             work issue={} fair={} ahead={} refusals={} found={:?} failed={:?} stuck={} expired={} yielded={} approached={} \
+            "orders={} starts={} group_members={} group_path={} group_path_writes={} group_collision={} at_issue={} cache_hits={} fast={} deferred={:?} \
+             work issue={} fair={} ahead={} found={:?} failed={:?} stuck={} expired={} approached={} \
              samples={:?}",
             self.orders,
             self.searches_started,
@@ -130,16 +125,13 @@ impl fmt::Display for RouteMetrics {
             self.cache_hits,
             self.fast_path,
             self.deferred_by_distance,
-            self.deferred_without_slot,
             self.issue_work,
             self.fair_work,
             self.lookahead_work,
-            self.slot_refusals,
             self.found,
             self.failed,
             self.stuck,
             self.expired,
-            self.yielded,
             self.approached,
             self.samples,
         )

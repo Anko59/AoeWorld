@@ -1,5 +1,5 @@
 use crate::{
-    GameWorld, GameWorldError, MAX_ROUTE_WORK_PER_TICK, Terrain, movement_speed::cavalry_config,
+    GameWorld, GameWorldError, Terrain, movement_speed::cavalry_config,
     navigation_cache::NavigationCache,
 };
 use aoe_core::{Seed, Tick, WorldConfig};
@@ -43,10 +43,9 @@ impl GameWorld {
             idle_spacing: Default::default(),
             passes: Default::default(),
             collision_subscribers: Default::default(),
-            planning_budget: MAX_ROUTE_WORK_PER_TICK,
+            planning_budget: None,
             navigation_preparation_budget: Mutex::new(crate::MAX_NAV_PREPARATIONS_PER_TICK),
-            fast_route_budget: crate::game_movement::MAX_FAST_ROUTE_WORK_PER_TICK,
-            fast_route_spent: BTreeMap::new(),
+            fast_route_budget: None,
             navigation_cache: NavigationCache::default(),
             regions: std::sync::Mutex::new(std::array::from_fn(|_| None)),
             resource_chunks: Mutex::new(Default::default()),
@@ -54,12 +53,12 @@ impl GameWorld {
             active_planner_count: 0,
             active_route_searches: 0,
             partial_kits: 0,
+            routing_contact: false,
             route_slots: BTreeMap::new(),
             group_work: Default::default(),
             order_diagnostics: Default::default(),
             route_metrics: Default::default(),
             planning_probe: None,
-            route_queued: Default::default(),
         })
     }
 
@@ -119,10 +118,9 @@ impl GameWorld {
             idle_spacing: Default::default(),
             passes: Default::default(),
             collision_subscribers: Default::default(),
-            planning_budget: MAX_ROUTE_WORK_PER_TICK,
+            planning_budget: None,
             navigation_preparation_budget: Mutex::new(crate::MAX_NAV_PREPARATIONS_PER_TICK),
-            fast_route_budget: crate::game_movement::MAX_FAST_ROUTE_WORK_PER_TICK,
-            fast_route_spent: BTreeMap::new(),
+            fast_route_budget: None,
             navigation_cache: NavigationCache::default(),
             regions: std::sync::Mutex::new(std::array::from_fn(|_| None)),
             resource_chunks: Mutex::new(Default::default()),
@@ -130,12 +128,12 @@ impl GameWorld {
             active_planner_count: 0,
             active_route_searches: 0,
             partial_kits: 0,
+            routing_contact: false,
             route_slots: BTreeMap::new(),
             group_work: Default::default(),
             order_diagnostics: Default::default(),
             route_metrics: Default::default(),
             planning_probe: None,
-            route_queued: Default::default(),
         })
     }
 
@@ -177,10 +175,9 @@ impl GameWorld {
             idle_spacing: Default::default(),
             passes: Default::default(),
             collision_subscribers: Default::default(),
-            planning_budget: MAX_ROUTE_WORK_PER_TICK,
+            planning_budget: None,
             navigation_preparation_budget: Mutex::new(crate::MAX_NAV_PREPARATIONS_PER_TICK),
-            fast_route_budget: crate::game_movement::MAX_FAST_ROUTE_WORK_PER_TICK,
-            fast_route_spent: BTreeMap::new(),
+            fast_route_budget: None,
             navigation_cache: NavigationCache::default(),
             regions: std::sync::Mutex::new(std::array::from_fn(|_| None)),
             resource_chunks: Mutex::new(Default::default()),
@@ -188,12 +185,12 @@ impl GameWorld {
             active_planner_count: 0,
             active_route_searches: 0,
             partial_kits: 0,
+            routing_contact: false,
             route_slots: BTreeMap::new(),
             group_work: Default::default(),
             order_diagnostics: Default::default(),
             route_metrics: Default::default(),
             planning_probe: None,
-            route_queued: Default::default(),
         })
     }
 }

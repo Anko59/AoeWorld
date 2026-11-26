@@ -38,7 +38,8 @@ fn sealed_near_world() -> GameWorld {
     world
 }
 
-/// Orders into the sealed ground that no fast attempt can settle.
+/// Orders into the sealed ground that no fast attempt can settle. A contact
+/// order the region layer proves disconnected is refused when issued (#978).
 fn hopeless_orders(world: &mut GameWorld, player: PlayerId) -> Vec<EntityId> {
     let out = RADIUS + 1;
     [(0, -out), (0, out)]
@@ -47,7 +48,10 @@ fn hopeless_orders(world: &mut GameWorld, player: PlayerId) -> Vec<EntityId> {
             let id = world
                 .spawn_unit(player, tile_position(CX + dx, CY + dy))
                 .expect("unit");
-            assert_eq!(world.issue_task_move(id, tile_position(CX, CY)), Ok(true));
+            assert_eq!(
+                world.issue_task_move(id, tile_position(CX, CY)),
+                Err(GameWorldError::Unreachable)
+            );
             id
         })
         .collect()
@@ -110,7 +114,6 @@ fn hopeless_near_searches_do_not_starve_the_routes_of_their_player() {
     for id in hopeless {
         let unit = world.unit(id).expect("unit");
         assert!(world.movement_order(id).is_none(), "{stats:?}");
-        assert!(world.movement_failure(id).is_some());
         assert_eq!(unit.task, crate::UnitTask::Idle);
         assert!(!unit.planning && !unit.moving);
     }
@@ -124,7 +127,7 @@ fn hopeless_near_searches_do_not_starve_the_routes_of_their_player() {
 #[test]
 fn a_search_restarted_by_ground_changes_still_answers_in_bounded_time() {
     let mut world = sealed_near_world();
-    world.fast_route_budget = 0;
+    world.fast_route_budget = Some(0);
     let hopeless = hopeless_orders(&mut world, PlayerId(3));
     let area = aoe_core::TileRect::new(
         TileCoord::new(CX, CY - RADIUS - 2),
@@ -132,8 +135,8 @@ fn a_search_restarted_by_ground_changes_still_answers_in_bounded_time() {
     );
     for _ in 0..10 {
         world.collision_closed(area);
-        world.planning_budget = 1;
-        world.fast_route_budget = 0;
+        world.planning_budget = Some(1);
+        world.fast_route_budget = Some(0);
         world.advance();
         assert!(
             hopeless
@@ -218,23 +221,6 @@ fn a_group_sent_into_sealed_ground_is_answered_in_bounded_time() {
     assert_eq!(world.route_metrics.attribution.group_wait_renewals, 0);
 }
 
-/// A fast attempt with no slot to keep its frontier spends half as much.
-#[test]
-fn an_attempt_with_no_slot_for_its_frontier_is_cut_short() {
-    let mut world = sealed_near_world();
-    let player = PlayerId(3);
-    world.fast_route_budget = 0;
-    detour_orders(&mut world, player, 2);
-    world.planning_budget = 0;
-    world.advance();
-    let before = world.route_metrics.issue_work;
-    detour_orders(&mut world, player, 1);
-    assert_eq!(
-        world.route_metrics.issue_work - before,
-        u64::from(crate::game_world::route_scheduler::NO_SLOT_ROUTE_WORK)
-    );
-}
-
 /// Sealed targets project to a reachable layout and settle, without a deadline.
 #[test]
 fn a_near_group_stops_at_its_frontier_without_waiting_for_an_expiry() {
@@ -285,68 +271,13 @@ fn frontier_group_settles(distance: i32, ticks: usize) {
     assert_eq!(world.route_accounting_error(), None);
 }
 
-/// A near group that only queued for a slot keeps its order past the wait
-/// bound: in a 100-AI probe 35 group orders, nearly all near, were ended so
-/// after one minute and their armies stood idle short of the destination.
-#[test]
-fn a_near_group_queued_for_a_slot_outlives_its_wait() {
-    let mut world = sealed_near_world();
-    let player = PlayerId(3);
-    world.fast_route_budget = 0;
-    detour_orders(&mut world, player, 2);
-    world.planning_budget = 0;
-    world.advance();
-    assert_eq!(world.route_slots[&player].searches, 2, "both slots held");
-    let units = (0..6)
-        .map(|n| {
-            world
-                .spawn_unit(player, tile_position(220 + n, 190))
-                .expect("unit")
-        })
-        .collect::<Vec<_>>();
-    let goal = tile_position(223, 210);
-    world
-        .issue_formation_move(
-            player,
-            &units,
-            aoe_core::Formation::Line,
-            goal,
-            false,
-            false,
-        )
-        .expect("accepted");
-    world.planning_budget = 0;
-    world.fast_route_budget = 0;
-    world.advance();
-    let carrier = *world.formations.keys().next().expect("group");
-    let index = world.lookup[&carrier];
-    assert!(world.units[index].state.planning, "carrier waits");
-    assert!(world.units[index].planner.is_none(), "no slot for it");
-    world.tick.0 += NEAR_ANSWER_TICKS;
-    for _ in 0..3 {
-        world.advance();
-    }
-    assert_eq!(world.formations.len(), 1, "the group keeps its order");
-    assert!(world.movement_order(carrier).is_some());
-    assert_eq!(world.route_metrics.attribution.group_orders_expired, 0);
-    assert_eq!(world.route_metrics.attribution.group_wait_renewals, 1);
-    // It is answered with its route once a slot frees.
-    for _ in 0..2_000 {
-        world.advance();
-    }
-    for id in units {
-        let unit = world.unit(id).expect("unit");
-        assert!(unit.position.tile_floor().y > 200, "{id:?} crossed");
-    }
-}
-
 #[test]
 fn repeated_waiting_goals_retain_search_progress_and_the_original_deadline() {
     let mut w = sealed_near_world();
     // Region proofs now answer sealed destinations immediately. A connected
     // detour with a small first allowance leaves a real frontier to retain.
-    w.fast_route_budget = 256;
-    w.planning_budget = 0;
+    w.fast_route_budget = Some(256);
+    w.planning_budget = Some(0);
     let id = detour_orders(&mut w, PlayerId(0), 1)[0];
     let other = w.spawn_unit(PlayerId(0), tile_position(182, 190)).unwrap();
     assert_eq!(w.issue_task_move(other, tile_position(180, 210)), Ok(true));

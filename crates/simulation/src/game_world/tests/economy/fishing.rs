@@ -347,8 +347,6 @@ fn naval_routes_on_a_hundred_thousand_tile_map_keep_incremental_caps_and_replay(
             .unwrap();
         for _ in 0..100 {
             world.advance();
-            assert!(world.active_planner_count <= crate::game_movement::MAX_ACTIVE_ROUTE_PLANNERS);
-            assert!(world.active_route_searches <= crate::game_movement::MAX_ACTIVE_ROUTE_SEARCHES);
         }
         let unit = world.unit(ship).unwrap();
         assert!(unit.moving || unit.planning);

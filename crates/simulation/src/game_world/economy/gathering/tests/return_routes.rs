@@ -64,8 +64,10 @@ fn a_cached_unreachable_perimeter_preserves_the_choice_and_canonical_state_witho
         warm.canonical_hash(),
         "including route budget and failed-target memo"
     );
+    // The region layer filters the sealed tile before route issue with or
+    // without the cached proof (#978).
     assert_eq!(
-        warm.gather_work().return_routes + 1,
+        warm.gather_work().return_routes,
         cold.gather_work().return_routes,
         "a proven unreachable tile is filtered before route issue"
     );
@@ -112,8 +114,8 @@ fn source_pocket_rejection_matches_normal_orders_at_every_budget_boundary() {
         ] {
             reference.refill_route_budgets();
             filtered.refill_route_budgets();
-            reference.fast_route_budget = budget;
-            filtered.fast_route_budget = budget;
+            reference.fast_route_budget = Some(budget);
+            filtered.fast_route_budget = Some(budget);
             let expected = reference.issue_task_move(worker, position(to).unwrap());
             let rejected = filtered.reject_known_unreachable_task_move(worker, to, Some(&pocket));
             let actual = if rejected {
@@ -195,9 +197,10 @@ fn a_sealed_worker_checks_its_component_once_instead_of_routing_to_every_perimet
     assert!(!filtered.begin_return(worker, &mut actual));
     assert_eq!(expected, actual);
     assert_eq!(normal.canonical_hash(), filtered.canonical_hash());
-    assert_eq!(filtered.gather_work().return_routes, 1);
+    // The region layer refuses every perimeter tile before any route (#978).
+    assert_eq!(filtered.gather_work().return_routes, 0);
     assert_eq!(
         filtered.gather_work().return_known_unreachable,
-        tiles.len() as u64 - 1
+        tiles.len() as u64
     );
 }

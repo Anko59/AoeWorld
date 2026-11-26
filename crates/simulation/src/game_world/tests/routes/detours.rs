@@ -34,15 +34,16 @@ fn arrive(world: &mut GameWorld, origin: TileCoord, destination: TileCoord) -> V
     for _ in 0..40_000 {
         let before = world.route_metrics.clone();
         world.advance();
+        // One unit: at most its one fast attempt and its two slices a tick.
         assert!(
             world.route_metrics.issue_work - before.issue_work
-                <= u64::from(crate::game_movement::MAX_FAST_ROUTE_WORK_PER_TICK)
+                <= u64::from(crate::game_movement::FAST_ROUTE_WORK)
         );
         assert!(
             world.route_metrics.fair_work + world.route_metrics.lookahead_work
                 - before.fair_work
                 - before.lookahead_work
-                <= u64::from(MAX_ROUTE_WORK_PER_TICK)
+                <= 2 * u64::from(crate::game_world::route_scheduler::ROUTE_SLICE_WORK)
         );
         assert_eq!(
             world.movement_failure(id),

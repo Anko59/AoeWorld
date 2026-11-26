@@ -110,6 +110,37 @@ impl GameWorld {
             .is_some_and(|near| (near.x - to.x).abs().max((near.y - to.y).abs()) <= 1)
     }
 
+    /// Whether the region layer proves `planner`'s near route disconnected;
+    /// a proven connection is recorded on the planner.
+    pub(super) fn near_route_disconnected(
+        &self,
+        player: PlayerId,
+        bucket: aoe_map::LandBucket,
+        planner: &mut aoe_map::RoutePlanner,
+    ) -> bool {
+        let from = planner.origin();
+        // Endpoint refinement may have replaced an isolated requested tile.
+        let to = planner
+            .certified_destination()
+            .unwrap_or(planner.destination());
+        // Bounded: an unbounded query floods the whole reachable continent
+        // before it can say no (5.7 ms a refused farm on the 5x replay, 87G
+        // instructions in one tick). Unknown is left to the search.
+        match self.land_reachable_bounded(player, bucket, from, to) {
+            Ok(reach) if reach.is_reachable() => {
+                planner.confirm_reachable_destination(from, to);
+                false
+            }
+            Ok(aoe_map::RegionReachability::Unknown) | Err(_) => false,
+            // A requested tile in a pocket beside a mine or a wall is still
+            // served from next to it, once refinement certifies that tile.
+            Ok(_) => {
+                planner.certified_destination().is_some()
+                    || !self.pocket_beside_frontier(player, bucket, from, to)
+            }
+        }
+    }
+
     pub(super) fn end_disconnected_near_route(
         &mut self,
         id: EntityId,
@@ -123,35 +154,19 @@ impl GameWorld {
         if far || unit.state.kind.is_naval() || !self.waiting_for_route(index) {
             return;
         }
-        let Some(planner) = unit.planner.as_deref() else {
-            return;
-        };
         let Some(bucket) = aoe_map::LandBucket::for_radius(unit.state.kind.collision_radius())
         else {
             return;
         };
-        let from = planner.origin();
-        // Endpoint refinement may have replaced an isolated requested tile.
-        let to = planner
-            .certified_destination()
-            .unwrap_or(planner.destination());
-        match self.land_reachable(unit.state.player, bucket, from, to) {
-            Ok(true) => {
-                if let Some(planner) = self.units[index].planner.as_deref_mut() {
-                    planner.confirm_reachable_destination(from, to);
-                }
-                return;
-            }
-            Err(_) => return,
-            // A requested tile in a pocket beside a mine or a wall is still
-            // served from next to it, once refinement certifies that tile.
-            Ok(false)
-                if planner.certified_destination().is_none()
-                    && self.pocket_beside_frontier(unit.state.player, bucket, from, to) =>
-            {
-                return;
-            }
-            Ok(false) => {}
+        let player = unit.state.player;
+        // Borrowed in place: the planner stays counted as this unit's.
+        let Some(mut planner) = self.units[index].planner.take() else {
+            return;
+        };
+        let disconnected = self.near_route_disconnected(player, bucket, &mut planner);
+        self.units[index].planner = Some(planner);
+        if !disconnected {
+            return;
         }
         let unit = &self.units[index];
         let Some(planner) = unit.planner.as_deref() else {
