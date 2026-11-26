@@ -110,7 +110,11 @@ the request file and a hash of that code. A job uses
 `./.github/actions/game-map-restore` and then
 `make game-map GAME_MAP_ARGS='--no-fetch --soft'`. A pull request that changes the
 page-writing code finds no exact key and gets the package of `dev`'s generator
-(`exact` is `false`: say so next to its numbers). Sources and packages are never
+(`exact` is `false`: say so next to its numbers). Open problem (2026-11-26): the first
+warm run fetched the 6.0 GB overview stack in about 4 minutes, then
+`data.hydrosheds.org` (HydroLAKES, HydroRIVERS) answered HTTP 403 to the GitHub runner,
+so no package was saved and consumers see "map unavailable"; the failure step prints
+what the runner gets from those two URLs. Sources and packages are never
 workflow artifacts or release assets: see [licences](licences.md).
 
 ## Terrain, history, and compatibility limits

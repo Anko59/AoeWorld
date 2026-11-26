@@ -50,13 +50,26 @@ jobs:
           cache: 'false'
       - name: Fetch the sources and generate the package
         if: steps.map.outputs.exact != 'true'
+        # An explicit shell turns on pipefail: a failed `make` must stop the job before the save step,
+        # or an empty package directory would be saved under the exact key and look warm forever.
+        shell: bash
         run: |
           start=$(date +%s)
           make game-map | tee game-map.log
           echo "generation took $(( $(date +%s) - start )) s" | tee -a game-map.log
           du -sh .cache/geodata .cache/game-map/packages | tee -a game-map.log
+      - name: What the runner can reach (diagnostic, after a failure only)
+        if: failure() && steps.map.outputs.exact != 'true'
+        shell: bash
+        run: |
+          # A plain request with curl's own user agent, first 100 bytes, for the two HydroSHEDS files
+          # (the sources a GitHub runner could not fetch on 2026-11-26: HTTP 403).
+          for url in https://data.hydrosheds.org/file/HydroLAKES/HydroLAKES_polys_v10.gdb.zip https://data.hydrosheds.org/file/HydroRIVERS/HydroRIVERS_v10_eu_shp.zip; do
+            echo "== $url"
+            curl -sS -o /dev/null -D - -m 30 -r 0-99 "$url" | head -12 || true
+          done | tee -a game-map.log
       - name: Save the package to the cache
-        if: steps.map.outputs.exact != 'true'
+        if: steps.map.outputs.exact != 'true' && hashFiles('.cache/game-map/packages/*.json') != ''
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
           path: .cache/game-map/packages
