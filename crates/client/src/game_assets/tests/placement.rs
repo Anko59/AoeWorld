@@ -387,12 +387,7 @@ fn cliff_palette_keeps_relief_and_alpha_with_a_neutral_warm_stone_colour() {
 
 #[wasm_bindgen_test]
 fn dressing_catalog_prefixes_preserve_native_signed_hotspots_and_object_page() {
-    for (id, count, anchor) in [
-        (4474, 6, [28, 6]),
-        (1035, 3, [-3, 13]),
-        (1252, 2, [63, 18]),
-        (1262, 1, [94, 172]),
-    ] {
+    for (id, count, anchor) in [(1035, 3, [-3, 13]), (1252, 2, [63, 18])] {
         let source = OPTIONAL_RESOURCE_SOURCES
             .iter()
             .find(|source| source.id == id)

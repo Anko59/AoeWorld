@@ -123,7 +123,7 @@ pub(in super::super) fn update(client: &Client) {
     values[13] = client.village.idle_villagers.len() as f64;
     values[14] = client.village.idle_military.len() as f64;
     values[10] = (client.village.tick / u64::from(client.config.tick_hz.max(1))) as f64;
-    values[11] = flag(!client.art.village[0].is_empty());
+    values[11] = flag(client.art.compositions.iter().any(|b| !b.parts.is_empty()));
     if let Some(player) = client.village.players.iter().find(|p| p.player == owner) {
         let s = player.stockpile;
         values[..6].copy_from_slice(&[

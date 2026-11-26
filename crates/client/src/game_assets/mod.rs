@@ -140,18 +140,6 @@ fn source_present(manifest: &Manifest, source: &str) -> bool {
     manifest.frames.sources().contains(source)
 }
 
-// Idle actors already display only the first cell of each facing row. Drop
-// unused cells after validating the original prefix; walking/work rows stay full.
-#[inline(never)]
-fn compact_standing(frames: Vec<usize>, role: AssetRole) -> Vec<usize> {
-    let step = match role {
-        AssetRole::CavalryStanding => 10,
-        AssetRole::VillagerStanding => 15,
-        _ => return frames,
-    };
-    frames.into_iter().step_by(step).collect()
-}
-
 const TERRAIN_ROLES: [AssetRole; 12] = [
     AssetRole::TemperateGrass,
     AssetRole::DryGrass,

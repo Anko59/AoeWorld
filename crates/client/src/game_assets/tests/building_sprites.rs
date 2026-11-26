@@ -18,24 +18,6 @@ fn manifest_with(source: &str, count: u32) -> Manifest {
 }
 
 #[wasm_bindgen_test]
-fn standing_compaction_keeps_exactly_the_native_frame_already_drawn_per_facing() {
-    let manifest = manifest_with("graphics.drs:[32, 112, 108, 115]:3004", 50);
-    let frames = source_frames(&manifest, "graphics.drs:[32, 112, 108, 115]:3004", 50).unwrap();
-    assert_eq!(
-        compact_standing(frames, AssetRole::CavalryStanding),
-        vec![0, 10, 20, 30, 40]
-    );
-    assert_eq!(
-        compact_standing((0..75).collect(), AssetRole::VillagerStanding),
-        vec![0, 15, 30, 45, 60]
-    );
-    assert_eq!(
-        compact_standing((0..50).collect(), AssetRole::CavalryWalking),
-        (0..50).collect::<Vec<_>>()
-    );
-}
-
-#[wasm_bindgen_test]
 fn feudal_textures_pack_every_source_pixel_with_native_geometry_and_source_bounds() {
     let mut manifest = manifest_with("de/b_west_blacksmith_age2_x1.sld", 1);
     let frame = &mut manifest.frames[0];

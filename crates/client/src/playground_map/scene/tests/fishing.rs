@@ -1,6 +1,9 @@
 use super::*;
 use aoe_rendering::{AtlasAddress, GameFrame};
 
+#[path = "hud/village_art.rs"]
+mod village_art;
+
 #[wasm_bindgen_test]
 async fn seeding_and_animal_tasks_have_distinct_numeric_hud_tags() {
     let scene = contact_scene();

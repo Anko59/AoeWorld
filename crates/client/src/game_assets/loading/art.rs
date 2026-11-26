@@ -30,23 +30,6 @@ pub(super) fn resolve(input: Input<'_>) -> Result<GameArt, JsValue> {
     let group = |role| group_frames(&ranges, &records, role);
     let mut terrain: [Vec<GameFrame>; 12] = Default::default();
     actors::fill_groups(&mut terrain, &TERRAIN_ROLES, &ranges, &records);
-    let mut village: [Vec<GameFrame>; 9] = Default::default();
-    actors::fill_groups(
-        &mut village,
-        &[
-            AssetRole::VillagerStanding,
-            AssetRole::VillagerWalking,
-            AssetRole::VillagerChopping,
-            AssetRole::VillagerCarryingWood,
-            AssetRole::VillagerForaging,
-            AssetRole::VillagerCarryingFood,
-            AssetRole::VillagerCarryingGold,
-            AssetRole::VillagerCarryingStone,
-            AssetRole::VillagerMiningStone,
-        ],
-        &ranges,
-        &records,
-    );
     let mut environment = Vec::new();
     let mut resolved_buildings = Vec::new();
     for b in buildings::resolve(&manifest, &selected, &records) {
@@ -84,9 +67,9 @@ pub(super) fn resolve(input: Input<'_>) -> Result<GameArt, JsValue> {
             .collect(),
         actors: actors::resolve(&manifest, &selected, &records, &actor_ranges),
         fishing: Default::default(),
-        walking: group(AssetRole::CavalryWalking),
-        standing: group(AssetRole::CavalryStanding),
-        village,
+        walking: Vec::new(),
+        standing: Vec::new(),
+        village: Default::default(),
         compositions: buildings,
         buildings: std::array::from_fn(|_| Vec::new()),
         foundation,
@@ -114,9 +97,9 @@ pub(super) fn resolve(input: Input<'_>) -> Result<GameArt, JsValue> {
             ),
             cliff_faces: native_cliffs.unwrap_or_else(|| group(AssetRole::CliffFace)),
             rocks: group(AssetRole::RockPile),
-            shrubs: group(AssetRole::Shrub),
+            shrubs: Vec::new(),
             stumps: group(AssetRole::DeadwoodStump),
-            snags: group(AssetRole::DeadwoodTree),
+            snags: Vec::new(),
             logs: group(AssetRole::DeadwoodLog),
         },
     })

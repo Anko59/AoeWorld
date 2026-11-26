@@ -109,10 +109,7 @@ fn complete_actor_inventory_and_dat_damage_cells_fit_without_startup_animation_p
     let mut manifest: Manifest = serde_json::from_value(value).unwrap();
     let (mut selected, mut domains) = (Vec::new(), Vec::new());
     for source in catalog {
-        let frames = compact_standing(
-            source_frames(&manifest, &source.manifest_source(), source.frames).unwrap(),
-            source.role,
-        );
+        let frames = source_frames(&manifest, &source.manifest_source(), source.frames).unwrap();
         domains.extend(std::iter::repeat_n(
             if source.terrain_topology.is_some() {
                 AtlasDomain::Terrain
@@ -132,7 +129,8 @@ fn complete_actor_inventory_and_dat_damage_cells_fit_without_startup_animation_p
         selected.len(),
         // +127: Trebuchet transition, boulder and gunpowder shot poses (#916);
         // +4,708: the roster's DAT attack, ship and siege effect poses (#916).
-        182_329,
+        // -667: trial cavalry, villager, scrub and snag cells that nothing draws.
+        181_662,
         "current complete catalog, sharing identical pose ranges"
     );
     let before = selected.len();

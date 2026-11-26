@@ -4,7 +4,7 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 26;
+pub const VERSION: u8 = 27;
 
 pub mod buildings;
 pub mod candidates;
@@ -14,11 +14,10 @@ pub mod runtime;
 mod topology;
 pub mod trees;
 pub mod units;
-mod village;
 pub use topology::TerrainFrameTopology;
 
 /// Reviewed selection ceiling, not an increase to the fixed five-page atlas.
-pub const MAX_REVIEWED_FRAMES: u32 = 2_371;
+pub const MAX_REVIEWED_FRAMES: u32 = 1_589;
 
 /// Shipped trial recipes. Its unused Imperial records include cyclic deltas;
 /// the licensed DE importer supplies the current Imperial architecture.
@@ -123,24 +122,9 @@ impl SpriteSource {
 }
 
 /// Sources required for a local-pack game to start. They are deliberately
-/// ordered by render role, not by incidental archive order.
-pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 7] = [
-    SpriteSource {
-        role: AssetRole::CavalryWalking,
-        archive: "graphics.drs",
-        id: 3008,
-        frames: 50,
-        interpretation: "five facing rows of ten walking animation frames",
-        terrain_topology: None,
-    },
-    SpriteSource {
-        role: AssetRole::CavalryStanding,
-        archive: "graphics.drs",
-        id: 3004,
-        frames: 50,
-        interpretation: "five facing rows of ten standing frames",
-        terrain_topology: None,
-    },
+/// ordered by render role, not by incidental archive order. Units are native
+/// actors (`units::SPRITES`), so no unit sheet belongs in these lists.
+pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 5] = [
     SpriteSource {
         role: AssetRole::TemperateGrass,
         archive: "terrain.drs",
@@ -201,7 +185,7 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 7] = [
 /// Reviewed resource art that a renderer loads when its local pack provides
 /// it. Its absence never prevents synthetic fixtures or partial local packs
 /// from starting.
-pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 23] = [
+pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 12] = [
     // Visually reviewed in the local trial viewer: fourteen distinct standing
     // broadleaf-tree variants with their original hotspots intact.
     SpriteSource {
@@ -283,16 +267,7 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 23] = [
         interpretation: "seven plain grey rock piles for visual rocks",
         terrain_topology: None,
     },
-    // Full native prefixes retain source slots and signed hotspots. Selection
-    // excludes the three tall cactus forms; only low succulent scrub is dressing.
-    SpriteSource {
-        role: AssetRole::Shrub,
-        archive: "graphics.drs",
-        id: 4474,
-        frames: 6,
-        interpretation: "low succulent scrub frames 3,4,5 only; no tall cacti or forage bushes",
-        terrain_topology: None,
-    },
+    // Full native prefixes retain source slots and signed hotspots.
     SpriteSource {
         role: AssetRole::DeadwoodStump,
         archive: "graphics.drs",
@@ -309,23 +284,6 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 23] = [
         interpretation: "two low mossy fallen logs; nonblocking deadwood dressing",
         terrain_topology: None,
     },
-    SpriteSource {
-        role: AssetRole::DeadwoodTree,
-        archive: "graphics.drs",
-        id: 1262,
-        frames: 1,
-        interpretation: "occasional bare snag; nonblocking deadwood, no wood resource",
-        terrain_topology: None,
-    },
-    village::SOURCES[0],
-    village::SOURCES[1],
-    village::SOURCES[2],
-    village::SOURCES[3],
-    village::SOURCES[4],
-    village::SOURCES[5],
-    village::SOURCES[6],
-    village::SOURCES[7],
-    village::SOURCES[8],
     SpriteSource {
         role: AssetRole::RallyFlag,
         archive: "graphics.drs",

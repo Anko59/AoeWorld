@@ -37,18 +37,13 @@ fn reviewed_sources() -> impl Iterator<
             (
                 s.manifest_source(),
                 s.frames,
+                // No reviewed sheet is team-masked: every unit is an actor.
                 if s.terrain_topology.is_some() {
                     AtlasDomain::Terrain
-                } else if super::runtime::PLAYER_ROLES.contains(&s.role) {
-                    AtlasDomain::Objects
                 } else {
                     AtlasDomain::Shared
                 },
-                match s.role {
-                    super::AssetRole::CavalryStanding => 10,
-                    super::AssetRole::VillagerStanding => 15,
-                    _ => 1,
-                },
+                1,
                 None,
             )
         })
@@ -84,7 +79,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
     let mut selected = std::collections::BTreeSet::new();
     let mut counts = [0_usize; 2];
     // Validate complete prefixes, then pack the client's actual selection:
-    // compact idle facings and the sampled native actor/projectile cells.
+    // the drawn reviewed sheets and the sampled native actor/projectile cells.
     // Neutral/owned palette copies still occupy separate semantic entries.
     for (identity, count, domain, step, actor) in reviewed_sources() {
         if actor.is_some_and(|s| s.is_native())
@@ -152,9 +147,9 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
         }
     }
     let actor_count = actor_frames();
-    // 45 cavalry idle and 70 villager idle cells are not drawn.
-    if extents.len() != MAX_REVIEWED_FRAMES as usize + actor_count - 115
-        || counts != [1474, 897 + actor_count - 115]
+    // Every reviewed cell is drawn: 115 objects beside the ground sheets.
+    if extents.len() != MAX_REVIEWED_FRAMES as usize + actor_count
+        || counts != [1474, 115 + actor_count]
     {
         return Err("incomplete semantic selection".into());
     }
@@ -351,10 +346,7 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
         // Pin the complete current selection independently of runtime residency.
         "military, Castle, projectile and farmer cells included"
     );
-    assert_eq!(
-        prove(&manifest).unwrap(),
-        (1474, 897 + actor_frames() - 115)
-    );
+    assert_eq!(prove(&manifest).unwrap(), (1474, 115 + actor_frames()));
     let saved = manifest.frames[0].clone();
     manifest.frames[0].frame = 1;
     assert!(prove(&manifest).is_err());
@@ -459,10 +451,7 @@ fn private_proof_covers_house_variants_and_all_construction_angles() {
             manifest.frames.push(record);
         }
     }
-    assert_eq!(
-        prove(&manifest).unwrap(),
-        (1474, 897 + actor_frames() - 115 + 15)
-    );
+    assert_eq!(prove(&manifest).unwrap(), (1474, 115 + actor_frames() + 15));
     for index in manifest.frames.len() - 15..manifest.frames.len() {
         let mut bad = manifest.clone();
         bad.frames.remove(index);

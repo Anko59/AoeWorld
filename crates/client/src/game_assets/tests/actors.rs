@@ -100,15 +100,11 @@ fn native_light_cavalry_keeps_every_cell_instead_of_reusing_trial_base_rows() {
         }
     }
     let manifest: Manifest = serde_json::from_value(value).unwrap();
-    let mut selected = vec![0, 10, 20, 30, 40];
-    selected.extend(50..100);
-    let mut domains = vec![AtlasDomain::Objects; selected.len()];
+    // Cells 0..100 are the trial rows 3004 and 3008, which nothing may select.
+    let (mut selected, mut domains) = (Vec::new(), Vec::new());
     let ranges = actors::select(&manifest, &mut selected, &mut domains).unwrap();
-    assert_eq!(
-        selected.len(),
-        1255,
-        "native cavalry retains all 1200 cells beside the existing base rows"
-    );
+    assert_eq!(selected.len(), 1200, "native cavalry keeps all its cells");
+    assert!(selected.iter().all(|&index| index >= 100), "trial row");
     let places = placement::plan(&manifest, &selected, &domains).unwrap();
     let records: Vec<_> = selected
         .iter()
