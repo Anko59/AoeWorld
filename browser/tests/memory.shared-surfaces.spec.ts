@@ -20,13 +20,30 @@ const CHROMIUM_RSS_BUDGET = 1200 * 1024 * 1024;
 // workload being measured. Keep command/memory JSON, as in exploration.
 test.use({ screenshot: "off", trace: "off" });
 
-async function frames(page: Page, count: number) {
-  await page.evaluate(async (remaining) => {
-    for (let index = 0; index < remaining; index++)
-      await new Promise<void>((resolve) =>
-        requestAnimationFrame(() => resolve()),
-      );
-  }, count);
+async function resizeAndPresent(page: Page, width: number, height: number) {
+  const scene = page.locator("#scene");
+  const before = Number(await scene.getAttribute("data-frame"));
+  await page.setViewportSize({ width, height });
+  await expect
+    .poll(() =>
+      scene.evaluate((element, previous) => {
+        const canvas = element as HTMLCanvasElement;
+        const painted =
+          canvas.dataset["viewPainted"] === "true" &&
+          Number(canvas.dataset["frame"]) > previous;
+        return painted ? [canvas.width, canvas.height] : null;
+      }, before),
+    )
+    .toEqual([width * 2, height * 2]);
+}
+
+async function cameraPosition(page: Page) {
+  return page
+    .locator("#minimap")
+    .evaluate((element) => [
+      element.dataset["cameraX"],
+      element.dataset["cameraY"],
+    ]);
 }
 
 async function wasmBytes(page: Page) {
@@ -93,8 +110,9 @@ test("dense forest resize and camera cycles keep backing and WASM memory bounded
         "data-renderer",
         testInfo.project.name === "canvas" ? "canvas2d" : "webgpu",
       );
-    await frames(page, 1);
-    const backing = await page.locator("#scene").evaluate((element) => {
+    const scene = page.locator("#scene");
+    await expect(scene).toHaveAttribute("data-view-painted", "true");
+    const backing = await scene.evaluate((element) => {
       const canvas = element as HTMLCanvasElement;
       return [canvas.width, canvas.height];
     });
@@ -107,24 +125,25 @@ test("dense forest resize and camera cycles keep backing and WASM memory bounded
     await coverageProfile(page, true);
     // Check the maximum-size backing once, then exercise allocation reuse at
     // ordinary window sizes so the software renderer stays within the suite budget.
-    await page.setViewportSize({ width: 800, height: 450 });
+    await resizeAndPresent(page, 800, 450);
     await activateSyntheticMap(page, true);
     await page.mouse.move(400, 225);
     await page.mouse.wheel(0, 5_000);
-    await frames(page, 2);
+    await expect(scene).toHaveAttribute("data-lod", "map");
+    await expect(scene).toHaveAttribute("data-view-painted", "true");
     const samples: number[] = [];
     const residentSamples: ProcessMemory[] = [];
     const rendererSamples: RendererMemory[] = [];
     for (let cycle = 0; cycle < 6; cycle++) {
       for (const key of ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"]) {
+        const before = await cameraPosition(page);
         await page.keyboard.press(key);
-        await frames(page, 1);
+        await expect.poll(() => cameraPosition(page)).not.toEqual(before);
+        await expect(scene).toHaveAttribute("data-view-painted", "true");
       }
-      await page.setViewportSize({ width: 640, height: 360 });
-      await frames(page, 2);
-      await page.setViewportSize({ width: 800, height: 450 });
+      await resizeAndPresent(page, 640, 360);
+      await resizeAndPresent(page, 800, 450);
       await page.mouse.move(400, 225);
-      await frames(page, 2);
       samples.push(await wasmBytes(page));
       residentSamples.push(await processMemory(session));
       rendererSamples.push(await rendererMemory(page));
