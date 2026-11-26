@@ -35,6 +35,7 @@ fn run(initial: Value, retry: Value) -> (Result<()>, String, usize) {
     let result = resolve(
         Some(&policy),
         &mut journal,
+        &mut record::Log::unsaved(),
         &[REPORTER.into()],
         &directory.path().join("run.json"),
         |_, _| {

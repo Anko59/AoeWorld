@@ -174,10 +174,11 @@ pairs, empty metadata, invalid dates and future dates fail validation.
 `make docs-check` and both browser gates reject entries older than 14 days:
 remove fixed entries or resolve the tracking issue before expiry.
 
-Nothing is skipped. After an ordinary completed failure, Rust retries only the
-named quarantined case, at most twice per gate run. A recovery prints
+Nothing is skipped. After an ordinary completed failure, Rust retries the
+named quarantined case at most twice per gate run (WASM: only those). A recovery prints
 `flaky: <test> passed on attempt N (quarantined, #391)`; three failures still
-fail the gate. Unlisted failures stay failed, even if another test recovers.
+fail the gate. For `test-e2e`, an unlisted case gets one immediate retry, and
+a pass there is recorded as flaky ([flaky tests](flaky-tests.md#count-flakiness)).
 WASM entries use the full runner name; E2E entries use the spec path relative
 to `browser/tests`, without `.spec.ts` (for example `memory.shared-surfaces`).
 E2E retries select one failed case by file, line, column, project and escaped title.

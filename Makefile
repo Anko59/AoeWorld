@@ -28,6 +28,7 @@ GIT_COMMON := $(shell git rev-parse --path-format=absolute --git-common-dir 2>/d
 GIT_EXTERNAL := $(filter-out $(ROOT) $(ROOT)/%,$(GIT_COMMON))
 GIT_MOUNT := $(if $(GIT_EXTERNAL),$(call BIND_MOUNT,$(GIT_EXTERNAL),$(GIT_EXTERNAL)))
 GITHUB_OUTPUT_MOUNT := $(if $(GITHUB_OUTPUT),-v $(GITHUB_OUTPUT):$(GITHUB_OUTPUT))
+GITHUB_SUMMARY_MOUNT := $(if $(GITHUB_STEP_SUMMARY),-v $(GITHUB_STEP_SUMMARY):$(GITHUB_STEP_SUMMARY))
 HARNESS_CARGO_CACHE ?= $(GIT_COMMON)/aoe-cargo
 HARNESS_TARGET_CACHE ?= $(ROOT)/target
 # A single storage daemon serves client-side compilers across local worktrees.

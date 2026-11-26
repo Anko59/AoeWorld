@@ -124,12 +124,11 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: e2e-${{ matrix.shard }}-diagnostics
-          path: |
-            browser/test-results/
-            reports/e2e/
-            reports/process/
+          path: "browser/test-results/\nreports/e2e/\nreports/process/"
           retention-days: 7
           if-no-files-found: ignore
+      # The tests this shard saw fail and then pass on their one retry; the nightly triage counts them (docs/flaky-tests.md).
+      - { if: always(), uses: 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9', with: { name: 'e2e-flaky-${{ matrix.shard }}', path: 'reports/e2e/*.flaky.jsonl', retention-days: 14, if-no-files-found: ignore } }
       - if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with: { name: 'e2e-evidence-${{ matrix.shard }}', path: 'reports/e2e/shard-*-of-*.json', retention-days: 7, if-no-files-found: error }

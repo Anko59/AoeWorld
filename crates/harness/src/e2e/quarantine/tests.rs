@@ -105,13 +105,15 @@ pub(super) fn successful_report() -> Value {
 }
 
 #[test]
-fn flaky_playwright_orchestration_retries_only_listed_failures_and_keeps_recovery_on_red() {
+fn flaky_playwright_orchestration_gives_listed_cases_two_reruns_and_others_one() {
     for (listed, pass_on, mixed, expected_calls, passes) in [
         (true, 2, false, 2, true),
         (true, 3, false, 3, true),
         (true, 4, false, 3, false),
-        (false, 2, false, 1, false),
-        (true, 2, true, 2, false),
+        // An unlisted case gets exactly one rerun: it recovers there, or it fails the run.
+        (false, 2, false, 2, true),
+        (false, 3, false, 2, false),
+        (true, 2, true, 3, false),
     ] {
         let directory = tempfile::tempdir().unwrap();
         fs::create_dir(directory.path().join("gates")).unwrap();
@@ -142,6 +144,7 @@ fn flaky_playwright_orchestration_retries_only_listed_failures_and_keeps_recover
         let result = resolve(
             Some(&policy),
             &mut journal,
+            &mut record::Log::unsaved(),
             &[REPORTER.into()],
             &directory.path().join("run.json"),
             |args, _| {
@@ -186,6 +189,7 @@ fn flaky_disabled_duel_checks_keep_the_ordinary_failure_contract_without_retryin
     let error = resolve(
         None,
         &mut journal,
+        &mut record::Log::unsaved(),
         &[],
         &directory.path().join("run.json"),
         |_, _| {
@@ -324,6 +328,7 @@ fn assert_rejected(value: Value, kind: &str, during_retry: bool) {
     let result = resolve(
         Some(&policy),
         &mut journal,
+        &mut record::Log::unsaved(),
         &[REPORTER.into()],
         &directory.path().join("run.json"),
         |_, _| {

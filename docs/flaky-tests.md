@@ -40,3 +40,29 @@ writes its report at the end: split a long repeat into several dispatches.
 
 `make test-e2e-repeat` is refused to agents like the other whole suites: dispatch the
 workflow instead.
+
+## Count flakiness
+
+A browser test that fails and then passes on one immediate retry does not fail the pull
+request, but it is never silent. The rule, in `crates/harness/src/e2e/quarantine`:
+
+- After a completed failure of a test (an assertion in an `expect` step; never a setup
+  or fixture failure, a worker exit or a test timeout), the harness reruns exactly that
+  test once, on its own project. Playwright's own retry count stays zero.
+- More than three failed tests in one run (timeouts counted) are a broken change, not a
+  flake: nothing unlisted is retried.
+- It passes the rerun: the job passes, and the test is recorded as flaky (below).
+- It fails the rerun: the job fails. A test that fails twice fails the job.
+- A test in `gates/flaky.json` keeps its two reruns and names its issue in the record; the
+  quarantine stays the explicit, expiring exception.
+- `AOE_E2E_SPECS` runs and `make test-e2e-repeat` follow the same code: a filtered local
+  run retries once; the repeat run never retries. Duel checks never retry.
+
+The record: one JSON line per flaky test in `reports/e2e/<report>.flaky.jsonl` (test,
+project, first error, attempts, shard, commit, run), a table in the job summary, and the
+CI artifact `e2e-flaky-<shard>` (kept 14 days, only when a shard flaked).
+
+The nightly triage (`make nightly-triage`, job `triage`) reads the `e2e-flaky-*`
+artifacts of the last seven days. A test flagged in three artifacts (three shard runs)
+gets an issue titled `Flaky e2e test: <test> [<project>]`; a later night comments on
+the open issue instead of opening another. Close it once `e2e-repeat` shows 30 passes.

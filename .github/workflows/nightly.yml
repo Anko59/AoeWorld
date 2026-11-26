@@ -99,7 +99,8 @@ jobs:
     permissions:
       contents: read
       issues: write
-      # The run's jobs and their logs name the failing step and tests in the comment.
+      # The run's jobs and their logs name the failing step and tests in the comment;
+      # the e2e-flaky-* artifacts of the last seven days count flaky tests (docs/flaky-tests.md).
       actions: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262

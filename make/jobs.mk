@@ -155,7 +155,7 @@ E2E_HARNESS_COMMAND ?= test-e2e
 test-e2e-steps:
 	@$(MAKE) --no-print-directory disk-precheck build-wasm browser-deps orchestrator-tools
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
-	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_E2E_WORKERS -e AOE_E2E_PORT_RANGE -e AOE_E2E_SPECS -e AOE_E2E_REPEAT_SPECS -e AOE_E2E_REPEAT_PROJECTS -e AOE_E2E_REPEAT $(E2E_PACKAGES_ENV) -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- $(E2E_HARNESS_COMMAND)
+	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_E2E_WORKERS -e AOE_E2E_PORT_RANGE -e AOE_E2E_SPECS -e AOE_E2E_REPEAT_SPECS -e AOE_E2E_REPEAT_PROJECTS -e AOE_E2E_REPEAT -e GITHUB_SHA -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_STEP_SUMMARY $(GITHUB_SUMMARY_MOUNT) $(E2E_PACKAGES_ENV) -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- $(E2E_HARNESS_COMMAND)
 
 # Keep the focused memory investigation serial within this command, including nested builds.
 # Every child keeps its normal resource admission and checks.

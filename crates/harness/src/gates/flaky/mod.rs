@@ -85,7 +85,7 @@ fn leap(year: i64) -> bool {
 }
 
 /// Strict UTC calendar date, expressed as days since the Unix epoch.
-fn date(text: &str) -> Result<i64> {
+pub(crate) fn date(text: &str) -> Result<i64> {
     let bytes = text.as_bytes();
     if bytes.len() != 10
         || bytes[4] != b'-'

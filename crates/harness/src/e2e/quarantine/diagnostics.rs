@@ -22,7 +22,7 @@ fn array(value: &Value) -> &[Value] {
     value.as_array().map(Vec::as_slice).unwrap_or(&[])
 }
 
-fn first_error(error: &Value) -> String {
+pub(super) fn first_error(error: &Value) -> String {
     let message = error["message"]
         .as_str()
         .or_else(|| error["value"].as_str())
