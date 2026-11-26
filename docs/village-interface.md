@@ -135,6 +135,8 @@ Every land sample takes one colour from its own class and relief shade. Land in
 sight is lifted inside a light rim, remembered land is dim, and unexplored land
 is a dark chart drawn from position alone: the composed canvas stays empty in an
 unexplored cell and fades inward only, so no scaling shows land under the fog.
+An explored cell shows the sample over it: the coarse raster has one per 4x4
+cells, so it can show land from outside the cell until the fine raster arrives.
 Until a map's land arrives, or if it fails, explored cells show a flat tone.
 With fog off the plain land is shown.
 Grid remains available through its minimap button and G. Selection ellipses use

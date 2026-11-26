@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 import { test } from "../../../server.js";
-import { landPage, layouts, shot, type Land } from "./land-page.js";
+import { differing, landPage, layouts, shot, type Land } from "./land-page.js";
 
 test("the plain land cannot shine through fog and the chart ignores the land", async ({
   page,
@@ -58,6 +58,32 @@ test("the plain land cannot shine through fog and the chart ignores the land", a
   });
   expect(new Set(chart.drawn).size, "position only").toBe(1);
   expect(chart.files, "no file, no request").toBe(0);
+});
+
+test("fog switched off and on again hides the plain land again", async ({
+  page,
+}) => {
+  await landPage(page);
+  await page.evaluate(async () => {
+    const land = Reflect.get(window, "land") as Land;
+    await land.open({ fine: land.raster(64, () => 8 << 4) });
+  });
+  const show = async (fogged: boolean) => {
+    await page.evaluate(async (fogged) => {
+      const land = Reflect.get(window, "land") as Land;
+      // Half of the world is unexplored.
+      if (fogged) land.fog((x) => (x < 128 ? 2 : 0));
+      else land.navigation.fog(true, []);
+      await land.frames(3);
+    }, fogged);
+    return (await shot(page)).image;
+  };
+  const before = await show(true);
+  const off = await show(false);
+  const after = await show(true);
+  expect(differing(before, off), "the plain land").toBeGreaterThan(1000);
+  // A stray pixel at most, as between two captures of one scene.
+  expect(differing(before, after), "fog on again").toBeLessThanOrEqual(4);
 });
 
 for (const layout of layouts) {

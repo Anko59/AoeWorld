@@ -13,7 +13,9 @@ import {
 // Both tests draw one land, then the same land with every sample that lies
 // wholly in unexplored cells replaced: a byte or a pixel that changes was read
 // from under the fog. A third land, whose explored samples differ instead,
-// proves that the comparison would notice.
+// proves that the comparison would notice. A sample that spans explored and
+// unexplored cells, as in a coarse raster, counts as explored: what it shows of
+// the land around an explored cell is not seen here.
 
 test("no byte of the land under the fog reaches the composed canvas", async ({
   page,

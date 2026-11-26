@@ -285,10 +285,10 @@ export function differing(a: PNG, b: PNG) {
   return count;
 }
 
-/** Pixels on which both captures of one scene agree, both captures of another
- * agree, and the two scenes differ. A pixel that a renderer draws differently by
- * chance shows in one capture only; a difference that comes from the scene shows
- * in both. */
+/** Pixels on which no capture of one scene equals any capture of another. A
+ * pixel that a renderer draws differently by chance in one capture still equals
+ * the other scene in the second one; a difference that comes from the scene
+ * stays, even where the captures of one scene disagree. */
 export function contradicted(a: [PNG, PNG], b: [PNG, PNG]) {
   const [first] = a;
   for (const { width, height } of [a[1], ...b])
@@ -297,8 +297,7 @@ export function contradicted(a: [PNG, PNG], b: [PNG, PNG]) {
     x.data.compare(y.data, at, at + 4, at, at + 4) === 0;
   let count = 0;
   for (let at = 0; at < first.data.length; at += 4)
-    if (same(a[0], a[1], at) && same(b[0], b[1], at) && !same(a[0], b[0], at))
-      count++;
+    if (!a.some((one) => b.some((other) => same(one, other, at)))) count++;
   return count;
 }
 
