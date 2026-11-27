@@ -135,7 +135,7 @@ SOURCE_QUAL_RUN := $(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --
 SOURCE_QUAL_GEOGRAPHIC_ARGS := $(if $(AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY),--geographic-package-directory '$(AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_GEOGRAPHIC_CONTENT_HASH),--geographic-content-hash '$(AOE_SOURCE_QUAL_GEOGRAPHIC_CONTENT_HASH)')
 SOURCE_QUAL_SCALE_ARGS := $(if $(AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY),--scale-512-package-directory '$(AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_512_CONTENT_HASH),--scale-512-content-hash '$(AOE_SOURCE_QUAL_512_CONTENT_HASH)') $(if $(AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY),--scale-16384-package-directory '$(AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_16384_CONTENT_HASH),--scale-16384-content-hash '$(AOE_SOURCE_QUAL_16384_CONTENT_HASH)') $(if $(AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY),--scale-262144-package-directory '$(AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_262144_CONTENT_HASH),--scale-262144-content-hash '$(AOE_SOURCE_QUAL_262144_CONTENT_HASH)')
 BROWSER_RUN := $(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --network host --ipc host --user $(UID):$(GID) -e HOME=$(ROOT)/.cache/browser-home $(ROOT_MOUNTS) -w $(ROOT)/browser $(BROWSER_IMAGE) $(RESOURCE_OBSERVER)
-DEV_ORCH_BASE := $(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_SCENARIO -e AOE_ASSET_PACK -e AOE_OPEN_MAP_PACKAGE -e AOE_FOG_DISABLED -e AOE_FOG_SHOWCASE -e AOE_MATCH_TOKEN -e AOE_ARENA -e AOE_PRESET_MAPS -e DEV_PORT $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT)
+DEV_ORCH_BASE := $(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -L -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_SCENARIO -e AOE_ASSET_PACK -e AOE_OPEN_MAP_PACKAGE -e AOE_FOG_DISABLED -e AOE_FOG_SHOWCASE -e AOE_MATCH_TOKEN -e AOE_ARENA -e AOE_PRESET_MAPS -e DEV_PORT $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT)
 DEV_ORCH_RUN := $(DEV_ORCH_BASE) $(ORCH_IMAGE)
 HARNESS_EVIDENCE_DIR ?= /tmp/aoeworld-harness-evidence
 HARNESS_CADENCE ?= edit
@@ -188,7 +188,7 @@ orchestrator-tools: tools
 .PHONY: compile-cache-start compile-cache-stop compile-cache-stats
 compile-cache-start compile-cache-stop compile-cache-stats: orchestrator-tools
 	@mkdir -p '$(HARNESS_SCCACHE_DIR)'
-	@$(RESOURCE_RUN) docker run --rm $(JOB_ENV) $(RESOURCE_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -v /var/run/docker.sock:/var/run/docker.sock $(ORCH_IMAGE) /usr/local/bin/aoe-compile-cache --service $(patsubst compile-cache-%,%,$@) '$(HARNESS_SCCACHE_DIR)' '$(UID):$(GID)'
+	@$(RESOURCE_RUN) docker run --rm $(JOB_ENV) $(RESOURCE_CAP) --user $(UID):$(GID) --group-add $(shell stat -L -c %g /var/run/docker.sock) -v /var/run/docker.sock:/var/run/docker.sock $(ORCH_IMAGE) /usr/local/bin/aoe-compile-cache --service $(patsubst compile-cache-%,%,$@) '$(HARNESS_SCCACHE_DIR)' '$(UID):$(GID)'
 
 browser-deps: browser-tools
 	@mkdir -p .cache/browser-home
@@ -208,7 +208,7 @@ doctor:
 
 # Stops the containers a host suspend left running (their gap no longer matches the machine's).
 recover:
-	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- recover
+	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --user $(UID):$(GID) --group-add $(shell stat -L -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- recover
 
 include make/profiling.mk
 include make/resources.mk
@@ -323,7 +323,7 @@ qa-validate:
 
 qa-serve:
 	@$(MAKE) --no-print-directory orchestrator-tools browser-deps 1>&2
-	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) -i --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_QA_BASE_URL $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- qa-serve
+	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) -i --network host --user $(UID):$(GID) --group-add $(shell stat -L -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_QA_BASE_URL $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- qa-serve
 
 pre-commit:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- pre-commit
@@ -365,7 +365,7 @@ test-creator-source: build-wasm browser-deps orchestrator-tools job-bootstrap
 test-creator-source-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
-	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_GEODATA_CACHE -e AOE_ASSET_PACK $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- test-creator-source
+	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -L -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_GEODATA_CACHE -e AOE_ASSET_PACK $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- test-creator-source
 
 test-geographic-matrix: orchestrator-tools job-bootstrap
 	@$(JOB_RUN) test-geographic-matrix -- make --no-print-directory test-geographic-matrix-steps
@@ -380,7 +380,7 @@ test-geographic-visuals: build-wasm browser-deps orchestrator-tools job-bootstra
 test-geographic-visuals-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
-	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_ASSET_PACK -e AOE_GEODATA_CACHE $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- test-geographic-visuals
+	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -L -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_ASSET_PACK -e AOE_GEODATA_CACHE $(ROOT_MOUNTS) $(GEODATA_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- test-geographic-visuals
 
 dev: build-wasm orchestrator-tools dev-build
 	@$(DEV_ORCH_RUN) cargo run --locked -p aoe-harness -- dev start

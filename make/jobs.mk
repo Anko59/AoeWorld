@@ -155,7 +155,7 @@ E2E_HARNESS_COMMAND ?= test-e2e
 test-e2e-steps:
 	@$(MAKE) --no-print-directory disk-precheck build-wasm browser-deps orchestrator-tools
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
-	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_E2E_WORKERS -e AOE_E2E_PORT_RANGE -e AOE_E2E_SPECS -e AOE_E2E_REPEAT_SPECS -e AOE_E2E_REPEAT_PROJECTS -e AOE_E2E_REPEAT -e GITHUB_SHA -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_STEP_SUMMARY $(GITHUB_SUMMARY_MOUNT) $(E2E_PACKAGES_ENV) -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- $(E2E_HARNESS_COMMAND)
+	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -L -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_E2E_WORKERS -e AOE_E2E_PORT_RANGE -e AOE_E2E_SPECS -e AOE_E2E_REPEAT_SPECS -e AOE_E2E_REPEAT_PROJECTS -e AOE_E2E_REPEAT -e GITHUB_SHA -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_STEP_SUMMARY $(GITHUB_SUMMARY_MOUNT) $(E2E_PACKAGES_ENV) -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- $(E2E_HARNESS_COMMAND)
 
 # Keep the focused memory investigation serial within this command, including nested builds.
 # Every child keeps its normal resource admission and checks.
@@ -219,14 +219,14 @@ test-exhaustive-steps:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-exhaustive
 
 test-wasm-steps:
-	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_E2E_PORT_RANGE -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- test-wasm
+	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -L -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_E2E_PORT_RANGE -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- test-wasm
 
 .PHONY: test-wasm-focused test-wasm-focused-steps
 test-wasm-focused: disk-precheck browser-tools orchestrator-tools job-bootstrap
 	@$(JOB_RUN) test-wasm-focused -- make --no-print-directory test-wasm-focused-steps
 
 test-wasm-focused-steps:
-	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_WASM_TEST_PACKAGE -e AOE_WASM_TEST_FILTER $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_E2E_PORT_RANGE -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- test-wasm-focused
+	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -L -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_WASM_TEST_PACKAGE -e AOE_WASM_TEST_FILTER $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_E2E_PORT_RANGE -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- test-wasm-focused
 
 # Build and test targets use the same host job wrapper; short work never takes a lock.
 build: job-bootstrap
@@ -276,14 +276,14 @@ duel-check: job-bootstrap
 
 duel-check-steps:
 	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GIT_INDEX_FILE -e AOE_SHIP_EVIDENCE -e HARNESS_DUEL_BASE -e HARNESS_DUEL_REVISION $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- duel-check
-	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e HARNESS_DUEL_BASE -e HARNESS_DUEL_REVISION -e AOE_ASSET_PACK $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- duel-browser-check
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -L -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e HARNESS_DUEL_BASE -e HARNESS_DUEL_REVISION -e AOE_ASSET_PACK $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- duel-browser-check
 
 test-country-source: build-wasm browser-deps orchestrator-tools job-bootstrap
 	@$(JOB_RUN) test-country-source -- make --no-print-directory test-country-source-steps
 
 test-country-source-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
-	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_ASSET_PACK $(ROOT_MOUNTS) $(SOURCE_QUAL_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --release --locked -p aoe-harness -- source-country-probe --package-directory '$(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY)' --content-hash '$(AOE_SOURCE_QUAL_CONTENT_HASH)' --browser
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -L -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_ASSET_PACK $(ROOT_MOUNTS) $(SOURCE_QUAL_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --release --locked -p aoe-harness -- source-country-probe --package-directory '$(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY)' --content-hash '$(AOE_SOURCE_QUAL_CONTENT_HASH)' --browser
 
 dev-build: job-bootstrap sdk-python-tools
 	@$(JOB_RUN) dev-build -- make --no-print-directory dev-build-steps
@@ -329,7 +329,7 @@ perf-late-game-admitted: job-bootstrap
 
 perf-late-game-steps:
 	@$(MAKE) --no-print-directory orchestrator-tools
-	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --release --locked -p aoe-harness -- perf-late-game $(AOE_LATE_GAME_ARGS)
+	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --user $(UID):$(GID) --group-add $(shell stat -L -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --release --locked -p aoe-harness -- perf-late-game $(AOE_LATE_GAME_ARGS)
 
 perf-ci: resource-bootstrap
 	@$(RESOURCE_LONG) perf-ci -- $(MAKE) --no-print-directory perf-ci-admitted
