@@ -5,6 +5,12 @@ use std::collections::BinaryHeap;
 /// Paid foundations a domain may keep in flight.
 const PIPELINE: usize = 24;
 
+#[derive(Debug)]
+pub(super) enum FoundationProgress {
+    Watching { done: u64, since: u64 },
+    Disconnected,
+}
+
 const RESERVE: Stockpile = Stockpile {
     food: 200,
     wood: 200,
@@ -114,58 +120,63 @@ impl GameWorld {
     }
 
     fn observe_vassal_progress(&mut self, id: EntityId, work: &super::work::Workload) {
-        let previous = self.economy.vassals.domains[&id].progress;
-        // Other sites can keep progressing while this paid site never gets a
-        // builder. Watch sites already blocked by terrain or a foreign unit first.
-        let observed = work
-            .open
-            .iter()
-            .filter(|(site, _)| self.economy.builders.assigned_count(*site) == 0)
-            .find_map(|&(site, job)| {
-                if self.foreign_foundation_blocker(site) {
-                    return Some((site, job.tile, false));
-                }
-                let b = self.building(site)?;
-                (self.validate_foundation_reach(b.player, &[], b.footprint)
-                    == Err(EconomyError::Movement(crate::GameWorldError::Unreachable)))
-                .then_some((site, job.tile, true))
-            })
-            .or_else(|| {
-                work.open
-                    .iter()
-                    .find(|(id, _)| {
-                        previous.is_some_and(|(site, _, _)| site == *id)
-                            || self.economy.builders.assigned_count(*id) > 0
-                    })
-                    .map(|&(id, job)| (id, job.tile, false))
-            });
-        let Some((building, tile, unreachable, done)) =
-            observed.and_then(|(id, tile, unreachable)| {
-                self.building(id)
-                    .map(|b| (id, tile, unreachable, b.work_done))
-            })
-        else {
-            if let Some(domain) = self.economy.vassals.domains.get_mut(&id) {
-                domain.progress = None;
-            }
-            return;
-        };
         let tick = self.tick.0;
         let timeout = u64::from(self.config.tick_hz) * 60;
+        let buildings = &self.economy.buildings;
         let Some(domain) = self.economy.vassals.domains.get_mut(&id) else {
             return;
         };
-        let since = previous
-            .filter(|&(site, work, _)| site == building && work == done)
-            .map_or(tick, |(_, _, since)| since);
-        domain.progress = Some((building, done, since));
-        // A disconnected site has already failed its reachability proof. An
-        // occupied or merely slow site can still clear during the grace period.
-        if (unreachable || tick.saturating_sub(since) >= timeout)
-            && !domain.refused.contains_key(&tile)
-        {
-            domain.refused.insert(tile, tick + 600);
-            domain.request_replan(tick + plan::REFUSED_REPLAN_TICKS);
+        domain.progress.retain(|site, _| {
+            buildings
+                .get(site)
+                .is_some_and(|b| b.hp > 0 && !b.is_complete())
+        });
+        let scan = domain.reach_scan;
+        let in_sweep =
+            |site: EntityId| scan.is_some_and(|(last, end)| last < site && u64::from(site.0) < end);
+        let probe_key = |site| (!in_sweep(site), site);
+        let mut probe = None;
+        for &(site, job) in &work.open {
+            if matches!(
+                domain.progress.get(&site),
+                Some(FoundationProgress::Disconnected)
+            ) {
+                continue;
+            }
+            if self.economy.builders.assigned_count(site) > 0 {
+                domain.watch_foundation(&buildings[&site], tick, timeout);
+            } else if !domain.refused.contains_key(&job.tile)
+                && probe.is_none_or(|next| probe_key(site) < probe_key(next))
+            {
+                probe = Some(site);
+            }
+        }
+        // Bound the proof to one unstaffed site per visit. Building IDs give a
+        // stable order across replans. New IDs wait for the next sweep, so
+        // continuous construction cannot postpone the wrap to older sites.
+        let Some(site) = probe else {
+            return;
+        };
+        let b = &self.economy.buildings[&site];
+        let unreachable = self.validate_foundation_reach(b.player, &[], b.footprint)
+            == Err(EconomyError::Movement(crate::GameWorldError::Unreachable));
+        let occupied = !unreachable && self.foreign_foundation_blocker(site);
+        let Some(domain) = self.economy.vassals.domains.get_mut(&id) else {
+            return;
+        };
+        let end = scan
+            .filter(|_| in_sweep(site))
+            .map_or(self.next_entity_id, |(_, end)| end);
+        domain.reach_scan = Some((site, end));
+        if unreachable {
+            // Remember the proof for this paid foundation even when the
+            // tile's temporary placement refusal expires.
+            domain
+                .progress
+                .insert(site, FoundationProgress::Disconnected);
+            domain.refuse_foundation(b.footprint.min, tick);
+        } else if occupied || domain.progress.contains_key(&site) {
+            domain.watch_foundation(b, tick, timeout);
         }
     }
 
@@ -336,6 +347,35 @@ impl GameWorld {
         }
         if let Some(d) = self.economy.vassals.domains.get_mut(&id) {
             d.status.wait = wait;
+        }
+    }
+}
+
+impl Domain {
+    fn watch_foundation(&mut self, building: &crate::GameBuilding, tick: u64, timeout: u64) {
+        let progress = self
+            .progress
+            .entry(building.id)
+            .or_insert(FoundationProgress::Watching {
+                done: building.work_done,
+                since: tick,
+            });
+        let FoundationProgress::Watching { done, since } = progress else {
+            return;
+        };
+        if *done != building.work_done {
+            *done = building.work_done;
+            *since = tick;
+        }
+        if tick.saturating_sub(*since) >= timeout {
+            self.refuse_foundation(building.footprint.min, tick);
+        }
+    }
+
+    fn refuse_foundation(&mut self, tile: TileCoord, tick: u64) {
+        if let std::collections::btree_map::Entry::Vacant(entry) = self.refused.entry(tile) {
+            entry.insert(tick + 600);
+            self.request_replan(tick + plan::REFUSED_REPLAN_TICKS);
         }
     }
 }

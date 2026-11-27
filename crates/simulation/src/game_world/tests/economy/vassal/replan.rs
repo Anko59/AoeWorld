@@ -103,20 +103,26 @@ fn earliest_deadline_is_hashed_and_rebuilds_during_pending_roads() {
 
 #[test]
 fn f1_stalled_foundation_replan_survives_road_completion() {
-    let (mut w, v, tower, _) = pending_domain();
-    let building = w
-        .insert_building(
-            PlayerId(0),
-            tower.kind,
-            footprint(tower.kind, tower.tile),
-            false,
-        )
+    let (mut w, v, tower, worker) = pending_domain();
+    let player = PlayerId(0);
+    let occupied = Site::new(BuildingKind::PalisadeWall, TileCoord::new(96, 98), 0);
+    w.issue_build(player, &[], occupied.kind, occupied.tile, false)
         .unwrap();
-    let d = w.economy.vassals.domains.get_mut(&v).unwrap();
-    d.plan = vec![tower];
-    d.progress = Some((building, 0, 1_200));
+    w.spawn_militia(
+        PlayerId(1),
+        WorldPosition::from_tile_center(occupied.tile).unwrap(),
+    )
+    .unwrap();
+    let building = w
+        .issue_build(player, &[worker], tower.kind, tower.tile, false)
+        .unwrap();
+    assert_eq!(w.economy.builders.assigned_count(building), 1);
+    w.economy.vassals.domains.get_mut(&v).unwrap().plan = vec![occupied, tower];
     // Keep the staffing pass from purchasing unrelated foundations.
-    w.economy.players.get_mut(&PlayerId(0)).unwrap().stockpile = Stockpile::default();
+    w.economy.players.get_mut(&player).unwrap().stockpile = Stockpile::default();
+    w.tick.0 = 1_200;
+    w.vassal_develop(v);
+    w.tick.0 = 2_400;
     w.vassal_develop(v);
     assert!(
         w.economy.vassals.domains[&v]
@@ -138,6 +144,71 @@ fn f1_stalled_foundation_replan_survives_road_completion() {
             .all(|s| s.tile != tower.tile),
         "F1: the stalled foundation must not be reused while refused"
     );
+}
+
+#[test]
+fn occupied_paid_foundation_does_not_hide_a_disconnected_paid_foundation() {
+    let (mut w, v, sealed, _) = pending_domain();
+    let player = PlayerId(0);
+    let occupied = Site::new(BuildingKind::PalisadeWall, TileCoord::new(96, 98), 0);
+    let [occupied_id, sealed_id] = [occupied, sealed].map(|site| {
+        w.issue_build(player, &[], site.kind, site.tile, false)
+            .unwrap()
+    });
+    w.spawn_militia(
+        PlayerId(1),
+        WorldPosition::from_tile_center(occupied.tile).unwrap(),
+    )
+    .unwrap();
+    for tile in
+        crate::game_world::economy::placement::perimeter(footprint(sealed.kind, sealed.tile))
+    {
+        w.economy.blocked_tiles.insert(tile);
+    }
+    assert!(w.foreign_foundation_blocker(occupied_id));
+    assert_eq!(
+        w.validate_foundation_reach(player, &[], footprint(sealed.kind, sealed.tile)),
+        Err(EconomyError::Movement(crate::GameWorldError::Unreachable))
+    );
+    for id in [occupied_id, sealed_id] {
+        assert_eq!(w.economy.builders.assigned_count(id), 0);
+    }
+    w.economy.vassals.domains.get_mut(&v).unwrap().plan = vec![occupied, sealed];
+    w.economy.players.get_mut(&player).unwrap().stockpile = Stockpile::default();
+
+    // The occupied foundation should remain in its grace period while the
+    // terrain failure is proven and schedules a rebuild.
+    let start = w.tick.0;
+    for tick in (start..start + 100).step_by(20) {
+        w.tick.0 = tick;
+        w.vassal_develop(v);
+    }
+    let d = &w.economy.vassals.domains[&v];
+    assert!(!d.refused.contains_key(&occupied.tile));
+    let expiry = *d
+        .refused
+        .get(&sealed.tile)
+        .expect("the occupied foundation must not hide the sealed foundation");
+    let replan = d.replan_at.expect("the later site must schedule a rebuild");
+    assert!(replan <= start + 100 + REFUSED_REPLAN_TICKS);
+
+    w.tick.0 = replan;
+    w.vassal_develop(v);
+    let d = &w.economy.vassals.domains[&v];
+    assert_eq!(d.planned, replan);
+    assert!(d.plan.iter().all(|site| site.tile != sealed.tile));
+    assert!(d.paid.contains(&sealed_id));
+    for tick in (expiry..expiry + 100).step_by(20) {
+        w.tick.0 = tick;
+        w.vassal_develop(v);
+    }
+    let d = &w.economy.vassals.domains[&v];
+    assert!(!d.refused.contains_key(&sealed.tile));
+    assert_eq!(
+        d.replan_at, None,
+        "the same disconnection only replans once"
+    );
+    assert!(w.foreign_foundation_blocker(occupied_id));
 }
 
 #[test]
