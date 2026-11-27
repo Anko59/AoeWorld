@@ -30,49 +30,61 @@ Owner 11-24: "priority goes to any decisions we still have to take that block th
    2,000 gate); "decided by Q6" was never decided. Without a direction, rungs 2-3 have no plan.
 3. **Hierarchy engine: decided 11-25.** Specification agreed with the owner ([spec](hierarchy/spec.md),
    [hierarchy](roadmap/hierarchy.md)); build order in its section 10, provinces first.
-4. **Memory per unit: target set 11-25.** 4 KB per unit (2M units in 14 GB with the OS and AIs). The 5x bench measures
-   7-8 KB per unit today; a heap profile of the 5x save comes first.
+4. **Memory per unit: target set 11-25.** 4 KB per unit (2M units in 14 GB with the OS and AIs). An earlier 5x bench measured
+   7–8 KB per unit; #1075 saved about 240 MB of heap at 5x by boxing the planner. Reprofile total memory on the 5x save.
 5. **Players and AI cost.** Python AIs cost about 47 ms CPU per decision (#942); 2M units with 99 AIs or with hundreds of
    players decides whether AI decisions move into Rust.
 
-## Ten highest-priority open items
+## Ten highest-priority items from the 11-26 brief
 
-Open items only, owner emphasis first (reconciled 2026-11-26 against `origin/dev` at `84acf02f2`, the open pull
-requests, the owner playtest of 11-25 and the owner's feedback of 11-26).
+Order follows the owner's 11-26 emphasis. Reconciled 2026-11-27 against `origin/dev` at `5ffbb643a503`,
+with the subsequent #1136 merge checked at `aa375f82e29b`.
+The owner is away 2026-11-27 to 2026-11-30.
 
 Last playtest, 11-25 (play25, dev 2d7ae70aa, 99 Python AIs): the converted Anatolia 5 save was "absolutely
-unplayable" (client under 1 FPS, route caps, fords changed by #1036) and was dropped; a new France game was "a
-pleasure, still nearly no lag" at 63.5k units and 6.0 ticks/s, until the client crashed and leaked memory. Owner
-11-26: fights and AIs are "in a good state and not priority" (AI armies that walk without engaging went from about 90%
-to 30% of the time); client stutter, not average frame rate, is what frustrates.
+unplayable" and was dropped. The new France game was "a pleasure, still nearly no lag" at 63.5k units and
+6.0 ticks/s until the client crashed and leaked memory. On 11-26 the owner said fights and AIs are
+"in a good state and not priority" and singled out client stutter.
 
-1. Client stability: a terrain panic crashed the client on repeat (fix on `client/panic-message`), and the WebGPU tab
-   grows about 90 MB a minute until Firefox runs out of memory ([UI](roadmap/ui.md)).
-2. Route caps and the route queue (owner 11-25: "The route caps are still not removed so I can't do shit"; asked since
-   11-05): route caps off is shipping on #978 (#1096) at +71% instructions per tick, never-moved units 10,429 to 3,709
-   on R1 ([scale](roadmap/scale.md), [caps](roadmap/caps.md)).
-3. Movement simplified and its cost brought back down (owner 11-26): keep planners across building placement, shared
-   paths per player and destination chunk, then delete the route queue ([movement](roadmap/movement.md), #978).
-4. Server lag in big late games: 11-25 France 6.0 ticks/s at 63.5k units (60% of real time at 10 Hz), up from 11-19's
-   4.0 at 61.5k; target real time at 10 Hz. The next owner game is the first with the Rust AI and without route caps,
-   so measure it again ([scale](roadmap/scale.md)).
-5. Wasted unit work the owner saw: attack-move paths around enemy buildings instead of destroying them; Steward
-   villagers gather resources they cannot reach; builders sent to unreachable foundations or to one an enemy stands
-   on, dozens at a time ([gameplay](roadmap/gameplay.md)).
-6. Client stutter in crowded views and fast pans: measure long frames, not the average (28 FPS average at 37.8k units
-   on France) ([scale](roadmap/scale.md)).
-7. Formation coherence on real terrain (11-20, 11-22: huge lines) and Steward arrival 80-82% ([movement](roadmap/movement.md)).
-8. Steward and Vassal zones really in walking distance (membership and discovery are still a circle; 11-23), Vassal and
-   Steward cooperation ([hierarchy](roadmap/hierarchy.md)).
-9. Remove the other caps and budgets (owner 11-23 "solve, not limit and hide") ([caps](roadmap/caps.md)).
-10. Fights and AIs, not a priority (owner 11-26): own engaged armies stack too tightly; AIs rarely leave their base
-    after the early game ([gameplay](roadmap/gameplay.md), [AI](roadmap/ai.md)).
+1. Client stability: terrain crash **DONE** via #1111. The Firefox WebGPU leak remains open at about 90 MB/min;
+   diagnosis needs an owner Firefox `about:memory` capture during growth ([UI](roadmap/ui.md)).
+2. Route caps **DONE** via #1096. R1 never-moved units fell from 10,429 to 3,709 at +71% instructions/tick.
+   Recheck in play. Removing the remaining route queue is item 3 ([scale](roadmap/scale.md), [caps](roadmap/caps.md)).
+3. Movement cost **PARTIAL**. #1122 moved lookahead to workers and kept planners across coarse-only chunk overlaps
+   (main-thread instructions/tick: R1 −7.9%, 5x −16.6%, arrivals effectively unchanged). Shared paths and removal of the remaining queue are still ahead
+   ([movement](roadmap/movement.md), #978).
+4. Late-game server lag **PARTIAL**. France reached 6.0 of the target 10 ticks/s at 63.5k units on 11-25, up from
+   4.0 at 61.5k on 11-19. Measure a live owner game with default Rust AI and route caps removed ([scale](roadmap/scale.md)).
+5. Wasted unit work. **IN FLIGHT #1114** covers unreachable gathering and foundations, and enemy-blocked crews.
+   Attack-move still needs to engage enemy buildings in its path ([gameplay](roadmap/gameplay.md)).
+6. Client stutter **PARTIAL**. #1112 improved France 11 crowded-hold p99 from 10,145 to 127 ms and pan p99 from
+   1,487 to 793 ms. Pan work is **IN FLIGHT #1129**; recheck long frames in play ([scale](roadmap/scale.md)).
+7. Formation coherence and Steward arrival **PARTIAL**. Wide formations still file into long lines on real terrain.
+   The Steward transfer baseline was 80–82%; rerun quality metrics with the merged route changes ([movement](roadmap/movement.md)).
+8. Walking-distance zones and office cooperation **PARTIAL**. Server walking membership landed in #1038 and shared
+   Vassal builders in #962. Client outlines were **IN FLIGHT #1136** at the brief cutoff and merged at 07:21 CET. Recheck in play
+   ([hierarchy](roadmap/hierarchy.md)).
+9. Other caps and budgets **PARTIAL**. #1029 removed global attack-position search caps and #1038 removed global
+   office visit and per-visit limits. Remaining caps follow the owner's "solve, not limit and hide" rule ([caps](roadmap/caps.md)).
+10. Fights and AIs **PARTIAL**, deprioritised by the owner on 11-26. #1026 removed engagement caps and #1034 improved
+    march response and defence. Engaged armies still stack too tightly, and late-game attacks away from home need a
+    play recheck with the Rust AI ([gameplay](roadmap/gameplay.md), [AI](roadmap/ai.md)).
 
-Next after these: rock footprints (#926, held only while the owner needed the Anatolia 4 save, which the owner no longer
-plays), the 11-22 UI items still open (far-view training panel and activity panel in DE style, road texture and enemy
-foundation bars to recheck in play), unseeded farm furrows, the hierarchy build order (provinces first). Done since
-11-21: shallows and saved resource memory (#1036), uncapped far view and order limits (#1020, #1028), Vassals without
-villagers (#962), uncapped attack-move looks (#1026), the Rust AI by default (#1080, #1092).
+Next after these: recheck merged rock footprints (#926), DE road edges, far-view training flow and enemy foundation bars
+in play. Medieval DE styling remains for the training and activity panels. #974 merged bare furrows for unseeded farms;
+recheck in play. The hierarchy build order stays provinces first.
+
+## Merges since 2026-11-26 17:00
+
+- Client: crash fix #1111, stutter round 1 #1112, map recovery and browser test fixes #1131, #1127 and #1134,
+  plus walking-zone outlines #1136.
+- Simulation and AI: worker route lookahead #1122, seed 4 AI recovery #1125 and Rust seat timing #1097.
+- Smirkey: minimap raster #1081 (19× faster on a 2,000-tile map, identical bytes), bulk housing recount #1095
+  and minimap orders #1100.
+- CI: selective PR checks #1121, read-only Docker cache on PRs #1126, per-leg Rust caches #1132 and job setup #1133.
+  Also map cache recovery #1124, nightly triage #1116, native timing assertions #1119, browser repeat/retry #1113/#1130,
+  scheduled dependency audit #1123, Anatolia package command #1118 and dependency updates #1110.
+- Harness and docs: real-map game score #1128, CI report #1115 and 11-26 owner feedback #1104.
 
 ## Source conflicts resolved in this roadmap
 
