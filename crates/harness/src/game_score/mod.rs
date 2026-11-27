@@ -134,8 +134,7 @@ impl Options {
             }
             None => {
                 let set = scenarios::pull_request_set(map_hash);
-                let in_set =
-                    |scenario: &Scenario| set.iter().any(|kept| std::ptr::eq(*kept, scenario));
+                let in_set = |scenario: &Scenario| set.iter().any(|kept| kept.id == scenario.id);
                 for left_out in scenarios::ALL.iter().copied().filter(|s| !in_set(s)) {
                     eprintln!(
                         "game score: {} is left out, it is staged on another map",

@@ -341,7 +341,7 @@ matches no move beyond its spread is listed, and so is one whose name is unknown
 ### The usual spread
 
 How much a judged number moves when the game has not changed: the same code played at seeds 1
-to 8 (one worker, both scenarios), `dev` at the commit named in
+to 8 (one worker, every scenario of the set), `dev` at the commit named in
 [`scenarios/spread.json`](../../crates/harness/src/game_score/scenarios/spread.json), which the
 verdict reads. It sits beside the scenarios because it is a property of them: a test fails
 when a scenario, a window or a judged number has no entry, so changing a scenario means

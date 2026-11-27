@@ -224,6 +224,10 @@ fn game_score_the_pull_request_set_leaves_out_what_is_staged_on_another_map_and_
         text.contains("march is left out") && text.contains("battle is left out"),
         "{text}"
     );
+    assert!(
+        !text.contains("natural is left out") && !text.contains("late is left out"),
+        "the scenarios that are played are not said to be left out: {text}"
+    );
     assert_eq!(report["scenarios"].as_array().map(Vec::len), Some(2));
 }
 
