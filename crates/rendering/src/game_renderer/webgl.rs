@@ -82,6 +82,7 @@ pub struct WebGlRenderer {
     stats: ContourStats,
     upload: InstanceUpload,
     pub(super) staging: Vec<Sprite>,
+    pub(super) layer_sort: super::LayerSort,
     contours: Vec<Sprite>,
 }
 
@@ -159,6 +160,7 @@ impl WebGlRenderer {
     pub(super) fn staging_bytes(&self) -> usize {
         self.upload.resident_bytes()
             + (self.staging.capacity() + self.contours.capacity()) * INSTANCE_BYTES
+            + self.layer_sort.resident_bytes()
     }
 
     pub(super) fn render_staged(
@@ -179,6 +181,7 @@ impl WebGlRenderer {
             stats: ContourStats::default(),
             upload: InstanceUpload::default(),
             staging: Vec::new(),
+            layer_sort: Default::default(),
             contours: Vec::new(),
         })
     }

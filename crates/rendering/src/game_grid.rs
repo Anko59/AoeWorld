@@ -15,7 +15,7 @@ pub(crate) fn selection_ring(
     camera: SceneCamera,
     position: [f64; 2],
     elevation_meters: f64,
-) -> Vec<(Sprite, f64)> {
+) -> [(Sprite, f64); SELECTION_RING_SPRITES] {
     selection_ellipse(camera, position, elevation_meters, [24.0, 8.0])
 }
 
@@ -24,7 +24,7 @@ pub(crate) fn selection_ellipse(
     position: [f64; 2],
     elevation_meters: f64,
     radius: [f64; 2],
-) -> Vec<(Sprite, f64)> {
+) -> [(Sprite, f64); SELECTION_RING_SPRITES] {
     let screen = camera_projection(camera).world_to_screen_at_height(position, elevation_meters);
     // One analytic ellipse, with a constant two-pixel stroke. It clears its
     // ground surface but stays below the unit body in world depth order.
@@ -45,7 +45,7 @@ pub(crate) fn selection_ellipse(
         0.0
     };
     let half = ((radii[1] + 1.0) * slope) as f32;
-    vec![(
+    [(
         Sprite {
             position: to_clip(screen, camera.viewport),
             radius: [

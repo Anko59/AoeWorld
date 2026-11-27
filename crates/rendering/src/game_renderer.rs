@@ -25,9 +25,9 @@ mod perf;
 mod world_layers;
 #[path = "game_renderer/world_sprites.rs"]
 mod world_sprites;
-use world_layers::direct_world_layers;
+pub(crate) use world_layers::LayerSort;
 #[cfg(test)]
-use world_layers::{layer_order, ordered_world_layers, triangle_depth};
+use world_layers::{direct_world_layers, layer_order, ordered_world_layers, triangle_depth};
 #[cfg(test)]
 use world_sprites::world_sprite_frames;
 
@@ -360,7 +360,7 @@ impl GameRenderer {
     ) -> Result<bool, String> {
         let surfaces = surfaces.surfaces(art);
         let mut layers =
-            direct_world_layers(surfaces, art, terrain, resources, units, camera, animation);
+            self.world_layers(surfaces, art, terrain, resources, units, camera, animation);
         let fog_span = perf::Stage::new(6);
         fog::shade_objects(&mut layers, art, resources, units, animation, light);
         drop(fog_span);

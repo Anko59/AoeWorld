@@ -1,6 +1,28 @@
 use super::*;
 
-#[inline(never)]
+impl GameRenderer {
+    pub(super) fn world_layers(
+        &mut self,
+        surfaces: impl IntoIterator<Item = ProjectedSurfaceTriangle>,
+        art: &GameArt,
+        terrain: &[SceneTerrain],
+        resources: &[SceneResource],
+        units: &[SceneUnit],
+        camera: SceneCamera,
+        animation: usize,
+    ) -> Vec<WorldLayer> {
+        let sort = match self {
+            Self::WebGpu(renderer) => &mut renderer.layer_sort,
+            Self::WebGl(renderer) => &mut renderer.layer_sort,
+            Self::Canvas { presentation, .. } => &mut presentation.layer_sort,
+        };
+        build_layers(
+            surfaces, art, terrain, resources, units, camera, animation, sort,
+        )
+    }
+}
+
+#[cfg(test)]
 pub(super) fn direct_world_layers(
     surfaces: impl IntoIterator<Item = ProjectedSurfaceTriangle>,
     art: &GameArt,
@@ -9,6 +31,29 @@ pub(super) fn direct_world_layers(
     units: &[SceneUnit],
     camera: SceneCamera,
     animation: usize,
+) -> Vec<WorldLayer> {
+    build_layers(
+        surfaces,
+        art,
+        terrain,
+        resources,
+        units,
+        camera,
+        animation,
+        &mut LayerSort::default(),
+    )
+}
+
+#[inline(never)]
+fn build_layers(
+    surfaces: impl IntoIterator<Item = ProjectedSurfaceTriangle>,
+    art: &GameArt,
+    terrain: &[SceneTerrain],
+    resources: &[SceneResource],
+    units: &[SceneUnit],
+    camera: SceneCamera,
+    animation: usize,
+    sort: &mut LayerSort,
 ) -> Vec<WorldLayer> {
     let ground = ground::BuildingGround::new(units, camera);
     let compatibility = if terrain.is_empty() {
@@ -48,7 +93,7 @@ pub(super) fn direct_world_layers(
         animation,
         |(sprite, frame, depth, id)| entries.push(WorldLayer::Sprite(sprite, frame, depth, id)),
     );
-    sort_layers(&mut entries);
+    sort.sort(&mut entries);
     drop(sprites_span);
     entries
 }
@@ -69,7 +114,7 @@ pub(super) fn ordered_world_layers(
     for (sprite, frame, depth, id) in objects {
         entries.push(WorldLayer::Sprite(sprite, frame, depth, id));
     }
-    sort_layers(&mut entries);
+    LayerSort::default().sort(&mut entries);
     entries
 }
 
@@ -88,7 +133,7 @@ fn capacity(surfaces: usize, objects: usize, units: &[SceneUnit]) -> usize {
 #[inline(never)]
 fn append_selections(entries: &mut Vec<WorldLayer>, units: &[SceneUnit], camera: SceneCamera) {
     for unit in units.iter().filter(|unit| unit.visual.selected()) {
-        let selections = if let Some(side) = unit.kind.building_side() {
+        let [(mut sprite, depth)] = if let Some(side) = unit.kind.building_side() {
             game_grid::selection_ellipse(
                 camera,
                 unit.position,
@@ -101,28 +146,69 @@ fn append_selections(entries: &mut Vec<WorldLayer>, units: &[SceneUnit], camera:
         } else {
             game_grid::selection_ring(camera, unit.position, f64::from(unit.elevation_meters))
         };
-        for (mut sprite, depth) in selections {
-            if unit.visual.hostile() {
-                sprite.color = [245.0 / 255.0, 65.0 / 255.0, 65.0 / 255.0, 1.0];
-            }
-            entries.push(WorldLayer::Selection(sprite, depth));
+        if unit.visual.hostile() {
+            sprite.color = [245.0 / 255.0, 65.0 / 255.0, 65.0 / 255.0, 1.0];
         }
+        entries.push(WorldLayer::Selection(sprite, depth));
     }
 }
 
-#[inline(never)]
-fn sort_layers(entries: &mut [WorldLayer]) {
-    // Compose the former object (depth, id) pre-sort with layer (depth, kind)
-    // ordering in one stable sort. Exact id ties keep shadow/body and source
-    // input order, without a second scene or a second object sort buffer.
-    entries.sort_by(|left, right| {
-        let left = layer_order(left);
-        let right = layer_order(right);
-        left.0
-            .total_cmp(&right.0)
-            .then(left.1.cmp(&right.1))
-            .then(left.2.cmp(&right.2))
-    });
+#[derive(Default)]
+pub(crate) struct LayerSort {
+    keys: Vec<LayerKey>,
+}
+
+struct LayerKey {
+    depth: f64,
+    id: u64,
+    source: usize,
+    kind: u8,
+}
+
+impl LayerSort {
+    pub(crate) fn resident_bytes(&self) -> usize {
+        self.keys.capacity() * std::mem::size_of::<LayerKey>()
+    }
+
+    #[inline(never)]
+    fn sort(&mut self, entries: &mut [WorldLayer]) {
+        let keys = &mut self.keys;
+        keys.clear();
+        keys.extend(entries.iter().enumerate().map(|(source, layer)| {
+            let (depth, kind, id) = layer_order(layer);
+            LayerKey {
+                depth,
+                id,
+                source,
+                kind,
+            }
+        }));
+        // Sort the small keys in place. The original ordinal keeps exact ties
+        // stable, including shadow/body and source order.
+        keys.sort_unstable_by(|left, right| {
+            left.depth
+                .total_cmp(&right.depth)
+                .then(left.kind.cmp(&right.kind))
+                .then(left.id.cmp(&right.id))
+                .then(left.source.cmp(&right.source))
+        });
+        // Each sorted key maps a destination to its original source. Move
+        // one cycle at a time and mark its finished destinations in the keys.
+        for start in 0..keys.len() {
+            if keys[start].source == start {
+                continue;
+            }
+            let saved = entries[start];
+            let mut destination = start;
+            while keys[destination].source != start {
+                let source = std::mem::replace(&mut keys[destination].source, destination);
+                entries[destination] = entries[source];
+                destination = source;
+            }
+            entries[destination] = saved;
+            keys[destination].source = destination;
+        }
+    }
 }
 
 pub(super) fn layer_order(layer: &WorldLayer) -> (f64, u8, u64) {
