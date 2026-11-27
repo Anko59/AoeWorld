@@ -1,5 +1,6 @@
 //! Demand-built chunk labels. Connectivity walks the shared region graph from
 //! both ends: a small sealed goal is rejected without labelling its continent.
+use super::proofs::Query;
 use super::{CHUNK, RegionGround, Regions, label};
 use aoe_core::TileCoord;
 use std::collections::{BTreeMap, BTreeSet};
@@ -315,13 +316,35 @@ impl Regions {
         from: TileCoord,
         to: TileCoord,
     ) -> bool {
+        if !ground.available() {
+            return false;
+        }
+        let known = self.current_query(player, from, to);
+        if let Some(answer) = known.and_then(|query| self.known_reach(query)) {
+            return answer;
+        }
+        // Keep the cheap witness for endpoints whose chunks are still cold.
+        if self.clear_ray(ground, player, from, to) {
+            if let Some(query) = known {
+                self.proofs.insert(query, true);
+            }
+            return true;
+        }
         let Some(start) = self.lazy_node(ground, from) else {
             return false;
         };
         let Some(goal) = self.lazy_node(ground, to) else {
             return false;
         };
-        self.connected(ground, player, start, goal)
+        let query = Query(player, start, goal);
+        if let Some(answer) = self.known_reach(query) {
+            return answer;
+        }
+        let reachable = self.connected(ground, player, start, goal);
+        if ground.available() {
+            self.proofs.insert(query, reachable);
+        }
+        reachable
     }
 
     pub(super) fn lazy_frontier(

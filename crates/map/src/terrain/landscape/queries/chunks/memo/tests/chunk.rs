@@ -1,5 +1,77 @@
 use super::*;
 
+fn coastal_chunk_generator() -> MapChunkGenerator {
+    let mut generator = MapChunkGenerator::new([17; 32], 1, 128);
+    let ocean = (0..25)
+        .map(|index| if index % 5 >= 3 { 100 } else { 0 })
+        .collect();
+    generator.water = Some(Arc::new(crate::water::PreparedWater::new(
+        5,
+        [(
+            (0, 0),
+            crate::WaterPage {
+                level: 0,
+                x: 0,
+                y: 0,
+                width: 5,
+                height: 5,
+                ocean_coverage_percent: ocean,
+                inland_coverage_percent: vec![0; 25],
+            },
+        )]
+        .into(),
+    )));
+    generator
+}
+
+#[test]
+fn dry_chunk_and_its_halo_do_not_sample_water_per_tile() {
+    let generator = coastal_chunk_generator();
+    let cancelled = Cell::new(false);
+    let callback = || cancelled.get();
+    let memo = ChunkMemo::new_chunk(&generator, TileCoord::new(0, 32), &callback);
+    for y in 30..66 {
+        for x in 0..34 {
+            let tile = TileCoord::new(x, y);
+            let base = memo.base(tile).unwrap().unwrap();
+            assert_eq!(base.water, crate::WaterKind::None);
+            assert_eq!(
+                base.water_provenance,
+                crate::terrain::Provenance::SourceDerived
+            );
+            assert_eq!(memo.shore(tile).unwrap(), Shore::None);
+        }
+    }
+    assert!(memo.water.borrow().iter().all(Option::is_none));
+    cancelled.set(true);
+    assert_eq!(
+        memo.base(TileCoord::new(0, 32)),
+        Err(EnvironmentPageError::Cancelled)
+    );
+}
+
+#[test]
+fn a_chunk_near_the_coast_keeps_exact_shore_bands_and_water() {
+    let generator = coastal_chunk_generator();
+    let memo = ChunkMemo::new_chunk(&generator, TileCoord::new(64, 32), &|| false);
+    let mut found_shore = false;
+    for y in [30, 32, 40, 63, 65] {
+        for x in 62..98 {
+            let tile = TileCoord::new(x, y);
+            let expected = PointMemo::new(&generator, tile, &|| false);
+            assert_eq!(
+                memo.base(tile).unwrap(),
+                expected.base(tile).unwrap(),
+                "{tile:?}"
+            );
+            let band = memo.shore(tile).unwrap();
+            assert_eq!(band, expected.shore(tile).unwrap(), "{tile:?}");
+            found_shore |= matches!(band, Shore::Beach | Shore::Shallow);
+        }
+    }
+    assert!(found_shore, "the fixture crosses the shaped coast");
+}
+
 #[test]
 fn chunk_halo_is_lazy_fixed_and_checks_cancellation_on_hits() {
     let (generator, source) = generator(None);

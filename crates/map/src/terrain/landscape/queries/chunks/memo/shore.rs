@@ -37,6 +37,29 @@ const REACH: [i32; 3] = [2, shoreline::RIVER_BANK_MAX_DISTANCE_SQUARED, 10];
 const MEDIUM: [i32; 3] = [25, 36, BAND_LIMIT];
 const WIDTH_LATTICE_TILES: i64 = 9;
 
+pub(super) fn dry_chunk_provenance(
+    generator: &MapChunkGenerator,
+    origin: TileCoord,
+    cancelled: &dyn Fn() -> bool,
+) -> Option<crate::terrain::Provenance> {
+    // Dense coverage and seeded fallback can prove the whole window dry
+    // from source cells. Leave paged and modelled water to per-tile reads.
+    if generator.provider.is_some() || cancelled() {
+        return None;
+    }
+    let half = CHUNK_TILES / 2;
+    let center = TileCoord::new(origin.x.saturating_add(half), origin.y.saturating_add(half));
+    let reach = half + CHUNK_HALO + BAND_REACH;
+    if generator.dense_water_near(center, reach) {
+        return None;
+    }
+    Some(if generator.water.is_some() {
+        crate::terrain::Provenance::SourceDerived
+    } else {
+        crate::terrain::Provenance::Fallback
+    })
+}
+
 const fn band() -> [(i32, i32, i32); 160] {
     let mut offsets = [(0, 0, 0); 160];
     let mut count = 0;
@@ -119,6 +142,11 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         &self,
         position: TileCoord,
     ) -> (WaterKind, crate::terrain::Provenance) {
+        if let Some(provenance) = self.dry_provenance
+            && self.index(position).is_some()
+        {
+            return (WaterKind::None, provenance);
+        }
         let index = self.water_index(position);
         if let Some(index) = index
             && let Some((at, (kind, Some(provenance)))) = self.water.borrow()[index]
@@ -138,6 +166,13 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
         position: TileCoord,
     ) -> Result<Shore, EnvironmentPageError> {
         let index = self.index(position);
+        if self.dry_provenance.is_some() && index.is_some() {
+            return if (self.cancelled)() {
+                Err(EnvironmentPageError::Cancelled)
+            } else {
+                Ok(Shore::None)
+            };
+        }
         if let Some(index) = index
             && let Some(shore) = self.entries.borrow()[index].shore
         {

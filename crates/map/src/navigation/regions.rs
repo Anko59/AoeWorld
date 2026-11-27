@@ -23,6 +23,7 @@ use bucket::BucketEdges;
 pub use bucket::LandBucket;
 mod label;
 mod lazy;
+mod proofs;
 mod ray;
 mod terrain;
 pub use label::Input as RegionChunk;
@@ -177,6 +178,7 @@ pub struct Regions {
     /// Per chunk: its nodes' neighbours before the per-player gate filter,
     /// as `lazy::adjacent` found them. Dropped with the chunk or a neighbour.
     adjacency: std::collections::HashMap<u32, Vec<CachedAdjacency>>,
+    proofs: proofs::Proofs,
     stats: RegionStats,
 }
 
@@ -199,6 +201,7 @@ impl Regions {
             gate_access: BTreeMap::new(),
             closures: BTreeMap::new(),
             adjacency: Default::default(),
+            proofs: Default::default(),
             stats: RegionStats::default(),
         }
     }
@@ -209,6 +212,7 @@ impl Regions {
 
     /// Ground in `area` may have changed (tile-exclusive maximum).
     pub fn invalidate(&mut self, min: TileCoord, max: TileCoord) {
+        self.proofs.invalidate();
         let x0 = (min.x - 1).max(0).div_euclid(CHUNK);
         let y0 = (min.y - 1).max(0).div_euclid(CHUNK);
         let x1 = (max.x).min(self.size.0 - 1).div_euclid(CHUNK);
@@ -229,6 +233,7 @@ impl Regions {
 
     /// Everything may have changed.
     pub fn invalidate_all(&mut self) {
+        self.proofs.invalidate();
         self.adjacency.clear();
         self.pending_dirty.extend(self.pending.keys().copied());
         self.dirty.extend(self.pending.keys().copied());
@@ -475,8 +480,7 @@ impl Regions {
         to: TileCoord,
     ) -> bool {
         if self.chunks.is_empty() {
-            return self.clear_ray(ground, player, from, to)
-                || self.lazy_reachable(ground, player, from, to);
+            return self.lazy_reachable(ground, player, from, to);
         }
         self.flush(ground);
         let Some(goal) = self.node(to) else {

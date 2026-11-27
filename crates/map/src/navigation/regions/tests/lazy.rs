@@ -105,6 +105,59 @@ fn demand_labels_keep_gate_toggles_out_of_relabelling() {
 }
 
 #[test]
+fn walkers_and_contacts_in_the_same_regions_reuse_a_directed_proof() {
+    let mut grid = walled_base();
+    grid.open_gates.insert(7);
+    let mut regions = Regions::new(120, 110, LandBucket::Small);
+    let (from, to) = (TileCoord::new(45, 80), TileCoord::new(45, 45));
+    assert!(regions.reachable(&grid, 2, from, to));
+    let searched = regions.stats().searched;
+    assert!(searched > 0, "the ray crosses the wall, beside the gate");
+    let contacts = (42..47).map(|x| TileCoord::new(x, 45)).collect::<Vec<_>>();
+    for x in 42..47 {
+        let start = TileCoord::new(x, 80);
+        assert_eq!(
+            regions.reachable_each(&grid, 2, start, &contacts),
+            vec![true; 5]
+        );
+    }
+    assert_eq!(regions.stats().searched, searched);
+
+    grid.open_gates.remove(&7);
+    regions.invalidate(TileCoord::new(48, 59), TileCoord::new(52, 60));
+    assert!(!regions.reachable(&grid, 2, from, to));
+    assert!(regions.reachable(&grid, 1, from, to));
+    let searched = regions.stats().searched;
+    assert_eq!(
+        regions.reachable_each(&grid, 2, from, &contacts),
+        vec![false; 5]
+    );
+    assert_eq!(regions.stats().searched, searched);
+
+    grid.open_gates.insert(7);
+    regions.invalidate(TileCoord::new(48, 59), TileCoord::new(52, 60));
+    assert!(regions.reachable(&grid, 2, from, to));
+}
+
+#[test]
+fn a_cached_proof_can_cross_a_one_way_edge_only_in_its_direction() {
+    let mut grid = Grid::new(64, 64);
+    grid.set(TileCoord::new(20, 10), RegionTile::Blocked);
+    for y in 0..64 {
+        for dy in -1..=1 {
+            grid.walls
+                .insert((TileCoord::new(32, y), TileCoord::new(31, y + dy)));
+        }
+    }
+    let mut regions = Regions::new(64, 64, LandBucket::Small);
+    let (left, right) = (TileCoord::new(10, 10), TileCoord::new(45, 10));
+    for _ in 0..2 {
+        assert!(regions.reachable(&grid, 0, left, right));
+        assert!(!regions.reachable(&grid, 0, right, left));
+    }
+}
+
+#[test]
 fn a_foreign_gate_start_can_leave_across_a_chunk_boundary() {
     let mut grid = Grid::new(64, 64);
     grid.cells.fill(RegionTile::Blocked);
