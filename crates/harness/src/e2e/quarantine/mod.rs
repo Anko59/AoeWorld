@@ -10,7 +10,14 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 mod diagnostics;
 mod evidence;
 mod identity;
+mod record;
 use identity::Identity;
+
+/// Playwright's output directory, relative to `browser/` (`outputDir` in its config).
+const RESULTS: &str = "../.cache/playwright-results";
+
+/// Most failed tests (timeouts included) of one run that still earn the unlisted one retry.
+const MAX_FLAKY_FAILURES: usize = 3;
 
 pub(super) const REPORTER: &str = "--reporter=./quarantine-reporter.ts,json";
 
@@ -21,6 +28,8 @@ struct Case {
     status: String,
     passed: bool,
     actual: String,
+    /// First line of the attempt's error; empty when it passed.
+    error: String,
 }
 
 fn escape(text: &str) -> String {
@@ -161,6 +170,12 @@ fn collect(
                     status: status.to_owned(),
                     passed: actual == "passed",
                     actual: actual.to_owned(),
+                    error: result
+                        .get("error")
+                        .filter(|error| !error.is_null())
+                        .or_else(|| result.get("errors")?.as_array()?.first())
+                        .map(diagnostics::first_error)
+                        .unwrap_or_default(),
                 });
             }
         }
@@ -196,12 +211,15 @@ fn check_exit(success: bool, value: &Value) -> Result<()> {
     Ok(())
 }
 
-fn retry_args(original: &[String], case: &Case) -> Result<Vec<String>> {
+fn retry_args(original: &[String], case: &Case, output: &str) -> Result<Vec<String>> {
     let separator = original
         .iter()
         .position(|arg| arg == REPORTER)
         .ok_or("missing JSON reporter")?;
     let mut args = original[..=separator].to_vec();
+    // A Playwright run empties its output directory first: the rerun writes its own, inside
+    // the run's, so the traces of the failed first attempt survive for the flaky record.
+    args.push(format!("--output={output}"));
     // Initial spec filters and sharding apply once; select exactly this failed case.
     args.extend(case.selector());
     Ok(args)
@@ -247,18 +265,24 @@ pub(super) fn run(
         .then(|| flaky::Policy::load(Path::new(".")))
         .transpose()?;
     let mut journal = flaky::Journal::create(journal)?;
-    resolve(
+    let mut flakes = record::Log::new(report.with_extension("flaky.jsonl"))?;
+    let result = resolve(
         policy.as_ref(),
         &mut journal,
+        &mut flakes,
         args,
         report,
         |args, report| attempt(args, report, deadline, cancellation),
-    )
+    );
+    // Flakes are reported whether or not another case failed the run.
+    flakes.publish();
+    result
 }
 
 fn resolve(
     policy: Option<&flaky::Policy>,
     journal: &mut flaky::Journal,
+    flakes: &mut record::Log,
     args: &[String],
     report: &Path,
     mut run_attempt: impl FnMut(&[String], &Path) -> Result<(bool, Value)>,
@@ -294,40 +318,47 @@ fn resolve(
         .into());
     }
     let mut unresolved: Vec<_> = failed.iter().map(|case| case.identity.clone()).collect();
+    // A few failures are flakes; more are a broken change, which no retry will fix and
+    // which would cost one browser start per failed test.
+    let isolated = failed.len() <= MAX_FLAKY_FAILURES;
     for (index, case) in failed.iter().enumerate() {
         if case.actual == "timedOut" {
             continue;
         }
-        let mut attempt_number = 1;
-        let recovered = flaky::retry(
-            policy.and_then(|policy| policy.find("test-e2e", &case.key)),
-            &case.name(),
-            journal,
-            &mut 0,
-            || {
-                attempt_number += 1;
-                let report =
-                    report.with_extension(format!("retry-{}-{attempt_number}.json", index + 1));
-                let (success, value) = run_attempt(&retry_args(args, case)?, &report)?;
-                let selected = diagnostics::checked(&value, cases(&value))?;
-                diagnostics::checked(&value, check_exit(success, &value))?;
-                let [selected] = selected.as_slice() else {
-                    return Err("Playwright rerun did not select exactly one case".into());
-                };
-                if selected.identity != case.identity {
-                    return Err("Playwright rerun selected a different case".into());
-                }
-                match (success, selected.status.as_str()) {
-                    (true, "expected") if selected.passed => Ok(true),
-                    (false, "unexpected") if selected.actual == "failed" => Ok(false),
-                    _ => Err(diagnostics::failure(
-                        &value,
-                        "rerun did not complete a recoverable assertion",
-                        None,
-                    )),
-                }
-            },
-        )
+        let mut attempt_number = 1_u8;
+        let mut rerun = || {
+            attempt_number += 1;
+            let report =
+                report.with_extension(format!("retry-{}-{attempt_number}.json", index + 1));
+            let output = format!("{RESULTS}/retry-{}-{attempt_number}", index + 1);
+            let (success, value) = run_attempt(&retry_args(args, case, &output)?, &report)?;
+            let selected = diagnostics::checked(&value, cases(&value))?;
+            diagnostics::checked(&value, check_exit(success, &value))?;
+            let [selected] = selected.as_slice() else {
+                return Err("Playwright rerun did not select exactly one case".into());
+            };
+            if selected.identity != case.identity {
+                return Err("Playwright rerun selected a different case".into());
+            }
+            match (success, selected.status.as_str()) {
+                (true, "expected") if selected.passed => Ok(true),
+                (false, "unexpected") if selected.actual == "failed" => Ok(false),
+                _ => Err(diagnostics::failure(
+                    &value,
+                    "rerun did not complete a recoverable assertion",
+                    None,
+                )),
+            }
+        };
+        // A quarantined case keeps its two reruns. Every other case gets exactly one: a failure
+        // that does not repeat is recorded as flaky instead of failing the pull request, and
+        // one that repeats fails the run.
+        let entry = policy.and_then(|policy| policy.find("test-e2e", &case.key));
+        let recovered = match entry {
+            Some(_) => flaky::retry(entry, &case.name(), journal, &mut 0, &mut rerun),
+            None if isolated => rerun(),
+            None => Ok(false),
+        }
         .map_err(|error| -> Box<dyn Error> {
             format!(
                 "{error}\n{}",
@@ -336,6 +367,11 @@ fn resolve(
             .into()
         })?;
         if recovered {
+            flakes.record(
+                case,
+                attempt_number,
+                entry.map(|entry| entry.issue.as_str()),
+            )?;
             unresolved.retain(|identity| identity != &case.identity);
         }
     }
@@ -359,3 +395,7 @@ mod diagnostics_tests;
 #[cfg(test)]
 #[path = "tests/identity.rs"]
 mod identity_tests;
+
+#[cfg(test)]
+#[path = "tests/record.rs"]
+mod record_tests;
