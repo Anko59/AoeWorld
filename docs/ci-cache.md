@@ -24,6 +24,7 @@ below the limit.
   (`rust-cache-save` deletes those artifacts and the test executables before saving).
 - Legs that build the same thing share one cache: the four `e2e` shards restore `e2e`.
 - After each validation run on dev, `cache-trim.yml` keeps the newest entry of each leg and deletes
-  the older generations (`.github/actions/cache-trim`). It runs no pull request code and is the only
-  workflow with `actions: write`. It never lists `game-map-…` or the Docker layers.
+  the older generations (`.github/actions/cache-trim`). It runs no pull request code; with
+  `post-push.yml` (dev's code too) it is one of the two workflows with `actions: write`, and
+  `ci.yml`, which runs pull request code, has none. It never lists `game-map-…` or the Docker layers.
 - A new leg needs a line in the table above and a measured size.

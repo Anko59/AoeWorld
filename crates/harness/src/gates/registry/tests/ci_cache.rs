@@ -94,10 +94,16 @@ fn the_save_keeps_dependencies_only() {
 
 #[test]
 fn only_a_workflow_without_pull_request_code_may_delete_caches() {
-    let ci = read(".github/workflows/ci.yml");
-    assert!(!ci.contains("actions: write"));
+    // `actions: write` lets a token delete caches: the validation workflow, which runs the code of
+    // pull requests, never has it; the two workflows that have it run dev's code only.
+    let workflows = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.github/workflows");
+    for entry in std::fs::read_dir(workflows).unwrap().flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let text = std::fs::read_to_string(entry.path()).unwrap();
+        let allowed = ["cache-trim.yml", "post-push.yml"].contains(&name.as_str());
+        assert_eq!(text.contains("actions: write"), allowed, "{name}");
+    }
     let trim = read(".github/workflows/cache-trim.yml");
-    assert!(trim.contains("actions: write"));
     assert!(trim.contains("workflow_run:") && trim.contains("branches: [dev]"));
     assert!(!trim.contains("pull_request"));
     assert!(trim.contains("ref: dev"));
