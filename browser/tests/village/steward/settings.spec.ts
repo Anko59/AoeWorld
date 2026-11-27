@@ -108,8 +108,9 @@ test("a late echo of an earlier order does not undo a newer edit", async ({
   });
   const echo = (index: number) =>
     page.evaluate((index) => {
-      const sent = Reflect.get(window, "sentSteward") as number[][];
-      window.aoeSteward.update([], "Steward settings", [17, ...sent[index]!]);
+      const order = (Reflect.get(window, "sentSteward") as number[][])[index];
+      if (!order) throw new Error(`Order ${index} was never sent`);
+      window.aoeSteward.update([], "Steward settings", [17, ...order]);
     }, index);
   const cap = page.getByLabel("Villager cap", { exact: true });
   const training = page.getByLabel("Train villagers and fishing ships", {
