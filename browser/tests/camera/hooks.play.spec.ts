@@ -143,15 +143,12 @@ test("a second page's camera fragments settle on terrain the first page opened a
       "canvas2d",
     );
     await camera(second, "256.25", "256.5", "1.75");
-    await expect(second.locator("#scene")).toHaveAttribute(
-      "data-chunks-pending",
-      "0",
-    );
-    await expect(second.locator("#scene")).toHaveAttribute(
-      "data-chunks-failed",
-      "0",
-    );
-    const before = PNG.sync.read(await second.locator("#scene").screenshot());
+    // The canvas can still show an earlier frame after the chunks are resident.
+    await expect(
+      second.locator('#scene[data-chunks-pending="0"][data-chunks-failed="0"]'),
+    ).toHaveAttribute("data-view-painted", "true");
+    const scene = second.locator("#scene");
+    const before = PNG.sync.read(await scene.screenshot());
     // Sample clear terrain to the right of the starting kit. Its current opaque
     // tree fixtures cover the old central patch; keep the same area and floor
     // so neither blank background nor those sprites can satisfy this check.
