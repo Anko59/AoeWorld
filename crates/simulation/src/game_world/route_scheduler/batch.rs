@@ -173,14 +173,13 @@ impl GameWorld {
         if !fast && allowance == 0 {
             return None;
         }
-        let mut planner = self
+        let planner = self
             .take_planner(index)
             .unwrap_or_else(|| super::order_planner(&order));
         let fresh = planner.work() == 0;
         let class = far_planner(&planner);
         self.hold_search_slot(player, class, true);
         reserved.0.push((player, class));
-        self.reuse_region_endpoint_proof(&mut planner, kind, player);
         let fast = fast.then(|| {
             self.charge_fast_route(FAST_ROUTE_WORK);
             (FAST_ROUTE_WORK, true)
@@ -211,7 +210,10 @@ impl GameWorld {
             None => search.allowance,
         }
         .saturating_sub(spent);
-        // In steps, answering region proofs between them (`REGION_PROOF_STEP`).
+        // In steps, answering region proofs before and between them
+        // (`REGION_PROOF_STEP`); on workers (#978: answered while preparing,
+        // they ran on the simulation thread).
+        self.reuse_region_endpoint_proof(&mut search.planner, search.kind, search.player);
         let mut left = budget;
         loop {
             let step = left.min(super::REGION_PROOF_STEP);
