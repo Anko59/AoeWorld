@@ -3,11 +3,13 @@
 //! world after every tick and writes its `Measurement` where the parent asked.
 use super::counters::Recorder;
 use super::measure::{self, Measurement};
-use super::scenarios::{self, Scenario};
+use super::scenarios::{self, Scenario, Start};
+use super::staging;
 use super::windows::{self, Record};
 use super::{BoxError, Plan};
 use crate::perf_scale::stats::memory;
 use aoe_server::{HeadlessMatch, HeadlessPlan};
+use aoe_simulation::GameWorld;
 use std::{fs, path::Path, time::Duration, time::Instant};
 
 pub(super) fn run(plan: &Plan, out: &Path) -> Result<(), BoxError> {
@@ -30,42 +32,104 @@ pub(super) fn orders_path(out: &Path) -> std::path::PathBuf {
     out.with_extension("orders.txt")
 }
 
+/// What is played: a match, with the Rust AI in every seat, or a staged world, which nobody plays
+/// but the staging (`staging`): its armies are ordered once, before the first tick.
+enum Game {
+    Match(Box<HeadlessMatch>),
+    Staged {
+        world: Box<GameWorld>,
+        orders: Vec<String>,
+    },
+}
+
+impl Game {
+    async fn start(plan: &Plan, scenario: &Scenario) -> Result<Self, BoxError> {
+        if let Start::Staged(staging) = scenario.start {
+            let mut world =
+                HeadlessMatch::bare_world(&plan.package_directory, &plan.map_hash).await?;
+            let staged = staging::stage(&mut world, staging, plan.seed)?;
+            // The engine keeps who hit whom only on request, and never reads it back.
+            world.set_damage_observation(true);
+            return Ok(Self::Staged {
+                world: Box::new(world),
+                orders: staged.orders,
+            });
+        }
+        Ok(Self::Match(Box::new(
+            HeadlessMatch::start(&HeadlessPlan {
+                package_directory: plan.package_directory.clone(),
+                map_hash: plan.map_hash.clone(),
+                seats: plan.seats,
+                seed: plan.seed,
+                late_game_percent: scenario.late_percent(plan.late_percent),
+                record_orders: plan.record_orders,
+            })
+            .await?,
+        )))
+    }
+
+    /// One tick; the hits it landed, as (attacker, target) ids, in a staged world.
+    async fn tick(&mut self) -> Vec<(u32, u32)> {
+        match self {
+            Self::Match(game) => {
+                game.tick().await;
+                Vec::new()
+            }
+            Self::Staged { world, .. } => {
+                world.advance();
+                world
+                    .take_damage_observations()
+                    .into_iter()
+                    .map(|hit| (hit.attacker.0, hit.target.0))
+                    .collect()
+            }
+        }
+    }
+
+    async fn look<R>(&self, read: impl FnOnce(&GameWorld) -> R) -> R {
+        match self {
+            Self::Match(game) => game.gameplay().inspect_scale_world(read).await,
+            Self::Staged { world, .. } => read(world),
+        }
+    }
+
+    /// The orders the seats gave: the AI's, or those of the staging.
+    fn order_log(&self) -> Vec<String> {
+        match self {
+            Self::Match(game) => game.order_log(),
+            Self::Staged { orders, .. } => orders.clone(),
+        }
+    }
+}
+
 async fn play(plan: &Plan, scenario: &Scenario, out: &Path) -> Result<Measurement, BoxError> {
     let started = Instant::now();
-    let game = HeadlessMatch::start(&HeadlessPlan {
-        package_directory: plan.package_directory.clone(),
-        map_hash: plan.map_hash.clone(),
-        seats: plan.seats,
-        seed: plan.seed,
-        late_game_percent: scenario.late_percent(plan.late_percent),
-        record_orders: plan.record_orders,
-    })
-    .await?;
+    let mut game = Game::start(plan, scenario).await?;
     let setup_seconds = started.elapsed().as_secs_f64();
-    let gameplay = game.gameplay();
-    let tick_hz = gameplay
-        .inspect_scale_world(|world| world.config().tick_hz)
-        .await;
+    let tick_hz = game.look(|world| world.config().tick_hz).await;
     let mut recorder = Recorder::new(plan.seats, tick_hz);
+    if let Start::Staged(staging) = scenario.start {
+        recorder.stage(staging.choke);
+    }
     let sampled = scenario.sample_ticks(plan.ticks, plan.sample_every);
     let hash_every = plan.hash_every.max(1);
     let mut digests = Vec::new();
-    gameplay
-        .inspect_scale_world(|world| {
-            recorder.start(world);
-            digests.push(measure::digest(world));
-        })
-        .await;
+    game.look(|world| {
+        recorder.start(world);
+        digests.push(measure::digest(world));
+    })
+    .await;
     let mut tick_time = Duration::ZERO;
     for n in 1..=plan.ticks {
         let begun = Instant::now();
-        game.tick().await;
+        let hits = game.tick().await;
         let spent = begun.elapsed();
         tick_time += spent;
+        recorder.blows(hits);
         let hash = n % hash_every == 0 || n == plan.ticks;
         let sample = sampled.contains(&n);
-        let digest = gameplay
-            .inspect_scale_world(|world| {
+        let digest = game
+            .look(|world| {
                 recorder.tick(world, spent);
                 if sample {
                     recorder.sample(world);

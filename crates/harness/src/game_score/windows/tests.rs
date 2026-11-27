@@ -1,5 +1,6 @@
 use super::service::service;
 use super::{Record, TICKS_PER_MINUTE, series, window};
+use crate::game_score::choke::ChokeTotals;
 use crate::game_score::counters::{
     Delay, Events, ISSUERS, IssuerTotals, RouteTotals, Sample, TickRow,
 };
@@ -291,4 +292,160 @@ fn the_series_has_one_entry_per_game_minute_and_a_shorter_last_one() {
         .collect();
     assert_eq!(totals, [1200, 1200, 500]);
     assert!(series(run.record(), 0).expect("no ticks").is_empty());
+}
+
+// The numbers at a choke (`Crossing`, `Battle`), from rows and the census the watch keeps.
+
+fn watched(ticks: u64, totals: ChokeTotals, fill: impl Fn(u64, &mut TickRow)) -> Run {
+    let mut run = Run::new(ticks, 10, fill);
+    for sample in &mut run.samples {
+        sample.choke = Some(totals);
+    }
+    run
+}
+
+#[test]
+fn a_window_at_a_choke_counts_crossings_names_their_ticks_and_finds_the_best_game_minute() {
+    let totals = ChokeTotals {
+        sent: 40,
+        sent_by_seat: [40, 0],
+        near_side: 20,
+        at_goal: 37,
+        alive_by_seat: [40, 0],
+        fought: 0,
+    };
+    let run = watched(1_300, totals, |tick, row| {
+        row.crossed = match tick {
+            200 => 3,
+            250 => 10,
+            900 => 7,
+            _ => 0,
+        };
+        row.still_inside_peak = match tick {
+            300 => 5,
+            301 => 6,
+            302 => 2,
+            _ => 0,
+        };
+    });
+    let found = service(run.record(), 0, 1_300).expect("a window");
+    let crossing = found
+        .choke
+        .expect("a run watched at a choke has its numbers");
+    assert_eq!(crossing.units_sent, 40);
+    assert_eq!(crossing.crossed, 20);
+    assert_eq!(
+        crossing.crossed_per_minute_peak, 13,
+        "ticks 200 and 250 are one game minute (600 ticks) apart at most; 900 is not with them"
+    );
+    assert_eq!(crossing.first_crossing_tick, Some(200));
+    assert_eq!(crossing.last_crossing_tick, Some(900));
+    assert_eq!(crossing.waiting_near_side, 20);
+    assert_eq!(
+        crossing.standing_still_inside_ticks, 6,
+        "the longest, not the sum of the units that stood still"
+    );
+    assert_eq!(crossing.arrived_at_goal, 37);
+    assert!(!crossing.all_arrived, "37 of 40");
+    assert!(found.battle.is_none(), "one army is no battle");
+}
+
+#[test]
+fn the_ticks_of_a_crossing_are_those_of_the_run_whatever_the_window() {
+    let totals = ChokeTotals {
+        sent: 10,
+        sent_by_seat: [10, 0],
+        alive_by_seat: [10, 0],
+        at_goal: 10,
+        ..ChokeTotals::default()
+    };
+    let run = watched(1_300, totals, |tick, row| {
+        row.crossed = u64::from(tick == 200 || tick == 900);
+    });
+    let late = service(run.record(), 600, 1_300).expect("a window");
+    let crossing = late.choke.expect("numbers");
+    assert_eq!(
+        (
+            crossing.crossed,
+            crossing.first_crossing_tick,
+            crossing.last_crossing_tick
+        ),
+        (1, Some(900), Some(900))
+    );
+    assert!(crossing.all_arrived, "ten of ten");
+    let early = service(run.record(), 0, 100).expect("a window");
+    let nothing = early.choke.expect("numbers");
+    assert_eq!(
+        (
+            nothing.crossed,
+            nothing.crossed_per_minute_peak,
+            nothing.first_crossing_tick,
+            nothing.last_crossing_tick
+        ),
+        (0, 0, None, None)
+    );
+}
+
+#[test]
+fn two_armies_make_a_battle_with_a_first_blow_a_fight_and_two_shares_alive() {
+    let totals = ChokeTotals {
+        sent: 800,
+        sent_by_seat: [400, 400],
+        alive_by_seat: [100, 0],
+        fought: 40,
+        ..ChokeTotals::default()
+    };
+    let run = watched(1_000, totals, |tick, row| {
+        row.hits = if tick >= 120 { 5 } else { 0 };
+        row.fighters_new = match tick {
+            120 => 30,
+            130 => 10,
+            _ => 0,
+        };
+        row.alive_by_seat = if tick < 700 { [300, 200] } else { [100, 0] };
+    });
+    let battle = service(run.record(), 0, 1_000)
+        .expect("a window")
+        .battle
+        .expect("two armies make a battle");
+    assert_eq!(battle.first_blow_tick, Some(120));
+    assert_eq!(battle.fought, 40);
+    assert_eq!(
+        battle.queued, 760,
+        "800 sent, 40 have struck or been struck"
+    );
+    assert_eq!(
+        battle.fight_ended_tick,
+        Some(700),
+        "no unit of seat 1 is left alive"
+    );
+    assert_eq!(
+        (battle.alive_seat_0_permille, battle.alive_seat_1_permille),
+        (250, 0)
+    );
+    // Before the first blow, in a window of its own, nothing has happened.
+    let before = service(run.record(), 0, 100)
+        .expect("a window")
+        .battle
+        .expect("a battle");
+    assert_eq!(
+        (
+            before.first_blow_tick,
+            before.fought,
+            before.fight_ended_tick
+        ),
+        (None, 0, None)
+    );
+}
+
+#[test]
+fn a_run_without_a_watch_has_no_choke_numbers_and_the_report_leaves_them_out() {
+    let run = Run::new(10, 5, |_, _| {});
+    let found = service(run.record(), 0, 10).expect("a window");
+    assert!(found.choke.is_none() && found.battle.is_none());
+    let json = serde_json::to_value(&found).expect("json");
+    assert!(
+        json.get("choke").is_none() && json.get("battle").is_none(),
+        "{json}"
+    );
 }

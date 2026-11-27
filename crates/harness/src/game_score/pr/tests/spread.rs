@@ -151,7 +151,14 @@ fn every_judged_number_of_every_named_window_is_measured_and_the_whole_run_is_no
     let spread =
         measure(&seeds(&[970, 972, 960, 975, 968, 971, 969]), measured()).expect("a spread");
     let early = &spread.scenarios["natural"]["early"];
-    assert_eq!(early.len(), judged().count());
+    assert_eq!(
+        early.len(),
+        judged()
+            .filter(|path| scenarios::NATURAL.measures(path))
+            .count(),
+        "every judged number a fresh game has, and none of a staged scenario's"
+    );
+    assert!(!early.contains_key("choke.crossed"));
     let arrived = early["arrival.arrived_permille"];
     assert_eq!(arrived.median, 970.0);
     assert_eq!(arrived.mad_percent, 0.2);
@@ -227,7 +234,7 @@ fn the_committed_spread_covers_every_judged_number_of_every_window_of_every_scen
     let spread = Spread::committed().expect("the committed spread parses");
     for scenario in scenarios::ALL {
         for span in scenario.spans {
-            for path in judged() {
+            for path in judged().filter(|path| scenario.measures(path)) {
                 assert!(
                     spread.entry(scenario.id, span.id, path).is_some(),
                     "{}/{} {path} is not in scenarios/spread.json: measure it again",

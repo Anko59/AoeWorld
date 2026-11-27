@@ -87,6 +87,15 @@ fn the_floor_of_a_move_is_a_few_ticks_for_a_delay_and_ten_for_the_rest() {
 fn the_names_a_declaration_may_use_are_listed_in_the_order_of_the_table() {
     let names = declarable();
     assert_eq!(names.first(), Some(&"idle"));
-    assert_eq!(names.len(), 13);
+    assert_eq!(names.len(), 22);
     assert!(names.contains(&"cost-per-unit"));
+    for staged in [
+        "crossed",
+        "crossing-rate",
+        "last-crossing",
+        "still-inside",
+        "first-blow",
+    ] {
+        assert!(names.contains(&staged), "{staged}");
+    }
 }

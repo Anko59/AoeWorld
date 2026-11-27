@@ -248,27 +248,36 @@ fn a_plan_without_flags_takes_everything_from_its_scenario() {
 
 #[test]
 fn no_scenario_flag_plays_the_pull_request_set_and_a_flag_plays_one() {
+    let anatolia = scenarios::MARCH.map().expect("staged on a map");
     let all = Cli::try_parse_from(["test"]).expect("parse");
-    let ids: Vec<_> = all
-        .options
-        .scenarios()
-        .expect("set")
-        .iter()
-        .map(|s| s.id)
-        .collect();
-    assert_eq!(ids, ["natural", "late"]);
+    let ids = |options: &Options, map: &str| -> Vec<&'static str> {
+        options
+            .scenarios(map)
+            .expect("scenarios")
+            .iter()
+            .map(|s| s.id)
+            .collect()
+    };
+    assert_eq!(
+        ids(&all.options, anatolia),
+        ["natural", "late", "march", "battle"]
+    );
+    assert_eq!(ids(&all.options, "another"), ["natural", "late"]);
     let one = Cli::try_parse_from(["test", "--scenario", "late"]).expect("parse");
-    let ids: Vec<_> = one
+    assert_eq!(ids(&one.options, anatolia), ["late"]);
+    let staged = Cli::try_parse_from(["test", "--scenario", "battle"]).expect("parse");
+    assert_eq!(ids(&staged.options, anatolia), ["battle"]);
+    let elsewhere = staged
         .options
-        .scenarios()
-        .expect("one")
-        .iter()
-        .map(|s| s.id)
-        .collect();
-    assert_eq!(ids, ["late"]);
-    let wrong = Cli::try_parse_from(["test", "--scenario", "battle"]).expect("parse");
-    let error = wrong.options.scenarios().expect_err("no such scenario");
-    assert!(error.to_string().contains("battle"), "{error}");
+        .scenarios("another")
+        .expect_err("not its map");
+    assert!(elsewhere.to_string().contains("battle"), "{elsewhere}");
+    let wrong = Cli::try_parse_from(["test", "--scenario", "siege"]).expect("parse");
+    let error = wrong
+        .options
+        .scenarios(anatolia)
+        .expect_err("no such scenario");
+    assert!(error.to_string().contains("siege"), "{error}");
 }
 
 #[test]

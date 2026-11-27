@@ -1,6 +1,6 @@
 //! The terminal table, and the section of the pull request comment: one block
 //! per scenario, one line per number, one column per window, in plain words.
-use super::Played;
+use super::{Played, staged};
 use crate::game_score::judge::Comparison;
 use crate::game_score::measure::Measurement;
 use crate::game_score::windows::{Minute, WindowReport};
@@ -222,7 +222,14 @@ fn block(played: &Played) -> String {
         Some("instructions") => "instructions",
         _ => "wall ms",
     };
-    let names: Vec<String> = ROWS
+    let at_a_choke = windows.iter().any(|w| w.service.choke.is_some());
+    let mut rows: Vec<Row> = ROWS
+        .iter()
+        .copied()
+        .filter(|(name, _)| !(at_a_choke && staged::is_empty_in_a_staged_scenario(name)))
+        .collect();
+    rows.extend(staged::rows(windows));
+    let names: Vec<String> = rows
         .iter()
         .map(|(name, _)| name.replace("{unit}", unit))
         .collect();
@@ -246,7 +253,7 @@ fn block(played: &Played) -> String {
         text.push_str(&format!("  {ticks:>16}"));
     }
     text.push('\n');
-    for (name, (_, value)) in names.iter().zip(ROWS) {
+    for (name, (_, value)) in names.iter().zip(rows) {
         text.push_str(&format!("{name:label$}"));
         for window in windows {
             text.push_str(&format!("  {:>16}", value(window)));
@@ -254,11 +261,19 @@ fn block(played: &Played) -> String {
         text.push('\n');
     }
     if base.series.len() > 1 {
-        text.push_str(&per_minute(
-            "resources delivered per game minute:",
-            &base.series,
-            |minute| minute.service.economy.delivered_total,
-        ));
+        if at_a_choke {
+            text.push_str(&per_minute(
+                "units across the line per game minute:",
+                &base.series,
+                |minute| minute.service.choke.map_or(0, |choke| choke.crossed),
+            ));
+        } else {
+            text.push_str(&per_minute(
+                "resources delivered per game minute:",
+                &base.series,
+                |minute| minute.service.economy.delivered_total,
+            ));
+        }
     }
     if !scenario.note.is_empty() {
         text.push_str(&format!("note: {}\n", scenario.note));

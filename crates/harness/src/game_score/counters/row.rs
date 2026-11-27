@@ -98,6 +98,14 @@ pub(in crate::game_score) struct TickRow {
     pub income_faults: u64,
     pub steward: StewardTotals,
     pub general: GeneralTotals,
+    /// At a choke (the staged scenarios): units that crossed the line this tick, the longest a
+    /// unit has stood still inside the neck as of this tick (not additive: a window takes the
+    /// highest), units that struck or were struck for the first time, and units alive after the
+    /// tick, seat 0 first and every other seat second.
+    pub crossed: u64,
+    pub still_inside_peak: u64,
+    pub fighters_new: u64,
+    pub alive_by_seat: [u64; 2],
 }
 
 /// A delay observed at a tick: how many ticks an order took to show a

@@ -8,6 +8,7 @@
 //! into numbers; `report` writes the table and the JSON.
 //! See docs/scale/game-score.md.
 mod children;
+mod choke;
 mod counters;
 mod judge;
 mod measure;
@@ -16,6 +17,7 @@ mod play;
 pub(crate) mod pr;
 mod report;
 mod scenarios;
+mod staging;
 #[cfg(test)]
 mod tests;
 mod windows;
@@ -43,10 +45,11 @@ pub struct Options {
     /// The package to play on. Omitted: the only package of the directory.
     #[arg(long)]
     map_hash: Option<String>,
-    /// The scenario to play: `natural` or `late`. Omitted: the pull request set.
+    /// The scenario to play: `natural`, `late`, `march` or `battle`. Omitted: the pull request set
+    /// (every scenario that is one of the map).
     #[arg(long)]
     scenario: Option<String>,
-    /// Seats, all played by the Rust AI.
+    /// Seats, all played by the Rust AI (the staged scenarios have the seats of their armies).
     #[arg(long, default_value_t = 100)]
     seats: usize,
     /// Ticks played (ten ticks are one game second). Omitted: the scenario's
@@ -84,6 +87,14 @@ pub struct Options {
     parallel: bool,
     #[arg(long, default_value = ".cache/game-score/game-score.json")]
     out: PathBuf,
+    /// Survey the map for chokes instead of playing it, and write the text to `chokes.txt` beside
+    /// `--out` (docs/scale/game-score-chokes.md).
+    #[arg(long)]
+    survey_chokes: bool,
+    /// With `--survey-chokes`: describe the neck at this tile in full, as `x,y` (repeat the flag for
+    /// several).
+    #[arg(long, value_parser = parse_tile)]
+    survey_at: Vec<choke::Tile>,
     /// Internal: play one scenario once and write its measurement here.
     #[arg(long, hide = true)]
     child: Option<PathBuf>,
@@ -102,7 +113,7 @@ impl Options {
             package_directory: self.package_directory(),
             map_hash: map_hash.to_owned(),
             scenario: scenario.id.to_owned(),
-            seats: self.seats,
+            seats: scenario.seats(self.seats),
             ticks: self.ticks.unwrap_or(scenario.ticks),
             seed: self.seed,
             late_percent: self.late_percent,
@@ -113,13 +124,36 @@ impl Options {
         }
     }
 
-    /// The scenarios to play: the one named, or the pull request set.
-    fn scenarios(&self) -> Result<Vec<&'static Scenario>, BoxError> {
+    /// The scenarios to play on the map `map_hash`: the one named, or the pull request set.
+    fn scenarios(&self, map_hash: &str) -> Result<Vec<&'static Scenario>, BoxError> {
         match &self.scenario {
-            Some(id) => Ok(vec![scenarios::find(id)?]),
-            None => Ok(scenarios::pull_request_set()),
+            Some(id) => {
+                let scenario = scenarios::find(id)?;
+                scenario.applies_to(map_hash)?;
+                Ok(vec![scenario])
+            }
+            None => {
+                let set = scenarios::pull_request_set(map_hash);
+                let in_set =
+                    |scenario: &Scenario| set.iter().any(|kept| std::ptr::eq(*kept, scenario));
+                for left_out in scenarios::ALL.iter().copied().filter(|s| !in_set(s)) {
+                    eprintln!(
+                        "game score: {} is left out, it is staged on another map",
+                        left_out.id
+                    );
+                }
+                Ok(set)
+            }
         }
     }
+}
+
+fn parse_tile(text: &str) -> Result<choke::Tile, String> {
+    let (x, y) = text.split_once(',').ok_or("a tile is x,y")?;
+    Ok((
+        x.trim().parse().map_err(|_| "a tile is x,y")?,
+        y.trim().parse().map_err(|_| "a tile is x,y")?,
+    ))
 }
 
 fn no_package(directory: &Path) -> BoxError {
@@ -339,8 +373,22 @@ pub fn run(mut options: Options) -> Result<(), BoxError> {
         let hash = resolve_hash(&options.package_directory(), options.map_hash.as_deref())?;
         return play::run(&options.plan(scenarios::find(id)?, &hash, workers), out);
     }
-    let selected = options.scenarios()?;
     let hash = resolve_hash(&options.package_directory(), options.map_hash.as_deref())?;
+    if options.survey_chokes {
+        let out = options
+            .out
+            .parent()
+            .unwrap_or(Path::new("."))
+            .join("chokes.txt");
+        fs::create_dir_all(out.parent().unwrap_or(Path::new(".")))?;
+        return choke::survey_map(
+            &options.package_directory(),
+            &hash,
+            &options.survey_at,
+            &out,
+        );
+    }
+    let selected = options.scenarios(&hash)?;
     let cores = std::thread::available_parallelism().map_or(1, usize::from);
     let counts = worker_counts(&options.workers, cores)?;
     let directory = options

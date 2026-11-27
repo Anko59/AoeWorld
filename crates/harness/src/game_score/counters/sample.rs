@@ -1,6 +1,7 @@
 //! The world at a sampled tick: the census (one pass over every unit) and the
 //! engine's cumulative counters. A window reads the samples at its two ends
 //! (differences of the cumulative ones) and between them (peaks and means).
+use crate::game_score::choke::ChokeTotals;
 use crate::perf_scale::stats::memory;
 use aoe_core::PlayerId;
 use aoe_simulation::{GameWorld, OrderDemand, OrderIssuer};
@@ -73,6 +74,8 @@ pub(in crate::game_score) struct Sample {
     pub losses: u64,
     /// Buildings whose id showed for the first time, since the start.
     pub buildings_born: u64,
+    /// What the watch at the choke counts, in the staged scenarios; `None` elsewhere.
+    pub choke: Option<ChokeTotals>,
     /// Resident memory of the process now, MiB: wall-clock noise, not game.
     pub resident_mib: u64,
 }
@@ -120,6 +123,7 @@ pub(in crate::game_score) fn capture(
         kills,
         losses,
         buildings_born,
+        choke: None,
         resident_mib: memory()["rss_mib"].as_u64().unwrap_or(0),
     }
 }

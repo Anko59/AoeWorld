@@ -11,15 +11,16 @@ work at different scale scenarios (early game, middle game, late game ...) all
 of it on real maps that are really in the game". The name is "game score";
 "scoreboard" is the owner-save replay of [scoreboard](scoreboard.md).
 
-Two scenarios exist, `natural` and `late`. Everything here is informational:
-nothing gates. The choke and bridge numbers and the Callgrind child come in
-later changes. `make ship` writes the game score into the pull request
-([below](#in-make-ship)).
+Four scenarios exist. `natural` and `late` are played by the Rust AI; `march` and
+`battle` are staged at a real choke of the map, with no AI seat
+([the choke scenarios](game-score-chokes.md)). Everything here is informational:
+nothing gates. The Callgrind child comes in a later change. `make ship` writes the
+game score into the pull request ([below](#in-make-ship)).
 
 ## Run it
 
 ```sh
-make game-score                                 # both scenarios, 1 worker and this machine's cores
+make game-score                                 # the four scenarios, 1 worker and this machine's cores
 make game-score GAME_SCORE_ARGS='--scenario late --workers 1,4'
 make game-score GAME_SCORE_ARGS='--scenario natural --ticks 3000'
 make game-score GAME_SCORE_ARGS='--package-directory <dir> --map-hash <64 hex digits>'
@@ -36,10 +37,10 @@ container sees. Any other package works too, down to a synthetic one.
 
 | flag | meaning | default |
 | --- | --- | --- |
-| `--scenario` | `natural` or `late`; one flag, one scenario | both |
+| `--scenario` | `natural`, `late`, `march` or `battle`; one flag, one scenario | every scenario of the map |
 | `--package-directory` | where `<hash>.json` and its pages are | `packages` of the shared home |
 | `--map-hash` | the package to play on | the only package of the directory |
-| `--seats` | seats, all played by the Rust AI | 100 |
+| `--seats` | seats, all played by the Rust AI (a staged scenario has the seats of its armies) | 100 |
 | `--ticks` | ticks played (ten ticks are one game second); a window that does not fit is left out | the scenario's own |
 | `--seed` | seeds the village layout | 1 |
 | `--late-percent` | scale of the late-game recipe in percent | the scenario's (100) |
@@ -49,19 +50,22 @@ container sees. Any other package works too, down to a synthetic one.
 | `--no-orders` | keep no order log: time the run as a live server runs | off |
 | `--parallel` | play every run at once, one process each (all scenarios at all worker counts): the pull request's way, about the time of the longest run | off |
 | `--out` | the JSON report | `.cache/game-score/game-score.json` |
+| `--survey-chokes`, `--survey-at x,y` | survey the map for chokes instead of playing it (written to `chokes.txt` beside `--out`), and measure the neck at a tile in full | off |
 
 ## Scenarios
 
 A scenario is data (`game_score/scenarios/`): how the match starts, how many
 ticks are played, which windows of them are reported. The runner plays every
-scenario the same way, so a new one (the battle at a choke, the march over a
-bridge) is one more constant, plus a `Start` when it needs another beginning.
+scenario the same way, so a new one is one more constant, plus a `Start` when it
+needs another beginning.
 The whole run is always reported too, as the window `whole`.
 
 | scenario | start | ticks | windows (ticks) | why these |
 | --- | --- | --- | --- | --- |
 | `natural` | one village per seat, as `POST /match` places them; 100 seats, seed 1 | 10,000 (16 min 40 s) | `early` 1,000 to 3,000, `middle` 8,000 to 10,000 | 200 ticks show nothing: 400 units, no delivery, no fight. From tick 1,000 on, deliveries and orders fill the early window; the first real fights are in the middle one |
 | `late` | the owner's late game on every village (`late_game.rs`) at 100 percent: about 9,600 units; 100 seats | 1,200 (2 minutes) | `late` 600 to 1,200 | the first minute is the warm-up: 3,800 villagers walk to work at once and the AI brains take their first decisions. The Steward and the General start working and the armies meet in the second minute |
+| `march` | 800 Militia on one bank of a real choke (a river ford), one formation move to the other | 2,400 (4 minutes) | `crossing` | the ability to cross a choke, with nothing else going on ([chokes](game-score-chokes.md)) |
+| `battle` | two armies of 400 (melee and ranged) sent across the same choke from opposite banks, attack-moving | 4,500 (7.5 minutes) | `fight` | a fight that always happens, in the narrows |
 
 `late` runs at the full recipe: it starts in 7 s, so the scenario takes under a
 minute at one worker (see the measured times below). Nothing is scaled and no
@@ -87,6 +91,7 @@ Each is a whole number per window (`service`), the same at any worker count.
 | management units | the Steward's and the General's `StewardWork` and `GeneralWork`, summed over the ticks; orders by issuer (`OrderDemand`) for the Vassal, the Rust AI, the automations and the others. The Vassal keeps no per-tick work counter: its orders are its work |
 | fights | hits, attacker-ticks, attack searches, first blows after contact and the ticks they waited (all summed over the ticks), kills and losses of every seat (a loss may be a building) |
 | economy | food, wood, gold and stone delivered, every tick, from `recent_deliveries` (below) |
+| choke, battle | in `march` and `battle` only: units across the line of the choke, the neck's throughput, standing still in the neck, arrival at the goal; the first blow, who fought and who only queued, who survived ([chokes](game-score-chokes.md#the-numbers)) |
 
 The cost of a window (`cost`) is wall time and memory, so noisy and never
 compared between runs: seconds inside the ticks, tick milliseconds (mean, p50,
@@ -127,6 +132,7 @@ scenarios[]
     id, from_tick, to_tick             ticks from_tick + 1 through to_tick
     service                            whole numbers, the same at any worker count
       size, arrival, planning, management, fights, economy
+      choke, battle                    only in a staged scenario (march, battle)
     cost                               wall time and memory: instructions, tick_seconds, tick_ms, peak_memory_mib
     efficiency                         basis, unit, per_arrival, per_thousand_resources_delivered, per_hit, per_unit_produced
   series[]                             one entry per game minute (600 ticks; the last may be shorter)
@@ -165,7 +171,7 @@ not fail the run.
 
 A scenario that is not the same game at every worker count carries
 `fixed_workers`: it is played twice at that count and the report says so in its
-`note`. Both scenarios are the same game at 1 and 4 workers today.
+`note`. All four scenarios are the same game at 1 and 4 workers today.
 
 The engine fixes its thread pool once per process, so each worker count plays
 in a child process of its own.
@@ -218,12 +224,13 @@ make ci-explain             # says "game-score (make ship, not a CI job): runs b
    ([CI selection](../ci-selection.md#local-checks-the-game-score)). Otherwise ship prints one
    line (`skipped because ...`) and does nothing else. If the map is not in the shared home
    (`make game-map`), ship says so in one line and goes on.
-2. **The branch.** Both scenarios at 1 and 4 workers (the determinism check: two different
+2. **The branch.** Every scenario of the set (the four on the owner's map) at 1 and 4 workers (the determinism check: two different
    counts, not every core, because several agents ship at once on one machine; one constant,
    `WORKERS` in `crates/harness/src/game_score/pr/real.rs`), every run in a process of its own
    and all at once (`--parallel`): 75 to 140 s on the owner's Mac, where the other agents'
-   builds were running. The release build of the checkout comes first (39 to 67 s once the
-   dependencies are compiled).
+   builds were running (`march` and `battle` take 1 to 6 s each, so the set costs what `natural`
+   costs). The release build of the checkout comes first (39 to 67 s once the dependencies are
+   compiled).
 3. **The merge base, without paying for it every time.** The `service` numbers are a function
    of the game's code, the map and the scenarios, so a result is stored under a hash of
    exactly those, not under a commit: every file (path and Git object id) of every crate in the
@@ -258,7 +265,9 @@ make ci-explain             # says "game-score (make ship, not a CI job): runs b
      still chaotic: any change of behaviour perturbs every number a little, and one seed is
      one sample. So a judged number (share of orders arrived, order to arrival and to first
      step p95, movers waiting, wait for a route, route orders stuck or expired, idle
-     villagers, resources delivered) gets a line only when it moved beyond what it does across
+     villagers, resources delivered; in the staged scenarios units across the line, the crossing
+     rate, standing still in the neck, units waiting, first blow, units that only queued)
+     gets a line only when it moved beyond what it does across
      seeds on the same code ([the usual spread](#the-usual-spread)): by more than twice its
      measured spread, never under 5 percent, and by more than a minimum absolute move (the
      range it showed across the seeds, and for a small count 10, for a delay 3 ticks), so that
@@ -303,6 +312,8 @@ game-score: natural/early first-step-p95 +20% because orders go through the new 
 merge base, `because`, a reason. Without a window the line covers every named window of the
 scenario (`whole` is shown but not judged). The names: `arrived`, `arrival-p95`,
 `first-step-p95`, `waiting`, `wait-p95`, `stuck`, `expired`, `idle`, `delivered`,
+`crossed`, `crossing-rate`, `first-crossing`, `last-crossing`, `waiting-near-side`,
+`still-inside`, `at-goal`, `first-blow`, `queued`,
 `cost-per-arrival`, `cost-per-resources`, `cost-per-hit`, `cost-per-unit`. A move with such a
 line is shown as explained, with the reason; one without says "moved beyond its usual spread
 (one seed)" and the line it would take. A line that understates the move says so, one that
@@ -402,18 +413,20 @@ request that added the scenarios.
 | --- | --- | --- | --- |
 | `natural`, 10,000 ticks | 54 s | 46 s | 5 to 6 s |
 | `late`, 1,200 ticks | 55 s | 44 s | 7 s |
+| `march`, 2,400 ticks | 1.3 s | 1.4 s | 0.5 s |
+| `battle`, 4,500 ticks | 5.6 s | 5.7 s | 0.8 s and 0.4 s |
 
 These are runs on a quiet machine (load average 2.6 to 4.4). The same scenarios
 took 86 s and 107 s (`natural`) and 91 s and 77 s (`late`) on a machine shared
 with other builds, so wall time moves by half and more, and at 4 workers a busy
 machine can be slower than at 1. The game numbers are the same on a busy and a
 quiet machine; they change when the game changes (the route planning of #1122
-moved them a little). Both scenarios are inside the two-minute budget of a
-pull-request scenario at one worker count.
+moved them a little). Every scenario is inside the two-minute budget of a
+pull-request scenario at one worker count; the two staged ones need no world of 100 villages
+and cost seconds ([the choke scenarios](game-score-chokes.md)).
 
 ## What is not here yet
 
-The battle at a choke, the march over a bridge and the choke-crossing counter;
-the Callgrind child (instructions per window, memory per unit), which makes the
+The Callgrind child (instructions per window, memory per unit), which makes the
 cost per unit of service judgeable; a way for the map to reach CI (the owner decides
 it); the gate.

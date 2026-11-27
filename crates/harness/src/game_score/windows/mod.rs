@@ -6,6 +6,8 @@ mod service;
 mod tests;
 
 pub(super) use cost::{Cost, Efficiency};
+#[cfg(test)]
+pub(super) use service::{Battle, Crossing};
 pub(super) use service::{Record, Service};
 
 use super::scenarios::Span;
