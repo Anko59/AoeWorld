@@ -156,7 +156,7 @@ test("publishes the fine minimap without reading a GPU-backed canvas or blocking
       image.close();
       return Array.from(context.getImageData(0, 0, 1, 1).data);
     }, url),
-  ).toEqual([124, 164, 82, 255]);
+  ).toEqual([118, 150, 76, 255]);
 
   await page.evaluate(async () => {
     const nav = Reflect.get(window, "aoeNavigation");

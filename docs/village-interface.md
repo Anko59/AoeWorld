@@ -114,7 +114,7 @@ and modes. Without local configuration it uses synthetic art; an ignored
 `{"url":"http://127.0.0.1:8121/"}` switches it to an already running native-pack
 `make dev` instance. The proof retains nine screenshots and served build IDs
 under `.cache/hover-options/`; these files must never enter Git.
-The minimap uses a diamond frame with visible deposits and solid, outlined marks
+The minimap uses a gilded diamond frame with visible deposits and solid, outlined marks
 for the known actors: own ones with a pale rim, and six or more joined buildings
 of one player, walls and farms included, as a keep. Other players' marks lie over
 own ones, so a raid on an own town is seen; own units lie over their buildings,
@@ -131,6 +131,14 @@ replaces a large view with no visible part, or a small one whose centre is off
 the map. The marker lies above the map and below the buttons over it. A camera
 jump closes the brackets on the new place once, a frame never over the map's
 border; with reduced motion a second, still bracket shows for 0.7 s instead.
+Every land sample takes one colour from its own class and relief shade. Land in
+sight is lifted inside a light rim, remembered land is dim, and unexplored land
+is a dark chart drawn from position alone: the composed canvas stays empty in an
+unexplored cell and fades inward only, so no scaling shows land under the fog.
+An explored cell shows the sample over it: the coarse raster has one per 4x4
+cells, so it can show land from outside the cell until the fine raster arrives.
+Until a map's land arrives, or if it fails, explored cells show a flat tone.
+With fog off the plain land is shown.
 Grid remains available through its minimap button and G. Selection ellipses use
 a continuous constant-pixel stroke across all renderers and zoom levels.
 

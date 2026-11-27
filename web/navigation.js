@@ -166,6 +166,7 @@ export function initNavigation() {
     mapHash = hash;
     clearTimeout(retryTimer);
     fog(false, []);
+    fog.land(null);
     panel.dataset.mapHash = hash;
     rasterState('pending');
     delete panel.dataset.coarseMs; delete panel.dataset.fineMs;
@@ -219,6 +220,7 @@ export function initNavigation() {
         if (rasterUrl) URL.revokeObjectURL(rasterUrl);
         rasterUrl = url;
         strategic.terrain(canvas, raster);
+        fog.land(raster);
         samples = raster.samples;
         rasterState(stage === 'coarse' ? 'coarse' : 'ready');
         panel.dataset[`${stage}Ms`] = (performance.now() - started).toFixed(1);

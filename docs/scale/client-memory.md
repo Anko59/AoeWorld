@@ -52,6 +52,7 @@ storage against its 512 MiB ceiling.
 | Canvas backing | 4,194,304 pixels, at most 4096 per axis; raster buffers shrink after large resizes |
 | Terrain minimap | One raster, at most 512² RGBA pixels; no terrain chunk requests |
 | Strategic fog raster | One 256² canvas, one ImageData and one 65,536-word comparison buffer: 768 KiB payload |
+| Known land | One 512² canvas (1 MiB backing), one 512² ImageData, seven 65,536-byte planes and at most 512² raster bytes: about 1.7 MiB besides the backing; composed at most once a frame |
 | Subscription fog | One replacement view: at most 512² tile states and 65,536 overview entries |
 | Units | 16,384 per subscription; snapshots replace residents and removals prune interpolation |
 | Interpolation | Eight samples per unit, at most 16,384 histories |

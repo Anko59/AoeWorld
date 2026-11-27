@@ -8,23 +8,42 @@ export const MAX_MINIMAP_BYTES = MINIMAP_HEADER_BYTES + MAX_MINIMAP_SAMPLES ** 2
 // Forest is deliberately much darker than every open-ground colour, and the
 // three water kinds share one hue family that no land class uses.
 export const MINIMAP_CLASSES = [
-  ['grass', [124, 164, 82]],
-  ['dry grass', [176, 166, 96]],
-  ['forest', [34, 84, 44]],
-  ['soil', [142, 112, 76]],
-  ['sand', [216, 196, 136]],
-  ['rock', [134, 128, 122]],
-  ['snow', [238, 242, 246]],
-  ['ice', [196, 224, 236]],
-  ['shore', [108, 168, 184]],
-  ['river', [66, 138, 196]],
-  ['lake', [52, 112, 170]],
-  ['ocean', [30, 70, 118]],
-  ['cropland', [190, 168, 98]],
-  ['pasture', [150, 172, 104]],
+  ['grass', [118, 150, 76]],
+  ['dry grass', [166, 152, 98]],
+  ['forest', [34, 74, 44]],
+  ['soil', [140, 112, 78]],
+  ['sand', [206, 190, 142]],
+  ['rock', [132, 126, 120]],
+  ['snow', [236, 239, 236]],
+  ['ice', [194, 218, 228]],
+  ['shore', [98, 164, 178]],
+  ['river', [75, 131, 171]],
+  ['lake', [49, 109, 154]],
+  ['ocean', [28, 73, 111]],
+  ['cropland', [176, 156, 88]],
+  ['pasture', [140, 154, 90]],
 ];
+// A class under a relief shade; lit pale classes pass 255. Shade 8 is the exact
+// class colour. The power curve lifts the one- and two-step slopes that make up
+// nearly all real relief; water is always level.
+export function minimapTone(kind, shade) {
+  const slope = kind >= 8 && kind <= 11 ? 0 : (shade - 8) / 8;
+  const light = Math.sign(slope) * Math.abs(slope) ** 0.62;
+  const tint = light > 0 ? [255, 244, 206] : [22, 28, 50];
+  const weight = (light > 0 ? 0.22 : 0.62) * Math.abs(light);
+  const keep = (light > 0 ? 1 + 0.42 * light : 1) * (1 - weight);
+  return MINIMAP_CLASSES[kind][1].map((value, at) => value * keep + tint[at] * weight);
+}
+// RGBA of every sample byte; the two unused classes stay wholly transparent.
+const tones = new Uint8ClampedArray(256 * 4);
+MINIMAP_CLASSES.forEach((_, kind) => {
+  for (let shade = 0; shade < 16; shade++) {
+    tones.set([...minimapTone(kind, shade), 255], (kind | shade << 4) * 4);
+  }
+});
+const toneWords = new Uint32Array(tones.buffer);
 
-// Returns {samples, rgba} for a valid raster and null for anything else; a
+// Returns {samples, rgba, cells} for a valid raster and null for anything else; a
 // rejected raster leaves the schematic map in place.
 export function decodeMinimap(buffer) {
   if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < MINIMAP_HEADER_BYTES
@@ -35,19 +54,15 @@ export function decodeMinimap(buffer) {
   const samples = bytes[4] | bytes[5] << 8;
   if (samples < 1 || samples > MAX_MINIMAP_SAMPLES
     || bytes.length !== MINIMAP_HEADER_BYTES + samples * samples) return null;
-  const rgba = new Uint8ClampedArray(samples * samples * 4);
-  for (let index = 0; index < samples * samples; index++) {
-    const cell = bytes[MINIMAP_HEADER_BYTES + index];
-    const color = MINIMAP_CLASSES[cell & 15]?.[1];
-    if (!color) return null;
-    // 8 is level ground; each step is 4.5% brighter or darker.
-    const light = 1 + ((cell >> 4) - 8) * 0.045;
-    rgba[index * 4] = color[0] * light;
-    rgba[index * 4 + 1] = color[1] * light;
-    rgba[index * 4 + 2] = color[2] * light;
-    rgba[index * 4 + 3] = 255;
+  const cells = bytes.subarray(MINIMAP_HEADER_BYTES);
+  const rgba = new Uint8ClampedArray(samples * samples * 4), words = new Uint32Array(rgba.buffer);
+  // Each sample decides alone: no neighbour's class can show through the fog.
+  for (let index = 0; index < cells.length; index++) {
+    const tone = toneWords[cells[index]];
+    if (tone === 0) return null;
+    words[index] = tone;
   }
-  return { samples, rgba, cells: bytes.subarray(MINIMAP_HEADER_BYTES) };
+  return { samples, rgba, cells };
 }
 
 // Normalized isometric map coordinates, before the SVG square's letterboxing.
