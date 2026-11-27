@@ -12,7 +12,7 @@ pub enum BehaviourScene {
     Hunt,
     Camps,
     Bridge,
-    Regrowth,
+    Regrowth(u32),
 }
 
 impl GameWorld {
@@ -25,6 +25,8 @@ impl GameWorld {
         w.set_fog_disabled(true);
         if matches!(scene, BehaviourScene::Hunt) {
             w.config.tick_hz = 5;
+        } else if let BehaviourScene::Regrowth(tick_hz) = scene {
+            w.set_tick_hz(tick_hz);
         }
         clear_kingdom_plot(&mut w, TileRect::from_xywh(80, 80, 90, 90))?;
         let home = w.place_town_center(PlayerId(0), TileCoord::new(100, 100))?;
@@ -98,7 +100,7 @@ impl GameWorld {
                 w.issue_hunt(PlayerId(0), &[worker], deer)?;
             }
             BehaviourScene::Bridge => {}
-            BehaviourScene::Regrowth => w.prepare_regrowth_demo(worker)?,
+            BehaviourScene::Regrowth(_) => w.prepare_regrowth_demo(worker)?,
             BehaviourScene::Camps => {
                 w.insert_building(
                     PlayerId(0),

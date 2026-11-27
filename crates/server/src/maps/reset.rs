@@ -39,7 +39,7 @@ pub(crate) async fn reset(
                 "behaviour-deer" => BehaviourScene::Deer,
                 "behaviour-hunt" => BehaviourScene::Hunt,
                 "behaviour-bridge" => BehaviourScene::Bridge,
-                "regrowth" => BehaviourScene::Regrowth,
+                "regrowth" => BehaviourScene::Regrowth(crate::Config::sim_hz_from_env()),
                 _ => BehaviourScene::Camps,
             };
             let Ok((package, elevation, water)) = aoe_simulation::GameWorld::behaviour_environment(
