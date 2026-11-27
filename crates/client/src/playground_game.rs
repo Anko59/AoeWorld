@@ -152,6 +152,7 @@ pub(super) fn remember(client: &mut Client, state: &GameplayUnitState, tick: u64
     }
     let owner = village::owner(client);
     client.village.remember_idle(owner, state);
+    client.village.remember_prey(owner, state);
     let Client {
         units,
         presentation,

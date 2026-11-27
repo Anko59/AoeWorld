@@ -11,6 +11,7 @@ pub(super) fn send(client: &mut Client, message: Message) -> bool {
         && crate::playground::game::network::send(client, &bytes)
     {
         client.order_feedback.record(sequence, None);
+        crate::playground::game::network::alerts::sent(client, &message);
         true
     } else {
         false

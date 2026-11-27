@@ -12,6 +12,7 @@ export function navigation_frame(state) {
 }
 export function navigation_present(state) { window.aoeNavigation?.present(state); }
 export function navigation_bind(callback) { window.aoeNavigation?.bindOrders?.(callback); }
+export function navigation_hits(places) { window.aoeNavigation?.hits?.(places); }
 export function navigation_interrupt(state) {
   const pose = window.aoeNavigation?.strategic?.interrupt();
   if (pose) state.set(pose);
@@ -61,6 +62,8 @@ extern "C" {
     fn navigation_present(state: &[f64]);
     fn navigation_bind(callback: &js_sys::Function);
     fn navigation_interrupt(state: &mut [f64]);
+    /// World x and y of each new foreign hit of one tick that no screen shows.
+    pub(in super::super) fn navigation_hits(places: &[f64]);
     pub(in super::super) fn overview_active() -> bool;
     pub(in super::super) fn camera_fragment(state: &mut [f64]);
     pub(in super::super) fn capture_update(

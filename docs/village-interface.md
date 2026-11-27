@@ -34,8 +34,10 @@ a ground rally, which also ends an order left armed. It never attacks, gathers,
 garrisons, repairs, trades or unloads, never moves the camera, and does nothing
 outside the world. While an order is armed (Move, Attack move, Patrol, General
 alone) the left button orders too if an own living unit or sheep is selected;
-otherwise it ends that order and jumps. Rings mark the latest eight orders on
-the map; Stop clears them. With a building placement or a far-view production
+otherwise it ends that order and jumps. The latest eight orders are marked on the
+map for 0.7 s: four ivory chevrons close on a move, four orange ones between the
+axes on an attack-move, and two gold arrowheads part from a patrol. With reduced
+motion they stand still for 0.9 s; Stop clears them. With a building placement or a far-view production
 destination armed, a right-click anywhere on the map only cancels it. Cancelling
 a placement also ends every other armed order.
 
@@ -131,6 +133,29 @@ replaces a large view with no visible part, or a small one whose centre is off
 the map. The marker lies above the map and below the buttons over it. A camera
 jump closes the brackets on the new place once, a frame never over the map's
 border; with reduced motion a second, still bracket shows for 0.7 s instead.
+
+A new hit on an own unit or building that the screen does not show raises an
+alert on the minimap: a hollow eight-point star for eight seconds, with three
+beats of a ring around it (none with reduced motion), half as large again on the
+whole map. Hits within 24 tiles of its first blow keep the star and raise no
+other. The newest four battles have a star; up to 64 are remembered, and the
+stalest one without a star makes room for another. A left click
+within 8 px jumps exactly to a star, a right-click orders as usual, and a screen
+reader hears "Under attack" at most once in ten seconds. Hits by own strikers are no
+attack, nor are bites of game: the server tells animals near the camera only, so game
+is every boar it ever told of and what an own villager was told to hunt. A boar bites
+only who struck it. A wolf attacks unprovoked, so each of its bites is an alert, also
+on a villager that fights it. A building lost within 12 s of its
+last hit is an alert too, at its middle, and a wall or a gate also without one, as
+one blow can take it. Nothing is told of what the player deleted or cancelled in the
+last 5 s of game time, nor where an own building is told on the same footprint in
+the same tick (stone over a palisade, a gate in a wall). Only the changes of a
+tick are read, and a unit's hit only for one second of game time: neither a state
+seen for the first time nor the snapshot of
+a pan or a reconnection is an alert. On the detailed scene, hits inside the
+canvas, also those behind a panel, are not told; in the far view and under the
+whole map, where no unit is shown, all are.
+
 Every land sample takes one colour from its own class and relief shade. Land in
 sight is lifted inside a light rim, remembered land is dim, and unexplored land
 is a dark chart drawn from position alone: the composed canvas stays empty in an

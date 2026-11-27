@@ -54,6 +54,7 @@
       </section>
     <section id="minimap" aria-label="Map navigation" data-raster="pending">
       <p id="minimap-title">Minimap · schematic</p>
+      <p id="minimap-news" aria-live="polite"></p>
       <svg id="minimap-map" viewBox="0 0 256 256" role="img" tabindex="0" aria-label="Whole map navigation. Wheel to zoom; drag to pan; click to jump; right-click sends the selection; arrow keys jump across the map.">
         <g id="minimap-view"><g id="minimap-frame" transform="translate(128 128) rotate(45) scale(.7071067811865476) translate(-128 -128)">
         <rect width="256" height="256" fill="#253c2c"></rect>
@@ -84,6 +85,7 @@
           <g stroke="#0c0703" stroke-opacity=".7" style="--wide:1.7"><path class="tick" style="--long:2.6" d="M144 16l-128 128M16 144l128-128M112 16l128 128M240 144l-128-128M160 32l-128 128M32 160l128-128M96 32l128 128M224 160l-128-128M176 48l-128 128M48 176l128-128M80 48l128 128M208 176l-128-128M208 80l-128 128M80 208l128-128M48 80l128 128M176 208l-128-128M224 96l-128 128M96 224l128-128M32 96l128 128M160 224l-128-128M240 112l-128 128M112 240l128-128M16 112l128 128M144 240l-128-128"/><path class="tick" style="--long:5" d="M192 64l-128 128M64 192l128-128M64 64l128 128M192 192l-128-128"/></g>
           <g stroke="#e8cf95" style="--wide:.8"><path class="tick" style="--long:2.6" d="M144 16l-128 128M16 144l128-128M112 16l128 128M240 144l-128-128M160 32l-128 128M32 160l128-128M96 32l128 128M224 160l-128-128M176 48l-128 128M48 176l128-128M80 48l128 128M208 176l-128-128M208 80l-128 128M80 208l128-128M48 80l128 128M176 208l-128-128M224 96l-128 128M96 224l128-128M32 96l128 128M160 224l-128-128M240 112l-128 128M112 240l128-128M16 112l128 128M144 240l-128-128"/><path class="tick" style="--long:5" d="M192 64l-128 128M64 192l128-128M64 64l128 128M192 192l-128-128"/></g>
         </g>
+        <g id="minimap-pings"></g><g id="minimap-alerts"></g>
       </svg>
       <svg id="minimap-marker" width="100" height="100" aria-hidden="true"></svg>
       <button id="minimap-zoom" type="button" aria-label="Reset minimap zoom" title="Minimap zoom · click to reset and follow camera">1×</button>

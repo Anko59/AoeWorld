@@ -13,7 +13,7 @@ function drawnMap(bounds, stretch) {
 
 // Terrain/fog are retained SVG images. Only their transform and occupied actor
 // pixels change; neither zoom nor panning regenerates a world raster.
-export function initMinimapView(svg, panel, jump, order, { pings } = {}) {
+export function initMinimapView(svg, panel, jump, order, { alerts, pings } = {}) {
   const locator = initLocator(document.getElementById('minimap-marker'));
   const drawMarks = initMarks(document.getElementById('minimap-marks'));
   let ground = null, frame = null;
@@ -58,7 +58,8 @@ export function initMinimapView(svg, panel, jump, order, { pings } = {}) {
     }
     for (const [key, node] of nodes) if (!live.has(key)) { node.remove(); nodes.delete(key); }
     drawMarks(actors, world, state(), frame);
-    pings?.draw();
+    pings?.draw(world, state(), frame);
+    alerts?.draw(world, state(), frame);
   }
   function reset() { zoom = 1; follow = true; update(world, camera); }
   // `seen`: the four unclamped ground corners of the screen, null for none.
@@ -79,7 +80,7 @@ export function initMinimapView(svg, panel, jump, order, { pings } = {}) {
     if (event.button !== 0 && event.button !== 2) return;
     event.preventDefault();
     const point = minimapOrderPoint(svg.getBoundingClientRect(), event.clientX, event.clientY, world, state(), svg.getAttribute('preserveAspectRatio') === 'none');
-    if (order?.(point, world, event) || event.button === 2) return;
+    if (order?.(point, event) || event.button === 2) return;
     dragging = { id: event.pointerId, x: event.clientX, y: event.clientY, center: [...center], moved: false };
     svg.setPointerCapture(event.pointerId);
   });
@@ -94,9 +95,16 @@ export function initMinimapView(svg, panel, jump, order, { pings } = {}) {
       .map((v, i) => Math.max(0, Math.min(world[i] - 1, v)));
     render();
   });
+  // The exact place of a star under the pointer, else the land there.
+  function clicked({ clientX, clientY }) {
+    const bounds = svg.getBoundingClientRect(), stretched = svg.getAttribute('preserveAspectRatio') === 'none';
+    const map = drawnMap(bounds, stretched);
+    return (map && alerts?.at(clientX - map.origin[0], clientY - map.origin[1]))
+      ?? minimapWorldPoint(bounds, clientX, clientY, world, state(), stretched);
+  }
   svg.addEventListener('pointerup', event => {
     if (dragging?.id !== event.pointerId) return;
-    if (!dragging.moved) jump(minimapWorldPoint(svg.getBoundingClientRect(), event.clientX, event.clientY, world, state(), svg.getAttribute('preserveAspectRatio') === 'none'));
+    if (!dragging.moved) jump(clicked(event));
     dragging = null;
     svg.releasePointerCapture(event.pointerId);
   });

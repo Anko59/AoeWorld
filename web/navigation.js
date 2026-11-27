@@ -2,6 +2,7 @@
 import { MAX_MINIMAP_BYTES, decodeMinimap } from '/minimap.js';
 import { initStrategic } from '/navigation/strategic.js';
 import { initMinimapView } from '/navigation/view.js';
+import { initAlerts } from '/navigation/minimap/alerts.js';
 import { initMinimapOrders } from '/navigation/minimap/orders.js';
 import { initFogMap } from '/navigation/fog.js';
 import { initViews } from '/navigation/views.js';
@@ -123,8 +124,13 @@ export function initNavigation() {
   document.addEventListener('visibilitychange', () => { if (document.hidden) stopPanning(); });
   document.addEventListener('focusin', event => { if (editable(event.target)) stopPanning(); });
 
-  const orders = initMinimapOrders(svg);
-  const view = initMinimapView(svg, panel, point => { if (point) pending = point; }, orders.press, { pings: orders });
+  const orders = initMinimapOrders(document.getElementById('minimap-pings'));
+  // The views keep the newest alert only, so a count of them is clock enough.
+  let alertCount = 0;
+  const alerts = initAlerts(document.getElementById('minimap-alerts'), document.getElementById('minimap-news'),
+    ([x, y]) => views.alert(++alertCount, x, y));
+  const view = initMinimapView(svg, panel, point => { if (point) pending = point; }, orders.press,
+    { alerts, pings: orders });
   const views = initViews(([x, y, zoom]) => {
     const hash = `x=${x}&y=${y}&zoom=${zoom}`;
     // Panning and H can move the camera while leaving this fragment intact.
@@ -176,6 +182,7 @@ export function initNavigation() {
     view.update(world, center, null);
     view.reset();
     view.actors([]);
+    alerts.clear();
     strategic.reset();
     strategic.terrain(null);
     pending = [NaN, NaN];
@@ -268,6 +275,7 @@ export function initNavigation() {
   window.aoeNavigation = {
     clearGroups() {
       views.reset();
+      alerts.clear();
       strategic.reset();
       groups.forEach(group => group.clear());
       groupTap = null;
@@ -301,6 +309,7 @@ export function initNavigation() {
     },
     fog,
     bindOrders: orders.bind,
+    hits: alerts.hits,
     actors: view.actors,
     resources: strategic.resources,
     strategic,

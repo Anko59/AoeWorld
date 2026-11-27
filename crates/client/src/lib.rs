@@ -28,6 +28,7 @@ mod png_page;
 #[cfg(all(target_arch = "wasm32", not(feature = "diagnostics")))]
 mod unit_visuals;
 
+pub mod alerts;
 pub mod fog;
 pub mod resource_state;
 pub mod strategic;

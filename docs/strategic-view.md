@@ -168,9 +168,13 @@ At far zoom, Ctrl+F1–F4 save the camera position and zoom for this world;
 Shift+F1–F4 recall them. On-screen slot buttons recall a saved view (an empty slot saves).
 Plain F1–F6 still control layers. H uses the existing main-base command.
 End jumps to the largest reported owned General army (soldier count, then
-lowest General ID). Space jumps to the newest observed damage to an owned
-unit or building. These jumps preserve zoom; a saved view restores zoom.
-Missing targets stay disabled. Bookmarks and alerts clear when the world resets.
+lowest General ID). Space jumps to the newest alert, at any zoom: the first blow
+of the latest battle that the minimap marked with a star
+([village interface](village-interface.md)). Further blows of a battle are no new
+alert. Space also works under the whole map, but does not jump while a button has
+the focus: it presses that button. These jumps preserve zoom; a saved view restores zoom.
+Missing targets stay disabled. Bookmarks and alerts clear when the world resets
+and when the client connects again.
 Typing in a form or opening a dialog suppresses these shortcuts.
 
 ## Units here
