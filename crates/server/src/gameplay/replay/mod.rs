@@ -10,6 +10,7 @@ use std::{
     path::Path,
     sync::Arc,
 };
+pub(crate) mod counter;
 mod timing;
 pub use timing::Timing;
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;

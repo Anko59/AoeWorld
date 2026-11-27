@@ -16,7 +16,8 @@ not ship; the duel driver commits each step and the main session reviews and shi
 `aoe-harness ship` (`crates/harness/src/ship/`), run on the host by the same
 judge binary as the agent hooks (`.agents/hooks/harness.sh exec ship`, built
 from `origin/dev`; while bootstrapping, from the checkout's committed HEAD and
-labelled non-authoritative), never from uncommitted edits. `SHIP_TITLE`, `SHIP_BODY`,
+labelled non-authoritative), never from uncommitted edits; a Mac can build that
+judge [itself](local-development.md#shipping-from-the-mac-itself). `SHIP_TITLE`, `SHIP_BODY`,
 `SHIP_FORCE` and `SHIP_BASE` reach it through the environment, never through shell text, and the
 agent policy refuses `$` in agent-set Make values.
 

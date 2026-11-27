@@ -32,7 +32,7 @@
 //!   thread timing. The wait starts as late as that allows (`collect`, after
 //!   the world stepped) so it overlaps the tick's own work.
 use super::{Stats, Wait};
-use crate::{AppState, GameplayService, terrain_cache};
+use crate::{AppState, GameplayService, gameplay::replay::counter, terrain_cache};
 use aoe_ai::{Brain, Config as AiConfig, Seat as OrderSeat};
 use aoe_core::{PlayerId, TileCoord};
 use aoe_map::CompactChunk;
@@ -160,21 +160,6 @@ fn thread_cpu() -> Duration {
     Duration::ZERO
 }
 
-/// A running count of this thread's user-mode instructions; `None` where the
-/// kernel or container gives no hardware counter.
-fn instructions() -> Option<perf_event::Counter> {
-    use perf_event::{Builder, events::Hardware};
-    let mut counter = Builder::new(Hardware::INSTRUCTIONS)
-        .observe_self()
-        .any_cpu()
-        .exclude_kernel(true)
-        .exclude_hv(true)
-        .build()
-        .ok()?;
-    counter.enable().ok()?;
-    Some(counter)
-}
-
 fn decide(
     mut seat: Seat,
     stats: &Stats,
@@ -271,7 +256,7 @@ impl GameplayService {
             stats.wait(Wait::Settle, started.elapsed());
         }
         // The seats' work on the tick's thread: applying what was delivered.
-        let (started, cpu, counter) = (Instant::now(), thread_cpu(), instructions());
+        let (started, cpu, counter) = (Instant::now(), thread_cpu(), counter::running());
         for seat in &mut inner.seats {
             seat.feed();
         }

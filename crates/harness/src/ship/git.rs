@@ -21,6 +21,9 @@ pub(crate) fn git_raw(root: &Path, args: &[&str]) -> Result<String> {
     if matches!(args.first(), Some(&"rebase" | &"push")) {
         super::lock::prepare_command(root, &mut command).map_err(|e| e.to_string())?;
     }
+    if matches!(args.first(), Some(&"fetch" | &"push" | &"ls-remote")) {
+        super::github::account::git(&mut command);
+    }
     let output = if matches!(args.first(), Some(&"fetch" | &"push")) {
         remote::output(&mut command)?
     } else {

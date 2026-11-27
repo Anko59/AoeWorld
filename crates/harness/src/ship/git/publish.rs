@@ -21,6 +21,7 @@ pub(in crate::ship) fn push_command(root: &Path, head: &str) -> Command {
     let mut command = Command::new("git");
     command.arg("-C").arg(root).arg("push");
     command.env(prepush::ENV, head);
+    crate::ship::github::account::git(&mut command);
     command
 }
 

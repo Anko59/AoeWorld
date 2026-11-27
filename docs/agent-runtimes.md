@@ -84,7 +84,10 @@ is built from `refs/remotes/origin/dev`, so a branch cannot change the rules tha
 judge it. The binary is keyed by what it is compiled from at that commit
 (`crates/`, `gates/`, `fuzz/`, the root Cargo files and the toolchain file), so
 a `dev` commit that changes any of them triggers one rebuild and any other
-commit reuses the judge. While `origin/dev` has no
+commit reuses the judge. On a Mac with
+`AOE_NATIVE_SHIP=1` the ship commands, never the hooks, run a judge the Mac compiles
+from the same commit and keeps apart
+([local development](local-development.md#shipping-from-the-mac-itself)). While `origin/dev` has no
 runtime adapter yet, the judge is built from the checkout and labelled a
 **non-authoritative bootstrap** at session start. The registry and limits are
 always read from the checkout.

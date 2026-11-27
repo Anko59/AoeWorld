@@ -1,4 +1,4 @@
-use super::precheck::{GIB, check_at, free_bytes};
+use super::precheck::{GIB, available, check_at, free_bytes};
 use crate::ship::git::git;
 use std::{cell::RefCell, fs, path::Path};
 
@@ -112,6 +112,14 @@ fn missing_output_uses_its_existing_parent_filesystem() {
     let missing = temp.path().join("missing/cache");
     free_bytes(&missing).expect("measure the existing ancestor without creating output");
     assert!(!missing.exists());
+}
+
+#[test]
+fn free_bytes_take_the_block_counts_of_either_kernel_and_never_overflow() {
+    // macOS counts blocks in 32 bits and Linux in 64.
+    assert_eq!(available(5_000_000_u32, 4096_u64), 20_480_000_000);
+    assert_eq!(available(5_000_000_u64, 4096_u64), 20_480_000_000);
+    assert_eq!(available(u64::MAX, 4096_u64), u64::MAX);
 }
 
 #[test]

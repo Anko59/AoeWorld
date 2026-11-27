@@ -1,6 +1,6 @@
 //! User-only retired instructions and thread CPU time on the simulation thread.
+use super::counter::{self, Counter};
 use aoe_simulation::TickPhase;
-use perf_event::{Builder, Counter, ReadFormat, events::Hardware};
 use std::{
     collections::BTreeMap,
     io,
@@ -104,13 +104,8 @@ impl Probe {
         }))
     }
     pub(super) fn open() -> io::Result<Self> {
-        let mut counter = Builder::new(Hardware::INSTRUCTIONS)
-            .observe_self().any_cpu().inherit(false).exclude_kernel(true).exclude_hv(true)
-            .pinned(true).read_format(ReadFormat::TOTAL_TIME_ENABLED | ReadFormat::TOTAL_TIME_RUNNING)
-            .build().map_err(|e| io::Error::new(e.kind(), format!("perf_event_open instructions: {e}; run make save-replay-counter-check (Docker PERFMON and host perf_event_paranoid <= 2 required)")))?;
-        counter.enable()?;
         Ok(Self::new(Source::Hardware {
-            counter: Mutex::new(counter),
+            counter: Mutex::new(counter::pinned()?),
             thread: thread::current().id(),
         }))
     }

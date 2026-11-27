@@ -1,7 +1,9 @@
 //! Shared container caps and immediate memory admission; no slots or load wait.
-use std::{fs, io};
+use std::{fs, io, path::Path};
 
 pub(crate) const FLOOR_KIB: u64 = 3 * 1024 * 1024;
+const MEMINFO: &str = "/proc/meminfo";
+const LINUX: bool = cfg!(target_os = "linux");
 const CAPS: &str = include_str!("../../../../gates/container.args");
 
 pub(crate) fn cap_args() -> Vec<String> {
@@ -28,5 +30,27 @@ pub(crate) fn admit(text: &str) -> io::Result<()> {
 }
 
 pub(crate) fn check() -> io::Result<()> {
-    admit(&fs::read_to_string("/proc/meminfo")?)
+    admit_measured(meminfo()?)
+}
+
+/// Work is admitted only where its memory is measured.
+pub(crate) fn admit_measured(meminfo: Option<String>) -> io::Result<()> {
+    match meminfo {
+        Some(text) => admit(&text),
+        None => Err(io::Error::other(format!(
+            "no {MEMINFO} on this system: containers are admitted inside the Linux VM"
+        ))),
+    }
+}
+
+/// This host's memory; `None` only on a system that is not Linux.
+pub(crate) fn meminfo() -> io::Result<Option<String>> {
+    meminfo_at(Path::new(MEMINFO), LINUX)
+}
+
+pub(crate) fn meminfo_at(path: &Path, linux: bool) -> io::Result<Option<String>> {
+    match fs::read_to_string(path) {
+        Err(error) if !linux && error.kind() == io::ErrorKind::NotFound => Ok(None),
+        read => read.map(Some),
+    }
 }

@@ -76,19 +76,51 @@ every agent hook there, so Claude Code and the other runtimes are judged on a
 Mac exactly as on Linux. Both go through `.agents/hooks/colima.sh`, which runs
 one command in the VM in the current directory and returns its output and exit
 status. It forwards the harness's variables (`AOE_*`, `HARNESS_*`, `SHIP_*`,
-`REVIEW_*`, `PERF_*`, `SHOWCASE_*`, `DEV_PORT` and the test-thread settings),
-Git's hook context and your Git identity. `COLIMA_PROFILE` selects a VM other
-than `default`.
+`REVIEW_*`, `PERF_*`, `SHOWCASE_*`, `DEV_PORT`, `GAME_SCORE_PR_ARGS` and the
+test-thread settings), Git's hook context and your Git identity. `COLIMA_PROFILE`
+selects a VM other than `default`.
 
-Limits:
+### Shipping from the Mac itself
+
+With Colima, `AOE_NATIVE_SHIP=1` (exported, or on the `make` command line) runs
+`make ship`, `ship-status`, `describe-check`, `review`, `review-floor`,
+`review-pr`, `issue`, `next`, `carry-review` and `update-prs` on the Mac, with its
+own `gh`, `claude`, Git, SSH and commit signing, so the VM needs no login. A
+`make` command that also names another goal runs in the VM. It is opt-in: a person
+may be logged in inside the VM with another account. OrbStack ignores it, since
+its machine already uses the Mac's programs.
+
+The Mac then needs `gh`, the `docker` client (ship asks `docker info` before a
+gate) and [rustup](https://rustup.rs) with the toolchain of `rust-toolchain.toml`
+(`rustup toolchain install <channel> --profile minimal`; nothing is installed for
+you). `.agents/hooks/mac-judge.sh` compiles the judge from `origin/dev`, never from
+the checkout, and caches it under the same key as the Linux one, apart from it, in
+`aoe-agent-hook/darwin-<arch>/` of the Git common directory. Every gate, and the
+game score, still goes through `make` into the VM, and agent hooks, the reviewers'
+included, are still judged there.
+
+`AOE_GH_ACCOUNT=<login>` picks the account for `gh` and for Git over https. Its
+token comes from `gh auth token` at each call, and reaches `gh` in that process's
+environment and Git through a credential helper: never a file, a command line, Git
+configuration, the reviewers or the gates.
+
+### Limits
 
 - The checkout must be under `$HOME`; nothing else is mounted in the VM.
 - Tokens are not forwarded, because a command line is visible to `ps`. For
-  `make ship` and `make issue`, run `gh auth login` once inside `colima ssh`
-  (an OrbStack machine uses the Mac's `gh` instead).
+  `make ship` and `make issue`, set `AOE_NATIVE_SHIP=1`, or run `gh auth login`
+  once inside `colima ssh` (an OrbStack machine uses the Mac's `gh` instead).
   The Mac has no `secret-tool` keyring; see [credentials](credentials.md).
-- `make ship` and `make duel` start agent command-line tools inside the VM, so
-  install the ones you use there too.
+- `make duel`, and `make ship` without `AOE_NATIVE_SHIP=1`, start agent
+  command-line tools inside the VM, so install the ones you use there too.
+- The judge of `AOE_NATIVE_SHIP=1` is compiled by the Mac's own toolchain and
+  linker, not in the pinned image, and its dependencies' build scripts run on the
+  Mac. CI does not build macOS: a change on `dev` can break that build.
+- Each system has its own kernel locks: do not run a ship on the Mac and a ship or
+  duel in the VM at once. `make load-status` shows the VM's slots; `ship-status` on
+  the Mac does not. Work a killed gate or game score started in the VM may
+  outlive it.
+- `SHIP_VIDEO` must be under `$HOME` for the VM to read it.
 - `make dev` listens in the VM; Colima forwards its loopback port to the Mac, so
   `http://127.0.0.1:8080` works from the Mac's browser.
 - Build output lives on the shared mount, which is slower than a Linux disk.
