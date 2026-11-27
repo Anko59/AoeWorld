@@ -460,7 +460,7 @@ impl BuildingKind {
     /// AoK DAT 109 is non-obstructing; its annex 618 has half extents (1,1)
     /// at native NE/SE (1,-1), the NW 2x2 in our world axes. Annexes 619/620
     /// are non-obstructing. Construction unit 621 blocks 4x4 until replaced.
-    pub(crate) fn collision_rect(
+    pub fn collision_rect(
         self,
         footprint: aoe_core::TileRect,
         complete: bool,

@@ -60,7 +60,7 @@ fn militia_timelines_use_fractional_native_dat_durations() {
 
 #[test]
 fn every_spawned_unit_pose_uses_all_native_cells_and_dat_timing() {
-    assert_eq!(SPRITES.len(), Pose::MangonelScatter as usize + 1);
+    assert_eq!(SPRITES.len(), Pose::MonkWithRelicWalk as usize + 1);
     for (pose, source) in SPRITES.iter().copied().enumerate() {
         if matches!(pose, 72 | 73 | 120 | 223) {
             continue;
@@ -196,5 +196,37 @@ fn naval_overhaul_bindings_select_each_dat_identity_with_native_art() {
             assert_eq!(binding.unit, id, "{pose}");
             assert!(SPRITES[binding.pose as usize].is_native(), "{pose}");
         }
+    }
+}
+
+#[test]
+fn relic_actors_resolve_the_native_ground_and_carrier_graphics() {
+    use crate::de::unit_catalog::{Action, BINDINGS};
+
+    for (pose, unit, action, source) in [
+        (Pose::RelicStand, 285, Action::Idle, "de/dat_647.sld"),
+        (
+            Pose::MonkWithRelicStand,
+            286,
+            Action::Idle,
+            "de/dat_3370.sld",
+        ),
+        (
+            Pose::MonkWithRelicWalk,
+            286,
+            Action::Walk,
+            "de/dat_3374.sld",
+        ),
+    ] {
+        let binding = BINDINGS
+            .iter()
+            .find(|binding| binding.pose == pose)
+            .unwrap();
+        assert_eq!(binding.unit, unit);
+        assert_eq!(
+            std::mem::discriminant(&binding.action),
+            std::mem::discriminant(&action)
+        );
+        assert_eq!(SPRITES[pose as usize].manifest_source(), source);
     }
 }

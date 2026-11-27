@@ -48,8 +48,13 @@ fn target(client: &Client, point: ScreenPoint, units_only: bool) -> Option<(Enti
         .filter(|_| !units_only)
         .filter(|a| a.hp > 0 || a.food_remaining > 0)
         .map(|a| (a.id, true, false));
+    let relics = super::relics::ground(client)
+        .iter()
+        .filter(|_| !units_only)
+        .map(|r| (r.id, true, false));
     units
         .chain(animals)
+        .chain(relics)
         .filter_map(|(id, animal, enemy)| {
             // Keep bounds on the same submitted pose as the hotspot. New
             // simulation poses may still be waiting for the GPU.

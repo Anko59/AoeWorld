@@ -122,6 +122,7 @@ impl GameWorld {
             let m = self.unit(id).expect("missed wake: healer removed");
             assert!(
                 m.hp > 0
+                    && !m.holds_relic
                     && !m.moving
                     && !m.planning
                     && m.attack_target.is_none()
@@ -159,7 +160,11 @@ impl GameWorld {
                 .unit(id)
                 .expect("missed wake: healer parked after removal");
             assert!(
-                self.embarked(id) || m.moving || m.planning || m.attack_target.is_some(),
+                m.holds_relic
+                    || self.embarked(id)
+                    || m.moving
+                    || m.planning
+                    || m.attack_target.is_some(),
                 "missed wake: healer {id:?} ready again"
             );
         }

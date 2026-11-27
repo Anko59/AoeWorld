@@ -201,3 +201,39 @@ async fn five_thousand_villagers_gather_in_two_list_orders_without_admission_ref
     }
     assert_eq!(acks, 2);
 }
+
+#[test]
+fn a_build_order_covering_a_ground_relic_is_rejected_atomically() {
+    use aoe_core::{PlayerId, TileCoord, WorldPosition};
+    use aoe_simulation::GameWorld;
+
+    let (mut world, scout) = GameWorld::default_with_village(Seed(1));
+    let owner = PlayerId(0);
+    world.set_fog_disabled(true);
+    world.place_relics(&[scout], &|| false).unwrap();
+    let (_, position) = world.ground_relics().next().unwrap();
+    let tile = position.tile_floor();
+    let origin = TileCoord::new(tile.x - 1, tile.y - 1);
+    let builder = world
+        .spawn_villager(
+            owner,
+            WorldPosition::from_tile_center(TileCoord::new(tile.x - 3, tile.y)).unwrap(),
+        )
+        .unwrap();
+    let before = world.canonical_hash();
+
+    assert_eq!(
+        apply(
+            &mut world,
+            owner,
+            PendingAction::Build {
+                builder_ids: vec![builder],
+                kind: BuildingKind::Barracks,
+                origin,
+                queued: false,
+            }
+        ),
+        CommandResult::RejectedInvalidPlacement
+    );
+    assert_eq!(world.canonical_hash(), before);
+}

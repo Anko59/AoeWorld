@@ -1,6 +1,6 @@
 //! The SDK's fog-filtered `World` as a `View`, mirroring
 //! `crates/sdk-python/src/world.rs`.
-use aoe_sdk::{BuildingKind, ResourceKind, TileCoord, Visibility, World};
+use aoe_sdk::{BuildingKind, EntityId, ResourceKind, TileCoord, Visibility, World};
 
 use crate::view::{Animal, Building, Economy, Node, Tile, Unit, View};
 
@@ -27,6 +27,9 @@ impl View for World {
     }
     fn economy(&self) -> Option<Economy> {
         World::economy(self).map(Economy::from)
+    }
+    fn relics(&self) -> Option<&aoe_sdk::RelicView> {
+        World::relics(self)
     }
     fn my_units(&self) -> Vec<Unit> {
         World::my_units(self, None)
@@ -79,6 +82,9 @@ impl View for World {
     }
     fn land_frontier(&self, from: Tile, to: Tile) -> Option<Tile> {
         World::land_frontier(self, coord(from), coord(to)).map(tile)
+    }
+    fn first_reachable_monastery(&self, from: Tile, candidates: &[EntityId]) -> Option<EntityId> {
+        World::first_reachable_monastery(self, coord(from), candidates)
     }
     fn find_build_site(
         &self,

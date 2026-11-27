@@ -29,6 +29,9 @@ mod ordering_tests;
 #[path = "scene/tests/petard.rs"]
 mod petard_tests;
 #[cfg(test)]
+#[path = "scene/tests/relics/mod.rs"]
+mod relics_tests;
+#[cfg(test)]
 #[path = "scene/tests/review.rs"]
 mod review_tests;
 #[cfg(test)]

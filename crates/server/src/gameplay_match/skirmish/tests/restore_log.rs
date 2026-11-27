@@ -67,6 +67,7 @@ async fn play_save_and_resume() -> (String, BTreeMap<&'static str, u64>) {
         Json(StartRequest {
             map_hash: hash.clone(),
             opponents: 0,
+            relic_victory: false,
             save,
         })
     };

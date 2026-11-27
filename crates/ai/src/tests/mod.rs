@@ -15,3 +15,5 @@ mod play;
 mod recorder;
 mod roster;
 mod scouts;
+
+mod relics;

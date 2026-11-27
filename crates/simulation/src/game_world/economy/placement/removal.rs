@@ -72,6 +72,9 @@ impl GameWorld {
             }
             self.collision_opened(building.footprint);
         }
+        if building.kind == BuildingKind::Monastery {
+            self.release_monastery_relics(&building);
+        }
         self.release_destroyed_garrison(id, building.footprint, building.garrison, &mut Vec::new());
         self.economy.open_gates.remove(&id);
         if self.economy.gates.remove(&id) {

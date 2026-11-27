@@ -86,8 +86,7 @@ fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
             .all(|source| source.frames > 0)
     );
     // The merged catalog includes the Fish Trap and both upgraded tower recipes.
-    // Version 27 drops the thirteen reviewed sheets that no renderer reads.
-    assert_eq!(VERSION, 27);
+    assert_eq!(VERSION, 29);
     assert_eq!(GAMEPLAY_BUILDING_IDS.len(), 67);
     assert!(GAMEPLAY_BUILDING_IDS.ends_with(&[199, 234, 235]));
     assert_eq!(

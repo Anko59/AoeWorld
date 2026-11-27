@@ -23,7 +23,9 @@ export function initSkirmish({ readJson, tokenHeaders, onStatus }) {
     cancelled = false;
     starter = tokenHeaders();
     try {
-      const started = await post('/skirmish', save ? { save } : { map_hash: hash, opponents });
+      const settings = { map_hash: hash, opponents };
+      if (document.getElementById('start-relic-victory')?.checked) settings.relic_victory = true;
+      const started = await post('/skirmish', save ? { save } : settings);
       for (let value = started; ; value = await status()) {
         if (value.id !== started.id) throw new Error('Another game was started on this server.');
         onStatus?.(value);

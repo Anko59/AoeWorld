@@ -15,6 +15,7 @@ impl WorldSnapshot {
                 .unwrap_or(u64::MAX)
         };
         self.tick = at(self.tick);
+        self.relics.retime(at);
         for record in &mut self.units {
             record.next_hit_tick = at(record.next_hit_tick);
             record.transform_until = record.transform_until.map(at);

@@ -24,6 +24,8 @@ pub(crate) mod economy;
 mod fog;
 mod projectiles;
 mod queues;
+mod relics;
+pub use relics::*;
 mod rally;
 pub use queues::MoveQueue;
 mod resources;
@@ -35,7 +37,7 @@ pub use projectiles::{ProjectileKind, ProjectileState};
 pub use resources::{MAX_RESOURCE_CACHE, MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
 pub use wildlife::*;
 
-pub const VERSION: u16 = 32;
+pub const VERSION: u16 = 33;
 pub const MAX_OFFICE_ZONE_CHUNKS: usize = 64;
 /// Coordinates in 32-tile chunks, then one row of x bits per local y.
 pub type OfficeZoneChunk = (TileCoord, [u32; 32]);
@@ -343,6 +345,7 @@ pub enum ServerMessage {
         revision: u64,
         code: u16,
     },
+    Relics(RelicView),
 }
 
 impl ServerMessage {

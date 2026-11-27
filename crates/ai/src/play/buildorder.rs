@@ -298,7 +298,7 @@ pub fn wants_urgent_market(ctx: &Context<'_>) -> bool {
         || (established && (gold < ctx.config.market_gold_reserve || stone < next_bill))
 }
 
-/// (kind, how many) in the order they should appear; Feudal Age only.
+/// (kind, how many) in the order they should appear as the town advances.
 ///
 /// Dark Age drop-offs (Lumber Camp, Mill, mining camps) follow the resources,
 /// see the constructor.
@@ -330,6 +330,9 @@ pub fn wanted_buildings(ctx: &Context<'_>) -> Vec<(BuildingKind, usize)> {
     }
     if ctx.castle() || researching_age(ctx, Tech::CastleAge) {
         wants.insert(2, (BuildingKind::Stable, (centers / 2).max(1)));
+    }
+    if super::relics::monastery_anchor(ctx).is_some() {
+        wants.insert(2, (BuildingKind::Monastery, 1));
     }
     // The Imperial Age buildings come before the second Barracks and Range:
     // they are the age's prerequisite, the extra production is not.

@@ -109,14 +109,18 @@ impl GameWorld {
         Ok(())
     }
 
-    /// Terrain, resource and building checks only: ordered foundations may
+    /// Terrain, resource, relic and building checks only: ordered foundations may
     /// stand on units, which step aside (see `construction::clearance`).
     pub(super) fn validate_footprint_ground(
         &self,
         player: PlayerId,
         footprint: TileRect,
     ) -> Result<(), EconomyError> {
-        if !footprint.valid(self.config.width_tiles, self.config.height_tiles) {
+        if !footprint.valid(self.config.width_tiles, self.config.height_tiles)
+            || self
+                .ground_relics()
+                .any(|(_, at)| footprint.contains(at.tile_floor()))
+        {
             return Err(EconomyError::InvalidFootprint);
         }
         // The maintained tile index includes nonblocking Farms, open gates and

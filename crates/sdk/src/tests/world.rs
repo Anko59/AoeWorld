@@ -141,7 +141,7 @@ fn player(researched: u128, age: aoe_protocol::Age) -> GameplayPlayerState {
     }
 }
 
-fn started() -> World {
+pub(super) fn started() -> World {
     let mut world = World::from_welcome(&welcome()).unwrap();
     world.subscription = 1;
     world.apply(M::Snapshot {

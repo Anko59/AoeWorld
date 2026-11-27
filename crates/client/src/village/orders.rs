@@ -78,6 +78,12 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
         return;
     }
     let actor = super::picking::actor(client, point);
+    if contextual
+        && !forced_move
+        && actor.is_some_and(|(id, _, _)| super::relics::pick_up(client, id))
+    {
+        return;
+    }
     let enemy = actor
         .filter(|a| a.2)
         .map(|a| a.0)

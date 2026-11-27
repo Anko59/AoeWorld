@@ -43,7 +43,10 @@ impl GameWorld {
             .iter()
             .filter(|stored| stored.state.hp > 0 && stored.state.death_tick.is_none())
             .map(|stored| UnitRecord {
-                unit: stored.state,
+                unit: GameUnit {
+                    holds_relic: false,
+                    ..stored.state
+                },
                 next_hit_tick: stored.next_hit_tick,
                 transform_until: self
                     .combat
@@ -68,6 +71,7 @@ impl GameWorld {
                     .formation
                     .is_none()
                     .then_some(stored.order)
+                    .filter(|_| !self.relics.orders.contains_key(&stored.state.id))
                     .flatten()
                     .map(|o| o.destination),
                 queue: self.snapshot_pending_moves(stored.state.id),
@@ -147,6 +151,7 @@ impl GameWorld {
             units,
             formations: self.formation_records(),
             animals: self.animal_records(),
+            relics: self.relics.clone(),
             explored: self.explored_records(),
             building_memory: self.building_memory_records(),
             resource_memory: self.resource_memory_records(),
@@ -253,6 +258,7 @@ impl GameWorld {
             }
         }
         self.next_entity_id = snapshot.next_entity_id;
+        self.restore_relics(snapshot.relics.clone())?;
         self.combat.hp_quarters.clone_from(&snapshot.hp_quarters);
         if report.units_lost + report.buildings_lost > 0 {
             return Err(SnapshotError::Unplaced {
@@ -270,6 +276,7 @@ impl GameWorld {
         // is absent from the save.
         self.order_diagnostics.restoring_jobs = true;
         self.resume_jobs(&snapshot, &mut report);
+        self.resume_relic_orders(&mut report);
         self.order_diagnostics.restoring_jobs = false;
         self.rebind_trade_units();
         probe(RestorePhase::JobsAndOrders);

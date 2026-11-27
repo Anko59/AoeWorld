@@ -16,6 +16,8 @@ pub(super) mod presentation;
 #[path = "production/mod.rs"]
 pub(super) mod production;
 pub(super) mod rally;
+#[path = "relics/mod.rs"]
+pub(super) mod relics;
 pub(super) mod selection;
 #[path = "selection/orders.rs"]
 mod selection_orders;
@@ -57,6 +59,7 @@ pub(crate) struct Village {
     pub far_placement: bool,
     pub wall_start: Option<aoe_core::TileCoord>,
     pub rubble: Vec<(GameplayBuildingState, u64)>,
+    pub relics: Option<aoe_protocol::RelicView>,
     pub animals: Vec<aoe_protocol::AnimalState>,
     /// Every boar the server told of, and what his villagers hunted: the
     /// animals are told near the camera only. No id is used twice.
@@ -71,6 +74,12 @@ pub(crate) struct Village {
 }
 
 impl Village {
+    pub(crate) fn knows_ground_relic(&self, id: aoe_core::EntityId) -> bool {
+        self.relics
+            .as_ref()
+            .is_some_and(|view| view.ground.binary_search_by_key(&id, |r| r.id).is_ok())
+    }
+
     pub fn clear_move_cursor(&mut self) {
         self.move_cursor = false;
         self.attack_move = false;

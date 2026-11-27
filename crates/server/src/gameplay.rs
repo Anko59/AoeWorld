@@ -38,6 +38,8 @@ mod slots;
 mod tick;
 pub(crate) use slots::{Access, Slot};
 pub use slots::{SlotInfo, SlotSetup};
+#[path = "gameplay/relics/mod.rs"]
+mod relics;
 #[path = "gameplay/wildlife.rs"]
 mod wildlife;
 use commands::queue::{PendingCommand, QueuedCommand};
@@ -242,6 +244,9 @@ impl GameplayService {
             players: players.values().cloned().collect(),
             buildings: buildings.values().cloned().collect(),
         };
+        let had_relics = session.resident_relics.is_some();
+        session.resident_relics =
+            relics::view(&world, player, revision, region, relics::markers(&world));
         let animals = wildlife::animals(&world, region, player);
         let projectiles = wildlife::projectiles(&world, region, player);
         let projectile_message = GameplayServerMessage::Projectiles {
@@ -288,6 +293,14 @@ impl GameplayService {
         let holding_message = economy::holdings::message(&land, revision, world.tick());
         session.resident_land = Some(land);
         let mut initial = vec![snapshot, wildlife, fog, projectile_message, holding_message];
+        if let Some(view) = session.resident_relics.clone() {
+            initial.push(GameplayServerMessage::Relics(view));
+        } else if had_relics {
+            initial.push(GameplayServerMessage::Relics(aoe_protocol::RelicView {
+                revision,
+                ..aoe_protocol::RelicView::default()
+            }));
+        }
         if !session.resident_move_queues.is_empty() {
             initial.push(GameplayServerMessage::MoveQueues {
                 revision,

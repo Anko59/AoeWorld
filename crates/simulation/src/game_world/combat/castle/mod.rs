@@ -133,7 +133,12 @@ impl GameWorld {
                 self.combat.healing.remove(id);
                 continue;
             };
-            if self.embarked(id) || m.moving || m.planning || m.attack_target.is_some() {
+            if m.holds_relic
+                || self.embarked(id)
+                || m.moving
+                || m.planning
+                || m.attack_target.is_some()
+            {
                 if !self.economy.no_sleep {
                     self.combat.healing.park(id);
                 }

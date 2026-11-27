@@ -99,7 +99,10 @@ impl GameWorld {
         if !shelter.is_complete() {
             return Err(EconomyError::UnderConstruction);
         }
-        if !shelter.kind.admits(actor.kind) {
+        if actor.holds_relic && shelter.kind == BuildingKind::Monastery {
+            return self.issue_deposit_relic(player, unit, building);
+        }
+        if actor.holds_relic || !shelter.kind.admits(actor.kind) {
             return Err(EconomyError::WrongUnitKind);
         }
         if actor.kind == UnitKind::Steward && self.steward_reserved(&shelter, Some(unit)) {
@@ -134,6 +137,9 @@ impl GameWorld {
         self.cancel_auto_scout(unit);
         self.stop_gathering(unit);
         self.cancel_attack(unit);
+        if actor.kind == UnitKind::Monk {
+            self.cancel_relic_order(unit);
+        }
         self.economy.builders.remove(&unit);
         self.units[self.lookup[&unit]].state.task = UnitTask::Moving;
         self.cancel_garrison_order(unit);

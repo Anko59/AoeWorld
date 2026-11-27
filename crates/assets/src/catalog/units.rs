@@ -380,6 +380,9 @@ pub enum Pose {
     TrebuchetImpact,
     ProjectileImpact,
     MangonelScatter,
+    RelicStand,
+    MonkWithRelicStand,
+    MonkWithRelicWalk,
 }
 
 #[path = "units/source.rs"]

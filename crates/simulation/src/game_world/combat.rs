@@ -215,7 +215,9 @@ impl GameWorld {
         if unit.player != player {
             return Err(EconomyError::NotOwner);
         }
-        if unit_combat(unit.kind).attack == 0 && unit.kind != crate::UnitKind::Monk {
+        if unit.holds_relic
+            || (unit_combat(unit.kind).attack == 0 && unit.kind != crate::UnitKind::Monk)
+        {
             return Err(EconomyError::WrongUnitKind);
         }
         let goal = self
@@ -313,6 +315,9 @@ impl GameWorld {
         let Some(&index) = self.lookup.get(&id) else {
             return;
         };
+        if self.units[index].state.kind == crate::UnitKind::Monk {
+            self.cancel_relic_order(id);
+        }
         self.set_movement_error(index, None);
         self.combat.attackers.insert(
             id,

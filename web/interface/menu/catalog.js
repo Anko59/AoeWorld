@@ -58,7 +58,7 @@ export const buildingNames = buildingKinds.map(kind => names[kind]);
 export const techName = kind => kind === 'WarGalley' ? 'Medium Warships' : names[kind];
 
 // The native HUD sends protocol unit kinds, then buildings and wildlife.
-export const actorKinds = [...trainingKinds, ...buildingKinds, 'Sheep', 'Deer', 'Boar', 'Wolf'];
+export const actorKinds = [...trainingKinds, ...buildingKinds, 'Sheep', 'Deer', 'Boar', 'Wolf', 'Relic'];
 
 export const price = amounts => amounts.map((amount, index) =>
   amount ? amount + ' ' + ['food', 'wood', 'gold', 'stone'][index] : '').filter(Boolean).join(' · ');

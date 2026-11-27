@@ -124,6 +124,7 @@ impl GameWorld {
                 .0
                 .iter()
                 .any(|u| u.hp > 0 && !self.embarked(u.id) && span.contains(u.position.tile_floor()))
+            || self.ground_relics().any(|(_, at)| span.contains(at.tile_floor()))
             // The footprint index includes foundations, nonblocking roads,
             // open gates and only the raster cells of angled bridges.
             || tiles.iter().copied().any(|tile| {

@@ -32,6 +32,8 @@ mod navy;
 mod orders;
 pub use orders::{ISSUER_SPANS, OrderDemand, OrderIssuer, OrderRedundancy};
 pub mod parallel;
+#[path = "game_world/relics/mod.rs"]
+pub(crate) mod relics;
 mod research;
 mod resources;
 #[path = "game_world/snapshot/mod.rs"]
@@ -82,6 +84,9 @@ pub struct GameUnit {
     pub kind: UnitKind,
     pub task: UnitTask,
     pub carried: Option<CarriedResource>,
+    /// Derived from the sparse relic carrier index on restore.
+    #[serde(skip)]
+    pub holds_relic: bool,
     pub hp: u16,
     pub max_hp: u16,
     pub attack_target: Option<EntityId>,
@@ -161,6 +166,7 @@ pub struct GameWorld {
     pub(crate) economy: economy::Economy,
     pub(crate) combat: combat::Combat,
     pub(crate) wildlife: wildlife::Wildlife,
+    pub(crate) relics: relics::Relics,
     pub(crate) vision: visibility::Vision,
     pub(crate) tick: Tick,
     pub(crate) units: changes::Units,
@@ -230,6 +236,7 @@ impl GameWorld {
             economy: economy::Economy::default(),
             combat: Default::default(),
             wildlife: Default::default(),
+            relics: Default::default(),
             vision: Default::default(),
             units: Default::default(),
             unit_changes: Vec::new(),
@@ -322,13 +329,13 @@ impl GameWorld {
         for raw in 0..count {
             let (x, y) = if raw < hotspot_count {
                 (
-                    radius + (next_random(&mut random) % hotspot_span as u64) as i64,
-                    radius + (next_random(&mut random) % hotspot_span as u64) as i64,
+                    radius + (spawning::next_random(&mut random) % hotspot_span as u64) as i64,
+                    radius + (spawning::next_random(&mut random) % hotspot_span as u64) as i64,
                 )
             } else {
                 (
-                    radius + (next_random(&mut random) % span_x as u64) as i64,
-                    radius + (next_random(&mut random) % span_y as u64) as i64,
+                    radius + (spawning::next_random(&mut random) % span_x as u64) as i64,
+                    radius + (spawning::next_random(&mut random) % span_y as u64) as i64,
                 )
             };
             let position =
@@ -484,13 +491,6 @@ pub(crate) fn interpolate(order: MovementOrder, travelled: u32) -> WorldPosition
     let y = i128::from(order.origin.y)
         + (i128::from(order.waypoint.y) - i128::from(order.origin.y)) * t / length;
     WorldPosition::new(x as i32, y as i32)
-}
-
-fn next_random(state: &mut u64) -> u64 {
-    *state ^= *state << 13;
-    *state ^= *state >> 7;
-    *state ^= *state << 17;
-    *state
 }
 
 #[cfg(any(test, feature = "bench-fixtures"))]

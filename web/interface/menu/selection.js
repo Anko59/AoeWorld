@@ -12,7 +12,7 @@ const orderHints = {
   General: 'Right-click: march · Alt+right-click: solo',
   Steward: 'Garrison in an owned Town Center to manage the economy',
   Vassal: 'Garrison in an owned Castle to manage its domain',
-  Monk: 'Right-click: convert or move · heals nearby injured units automatically',
+  Monk: 'Right-click: collect relics, convert or move · heals nearby injured units automatically',
   Sheep: 'Right-click: herd owned sheep',
 };
 const isBuilding = kind => buildingKinds.includes(kind);
@@ -42,6 +42,10 @@ export function describeSelection(selected, resource, unitRules = {}) {
   }
   const first = selected[0], count = selected.length;
   if (!first) return { type: 'empty', count: 0, commands: [], name: '', hint: 'Click to select · drag to select a group' };
+  if (first.kind === 'Relic') return {
+    type: 'relic', count: 1, commands: [], name: 'Relic', kind: 'Relic', owner: 'Neutral',
+    portrait: [285, 'gold'], hint: 'Right-click with a Monk to collect this relic',
+  };
   const owned = selected.every(actor => actor.owned);
   const buildings = selected.filter(actor => isBuilding(actor.kind)).length;
   const isAnimal = wildlife.has(first.kind);

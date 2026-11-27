@@ -10,6 +10,7 @@ pub mod market;
 pub mod military;
 pub mod naval;
 pub mod production;
+pub mod relics;
 pub mod research;
 pub mod reseeding;
 pub mod scouting;

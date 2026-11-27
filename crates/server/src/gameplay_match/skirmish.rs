@@ -10,7 +10,7 @@ use crate::{AppState, gameplay_transport::same_token, maps};
 use aoe_map::EnvironmentPageProvider;
 use aoe_protocol::ResumeToken;
 use axum::{Json, extract::State, http::HeaderMap, http::StatusCode};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::{
     sync::{
         Arc,
@@ -214,17 +214,8 @@ pub(super) async fn authorize(
         .ok_or_else(refused)
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct StartRequest {
-    #[serde(default)]
-    map_hash: String,
-    #[serde(default)]
-    opponents: usize,
-    /// Resume this saved game instead of placing new villages.
-    #[serde(default)]
-    save: Option<String>,
-}
+mod request;
+use request::StartRequest;
 
 async fn get_status(State(state): State<AppState>) -> Json<Status> {
     Json(status(&state).await)
@@ -303,7 +294,7 @@ async fn start(
             &task_state,
             id,
             package,
-            request.opponents,
+            request,
             resume,
             &cancelled,
             &placed,
@@ -327,7 +318,7 @@ async fn prepare(
     state: &AppState,
     id: u64,
     package: aoe_map::MapPackage,
-    opponents: usize,
+    request: StartRequest,
     resume: Option<Arc<super::saves::Loaded>>,
     cancelled: &Arc<AtomicBool>,
     placed: &Arc<AtomicUsize>,
@@ -338,17 +329,20 @@ async fn prepare(
     if !state.skirmish.advance(id, Phase::PlacingVillages) {
         return Ok(());
     }
+    let opponents = request.opponents;
     let mut humans = vec![false; opponents + 1];
     humans[0] = true;
     let seed = super::fresh_seed();
     tracing::info!(seed, "village layout seed");
     let started = Instant::now();
+    let mut rules = super::MatchRules::default().with_seed(seed);
+    rules.relic_victory = request.relic_victory;
     let (service, (restore_us, restore_phases_us)) = super::saves::build(
         package,
         provider.map(|value| value as Arc<dyn EnvironmentPageProvider>),
         resume,
         humans,
-        (seed, placed.clone()),
+        (rules, placed.clone()),
         cancelled.clone(),
         state.map_package_directory.clone(),
     )

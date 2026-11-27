@@ -9,6 +9,13 @@ use crate::{
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 
 impl World {
+    /// Relics and Monasteries the current subscription can see.
+    pub fn relics(&self) -> Option<&aoe_protocol::RelicView> {
+        self.relics
+            .as_ref()
+            .filter(|view| view.revision == self.subscription)
+    }
+
     /// Identifies the match; it changes when the server starts a new one.
     pub fn world_id(&self) -> u64 {
         self.world_id
@@ -218,6 +225,12 @@ impl World {
             .chain(self.nodes().filter_map(|node| {
                 let remaining = self.amounts.get(&node.id).copied().unwrap_or(node.initial);
                 (remaining > 0).then(|| TileRect::from_xywh(node.tile.x, node.tile.y, 1, 1))
+            }))
+            .chain(self.relics().into_iter().flat_map(|view| {
+                view.ground.iter().map(|relic| {
+                    let tile = relic.position.tile_floor();
+                    TileRect::from_xywh(tile.x, tile.y, 1, 1)
+                })
             }))
             .collect();
         for radius in 0..=max_radius {

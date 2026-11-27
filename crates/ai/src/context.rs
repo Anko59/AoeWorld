@@ -71,7 +71,10 @@ fn worked_units(order: &Order) -> Vec<u32> {
         | Order::Farm { unit, .. }
         | Order::Move { unit, .. }
         | Order::Attack { unit, .. }
-        | Order::Stop { unit } => vec![unit.0],
+        | Order::Stop { unit }
+        | Order::Garrison { unit, .. }
+        | Order::Relic(aoe_sdk::RelicAction::PickUp { monk: unit, .. })
+        | Order::Relic(aoe_sdk::RelicAction::Drop { monk: unit }) => vec![unit.0],
         Order::Build { builders, .. }
         | Order::BuildBridge { builders, .. }
         | Order::Construct { builders, .. } => ids(builders),

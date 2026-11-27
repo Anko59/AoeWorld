@@ -36,8 +36,21 @@ pub(in crate::gameplay) fn apply(
     player: aoe_core::PlayerId,
     action: PendingAction,
 ) -> CommandResult {
+    if world.relic_winner().is_some() {
+        return CommandResult::RejectedInvalidTarget;
+    }
     let commanded = commanded_units(&action);
     let result = match action {
+        PendingAction::Relic(action) => match action {
+            aoe_protocol::RelicAction::PickUp { monk, relic } => {
+                world.issue_pickup_relic(player, monk, relic)
+            }
+            aoe_protocol::RelicAction::Drop { monk } => world.issue_drop_relic(player, monk),
+            aoe_protocol::RelicAction::Eject { monastery } => {
+                world.issue_eject_relic(player, monastery)
+            }
+        },
+
         PendingAction::MoveSelection(order) => {
             return selections::move_selection(world, player, order);
         }

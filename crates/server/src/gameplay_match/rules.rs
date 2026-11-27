@@ -110,6 +110,8 @@ impl ProbeArmy {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct MatchRules {
     pub start_units: StartUnits,
+    /// Hold all relics for 200 in-game years to win.
+    pub relic_victory: bool,
     /// Seeds which village each slot gets (and the human's seat in it). `None`
     /// keeps the canonical layout; a hosted match gets a fresh seed.
     pub seed: Option<u64>,
@@ -133,6 +135,7 @@ impl MatchRules {
         }
         Ok(Self {
             start_units,
+            relic_victory: false,
             seed: None,
             start_tiles: None,
         })

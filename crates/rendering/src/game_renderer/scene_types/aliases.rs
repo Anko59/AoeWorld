@@ -368,6 +368,9 @@ impl SceneUnitKind {
     pub const TrebuchetImpact: Self = Self::Actor314;
     pub const ProjectileImpact: Self = Self::Actor315;
     pub const MangonelScatter: Self = Self::Actor316;
+    pub const RelicStand: Self = Self::Actor317;
+    pub const MonkWithRelicStand: Self = Self::Actor318;
+    pub const MonkWithRelicWalk: Self = Self::Actor319;
     pub const Scout: Self = Self::ScoutStand;
     pub const Villager: Self = Self::VillagerStand;
     pub const VillagerChopping: Self = Self::ChopperWork;

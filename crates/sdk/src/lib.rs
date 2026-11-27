@@ -39,6 +39,7 @@ mod world;
 mod tests;
 
 pub use aoe_protocol::{CombatStance, GeneralState, GeneralStatus, SquadKind, SquadStatus};
+pub use aoe_protocol::{GroundRelic, MonasteryRelics, RelicAction, RelicVictory, RelicView};
 pub use bot::{Bot, RunLimits, RunSummary, run_bot};
 pub use catalog::ResourceCatalog;
 pub use client::{Client, ConnectOptions, ConnectionStats, Decision, ViewPolicy, parse_token};

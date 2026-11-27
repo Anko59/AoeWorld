@@ -69,6 +69,7 @@ impl GameWorld {
             kind,
             task: UnitTask::Idle,
             carried: None,
+            holds_relic: false,
             hp: unit_combat(kind).hp + self.researched_hp_bonus(player, kind),
             max_hp: unit_combat(kind).hp + self.researched_hp_bonus(player, kind),
             attack_target: None,
@@ -147,4 +148,11 @@ impl GameWorld {
         self.update_unit_vision(id);
         self.sleep_new_seeker(id);
     }
+}
+
+pub(super) fn next_random(state: &mut u64) -> u64 {
+    *state ^= *state << 13;
+    *state ^= *state >> 7;
+    *state ^= *state << 17;
+    *state
 }

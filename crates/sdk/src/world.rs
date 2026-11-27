@@ -16,6 +16,7 @@ use std::{
 
 mod bridges;
 mod land;
+mod monastery_access;
 
 /// Bound on remembered dying units (an event dedup set, not game state).
 const MAX_DYING_MEMORY: usize = 8_192;
@@ -37,6 +38,7 @@ pub struct World {
     pub(crate) units: BTreeMap<EntityId, GameplayUnitState>,
     pub(crate) buildings: BTreeMap<EntityId, GameplayBuildingState>,
     pub(crate) bridges: aoe_map::ResourceOverlay,
+    pub(crate) relics: Option<aoe_protocol::RelicView>,
     pub(crate) animals: BTreeMap<EntityId, Animal>,
     pub(crate) projectiles: Vec<Projectile>,
     move_queues: Vec<aoe_protocol::MoveQueue>,
@@ -85,6 +87,7 @@ impl World {
             buildings: BTreeMap::new(),
             bridges: Default::default(),
             animals: BTreeMap::new(),
+            relics: None,
             projectiles: Vec::new(),
             move_queues: Vec::new(),
             economy: None,
@@ -170,6 +173,9 @@ impl World {
                         });
                     }
                 }
+            }
+            M::Relics(view) if view.revision == self.subscription => {
+                self.relics = Some(view);
             }
             M::WildlifeState {
                 revision, animals, ..

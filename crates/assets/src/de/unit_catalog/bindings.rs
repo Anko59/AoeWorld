@@ -390,4 +390,7 @@ pub const BINDINGS: &[Binding] = &[
         Action::DeathEffect("smoke_hit"),
     ),
     b(Pose::MangonelScatter, 369, Action::Projectile),
+    b(Pose::RelicStand, 285, Action::Idle),
+    b(Pose::MonkWithRelicStand, 286, Action::Idle),
+    b(Pose::MonkWithRelicWalk, 286, Action::Walk),
 ];

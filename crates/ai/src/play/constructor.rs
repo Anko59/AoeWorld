@@ -357,8 +357,12 @@ pub fn production(ctx: &mut Context<'_>, only: Option<BuildingKind>) -> Done {
         if !ctx.can_afford([cost[0], cost[1] + margin, cost[2], cost[3]]) {
             continue;
         }
-        let near = nearest_trainer(ctx, kind);
-        let Some(near) = near.or(ctx.home) else {
+        let near = if kind == BuildingKind::Monastery {
+            super::relics::monastery_anchor(ctx)
+        } else {
+            nearest_trainer(ctx, kind).or(ctx.home)
+        };
+        let Some(near) = near else {
             continue;
         };
         let gap = ctx.config.building_gap;

@@ -198,6 +198,7 @@ pub type SiteFn = Box<dyn Fn(BuildingKind, Tile, i32, i32) -> Option<Tile>>;
 
 /// `fakes.FakeWorld`. Fields are public so a test edits the world between decisions.
 pub struct FakeWorld {
+    pub relics: Option<aoe_sdk::RelicView>,
     /// Replaces `find_build_site` (kind, near, radius, gap); queries still land in `sites`.
     pub site_fn: Option<SiteFn>,
     /// Replaces `land_route` (a query is still recorded in `route_queries`).
@@ -236,6 +237,7 @@ pub struct FakeWorld {
 impl FakeWorld {
     pub fn new(units: Vec<Unit>, buildings: Vec<Building>) -> Self {
         Self {
+            relics: None,
             site_fn: None,
             route_fn: None,
             frontier_fn: None,
@@ -298,6 +300,9 @@ impl FakeWorld {
 }
 
 impl View for FakeWorld {
+    fn relics(&self) -> Option<&aoe_sdk::RelicView> {
+        self.relics.as_ref()
+    }
     fn tick(&self) -> u64 {
         self.tick
     }
@@ -370,6 +375,14 @@ impl View for FakeWorld {
             Some(frontier) => frontier(from, to),
             None => self.route(from, to)?.last().copied(),
         }
+    }
+    fn first_reachable_monastery(&self, from: Tile, candidates: &[EntityId]) -> Option<EntityId> {
+        candidates.iter().copied().find(|id| {
+            self.buildings
+                .iter()
+                .find(|b| b.id == id.0)
+                .is_some_and(|b| self.route(from, b.center()).is_some())
+        })
     }
     fn find_build_site(
         &self,
