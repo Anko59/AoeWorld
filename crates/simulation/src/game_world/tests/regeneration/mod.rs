@@ -62,6 +62,7 @@ fn a_fully_cleared_patch_never_regrows() {
     for tree in trees {
         w.deplete_resource(tree.id, tree.initial_amount).unwrap();
     }
+    assert!(w.resource_recovery_deadline().is_none());
     advance(&mut w, 360);
     for tree in trees {
         assert_eq!(w.resource_remaining(tree.id), Some(0));

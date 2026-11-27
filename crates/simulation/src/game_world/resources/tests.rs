@@ -139,3 +139,44 @@ fn collision_oracle_rejects_a_subscribed_planner_after_a_closing() {
 fn collision_oracle_rejects_a_subscribed_planner_after_an_opening() {
     check_collision_oracle(true);
 }
+
+#[test]
+fn regrowing_neighbor_preserves_a_cut_trees_original_recovery_deadline() {
+    let package = MapPackage::new(1, MapRequest::default(), Vec::new()).unwrap();
+    let generator = package.generator();
+    let [_, a, b, _] = (0..16)
+        .flat_map(|y| (0..16).map(move |x| (x, y)))
+        .flat_map(|(x, y)| generator.chunk(x, y).unwrap().resources)
+        .find_map(|left| {
+            let tree_at = |dx| {
+                generator
+                    .object_at(aoe_core::TileCoord::new(left.tile.x + dx, left.tile.y))
+                    .filter(|node| node.object == ObjectKind::Tree)
+            };
+            (left.object == ObjectKind::Tree)
+                .then(|| Some([left, tree_at(1)?, tree_at(2)?, tree_at(3)?]))
+                .flatten()
+        })
+        .expect("four cardinally connected trees");
+    let mut world = GameWorld::from_map(package).unwrap();
+    let hz = u64::from(world.config.tick_hz);
+    let cut = |world: &mut GameWorld, tree: ResourceNode| {
+        world
+            .prepare_resource_depletion(tree.id, tree.initial_amount)
+            .unwrap()
+            .commit();
+    };
+    cut(&mut world, a);
+    world.tick = aoe_core::Tick(100 * hz);
+    cut(&mut world, b);
+    world.tick = aoe_core::Tick(120 * hz);
+    world.advance_resource_recovery(&mut |_| true);
+    assert_eq!(world.resource_remaining(a.id), Some(a.initial_amount));
+    assert_eq!(world.resource_remaining(b.id), Some(0));
+    world.tick = aoe_core::Tick(220 * hz - 1);
+    world.advance_resource_recovery(&mut |_| true);
+    assert_eq!(world.resource_remaining(b.id), Some(0));
+    world.tick = aoe_core::Tick(220 * hz);
+    world.advance_resource_recovery(&mut |_| true);
+    assert_eq!(world.resource_remaining(b.id), Some(b.initial_amount));
+}

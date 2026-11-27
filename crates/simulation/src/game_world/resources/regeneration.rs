@@ -115,7 +115,19 @@ impl GameWorld {
     ) {
         match node.object {
             ObjectKind::Tree if change.became_nonblocking => {
-                timers.schedule(node.id, self.recovery_deadline(FOREST_SECONDS));
+                if self.has_tree_seed(node.tile, None) {
+                    timers.schedule(node.id, self.recovery_deadline(FOREST_SECONDS));
+                }
+                // The prepared snapshot and the live commit examine opposite
+                // sides of the mutation. Exclude the felled seed in both.
+                for tile in neighbors(node.tile) {
+                    if let Some(cut) = self.original_tree(tile)
+                        && self.resource_remaining(cut.id) == Some(0)
+                        && !self.has_tree_seed(tile, Some(node.tile))
+                    {
+                        timers.cancel(cut.id);
+                    }
+                }
             }
             ObjectKind::Tree if change.added > 0 => {
                 timers.cancel(node.id);
@@ -123,8 +135,8 @@ impl GameWorld {
                     if let Some(cut) = self.original_tree(tile)
                         && self.resource_remaining(cut.id) == Some(0)
                     {
-                        // Each newly exposed edge waits a full interval.
-                        timers.cancel(cut.id);
+                        // A new seed starts an unscheduled edge. A scheduled
+                        // edge has had continuous access to a seed.
                         timers.schedule(cut.id, self.recovery_deadline(FOREST_SECONDS));
                     }
                 }
@@ -160,6 +172,16 @@ impl GameWorld {
             .object_at(tile)
             .or_else(|| overlay.starting_nodes_in(tile, tile).next())
             .filter(|node| node.object == ObjectKind::Tree)
+    }
+
+    fn has_tree_seed(&self, tile: TileCoord, excluded: Option<TileCoord>) -> bool {
+        neighbors(tile).any(|tile| {
+            Some(tile) != excluded
+                && self.original_tree(tile).is_some_and(|tree| {
+                    self.resource_remaining(tree.id)
+                        .is_some_and(|amount| amount > 0)
+                })
+        })
     }
 
     pub(crate) fn advance_resource_recovery(
@@ -199,13 +221,7 @@ impl GameWorld {
     fn can_recover_resource(&self, node: ResourceNode) -> bool {
         match node.object {
             ObjectKind::Tree => {
-                self.resource_remaining(node.id) == Some(0)
-                    && neighbors(node.tile).any(|tile| {
-                        self.original_tree(tile).is_some_and(|tree| {
-                            self.resource_remaining(tree.id)
-                                .is_some_and(|amount| amount > 0)
-                        })
-                    })
+                self.resource_remaining(node.id) == Some(0) && self.has_tree_seed(node.tile, None)
             }
             ObjectKind::ShoreFish | ObjectKind::DeepFish => self
                 .resource_remaining(node.id)
