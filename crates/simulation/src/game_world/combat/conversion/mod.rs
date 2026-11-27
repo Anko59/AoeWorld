@@ -164,6 +164,9 @@ impl GameWorld {
             economy.population_used = economy.population_used.saturating_sub(1);
         }
         self.wake_player_training(old.player);
+        if old.holds_relic {
+            self.move_carried_relic(id, new);
+        }
         self.remove_unit(id);
         if let Some(&index) = self.lookup.get(&new) {
             let state = &mut self.units[index].state;

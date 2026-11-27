@@ -341,7 +341,11 @@ impl GameWorld {
                 researched,
             ),
         };
-        Some((u.player, u.position.tile_floor(), los))
+        Some((
+            u.player,
+            u.position.tile_floor(),
+            los.saturating_sub(2 * u8::from(u.holds_relic)),
+        ))
     }
 
     /// True when `update_unit_vision` would change the shared vision state for

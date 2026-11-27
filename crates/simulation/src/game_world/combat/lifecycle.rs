@@ -125,6 +125,9 @@ impl GameWorld {
         self.active_movers.remove(id);
         self.stop_gathering(id);
         self.cancel_attack(id);
+        if unit.kind == crate::UnitKind::Monk {
+            self.cancel_relic_order(id);
+        }
         self.economy.builders.remove(&id);
         self.set_movement_error(index, None);
         self.units[index].state.task = if unit.carried.is_some() {
@@ -155,6 +158,9 @@ impl GameWorld {
     /// Population is freed now; native death playback precedes thirty seconds of corpse decay.
     pub(crate) fn kill_unit(&mut self, index: usize) {
         let unit = self.units[index].state;
+        if unit.kind == crate::UnitKind::Monk {
+            self.drop_monks_relic(unit);
+        }
         if unit.kind.is_trebuchet() {
             self.combat.trebuchets_transforming.remove(&unit.id);
         }
@@ -191,6 +197,7 @@ impl GameWorld {
             .map(|a| a.kind);
         let state = &mut self.units[index].state;
         state.hp = 0;
+        state.holds_relic = false;
         state.death_tick = Some(self.tick);
         state.death_hunt = death_hunt;
         state.task = UnitTask::Dying;
@@ -263,6 +270,9 @@ impl GameWorld {
         };
         let unit = self.units[index].state;
         self.forget_foundation_worker(unit);
+        if unit.kind == crate::UnitKind::Monk {
+            self.drop_monks_relic(unit);
+        }
         if unit.hp > 0 {
             self.change_unit_census(unit.player, Some(unit.kind), None, 1);
         }

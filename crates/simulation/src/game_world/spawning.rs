@@ -69,6 +69,7 @@ impl GameWorld {
             kind,
             task: UnitTask::Idle,
             carried: None,
+            holds_relic: false,
             hp: unit_combat(kind).hp + self.researched_hp_bonus(player, kind),
             max_hp: unit_combat(kind).hp + self.researched_hp_bonus(player, kind),
             attack_target: None,

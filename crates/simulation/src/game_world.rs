@@ -84,6 +84,9 @@ pub struct GameUnit {
     pub kind: UnitKind,
     pub task: UnitTask,
     pub carried: Option<CarriedResource>,
+    /// Derived from the sparse relic carrier index on restore.
+    #[serde(skip)]
+    pub holds_relic: bool,
     pub hp: u16,
     pub max_hp: u16,
     pub attack_target: Option<EntityId>,

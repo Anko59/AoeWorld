@@ -93,6 +93,9 @@ impl GameWorld {
         self.cancel_attack(id);
         self.economy.builders.remove(&id);
         if let Some(&index) = self.lookup.get(&id) {
+            if self.units[index].state.kind == UnitKind::Monk {
+                self.cancel_relic_order(id);
+            }
             self.units[index].state.task = if result {
                 UnitTask::Moving
             } else if self.units[index].state.carried.is_some() {

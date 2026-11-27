@@ -79,6 +79,7 @@ impl GameWorld {
         probe(TickPhase::Movement);
         self.advance_transports(&mut changed);
         self.advance_spacing(&mut changed);
+        self.advance_relics();
         probe(TickPhase::Spacing);
         self.advance_wildlife(&mut changed);
         probe(TickPhase::Wildlife);

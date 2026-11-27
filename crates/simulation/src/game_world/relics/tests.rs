@@ -1,7 +1,7 @@
 use super::*;
 use aoe_core::{PlayerId, Seed, TileRect, WorldConfig};
 
-fn fixture(side: i32, starts: &[TileCoord]) -> (GameWorld, Vec<EntityId>) {
+pub(super) fn fixture(side: i32, starts: &[TileCoord]) -> (GameWorld, Vec<EntityId>) {
     let mut world = GameWorld::new(WorldConfig::new(side, side, Seed(57)).unwrap()).unwrap();
     let ids = starts
         .iter()

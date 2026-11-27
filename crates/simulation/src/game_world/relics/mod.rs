@@ -3,10 +3,10 @@ use aoe_core::{EntityId, PlayerId, TileCoord, WorldPosition};
 use aoe_map::{EnvironmentPageError, GroundMaterial, LandBucket, WaterKind};
 use std::collections::BTreeMap;
 
-#[cfg(test)]
-mod tests;
-
-pub(super) type Relics = BTreeMap<EntityId, WorldPosition>;
+mod lifecycle;
+mod persistence;
+use lifecycle::RelicTarget;
+pub(crate) use lifecycle::Relics;
 
 /// Adapt DE Arabia's balanced relics to geographic maps. Small games get
 /// two relics per seat and one contested relic. More seats keep a local
@@ -59,7 +59,7 @@ impl GameWorld {
         let radius = (side / 4).clamp(12, 32);
         let spacing = (radius / 2).max(6);
         let bucket = LandBucket::for_radius(UnitKind::Monk.collision_radius())
-            .expect("Monks have a land navigation bucket");
+            .ok_or(GameWorldError::InvalidPosition)?;
         let mut sites = Vec::with_capacity(local * starts.len() + neutral);
         let mut try_site = |tile, owners: &[(PlayerId, TileCoord)]| {
             if cancelled() {
@@ -115,11 +115,11 @@ impl GameWorld {
                     .filter(|&(i, _)| i != a)
                     .min_by_key(|&(_, &(_, at))| distance(starts[a].1, at))
                     .map(|(_, &start)| start)
-                    .expect("at least two starts");
+                    .unwrap_or(starts[a]);
                 vec![starts[a], other]
             };
             let from = owners[0].1;
-            let to = owners.last().expect("one or two starts").1;
+            let to = owners.last().map_or(from, |owner| owner.1);
             let middle = TileCoord::new((from.x + to.x) / 2, (from.y + to.y) / 2);
             let seed = self.start_roll(middle, 0x4e45_5554_5200 + n as u64);
             // Geographic seats may be continents apart. Limit midpoint
@@ -149,7 +149,7 @@ impl GameWorld {
         for site in sites {
             let position = WorldPosition::from_tile_center(site)?;
             let id = self.allocate_entity_id()?;
-            self.relics.insert(id, position);
+            self.relics.ground.insert(id, position);
         }
         Ok(())
     }
@@ -173,18 +173,12 @@ impl GameWorld {
     }
 
     pub fn ground_relics(&self) -> impl Iterator<Item = (EntityId, WorldPosition)> + '_ {
-        self.relics.iter().map(|(&id, &at)| (id, at))
-    }
-
-    pub(super) fn hash_relics(&self, hash: &mut blake3::Hasher) {
-        if !self.relics.is_empty() {
-            hash.update(b"ground relics\0");
-            hash.update(&(self.relics.len() as u64).to_le_bytes());
-            for (id, at) in self.ground_relics() {
-                hash.update(&id.0.to_le_bytes());
-                hash.update(&at.x.to_le_bytes());
-                hash.update(&at.y.to_le_bytes());
-            }
-        }
+        self.relics.ground.iter().map(|(&id, &at)| (id, at))
     }
 }
+
+#[cfg(test)]
+#[path = "tests/lifecycle.rs"]
+mod lifecycle_tests;
+#[cfg(test)]
+mod tests;
