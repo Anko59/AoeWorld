@@ -51,37 +51,44 @@ test("sell 100,000 food from the far Trade tab and watch the price recover", asy
   await page.locator("#build-menu").click();
   await expect(page.locator("#build-market")).toBeEnabled();
   await page.keyboard.press("d");
-  // The preview follows the pointer only once the client is in build mode and
-  // has drawn a frame: wait for both instead of a fixed 150 ms per probe.
+  // The preview is computed when the client draws a frame, a while after the
+  // pointer moved (two animation frames were too few: 16 of 30 repeats found no
+  // site). So each probe waits, up to a bound, for the attribute to turn true,
+  // and a click that places nothing (the attribute was a frame behind and the
+  // site is not valid) goes on to the next probe instead of ending the search.
   await expect(page.locator("#scene")).toHaveAttribute(
     "data-order-mode",
     "build",
   );
-  const frames = (count: number) =>
-    page.evaluate(
-      (remaining) =>
-        new Promise<void>((resolve) => {
-          const next = (left: number) =>
-            requestAnimationFrame(() =>
-              left > 1 ? next(left - 1) : resolve(),
-            );
-          next(remaining);
-        }),
-      count,
-    );
+  const marketPlaced = () =>
+    expect
+      .poll(async () => (await actors(page)).some((a) => a.kind === "Market"), {
+        timeout: 1_500,
+        intervals: [100],
+      })
+      .toBe(true)
+      .then(
+        () => true,
+        () => false,
+      );
   let placedAt: [number, number] | undefined;
   for (const y of [180, 260, 340, 420])
     for (const x of [150, 280, 410, 540, 670, 800, 930, 1060]) {
       if (placedAt) break;
       await page.mouse.move(x, y);
-      await frames(2);
-      if (
-        (await page.locator("#scene").getAttribute("data-placement-valid")) ===
-        "true"
-      ) {
-        await page.mouse.click(x, y);
-        placedAt = [x, y];
-      }
+      const valid = await expect
+        .poll(
+          () => page.locator("#scene").getAttribute("data-placement-valid"),
+          { timeout: 400, intervals: [50] },
+        )
+        .toBe("true")
+        .then(
+          () => true,
+          () => false,
+        );
+      if (!valid) continue;
+      await page.mouse.click(x, y);
+      if (await marketPlaced()) placedAt = [x, y];
     }
   expect(placedAt).toBeDefined();
   await expect
