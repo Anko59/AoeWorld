@@ -9,6 +9,7 @@ mod game_world;
 pub use game_world::apply_research_stats;
 #[cfg(not(target_arch = "wasm32"))]
 pub use game_world::parallel::meter as parallel_meter;
+pub use game_world::snapshot::RestorePhase;
 #[cfg(feature = "bench-fixtures")]
 pub use game_world::terrain_fixtures;
 pub use game_world::{ArmorClass, AttackBonus, BuildingGroup, ConversionTarget, RuleEffect};

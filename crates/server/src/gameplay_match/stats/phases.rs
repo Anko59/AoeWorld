@@ -6,7 +6,7 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 
-pub(super) const NAMES: [&str; 46] = [
+pub(super) const NAMES: [&str; 48] = [
     "sessions",
     "world_lock",
     "orders",
@@ -17,6 +17,7 @@ pub(super) const NAMES: [&str; 46] = [
     "construction",
     "gathering",
     "research_training",
+    "steward_economy",
     "building_memory",
     "changed",
     "resource_journal",
@@ -53,7 +54,15 @@ pub(super) const NAMES: [&str; 46] = [
     "attack_position_search",
     "index_collision",
     "index_chunks",
+    "other",
 ];
+/// The last name: the phases of a tick recorded under a name not listed above.
+pub(super) const OTHER: usize = NAMES.len() - 1;
+
+fn listed(name: &str) -> Option<usize> {
+    NAMES.iter().position(|key| *key == name)
+}
+
 type Counters = Arc<[AtomicU64; NAMES.len()]>;
 
 #[derive(Debug)]
@@ -66,12 +75,17 @@ impl Default for Phases {
 }
 
 impl Phases {
+    /// A phase of the tick. One that is not listed still counts, in `other`,
+    /// so no recorded time is lost. The names need not add up to the tick: a
+    /// listed one nested in another overlaps it, and work between two phases
+    /// is in none.
     pub(super) fn record(&self, name: &'static str, elapsed: Duration) {
-        if let Some(at) = NAMES.iter().position(|key| *key == name) {
-            // Individual index updates can take less than a microsecond. Round
-            // only their accumulated tick total, rather than losing each one.
-            self.0[at].fetch_add(elapsed.as_nanos() as u64, Ordering::Relaxed);
-        }
+        self.add(listed(name).unwrap_or(OTHER), elapsed);
+    }
+    fn add(&self, at: usize, elapsed: Duration) {
+        // Individual index updates can take less than a microsecond. Round
+        // only their accumulated tick total, rather than losing each one.
+        self.0[at].fetch_add(elapsed.as_nanos() as u64, Ordering::Relaxed);
     }
     pub(super) fn drain(&self) -> Micros {
         Micros(std::array::from_fn(|at| {
@@ -124,6 +138,9 @@ pub(super) struct Measurement {
 impl aoe_map::NavigationSpan for Measurement {}
 impl Drop for Measurement {
     fn drop(&mut self) {
-        Phases(self.counters.clone()).record(self.name, self.started.elapsed());
+        // A span runs inside a listed phase: in `other` it would count twice.
+        if let Some(at) = listed(self.name) {
+            Phases(self.counters.clone()).add(at, self.started.elapsed());
+        }
     }
 }

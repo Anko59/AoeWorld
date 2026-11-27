@@ -428,9 +428,9 @@ hardware WebGL2 samples and the HUD and wall-lookup changes.
 
 Use the authenticated [admin endpoints](admin.md) while a game is running.
 `GET /admin/perf` computes nearest-rank `p50_us`, `p95_us`, and `max_us` for
-`total`, simulation `advance`, scheduler `late`, `planning`, and every recorded
-named phase. `top_phases` lists the five named phases with highest p95. Timings
-are microseconds. Nested navigation spans and `fanout_wait` overlap other
+`total`, simulation `advance`, scheduler `late`, `planning`, and every named phase
+(`other` sums the tick phases without a listed name). `top_phases` lists the five
+with highest p95, in microseconds. Nested spans and `fanout_wait` overlap other
 phases: do not add all phases together. The window is the most recent sixty
 wall-clock seconds, capped at 1,200 completed ticks (one minute at 20 Hz).
 `samples` is its actual size; an idle/stopped server's window eventually empties.

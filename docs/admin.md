@@ -78,6 +78,22 @@ completed ticks. See [performance](performance.md) for units, window semantics,
 phase overlap, memory limits and the client overlay. Existing `GET /match/stats`
 remains available for raw timing rows using the same secret.
 
+Both show each phase under its name in
+`crates/server/src/gameplay_match/stats/phases.rs`. A tick phase whose name is not
+in that list is summed into `other`, so its time is not lost; a value above zero
+means a name to add. Spans nested in a listed phase are either listed too or left
+out, never in `other`. Work between two phases is in no name: the Rust AI seats'
+`feed`, `chunk_waits` and `settle` are only in `rust_ai`, of `GET /admin/perf` and
+of the match telemetry (their `join` is in `sessions`). The `slow gameplay tick`
+log line shows the same phases, without those at zero.
+
+A resumed skirmish shows where its restore went, on its `skirmish match created`
+log line only. `restore_us` is the whole restore of the save into the built world,
+in microseconds; `restore_phases_us` splits it into `resources`, `explored`,
+`buildings`, `units`, `fog_and_vision`, `jobs_and_orders` and `rest`, which is what
+the six others leave of the whole. Building the map and warming up navigation are
+in the line's `seconds`, not in the restore. A new match has neither field.
+
 ## Match telemetry
 
 The owner build started by `make dev` appends client and server records to
