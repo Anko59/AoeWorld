@@ -139,6 +139,7 @@ impl GameWorld {
             players: self.economy.players.values().copied().collect(),
             market_recovery: self.economy.market_recovery.snapshot(self.tick.0),
             resources,
+            resource_recovery: self.economy.resource_recovery.records(),
             buildings,
             dispatch_sites: self
                 .economy
@@ -152,6 +153,7 @@ impl GameWorld {
             formations: self.formation_records(),
             animals: self.animal_records(),
             relics: self.relics.clone(),
+            herd_recovery: self.herd_records(),
             explored: self.explored_records(),
             building_memory: self.building_memory_records(),
             resource_memory: self.resource_memory_records(),
@@ -192,6 +194,9 @@ impl GameWorld {
         if let Some(resources) = &snapshot.resources {
             self.restore_resources(resources, content_hash, cancelled)
                 .map_err(|error| SnapshotError::Map(error.to_string()))?;
+        }
+        if !self.restore_resource_recovery(&snapshot.resource_recovery) {
+            return Err(SnapshotError::Recovery);
         }
         probe(RestorePhase::Resources);
         // Sheltered units are briefly placed outside before re-entering their
@@ -256,6 +261,9 @@ impl GameWorld {
             } else {
                 report.animals_lost += 1;
             }
+        }
+        if !self.restore_herds(&snapshot.herd_recovery) {
+            return Err(SnapshotError::Recovery);
         }
         self.next_entity_id = snapshot.next_entity_id;
         self.restore_relics(snapshot.relics.clone())?;

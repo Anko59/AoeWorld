@@ -200,6 +200,7 @@ impl ResourceOverlay {
     pub(crate) fn navigation_snapshot(&self) -> Self {
         Self {
             remaining: BTreeMap::new(),
+            replenished: 0,
             revision: self.revision,
             navigation_state: Box::new(CollisionState {
                 obstacles: BTreeSet::new(),
@@ -284,7 +285,9 @@ impl ResourceOverlay {
                 chunk.bridges.insert(tile, identity as u16);
             }
         } else if domain == 2 {
-            chunk.depleted.insert(identity);
+            if !chunk.depleted.remove(&identity) {
+                chunk.depleted.insert(identity);
+            }
         } else {
             let flag = if domain == 1 { 1 } else { 2 };
             let present = chunk.occupied.toggle(tile, flag);

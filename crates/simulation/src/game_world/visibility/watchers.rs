@@ -102,9 +102,19 @@ impl GameWorld {
         self.building_at(tile).or_else(|| {
             self.vision
                 .private_foundations
-                .get(&(player, tile))
+                .get(&(tile, player))
                 .copied()
         })
+    }
+
+    pub(crate) fn tile_has_reservation(&self, tile: TileCoord) -> bool {
+        self.building_at(tile).is_some()
+            || self
+                .vision
+                .private_foundations
+                .range((tile, PlayerId(0))..=(tile, PlayerId(u16::MAX)))
+                .next()
+                .is_some()
     }
 
     pub(crate) fn site_has_building(
@@ -130,7 +140,7 @@ impl GameWorld {
         span: Option<aoe_core::BridgeSpan>,
     ) {
         for tile in footprint_tiles(footprint, span) {
-            let key = (player, tile);
+            let key = (tile, player);
             if self.vision.private_foundations.get(&key) == Some(&id) {
                 self.vision.private_foundations.remove(&key);
             }
@@ -150,7 +160,7 @@ impl GameWorld {
         let (private, span) = (building.is_unstarted(), building.bridge_span);
         if private {
             for tile in footprint_tiles(footprint, span) {
-                self.vision.private_foundations.insert((player, tile), id);
+                self.vision.private_foundations.insert((tile, player), id);
             }
         } else {
             self.combat.quiet.wake_area(footprint);

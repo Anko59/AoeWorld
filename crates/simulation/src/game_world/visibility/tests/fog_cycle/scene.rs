@@ -164,6 +164,7 @@ pub(super) fn hidden() -> GameWorld {
     overlay.apply_depletion(&Depletion {
         id: (tile.y as u64) << 19 | (tile.x as u64) << 1,
         removed: 1,
+        added: 0,
         remaining: 99,
         became_nonblocking: false,
         revision: 1,

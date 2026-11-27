@@ -259,6 +259,8 @@ pub(super) fn clear_kingdom_plot(
         world
             .deplete_resource(node.id, u16::MAX)
             .map_err(|_| EconomyError::InvalidResource)?;
+        // The fixture starts with a prepared clearing.
+        world.economy.resource_recovery.cancel(node.id);
     }
     Ok(())
 }

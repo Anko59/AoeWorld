@@ -12,11 +12,12 @@ mod hash;
 mod hunting;
 mod lure;
 mod navigation;
+mod recovery;
 mod spawning;
 mod table;
 pub use table::{AnimalKind, WILDLIFE_RULES, WildlifeRules};
 
-/// Animals per seat: the 15 of a village's wildlife kit, with room to spare.
+/// Animals per seat: the 16–18 of a village's wildlife kit, with room to spare.
 pub const ANIMALS_PER_PLAYER: usize = 32;
 /// The animal capacity of a world with every seat of the default limits.
 pub const MAX_ANIMALS: usize = super::economy::MAX_ECONOMY_PLAYERS * ANIMALS_PER_PLAYER;
@@ -104,6 +105,7 @@ pub struct WildlifeStats {
 #[derive(Debug, Default)]
 pub(crate) struct Wildlife {
     animals: BTreeMap<EntityId, StoredAnimal>,
+    recovery: recovery::HerdRecovery,
     /// Living animals and retained carcasses, for local food replacement.
     cells: BTreeMap<(i32, i32), BTreeSet<EntityId>>,
     /// Chasing/fleeing animals get a cleanup step if nearby units disappear.

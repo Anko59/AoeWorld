@@ -162,6 +162,12 @@ enemy Knights near each. Load native art before resuming. Camera centres
 Verify extracted in-flight pixels before accepting a recording; a projectile
 count alone does not establish that arrows are visible.
 
+POST `/maps/reset?scenario=regrowth` stages a cut forest edge and a deer
+herd with three survivors. Use the camera `x=126&y=125&zoom=0.82`.
+The two cut columns regrow at game minutes two and four, and a fourth deer
+appears beside a survivor at minute four. In arena mode, advance the regular
+game ticks between the three views for a short time-lapse.
+
 Fog is enabled in ordinary games. For terrain/art showcases that need the whole
 map, start the filmed server with `AOE_FOG_DISABLED=1 make dev DEV_PORT=8097`.
 This is a server scenario setting; camera links cannot reveal hidden entities.

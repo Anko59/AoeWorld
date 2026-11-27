@@ -30,7 +30,7 @@ pub(crate) async fn reset(
         None => GameplayService::new(state.diagnostic_scenario.seed),
         Some(
             name @ ("behaviour-tc" | "behaviour-wolf" | "behaviour-deer" | "behaviour-hunt"
-            | "behaviour-camps" | "behaviour-bridge"),
+            | "behaviour-camps" | "behaviour-bridge" | "regrowth"),
         ) => {
             use aoe_simulation::BehaviourScene;
             let scene = match name {
@@ -39,6 +39,7 @@ pub(crate) async fn reset(
                 "behaviour-deer" => BehaviourScene::Deer,
                 "behaviour-hunt" => BehaviourScene::Hunt,
                 "behaviour-bridge" => BehaviourScene::Bridge,
+                "regrowth" => BehaviourScene::Regrowth,
                 _ => BehaviourScene::Camps,
             };
             let Ok((package, elevation, water)) = aoe_simulation::GameWorld::behaviour_environment(

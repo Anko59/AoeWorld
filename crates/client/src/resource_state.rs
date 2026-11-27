@@ -205,13 +205,6 @@ impl ResourceStateCache {
         if state.from_revision.is_none() {
             self.amounts = state.changes;
         } else {
-            if state.changes.iter().any(|change| {
-                self.amounts
-                    .binary_search_by_key(&change.id, |value| value.id)
-                    .is_ok_and(|index| change.remaining > self.amounts[index].remaining)
-            }) {
-                return false;
-            }
             let added = state
                 .changes
                 .iter()

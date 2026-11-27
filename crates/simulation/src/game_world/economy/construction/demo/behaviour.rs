@@ -12,6 +12,7 @@ pub enum BehaviourScene {
     Hunt,
     Camps,
     Bridge,
+    Regrowth,
 }
 
 impl GameWorld {
@@ -97,6 +98,7 @@ impl GameWorld {
                 w.issue_hunt(PlayerId(0), &[worker], deer)?;
             }
             BehaviourScene::Bridge => {}
+            BehaviourScene::Regrowth => w.prepare_regrowth_demo(worker)?,
             BehaviourScene::Camps => {
                 w.insert_building(
                     PlayerId(0),
@@ -143,6 +145,64 @@ impl GameWorld {
                 Vec::new()
             },
         )
+    }
+
+    fn prepare_regrowth_demo(&mut self, worker: EntityId) -> Result<(), EconomyError> {
+        let crate::Terrain::Map { generator, overlay } = &mut self.terrain else {
+            return Err(EconomyError::InvalidResource);
+        };
+        let origin = (118..132)
+            .flat_map(|y| (113..123).map(move |x| TileCoord::new(x, y)))
+            .find(|at| {
+                (0..4).all(|dy| {
+                    (0..4).all(|dx| {
+                        let tile = TileCoord::new(at.x + dx, at.y + dy);
+                        generator
+                            .tile_and_node_with_cancel(tile, &|| false)
+                            .ok()
+                            .flatten()
+                            .is_some_and(|(ground, node)| ground.passable && node.is_none())
+                    })
+                })
+            })
+            .ok_or(EconomyError::InvalidResource)?;
+        let mut cut = Vec::new();
+        for dy in 0..4 {
+            for dx in 0..4 {
+                let tile = TileCoord::new(origin.x + dx, origin.y + dy);
+                let tree = ResourceNode::starting(tile, ResourceKind::Wood)
+                    .ok_or(EconomyError::InvalidResource)?;
+                overlay
+                    .insert_starting_resource(generator, tree)
+                    .map_err(|_| EconomyError::InvalidResource)?;
+                if dx >= 2 {
+                    cut.push(tree.id);
+                }
+            }
+        }
+        // Cut the outer two columns before filming. Their normal timers are
+        // the only source of new trees after the camera starts.
+        for id in cut {
+            self.deplete_resource(id, u16::MAX)
+                .map_err(|_| EconomyError::InvalidResource)?;
+        }
+
+        let sites: Vec<_> = (125..=133)
+            .step_by(2)
+            .flat_map(|y| (135..=143).step_by(2).map(move |x| TileCoord::new(x, y)))
+            .filter(|&tile| self.tile_free(tile))
+            .take(4)
+            .collect();
+        if sites.len() != 4 {
+            return Err(EconomyError::InvalidFootprint);
+        }
+        let mut herd = Vec::new();
+        for tile in sites {
+            herd.push(self.spawn_animal(AnimalKind::Deer, kingdom_position(tile)?)?);
+        }
+        self.register_herd(AnimalKind::Deer, &herd);
+        self.strike_animal(herd[0], worker, u16::MAX);
+        Ok(())
     }
 
     fn demo_tree(&mut self, near: TileCoord) -> Result<(), EconomyError> {

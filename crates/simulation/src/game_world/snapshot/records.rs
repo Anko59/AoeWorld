@@ -9,7 +9,7 @@ use aoe_core::{EntityId, Formation, PlayerId, TileRect, WorldPosition};
 use aoe_map::ResourceOverlaySnapshot;
 use serde::{Deserialize, Serialize};
 
-pub const WORLD_SNAPSHOT_VERSION: u16 = 34;
+pub const WORLD_SNAPSHOT_VERSION: u16 = 35;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WorldSnapshot {
@@ -23,6 +23,7 @@ pub struct WorldSnapshot {
     pub(crate) market_recovery: Vec<(u64, PlayerId, MarketCommodity)>,
     /// Absent only for worlds without map terrain (test fixtures).
     pub resources: Option<ResourceOverlaySnapshot>,
+    pub(crate) resource_recovery: Vec<(u64, u64)>,
     pub buildings: Vec<BuildingRecord>,
     pub(crate) dispatch_sites: Vec<(EntityId, Option<EntityId>)>,
     pub(crate) dispatch_cursor: Option<EntityId>,
@@ -30,6 +31,7 @@ pub struct WorldSnapshot {
     pub formations: Vec<FormationRecord>,
     pub animals: Vec<AnimalRecord>,
     pub(crate) relics: super::super::relics::Relics,
+    pub(crate) herd_recovery: Vec<HerdRecord>,
     pub(crate) town_bells: Vec<EntityId>,
     pub explored: Vec<(PlayerId, crate::game_world::visibility::ExploredChunks)>,
     pub(crate) building_memory: Vec<BuildingMemoryRecord>,
@@ -55,6 +57,15 @@ pub struct FormationRecord {
     pub queue: Vec<(WorldPosition, bool)>,
     pub attack_move: bool,
     pub pace_limit: Option<(u64, u64)>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct HerdRecord {
+    pub(crate) id: EntityId,
+    pub(crate) kind: AnimalKind,
+    pub(crate) capacity: u16,
+    pub(crate) members: Vec<EntityId>,
+    pub(crate) due: Option<u64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -222,6 +233,8 @@ pub struct RestoreReport {
 pub enum SnapshotError {
     #[error("the snapshot is from an unsupported version")]
     Version,
+    #[error("invalid resource or herd recovery records")]
+    Recovery,
     #[error("the world already holds units or buildings")]
     NotEmpty,
     #[error("the snapshot does not fit this map: {0}")]

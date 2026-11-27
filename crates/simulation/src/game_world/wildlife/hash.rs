@@ -2,6 +2,7 @@ use super::Wildlife;
 
 impl Wildlife {
     pub(crate) fn update_hash(&self, hash: &mut blake3::Hasher) {
+        self.recovery.update_hash(hash);
         hash.update(&(self.animals.len() as u64).to_le_bytes());
         for a in self.animals.values() {
             let s = a.state;

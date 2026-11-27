@@ -1,6 +1,11 @@
 use super::GameWorld;
 use crate::Terrain;
-use aoe_map::{Depletion, ResourceOverlay, ResourceOverlayError, ResourceOverlaySnapshot};
+use aoe_map::{
+    Depletion, ObjectKind, ResourceNode, ResourceOverlay, ResourceOverlayError,
+    ResourceOverlaySnapshot,
+};
+
+pub(crate) mod regeneration;
 
 /// An exclusive, validated mutation. Dropping it preserves the live world.
 /// The server can persist `snapshot()` before calling the infallible commit.
@@ -8,6 +13,7 @@ pub struct PreparedResourceDepletion<'a> {
     world: &'a mut GameWorld,
     depletion: Depletion,
     previous_revision: u64,
+    node: ResourceNode,
 }
 
 impl PreparedResourceDepletion<'_> {
@@ -31,7 +37,9 @@ impl PreparedResourceDepletion<'_> {
             unreachable!("prepared mutation exclusively borrows a map world");
         };
         overlay.apply_depletion(&self.depletion);
-        if self.depletion.became_nonblocking {
+        if self.depletion.added > 0 && self.node.object == ObjectKind::Tree {
+            self.world.collision_closed(resource_area(self.node.id));
+        } else if self.depletion.became_nonblocking {
             self.world
                 .collision_opened(resource_area(self.depletion.id));
         }
@@ -45,6 +53,8 @@ impl PreparedResourceDepletion<'_> {
                     self.depletion.id,
                 ));
         }
+        self.world
+            .schedule_resource_recovery(self.node, self.depletion);
         self.depletion
     }
 }
@@ -81,6 +91,7 @@ impl GameWorld {
         let replacement =
             ResourceOverlay::from_snapshot(snapshot, content_hash, generator, cancelled)?;
         *overlay = replacement;
+        self.economy.resource_recovery = Default::default();
         if let Ok(cache) = self.resource_chunks.get_mut() {
             cache.clear();
         }
@@ -106,11 +117,15 @@ impl GameWorld {
             return Err(ResourceOverlayError::UnknownResource);
         };
         let previous_revision = overlay.revision();
-        let depletion = overlay.plan_depletion(generator, id, requested)?;
+        let node = overlay
+            .resource_by_id_with_cancel(generator, id, &|| false)?
+            .ok_or(ResourceOverlayError::UnknownResource)?;
+        let depletion = overlay.plan_resolved_depletion(node, requested)?;
         Ok(PreparedResourceDepletion {
             world: self,
             depletion,
             previous_revision,
+            node,
         })
     }
 

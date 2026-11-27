@@ -36,23 +36,27 @@ fn snapshot_delta_reconnect_and_out_of_order_updates_are_atomic() {
         }]
     }));
     assert!(!cache.visible(0));
-    for changes in [
-        Vec::new(),
-        vec![ResourceAmount {
+    assert!(!cache.apply(ResourceState {
+        snapshot_page: None,
+        subscription_revision: 1,
+        from_revision: Some(2),
+        revision: 3,
+        changes: Vec::new(),
+    }));
+    assert_eq!(cache.revision, Some(2));
+    assert!(!cache.visible(0));
+    assert!(cache.apply(ResourceState {
+        snapshot_page: None,
+        subscription_revision: 1,
+        from_revision: Some(2),
+        revision: 3,
+        changes: vec![ResourceAmount {
             id: 0,
-            remaining: 1,
+            remaining: 1
         }],
-    ] {
-        assert!(!cache.apply(ResourceState {
-            snapshot_page: None,
-            subscription_revision: 1,
-            from_revision: Some(2),
-            revision: 3,
-            changes,
-        }));
-        assert_eq!(cache.revision, Some(2));
-        assert!(!cache.visible(0));
-    }
+    }));
+    assert_eq!(cache.revision, Some(3));
+    assert_eq!(cache.tree_stage(0, 1, 0.0), TreeStage::Full);
     cache.clear();
     assert!(!cache.visible(2));
     assert!(cache.apply(ResourceState {

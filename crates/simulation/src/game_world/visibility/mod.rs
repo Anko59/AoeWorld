@@ -61,7 +61,7 @@ pub(crate) struct Vision {
     /// part of a chunk outside its sight.
     pub(crate) building_cells: crate::game_world::unit_index::ChunkPresence,
     /// Planned sites reserve placement only for their own player.
-    private_foundations: BTreeMap<(PlayerId, TileCoord), EntityId>,
+    private_foundations: BTreeMap<(TileCoord, PlayerId), EntityId>,
     building_watchers: BTreeMap<EntityId, Watched>,
     /// Buildings changed or newly watched since the last memory refresh
     /// (`memory.rs`). Derived, never hashed.

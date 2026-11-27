@@ -40,6 +40,7 @@ fn exhaust(overlay: &mut ResourceOverlay, node: ResourceNode) {
     overlay.apply_depletion(&Depletion {
         id: node.id,
         removed: node.initial_amount,
+        added: 0,
         remaining: 0,
         became_nonblocking: true,
         revision: overlay.revision() + 1,

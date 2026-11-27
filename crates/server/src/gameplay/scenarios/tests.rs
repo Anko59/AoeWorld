@@ -440,7 +440,7 @@ async fn road_demo_stream_contains_valid_road_buildings() {
 #[tokio::test]
 async fn behaviour_recordings_pause_the_real_world_before_the_first_frame() {
     use aoe_simulation::BehaviourScene::*;
-    for scene in [TownCenter, Wolf, Deer, Hunt, Camps, Bridge] {
+    for scene in [TownCenter, Wolf, Deer, Hunt, Camps, Bridge, Regrowth] {
         let service = GameplayService::behaviour_demo(Seed(7), scene).unwrap();
         assert!(service.paused());
         assert!(service.world.read().await.units().any(|u| u.hp > 0));

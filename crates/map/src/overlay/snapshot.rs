@@ -6,7 +6,7 @@ use serde::{
 };
 use std::{collections::BTreeMap, fmt};
 
-pub const RESOURCE_OVERLAY_SCHEMA_VERSION: u16 = 1;
+pub const RESOURCE_OVERLAY_SCHEMA_VERSION: u16 = 2;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ResourceChange {
@@ -20,6 +20,7 @@ pub struct ResourceOverlaySnapshot {
     pub schema_version: u16,
     pub map_content_hash: [u8; 32],
     pub revision: u64,
+    pub replenished: u64,
     #[serde(deserialize_with = "bounded_changes")]
     pub changes: Vec<ResourceChange>,
 }
@@ -30,6 +31,7 @@ impl ResourceOverlay {
             schema_version: RESOURCE_OVERLAY_SCHEMA_VERSION,
             map_content_hash,
             revision: self.revision,
+            replenished: self.replenished,
             changes: self
                 .changed()
                 .map(|(id, remaining)| ResourceChange { id, remaining })
@@ -60,46 +62,43 @@ impl ResourceOverlay {
         let mut starting = Self::default();
         let mut depleted_count = 0;
         let mut previous = None;
-        let mut removed_total = 0_u64;
+        let mut net_removed = 0_u64;
+        let mut fully_regrown = 0_u64;
         for change in &snapshot.changes {
             if previous.is_some_and(|id| id >= change.id) {
                 return Err(ResourceOverlayError::InvalidSnapshot);
             }
             let added = ResourceNode::starting_from_id(change.id);
             if let Some(node) = added {
-                // A starting-kit node whose tile became water when the map's
-                // rivers were regenerated (ford spacing, wading width) is
-                // dropped: the save still loads, without that one resource.
-                if !starting.starting_tile_fits(terrain, node)? {
-                    depleted_count += u64::from(change.remaining < node.initial_amount);
-                    removed_total +=
-                        u64::from(node.initial_amount - change.remaining.min(node.initial_amount));
-                    previous = Some(change.id);
-                    continue;
-                }
                 starting.insert_starting_resource(terrain, node)?;
             }
             let node = added
                 .or(terrain.resource_by_id_with_cancel(change.id, cancelled)?)
                 .ok_or(ResourceOverlayError::UnknownResource)?;
-            if change.remaining > node.initial_amount
-                || (added.is_none() && change.remaining == node.initial_amount)
-            {
+            if change.remaining > node.initial_amount {
                 return Err(ResourceOverlayError::InvalidSnapshot);
             }
+            if added.is_none() && change.remaining == node.initial_amount {
+                fully_regrown += 1;
+            }
             depleted_count += u64::from(change.remaining < node.initial_amount);
-            removed_total += u64::from(node.initial_amount - change.remaining);
+            net_removed += u64::from(node.initial_amount - change.remaining);
             remaining.insert(change.id, change.remaining);
             previous = Some(change.id);
         }
-        // Each changing depletion removes at least one unit and changes one
-        // entry; zero-removal calls never increase the revision.
-        if snapshot.revision > removed_total || snapshot.revision < depleted_count {
+        // Every operation changes at least one unit. Total harvested stock is
+        // net removal plus stock restored since the beginning of the match.
+        let maximum_revision = net_removed.saturating_add(snapshot.replenished.saturating_mul(2));
+        if snapshot.revision > maximum_revision
+            || snapshot.revision < depleted_count + 2 * fully_regrown
+            || snapshot.replenished < fully_regrown
+        {
             return Err(ResourceOverlayError::InvalidSnapshot);
         }
         let mut overlay = Self {
             remaining,
             revision: snapshot.revision,
+            replenished: snapshot.replenished,
             ..Self::default()
         };
         overlay.rebuild_navigation();

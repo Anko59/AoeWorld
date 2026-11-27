@@ -86,6 +86,10 @@ impl GameWorld {
         self.advance_relics();
         probe(TickPhase::Spacing);
         self.advance_wildlife(&mut changed);
+        self.advance_herd_recovery();
+        if self.economy.resource_recovery.ready(self.tick.0) {
+            self.advance_resource_recovery(sink);
+        }
         probe(TickPhase::Wildlife);
         if self.economy.gatherers.is_empty()
             && self.combat.is_idle()

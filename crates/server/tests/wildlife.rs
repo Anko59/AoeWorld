@@ -48,14 +48,14 @@ async fn wildlife_hunting_scenario_over_the_wire() {
             .iter()
             .filter(|a| a.kind == AnimalKind::Boar)
             .count(),
-        2
+        3
     );
     assert_eq!(
         animals
             .iter()
             .filter(|a| a.kind == AnimalKind::Deer)
             .count(),
-        4
+        6
     );
     let worker = units
         .iter()
@@ -82,7 +82,7 @@ async fn wildlife_hunting_scenario_over_the_wire() {
         unreachable!()
     };
     service.queue_hunt(id, sequence, unit_ids, animal_id).await;
-    let mut log = vec!["village: 8 sheep, 2 boar, 4 deer; food 200".to_owned()];
+    let mut log = vec!["village: 8 sheep, 3 boar, 6 deer; food 200".to_owned()];
     let (mut owned, mut dead, mut gathered, mut delivered) = (false, false, false, false);
     let mut accepted = false;
     for tick in 1..=10_000 {
@@ -179,7 +179,7 @@ async fn wildlife_subscription_replaces_the_region_and_a_full_queue_keeps_the_co
             true,
         )
         .await;
-    assert!(drain(&mut rx).iter().any(|m| matches!(m, GameplayServerMessage::WildlifeState { revision: 1, animals, .. } if animals.len() == 15)));
+    assert!(drain(&mut rx).iter().any(|m| matches!(m, GameplayServerMessage::WildlifeState { revision: 1, animals, .. } if animals.len() == 18)));
     service
         .subscribe(
             id,

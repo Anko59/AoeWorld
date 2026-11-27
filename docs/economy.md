@@ -315,13 +315,23 @@ combat AttackOrder targets live units, buildings and animals. Owned sheep
 accept MoveOrder for herding.
 
 The map generator has no animal hooks. Village initialization therefore places
-a seeded local kit: either eight sheep/two boar/four deer or seven sheep/three
-boar/two deer, totaling 2,040 or 2,000 food (a range below 2% of midpoint), plus
+a seeded local kit: either eight sheep, three boar and six deer or seven sheep,
+four boar and four deer. The two kits contain 2,660 or 2,620 food, plus
 one wolf. Sheep spawn 3–6 tiles from the TC center, boar/deer 9–15 and wolves
 16–20. Herds use irregular noise-ranked positions around seeded anchors. All
 animals must lie in the TC's connected land region, so water, cliffs and sealed
 forest pockets cannot hide a start herd. Constrained starts may omit animals
 when their distance band has no free reachable tile.
+
+Herds recover to the number placed at the start. A surviving deer herd has
+one birth every four game minutes, sheep every five and boar every six. A
+newborn needs a free tile beside a survivor and inherits its herd. An empty
+herd is gone permanently. Save files preserve both members and deadlines.
+
+A cut tree can grow back after two game minutes when an original tree tile
+beside it still has a living tree. Each new tree can seed the next edge of the
+original footprint. Occupied tiles wait for another interval. A fully cleared
+patch can never seed itself.
 
 Live animals occupy an eight-tile spatial index. Each tick probes a fixed
 neighborhood around living units and advances only candidate animals and

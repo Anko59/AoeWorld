@@ -116,6 +116,7 @@ impl GameWorld {
             .map(|(id, a)| (*id, cell(a.state.position)))
             .collect();
         for (id, key) in found {
+            self.herd_lost_member(id);
             self.wildlife.animals.remove(&id);
             self.wildlife.engaged.remove(&id);
             self.unindex_animal(id, key);
@@ -138,8 +139,8 @@ impl GameWorld {
                 3_u64,
                 6_u64,
             ),
-            (AnimalKind::Boar, if extra_boar { 3 } else { 2 }, 9, 15),
-            (AnimalKind::Deer, if extra_boar { 2 } else { 4 }, 9, 15),
+            (AnimalKind::Boar, if extra_boar { 4 } else { 3 }, 9, 15),
+            (AnimalKind::Deer, if extra_boar { 4 } else { 6 }, 9, 15),
             (AnimalKind::Wolf, 1, 16, 20),
         ]
         .into_iter()
@@ -167,7 +168,7 @@ impl GameWorld {
             candidates.sort_by_key(|tile| {
                 distance(*tile, anchor) * 8 + self.start_roll(*tile, salt) % 64
             });
-            let mut placed = 0;
+            let mut members = Vec::new();
             for tile in candidates
                 .into_iter()
                 .filter(|tile| !used.contains(tile))
@@ -175,13 +176,14 @@ impl GameWorld {
                 .collect::<Vec<_>>()
             {
                 if let Ok(at) = WorldPosition::from_tile_center(tile)
-                    && self.spawn_animal(kind, at).is_ok()
+                    && let Ok(id) = self.spawn_animal(kind, at)
                 {
                     used.insert(tile);
-                    placed += 1;
+                    members.push(id);
                 }
             }
-            short_herds += usize::from(guaranteed && placed < count);
+            short_herds += usize::from(guaranteed && members.len() < count);
+            self.register_herd(kind, &members);
         }
         short_herds
     }

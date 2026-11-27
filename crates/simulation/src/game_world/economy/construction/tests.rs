@@ -133,3 +133,35 @@ fn behaviour_recording_scenes_have_a_live_primary_and_deterministic_setup() {
         }
     }
 }
+
+#[test]
+fn regrowth_showcase_replays_real_growth_in_a_fixed_frame() {
+    use crate::{AnimalKind, BehaviourScene};
+    let (mut world, _) = GameWorld::behaviour_demo(Seed(7), BehaviourScene::Regrowth).unwrap();
+    let living_deer = |world: &GameWorld| {
+        world
+            .animals()
+            .filter(|a| a.kind == AnimalKind::Deer && a.hp > 0)
+            .count()
+    };
+    let trees = world.starting_resources();
+    let live_trees = |world: &GameWorld| {
+        trees
+            .iter()
+            .filter(|tree| {
+                world
+                    .resource_remaining(tree.id)
+                    .is_some_and(|left| left > 0)
+            })
+            .count()
+    };
+    assert_eq!((living_deer(&world), live_trees(&world)), (3, 8));
+    for _ in 0..120 * world.config().tick_hz {
+        world.advance();
+    }
+    assert_eq!((living_deer(&world), live_trees(&world)), (3, 12));
+    for _ in 0..120 * world.config().tick_hz {
+        world.advance();
+    }
+    assert_eq!((living_deer(&world), live_trees(&world)), (4, 16));
+}

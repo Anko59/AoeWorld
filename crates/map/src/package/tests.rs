@@ -1,7 +1,7 @@
 use super::*;
 
-#[path = "tests/recipe4.rs"]
-mod recipe4;
+#[path = "tests/recipe.rs"]
+mod recipe;
 #[path = "tests/strict.rs"]
 mod strict;
 

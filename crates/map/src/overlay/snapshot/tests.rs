@@ -122,6 +122,7 @@ fn snapshot_rejects_wrong_map_schema_amount_order_and_impossible_revision() {
 #[test]
 fn snapshot_deserialization_rejects_oversize_input_before_retaining_it() {
     let snapshot = ResourceOverlaySnapshot {
+        replenished: 0,
         schema_version: RESOURCE_OVERLAY_SCHEMA_VERSION,
         map_content_hash: [0; 32],
         revision: 0,
@@ -244,7 +245,7 @@ fn restore_and_deplete_keep_provider_errors_and_cancellation_distinct() {
 }
 
 #[test]
-fn a_starting_node_whose_tile_became_water_is_dropped_and_the_save_loads() {
+fn a_starting_node_on_water_invalidates_the_snapshot() {
     let (terrain, _) = resource();
     let tiles = || (0..128).flat_map(|y| (0..128).map(move |x| aoe_core::TileCoord::new(x, y)));
     let dry = tiles()
@@ -260,12 +261,37 @@ fn a_starting_node_whose_tile_became_water_is_dropped_and_the_save_loads() {
     overlay
         .insert_starting_resource(&terrain, ResourceNode::starting(dry, kind).unwrap())
         .unwrap();
-    // The same save on a map whose rivers were regenerated: the kit's tile is
-    // now water.
     let mut snapshot = overlay.snapshot([4; 32]);
     snapshot.changes[0].id = ResourceNode::starting(wet, kind).unwrap().id;
-    let restored = ResourceOverlay::from_snapshot(&snapshot, [4; 32], &terrain, &|| false)
-        .expect("the save loads without the drowned node");
-    assert_eq!(restored.starting_nodes().count(), 0);
-    assert!(!restored.blocks_tile(wet));
+    assert_eq!(
+        ResourceOverlay::from_snapshot(&snapshot, [4; 32], &terrain, &|| false),
+        Err(ResourceOverlayError::InvalidSnapshot)
+    );
+}
+
+#[test]
+fn renewed_wood_restores_its_collision_and_revision() {
+    let (terrain, _, mut overlay) = state();
+    let tree = (0..4)
+        .flat_map(|y| (0..4).map(move |x| (x, y)))
+        .flat_map(|(x, y)| terrain.chunk(x, y).unwrap().resources)
+        .find(|node| node.object == crate::ObjectKind::Tree)
+        .unwrap();
+    overlay
+        .deplete(&terrain, tree.id, tree.initial_amount)
+        .unwrap();
+    assert!(!overlay.blocks_node(tree));
+    let open_ground = overlay.navigation_snapshot();
+    let growth = overlay
+        .plan_regeneration(tree, tree.initial_amount)
+        .unwrap()
+        .unwrap();
+    overlay.apply_depletion(&growth);
+    assert_eq!(growth.added, tree.initial_amount);
+    assert!(overlay.blocks_node(tree));
+    assert!(!overlay.navigation_preserves_walkability(&open_ground));
+    let saved = overlay.snapshot([1; 32]);
+    let restored = ResourceOverlay::from_snapshot(&saved, [1; 32], &terrain, &|| false).unwrap();
+    assert!(restored.blocks_node(tree));
+    assert_eq!(restored.revision(), growth.revision);
 }

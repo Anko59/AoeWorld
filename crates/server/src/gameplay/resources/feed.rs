@@ -11,7 +11,7 @@ pub(in crate::gameplay) struct Journal {
 
 impl Journal {
     pub(in crate::gameplay) fn record(&mut self, change: aoe_map::Depletion) {
-        if change.removed == 0 {
+        if change.removed == 0 && change.added == 0 {
             return;
         }
         self.changes.push_back((

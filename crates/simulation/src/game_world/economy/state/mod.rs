@@ -109,6 +109,7 @@ pub(crate) struct Economy {
     pub(crate) foundations: super::construction::Foundations,
     pub(crate) builders: super::construction::Builders,
     pub(crate) construction: super::construction::ConstructionTimers,
+    pub(crate) resource_recovery: super::super::resources::regeneration::ResourceRecovery,
     pub(crate) depletions: Vec<aoe_map::Depletion>,
     pub(crate) limits: WorldLimits,
 }

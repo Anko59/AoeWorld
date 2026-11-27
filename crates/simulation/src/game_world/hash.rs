@@ -166,6 +166,7 @@ impl GameWorld {
         );
         hash.update(&self.fast_route_budget.unwrap_or(u32::MAX).to_le_bytes());
         self.terrain.update_mutable_state_hash(&mut hash);
+        self.economy.resource_recovery.hash(&mut hash);
         hash.update(&self.next_entity_id.to_le_bytes());
         self.economy.update_hash(&mut hash, self.tick.0);
         self.combat.update_hash(&mut hash);

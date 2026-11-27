@@ -3,6 +3,7 @@ fn change(revision: u64) -> aoe_map::Depletion {
     aoe_map::Depletion {
         id: 2,
         removed: 1,
+        added: 0,
         remaining: 10,
         became_nonblocking: false,
         revision,
@@ -63,6 +64,7 @@ fn reconnect_snapshots_over_65536_nodes_keep_each_encoded_frame_bounded() {
 fn the_complete_supported_overlay_roundtrips_through_bounded_storage() {
     let count = aoe_map::MAX_RESOURCE_OVERLAY_CHANGES;
     let snapshot = aoe_map::ResourceOverlaySnapshot {
+        replenished: 0,
         schema_version: aoe_map::RESOURCE_OVERLAY_SCHEMA_VERSION,
         map_content_hash: [7; 32],
         revision: count as u64,
@@ -78,5 +80,22 @@ fn the_complete_supported_overlay_roundtrips_through_bounded_storage() {
     assert_eq!(
         super::super::store::load(directory.path(), snapshot.map_content_hash).unwrap(),
         Some(snapshot)
+    );
+}
+
+#[test]
+fn journal_keeps_regrown_amounts_in_the_delta() {
+    let mut journal = Journal::default();
+    let mut growth = change(2);
+    growth.removed = 0;
+    growth.added = 100;
+    growth.remaining = 100;
+    journal.record(growth);
+    assert_eq!(
+        journal.since(1, 2),
+        Some(vec![ResourceAmount {
+            id: growth.id,
+            remaining: 100
+        }])
     );
 }
