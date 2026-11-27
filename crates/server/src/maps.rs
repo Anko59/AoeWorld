@@ -18,7 +18,7 @@ pub(super) use creation::{cancel_job, create_job, estimate, job_status, list_job
 mod height_bounds;
 pub(crate) use height_bounds::height_bounds;
 mod minimap;
-pub(crate) use minimap::MinimapCache;
+pub(crate) use minimap::Minimaps;
 use minimap::minimap;
 mod reset;
 mod routes;

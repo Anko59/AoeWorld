@@ -78,7 +78,8 @@ One raster is generated at a time off the async runtime within 30 seconds, a fin
 one on four bounded workers and a coarse one on a thread of its own,
 never partially, and the eight most recent rasters are cached. Coarse and fine
 rasters share the cache as `{hash}:coarse` and `{hash}`, so four maps keep both stages
-(at most 2 MiB). The client rejects any
+(at most 2 MiB). A cached raster is served while another map's package opens or its
+raster computes. The client rejects any
 other shape and retains its coarse map on refinement failure (or its schematic
 map when neither stage succeeded); it requests no chunks for the map. Surface
 queries preserve the composed terrain while omitting final resource and decoration

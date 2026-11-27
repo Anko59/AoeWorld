@@ -14,6 +14,7 @@ use std::{collections::BTreeMap, sync::Arc};
 mod bounds;
 mod landscape;
 mod minimap;
+mod minimap_waiting;
 mod preview;
 mod stored;
 

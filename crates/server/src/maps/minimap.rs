@@ -71,37 +71,6 @@ pub(crate) enum MinimapError {
     Page(EnvironmentPageError),
 }
 
-/// Most-recently-used rasters by package content hash.
-#[derive(Debug, Default)]
-pub(crate) struct MinimapCache {
-    entries: VecDeque<(String, Arc<[u8]>)>,
-    /// Rasters still computing after a request hit its deadline.
-    pub(in crate::maps) pending: BTreeSet<String>,
-}
-
-impl MinimapCache {
-    pub(crate) fn get(&mut self, hash: &str) -> Option<Arc<[u8]>> {
-        let index = self.entries.iter().position(|(key, _)| key == hash)?;
-        let entry = self.entries.remove(index)?;
-        let raster = entry.1.clone();
-        self.entries.push_back(entry);
-        Some(raster)
-    }
-
-    pub(crate) fn insert(&mut self, hash: String, raster: Arc<[u8]>) {
-        self.entries.retain(|(key, _)| *key != hash);
-        self.entries.push_back((hash, raster));
-        while self.entries.len() > MAX_CACHED_MINIMAPS {
-            self.entries.pop_front();
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn len(&self) -> usize {
-        self.entries.len()
-    }
-}
-
 /// Raster axis for a map: one sample per tile up to the fixed maximum.
 pub(crate) fn minimap_samples(tiles_per_side: u64) -> u16 {
     tiles_per_side.min(u64::from(MAX_MINIMAP_SAMPLES_PER_AXIS)) as u16
@@ -275,8 +244,11 @@ fn package_raster(
     )
 }
 
+#[path = "minimap_cache.rs"]
+mod cache;
 #[path = "minimap_http.rs"]
 mod http;
+pub(crate) use cache::{MinimapCache, Minimaps};
 #[cfg(test)]
 pub(in crate::maps) use http::finish;
 pub(in crate::maps) use http::{coarse_minimap, minimap};
