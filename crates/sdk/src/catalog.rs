@@ -1,7 +1,7 @@
 //! Resource nodes read from public map chunks, the same terrain the browser
 //! downloads. A node is exposed to a bot only once its tile is explored.
 use aoe_core::TileCoord;
-use aoe_map::{CompactChunk, LandscapeChunk, ResourceKind as MapKind, WaterKind};
+use aoe_map::{CompactChunk, LandscapeChunk, ObjectKind, ResourceKind as MapKind, WaterKind};
 use aoe_protocol::ResourceKind;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -11,6 +11,7 @@ pub(crate) struct Node {
     pub tile: TileCoord,
     pub kind: ResourceKind,
     pub initial: u16,
+    pub blocks_walk: bool,
 }
 
 /// The first resource id of the starting kit (bit 37, see `aoe_map::ResourceNode::starting`).
@@ -26,6 +27,7 @@ impl Node {
             tile: node.tile,
             kind: map_kind(node.kind),
             initial: node.initial_amount,
+            blocks_walk: true,
         })
     }
 }
@@ -100,6 +102,10 @@ impl ResourceCatalog {
                     tile: node.tile,
                     kind: map_kind(node.kind),
                     initial: node.initial_amount,
+                    blocks_walk: !matches!(
+                        node.object,
+                        ObjectKind::ShoreFish | ObjectKind::DeepFish
+                    ),
                 },
             );
         }

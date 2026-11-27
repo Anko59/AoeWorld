@@ -376,6 +376,14 @@ impl View for FakeWorld {
             None => self.route(from, to)?.last().copied(),
         }
     }
+    fn first_reachable_monastery(&self, from: Tile, candidates: &[EntityId]) -> Option<EntityId> {
+        candidates.iter().copied().find(|id| {
+            self.buildings
+                .iter()
+                .find(|b| b.id == id.0)
+                .is_some_and(|b| self.route(from, b.center()).is_some())
+        })
+    }
     fn find_build_site(
         &self,
         kind: BuildingKind,

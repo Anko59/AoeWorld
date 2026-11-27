@@ -267,3 +267,48 @@ fn known_ground_relics_are_not_build_sites() {
     }));
     assert_eq!(world.find_build_site(kind, origin, 0, 0, &[]), None);
 }
+
+#[test]
+fn walking_labels_find_a_monastery_approach_on_the_carriers_bank() {
+    let from = TileCoord::new(13, 8);
+    for (ford, expected) in [(false, EntityId(11)), (true, EntityId(10))] {
+        let mut world = river_world(ford, true);
+        let monasteries = [(10, (19, 7)), (11, (8, 20))];
+        for (id, (x, y)) in monasteries {
+            let mut monastery = building(id, ME, ConstructionState::Complete);
+            monastery.kind = BuildingKind::Monastery;
+            monastery.footprint = TileRect::from_xywh(x, y, 3, 3);
+            world.buildings.insert(EntityId(id), monastery);
+        }
+        let candidates = [EntityId(10), EntityId(11)];
+        assert_eq!(
+            world.first_reachable_monastery(from, &candidates),
+            Some(expected)
+        );
+    }
+}
+
+#[test]
+fn a_monastery_with_its_whole_perimeter_sealed_has_no_walking_approach() {
+    let mut world = river_world(false, true);
+    let mut monastery = building(10, ME, ConstructionState::Complete);
+    monastery.kind = BuildingKind::Monastery;
+    monastery.footprint = TileRect::from_xywh(8, 8, 3, 3);
+    world.buildings.insert(EntityId(10), monastery);
+    let mut id = 11;
+    for y in 7..=11 {
+        for x in 7..=11 {
+            if x == 7 || x == 11 || y == 7 || y == 11 {
+                let mut wall = building(id, ME, ConstructionState::Complete);
+                wall.kind = BuildingKind::StoneWall;
+                wall.footprint = TileRect::from_xywh(x, y, 1, 1);
+                world.buildings.insert(EntityId(id), wall);
+                id += 1;
+            }
+        }
+    }
+    assert_eq!(
+        world.first_reachable_monastery(TileCoord::new(4, 8), &[EntityId(10)]),
+        None
+    );
+}

@@ -2,8 +2,8 @@
 //! `crates/sdk-python/src/types.rs`, and the `View` trait every manager reads
 //! the world through (the SDK's `World` implements it in `sdk_view`).
 use aoe_sdk::{
-    Age, AnimalKind, AnimalTask, BuildingKind, CombatStance, GeneralState, ResourceKind, Tech,
-    UnitKind, UnitTask, Visibility,
+    Age, AnimalKind, AnimalTask, BuildingKind, CombatStance, EntityId, GeneralState, ResourceKind,
+    Tech, UnitKind, UnitTask, Visibility,
 };
 
 /// A tile `(x, y)`.
@@ -311,6 +311,7 @@ pub trait View {
     fn land_known(&self, tile: Tile) -> bool;
     fn land_route(&self, from: Tile, to: Tile) -> Option<Vec<Tile>>;
     fn land_frontier(&self, from: Tile, to: Tile) -> Option<Tile>;
+    fn first_reachable_monastery(&self, from: Tile, candidates: &[EntityId]) -> Option<EntityId>;
     fn find_build_site(
         &self,
         kind: BuildingKind,

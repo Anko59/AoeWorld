@@ -109,3 +109,35 @@ fn the_build_order_wants_one_monastery_for_a_nearby_relic_in_castle_age() {
     world.relics.as_mut().unwrap().ground = vec![relic(20, 210, 230)];
     assert!(!plans_monastery(&world));
 }
+
+#[test]
+fn a_relic_carrier_uses_the_nearest_monastery_on_its_side_of_a_river() {
+    let mut world = FakeWorld::new(
+        vec![unit_of(13, UnitKind::Monk, (48, 50))],
+        vec![
+            building(1, BuildingKind::TownCenter, (34, 45)),
+            building(2, BuildingKind::Monastery, (52, 50)),
+            building(3, BuildingKind::Monastery, (48, 68)),
+            building(4, BuildingKind::Monastery, (30, 65)),
+        ],
+    );
+    world.economy = Some(with_age(eco(0, 0, 0, 1, 10), Age::Castle, &[]));
+    world.relics = Some(RelicView {
+        carriers: vec![EntityId(13)],
+        ..RelicView::default()
+    });
+    // Water runs from edge to edge at x = 50.
+    world.route_fn = Some(Box::new(|from, to| {
+        (from.0 < 50 && to.0 < 50).then(|| vec![from, to])
+    }));
+    let (_, orders) = play_fresh(&world);
+    let deliveries = orders
+        .orders
+        .iter()
+        .filter_map(|order| match order {
+            Order::Garrison { unit, building } if *unit == EntityId(13) => Some(*building),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(deliveries, [EntityId(3)]);
+}

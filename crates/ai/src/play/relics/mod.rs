@@ -74,14 +74,18 @@ pub fn step(ctx: &mut Context<'_>) -> Result<(), OrderBudgetExhausted> {
     let mut claimed = std::collections::BTreeSet::new();
     for &(id, from, _) in monks.iter().filter(|(_, _, idle)| *idle) {
         let action = if view.carriers.binary_search(&id).is_ok() {
-            monasteries
+            let mut by_distance: Vec<_> = monasteries
                 .iter()
                 .map(|&(id, at, _)| (dist2(at, from), id))
-                .min()
-                .map(|(_, building)| Order::Garrison {
-                    unit: id,
-                    building: EntityId(building),
-                })
+                .collect();
+            by_distance.sort_unstable();
+            let candidates: Vec<_> = by_distance
+                .into_iter()
+                .map(|(_, id)| EntityId(id))
+                .collect();
+            world
+                .first_reachable_monastery(from, &candidates)
+                .map(|building| Order::Garrison { unit: id, building })
         } else {
             let mut nearby: Vec<_> = view
                 .ground

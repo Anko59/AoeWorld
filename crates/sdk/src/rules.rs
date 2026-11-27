@@ -17,7 +17,7 @@ fn stock(cost: sim::Stockpile) -> Stockpile {
     }
 }
 
-fn native_building(kind: BuildingKind) -> sim::BuildingKind {
+pub(crate) fn native_building(kind: BuildingKind) -> sim::BuildingKind {
     use sim::BuildingKind as N;
     match kind {
         BuildingKind::TownCenter => N::TownCenter,
