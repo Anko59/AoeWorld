@@ -58,7 +58,7 @@ test("neighbouring units leave no gap at native size and carry an outline", asyn
   }
 });
 
-test("own forces win a shared place and are drawn after their rivals", async ({
+test("rival forces show in a shared place, inside the outline of own ones", async ({
   page,
 }) => {
   await stillMap(page, "native");
@@ -70,12 +70,12 @@ test("own forces win a shared place and are drawn after their rivals", async ({
     const ours = [8, x, y, own.owner, own.colour];
     const theirs = [0, x, y, rival.owner, rival.colour];
     still.present(...still.at(0, -80));
-    // Own forces arrive first, are fewer and have the larger id.
+    // The rival arrives last and is one against four.
     still.actors([
-      ...ours,
+      ...[ours, ours, ours, ours].flat(),
       ...still.block([40, 10], [8, 8], own),
       ...still.block([48, 10], [8, 8], rival),
-      ...[theirs, theirs, theirs, theirs].flat(),
+      ...theirs,
     ]);
     await still.frames(2);
     const marks = document.getElementById("minimap-marks");
@@ -91,24 +91,31 @@ test("own forces win a shared place and are drawn after their rivals", async ({
       ?.getAttribute("data-player");
     return { map: still.map, order, owner };
   });
-  // The counted pixel keeps its majority owner; only the drawing prefers ours.
-  expect(seen.owner).toBe("2");
+  // The counted pixel keeps its majority owner; only the drawing shows both.
+  expect(seen.owner).toBe("5");
   expect(seen.order).toContain("own");
   expect(seen.order).toContain("rival");
-  expect(seen.order.lastIndexOf("rival")).toBeLessThan(
-    seen.order.indexOf("own"),
+  expect(seen.order.lastIndexOf("own")).toBeLessThan(
+    seen.order.indexOf("rival"),
   );
   const colour = await pixels(page);
-  const around = [-1, 0, 1].flatMap((across) =>
-    [-1, 0, 1].map((down) =>
+  const reach = [-3, -2, -1, 0, 1, 2, 3];
+  const around = reach.flatMap((across) =>
+    reach.map((down) =>
       colour(
         seen.map.left + seen.map.width / 2 - 20 + across,
         seen.map.top + seen.map.height / 2 + 10 + down,
       ),
     ),
   );
-  expect(around.some(({ red, blue }) => blue > 150 && red < 130)).toBe(true);
-  expect(around.some(({ red, blue }) => red > 150 && blue < 110)).toBe(false);
+  expect(
+    around.filter(({ red, blue }) => red > 190 && blue < 90).length,
+    "the rival",
+  ).toBeGreaterThanOrEqual(4);
+  expect(
+    around.filter(({ red, blue }) => blue > red + 30 && blue > 90).length,
+    "the pale outline of the own ones",
+  ).toBeGreaterThan(3);
 });
 
 test("six joined buildings of one player are a town, fewer or scattered are not", async ({

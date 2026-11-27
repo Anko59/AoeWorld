@@ -175,6 +175,54 @@ for (const frame of ["native", "square", "overview"] as const)
     expect((await spilled(page)).outside).toBe(0);
   });
 
+test("a letterboxed map marks the camera wherever its land is visible", async ({
+  page,
+}) => {
+  await stillMap(page, "overview");
+  const { map, box } = await page.evaluate(() => {
+    const still = Reflect.get(window, "still") as Still;
+    const box = document.getElementById("minimap-map")?.getBoundingClientRect();
+    if (!box) throw new Error("#minimap-map is missing");
+    still.wheel(8);
+    still.present(1000, 1000);
+    return { map: still.map, box: { left: box.left, width: box.width } };
+  });
+  const x = Math.round(map.left + map.width / 2);
+  const y = Math.round(map.top + map.height / 2);
+  // The bars beside the square are wide enough for the place of the camera.
+  expect(map.width / 2).toBeLessThan(330);
+  expect(box.width / 2).toBeGreaterThan(520);
+  const drag = async () => {
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x - 350, y, { steps: 6 });
+    await page.mouse.up();
+  };
+  const look = (zoom: number) =>
+    page.evaluate(async (zoom) => {
+      const still = Reflect.get(window, "still") as Still;
+      still.present(1000, 1000, zoom);
+      await still.frames(2);
+      return still.drawn();
+    }, zoom);
+  await drag();
+  const small = await look(1);
+  expect(small.kind).not.toBe("arrow");
+  expect(Math.abs(small.x - (x - 350))).toBeLessThan(2);
+  expect(Math.abs(small.y - y)).toBeLessThan(2);
+  // A whole view, partly on the square and partly on the bar beside it.
+  const large = await look(0.1);
+  expect(large.kind).toBe("frame");
+  expect(Math.abs(large.width - 0.4 * map.width)).toBeLessThan(4);
+  expect(Math.abs(large.x - (x - 350))).toBeLessThan(2);
+  // Off the bar as well.
+  await drag();
+  const gone = await look(1);
+  expect(gone.kind).toBe("arrow");
+  expect(gone.x - x).toBeLessThan(-map.width / 2 - 100);
+  expect(gone.x).toBeGreaterThan(box.left);
+});
+
 test("the marker is above the map and below the buttons over it", async ({
   page,
 }) => {

@@ -2,7 +2,12 @@ import { expect, type Page } from "@playwright/test";
 import { test } from "../../server.js";
 
 type Point = [number, number];
-type Frame = { width: number; height: number; stretch: boolean };
+type Frame = {
+  width: number;
+  height: number;
+  stretch: boolean;
+  inset?: Point;
+};
 /** `polygon`: the four unclamped ground corners, clockwise from top left. */
 type Input = Frame & {
   polygon: Point[];
@@ -324,6 +329,32 @@ test("a frame is also cut at the visible minimap and lives while any part shows"
   ]);
   expect(sliver.shape.kind).toBe("frame");
   expect(gone.shape.kind).toBe("arrow");
+});
+
+test("the bars beside a letterboxed map belong to the visible minimap", async ({
+  page,
+}) => {
+  const wide = { ...square, inset: [60, 0] as Point };
+  const [boxed, cover, arrow] = await shapes(page, [
+    wideView(wide, 100, 40),
+    wideView(wide, 400, -300),
+    wideView(wide, -65, -300),
+  ]);
+  if (!boxed || !cover || !arrow) throw new Error("Shape missing");
+  expect(boxed.shape.kind).toBe("frame");
+  samePoints(
+    boxed.shape.polygon,
+    [
+      [-60, 40],
+      [100, 40],
+      [100, 139],
+      [-60, 139],
+    ],
+    0.01,
+  );
+  expect(cover.shape.kind).toBe("cover");
+  expect(Math.min(...cover.shape.polygon.map(([x]) => x))).toBeLessThan(-50);
+  expect(arrow.shape.kind).toBe("arrow");
 });
 
 test("a view covering the whole visible minimap is an outline inside its border", async ({

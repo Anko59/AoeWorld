@@ -216,8 +216,9 @@ export async function stillMap(
   }, frame);
 }
 
-/** The px of the page that the marker changes inside the rectangle of the map,
- * and beyond it by more than half of its widest stroke. */
+/** The px of the page that the marker changes inside the rectangle that shows
+ * land, bars beside a letterboxed map included, and beyond it by more than half
+ * of its widest stroke. */
 export async function spilled(page: Page) {
   // The buttons beside the map are painted a little differently while something
   // under them is animated; they are not the marker.
@@ -230,7 +231,16 @@ export async function spilled(page: Page) {
       const root = document.getElementById("minimap-marker");
       if (!root) throw new Error("#minimap-marker is missing");
       root.style.visibility = visibility;
-      return (Reflect.get(window, "still") as Still).map;
+      const box = document
+        .getElementById("minimap-map")
+        ?.getBoundingClientRect();
+      if (!box) throw new Error("#minimap-map is missing");
+      return {
+        left: box.left,
+        top: box.top,
+        width: box.width,
+        height: box.height,
+      };
     }, visibility);
     // A layer that was just scaled is drawn again, sharper, some frames later.
     let bytes = await page.screenshot({ scale: "css" });

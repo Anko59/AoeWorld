@@ -50,18 +50,21 @@ const holds = (polygon, p) => polygon.every((a, index) => {
 
 const onWorld = world => [p => p[0], p => world[0] - p[0], p => p[1], p => world[1] - p[1]];
 
-// A stretched map shows its rhombus, a letterboxed one its whole square. `reach`
-// is 1 on its border; the planes give px.
-function visibleMap(width, height, stretch) {
+// A stretched map shows its rhombus, a letterboxed one its whole box: zoomed
+// land also fills the bars beside the square. `reach` is 1 on its border; the
+// planes give px.
+function visibleMap(width, height, stretch, inset) {
+  const [wide, high] = [width + 2 * inset[0], height + 2 * inset[1]];
   const round = [[1, 0], [0, 1], [-1, 0], [0, -1]], aslant = [[1, 1], [-1, 1], [-1, -1], [1, -1]];
   const sides = stretch ? aslant : round;
-  const share = ([x, y], p) => 2 * (x * (p[0] / width - .5) + y * (p[1] / height - .5));
+  const share = ([x, y], p) => 2 * (x * (p[0] - width / 2) / wide + y * (p[1] - height / 2) / high);
   return {
+    half: Math.min(wide, high) / 2,
     border: part => (stretch ? round : aslant).map(([x, y]) =>
-      [(1 + x * part) / 2 * width, (1 + y * part) / 2 * height]),
+      [(width + x * part * wide) / 2, (height + y * part * high) / 2]),
     reach: p => Math.max(...sides.map(side => share(side, p))),
     planes: sides.map(side => {
-      const slope = 2 * Math.hypot(side[0] / width, side[1] / height);
+      const slope = 2 * Math.hypot(side[0] / wide, side[1] / high);
       return p => (1 - share(side, p)) / slope + EPSILON;
     }),
   };
@@ -99,10 +102,10 @@ function spread(point, brackets, planes) {
 }
 
 // Inside the border, pointing away from the centre of the map; its tip first.
-function arrowhead(target, width, height, reach) {
+function arrowhead(target, width, height, half, reach) {
   const dx = target[0] - width / 2, dy = target[1] - height / 2;
   const length = Math.hypot(dx, dy) || 1, ux = dx / length, uy = dy / length;
-  const part = Math.max(0, 1 - ARROW_INSET / (Math.min(width, height) / 2)) / (reach || 1);
+  const part = Math.max(0, 1 - ARROW_INSET / half) / (reach || 1);
   const x = width / 2 + dx * part, y = height / 2 + dy * part;
   return [[7, 0], [-5, 6], [-2, 0], [-5, -6]].map(([along, aside]) =>
     [x + ux * along - uy * aside, y + uy * along + ux * aside]);
@@ -110,12 +113,13 @@ function arrowhead(target, width, height, reach) {
 
 // `polygon`: the four unclamped ground corners, clockwise from top left.
 // `origin`: the drawn map's place on the page, where the brackets are rounded.
-export function markerShape({ polygon, world, view, width, height, stretch, origin = [0, 0] }) {
+// `inset`: the bars beside it.
+export function markerShape({ polygon, world, view, width, height, stretch, inset = [0, 0], origin = [0, 0] }) {
   const project = point => {
     const [x, y] = minimapProject(point, world, view);
     return [x * width / 256, y * height / 256];
   };
-  const full = polygon.map(project), map = visibleMap(width, height, stretch);
+  const full = polygon.map(project), map = visibleMap(width, height, stretch, inset);
   const xs = full.map(p => p[0]), ys = full.map(p => p[1]);
   const left = Math.min(...xs), top = Math.min(...ys);
   const size = [Math.max(...xs) - left, Math.max(...ys) - top];
@@ -137,13 +141,13 @@ export function markerShape({ polygon, world, view, width, height, stretch, orig
   const kept = polygon.map(p => kind === 'spot' || kind === 'inset'
     || kind === 'frame' && onWorld(world).every(depth => depth(p) >= -EPSILON));
   const brackets = bracketed(box, kept, planes);
-  const inner = Math.max(.9, 1 - COVER_INSET / map.planes[0]([width / 2, height / 2]));
+  const inner = Math.max(.9, 1 - COVER_INSET / Math.min(...map.planes.map(depth => depth([width / 2, height / 2]))));
   return {
     kind, box, centre, size, brackets,
     polygon: kind === 'cover' ? map.border(inner) : drawn,
     corners: brackets.map(bracket => bracket !== null),
     echo: bracketed({ x: box.x - ECHO, y: box.y - ECHO, width: wide + 2 * ECHO, height: high + 2 * ECHO }, kept, planes),
     spread: spread(centre, brackets, planes),
-    arrow: kind === 'arrow' ? arrowhead(centre, width, height, map.reach(centre)) : null,
+    arrow: kind === 'arrow' ? arrowhead(centre, width, height, map.half, map.reach(centre)) : null,
   };
 }

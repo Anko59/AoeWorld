@@ -124,7 +124,7 @@ export function initNavigation() {
   document.addEventListener('focusin', event => { if (editable(event.target)) stopPanning(); });
 
   const orders = initMinimapOrders(svg);
-  const view = initMinimapView(svg, panel, point => { if (point) pending = point; }, orders.press);
+  const view = initMinimapView(svg, panel, point => { if (point) pending = point; }, orders.press, { pings: orders });
   const views = initViews(([x, y, zoom]) => {
     const hash = `x=${x}&y=${y}&zoom=${zoom}`;
     // Panning and H can move the camera while leaving this fragment intact.

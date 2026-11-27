@@ -13,7 +13,7 @@ function drawnMap(bounds, stretch) {
 
 // Terrain/fog are retained SVG images. Only their transform and occupied actor
 // pixels change; neither zoom nor panning regenerates a world raster.
-export function initMinimapView(svg, panel, jump, order) {
+export function initMinimapView(svg, panel, jump, order, { pings } = {}) {
   const locator = initLocator(document.getElementById('minimap-marker'));
   const drawMarks = initMarks(document.getElementById('minimap-marks'));
   let ground = null, frame = null;
@@ -58,6 +58,7 @@ export function initMinimapView(svg, panel, jump, order) {
     }
     for (const [key, node] of nodes) if (!live.has(key)) { node.remove(); nodes.delete(key); }
     drawMarks(actors, world, state(), frame);
+    pings?.draw();
   }
   function reset() { zoom = 1; follow = true; update(world, camera); }
   // `seen`: the four unclamped ground corners of the screen, null for none.
