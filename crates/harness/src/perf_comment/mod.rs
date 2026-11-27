@@ -3,7 +3,7 @@
 //! marker and updated in place by later runs. Informational only: no gate,
 //! baseline or threshold is read from it or changed by it.
 //!
-//! `make perf-comment` runs this after that job on pull requests. It reads
+//! `make perf-comment` runs this as the last step of that job on pull requests. It reads
 //! the run's `performance-report` artifact and the latest one from a `dev`
 //! run whose `target-performance` job passed, renders one compact table, and
 //! creates or rewrites the marked pull request comment. `PERF_COMMENT_PRINT=1`
@@ -191,21 +191,34 @@ struct JobJson {
     completed_at: Option<String>,
 }
 
-fn wall_seconds(job: &JobJson) -> Option<u64> {
+/// A job with no conclusion yet is the one running this command (the comment is the last
+/// step of `target-performance`): it is timed up to `now`.
+fn wall_seconds(job: &JobJson, now: i64) -> Option<u64> {
     let start = epoch_seconds(job.started_at.as_deref()?)?;
-    let end = epoch_seconds(job.completed_at.as_deref()?)?;
+    let end = match (&job.completed_at, &job.conclusion) {
+        (Some(end), _) => epoch_seconds(end)?,
+        (None, None) => now,
+        (None, Some(_)) => return None,
+    };
     u64::try_from(end.saturating_sub(start)).ok()
 }
 
 /// The jobs of `repos/{repo}/actions/runs/{run}/jobs` with their wall time.
 pub(crate) fn parse_jobs(text: &str, run: u64) -> Result<Vec<Job>> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| i64::try_from(elapsed.as_secs()).unwrap_or(0));
+    parse_jobs_at(text, run, now)
+}
+
+fn parse_jobs_at(text: &str, run: u64, now: i64) -> Result<Vec<Job>> {
     let parsed: JobsJson =
         serde_json::from_str(text).map_err(|error| format!("run {run}: jobs: {error}"))?;
     Ok(parsed
         .jobs
         .into_iter()
         .map(|job| Job {
-            seconds: wall_seconds(&job),
+            seconds: wall_seconds(&job, now),
             name: job.name,
             conclusion: job.conclusion,
         })

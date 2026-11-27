@@ -7,6 +7,7 @@ use tempfile::tempdir;
 
 mod notes;
 mod reference;
+mod running;
 
 /// One artifact directory: `ci.json` plus the optional sibling files.
 fn fixture(
