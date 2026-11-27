@@ -9,21 +9,25 @@ const MAX_PINGS = 8;
 
 export function initMinimapOrders(svg) {
   let send = null;
+  // Last in the map: over the marks, which would hide most of a ping.
+  const layer = document.createElementNS(svg.namespaceURI, 'g');
+  layer.id = 'minimap-pings';
+  svg.append(layer);
   // Zero-length round strokes keep their size at any zoom or stretch, and the
-  // map's own transform keeps them in place. Stop removes pings from the page.
+  // land's transform keeps them in place. Stop removes pings from the page.
   function ping([kind, colour], [x, y]) {
     const node = document.createElementNS(svg.namespaceURI, 'g');
     node.setAttribute('data-minimap-ping', kind);
     node.setAttribute('pointer-events', 'none');
     node.innerHTML = [[15, '#17251b'], [12, colour], [5, '#17251b']].map(([width, stroke]) =>
       `<path d="M${x} ${y}h0" stroke="${stroke}" stroke-width="${width}" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`).join('');
-    document.getElementById('minimap-view').append(node);
-    const drawn = svg.querySelectorAll('[data-minimap-ping]');
-    if (drawn.length > MAX_PINGS) drawn[0].remove();
+    layer.append(node);
+    if (layer.children.length > MAX_PINGS) layer.firstElementChild.remove();
     setTimeout(() => node.remove(), 1500);
   }
   return {
     bind(callback) { send = callback; },
+    draw() { layer.setAttribute('transform', document.getElementById('minimap-view').getAttribute('transform')); },
     // True when the press was an order: it starts no drag and no jump.
     press(point, world, event) {
       const [x, y] = point ?? [NaN, NaN];

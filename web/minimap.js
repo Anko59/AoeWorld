@@ -81,7 +81,8 @@ export function minimapOrderPoint(rect, clientX, clientY, world, view, stretch) 
 }
 
 // Five-number actor records: kind and flags, world x/y, owner, packed RGB.
-// The low nibble flags buildings (1), economic units (2), ships (4), and local units (8).
+// The low nibble flags buildings (1), economic units (2), ships (4), and local
+// ownership of a unit or a building (8).
 // Work is proportional to the received actors and occupied screen pixels, never
 // world area. Ties choose the smaller owner id, independent of arrival order.
 export function aggregatePixels(actors, project, width, height, cell = 1) {

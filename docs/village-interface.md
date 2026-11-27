@@ -114,7 +114,23 @@ and modes. Without local configuration it uses synthetic art; an ignored
 `{"url":"http://127.0.0.1:8121/"}` switches it to an already running native-pack
 `make dev` instance. The proof retains nine screenshots and served build IDs
 under `.cache/hover-options/`; these files must never enter Git.
-The minimap uses a diamond frame with own units, buildings and visible deposits.
+The minimap uses a diamond frame with visible deposits and solid, outlined marks
+for the known actors: own ones with a pale rim, and six or more joined buildings
+of one player, walls and farms included, as a keep. Other players' marks lie over
+own ones, so a raid on an own town is seen; own units lie over their buildings,
+and units under the keep of their own town. A cell of both shows the other player
+inside the own outline. Pings of orders lie over all marks. The cells are
+anchored to the land, so they move with a zoomed minimap by whole px. Ivory
+brackets of a constant page size locate the camera at every minimap zoom and menu
+size. The closed outline inside them is the true view, and a view thinner than
+4 px is a dot of at least 2 px; once it is larger than the brackets it carries
+them on its visible corners, cut at the borders of the world and of the visible
+map, which includes the bars beside a letterboxed one.
+A view of the whole visible map is an outline just inside its border. An arrow
+replaces a large view with no visible part, or a small one whose centre is off
+the map. The marker lies above the map and below the buttons over it. A camera
+jump closes the brackets on the new place once, a frame never over the map's
+border; with reduced motion a second, still bracket shows for 0.7 s instead.
 Grid remains available through its minimap button and G. Selection ellipses use
 a continuous constant-pixel stroke across all renderers and zoom levels.
 

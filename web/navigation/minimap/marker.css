@@ -1,0 +1,33 @@
+/* The place of the camera on the minimap: ivory over an ink casing, so no hue
+   carries a meaning alone. The unit is one page px at every zoom of the menu.
+   No z-index: it follows the map and precedes the buttons, which are positioned. */
+#minimap-marker { position:absolute; left:0; top:0; overflow:visible; pointer-events:none; --core:2.5px; --edge:1px; --edge-casing:1px; }
+#map-navigation { position:relative; }
+#minimap-marker[data-size=large], #minimap-marker[data-kind=frame] { --core:3px; }
+#minimap-marker[data-size=large][data-kind=frame] { --core:3.5px; }
+#minimap-marker:is([data-kind=frame],[data-kind=cover]) { --edge-casing:1.25px; }
+#minimap-marker[data-kind=frame][data-cut] { --edge:1.5px; }
+#minimap-marker[data-kind=cover] { --edge:2px; }
+#minimap-marker path { fill:none; stroke:none; stroke-linecap:square; }
+#minimap-marker .marker-moat { stroke:#0d0a06; stroke-opacity:.45; stroke-width:8px; stroke-linejoin:round; }
+#minimap-marker[data-size=large] .marker-moat { stroke-width:8.5px; }
+#minimap-marker .marker-lens { fill:#fff; fill-opacity:.16; }
+#minimap-marker[data-kind=frame] .marker-lens { fill-opacity:.1; }
+/* Round: a miter at a sharp cut would reach far off the map. */
+#minimap-marker :is(.marker-edge-ink,.marker-edge) { stroke-linejoin:round; }
+#minimap-marker .marker-edge-ink { stroke:#0d0a06; stroke-opacity:.92; stroke-width:calc(var(--edge) + 2*var(--edge-casing)); }
+#minimap-marker .marker-edge { stroke:#fffbe8; stroke-width:var(--edge); }
+#minimap-marker .marker-spot-ink { fill:#0d0a06; fill-opacity:.92; }
+#minimap-marker .marker-spot { fill:#fffbe8; }
+#minimap-marker :is(.marker-bracket-ink,.marker-echo-ink) { stroke:#0d0a06; stroke-opacity:.92; stroke-width:calc(var(--core) + 2.5px); }
+#minimap-marker :is(.marker-bracket,.marker-echo) { stroke:#fffbe8; stroke-width:var(--core); }
+/* Reduced motion answers a camera jump with this second bracket, at rest. */
+#minimap-marker:not([data-pulse=still]) :is(.marker-echo-ink,.marker-echo) { display:none; }
+#minimap-marker .marker-arrow-soft { stroke:#0d0a06; stroke-opacity:.28; stroke-width:6px; stroke-linejoin:round; }
+#minimap-marker .marker-arrow-ink { fill:#0d0a06; stroke:#0d0a06; stroke-width:3px; opacity:.92; }
+#minimap-marker .marker-arrow { fill:#fffbe8; stroke:#fffbe8; stroke-width:.5px; }
+
+/* Actors are counted on the hidden cells and drawn as whole px runs. */
+#minimap-entities { visibility:hidden; pointer-events:none; }
+#minimap-marks { pointer-events:none; }
+#minimap-marks path { paint-order:stroke; stroke-linejoin:round; }
