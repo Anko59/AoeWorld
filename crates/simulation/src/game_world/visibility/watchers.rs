@@ -107,14 +107,36 @@ impl GameWorld {
         })
     }
 
-    pub(crate) fn tile_has_reservation(&self, tile: TileCoord) -> bool {
-        self.building_at(tile).is_some()
-            || self
-                .vision
-                .private_foundations
-                .range((tile, PlayerId(0))..=(tile, PlayerId(u16::MAX)))
-                .next()
-                .is_some()
+    fn foundations_at(&self, tile: TileCoord) -> impl Iterator<Item = EntityId> + '_ {
+        self.vision
+            .private_foundations
+            .range((tile, PlayerId(0))..=(tile, PlayerId(u16::MAX)))
+            .map(|(_, &id)| id)
+    }
+
+    /// Recovery leaves both footprints and the one-tile exit rings for
+    /// training and ungarrisoning clear. Neighboring footprint tiles locate
+    /// those buildings, including private foundations, in the existing indexes.
+    pub(crate) fn tile_reserved_by_building(&self, tile: TileCoord) -> bool {
+        if self.building_at(tile).is_some() || self.foundations_at(tile).next().is_some() {
+            return true;
+        }
+        let has_exit = |id| {
+            self.economy.buildings.get(&id).is_some_and(|building| {
+                building.kind.garrison_capacity() > 0
+                    || !crate::trainable_units(building.kind).is_empty()
+            })
+        };
+        (-1..=1).any(|dy| {
+            (-1..=1).any(|dx| {
+                if dx == 0 && dy == 0 {
+                    return false;
+                }
+                let neighbor = TileCoord::new(tile.x + dx, tile.y + dy);
+                self.building_at(neighbor).is_some_and(has_exit)
+                    || self.foundations_at(neighbor).any(has_exit)
+            })
+        })
     }
 
     pub(crate) fn site_has_building(

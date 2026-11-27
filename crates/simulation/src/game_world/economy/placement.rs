@@ -49,6 +49,13 @@ impl GameWorld {
             && !self.rect_has_unit(TileRect::new(tile, TileCoord::new(tile.x + 1, tile.y + 1)))
     }
 
+    pub(crate) fn recovery_site_free(&self, tile: TileCoord) -> bool {
+        self.tile_free(tile)
+            && !self.living_animal_at(tile)
+            && !self.destination_tile_reserved(tile)
+            && !self.tile_reserved_by_building(tile)
+    }
+
     /// `!query(rect).0.is_empty()`, stopping at the first unit: no ordered
     /// copy of every unit in the rect's chunks just to see if one is there
     /// (a one-tile check in a town read hundreds, #978).

@@ -2,6 +2,8 @@ use super::*;
 use crate::AnimalKind;
 use aoe_map::{ObjectKind, ResourceKind, ResourceNode};
 
+mod training;
+
 fn advance(w: &mut GameWorld, seconds: u32) {
     for _ in 0..seconds * w.config().tick_hz {
         w.advance();

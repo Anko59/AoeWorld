@@ -173,10 +173,7 @@ impl GameWorld {
         for (dx, dy) in [(0, -1), (-1, 0), (1, 0), (0, 1)] {
             let next = TileCoord::new(tile.x + dx, tile.y + dy);
             if self.animal_edge_open(tile, next)
-                && !self.living_animal_at(next)
-                && self.tile_free(next)
-                && !self.tile_has_reservation(next)
-                && !self.destination_tile_reserved(next)
+                && self.recovery_site_free(next)
                 && let Ok(at) = WorldPosition::from_tile_center(next)
             {
                 return Some((at, self.wildlife.animals[&parent.id]));

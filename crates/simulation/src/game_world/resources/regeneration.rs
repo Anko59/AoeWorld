@@ -238,11 +238,7 @@ impl GameWorld {
     }
 
     fn tree_site_free(&self, tile: TileCoord) -> bool {
-        if !self.tile_free(tile)
-            || self.tile_has_reservation(tile)
-            || self.destination_tile_reserved(tile)
-            || self.living_animal_at(tile)
-        {
+        if !self.recovery_site_free(tile) {
             return false;
         }
         let tile_rect = TileRect::from_xywh(tile.x, tile.y, 1, 1);

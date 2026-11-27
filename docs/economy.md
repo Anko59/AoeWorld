@@ -330,13 +330,16 @@ Herds recover to the number placed at the start. A surviving deer herd has
 one birth every four game minutes, sheep every five and boar every six. A
 newborn needs a free tile beside a survivor and inherits its herd. An empty
 herd is gone permanently. Save files preserve both members and deadlines.
+Births and tree regrowth leave building footprints, work and arrival
+reservations, and the exit ring around training and garrison buildings free.
+Planned foundations reserve their exits too.
 
 A cut tree can grow back after two game minutes when an original tree tile
 beside it still has a living tree. Each new tree can seed the next edge of the
-original footprint. Unit bodies, reserved work and arrival tiles, foundations,
-and living animals defer growth for another interval. A fully cleared patch can
-never seed itself. Standalone resource overlays keep the time remaining until
-regrowth, and full saves rescale that time when the server tick rate changes.
+original footprint. Occupied or reserved ground defers growth for another
+interval. A fully cleared patch cannot seed itself. Standalone resource
+overlays preserve the remaining time, and full saves rescale it when the
+server tick rate changes.
 
 Live animals occupy an eight-tile spatial index. Each tick probes a fixed
 neighborhood around living units and advances only candidate animals and
