@@ -33,7 +33,7 @@ mod orders;
 pub use orders::{ISSUER_SPANS, OrderDemand, OrderIssuer, OrderRedundancy};
 pub mod parallel;
 #[path = "game_world/relics/mod.rs"]
-mod relics;
+pub(crate) mod relics;
 mod research;
 mod resources;
 #[path = "game_world/snapshot/mod.rs"]

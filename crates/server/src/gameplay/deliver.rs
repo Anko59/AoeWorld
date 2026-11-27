@@ -347,6 +347,22 @@ fn deliver_session(
             return (applied, failed);
         }
     }
+    if session.resident_relics != build.relics {
+        let view = build.relics.clone().unwrap_or(aoe_protocol::RelicView {
+            revision: build.revision,
+            ..aoe_protocol::RelicView::default()
+        });
+        if send(
+            session,
+            GameplayServerMessage::Relics(view),
+            &mut failed,
+            id,
+        ) {
+            session.resident_relics.clone_from(&build.relics);
+        } else {
+            return (applied, failed);
+        }
+    }
     if session.resident_projectiles != build.projectiles {
         let message = GameplayServerMessage::Projectiles {
             revision: build.revision,

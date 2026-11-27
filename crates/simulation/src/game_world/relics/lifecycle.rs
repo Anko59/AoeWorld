@@ -50,6 +50,8 @@ pub(crate) struct Relics {
     pub(super) carriers: BTreeMap<EntityId, EntityId>,
     pub(super) stored: BTreeMap<EntityId, MonasteryStore>,
     pub(in crate::game_world) orders: BTreeMap<EntityId, RelicOrder>,
+    pub(super) victory_enabled: bool,
+    pub(super) victory: Option<RelicVictory>,
     #[serde(skip)]
     payments: BTreeSet<(u64, EntityId, EntityId)>,
 }
@@ -64,6 +66,9 @@ impl Relics {
             for due in relics.relics.values_mut() {
                 *due = at(*due);
             }
+        }
+        if let Some(RelicVictory::Holding { deadline, .. }) = &mut self.victory {
+            deadline.0 = at(deadline.0);
         }
         self.rebuild_payments();
     }
@@ -308,6 +313,7 @@ impl GameWorld {
         if held.relics.is_empty() {
             self.relics.stored.remove(&monastery);
         }
+        self.update_relic_victory();
         Ok(())
     }
 
@@ -324,6 +330,7 @@ impl GameWorld {
             self.relics.payments.remove(&(due, building.id, relic));
             self.relics.ground.insert(relic, tiles[i % tiles.len()]);
         }
+        self.update_relic_victory();
     }
 
     pub(crate) fn advance_relics(&mut self) {
@@ -414,6 +421,7 @@ impl GameWorld {
                     .insert(relic, due);
                 self.relics.payments.insert((due, monastery, relic));
                 self.set_holds_relic(monk, false);
+                self.update_relic_victory();
             }
         }
         self.stop_movement(self.lookup[&monk]);

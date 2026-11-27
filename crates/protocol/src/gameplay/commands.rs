@@ -319,6 +319,10 @@ pub enum ClientMessage {
         entity_ids: Vec<EntityId>,
         destination: WorldPosition,
     },
+    RelicOrder {
+        sequence: u64,
+        action: RelicAction,
+    },
 }
 
 pub const MAX_TRAIN_BATCH: usize = 5;

@@ -160,4 +160,5 @@ pub(super) enum PendingAction {
         kind: aoe_protocol::UnitKind,
     },
     StopSelection(Vec<EntityId>),
+    Relic(aoe_protocol::RelicAction),
 }

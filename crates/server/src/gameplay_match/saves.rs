@@ -24,8 +24,8 @@ use std::{
 mod timing;
 
 /// Read by `make check-fixtures` to explain a save that no longer loads.
-/// Includes carried and stored relics, pending orders and payouts.
-pub const SAVE_VERSION: u16 = 24;
+/// Includes relic lifecycle and the optional victory countdown.
+pub const SAVE_VERSION: u16 = 25;
 const MAX_NAME: usize = 60;
 const MAX_SAVE_BYTES: u64 = 2 << 30;
 
@@ -285,7 +285,7 @@ pub(super) async fn build(
     provider: Option<Arc<dyn aoe_map::EnvironmentPageProvider>>,
     resume: Option<Arc<Loaded>>,
     humans: Vec<bool>,
-    (seed, placed): (u64, Arc<std::sync::atomic::AtomicUsize>),
+    (rules, placed): (MatchRules, Arc<std::sync::atomic::AtomicUsize>),
     cancelled: Arc<std::sync::atomic::AtomicBool>,
     directory: Option<PathBuf>,
 ) -> Result<(GameplayService, timing::Spent), String> {
@@ -318,7 +318,7 @@ pub(super) async fn build(
                 package,
                 provider,
                 &humans,
-                &MatchRules::default().with_seed(seed),
+                &rules,
                 &placed,
                 &cancelled,
                 directory.as_deref(),

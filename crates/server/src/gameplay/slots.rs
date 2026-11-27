@@ -261,6 +261,7 @@ impl GameplayService {
                 resident_players: BTreeMap::new(),
                 resident_buildings: BTreeMap::new(),
                 resident_animals: Vec::new(),
+                resident_relics: None,
                 resident_projectiles: Vec::new(),
                 resident_move_queues: Vec::new(),
                 resident_land: None,

@@ -37,6 +37,9 @@ impl GameWorld {
         sink: &mut impl FnMut(&PreparedResourceDepletion<'_>) -> bool,
         probe: &mut impl FnMut(TickPhase),
     ) -> Vec<GameUnit> {
+        if self.relic_winner().is_some() {
+            return Vec::new();
+        }
         #[cfg(test)]
         {
             let units = &self.units;
@@ -45,6 +48,7 @@ impl GameWorld {
         }
         self.economy.stewards.automatic = true;
         let changed = self.advance_phases(sink, probe);
+        self.advance_relic_victory();
         self.publish_unit_changes(&changed);
         self.recover_market_prices();
         self.economy.stewards.automatic = false;

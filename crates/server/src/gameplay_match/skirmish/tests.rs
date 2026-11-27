@@ -117,6 +117,7 @@ async fn refusals_name_the_reason() {
     let hash = small_map(&state).await;
     let request = |opponents| {
         Json(StartRequest {
+            relic_victory: false,
             map_hash: hash.clone(),
             opponents,
             save: None,
@@ -160,6 +161,7 @@ async fn a_skirmish_places_every_village_starts_its_hosts_and_stop_ends_them() {
     let headers = controller(&state).await;
     let old_world = state.gameplay.read().await.world_id();
     let request = Json(StartRequest {
+        relic_victory: false,
         map_hash: hash.clone(),
         opponents: 2,
         save: None,
@@ -192,6 +194,7 @@ async fn no_opponents_is_ready_once_the_match_is_in() {
     let hash = small_map(&state).await;
     let headers = controller(&state).await;
     let request = Json(StartRequest {
+        relic_victory: false,
         map_hash: hash,
         opponents: 0,
         save: None,
@@ -219,6 +222,7 @@ async fn a_reload_reclaims_the_human_seat_and_keeps_the_ai_running() {
     let hash = small_map(&state).await;
     let headers = controller(&state).await;
     let request = Json(StartRequest {
+        relic_victory: false,
         map_hash: hash,
         opponents: 2,
         save: None,
@@ -285,6 +289,7 @@ async fn starter_authority_ends_when_an_unrelated_world_replaces_the_skirmish() 
         State(state.clone()),
         starter.clone(),
         Json(StartRequest {
+            relic_victory: false,
             map_hash: hash.clone(),
             opponents: 0,
             save: None,
@@ -302,6 +307,7 @@ async fn starter_authority_ends_when_an_unrelated_world_replaces_the_skirmish() 
         State(state.clone()),
         starter.clone(),
         Json(StartRequest {
+            relic_victory: false,
             map_hash: hash,
             opponents: 0,
             save: None,

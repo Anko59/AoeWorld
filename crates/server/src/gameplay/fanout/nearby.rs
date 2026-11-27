@@ -1,5 +1,5 @@
-//! Animals and projectiles bucketed by area once per tick, so each session
-//! looks at those near its region instead of every one in the world.
+//! Sparse entities bucketed by area once per tick so sessions can visit their region.
+use super::super::relics;
 use aoe_core::{PlayerId, TileCoord, TileRect};
 use aoe_simulation::{GameAnimal, GameWorld, Projectile};
 use std::collections::{BTreeMap, HashMap};
@@ -57,6 +57,8 @@ pub(super) struct Nearby<'w> {
     animals: Buckets<&'w GameAnimal>,
     owned: BTreeMap<PlayerId, Vec<u32>>,
     projectiles: Buckets<&'w Projectile>,
+    relics: Buckets<relics::Marker>,
+    owned_relics: BTreeMap<PlayerId, Vec<u32>>,
 }
 
 impl<'w> Nearby<'w> {
@@ -72,7 +74,16 @@ impl<'w> Nearby<'w> {
         let projectiles = Buckets::new(world.projectiles().collect(), |p| {
             p.position(tick).tile_floor()
         });
+        let relics = Buckets::new(relics::markers(world).collect(), |marker| marker.tile());
+        let mut owned_relics = BTreeMap::<PlayerId, Vec<u32>>::new();
+        for (index, marker) in relics.items.iter().enumerate() {
+            if let Some(owner) = marker.owner() {
+                owned_relics.entry(owner).or_default().push(index as u32);
+            }
+        }
         Self {
+            relics,
+            owned_relics,
             animals,
             owned,
             projectiles,
@@ -88,6 +99,20 @@ impl<'w> Nearby<'w> {
         let owned = self.owned.get(&player).map_or(&[][..], Vec::as_slice);
         self.animals.near(region, owned, scratch);
         scratch.iter().map(|at| self.animals.items[*at as usize])
+    }
+
+    pub(super) fn relics<'a>(
+        &'a self,
+        region: TileRect,
+        viewer: PlayerId,
+        scratch: &'a mut Vec<u32>,
+    ) -> impl Iterator<Item = relics::Marker> + 'a {
+        let owned = self
+            .owned_relics
+            .get(&viewer)
+            .map_or(&[][..], Vec::as_slice);
+        self.relics.near(region, owned, scratch);
+        scratch.iter().map(|at| self.relics.items[*at as usize])
     }
 
     pub(super) fn projectiles<'a>(

@@ -19,6 +19,7 @@ pub use game_world::{HoldingSpan, LandControl};
 /// One 32-by-32 walking-zone bitmap, in chunk coordinates and row order.
 pub type OfficeZoneChunk = (aoe_core::TileCoord, [u32; 32]);
 pub type OfficeZone = (aoe_core::EntityId, std::sync::Arc<[OfficeZoneChunk]>);
+pub use game_world::relics::RelicVictory;
 pub use game_world::{HumanView, StateCensus, TileVisibility};
 pub use game_world::{RestoreReport, SnapshotError, WORLD_SNAPSHOT_VERSION, WorldSnapshot};
 #[cfg(any(not(target_arch = "wasm32"), feature = "content-source"))]

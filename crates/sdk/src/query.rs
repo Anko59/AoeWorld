@@ -9,6 +9,13 @@ use crate::{
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 
 impl World {
+    /// Relics and Monasteries the current subscription can see.
+    pub fn relics(&self) -> Option<&aoe_protocol::RelicView> {
+        self.relics
+            .as_ref()
+            .filter(|view| view.revision == self.subscription)
+    }
+
     /// Identifies the match; it changes when the server starts a new one.
     pub fn world_id(&self) -> u64 {
         self.world_id

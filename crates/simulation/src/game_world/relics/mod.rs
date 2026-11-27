@@ -5,8 +5,10 @@ use std::collections::BTreeMap;
 
 mod lifecycle;
 mod persistence;
+mod victory;
 use lifecycle::RelicTarget;
 pub(crate) use lifecycle::Relics;
+pub use victory::RelicVictory;
 
 /// Adapt DE Arabia's balanced relics to geographic maps. Small games get
 /// two relics per seat and one contested relic. More seats keep a local
@@ -182,3 +184,7 @@ impl GameWorld {
 mod lifecycle_tests;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests/victory.rs"]
+mod victory_tests;

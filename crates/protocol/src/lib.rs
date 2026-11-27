@@ -5,6 +5,9 @@ pub use gameplay::MoveQueue;
 pub use gameplay::NativeAction;
 pub use gameplay::{AnimalKind, AnimalState, AnimalTask, MAX_ANIMALS};
 pub use gameplay::{CombatStance, FogState, Formation};
+pub use gameplay::{
+    GroundRelic, MAX_RELICS, MonasteryRelics, RelicAction, RelicVictory, RelicView,
+};
 pub use gameplay::{HoldingSpan, MAX_HOLDING_SPANS, MAX_OFFICE_ZONE_CHUNKS, OfficeZoneChunk};
 pub use gameplay::{ProjectileKind, ProjectileState};
 

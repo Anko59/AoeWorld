@@ -64,6 +64,23 @@ impl GameWorld {
     }
 
     pub(in crate::game_world) fn hash_relics(&self, hash: &mut blake3::Hasher) {
+        if self.relics.victory_enabled {
+            hash.update(b"relic victory\0");
+            match self.relic_victory() {
+                None => {
+                    hash.update(&[0]);
+                }
+                Some(RelicVictory::Holding { player, deadline }) => {
+                    hash.update(&[1]);
+                    hash.update(&player.0.to_le_bytes());
+                    hash.update(&deadline.0.to_le_bytes());
+                }
+                Some(RelicVictory::Won(player)) => {
+                    hash.update(&[2]);
+                    hash.update(&player.0.to_le_bytes());
+                }
+            }
+        }
         if self.relics.is_empty() {
             return;
         }

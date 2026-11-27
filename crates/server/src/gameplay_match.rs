@@ -98,6 +98,9 @@ impl GameplayService {
         warmup::prepare(&world, &starts, cancelled)?;
         let seeded = rules::seed_units(&mut world, &starts, rules, cancelled)?;
         world.place_relics(&starts, cancelled)?;
+        if rules.relic_victory {
+            world.enable_relic_victory();
+        }
         world
             .prepare_navigation(cancelled)
             .map_err(GameWorldError::Environment)?;
@@ -175,6 +178,8 @@ pub(crate) struct MatchRequest {
     slots: Vec<SlotKind>,
     /// Extra villagers and militia every player starts with.
     start_units: Option<StartUnits>,
+    #[serde(default)]
+    relic_victory: bool,
     /// Seeds the village layout (which slot starts where). Omitted: a fresh
     /// seed per match, reported back so the layout can be reproduced.
     seed: Option<u64>,
@@ -328,6 +333,7 @@ async fn start_match(
     let seed = request.seed.unwrap_or_else(fresh_seed);
     let mut rules = rules.with_seed(seed);
     let measure_start_environment = request.start_tiles.is_some();
+    rules.relic_victory = request.relic_victory;
     rules.start_tiles = request.start_tiles.map(|tiles| {
         tiles
             .into_iter()

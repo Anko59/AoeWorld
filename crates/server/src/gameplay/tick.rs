@@ -147,17 +147,19 @@ impl GameplayService {
             return;
         };
         if let Some(commands) = recorded
+            && world.tick().0 != barrier
             && let Err(error) = self.record_finished(world.tick().0 - 1, commands, &world)
         {
             tracing::error!(%error, "command recording failed");
             return;
         }
-        if world.tick().0.is_multiple_of(ROUTE_LOG_TICKS) {
+        if world.tick().0 != barrier && world.tick().0.is_multiple_of(ROUTE_LOG_TICKS) {
             log_route_scheduler(&world);
         }
         // AI sessions are viewed every `AI_VIEW_TICKS`: an AI decides about
         // 1.6 times a second. Its players keep their building changes until then.
-        let ai_due = world.tick().0.is_multiple_of(AI_VIEW_TICKS);
+        let ai_due = world.tick().0 != barrier
+            && (world.relic_winner().is_some() || world.tick().0.is_multiple_of(AI_VIEW_TICKS));
         let changes = if ai_due {
             world.take_remembered_building_changes()
         } else {
@@ -185,7 +187,9 @@ impl GameplayService {
                 .collect::<Vec<_>>()
         };
         self.probe.phase("sessions", started.elapsed());
-        self.collect_ai_seats(barrier).await;
+        if world.tick().0 != barrier {
+            self.collect_ai_seats(barrier).await;
+        }
         let fanout_started = std::time::Instant::now();
         let last = self.fanout_probe.take_last_frame();
         let built = tokio::task::spawn_blocking(move || {

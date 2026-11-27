@@ -59,6 +59,7 @@ pub(super) struct SessionBuild {
     pub units: Option<Vec<u32>>,
     pub fog: Option<(FogState, u64)>,
     pub animals: Vec<AnimalState>,
+    pub relics: Option<aoe_protocol::RelicView>,
     pub projectiles: Vec<ProjectileState>,
     pub move_queues: Vec<aoe_protocol::MoveQueue>,
     pub office_zones: super::deliver::OfficeZones,
@@ -232,6 +233,13 @@ fn build_session(
             nearby.animals(region, view.viewer, near),
             region,
             view.viewer,
+        ),
+        relics: super::relics::view(
+            world,
+            view.viewer,
+            revision,
+            region,
+            nearby.relics(region, view.viewer, near),
         ),
         projectiles: {
             let candidates = nearby.projectiles(region, near);
