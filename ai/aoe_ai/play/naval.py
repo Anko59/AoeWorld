@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from aoeworld import BuildingKind, ResourceKind, UnitKind
+from aoeworld import BuildingKind, ResourceKind, UnitKind, building_cost
 
 from ..context import Context
 from ..geometry import dist, nearest
 from ..roster import best_recruit, options, price, visible_composition, warship
+from . import buildorder
 from .constructor import Constructor
 
 
@@ -33,6 +34,10 @@ class NavalManager:
     def __init__(self, constructor: Constructor) -> None:
         self.constructor = constructor
 
+    def can_fund_fishing(self, ctx: Context, cost: tuple[int, int, int, int]) -> bool:
+        food, wood, gold, stone = cost
+        return ctx.can_afford((food, wood + buildorder.fleet_wood_reserve(ctx), gold, stone))
+
     def step(self, ctx: Context) -> None:
         if ctx.economy is None or ctx.home is None:
             return
@@ -44,7 +49,8 @@ class NavalManager:
         dock = min((b for b in ctx.buildings if b.kind == BuildingKind.DOCK and b.complete),
                    key=lambda b: b.id, default=None)
         if dock is None:
-            if fish and self.constructor.total(ctx, BuildingKind.DOCK) == 0:
+            if (fish and self.constructor.total(ctx, BuildingKind.DOCK) == 0
+                    and self.can_fund_fishing(ctx, building_cost(BuildingKind.DOCK))):
                 target = nearest(fish, ctx.home)
                 builder = self.constructor.builder_near(ctx, target.tile)
                 if builder is not None:
@@ -68,7 +74,8 @@ class NavalManager:
     def recruit(self, ctx: Context, dock: Any, fish: list):
         fishing = UnitKind.FISHING_SHIP
         if (fish and sum(u.alive and u.kind == fishing for u in ctx.units) < ctx.config.fishing_ships
-                and ctx.can_afford(price(fishing)) and str(fishing) not in ctx.board.blocked_units):
+                and self.can_fund_fishing(ctx, price(fishing))
+                and str(fishing) not in ctx.board.blocked_units):
             return fishing
         if not ctx.feudal:
             return None

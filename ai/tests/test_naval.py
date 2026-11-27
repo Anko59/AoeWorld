@@ -1,6 +1,8 @@
 """River decisions use public terrain knowledge and keep the navy small."""
 
-from aoeworld import Age, BuildingKind, ResourceKind, UnitKind
+import pytest
+
+from aoeworld import Age, BuildingKind, ResourceKind, UnitKind, building_cost
 
 from aoe_ai import Brain, Config
 from aoe_ai.blackboard import Blackboard
@@ -70,6 +72,35 @@ def test_known_river_food_prompts_one_dock_and_no_duplicate_plan():
     later = context(river_world(tick=110), board)
     manager.step(later)
     assert later.client.named("build") == []
+
+
+@pytest.mark.parametrize("retry", [False, True])
+def test_dock_waits_for_opening_wood_then_uses_the_available_shore_site(retry):
+    world = river_world()
+    world.economy.age = Age.DARK
+    world.economy.wood = building_cost(BuildingKind.DOCK)[1]
+    board = Blackboard()
+    rejected, alternate = (55, 52), (54, 52)
+    if retry:
+        board.bad_sites.add((str(BuildingKind.DOCK), *rejected))
+
+    def sites(kind, x, y, radius, gap, avoid=()):
+        assert kind == BuildingKind.DOCK
+        return next((site for site in (rejected, alternate) if site not in avoid), None)
+
+    world.find_build_site = sites
+    manager = naval()
+    opening = context(world, board)
+    manager.step(opening)
+    assert opening.client.named("build") == []
+    assert opening.spent == [0, 0, 0, 0]
+    assert board.plans == []
+
+    world.economy.wood = 1000
+    world.tick += world.tick_hz
+    surplus = context(world, board)
+    manager.step(surplus)
+    assert [args[2:] for args in surplus.client.named("build")] == [alternate if retry else rejected]
 
 
 def test_dock_starts_with_one_fishing_ship_and_waits_for_its_order():

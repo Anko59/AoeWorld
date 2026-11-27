@@ -146,15 +146,14 @@ class Context:
         self._land_queries += 1
         return self.world.land_frontier(*origin, *target)
 
-    def find_build_site(self, *args):
+    def find_build_site(self, kind, x, y, max_radius, gap):
         if self._site_queries >= self.config.site_queries_per_decision:
             return None
         self._site_queries += 1
-        # A site the server refused stays refused: ask for the next nearest, or
-        # the one nearest refused site would answer every search.
-        name = str(args[0])
-        avoid = [(x, y) for kind, x, y in self.board.bad_sites if kind == name]
-        return self.world.find_build_site(*args, avoid)
+        # A refused origin must not hide other candidates for the same kind.
+        name = str(kind)
+        avoid = [(bx, by) for refused, bx, by in self.board.bad_sites if refused == name]
+        return self.world.find_build_site(kind, x, y, max_radius, gap, avoid)
 
     def settlement_distance(self, tile):
         known = self.board.settlements[1]

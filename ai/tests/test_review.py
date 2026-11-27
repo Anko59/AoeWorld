@@ -1,9 +1,12 @@
 """Regression tests for review findings: hit proof, refused approach tiles,
 the per-decision job cap and abandoned foundations."""
 
+import pytest
+
 from aoeworld import Age, BuildingKind, CommandResult, Tech, UnitKind, UnitTask
 
 from aoe_ai import Brain
+from aoe_ai.context import Context
 from aoe_ai.play.economy import MAX_ASSIGN_PER_DECISION
 
 from fakes import FakeClient, FakeWorld, base, building, decision, economy, order_result, unit
@@ -357,3 +360,59 @@ def test_a_refused_house_site_does_not_stop_the_village_building_houses():
     builds = [a for name, a in client.calls if name == "build"]
     assert builds, "the village still builds"
     assert all((str(a[1]), a[2], a[3]) != refused for a in builds)
+
+
+def test_a_rejected_house_site_does_not_block_the_next_candidate():
+    units, buildings = base(14)
+    world = FakeWorld(units, buildings, eco=economy(wood=100, population=15, cap=15))
+    blocked, alternate = (53, 53), (54, 53)
+    find_site = world.find_build_site
+
+    def sites(kind, x, y, max_radius, gap, excluded=()):
+        if kind == BuildingKind.HOUSE:
+            return next((site for site in (blocked, alternate) if site not in excluded), None)
+        return find_site(kind, x, y, max_radius, gap)
+
+    world.find_build_site = sites
+    brain, client = play(world)
+    sequence, initial = next((i, args) for i, (name, args) in enumerate(client.calls, 1)
+                             if name == "build" and args[1] == BuildingKind.HOUSE)
+    assert initial[2:] == blocked
+
+    world.tick += world.tick_hz
+    refusal = order_result(sequence, CommandResult.REJECTED_UNREACHABLE)
+    _, client = play(world, brain=brain, events=[refusal])
+    assert [args[2:] for args in client.named("build") if args[1] == BuildingKind.HOUSE] == [alternate]
+
+
+# Bridges use a separate bank-to-bank query and build_bridge order.
+@pytest.mark.parametrize("kind_name", [
+    name for name in dir(BuildingKind)
+    if isinstance(getattr(BuildingKind, name), BuildingKind) and name != "BRIDGE"
+])
+def test_each_building_kind_retries_an_alternate_site_after_refusal(kind_name):
+    kind = getattr(BuildingKind, kind_name)
+    units, buildings = base(4)
+    world = FakeWorld(units, buildings, eco=economy(food=2000, wood=2000, gold=2000, stone=2000))
+    rejected, alternate = (53, 53), (54, 53)
+
+    def sites(requested, x, y, max_radius, gap, avoid=()):
+        assert requested == kind
+        return next((site for site in (rejected, alternate) if site not in avoid), None)
+
+    world.find_build_site = sites
+    brain = Brain()
+    first = Context(FakeClient(), decision(world), brain.board, brain.config)
+    assert brain.constructor.place(first, kind, first.home, [first.villagers[0]])
+    assert first.client.named("build") == [([first.villagers[0].id], kind, *rejected)]
+
+    world.tick += world.tick_hz
+    refusal = order_result(1, CommandResult.REJECTED_UNREACHABLE)
+    retry = Context(FakeClient(), decision(world, events=[refusal]), brain.board, brain.config)
+    brain.absorb(retry)
+    assert not brain.board.plans
+    assert retry.spent == [0, 0, 0, 0]
+    other_kind = BuildingKind.BARRACKS if kind == BuildingKind.HOUSE else BuildingKind.HOUSE
+    brain.board.bad_sites.add((str(other_kind), *alternate))
+    assert brain.constructor.place(retry, kind, retry.home, [retry.villagers[0]])
+    assert retry.client.named("build") == [([retry.villagers[0].id], kind, *alternate)]
