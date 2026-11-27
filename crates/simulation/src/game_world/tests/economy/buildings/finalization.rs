@@ -58,7 +58,7 @@ fn an_outpost_has_a_large_line_of_sight_and_costs_wood_and_stone() {
         .unwrap();
     assert_eq!(stock(&world), (200, 175, 100, 195));
     let outpost = world.building(id).unwrap();
-    assert_eq!((outpost.los, outpost.max_hp), (10, 500));
+    assert_eq!((outpost.los, outpost.max_hp), (20, 500));
     assert_eq!(
         world
             .building(world.buildings().next().unwrap().id)
@@ -69,6 +69,14 @@ fn an_outpost_has_a_large_line_of_sight_and_costs_wood_and_stone() {
     // 15 s = 300 ticks for one builder.
     assert_eq!(finish(&mut world, id, 400), 300);
     assert_eq!(world.building(id).unwrap().hp, 500);
+    assert_eq!(
+        world.visibility(PlayerId(0), at(120, 100)),
+        crate::TileVisibility::Visible
+    );
+    assert_ne!(
+        world.visibility(PlayerId(0), at(121, 100)),
+        crate::TileVisibility::Visible
+    );
 }
 
 #[test]

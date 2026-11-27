@@ -205,7 +205,7 @@ pub const BUILDING_RULES: [BuildingRules; 28] = [
         max_hp: 500,
         side: 1,
         depth: 1,
-        los: 10,
+        los: 20,
         population_support: 0,
         accepts: NONE,
         trainable: NO_UNITS,
