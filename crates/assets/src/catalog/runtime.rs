@@ -13,20 +13,6 @@ pub struct RuntimeSpriteSource {
     pub terrain_topology: Option<TerrainFrameTopology>,
 }
 
-pub const PLAYER_ROLES: [AssetRole; 11] = [
-    AssetRole::CavalryStanding,
-    AssetRole::CavalryWalking,
-    AssetRole::VillagerStanding,
-    AssetRole::VillagerWalking,
-    AssetRole::VillagerChopping,
-    AssetRole::VillagerCarryingWood,
-    AssetRole::VillagerForaging,
-    AssetRole::VillagerCarryingFood,
-    AssetRole::VillagerCarryingGold,
-    AssetRole::VillagerCarryingStone,
-    AssetRole::VillagerMiningStone,
-];
-
 pub fn actor_maskable(index: usize) -> bool {
     let neutral = super::units::Pose::NeutralSheepStand as usize;
     !(neutral..neutral + 4).contains(&index)

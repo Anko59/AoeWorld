@@ -32,8 +32,8 @@ PNG samples directly, preserving the full RGBA values allowed by manifest
 version 1, including arbitrary partial alpha in externally produced packs.
 
 To inspect a pack in the local app, start `make dev` with
-`AOE_ASSET_PACK=local-assets/packs/<pack-hash>` to play at `/`. For inspection, open `http://127.0.0.1:8080/asset-viewer.html`. The game imports cavalry walking/standing resources
-3008/3004 and five reviewed imported terrain groups: temperate grass 15008,
+`AOE_ASSET_PACK=local-assets/packs/<pack-hash>` to play at `/`. For inspection, open `http://127.0.0.1:8080/asset-viewer.html`. The game requires
+five reviewed imported terrain groups: temperate grass 15008,
 dry grass 15007, dirt 15000, sand 15010, and water 15002. These groups declare
 10×10 periodic topology explicitly, indexed x-major with reversed y so
 neighboring source edges meet. Water 15002 is the light shallow sheet; optional
@@ -55,8 +55,9 @@ are not qualified as a seamless periodic sheet. Metadata-free material 6 selecti
 Four optional ground-variety sheets, each a reviewed 10×10 periodic montage, add
 grass and dirt mix 15006, grass with brown patches 15009, darker grass 15001 and
 pebbly beach 15017; a pack without one draws dry grass, grass, grass or sand.
-The periodic groups retain all 100 frames. The base selects 2,371 frames (including ten gather-point flag cells):
-1,474 terrain and 897 objects including village art and cliff faces 226. The
+The periodic groups retain all 100 frames. The base selects 1,589 frames (including ten gather-point flag cells):
+1,474 terrain and 115 objects including cliff faces 226. Units are never in this
+list: each is a native DE actor, or a marker without one. The
 [unit and wildlife selection](assets/units.md) includes complete native DE
 unit animations, workers, wildlife and naval graphics through one DAT-driven path. DAT building recipes
 add selected native frames, including animated Mill layers, static House variants
@@ -122,11 +123,9 @@ silhouette, never broadleaf 2296 or unqualified 2304/2300 shadows. Missing optio
 species keeps the healthy broadleaf fallback; family 0 keeps its base variants.
 Culling and drawing share the selected body and its shadow decision. Palm frame 0
 anchor (20,175) lies below its 88×168 image and is deliberately preserved, not clamped.
-Optional village groups add the male villager: idle 1479, walking 1484,
-wood chopping/carrying 1535/1536, berry foraging/food carrying 2589/2592 (forager `VMFOR`),
-the miners' shared pick 1560 with gold carrying 2117 and stone carrying 1552, each five
-rows of fifteen frames.
-The same eight-direction mirror mapping as the scout uses the native anchors.
+The trial's cavalry (3008/3004), male villager, scrub 4474 and snag 1262 sheets
+are not loaded: nothing draws them. The trial arrow 3799 and javelin 3820 still
+load, because they fly beside native units.
 Stationary Gathering tasks select the resource tool even with a partial load.
 Moving villagers use their nonempty authoritative load's native carry art,
 including after new move orders; stopped loaded villagers hold its first native
@@ -142,7 +141,7 @@ Signed and outside anchors are preserved; player masks use the current blue
 ramp. The foundation material is painted into the shared terrain before
 tessellation, so ordinary terrain blending owns its edges in every backend.
 See [game data](assets/game-data.md) for measured layouts and local proof tools.
-These are metadata, not committed pixels. Missing village groups draw simple semantic markers;
+These are metadata, not committed pixels. Missing native actors draw simple semantic markers;
 a present incomplete group remains a pack error. The native metadata packing
 proof covers the full base and actor prefixes plus DAT building and foundation
 frames through the same bounded runtime packer.

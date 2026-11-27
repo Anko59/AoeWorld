@@ -18,13 +18,16 @@ impl AtlasSink for Streamed {
 
 #[wasm_bindgen_test]
 async fn resident_source_order_preserves_every_streamed_atlas_byte() {
-    let value = selection_tests::pack_fixture(REQUIRED_RENDER_SOURCES.iter().map(|source| {
-        (
-            source.manifest_source(),
-            source.frames,
-            source.terrain_topology.is_some(),
-        )
-    }));
+    use aoe_assets::catalog::units::{Pose, SPRITES};
+    // Ground sheets own no mask. The sheep keeps owned and neutral cells in
+    // the comparison without depending on a reviewed unit sheet.
+    let sheep = SPRITES[Pose::SheepStand as usize];
+    let value = selection_tests::pack_fixture(
+        REQUIRED_RENDER_SOURCES
+            .iter()
+            .map(|s| (s.manifest_source(), s.frames, s.terrain_topology.is_some()))
+            .chain([(sheep.manifest_source(), sheep.frames(), false)]),
+    );
     // Partial base alpha and a nonzero owner ramp catch mask-plane ordering.
     let fetch = selection_tests::FetchFixture::install_with_player(&value, true);
     let mut resident = CollectedAtlas(Vec::new());

@@ -73,10 +73,7 @@ fn castle_full_timelines_share_bounded_native_residency_with_the_full_actor_sele
             length: 1,
         });
     }
-    assert_eq!(
-        prove(&manifest).unwrap(),
-        (1474, 897 + actor_frames() - 115 + 66)
-    );
+    assert_eq!(prove(&manifest).unwrap(), (1474, 115 + actor_frames() + 66));
     let first = manifest
         .frames
         .iter_mut()
@@ -138,6 +135,6 @@ fn full_catalog_with_native_mill_dock_and_farm_fits_runtime_budget() {
     }
     assert_eq!(
         prove(&manifest).unwrap(),
-        (1510, 897 + actor_frames() - 115 + 104)
+        (1510, 115 + actor_frames() + 104)
     );
 }

@@ -98,9 +98,7 @@ including Dock and its native wake animation, occupy the live atlas. Foundation
 terrain and its apron paint land samples only; water keeps its authored sheet
 and surface metadata beneath completed Docks and construction sites.
 The packing proofs validate full source prefixes before applying the client's
-existing idle and fisherman selections: 5/50 Cavalry Standing cells, 5/75
-Villager Standing cells, and 70/140 fisherman cells. This removes 185 unused
-entries from the complete catalog proof. The Dock's native 60-cell wake at
+existing fisherman selection: 70/140 cells. The Dock's native 60-cell wake at
 150ms per cell is sampled at every second cell: 30 cells at 300ms retain the
 nine-second loop. Static Dock art and all construction angles stay complete,
 as do the 43 Mill sail cells and the Farm terrain sheet. The limits remain

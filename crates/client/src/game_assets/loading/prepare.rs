@@ -53,7 +53,6 @@ pub(super) fn prepare(mut manifest: Manifest, team: [u8; 3]) -> Result<Prepared,
                         | AssetRole::RockPile
                         | AssetRole::DeadwoodStump
                         | AssetRole::DeadwoodLog
-                        | AssetRole::DeadwoodTree
                         | AssetRole::CliffFace
                 )
             {
@@ -70,7 +69,6 @@ pub(super) fn prepare(mut manifest: Manifest, team: [u8; 3]) -> Result<Prepared,
                 }
                 continue;
             };
-            let frames = compact_standing(frames, selection.role);
             if frames.len() > MAX_SELECTED_FRAMES - selected.len() {
                 return Err(JsValue::from_str("Too many selected frames"));
             }
@@ -111,11 +109,6 @@ pub(super) fn prepare(mut manifest: Manifest, team: [u8; 3]) -> Result<Prepared,
     let building_start = selected.len();
     buildings::select(&manifest, &mut selected, &mut domains)?;
     let mut maskable = vec![false; selected.len()];
-    for role in aoe_assets::catalog::runtime::PLAYER_ROLES {
-        if let Some(range) = &ranges[role as usize] {
-            maskable[range.clone()].fill(true);
-        }
-    }
     for (index, range) in actor_ranges.iter().enumerate() {
         if aoe_assets::catalog::runtime::actor_maskable(index)
             && let Some(range) = range

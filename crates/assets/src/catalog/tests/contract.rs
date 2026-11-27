@@ -86,7 +86,8 @@ fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
             .all(|source| source.frames > 0)
     );
     // The merged catalog includes the Fish Trap and both upgraded tower recipes.
-    assert_eq!(VERSION, 26);
+    // Version 27 drops the thirteen reviewed sheets that no renderer reads.
+    assert_eq!(VERSION, 27);
     assert_eq!(GAMEPLAY_BUILDING_IDS.len(), 67);
     assert!(GAMEPLAY_BUILDING_IDS.ends_with(&[199, 234, 235]));
     assert_eq!(
@@ -126,7 +127,7 @@ fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
     assert_eq!(AssetRole::Shallows as usize, 18);
     // Water depth sheets: light shallow water stays the required sheet;
     // medium, deep and walkable marsh shallows are optional periodic sheets.
-    assert_eq!(REQUIRED_RENDER_SOURCES[6].id, 15002);
+    assert_eq!(REQUIRED_RENDER_SOURCES.last().unwrap().id, 15002);
     assert_eq!(
         OPTIONAL_TERRAIN_SOURCES[1..4]
             .iter()
@@ -204,22 +205,36 @@ fn reviewed_resource_sources_preserve_semantic_order_and_frame_counts() {
             (AssetRole::TreePalm as usize, 4653, 13),
             (AssetRole::CliffFace as usize, 226, 25),
             (AssetRole::RockPile as usize, 1034, 7),
-            (AssetRole::Shrub as usize, 4474, 6),
             (AssetRole::DeadwoodStump as usize, 1035, 3),
             (AssetRole::DeadwoodLog as usize, 1252, 2),
-            (AssetRole::DeadwoodTree as usize, 1262, 1),
-            (AssetRole::VillagerStanding as usize, 1479, 75),
-            (AssetRole::VillagerWalking as usize, 1484, 75),
-            (AssetRole::VillagerChopping as usize, 1535, 75),
-            (AssetRole::VillagerCarryingWood as usize, 1536, 75),
-            (AssetRole::VillagerForaging as usize, 2589, 75),
-            (AssetRole::VillagerCarryingFood as usize, 2592, 75),
-            (AssetRole::VillagerCarryingGold as usize, 2117, 75),
-            (AssetRole::VillagerCarryingStone as usize, 1552, 75),
-            (AssetRole::VillagerMiningStone as usize, 1560, 75),
             (AssetRole::RallyFlag as usize, 4480, 10),
         ]
     );
+}
+
+#[test]
+fn required_and_optional_counts_are_exactly_the_sheets_a_renderer_draws() {
+    // A pack starts with the five base ground sheets alone. Units are native
+    // DE actors, so no trial unit sheet is required or optional.
+    assert_eq!(
+        REQUIRED_RENDER_SOURCES
+            .iter()
+            .map(|source| (source.archive, source.id, source.frames))
+            .collect::<Vec<_>>(),
+        [
+            ("terrain.drs", 15008, 100),
+            ("terrain.drs", 15007, 100),
+            ("terrain.drs", 15000, 100),
+            ("terrain.drs", 15010, 100),
+            ("terrain.drs", 15002, 100),
+        ]
+    );
+    let frames = |sources: &[SpriteSource]| sources.iter().map(|s| s.frames).sum::<u32>();
+    let required = frames(&REQUIRED_RENDER_SOURCES);
+    let objects = frames(&OPTIONAL_RESOURCE_SOURCES);
+    let terrain = frames(&OPTIONAL_TERRAIN_SOURCES);
+    assert_eq!((required, objects, terrain), (500, 115, 974));
+    assert_eq!(MAX_REVIEWED_FRAMES, 1_589);
 }
 
 #[test]
@@ -248,32 +263,41 @@ fn every_reviewed_terrain_source_loads_its_complete_periodic_texture_grid() {
 }
 
 #[test]
-fn village_art_is_optional_and_uses_reviewed_directional_prefixes() {
-    for (id, count) in [(1479, 75), (1484, 75), (1535, 75), (1536, 75)] {
-        let source = OPTIONAL_RESOURCE_SOURCES
-            .iter()
-            .find(|source| source.id == id)
-            .expect("optional village sprite metadata");
-        assert_eq!(source.frames, count);
-        assert!(source.terrain_topology.is_none());
-        assert!(
-            !REQUIRED_RENDER_SOURCES
+fn no_load_list_names_a_sheet_that_no_renderer_reads() {
+    // Light Cavalry rows 3008/3004 and the nine male villager sheets: a unit is
+    // drawn from its native DE actor, or as a marker without one. Scrub 4474 is
+    // suppressed and deadwood never draws the bare snag 1262.
+    let undrawn = [
+        3008, 3004, 1479, 1484, 1535, 1536, 2589, 2592, 2117, 1552, 1560, 4474, 1262,
+    ];
+    let listed = undrawn
+        .into_iter()
+        .filter(|id| {
+            REQUIRED_RENDER_SOURCES
                 .iter()
-                .any(|required| required.id == id)
-        );
-    }
+                .chain(OPTIONAL_RESOURCE_SOURCES.iter())
+                .any(|source| source.archive == "graphics.drs" && source.id == *id)
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        listed.is_empty(),
+        "undrawn sheets selected at page start: {listed:?}"
+    );
 }
 
 #[test]
-fn resource_specific_worker_sets_are_selected_from_the_local_pack() {
-    for id in [2589, 2592, 2117, 1552, 1560] {
-        let source = OPTIONAL_RESOURCE_SOURCES
-            .iter()
-            .find(|source| source.id == id)
-            .expect("reviewed villager work/carry source");
-        assert_eq!(source.frames, 75);
-        assert_eq!(source.archive, "graphics.drs");
-    }
+fn only_the_drawn_arrow_and_javelin_still_come_from_trial_unit_sheets() {
+    // Guard: both are drawn in flight beside native DE units, so dropping the
+    // undrawn unit sheets must not drop these two actor sources.
+    let trial = units::SPRITES
+        .iter()
+        .filter(|source| !source.is_native())
+        .map(|source| (source.manifest_source(), source.selected_frames()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        trial,
+        [3799, 3820].map(|id| (format!("graphics.drs:[32, 112, 108, 115]:{id}"), 5))
+    );
 }
 
 #[test]

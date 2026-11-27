@@ -65,10 +65,8 @@ fn optional_tree_families_require_complete_unique_native_prefixes() {
     for role in [
         AssetRole::TreeConifer,
         AssetRole::TreePalm,
-        AssetRole::Shrub,
         AssetRole::DeadwoodStump,
         AssetRole::DeadwoodLog,
-        AssetRole::DeadwoodTree,
     ] {
         let selection = OPTIONAL_RESOURCE_SOURCES
             .iter()
@@ -249,11 +247,9 @@ pub(super) fn pack_fixture(
 
 #[wasm_bindgen_test]
 async fn minimal_pack_starts_without_mountain_sources_and_present_art_is_loaded() {
-    // Independent fixture contract: cavalry plus the five base ground sheets.
+    // Independent fixture contract: the five base ground sheets and no unit art.
     let minimal = || {
         [
-            ("graphics.drs", 3008, 50),
-            ("graphics.drs", 3004, 50),
             ("terrain.drs", 15008, 100),
             ("terrain.drs", 15007, 100),
             ("terrain.drs", 15000, 100),
@@ -280,7 +276,6 @@ async fn minimal_pack_starts_without_mountain_sources_and_present_art_is_loaded(
         let loaded = load_collected().await;
         drop(fetch);
         let (art, pixels, _) = loaded.expect("minimal pack must initialise");
-        assert_eq!(art.walking.len(), 50);
         assert_eq!(art.terrain[2].len(), 100, "base fallback remains available");
         for slot in [4, 11] {
             assert_eq!(art.terrain[slot].len(), if mountain { 100 } else { 0 });
@@ -308,7 +303,7 @@ async fn minimal_pack_starts_without_mountain_sources_and_present_art_is_loaded(
 }
 
 #[wasm_bindgen_test]
-async fn full_catalog_packs_1474_terrain_frames_and_782_objects_in_their_domains() {
+async fn full_catalog_packs_1474_terrain_frames_and_115_objects_in_their_domains() {
     let sources = REQUIRED_RENDER_SOURCES
         .iter()
         .chain(&OPTIONAL_RESOURCE_SOURCES)
@@ -350,9 +345,9 @@ async fn full_catalog_packs_1474_terrain_frames_and_782_objects_in_their_domains
         0,
         "marsh belongs on terrain pages"
     );
-    // Castle Light Cavalry keeps its five standing and ten walking semantic
-    // entries while sharing their existing scout texels: still 782 stored cells.
-    assert_eq!(count(objects, [120, 120, 120, 255]), 782);
+    // Every stored object cell belongs to a drawn sheet: resources, trees and
+    // shadows, cliff faces, rocks, deadwood and the gather-point flag.
+    assert_eq!(count(objects, [120, 120, 120, 255]), 115);
     assert_eq!(count(terrain, [120, 120, 120, 255]), 0);
 }
 
@@ -384,8 +379,6 @@ impl AtlasSink for PageLog {
 async fn the_atlas_streams_one_page_at_a_time_and_is_never_resident_whole() {
     let value = pack_fixture(
         [
-            ("graphics.drs", 3008, 50, false),
-            ("graphics.drs", 3004, 50, false),
             ("terrain.drs", 15008, 100, true),
             ("terrain.drs", 15007, 100, true),
             ("terrain.drs", 15000, 100, true),
@@ -414,3 +407,6 @@ async fn the_atlas_streams_one_page_at_a_time_and_is_never_resident_whole() {
     assert_eq!(log.finished, 1);
     assert!(log.pages.iter().all(|(_, bytes)| *bytes < GAME_ATLAS_BYTES));
 }
+
+#[path = "selection/drawn.rs"]
+mod drawn;
