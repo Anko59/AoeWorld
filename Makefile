@@ -308,14 +308,14 @@ perf-baseline-propose-steps: perf-instructions perf-wasm-size
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-baseline-propose
 
 # The latest passing dev instruction counts for the perf-ci gate (CI, pull requests).
-perf-dev-reference:
+perf-dev-reference: orchestrator-tools
 	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --network host --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GITHUB_TOKEN $(ROOT_MOUNTS) -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- perf-dev-reference
 
 # The pull request's informational performance comment (item 12 of #388).
 # PR and run arrive through the environment; GITHUB_TOKEN authorizes gh.
 # PERF_COMMENT_PRINT=1 prints the comment instead of posting it.
-perf-comment:
-	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --network host --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GITHUB_TOKEN -e AOE_PR_NUMBER -e AOE_RUN_ID -e GITHUB_RUN_ID -e PERF_COMMENT_PRINT $(ROOT_MOUNTS) -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- perf-comment
+perf-comment: orchestrator-tools
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --network host --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GITHUB_TOKEN -e AOE_PR_NUMBER -e AOE_RUN_ID -e GITHUB_RUN_ID -e GITHUB_JOB -e AOE_JOB_STATUS -e PERF_COMMENT_PRINT $(ROOT_MOUNTS) -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- perf-comment
 
 perf-hardware-check: tools
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-hardware-check
