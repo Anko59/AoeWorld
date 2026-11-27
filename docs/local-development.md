@@ -76,9 +76,9 @@ every agent hook there, so Claude Code and the other runtimes are judged on a
 Mac exactly as on Linux. Both go through `.agents/hooks/colima.sh`, which runs
 one command in the VM in the current directory and returns its output and exit
 status. It forwards the harness's variables (`AOE_*`, `HARNESS_*`, `SHIP_*`,
-`REVIEW_*`, `PERF_*`, `SHOWCASE_*`, `DEV_PORT` and the test-thread settings),
-Git's hook context and your Git identity. `COLIMA_PROFILE` selects a VM other
-than `default`.
+`REVIEW_*`, `PERF_*`, `SHOWCASE_*`, `DEV_PORT`, `GAME_SCORE_PR_ARGS` and the
+test-thread settings), Git's hook context and your Git identity. `COLIMA_PROFILE`
+selects a VM other than `default`.
 
 ### Shipping from the Mac itself
 
@@ -95,9 +95,9 @@ gate) and [rustup](https://rustup.rs) with the toolchain of `rust-toolchain.toml
 (`rustup toolchain install <channel> --profile minimal`; nothing is installed for
 you). `.agents/hooks/mac-judge.sh` compiles the judge from `origin/dev`, never from
 the checkout, and caches it under the same key as the Linux one, apart from it, in
-`aoe-agent-hook/darwin-<arch>/` of the Git common directory. Every gate still goes
-through `make` into the VM, and agent hooks, the reviewers' included, are still
-judged there.
+`aoe-agent-hook/darwin-<arch>/` of the Git common directory. Every gate, and the
+game score, still goes through `make` into the VM, and agent hooks, the reviewers'
+included, are still judged there.
 
 `AOE_GH_ACCOUNT=<login>` picks the account for `gh` and for Git over https. Its
 token comes from `gh auth token` at each call, and reaches `gh` in that process's
@@ -118,7 +118,8 @@ configuration, the reviewers or the gates.
   Mac. CI does not build macOS: a change on `dev` can break that build.
 - Each system has its own kernel locks: do not run a ship on the Mac and a ship or
   duel in the VM at once. `make load-status` shows the VM's slots; `ship-status` on
-  the Mac does not. Work a killed gate started in the VM may outlive it.
+  the Mac does not. Work a killed gate or game score started in the VM may
+  outlive it.
 - `SHIP_VIDEO` must be under `$HOME` for the VM to read it.
 - `make dev` listens in the VM; Colima forwards its loopback port to the Mac, so
   `http://127.0.0.1:8080` works from the Mac's browser.

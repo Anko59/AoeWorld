@@ -9,8 +9,10 @@ include make/ship.mk
 else
 COLIMA_GOALS := $(or $(MAKECMDGOALS),help)
 COLIMA_VARS := $(strip $(foreach name,$(.VARIABLES),$(if $(filter command,$(origin $(name))),$(name))))
-.PHONY: colima-delegate $(COLIMA_GOALS)
-$(COLIMA_GOALS): colima-delegate
+# Ship asks Make which goals exist (`make -rRqp`): the VM's are declared here too.
+COLIMA_KNOWN := $(filter-out $(COLIMA_GOALS),$(sort $(shell sed -n 's/^\([a-z][a-z0-9-]*\):.*/\1/p' Makefile make/*.mk)))
+.PHONY: colima-delegate $(COLIMA_GOALS) $(COLIMA_KNOWN)
+$(COLIMA_GOALS) $(COLIMA_KNOWN): colima-delegate
 	@:
 colima-delegate:
 	@AOE_COLIMA_MAKE_VARS='$(COLIMA_VARS)' .agents/hooks/colima.sh make --no-print-directory $(COLIMA_GOALS)

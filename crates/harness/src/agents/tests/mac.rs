@@ -60,6 +60,8 @@ impl Mac {
             ".agents/hooks/colima.sh",
             ".agents/hooks/mac-judge.sh",
             "GNUmakefile",
+            "Makefile",
+            "make/profiling.mk",
             "make/ship.mk",
         ] {
             fs::create_dir_all(root.join(file).parent().unwrap()).unwrap();
@@ -335,6 +337,32 @@ fn make_runs_a_native_goal_with_its_variables_and_sends_every_other_goal_to_the_
         assert_eq!(mac.read("vm").lines().count(), before + 1, "{arguments:?}");
     }
     assert_eq!(mac.read("judged").matches("judge ").count(), 2);
+}
+
+#[test]
+fn a_native_ship_finds_the_game_score_and_the_vm_gets_its_flags() {
+    let mac = Mac::new();
+    let make = |arguments: &[&str]| {
+        let mut command = mac.command("make", arguments);
+        command.env("AOE_NATIVE_SHIP", "1");
+        command
+    };
+    // As ship asks whether this revision has a target, then as it runs it.
+    let probe = make(&["-rRqp"]).output().unwrap();
+    let listed = String::from_utf8_lossy(&probe.stdout).into_owned();
+    let has = |goal: &str| listed.lines().any(|line| line.starts_with(goal));
+    assert!(has("game-score-pr:"));
+    assert!(!has("no-such-goal:"));
+    assert_eq!(mac.read("vm"), "", "asking runs nothing");
+    let flags = "--base abc --out .cache/game-score/pr.json";
+    let mut score = make(&["--no-print-directory", "game-score-pr"]);
+    score.env("GAME_SCORE_PR_ARGS", flags);
+    assert!(score.status().unwrap().success());
+    let sent = mac.read("vm");
+    assert_eq!(sent.lines().count(), 1, "{sent}");
+    for word in [&format!("GAME_SCORE_PR_ARGS={flags}"), "game-score-pr"] {
+        assert!(sent.contains(&format!("'{word}'")), "{word}: {sent}");
+    }
 }
 
 #[test]
