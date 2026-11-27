@@ -143,7 +143,7 @@ test("reduced motion shows the star alone: eight points in orange and ivory arou
   expect(ivory).toBeGreaterThan(8);
 });
 
-test("a star is drawn over the marks and over an order's ping, and under the view marker", async ({
+test("a star is drawn over the marks, the frame and an order's ping, and under the view marker", async ({
   page,
 }) => {
   await alertMap(page, "native");
@@ -191,20 +191,26 @@ test("a star is drawn over the marks and over an order's ping, and under the vie
     });
     const ping = document.querySelector("[data-minimap-ping]");
     const star = document.querySelector("[data-minimap-alert]");
+    const border = document.getElementById("minimap-border");
     const mark = [...document.querySelectorAll("#minimap-marks path")]
       .filter((node) => node.closest(layers)?.id === "minimap-marks")
       .at(-1);
-    if (!ping || !star || !mark) throw new Error("A layer is missing");
+    if (!ping || !star || !mark || !border)
+      throw new Error("A layer is missing");
     const { DOCUMENT_POSITION_FOLLOWING: after } = Node;
     const follows = (first: Element, then: Element) =>
       (first.compareDocumentPosition(then) & after) !== 0;
     return {
       stack: [...new Set(stack)],
-      ping: follows(mark, ping) && follows(ping, star),
+      order: [
+        follows(mark, border),
+        follows(border, ping),
+        follows(ping, star),
+      ],
     };
   });
   expect(seen.stack).toEqual(["minimap-marker", "star", "minimap-marks"]);
-  expect(seen.ping, "marks, then the ping, then the star").toBe(true);
+  expect(seen.order, "marks, frame, ping, star").toEqual([true, true, true]);
 });
 
 test("the minimap is not written while nothing is hit nor while a star rests", async ({

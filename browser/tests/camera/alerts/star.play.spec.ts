@@ -206,6 +206,83 @@ test("a left click within 6 px of a star jumps exactly to it, a right click orde
   expect(last?.[2]).toBe(false);
 });
 
+test("the bars beside a zoomed whole map show stars and pings, and nothing lies beyond them", async ({
+  page,
+}) => {
+  await alertMap(page, "overview");
+  const camera: Place = [1000, 1000];
+  await zoomIn(page, 8, camera);
+  // In the middle of the left bar, and as far beyond its outer edge.
+  const { bar, inside, beyond } = await page.evaluate(async (camera) => {
+    const { minimapOrderPoint } = await import("/minimap.js" as string);
+    const { map } = Reflect.get(window, "still") as Still;
+    const box = document.getElementById("minimap-map")?.getBoundingClientRect();
+    if (!box) throw new Error("#minimap-map is missing");
+    const bar = map.left - box.left;
+    const at = (x: number) => {
+      const y = map.top + map.height / 2;
+      const view = { zoom: 8, center: camera };
+      const world = minimapOrderPoint(
+        box,
+        x,
+        y,
+        [2000, 2000],
+        view,
+        false,
+      ) as Place | null;
+      if (!world) throw new Error("No world under that px");
+      return { x, y, world };
+    };
+    return {
+      bar,
+      inside: at(Math.round(box.left + bar / 2)),
+      beyond: at(Math.round(box.left - bar / 2)),
+    };
+  }, camera);
+  expect(bar, "the whole map has bars").toBeGreaterThan(40);
+  const apart = inside.world.map((at, axis) => at - (beyond.world[axis] ?? at));
+  expect(Math.hypot(...apart), "two battles").toBeGreaterThan(24);
+
+  await hit(page, inside.world);
+  await run(page, 50, camera);
+  await expectStars(page, [inside]);
+  await hit(page, beyond.world);
+  await run(page, 50, camera);
+  await expectStars(page, [inside]);
+
+  await page.mouse.click(inside.x + 3, inside.y);
+  const jump = await page.evaluate(() =>
+    (Reflect.get(window, "still") as Still).jump(),
+  );
+  expect(jump[0]).toBeCloseTo(inside.world[0], 6);
+  expect(jump[1]).toBeCloseTo(inside.world[1], 6);
+
+  // An order in the bar is an order on the land there.
+  const ping = await page.evaluate(({ x, y }) => {
+    const navigation = Reflect.get(window, "aoeNavigation") as {
+      bindOrders(send: () => number): void;
+    };
+    navigation.bindOrders(() => 2);
+    document.getElementById("minimap-map")?.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        button: 2,
+        clientX: x,
+        clientY: y,
+      }),
+    );
+    const box = document
+      .querySelector("[data-minimap-ping]")
+      ?.getBoundingClientRect();
+    if (!box) throw new Error("No ping");
+    const apart = [box.x + box.width / 2 - x, box.y + box.height / 2 - y];
+    return { width: box.width, apart: Math.hypot(...apart) };
+  }, inside);
+  expect(ping.width, "the ping is drawn").toBeGreaterThan(5);
+  expect(ping.apart).toBeLessThan(2);
+});
+
 test("Space jumps to the latest alert and keeps the zoom", async ({ page }) => {
   await alertMap(page, "native");
   const hash = () => page.evaluate(() => location.hash);

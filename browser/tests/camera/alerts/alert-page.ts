@@ -42,9 +42,10 @@ export const readAlerts = (page: Page) =>
       stars: () =>
         [...document.querySelectorAll("[data-minimap-alert]")].flatMap(
           (root) => {
-            const boxes = painted(root).map((node) =>
-              node.getBoundingClientRect(),
-            );
+            // A node that is not drawn has an empty box.
+            const boxes = painted(root)
+              .map((node) => node.getBoundingClientRect())
+              .filter((box) => box.width > 0);
             if (boxes.length === 0) return [];
             const left = Math.min(...boxes.map((box) => box.left));
             const right = Math.max(...boxes.map((box) => box.right));
