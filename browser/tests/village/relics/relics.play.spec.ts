@@ -44,7 +44,7 @@ test("a Monk collects a relic and a Monastery starts paying gold", async ({
     const builder = await actor(page, "Villager");
     await page.mouse.click(builder.x, builder.y);
     await expect(page.locator("#selection-name")).toHaveText("Villager");
-    await page.locator("#build-menu").click();
+    await page.locator("#build-military-menu").click();
     await page.locator("#build-barracks").click();
     await expect(scene).toHaveAttribute("data-order-mode", "build");
     await page.mouse.move(relic.x, relic.y);
