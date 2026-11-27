@@ -60,3 +60,52 @@ fn the_rust_seat_delivers_a_carrier_to_its_nearest_completed_monastery() {
         building: EntityId(3)
     }));
 }
+
+#[test]
+fn the_build_order_wants_one_monastery_for_a_nearby_relic_in_castle_age() {
+    use crate::tests::fake::with_task;
+    use aoe_sdk::{ResourceKind, UnitTask};
+
+    let mut builder = with_task(
+        unit_of(13, UnitKind::Villager, (48, 50)),
+        UnitTask::Gathering,
+    );
+    builder.gathering = Some(ResourceKind::Wood);
+    builder.carrying = Some((ResourceKind::Wood, 5));
+    let mut world = FakeWorld::new(
+        vec![builder],
+        vec![
+            building(1, BuildingKind::TownCenter, (44, 44)),
+            building(2, BuildingKind::Barracks, (37, 44)),
+            building(3, BuildingKind::ArcheryRange, (40, 39)),
+            building(4, BuildingKind::Blacksmith, (49, 39)),
+            building(5, BuildingKind::Stable, (43, 52)),
+        ],
+    );
+    let plans_monastery = |world: &FakeWorld| {
+        play_fresh(world).1.orders.iter().any(|order| {
+            matches!(
+                order,
+                Order::Build {
+                    kind: BuildingKind::Monastery,
+                    ..
+                }
+            )
+        })
+    };
+    world.relics = Some(RelicView {
+        ground: vec![relic(20, 60, 53)],
+        ..RelicView::default()
+    });
+    world.economy = Some(with_age(eco(0, 400, 0, 1, 10), Age::Feudal, &[]));
+    assert!(!plans_monastery(&world));
+
+    world.economy = Some(with_age(eco(0, 120, 0, 1, 10), Age::Castle, &[]));
+    assert!(!plans_monastery(&world));
+
+    world.economy = Some(with_age(eco(0, 400, 0, 1, 10), Age::Castle, &[]));
+    assert!(plans_monastery(&world));
+
+    world.relics.as_mut().unwrap().ground = vec![relic(20, 210, 230)];
+    assert!(!plans_monastery(&world));
+}

@@ -2,7 +2,34 @@
 use crate::context::{Context, OrderBudgetExhausted};
 use crate::geometry::dist2;
 use crate::roster::price;
+use crate::view::Tile;
 use aoe_sdk::{BuildingKind, EntityId, Order, RelicAction, UnitKind};
+
+/// Site the Monastery near a visible relic close to one of our villages.
+pub(super) fn monastery_anchor(ctx: &Context<'_>) -> Option<Tile> {
+    if !ctx.castle() {
+        return None;
+    }
+    let range = collect_range_sq(ctx);
+    ctx.world
+        .relics()?
+        .ground
+        .iter()
+        .flat_map(|relic| {
+            let at = relic.position.tile_floor();
+            let tile = (at.x, at.y);
+            ctx.centers
+                .iter()
+                .map(move |&center| (dist2(center, tile), tile))
+        })
+        .filter(|(distance, _)| *distance <= range)
+        .min()
+        .map(|(_, tile)| tile)
+}
+
+fn collect_range_sq(ctx: &Context<'_>) -> i64 {
+    i64::from(ctx.config.relic_collect_distance).pow(2)
+}
 
 pub fn step(ctx: &mut Context<'_>) -> Result<(), OrderBudgetExhausted> {
     if !ctx.castle() {
@@ -43,7 +70,7 @@ pub fn step(ctx: &mut Context<'_>) -> Result<(), OrderBudgetExhausted> {
             )
         })
         .collect();
-    let range = i64::from(ctx.config.relic_collect_distance).pow(2);
+    let range = collect_range_sq(ctx);
     let mut claimed = std::collections::BTreeSet::new();
     for &(id, from, _) in monks.iter().filter(|(_, _, idle)| *idle) {
         let action = if view.carriers.binary_search(&id).is_ok() {

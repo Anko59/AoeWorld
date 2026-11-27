@@ -226,6 +226,12 @@ impl World {
                 let remaining = self.amounts.get(&node.id).copied().unwrap_or(node.initial);
                 (remaining > 0).then(|| TileRect::from_xywh(node.tile.x, node.tile.y, 1, 1))
             }))
+            .chain(self.relics().into_iter().flat_map(|view| {
+                view.ground.iter().map(|relic| {
+                    let tile = relic.position.tile_floor();
+                    TileRect::from_xywh(tile.x, tile.y, 1, 1)
+                })
+            }))
             .collect();
         for radius in 0..=max_radius {
             for dy in -radius..=radius {

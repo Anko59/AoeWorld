@@ -250,3 +250,20 @@ fn remembered_exact_exploration_still_proves_a_land_route() {
     assert_eq!(route.last(), Some(&to));
     assert!(route.iter().all(|tile| world.fog().explored_exactly(*tile)));
 }
+
+#[test]
+fn known_ground_relics_are_not_build_sites() {
+    let mut world = river_world(false, true);
+    let origin = TileCoord::new(7, 7);
+    let kind = BuildingKind::Monastery;
+    assert_eq!(world.find_build_site(kind, origin, 0, 0, &[]), Some(origin));
+    world.apply(M::Relics(crate::RelicView {
+        revision: 1,
+        ground: vec![crate::GroundRelic {
+            id: EntityId(50),
+            position: WorldPosition::from_tile_center(TileCoord::new(8, 8)).unwrap(),
+        }],
+        ..crate::RelicView::default()
+    }));
+    assert_eq!(world.find_build_site(kind, origin, 0, 0, &[]), None);
+}
