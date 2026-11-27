@@ -141,6 +141,71 @@ test("normal player navigation keeps developer timing disabled", async ({
   });
 });
 
+for (const delay of ["slow callback", "late browser dispatch"] as const) {
+  test(`game frames yield to queued browser tasks after a ${delay}`, async ({
+    page,
+  }, info) => {
+    await inputFixture(
+      page,
+      info.project.name === "webgpu" ? "webgpu" : "webgl2",
+    );
+    const taskRan = await page.evaluate(
+      (delay) =>
+        new Promise<boolean>((resolve) => {
+          const timing = Reflect.get(window, "aoePerformance") as {
+            mark(section: number): void;
+          };
+          const mark = timing.mark;
+          const requestFrame = window.requestAnimationFrame;
+          const channel = new MessageChannel();
+          let delayRequested = false;
+          let delayedFrame = false;
+          let observedFrame = false;
+          let finished = false;
+          let ran = false;
+          channel.port1.onmessage = () => {
+            ran = true;
+          };
+          timing.mark = (section) => {
+            mark(section);
+            if (section === 0 && delay === "slow callback" && !observedFrame) {
+              observedFrame = true;
+              const until = performance.now() + 60;
+              while (performance.now() < until) {
+                // Simulate one over-budget render callback.
+              }
+            }
+            if (section === 21 && (observedFrame || delayedFrame)) {
+              finished = true;
+              channel.port2.postMessage(null);
+            }
+          };
+          window.requestAnimationFrame = (callback) => {
+            if (finished) {
+              timing.mark = mark;
+              window.requestAnimationFrame = requestFrame;
+              channel.port1.close();
+              channel.port2.close();
+              resolve(ran);
+            } else if (delay === "late browser dispatch" && !delayRequested) {
+              delayRequested = true;
+              window.setTimeout(() => {
+                requestFrame.call(window, (time) => {
+                  delayedFrame = true;
+                  callback(time);
+                });
+              }, 80);
+              return 0;
+            }
+            return requestFrame.call(window, callback);
+          };
+        }),
+      delay,
+    );
+    expect(taskRan).toBe(true);
+  });
+}
+
 test("frame telemetry runs with the overlay hidden and posts bounded stage summaries", async ({
   page,
 }, info) => {

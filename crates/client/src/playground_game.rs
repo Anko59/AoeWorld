@@ -6,8 +6,17 @@ use aoe_protocol::{
 use aoe_rendering::{GameArt, GameRenderer, SceneCamera};
 use map::{CachedChunk, ChunkTable};
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
-use wasm_bindgen::{JsCast, JsValue, closure::Closure};
+use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 use web_sys::{Document, HtmlCanvasElement, WebSocket};
+
+#[wasm_bindgen(inline_js = "
+export function schedule_game_frame(callback, delay) {
+    if (delay === 0) requestAnimationFrame(callback);
+    else setTimeout(() => requestAnimationFrame(callback), delay);
+}")]
+extern "C" {
+    fn schedule_game_frame(callback: &js_sys::Function, delay: i32);
+}
 
 #[path = "playground_controls/capture.rs"]
 mod capture;
@@ -170,6 +179,7 @@ pub(super) fn send_order(client: &mut Client, point: ScreenPoint, queued: bool) 
 fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     let callback = Rc::new(RefCell::new(None::<Closure<dyn FnMut(f64)>>));
     let next = callback.clone();
+    let mut previous_yield_ms = 0;
     let subscription_client = Rc::downgrade(&shared);
     let subscription = Closure::<dyn FnMut()>::new(move || {
         if let Some(client) = subscription_client.upgrade() {
@@ -189,11 +199,12 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         }
         let update = perf::Scope::stage(0);
         resize(&mut client);
-        let delta_ms = if client.last_frame == 0.0 {
+        let frame_interval_ms = if client.last_frame == 0.0 {
             16.0
         } else {
-            (time - client.last_frame).clamp(0.0, 100.0)
+            time - client.last_frame
         };
+        let delta_ms = frame_interval_ms.clamp(0.0, 100.0);
         client.last_frame = time;
         client.resources.expire_effects(time);
         controls::edge_pan(&mut client, delta_ms);
@@ -416,10 +427,18 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             map::request_visible(shared.clone());
         }
         perf::perf_mark(21);
-        if let Some(window) = web_sys::window()
-            && let Some(cb) = next.borrow().as_ref()
-        {
-            let _ = window.request_animation_frame(cb.as_ref().unchecked_ref());
+        if let Some(cb) = next.borrow().as_ref() {
+            // Compositing can delay frame dispatch even when this callback is
+            // cheap. Give input and WebSocket tasks a bounded window to run
+            // before asking for more rendering work. Exclude our own delay.
+            let busy_ms = (now() - time).max(frame_interval_ms - f64::from(previous_yield_ms));
+            let yield_ms = if busy_ms >= 50.0 {
+                (busy_ms / 8.0).clamp(16.0, 100.0) as i32
+            } else {
+                0
+            };
+            previous_yield_ms = yield_ms;
+            schedule_game_frame(cb.as_ref().unchecked_ref(), yield_ms);
         }
     }));
     web_sys::window()
