@@ -5,6 +5,8 @@ const capacity = 2048;
 const cadenceCapacity = 32_768;
 const minute = 60_000;
 const overflow = 137;
+const maxQueuedReports = 8;
+const retryDelay = 5_000;
 
 function cadence() {
   return { bins: new Uint32Array(overflow + 1), frames: 0, max: 0 };
@@ -112,37 +114,74 @@ export function frameTelemetry(clock = () => performance.now()) {
 
 export function initFrameTelemetry() {
   const telemetry = frameTelemetry();
-  let posting = false, token = '', visible = !document.hidden;
+  const source = crypto.getRandomValues(new Uint32Array(1))[0];
+  let sequence = 0, outbox = null, visible = !document.hidden;
+  const collecting = () => visible && outbox && outbox.reports.length < maxQueuedReports;
   document.addEventListener('visibilitychange', () => {
     visible = !document.hidden;
     telemetry.suspend();
   });
+
+  async function send(box) {
+    if (box.sending || box.timer !== null || !box.reports.length) return;
+    box.sending = true;
+    let retry;
+    try {
+      const response = await fetch('/client/perf', {
+        method: 'POST', signal: globalThis.AbortSignal?.timeout?.(4000),
+        headers: { 'content-type': 'application/json', 'x-aoeworld-controller-token': box.token },
+        body: box.reports[0],
+      });
+      // 409 confirms that a previous attempt already recorded this sequence.
+      retry = response.status === 429 || response.status >= 500;
+    } catch {
+      retry = true;
+    }
+    box.sending = false;
+    if (outbox !== box) return;
+    if (retry) {
+      box.timer = setTimeout(() => {
+        box.timer = null;
+        void send(box);
+      }, box.delay);
+      box.delay = Math.min(minute, box.delay * 2);
+      return;
+    }
+    box.reports.shift();
+    box.delay = retryDelay;
+    void send(box);
+  }
+
   const state = { latest: null, session(next) {
-    if (next === token) return;
-    token = next;
+    if ((outbox?.token ?? '') === next) return;
+    if (outbox?.timer != null) clearTimeout(outbox.timer);
+    outbox = next ? { token: next, reports: [], sending: false, timer: null, delay: retryDelay } : null;
     state.latest = null;
     telemetry.suspend();
     telemetry.clear();
   }, mark(section) {
-    if (token && visible) telemetry.mark(section);
+    if (collecting()) telemetry.mark(section);
   }, view(x, y) {
-    return !!token && visible && telemetry.view(x, y);
+    return !!collecting() && telemetry.view(x, y);
   }, publish(detailedUnits, effect_frames, plain_frames, eligible_instances,
     occluder_instances, depth_span, context_lost, context_restored) {
-    const report = { ...telemetry.summary(),
+    // Use the monotonic clock across minutes and give each page its own suffix.
+    sequence = Math.max(sequence + 1, Math.floor((performance.timeOrigin + performance.now()) * 1000));
+    const report = { ...telemetry.summary(), sequence: [sequence, source],
       units_in_view: window.aoeNavigation?.strategic?.visibleUnits?.() ?? detailedUnits,
       renderer: document.getElementById('playground')?.dataset.renderer,
       contour: { effect_frames, plain_frames, eligible_instances, occluder_instances,
         depth_span, context_lost, context_restored } };
     state.latest = report;
+    if (collecting() && report.frames) {
+      outbox.reports.push(JSON.stringify(report));
+      // Pause sampling during a long backlog so completed minutes stay queued.
+      if (outbox.reports.length === maxQueuedReports) telemetry.suspend();
+      void send(outbox);
+    }
     telemetry.clear();
-    if (!token || !report.frames || posting) return;
-    posting = true;
-    fetch('/client/perf', { method: 'POST', signal: globalThis.AbortSignal?.timeout?.(4000), headers: { 'content-type': 'application/json',
-      'x-aoeworld-controller-token': token }, body: JSON.stringify(report) })
-      .catch(() => {}).finally(() => { posting = false; });
   } };
-  const restore = observeDraws(() => { if (token && visible) telemetry.draw(); });
+  const restore = observeDraws(() => { if (collecting()) telemetry.draw(); });
   window.addEventListener('pagehide', event => { if (!event.persisted) restore(); });
   return state;
 }

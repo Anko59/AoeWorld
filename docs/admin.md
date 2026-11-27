@@ -92,6 +92,12 @@ Hardware instruction counts are available there when the live AI counter
 is enabled by the host. Detailed simulation instruction counts come from
 the saved-replay profiler.
 
+`POST /client/perf` requires a human resume token and caps each report at 4 KiB.
+Its `sequence` pairs a monotonic client number with a random page suffix.
+The server excludes tokens from logs, returns 409 for a sequence already
+recorded for that seat, and allows four attempts per seat in a rolling minute.
+Browsers retain the report and retry after a 429 or a temporary delivery failure.
+
 Run the summary on an existing log from the repository root.
 
 ```sh

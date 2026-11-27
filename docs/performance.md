@@ -460,10 +460,10 @@ less often than frames. Browser clock resolution may round short sections to
 zero. Disabling the overlay stops its GPU queries; bounded CPU telemetry
 continues with the overlay hidden.
 
-Visible game pages POST once a minute to `/client/perf` with a human resume
-token. `/admin/perf` lists up to 64 recent reports, expiring after two minutes.
-Bodies are capped at 4 KiB and each token can report once every 55 seconds.
-The server treats observations as untrusted and excludes tokens from logs.
+Visible game pages collect one report a minute for `/client/perf`. They retry
+temporary failures in order and pause collection if eight reports are queued.
+`/admin/perf` lists each seat's latest report for two minutes. See [match
+telemetry](admin.md#match-telemetry) for admission and journal details.
 
 `window.aoeTelemetry.latest` gives cadence p50/p99/max and separate histograms
 for camera motion and holds. The histograms preserve exact counts over 50 ms

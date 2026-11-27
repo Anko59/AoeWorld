@@ -7,16 +7,21 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     time::{Duration, Instant},
 };
 
-const REPORT_RATE: Duration = Duration::from_secs(60);
+const RATE_WINDOW: Duration = Duration::from_secs(60);
+const REPORTS_PER_WINDOW: usize = 4;
+
+// Monotonic client sequence with a random per-page suffix.
+type Sequence = (u64, u32);
 
 type Quantiles = [f64; 3];
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Report {
+    sequence: Sequence,
     pub frames: u32,
     frame_ms: Quantiles,
     pub units_in_view: u32,
@@ -145,42 +150,102 @@ struct Entry {
     report: Report,
 }
 
+struct Attempt {
+    at: Instant,
+    pending: Option<Sequence>,
+}
+
+#[derive(Default)]
+struct SeatReports {
+    // Retain accepted identities for this match so a delayed duplicate cannot
+    // be journaled again. Only accepted reports consume this long-lived space.
+    accepted: HashSet<Sequence>,
+    attempts: [Option<Attempt>; REPORTS_PER_WINDOW],
+    latest: Option<Entry>,
+}
+
+impl SeatReports {
+    fn finish_attempt(&mut self, sequence: Sequence) {
+        if let Some(attempt) = self
+            .attempts
+            .iter_mut()
+            .flatten()
+            .find(|attempt| attempt.pending == Some(sequence))
+        {
+            attempt.pending = None;
+        }
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct Reports {
     world_id: u64,
-    // Only authenticated human seat tokens from this match can reach record().
-    by_session: HashMap<[u8; 24], Entry>,
+    // Only authenticated human seat tokens from this match can reach admit().
+    by_session: HashMap<[u8; 24], SeatReports>,
 }
 
 impl Reports {
-    fn record(
+    fn admit(
         &mut self,
         token: aoe_protocol::ResumeToken,
-        report: Report,
-        tick: u64,
+        sequence: Sequence,
         world_id: u64,
+        now: Instant,
     ) -> Result<(), StatusCode> {
-        let now = Instant::now();
         if self.world_id != world_id {
             *self = Self {
                 world_id,
                 ..Self::default()
             };
         }
-        if self
-            .by_session
-            .get(&token.0)
-            .is_some_and(|entry| now.duration_since(entry.at) < REPORT_RATE)
+        let seat = self.by_session.entry(token.0).or_default();
+        if seat.accepted.contains(&sequence) {
+            return Err(StatusCode::CONFLICT);
+        }
+        if seat
+            .attempts
+            .iter()
+            .flatten()
+            .any(|attempt| attempt.pending == Some(sequence))
         {
             return Err(StatusCode::TOO_MANY_REQUESTS);
         }
+        let slot = seat
+            .attempts
+            .iter_mut()
+            .find(|slot| {
+                slot.as_ref().is_none_or(|attempt| {
+                    attempt.pending.is_none() && now.duration_since(attempt.at) >= RATE_WINDOW
+                })
+            })
+            .ok_or(StatusCode::TOO_MANY_REQUESTS)?;
+        *slot = Some(Attempt {
+            at: now,
+            pending: Some(sequence),
+        });
+        Ok(())
+    }
+
+    fn record(
+        &mut self,
+        token: aoe_protocol::ResumeToken,
+        report: Report,
+        tick: u64,
+        now: Instant,
+    ) {
+        let Some(seat) = self.by_session.get_mut(&token.0) else {
+            return;
+        };
+        seat.finish_attempt(report.sequence);
+        seat.accepted.insert(report.sequence);
         // Never log session secrets or trust client timing as server performance.
         tracing::info!(tick, frames = report.frames, frame_ms = ?report.frame_ms,
             stages_ms = ?serde_json::to_value(&report.stages_ms).ok(),
             draw_calls = ?report.draw_calls, renderer = %report.renderer,
             contour = ?serde_json::to_value(&report.contour).ok(), "client frame summary");
-        self.by_session.insert(token.0, Entry { at: now, report });
-        Ok(())
+        if seat.latest.as_ref().is_none_or(|entry| entry.at <= now) {
+            seat.latest = Some(Entry { at: now, report });
+        }
     }
 
     pub(crate) fn recent(&self, world_id: u64) -> serde_json::Value {
@@ -191,6 +256,7 @@ impl Reports {
         let mut entries: Vec<_> = self
             .by_session
             .values()
+            .filter_map(|seat| seat.latest.as_ref())
             .filter(|entry| now.duration_since(entry.at) < Duration::from_secs(120))
             .collect();
         entries.sort_unstable_by_key(|entry| entry.at);
@@ -208,6 +274,15 @@ pub(super) async fn receive(
     headers: HeaderMap,
     Json(report): Json<Report>,
 ) -> Result<StatusCode, StatusCode> {
+    receive_at(state, headers, report, Instant::now()).await
+}
+
+async fn receive_at(
+    state: AppState,
+    headers: HeaderMap,
+    report: Report,
+    now: Instant,
+) -> Result<StatusCode, StatusCode> {
     let token = crate::maps::controller_token(&headers).ok_or(StatusCode::FORBIDDEN)?;
     let active = state.gameplay.read().await;
     let gameplay = active.clone();
@@ -217,18 +292,39 @@ pub(super) async fn receive(
     if !report.valid() {
         return Err(StatusCode::BAD_REQUEST);
     }
-    let (tick, _) = gameplay.tick_and_units().await;
+    let world_id = gameplay.world_id();
     state
         .client_perf
         .lock()
         .await
-        .record(token, report.clone(), tick, gameplay.world_id())?;
+        .admit(token, report.sequence, world_id, now)?;
     drop(active);
-    if let Err(error) = super::super::append_client(&state, &gameplay, tick, report).await {
-        tracing::warn!(world_id = gameplay.world_id(), %error, "could not append client telemetry");
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    }
-    Ok(StatusCode::NO_CONTENT)
+
+    // Complete the reservation even if the browser disconnects mid-write.
+    tokio::spawn(async move {
+        let (tick, _) = gameplay.tick_and_units().await;
+        let result = super::super::append_client(&state, &gameplay, tick, report.clone()).await;
+        let mut reports = state.client_perf.lock().await;
+        match result {
+            Ok(()) => {
+                if reports.world_id == world_id {
+                    reports.record(token, report, tick, now);
+                }
+                Ok(StatusCode::NO_CONTENT)
+            }
+            Err(error) => {
+                if reports.world_id == world_id
+                    && let Some(seat) = reports.by_session.get_mut(&token.0)
+                {
+                    seat.finish_attempt(report.sequence);
+                }
+                tracing::warn!(world_id, %error, "could not append client telemetry");
+                Err(StatusCode::INTERNAL_SERVER_ERROR)
+            }
+        }
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
 }
 
 #[cfg(test)]

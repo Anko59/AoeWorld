@@ -14,7 +14,7 @@ async fn post(server: &Server, token: &str, body: Value) -> u16 {
 }
 
 fn report() -> Value {
-    json!({"frames":120, "frame_ms":[16.0,32.0,80.0], "units_in_view":12,
+    json!({"sequence":[1, 0], "frames":120, "frame_ms":[16.0,32.0,80.0], "units_in_view":12,
         "still": {"frames":120, "max_ms":80, "over_50_ms":1, "over_100_ms":0,
             "histogram": [[16, 118], [32, 1], [80, 1]]},
         "panning": {"frames":0, "max_ms":0, "over_50_ms":0, "over_100_ms":0, "histogram":[]},
@@ -57,7 +57,7 @@ async fn authenticated_client_timings_are_bounded_rate_limited_and_visible_with_
     invalid["renderer"] = json!("x".repeat(5000));
     assert_eq!(post(&server, &token, invalid).await, 413);
     assert_eq!(post(&server, &token, report()).await, 204);
-    assert_eq!(post(&server, &token, report()).await, 429);
+    assert_eq!(post(&server, &token, report()).await, 409);
     let (status, body) = request(&server, "GET", "/admin/perf", Some(SECRET), "").await;
     assert_eq!(status, 200);
     assert_eq!(body["clients"].as_array().unwrap().len(), 1);
@@ -82,6 +82,7 @@ async fn authenticated_client_timings_are_bounded_rate_limited_and_visible_with_
         .collect();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["kind"], "client");
+    assert_eq!(rows[0]["report"]["sequence"], json!([1, 0]));
     assert_eq!(rows[0]["report"]["frame_ms"], json!([16.0, 32.0, 80.0]));
     assert!(body.get("samples").is_some(), "tick summary retained");
     assert!(

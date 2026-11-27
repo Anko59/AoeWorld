@@ -2,6 +2,7 @@ use super::*;
 fn report() -> Report {
     let q = [0.0, 1.0, 2.0];
     Report {
+        sequence: (1, 0),
         frames: 120,
         frame_ms: [16.0, 32.0, 80.0],
         units_in_view: 12,
@@ -94,7 +95,11 @@ async fn all_65_human_seats_reach_the_match_journal() {
         .path()
         .join(format!("matches/{world_id:016x}/telemetry.jsonl"));
 
-    for minute in 0..2 {
+    let first_arrival = Instant::now();
+    // Reports sent 60.010 s apart with 100 ms then 10 ms transit.
+    let arrival_gap = Duration::from_millis(60_010 + 10 - 100);
+    for minute in 0_u32..2 {
+        let arrival = first_arrival + minute * arrival_gap;
         for (index, seat) in seats.iter().enumerate() {
             let mut headers = HeaderMap::new();
             let token: String = seat
@@ -105,19 +110,17 @@ async fn all_65_human_seats_reach_the_match_journal() {
                 .collect();
             headers.insert("x-aoeworld-controller-token", token.parse().unwrap());
             let mut sample = report();
+            sample.sequence.0 += u64::from(minute) * 60_010_000;
             sample.units_in_view = minute * 65 + index as u32;
             assert_eq!(
-                receive(State(state.clone()), headers.clone(), Json(sample.clone())).await,
+                receive_at(state.clone(), headers.clone(), sample.clone(), arrival).await,
                 Ok(StatusCode::NO_CONTENT),
                 "minute {minute}, seat {index}"
             );
             assert_eq!(
-                receive(State(state.clone()), headers, Json(sample)).await,
-                Err(StatusCode::TOO_MANY_REQUESTS)
+                receive_at(state.clone(), headers, sample, arrival).await,
+                Err(StatusCode::CONFLICT)
             );
-        }
-        for entry in state.client_perf.lock().await.by_session.values_mut() {
-            entry.at -= Duration::from_secs(60);
         }
     }
 
@@ -135,31 +138,50 @@ async fn all_65_human_seats_reach_the_match_journal() {
 }
 
 #[test]
-fn a_seat_keeps_one_report_and_its_own_full_minute_cooldown() {
+fn burst_budget_and_deduplication_are_independent_per_seat() {
     let mut reports = Reports::default();
-    let token = aoe_protocol::ResumeToken([7; 24]);
-    assert_eq!(reports.record(token, report(), 0, 7), Ok(()));
-    let entry = reports.by_session.get_mut(&token.0).unwrap();
-    entry.at -= Duration::from_secs(56);
+    let first = aoe_protocol::ResumeToken([7; 24]);
+    let second = aoe_protocol::ResumeToken([8; 24]);
+    let now = Instant::now();
+    // An older distinct report can arrive after a newer one, including from
+    // another page on the seat. Each report gets at most one admission.
+    for sequence in [2, 1, 3, 4] {
+        let mut sample = report();
+        sample.sequence.0 = sequence;
+        assert_eq!(reports.admit(first, sample.sequence, 7, now), Ok(()));
+        assert_eq!(
+            reports.admit(first, sample.sequence, 7, now),
+            Err(StatusCode::TOO_MANY_REQUESTS)
+        );
+        reports.record(first, sample, 0, now);
+    }
+    for sequence in 5..100 {
+        assert_eq!(
+            reports.admit(first, (sequence, 0), 7, now + Duration::from_secs(59)),
+            Err(StatusCode::TOO_MANY_REQUESTS)
+        );
+    }
+    assert_eq!(reports.admit(second, (2, 0), 7, now), Ok(()));
+    let later = now + Duration::from_secs(120);
     assert_eq!(
-        reports.record(token, report(), 0, 7),
-        Err(StatusCode::TOO_MANY_REQUESTS)
+        reports.admit(first, (1, 0), 7, later),
+        Err(StatusCode::CONFLICT)
     );
-    let entry = reports.by_session.get_mut(&token.0).unwrap();
-    entry.at -= Duration::from_secs(4);
-    assert_eq!(reports.record(token, report(), 0, 7), Ok(()));
-    assert_eq!(reports.by_session.len(), 1);
-    let recent = reports.recent(7);
-    assert_eq!(recent.as_array().unwrap().len(), 1);
-    assert!(recent[0].get("token").is_none());
-    reports.by_session.get_mut(&token.0).unwrap().at -= Duration::from_secs(120);
+    assert_eq!(reports.admit(first, (5, 0), 7, later), Ok(()));
+    assert_eq!(reports.recent(7).as_array().unwrap().len(), 1);
+    reports
+        .by_session
+        .get_mut(&first.0)
+        .unwrap()
+        .latest
+        .as_mut()
+        .unwrap()
+        .at -= Duration::from_secs(120);
     assert_eq!(reports.recent(7), serde_json::json!([]));
 
-    let replacement_token = aoe_protocol::ResumeToken([8; 24]);
-    assert_eq!(reports.record(replacement_token, report(), 0, 8), Ok(()));
+    assert_eq!(reports.admit(first, (1, 0), 8, later), Ok(()));
     assert_eq!(reports.by_session.len(), 1);
     assert_eq!(reports.recent(7), serde_json::json!([]));
-    assert_eq!(reports.recent(8).as_array().unwrap().len(), 1);
 }
 
 #[test]
