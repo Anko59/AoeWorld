@@ -292,6 +292,7 @@ fn fixtures_load_a_small_save_and_reject_its_snapshot_version() {
         0, // relic orders
         0, // relic victory enabled
         0, // relic victory
+        0, // herd recovery
         0, // town bells
         0, // explored chunks
         0, // building memory

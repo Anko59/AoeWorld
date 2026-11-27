@@ -23,7 +23,6 @@ pub struct WorldSnapshot {
     pub(crate) market_recovery: Vec<(u64, PlayerId, MarketCommodity)>,
     /// Absent only for worlds without map terrain (test fixtures).
     pub resources: Option<ResourceOverlaySnapshot>,
-    pub(crate) resource_recovery: Vec<(u64, u64)>,
     pub buildings: Vec<BuildingRecord>,
     pub(crate) dispatch_sites: Vec<(EntityId, Option<EntityId>)>,
     pub(crate) dispatch_cursor: Option<EntityId>,
@@ -233,7 +232,7 @@ pub struct RestoreReport {
 pub enum SnapshotError {
     #[error("the snapshot is from an unsupported version")]
     Version,
-    #[error("invalid resource or herd recovery records")]
+    #[error("invalid herd recovery records")]
     Recovery,
     #[error("the world already holds units or buildings")]
     NotEmpty,

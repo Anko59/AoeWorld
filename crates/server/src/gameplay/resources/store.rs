@@ -6,9 +6,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-// Worst-case JSON entries (ID, remaining and punctuation) plus metadata.
+// Worst-case JSON change and recovery entries plus metadata.
 // The bound covers the map's supported overlay, independently of wire frames.
-pub(super) const MAX_SNAPSHOT_BYTES: u64 = aoe_map::MAX_RESOURCE_OVERLAY_CHANGES as u64 * 64 + 1024;
+pub(super) const MAX_SNAPSHOT_BYTES: u64 = aoe_map::MAX_RESOURCE_OVERLAY_CHANGES as u64 * 96 + 1024;
 static SAVE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn path(directory: &Path, hash: [u8; 32]) -> PathBuf {

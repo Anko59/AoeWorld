@@ -168,6 +168,7 @@ impl GameWorld {
                 && !self.living_animal_at(next)
                 && self.tile_free(next)
                 && !self.tile_has_reservation(next)
+                && !self.destination_tile_reserved(next)
                 && let Ok(at) = WorldPosition::from_tile_center(next)
             {
                 return Some((at, self.wildlife.animals[&parent.id]));

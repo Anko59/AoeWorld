@@ -139,7 +139,6 @@ impl GameWorld {
             players: self.economy.players.values().copied().collect(),
             market_recovery: self.economy.market_recovery.snapshot(self.tick.0),
             resources,
-            resource_recovery: self.economy.resource_recovery.records(),
             buildings,
             dispatch_sites: self
                 .economy
@@ -192,11 +191,8 @@ impl GameWorld {
         let snapshot = snapshot.clone().retimed(REFERENCE_HZ, self.config.tick_hz);
         probe(RestorePhase::Rest);
         if let Some(resources) = &snapshot.resources {
-            self.restore_resources(resources, content_hash, cancelled)
+            self.restore_resources_at(resources, content_hash, cancelled, snapshot.tick)
                 .map_err(|error| SnapshotError::Map(error.to_string()))?;
-        }
-        if !self.restore_resource_recovery(&snapshot.resource_recovery) {
-            return Err(SnapshotError::Recovery);
         }
         probe(RestorePhase::Resources);
         // Sheltered units are briefly placed outside before re-entering their

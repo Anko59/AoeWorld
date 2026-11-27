@@ -220,3 +220,114 @@ fn simultaneous_herd_deadlines_are_served_on_the_same_game_tick() {
     advance(&mut w, 1);
     assert_eq!(w.animals().filter(|a| a.hp > 0).count(), 40);
 }
+
+#[test]
+fn a_prepared_cut_persists_the_recovery_deadline_before_commit() {
+    let (mut world, [_, edge, _]) = tree_line();
+    let cut = world
+        .prepare_resource_depletion(edge.id, edge.initial_amount)
+        .unwrap();
+    let stored = cut.snapshot([0; 32]);
+    cut.commit();
+    assert_eq!(world.resource_snapshot([0; 32]).unwrap(), stored);
+
+    let (mut restored, _) = tree_line();
+    let before = restored.canonical_hash();
+    let mut malformed = stored.clone();
+    malformed.recovery.push(malformed.recovery[0]);
+    assert!(
+        restored
+            .restore_resources(&malformed, [0; 32], &|| false)
+            .is_err()
+    );
+    assert_eq!(restored.canonical_hash(), before);
+    restored
+        .restore_resources(&stored, [0; 32], &|| false)
+        .unwrap();
+    assert_eq!(restored.canonical_hash(), world.canonical_hash());
+    advance(&mut world, 40);
+    let mut restored = tree_line().0;
+    restored.set_tick_hz(10);
+    restored
+        .restore_resources(&world.resource_snapshot([0; 32]).unwrap(), [0; 32], &|| {
+            false
+        })
+        .unwrap();
+    advance(&mut restored, 79);
+    assert_eq!(restored.resource_remaining(edge.id), Some(0));
+    advance(&mut restored, 1);
+    assert_eq!(
+        restored.resource_remaining(edge.id),
+        Some(edge.initial_amount)
+    );
+}
+
+#[test]
+fn a_tree_waits_while_a_unit_overlaps_from_the_adjacent_tile() {
+    let (mut world, [_, edge, _]) = tree_line();
+    world
+        .deplete_resource(edge.id, edge.initial_amount)
+        .unwrap();
+    let center = WorldPosition::from_tile_center(edge.tile).unwrap();
+    let at = WorldPosition::new(center.x, center.y + 520);
+    assert_ne!(at.tile_floor(), edge.tile);
+    let unit = world.spawn_villager(PlayerId(0), at).unwrap();
+    advance(&mut world, 120);
+    let unit = world.unit(unit).unwrap();
+    assert!(world.body_position_clear(unit.kind, unit.position));
+    assert_eq!(world.resource_remaining(edge.id), Some(0));
+}
+
+#[test]
+fn a_herd_waits_for_a_walkable_neighbor_without_a_unit_or_animal() {
+    let mut world = world();
+    let [lost, _] = herd(&mut world, 100);
+    assert!(world.strike_animal(lost, EntityId(u32::MAX), u16::MAX));
+    let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
+    world.spawn_villager(PlayerId(0), at(100, 100)).unwrap();
+    world.spawn_animal(AnimalKind::Sheep, at(101, 99)).unwrap();
+    let animal = world.spawn_animal(AnimalKind::Sheep, at(102, 100)).unwrap();
+    world.spawn_animal(AnimalKind::Sheep, at(101, 101)).unwrap();
+    let interval = 240 * u64::from(world.config().tick_hz);
+    world.tick.0 = interval;
+    world.advance_herd_recovery();
+    let deer = |world: &GameWorld| {
+        world
+            .animals()
+            .filter(|a| a.kind == AnimalKind::Deer && a.hp > 0)
+            .count()
+    };
+    assert_eq!(deer(&world), 1);
+
+    assert!(world.strike_animal(animal, EntityId(u32::MAX), u16::MAX));
+    world.tick.0 += interval;
+    world.advance_herd_recovery();
+    assert_eq!(deer(&world), 2);
+    assert!(
+        world
+            .animals()
+            .any(|a| { a.kind == AnimalKind::Deer && a.hp > 0 && a.position == at(102, 100) })
+    );
+}
+
+#[test]
+fn a_tree_waits_while_a_unit_has_reserved_the_tile_for_arrival() {
+    let (mut world, [_, edge, _]) = tree_line();
+    world
+        .deplete_resource(edge.id, edge.initial_amount)
+        .unwrap();
+    let approach = TileCoord::new(edge.tile.x, edge.tile.y + 1);
+    let unit = world
+        .spawn_villager(
+            PlayerId(0),
+            WorldPosition::from_tile_center(approach).unwrap(),
+        )
+        .unwrap();
+    world
+        .issue_move(unit, WorldPosition::from_tile_center(edge.tile).unwrap())
+        .unwrap();
+    assert_eq!(world.unit(unit).unwrap().position.tile_floor(), approach);
+    world.tick.0 = 120 * u64::from(world.config().tick_hz);
+    world.advance_resource_recovery(&mut |_| true);
+    assert_eq!(world.resource_remaining(edge.id), Some(0));
+}

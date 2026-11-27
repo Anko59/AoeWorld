@@ -29,7 +29,12 @@ impl PreparedResourceDepletion<'_> {
         };
         let mut next = overlay.clone();
         next.apply_depletion(&self.depletion);
-        next.snapshot(content_hash)
+        let mut snapshot = next.snapshot(content_hash);
+        let mut recovery = self.world.economy.resource_recovery.clone();
+        self.world
+            .update_resource_recovery(&mut recovery, self.node, self.depletion);
+        recovery.write_snapshot(&mut snapshot, self.world.tick.0, self.world.config.tick_hz);
+        snapshot
     }
 
     pub fn commit(self) -> Depletion {
@@ -53,8 +58,10 @@ impl PreparedResourceDepletion<'_> {
                     self.depletion.id,
                 ));
         }
+        let mut recovery = std::mem::take(&mut self.world.economy.resource_recovery);
         self.world
-            .schedule_resource_recovery(self.node, self.depletion);
+            .update_resource_recovery(&mut recovery, self.node, self.depletion);
+        self.world.economy.resource_recovery = recovery;
         self.depletion
     }
 }
@@ -71,7 +78,13 @@ impl GameWorld {
         let Terrain::Map { overlay, .. } = &self.terrain else {
             return None;
         };
-        Some(overlay.snapshot(content_hash))
+        let mut snapshot = overlay.snapshot(content_hash);
+        self.economy.resource_recovery.write_snapshot(
+            &mut snapshot,
+            self.tick.0,
+            self.config.tick_hz,
+        );
+        Some(snapshot)
     }
 
     /// Restore only before spawning units, so restored obstacles cannot cover
@@ -82,6 +95,16 @@ impl GameWorld {
         content_hash: [u8; 32],
         cancelled: &dyn Fn() -> bool,
     ) -> Result<(), ResourceOverlayError> {
+        self.restore_resources_at(snapshot, content_hash, cancelled, self.tick.0)
+    }
+
+    pub(super) fn restore_resources_at(
+        &mut self,
+        snapshot: &ResourceOverlaySnapshot,
+        content_hash: [u8; 32],
+        cancelled: &dyn Fn() -> bool,
+        tick: u64,
+    ) -> Result<(), ResourceOverlayError> {
         if !self.units.is_empty() || !self.economy.buildings.is_empty() {
             return Err(ResourceOverlayError::InvalidSnapshot);
         }
@@ -90,8 +113,15 @@ impl GameWorld {
         };
         let replacement =
             ResourceOverlay::from_snapshot(snapshot, content_hash, generator, cancelled)?;
+        let recovery = regeneration::ResourceRecovery::from_snapshot(
+            snapshot,
+            &replacement,
+            tick,
+            self.config.tick_hz,
+        )
+        .ok_or(ResourceOverlayError::InvalidSnapshot)?;
         *overlay = replacement;
-        self.economy.resource_recovery = Default::default();
+        self.economy.resource_recovery = recovery;
         if let Ok(cache) = self.resource_chunks.get_mut() {
             cache.clear();
         }

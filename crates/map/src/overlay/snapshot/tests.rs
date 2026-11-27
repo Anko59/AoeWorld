@@ -123,6 +123,8 @@ fn snapshot_rejects_wrong_map_schema_amount_order_and_impossible_revision() {
 fn snapshot_deserialization_rejects_oversize_input_before_retaining_it() {
     let snapshot = ResourceOverlaySnapshot {
         replenished: 0,
+        recovery_hz: aoe_core::REFERENCE_HZ,
+        recovery: Vec::new(),
         schema_version: RESOURCE_OVERLAY_SCHEMA_VERSION,
         map_content_hash: [0; 32],
         revision: 0,
@@ -134,6 +136,19 @@ fn snapshot_deserialization_rejects_oversize_input_before_retaining_it() {
             MAX_RESOURCE_OVERLAY_CHANGES + 1
         ],
     };
+    let bytes = serde_json::to_vec(&snapshot).expect("oversize fixture");
+    assert!(
+        serde_json::from_slice::<ResourceOverlaySnapshot>(&bytes)
+            .expect_err("bounded parser")
+            .to_string()
+            .contains("too many resource changes")
+    );
+}
+
+#[test]
+fn snapshot_deserialization_rejects_oversize_recovery() {
+    let mut snapshot = ResourceOverlay::default().snapshot([0; 32]);
+    snapshot.recovery = vec![(0, 0); MAX_RESOURCE_OVERLAY_CHANGES + 1];
     let bytes = serde_json::to_vec(&snapshot).expect("oversize fixture");
     assert!(
         serde_json::from_slice::<ResourceOverlaySnapshot>(&bytes)

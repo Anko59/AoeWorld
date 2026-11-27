@@ -65,6 +65,7 @@ impl GameplayService {
             cancelled,
         )
         .map_err(ResourceLifecycleError::Navigation)?;
+        world.set_tick_hz(crate::Config::sim_hz_from_env());
         let directory = package_directory.map(|root| root.join("resource-overlays"));
         if let Some(directory) = &directory
             && let Some(snapshot) = store::load(directory, content_hash)?

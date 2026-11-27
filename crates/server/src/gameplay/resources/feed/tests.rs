@@ -65,12 +65,16 @@ fn the_complete_supported_overlay_roundtrips_through_bounded_storage() {
     let count = aoe_map::MAX_RESOURCE_OVERLAY_CHANGES;
     let snapshot = aoe_map::ResourceOverlaySnapshot {
         replenished: 0,
+        recovery_hz: aoe_core::REFERENCE_HZ,
+        recovery: (0..count)
+            .map(|id| (u64::MAX, u64::MAX - (count - id) as u64))
+            .collect(),
         schema_version: aoe_map::RESOURCE_OVERLAY_SCHEMA_VERSION,
         map_content_hash: [7; 32],
         revision: count as u64,
         changes: (0..count)
             .map(|id| aoe_map::ResourceChange {
-                id: id as u64 * 2,
+                id: u64::MAX - (count - id) as u64,
                 remaining: u16::MAX,
             })
             .collect(),

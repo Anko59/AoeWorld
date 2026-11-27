@@ -16,10 +16,6 @@ impl WorldSnapshot {
         };
         self.tick = at(self.tick);
         self.relics.retime(at);
-        for (due, _) in &mut self.resource_recovery {
-            *due = at(*due);
-        }
-        self.resource_recovery.sort_unstable();
         for herd in &mut self.herd_recovery {
             herd.due = herd.due.map(at);
         }

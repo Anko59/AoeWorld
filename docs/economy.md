@@ -330,8 +330,10 @@ herd is gone permanently. Save files preserve both members and deadlines.
 
 A cut tree can grow back after two game minutes when an original tree tile
 beside it still has a living tree. Each new tree can seed the next edge of the
-original footprint. Occupied tiles wait for another interval. A fully cleared
-patch can never seed itself.
+original footprint. Unit bodies, reserved work and arrival tiles, foundations,
+and living animals defer growth for another interval. A fully cleared patch can
+never seed itself. Standalone resource overlays keep the time remaining until
+regrowth, and full saves rescale that time when the server tick rate changes.
 
 Live animals occupy an eight-tile spatial index. Each tick probes a fixed
 neighborhood around living units and advances only candidate animals and
