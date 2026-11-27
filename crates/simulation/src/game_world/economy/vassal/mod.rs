@@ -109,7 +109,7 @@ pub(crate) struct Manager {
     pub(super) manual: BTreeSet<EntityId>,
     recalls: BTreeMap<EntityId, Recall>,
     returns: BTreeMap<EntityId, WorldPosition>,
-    plan_cursor: Option<EntityId>,
+    planning: BTreeSet<EntityId>,
     /// The domains each tracked unit stands in.
     member_of: BTreeMap<EntityId, Vec<EntityId>>,
 }
@@ -207,6 +207,7 @@ impl GameWorld {
         Ok(())
     }
     pub(crate) fn deactivate_vassal(&mut self, id: EntityId) {
+        self.economy.vassals.planning.remove(&id);
         if let Some(d) = self.economy.vassals.domains.remove(&id) {
             for unit in &d.members {
                 if let Some(list) = self.economy.vassals.member_of.get_mut(unit) {

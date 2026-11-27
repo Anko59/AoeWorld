@@ -97,3 +97,29 @@ fn vassal_road_purchases_wait_for_unfinished_fortifications() {
     assert!(!w.buildings().any(|b| b.kind == BuildingKind::Road));
     assert!(w.buildings().any(|b| !b.is_complete()));
 }
+
+#[test]
+fn roads_connect_a_work_point_after_the_first_sixty_four_nodes() {
+    let (mut w, v, _) = setup();
+    w.set_fog_disabled(true);
+    for n in 0..70 {
+        w.insert_building(
+            PlayerId(0),
+            BuildingKind::Mill,
+            TileRect::from_xywh(40 + n % 10 * 5, 115 + n / 10 * 5, 2, 2),
+            true,
+        )
+        .unwrap();
+    }
+    let far = TileRect::from_xywh(170, 90, 2, 2);
+    w.insert_building(PlayerId(0), BuildingKind::Mill, far, true)
+        .unwrap();
+    let access = TileRect::from_xywh(169, 89, 4, 4);
+    assert!(
+        w.vassal_network(v)
+            .iter()
+            .any(|(kind, tile, _)| *kind == BuildingKind::Road
+                && access.contains(*tile)
+                && !far.contains(*tile))
+    );
+}

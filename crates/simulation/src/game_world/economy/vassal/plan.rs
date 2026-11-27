@@ -94,8 +94,9 @@ impl GameWorld {
             d.plan_age = age;
             d.planned = self.tick.0;
             d.replan_at = None;
-            if d.pending.is_none() {
-                d.pending = pending;
+            if let Some(pending) = pending {
+                d.pending = Some(pending);
+                self.economy.vassals.planning.insert(id);
             }
         }
         plan
@@ -348,11 +349,13 @@ impl GameWorld {
             .get_mut(&id)
             .and_then(|d| d.pending.take());
         let Some(mut pending) = pending else {
+            self.economy.vassals.planning.remove(&id);
             return;
         };
         let result = pending.poll(self);
         if let Some(d) = self.economy.vassals.domains.get_mut(&id) {
             if let Some(roads) = result {
+                self.economy.vassals.planning.remove(&id);
                 d.plan
                     .retain(|s| !matches!(s.kind, BuildingKind::Road | BuildingKind::Bridge));
                 d.plan.extend(roads);
@@ -363,17 +366,14 @@ impl GameWorld {
         }
     }
     pub(super) fn advance_vassal_plans(&mut self) {
-        use std::ops::Bound::{Excluded, Unbounded};
-        let m = &self.economy.vassals;
-        let cursor = m.plan_cursor.unwrap_or(EntityId(0));
-        let next = m
-            .domains
-            .range((Excluded(cursor), Unbounded))
-            .chain(m.domains.range(..=cursor))
-            .find(|(_, d)| d.pending.is_some())
-            .map(|(&id, _)| id);
-        self.economy.vassals.plan_cursor = next;
-        if let Some(id) = next {
+        let active = self
+            .economy
+            .vassals
+            .planning
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        for id in active {
             self.poll_vassal_plan(id);
         }
     }

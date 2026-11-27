@@ -28,12 +28,7 @@ pub(super) struct Search {
 }
 impl Search {
     pub(super) fn new(view: &View<'_>, starts: &[TileCoord], node: TileRect, tier: u8) -> Self {
-        let aim = starts.first().and_then(|s| {
-            view.goals
-                .iter()
-                .min_by_key(|g| (super::super::placement::distance_squared(**g, *s), g.y, g.x))
-                .copied()
-        });
+        let aim = starts.first().and_then(|&s| nearest_goal(&view.goals, s));
         let mut search = Self {
             node,
             tier,
@@ -206,21 +201,27 @@ impl Search {
             let next = TileCoord::new(tile.x + dx, tile.y + dy);
             let (to, step, bridge) = if view.walkable(next) && view.crossable(tile, next) {
                 (next, 1, false)
-            } else if !view.avoid.contains(&next)
+            } else if matches!(view.w.terrain(), crate::Terrain::Map { .. })
+                && !view.avoid.contains(&next)
                 && view.w.building_at_for(view.player, next).is_none()
                 && !view.passable(next)
             {
                 // Water (or other barrier) ahead: look for the far bank.
-                let far = super::roads::bank_steps().find_map(|k| {
-                    let m = TileCoord::new(tile.x + dx * k, tile.y + dy * k);
-                    if view.free(m) {
-                        Some((k, m))
-                    } else if view.passable(m) || view.w.building_at_for(view.player, m).is_some() {
-                        Some((0, m))
-                    } else {
-                        None
-                    }
-                });
+                // Stop at the first bank or the actual bridge geometry limit.
+                let far = (2..)
+                    .map(|k| (k, TileCoord::new(tile.x + dx * k, tile.y + dy * k)))
+                    .take_while(|&(_, bank)| aoe_core::BridgeSpan::new(tile, bank).is_some())
+                    .find_map(|(k, m)| {
+                        if view.free(m) {
+                            Some((k, m))
+                        } else if view.passable(m)
+                            || view.w.building_at_for(view.player, m).is_some()
+                        {
+                            Some((0, m))
+                        } else {
+                            None
+                        }
+                    });
                 match far {
                     Some((k, m)) if k > 0 && view.bridgeable(tile, m) => {
                         (m, NEW_BRIDGE_COST + BRIDGE_TILE_COST * (k as u32 - 1), true)
@@ -242,4 +243,39 @@ impl Search {
 
         None
     }
+}
+
+/// Goals are ordered by x then y. Seed a bound on each side of the start,
+/// then stop each scan as soon as its x distance alone exceeds that bound.
+fn nearest_goal(goals: &BTreeSet<TileCoord>, start: TileCoord) -> Option<TileCoord> {
+    let pivot = TileCoord::new(start.x, i32::MIN);
+    let rank = |g: TileCoord| {
+        (
+            super::super::placement::distance_squared(g, start),
+            g.y,
+            g.x,
+        )
+    };
+    let mut left = goals.range(..pivot).rev();
+    let mut right = goals.range(pivot..);
+    let mut best = left
+        .clone()
+        .next()
+        .into_iter()
+        .chain(right.clone().next())
+        .copied()
+        .min_by_key(|&g| rank(g))?;
+    let mut scan = |tiles: &mut dyn Iterator<Item = &TileCoord>| {
+        for &g in tiles {
+            if u64::from(g.x.abs_diff(start.x)).pow(2) > rank(best).0 {
+                break;
+            }
+            if rank(g) < rank(best) {
+                best = g;
+            }
+        }
+    };
+    scan(&mut left);
+    scan(&mut right);
+    Some(best)
 }

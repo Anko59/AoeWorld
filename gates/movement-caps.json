@@ -103,8 +103,6 @@
     {"count":1,"expr":"s.home.navy.fish.len() == KNOWN_FISH","file":"crates/simulation/src/game_world/economy/steward/navy/mod.rs","kind":"cmp"},
     {"count":2,"expr":"CANDIDATES","file":"crates/simulation/src/game_world/economy/steward/search.rs","kind":"use"},
     {"count":1,"expr":"VASSAL_LIMIT","file":"crates/simulation/src/game_world/economy/vassal/mod.rs","kind":"use"},
-    {"count":1,"expr":"MAX_BRIDGE","file":"crates/simulation/src/game_world/economy/vassal/roads.rs","kind":"use"},
-    {"count":1,"expr":"MAX_NODES","file":"crates/simulation/src/game_world/economy/vassal/roads.rs","kind":"use"},
     {"count":2,"expr":"MAX_WALL_SEGMENTS","file":"crates/simulation/src/game_world/economy/wall.rs","kind":"use"},
     {"count":1,"expr":"*budget < steps","file":"crates/simulation/src/game_world/formation/anchor/taut.rs","kind":"cmp"},
     {"count":1,"expr":"*budget > 0","file":"crates/simulation/src/game_world/formation/anchor/taut.rs","kind":"cmp"},

@@ -5,9 +5,13 @@ use super::*;
 use super::super::bridges::river_fixture::river_width;
 
 fn river_village() -> (GameWorld, EntityId) {
-    // The river runs along x = 30..34 over the whole map.
-    let mut w = river_width(true, 30..34);
-    w.place_town_center(PlayerId(0), TileCoord::new(40, 12))
+    river_village_with_width(30..34)
+}
+
+fn river_village_with_width(width: std::ops::Range<usize>) -> (GameWorld, EntityId) {
+    let town_x = (width.end as i32 + 6).max(40);
+    let mut w = river_width(true, width);
+    w.place_town_center(PlayerId(0), TileCoord::new(town_x, 12))
         .unwrap();
     let p = w.economy.players.get_mut(&PlayerId(0)).unwrap();
     p.age = Age::Castle;
@@ -77,4 +81,19 @@ fn a_vassal_builds_the_bridge_and_its_road_across_the_river() {
     }
     eprintln!("bridge complete at {built:?}");
     assert!(built.is_some(), "{:?}", w.vassal_status(v));
+}
+
+#[test]
+fn a_vassal_plans_a_bridge_wider_than_fourteen_tiles() {
+    let (mut w, v) = river_village_with_width(25..43);
+    let bridges: Vec<_> = w
+        .vassal_network(v)
+        .into_iter()
+        .filter(|(kind, _, _)| *kind == BuildingKind::Bridge)
+        .collect();
+    assert_eq!(bridges.len(), 1, "{bridges:?}");
+    let (_, left, right) = bridges[0];
+    let right = right.unwrap();
+    assert!(left.x < 25 && right.x >= 43, "{left:?} -> {right:?}");
+    assert!(left.x.abs_diff(right.x) > 14);
 }

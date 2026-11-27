@@ -64,7 +64,7 @@ Rows 1, 10 and 14 span several constants. The original inventory matched the pla
 Economy and AI rules that look like caps but are game rules or AI budgets are in the allowlist
 because the lint matches names, not intent, and they stay: farm storage, market price,
 `VASSAL_LIMIT`, `MAX_WALL_SEGMENTS`, the Steward's per-domain order and search budgets
-(`economy/steward/rules.rs`, `manager.rs`), `MAX_APPROACH_ATTEMPTS`, `MAX_BRIDGE`, `MAX_NODES`.
+(`economy/steward/rules.rs`, `manager.rs`), and `MAX_APPROACH_ATTEMPTS`.
 Geometry locals named `budget` (`contact.rs`, `formation/anchor/taut.rs`, `avoidance.rs`) are
 name-based false positives of the lint, not caps.
 

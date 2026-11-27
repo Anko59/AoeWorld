@@ -5,17 +5,9 @@ use super::road_job::Network;
 use super::*;
 use std::ops::{Deref, DerefMut};
 pub(super) const TIER_GATE_ROAD: u8 = 5;
-const MAX_NODES: usize = 64;
-pub(super) const MAX_BRIDGE: i32 = 14;
 const BRIDGE_SPACING: i32 = 30;
 pub(super) const STUB: i32 = 3;
 pub(super) type Out = Option<(i32, i32)>;
-pub(super) fn trim_nodes<T>(nodes: &mut Vec<T>) {
-    nodes.truncate(MAX_NODES);
-}
-pub(super) fn bank_steps() -> std::ops::RangeInclusive<i32> {
-    2..=MAX_BRIDGE
-}
 pub(super) fn footprint_of(site: &Site) -> TileRect {
     let r = site.kind.rules();
     let (w, h) = if site.vertical {
@@ -129,12 +121,15 @@ impl<'a> View<'a> {
     pub(super) fn bridgeable(&mut self, a: TileCoord, b: TileCoord) -> bool {
         // A second span near a laid or planned one is never wanted: cross by
         // that one and walk the bank.
-        let near =
-            |t: TileCoord, o: TileCoord| (t.x - o.x).abs().max((t.y - o.y).abs()) <= BRIDGE_SPACING;
-        if self.roads.contains(&a)
-            || self.roads.contains(&b)
-            || self.fixed.keys().any(|&f| near(f, a) || near(f, b))
-        {
+        let near = |tile: TileCoord| {
+            self.fixed
+                .range(
+                    TileCoord::new(tile.x - BRIDGE_SPACING, i32::MIN)
+                        ..=TileCoord::new(tile.x + BRIDGE_SPACING, i32::MAX),
+                )
+                .any(|(bank, _)| tile.y.abs_diff(bank.y) <= BRIDGE_SPACING as u32)
+        };
+        if self.roads.contains(&a) || self.roads.contains(&b) || near(a) || near(b) {
             return false;
         }
         let (w, player) = (self.w, self.player);

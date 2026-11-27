@@ -2,7 +2,7 @@
 use super::super::placement::{distance_squared, perimeter};
 use super::plan::{Site, TIER_ROAD};
 use super::road_search::Search;
-use super::roads::{Out, STUB, TIER_GATE_ROAD, View, center_of, footprint_of, trim_nodes};
+use super::roads::{Out, STUB, TIER_GATE_ROAD, View, center_of, footprint_of};
 use super::*;
 #[derive(Debug)]
 pub(super) struct Network {
@@ -22,10 +22,18 @@ pub(super) struct Network {
     pub(super) planned_spans: BTreeSet<(TileCoord, TileCoord)>,
 }
 
+#[derive(Debug)]
+struct Endpoint {
+    node: TileRect,
+    out: Out,
+    tier: u8,
+    center: TileCoord,
+    nearest: u64,
+}
+
 pub(super) struct Planner {
     net: Network,
-    remaining: Vec<(TileRect, Out, u8)>,
-    connected: Vec<TileCoord>,
+    remaining: Vec<Endpoint>,
     tail: Vec<(TileCoord, u8, bool)>,
     tail_at: usize,
     search: Option<Search>,
@@ -61,8 +69,8 @@ impl Planner {
             let c = center_of(r);
             (c.x - center.x).abs() <= reach && (c.y - center.y).abs() <= reach
         };
-        // Keep slots for every gate and planned military production site.
-        // Fill the rest with the nearest operating work and production sites.
+        // Include every gate and each distinct operating or planned work
+        // and production site in the domain.
         let mut production: BTreeSet<_> = planned
             .iter()
             .filter(|s| {
@@ -105,7 +113,8 @@ impl Planner {
         .filter(|b| b.hp > 0 && b.is_complete() && in_domain(b.footprint))
         .map(|b| (b.id, b.footprint))
         .collect();
-        standing.sort_unstable_by_key(|(id, r)| (distance_squared(center, center_of(*r)), *id));
+        standing
+            .sort_unstable_by_key(|(id, rect)| (distance_squared(center, center_of(*rect)), *id));
         nodes.extend(
             production
                 .iter()
@@ -116,7 +125,6 @@ impl Planner {
                 nodes.push((r, None, TIER_ROAD));
             }
         }
-        trim_nodes(&mut nodes);
         // Footprints of every other planned building stay clear of roads.
         let avoid: BTreeSet<TileCoord> = planned
             .iter()
@@ -180,8 +188,19 @@ impl Planner {
         tail.extend(unfinished.into_iter().map(|tile| (tile, TIER_ROAD, true)));
         Some(Self {
             net,
-            remaining: nodes,
-            connected: vec![center_of(castle.footprint)],
+            remaining: nodes
+                .into_iter()
+                .map(|(node, out, tier)| {
+                    let node_center = center_of(node);
+                    Endpoint {
+                        node,
+                        out,
+                        tier,
+                        center: node_center,
+                        nearest: distance_squared(center, node_center),
+                    }
+                })
+                .collect(),
             tail,
             tail_at: 0,
             search: None,
@@ -196,29 +215,28 @@ impl Planner {
             super::super::bridge::work::operation();
             if let Some(search) = &mut self.search {
                 if let Some(joined) = search.step(&mut view) {
+                    // Each join contributes one new centre to the ranking.
+                    // Keep its distance instead of re-reading the growing
+                    // list of connected buildings for every remaining endpoint.
                     if joined {
-                        self.connected.push(center_of(search.node));
+                        let joined_center = center_of(search.node);
+                        for endpoint in &mut self.remaining {
+                            endpoint.nearest = endpoint
+                                .nearest
+                                .min(distance_squared(endpoint.center, joined_center));
+                        }
                     }
                     self.search = None;
                 }
-            } else if !self.remaining.is_empty() {
-                let nearest = |c: TileCoord| {
-                    self.connected
-                        .iter()
-                        .map(|&o| distance_squared(c, o))
-                        .min()
-                        .unwrap_or(0)
-                };
-                let (i, _) = self
-                    .remaining
-                    .iter()
-                    .enumerate()
-                    .min_by_key(|(_, (r, _, tier))| {
-                        let c = center_of(*r);
-                        (*tier, nearest(c), c.y, c.x)
-                    })
-                    .unwrap_or((0, &self.remaining[0]));
-                let (node, out, tier) = self.remaining.swap_remove(i);
+            } else if let Some((index, _)) = self
+                .remaining
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, e)| (e.tier, e.nearest, e.center.y, e.center.x))
+            {
+                let Endpoint {
+                    node, out, tier, ..
+                } = self.remaining.swap_remove(index);
                 let edge = edge(node, out);
                 let starts = edge
                     .iter()
@@ -247,13 +265,7 @@ impl Planner {
         h.update(
             format!(
                 "{:?}",
-                (
-                    &self.net,
-                    &self.remaining,
-                    &self.connected,
-                    &self.tail,
-                    self.tail_at
-                )
+                (&self.net, &self.remaining, &self.tail, self.tail_at)
             )
             .as_bytes(),
         );
