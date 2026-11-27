@@ -142,7 +142,10 @@ fn town_watch_adds_four_to_the_line_of_sight_of_every_building() {
     );
     set_stock(&mut world, 0, 100, 0, 10);
     let later = built(&mut world, BuildingKind::Outpost, at(90, 90));
-    assert_eq!(world.building(later).unwrap().los, 14);
+    assert_eq!(
+        world.building(later).unwrap().los,
+        BuildingKind::Outpost.rules().los + 4
+    );
 }
 
 #[test]
