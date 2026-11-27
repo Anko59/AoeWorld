@@ -1,7 +1,7 @@
 //! Placement feedback and construction orders use only resident map knowledge.
 use super::{Client, orders::send, owner};
 use crate::{building_ui, playground::game::map};
-use aoe_core::{EntityId, ScreenPoint, TileCoord};
+use aoe_core::{EntityId, ScreenPoint, TileCoord, TileRect};
 pub(crate) mod strategic;
 
 use aoe_protocol::{BuildingKind, ConstructionState, GameplayClientMessage as Message, UnitKind};
@@ -105,6 +105,13 @@ pub(super) fn origin(client: &Client, point: ScreenPoint) -> Option<TileCoord> {
 
 #[inline(never)]
 pub(super) fn valid(client: &Client, kind: BuildingKind, origin: TileCoord) -> bool {
+    let footprint = TileRect::from_xywh(origin.x, origin.y, kind.side(), kind.depth());
+    if super::relics::ground(client)
+        .iter()
+        .any(|relic| footprint.contains(relic.position.tile_floor()))
+    {
+        return false;
+    }
     let (mut land, mut water) = (false, false);
     let valid = building_ui::footprint_valid(
         kind,

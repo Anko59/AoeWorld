@@ -228,3 +228,29 @@ fn an_idle_carrier_resumes_healing_after_dropping_its_relic() {
     until(&mut world, |w| w.unit(ally).unwrap().hp > wounded);
     assert_eq!(world.carried_relic(monk), None);
 }
+
+#[test]
+fn a_ground_relic_blocks_a_foundation_until_the_monk_picks_it_up() {
+    let (mut world, monk, relic, _) = setup();
+    let builder = world.spawn_villager(OWNER, at(52, 52)).unwrap();
+    world
+        .economy
+        .players
+        .get_mut(&OWNER)
+        .unwrap()
+        .stockpile
+        .wood = 175;
+    let origin = TileCoord::new(54, 50);
+    let before = world.canonical_hash();
+    assert_eq!(
+        world.issue_build(OWNER, &[builder], BuildingKind::Barracks, origin, false),
+        Err(crate::EconomyError::InvalidFootprint)
+    );
+    assert_eq!(world.canonical_hash(), before);
+
+    world.issue_pickup_relic(OWNER, monk, relic).unwrap();
+    until(&mut world, |w| w.carried_relic(monk) == Some(relic));
+    world
+        .issue_build(OWNER, &[builder], BuildingKind::Barracks, origin, false)
+        .unwrap();
+}

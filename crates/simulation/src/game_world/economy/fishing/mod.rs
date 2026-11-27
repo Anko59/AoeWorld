@@ -60,6 +60,13 @@ impl GameWorld {
         if kind == BuildingKind::Bridge {
             return Err(EconomyError::InvalidFootprint);
         }
+        if matches!(kind, BuildingKind::Dock | BuildingKind::FishTrap)
+            && self
+                .ground_relics()
+                .any(|(_, at)| footprint.contains(at.tile_floor()))
+        {
+            return Err(EconomyError::InvalidFootprint);
+        }
         if kind == BuildingKind::FishTrap {
             return self.validate_fish_trap_placement(player, footprint);
         }

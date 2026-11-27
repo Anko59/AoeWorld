@@ -3,6 +3,8 @@ import { fallbackTest as test } from "../../rendering/backends.js";
 import { gameAssets } from "../../game-assets.js";
 import { freshHud } from "../fixtures/resources.js";
 
+test.use({ video: { mode: "on", size: { width: 1280, height: 720 } } });
+
 type Actor = { kind: string; x: number; y: number; owned: boolean };
 
 async function actor(page: Page, kind: string): Promise<Actor> {
@@ -37,6 +39,22 @@ test("a Monk collects a relic and a Monastery starts paying gold", async ({
   await page.mouse.click(relic.x, relic.y);
   await expect(page.locator("#selection-name")).toHaveText("Relic");
 
+  const scene = page.locator("#scene");
+  const armBarracks = async () => {
+    const builder = await actor(page, "Villager");
+    await page.mouse.click(builder.x, builder.y);
+    await expect(page.locator("#selection-name")).toHaveText("Villager");
+    await page.locator("#build-menu").click();
+    await page.locator("#build-barracks").click();
+    await expect(scene).toHaveAttribute("data-order-mode", "build");
+    await page.mouse.move(relic.x, relic.y);
+  };
+  await armBarracks();
+  await expect(scene).toHaveAttribute("data-placement-valid", "false");
+  await page.mouse.click(relic.x, relic.y);
+  await expect(page.locator("#stockpile-wood")).toHaveText("175");
+  await page.keyboard.press("Escape");
+
   const monk = await actor(page, "Monk");
   await page.mouse.click(monk.x, monk.y);
   await page.mouse.click(relic.x, relic.y, { button: "right" });
@@ -55,4 +73,7 @@ test("a Monk collects a relic and a Monastery starts paying gold", async ({
   await expect
     .poll(async () => Number((await gold.textContent())?.replaceAll(",", "")))
     .toBeGreaterThan(before);
+
+  await armBarracks();
+  await expect(scene).toHaveAttribute("data-placement-valid", "true");
 });

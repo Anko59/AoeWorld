@@ -14,6 +14,11 @@ impl GameWorld {
             WorldPosition::from_tile_center(TileCoord::new(62, 66))
                 .map_err(GameWorldError::InvalidConfig)?,
         )?;
+        world.spawn_villager(
+            owner,
+            WorldPosition::from_tile_center(TileCoord::new(62, 68))
+                .map_err(GameWorldError::InvalidConfig)?,
+        )?;
         world.insert_building(
             owner,
             BuildingKind::Monastery,
@@ -22,6 +27,9 @@ impl GameWorld {
         )?;
         for tech in [Tech::FeudalAge, Tech::CastleAge] {
             world.complete_research(owner, tech, &mut Vec::new());
+        }
+        if let Some(player) = world.economy.players.get_mut(&owner) {
+            player.stockpile.wood = BuildingKind::Barracks.rules().cost.wood;
         }
         let relic = world.allocate_entity_id()?;
         world.relics.ground.insert(
