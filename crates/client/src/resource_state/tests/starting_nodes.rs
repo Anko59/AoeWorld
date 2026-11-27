@@ -96,3 +96,29 @@ fn supplemental_tree_species_survives_snapshot_and_reconnect() {
         }
     }
 }
+
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn regrown_starting_tree_renders_again_after_an_amount_delta() {
+    let tree = ResourceNode::starting(TileCoord::new(12, 13), ResourceKind::Wood).unwrap();
+    let mut cache = ResourceStateCache::default();
+    for (revision, from_revision, remaining) in [
+        (0, None, tree.initial_amount),
+        (1, Some(0), 0),
+        (2, Some(1), tree.initial_amount),
+    ] {
+        assert!(cache.apply(ResourceState {
+            snapshot_page: None,
+            subscription_revision: 1,
+            from_revision,
+            revision,
+            changes: vec![ResourceAmount {
+                id: tree.id,
+                remaining
+            }],
+        }));
+        assert_eq!(
+            cache.rendered_starting_nodes(4_000.0).next(),
+            (remaining > 0).then_some(tree)
+        );
+    }
+}

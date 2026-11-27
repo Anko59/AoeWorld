@@ -11,13 +11,19 @@ mod continuation;
 mod hash;
 mod hunting;
 mod lure;
+mod map_herds;
 mod navigation;
+mod recovery;
 mod spawning;
 mod table;
+pub use map_herds::MapHerdSnapshot;
 pub use table::{AnimalKind, WILDLIFE_RULES, WildlifeRules};
 
-/// Animals per seat: the 15 of a village's wildlife kit, with room to spare.
+/// Animals per seat: the 16–18 of a village's wildlife kit, with room to spare.
 pub const ANIMALS_PER_PLAYER: usize = 32;
+/// Herd recruitment cannot renumber units or buildings and change their
+/// deterministic scheduling phase.
+pub(crate) const HERD_RECRUIT_ID_START: u32 = 1 << 31;
 /// The animal capacity of a world with every seat of the default limits.
 pub const MAX_ANIMALS: usize = super::economy::MAX_ECONOMY_PLAYERS * ANIMALS_PER_PLAYER;
 const CELL_TILES: i32 = 8;
@@ -51,6 +57,7 @@ pub struct GameAnimal {
 struct StoredAnimal {
     state: GameAnimal,
     home: WorldPosition,
+    hp_quarters: u8,
     cooldown: u32,
     speed_carry: u64,
     decay_carry: u64,
@@ -88,6 +95,12 @@ pub(crate) struct CellUnit {
     alive: bool,
 }
 
+#[derive(Debug, Default)]
+struct CellUnits {
+    units: Vec<CellUnit>,
+    dead: usize,
+}
+
 /// Actual visits by the last tick, including broad-phase pairs and due bodies.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct WildlifeStats {
@@ -104,13 +117,15 @@ pub struct WildlifeStats {
 #[derive(Debug, Default)]
 pub(crate) struct Wildlife {
     animals: BTreeMap<EntityId, StoredAnimal>,
+    pub(super) next_herd_recruit: u32,
+    recovery: recovery::HerdRecovery,
     /// Living animals and retained carcasses, for local food replacement.
     cells: BTreeMap<(i32, i32), BTreeSet<EntityId>>,
     /// Chasing/fleeing animals get a cleanup step if nearby units disappear.
     engaged: BTreeSet<EntityId>,
     /// Units mirrored by wildlife cell. Only point lookups and per-cell
     /// edits are made, so the hash map never biases a scan order.
-    unit_cells: HashMap<u64, Vec<CellUnit>, BuildHasherDefault<CellHasher>>,
+    unit_cells: HashMap<u64, CellUnits, BuildHasherDefault<CellHasher>>,
     hunts: super::changes::Reports<HuntJob>,
     due: BTreeSet<(u64, EntityId)>,
     stats: WildlifeStats,
@@ -189,7 +204,7 @@ impl GameWorld {
                     .wildlife
                     .unit_cells
                     .get(&unit_key((x, y)))
-                    .map_or(&[][..], Vec::as_slice);
+                    .map_or(&[][..], |cell| cell.units.as_slice());
                 if units.is_empty() || (units.len() == 1 && units[0].id == except) {
                     continue;
                 }
@@ -248,13 +263,13 @@ impl GameWorld {
             unit.kind.is_naval(),
             self.lookup[&unit.id],
         );
-        let units = self
+        let cell = self
             .wildlife
             .unit_cells
             .entry(unit_key(cell(unit.position)))
             .or_default();
-        self.units[self.lookup[&unit.id]].wildlife_slot = units.len();
-        units.push(CellUnit {
+        self.units[self.lookup[&unit.id]].wildlife_slot = cell.units.len();
+        cell.units.push(CellUnit {
             id: unit.id,
             position: unit.position,
             player: unit.player,
@@ -305,8 +320,8 @@ impl GameWorld {
         let (old, new) = (cell_of(previous_tile), cell_of(tile));
         if old == new {
             let slot = self.units[self.lookup[&id]].wildlife_slot;
-            if let Some(units) = self.wildlife.unit_cells.get_mut(&unit_key(old))
-                && let Some(entry) = units.get_mut(slot).filter(|u| u.id == id)
+            if let Some(cell) = self.wildlife.unit_cells.get_mut(&unit_key(old))
+                && let Some(entry) = cell.units.get_mut(slot).filter(|u| u.id == id)
             {
                 entry.position = unit.position;
             }
@@ -322,18 +337,19 @@ impl GameWorld {
             return;
         };
         let slot = self.units[index].wildlife_slot;
-        let Some(units) = self.wildlife.unit_cells.get_mut(&key) else {
+        let Some(cell) = self.wildlife.unit_cells.get_mut(&key) else {
             return;
         };
-        if units.get(slot).is_none_or(|u| u.id != id) {
+        if cell.units.get(slot).is_none_or(|u| u.id != id) {
             return;
         }
-        units.swap_remove(slot);
+        let removed = cell.units.swap_remove(slot);
+        cell.dead -= usize::from(!removed.alive);
         self.units[index].wildlife_slot = usize::MAX;
-        if let Some(displaced) = units.get(slot) {
+        if let Some(displaced) = cell.units.get(slot) {
             self.units[self.lookup[&displaced.id]].wildlife_slot = slot;
         }
-        if units.is_empty() {
+        if cell.units.is_empty() {
             self.wildlife.unit_cells.remove(&key);
         }
     }
@@ -362,10 +378,11 @@ impl GameWorld {
         );
         self.idle_spacing.remove(id, at.tile_floor());
         let slot = self.units[self.lookup[&id]].wildlife_slot;
-        if let Some(units) = self.wildlife.unit_cells.get_mut(&unit_key(cell(at)))
-            && let Some(entry) = units.get_mut(slot).filter(|u| u.id == id)
+        if let Some(cell) = self.wildlife.unit_cells.get_mut(&unit_key(cell(at)))
+            && let Some(entry) = cell.units.get_mut(slot).filter(|u| u.id == id && u.alive)
         {
             entry.alive = false;
+            cell.dead += 1;
         }
     }
 

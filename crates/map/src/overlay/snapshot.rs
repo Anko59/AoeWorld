@@ -6,7 +6,7 @@ use serde::{
 };
 use std::{collections::BTreeMap, fmt};
 
-pub const RESOURCE_OVERLAY_SCHEMA_VERSION: u16 = 1;
+pub const RESOURCE_OVERLAY_SCHEMA_VERSION: u16 = 3;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ResourceChange {
@@ -20,8 +20,14 @@ pub struct ResourceOverlaySnapshot {
     pub schema_version: u16,
     pub map_content_hash: [u8; 32],
     pub revision: u64,
-    #[serde(deserialize_with = "bounded_changes")]
+    pub replenished: u64,
+    #[serde(deserialize_with = "bounded_sequence")]
     pub changes: Vec<ResourceChange>,
+    /// Clock used for the remaining ticks in recovery.
+    pub recovery_hz: u32,
+    /// Pending recovery as (remaining ticks, resource ID), in ascending order.
+    #[serde(deserialize_with = "bounded_sequence")]
+    pub recovery: Vec<(u64, u64)>,
 }
 
 impl ResourceOverlay {
@@ -30,6 +36,9 @@ impl ResourceOverlay {
             schema_version: RESOURCE_OVERLAY_SCHEMA_VERSION,
             map_content_hash,
             revision: self.revision,
+            replenished: self.replenished,
+            recovery_hz: aoe_core::REFERENCE_HZ,
+            recovery: Vec::new(),
             changes: self
                 .changed()
                 .map(|(id, remaining)| ResourceChange { id, remaining })
@@ -37,8 +46,8 @@ impl ResourceOverlay {
         }
     }
 
-    /// Validates the complete snapshot before returning replacement state.
-    /// Callers retain their existing overlay when validation or I/O fails.
+    /// Validates the resource amounts before returning replacement terrain state.
+    /// Simulation restores its recovery schedule from the same snapshot.
     pub fn from_snapshot(
         snapshot: &ResourceOverlaySnapshot,
         expected_map_content_hash: [u8; 32],
@@ -60,46 +69,43 @@ impl ResourceOverlay {
         let mut starting = Self::default();
         let mut depleted_count = 0;
         let mut previous = None;
-        let mut removed_total = 0_u64;
+        let mut net_removed = 0_u64;
+        let mut fully_regrown = 0_u64;
         for change in &snapshot.changes {
             if previous.is_some_and(|id| id >= change.id) {
                 return Err(ResourceOverlayError::InvalidSnapshot);
             }
             let added = ResourceNode::starting_from_id(change.id);
             if let Some(node) = added {
-                // A starting-kit node whose tile became water when the map's
-                // rivers were regenerated (ford spacing, wading width) is
-                // dropped: the save still loads, without that one resource.
-                if !starting.starting_tile_fits(terrain, node)? {
-                    depleted_count += u64::from(change.remaining < node.initial_amount);
-                    removed_total +=
-                        u64::from(node.initial_amount - change.remaining.min(node.initial_amount));
-                    previous = Some(change.id);
-                    continue;
-                }
                 starting.insert_starting_resource(terrain, node)?;
             }
             let node = added
                 .or(terrain.resource_by_id_with_cancel(change.id, cancelled)?)
                 .ok_or(ResourceOverlayError::UnknownResource)?;
-            if change.remaining > node.initial_amount
-                || (added.is_none() && change.remaining == node.initial_amount)
-            {
+            if change.remaining > node.initial_amount {
                 return Err(ResourceOverlayError::InvalidSnapshot);
             }
+            if added.is_none() && change.remaining == node.initial_amount {
+                fully_regrown += 1;
+            }
             depleted_count += u64::from(change.remaining < node.initial_amount);
-            removed_total += u64::from(node.initial_amount - change.remaining);
+            net_removed += u64::from(node.initial_amount - change.remaining);
             remaining.insert(change.id, change.remaining);
             previous = Some(change.id);
         }
-        // Each changing depletion removes at least one unit and changes one
-        // entry; zero-removal calls never increase the revision.
-        if snapshot.revision > removed_total || snapshot.revision < depleted_count {
+        // Every operation changes at least one unit. Total harvested stock is
+        // net removal plus stock restored since the beginning of the match.
+        let maximum_revision = net_removed.saturating_add(snapshot.replenished.saturating_mul(2));
+        if snapshot.revision > maximum_revision
+            || snapshot.revision < depleted_count + 2 * fully_regrown
+            || snapshot.replenished < fully_regrown
+        {
             return Err(ResourceOverlayError::InvalidSnapshot);
         }
         let mut overlay = Self {
             remaining,
             revision: snapshot.revision,
+            replenished: snapshot.replenished,
             ..Self::default()
         };
         overlay.rebuild_navigation();
@@ -107,12 +113,12 @@ impl ResourceOverlay {
     }
 }
 
-fn bounded_changes<'de, D: Deserializer<'de>>(
+fn bounded_sequence<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
     deserializer: D,
-) -> Result<Vec<ResourceChange>, D::Error> {
-    struct Changes;
-    impl<'de> Visitor<'de> for Changes {
-        type Value = Vec<ResourceChange>;
+) -> Result<Vec<T>, D::Error> {
+    struct Changes<T>(std::marker::PhantomData<T>);
+    impl<'de, T: Deserialize<'de>> Visitor<'de> for Changes<T> {
+        type Value = Vec<T>;
         fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
             formatter.write_str("a bounded sequence of resource changes")
         }
@@ -129,7 +135,7 @@ fn bounded_changes<'de, D: Deserializer<'de>>(
                     .unwrap_or(0)
                     .min(MAX_RESOURCE_OVERLAY_CHANGES),
             );
-            while let Some(change) = sequence.next_element::<ResourceChange>()? {
+            while let Some(change) = sequence.next_element::<T>()? {
                 if changes.len() == MAX_RESOURCE_OVERLAY_CHANGES {
                     return Err(serde::de::Error::custom("too many resource changes"));
                 }
@@ -138,7 +144,7 @@ fn bounded_changes<'de, D: Deserializer<'de>>(
             Ok(changes)
         }
     }
-    deserializer.deserialize_seq(Changes)
+    deserializer.deserialize_seq(Changes(std::marker::PhantomData))
 }
 
 #[cfg(test)]

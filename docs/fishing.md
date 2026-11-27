@@ -7,7 +7,7 @@ coordinate hash, shares the shoreline memo, and never scans the world. River and
 including narrow channels. Fords and marsh shallows remain excluded. River
 channel fish require two wet tiles in each cardinal direction; lake and sea
 deep fish retain the deep-water classification and eleven-tile wet clearance.
-Package generation recipe 4 is the only current recipe; regenerate local
+Package generation recipe 5 is the only current recipe; regenerate local
 packages rather than keeping a reader for superseded recipes. Current-output map pins
 are regenerated when the recipe changes.
 
@@ -32,6 +32,10 @@ owned completed building, with the existing bounded perimeter fallback. Ships
 use Docks only; shore fishermen use Town Centers, Mills or Docks. Other villager
 food jobs keep their existing drop-offs. Exhausted fish are removed through
 the normal overlay feed and replacement searches remain local and bounded.
+A natural fishing tile represents one shoal. Shore stocks start at 250 and
+deep stocks at 250 or 275. A partly fished shoal adds up to 10 stock at its
+own tile every three game minutes until it reaches its initial size. An empty
+shoal stays empty. Fish traps use their existing production rules.
 
 ## Data and sprite sources
 

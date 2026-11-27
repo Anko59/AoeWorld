@@ -25,7 +25,7 @@ fn fish_are_deterministic_in_chunks_and_points_on_coasts_and_lakes() {
                     match node.object {
                         ObjectKind::ShoreFish => {
                             shore += 1;
-                            assert_eq!(node.initial_amount, 200);
+                            assert_eq!(node.initial_amount, 250);
                             assert!([(0, -1), (-1, 0), (1, 0), (0, 1)].iter().any(|(dx, dy)| {
                                 generator
                                     .tile_at(TileCoord::new(node.tile.x + dx, node.tile.y + dy))
@@ -37,9 +37,9 @@ fn fish_are_deterministic_in_chunks_and_points_on_coasts_and_lakes() {
                             assert_eq!(
                                 node.initial_amount,
                                 if node.visual_variant % 5 == 4 {
-                                    200
+                                    250
                                 } else {
-                                    225
+                                    275
                                 }
                             );
                             assert_eq!(tile.material, GroundMaterial::DeepWater);
@@ -132,7 +132,7 @@ fn inland_fish(generator: &MapChunkGenerator) -> Vec<ResourceNode> {
                 assert!(matches!(tile.water, WaterKind::Lake | WaterKind::River));
                 assert_ne!(tile.material, GroundMaterial::Ford);
                 if node.object == ObjectKind::ShoreFish {
-                    assert_eq!(node.initial_amount, 200);
+                    assert_eq!(node.initial_amount, 250);
                     assert!([(0, -1), (-1, 0), (1, 0), (0, 1)].iter().any(|(dx, dy)| {
                         generator
                             .tile_at(TileCoord::new(node.tile.x + dx, node.tile.y + dy))
@@ -142,9 +142,9 @@ fn inland_fish(generator: &MapChunkGenerator) -> Vec<ResourceNode> {
                     assert_eq!(
                         node.initial_amount,
                         if node.visual_variant % 5 == 4 {
-                            200
+                            250
                         } else {
-                            225
+                            275
                         }
                     );
                     assert!([(0, -1), (-1, 0), (1, 0), (0, 1)].iter().all(|(dx, dy)| {

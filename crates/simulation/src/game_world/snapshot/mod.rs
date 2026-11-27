@@ -152,6 +152,8 @@ impl GameWorld {
             formations: self.formation_records(),
             animals: self.animal_records(),
             relics: self.relics.clone(),
+            herd_recovery: self.herd_records(),
+            next_herd_recruit: self.wildlife.next_herd_recruit,
             explored: self.explored_records(),
             building_memory: self.building_memory_records(),
             resource_memory: self.resource_memory_records(),
@@ -184,13 +186,19 @@ impl GameWorld {
         if snapshot.version != WORLD_SNAPSHOT_VERSION {
             return Err(SnapshotError::Version);
         }
-        if !self.units.is_empty() || !self.economy.buildings.is_empty() {
+        if !self.units.is_empty()
+            || !self.economy.buildings.is_empty()
+            || self.animals().next().is_some()
+        {
             return Err(SnapshotError::NotEmpty);
+        }
+        if !snapshot.entity_ids_fit() {
+            return Err(SnapshotError::EntityIds);
         }
         let snapshot = snapshot.clone().retimed(REFERENCE_HZ, self.config.tick_hz);
         probe(RestorePhase::Rest);
         if let Some(resources) = &snapshot.resources {
-            self.restore_resources(resources, content_hash, cancelled)
+            self.restore_resources_at(resources, content_hash, cancelled, snapshot.tick)
                 .map_err(|error| SnapshotError::Map(error.to_string()))?;
         }
         probe(RestorePhase::Resources);
@@ -250,13 +258,19 @@ impl GameWorld {
             }
         }
         for record in &snapshot.animals {
-            self.expect_id(record.id);
+            if record.id.0 < super::wildlife::HERD_RECRUIT_ID_START {
+                self.expect_id(record.id);
+            }
             if self.restore_animal(record) {
                 report.animals += 1;
             } else {
                 report.animals_lost += 1;
             }
         }
+        if !self.restore_herds(&snapshot.herd_recovery) {
+            return Err(SnapshotError::Recovery);
+        }
+        self.wildlife.next_herd_recruit = snapshot.next_herd_recruit;
         self.next_entity_id = snapshot.next_entity_id;
         self.restore_relics(snapshot.relics.clone())?;
         self.combat.hp_quarters.clone_from(&snapshot.hp_quarters);
@@ -450,44 +464,5 @@ impl GameWorld {
             }
         }
         Err(GameWorldError::InvalidPosition)
-    }
-
-    /// Puts management settings back; the unit's own activation (sheltering in
-    /// its Town Center or Castle) has already happened.
-    fn restore_management(&mut self, record: &UnitRecord) -> bool {
-        let (id, player) = (record.unit.id, record.unit.player);
-        match record.management {
-            Some(Management::Steward(settings)) => {
-                self.issue_steward_settings(player, id, settings).is_ok()
-            }
-            Some(Management::Vassal { development, focus }) => self
-                .issue_vassal_focus(player, id, focus)
-                .and_then(|()| self.issue_vassal_development(player, id, development))
-                .is_ok(),
-            Some(Management::General {
-                training,
-                mix,
-                solo,
-                destination,
-                owner_march,
-            }) => {
-                let Some(army) = self.economy.generals.armies.get_mut(&id) else {
-                    return false;
-                };
-                army.training = training;
-                army.mix = mix;
-                army.solo = solo;
-                if let Some(destination) =
-                    destination.filter(|&at| self.config.valid_ground_position(at))
-                {
-                    army.destination = Some(destination);
-                    army.owner_march = if solo { None } else { owner_march };
-                    army.state = crate::GeneralState::Marching;
-                    army.routed = None;
-                }
-                true
-            }
-            None => false,
-        }
     }
 }

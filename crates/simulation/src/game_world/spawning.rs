@@ -19,9 +19,10 @@ impl GameWorld {
     }
 
     pub(crate) fn allocate_entity_id(&mut self) -> Result<EntityId, GameWorldError> {
-        let id = EntityId(
-            u32::try_from(self.next_entity_id).map_err(|_| GameWorldError::EntityIdExhausted)?,
-        );
+        if self.next_entity_id >= u64::from(super::wildlife::HERD_RECRUIT_ID_START) {
+            return Err(GameWorldError::EntityIdExhausted);
+        }
+        let id = EntityId(self.next_entity_id as u32);
         self.next_entity_id += 1;
         self.combat.hp_quarters.push(0);
         Ok(id)

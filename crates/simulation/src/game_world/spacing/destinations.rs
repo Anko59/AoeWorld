@@ -58,6 +58,10 @@ impl GameWorld {
         self.refresh_spacing_order(id);
     }
 
+    pub(crate) fn destination_tile_reserved(&self, tile: TileCoord) -> bool {
+        self.destinations.by_tile.contains_key(&tile_key(tile))
+    }
+
     pub(crate) fn destination_point_reserved(&self, at: WorldPosition, except: EntityId) -> bool {
         let Some(&index) = self.lookup.get(&except) else {
             return true;

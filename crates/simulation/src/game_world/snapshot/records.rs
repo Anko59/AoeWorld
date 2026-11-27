@@ -9,7 +9,7 @@ use aoe_core::{EntityId, Formation, PlayerId, TileRect, WorldPosition};
 use aoe_map::ResourceOverlaySnapshot;
 use serde::{Deserialize, Serialize};
 
-pub const WORLD_SNAPSHOT_VERSION: u16 = 34;
+pub const WORLD_SNAPSHOT_VERSION: u16 = 35;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WorldSnapshot {
@@ -30,6 +30,8 @@ pub struct WorldSnapshot {
     pub formations: Vec<FormationRecord>,
     pub animals: Vec<AnimalRecord>,
     pub(crate) relics: super::super::relics::Relics,
+    pub(crate) herd_recovery: Vec<HerdRecord>,
+    pub(crate) next_herd_recruit: u32,
     pub(crate) town_bells: Vec<EntityId>,
     pub explored: Vec<(PlayerId, crate::game_world::visibility::ExploredChunks)>,
     pub(crate) building_memory: Vec<BuildingMemoryRecord>,
@@ -58,11 +60,21 @@ pub struct FormationRecord {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct HerdRecord {
+    pub(crate) id: EntityId,
+    pub(crate) kind: AnimalKind,
+    pub(crate) capacity: u16,
+    pub(crate) members: Vec<EntityId>,
+    pub(crate) due: Option<u64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AnimalRecord {
     pub id: EntityId,
     pub kind: AnimalKind,
     pub owner: Option<PlayerId>,
     pub hp: u16,
+    pub(crate) hp_quarters: u8,
     pub position: WorldPosition,
     pub food_remaining: u16,
     pub facing: Facing,
@@ -85,6 +97,25 @@ pub enum Management {
         development: bool,
         focus: VassalFocus,
     },
+}
+
+impl WorldSnapshot {
+    pub(super) fn entity_ids_fit(&self) -> bool {
+        use crate::game_world::wildlife::HERD_RECRUIT_ID_START;
+
+        let Some(recruit_end) = HERD_RECRUIT_ID_START.checked_add(self.next_herd_recruit) else {
+            return false;
+        };
+        let ordinary_id = |id: EntityId| u64::from(id.0) < self.next_entity_id;
+        self.next_entity_id <= u64::from(HERD_RECRUIT_ID_START)
+            && self.next_entity_id == self.hp_quarters.len() as u64
+            && self.units.iter().all(|u| ordinary_id(u.unit.id))
+            && self.buildings.iter().all(|b| ordinary_id(b.id))
+            && self.animals.iter().all(|a| {
+                a.hp_quarters < 4
+                    && (ordinary_id(a.id) || (HERD_RECRUIT_ID_START..recruit_end).contains(&a.id.0))
+            })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -222,6 +253,10 @@ pub struct RestoreReport {
 pub enum SnapshotError {
     #[error("the snapshot is from an unsupported version")]
     Version,
+    #[error("invalid herd recovery records")]
+    Recovery,
+    #[error("invalid saved entity identities")]
+    EntityIds,
     #[error("the world already holds units or buildings")]
     NotEmpty,
     #[error("the snapshot does not fit this map: {0}")]

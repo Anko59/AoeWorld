@@ -148,6 +148,31 @@ fn wildlife_skip_counts_every_cell_and_pair_like_the_full_scan() {
 }
 
 #[test]
+fn wildlife_counts_live_units_outside_sight_and_scores_across_a_cell_edge() {
+    let mut w = world();
+    let player = PlayerId(0);
+    let visible = w.spawn_unit(player, at(104, 100)).unwrap();
+    let distant = w.spawn_unit(PlayerId(1), at(113, 100)).unwrap();
+    let dead = w.spawn_unit(PlayerId(1), at(105, 100)).unwrap();
+    let dead_index = w.lookup[&dead];
+    w.units[dead_index].state.hp = 0;
+    w.kill_unit(dead_index);
+    let sheep = w.spawn_animal(AnimalKind::Sheep, at(103, 100)).unwrap();
+
+    let mut changed = Vec::new();
+    w.advance_wildlife(&mut changed);
+    assert!(w.unit(visible).is_some());
+    assert_eq!(w.animal(sheep).unwrap().owner, Some(player));
+    assert_eq!(w.wildlife_stats().candidate_pairs, 1);
+
+    let other = w.spawn_animal(AnimalKind::Sheep, at(111, 100)).unwrap();
+    w.advance_wildlife(&mut changed);
+    assert!(w.unit(distant).is_some());
+    assert_eq!(w.animal(other).unwrap().owner, Some(PlayerId(1)));
+    assert_eq!(w.wildlife_stats().candidate_pairs, 3);
+}
+
+#[test]
 fn auxiliary_job_storage_limits_do_not_block_training() {
     let mut w = world();
     w.set_limits(WorldLimits {

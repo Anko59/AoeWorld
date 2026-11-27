@@ -5,7 +5,7 @@ use aoe_core::{TileCoord, WorldPosition};
 use std::collections::{BTreeSet, VecDeque};
 
 impl GameWorld {
-    fn animal_edge_open(&self, from: TileCoord, to: TileCoord) -> bool {
+    pub(super) fn animal_edge_open(&self, from: TileCoord, to: TileCoord) -> bool {
         self.tile_passable(to)
             && self.building_step_clear(from, to)
             && self.terrain.crossable(from, to, self.config)

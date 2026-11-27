@@ -37,6 +37,7 @@ pub(super) fn sheep(w: &mut GameWorld, x: i32, y: i32, owner: Option<u16>) {
         kind: AnimalKind::Sheep,
         owner: owner.map(PlayerId),
         hp: 7,
+        hp_quarters: 0,
         position: at(x, y),
         food_remaining: 100,
         facing: Facing::South,
@@ -164,6 +165,7 @@ pub(super) fn hidden() -> GameWorld {
     overlay.apply_depletion(&Depletion {
         id: (tile.y as u64) << 19 | (tile.x as u64) << 1,
         removed: 1,
+        added: 0,
         remaining: 99,
         became_nonblocking: false,
         revision: 1,

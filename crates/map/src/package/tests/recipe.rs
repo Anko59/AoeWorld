@@ -1,29 +1,27 @@
-//! Packages store inputs only, so a recipe-4 package written before rock
-//! footprints blocked walking still loads under the same identity and now
-//! blocks walking under its rocks.
+//! Current package identity and derived rock walkability.
 use super::*;
 use crate::{DecorationFamily, WaterKind};
 
-/// Content hash of the default request at recipe 4, computed before rock
-/// footprints blocked walking. It must never change with generation behavior.
-const RECIPE_4_DEFAULT_HASH: &str =
-    "789e3f349c7cb50c288d806de5463e294693d6c0f3d1a15195f15cc959cf59cf";
+/// Content hash of the default request under the current recipe.
+const DEFAULT_PACKAGE_HASH: &str =
+    "339c8def0dc963800bcd3ed43ab06c59debcae605f8cd88908d99da9c5485182";
 
 #[test]
-fn recipe_four_package_keeps_its_identity_and_loads() {
-    assert_eq!(crate::GENERATION_RECIPE_VERSION, 4);
+fn current_recipe_package_has_its_canonical_identity_and_loads() {
+    assert_eq!(crate::GENERATION_RECIPE_VERSION, 5);
     let package = MapPackage::new(1, MapRequest::default(), vec![]).expect("package");
-    assert_eq!(package.generation_recipe_version, 4);
-    assert_eq!(package.content_hash_hex(), RECIPE_4_DEFAULT_HASH);
+    assert_eq!(package.generation_recipe_version, 5);
+    assert_eq!(package.content_hash_hex(), DEFAULT_PACKAGE_HASH);
     package.validate().expect("canonical");
     let stored = serde_json::to_string(&package).expect("serialize");
-    let loaded: MapPackage = serde_json::from_str(&stored).expect("strict reader loads recipe 4");
+    let loaded: MapPackage =
+        serde_json::from_str(&stored).expect("strict reader loads the current recipe");
     assert_eq!(loaded, package);
     loaded.validate().expect("validates");
 }
 
 #[test]
-fn rocks_of_a_recipe_four_package_block_walking_without_regeneration() {
+fn rocks_of_a_current_package_block_walking() {
     let package = MapPackage::new(1, MapRequest::default(), vec![]).expect("package");
     let generator = package.generator();
     let mut piles = 0;

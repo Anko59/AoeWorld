@@ -415,17 +415,7 @@ impl GameWorld {
         id: u64,
         requested: u16,
     ) -> Result<Depletion, ResourceOverlayError> {
-        let depletion = self.terrain.deplete_resource(id, requested)?;
-        if depletion.became_nonblocking {
-            self.collision_opened(resources::resource_area(depletion.id));
-        }
-        self.record_observed_resource(depletion.id, depletion.remaining);
-        if depletion.remaining == 0 {
-            self.economy
-                .gatherers
-                .wake_target(economy::WorkTarget::Node(depletion.id));
-        }
-        Ok(depletion)
+        Ok(self.prepare_resource_depletion(id, requested)?.commit())
     }
 
     pub fn query(&self, rect: TileRect) -> (Vec<GameUnit>, GameQueryStats) {

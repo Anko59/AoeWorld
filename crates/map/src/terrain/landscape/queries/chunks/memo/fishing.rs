@@ -31,7 +31,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
             if !roll.is_multiple_of(5) {
                 return Ok(None);
             }
-            (ObjectKind::ShoreFish, 200)
+            (ObjectKind::ShoreFish, 250)
         } else {
             // Rivers keep medium-water art even in their channel. A two-tile
             // wet cross certifies room for fishing ships without demanding a
@@ -52,7 +52,7 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
             }
             (
                 ObjectKind::DeepFish,
-                if (roll >> 8) as u8 % 5 == 4 { 200 } else { 225 },
+                if (roll >> 8) as u8 % 5 == 4 { 250 } else { 275 },
             )
         };
         Ok(Some(ResourceNode {

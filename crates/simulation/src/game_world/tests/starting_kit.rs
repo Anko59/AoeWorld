@@ -324,7 +324,7 @@ fn natural_starts_vary_by_seed_and_seat_with_tight_resource_bands() {
                 })
                 .collect();
             let count = |kind| animals.iter().filter(|a| a.kind == kind).count();
-            assert!([(8, 2, 4), (7, 3, 2)].contains(&(
+            assert!([(8, 3, 6), (7, 4, 4)].contains(&(
                 count(crate::AnimalKind::Sheep),
                 count(crate::AnimalKind::Boar),
                 count(crate::AnimalKind::Deer)
@@ -332,7 +332,7 @@ fn natural_starts_vary_by_seed_and_seat_with_tight_resource_bands() {
             boars.insert(count(crate::AnimalKind::Boar));
             deer.insert(count(crate::AnimalKind::Deer));
             let food: u32 = animals.iter().map(|a| u32::from(a.food_remaining)).sum();
-            assert!((2000..=2040).contains(&food), "food {food}");
+            assert!((2620..=2660).contains(&food), "food {food}");
             for a in animals {
                 let tile = a.position.tile_floor();
                 let d2 = tile.x.abs_diff(center.x).pow(2) + tile.y.abs_diff(center.y).pow(2);

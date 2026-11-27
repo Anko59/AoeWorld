@@ -1,6 +1,11 @@
 use super::GameWorld;
 use crate::Terrain;
-use aoe_map::{Depletion, ResourceOverlay, ResourceOverlayError, ResourceOverlaySnapshot};
+use aoe_map::{
+    Depletion, ObjectKind, ResourceNode, ResourceOverlay, ResourceOverlayError,
+    ResourceOverlaySnapshot,
+};
+
+pub(crate) mod regeneration;
 
 /// An exclusive, validated mutation. Dropping it preserves the live world.
 /// The server can persist `snapshot()` before calling the infallible commit.
@@ -8,9 +13,15 @@ pub struct PreparedResourceDepletion<'a> {
     world: &'a mut GameWorld,
     depletion: Depletion,
     previous_revision: u64,
+    node: ResourceNode,
 }
 
 impl PreparedResourceDepletion<'_> {
+    /// Simulation tick at which this mutation would commit.
+    pub fn tick(&self) -> aoe_core::Tick {
+        self.world.tick()
+    }
+
     pub fn previous_revision(&self) -> u64 {
         self.previous_revision
     }
@@ -23,7 +34,12 @@ impl PreparedResourceDepletion<'_> {
         };
         let mut next = overlay.clone();
         next.apply_depletion(&self.depletion);
-        next.snapshot(content_hash)
+        let mut snapshot = next.snapshot(content_hash);
+        let mut recovery = self.world.economy.resource_recovery.clone();
+        self.world
+            .update_resource_recovery(&mut recovery, self.node, self.depletion);
+        recovery.write_snapshot(&mut snapshot, self.world.tick.0, self.world.config.tick_hz);
+        snapshot
     }
 
     pub fn commit(self) -> Depletion {
@@ -31,7 +47,9 @@ impl PreparedResourceDepletion<'_> {
             unreachable!("prepared mutation exclusively borrows a map world");
         };
         overlay.apply_depletion(&self.depletion);
-        if self.depletion.became_nonblocking {
+        if self.depletion.added > 0 && self.node.object == ObjectKind::Tree {
+            self.world.collision_closed(resource_area(self.node.id));
+        } else if self.depletion.became_nonblocking {
             self.world
                 .collision_opened(resource_area(self.depletion.id));
         }
@@ -45,11 +63,23 @@ impl PreparedResourceDepletion<'_> {
                     self.depletion.id,
                 ));
         }
+        let mut recovery = std::mem::take(&mut self.world.economy.resource_recovery);
+        self.world
+            .update_resource_recovery(&mut recovery, self.node, self.depletion);
+        self.world.economy.resource_recovery = recovery;
         self.depletion
     }
 }
 
 impl GameWorld {
+    /// Next resource recovery deadline on the simulation clock.
+    pub fn resource_recovery_deadline(&self) -> Option<aoe_core::Tick> {
+        self.economy
+            .resource_recovery
+            .next_deadline()
+            .map(aoe_core::Tick)
+    }
+
     pub fn resource_revision(&self) -> Option<u64> {
         let Terrain::Map { overlay, .. } = &self.terrain else {
             return None;
@@ -61,7 +91,13 @@ impl GameWorld {
         let Terrain::Map { overlay, .. } = &self.terrain else {
             return None;
         };
-        Some(overlay.snapshot(content_hash))
+        let mut snapshot = overlay.snapshot(content_hash);
+        self.economy.resource_recovery.write_snapshot(
+            &mut snapshot,
+            self.tick.0,
+            self.config.tick_hz,
+        );
+        Some(snapshot)
     }
 
     /// Restore only before spawning units, so restored obstacles cannot cover
@@ -72,6 +108,16 @@ impl GameWorld {
         content_hash: [u8; 32],
         cancelled: &dyn Fn() -> bool,
     ) -> Result<(), ResourceOverlayError> {
+        self.restore_resources_at(snapshot, content_hash, cancelled, self.tick.0)
+    }
+
+    pub(super) fn restore_resources_at(
+        &mut self,
+        snapshot: &ResourceOverlaySnapshot,
+        content_hash: [u8; 32],
+        cancelled: &dyn Fn() -> bool,
+        tick: u64,
+    ) -> Result<(), ResourceOverlayError> {
         if !self.units.is_empty() || !self.economy.buildings.is_empty() {
             return Err(ResourceOverlayError::InvalidSnapshot);
         }
@@ -80,7 +126,15 @@ impl GameWorld {
         };
         let replacement =
             ResourceOverlay::from_snapshot(snapshot, content_hash, generator, cancelled)?;
+        let recovery = regeneration::ResourceRecovery::from_snapshot(
+            snapshot,
+            &replacement,
+            tick,
+            self.config.tick_hz,
+        )
+        .ok_or(ResourceOverlayError::InvalidSnapshot)?;
         *overlay = replacement;
+        self.economy.resource_recovery = recovery;
         if let Ok(cache) = self.resource_chunks.get_mut() {
             cache.clear();
         }
@@ -106,11 +160,15 @@ impl GameWorld {
             return Err(ResourceOverlayError::UnknownResource);
         };
         let previous_revision = overlay.revision();
-        let depletion = overlay.plan_depletion(generator, id, requested)?;
+        let node = overlay
+            .resource_by_id_with_cancel(generator, id, &|| false)?
+            .ok_or(ResourceOverlayError::UnknownResource)?;
+        let depletion = overlay.plan_resolved_depletion(node, requested)?;
         Ok(PreparedResourceDepletion {
             world: self,
             depletion,
             previous_revision,
+            node,
         })
     }
 

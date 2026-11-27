@@ -27,11 +27,19 @@ impl GameWorld {
         let Some(a) = self.wildlife.animals.get_mut(&id) else {
             return;
         };
+        if a.state.death_tick.is_some() {
+            return;
+        }
         a.state.hp = 0;
+        a.hp_quarters = 0;
         a.state.moving = false;
         a.state.death_tick = Some(self.tick);
         a.state.task = AnimalTask::Dead;
         a.state.target = None;
+        if a.state.kind != super::AnimalKind::Wolf {
+            self.wildlife.recovery.revision += 1;
+        }
+        self.herd_lost_member(id);
         self.wildlife.engaged.remove(&id);
         self.update_observer(id, None);
         self.wildlife.due.insert((

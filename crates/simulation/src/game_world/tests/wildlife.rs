@@ -296,7 +296,7 @@ fn village_spawns_a_deterministic_local_wildlife_kit() {
         .unwrap();
     let counts = [AnimalKind::Sheep, AnimalKind::Boar, AnimalKind::Deer]
         .map(|kind| w.animals().filter(|a| a.kind == kind).count());
-    assert!([[8, 2, 4], [7, 3, 2]].contains(&counts));
+    assert!([[8, 3, 6], [7, 4, 4]].contains(&counts));
     assert!(
         w.animals()
             .all(|a| w.tile_passable(a.position.tile_floor()))

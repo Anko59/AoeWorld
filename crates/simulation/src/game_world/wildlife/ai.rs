@@ -1,4 +1,4 @@
-use super::{AnimalKind, AnimalTask, StoredAnimal, cell, distance, radius, unit_key};
+use super::{AnimalKind, AnimalTask, CELL_TILES, StoredAnimal, cell, distance, radius, unit_key};
 use crate::{DamageKind, GameWorld, HitRecord, UnitKind, damage_dealt};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, WorldPosition};
 use std::collections::BTreeMap;
@@ -7,16 +7,17 @@ impl GameWorld {
     pub(crate) fn advance_wildlife(&mut self, changed: &mut Vec<EntityId>) {
         self.wildlife.stats = Default::default();
         self.advance_hunters(changed);
-        // Animal-driven: each animal probes the unit cell grid around itself.
-        // An animal no unit can reach through its nine-cell neighbourhood is
-        // never visited, so idle populations cost nothing.
+        // An animal outside every live unit's neighbourhood needs only its
+        // ongoing attack or flee step. Count broad-phase pairs per cell and
+        // score individual units only in cells that touch acquisition range.
         let mut nearby: BTreeMap<EntityId, Option<EntityId>> =
             self.wildlife.engaged.iter().map(|id| (*id, None)).collect();
-        let ids = self.wildlife.animals.keys().copied().collect::<Vec<_>>();
-        self.passes
-            .record(crate::game_world::Pass::WildlifeIds, ids.len());
-        for id in ids {
-            let a = self.wildlife.animals[&id].state;
+        self.passes.record(
+            crate::game_world::Pass::WildlifeIds,
+            self.wildlife.animals.len(),
+        );
+        const CELL_SUBUNITS: i32 = CELL_TILES * FIXED_SUBUNITS_PER_TILE;
+        for a in self.wildlife.animals.values().map(|animal| animal.state) {
             // Carcasses remain in the food-search index but never run animal
             // AI; their state belongs to the decay clock.
             if a.hp == 0 {
@@ -24,34 +25,45 @@ impl GameWorld {
             }
             let (cx, cy) = cell(a.position);
             let wolf = a.kind == AnimalKind::Wolf;
-            let sight = radius(i64::from(a.kind.rules().sight_tiles));
+            let acquire = match a.kind {
+                AnimalKind::Boar => false,
+                AnimalKind::Sheep => a.owner.is_none(),
+                AnimalKind::Deer | AnimalKind::Wolf => true,
+            };
+            let reach = i32::from(a.kind.rules().sight_tiles) * FIXED_SUBUNITS_PER_TILE;
+            let sight = i64::from(reach).pow(2);
+            let x_cells = a.position.x.saturating_sub(reach).div_euclid(CELL_SUBUNITS)
+                ..=a.position.x.saturating_add(reach).div_euclid(CELL_SUBUNITS);
+            let y_cells = a.position.y.saturating_sub(reach).div_euclid(CELL_SUBUNITS)
+                ..=a.position.y.saturating_add(reach).div_euclid(CELL_SUBUNITS);
             let mut closest: Option<(i64, aoe_core::PlayerId, EntityId)> = None;
-            let mut probed = false;
+            let mut pairs = 0;
             for y in cy - 1..=cy + 1 {
+                let score_row = acquire && y_cells.contains(&y);
                 for x in cx - 1..=cx + 1 {
-                    let Some(units) = self.wildlife.unit_cells.get(&unit_key((x, y))) else {
+                    let Some(cell) = self.wildlife.unit_cells.get(&unit_key((x, y))) else {
                         continue;
                     };
-                    for unit in units {
-                        if !unit.alive {
+                    pairs += cell.units.len() - cell.dead;
+                    if !score_row || !x_cells.contains(&x) {
+                        continue;
+                    }
+                    for unit in &cell.units {
+                        if !unit.alive || (wolf && unit.kind != UnitKind::Villager) {
                             continue;
                         }
-                        probed = true;
-                        self.wildlife.stats.candidate_pairs += 1;
                         let gap = distance(unit.position, a.position);
                         let score = (gap, unit.player, unit.id);
-                        if (!wolf || unit.kind == UnitKind::Villager)
-                            && gap <= sight
-                            && closest.is_none_or(|old| score < old)
-                        {
+                        if gap <= sight && closest.is_none_or(|old| score < old) {
                             closest = Some(score);
                         }
                     }
                 }
             }
-            if probed {
+            if pairs != 0 {
+                self.wildlife.stats.candidate_pairs += pairs as u32;
                 self.wildlife.stats.cells += 9;
-                nearby.insert(id, closest.map(|(_, _, unit)| unit));
+                nearby.insert(a.id, closest.map(|(_, _, unit)| unit));
             }
         }
         for (id, nearest) in nearby {

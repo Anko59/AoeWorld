@@ -30,6 +30,7 @@ pub const MAX_FOOTPRINT_TILES: u64 = 4_096;
 pub struct ResourceOverlay {
     remaining: BTreeMap<u64, u16>,
     revision: u64,
+    replenished: u64,
     navigation_state: Box<navigation::CollisionState>,
 }
 
@@ -37,6 +38,7 @@ pub struct ResourceOverlay {
 pub struct Depletion {
     pub id: u64,
     pub removed: u16,
+    pub added: u16,
     pub remaining: u16,
     pub became_nonblocking: bool,
     pub revision: u64,
@@ -110,18 +112,6 @@ impl ResourceOverlay {
 
     pub fn blocks_tile(&self, tile: TileCoord) -> bool {
         self.collision_blocks_tile(tile)
-    }
-
-    /// Whether a starting-kit node's tile is still passable empty ground.
-    pub(crate) fn starting_tile_fits(
-        &self,
-        terrain: &MapChunkGenerator,
-        node: ResourceNode,
-    ) -> Result<bool, ResourceOverlayError> {
-        Ok(!self.blocks_tile(node.tile)
-            && terrain
-                .tile_and_node_with_cancel(node.tile, &|| false)?
-                .is_some_and(|(tile, object)| tile.passable && object.is_none()))
     }
 
     /// Startup insertion is part of the initial snapshot, not a depletion revision.
@@ -271,6 +261,15 @@ impl ResourceOverlay {
         let node = self
             .resource_by_id_with_cancel(terrain, id, &|| false)?
             .ok_or(ResourceOverlayError::UnknownResource)?;
+        self.plan_resolved_depletion(node, requested)
+    }
+
+    pub fn plan_resolved_depletion(
+        &self,
+        node: ResourceNode,
+        requested: u16,
+    ) -> Result<Depletion, ResourceOverlayError> {
+        let id = node.id;
         let previous = self
             .remaining
             .get(&id)
@@ -293,15 +292,49 @@ impl ResourceOverlay {
         Ok(Depletion {
             id,
             removed,
+            added: 0,
             remaining,
             became_nonblocking,
             revision,
         })
     }
 
-    /// Applies a depletion returned by `plan_depletion` on this same overlay.
+    /// Plans a stock increase on an existing depleted node. The caller owns
+    /// ecological eligibility and occupancy checks; the overlay owns stock and
+    /// revision limits.
+    pub fn plan_regeneration(
+        &self,
+        node: ResourceNode,
+        requested: u16,
+    ) -> Result<Option<Depletion>, ResourceOverlayError> {
+        let Some(previous) = self.changed_amount(node.id) else {
+            return Ok(None);
+        };
+        let added = requested.min(node.initial_amount.saturating_sub(previous));
+        if added == 0 {
+            return Ok(None);
+        }
+        self.replenished
+            .checked_add(u64::from(added))
+            .ok_or(ResourceOverlayError::RevisionExhausted)?;
+        Ok(Some(Depletion {
+            id: node.id,
+            removed: 0,
+            added,
+            remaining: previous + added,
+            became_nonblocking: false,
+            revision: self
+                .revision
+                .checked_add(1)
+                .ok_or(ResourceOverlayError::RevisionExhausted)?,
+        }))
+    }
+
+    /// Applies an amount change planned on this same overlay.
     pub fn apply_depletion(&mut self, depletion: &Depletion) {
-        if depletion.became_nonblocking {
+        if depletion.became_nonblocking
+            || (depletion.added > 0 && depletion.remaining == depletion.added)
+        {
             let id = depletion.id;
             let tile = TileCoord::new(
                 ((id >> 1) & 0x3_ffff) as i32,
@@ -317,7 +350,8 @@ impl ResourceOverlay {
                 id,
             );
         }
-        if depletion.removed > 0 {
+        if depletion.removed > 0 || depletion.added > 0 {
+            self.replenished += u64::from(depletion.added);
             self.remaining.insert(depletion.id, depletion.remaining);
             self.revision = depletion.revision;
         }

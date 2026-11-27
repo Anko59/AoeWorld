@@ -12,6 +12,7 @@ type Actor = {
   kind: string;
   x: number;
   y: number;
+  owned: boolean;
   selected: boolean;
   hp: number;
   task: string;
@@ -273,14 +274,20 @@ test("train one Steward per Town Center and activate its visible economic domain
   // their Town Center queue, so drain it before testing one manual entry.
   await expect(page.locator("#training")).toBeHidden({ timeout: 45_000 });
   await freshHud(page);
-  const beforeTraining = Math.max(...(await actors(page)).map((a) => a.id));
+  // Wildlife has its own ID range. Compare the owned villager roster directly.
+  const beforeTraining = new Set(
+    (await actors(page))
+      .filter((a) => a.owned && a.kind === "Villager")
+      .map((a) => a.id),
+  );
   await page.locator("#train-villager").click();
   let dismissedId = -1;
   await expect(async () => {
     const idle = (await actors(page)).find(
       (a) =>
+        a.owned &&
         a.kind === "Villager" &&
-        a.id > beforeTraining &&
+        !beforeTraining.has(a.id) &&
         a.task === "Idle" &&
         a.hp > 0,
     );

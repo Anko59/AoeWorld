@@ -37,8 +37,8 @@ use aoe_core::{CHUNK_SIZE, EntityId, PlayerId, Position, Region, Tick};
 use aoe_scenario::Scenario;
 pub use game_query::GameQueryStats;
 pub use game_world::{
-    ANIMALS_PER_PLAYER, AnimalKind, AnimalTask, GameAnimal, MAX_ANIMALS, WILDLIFE_RULES,
-    WildlifeRules, WildlifeStats,
+    ANIMALS_PER_PLAYER, AnimalKind, AnimalTask, GameAnimal, MAX_ANIMALS, MapHerdSnapshot,
+    WILDLIFE_RULES, WildlifeRules, WildlifeStats,
 };
 pub use game_world::{
     Age, BUILDING_COMBAT, BUILDING_RULES, BUILDINGS_PER_PLAYER, BehaviourScene, BuildingAttack,

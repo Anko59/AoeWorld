@@ -8,6 +8,7 @@ mod census;
 mod clearance;
 mod formations;
 mod group_baseline;
+mod regeneration;
 mod snapshot_roundtrip;
 mod spacing;
 mod visibility;

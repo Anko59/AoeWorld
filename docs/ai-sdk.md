@@ -377,9 +377,9 @@ Tunables are in `config.py`. `python -m aoe_ai --help` lists the launcher modes.
 ### The standard start
 
 Every village of a match starts like the Arabia start of Age of Empires II:
-Town Center, 3 villagers and a scout, 8 sheep, 7 berry bushes, 7 gold and 5
-stone nodes, 12 trees (topped up beside the natural ones), 2 boar, 4 deer and a
-wolf, placed by the simulation's deterministic starting kit
+Town Center, 3 villagers and a scout, 7–8 sheep, 7 berry bushes, 7 gold and 5
+stone nodes, 12 trees (topped up beside the natural ones), 3–4 boar, 4–6 deer
+and a wolf, placed by the simulation's deterministic starting kit
 ([economy](economy.md), [wildlife](economy.md#wildlife-and-hunting)). The
 official guide lists, per player, 8 herdables, 3 forests, 6 fruit bushes, 2
 aggressive and 4 wild hunt, 7 tiles of gold and 5 of stone
