@@ -17,13 +17,15 @@ COVERAGE_IMAGE := aoeworld/coverage:0.9.1-sccache0.19.0
 FUZZ_IMAGE := aoeworld/fuzz:nightly-2026-09-01-0.13.2-sccache0.19.0
 SDK_IMAGE := aoeworld/sdk-python:1.15.0-sccache0.19.0
 # CI sets e.g. type=gha,version=2 to reuse BuildKit layers; empty keeps local builds unchanged.
+# Only a push to dev also exports layers (DOCKER_BUILD_CACHE_SAVE): a pull request never writes the cache.
 DOCKER_BUILD_CACHE ?=
+DOCKER_BUILD_CACHE_SAVE ?=
 COMMA := ,
 # Quote complete CSV fields for Docker binds; colons stay ordinary path data.
 MOUNT_QUOTE = '$(subst ','"'"',$(1))'
 MOUNT_FIELD = "$(subst ","",$(1))"
 BIND_MOUNT = --mount $(call MOUNT_QUOTE,type=bind$(COMMA)$(call MOUNT_FIELD,source=$(1))$(COMMA)$(call MOUNT_FIELD,target=$(2))$(if $(3),$(COMMA)readonly))
-IMAGE_BUILD = docker build $(if $(DOCKER_BUILD_CACHE),--load --cache-from $(DOCKER_BUILD_CACHE)$(COMMA)scope=$(1) --cache-to $(DOCKER_BUILD_CACHE)$(COMMA)scope=$(1)$(COMMA)mode=max$(COMMA)ignore-error=true) -f docker/$(1).Dockerfile -t $(2) .
+IMAGE_BUILD = docker build $(if $(DOCKER_BUILD_CACHE),--load --cache-from $(DOCKER_BUILD_CACHE)$(COMMA)scope=$(1) $(if $(DOCKER_BUILD_CACHE_SAVE),--cache-to $(DOCKER_BUILD_CACHE)$(COMMA)scope=$(1)$(COMMA)mode=max$(COMMA)ignore-error=true)) -f docker/$(1).Dockerfile -t $(2) .
 GIT_COMMON := $(shell git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
 GIT_EXTERNAL := $(filter-out $(ROOT) $(ROOT)/%,$(GIT_COMMON))
 GIT_MOUNT := $(if $(GIT_EXTERNAL),$(call BIND_MOUNT,$(GIT_EXTERNAL),$(GIT_EXTERNAL)))

@@ -399,13 +399,13 @@ action. It points the runner's Docker daemon at `mirror.gcr.io` for Docker Hub
 pulls (base images stay digest-pinned; the daemon falls back to Docker Hub when
 the mirror misses), switches to the containerd image store, and sets
 `DOCKER_BUILD_CACHE=type=gha,version=2`. The Make image targets then pass
-`--load --cache-from/--cache-to` with one GitHub Actions cache scope per
-Dockerfile, so unchanged tool images are restored from layers rather than
-rebuilt; tags, Dockerfiles, and every job and gate are unchanged. Cache export
-failures are ignored and a missing cache only means a full build. Release jobs
-(`dev-artifacts`, `release-candidate`, `main-promotion`) use only the mirror and
-keep the daemon's default image store and uncached builds. Locally
-`DOCKER_BUILD_CACHE` is empty and `docker build` arguments are unchanged.
+`--load --cache-from` with one GitHub Actions cache scope per Dockerfile, so
+unchanged tool images are restored from layers rather than rebuilt; a push to
+`dev` also passes `--cache-to` (`DOCKER_BUILD_CACHE_SAVE`), a pull request never
+writes the cache. A cache export failure is ignored and a missing cache only
+means a full build. Release jobs (`dev-artifacts`, `release-candidate`,
+`main-promotion`) use only the mirror, the default image store and uncached
+builds. Locally `DOCKER_BUILD_CACHE` is empty and `docker build` is unchanged.
 
 ## Registry and plans
 
