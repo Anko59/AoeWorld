@@ -219,19 +219,24 @@ impl GameWorld {
             return false;
         };
         let fishing = unit.kind == UnitKind::FishingShip;
-        let mut candidates = self
-            .economy
-            .foundations
-            .nearest(player, unit.position.tile_floor());
+        let from = unit.position.tile_floor();
+        let steward = if fishing {
+            None
+        } else {
+            self.steward_controller(builder)
+        };
+        let mut candidates = self.economy.foundations.nearest(player, from);
         let mut nearest = None;
         while let Some(target) = candidates.next(&self.economy.foundations) {
             let Some(building) = self.building(target).filter(|b| !b.is_complete()) else {
                 continue;
             };
             if (building.kind == BuildingKind::FishTrap) != fishing
-                || (self.economy.dispatch.sites.contains_key(&target)
-                    && self.economy.builders.assigned_count(target)
-                        >= self.dispatch_builder_limit(&building))
+                || self.economy.builders.assigned_count(target)
+                    >= self.automatic_builder_limit(&building)
+                || steward.is_some_and(|id| {
+                    !self.economy.steward_homes[&id].connects(from, building.footprint)
+                })
             {
                 continue;
             }
