@@ -1,6 +1,6 @@
 use super::*;
 use crate::resource_frame_index;
-use crate::terrain::visible_terrain_frames;
+use crate::terrain::diagnostic_terrain_frames;
 
 #[path = "village/environment.rs"]
 pub(super) mod environment;
@@ -141,9 +141,7 @@ pub(super) fn emit_world_sprite_frames(
         resources.len() + units.len(),
     );
     if terrain.is_empty() {
-        // Keep the bounded diagnostic terrain-frame helper, without collecting another
-        // object scene. Surfaces and selections have already been appended.
-        for (sprite, frame) in visible_terrain_frames(art, terrain, camera) {
+        for (sprite, frame) in diagnostic_terrain_frames(art, camera) {
             emit((sprite, frame, f64::NEG_INFINITY, 0));
         }
     }

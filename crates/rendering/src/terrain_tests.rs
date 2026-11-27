@@ -152,8 +152,8 @@ fn nonzero_height_terrain_is_culled_relative_to_camera_focus() {
         elevation_meters: 0.0,
         surface: SceneTerrainSurface::flat(0.0),
     }];
-    assert_eq!(visible_terrain_frames(&art, &elevated, camera).len(), 1);
-    assert!(visible_terrain_frames(&art, &ground, camera).is_empty());
+    assert_eq!(visible_map_terrain_frames(&art, &elevated, camera).len(), 1);
+    assert!(visible_map_terrain_frames(&art, &ground, camera).is_empty());
 }
 
 #[wasm_bindgen_test]
@@ -189,8 +189,8 @@ fn offscreen_cached_tiles_do_not_change_visible_terrain() {
         elevation_meters: 0.0,
         surface: SceneTerrainSurface::flat(0.0),
     }));
-    let baseline = visible_terrain_frames(&art, &visible, camera);
-    let cached = visible_terrain_frames(&art, &populated, camera);
+    let baseline = visible_map_terrain_frames(&art, &visible, camera);
+    let cached = visible_map_terrain_frames(&art, &populated, camera);
     assert_eq!(baseline.len(), 1);
     assert_eq!(cached.len(), baseline.len());
     assert_eq!(cached[0].0.position, baseline[0].0.position);
@@ -226,9 +226,20 @@ fn diagnostic_terrain_uses_world_coordinates_after_camera_translation() {
         cell_size += 1;
     }
     assert!(cell_size > 1);
-    let frames = visible_terrain_frames(&art, &[], camera);
+    let frames = diagnostic_terrain_frames(&art, camera);
     assert!(frames.len() <= MAX_VISIBLE_TERRAIN_SPRITES);
     assert!(sprites_cover_viewport(&frames, camera.viewport));
+    let ordered = frames.iter().map(|(sprite, _)| {
+        let [x, y] = sprite.position.map(f64::from);
+        let point = ScreenPoint {
+            x: (1.0 + x) * camera.viewport[0] / 2.0,
+            y: (1.0 - y) * camera.viewport[1] / 2.0,
+        };
+        projection
+            .screen_to_world(point)
+            .map(|world| (world / f64::from(cell_size)).floor() as i32)
+    });
+    assert!(ordered.is_sorted_by(|a, b| a < b));
 }
 
 #[wasm_bindgen_test]
@@ -267,7 +278,7 @@ fn flat_map_terrain_uses_covering_lod_at_translated_camera() {
     };
     let cell_size = map_cell_size(&art, &terrain, camera, &projection);
     assert!(cell_size > 1);
-    let frames = visible_terrain_frames(&art, &terrain, camera);
+    let frames = visible_map_terrain_frames(&art, &terrain, camera);
     assert!(frames.len() <= MAX_VISIBLE_TERRAIN_SPRITES);
     assert!(sprites_cover_viewport(&frames, camera.viewport));
 }
