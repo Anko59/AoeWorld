@@ -239,7 +239,7 @@ impl GameWorld {
             || self
                 .next_entity_id
                 .saturating_add(u64::from(VILLAGE_RULES.starting_villagers) + 1)
-                > u64::from(u32::MAX)
+                > u64::from(crate::game_world::wildlife::HERD_RECRUIT_ID_START)
         {
             return Err(EconomyError::Capacity);
         }

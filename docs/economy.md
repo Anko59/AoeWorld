@@ -321,7 +321,10 @@ one wolf. Sheep spawn 3–6 tiles from the TC center, boar/deer 9–15 and wolve
 16–20. Herds use irregular noise-ranked positions around seeded anchors. All
 animals must lie in the TC's connected land region, so water, cliffs and sealed
 forest pockets cannot hide a start herd. Constrained starts may omit animals
-when their distance band has no free reachable tile.
+when their distance band has no free reachable tile. Each start places its
+founding wildlife before filling the extra boar and deer slots. Those extra
+animals and newborns have their own sequence of entity IDs, so recruiting
+animals does not change the order in which units and buildings get IDs.
 
 Herds recover to the number placed at the start. A surviving deer herd has
 one birth every four game minutes, sheep every five and boar every six. A

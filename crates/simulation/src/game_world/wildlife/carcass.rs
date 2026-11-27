@@ -31,6 +31,7 @@ impl GameWorld {
             return;
         }
         a.state.hp = 0;
+        a.hp_quarters = 0;
         a.state.moving = false;
         a.state.death_tick = Some(self.tick);
         a.state.task = AnimalTask::Dead;

@@ -331,3 +331,76 @@ fn a_tree_waits_while_a_unit_has_reserved_the_tile_for_arrival() {
     world.advance_resource_recovery(&mut |_| true);
     assert_eq!(world.resource_remaining(edge.id), Some(0));
 }
+
+#[test]
+fn herd_recruitment_keeps_regular_ids_and_the_recruit_cursor_across_a_save() {
+    let mut control = world();
+    let mut simulation = world();
+    herd(&mut control, 100);
+    let [lost, founder] = herd(&mut simulation, 100);
+    assert!(simulation.strike_animal(lost, EntityId(u32::MAX), u16::MAX));
+    let interval = 240 * u64::from(simulation.config().tick_hz);
+    simulation.tick.0 = interval;
+    simulation.advance_herd_recovery();
+    let recruit = simulation
+        .animals()
+        .find(|a| a.kind == AnimalKind::Deer && a.hp > 0 && a.id != founder)
+        .unwrap()
+        .id;
+    let at = WorldPosition::from_tile_center(TileCoord::new(110, 110)).unwrap();
+    let next = control.spawn_villager(PlayerId(0), at).unwrap();
+
+    *simulation.animal_hp_quarters_mut(recruit).unwrap() = 3;
+    let save = simulation.snapshot([0; 32]).unwrap();
+    let mut restored = world();
+    restored
+        .restore_snapshot(&save, [0; 32], &|| false)
+        .unwrap();
+    assert!(restored.animal(recruit).is_some());
+    assert_eq!(restored.animal_hp_quarters_mut(recruit).copied(), Some(3));
+    assert_eq!(restored.spawn_villager(PlayerId(0), at).unwrap(), next);
+    assert!(restored.strike_animal(recruit, EntityId(u32::MAX), u16::MAX));
+    restored.tick.0 += interval;
+    restored.advance_herd_recovery();
+    assert_eq!(restored.animals().filter(|a| a.hp > 0).count(), 2);
+    assert!(restored.animals().any(|a| a.hp > 0 && a.id > recruit));
+}
+
+#[test]
+fn a_newborn_sheep_preserves_its_owners_sight_when_it_is_the_last_survivor() {
+    let mut world = world();
+    world.set_fog_disabled(false);
+    let player = PlayerId(0);
+    let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
+    let lost = world.spawn_animal(AnimalKind::Sheep, at(100, 100)).unwrap();
+    let parent = world.spawn_animal(AnimalKind::Sheep, at(101, 100)).unwrap();
+    world.register_herd(AnimalKind::Sheep, &[lost, parent]);
+    let scout = world.spawn_unit(player, at(101, 101)).unwrap();
+    world.advance();
+    assert_eq!(world.animal(parent).unwrap().owner, Some(player));
+    assert!(world.strike_animal(lost, scout, u16::MAX));
+    world.tick.0 += 300 * u64::from(world.config().tick_hz);
+    world.advance_herd_recovery();
+    let newborn = *world
+        .animals()
+        .find(|a| a.id != parent && a.hp > 0)
+        .unwrap();
+    assert_eq!(newborn.owner, Some(player));
+
+    assert!(world.strike_animal(parent, scout, u16::MAX));
+    world.kill_unit(world.lookup[&scout]);
+    let visible = crate::TileVisibility::Visible;
+    assert_eq!(
+        world.visibility(player, newborn.position.tile_floor()),
+        visible
+    );
+    let save = world.snapshot([0; 32]).unwrap();
+    let mut restored = super::world();
+    restored
+        .restore_snapshot(&save, [0; 32], &|| false)
+        .unwrap();
+    assert_eq!(
+        restored.visibility(player, newborn.position.tile_floor()),
+        visible
+    );
+}

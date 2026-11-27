@@ -134,7 +134,7 @@ impl GameWorld {
                 .filter_map(|&member| self.animal(member))
                 .find_map(|parent| self.birth_site(parent));
             if let Some((at, parent)) = site
-                && let Ok(born) = self.spawn_animal(kind, at)
+                && let Ok(born) = self.spawn_herd_recruit(kind, at)
                 && let Some(animal) = self.wildlife.animals.get_mut(&born)
             {
                 animal.home = parent.home;

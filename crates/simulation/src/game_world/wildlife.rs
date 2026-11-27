@@ -19,6 +19,9 @@ pub use table::{AnimalKind, WILDLIFE_RULES, WildlifeRules};
 
 /// Animals per seat: the 16–18 of a village's wildlife kit, with room to spare.
 pub const ANIMALS_PER_PLAYER: usize = 32;
+/// Herd recruitment cannot renumber units or buildings and change their
+/// deterministic scheduling phase.
+pub(crate) const HERD_RECRUIT_ID_START: u32 = 1 << 31;
 /// The animal capacity of a world with every seat of the default limits.
 pub const MAX_ANIMALS: usize = super::economy::MAX_ECONOMY_PLAYERS * ANIMALS_PER_PLAYER;
 const CELL_TILES: i32 = 8;
@@ -52,6 +55,7 @@ pub struct GameAnimal {
 struct StoredAnimal {
     state: GameAnimal,
     home: WorldPosition,
+    hp_quarters: u8,
     cooldown: u32,
     speed_carry: u64,
     decay_carry: u64,
@@ -111,6 +115,7 @@ pub struct WildlifeStats {
 #[derive(Debug, Default)]
 pub(crate) struct Wildlife {
     animals: BTreeMap<EntityId, StoredAnimal>,
+    pub(super) next_herd_recruit: u32,
     recovery: recovery::HerdRecovery,
     /// Living animals and retained carcasses, for local food replacement.
     cells: BTreeMap<(i32, i32), BTreeSet<EntityId>>,

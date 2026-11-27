@@ -3,6 +3,10 @@ use super::Wildlife;
 impl Wildlife {
     pub(crate) fn update_hash(&self, hash: &mut blake3::Hasher) {
         self.recovery.update_hash(hash);
+        if self.next_herd_recruit != 0 {
+            hash.update(b"herd recruit identity\0");
+            hash.update(&self.next_herd_recruit.to_le_bytes());
+        }
         hash.update(&(self.animals.len() as u64).to_le_bytes());
         for a in self.animals.values() {
             let s = a.state;
@@ -16,6 +20,10 @@ impl Wildlife {
                     .map_or(u64::MAX, |id| u64::from(id.0))
                     .to_le_bytes(),
             );
+            if a.hp_quarters != 0 {
+                hash.update(b"animal hp quarters\0");
+                hash.update(&[a.hp_quarters]);
+            }
             for n in [s.hp, s.food_remaining] {
                 hash.update(&n.to_le_bytes());
             }

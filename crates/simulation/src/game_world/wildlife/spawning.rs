@@ -1,4 +1,4 @@
-use super::{AnimalKind, AnimalTask, GameAnimal, StoredAnimal, cell};
+use super::{AnimalKind, AnimalTask, GameAnimal, HERD_RECRUIT_ID_START, StoredAnimal, cell};
 use crate::{EconomyError, GameWorld};
 use aoe_core::{EntityId, TileCoord, WorldPosition};
 
@@ -14,6 +14,7 @@ impl GameWorld {
                 kind: a.state.kind,
                 owner: a.state.owner,
                 hp: a.state.hp,
+                hp_quarters: a.hp_quarters,
                 position: a.state.position,
                 food_remaining: a.state.food_remaining,
                 facing: a.state.facing,
@@ -29,7 +30,11 @@ impl GameWorld {
     ) -> bool {
         // The saved game held these animals already: its limit is not applied again.
         let limit = std::mem::replace(&mut self.economy.limits.animals, usize::MAX);
-        let mut spawned = self.spawn_animal(record.kind, record.position);
+        let recruit = record.id.0 >= HERD_RECRUIT_ID_START;
+        if recruit {
+            self.wildlife.next_herd_recruit = record.id.0 - HERD_RECRUIT_ID_START;
+        }
+        let mut spawned = self.spawn_animal_in(record.kind, record.position, recruit);
         // A foundation laid over it since: the nearest open tile, ring by ring.
         let home = record.position.tile_floor();
         for radius in 1..=12_i32 {
@@ -43,7 +48,7 @@ impl GameWorld {
                     }
                     let tile = aoe_core::TileCoord::new(home.x + dx, home.y + dy);
                     if let Ok(at) = WorldPosition::from_tile_center(tile) {
-                        spawned = self.spawn_animal(record.kind, at);
+                        spawned = self.spawn_animal_in(record.kind, at, recruit);
                     }
                 }
             }
@@ -58,6 +63,7 @@ impl GameWorld {
         if let Some(animal) = self.wildlife.animals.get_mut(&id) {
             animal.state.owner = record.owner;
             animal.state.hp = record.hp;
+            animal.hp_quarters = record.hp_quarters;
             animal.state.food_remaining = record.food_remaining;
             animal.state.facing = record.facing;
             animal.home = record.home;
@@ -69,6 +75,30 @@ impl GameWorld {
         kind: AnimalKind,
         at: WorldPosition,
     ) -> Result<EntityId, EconomyError> {
+        self.spawn_animal_in(kind, at, false)
+    }
+
+    pub(super) fn spawn_herd_recruit(
+        &mut self,
+        kind: AnimalKind,
+        at: WorldPosition,
+    ) -> Result<EntityId, EconomyError> {
+        self.spawn_animal_in(kind, at, true)
+    }
+
+    pub(crate) fn animal_hp_quarters_mut(&mut self, id: EntityId) -> Option<&mut u8> {
+        self.wildlife
+            .animals
+            .get_mut(&id)
+            .map(|a| &mut a.hp_quarters)
+    }
+
+    fn spawn_animal_in(
+        &mut self,
+        kind: AnimalKind,
+        at: WorldPosition,
+        recruit: bool,
+    ) -> Result<EntityId, EconomyError> {
         if self.wildlife.animals.len() >= self.economy.limits.animals {
             return Err(EconomyError::Capacity);
         }
@@ -78,7 +108,16 @@ impl GameWorld {
         {
             return Err(crate::GameWorldError::InvalidPosition.into());
         }
-        let id = self.allocate_entity_id()?;
+        let id = if recruit {
+            let id = HERD_RECRUIT_ID_START
+                .checked_add(self.wildlife.next_herd_recruit)
+                .filter(|&id| id < u32::MAX)
+                .ok_or(crate::GameWorldError::EntityIdExhausted)?;
+            self.wildlife.next_herd_recruit += 1;
+            EntityId(id)
+        } else {
+            self.allocate_entity_id()?
+        };
         self.wildlife.animals.insert(
             id,
             StoredAnimal {
@@ -96,6 +135,7 @@ impl GameWorld {
                     death_tick: None,
                 },
                 home: at,
+                hp_quarters: 0,
                 cooldown: 0,
                 speed_carry: 0,
                 decay_carry: 0,
@@ -128,20 +168,22 @@ impl GameWorld {
     /// Returns how many guaranteed boar/deer herds (food the village is owed)
     /// could not be placed in full, so the caller can report a partial start.
     pub(crate) fn initialize_wildlife(&mut self, center: TileCoord, root: TileCoord) -> usize {
+        let mut pending = Vec::new();
         let mut short_herds = 0;
         let region = self.animal_start_region(center, root);
         let mut used = std::collections::BTreeSet::new();
         let extra_boar = self.start_roll(center, 200).is_multiple_of(2);
-        for (slot, (kind, count, min, max)) in [
+        for (slot, (kind, founders, recruits, min, max)) in [
             (
                 AnimalKind::Sheep,
                 if extra_boar { 7 } else { 8 },
+                0,
                 3_u64,
                 6_u64,
             ),
-            (AnimalKind::Boar, if extra_boar { 4 } else { 3 }, 9, 15),
-            (AnimalKind::Deer, if extra_boar { 4 } else { 6 }, 9, 15),
-            (AnimalKind::Wolf, 1, 16, 20),
+            (AnimalKind::Boar, if extra_boar { 3 } else { 2 }, 1, 9, 15),
+            (AnimalKind::Deer, if extra_boar { 2 } else { 4 }, 2, 9, 15),
+            (AnimalKind::Wolf, 1, 0, 16, 20),
         ]
         .into_iter()
         .enumerate()
@@ -170,9 +212,10 @@ impl GameWorld {
             });
             let mut members = Vec::new();
             for tile in candidates
-                .into_iter()
+                .iter()
+                .copied()
                 .filter(|tile| !used.contains(tile))
-                .take(count)
+                .take(founders)
                 .collect::<Vec<_>>()
             {
                 if let Ok(at) = WorldPosition::from_tile_center(tile)
@@ -182,7 +225,29 @@ impl GameWorld {
                     members.push(id);
                 }
             }
-            short_herds += usize::from(guaranteed && members.len() < count);
+            if guaranteed {
+                pending.push((kind, founders + recruits, members, candidates));
+            } else {
+                self.register_herd(kind, &members);
+            }
+        }
+        // Place the core wildlife of each village first. The additional game
+        // can only use ground that those animals did not already claim.
+        for (kind, target, mut members, candidates) in pending {
+            for tile in candidates {
+                if members.len() == target {
+                    break;
+                }
+                if !used.contains(&tile)
+                    && !self.living_animal_at(tile)
+                    && let Ok(at) = WorldPosition::from_tile_center(tile)
+                    && let Ok(id) = self.spawn_herd_recruit(kind, at)
+                {
+                    used.insert(tile);
+                    members.push(id);
+                }
+            }
+            short_herds += usize::from(members.len() < target);
             self.register_herd(kind, &members);
         }
         short_herds

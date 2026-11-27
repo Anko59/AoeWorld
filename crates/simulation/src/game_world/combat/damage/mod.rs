@@ -103,7 +103,14 @@ impl GameWorld {
             4
         };
         let damage = (u32::from(raw) * factor).max(4);
-        let quarter = &mut self.combat.hp_quarters[target.0 as usize];
+        let quarter = if target.0 >= crate::game_world::wildlife::HERD_RECRUIT_ID_START {
+            let Some(quarter) = self.animal_hp_quarters_mut(target) else {
+                return hp;
+            };
+            quarter
+        } else {
+            &mut self.combat.hp_quarters[target.0 as usize]
+        };
         let before = u32::from(hp) * 4 + u32::from(*quarter);
         let left = before.saturating_sub(damage);
         let hp = (left / 4) as u16;
