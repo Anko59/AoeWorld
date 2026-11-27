@@ -77,7 +77,6 @@
     {"count":1,"expr":"self.economy.gather_repick_budget -=","file":"crates/simulation/src/game_world/economy/gathering/replacement.rs","kind":"refill"},
     {"count":1,"expr":".take(8)","file":"crates/simulation/src/game_world/economy/gathering/replacement.rs","kind":"take"},
     {"count":1,"expr":".take(128)","file":"crates/simulation/src/game_world/economy/general/mod.rs","kind":"take"},
-    {"count":1,"expr":"GENERAL_ADMISSIONS","file":"crates/simulation/src/game_world/economy/general/mod.rs","kind":"use"},
     {"count":4,"expr":"GENERAL_ARMY_LIMIT","file":"crates/simulation/src/game_world/economy/general/mod.rs","kind":"use"},
     {"count":1,"expr":"GENERAL_ARMY_LIMIT","file":"crates/simulation/src/game_world/economy/general/orders.rs","kind":"use"},
     {"count":2,"expr":"CAPACITY","file":"crates/simulation/src/game_world/economy/general/squads.rs","kind":"use"},

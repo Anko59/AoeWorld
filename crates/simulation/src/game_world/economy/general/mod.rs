@@ -21,7 +21,6 @@ pub const GENERAL_INFLUENCE_TILES: i64 = 50;
 /// Infantry:archers:heavy cavalry:siege:scouts a new General aims for.
 pub const DEFAULT_MIX: [u8; 5] = [35, 30, 20, 10, 5];
 pub const GENERAL_CADENCE: u64 = 10;
-pub const GENERAL_ADMISSIONS: usize = 8;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GeneralState {
     Idle,
@@ -75,7 +74,7 @@ pub(crate) struct Manager {
     /// Soldiers the player ordered directly, with the tick of that order.
     /// Creation censuses exclude them; ordinary General orders never readmit them.
     pub manual: BTreeMap<EntityId, u64>,
-    pub cursor: Option<EntityId>,
+    phases: [BTreeSet<EntityId>; GENERAL_CADENCE as usize],
     pub work: GeneralWork,
     pub appearance_changes: BTreeSet<EntityId>,
 }
@@ -116,6 +115,10 @@ pub(super) fn distance(a: WorldPosition, b: WorldPosition) -> i64 {
     let y = i64::from(a.y) - i64::from(b.y);
     x * x + y * y
 }
+fn general_phase(player: PlayerId) -> usize {
+    usize::from(player.0) % GENERAL_CADENCE as usize
+}
+
 impl GameWorld {
     pub(crate) fn register_general(&mut self, id: EntityId) {
         let Some(u) = self.unit(id) else { return };
@@ -159,6 +162,7 @@ impl GameWorld {
                 stances: [None; GENERAL_ARMY_LIMIT + 1],
             },
         );
+        self.economy.generals.phases[general_phase(u.player)].insert(id);
         self.recruit_general_army(id);
     }
     pub(crate) fn bind_general_castle(&mut self, id: EntityId, castle: EntityId) {
@@ -205,6 +209,11 @@ impl GameWorld {
             self.restore_general_stance(g, id);
         }
         if let Some(army) = self.economy.generals.armies.remove(&id) {
+            for phase in &mut self.economy.generals.phases {
+                if phase.remove(&id) {
+                    break;
+                }
+            }
             for member in army.members {
                 self.set_sergeant(member, false);
                 self.economy.generals.controlled.remove(&member);
@@ -302,32 +311,25 @@ impl GameWorld {
             return;
         }
         let mut work = GeneralWork::default();
-        if self.tick.0.is_multiple_of(GENERAL_CADENCE) {
-            use std::ops::Bound::{Excluded, Unbounded};
-            let cursor = self.economy.generals.cursor.unwrap_or(EntityId(0));
-            let ids: Vec<_> = self
-                .economy
-                .generals
-                .armies
-                .range((Excluded(cursor), Unbounded))
-                .chain(self.economy.generals.armies.range(..=cursor))
-                .map(|(&id, _)| id)
-                .take(GENERAL_ADMISSIONS)
-                .collect();
-            for id in ids {
-                self.economy.generals.cursor = Some(id);
-                let Some(u) = self.unit(id).filter(|u| u.hp > 0 && !self.embarked(id)) else {
-                    continue;
-                };
-                work.generals += 1;
-                if self.economy.generals.armies[&id].owner_march.is_some() {
-                    self.advance_owner_general_move(u, changed, &mut work);
-                } else if let Some(survey) = self.general_survey(id, &mut work) {
-                    self.general_decide(u, survey, changed, &mut work);
-                }
-                self.general_reinforce(id, u.player, &mut work);
-                changed.push(id);
+        // Each seat's Generals share a phase. Registration and removal maintain
+        // the buckets, so other phases never cost a scan.
+        let phase = (self.tick.0 % GENERAL_CADENCE) as usize;
+        let ids: Vec<_> = self.economy.generals.phases[phase]
+            .iter()
+            .copied()
+            .collect();
+        for id in ids {
+            let Some(u) = self.unit(id).filter(|u| u.hp > 0 && !self.embarked(id)) else {
+                continue;
+            };
+            work.generals += 1;
+            if self.economy.generals.armies[&id].owner_march.is_some() {
+                self.advance_owner_general_move(u, changed, &mut work);
+            } else if let Some(survey) = self.general_survey(id, &mut work) {
+                self.general_decide(u, survey, changed, &mut work);
             }
+            self.general_reinforce(id, u.player, &mut work);
+            changed.push(id);
         }
         changed.extend(std::mem::take(
             &mut self.economy.generals.appearance_changes,

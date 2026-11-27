@@ -28,14 +28,14 @@ assignment and is marked *(assigned)*.
 | 10 | Target inspections | 16,384 per tick, shared with towers (half for acquisition, 3/4 stop, 2,048 reserved for towers) | `combat/targeting.rs:9,11,91,151`, `acquisition.rs:32,135,197`, `towers.rs:116` | world, per tick | 6 |
 | 11 | Formation looks | 16 engagements and 128 members per look; looks every 4 ticks; 256 candidates, 2,048 inspections, 128 per bucket, 1,024 building tiles | `formation/combat.rs:5-19`, used `:65-68,166-220` | world, per tick | 6 |
 | 12 | Scouting | 8 jobs per tick, 16 active searches (and 64 refused tiles per job) | `economy/scouting/mod.rs:14,15,152-159,196` | world, per tick | 4 *(assigned: the searches become L2)* |
-| 13 | Generals | 8 armies per 10 ticks (cadence 10, admissions 8) | `economy/general/mod.rs:23,24,309` | world, per tick | 6 |
+| 13 | Generals | Admission cap removed. One decision every 10 ticks per General | `economy/general/mod.rs` | Per General, staggered by seat | Done |
 | 14 | Server commands: per tick | 32 per tick match-wide | `server/src/gameplay/tick.rs:114,127` | world, per tick | 4 |
 | 14 | Server commands: queues | 64 pending per connection, 1,024 global (scaled by seats), 256 per AI, 4,096 unacked | `protocol/src/gameplay.rs:42,45`, `server/src/gameplay/commands.rs:13`, `commands/queue.rs:25-49`, `deliver.rs:84` | capacity | 4 |
 | 15 | `MAX_ECONOMY_PLAYERS` | 128; also sizes animals (`MAX_ANIMALS` 4,096 = 128 × 32) | `simulation/src/game_world/economy/limits/mod.rs:3`, `protocol/src/gameplay/economy.rs:17`, `wildlife.rs:19-21`, `protocol/src/gameplay/wildlife.rs:7` | capacity | 0 raises it at the simulation level; 7c lifts the wire cap |
 | 16 | Depletion records | 2²⁰ (`1 << 20`); past it a depletion is refused (`Capacity`) | `map/src/overlay.rs:15`, checked `:124,266`, `overlay/snapshot.rs` | capacity | 4 |
 | 17 | Obstacle tiles | 2²⁴ (`1 << 24`) | `map/src/overlay.rs:25`, checked `overlay.rs:84`, `overlay/bridges.rs:58` | capacity | 4 |
 
-Rows 1, 10 and 14 span several constants. Every value matches the plan.
+Rows 1, 10 and 14 span several constants. The original inventory matched the plan. Updated rows record completed changes.
 
 ## 2. Caps found beyond §4.10
 
@@ -50,7 +50,7 @@ Rows 1, 10 and 14 span several constants. Every value matches the plan.
 | Navigation cache | 8,192 entries, 128 MiB | `navigation_cache.rs:8,11` | capacity | 4 (corridors replace it) |
 | Resource cache | 8,192 entries, 32 MiB | `game_cache/resources.rs:6,7` | capacity | 4 *(assigned)* |
 | Clearance pages | 4,096 | `terrain/clearance.rs:11` | capacity | 4 *(assigned: overlay pages)* |
-| Army size | 200 members (squads of 10) | `economy/general/mod.rs:18`, `general/squads.rs:5` | capacity | 6 |
+| Army size | 200 members (squads of 10) | `economy/general/mod.rs`, `general/squads.rs` | game rule | Kept |
 | Army survey | 1,024 visits | `economy/general/survey.rs:33,39` | world, per decision | 6 |
 | Tower candidates | first 64 buildings | `combat/towers.rs:112` | world, per tick | 6 |
 | Gather approach | 8 failures, 8 candidates | `economy/gathering.rs:11`, `gathering/approach.rs`, `gathering/replacement.rs` | per unit | 4 *(assigned)* |

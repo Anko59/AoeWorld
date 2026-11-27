@@ -279,7 +279,7 @@ fn general_replay_and_work_budget_are_deterministic() {
     let a = run();
     let b = run();
     assert_eq!(a, b);
-    assert!(a.1.generals <= 8 && a.1.unit_visits <= 8192 && a.1.orders <= 808);
+    assert!(a.1.generals <= 1 && a.1.unit_visits <= 1024 && a.1.orders <= 101);
 }
 
 #[test]
@@ -351,10 +351,9 @@ fn cancelled_recruitment_releases_reservations_and_never_overfills() {
 }
 
 #[test]
-fn crowded_general_admission_is_bounded_and_rotates_without_scanning_world_armies() {
+fn every_general_gets_one_decision_per_cycle_even_with_a_thousand_armies() {
     let (mut w, _) = setup();
-    // Synthetic ownership/census pressure, not player or hardware qualification.
-    let leaders: Vec<_> = (0..1000)
+    let leaders: std::collections::BTreeSet<_> = (0..1000)
         .map(|n| {
             w.spawn_kind(
                 PlayerId(n),
@@ -364,27 +363,25 @@ fn crowded_general_admission_is_bounded_and_rotates_without_scanning_world_armie
             .unwrap()
         })
         .collect();
-    w.tick.0 = 10;
-    let mut first = Vec::new();
-    w.advance_generals(&mut first);
-    let work = w.general_work();
-    assert_eq!(work.generals, 8);
-    assert!(work.unit_visits <= 8192);
-    assert!(work.building_visits <= 6024);
-    assert!(work.orders <= 136);
-    w.tick.0 = 11;
-    w.advance_generals(&mut Vec::new());
-    assert_eq!(w.general_work().generals, 0);
-    w.tick.0 = 20;
-    let mut second = Vec::new();
-    w.advance_generals(&mut second);
-    assert!(
-        first
-            .iter()
-            .filter(|id| leaders.contains(id))
-            .all(|id| !second.contains(id))
-    );
-    assert_eq!(w.general_work().generals, 8);
+    // Isolate decision admission from combat, which can journal a General
+    // again when it issues an order to that same unit.
+    for id in &leaders {
+        w.economy.generals.armies.get_mut(id).unwrap().solo = true;
+    }
+    let mut visited = std::collections::BTreeSet::new();
+    for tick in 10..20 {
+        w.tick.0 = tick;
+        let mut changed = Vec::new();
+        w.advance_generals(&mut changed);
+        let work = w.general_work();
+        assert_eq!(work.generals, 100);
+        assert!(work.unit_visits <= 1024 * work.generals);
+        assert!(work.building_visits <= (625 + 128) * work.generals);
+        for id in changed {
+            assert!(visited.insert(id), "a General ran twice in one cycle");
+        }
+    }
+    assert_eq!(visited, leaders);
 }
 
 #[test]
