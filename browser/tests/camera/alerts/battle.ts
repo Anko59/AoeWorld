@@ -6,39 +6,39 @@ import {
   playerEconomyTail,
   townCenterState,
 } from "../../wire/buildings.js";
-import { scoutCombat, villagerCombat } from "../../wire/combat.js";
+import {
+  postcardFields,
+  scoutCombat,
+  villagerCombat,
+} from "../../wire/combat.js";
 import { disabledFog } from "../../wire/fog.js";
 import { readAlerts } from "./alert-page.js";
 
 /** Whose blow and the tick of it. */
 export type Hit = readonly [attacker: number, tick: number];
-/** A villager, or the scout with id 0, of the viewer unless it says so. */
-export type Unit = {
-  id: number;
-  x: number;
-  y: number;
-  player?: number;
-  hit?: Hit;
-};
+type Thing = { id: number; x: number; y: number; player?: number; hit?: Hit };
+/** A villager, or the scout with id 0, of the viewer unless it says so. The
+ * server tells what animal a villager is at: one that hunts it has the task
+ * Hunting, one that fights a wolf the task Attacking. */
+export type Unit = Thing & { hunts?: number; fights?: number };
 /** A Town Center of four tiles, or a palisade (7) or stone wall (21) of one.
  * `x` and `y` are its first tile. */
-export type Building = Unit & { kind?: 7 | 21 };
+export type Building = Thing & { kind?: 7 | 21; unfinished?: boolean };
 /** A boar (2) or a wolf (3). */
 export type Animal = { id: number; x: number; y: number; kind: 2 | 3 };
 
-/** The state with its field `last_hit`, None in the shared fragments, set. */
-const struck = (state: number[], at: number, hit?: Hit) =>
-  hit
+/** The state with that field, None in the shared fragments, set. */
+const some = (state: number[], at: number, values: readonly number[] = []) =>
+  values.length
     ? [
         ...state.slice(0, at),
         1,
-        ...uint(hit[0]),
-        ...uint(hit[1]),
+        ...values.flatMap(uint),
         ...state.slice(at + 1),
       ]
     : state;
 
-const unit = ({ id, x, y, player = 0, hit }: Unit) => [
+const unit = ({ id, x, y, player = 0, hit, hunts, fights }: Unit) => [
   ...uint(id),
   player,
   ...position(x, y),
@@ -46,21 +46,35 @@ const unit = ({ id, x, y, player = 0, hit }: Unit) => [
   0,
   0,
   id === 0 ? 1 : 0,
+  hunts ? 9 : fights ? 5 : 0,
   0,
   0,
-  0,
-  ...struck(id === 0 ? scoutCombat : villagerCombat, 3, hit),
+  ...some(
+    some(
+      id === 0 ? scoutCombat : villagerCombat,
+      5,
+      [hunts, fights].filter((animal) => animal !== undefined),
+    ),
+    3,
+    hit,
+  ),
 ];
 
-const building = ({ id, x, y, player = 0, kind, hit }: Building) => [
+const building = ({ id, x, y, player = 0, ...state }: Building) => [
   ...uint(id),
   player,
-  kind ?? 0,
+  state.kind ?? 0,
   ...sint(x),
   ...sint(y),
-  ...sint(x + (kind ? 1 : 4)),
-  ...sint(y + (kind ? 1 : 4)),
-  ...struck(townCenterState, 11, hit),
+  ...sint(x + (state.kind ? 1 : 4)),
+  ...sint(y + (state.kind ? 1 : 4)),
+  ...some(
+    state.unfinished
+      ? [0, ...uint(200), ...townCenterState.slice(3)]
+      : townCenterState,
+    11,
+    state.hit,
+  ),
 ];
 
 const animal = ({ id, x, y, kind }: Animal) => [
@@ -77,7 +91,9 @@ const animal = ({ id, x, y, kind }: Animal) => [
 const list = (items: number[][]) => [...uint(items.length), ...items.flat()];
 
 /** The real client over a server that the test plays. Its clock is at tick
- * 1,000, its rate 20 ticks a second and the viewer is player 0. */
+ * 1,000, its rate 20 ticks a second and the viewer is player 0. Like the real
+ * one it tells all units and buildings of the viewer, and the animals inside
+ * the region of the last subscription only. */
 export async function battle(
   page: Page,
   hash: string,
@@ -128,15 +144,17 @@ export async function battle(
         if (byte < 128) break;
       }
       views++;
+      const [, left = 0, top = 0, right = 0, bottom = 0] = postcardFields(
+        bytes.subarray(1),
+        5,
+      ).map((field) => (field % 2 ? -(field + 1) / 2 : field / 2));
+      const near = animals.filter(
+        ({ x, y }) => x >= left && x < right && y >= top && y < bottom,
+      );
       route.send(snapshot());
       route.send(disabledFog(revision));
       route.send(
-        Buffer.from([
-          7,
-          ...revision,
-          ...uint(tick),
-          ...list(animals.map(animal)),
-        ]),
+        Buffer.from([7, ...revision, ...uint(tick), ...list(near.map(animal))]),
       );
     });
   });
@@ -167,19 +185,23 @@ export async function battle(
     hold(state: Unit) {
       held.units.set(state.id, state);
     },
-    /** One tick: changes and removals, each in the order of their ids. */
-    send(change: {
-      units?: Unit[];
-      removals?: number[];
-      buildings?: Building[];
-      lost?: number[];
-    }) {
+    /** One message, that many ticks after the last: changes and removals,
+     * each in the order of their ids. */
+    send(
+      change: {
+        units?: Unit[];
+        removals?: number[];
+        buildings?: Building[];
+        lost?: number[];
+      },
+      after = 1,
+    ) {
       const { units = [], removals = [], buildings = [], lost = [] } = change;
       for (const state of units) held.units.set(state.id, state);
       for (const id of removals) held.units.delete(id);
       for (const state of buildings) held.buildings.set(state.id, state);
       for (const id of lost) held.buildings.delete(id);
-      tick++;
+      tick += after;
       socket?.send(
         Buffer.from([
           2,
