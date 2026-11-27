@@ -118,6 +118,16 @@ impl GameWorld {
         bucket: aoe_map::LandBucket,
         planner: &mut aoe_map::RoutePlanner,
     ) -> bool {
+        self.near_route_region(player, bucket, planner) == Some(true)
+    }
+
+    /// As `near_route_disconnected`, `None` when the bounded query cannot say.
+    fn near_route_region(
+        &self,
+        player: PlayerId,
+        bucket: aoe_map::LandBucket,
+        planner: &mut aoe_map::RoutePlanner,
+    ) -> Option<bool> {
         let from = planner.origin();
         // Endpoint refinement may have replaced an isolated requested tile.
         let to = planner
@@ -129,15 +139,15 @@ impl GameWorld {
         match self.land_reachable_bounded(player, bucket, from, to) {
             Ok(reach) if reach.is_reachable() => {
                 planner.confirm_reachable_destination(from, to);
-                false
+                Some(false)
             }
-            Ok(aoe_map::RegionReachability::Unknown) | Err(_) => false,
+            Ok(aoe_map::RegionReachability::Unknown) | Err(_) => None,
             // A requested tile in a pocket beside a mine or a wall is still
             // served from next to it, once refinement certifies that tile.
-            Ok(_) => {
+            Ok(_) => Some(
                 planner.certified_destination().is_some()
-                    || !self.pocket_beside_frontier(player, bucket, from, to)
-            }
+                    || !self.pocket_beside_frontier(player, bucket, from, to),
+            ),
         }
     }
 
@@ -163,7 +173,19 @@ impl GameWorld {
         let Some(mut planner) = self.units[index].planner.take() else {
             return;
         };
-        let disconnected = self.near_route_disconnected(player, bucket, &mut planner);
+        // Every 8 reference ticks (0.4 s), and when the endpoints change
+        // (#978: asked every tick for every waiting near unit, this was 125M
+        // of 352M route-serving instructions a tick on R1).
+        let to = planner
+            .certified_destination()
+            .unwrap_or(planner.destination());
+        let period = self.config.ticks(8);
+        if !planner.take_region_question(planner.origin(), to, self.tick.0, period) {
+            self.units[index].planner = Some(planner);
+            return;
+        }
+        let answer = self.near_route_region(player, bucket, &mut planner);
+        let disconnected = answer == Some(true);
         self.units[index].planner = Some(planner);
         if !disconnected {
             return;

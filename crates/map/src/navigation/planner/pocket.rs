@@ -288,6 +288,25 @@ impl RoutePlanner {
             .then(|| (self.leg_origin, self.effective_destination()))
     }
 
+    /// Whether a waiting caller should ask its region layer about `from` to
+    /// `to` at tick `now`: when the endpoints change, and otherwise every
+    /// `period` ticks.
+    pub fn take_region_question(
+        &mut self,
+        from: TileCoord,
+        to: TileCoord,
+        now: u64,
+        period: u64,
+    ) -> bool {
+        let due = self
+            .region_asked
+            .is_none_or(|(f, t, at)| (f, t) != (from, to) || now >= at.saturating_add(period));
+        if due {
+            self.region_asked = Some((from, to, now));
+        }
+        due
+    }
+
     /// Reuse a current directed reachability proof for this leg's endpoint.
     /// A certificate for an older leg or a different endpoint cannot discharge
     /// its reverse flood. Geometry changes remain the caller's responsibility,

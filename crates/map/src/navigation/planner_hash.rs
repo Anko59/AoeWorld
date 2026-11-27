@@ -44,6 +44,14 @@ impl RoutePlanner {
             hash.update(&tile.y.to_le_bytes());
         }
         hash.update(&[self.validation_step, u8::from(self.pocket_checked)]);
+        if let Some((from, to, at)) = self.region_asked {
+            hash.update(b"region-asked");
+            for tile in [from, to] {
+                hash.update(&tile.x.to_le_bytes());
+                hash.update(&tile.y.to_le_bytes());
+            }
+            hash.update(&at.to_le_bytes());
+        }
         if let Some(proof) = &self.region_pocket {
             hash.update(b"region-pocket-proof");
             hash.update(&proof.to.x.to_le_bytes());
