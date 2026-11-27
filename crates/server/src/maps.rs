@@ -17,8 +17,6 @@ mod creation;
 pub(super) use creation::{cancel_job, create_job, estimate, job_status, list_jobs};
 mod height_bounds;
 pub(crate) use height_bounds::height_bounds;
-#[cfg(test)]
-use height_bounds::{HeightBoundsError, package_height_bounds};
 mod minimap;
 pub(crate) use minimap::MinimapCache;
 use minimap::minimap;

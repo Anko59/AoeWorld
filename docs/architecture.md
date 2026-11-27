@@ -43,9 +43,9 @@ environment reads are isolated in
 `crates/server/src/config.rs`.
 
 Before fetching geographic terrain, the client requests the package's verified
-minimum and maximum game heights. The server scans source elevation and modeled
-water pages through bounded residency off the async runtime, then caches the
-result with that immutable package. Bilinear interpolation stays inside those
+minimum and maximum game heights. The server takes them from source elevation
+and modeled water while it opens and checks the package's pages, and keeps the
+result with that opened package. Bilinear interpolation stays inside those
 source bounds. The client projects the resulting height interval into a narrow
 viewport strip instead of exploring the world square. Compact height probes
 let it discard off-screen candidates without repeatedly downloading them, and
