@@ -1,9 +1,9 @@
 use super::{Command, DevCommand};
 use crate::{
-    agents, architecture, assets, coverage, dev, e2e, format_commands, fuzz, game_map, gates,
-    hooks, jobs, ledger, native, perf, perf_comment, perf_hardware, perf_micro, perf_pressure,
-    perf_scale, perf_size, perf_soak, perf_stress, policy, process, qa, qa_mcp, release,
-    release_promotion, release_publish, repo_policy, review, ship, timeline, wasm_test,
+    agents, architecture, assets, coverage, dev, e2e, format_commands, fuzz, game_map, game_score,
+    gates, hooks, jobs, ledger, native, perf, perf_comment, perf_hardware, perf_micro,
+    perf_pressure, perf_scale, perf_size, perf_soak, perf_stress, policy, process, qa, qa_mcp,
+    release, release_promotion, release_publish, repo_policy, review, ship, timeline, wasm_test,
 };
 use std::{
     path::{Path, PathBuf},
@@ -132,6 +132,7 @@ pub(super) fn run(
         Command::RoadmapCheck => crate::roadmap::check()?,
         Command::QualityMetrics(options) => crate::quality_metrics::run(options)?,
         Command::MatchBench(options) => perf_scale::match_bench::run(options)?,
+        Command::GameScore(options) => game_score::run(options)?,
         Command::PerfSoak10 => perf_soak::run(600, "soak-10")?,
         Command::PerfSoak30 => perf_soak::run(1_800, "soak-30")?,
         Command::PerfBaselinePropose => {

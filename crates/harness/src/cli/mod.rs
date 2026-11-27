@@ -1,7 +1,8 @@
 mod dispatch;
 
 use crate::{
-    agents, assets, e2e, game_map, gates, jobs, ledger, native, perf_scale, qa, review, ship,
+    agents, assets, e2e, game_map, game_score, gates, jobs, ledger, native, perf_scale, qa, review,
+    ship,
 };
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use std::path::PathBuf;
@@ -150,6 +151,8 @@ enum Command {
     QualityMetrics(crate::quality_metrics::Options),
     /// Closed-loop in-process late-game match with Rust bots: ticks/s, hashes per worker count, Callgrind stages.
     MatchBench(perf_scale::match_bench::Options),
+    /// A real game on a real map played by the Rust AI in process, measured and checked for determinism.
+    GameScore(game_score::Options),
     #[command(name = "perf-soak-10")]
     PerfSoak10,
     #[command(name = "perf-soak-30")]
