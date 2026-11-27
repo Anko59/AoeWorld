@@ -10,7 +10,15 @@ pub(super) fn set_controller_ready(client: &Client, ready: bool) {
     }
 }
 
+/// Forgets the resume token: the next connection is a new controller.
+pub(super) fn forget_session(client: &mut Client) {
+    client.token = None;
+    storage::save_token(None);
+    set_controller_ready(client, false);
+}
+
 pub(super) fn record_close(client: &mut Client, event: &Event) {
+    set_controller_ready(client, false);
     village::construction::strategic::connection_reset(client);
     let reason = js_sys::Reflect::get(&event, &JsValue::from_str("reason"))
         .ok()

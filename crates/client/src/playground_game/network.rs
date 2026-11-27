@@ -406,9 +406,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     client.focus_map_hash = None;
                 }
                 client.camera.focus_elevation_meters = 0.0;
-                client.token = None;
-                storage::save_token(None);
-                lifecycle::set_controller_ready(&client, false);
+                lifecycle::forget_session(&mut client);
                 controls::map_changed(None);
                 client.status = "map changed; reconnecting".to_owned();
             }
@@ -458,7 +456,6 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             lifecycle::record_close(client, &event);
             client.status = "reconnecting".to_owned();
             client.socket = None;
-            lifecycle::set_controller_ready(client, false);
         }
     });
     socket.set_onclose(Some(onclose.as_ref().unchecked_ref()));
