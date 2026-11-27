@@ -328,3 +328,24 @@ fn a_tier_builds_only_its_own_packages_and_fails_when_nothing_matches() {
     );
     assert!(!args.contains(&"--workspace"));
 }
+
+/// The harness tests set `PATH` and other process-global variables around fake `git`, `gh`
+/// and agent binaries, so threads of one process race: `cargo test` failed `ship::` tests
+/// in 8 of 10 runs. Nextest gives each test its own process, as `test-unit` and coverage
+/// run them; the two local harness targets must do the same.
+#[test]
+fn the_harness_test_targets_run_one_process_per_test() {
+    let make = fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../make/jobs.mk"),
+    )
+    .unwrap();
+    for recipe in ["\ntest-harness-steps:", "\ntest-harness-focused-steps:"] {
+        let body = make.split_once(recipe).expect(recipe).1;
+        let body = body.split("\n\n").next().unwrap();
+        assert!(
+            body.contains("cargo nextest run --locked -p aoe-harness"),
+            "{recipe}: {body}"
+        );
+        assert!(!body.contains("cargo test"), "{recipe}: {body}");
+    }
+}

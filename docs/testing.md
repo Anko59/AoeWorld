@@ -412,7 +412,7 @@ builds. Locally `DOCKER_BUILD_CACHE` is empty and `docker build` is unchanged.
 [Registry v2](../gates/registry.json) owns path globs, suite implications,
 prerequisites, cadence metadata, and the validation job map. Use `make gate-plan`
 for a conservative PR plan and `make gates-docs` to regenerate the registry table;
-`make test-harness` exercises the Rust harness and CLI regressions in Docker.
+`make test-harness` exercises the Rust harness and CLI regressions in Docker, one process per test (nextest, as `test-unit`: the fixtures set `PATH` and other process variables, so threads of one process race).
 For red/green work, `make test-harness-focused HARNESS_TEST_FILTER=<substring>`
 selects matching test names; it does not replace the full gate.
 Unknown paths and unavailable CI comparison bases select every job. CI's job

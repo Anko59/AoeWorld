@@ -178,8 +178,8 @@ test-harness: orchestrator-tools job-bootstrap
 	@$(JOB_RUN) test-harness -- make --no-print-directory test-harness-steps
 
 test-harness-steps:
-	# Harness fixtures mutate process-global environment and must not race other tests.
-	@$(DOCKER_RUN) cargo test --locked -p aoe-harness --no-fail-fast -- --test-threads=1
+	# Harness fixtures mutate process-global environment (PATH, GH_*, the stubs): one process per test, as test-unit and coverage run them, never threads of one process.
+	@$(DOCKER_RUN) cargo nextest run --locked -p aoe-harness --no-fail-fast --no-tests fail
 
 test-unit-steps:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-unit
@@ -269,7 +269,7 @@ test-harness-focused: job-bootstrap
 
 test-harness-focused-steps:
 	@test -n "$$HARNESS_TEST_FILTER"
-	@$(DOCKER_RUN) cargo test --locked -p aoe-harness "$$HARNESS_TEST_FILTER"
+	@$(DOCKER_RUN) cargo nextest run --locked -p aoe-harness --no-fail-fast --no-tests fail "$$HARNESS_TEST_FILTER"
 
 duel-check: job-bootstrap
 	@$(JOB_RUN) duel-check -- make --no-print-directory duel-check-steps

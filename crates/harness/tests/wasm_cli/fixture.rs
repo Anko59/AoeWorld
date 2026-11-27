@@ -72,7 +72,23 @@ pub(super) fn run(tool: &str) {
     std::process::exit(0);
 }
 
+/// Four ports of a window no other test shares, below the operating system's ephemeral range.
+/// `test-wasm` picks its driver port and frees it, and the test then binds that same port to
+/// answer the driver's readiness probe. With no range the harness took an ephemeral port, which
+/// another process's `:0` bind or outgoing connection could take in between: `AddrInUse` once in
+/// 23 full runs. The window comes from the process id and a counter, so tests in parallel processes
+/// (nextest) and in parallel threads (`cargo test`) get different ones.
+fn private_ports() -> String {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    let window = (std::process::id() * 16 + NEXT.fetch_add(1, Ordering::Relaxed)) % 4_000;
+    let first = 12_000 + window * 4;
+    format!("{first}-{}", first + 3)
+}
+
 /// Short WASM CLI fixtures start without queue tokens or load-dependent setup.
 pub(super) fn command() -> std::process::Command {
-    std::process::Command::new(env!("CARGO_BIN_EXE_aoe-harness"))
+    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_aoe-harness"));
+    command.env("AOE_E2E_PORT_RANGE", private_ports());
+    command
 }
