@@ -65,6 +65,9 @@ pub struct RoutePlanner {
     nearest_reached: Option<TileCoord>,
     /// The sealed-destination proof has run (see `pocket`).
     pocket_checked: bool,
+    /// Endpoints the caller's region layer was last asked about while the
+    /// planner waited, and the tick it was asked.
+    region_asked: Option<(TileCoord, TileCoord, u64)>,
     pocket: Option<pocket::Proof>,
     region_proof: Option<pocket::RegionProof>,
     region_pocket: Option<pocket::RegionPocket>,
@@ -134,6 +137,7 @@ impl RoutePlanner {
             leg_best: None,
             nearest_reached: None,
             pocket_checked: false,
+            region_asked: None,
             pocket: None,
             region_proof: None,
             region_pocket: None,
