@@ -158,7 +158,7 @@ fn webgl_native_size_checker_stays_pixel_exact() {
 }
 
 #[wasm_bindgen_test]
-fn webgl_terrain_quads_keep_dev_pixels_at_quarter_and_native_zoom_with_objects() {
+async fn webgl_terrain_quads_keep_dev_pixels_at_quarter_and_native_zoom_with_objects() {
     for zoom in [0.25, 1.0] {
         let (_, quads, atlas) = terrain_pixels::scene(zoom);
         let expected = terrain_pixels::nearest_image(&quads, &atlas, true);
@@ -181,6 +181,20 @@ fn webgl_terrain_quads_keep_dev_pixels_at_quarter_and_native_zoom_with_objects()
             }
             if objects {
                 assert_pixel(&canvas, 5, 5, [0, 128, 0, 255]);
+            } else {
+                // The next render grows instance storage. Let the browser expose
+                // fence completion even though the pixel readback is synchronous.
+                for _ in 0..100 {
+                    super::super::webgl_tests::browser_turn().await;
+                    renderer.check_health().unwrap();
+                    if renderer.atlas_updates_ready() {
+                        break;
+                    }
+                }
+                assert!(
+                    renderer.atlas_updates_ready(),
+                    "terrain draw did not retire"
+                );
             }
         }
     }

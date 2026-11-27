@@ -32,22 +32,6 @@ export class AoeWebGl {
         this.contextLostCount = 0;
         this.contextRestoredCount = 0;
         this.initialize();
-        const readPixels = gl.readPixels;
-        const readback = (...args) => {
-            readPixels.apply(gl, args);
-            // Client-memory readback can retire draws before fences are visible.
-            // Finish covers reads that GL rejected before transferring data.
-            if (ArrayBuffer.isView(args[6]) && this.pendingFrames.length) {
-                gl.finish();
-                for (const sync of this.pendingFrames) gl.deleteSync(sync);
-                this.pendingFrames.length = 0;
-                this.needsFrameValidation = true;
-            }
-        };
-        gl.readPixels = readback;
-        this.releaseReadback = () => {
-            if (gl.readPixels === readback) gl.readPixels = readPixels;
-        };
         this.onLost = event => { this.contextLostCount++; event.preventDefault(); };
         this.onRestored = () => {
             try {
@@ -477,7 +461,6 @@ export class AoeWebGl {
     dispose() {
         if (this.disposed) return;
         const gl = this.gl;
-        this.releaseReadback?.();
         window.removeEventListener('pagehide', this.onPageHide);
         for (const sync of this.pendingFrames) gl.deleteSync(sync);
         this.pendingFrames = [];

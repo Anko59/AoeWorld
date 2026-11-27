@@ -242,7 +242,7 @@ fn target(atlas: &[u8]) -> (HtmlCanvasElement, WebGlRenderer) {
 
 // A macrotask lets WebDriver scrape output and the browser process context-loss
 // events; resolving a Promise immediately would only yield to microtasks.
-async fn browser_turn() {
+pub(super) async fn browser_turn() {
     use std::{cell::Cell, rc::Rc, task::Poll};
     let done = Rc::new(Cell::new(false));
     let mut scheduled = false;

@@ -283,6 +283,10 @@ async fn native_failed_fetch_releases_reservations_without_losing_other_completi
 #[wasm_bindgen_test]
 async fn native_context_loss_during_patch_restores_resident_cells_and_presentation() {
     let (mut native, mut art, mut renderer, canvas, bytes) = fixture("webgl2").await;
+    assert!(
+        !renderer.atlas_updates_ready().unwrap(),
+        "reading a pixel must not retire the submitted draw before its fence is polled"
+    );
     native.requests(&[2]).unwrap();
     native.accept(1, bytes[1].clone()).unwrap();
     lose_during_patch(&canvas);
