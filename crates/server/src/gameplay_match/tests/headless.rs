@@ -160,3 +160,37 @@ async fn a_late_game_match_is_played_by_the_ai_and_stays_the_same_game() {
     assert_eq!(hashes[0], hashes[1], "one late-game seed played two games");
     assert!(!hashes[0].1.is_empty(), "the seats gave no orders");
 }
+
+#[tokio::test]
+async fn a_bare_world_is_the_package_without_a_village_a_unit_or_a_seat() {
+    let (directory, hash) = stored_package();
+    let mut world = HeadlessMatch::bare_world(directory.path(), &hash)
+        .await
+        .expect("the world of a stored package");
+    assert_eq!(world.unit_count(), 0, "a bare world holds no unit");
+    assert_eq!(
+        world.buildings().count(),
+        0,
+        "a bare world holds no building"
+    );
+    assert_eq!(world.tick().0, 0);
+    for _ in 0..5 {
+        world.advance();
+    }
+    assert_eq!(
+        world.tick().0,
+        5,
+        "the caller ticks it, as the headless match does"
+    );
+    assert_eq!(world.unit_count(), 0, "nobody plays in it");
+}
+
+#[tokio::test]
+async fn a_bare_world_of_a_package_that_is_not_stored_is_refused_by_name() {
+    let (directory, _) = stored_package();
+    let missing = "cd".repeat(32);
+    let error = HeadlessMatch::bare_world(directory.path(), &missing)
+        .await
+        .expect_err("a package that is not stored");
+    assert!(error.to_string().contains(&missing), "{error}");
+}

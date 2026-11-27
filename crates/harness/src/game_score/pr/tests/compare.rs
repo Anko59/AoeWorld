@@ -312,3 +312,66 @@ fn a_rise_from_zero_has_no_percent_but_a_direction() {
     row.branch = Some(0.0);
     assert_eq!(row.direction(), Direction::Same);
 }
+
+/// A staged scenario as the report holds it: one window that is the whole run, and `whole`.
+fn staged() -> Value {
+    let mut march = crate::game_score::pr::fixtures::scenario(
+        "march",
+        2_400,
+        vec![
+            crate::game_score::pr::fixtures::window("crossing", 0, 2_400),
+            crate::game_score::pr::fixtures::window("whole", 0, 2_400),
+        ],
+    );
+    for window in march["windows"].as_array_mut().expect("windows") {
+        window["service"]["choke"] = json!({
+            "units_sent": 800, "crossed": 800, "crossed_per_minute_peak": 776,
+            "first_crossing_tick": 193, "last_crossing_tick": 1036, "waiting_near_side": 0,
+            "standing_still_inside_ticks": 1738, "arrived_at_goal": 796, "all_arrived": false
+        });
+    }
+    march
+}
+
+#[test]
+fn a_whole_window_that_repeats_a_named_one_is_shown_once() {
+    let diffs = compare(None, &report(vec![staged(), natural()]));
+    let march: Vec<&str> = diffs[0].windows.iter().map(|w| w.id.as_str()).collect();
+    assert_eq!(march, ["crossing"], "the same ticks twice is one table");
+    let natural: Vec<&str> = diffs[1].windows.iter().map(|w| w.id.as_str()).collect();
+    assert_eq!(
+        natural,
+        ["early", "middle", "whole"],
+        "a whole run that is no window's span stays"
+    );
+    let base = report(vec![staged()]);
+    let compared = compare(Some(&base), &base);
+    assert_eq!(compared[0].windows.len(), 1);
+}
+
+#[test]
+fn a_staged_scenario_alone_shows_its_choke_and_not_a_village_that_is_not_there() {
+    let diffs = compare(None, &report(vec![staged()]));
+    let rows = paths(&diffs[0].windows[0]);
+    for wanted in [
+        "choke.crossed",
+        "choke.last_crossing_tick",
+        "choke.arrived_at_goal",
+    ] {
+        assert!(rows.contains(&wanted), "{wanted}: {rows:?}");
+    }
+    for village in [
+        "management.steward.orders",
+        "management.general.orders",
+        "management.orders_by_issuer.rust_ai.orders",
+        "economy.delivered_total",
+        "size.idle_villagers_permille",
+    ] {
+        assert!(!rows.contains(&village), "{village}: {rows:?}");
+    }
+    // A fresh game alone keeps its village rows.
+    let fresh = compare(None, &report(vec![natural()]));
+    let natural_rows = paths(&fresh[0].windows[0]);
+    assert!(natural_rows.contains(&"economy.delivered_total"));
+    assert!(natural_rows.contains(&"management.steward.orders"));
+}

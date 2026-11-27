@@ -1,4 +1,4 @@
-use super::{ALL, LATE, NATURAL, Start, find, pull_request_set};
+use super::{ALL, BATTLE, LATE, MARCH, NATURAL, Start, find, pull_request_set};
 use std::collections::BTreeSet;
 
 #[test]
@@ -68,11 +68,48 @@ fn late_seeds_the_recipe_and_measures_after_a_warm_up() {
 
 #[test]
 fn the_pull_request_set_is_what_make_game_score_plays_by_default() {
-    let ids: Vec<_> = pull_request_set()
-        .iter()
-        .map(|scenario| scenario.id)
-        .collect();
-    assert_eq!(ids, ["natural", "late"]);
+    let ids = |map: &str| -> Vec<_> {
+        pull_request_set(map)
+            .iter()
+            .map(|scenario| scenario.id)
+            .collect()
+    };
+    assert_eq!(
+        ids(super::anatolia::MAP),
+        ["natural", "late", "march", "battle"]
+    );
+    assert_eq!(
+        ids("another map"),
+        ["natural", "late"],
+        "the staged scenarios are scenarios of one map each"
+    );
+}
+
+#[test]
+fn a_staged_scenario_is_played_on_its_map_and_refused_on_another_by_name() {
+    for scenario in [&MARCH, &BATTLE] {
+        let map = scenario.map().expect("a staged scenario has a map");
+        assert_eq!(map.len(), 64);
+        assert_eq!(scenario.applies_to(map), Ok(()));
+        let error = scenario
+            .applies_to(&"ab".repeat(32))
+            .expect_err("another map");
+        assert!(
+            error.contains(scenario.id) && error.contains(&map[..8]) && error.contains("abababab"),
+            "{error}"
+        );
+    }
+    assert_eq!(NATURAL.map(), None);
+    assert_eq!(LATE.applies_to("any map"), Ok(()));
+}
+
+#[test]
+fn the_staged_scenarios_have_the_seats_of_their_armies_and_the_others_what_a_flag_says() {
+    assert_eq!((MARCH.seats(100), BATTLE.seats(100)), (1, 2));
+    assert_eq!((NATURAL.seats(100), LATE.seats(3)), (100, 3));
+    assert!(MARCH.measures("choke.crossed") && !MARCH.measures("battle.queued"));
+    assert!(BATTLE.measures("choke.crossed") && BATTLE.measures("battle.queued"));
+    assert!(!NATURAL.measures("choke.crossed") && NATURAL.measures("planning.stuck"));
 }
 
 #[test]
@@ -123,4 +160,39 @@ fn a_flag_scales_the_late_recipe_and_never_a_fresh_start() {
         panic!("late is a late game");
     };
     assert_eq!(LATE.late_percent(None), Some(percent));
+}
+
+#[test]
+fn march_is_one_army_of_militia_and_battle_two_mixed_armies_of_the_same_size() {
+    use super::super::staging::Side;
+    use aoe_simulation::UnitKind;
+    let Start::Staged(march) = MARCH.start else {
+        panic!("march is staged");
+    };
+    let Start::Staged(battle) = BATTLE.start else {
+        panic!("battle is staged");
+    };
+    let [army] = march.armies else {
+        panic!("one army marches");
+    };
+    assert_eq!((army.seat, army.from, army.units()), (0, Side::Near, 800));
+    assert!(army.mix.iter().all(|&(kind, _)| kind == UnitKind::Militia));
+    assert!(!march.attack, "the march only moves");
+    let [near, far] = battle.armies else {
+        panic!("two armies meet");
+    };
+    assert_eq!((near.seat, near.from), (0, Side::Near));
+    assert_eq!((far.seat, far.from), (1, Side::Far));
+    assert_eq!(near.mix, far.mix, "the same army on each bank");
+    assert!(near.mix.len() >= 3, "melee and ranged kinds");
+    assert!(battle.attack, "the armies fight what they meet");
+    assert_eq!(march.choke, battle.choke, "the same choke");
+    assert!(
+        march.choke.width_tiles < 10 && march.choke.length_tiles >= 3,
+        "a neck an army of hundreds has to file through"
+    );
+    assert!(
+        near.units() >= 300 && army.units() >= 300,
+        "armies of several hundred"
+    );
 }

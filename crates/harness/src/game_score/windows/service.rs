@@ -135,6 +135,44 @@ pub(in crate::game_score) struct Economy {
     pub income_faults: u64,
 }
 
+/// What happened at the choke of a staged scenario (`march`, `battle`): the crossing of the line
+/// drawn across the neck. Ticks are those of the run, not of the window.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub(in crate::game_score) struct Crossing {
+    /// Units staged, from the first tick.
+    pub units_sent: u64,
+    /// Units that crossed the line for the first time in the window, and the most that did in any
+    /// one game minute (600 ticks) of it: what the neck lets through.
+    pub crossed: u64,
+    pub crossed_per_minute_peak: u64,
+    pub first_crossing_tick: Option<u64>,
+    pub last_crossing_tick: Option<u64>,
+    /// Units alive at the end of the window that have not crossed.
+    pub waiting_near_side: u64,
+    /// The longest a unit stood still inside the neck, in the window (ticks).
+    pub standing_still_inside_ticks: u64,
+    /// Units alive within two tiles of the last goal they were given, at the end of the window,
+    /// and whether that is every unit sent.
+    pub arrived_at_goal: u64,
+    pub all_arrived: bool,
+}
+
+/// The fight of the `battle` scenario, two armies that meet at the choke.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub(in crate::game_score) struct Battle {
+    /// The tick of the first hit in the window.
+    pub first_blow_tick: Option<u64>,
+    /// Units that struck or were struck for the first time in the window, and units that had done
+    /// neither by its end: they only queued behind.
+    pub fought: u64,
+    pub queued: u64,
+    /// The first tick in the window with no unit of one army left alive, if there was one.
+    pub fight_ended_tick: Option<u64>,
+    /// The share of each army still alive at the end of the window, in parts per thousand.
+    pub alive_seat_0_permille: u64,
+    pub alive_seat_1_permille: u64,
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub(in crate::game_score) struct Service {
     pub size: Size,
@@ -143,6 +181,10 @@ pub(in crate::game_score) struct Service {
     pub management: Management,
     pub fights: Fights,
     pub economy: Economy,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub choke: Option<Crossing>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub battle: Option<Battle>,
 }
 
 fn sample_at(samples: &[Sample], tick: u64) -> Result<&Sample, String> {
@@ -176,6 +218,69 @@ fn issuer_between(a: &IssuerTotals, b: &IssuerTotals) -> IssuerTotals {
         accepted: grew(a.accepted, b.accepted),
         route_searches: grew(a.route_searches, b.route_searches),
     }
+}
+
+/// The choke numbers of ticks `from + 1` through `to`, for a run watched at a choke: `rows` are
+/// those ticks and `last` the sample at the end.
+fn choke_numbers(rows: &[TickRow], from: u64, last: &Sample) -> Option<(Crossing, Option<Battle>)> {
+    let totals = last.choke?;
+    let tick_of = |index: usize| from + 1 + index as u64;
+    let crossing = |row: &&(usize, &TickRow)| row.1.crossed > 0;
+    let indexed: Vec<(usize, &TickRow)> = rows.iter().enumerate().collect();
+    let first = indexed
+        .iter()
+        .find(crossing)
+        .map(|(index, _)| tick_of(*index));
+    let latest = indexed
+        .iter()
+        .rfind(crossing)
+        .map(|(index, _)| tick_of(*index));
+    // The most crossings in any game minute: a sliding sum over the ticks.
+    let minute = super::TICKS_PER_MINUTE as usize;
+    let (mut inside, mut peak) = (0_u64, 0_u64);
+    for (index, row) in rows.iter().enumerate() {
+        inside += row.crossed;
+        if index >= minute {
+            inside -= rows[index - minute].crossed;
+        }
+        peak = peak.max(inside);
+    }
+    let arrived = totals.at_goal;
+    let crossing = Crossing {
+        units_sent: totals.sent,
+        crossed: rows.iter().map(|row| row.crossed).sum(),
+        crossed_per_minute_peak: peak,
+        first_crossing_tick: first,
+        last_crossing_tick: latest,
+        waiting_near_side: totals.near_side,
+        standing_still_inside_ticks: rows
+            .iter()
+            .map(|row| row.still_inside_peak)
+            .max()
+            .unwrap_or(0),
+        arrived_at_goal: arrived,
+        all_arrived: totals.sent > 0 && arrived == totals.sent,
+    };
+    // Two armies staged: a battle.
+    let battle = (totals.sent_by_seat[1] > 0).then(|| {
+        let share = |seat: usize| {
+            (totals.alive_by_seat[seat] * 1000)
+                .checked_div(totals.sent_by_seat[seat])
+                .unwrap_or(0)
+        };
+        Battle {
+            first_blow_tick: rows.iter().position(|row| row.hits > 0).map(tick_of),
+            fought: rows.iter().map(|row| row.fighters_new).sum(),
+            queued: totals.sent.saturating_sub(totals.fought),
+            fight_ended_tick: rows
+                .iter()
+                .position(|row| row.alive_by_seat.contains(&0))
+                .map(tick_of),
+            alive_seat_0_permille: share(0),
+            alive_seat_1_permille: share(1),
+        }
+    });
+    Some((crossing, battle))
 }
 
 /// The ticks `from + 1` through `to`, given a sample at each end.
@@ -244,7 +349,10 @@ pub(in crate::game_score) fn service(
         gold: delivered[2],
         stone: delivered[3],
     };
+    let (choke, battle) = choke_numbers(rows, from, last).unzip();
     Ok(Service {
+        choke,
+        battle: battle.flatten(),
         size: Size {
             units: last.units,
             buildings: last.buildings,

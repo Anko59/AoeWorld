@@ -195,9 +195,40 @@ fn game_score_without_orders_hashes_are_still_compared() {
 
 #[test]
 fn game_score_an_unknown_scenario_is_refused_by_name() {
-    let (output, _, _directory) = game_score(&["--scenario", "battle"]);
+    let (output, _, _directory) = game_score(&["--scenario", "siege"]);
     assert!(!output.status.success());
-    assert!(stderr(&output).contains("battle"), "{}", stderr(&output));
+    assert!(stderr(&output).contains("siege"), "{}", stderr(&output));
+}
+
+#[test]
+fn game_score_a_staged_scenario_is_refused_on_a_map_it_is_not_staged_on() {
+    for scenario in ["march", "battle"] {
+        let (output, report, _directory) = game_score(&["--scenario", scenario, "--workers", "1"]);
+        assert!(!output.status.success(), "{scenario} was played");
+        let text = stderr(&output);
+        assert!(
+            text.contains(scenario) && text.contains("staged at a choke of map"),
+            "{text}"
+        );
+        assert_eq!(report, Value::Null, "nothing was played");
+    }
+}
+
+#[test]
+fn game_score_the_pull_request_set_leaves_out_what_is_staged_on_another_map_and_says_so() {
+    let (output, report, _directory) =
+        game_score(&["--ticks", "40", "--late-percent", "5", "--workers", "1"]);
+    assert!(output.status.success(), "{}", stderr(&output));
+    let text = stderr(&output);
+    assert!(
+        text.contains("march is left out") && text.contains("battle is left out"),
+        "{text}"
+    );
+    assert!(
+        !text.contains("natural is left out") && !text.contains("late is left out"),
+        "the scenarios that are played are not said to be left out: {text}"
+    );
+    assert_eq!(report["scenarios"].as_array().map(Vec::len), Some(2));
 }
 
 #[test]

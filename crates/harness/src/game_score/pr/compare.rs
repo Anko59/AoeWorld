@@ -225,15 +225,33 @@ fn scenario_of<'a>(report: &'a Value, id: &str) -> Option<&'a Value> {
         .find(|scenario| scenario["id"] == id)
 }
 
+/// What a village does: in a staged scenario (one with a choke) there is none, and its numbers
+/// are zero and say nothing.
+const VILLAGE: [&str; 3] = ["management.", "economy.", "size.idle_villagers"];
+
+/// `window` is a `whole` that repeats a window of its own scenario spanning the same ticks (a
+/// staged scenario names one that is the whole run): showing both only doubles the table.
+fn repeats(all: &[Value], window: &Value) -> bool {
+    window["id"] == "whole"
+        && all.iter().any(|other| {
+            other["id"] != "whole"
+                && other["from_tick"] == window["from_tick"]
+                && other["to_tick"] == window["to_tick"]
+        })
+}
+
 /// The numbers of the branch alone, for a scenario nothing can be compared with: the
 /// headline ones (`numbers::KNOWN`), so the table stays short.
 fn alone(branch: &Value) -> WindowDiff {
+    let staged = branch.pointer("/service/choke").is_some();
     let mut window = diff_window(None, branch);
     let numbers = std::mem::take(&mut window.changed);
     window.changed = numbers
         .into_iter()
         .filter(|row| {
-            numbers::find(&row.path).is_some_and(|known| known.headline) && row.branch.is_some()
+            numbers::find(&row.path).is_some_and(|known| known.headline)
+                && row.branch.is_some()
+                && !(staged && VILLAGE.iter().any(|prefix| row.path.starts_with(prefix)))
         })
         .collect();
     window.unchanged = 0;
@@ -251,7 +269,8 @@ pub(super) fn compare(base: Option<&Value>, branch: &Value) -> Vec<ScenarioDiff>
         .flatten()
         .map(|scenario| {
             let id = scenario["id"].as_str().unwrap_or_default().to_owned();
-            let windows = || scenario["windows"].as_array().into_iter().flatten();
+            let all: &[Value] = scenario["windows"].as_array().map_or(&[], Vec::as_slice);
+            let windows = || all.iter().filter(|window| !repeats(all, window));
             let counterpart = base.and_then(|base| scenario_of(base, &id));
             let refusal = match (base, counterpart) {
                 (None, _) => Some(Status::NoBase("no numbers for the merge base".to_owned())),

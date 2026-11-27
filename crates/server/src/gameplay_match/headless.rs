@@ -7,7 +7,12 @@
 //! wants it. Every slot is an AI seat played by the Rust AI in process.
 use super::{MatchRules, StartUnits, install, launch};
 use crate::{AiRuntime, AppState, Config, GameplayService};
-use std::path::PathBuf;
+use aoe_map::{EnvironmentPageProvider, MapPackage};
+use aoe_simulation::GameWorld;
+use std::{
+    path::{Path, PathBuf},
+    sync::{Arc, atomic::AtomicBool},
+};
 
 /// How a headless match starts.
 #[derive(Clone, Debug)]
@@ -41,28 +46,67 @@ pub struct HeadlessMatch {
     gameplay: GameplayService,
 }
 
+/// The state of a server that serves `directory`, and the package `hash` in it.
+async fn open(directory: &Path, hash: &str) -> Result<(AppState, MapPackage), HeadlessError> {
+    let config = Config {
+        bind: ([127, 0, 0, 1], 0).into(),
+        scenario: aoe_scenario::SMOKE,
+        tick_hz: Config::DEFAULT_SIM_HZ,
+        asset_pack: None,
+        map_package_directory: Some(directory.to_owned()),
+        open_map_package: None,
+        map_worker: None,
+        geodata_cache_directory: Config::DEFAULT_GEODATA_CACHE_DIRECTORY.into(),
+    };
+    let state =
+        AppState::new(&config, "headless").map_err(|error| HeadlessError(error.to_string()))?;
+    let package = state
+        .map_packages
+        .read()
+        .await
+        .get(hash)
+        .cloned()
+        .ok_or_else(|| HeadlessError(format!("no map package {hash}")))?;
+    Ok((state, package))
+}
+
 impl HeadlessMatch {
+    /// The world of a package exactly as a match loads it (its page residency, its prepared
+    /// navigation, the simulation's clock rate), with no village, no unit, no seat and no AI.
+    /// For a scenario that stages its own units and ticks the world itself with
+    /// `GameWorld::advance`, which is what one `GameplayService::tick` does for a world
+    /// nobody sends orders to (the game score's `march` and `battle`).
+    pub async fn bare_world(directory: &Path, map_hash: &str) -> Result<GameWorld, HeadlessError> {
+        let (state, package) = open(directory, map_hash).await?;
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let provider = crate::maps::page_residency(&state, &package, cancelled)
+            .await
+            .map_err(|(_, message)| HeadlessError(message))?;
+        let (hash, directory) = (package.content_hash, directory.to_owned());
+        tokio::task::spawn_blocking(move || {
+            let mut world = match provider {
+                Some(provider) => GameWorld::from_page_provider(
+                    package,
+                    provider as Arc<dyn EnvironmentPageProvider>,
+                ),
+                None => GameWorld::from_map(package),
+            }
+            .map_err(|error| HeadlessError(error.to_string()))?;
+            world.set_tick_hz(Config::sim_hz_from_env());
+            crate::map_store::navigation::prepare_world(&world, hash, Some(&directory), &|| false)
+                .map_err(HeadlessError)?;
+            world
+                .prepare_navigation(&|| false)
+                .map_err(|error| HeadlessError(error.to_string()))?;
+            Ok(world)
+        })
+        .await
+        .map_err(|_| HeadlessError("the world task failed".to_owned()))?
+    }
+
     /// Loads the package directory, builds the match and seats its AIs.
     pub async fn start(plan: &HeadlessPlan) -> Result<Self, HeadlessError> {
-        let config = Config {
-            bind: ([127, 0, 0, 1], 0).into(),
-            scenario: aoe_scenario::SMOKE,
-            tick_hz: Config::DEFAULT_SIM_HZ,
-            asset_pack: None,
-            map_package_directory: Some(plan.package_directory.clone()),
-            open_map_package: None,
-            map_worker: None,
-            geodata_cache_directory: Config::DEFAULT_GEODATA_CACHE_DIRECTORY.into(),
-        };
-        let state =
-            AppState::new(&config, "headless").map_err(|error| HeadlessError(error.to_string()))?;
-        let package = state
-            .map_packages
-            .read()
-            .await
-            .get(&plan.map_hash)
-            .cloned()
-            .ok_or_else(|| HeadlessError(format!("no map package {}", plan.map_hash)))?;
+        let (state, package) = open(&plan.package_directory, &plan.map_hash).await?;
         let rules = match plan.late_game_percent {
             None => MatchRules::default(),
             Some(percent) => MatchRules::new(Some(StartUnits {

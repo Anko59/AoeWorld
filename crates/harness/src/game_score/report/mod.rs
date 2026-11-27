@@ -1,5 +1,6 @@
 //! The terminal table and the JSON report (`schema` 1, documented in
 //! docs/scale/game-score.md).
+mod staged;
 mod table;
 #[cfg(test)]
 mod tests;
@@ -9,7 +10,7 @@ pub(super) use table::table;
 use super::Plan;
 use super::judge::Verdict;
 use super::measure::Measurement;
-use super::scenarios::Scenario;
+use super::scenarios::{Scenario, Start};
 use serde_json::{Value, json};
 
 /// The version of the report's layout (`schema`); a reader that compares two reports checks it.
@@ -26,6 +27,31 @@ pub(super) struct Played {
 }
 
 fn start(played: &Played) -> Value {
+    if let Start::Staged(staging) = played.scenario.start {
+        let armies: Vec<Value> = staging
+            .armies
+            .iter()
+            .map(|army| json!({ "seat": army.seat, "from": format!("{:?}", army.from), "units": army.units() }))
+            .collect();
+        return json!({
+            "kind": "staged",
+            "choke": staging.choke.name,
+            "attack": staging.attack,
+            "units": staging.units(),
+            "armies": armies,
+            "choke_record": {
+                "saddle": staging.choke.saddle,
+                "ends": staging.choke.ends,
+                "width_tiles": staging.choke.width_tiles,
+                "length_tiles": staging.choke.length_tiles,
+                "flow": staging.choke.flow,
+                "near": staging.choke.near,
+                "far": staging.choke.far,
+                "sides": staging.choke.sides,
+                "why": staging.choke.why,
+            },
+        });
+    }
     match played.scenario.late_percent(played.plan.late_percent) {
         None => json!({ "kind": "fresh" }),
         Some(percent) => json!({ "kind": "late_game", "percent": percent }),

@@ -1,8 +1,9 @@
 use super::table::{describe, grouped};
 use super::{Played, json, table};
 use crate::game_score::Plan;
-use crate::game_score::scenarios::{LATE, NATURAL, Scenario};
+use crate::game_score::scenarios::{BATTLE, LATE, MARCH, NATURAL, Scenario};
 use crate::game_score::tests::{hashes, minute, run, verdict, window};
+use crate::game_score::windows::{Battle, Crossing};
 use serde_json::{Value, json as value};
 use std::path::PathBuf;
 
@@ -293,5 +294,116 @@ fn a_short_series_fits_on_the_line_of_its_label_and_a_long_one_wraps_under_it() 
     assert!(
         lines.iter().all(|line| line.len() <= 110),
         "a line is too long"
+    );
+}
+
+fn staged(scenario: &'static Scenario, ticks: u64, battle: bool) -> Played {
+    let mut one = played(scenario, &[("crossing", 0, ticks)], 4);
+    for run in &mut one.runs {
+        for window in &mut run.windows {
+            window.service.choke = Some(Crossing {
+                units_sent: 800,
+                crossed: 800,
+                crossed_per_minute_peak: 776,
+                first_crossing_tick: Some(193),
+                last_crossing_tick: Some(1_036),
+                waiting_near_side: 0,
+                standing_still_inside_ticks: 12,
+                arrived_at_goal: 798,
+                all_arrived: false,
+            });
+            window.service.battle = battle.then_some(Battle {
+                first_blow_tick: Some(292),
+                fought: 770,
+                queued: 30,
+                fight_ended_tick: None,
+                alive_seat_0_permille: 187,
+                alive_seat_1_permille: 95,
+            });
+        }
+        for minute in &mut run.series {
+            minute.service.choke = Some(Crossing {
+                crossed: 100,
+                ..Crossing::default()
+            });
+        }
+    }
+    one
+}
+
+#[test]
+fn a_staged_scenario_shows_what_happened_at_its_choke_and_not_what_a_village_does() {
+    let text = table("title", &[staged(&MARCH, 2_400, false)]);
+    for wanted in [
+        "march:",
+        "units sent / across the line",
+        "800 / 800",
+        "most across the line in one game minute",
+        "776",
+        "first / last unit across (tick)",
+        "193 / 1,036",
+        "longest stand still inside the neck (ticks)",
+        "798 of 800",
+        "units across the line per game minute: 100 100 100 100",
+    ] {
+        assert!(text.contains(wanted), "{wanted:?} is not in\n{text}");
+    }
+    for village in [
+        "villagers standing idle",
+        "Steward orders",
+        "Vassal / Rust AI orders",
+        "resources delivered per game minute",
+        "first blow (tick)",
+    ] {
+        assert!(!text.contains(village), "{village:?} is in\n{text}");
+    }
+    assert!(text.contains("hits landed"), "the fights rows stay");
+}
+
+#[test]
+fn two_armies_add_the_rows_of_a_fight() {
+    let text = table("title", &[staged(&BATTLE, 4_500, true)]);
+    for wanted in [
+        "first blow (tick)",
+        "292",
+        "units that fought / only queued behind",
+        "770 / 30",
+        "fight ended (tick)",
+        "none",
+        "alive at the end, seat 0 / seat 1",
+        "19% / 10%",
+    ] {
+        assert!(text.contains(wanted), "{wanted:?} is not in\n{text}");
+    }
+}
+
+#[test]
+fn the_report_says_where_a_staged_scenario_is_staged() {
+    let report = json(value!({}), &[staged(&MARCH, 2_400, false)], "table");
+    let march = &report["scenarios"][0];
+    assert_eq!(march["start"]["kind"], "staged");
+    assert_eq!(march["start"]["units"], 800);
+    assert_eq!(march["start"]["attack"], false);
+    assert_eq!(march["start"]["armies"][0]["from"], "Near");
+    let record = &march["start"]["choke_record"];
+    assert_eq!(record["width_tiles"], 5);
+    assert!(
+        record["why"]
+            .as_str()
+            .is_some_and(|why| why.contains("62 steps")),
+        "{record}"
+    );
+    let window = &march["windows"][0]["service"];
+    assert_eq!(window["choke"]["crossed"], 800);
+    assert!(window.get("battle").is_none(), "one army: no battle");
+    let natural = json(
+        value!({}),
+        &[played(&NATURAL, &[("early", 1_000, 3_000)], 2)],
+        "t",
+    );
+    assert!(
+        natural["scenarios"][0]["windows"][0]["service"]
+            .get("choke")
+            .is_none()
     );
 }
