@@ -3,24 +3,19 @@ use crate::{
     surface_mesh::terrain_texture_frame, web::Sprite,
 };
 use aoe_core::{Camera, ISO_TILE_HEIGHT, ISO_TILE_WIDTH, ScreenPoint, TileCoord};
+#[cfg(test)]
 use std::collections::BTreeMap;
 const MAX_VISIBLE_TERRAIN_SPRITES: usize = 4_096;
 pub(crate) const TERRAIN_NATIVE_DIAMOND_WIDTH: f32 = 96.0;
 const TERRAIN_NATIVE_DIAMOND_HEIGHT: f32 = 48.0;
 
-/// Builds a bounded layer of local terrain sprites beneath world entities.
-/// A map supplies semantic material groups; diagnostic worlds retain the
-/// existing grass fallback before any immutable chunks arrive.
-pub(crate) fn visible_terrain_frames(
+/// Builds the bounded grass backdrop before any immutable chunks arrive.
+pub(crate) fn diagnostic_terrain_frames(
     art: &GameArt,
-    terrain: &[SceneTerrain],
     camera: SceneCamera,
 ) -> Vec<(Sprite, GameFrame)> {
     if art.grass.is_empty() {
         return Vec::new();
-    }
-    if !terrain.is_empty() {
-        return visible_map_terrain_frames(art, terrain, camera);
     }
     let projection = Camera {
         center: camera.center,
@@ -35,9 +30,10 @@ pub(crate) fn visible_terrain_frames(
     }
     let ((min_cell_x, max_cell_x), (min_cell_y, max_cell_y)) =
         canonical_cell_bounds(bounds, cell_size);
-    let mut cells = BTreeMap::new();
-    for cell_y in min_cell_y..max_cell_y {
-        for cell_x in min_cell_x..max_cell_x {
+    let mut sprites = Vec::new();
+    // Enumerate unique cells in the same (x, y) order as the world layer ties.
+    for cell_x in min_cell_x..max_cell_x {
+        for cell_y in min_cell_y..max_cell_y {
             let position = cell_center((cell_x, cell_y), cell_size);
             let source_tile = [
                 cell_x.saturating_mul(cell_size),
@@ -46,7 +42,7 @@ pub(crate) fn visible_terrain_frames(
             let Some(frame) = terrain_texture_frame(art, 0, source_tile).map(terrain_frame) else {
                 continue;
             };
-            if let Some(candidate) = terrain_candidate(
+            let Some(candidate) = terrain_candidate(
                 &projection,
                 SceneTerrain {
                     appearance: None,
@@ -58,14 +54,20 @@ pub(crate) fn visible_terrain_frames(
                 frame,
                 camera,
                 cell_size,
-            ) {
-                cells.insert((cell_x, cell_y), candidate);
+            ) else {
+                continue;
+            };
+            if let Some(sprite) = terrain_sprite(&projection, candidate, camera) {
+                sprites.push(sprite);
             }
         }
     }
-    render_cells(&projection, camera, cell_size, cells)
+    sprites
 }
 
+// The map terrain itself is drawn by the surface mesh. The sprite-based map
+// reference remains available to terrain tests.
+#[cfg(test)]
 fn visible_map_terrain_frames(
     art: &GameArt,
     terrain: &[SceneTerrain],
@@ -88,6 +90,7 @@ fn visible_map_terrain_frames(
     render_cells(&projection, camera, cell_size, cells)
 }
 
+#[cfg(test)]
 fn map_cell_size(
     art: &GameArt,
     terrain: &[SceneTerrain],
@@ -112,6 +115,7 @@ fn map_cell_size(
     }
 }
 
+#[cfg(test)]
 fn map_candidate(
     art: &GameArt,
     sample: SceneTerrain,
@@ -131,6 +135,7 @@ fn map_candidate(
     terrain_candidate(projection, sample, frame, camera, 1)
 }
 
+#[cfg(test)]
 fn cell_key(position: [f64; 2], cell_size: i32) -> (i32, i32) {
     (
         (position[0].floor() as i32).div_euclid(cell_size),
@@ -178,6 +183,7 @@ fn cell_center((cell_x, cell_y): (i32, i32), cell_size: i32) -> [f64; 2] {
     ]
 }
 
+#[cfg(test)]
 fn render_cells(
     projection: &Camera,
     camera: SceneCamera,

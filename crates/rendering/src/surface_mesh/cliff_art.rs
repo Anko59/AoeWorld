@@ -44,7 +44,11 @@ fn native_crop(face: &ProjectedSurfaceTriangle, art: &GameArt) -> Option<AtlasAd
     }
     let parallel = usize::from(face.order < 4);
     let phase = face.tile[parallel].rem_euclid(DE_SPAN) as f32;
-    let span = wall_span(face, parallel).clamp(1.0, DE_SPAN as f32 - phase);
+    let remaining = DE_SPAN as f32 - phase;
+    // The phase leaves at least one tile. Use static clamp bounds so WASM
+    // does not link float formatting for an invalid-bounds panic.
+    let span = wall_span(face, parallel).clamp(1.0, DE_SPAN as f32);
+    let span = if span > remaining { remaining } else { span };
     // South edges run from east to west within each quad.
     let start = if parallel == 1 {
         phase

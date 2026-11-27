@@ -191,5 +191,19 @@ fn streamed_cliffs_split_an_opaque_de_interior_across_adjacent_wall_segments() {
             faces.map(|face| face.points.map(|p| p.world)),
             [wall, next].map(|face| face.points.map(|p| p.world))
         );
+
+        // A coarse face in the last tile of a negative-coordinate repeat
+        // must sample only the remaining tile of the authored interior.
+        let mut last = wall;
+        last.tile[axis] = -1;
+        for point in &mut last.points {
+            point.world[axis] += 3.0;
+        }
+        let mut wide = last;
+        wide.points[0].world[axis] -= 3.0;
+        let mut faces = [last, wide];
+        apply_terrain_textures(&mut faces, &art);
+        assert!(faces[0].texture_uv.is_some());
+        assert_eq!(faces[0].texture_uv, faces[1].texture_uv);
     }
 }
