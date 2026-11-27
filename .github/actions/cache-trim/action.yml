@@ -1,0 +1,22 @@
+name: Trim the Rust build caches
+description: >-
+  Keep only the newest dev cache of each Rust leg (`rust-shared-<leg>-…`) and delete the older
+  generations a lock-file or toolchain change leaves behind. They are never read again (a pull
+  request restores the newest entry of its leg) and, together with the Docker layers and the game
+  map package (`game-map-…`, never touched here), they would push the 10 GB repository cache over
+  its limit, which evicts the least recently used entry first.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        gh cache list --ref refs/heads/dev --key rust-shared- --limit 100 --json id,key,createdAt,sizeInBytes \
+          --jq 'group_by(.["key"] | split("-")[2]) | .[] | sort_by(.createdAt) | reverse | .[1:][] | "\(.id) \(.sizeInBytes) \(.["key"])"' |
+          while read -r id size name; do
+            echo "delete $name ($((size / 1048576)) MiB)"
+            gh cache delete "$id"
+          done
+        gh api "repos/$GITHUB_REPOSITORY/actions/cache/usage" --jq '"repository cache after trim: \(.active_caches_size_in_bytes / 1048576 | floor) MiB in \(.active_caches_count) caches"'

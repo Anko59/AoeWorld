@@ -1,6 +1,7 @@
 name: Save the Rust build cache
 description: >-
-  Save the cargo registry and target/ of a job leg, only on a push to dev (so
+  Save the cargo registry and target/ (without the workspace crates' own artifacts,
+  which every checkout invalidates) of a job leg, only on a push to dev (so
   pull requests never evict it) and only when the restore step did not find
   this exact key. Run it as the last step of a green job.
 inputs:
@@ -14,7 +15,12 @@ runs:
       if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' && env.RUST_CACHE_EXACT != 'true' }}
       shell: bash
       run: |
+        du -sh target .git/aoe-cargo/registry .git/aoe-cargo/git 2>/dev/null || true
         rm -rf target/*/incremental target/tmp .git/aoe-cargo/registry/src
+        # A checkout gives every source file a new mtime, so cargo rebuilds the workspace crates
+        # whatever the cache holds: save the dependencies only (their fingerprints do not use mtimes).
+        find target -depth \( -name 'aoe_*' -o -name 'libaoe_*' -o -name 'aoe-*' \) -exec rm -rf {} +
+        find target -path '*/deps/*' -type f -perm -u+x ! -name '*.*' -delete
         du -sh target .git/aoe-cargo/registry .git/aoe-cargo/git 2>/dev/null || true
     - if: ${{ steps.trim.outcome == 'success' }}
       uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae
