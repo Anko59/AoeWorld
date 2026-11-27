@@ -77,3 +77,31 @@ Only the requested page's records are serialized.
 completed ticks. See [performance](performance.md) for units, window semantics,
 phase overlap, memory limits and the client overlay. Existing `GET /match/stats`
 remains available for raw timing rows using the same secret.
+
+## Match telemetry
+
+The owner build started by `make dev` appends client and server records to
+`local-assets/map-packages/matches/<world_id>/telemetry.jsonl` while playing.
+Restarting or resuming a game starts a separate log for the new world.
+`GET /admin/match` includes `telemetry.world_id`, the latest completed server
+minute (or `null` before the first one), and recent client reports. The
+server minute counts completed ticks over wall time, including pauses, and
+records the last observed unit count and existing phase-time quantiles.
+`rust_ai` records the existing cumulative in-process AI counter summary.
+Hardware instruction counts are available there when the live AI counter
+is enabled by the host. Detailed simulation instruction counts come from
+the saved-replay profiler.
+
+Run the summary on an existing log from the repository root.
+
+```sh
+make match-telemetry MATCH_TELEMETRY=local-assets/map-packages/matches/WORLD_ID/telemetry.jsonl
+```
+
+The command prints JSON for each ten-minute window on the match clock.
+It divides completed ticks by observed server seconds and uses the last
+server unit count. It assigns browser reports by server receipt time and
+pools their histograms separately for still and panning intervals. Pooled p99
+uses the nearest-rank histogram bucket's upper edge, capped by the observed
+maximum. Maxima and long-frame counts remain exact. A missing server sample
+or empty client group produces null values for its rate or percentiles.

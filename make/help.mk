@@ -102,6 +102,7 @@ help:
 	@echo '  make perf-smoke      Run synthetic smoke workload with real protocol clients'
 	@echo '  make perf-late-game-instructions  Count eight complete late-game ticks (Callgrind)'
 	@echo '  make perf-late-game Run three generated 100-seat/14k-unit phase profiles'
+	@echo '  make match-telemetry MATCH_TELEMETRY=<file>  Summarize a match in ten-minute windows'
 	@echo '  make perf-ci         Run target workloads and required comparisons'
 	@echo '  make perf-full       Add population and sparse-world scaling workloads'
 	@echo '  make perf-pressure   Schedule independent network offers and camera changes'

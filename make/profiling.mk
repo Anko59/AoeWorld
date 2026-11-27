@@ -1,3 +1,10 @@
+# Match telemetry stays outside Git. Mount just the chosen input as read-only.
+.PHONY: match-telemetry
+MATCH_TELEMETRY_INPUT = $(if $(MATCH_TELEMETRY),$(shell realpath -e -- $(call MOUNT_QUOTE,$(MATCH_TELEMETRY))))
+match-telemetry:
+	$(if $(strip $(MATCH_TELEMETRY_INPUT)),,$(error set MATCH_TELEMETRY to a match telemetry.jsonl file))
+	@$(subst $(TOOL_IMAGE),$(call BIND_MOUNT,$(MATCH_TELEMETRY_INPUT),/match-telemetry.jsonl,readonly) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo run --quiet --locked -p aoe-harness -- match-telemetry /match-telemetry.jsonl
+
 # Same army builder as perf-groups; instrument movement at tick 201, then whole ticks per stage
 # (instructions and cache-simulation LL misses, reports/perf/group-stages.json).
 .PHONY: perf-groups-instructions perf-groups-instructions-steps
