@@ -119,6 +119,7 @@ fn run_managers(ctx: &mut Context<'_>) {
     run(ctx, 2, |c| {
         ManagementManager::default().lead(c, &CombatManager::default())
     });
+    run(ctx, 4, crate::play::relics::step);
     run(ctx, 2, military::rally);
     run(ctx, 2, |c| ScoutManager::default().step(c));
     run(ctx, 1, constructor::fund_market);

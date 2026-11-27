@@ -2,6 +2,17 @@
 use super::super::Graphic;
 pub(super) const GRAPHICS: &[(u32, Graphic)] = &[
     (
+        203162,
+        Graphic {
+            stem: "dat_3162",
+            cells: 960,
+            seconds: f32::from_bits(1015580809),
+            replay_delay: f32::from_bits(0),
+            angles: 16,
+            stride: 60,
+        },
+    ),
+    (
         203165,
         Graphic {
             stem: "dat_3165",
@@ -123,6 +134,28 @@ pub(super) const GRAPHICS: &[(u32, Graphic)] = &[
         },
     ),
     (
+        203370,
+        Graphic {
+            stem: "dat_3370",
+            cells: 961,
+            seconds: f32::from_bits(1028443341),
+            replay_delay: f32::from_bits(0),
+            angles: 16,
+            stride: 60,
+        },
+    ),
+    (
+        203374,
+        Graphic {
+            stem: "dat_3374",
+            cells: 961,
+            seconds: f32::from_bits(1013455695),
+            replay_delay: f32::from_bits(0),
+            angles: 16,
+            stride: 60,
+        },
+    ),
+    (
         203375,
         Graphic {
             stem: "dat_3375",
@@ -230,39 +263,6 @@ pub(super) const GRAPHICS: &[(u32, Graphic)] = &[
             replay_delay: f32::from_bits(0),
             angles: 16,
             stride: 60,
-        },
-    ),
-    (
-        203417,
-        Graphic {
-            stem: "dat_3417",
-            cells: 961,
-            seconds: f32::from_bits(1018265163),
-            replay_delay: f32::from_bits(0),
-            angles: 16,
-            stride: 60,
-        },
-    ),
-    (
-        203443,
-        Graphic {
-            stem: "dat_3443",
-            cells: 721,
-            seconds: f32::from_bits(1024565940),
-            replay_delay: f32::from_bits(0),
-            angles: 16,
-            stride: 45,
-        },
-    ),
-    (
-        203446,
-        Graphic {
-            stem: "dat_3446",
-            cells: 721,
-            seconds: f32::from_bits(1026057248),
-            replay_delay: f32::from_bits(0),
-            angles: 16,
-            stride: 45,
         },
     ),
 ];

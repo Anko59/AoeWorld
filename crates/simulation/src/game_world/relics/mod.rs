@@ -3,6 +3,7 @@ use aoe_core::{EntityId, PlayerId, TileCoord, WorldPosition};
 use aoe_map::{EnvironmentPageError, GroundMaterial, LandBucket, WaterKind};
 use std::collections::BTreeMap;
 
+mod demo;
 mod lifecycle;
 mod persistence;
 mod victory;

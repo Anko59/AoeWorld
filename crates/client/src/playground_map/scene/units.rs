@@ -107,6 +107,24 @@ pub(in super::super::super) fn units(
         .with_actor_frame(frame);
         units.push(unit);
     }
+    for relic in crate::playground::game::village::relics::ground(client) {
+        let position = relic.position.as_tiles();
+        let height = scene
+            .height(position)
+            .unwrap_or_else(|| elevation_at_world(client, position)) as f32;
+        if !visible(client, scene, position, height, false) {
+            continue;
+        }
+        units.push(aoe_rendering::SceneUnit {
+            kind: aoe_rendering::SceneUnitKind::actor(crate::unit_visuals::Pose::RelicStand as u16),
+            id: relic.id,
+            position,
+            visual: aoe_rendering::SceneUnitVisual::new(false)
+                .with_selected(client.selected.units.contains(&relic.id)),
+            facing: 0,
+            elevation_meters: height,
+        });
+    }
     // Index wall families once instead of scanning every wall for each neighbor.
     let walls: std::collections::HashSet<_> = client
         .village

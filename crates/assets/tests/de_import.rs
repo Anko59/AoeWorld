@@ -121,7 +121,7 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
         .collect();
     assert_eq!(
         native.len(),
-        177_782,
+        179_720,
         "every native unit/stone source cell is chunked"
     );
     assert_eq!(
@@ -183,7 +183,7 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
     assert_eq!((farm.width, farm.height), (32, 32));
     assert_eq!(
         report.entries.len(),
-        291,
+        294,
         "native sources include construction, ammunition and particle effects"
     );
     assert_eq!(
@@ -212,6 +212,9 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
         Pose::GeneralAttack,
         Pose::GeneralDie,
         Pose::GeneralDecay,
+        Pose::RelicStand,
+        Pose::MonkWithRelicStand,
+        Pose::MonkWithRelicWalk,
     ] {
         let source = SPRITES[pose as usize];
         assert_eq!(

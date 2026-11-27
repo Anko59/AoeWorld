@@ -366,6 +366,7 @@ fn menu_order(client: &mut Client, action: u32, code: u32, target: u32, lots: u3
         (9 | 10, _) => super::steward::general_command(client, action, code),
         (11, _) => construction::cancel(client),
         (12 | 13, _) => far_commerce_order(client, action, code as usize, target, lots),
+        (20, _) => super::relics::menu_action(client, code),
         (19, _) => super::production::here::order(client, code as usize, lots),
         (14, _) => {
             if let Some((id, position)) = client

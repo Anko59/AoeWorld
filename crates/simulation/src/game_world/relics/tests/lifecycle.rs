@@ -207,3 +207,24 @@ fn a_monastery_can_hold_ten_relics_and_ejecting_one_frees_a_place() {
     world.issue_garrison(OWNER, monk, monastery).unwrap();
     until(&mut world, |w| w.monastery_relic_count(monastery) == 10);
 }
+
+#[test]
+fn an_idle_carrier_resumes_healing_after_dropping_its_relic() {
+    let (mut world, monk, relic, _) = setup();
+    world.issue_pickup_relic(OWNER, monk, relic).unwrap();
+    until(&mut world, |w| w.carried_relic(monk) == Some(relic));
+    let ally = world
+        .spawn_kind(OWNER, UnitKind::Militia, at(56, 51))
+        .unwrap();
+    let ally_index = world.lookup[&ally];
+    world.units[ally_index].state.hp -= 5;
+    let wounded = world.unit(ally).unwrap().hp;
+
+    for _ in 0..2 * world.config().tick_hz {
+        world.advance();
+    }
+    assert_eq!(world.unit(ally).unwrap().hp, wounded);
+    world.issue_drop_relic(OWNER, monk).unwrap();
+    until(&mut world, |w| w.unit(ally).unwrap().hp > wounded);
+    assert_eq!(world.carried_relic(monk), None);
+}

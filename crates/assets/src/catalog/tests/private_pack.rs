@@ -330,7 +330,7 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
     let mut manifest = synthetic_manifest();
     assert_eq!(
         actor_frames(),
-        180_073,
+        182_009,
         // Complete current DAT unit cells, including neutral colour semantics.
         // +480 over the previous pin: only the new farmer seed sheet (203364); the
         // four carry and hunter-carry poses reuse already-selected graphics.
@@ -343,8 +343,9 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
         // gunpowder shot (three native effect poses, #916).
         // +4708 for the complete ammunition, particle, Fire Galley walk and
         // Catapult Galleon attack cells from the installed DAT and effects.
+        // The relic adds 16 direction cells and its two Monk poses add 960 each.
         // Pin the complete current selection independently of runtime residency.
-        "military, Castle, projectile and farmer cells included"
+        "all catalogued cells, including the relic and carrier poses"
     );
     assert_eq!(prove(&manifest).unwrap(), (1474, 115 + actor_frames()));
     let saved = manifest.frames[0].clone();

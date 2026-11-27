@@ -11,6 +11,14 @@ extern "C" {
     fn garrison_update(v: &[f64]);
 }
 
+fn admits(client: &Client, kind: BuildingKind, unit: &aoe_protocol::GameplayUnitState) -> bool {
+    if kind == BuildingKind::Monastery {
+        super::relics::carries(client, unit.id)
+    } else {
+        kind.admits(unit.kind)
+    }
+}
+
 pub(super) fn target(client: &Client, point: ScreenPoint) -> Option<&GameplayBuildingState> {
     if client.village.move_cursor {
         return None;
@@ -18,8 +26,10 @@ pub(super) fn target(client: &Client, point: ScreenPoint) -> Option<&GameplayBui
     let b = construction::target(client, point)?;
     (b.player == owner(client)
         && b.construction == ConstructionState::Complete
-        && (b.hp == b.max_hp || client.village.garrison_cursor)
-        && super::selection::owned_units(client).any(|unit| b.kind.admits(unit.kind)))
+        && (b.hp == b.max_hp
+            || client.village.garrison_cursor
+            || b.kind == BuildingKind::Monastery)
+        && super::selection::owned_units(client).any(|unit| admits(client, b.kind, unit)))
     .then_some(b)
 }
 
@@ -29,7 +39,7 @@ pub(in super::super) fn interact(client: &mut Client, point: ScreenPoint) -> boo
     };
     let (building_id, kind) = (b.id, b.kind);
     let ids: Vec<_> = super::selection::owned_units(client)
-        .filter(|unit| kind.admits(unit.kind))
+        .filter(|unit| admits(client, kind, unit))
         .map(|unit| unit.id)
         .collect();
     for entity_ids in ids.chunks(aoe_core::MAX_FORMATION_MEMBERS) {

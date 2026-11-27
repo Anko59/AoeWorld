@@ -50,6 +50,7 @@ export function actorLabels(icon) {
     if (kinds.get(node) !== actor.load[0]) {
       node.innerHTML = icon(actor.load[0]); node.append(document.createTextNode(''));
       kinds.set(node, actor.load[0]);
+      set(node, 'title', actor.load[0] === 'relic' ? 'Carrying a relic' : '');
     }
     set(node.lastChild, 'textContent', actor.load[1]);
     style(node, 'left', `${actor.x + 12}px`); style(node, 'top', `${actor.y - 36}px`);

@@ -265,7 +265,9 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     ..
                 } = &mut *client;
                 selected.units.retain(|id| {
-                    units.contains_key(id) || village.animals.iter().any(|a| a.id == *id)
+                    units.contains_key(id)
+                        || village.animals.iter().any(|a| a.id == *id)
+                        || village.knows_ground_relic(*id)
                 });
             }
             Ok(GameplayServerMessage::Snapshot { .. }) => {}
@@ -375,6 +377,9 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     client.rendered_frame.invalidate();
                 }
             }
+            Ok(GameplayServerMessage::Relics(view)) if view.revision == client.revision => {
+                village::relics::sync(&mut client, view);
+            }
             Ok(GameplayServerMessage::WildlifeState {
                 revision,
                 tick,
@@ -401,7 +406,9 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                         ..
                     } = &mut *client;
                     selected.units.retain(|id| {
-                        units.contains_key(id) || village.animals.iter().any(|a| a.id == *id)
+                        units.contains_key(id)
+                            || village.animals.iter().any(|a| a.id == *id)
+                            || village.knows_ground_relic(*id)
                     });
                 }
             }

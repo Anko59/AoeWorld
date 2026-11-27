@@ -223,3 +223,16 @@ fn pose_indices_above_255_are_not_truncated_to_a_byte() {
         assert_ne!(SceneUnitKind::actor(256 + n), SceneUnitKind::actor(n));
     }
 }
+
+#[wasm_bindgen_test]
+fn relic_and_carrier_poses_have_distinct_native_render_slots() {
+    for (slot, kind) in [
+        (366, SceneUnitKind::RelicStand),
+        (367, SceneUnitKind::MonkWithRelicStand),
+        (368, SceneUnitKind::MonkWithRelicWalk),
+    ] {
+        assert_ne!(kind, SceneUnitKind::MonkStand);
+        assert_eq!(SceneUnitKind::actor(slot), kind);
+        assert_eq!(kind.actor_slot(), Some(usize::from(slot)));
+    }
+}

@@ -58,6 +58,9 @@ test("AI opponents: loading shows village and seat counts, then opens the game",
   await expect(opponents).toBeEnabled();
   await expect(opponents).toHaveValue("7");
   await opponents.fill("3");
+  const victory = page.getByRole("checkbox", { name: /Relic victory/ });
+  await expect(victory).not.toBeChecked();
+  await victory.check();
   await page.getByRole("button", { name: "Start Game", exact: true }).click();
   await expect(page.locator("#loading-screen")).toBeVisible();
   await expect(page.locator("#loading-location")).toContainText(
@@ -72,7 +75,7 @@ test("AI opponents: loading shows village and seat counts, then opens the game",
     "1 / 3 AI players",
   );
   await expect(page.locator("#loading-cancel")).toBeEnabled();
-  expect(server.posted).toEqual([{ map_hash: hash, opponents: 3 }]);
+  expect(server.posted).toEqual([{ map_hash: hash, opponents: 3, relic_victory: true }]);
   // Ready hands over to the terrain wait; loading stays until it is playable.
   await expect(page.locator("#start-sequence")).toBeHidden({ timeout: 60_000 });
   await expect(page.locator("#minimap")).toHaveAttribute("data-map-hash", hash);

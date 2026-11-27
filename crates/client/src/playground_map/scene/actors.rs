@@ -43,6 +43,19 @@ pub(super) fn shown_pose(
         )
     };
     let at_rest = unit.moving && stalled(client, unit);
+    if unit.kind == aoe_protocol::UnitKind::Monk
+        && unit.hp > 0
+        && crate::playground::game::village::relics::carries(client, unit.id)
+    {
+        let mut shown = *unit;
+        shown.moving &= !at_rest;
+        let pose = if shown.moving {
+            visuals::Pose::MonkWithRelicWalk
+        } else {
+            visuals::Pose::MonkWithRelicStand
+        };
+        return (shown, pose);
+    }
     let mut shown = *unit;
     shown.moving &= !at_rest;
     (

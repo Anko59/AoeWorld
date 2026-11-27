@@ -99,6 +99,10 @@ progress::-webkit-progress-value { background:linear-gradient(90deg,#8b9b62,#dec
 #minimap.expanded #minimap-terrain { image-rendering:pixelated; }
 #game-notice { position:fixed; bottom:calc(var(--bottom) + 12px); left:20px; color:#f1deb4; padding:6px 12px; background:#1a221be8; border-left:3px solid #bcaa70; z-index:2; max-width:calc(100% - 40px); font-size:12px; }
 #game-notice.connected { opacity:0; pointer-events:none; }
+#relic-victory { position:fixed; z-index:2; top:64px; left:50%; transform:translateX(-50%); padding:6px 12px; color:#fff2c6; background:#1a221bf0; border:1px solid #bcaa70; font-variant-numeric:tabular-nums; pointer-events:none; }
+#relic-status { color:#e7ca8b; font-size:12px; }
+#drop-relic, #eject-relic { margin-top:4px; padding:2px 7px; font-size:11px; }
+#minimap-relics { pointer-events:none; }
 #game-error { position:fixed; top:calc(var(--top) + 12px); left:20px; right:20px; width:fit-content; max-width:calc(100% - 40px); color:#fff1dd; background:#651e1ef2; border:1px solid #d9a162; padding:12px 16px; z-index:10; }
 #game-error[hidden] { display:none; }
 #game-error a { color:#ffe2a0; text-decoration:underline; white-space:nowrap; }

@@ -28,6 +28,9 @@ impl View for World {
     fn economy(&self) -> Option<Economy> {
         World::economy(self).map(Economy::from)
     }
+    fn relics(&self) -> Option<&aoe_sdk::RelicView> {
+        World::relics(self)
+    }
     fn my_units(&self) -> Vec<Unit> {
         World::my_units(self, None)
             .into_iter()

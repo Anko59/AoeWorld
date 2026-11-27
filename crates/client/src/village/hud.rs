@@ -11,6 +11,7 @@ extern "C" {
 }
 
 const BUILDING_OFFSET: usize = UnitKind::ALL.len();
+const RELIC_KIND: usize = ANIMAL_OFFSET + aoe_protocol::AnimalKind::Wolf as usize + 1;
 const ANIMAL_OFFSET: usize = BUILDING_OFFSET + BuildingKind::ALL.len();
 
 #[wasm_bindgen(
@@ -220,7 +221,11 @@ pub(in super::super) fn update(client: &Client) {
                 Some(aoe_protocol::NativeAction::TrebuchetTransform(_)) => 19.0,
                 _ => unit.task as u8 as f64,
             },
-            resource.map_or(4.0, |kind| kind as u8 as f64),
+            if unit.kind == UnitKind::Monk && super::relics::carries(client, unit.id) {
+                5.0
+            } else {
+                resource.map_or(4.0, |kind| kind as u8 as f64)
+            },
             f64::from(unit.carried.map_or(0, |load| load.amount)),
             f64::from(unit.hp),
             f64::from(unit.max_hp),
@@ -317,6 +322,31 @@ pub(in super::super) fn update(client: &Client) {
                 .map_or(0.0, |p| rendered_colour(client, p, owner)),
         ]);
     }
+    for relic in super::relics::ground(client) {
+        let selected = client.selected.units.contains(&relic.id);
+        if overview && !selected {
+            continue;
+        }
+        let Some([x, y]) = screen(relic.position.as_tiles(), selected) else {
+            continue;
+        };
+        if !crate::hud_visibility::visible([x, y], y, viewport, selected) {
+            continue;
+        }
+        let mut actor = [0.0; 19];
+        actor[..6].copy_from_slice(&[
+            f64::from(relic.id.0),
+            RELIC_KIND as f64,
+            x,
+            y,
+            flag(selected),
+            13.0,
+        ]);
+        actor[13] = y;
+        actor[16] = -1.0;
+        values[12] += 1.0;
+        values.extend(actor);
+    }
     let group = client.selected.buildings.len() > 1;
     let mut producers: Vec<_> = client
         .village
@@ -352,6 +382,7 @@ pub(in super::super) fn update(client: &Client) {
     }
     let details = super::presentation::values(client);
     village_update(&values, map::feedback::connection_label(client), &details);
+    super::relics::update(client);
     super::building_panel::update(client, panel_scale);
     let activity = crate::kingdom_activity::summarize(&client.village.buildings, owner);
     let mut rows = Vec::with_capacity(activity.len() * 5);

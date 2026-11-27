@@ -8,16 +8,18 @@ import { initGeneralPanel } from '/interface/general-panel.js';
 import { updateDetails } from '/interface/details.js';
 import { initPause } from '/interface/pause.js';
 import { initSaveGame } from '/interface/saves.js';
+import { initRelics } from '/interface/relics/panel.js';
 import { initActivity } from '/interface/activity/panel.js';
 // Original interface artwork and DOM presentation. Authoritative values arrive
 // from Rust at most four times per second; no frame loop or gameplay rules here.
-const icon = name => packIcon('resources',name,name);
+const icon = name => name === 'relic' ? packIcon('units',285,'gold') : packIcon('resources',name,name);
 const byId = id => document.getElementById(id);
 const text = (id,value) => { const node = byId(id); if (node) set(node, 'textContent', String(value)); };
 
 export function initInterface() {
   initBuildings();
   initActivity();
+  initRelics();
   initSteward();
   initVassal();
   initGeneralPanel();
@@ -85,7 +87,10 @@ export function initInterface() {
       const [id,kind,x,y,selected,task,resource,amount,hp,maxHp,attack,melee,pierce,head,capacity,range,player,owned,colour]=values.subarray(at,at+19);
       const actorKind = actorKinds[kind];
       const taskName = actorKind === 'FishingShip' && tasks[task] === 'Farming' ? 'Fishing' : tasks[task];
-      state.actors.push({id,player,owned:!!owned,kind:actorKind,x,y,selected:!!selected,hp,maxHp,head,task:taskName,load:actorKind==='Villager' && amount?[resources[resource],amount]:null,garrison:owned&&buildingKinds.includes(actorKind)?capacity:0});
+      const load = actorKind === 'Monk' && resource === 5
+        ? ['relic', '']
+        : actorKind === 'Villager' && amount ? [resources[resource], amount] : null;
+      state.actors.push({id,player,owned:!!owned,kind:actorKind,x,y,selected:!!selected,hp,maxHp,head,task:taskName,load,garrison:owned&&buildingKinds.includes(actorKind)?capacity:0});
       if (selected) state.selected.push({id,player,owned:!!owned,colour,kind:actorKind,name:names[actorKind],task:taskName,resource:resources[resource],amount,hp,maxHp,attack,melee,pierce,capacity,range});
     }
     while (at < values.length) {

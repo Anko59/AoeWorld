@@ -92,6 +92,9 @@ body[data-start-state="game"] #playground { visibility: visible; }
 .coordinate-row label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; font: 13px Georgia, serif; }
 .coordinate-row label span { font-size: 11px; color: #665135; }
 .coordinate-row input, .coordinate-row select { display: block; width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid #92754b; border-radius: 0; background: #fbebca77; color: #322315; color-scheme: light; font: 14px Georgia, serif; }
+.victory-option { display:flex; align-items:center; gap:6px; margin-top:11px; font:13px Georgia,serif; }
+.victory-option input { accent-color:#76522b; }
+.victory-option span { color:#665135; font-size:11px; }
 #skirmish-estimate { display: block; border-top: 1px solid #72533350; padding-top: 11px; margin-top: 13px; font: 12px/1.6 Georgia, serif; min-height: 50px; }
 .setup-actions { display: flex; justify-content: space-between; align-items: center; gap: 22px; margin-top: 22px; padding-top: 17px; border-top: 1px solid #89623999; }
 #setup-status { flex: 1; color: #c7b395; font: 12px/1.4 Georgia, serif; margin: 0; text-align: right; }

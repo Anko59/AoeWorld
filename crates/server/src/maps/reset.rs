@@ -13,6 +13,14 @@ pub(crate) async fn reset(
     Query(options): Query<ResetOptions>,
 ) -> StatusCode {
     let service = match options.scenario.as_deref() {
+        Some("relics") => {
+            let Ok((world, monk)) =
+                aoe_simulation::GameWorld::relic_demo(state.diagnostic_scenario.seed)
+            else {
+                return StatusCode::INTERNAL_SERVER_ERROR;
+            };
+            GameplayService::from_world(world, monk, None, None)
+        }
         Some("defensive-volley") => {
             match GameplayService::volley_demo(state.diagnostic_scenario.seed) {
                 Ok(service) => service,
