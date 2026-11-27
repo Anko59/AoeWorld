@@ -1,6 +1,5 @@
 use super::*;
 use aoe_protocol::GameplayServerMessage;
-use js_sys::Uint8Array;
 use web_sys::{Event, MessageEvent};
 
 #[path = "network/tests.rs"]
@@ -35,7 +34,7 @@ fn incoming_bytes(data: &JsValue) -> Result<Vec<u8>, &'static str> {
     if buffer.byte_length() as usize > aoe_protocol::GAMEPLAY_MAX_MESSAGE {
         return Err("protocol frame too large; reconnect required");
     }
-    Ok(Uint8Array::new(buffer).to_vec())
+    Ok(js_sys::Uint8Array::new(buffer).to_vec())
 }
 
 fn send_bytes(socket: &WebSocket, bytes: &[u8]) -> Result<(), &'static str> {
