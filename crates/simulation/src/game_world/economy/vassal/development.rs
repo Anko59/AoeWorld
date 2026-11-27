@@ -120,22 +120,30 @@ impl GameWorld {
         let observed = work
             .open
             .iter()
-            .find(|(site, _)| {
-                self.economy.builders.assigned_count(*site) == 0
-                    && (self.foreign_foundation_blocker(*site)
-                        || self.building(*site).is_some_and(|b| {
-                            self.validate_foundation_reach(b.player, &[], b.footprint)
-                                == Err(EconomyError::Movement(crate::GameWorldError::Unreachable))
-                        }))
+            .filter(|(site, _)| self.economy.builders.assigned_count(*site) == 0)
+            .find_map(|&(site, job)| {
+                if self.foreign_foundation_blocker(site) {
+                    return Some((site, job.tile, false));
+                }
+                let b = self.building(site)?;
+                (self.validate_foundation_reach(b.player, &[], b.footprint)
+                    == Err(EconomyError::Movement(crate::GameWorldError::Unreachable)))
+                .then_some((site, job.tile, true))
             })
             .or_else(|| {
-                work.open.iter().find(|(id, _)| {
-                    previous.is_some_and(|(site, _, _)| site == *id)
-                        || self.economy.builders.assigned_count(*id) > 0
-                })
+                work.open
+                    .iter()
+                    .find(|(id, _)| {
+                        previous.is_some_and(|(site, _, _)| site == *id)
+                            || self.economy.builders.assigned_count(*id) > 0
+                    })
+                    .map(|&(id, job)| (id, job.tile, false))
             });
-        let Some((building, tile, done)) =
-            observed.and_then(|&(id, job)| self.building(id).map(|b| (id, job.tile, b.work_done)))
+        let Some((building, tile, unreachable, done)) =
+            observed.and_then(|(id, tile, unreachable)| {
+                self.building(id)
+                    .map(|b| (id, tile, unreachable, b.work_done))
+            })
         else {
             if let Some(domain) = self.economy.vassals.domains.get_mut(&id) {
                 domain.progress = None;
@@ -147,14 +155,17 @@ impl GameWorld {
         let Some(domain) = self.economy.vassals.domains.get_mut(&id) else {
             return;
         };
-        match domain.progress {
-            Some((site, work, since)) if site == building && work == done => {
-                if tick.saturating_sub(since) >= timeout && !domain.refused.contains_key(&tile) {
-                    domain.refused.insert(tile, tick + 600);
-                    domain.request_replan(tick + plan::REFUSED_REPLAN_TICKS);
-                }
-            }
-            _ => domain.progress = Some((building, done, tick)),
+        let since = previous
+            .filter(|&(site, work, _)| site == building && work == done)
+            .map_or(tick, |(_, _, since)| since);
+        domain.progress = Some((building, done, since));
+        // A disconnected site has already failed its reachability proof. An
+        // occupied or merely slow site can still clear during the grace period.
+        if (unreachable || tick.saturating_sub(since) >= timeout)
+            && !domain.refused.contains_key(&tile)
+        {
+            domain.refused.insert(tile, tick + 600);
+            domain.request_replan(tick + plan::REFUSED_REPLAN_TICKS);
         }
     }
 
@@ -171,6 +182,20 @@ impl GameWorld {
         if open >= PIPELINE {
             return;
         }
+        // Leave work beside crews already building a line. On completion
+        // they can take the next segment without crossing the domain again.
+        let extensions: BTreeSet<_> = work
+            .open
+            .iter()
+            .filter(|(building, job)| {
+                (job.kind.is_wall() || job.kind == BuildingKind::Road)
+                    && self.economy.builders.assigned_count(*building) > 0
+            })
+            .flat_map(|(_, job)| {
+                [(0, -1), (-1, 0), (1, 0), (0, 1)]
+                    .map(|(dx, dy)| (job.kind, TileCoord::new(job.tile.x + dx, job.tile.y + dy)))
+            })
+            .collect();
         // Heapify the domain's current deficits once. Only pop as much work
         // as this pipeline can use, including successors to refused sites.
         #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
@@ -178,6 +203,7 @@ impl GameWorld {
             focus: (bool, bool),
             threatened_tier: u8,
             new: bool,
+            separate_run: bool,
             cost_distance: u64,
             tier: u8,
             before_cursor: bool,
@@ -202,6 +228,7 @@ impl GameWorld {
                             focus: site.build_priority(focus),
                             threatened_tier: if threatened { site.tier } else { 0 },
                             new: !replacement,
+                            separate_run: !extensions.contains(&(site.kind, site.tile)),
                             cost_distance: distance
                                 + u64::from(site.kind.rules().build_seconds) * 4,
                             tier: site.tier,

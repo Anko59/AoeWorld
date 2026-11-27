@@ -320,6 +320,43 @@ fn one_development_visit_fills_the_paid_pipeline_with_separate_sites() {
 }
 
 #[test]
+fn the_paid_pipeline_extends_a_staffed_wall_run_before_opening_a_distant_one() {
+    let (mut w, v, _, worker) = pending_domain();
+    let player = PlayerId(0);
+    let staffed = TileCoord::new(110, 110);
+    let next = TileCoord::new(111, 110);
+    let other = TileCoord::new(96, 94);
+    let kind = BuildingKind::PalisadeWall;
+    w.issue_build_wall(player, &[worker], kind, staffed, staffed, false)
+        .unwrap();
+    let other_paid = (0..22)
+        .map(|x| {
+            w.insert_building(
+                player,
+                BuildingKind::Road,
+                TileRect::from_xywh(75 + x, 130, 1, 1),
+                false,
+            )
+            .unwrap()
+        })
+        .collect();
+    let domain = w.economy.vassals.domains.get_mut(&v).unwrap();
+    domain.pending = None;
+    domain.plan = vec![
+        Site::new(kind, staffed, 1),
+        Site::new(kind, next, 1),
+        Site::new(kind, other, 1),
+    ];
+    domain.paid = other_paid;
+    domain.development = true;
+
+    w.vassal_develop(v);
+
+    assert!(w.building_at_for(player, next).is_some());
+    assert!(w.building_at_for(player, other).is_none());
+}
+
+#[test]
 fn blocked_candidates_do_not_hide_valid_sites_after_the_first_thirty_two() {
     let (mut w, v, _, _) = pending_domain();
     let close = (0..38).map(|n| {
