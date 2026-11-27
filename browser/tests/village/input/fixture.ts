@@ -1,4 +1,5 @@
 import { expect, type Page, type WebSocketRoute } from "@playwright/test";
+import { test } from "../../../server.js";
 import { gameAssets } from "../../game-assets.js";
 import {
   militiaCombat,
@@ -246,9 +247,25 @@ export async function inputFixture(
   await page.goto(
     `${options.url ?? "/"}?play=1${options.query ?? ""}#x=8192.5&y=8192.5&zoom=.6&renderer=${preference}`,
   );
-  await expect(page.locator("#connection")).toHaveText("connected", {
-    timeout: 60_000,
-  });
+  try {
+    await expect(page.locator("#connection")).toHaveText("connected", {
+      timeout: 60_000,
+    });
+  } catch (error) {
+    // "Unavailable" means the client failed to start (a renderer or WASM error);
+    // the page says why in #unsupported, which Playwright's own message omits.
+    // Attach it and rethrow the same error: a new one would no longer be a named
+    // assertion failure, and so no longer eligible for the harness's one retry.
+    const why = await page
+      .locator("#unsupported")
+      .textContent({ timeout: 1_000 })
+      .catch(() => "unreadable");
+    await test.info().attach("client-start-error.txt", {
+      body: why ?? "",
+      contentType: "text/plain",
+    });
+    throw error;
+  }
   await expect(page.locator("#playground")).toHaveAttribute(
     "data-renderer",
     renderer,

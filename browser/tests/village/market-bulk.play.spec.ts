@@ -51,36 +51,80 @@ test("sell 100,000 food from the far Trade tab and watch the price recover", asy
   await page.locator("#build-menu").click();
   await expect(page.locator("#build-market")).toBeEnabled();
   await page.keyboard.press("d");
-  let placed = false;
+  // The preview is computed when the client draws a frame, a while after the
+  // pointer moved (two animation frames were too few: 16 of 30 repeats found no
+  // site). So each probe waits, up to a bound, for the attribute to turn true,
+  // and a click that places nothing (the attribute was a frame behind and the
+  // site is not valid) goes on to the next probe instead of ending the search.
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-order-mode",
+    "build",
+  );
+  const marketPlaced = () =>
+    expect
+      .poll(async () => (await actors(page)).some((a) => a.kind === "Market"), {
+        timeout: 1_500,
+        intervals: [100],
+      })
+      .toBe(true)
+      .then(
+        () => true,
+        () => false,
+      );
+  let placedAt: [number, number] | undefined;
   for (const y of [180, 260, 340, 420])
     for (const x of [150, 280, 410, 540, 670, 800, 930, 1060]) {
-      if (placed) break;
+      if (placedAt) break;
       await page.mouse.move(x, y);
-      await page.waitForTimeout(150);
-      if (
-        (await page.locator("#scene").getAttribute("data-placement-valid")) ===
-        "true"
-      ) {
-        await page.mouse.click(x, y);
-        placed = true;
-      }
+      const valid = await expect
+        .poll(
+          () => page.locator("#scene").getAttribute("data-placement-valid"),
+          { timeout: 400, intervals: [50] },
+        )
+        .toBe("true")
+        .then(
+          () => true,
+          () => false,
+        );
+      if (!valid) continue;
+      await page.mouse.click(x, y);
+      if (await marketPlaced()) placedAt = [x, y];
     }
-  expect(placed).toBe(true);
+  expect(placedAt).toBeDefined();
   await expect
     .poll(async () => (await actors(page)).some((a) => a.kind === "Market"), {
       timeout: 30_000,
     })
     .toBe(true);
+  // A Market is large and the first valid site can lie low on the screen: its
+  // centre then sits under the bottom panel (CI: centre y 520, panel from y 512)
+  // and a click there selects nothing. Click inside the footprint (about 30
+  // above and below its centre), no lower than the panel's top edge.
+  const clickable = (market: Actor): [number, number][] =>
+    [...new Set([0, -10, -20, -28].map((dy) => Math.min(market.y + dy, 500)))]
+      .filter((y) => y > 54)
+      .map((y): [number, number] => [market.x, y]);
   await expect
     .poll(
       async () => {
         const market = (await actors(page)).find((a) => a.kind === "Market");
-        if (market) await page.mouse.click(market.x, market.y);
+        for (const [x, y] of market ? clickable(market) : []) {
+          await page.mouse.click(x, y);
+          const name = await page.locator("#selection-name").textContent();
+          if (name === "Market") return name;
+        }
         return page.locator("#selection-name").textContent();
       },
       { timeout: 30_000 },
     )
     .toBe("Market");
+  await test.info().attach("placement.json", {
+    body: JSON.stringify({
+      placedAt,
+      market: (await actors(page)).find((a) => a.kind === "Market"),
+    }),
+    contentType: "application/json",
+  });
   await expect(page.locator("#building-status")).toContainText("Complete", {
     timeout: 60_000,
   });
