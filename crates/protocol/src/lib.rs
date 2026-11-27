@@ -5,7 +5,7 @@ pub use gameplay::MoveQueue;
 pub use gameplay::NativeAction;
 pub use gameplay::{AnimalKind, AnimalState, AnimalTask, MAX_ANIMALS};
 pub use gameplay::{CombatStance, FogState, Formation};
-pub use gameplay::{HoldingSpan, MAX_HOLDING_SPANS};
+pub use gameplay::{HoldingSpan, MAX_HOLDING_SPANS, MAX_OFFICE_ZONE_CHUNKS, OfficeZoneChunk};
 pub use gameplay::{ProjectileKind, ProjectileState};
 
 use aoe_core::{EntityId, PlayerId, Position, Region, Tick};

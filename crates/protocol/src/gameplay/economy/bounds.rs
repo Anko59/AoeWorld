@@ -57,3 +57,9 @@ pub(crate) fn bounded_holdings<'de, D: Deserializer<'de>>(
 ) -> Result<Vec<HoldingSpan>, D::Error> {
     bounded::<D, _, MAX_HOLDING_SPANS>(d)
 }
+
+pub(crate) fn bounded_office_zone<'de, D: Deserializer<'de>>(
+    d: D,
+) -> Result<Vec<super::super::OfficeZoneChunk>, D::Error> {
+    bounded::<D, _, { super::super::MAX_OFFICE_ZONE_CHUNKS }>(d)
+}

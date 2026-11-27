@@ -35,7 +35,10 @@ pub use projectiles::{ProjectileKind, ProjectileState};
 pub use resources::{MAX_RESOURCE_CACHE, MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
 pub use wildlife::*;
 
-pub const VERSION: u16 = 29;
+pub const VERSION: u16 = 31;
+pub const MAX_OFFICE_ZONE_CHUNKS: usize = 64;
+/// Coordinates in 32-tile chunks, then one row of x bits per local y.
+pub type OfficeZoneChunk = (TileCoord, [u32; 32]);
 /// One gameplay frame: room for 65,536 units alongside bounded buildings,
 /// training queues and other view state. This is a memory guard, not housing.
 pub const MAX_MESSAGE: usize = 16 * 1_048_576;
@@ -317,6 +320,16 @@ pub enum ServerMessage {
         #[serde(deserialize_with = "economy::bounded_holdings")]
         shapes: Vec<HoldingSpan>,
         complete: bool,
+    },
+    /// One part of an owner-only walking zone, ordered on the match socket.
+    /// A start replaces any unfinished transfer. An empty start and end removes it.
+    OfficeZone {
+        office: EntityId,
+        vassal: bool,
+        start: bool,
+        complete: bool,
+        #[serde(deserialize_with = "economy::bounded_office_zone")]
+        chunks: Vec<OfficeZoneChunk>,
     },
 }
 

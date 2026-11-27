@@ -147,6 +147,27 @@ fn walk<S: Sink>(message: &ServerMessage, sink: &mut S) {
             }
         }
 
+        ServerMessage::OfficeZone {
+            office,
+            start,
+            complete,
+            chunks,
+            ..
+        } => {
+            let range = 0..aoe_core::MAX_WORLD_DIMENSION_TILES / 32;
+            if office.0 == 0
+                || chunks.len() > MAX_OFFICE_ZONE_CHUNKS
+                || (chunks.is_empty() && !(*start && *complete))
+                || chunks.windows(2).any(|pair| pair[0].0 >= pair[1].0)
+                || chunks.iter().any(|(chunk, rows)| {
+                    !range.contains(&chunk.x)
+                        || !range.contains(&chunk.y)
+                        || rows.iter().all(|&row| row == 0)
+                })
+            {
+                whole(sink, "OfficeZone", "office_zone_in_range", Class::Economy);
+            }
+        }
         ServerMessage::MoveQueues {
             revision, queues, ..
         } => {
