@@ -120,6 +120,7 @@ pub(super) fn run(
             no_work_sleep,
         } => perf::late_game(check, instructions, !no_work_sleep)?,
         Command::PerfCi => perf::run("ci")?,
+        Command::MatchTelemetry { path } => crate::match_telemetry::run(&path)?,
         Command::PerfFull => perf::run("full")?,
         Command::PerfPressure => perf_pressure::run()?,
         Command::PerfStress => perf_stress::run()?,

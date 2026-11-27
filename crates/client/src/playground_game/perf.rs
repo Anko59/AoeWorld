@@ -9,12 +9,15 @@ extern "C" {
 }
 
 #[wasm_bindgen(
-    inline_js = "export function perf_contour(effect, plain, contours, occluders, span, lost, restored) {
-    window.aoeTelemetry?.contour(effect, plain, contours, occluders, span, lost, restored);
+    inline_js = "export function perf_view(x, y) { return window.aoeTelemetry?.view?.(x, y) ?? false; }
+export function perf_publish(units, effect, plain, contours, occluders, span, lost, restored) {
+    window.aoeTelemetry?.publish?.(units, effect, plain, contours, occluders, span, lost, restored);
 }"
 )]
 extern "C" {
-    fn perf_contour(
+    pub(super) fn perf_view(x: f64, y: f64) -> bool;
+    fn perf_publish(
+        units: u32,
         effect: u32,
         plain: u32,
         contours: u32,
@@ -25,9 +28,16 @@ extern "C" {
     );
 }
 
-/// Contour observations of the last submitted frame; one cheap call per frame.
-pub(super) fn contour(stats: aoe_rendering::ContourStats) {
-    perf_contour(
+pub(super) fn publish(client: &super::Client) {
+    let units = client
+        .rendered_frame
+        .painted_units()
+        .iter()
+        .filter(|sprite| client.units.get(&sprite.id).is_some_and(|unit| unit.hp > 0))
+        .count();
+    let stats = client.renderer.contour_stats();
+    perf_publish(
+        units as u32,
         stats.effect_frames,
         stats.plain_frames,
         stats.contour_instances,

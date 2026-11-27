@@ -15,6 +15,7 @@ use std::{
 
 mod phases;
 mod summary;
+pub(crate) mod telemetry;
 
 /// Ticks kept (100 minutes at 20 Hz); older ones are dropped.
 pub(crate) const MAX_RECORDS: usize = 120_000;
@@ -94,6 +95,7 @@ pub(crate) struct TickRecord(u64, u64, u64, u64, u64, u64, u8, u64, phases::Micr
 
 #[derive(Default)]
 struct Inner {
+    world_id: u64,
     /// Sequence number of the oldest kept record.
     first: u64,
     records: VecDeque<TickRecord>,
@@ -120,7 +122,7 @@ impl TickStats {
     /// and fan-out), `late` how long after its schedule it started.
     pub(crate) fn record(
         &self,
-        tick: u64,
+        (world_id, tick): (u64, u64),
         total: Duration,
         late: Duration,
         period: Duration,
@@ -134,7 +136,9 @@ impl TickStats {
         };
         // A replacement match restarts its tick sequence. Keep the public
         // record cursor monotonic while discarding the previous game's window.
-        if inner.records.back().is_some_and(|record| record.0 >= tick) {
+        if inner.world_id != world_id || inner.records.back().is_some_and(|record| record.0 >= tick)
+        {
+            inner.world_id = world_id;
             inner.first += inner.records.len() as u64;
             inner.records.clear();
             inner.times.clear();
@@ -197,8 +201,14 @@ impl crate::AppState {
         let probe = gameplay.probe();
         probe.phase("observation_lock", observed.elapsed());
         let total = started.elapsed();
-        self.tick_stats
-            .record(tick, total, late, self.tick_period, &probe, units);
+        self.tick_stats.record(
+            (gameplay.world_id(), tick),
+            total,
+            late,
+            self.tick_period,
+            &probe,
+            units,
+        );
         if late > self.tick_period || total > self.tick_period {
             self.tick_deadline_misses.fetch_add(1, Ordering::Relaxed);
         }

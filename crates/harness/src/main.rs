@@ -21,6 +21,7 @@ mod hooks;
 mod input_json;
 mod jobs;
 mod ledger;
+mod match_telemetry;
 mod native;
 mod perf;
 mod perf_comment;

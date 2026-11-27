@@ -29,6 +29,7 @@ export function initStrategic(fog, actors) {
   initialScene.after(canvas, label);
   const context = canvas.getContext('2d', { alpha: false });
   let terrain = null, terrainRevision = 0, previous = '', redraws = 0, picks = [], pickRadius = 0;
+  let representedUnits = 0;
   let resources = [], resourceRevision = 0;
   const knownResources = [new Map(), new Map()], retiredResources = new Set();
   const refreshResources = () => {
@@ -139,8 +140,9 @@ export function initStrategic(fog, actors) {
     canvas.dataset.forests = String(forests);
     tokens.drawZones(context, layers.enabled, plane, zoom);
     tokens.draw(context, project, layers.enabled, scale, width, height, space, portrait);
-    picks = layers.enabled.armies ? drawUnits(context, unitGroups.groups(), project, width, height, scale,
-      space, settlements.place, portrait) : [];
+    const groups = layers.enabled.armies ? unitGroups.groups() : [];
+    ({ picks, representedUnits } = drawUnits(context, groups, project, width, height, scale,
+      space, settlements.place, portrait));
     settlements.chips(context, scale, portrait);
     const fishingGrounds = layers.enabled.resources
       ? resourceMarkers.drawFishingGrounds(context, project, scale, width, height, space) : 0;
@@ -192,7 +194,9 @@ export function initStrategic(fog, actors) {
       if (next === modelSignature) return;
       modelSignature = next; tokens.update(a, e, b, portraits); modelRevision++;
   }
-  return { frame, pick, present, navigation: reveal.navigation, cameraLink: reveal.link, interrupt: reveal.interrupt, cinematic: reveal.active, skipReveal: reveal.skip, entity: tokens.entity, update, cockpit: cockpit.update, production: cockpit.production, building: cockpit.building, commerce: cockpit.commerce,
+  return { frame, pick, present,
+    visibleUnits: () => canvas.hidden ? null : representedUnits,
+    navigation: reveal.navigation, cameraLink: reveal.link, interrupt: reveal.interrupt, cinematic: reveal.active, skipReveal: reveal.skip, entity: tokens.entity, update, cockpit: cockpit.update, production: cockpit.production, building: cockpit.building, commerce: cockpit.commerce,
     // All arrays are the bounded, authorized HUD stream. Aggregate jobs once
     // at HUD cadence, rather than retaining Rust map implementations in WASM.
     receive(a, castles, b, c, workers, orders) {

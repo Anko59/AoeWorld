@@ -252,3 +252,60 @@ test("unchanged near and far presentation avoids control and canvas mutations", 
   ).toBe(true);
   expect(samples.map((sample) => sample.writes)).toEqual([0, 0, 0, 0]);
 });
+
+test("strategic telemetry counts units folded into settlement chips", async ({
+  page,
+}) => {
+  await page.route("**/strategic-telemetry-test", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<canvas id="scene" style="width:1280px;height:720px"></canvas>',
+    }),
+  );
+  await page.goto("/strategic-telemetry-test");
+  const result = await page.evaluate(async () => {
+    // @ts-expect-error Served browser module.
+    const { initStrategic } = await import("/navigation/strategic.js");
+    // @ts-expect-error Served browser module.
+    const { initFrameTelemetry } = await import("/dev/frame-telemetry.js");
+    const strategic = initStrategic(
+      { disabled: true, canvas: document.createElement("canvas"), revision: 0 },
+      {
+        records: () =>
+          [
+            [24, 500, 500, 1, 0x4191f5],
+            [24, 500, 500, 1, 0x4191f5],
+            [26, 500, 500, 1, 0x4191f5],
+            [24, 550, 500, 1, 0x4191f5],
+            [24, 900, 500, 1, 0x4191f5],
+          ].flat(),
+        revision: () => 1,
+      },
+    );
+    strategic.settlements([10, 498, 498, 502, 502, 0, 0x4191f5, 1, -1, 1]);
+    Object.assign(window, { aoeNavigation: { strategic } });
+    const telemetry = initFrameTelemetry();
+    const sample = () => {
+      telemetry.publish(9, 0, 0, 0, 0, 0, 0, 0);
+      return telemetry.latest.units_in_view;
+    };
+    strategic.frame([1000, 1000, 500, 500, 1280, 720, 0.04, 1]);
+    const picks =
+      document.querySelector<HTMLElement>("#strategic-scene")?.dataset.picks;
+    const standalone: { count: number }[] = JSON.parse(picks ?? "[]");
+    const rendered = sample();
+    strategic.frame([1000, 1000, 500, 500, 1280, 720, 1, 0]);
+    const retained = sample();
+    strategic.present();
+    return {
+      rendered,
+      retained,
+      detailed: sample(),
+      picks: standalone.map(({ count }) => count),
+    };
+  });
+  expect(result.picks).toEqual([1]);
+  expect(result.rendered).toBe(4);
+  expect(result.retained).toBe(4);
+  expect(result.detailed).toBe(9);
+});

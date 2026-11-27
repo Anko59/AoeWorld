@@ -130,6 +130,10 @@ enum Command {
         no_work_sleep: bool,
     },
     PerfCi,
+    /// Summarize a match telemetry JSONL in ten-minute windows.
+    MatchTelemetry {
+        path: PathBuf,
+    },
     PerfFull,
     PerfPressure,
     PerfStress,

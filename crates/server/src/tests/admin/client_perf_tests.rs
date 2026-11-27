@@ -14,7 +14,10 @@ async fn post(server: &Server, token: &str, body: Value) -> u16 {
 }
 
 fn report() -> Value {
-    json!({"frames":120, "frame_ms":[16.0,32.0,80.0],
+    json!({"sequence":[1, 0], "frames":120, "frame_ms":[16.0,32.0,80.0], "units_in_view":12,
+        "still": {"frames":120, "max_ms":80, "over_50_ms":1, "over_100_ms":0,
+            "histogram": [[16, 118], [32, 1], [80, 1]]},
+        "panning": {"frames":0, "max_ms":0, "over_50_ms":0, "over_100_ms":0, "histogram":[]},
         "stages_ms": {"update":[1.0,2.0,3.0], "interpolation":[0.0,1.0,2.0],
         "culling":[0.0,1.0,2.0], "terrain":[0.0,1.0,2.0],
         "sprites":[1.0,2.0,3.0], "ui":[0.0,1.0,2.0], "fog":[0.0,1.0,2.0]},
@@ -34,7 +37,9 @@ async fn authenticated_client_timings_are_bounded_rate_limited_and_visible_with_
         .unwrap()
         .token;
     let token: String = token.0.iter().map(|b| format!("{b:02x}")).collect();
-    let server = server(gameplay, true).await;
+    let directory = tempfile::tempdir().unwrap();
+    let world = format!("{:016x}", gameplay.world_id());
+    let server = server_with_match_data(gameplay, true, Some(directory.path().into())).await;
     assert_eq!(post(&server, "wrong", report()).await, 403);
     let mut invalid = report();
     invalid["frame_ms"] = json!([32, 16, 80]);
@@ -43,16 +48,42 @@ async fn authenticated_client_timings_are_bounded_rate_limited_and_visible_with_
     invalid["frames"] = json!(100_000);
     assert_eq!(post(&server, &token, invalid).await, 400);
     let mut invalid = report();
+    invalid["still"]["over_100_ms"] = json!(3);
+    assert_eq!(post(&server, &token, invalid).await, 400);
+    let mut invalid = report();
+    invalid["still"]["histogram"][0][1] = json!(119);
+    assert_eq!(post(&server, &token, invalid).await, 400);
+    let mut invalid = report();
     invalid["renderer"] = json!("x".repeat(5000));
     assert_eq!(post(&server, &token, invalid).await, 413);
     assert_eq!(post(&server, &token, report()).await, 204);
-    assert_eq!(post(&server, &token, report()).await, 429);
+    assert_eq!(post(&server, &token, report()).await, 409);
     let (status, body) = request(&server, "GET", "/admin/perf", Some(SECRET), "").await;
     assert_eq!(status, 200);
     assert_eq!(body["clients"].as_array().unwrap().len(), 1);
+    assert_eq!(body["clients"][0]["units_in_view"], 12);
     assert_eq!(body["clients"][0]["frame_ms"], json!([16.0, 32.0, 80.0]));
     assert_eq!(body["clients"][0]["contour"]["effect_frames"], 30);
     assert_eq!(body["clients"][0]["contour"]["context_lost"], 1);
+    let (status, match_data) = request(&server, "GET", "/admin/match", Some(SECRET), "").await;
+    assert_eq!(status, 200);
+    assert_eq!(match_data["telemetry"]["world_id"], world);
+    assert_eq!(match_data["telemetry"]["clients"][0]["units_in_view"], 12);
+    let path = directory
+        .path()
+        .join("matches")
+        .join(world)
+        .join("telemetry.jsonl");
+    let jsonl = std::fs::read_to_string(path).unwrap();
+    assert!(!jsonl.contains(&token));
+    let rows: Vec<Value> = jsonl
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["kind"], "client");
+    assert_eq!(rows[0]["report"]["sequence"], json!([1, 0]));
+    assert_eq!(rows[0]["report"]["frame_ms"], json!([16.0, 32.0, 80.0]));
     assert!(body.get("samples").is_some(), "tick summary retained");
     assert!(
         !body.to_string().contains(&token),

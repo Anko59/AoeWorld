@@ -109,7 +109,7 @@ pub fn frame_bench_names() -> String {
 pub fn frame_bench_scene_counts() -> Result<Vec<u32>, JsValue> {
     with_client(|client| {
         let mut counts = vec![0, 0, 0];
-        for sprite in client.rendered_frame.benchmark_units() {
+        for sprite in client.rendered_frame.painted_units() {
             if let Some(unit) = client.units.get(&sprite.id).filter(|unit| unit.hp > 0) {
                 counts[0] += 1;
                 counts[2] += u32::from(unit.task == aoe_protocol::UnitTask::Attacking);

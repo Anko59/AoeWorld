@@ -460,17 +460,17 @@ less often than frames. Browser clock resolution may round short sections to
 zero. Disabling the overlay stops its GPU queries; bounded CPU telemetry
 continues with the overlay hidden.
 
-Every five seconds, visible game pages POST a compact summary to `/client/perf`
-using their human resume token. `/admin/perf` includes up to 64 client summaries
-from the last 30 seconds, separate from server tick observations. Server logs
-include the observed server tick and the client report, never the token.
-Reports are untrusted client observations: bodies are capped at 4 KiB, samples
-at 2,048 frames, and each human token may report at most once per two seconds.
-At capacity, a new session waits for the oldest session's rate window to expire.
-`window.aoeTelemetry.latest` exposes the latest local summary. Quantile triples
-are p50/p95/max; histories retain stalls and have a fixed 2,048-frame bound.
-Hidden pages reset cadence sampling to exclude background-tab throttling.
-`contour` explains a missing unit silhouette: cumulative `effect_frames`/`plain_frames`
+Visible game pages collect one report a minute for `/client/perf`. They retry
+temporary failures in order and pause collection if eight reports are queued.
+`/admin/perf` lists each seat's latest report for two minutes. See [match
+telemetry](admin.md#match-telemetry) for admission and journal details.
+
+`window.aoeTelemetry.latest` gives cadence p50/p99/max and separate histograms
+for camera motion and holds. The histograms preserve exact counts over 50 ms
+and 100 ms. Beyond the 32,768-frame cadence ring, percentiles use the histogram
+(1 ms buckets through 100 ms, 25 ms through 1 second, max for overflow).
+Stage and draw counts retain p50/p95/max over 2,048 frames. Units come from the
+latest rendered view. Background-tab intervals are excluded. `contour` explains a missing unit silhouette: cumulative `effect_frames`/`plain_frames`
 since page load (silhouettes need effects on), the last frame's `eligible_instances`,
 `occluder_instances` and `depth_span`, and `context_lost`/`context_restored` (WebGL2).
 

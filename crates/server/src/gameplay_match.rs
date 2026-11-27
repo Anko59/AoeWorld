@@ -467,6 +467,8 @@ use seats::place_villages;
 #[cfg(test)]
 use seats::ring_tiles;
 pub(crate) use skirmish::Skirmish;
+pub use stats::telemetry::MatchTelemetryRow;
+pub(crate) use stats::telemetry::{MatchTelemetry, append_client};
 pub use stats::{TickProbe, TickStats};
 
 #[path = "gameplay_match/tests.rs"]

@@ -24,7 +24,7 @@ fn timing_records_include_and_drain_planner_work_per_tick() {
     let stats = TickStats::default();
     for tick in 1..=2 {
         stats.record(
-            tick,
+            (0, tick),
             Duration::from_micros(100),
             Duration::ZERO,
             Duration::from_millis(50),
@@ -52,7 +52,7 @@ fn detailed_phases_are_named_and_drained_between_ticks() {
     let stats = TickStats::default();
     for tick in 1..=2 {
         stats.record(
-            tick,
+            (0, tick),
             Duration::from_micros(100),
             Duration::ZERO,
             Duration::from_millis(50),
@@ -86,7 +86,7 @@ fn stopped_perf_window_expires_without_new_ticks_but_keeps_raw_history() {
     let probe = TickProbe::default();
     probe.phase("movement", Duration::from_micros(300));
     stats.record(
-        1,
+        (0, 1),
         Duration::from_millis(60),
         Duration::ZERO,
         Duration::from_millis(50),
@@ -117,7 +117,7 @@ fn replacing_match_clears_old_perf_window_and_preserves_cursor_and_misses() {
     for tick in [10, 11] {
         probe.phase("movement", Duration::from_micros(900));
         stats.record(
-            tick,
+            (0, tick),
             Duration::from_millis(60),
             Duration::ZERO,
             Duration::from_millis(50),
@@ -130,7 +130,7 @@ fn replacing_match_clears_old_perf_window_and_preserves_cursor_and_misses() {
     for tick in [0, 1] {
         probe.phase("movement", Duration::from_micros(7));
         stats.record(
-            tick,
+            (0, tick),
             Duration::from_micros(10),
             Duration::ZERO,
             Duration::from_millis(50),

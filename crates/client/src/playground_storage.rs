@@ -1,4 +1,12 @@
 use aoe_protocol::ResumeToken;
+use wasm_bindgen::prelude::wasm_bindgen;
+
+#[wasm_bindgen(
+    inline_js = "export function telemetry_session(token) { window.aoeTelemetry?.session?.(token); }"
+)]
+extern "C" {
+    fn telemetry_session(token: &str);
+}
 
 pub(super) fn hex(bytes: &[u8]) -> String {
     const DIGITS: &[u8; 16] = b"0123456789abcdef";
@@ -53,12 +61,14 @@ pub(super) fn stored_token() -> Option<ResumeToken> {
 }
 
 pub(super) fn save_token(token: Option<ResumeToken>) {
+    let token = token.map(token_hex);
+    telemetry_session(token.as_deref().unwrap_or_default());
     let Some(storage) = web_sys::window().and_then(|window| window.local_storage().ok()?) else {
         return;
     };
     match token {
         Some(token) => {
-            let _ = storage.set_item("aoeworld.resume-token", &token_hex(token));
+            let _ = storage.set_item("aoeworld.resume-token", &token);
         }
         None => {
             let _ = storage.remove_item("aoeworld.resume-token");

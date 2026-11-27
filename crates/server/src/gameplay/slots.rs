@@ -134,6 +134,7 @@ impl GameplayService {
             slots,
             next_session: Arc::new(AtomicU64::new(1)),
             world_id,
+            telemetry: Arc::default(),
             map_content_hash,
             map_metadata,
             resource_directory: None,

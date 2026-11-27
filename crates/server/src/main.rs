@@ -34,6 +34,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!(address = %config.bind, scenario = config.scenario.name, "AoeWorld listening");
     if !Config::arena_from_env() {
         tokio::spawn(state.clone().run_ticks());
+        tokio::spawn(state.clone().run_match_telemetry());
     }
     axum::serve(nodelay(listener), app(state))
         .with_graceful_shutdown(shutdown_signal())
