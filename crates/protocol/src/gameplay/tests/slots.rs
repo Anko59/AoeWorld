@@ -22,6 +22,52 @@ fn join_slot_is_an_appended_variant_with_a_pinned_wire_form() {
     assert_eq!(decode_client(&expected).unwrap(), join);
 }
 
+/// A seat's credential must not reach a log or a panic through `{:?}`, neither
+/// alone nor inside the messages that carry it. A derived Debug fails this.
+#[test]
+fn no_debug_output_holds_a_token() {
+    let token = ResumeToken(std::array::from_fn(|index| 201 + index as u8));
+    let hello = ClientMessage::Hello {
+        version: VERSION,
+        resume_token: Some(token),
+    };
+    let join = ClientMessage::JoinSlot {
+        version: VERSION,
+        token,
+    };
+    let welcome = ServerMessage::Welcome {
+        version: VERSION,
+        world_id: 11,
+        map_content_hash: None,
+        map_metadata: None,
+        width_tiles: 64,
+        height_tiles: 64,
+        coordinate_precision: 1_024,
+        tick_hz: 20,
+        primary_unit_id: EntityId(0),
+        resume_token: token,
+    };
+    let printed = [
+        format!("{token:?}"),
+        format!("{token:#?}"),
+        format!("{token:x?}"),
+        format!("{:?}", Some(token)),
+        format!("{hello:?}"),
+        format!("{join:?}"),
+        format!("{welcome:?}"),
+        format!("{welcome:#?}"),
+    ];
+    let hex: String = token.0.iter().map(|byte| format!("{byte:02x}")).collect();
+    for text in printed {
+        assert!(text.contains("ResumeToken"), "{text}");
+        assert!(!text.contains(&hex), "{text}");
+        assert!(!text.contains("[c9, ca"), "{text}");
+        for byte in token.0 {
+            assert!(!text.contains(&byte.to_string()), "{byte} in {text}");
+        }
+    }
+}
+
 #[test]
 fn large_selection_and_training_click_have_one_bounded_wire_form() {
     let ids: Vec<_> = (2..1002).map(EntityId).collect();

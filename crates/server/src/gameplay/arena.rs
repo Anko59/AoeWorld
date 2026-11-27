@@ -7,7 +7,7 @@
 //! lets every bot decide, then steps again. A run for one seed repeats exactly.
 //! Order budgets that guard a real-time server against floods are lifted, since
 //! wall-clock rates mean nothing when time is not real.
-use crate::{AppState, Config, gameplay_match::ADMIN_TOKEN_HEADER};
+use crate::{AppState, Config, gameplay_match::presents_secret};
 use axum::{Json, Router, extract::State, http::HeaderMap, http::StatusCode, routing::post};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -64,13 +64,7 @@ async fn step(
     headers: HeaderMap,
     Json(request): Json<StepRequest>,
 ) -> Result<Json<StepResponse>, (StatusCode, String)> {
-    let allowed = state.match_admin_token.as_deref().is_some_and(|secret| {
-        headers
-            .get(ADMIN_TOKEN_HEADER)
-            .and_then(|value| value.to_str().ok())
-            .is_some_and(|given| given == secret)
-    });
-    if !allowed {
+    if !presents_secret(&state, &headers) {
         return Err((
             StatusCode::FORBIDDEN,
             "needs the AOE_MATCH_TOKEN secret".to_owned(),

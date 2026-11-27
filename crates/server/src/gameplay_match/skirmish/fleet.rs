@@ -51,6 +51,7 @@ impl Launch {
         for group in tokens.chunks(BOTS_PER_HOST) {
             let mut child = Command::new(&self.command[0])
                 .args(self.arguments())
+                .env_remove(crate::Config::MATCH_TOKEN)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())

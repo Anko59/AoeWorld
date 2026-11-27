@@ -5,7 +5,7 @@ use aoe_protocol::{
 };
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{Sink, SinkExt, StreamExt};
-use std::time::Duration;
+use std::{fs::File, sync::OnceLock, time::Duration};
 use tokio::{sync::mpsc, time::timeout};
 
 mod degrade;
@@ -152,19 +152,44 @@ where
     Ok(())
 }
 
-/// An unpredictable 192-bit token. `world_id` and `counter` only diversify the
-/// hasher input; the secrecy comes from the per-hasher random keys.
+/// Fills `bytes` from the operating system's random source. It stays open from
+/// the first token on, which the server makes as it starts, so that running out
+/// of file descriptors later cannot stop it.
+fn fill_random(bytes: &mut [u8]) -> std::io::Result<()> {
+    use std::io::Read;
+    static SOURCE: OnceLock<File> = OnceLock::new();
+    let mut source = match SOURCE.get() {
+        Some(source) => source,
+        None => {
+            let opened = File::open("/dev/urandom")?;
+            SOURCE.get_or_init(|| opened)
+        }
+    };
+    source.read_exact(bytes)
+}
+
+/// An unpredictable 192-bit token. `world_id` and `counter` are no part of it:
+/// they say which one could not be made. No guessable one is made instead, the
+/// server ends.
 pub(super) fn make_token(world_id: u64, counter: u64) -> ResumeToken {
-    use std::hash::{BuildHasher, Hasher};
     let mut bytes = [0_u8; 24];
-    for (index, chunk) in bytes.chunks_mut(8).enumerate() {
-        let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
-        hasher.write_u64(world_id);
-        hasher.write_u64(counter);
-        hasher.write_u64(index as u64);
-        chunk.copy_from_slice(&hasher.finish().to_le_bytes());
+    if let Err(error) = fill_random(&mut bytes) {
+        tracing::error!(world_id, counter, %error, "no random source for tokens");
+        std::process::exit(1);
     }
     ResumeToken(bytes)
+}
+
+/// Whether two secrets are equal. Every byte is compared, so the time taken
+/// does not tell how much of a guess is right.
+pub(super) fn same_secret(a: &[u8], b: &[u8]) -> bool {
+    let difference = a.iter().zip(b).fold(0_u8, |all, (a, b)| all | (a ^ b));
+    std::hint::black_box(difference) == 0 && a.len() == b.len()
+}
+
+/// `same_secret` for tokens.
+pub(super) fn same_token(a: ResumeToken, b: ResumeToken) -> bool {
+    same_secret(&a.0, &b.0)
 }
 
 #[path = "gameplay_transport/tests.rs"]

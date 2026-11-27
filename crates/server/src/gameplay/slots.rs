@@ -212,7 +212,10 @@ impl GameplayService {
     ) -> Result<(u64, GameplayServerMessage), UnknownSlotToken> {
         let config = self.world.read().await.config();
         let mut sessions = self.sessions.lock().await;
-        let by_token = |token: ResumeToken| self.slots.iter().position(|s| s.token == token);
+        let by_token = |token: ResumeToken| {
+            let mut slots = self.slots.iter();
+            slots.position(|slot| gameplay_transport::same_token(slot.token, token))
+        };
         let slot_index = match access {
             Access::Join(token) => by_token(token).ok_or(UnknownSlotToken)?,
             Access::Hello(token) => token

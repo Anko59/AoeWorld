@@ -6,7 +6,7 @@
 //! person. They stop when the match is replaced, cancelled or quit, or when
 //! nobody has held the human seat for a while.
 use super::MAX_MATCH_SLOTS;
-use crate::{AppState, maps};
+use crate::{AppState, gameplay_transport::same_token, maps};
 use aoe_map::EnvironmentPageProvider;
 use aoe_protocol::ResumeToken;
 use axum::{Json, extract::State, http::HeaderMap, http::StatusCode};
@@ -203,15 +203,14 @@ pub(super) async fn authorize(
     };
     let token = maps::controller_token(headers).ok_or_else(refused)?;
     let gameplay = state.gameplay.read().await.clone();
-    {
+    let world = gameplay.world_id();
+    let starter = {
         let inner = state.skirmish.lock();
-        if inner.started_by == Some(token) && inner.starter_world == Some(gameplay.world_id()) {
-            return Ok(gameplay.world_id());
-        }
-    }
-    gameplay
-        .is_human_token(token)
-        .then_some(gameplay.world_id())
+        let starter = inner.started_by.is_some_and(|by| same_token(by, token));
+        starter && inner.starter_world == Some(world)
+    };
+    (starter || gameplay.is_human_token(token))
+        .then_some(world)
         .ok_or_else(refused)
 }
 
