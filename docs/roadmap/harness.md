@@ -2,6 +2,7 @@
 
 | item | asked | status | evidence | next step |
 | --- | --- | --- | --- | --- |
+| A better test run policy: pull requests that touch different parts of the code run different tests, so everything does not run all the time | 11-26 | IN FLIGHT `harness/ci-selection` | [CI selection](../ci-selection.md): the crate dependency graph decides the jobs, the unit scope and the static legs; `make ci-explain` and the `select` job summary say why | Ship it; then split the instruction kernels out of `perf-ci`, so a client change skips them, and let local `make ship` preflight follow the same rules |
 | Every owner handoff proven by a real-match playtest, with logged errors | 10-26, 10-30 x2 | PARTIAL | #586 shows the real-match playtest in the PR (advisory); #830 quality metrics; 11-15 build shipped with new content never played end to end | Content e2e in the build handoff DROPPED 11-20 (owner: "Sounds overkill"); keep the real-match playtest and quality metrics |
 | Simpler, faster tests; net-negative lines | 10-27, 11-13 x2 | PARTIAL | #845, #847, #799, #797 and the 10-27 wave (#582 to #604) | Keep deleting; no gate may block a justified behaviour change |
 | Release evidence job: coverage ran 60+ minutes and failed 90 dev runs | 11-13 | PARTIAL | #808, #818, #841 | Issue #956: split the coverage job and move it to a nightly (harness session) |

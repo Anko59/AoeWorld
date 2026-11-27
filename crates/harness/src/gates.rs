@@ -7,8 +7,10 @@ mod resource_limits;
 pub(crate) mod review;
 pub(crate) mod runner;
 pub(crate) mod scopes;
+pub(crate) mod select;
 pub(crate) mod worker;
 use registry::{Cadence, Registry};
+use select::{Graph, Rules, UnitScope};
 
 use serde::{Deserialize, Serialize};
 use std::{
@@ -113,6 +115,7 @@ fn local_links_exist(path: &Path) -> Result<(), Box<dyn Error>> {
 pub fn docs_check(root: &Path) -> Result<(), Box<dyn Error>> {
     flaky::Policy::load(root)?;
     let registry = Registry::load(root)?;
+    Rules::load(root, &registry)?;
     let expected = table(&registry);
     let actual = fs::read_to_string(root.join("docs/gates.md"))?;
     if actual != expected {
@@ -151,6 +154,11 @@ struct Selection {
     registry_hash: String,
     gates: Vec<String>,
     jobs: BTreeMap<String, bool>,
+    /// One sentence per job: "runs because ..." or "skipped because ...".
+    reasons: BTreeMap<String, String>,
+    /// The legs of the `static` job: `light` or `checks`, then `unit` when tests run.
+    static_parts: Vec<String>,
+    unit: UnitScope,
 }
 
 fn git_output(args: &[&str]) -> Result<String, Box<dyn Error>> {
@@ -176,14 +184,50 @@ fn changed_paths(base: &str) -> Result<Vec<String>, Box<dyn Error>> {
     paths::changed(Path::new("."), base)
 }
 
+/// The gates the selected jobs execute: the members of each selected job that the cadence
+/// runs, narrowed for the `static` job to the legs its manifest runs. A prerequisite that
+/// no selected job runs is vacuous: its inputs did not change.
+fn executed_gates(
+    registry: &Registry,
+    rules: &Rules,
+    cadence: Cadence,
+    decision: &select::Decision,
+) -> Result<Vec<String>, Box<dyn Error>> {
+    let leg = |gate: &str| match rules.part_of(gate) {
+        Some("checks") => decision.static_parts.iter().any(|p| p == "checks"),
+        Some("unit") => {
+            decision.static_parts.iter().any(|p| p == "unit")
+                && (gate != "perf-smoke" || decision.unit.perf_smoke)
+        }
+        _ => true,
+    };
+    let mut seeds = BTreeSet::new();
+    for (job, members) in &registry.jobs {
+        if decision.jobs.get(job) != Some(&true) {
+            continue;
+        }
+        for id in members {
+            let in_cadence = registry
+                .gates
+                .iter()
+                .any(|g| &g.id == id && g.cadences.contains(&cadence));
+            if in_cadence && (job != "static" || leg(id)) {
+                seeds.insert(id.clone());
+            }
+        }
+    }
+    registry.dependency_order(&seeds)
+}
+
 fn selection(
     registry: &Registry,
+    rules: &Rules,
+    graph: &Graph,
     revision: String,
     base: Option<String>,
     paths: Vec<String>,
     pull_request: bool,
 ) -> Result<Selection, Box<dyn Error>> {
-    let suites = classify(registry, &paths).suites;
     // A pull request runs the `pr` cadence even when its base cannot be
     // resolved; a push to dev or main runs `ci`, which adds the slow gates
     // that need not block a merge.
@@ -192,42 +236,28 @@ fn selection(
     } else {
         Cadence::Ci
     };
-    let plan = registry.plan(cadence, &suites)?;
-    // Dependency closure can include gates outside CI cadence. A manifest must
-    // never promise work that none of its selected jobs actually executes.
-    let executed: BTreeSet<_> = registry
-        .jobs
-        .iter()
-        .filter(|(job, _)| plan.jobs.get(*job) == Some(&true))
-        .flat_map(|(_, members)| members.iter())
-        .collect();
-    let uncovered: Vec<_> = plan
-        .gates
-        .iter()
-        .filter(|gate| !executed.contains(gate))
-        .cloned()
-        .collect();
-    if !uncovered.is_empty() {
-        return Err(format!(
-            "CI selection has gates without selected executing jobs: {}",
-            uncovered.join(", ")
-        )
-        .into());
-    }
+    let eligible = select::eligible(registry, cadence);
+    let decision = select::decide(rules, graph, registry, &eligible, &paths);
+    let gates = executed_gates(registry, rules, cadence, &decision)?;
     Ok(Selection {
-        version: 2,
+        version: 3,
         revision,
         requested_base: base.clone(),
         base,
         paths,
-        registry_hash: registry.fingerprint()?,
-        gates: plan.gates,
-        jobs: plan.jobs,
+        registry_hash: format!("{}+{}", registry.fingerprint()?, rules.fingerprint()?),
+        gates,
+        jobs: decision.jobs,
+        reasons: decision.reasons,
+        static_parts: decision.static_parts,
+        unit: decision.unit,
     })
 }
 
 fn current_selection(base: Option<&str>) -> Result<Selection, Box<dyn Error>> {
-    let registry = Registry::load(&repository_root()?)?;
+    let root = repository_root()?;
+    let registry = Registry::load(&root)?;
+    let rules = Rules::load(&root, &registry)?;
     let revision = git_output(&["rev-parse", "HEAD"])?;
     let requested_base = base.map(str::to_owned);
     let (base, paths) = match base {
@@ -242,7 +272,17 @@ fn current_selection(base: Option<&str>) -> Result<Selection, Box<dyn Error>> {
         },
         None => (None, Vec::new()),
     };
-    let mut manifest = selection(&registry, revision, base, paths, requested_base.is_some())?;
+    let sources = paths.iter().any(|path| rules.reads(path));
+    let graph = Graph::load(&root, &rules, sources)?;
+    let mut manifest = selection(
+        &registry,
+        &rules,
+        &graph,
+        revision,
+        base,
+        paths,
+        requested_base.is_some(),
+    )?;
     manifest.requested_base = requested_base;
     Ok(manifest)
 }
@@ -275,8 +315,52 @@ pub fn ci_select() -> Result<(), Box<dyn Error>> {
         for (job, selected) in &selection.jobs {
             writeln!(output, "{}={selected}", job.replace('-', "_"))?;
         }
+        writeln!(
+            output,
+            "static_parts={}",
+            serde_json::to_string(&selection.static_parts)?
+        )?;
+        writeln!(
+            output,
+            "unit_scope={}",
+            serde_json::to_string(&selection.unit)?
+        )?;
+    }
+    if let Some(path) = std::env::var_os("GITHUB_STEP_SUMMARY") {
+        let mut summary = OpenOptions::new().append(true).open(path)?;
+        write!(summary, "{}", explain(&selection, true))?;
     }
     println!("{json}");
+    Ok(())
+}
+
+fn explain(selection: &Selection, markdown: bool) -> String {
+    let render = if markdown {
+        select::markdown
+    } else {
+        select::text
+    };
+    render(
+        &selection.jobs,
+        &selection.reasons,
+        &selection.static_parts,
+        &selection.unit,
+    )
+}
+
+/// What CI will run for the current branch against `base`, job by job, and why.
+pub fn ci_explain(base: &str) -> Result<(), Box<dyn Error>> {
+    let selection = current_selection(Some(base))?;
+    println!(
+        "CI for {} against {} ({} changed paths); a push to dev or the nightly runs every job",
+        selection.revision,
+        selection.base.as_deref().unwrap_or("an unavailable base"),
+        selection.paths.len()
+    );
+    if !git_output(&["status", "--porcelain"])?.is_empty() {
+        println!("note: uncommitted changes are not counted; CI sees commits only");
+    }
+    print!("{}", explain(&selection, false));
     Ok(())
 }
 

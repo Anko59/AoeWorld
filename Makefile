@@ -28,6 +28,7 @@ GIT_COMMON := $(shell git rev-parse --path-format=absolute --git-common-dir 2>/d
 GIT_EXTERNAL := $(filter-out $(ROOT) $(ROOT)/%,$(GIT_COMMON))
 GIT_MOUNT := $(if $(GIT_EXTERNAL),$(call BIND_MOUNT,$(GIT_EXTERNAL),$(GIT_EXTERNAL)))
 GITHUB_OUTPUT_MOUNT := $(if $(GITHUB_OUTPUT),-v $(GITHUB_OUTPUT):$(GITHUB_OUTPUT))
+GITHUB_SUMMARY_MOUNT := $(if $(GITHUB_STEP_SUMMARY),-v $(GITHUB_STEP_SUMMARY):$(GITHUB_STEP_SUMMARY))
 HARNESS_CARGO_CACHE ?= $(GIT_COMMON)/aoe-cargo
 HARNESS_TARGET_CACHE ?= $(ROOT)/target
 # A single storage daemon serves client-side compilers across local worktrees.
@@ -37,7 +38,7 @@ COMPILE_CACHE_ENV := $(if $(COMPILE_CACHE_SOCKET),-e RUSTC_WRAPPER=/usr/local/bi
 COMPILE_CACHE_MOUNTS := $(call BIND_MOUNT,$(ROOT),/aoe-source) $(if $(filter-out $(ROOT)/target,$(HARNESS_TARGET_CACHE)),$(call BIND_MOUNT,$(HARNESS_TARGET_CACHE),/aoe-source/target)) $(if $(COMPILE_CACHE_SOCKET),$(call BIND_MOUNT,$(HARNESS_SCCACHE_DIR),/aoe-sccache,1) $(call BIND_MOUNT,$(HARNESS_SCCACHE_DIR),$(HARNESS_SCCACHE_DIR),1))
 # Expose the cache at its host path too: harness commands start sibling containers.
 CACHE_MOUNTS := $(if $(filter-out $(ROOT)/.cache/cargo,$(HARNESS_CARGO_CACHE)),$(call BIND_MOUNT,$(HARNESS_CARGO_CACHE),$(ROOT)/.cache/cargo) $(call BIND_MOUNT,$(HARNESS_CARGO_CACHE),$(HARNESS_CARGO_CACHE))) $(if $(filter-out $(ROOT)/target,$(HARNESS_TARGET_CACHE)),$(call BIND_MOUNT,$(HARNESS_TARGET_CACHE),$(ROOT)/target))
-JOB_ENV := $(COMPILE_CACHE_ENV) -e $(call MOUNT_QUOTE,HARNESS_SCCACHE_DIR=$(HARNESS_SCCACHE_DIR)) -e $(call MOUNT_QUOTE,HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE)) -e CARGO_INCREMENTAL -e CARGO_PROFILE_DEV_DEBUG -e CARGO_PROFILE_TEST_DEBUG -e GITHUB_ACTIONS -e CI -e AOE_DISK_FLOOR_GIB -e AOE_TEST_SELECT -e AOE_TEST_ALL -e AOE_LONG_JOB -e AOE_LONG_DIR -e AOE_LONG_SLOT -e AOE_LONG_SLOTS
+JOB_ENV := $(COMPILE_CACHE_ENV) -e $(call MOUNT_QUOTE,HARNESS_SCCACHE_DIR=$(HARNESS_SCCACHE_DIR)) -e $(call MOUNT_QUOTE,HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE)) -e CARGO_INCREMENTAL -e CARGO_PROFILE_DEV_DEBUG -e CARGO_PROFILE_TEST_DEBUG -e GITHUB_ACTIONS -e CI -e AOE_DISK_FLOOR_GIB -e AOE_TEST_SELECT -e AOE_TEST_ALL -e AOE_UNIT_SCOPE -e AOE_LONG_JOB -e AOE_LONG_DIR -e AOE_LONG_SLOT -e AOE_LONG_SLOTS
 RESOURCE_CAP := $(file <gates/container.args)
 # A snapshot's long-lock directory is the real repository's Git directory: mount it unless a mount covers it.
 LONG_DIR_COVERED := $(ROOT) $(ROOT)/% $(if $(GIT_EXTERNAL),$(GIT_EXTERNAL) $(GIT_EXTERNAL)/%)
@@ -105,6 +106,7 @@ DOCKER_RUN := \
 .PHONY: \
   tools \
   ci-select \
+  ci-explain \
   ci-check \
   ci-dispatch-status \
   e2e-evidence \
@@ -112,6 +114,7 @@ DOCKER_RUN := \
   pre-push \
   preflight \
   preflight-checks \
+  preflight-light \
   preflight-unit \
   build \
   build-wasm \
@@ -277,10 +280,14 @@ coverage-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- coverage-check
 
 ci-select:
-	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_BASE_SHA -e GITHUB_EVENT_NAME -e GITHUB_REF_NAME -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- ci-select
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_BASE_SHA -e GITHUB_EVENT_NAME -e GITHUB_REF_NAME -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) -e GITHUB_STEP_SUMMARY $(GITHUB_SUMMARY_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- ci-select
 
 e2e-evidence: tools
 	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- e2e-evidence
+
+# What CI will run for this branch against origin/dev (CI_BASE=<ref> for another base), and why.
+ci-explain:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- ci-explain --base $(or $(CI_BASE),origin/dev)
 
 ci-dispatch-status: orchestrator-tools
 	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GH_TOKEN -e JOB_STATUS -e GITHUB_ACTIONS -e GITHUB_EVENT_NAME -e GITHUB_REF_NAME -e GITHUB_SHA -e GITHUB_REPOSITORY -e GITHUB_RUN_ID -e GITHUB_SERVER_URL $(ROOT_MOUNTS) -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- ci-dispatch-status
@@ -325,6 +332,10 @@ pre-commit:
 preflight-checks: disk-precheck
 	@$(MAKE) --no-print-directory deny build-wasm
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- preflight --part checks
+
+# The checks that compile nothing: CI's leg for a change without Rust code (docs/ci-selection.md).
+preflight-light: disk-precheck
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- preflight --part light
 
 preflight-unit: resource-bootstrap
 	@$(RESOURCE_LONG) preflight-unit -- $(MAKE) --no-print-directory preflight-unit-admitted

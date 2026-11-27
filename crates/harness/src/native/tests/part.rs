@@ -20,10 +20,23 @@ fn the_two_halves_together_run_everything_all_runs() {
 }
 
 #[test]
-fn part_names_on_the_command_line_are_all_checks_and_unit() {
+fn part_names_on_the_command_line_are_all_checks_unit_and_light() {
     let names: Vec<String> = PreflightPart::value_variants()
         .iter()
         .map(|part| part.to_possible_value().unwrap().get_name().to_owned())
         .collect();
-    assert_eq!(names, ["all", "checks", "unit"]);
+    assert_eq!(names, ["all", "checks", "unit", "light"]);
+}
+
+#[test]
+fn light_runs_only_the_checks_that_compile_nothing() {
+    let light = PreflightPart::Light;
+    assert!(light.runs_light() && !light.runs_checks() && !light.runs_unit());
+    for part in [
+        PreflightPart::All,
+        PreflightPart::Checks,
+        PreflightPart::Unit,
+    ] {
+        assert!(!part.runs_light());
+    }
 }

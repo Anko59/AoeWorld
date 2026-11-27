@@ -99,11 +99,13 @@ pub(super) fn skip_compilers(snapshot: &Snapshot) -> Result<bool> {
     })
 }
 
-pub(super) fn run(source: &Path, kind: Kind) -> Result<()> {
+/// `compile` false skips clippy and the wasm check whatever the scope: the caller knows no
+/// Rust code changed (CI's `light` leg, chosen by `make ci-select`).
+pub(super) fn run(source: &Path, kind: Kind, compile: bool) -> Result<()> {
     let source = fs::canonicalize(source)?;
     let snapshot = phase("index/export", || Snapshot::prepare(&source, kind))?;
     let clippy = clippy_args(&snapshot.identity.kind, &snapshot.paths);
-    let skip = phase("scope selection", || skip_compilers(&snapshot))?;
+    let skip = !compile || phase("scope selection", || skip_compilers(&snapshot))?;
     let home = crate::process::cargo_cache::home(&source)?;
     let home = home.to_str().ok_or("non-UTF-8 Cargo cache path")?;
     let target = source.join("target");
@@ -149,7 +151,7 @@ pub(super) fn run(source: &Path, kind: Kind) -> Result<()> {
     checked("docs", &crate::gates::docs_check)?;
     if skip {
         println!(
-            "pre-commit: documentation-only additions and edits; compiler checks remain in CI"
+            "static checks: no Rust code changed (documentation-only edits or the CI light leg); compiler checks remain in CI"
         );
     } else {
         cargo("clippy native", &clippy, 600)?;

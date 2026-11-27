@@ -18,7 +18,7 @@ pub(super) fn run(
     let admitted = match &command {
         Command::Job { gate, .. } => gate.as_str(),
         Command::Preflight {
-            part: native::part::PreflightPart::Checks,
+            part: native::part::PreflightPart::Checks | native::part::PreflightPart::Light,
         } => "preflight-checks",
         _ => gate,
     };
@@ -72,6 +72,7 @@ pub(super) fn run(
         Command::Impact { base, paths } => gates::impact(base.as_deref(), paths)?,
         Command::CiSelect => gates::ci_select()?,
         Command::CiReport => crate::ci_report::run(Path::new("."))?,
+        Command::CiExplain { base } => gates::ci_explain(&base)?,
         Command::CiCheck => gates::ci_check()?,
         Command::CiDispatchStatus => gates::dispatch_status::run()?,
         Command::Fmt => format_commands(false)?,
@@ -156,13 +157,22 @@ pub(super) fn run(
             if part.runs_checks() {
                 gates::scopes::static_checks(Path::new("."), gates::scopes::Kind::Working)?;
             }
+            if part.runs_light() {
+                gates::scopes::static_checks_without_compilers(Path::new("."))?;
+            }
             if part.runs_unit() {
-                let select = native::affected::preflight_base();
+                // CI: the select job's manifest names the crates and says whether to smoke.
+                let scope = gates::select::scope_from_env(native::affected::real_env)?;
                 {
                     let _slot = jobs::guard::guard("test-unit", slots)?;
-                    native::test_unit(select)?;
+                    match &scope {
+                        Some(scope) => native::test_unit_selection(Some(scope.selection.clone()))?,
+                        None => native::test_unit(native::affected::preflight_base())?,
+                    }
                 }
-                run(Command::PerfSmoke, "perf-smoke", slots)?;
+                if scope.as_ref().is_none_or(|scope| scope.perf_smoke) {
+                    run(Command::PerfSmoke, "perf-smoke", slots)?;
+                }
             }
         }
         Command::HooksInstall => hooks::install(Path::new("."))?,

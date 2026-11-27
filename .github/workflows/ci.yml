@@ -28,10 +28,11 @@ jobs:
       fuzz_smoke: ${{ steps.manifest.outputs.fuzz_smoke }}
       qualification: ${{ steps.manifest.outputs.qualification }}
       exhaustive: ${{ steps.manifest.outputs.exhaustive }}
+      static_parts: ${{ steps.manifest.outputs.static_parts }}
+      unit_scope: ${{ steps.manifest.outputs.unit_scope }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          fetch-depth: 0
+        with: { fetch-depth: 0 }
       - uses: ./.github/actions/docker-setup
       - run: make tools
       - id: manifest
@@ -39,17 +40,14 @@ jobs:
           AOE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: make ci-select
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: ci-selection
-          path: reports/gates/selection.json
-          retention-days: 7
+        with: { name: ci-selection, path: reports/gates/selection.json, retention-days: 7 }
 
   static:
-    # `make preflight` as two parallel legs, both required (#388, docs/testing.md).
-    # Always selected and reading nothing from `select`, it does not wait for it.
+    # `make preflight` in the parallel legs `select` chose: checks and unit, or light for a change without Rust code (docs/ci-selection.md).
+    needs: select
     strategy:
       fail-fast: false
-      matrix: { part: [checks, unit] }
+      matrix: { part: '${{ fromJSON(needs.select.outputs.static_parts) }}' }
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -60,6 +58,7 @@ jobs:
         with: { leg: '${{ matrix.part }}' }
       - run: make bootstrap
       - run: make preflight-${{ matrix.part }}
+        env: { AOE_UNIT_SCOPE: '${{ needs.select.outputs.unit_scope }}' }
       - uses: ./.github/actions/rust-cache-save
         with: { leg: '${{ matrix.part }}' }
 
@@ -208,8 +207,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          fetch-depth: 0
+        with: { fetch-depth: 0 }
       - uses: ./.github/actions/docker-setup
       - run: make tools
       - name: Validate selection and selected jobs

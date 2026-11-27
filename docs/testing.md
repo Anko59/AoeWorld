@@ -81,8 +81,9 @@ transitively (`cargo metadata`). A file outside every crate (root `Cargo.toml`,
 workspace; a change under `web/`, `browser/` and `docs/` only runs no Rust unit
 tests and says so. The first and last lines of the run, and so the gate
 evidence, show `test-unit: N of M crates (changed: a, b; dependents: c, d)`.
-CI (`GITHUB_ACTIONS=true`), a plain `make test-unit` and `AOE_TEST_ALL=1`
-always run the full suite.
+CI selects for itself: a pull request's unit leg runs the crates the `select` job
+named (`AOE_UNIT_SCOPE`, [CI selection](ci-selection.md)); a push to dev, a plain
+`make test-unit` and `AOE_TEST_ALL=1` run the full suite.
 
 For local iteration, `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation
 AOE_NATIVE_TEST_FILTER='test(navy::)'` runs a Nextest filter inside the shared heavy
@@ -96,7 +97,9 @@ CI runs `make preflight` as two parallel legs of its `static` job (#388):
 `make preflight-checks` (`deny`, `build-wasm`, the static checks and clippy) and
 `make preflight-unit` (`test-unit`, then the smoke workload), the harness's
 `preflight --part checks|unit`; together they run every gate `make preflight`
-runs, and the job is green only when both legs are. Each leg restores the cargo
+runs, and the job is green only when both legs are. A change without Rust code
+runs one `make preflight-light` leg instead (`--part light`: format, structure,
+architecture and docs checks, no compile). Each leg restores the cargo
 registry and `target/` cache that the last push to `dev` saved (key: leg,
 `Cargo.lock`, toolchain pin and tools Dockerfile; restore-key: the leg alone);
 pull requests only read it, so they cannot evict it from the repository's 10 GB.
@@ -295,11 +298,15 @@ are outside the active quota and must be retained separately.
 
 
 Pull-request CI runs `make ci-select` against the base commit and records the
-selected jobs in `reports/gates/selection.json`. Unknown paths and missing
-base information select every job. The aggregate `required` check recomputes
-the selection at the checked-out revision and requires success for each selected
-job; only unselected jobs may be skipped. `make ci-check` validates that
-contract locally when supplied the manifest and job results.
+selected jobs in `reports/gates/selection.json`. A pull request runs only the
+jobs and unit tests its change can break, derived from the crate dependency
+graph ([CI selection](ci-selection.md)); unknown paths and missing base
+information select every job. The `select` job writes one "runs because" or
+"skipped because" line per job to its summary, and `make ci-explain` prints the
+same for the current branch against `origin/dev`. The aggregate `required` check
+recomputes the selection at the checked-out revision and requires success for
+each selected job; only unselected jobs may be skipped. `make ci-check` validates
+that contract locally when supplied the manifest and job results.
 
 **Sharded browser suite (#388).** The Playwright suite ran on one serial worker
 and took 19.5 of 20 minutes on the 4-core runner, behind `browser-check` and
@@ -407,11 +414,13 @@ for a conservative PR plan and `make gates-docs` to regenerate the registry tabl
 `make test-harness` exercises the Rust harness and CLI regressions in Docker.
 For red/green work, `make test-harness-focused HARNESS_TEST_FILTER=<substring>`
 selects matching test names; it does not replace the full gate.
-Unknown/protected paths and unavailable CI comparison bases select every job.
-The manifest retains the requested and resolved base, canonical registry hash,
-and dependency-first gate list; aggregate validation recomputes them all.
-Every CI gate must directly identify an executing job, even when Make also runs
-it as a prerequisite. Code changes now select parser fuzzing as additional work.
+Unknown paths and unavailable CI comparison bases select every job. CI's job
+selection reads `gates/ci-rules.json` and the crate graph, not the registry's
+suite globs (those still drive the edit, stop, commit and preflight cadences).
+The manifest retains the requested and resolved base, the registry and rules
+hashes, the jobs with their reasons, the static legs, the unit scope and the
+dependency-first list of gates the selected jobs execute; aggregate validation
+recomputes them all.
 
 Plans do not imply automatic edit/stop interception. The opt-in local `gate-run`
 executor is available; protected judging and CI migration remain subsequent work.

@@ -68,6 +68,11 @@ enum Command {
     CiSelect,
     /// Build `reports/ci/index.html` and `data.json`: the CI numbers over time, from the CI performance comments and the Actions API.
     CiReport,
+    /// What CI will run for this branch against a base, and why, job by job.
+    CiExplain {
+        #[arg(long, default_value = "origin/dev")]
+        base: String,
+    },
     CiCheck,
     CiDispatchStatus,
     Fmt,
