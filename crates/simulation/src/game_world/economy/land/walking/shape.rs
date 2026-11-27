@@ -1,40 +1,12 @@
 //! Materialize the current ownership raster only when a browser needs it.
 use super::{CHUNK_TILES, Walking, field, page};
 use crate::{GameWorld, OfficeZone, OfficeZoneChunk};
-use aoe_core::{EntityId, PlayerId, TileCoord};
+use aoe_core::{PlayerId, TileCoord};
 use std::collections::BTreeMap;
-use std::sync::{Arc, OnceLock};
-
-pub(super) type CachedShape = OnceLock<Arc<[OfficeZoneChunk]>>;
+use std::sync::Arc;
 
 impl Walking {
-    pub(super) fn prepare_shapes(&mut self, previous: Option<&Self>) {
-        let Some((old, cached)) = previous.and_then(|old| Some((old, old.shapes.get()?))) else {
-            return;
-        };
-        self.shapes = OnceLock::from(
-            self.offices()
-                .map(|id| {
-                    if !self.zone_changed(id)
-                        && let Some(index) = old.index(id)
-                    {
-                        return cached[index].clone();
-                    }
-                    OnceLock::new()
-                })
-                .collect::<Box<[_]>>(),
-        );
-    }
-
-    pub(super) fn shape(&self, id: EntityId) -> Option<Arc<[OfficeZoneChunk]>> {
-        let index = self.index(id)?;
-        let cache = self
-            .shapes
-            .get_or_init(|| self.sources.iter().map(|_| OnceLock::new()).collect());
-        Some(cache[index].get_or_init(|| self.build_shape(index)).clone())
-    }
-
-    fn build_shape(&self, index: usize) -> Arc<[OfficeZoneChunk]> {
+    pub(super) fn build_shape(&self, index: usize) -> Arc<[OfficeZoneChunk]> {
         let (office, _) = self.sources[index];
         let active = &self.fields[index].active;
         let bounds = active.field.terrain.bounds;

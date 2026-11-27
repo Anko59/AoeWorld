@@ -44,6 +44,7 @@ fn a_local_walking_edit_reuses_the_other_offices_field() {
         (EntityId(2), TileRect::from_xywh(230, 200, 4, 4)),
     ];
     let before = install(&mut world, player, &sources);
+    let prior_shape = published_shape(&world, player, sources[1].0);
     world.management_ground_changed(TileRect::from_xywh(21, 42, 1, 1));
     let after = refresh(&mut world, player).unwrap();
     assert!(!Arc::ptr_eq(
@@ -59,6 +60,10 @@ fn a_local_walking_edit_reuses_the_other_offices_field() {
         &after.fields[1].active.claims
     ));
     assert!(!after.zone_changed(sources[1].0));
+    assert!(Arc::ptr_eq(
+        &prior_shape,
+        &published_shape(&world, player, sources[1].0)
+    ));
 }
 
 #[test]
@@ -116,10 +121,11 @@ fn a_walking_zone_respects_walls_and_its_owners_gate() {
         .unwrap();
     let through_gate = refresh(&mut world, player).unwrap();
     assert!(through_gate.owns(sources[0].0, far));
+    let open_shape = published_shape(&world, player, sources[0].0);
     world.set_gate_locked(player, gate, true).unwrap();
     let locked = refresh(&mut world, player).unwrap();
     assert!(!locked.owns(EntityId(1000), far));
-    assert_ne!(locked.shape(sources[0].0), through_gate.shape(sources[0].0));
+    assert_ne!(published_shape(&world, player, sources[0].0), open_shape);
 }
 
 fn install(
@@ -455,7 +461,7 @@ fn published_shape_matches_walking_ownership_across_the_river() {
         player,
         &[(office, TileRect::from_xywh(20, 35, 4, 4))],
     );
-    let shape = before.shape(office).unwrap();
+    let shape = published_shape(&world, player, office);
     let contains = |tile: TileCoord| {
         shape.iter().any(|(chunk, rows)| {
             (chunk.x, chunk.y) == page(tile, CHUNK_TILES)
@@ -469,6 +475,21 @@ fn published_shape_matches_walking_ownership_across_the_river() {
         assert_eq!(contains(tile), before.owns(office, tile), "{tile:?}");
     }
     world.management_ground_changed(TileRect::from_xywh(21, 42, 1, 1));
-    let after = refresh(&mut world, player).unwrap();
-    assert!(Arc::ptr_eq(&shape, &after.shape(office).unwrap()));
+    refresh(&mut world, player).unwrap();
+    assert!(Arc::ptr_eq(
+        &shape,
+        &published_shape(&world, player, office)
+    ));
+}
+
+fn published_shape(
+    world: &GameWorld,
+    player: PlayerId,
+    office: EntityId,
+) -> Arc<[crate::OfficeZoneChunk]> {
+    world
+        .office_zones(player, false)
+        .find(|(id, _)| *id == office)
+        .unwrap()
+        .1
 }
