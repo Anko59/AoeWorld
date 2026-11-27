@@ -3,8 +3,9 @@
 //! memory at once for its owner and its watchers; for everyone else it stays as
 //! a ghost until a tile of its site is seen again.
 use super::{PlayerVision, TileVisibility, Vision};
-use crate::GameWorld;
+use crate::{GameBuilding, GameWorld};
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The players currently seeing a live building. The owner is always one of
@@ -68,10 +69,64 @@ impl PlayerVision {
 
     fn any_visible(&self, footprint: TileRect) -> bool {
         (footprint.min.y..footprint.max.y).any(|y| {
-            (footprint.min.x..footprint.max.x)
-                .any(|x| self.state(TileCoord::new(x, y)) == TileVisibility::Visible)
+            (footprint.min.x..footprint.max.x).any(|x| {
+                #[cfg(test)]
+                PROBES.with(|probes| probes.set(probes.get() + 1));
+                self.state(TileCoord::new(x, y)) == TileVisibility::Visible
+            })
         })
     }
+
+    /// This player's memory, with the `live` building in its place where the
+    /// player sees it and memory may be behind. A player is a watcher of every
+    /// building it sees, unless the building is `part_indexed`; a refresh left
+    /// each watcher's memory equal to the live building, and what changed one
+    /// since marked it dirty. `behind` names both kinds. Only work in progress
+    /// moves without a mark: it runs on a clock, and a tech rescales it.
+    fn known<'a>(
+        &self,
+        player: PlayerId,
+        behind: impl Iterator<Item = EntityId>,
+        live: impl Fn(EntityId) -> Option<Cow<'a, GameBuilding>>,
+    ) -> Vec<GameBuilding> {
+        let in_sight = |id: EntityId| {
+            live(id).filter(|b| {
+                b.player == player || (!b.is_unstarted() && self.any_visible(b.footprint))
+            })
+        };
+        let mut known = self
+            .remembered
+            .iter()
+            .map(|(id, last)| {
+                let working = !last.is_complete()
+                    || !last.training_queue.is_empty()
+                    || last.research.is_some();
+                let now = if working { in_sight(*id) } else { None };
+                now.map_or_else(|| last.clone(), Cow::into_owned)
+            })
+            .collect::<Vec<_>>();
+        let mut unremembered = Vec::new();
+        for building in behind.filter_map(in_sight) {
+            let building = building.into_owned();
+            match known.binary_search_by_key(&building.id, |b| b.id) {
+                Ok(at) => known[at] = building,
+                Err(_) => unremembered.push(building),
+            }
+        }
+        if !unremembered.is_empty() {
+            known.append(&mut unremembered);
+            known.sort_unstable_by_key(|b| b.id);
+            // One building may be behind for both reasons.
+            known.dedup_by_key(|b| b.id);
+        }
+        known
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Footprint tiles asked for sight on this thread.
+    static PROBES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 impl Vision {
@@ -98,6 +153,61 @@ impl Vision {
 }
 
 impl GameWorld {
+    /// Authoritative last observations, including buildings destroyed unseen.
+    pub fn known_buildings(&self, player: PlayerId) -> Vec<GameBuilding> {
+        if self.vision.disabled {
+            return self
+                .buildings()
+                .filter(|b| !b.is_unstarted() || b.player == player)
+                .map(Cow::into_owned)
+                .collect();
+        }
+        let known = self.known_from_memory(player);
+        #[cfg(test)]
+        assert_eq!(known, self.scan_known_buildings(player), "{player:?}");
+        known
+    }
+
+    /// `known_buildings` with fog on. The player's sight is all it may walk;
+    /// the world answers for one building at a time.
+    pub(crate) fn known_from_memory(&self, player: PlayerId) -> Vec<GameBuilding> {
+        let Some(vision) = self.vision.players.get(&player) else {
+            // An owner or a seat that ever saw a tile has one.
+            return Vec::new();
+        };
+        let behind = self
+            .vision
+            .dirty_buildings
+            .iter()
+            .chain(&self.vision.part_indexed)
+            .copied();
+        vision.known(player, behind, |id| self.building(id))
+    }
+
+    /// Footprint tiles asked for sight on this thread so far.
+    #[cfg(test)]
+    pub(crate) fn footprint_probes(&self) -> usize {
+        PROBES.with(std::cell::Cell::get)
+    }
+
+    /// Test oracle: what a scan of every building in the world finds known.
+    #[cfg(test)]
+    fn scan_known_buildings(&self, player: PlayerId) -> Vec<GameBuilding> {
+        let mut known = self
+            .vision
+            .players
+            .get(&player)
+            .map(|v| v.remembered.clone())
+            .unwrap_or_default();
+        for building in self.buildings().filter(|b| {
+            b.player == player
+                || (!b.is_unstarted() && self.building_visible_to(player, b.footprint))
+        }) {
+            known.insert(building.id, building.into_owned());
+        }
+        known.into_values().collect()
+    }
+
     pub(crate) fn building_at_for(&self, player: PlayerId, tile: TileCoord) -> Option<EntityId> {
         self.building_at(tile).or_else(|| {
             self.vision
@@ -154,15 +264,21 @@ impl GameWorld {
             }
         } else {
             self.combat.quiet.wake_area(footprint);
+            let mut unindexed = i64::from(footprint.width()) * i64::from(footprint.height());
             for tile in footprint_tiles(footprint, span) {
+                unindexed -= 1;
                 if let Some(old) = self.vision.building_at_tile.insert(tile, id)
                     && let Some(owner) = self.economy.buildings.get(&old).map(|b| b.player)
                 {
+                    self.vision.part_indexed.insert(old);
                     self.vision.building_chunks.remove_tile(tile, owner);
                     self.vision.building_cells.remove_cell_tile(tile, owner);
                 }
                 self.vision.building_chunks.add_tile(tile, player);
                 self.vision.building_cells.add_cell_tile(tile, player);
+            }
+            if unindexed > 0 {
+                self.vision.part_indexed.insert(id);
             }
         }
         if self.vision.disabled {
@@ -195,6 +311,7 @@ impl GameWorld {
         self.vision.building_chunks.clear();
         self.vision.building_cells.clear();
         self.vision.private_foundations.clear();
+        self.vision.part_indexed.clear();
         self.vision.building_watchers.clear();
         let buildings = self
             .buildings()
@@ -209,6 +326,7 @@ impl GameWorld {
     pub(crate) fn forget_building(&mut self, id: EntityId, player: PlayerId, footprint: TileRect) {
         self.combat.quiet.wake_area(footprint);
         self.vision.dirty_buildings.remove(&id);
+        self.vision.part_indexed.remove(&id);
         for y in footprint.min.y..footprint.max.y {
             for x in footprint.min.x..footprint.max.x {
                 let tile = TileCoord::new(x, y);

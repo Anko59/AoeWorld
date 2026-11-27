@@ -1,9 +1,11 @@
 //! The state stream each session receives: boundaries follow snapshots and
 //! nothing a viewer cannot see is sent.
 use super::scenario::{SessionLog, run, run_with};
-use aoe_core::PlayerId;
+use crate::gameplay::economy;
+use aoe_core::{EntityId, PlayerId};
 use aoe_protocol::{FogState, GameplayServerMessage, encode_gameplay_server};
-use aoe_simulation::{GameWorld, TileVisibility};
+use aoe_simulation::{GameBuilding, GameWorld, TileVisibility};
+use std::collections::BTreeMap;
 
 /// FNV-1a over every encoded message, in order; `(messages, digest)` per session.
 /// A fog view with the same content the client already holds is not a
@@ -148,6 +150,40 @@ async fn a_session_is_never_sent_what_its_player_cannot_see() {
     })
     .await;
     assert!(checked > 1_000, "the scenario sent {checked} messages");
+}
+
+/// What a scan of the whole world finds `viewer` knows, through the public
+/// queries. The comparison inside `known_buildings` exists only in
+/// aoe-simulation's own unit tests; here it is built as the server runs it.
+fn scan_known_buildings(world: &GameWorld, viewer: PlayerId) -> BTreeMap<EntityId, GameBuilding> {
+    let mut known = (0..world.entity_id_bound() as u32)
+        .map(EntityId)
+        .filter_map(|id| Some((id, world.remembered_building(viewer, id)?.clone())))
+        .collect::<BTreeMap<_, _>>();
+    for building in world.buildings() {
+        if world.building_entity_visible_to(viewer, building.id) {
+            known.insert(building.id, building.into_owned());
+        }
+    }
+    known
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_session_rebuilds_from_the_buildings_a_scan_of_the_world_finds() {
+    let mut foreign = 0;
+    run(400, &mut |world, viewer, _| {
+        assert!(!world.fog_disabled());
+        let scanned = scan_known_buildings(world, viewer);
+        foreign += scanned.values().filter(|b| b.player != viewer).count();
+        let wire = scanned
+            .iter()
+            .map(|(id, b)| (*id, economy::wire_building_state(b, Some(viewer))))
+            .collect::<BTreeMap<_, _>>();
+        assert_eq!(economy::buildings(world, viewer), wire);
+        assert!(world.known_buildings(viewer).iter().eq(scanned.values()));
+    })
+    .await;
+    assert!(foreign > 0, "no seat ever knew another's building");
 }
 
 /// Delivering a tick while the next one advances changes when messages
