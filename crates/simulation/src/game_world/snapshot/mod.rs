@@ -297,7 +297,11 @@ impl GameWorld {
         building.work_total = record.work_total;
         building.hp = record.hp;
         building.max_hp = record.max_hp;
-        building.los = record.los;
+        // Outpost sight comes from the shared rule and the restored owner's research
+        // applied by insert_building_shape.
+        if record.kind != BuildingKind::Outpost {
+            building.los = record.los;
+        }
         building.food_remaining = record.food_remaining;
         building.research = record.research;
         building.gate_open = record.gate_open;

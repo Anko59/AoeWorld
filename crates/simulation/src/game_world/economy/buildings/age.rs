@@ -8,7 +8,6 @@ impl BuildingKind {
             return match self {
                 TownCenter => (2400, 8),
                 WatchTower => (1020, 10),
-                Outpost => (500, 12),
                 House => (900, 2),
                 LumberCamp | MiningCamp | Mill => (1000, 6),
                 Barracks | ArcheryRange | Stable => (1800, 6),
