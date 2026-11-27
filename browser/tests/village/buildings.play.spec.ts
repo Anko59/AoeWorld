@@ -37,7 +37,14 @@ test("villager build menu places a House and watches authoritative completion", 
   const actors = async () =>
     JSON.parse(
       (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
-    ) as { kind: string; x: number; y: number; task?: string }[];
+    ) as {
+      id: number;
+      kind: string;
+      x: number;
+      y: number;
+      task?: string;
+      selected?: boolean;
+    }[];
   await mkdir("../.cache/client-shots", { recursive: true });
   await writeFile(
     "../.cache/client-shots/start-actors.json",
@@ -53,15 +60,23 @@ test("villager build menu places a House and watches authoritative completion", 
   ).toBe(false);
   const worker = (await actors()).find((a) => a.kind === "Villager");
   if (!worker) throw new Error("Starting villager missing");
-  const selectWorker = async (nth: number) => {
-    // Recall the original builder, even while it moves beside a foundation.
-    await page.keyboard.press(String(nth + 1));
-    await expect(page.locator("#selection-name")).toHaveText("Villager");
-  };
   // Register idle builders before construction starts. A later coordinate
   // snapshot can be stale by the time the browser dispatches a mouse click.
   const builders = (await actors()).filter((a) => a.kind === "Villager");
   expect(builders.length).toBeGreaterThanOrEqual(2);
+  const selectWorker = async (nth: number) => {
+    // Recall the original builder, even while it moves beside a foundation.
+    // Both builders are Villagers, so the label alone does not show that the
+    // recall took: wait for the builder's own id, or a menu opened now would
+    // close when the new selection arrives a frame later.
+    await page.keyboard.press(String(nth + 1));
+    await expect
+      .poll(async () =>
+        (await actors()).filter((a) => a.selected).map((a) => a.id),
+      )
+      .toEqual([builders[nth]?.id]);
+    await expect(page.locator("#selection-name")).toHaveText("Villager");
+  };
   for (const [index, builder] of builders.slice(0, 2).entries()) {
     await page.mouse.click(builder.x, builder.y);
     await expect(page.locator("#selection-name")).toHaveText("Villager");
