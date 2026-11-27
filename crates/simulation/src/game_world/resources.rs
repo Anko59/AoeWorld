@@ -17,6 +17,11 @@ pub struct PreparedResourceDepletion<'a> {
 }
 
 impl PreparedResourceDepletion<'_> {
+    /// Simulation tick at which this mutation would commit.
+    pub fn tick(&self) -> aoe_core::Tick {
+        self.world.tick()
+    }
+
     pub fn previous_revision(&self) -> u64 {
         self.previous_revision
     }
@@ -67,6 +72,14 @@ impl PreparedResourceDepletion<'_> {
 }
 
 impl GameWorld {
+    /// Next resource recovery deadline on the simulation clock.
+    pub fn resource_recovery_deadline(&self) -> Option<aoe_core::Tick> {
+        self.economy
+            .resource_recovery
+            .next_deadline()
+            .map(aoe_core::Tick)
+    }
+
     pub fn resource_revision(&self) -> Option<u64> {
         let Terrain::Map { overlay, .. } = &self.terrain else {
             return None;

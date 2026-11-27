@@ -80,10 +80,13 @@ fn the_complete_supported_overlay_roundtrips_through_bounded_storage() {
             .collect(),
     };
     let directory = tempfile::tempdir().unwrap();
-    super::super::store::save(directory.path(), &snapshot, 0).unwrap();
+    super::super::store::save(directory.path(), &snapshot, 0, 0).unwrap();
     assert_eq!(
-        super::super::store::load(directory.path(), snapshot.map_content_hash).unwrap(),
-        Some(snapshot)
+        super::super::store::load(directory.path(), snapshot.map_content_hash)
+            .unwrap()
+            .unwrap()
+            .snapshot,
+        snapshot
     );
 }
 

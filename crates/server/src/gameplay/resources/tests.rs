@@ -3,6 +3,8 @@ use aoe_map::ResourceOverlay;
 
 #[path = "tests/memory.rs"]
 mod memory;
+#[path = "tests/regrowth.rs"]
+mod regrowth;
 
 #[derive(Debug)]
 struct Flat;
@@ -106,7 +108,12 @@ async fn persisted_depletion_survives_service_recreation_and_failed_save_is_atom
         GameplayService::from_stored_map(package, Some(Arc::new(Flat)), None, &|| false)
             .unwrap()
             .unwrap();
-    failed.resource_directory = Some(failed_directory);
+    failed.resource_persistence = Some(Arc::new(ResourcePersistence {
+        directory: failed_directory,
+        hash: failed.map_content_hash.unwrap(),
+        clock_origin: 0,
+        checkpoint_required: AtomicBool::new(false),
+    }));
     let before = failed.resource_snapshot().await.unwrap();
     assert!(failed.deplete_resource_persisted(node.id, 1).await.is_err());
     assert_eq!(failed.resource_snapshot().await.unwrap(), before);
@@ -157,7 +164,7 @@ fn bounded_storage_rejects_oversized_json_and_wrong_map_on_restore() {
     let package = package();
     let overlays = directory.path().join("resource-overlays");
     let snapshot = ResourceOverlay::default().snapshot(package.content_hash);
-    store::save(&overlays, &snapshot, 0).unwrap();
+    store::save(&overlays, &snapshot, 0, 0).unwrap();
     let saved = std::fs::read_dir(&overlays)
         .unwrap()
         .next()
@@ -177,7 +184,15 @@ fn bounded_storage_rejects_oversized_json_and_wrong_map_on_restore() {
     ));
     let mut wrong = snapshot;
     wrong.map_content_hash = [7; 32];
-    std::fs::write(saved, serde_json::to_vec(&wrong).unwrap()).unwrap();
+    std::fs::write(
+        saved,
+        serde_json::to_vec(&store::Checkpoint {
+            snapshot: wrong,
+            tick: 0,
+        })
+        .unwrap(),
+    )
+    .unwrap();
     assert!(
         GameplayService::from_stored_map(
             package,
@@ -228,11 +243,14 @@ fn interrupted_temporary_snapshot_is_recovered_without_accumulating_files() {
         .path()
         .join(format!("{}.resource-tmp", "05".repeat(32)));
     std::fs::write(&temporary, b"incomplete prior write").unwrap();
-    assert!(store::save(directory.path(), &snapshot, 0).unwrap());
+    assert!(store::save(directory.path(), &snapshot, 0, 0).unwrap());
     assert!(!temporary.exists());
     assert_eq!(
-        store::load(directory.path(), [5; 32]).unwrap(),
-        Some(snapshot)
+        store::load(directory.path(), [5; 32])
+            .unwrap()
+            .unwrap()
+            .snapshot,
+        snapshot
     );
     assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
 }

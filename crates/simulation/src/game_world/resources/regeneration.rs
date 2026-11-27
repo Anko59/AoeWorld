@@ -17,7 +17,11 @@ pub(crate) struct ResourceRecovery {
 
 impl ResourceRecovery {
     pub(crate) fn ready(&self, tick: u64) -> bool {
-        self.due.first().is_some_and(|&(due, _)| due <= tick)
+        self.next_deadline().is_some_and(|due| due <= tick)
+    }
+
+    pub(super) fn next_deadline(&self) -> Option<u64> {
+        self.due.first().map(|&(due, _)| due)
     }
 
     fn schedule(&mut self, id: u64, due: u64) {

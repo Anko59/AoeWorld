@@ -398,29 +398,19 @@ impl GameplayService {
         &self,
         mut world: tokio::sync::OwnedRwLockWriteGuard<GameWorld>,
     ) -> Option<tokio::sync::OwnedRwLockWriteGuard<GameWorld>> {
-        let hash = self.map_content_hash;
-        let directory = self.resource_directory.clone();
+        let persistence = self.resource_persistence.clone();
         let journal = self.resource_journal.clone();
         let probe = self.probe.clone();
         let advance = move || {
+            let recovery_before_tick = persistence
+                .as_ref()
+                .and_then(|_| world.resource_recovery_deadline());
             let mut phase_started = std::time::Instant::now();
             world.advance_with_probe(
                 &mut |transaction| {
-                    if let (Some(hash), Some(directory)) = (hash, &directory) {
-                        match super::resources::save_gathering(
-                            directory,
-                            &transaction.snapshot(hash),
-                            transaction.previous_revision(),
-                        ) {
-                            Ok(_) => true,
-                            Err(error) => {
-                                tracing::warn!("gathering persistence refused: {error}");
-                                false
-                            }
-                        }
-                    } else {
-                        true
-                    }
+                    persistence
+                        .as_ref()
+                        .is_none_or(|store| store.accept(transaction))
                 },
                 &mut |phase| {
                     let now = std::time::Instant::now();
@@ -441,6 +431,9 @@ impl GameplayService {
                 },
             );
             let journal_started = std::time::Instant::now();
+            if let Some(store) = persistence {
+                store.checkpoint_recovery(&world, recovery_before_tick);
+            }
             let changes = world.take_resource_changes();
             let mut journal = journal.lock().unwrap_or_else(|error| error.into_inner());
             for change in changes {
@@ -450,7 +443,7 @@ impl GameplayService {
             probe.phase("resource_journal", journal_started.elapsed());
             world
         };
-        if self.resource_directory.is_some() || self.map_content_hash.is_some() {
+        if self.map_content_hash.is_some() {
             tokio::task::spawn_blocking(advance).await.ok()
         } else {
             Some(advance())

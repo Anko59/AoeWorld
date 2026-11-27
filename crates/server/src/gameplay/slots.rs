@@ -137,7 +137,7 @@ impl GameplayService {
             telemetry: Arc::default(),
             map_content_hash,
             map_metadata,
-            resource_directory: None,
+            resource_persistence: None,
             probe,
             resource_journal: Arc::new(std::sync::Mutex::new(resources::Journal::default())),
             fanout_probe: Arc::default(),

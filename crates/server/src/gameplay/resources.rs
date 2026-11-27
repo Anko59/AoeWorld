@@ -1,14 +1,20 @@
 use super::GameplayService;
+use aoe_core::Tick;
 use aoe_map::{Depletion, EnvironmentPageProvider, MapPackage, ResourceOverlaySnapshot};
-use aoe_simulation::{GameWorld, GameWorldError, StartSearchResult};
-use std::{path::PathBuf, sync::Arc};
+use aoe_simulation::{GameWorld, GameWorldError, PreparedResourceDepletion, StartSearchResult};
+use std::{
+    path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 #[path = "resources/feed.rs"]
 mod feed;
 #[path = "resources/store.rs"]
 mod store;
 pub(super) use feed::Journal;
 pub(super) use feed::{ResourceUpdate, send_resources};
-pub(super) use store::save as save_gathering;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResourceLifecycleError {
@@ -24,7 +30,7 @@ pub enum ResourceLifecycleError {
     Disabled,
     #[error("resource mutation requires an immutable map world")]
     NoMap,
-    #[error("stored resource revision changed; reactivate the map before retrying")]
+    #[error("stored resource checkpoint changed; reactivate the map before retrying")]
     StaleRevision,
     #[error("invalid resource state: {0}")]
     Overlay(#[from] aoe_map::ResourceOverlayError),
@@ -39,6 +45,77 @@ pub struct PersistedDepletion {
     /// False means replacement and live commit succeeded, but a crash could
     /// lose the directory update. It never means the mutation was rejected.
     pub directory_synced: bool,
+}
+
+pub(super) struct ResourcePersistence {
+    directory: PathBuf,
+    hash: [u8; 32],
+    clock_origin: u64,
+    // Accessed only while holding the exclusive world guard.
+    checkpoint_required: AtomicBool,
+}
+
+impl ResourcePersistence {
+    fn save_mutation(
+        &self,
+        transaction: &PreparedResourceDepletion<'_>,
+    ) -> Result<bool, ResourceLifecycleError> {
+        let synced = store::save(
+            &self.directory,
+            &transaction.snapshot(self.hash),
+            transaction.previous_revision(),
+            self.clock_origin.saturating_add(transaction.tick().0),
+        )?;
+        self.checkpoint_required.store(!synced, Ordering::Relaxed);
+        Ok(synced)
+    }
+
+    pub(super) fn accept(&self, transaction: &PreparedResourceDepletion<'_>) -> bool {
+        persistence_succeeded(self.save_mutation(transaction))
+    }
+
+    pub(super) fn checkpoint_recovery(&self, world: &GameWorld, before: Option<Tick>) {
+        let now = world.tick().0;
+        let needs_snapshot = self.checkpoint_required.load(Ordering::Relaxed)
+            || before.is_some_and(|deadline| deadline.0 <= now);
+        if !needs_snapshot && (before.is_none() || world.resource_recovery_deadline().is_none()) {
+            // A transaction that starts (or ends) recovery saved the schedule.
+            return;
+        }
+        let tick = self.clock_origin.saturating_add(now);
+        let Some(revision) = world.resource_revision() else {
+            persistence_succeeded(Err(ResourceLifecycleError::NoMap));
+            return;
+        };
+        let result = if needs_snapshot {
+            // Due work can cancel or defer deadlines without changing amounts.
+            let result = world
+                .resource_snapshot(self.hash)
+                .ok_or(ResourceLifecycleError::NoMap)
+                .and_then(|snapshot| store::save(&self.directory, &snapshot, revision, tick));
+            self.checkpoint_required
+                .store(!matches!(result, Ok(true)), Ordering::Relaxed);
+            result
+        } else {
+            store::save_clock(&self.directory, self.hash, revision, tick)
+        };
+        persistence_succeeded(result);
+    }
+}
+
+fn persistence_succeeded(result: Result<bool, ResourceLifecycleError>) -> bool {
+    match result {
+        Ok(synced) => {
+            if !synced {
+                tracing::warn!("resource checkpoint directory sync failed");
+            }
+            true
+        }
+        Err(error) => {
+            tracing::warn!("resource persistence refused: {error}");
+            false
+        }
+    }
 }
 
 impl GameplayService {
@@ -67,10 +144,15 @@ impl GameplayService {
         .map_err(ResourceLifecycleError::Navigation)?;
         world.set_tick_hz(crate::Config::sim_hz_from_env());
         let directory = package_directory.map(|root| root.join("resource-overlays"));
+        let mut clock_origin = 0;
+        let mut checkpoint_required = false;
         if let Some(directory) = &directory
-            && let Some(snapshot) = store::load(directory, content_hash)?
+            && let Some(checkpoint) = store::load(directory, content_hash)?
         {
-            world.restore_resources(&snapshot, content_hash, cancelled)?;
+            clock_origin = checkpoint.tick;
+            checkpoint_required = !checkpoint.snapshot.recovery.is_empty()
+                && checkpoint.snapshot.recovery_hz != world.config().tick_hz;
+            world.restore_resources(&checkpoint.snapshot, content_hash, cancelled)?;
         }
         let config = world.config();
         let start = world
@@ -86,7 +168,14 @@ impl GameplayService {
         };
         let unit = crate::gameplay_map::initialize_village(&mut world, tile)?;
         let mut service = Self::from_world(world, unit, Some(content_hash), Some(metadata));
-        service.resource_directory = directory;
+        service.resource_persistence = directory.map(|directory| {
+            Arc::new(ResourcePersistence {
+                directory,
+                hash: content_hash,
+                clock_origin,
+                checkpoint_required: AtomicBool::new(checkpoint_required),
+            })
+        });
         Ok(Some(service))
     }
 
@@ -102,18 +191,16 @@ impl GameplayService {
         id: u64,
         amount: u16,
     ) -> Result<PersistedDepletion, ResourceLifecycleError> {
-        let hash = self.map_content_hash.ok_or(ResourceLifecycleError::NoMap)?;
-        let directory = self
-            .resource_directory
+        self.map_content_hash.ok_or(ResourceLifecycleError::NoMap)?;
+        let persistence = self
+            .resource_persistence
             .clone()
             .ok_or(ResourceLifecycleError::Disabled)?;
         let mut world = self.world.clone().write_owned().await;
         let journal = self.resource_journal.clone();
         tokio::task::spawn_blocking(move || {
             let mutation = world.prepare_resource_depletion(id, amount)?;
-            let snapshot = mutation.snapshot(hash);
-            let directory_synced =
-                store::save(&directory, &snapshot, mutation.previous_revision())?;
+            let directory_synced = persistence.save_mutation(&mutation)?;
             let depletion = mutation.commit();
             journal
                 .lock()

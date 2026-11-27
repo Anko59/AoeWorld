@@ -59,7 +59,7 @@ pub struct GameplayService {
     map_content_hash: Option<[u8; 32]>,
     map_metadata: Option<MapMetadata>,
     resource_journal: Arc<std::sync::Mutex<resources::Journal>>,
-    resource_directory: Option<std::path::PathBuf>,
+    resource_persistence: Option<Arc<resources::ResourcePersistence>>,
     fanout_probe: Arc<probe::FanoutProbe>,
     overlap: Arc<tick::Overlap>,
     preparation: preparation::Preparation,
