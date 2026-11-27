@@ -11,6 +11,8 @@ use aoe_core::TileCoord;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+pub(crate) const GOLD_PILE_AMOUNT: u16 = 3_200;
+
 mod elevation;
 mod fallback;
 mod geometry;

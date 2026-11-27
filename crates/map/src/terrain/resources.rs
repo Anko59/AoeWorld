@@ -95,7 +95,7 @@ impl Origins {
                 tile,
                 ResourceKind::Gold,
                 ObjectKind::GoldDeposit,
-                800,
+                super::GOLD_PILE_AMOUNT,
                 slot,
                 key,
             )));

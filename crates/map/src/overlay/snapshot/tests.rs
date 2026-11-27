@@ -34,6 +34,9 @@ fn indexed_starting_collision_preserves_kinds_depletion_and_buildings() {
     ] {
         let mut overlay = ResourceOverlay::default();
         let node = ResourceNode::starting(tile, kind).unwrap();
+        if kind == crate::ResourceKind::Gold {
+            assert_eq!(node.initial_amount, 3_200);
+        }
         overlay.insert_starting_resource(&terrain, node).unwrap();
         assert!(overlay.blocks_tile(tile));
         overlay.deplete(&terrain, node.id, u16::MAX).unwrap();

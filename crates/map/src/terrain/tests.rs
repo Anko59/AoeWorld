@@ -205,11 +205,9 @@ fn fixed_flat_patch_rejects_raw_resource_blockers_and_accepts_open_neighbor() {
     let open = TileCoord::new(root.x + 1, root.y + 1);
     let open_sample = terrain.tile_at(open).expect("open patch tile");
     assert!(super::resources::candidate_unreserved(&terrain, open, open_sample).is_some());
-    assert!(
-        terrain
-            .object_at(open)
-            .is_some_and(|node| node.kind == ResourceKind::Gold)
-    );
+    let gold = terrain.object_at(open).expect("open gold pile");
+    assert_eq!(gold.kind, ResourceKind::Gold);
+    assert_eq!(gold.initial_amount, 3_200);
     assert_ne!(value, 0);
 }
 
