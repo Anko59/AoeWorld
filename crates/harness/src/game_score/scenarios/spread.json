@@ -1,6 +1,6 @@
 {
   "measured": {
-    "commit": "a2b432f2df75db28b18926d5a93b9054fa377b9c",
+    "commit": "5c5222ff1b0a72f693e68d428e57d472906688d3",
     "date": "2026-11-27",
     "seeds": [
       1,
@@ -16,6 +16,118 @@
     "measure": "mad_percent is the median absolute deviation over the median across the seeds, in percent; min and max are the extremes across the seeds, in the number's own unit"
   },
   "scenarios": {
+    "battle": {
+      "fight": {
+        "arrival.arrived_permille": {
+          "median": 389.5,
+          "mad_percent": 5.4,
+          "min": 305.0,
+          "max": 421.0
+        },
+        "arrival.order_to_arrival_ticks.p95": {
+          "median": 0.0,
+          "mad_percent": 0.0,
+          "min": 0.0,
+          "max": 1.0
+        },
+        "arrival.order_to_first_step_ticks.p95": {
+          "median": 25.0,
+          "mad_percent": 0.0,
+          "min": 25.0,
+          "max": 26.0
+        },
+        "battle.first_blow_tick": {
+          "median": 286.0,
+          "mad_percent": 1.0,
+          "min": 274.0,
+          "max": 291.0
+        },
+        "battle.queued": {
+          "median": 25.0,
+          "mad_percent": 18.0,
+          "min": 8.0,
+          "max": 45.0
+        },
+        "choke.arrived_at_goal": {
+          "median": 8.5,
+          "mad_percent": 17.6,
+          "min": 5.0,
+          "max": 13.0
+        },
+        "choke.crossed": {
+          "median": 325.0,
+          "mad_percent": 4.2,
+          "min": 288.0,
+          "max": 343.0
+        },
+        "choke.crossed_per_minute_peak": {
+          "median": 244.5,
+          "mad_percent": 2.0,
+          "min": 214.0,
+          "max": 253.0
+        },
+        "choke.first_crossing_tick": {
+          "median": 293.0,
+          "mad_percent": 1.2,
+          "min": 283.0,
+          "max": 298.0
+        },
+        "choke.last_crossing_tick": {
+          "median": 2539.5,
+          "mad_percent": 12.3,
+          "min": 2015.0,
+          "max": 4493.0
+        },
+        "choke.standing_still_inside_ticks": {
+          "median": 846.0,
+          "mad_percent": 9.3,
+          "min": 617.0,
+          "max": 940.0
+        },
+        "choke.waiting_near_side": {
+          "median": 89.0,
+          "mad_percent": 21.9,
+          "min": 68.0,
+          "max": 124.0
+        },
+        "economy.delivered_total": {
+          "median": 0.0,
+          "mad_percent": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "planning.expired": {
+          "median": 0.0,
+          "mad_percent": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "planning.stuck": {
+          "median": 0.0,
+          "mad_percent": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "planning.wait_p95_ticks_peak": {
+          "median": 1.0,
+          "mad_percent": 0.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "planning.waiting_peak": {
+          "median": 2.0,
+          "mad_percent": 0.0,
+          "min": 1.0,
+          "max": 2.0
+        },
+        "size.idle_villagers_permille": {
+          "median": 0.0,
+          "mad_percent": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        }
+      }
+    },
     "late": {
       "late": {
         "arrival.arrived_permille": {
@@ -71,6 +183,106 @@
           "mad_percent": 10.3,
           "min": 21.0,
           "max": 43.0
+        }
+      }
+    },
+    "march": {
+      "crossing": {
+        "arrival.arrived_permille": {
+          "median": 798.5,
+          "mad_percent": 2.5,
+          "min": 744.0,
+          "max": 886.0
+        },
+        "arrival.order_to_arrival_ticks.p95": {
+          "median": 202.5,
+          "mad_percent": 1.2,
+          "min": 200.0,
+          "max": 236.0
+        },
+        "arrival.order_to_first_step_ticks.p95": {
+          "median": 1.0,
+          "mad_percent": 0.0,
+          "min": 0.0,
+          "max": 1.0
+        },
+        "choke.arrived_at_goal": {
+          "median": 796.0,
+          "mad_percent": 0.1,
+          "min": 794.0,
+          "max": 800.0
+        },
+        "choke.crossed": {
+          "median": 800.0,
+          "mad_percent": 0.0,
+          "min": 800.0,
+          "max": 800.0
+        },
+        "choke.crossed_per_minute_peak": {
+          "median": 776.0,
+          "mad_percent": 0.0,
+          "min": 776.0,
+          "max": 776.0
+        },
+        "choke.first_crossing_tick": {
+          "median": 193.0,
+          "mad_percent": 0.0,
+          "min": 193.0,
+          "max": 193.0
+        },
+        "choke.last_crossing_tick": {
+          "median": 1036.0,
+          "mad_percent": 0.0,
+          "min": 1036.0,
+          "max": 1036.0
+        },
+        "choke.standing_still_inside_ticks": {
+          "median": 1738.0,
+          "mad_percent": 0.0,
+          "min": 1738.0,
+          "max": 1738.0
+        },
+        "choke.waiting_near_side": {
+          "median": 0.0,
+          "mad_percent": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "economy.delivered_total": {
+          "median": 0.0,
+          "mad_percent": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "planning.expired": {
+          "median": 0.0,
+          "mad_percent": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "planning.stuck": {
+          "median": 0.0,
+          "mad_percent": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "planning.wait_p95_ticks_peak": {
+          "median": 0.0,
+          "mad_percent": 0.0,
+          "min": 0.0,
+          "max": 77.0
+        },
+        "planning.waiting_peak": {
+          "median": 0.0,
+          "mad_percent": 0.0,
+          "min": 0.0,
+          "max": 2.0
+        },
+        "size.idle_villagers_permille": {
+          "median": 0.0,
+          "mad_percent": 0.0,
+          "min": 0.0,
+          "max": 0.0
         }
       }
     },

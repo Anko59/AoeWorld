@@ -357,8 +357,9 @@ done
 make game-score-spread GAME_SCORE_SPREAD_ARGS="--reports <directory> --commit <sha> --date <YYYY-MM-DD>"
 ```
 
-Measured on 2026-11-27 on `dev` at `a2b432f2` (the game code of this pull request), seeds 1 to
-8, one worker, the 100-seat scenarios of this page:
+Measured on 2026-11-27 at `5c5222ff` (a branch of `dev` whose `natural` and `late` are `dev`'s:
+the same numbers as at `a2b432f2`), seeds 1 to 8, one worker. The 100-seat scenarios of this page
+are below; `march` and `battle` are in [the choke scenarios](game-score-chokes.md#the-usual-spread):
 
 | scenario | window | number | median | spread (MAD / median) | range | tolerance |
 |---|---|---|---|---|---|---|

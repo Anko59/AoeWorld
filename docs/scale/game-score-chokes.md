@@ -110,33 +110,71 @@ stuck, waiting, wait p95), hits, first blows and the ticks they waited, kills an
 ## What the first run shows
 
 Seed 1, at 1 and at 4 workers: the same game, the same hash every ten ticks, the same orders, the
-same numbers. On the OrbStack machine of the owner's Mac, `make game-score`.
+same numbers. On the OrbStack machine of the owner's Mac, through `make game-score`, with other
+agents' builds running.
 
 | | `march` | `battle` |
 | --- | --- | --- |
-| native seconds at 1 / 4 workers (of which the start) | 1.3 / 1.4 (0.5) | 5.6 / 5.7 (0.8 / 0.4) |
-| units across the line | 800 of 800 | 293 of 800 |
-| first / last unit across (tick) | 193 / 1,036 | 293 / 4,427 |
-| across per game minute | 534, 266 | 85, 168, 21, 6, 2, 3, 5, 3 |
-| most across in one game minute | 776 | 239 |
-| waiting on the near side at the end | 0 | 112 |
-| longest stand still inside the neck | 1,738 ticks | 850 ticks |
-| within two tiles of their goal at the end | 798 of 800 | 8 of 800 |
-| hits, kills | none | 10,546 and 687 |
-| first blow, units that fought / only queued behind | none | tick 292, 770 / 30 |
-| alive at the end | all | 19% of seat 0, 10% of seat 1 |
+| native seconds at 1 / 4 workers (of which the start) | 1.7 / 1.5 (0.9 / 0.4) | 9.5 / 16.4 (0.5 / 1.0) |
+| units across the line | 800 of 800 | 323 of 800 |
+| first / last unit across (tick) | 193 / 1,036 | 293 / 2,869 |
+| across per game minute | 534, 266 | 160, 84, 62, 15, 2 |
+| most across in one game minute | 776 | 241 |
+| waiting on the near side at the end | 0 | 111 |
+| longest stand still inside the neck | 1,738 ticks | 634 ticks |
+| within two tiles of their goal at the end | 796 of 800 | 5 of 800 |
+| hits, kills | none | 10,411 and 689 |
+| first blow, units that fought / only queued behind | none | tick 285, 755 / 45 |
+| alive at the end | all | 15% of seat 0, 13% of seat 1 |
 
-As facts, not as findings to fix: the army of 800 crosses the five-tile ford in 84 seconds, at up to
-776 units in a game minute (13 a second); 2 of the 800 never reach their slot, and a unit stands
-still inside the ford for 1,738 ticks, almost three game minutes. In the battle 770 of 800 units
-strike or are struck and 30 only queue behind; 687 die; the fight does not end: the survivors,
-112 of 113 of them on the bank they started on, go on trading hits across the river (deaths fall
-from 263 in the second game minute to between 25 and 52 in each of the last five) and only 293
-units ever cross the line.
+On a quiet machine the same runs took 1.3 / 1.4 s and 5.6 / 5.7 s (at 4 workers a busy machine
+can be slower than at 1, as the 16.4 s shows). Facts, not findings to fix: the army of 800 crosses
+the five-tile ford in 84 seconds, at up to 776 units in a game minute (13 a second). A unit stands
+still inside the ford's reach for 1,738 ticks, almost three game minutes: a diagnostic run found
+nine units standing within two tiles of the ford's exit for the rest of the run, the slot each was
+last assigned the tile it stands on, which is why "within two tiles of their goal" (796 of 800)
+does not see them. In the battle 755 of 800 units strike or are struck and 45 only queue behind;
+689 die (deaths per game minute: 77, 243, 158, 56, 42, 44, 49, 20); the fight does not end: 111
+units survive, every one on the bank it started on, and only 323 units ever cross the line.
 
-## The seed
+## The seed and the usual spread
 
-The seed shuffles which unit takes which place on the open ground around the anchor (a fill of
-the nearest tiles, kinds dealt out by a seeded shuffle), so a seed is a layout and the same seed
-is the same game. Seed 1 is the default. The spread across seeds 1 to 8 is in
-`scenarios/spread.json` and in [the usual spread](game-score.md#the-usual-spread).
+The seed deals the kinds and the places out in another order (the places are the nearest tiles of
+open ground around the anchor, one unit to a tile): who stands where, and so which unit has which
+id, the engine's tie-break, is the layout. Seed 1 is the default and the same seed is the same game.
+
+What a layout changes is small in `march` and large in `battle`. In `march` every unit is a
+Militia, the army moves as one formation, and eight layouts give the same crossing to the tick:
+the same 800 across, the same 776 in the best minute, the same first (193) and last (1,036) unit
+across, the same stand still inside the neck; only the units within two tiles of their goal move
+(794 to 800). So a move of the choke numbers of `march` is not seed noise, and its tolerance is the
+verdict's floor (5 percent, and 10 units or 3 ticks). In `battle` the layout decides who meets whom
+first, and the fight is chaotic. Measured on 2026-11-27 at `5c5222ff`, seeds 1 to 8, one worker
+(the numbers `march` and `battle` have; the rest of what the verdict judges is zero or flat in them:
+resources delivered, idle villagers, route orders stuck or expired, movers waiting for a route):
+
+| scenario | number | median | spread (MAD / median) | range | tolerance |
+|---|---|---|---|---|---|
+| march | share of orders arrived | 79.8% | 2.5% | 74.4% to 88.6% | 5% and 14.2% |
+| march | order to arrival, p95 (ticks) | 202.5 | 1.2% | 200 to 236 | 5% and 36 |
+| march | units across the line | 800 | 0.0% | 800 to 800 | 5% and 10 |
+| march | most across the line in a game minute | 776 | 0.0% | 776 to 776 | 5% and 10 |
+| march | first unit across (tick) | 193 | 0.0% | 193 to 193 | 5% and 10 |
+| march | last unit across (tick) | 1,036 | 0.0% | 1,036 to 1,036 | 5% and 10 |
+| march | longest stand still inside the neck (ticks) | 1,738 | 0.0% | 1,738 to 1,738 | 5% and 3 |
+| march | units still waiting on the near side | 0 | 0.0% | 0 to 0 | 5% and 10 |
+| march | units within two tiles of their goal | 796 | 0.1% | 794 to 800 | 5% and 10 |
+| battle | share of orders arrived | 39.0% | 5.4% | 30.5% to 42.1% | 11% and 11.6% |
+| battle | first blow (tick) | 286 | 1.0% | 274 to 291 | 5% and 17 |
+| battle | units that only queued behind | 25 | 18.0% | 8 to 45 | 36% and 37 |
+| battle | units across the line | 325 | 4.2% | 288 to 343 | 8% and 55 |
+| battle | most across the line in a game minute | 244.5 | 2.0% | 214 to 253 | 5% and 39 |
+| battle | first unit across (tick) | 293 | 1.2% | 283 to 298 | 5% and 15 |
+| battle | last unit across (tick) | 2,540 | 12.3% | 2,015 to 4,493 | 25% and 2,478 |
+| battle | longest stand still inside the neck (ticks) | 846 | 9.3% | 617 to 940 | 19% and 323 |
+| battle | units still waiting on the near side | 89 | 21.9% | 68 to 124 | 44% and 56 |
+| battle | units within two tiles of their goal | 8.5 | 17.6% | 5 to 13 | 35% and 10 |
+
+The whole table, every judged number of every window, is
+[`scenarios/spread.json`](../../crates/harness/src/game_score/scenarios/spread.json); a test fails
+when a scenario, a window or a judged number has no entry.
