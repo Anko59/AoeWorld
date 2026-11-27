@@ -120,3 +120,19 @@ fn review_f4_tall_coarse_scene_budgets_all_one_hundred_twenty_eight_skirt_triang
             .any(|t| t.points.iter().any(|p| p.world[2] == 8.0))
     );
 }
+
+#[wasm_bindgen_test]
+async fn an_old_subscription_rejection_keeps_the_current_view() {
+    let mut client = super::client_with_backend(&super::contact_scene(), Some("canvas")).await;
+    client.revision = 3;
+    let active = Some(aoe_core::TileRect::from_xywh(0, 0, 4, 4));
+    client.sent_region = active;
+    crate::playground::game::subscription::refuse_over_limit(&mut client, 2);
+    assert_eq!(client.sent_region, active);
+    assert!(client.subscription_guard);
+
+    crate::playground::game::subscription::refuse_over_limit(&mut client, 3);
+    assert_eq!(client.sent_region, None);
+    assert!(!client.subscription_guard);
+    client.canvas.remove();
+}

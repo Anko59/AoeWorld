@@ -35,7 +35,7 @@ pub use projectiles::{ProjectileKind, ProjectileState};
 pub use resources::{MAX_RESOURCE_CACHE, MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
 pub use wildlife::*;
 
-pub const VERSION: u16 = 31;
+pub const VERSION: u16 = 32;
 pub const MAX_OFFICE_ZONE_CHUNKS: usize = 64;
 /// Coordinates in 32-tile chunks, then one row of x bits per local y.
 pub type OfficeZoneChunk = (TileCoord, [u32; 32]);
@@ -330,6 +330,11 @@ pub enum ServerMessage {
         complete: bool,
         #[serde(deserialize_with = "economy::bounded_office_zone")]
         chunks: Vec<OfficeZoneChunk>,
+    },
+    /// A refused or overflowing subscription, scoped to its request.
+    SubscriptionRejected {
+        revision: u64,
+        code: u16,
     },
 }
 

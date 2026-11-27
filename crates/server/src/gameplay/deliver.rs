@@ -122,18 +122,6 @@ fn deliver_tick(
     let Some(subscription) = session.subscription else {
         return false;
     };
-    let Some(slots) = &build.units else {
-        let _ = send(
-            session,
-            GameplayServerMessage::Error {
-                code: 413,
-                message: "subscribed region exceeds gameplay entity limit".to_owned(),
-            },
-            failed,
-            id,
-        );
-        return false;
-    };
     if session
         .subscription_delivery
         .as_ref()
@@ -145,6 +133,18 @@ fn deliver_tick(
     {
         return false;
     }
+    let Some(slots) = &build.units else {
+        let _ = send(
+            session,
+            GameplayServerMessage::SubscriptionRejected {
+                revision: subscription.revision,
+                code: 413,
+            },
+            failed,
+            id,
+        );
+        return false;
+    };
     let diff = units::diff(&session.resident, slots, built, session.viewer);
     let changed_players = viewer
         .players

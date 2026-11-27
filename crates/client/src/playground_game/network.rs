@@ -91,8 +91,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         client.village.pending_training.clear();
         client.village.here_orders = Default::default();
         village::construction::strategic::connection_reset(&mut client);
-        client.sent_region = None;
-        client.subscribe_after = 0.0;
+        subscription::reset(&mut client);
         client.connection_id
     };
     let opened = Rc::downgrade(&shared);
@@ -114,7 +113,6 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         }
     });
     socket.set_onopen(Some(onopen.as_ref().unchecked_ref()));
-
     let received = Rc::downgrade(&shared);
     let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |event: MessageEvent| {
         let Some(received) = received.upgrade() else {
@@ -165,8 +163,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 storage::save_token(Some(resume_token));
                 lifecycle::set_controller_ready(&client, true);
                 client.status = "connected".to_owned();
-                // A new connection clears connection errors; an order rejection
-                // stays until the next order rather than the next snapshot.
+                // Clear connection errors on Welcome and order errors on the next order.
                 client.last_error = None;
                 resize(&mut client);
                 capture::world_received(&mut client, map_changed);
@@ -449,6 +446,10 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     client.last_error = Some(client.status.clone());
                 }
             }
+            Ok(GameplayServerMessage::SubscriptionRejected {
+                revision,
+                code: 413,
+            }) => subscription::refuse_over_limit(&mut client, revision),
             Ok(GameplayServerMessage::Error { code: 429, .. }) => {
                 retry_refused_view(&mut client, now());
             }

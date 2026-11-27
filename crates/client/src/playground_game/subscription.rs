@@ -33,9 +33,29 @@ pub(super) fn subscribed_to_view(client: &Client) -> bool {
             .is_some_and(|sent| camera_demand::contains(sent, requested_region(client)))
 }
 
+pub(super) fn reset(client: &mut Client) {
+    client.sent_region = None;
+    client.subscription_guard = true;
+    client.subscribe_after = 0.0;
+}
+
 pub(super) fn retry_refused_view(client: &mut Client, time: f64) {
     client.sent_region = None;
     client.subscribe_after = time + SUBSCRIBE_RETRY_MS;
+}
+
+pub(super) fn refuse_over_limit(client: &mut Client, revision: u64) {
+    if client.revision != revision || client.sent_region.is_none() {
+        return;
+    }
+    if client.subscription_guard {
+        // The server knows about units outside our last snapshot. After a
+        // refusal, keep camera requests lean for the rest of this connection.
+        client.subscription_guard = false;
+        client.sent_region = None;
+    } else {
+        retry_refused_view(client, now());
+    }
 }
 
 pub(super) fn subscription_due(client: &Client) -> bool {
@@ -54,10 +74,15 @@ pub(super) fn subscribe(client: &mut Client) {
     if !subscription_due(client) {
         return;
     }
-    let region = camera_demand::guarded_subscription(
-        requested_region(client),
-        [client.config.width_tiles, client.config.height_tiles],
-    );
+    let visible = requested_region(client);
+    let region = if client.subscription_guard {
+        camera_demand::guarded_subscription(
+            visible,
+            [client.config.width_tiles, client.config.height_tiles],
+        )
+    } else {
+        visible
+    };
     let unit_zoom = unit_zoom(client);
     client.revision = client.revision.saturating_add(1);
     let message = GameplayClientMessage::Subscribe {

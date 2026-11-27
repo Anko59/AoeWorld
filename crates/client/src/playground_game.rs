@@ -73,6 +73,7 @@ pub(super) struct Client {
     pub token: Option<ResumeToken>,
     pub revision: u64,
     pub sent_region: Option<TileRect>,
+    pub subscription_guard: bool,
     /// Whether the last sent view drew single units (`Subscribe::unit_zoom`).
     pub sent_unit_zoom: bool,
     pub subscribe_after: f64,

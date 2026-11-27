@@ -196,6 +196,7 @@ pub(super) async fn client_with_backend(scene: &PreparedScene, backend: Option<&
         token: None,
         revision: 0,
         sent_region: None,
+        subscription_guard: true,
         sent_unit_zoom: false,
         subscribe_after: 0.0,
         next_sequence: 1,
@@ -448,7 +449,6 @@ async fn authoritative_gate_stays_open_when_the_holding_enemy_is_not_resident() 
     assert_eq!(client.village.gate_art.borrow().updates(), 2);
     client.canvas.remove();
 }
-
 #[wasm_bindgen_test]
 async fn projectile_scene_uses_native_arrow_and_javelin_and_current_fog() {
     use aoe_core::{Tick, TileCoord, TileRect};

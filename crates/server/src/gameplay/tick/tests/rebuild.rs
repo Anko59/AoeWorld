@@ -31,7 +31,7 @@ fn apply(client: &mut Buildings, fixture: &mut Fixture, index: usize) -> bool {
                     client.remove(&id);
                 }
             }
-            GameplayServerMessage::Error { code: 413, .. } => over_limit = true,
+            GameplayServerMessage::SubscriptionRejected { code: 413, .. } => over_limit = true,
             _ => {}
         }
     }
@@ -351,5 +351,96 @@ async fn a_tick_skipped_for_a_full_queue_does_not_lose_buildings() {
         client.keys().collect::<Vec<_>>(),
         truth.keys().collect::<Vec<_>>(),
         "the reader ends up with the buildings its viewer knows"
+    );
+}
+
+#[tokio::test]
+async fn a_guarded_subscription_can_exceed_the_limit_while_the_visible_region_fits() {
+    use aoe_core::{TileRect, WorldPosition};
+
+    let mut fixture = start().await;
+    let service = &fixture.service;
+    let viewer = fixture.viewers[0];
+    let home = fixture.placed[0];
+    let camera = TileCoord::new(home.x + 34, home.y);
+    let visible = TileRect::from_xywh(camera.x - 5, camera.y - 5, 10, 10);
+    let guarded = TileRect::from_xywh(camera.x - 69, camera.y - 69, 138, 138);
+    let session = fixture.ids[0];
+    let receiver = &mut fixture.receivers[0];
+    while receiver.try_recv().is_ok() {}
+
+    let primary = service.sessions.lock().await[&session].primary_unit_id;
+    service.set_fog_disabled(true).await;
+    {
+        let mut world = service.world.write().await;
+        let own = world.units().filter(|unit| unit.player == viewer).count();
+        let position = world.unit(primary).unwrap().position;
+        assert!(!visible.contains(position.tile_floor()));
+        for _ in own..65_000 {
+            world.spawn_villager(viewer, position).unwrap();
+        }
+
+        // Use actual passable tiles in each rectangle. Existing enemy
+        // villagers also count against the viewer's subscription limit.
+        let enemies = |world: &aoe_simulation::GameWorld, region| {
+            world
+                .query(region)
+                .0
+                .iter()
+                .filter(|unit| unit.player != viewer)
+                .count()
+        };
+        let band_count = enemies(&world, guarded) - enemies(&world, visible);
+        for (region, inner, missing) in [
+            (visible, None, 100 - enemies(&world, visible)),
+            (guarded, Some(visible), 500 - band_count),
+        ] {
+            if missing == 0 {
+                continue;
+            }
+            let position = (region.min.y..region.max.y)
+                .flat_map(|y| (region.min.x..region.max.x).map(move |x| TileCoord::new(x, y)))
+                .filter(|tile| inner.is_none_or(|inner| !inner.contains(*tile)))
+                .filter_map(|tile| WorldPosition::from_tile_center(tile).ok())
+                .find(|position| world.spawn_unit(PlayerId(9), *position).is_ok())
+                .expect("passable enemy spawn tile");
+            for _ in 1..missing {
+                world.spawn_unit(PlayerId(9), position).unwrap();
+            }
+        }
+        assert_eq!(
+            economy::query_units(&world, guarded, primary, viewer).len(),
+            65_600
+        );
+    }
+
+    service.subscribe(session, 2, guarded, true).await;
+    assert_eq!(
+        receiver.try_recv().unwrap(),
+        GameplayServerMessage::SubscriptionRejected {
+            revision: 2,
+            code: 413
+        }
+    );
+    assert_eq!(
+        service.sessions.lock().await[&session]
+            .subscription
+            .unwrap()
+            .revision,
+        1
+    );
+
+    service.subscribe(session, 3, visible, true).await;
+    let GameplayServerMessage::Snapshot {
+        revision, units, ..
+    } = receiver.try_recv().unwrap()
+    else {
+        panic!("plain view did not produce a snapshot");
+    };
+    assert_eq!(revision, 3);
+    assert_eq!(units.len(), 65_100);
+    assert_eq!(
+        units.iter().filter(|unit| unit.player == viewer).count(),
+        65_000
     );
 }
