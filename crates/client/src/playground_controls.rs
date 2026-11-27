@@ -1,4 +1,4 @@
-use super::{Client, Drag, center_on_primary, map, position_at, reconnect, send_order, subscribe};
+use super::{Client, Drag, center_on_primary, map, position_at, reconnect, send_order};
 use aoe_core::{Camera, ScreenPoint};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
@@ -232,7 +232,6 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 center[0] + before[0] - after[0],
                 center[1] + before[1] - after[1],
             ];
-            subscribe(&mut client);
         }
     });
     shared
@@ -329,7 +328,6 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         };
         let zoom = wheel_zoom(client.camera.zoom, delta);
         client.camera = client.camera.zoom_around(target, zoom);
-        subscribe(&mut client);
     });
     canvas.add_event_listener_with_callback("wheel", onwheel.as_ref().unchecked_ref())?;
     onwheel.forget();
@@ -365,7 +363,6 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             10..=39 => groups::key(&mut client, action),
             _ => return,
         }
-        subscribe(&mut client);
     });
     shared
         .borrow()

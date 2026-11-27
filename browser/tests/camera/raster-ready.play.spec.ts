@@ -58,7 +58,7 @@ test("minimap raster readiness waits for terrain and resets when the map changes
   );
   await expect(page.locator("#minimap-terrain")).toHaveAttribute(
     "href",
-    /^data:image\/png/,
+    /^blob:/,
   );
   await expect(page.locator("#minimap-title")).toHaveText(
     "Minimap · coarse terrain",
@@ -76,7 +76,7 @@ test("minimap raster readiness waits for terrain and resets when the map changes
   );
   await expect(page.locator("#minimap-terrain")).toHaveAttribute(
     "href",
-    /^data:image\/png/,
+    /^blob:/,
   );
   await snapshot(page, "decoded and drawn");
   const reset = await page.evaluate(async () => {
@@ -172,7 +172,7 @@ test("a failed refinement retains the usable coarse map", async ({ page }) => {
   );
   await expect(page.locator("#minimap-terrain")).toHaveAttribute(
     "href",
-    /^data:image\/png/,
+    /^blob:/,
   );
   await page.waitForTimeout(1000);
   await expect(page.locator("#minimap")).toHaveAttribute(

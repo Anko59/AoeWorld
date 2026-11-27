@@ -1,19 +1,19 @@
 use super::Client;
 use crate::chunk_requests::{MAX_REQUESTED_CHUNKS, Request};
 use aoe_core::{Camera, ScreenPoint, TileRect};
-use aoe_map::{CHUNK_TILES, CompactChunk, GroundMaterial, ResourceNode, Tile};
+use aoe_map::{CHUNK_TILES, GroundMaterial, ResourceNode, Tile};
 use aoe_rendering::{
     SceneDecoration, SceneResource, SceneTerrain, SceneTerrainAppearance, SceneTerrainSurface,
     pick_surface_point, sample_surface_height,
 };
 use std::{cell::RefCell, mem::size_of, rc::Rc};
-use wasm_bindgen::{JsCast, JsValue};
-use wasm_bindgen_futures::{JsFuture, spawn_local};
-use web_sys::{AbortController, RequestInit, Response};
+use wasm_bindgen::JsValue;
+use wasm_bindgen_futures::spawn_local;
+use web_sys::AbortController;
 
 #[path = "playground_map/cache.rs"]
 mod cache;
-pub(crate) use cache::CachedChunk;
+pub(crate) use cache::{CachedChunk, ChunkTable};
 #[path = "playground_map/eviction.rs"]
 mod eviction;
 #[path = "playground_map/heights.rs"]
@@ -34,7 +34,7 @@ pub(super) mod render_cache;
 mod resources;
 #[path = "playground_map/scene.rs"]
 pub(crate) mod scene;
-pub(super) use resources::scene_resources;
+pub(super) use resources::{scene_resources, scene_resources_for};
 #[path = "playground_map/decorations.rs"]
 mod decorations;
 #[path = "playground_map/feedback.rs"]
@@ -58,6 +58,8 @@ pub(super) fn cache_status(client: &Client) -> String {
 }
 
 pub(super) fn clear_terrain_cache(client: &mut Client) {
+    client.terrain_patches = Default::default();
+    client.pan_motion = Default::default();
     client.terrain_scene.borrow_mut().take();
     client.terrain_chunks.clear();
     client.capture.failures.clear();
@@ -110,6 +112,8 @@ pub(super) fn inspection_label(client: &Client) -> String {
 }
 
 pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
+    #[cfg(feature = "frame-bench")]
+    let _requests = super::perf::Scope::new(43);
     if super::strategic::active(&shared.borrow()) && shared.borrow().village.placement.is_none() {
         return;
     }
@@ -131,7 +135,9 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
         let shared = Rc::downgrade(&shared);
         let content_hash = content_hash.clone();
         spawn_local(async move {
-            let result = fetch_chunk(&content_hash, x, y, request.handle.as_ref()).await;
+            let result = cache::fetch_chunk(&content_hash, x, y, request.handle.as_ref()).await;
+            #[cfg(feature = "frame-bench")]
+            let _install = super::perf::Scope::new(45);
             let Some(shared) = shared.upgrade() else {
                 return;
             };
@@ -150,6 +156,7 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
                     client.terrain_bounds.failures.chunks.remove(&(x, y));
                     include_chunk_height_bounds(&mut client, &chunk);
                     client.terrain_chunks.insert((x, y), chunk);
+                    client.terrain_patches.chunk_arrived((x, y));
                     client.terrain_scene.borrow_mut().take();
                     initialize_altitude_focus(&mut client);
                     evict_distant_chunks(&mut client);
@@ -412,7 +419,7 @@ fn visible_chunks(client: &mut Client) -> Vec<Request<Option<AbortController>>> 
     update.started
 }
 
-fn chunk_distance_for((x, y): (i32, i32), camera: Camera, _config: aoe_core::WorldConfig) -> f64 {
+fn chunk_distance_for((x, y): (i32, i32), camera: Camera) -> f64 {
     let center_x = f64::from(x * CHUNK_TILES + CHUNK_TILES / 2) - camera.center[0];
     let center_y = f64::from(y * CHUNK_TILES + CHUNK_TILES / 2) - camera.center[1];
     center_x.mul_add(center_x, center_y * center_y)
@@ -423,12 +430,14 @@ fn evict_distant_chunks(client: &mut Client) {
     let (removed, _) = evict_distant_chunks_with_limits(
         &mut client.terrain_chunks,
         client.camera,
-        client.config,
         MAX_CACHED_CHUNKS,
         MAX_CACHED_CHUNK_BYTES,
         &preferred,
     );
     if removed {
+        client
+            .terrain_patches
+            .source_evicted(&client.terrain_chunks);
         client.terrain_scene.borrow_mut().take();
         refresh_chunk_height_bounds(client);
     }
@@ -448,47 +457,6 @@ fn chunk_resident_bytes(chunk: &CachedChunk) -> usize {
 
 fn display_mebibytes(bytes: usize) -> String {
     crate::web::numeric::format(bytes as f64 / (1024.0 * 1024.0), 1)
-}
-
-async fn fetch_chunk(
-    content_hash: &str,
-    x: i32,
-    y: i32,
-    controller: Option<&AbortController>,
-) -> Result<CachedChunk, JsValue> {
-    let window = web_sys::window().ok_or("No window")?;
-    let options = RequestInit::new();
-    // Only a live human seat receives the server's camera priority. The
-    // server validates this token; AI traffic uses the low lane.
-    if let Some(token) = super::storage::stored_token() {
-        let headers = web_sys::Headers::new()?;
-        headers.set(
-            "X-AoeWorld-Controller-Token",
-            &super::storage::hex(&token.0),
-        )?;
-        options.set_headers(&headers);
-    }
-    if let Some(controller) = controller {
-        options.set_signal(Some(&controller.signal()));
-    }
-    let response: Response = JsFuture::from(
-        window.fetch_with_str_and_init(&format!("/maps/{content_hash}/chunks/{x}/{y}"), &options),
-    )
-    .await?
-    .dyn_into()?;
-    if !response.ok() {
-        return Err(JsValue::from_str(&format!("HTTP {}", response.status())));
-    }
-    let body = JsFuture::from(response.text()?).await?;
-    let compact = crate::game_assets::decode_chunk(
-        &body.as_string().ok_or("map chunk response was not text")?,
-    )?;
-    let chunk =
-        CachedChunk::decode(&compact).map_err(|error| JsValue::from_str(&error.to_string()))?;
-    if chunk.coordinate() != (x, y) {
-        return Err(JsValue::from_str("map chunk response coordinates mismatch"));
-    }
-    Ok(chunk)
 }
 
 #[path = "playground_map/fog.rs"]

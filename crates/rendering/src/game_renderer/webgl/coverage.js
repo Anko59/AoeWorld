@@ -1,26 +1,27 @@
-// Coverage effects specialize the shared sprite vertex program. No scene work
-// or extra instance upload: final depth/painter coverage decides every contour.
-export function coverageShaders(sources) {
-    const vertex = sources[0][0].replace('void main()', 'void spriteVertex()');
-    const contourVertex = vertex + `
+// Coverage effects specialize the shared sprite shaders. Final depth and
+// visible alpha determine where the contour pass paints.
+export function coverageShaders([vertex, fragment]) {
+    const contourVertex = vertex.replace('void main()', 'void spriteVertex()') + `
 void main() {
+    if (color.w < 0.0 || (pages.w & 56u) == 0u) { gl_Position = vec4(2,2,2,1); return; }
     spriteVertex();
-    if (color.w < 0.0 || (pages.w & 56u) == 0u) gl_Position = vec4(2,2,2,1);
 }`;
-    const world = sources.map(([v, f]) => [v, f.replace('out vec4 result;',
-        'layout(location=0) out vec4 result;\nlayout(location=1) out highp uint coverage;')
+    // Only alpha/discard/depth determine mask bits. Leave RGB unwritten so
+    // the shader compiler eliminates terrain colour, tint and owner-ramp work.
+    const mask = fragment.replace('out vec4 result;',
+        'vec4 result;\nlayout(location=1) out highp uint coverage;')
+        .replace('const bool coverageOnly = false;', 'const bool coverageOnly = true;')
         .replace('void main()', 'void worldColour()') + `
 void main() {
+    // A solid face always writes depth. Textured faces must still run their
+    // alpha discard before they can replace coverage from farther objects.
+    if (vSolid == 2u) { coverage = 0u; return; }
     worldColour();
     bool body = vSolid == 0u && result.a >= .8;
     coverage = (body && (vPages.w & 4u) != 0u ? 1u : 0u)
              | (body && (vPages.w & 48u) != 0u ? 2u : 0u);
-}`]);
-    // Only alpha/discard/depth determine mask bits. Leave RGB unwritten so
-    // the shader compiler eliminates terrain colour, tint and owner-ramp work.
-    const mask = world.map(([v, f]) => [v,
-        f.replace('layout(location=0) out vec4 result;', 'vec4 result;')]);
-    return [...world, [contourVertex, CONTOUR], ...mask];
+}`;
+    return [[vertex, fragment], [vertex, mask], [contourVertex, CONTOUR]];
 }
 
 const CONTOUR = `#version 300 es

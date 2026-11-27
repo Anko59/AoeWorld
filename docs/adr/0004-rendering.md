@@ -23,13 +23,13 @@ existing backing limit); resize replaces its texture/view and rebinds it. Its
 two persistent handles and the lazy contour pipeline/bind group are counted.
 WebGL2 uses the same final coverage bits and contour kernels. The world renders
 directly into the browser framebuffer, a coverage-only pass writes R8UI and
-Depth24, and contours load the browser framebuffer. This removes the owned
-full-resolution colour texture and final blit. The mask pass reuses the instance
-upload and painter order; it adds a world geometry draw without a second upload.
-The contour draw submits only eligible object runs from that same buffer,
-preserving order without processing the whole forest's vertices again.
-Coverage-only shader variants omit RGB output, pruning unused colour work while
-preserving alpha discard and depth.
+Depth24, and contours load the browser framebuffer. The mask reuses the world
+instance upload and painter order. One instanced draw per pass handles mixed
+ground and sprites through their packet tags. Ground writes its depth and clears
+coverage without sampling its colour in the mask pass. A reused contour buffer
+receives only eligible packets in painter order. Submission stays at one draw
+for the world or three with effects, including when mixed terrain and contour
+candidates are heavily interleaved.
 The targets allocate only when effects are present, resize in place and release
 after 60 consecutive rendered frames without effects, avoiding allocation churn
 when camera/hover changes briefly remove effects. Zero-size backing and disposal
@@ -74,10 +74,10 @@ before attempting the next tier and before installing input handlers.
 
 WebGL2 retains the 24-bit depth, 64 MiB instance and 4,194,304-pixel backing limits.
 JS borrows a bounded WASM packet view synchronously and never retains it or awaits.
-Both GPU backends retain one Rust packet (at most 64 MiB, counted as frame staging)
-to compare exact bytes and upload one contiguous changed span; equal packets
-need no buffer write. Growth/restoration rewrites storage; refused frames keep
-the previous snapshot. This adds CPU storage, not a GPU allocation saving.
+Both GPU backends retain the preceding world packet for exact byte comparison.
+They upload only the changed span. Growth and restoration rewrite storage.
+A refused frame keeps the preceding snapshot. CPU staging is counted separately
+from the GPU world and contour buffers, each bounded by the instance limit.
 Atlas pages upload one at a time with synchronous completion to bound driver
 transfer staging; ordinary frames do not wait on the GPU.
 The renderer retains its source atlas in
@@ -377,17 +377,15 @@ loaded medium/deep water completes their halo without blending a direct
 land/deep-water edge. Borders are still one mesh face wide on coarse
 LODs, and long straight biome edges are a map-generation property.
 
-The shared shader compiles into ordinary and ground-mixing programs. SwiftShader
-showed substantial ordinary-frame overhead from the larger fragment program
-even when its mixing branch was inactive. Rust build-time source assembly removes
-mixing-only WGSL sections before module compilation; the ordinary module has no
-mixing functions or junction branches. GLSL specializes with a compile-time
-constant. Contiguous instance runs
-choose their program without regrouping or changing painter order, depth ties,
-or alpha coverage. Both programs use the same buffers, atlas, bindings and
-Sprite112 layout. WebGPU creates the mixed pipeline only when needed and counts
-that additional persistent resource; draw-call counters count the actual runs.
-WebGL restores both programs and the retained atlas on context restoration.
+WebGPU compiles ordinary and ground-mixing programs. SwiftShader
+showed ordinary-frame overhead from the larger fragment program.
+Rust strips mixing-only WGSL from the ordinary shader before compilation.
+Contiguous runs choose their program and retain painter order, depth ties,
+alpha coverage and the Sprite112 buffer. The mixed pipeline loads lazily
+and counts toward persistent resources. WebGL instead selects branches from
+packet tags in one draw per pass, avoiding thousands of draw and attribute
+calls on the saved-game pan. Context restoration rebuilds those programs
+and re-uploads the retained atlas.
 
 Mixed layers share one filtered sampling body and skip zero-weight layers before
 frame resolution and texture reads. Tap offsets come from loop bits and
@@ -417,7 +415,7 @@ The production scene builder now appends the shared sprite emitter directly
 after surfaces and selection rings. It no longer materializes an intermediate
 object vector and then copies it into the WorldLayer vector. Resource-before-unit
 submission and the existing stable-index depth/type/id sort remain unchanged.
-WebGPU reuses packet/range storage; other scene and sort buffers still allocate.
+Both GPU backends reuse packet storage. Scene and sort buffers still allocate.
 [Measurements](../performance/webgpu-sprites.md) do not qualify hardware cadence.
 Bounded scene tests pin the final layer content over 72 cases (missing art,
 source ties, mirrors, boundary cameras, NaN depths) by digest and assert the
@@ -480,13 +478,14 @@ the packed triangle stays 240 bytes; the three renderers share one kernel
 (`surface_mesh::relief`). The gradient is in height levels per tile, so averaged
 far-zoom cells and near-zoom ramps agree.
 
-Minimum zoom first budgets the actual visible source cells and their closing
-edges rather than treating every cell of their rectangular index as drawable.
+The viewport tessellator budgets actual visible source cells and closing edges.
 When they fit the unchanged 24,576-triangle cap, source shores, materials and
 heights agree with the closer level. The rectangular index is bounded to at
 most 24,576 slots; at most two top and four closing-edge triangles are counted
-per visible cell. Larger views retain the existing coarse fallback. This does
-not qualify dedicated hardware or finished RTS performance.
+per visible cell. Larger views use coarse cells. In streamed play, chunk
+meshes use one world-aligned cell size per zoom and backing resolution, with
+source support across chunk boundaries. Prepared meshes survive camera pans.
+Dedicated hardware qualification remains separate.
 
 Fog object lookup shares the existing integer-pair index, splitting each full
 64-bit identity into two words. Parallel temporary values replace two additional

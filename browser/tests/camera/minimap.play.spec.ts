@@ -63,10 +63,20 @@ test("strategic raster is one bounded request per map and never loads the world"
     "data-raster-samples",
     "64",
   );
-  await expect(page.locator("#minimap-terrain")).toHaveAttribute(
-    "href",
-    /^data:image\/png/,
-  );
+  const terrain = page.locator("#minimap-terrain");
+  await expect(terrain).toHaveAttribute("href", /^blob:/);
+  const raster = await terrain.evaluate(async (image) => {
+    const href = image.getAttribute("href");
+    if (!href) throw new Error("Minimap image URL missing");
+    const response = await fetch(href);
+    if (!response.ok) throw new Error("Minimap image could not be read");
+    const png = await response.blob();
+    const bitmap = await createImageBitmap(png);
+    const dimensions = [bitmap.width, bitmap.height];
+    bitmap.close();
+    return { type: png.type, dimensions };
+  });
+  expect(raster).toEqual({ type: "image/png", dimensions: [64, 64] });
   const camera = await page.locator("#world-position").innerText();
   for (let index = 0; index < 3; index++) {
     await page.getByRole("button", { name: "Show whole map" }).click();

@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::BTreeMap;
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
 wasm_bindgen_test_configure!(run_in_browser);
@@ -291,5 +292,81 @@ fn minimum_zoom_keeps_the_previous_levels_jagged_shore_and_ground_sheet() {
             shore += usize::from(sample.surface.water != 0);
         }
         assert!(shore > 100);
+    }
+}
+
+#[wasm_bindgen_test]
+fn adjacent_prepared_patches_share_world_heights_and_project_to_the_new_camera() {
+    let terrain = variable_height_map(96);
+    let patches = [[0, 32], [32, 64]].map(|[lo, hi]| {
+        let faces =
+            chunk_surface_triangles(&terrain, TileRect::from_xywh(lo, 32, hi - lo, 32), 4, true);
+        assert!(!faces.is_empty());
+        assert!(faces.iter().all(|face| (lo..hi).contains(&face.tile[0])));
+        faces
+    });
+    fn seam(faces: &[ProjectedSurfaceTriangle]) -> BTreeMap<i32, f64> {
+        faces
+            .iter()
+            .flat_map(|face| face.points)
+            .filter(|point| point.world[0] == 32.0)
+            .map(|point| (point.world[1] as i32, point.world[2]))
+            .collect()
+    }
+    let east = seam(&patches[0]);
+    assert!(east.len() > 2);
+    assert_eq!(east, seam(&patches[1]));
+
+    let mut triangle = patches[0][0];
+    let camera = Camera {
+        center: [31.25, 41.0],
+        viewport: [1280.0, 720.0],
+        zoom: 0.102,
+        focus_elevation_meters: 8.0,
+    };
+    triangle.project_to(camera);
+    for point in triangle.points {
+        let [x, y, z] = point.world;
+        assert_eq!(point.screen, camera.world_to_screen_at_height([x, y], z));
+    }
+}
+
+#[wasm_bindgen_test]
+fn streamed_unit_faces_keep_the_source_river_until_refinement() {
+    let mut terrain = variable_height_map(8);
+    for tile in &mut terrain {
+        tile.elevation_meters = 0.0;
+        tile.surface = SceneTerrainSurface::flat(0.0);
+        tile.appearance = Some(crate::SceneTerrainAppearance {
+            palette: 5,
+            canopy_strength: 0,
+            floor_strength: 0,
+            exposure: 0,
+            height_band: 0,
+        });
+        // A one-tile river occupies only part of each coarse cell.
+        if tile_key(tile.position)[0] == 3 {
+            tile.material = 11;
+            tile.surface.water = 3;
+        }
+    }
+    let region = aoe_core::TileRect::from_xywh(0, 0, 8, 8);
+    for (size, refined) in [(2, false), (2, true), (4, false), (4, true)] {
+        let faces = chunk_surface_triangles(&terrain, region, size, refined);
+        let mut river_faces = 0;
+        for face in faces.iter().filter(|face| !face.skirt) {
+            let [x, _] = face.texture_tile;
+            assert_eq!(
+                appearance::water_material(face.material),
+                x == 3,
+                "river faces follow source tiles regardless of refinement: {:?}",
+                face.texture_tile
+            );
+            river_faces += usize::from(x == 3);
+        }
+        assert_eq!(
+            river_faces, 16,
+            "both faces of every river tile remain visible"
+        );
     }
 }

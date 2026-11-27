@@ -98,3 +98,85 @@ for (const resumed of [false, true]) {
     });
   }
 }
+
+test("publishes the fine minimap without reading a GPU-backed canvas or blocking on a data URL", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const probed = new WeakSet<HTMLCanvasElement>();
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (
+      this: HTMLCanvasElement,
+      type: string,
+      options?: CanvasRenderingContext2DSettings,
+    ) {
+      if (type === "2d" && this.width === 32 && this.height === 32) {
+        if (!options?.willReadFrequently)
+          throw new Error("Minimap needs a CPU-backed raster");
+        probed.add(this);
+      }
+      return Reflect.apply(getContext, this, [type, options]);
+    } as typeof getContext;
+    const toDataURL = HTMLCanvasElement.prototype.toDataURL;
+    HTMLCanvasElement.prototype.toDataURL = function (...args) {
+      if (probed.has(this)) throw new Error("Synchronous minimap encoding");
+      return toDataURL.apply(this, args);
+    };
+  });
+  await page.route("**/maps/*/minimap/coarse", (route) =>
+    route.fulfill({ status: 503 }),
+  );
+  await page.route("**/maps/*/minimap", (route) =>
+    route.fulfill({
+      contentType: "application/octet-stream",
+      body: Buffer.concat([
+        Buffer.from([65, 87, 77, 77, 32, 0, 0, 0]),
+        Buffer.alloc(32 * 32, 0x80),
+      ]),
+    }),
+  );
+  await page.goto("/?skipIntro=1");
+  await page.evaluate(async () => {
+    const nav = Reflect.get(window, "aoeNavigation");
+    await nav.map(new Uint8Array(32).fill(187));
+  });
+  await expect(page.locator("#minimap")).toHaveAttribute(
+    "data-raster",
+    "ready",
+  );
+  const url = await page.locator("#minimap-terrain").getAttribute("href");
+  expect(url).toMatch(/^blob:/);
+  expect(
+    await page.evaluate(async (url) => {
+      const blob = await (await fetch(url ?? "")).blob();
+      const image = await createImageBitmap(blob);
+      const context = new OffscreenCanvas(32, 32).getContext("2d");
+      if (!context) throw new Error("Missing pixel observer");
+      context.drawImage(image, 0, 0);
+      image.close();
+      return Array.from(context.getImageData(0, 0, 1, 1).data);
+    }, url),
+  ).toEqual([124, 164, 82, 255]);
+
+  await page.evaluate(async () => {
+    const nav = Reflect.get(window, "aoeNavigation");
+    await nav.map(new Uint8Array(32).fill(204));
+  });
+  await expect(page.locator("#minimap")).toHaveAttribute(
+    "data-raster",
+    "ready",
+  );
+  expect(await page.locator("#minimap-terrain").getAttribute("href")).not.toBe(
+    url,
+  );
+  expect(
+    await page.evaluate(async (url) => {
+      try {
+        await fetch(url ?? "");
+        return false;
+      } catch {
+        return true;
+      }
+    }, url),
+  ).toBe(true);
+});

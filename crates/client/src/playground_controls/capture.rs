@@ -57,6 +57,9 @@ fn apply_current(client: &mut Client) {
     client.camera.zoom = camera.zoom;
     // Reuse minimap centering, including its deferred terrain altitude focus.
     map::center_on_world(client, camera.center);
+    // A camera link explicitly requests capture of a new view. Its own
+    // snapshot must arrive before publishing it as painted.
+    client.sent_region = None;
     client.pointer = None;
 }
 
@@ -132,6 +135,6 @@ pub(super) fn update(client: &mut Client) {
         client.capture.frame,
         client.capture.current_view
             && client.capture.snapshot_revision == Some(client.revision)
-            && client.sent_region == Some(super::requested_region(client)),
+            && super::subscribed_to_view(client),
     );
 }

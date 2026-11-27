@@ -1,6 +1,5 @@
 use super::*;
-use aoe_protocol::{GameplayServerMessage, decode_gameplay_server};
-use js_sys::Uint8Array;
+use aoe_protocol::GameplayServerMessage;
 use web_sys::{Event, MessageEvent};
 
 #[path = "network/tests.rs"]
@@ -35,7 +34,7 @@ fn incoming_bytes(data: &JsValue) -> Result<Vec<u8>, &'static str> {
     if buffer.byte_length() as usize > aoe_protocol::GAMEPLAY_MAX_MESSAGE {
         return Err("protocol frame too large; reconnect required");
     }
-    Ok(Uint8Array::new(buffer).to_vec())
+    Ok(js_sys::Uint8Array::new(buffer).to_vec())
 }
 
 fn send_bytes(socket: &WebSocket, bytes: &[u8]) -> Result<(), &'static str> {
@@ -91,8 +90,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         client.village.pending_training.clear();
         client.village.here_orders = Default::default();
         village::construction::strategic::connection_reset(&mut client);
-        client.sent_region = None;
-        client.subscribe_after = 0.0;
+        subscription::reset(&mut client);
         client.connection_id
     };
     let opened = Rc::downgrade(&shared);
@@ -114,7 +112,6 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         }
     });
     socket.set_onopen(Some(onopen.as_ref().unchecked_ref()));
-
     let received = Rc::downgrade(&shared);
     let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |event: MessageEvent| {
         let Some(received) = received.upgrade() else {
@@ -132,9 +129,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 return;
             }
         };
-        let message = decode_gameplay_server(&bytes);
-        #[cfg(feature = "frame-bench")]
-        super::perf::tag_snapshot(message.as_ref().ok());
+        let message = super::perf::decode_message(&bytes);
         match message {
             Ok(GameplayServerMessage::Welcome {
                 width_tiles,
@@ -167,8 +162,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 storage::save_token(Some(resume_token));
                 lifecycle::set_controller_ready(&client, true);
                 client.status = "connected".to_owned();
-                // A new connection clears connection errors; an order rejection
-                // stays until the next order rather than the next snapshot.
+                // Clear connection errors on Welcome and order errors on the next order.
                 client.last_error = None;
                 resize(&mut client);
                 capture::world_received(&mut client, map_changed);
@@ -217,6 +211,8 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 players,
                 buildings,
             }) if revision >= client.revision => {
+                #[cfg(feature = "frame-bench")]
+                let _apply = perf::Scope::new(46);
                 if !client.presentation.receive(tick.0, now()) {
                     return;
                 }
@@ -360,7 +356,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 super::map::fog::minimap(&client, &state);
                 let was_disabled = client.fog.disabled();
                 if client.fog.apply(state) {
-                    client.rendered_frame.clear();
+                    client.rendered_frame.invalidate();
                     if was_disabled != client.fog.disabled() {
                         client.terrain_scene.borrow_mut().take();
                     }
@@ -379,7 +375,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     let hz = client.config.tick_hz;
                     record_shots(&mut client.village, &projectiles, tick.0, hz);
                     client.village.projectiles = projectiles;
-                    client.rendered_frame.clear();
+                    client.rendered_frame.invalidate();
                 }
             }
             Ok(GameplayServerMessage::WildlifeState {
@@ -449,6 +445,10 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     client.last_error = Some(client.status.clone());
                 }
             }
+            Ok(GameplayServerMessage::SubscriptionRejected {
+                revision,
+                code: 413,
+            }) => subscription::refuse_over_limit(&mut client, revision),
             Ok(GameplayServerMessage::Error { code: 429, .. }) => {
                 retry_refused_view(&mut client, now());
             }

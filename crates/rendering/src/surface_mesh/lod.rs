@@ -1,7 +1,9 @@
 use super::*;
-use aoe_core::Camera;
+use aoe_core::{Camera, TileCoord, TileRect};
 mod banks;
 mod budget;
+mod chunk;
+pub use chunk::{chunk_surface_halo, chunk_surface_triangles};
 mod cliffs;
 mod grid;
 use grid::*;
@@ -69,61 +71,75 @@ pub fn projected_surface_triangles(
         }
         break (grid, cells, bank_cells, tops, skirts);
     };
-    let coarse_heights = (size > 1).then(|| shared_coarse_heights(terrain, &cells, grid));
-    let mut result = Vec::with_capacity(MAX_SURFACE_TRIANGLES);
     let divisions = budget::subdivisions(&cells, grid, skirts);
-    let patches = patches::plan(
-        terrain,
+    let samples = MeshSamples {
         grid,
+        cells,
+        bank_cells,
+        tops,
+        skirts,
         divisions,
-        &cells,
-        tops * (divisions * divisions) as usize + skirts,
-    );
-    // Directional slope shade per cell, from the heights the mesh displays.
-    let ground = cells
-        .iter()
-        .enumerate()
-        .map(|(slot_index, cell)| match cell {
-            None => shade::Ground::Absent,
-            Some(cell) if cell.sample.surface.is_cliff() => shade::Ground::Cliff,
-            Some(cell) => {
-                let corners = displayed_heights(
-                    cell.sample,
-                    grid_cell(grid, slot_index),
-                    grid,
-                    coarse_heights.as_ref(),
-                );
-                shade::Ground::Height(corners.iter().sum::<f64>() / 4.0)
-            }
-        })
-        .collect::<Vec<_>>();
-    let mut shades = shade::cell_shades(&ground, grid);
-    // Water, cliffs and their native art keep their own look.
-    let unshaded = |sample: &SceneTerrain| {
-        sample.surface.water != 0
-            || sample.surface.is_cliff()
-            || appearance::water_material(sample.material)
     };
-    for (shade, cell) in shades.iter_mut().zip(&cells) {
-        if cell.as_ref().is_some_and(|cell| unshaded(&cell.sample)) {
-            *shade = 0.0;
-        }
-    }
-    let corner_shades = shade::vertex_shades(&ground, &shades, grid);
+    mesh_surfaces(terrain, &camera, samples, None, true)
+}
+
+struct MeshSamples {
+    grid: CellGrid,
+    cells: Vec<Option<CellSample>>,
+    bank_cells: Vec<Option<CellSample>>,
+    tops: usize,
+    skirts: usize,
+    divisions: i32,
+}
+
+fn mesh_surfaces(
+    terrain: &[SceneTerrain],
+    camera: &Camera,
+    samples: MeshSamples,
+    region: Option<TileRect>,
+    refined: bool,
+) -> Vec<ProjectedSurfaceTriangle> {
+    let MeshSamples {
+        grid,
+        cells,
+        bank_cells,
+        tops,
+        skirts,
+        divisions,
+    } = samples;
+    let size = grid.size;
+    let coarse_heights = (size > 1).then(|| shared_coarse_heights(terrain, &cells, grid));
+    let base = tops * (divisions * divisions) as usize + skirts;
+    let capacity = region.map_or(base, |rect| {
+        let tiles = rect.width().unsigned_abs().div_ceil(size as u32)
+            * rect.height().unsigned_abs().div_ceil(size as u32);
+        tiles as usize * (2 * (divisions * divisions) as usize + 2)
+    });
+    let mut result = Vec::with_capacity(capacity.min(MAX_SURFACE_TRIANGLES));
+    let patches = patches::plan(terrain, grid, divisions, &cells, base, region.is_some());
+    let shore = region
+        .filter(|_| size > 1)
+        .and_then(|rect| chunk::ShoreMaterials::new(terrain, rect));
+    let corner_shades = refined.then(|| shade::mesh_shades(&cells, grid, coarse_heights.as_ref()));
     for (slot_index, candidate) in cells.iter().enumerate() {
         let Some(candidate) = candidate else {
             continue;
         };
         let tile = grid_cell(grid, slot_index);
+        if region.is_some_and(|rect| !rect.contains(TileCoord::new(tile[0], tile[1]))) {
+            continue;
+        }
         let sample = candidate.sample;
         let heights = displayed_heights(sample, tile, grid, coarse_heights.as_ref());
-        let lattice = {
-            let stride = grid.width + 1;
-            let (x, y) = (slot_index % grid.width, slot_index / grid.width);
-            let at = |dx: usize, dy: usize| corner_shades[(y + dy) * stride + x + dx];
-            [at(0, 0), at(1, 0), at(1, 1), at(0, 1)]
-        };
-        let shaded = !unshaded(&sample);
+        let lattice = corner_shades
+            .as_ref()
+            .filter(|_| !shade::unshaded(&sample))
+            .map(|corner_shades| {
+                let stride = grid.width + 1;
+                let (x, y) = (slot_index % grid.width, slot_index / grid.width);
+                let at = |dx: usize, dy: usize| corner_shades[(y + dy) * stride + x + dx];
+                [at(0, 0), at(1, 0), at(1, 1), at(0, 1)]
+            });
         let indices = if sample.surface.triangulation == 1 {
             [[0, 1, 3], [1, 2, 3]]
         } else {
@@ -131,6 +147,11 @@ pub fn projected_surface_triangles(
         };
         for (texture_tile, step, farm) in patches.tiles(tile, divisions) {
             let mut sample = sample;
+            if step == 1
+                && let Some(shore) = &shore
+            {
+                shore.preserve(texture_tile, &mut sample);
+            }
             if let Some(material) = farm {
                 sample.material = material;
                 sample.appearance = None;
@@ -156,18 +177,20 @@ pub fn projected_surface_triangles(
                     f64::from(y) / f64::from(size),
                 );
             }
-            let corners = projected_corners(&camera, texture_tile, step, patch_heights);
+            let corners = projected_corners(camera, texture_tile, step, patch_heights);
             // Bilinear in the cell, so subdivided patches and neighbouring
             // cells compute the same value on every shared corner or edge.
             let mut codes = [0_i8; 4];
-            for (code, [x, y]) in codes.iter_mut().zip(local_corners) {
-                let (fx, fy) = (
-                    f64::from(x) as f32 / size as f32,
-                    f64::from(y) as f32 / size as f32,
-                );
-                let top = (1.0 - fx) * lattice[0] + fx * lattice[1];
-                let bottom = (1.0 - fx) * lattice[3] + fx * lattice[2];
-                *code = relief::quantize((1.0 - fy) * top + fy * bottom);
+            if let Some(lattice) = lattice {
+                for (code, [x, y]) in codes.iter_mut().zip(local_corners) {
+                    let (fx, fy) = (
+                        f64::from(x) as f32 / size as f32,
+                        f64::from(y) as f32 / size as f32,
+                    );
+                    let top = (1.0 - fx) * lattice[0] + fx * lattice[1];
+                    let bottom = (1.0 - fx) * lattice[3] + fx * lattice[2];
+                    *code = relief::quantize((1.0 - fy) * top + fy * bottom);
+                }
             }
             for (order, indices) in indices.into_iter().enumerate() {
                 let mut face = ProjectedSurfaceTriangle {
@@ -210,7 +233,7 @@ pub fn projected_surface_triangles(
                 };
                 let relief = indices.map(|index| codes[index]);
                 // Flat ground keeps its colour bits and order untouched.
-                if shaded && relief != [0; 3] {
+                if relief != [0; 3] {
                     face.set_relief(relief);
                 }
                 result.push(face);
@@ -225,7 +248,7 @@ pub fn projected_surface_triangles(
             {
                 append_edge_skirt(
                     &mut result,
-                    &camera,
+                    camera,
                     tile,
                     size,
                     SkirtSurface { sample, heights },
@@ -244,15 +267,17 @@ pub fn projected_surface_triangles(
         }
     }
     debug_assert!(result.len() <= MAX_SURFACE_TRIANGLES);
-    appearance::assign_materials(&mut result, terrain);
-    floor::assign(&mut result, terrain);
-    mix::assign(&mut result, terrain);
-    cliffs::sculpt(&mut result, &cells, grid, &camera);
+    if refined {
+        appearance::assign_materials(&mut result, terrain);
+        floor::assign(&mut result, terrain);
+        mix::assign(&mut result, terrain);
+    }
+    cliffs::sculpt(&mut result, &cells, grid, camera);
     // Material support belongs to the original integer vertices. Bevel their
     // presentation only after the ground and water sheets have been assigned.
     if !bank_cells.is_empty() {
         for triangle in result.iter_mut().filter(|t| !t.skirt) {
-            banks::round(&mut triangle.points, &bank_cells, grid, &camera);
+            banks::round(&mut triangle.points, &bank_cells, grid, camera);
         }
     }
     // Painter order is an average-depth approximation. Picking below uses the

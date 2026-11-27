@@ -64,6 +64,7 @@ pub(super) fn plan(
     divisions: i32,
     cells: &[Option<CellSample>],
     base: usize,
+    preserve_shore: bool,
 ) -> Patches {
     let patch_grid = CellGrid {
         min: grid.min,
@@ -102,31 +103,34 @@ pub(super) fn plan(
             };
             // Include the incident-cell halo at each patch's boundary. An
             // interior border also marks its patch even if no corner sees it.
-            for dy in -1..=1 {
-                for dx in -1..=1 {
-                    let (Some(x), Some(y)) = (tile[0].checked_add(dx), tile[1].checked_add(dy))
-                    else {
-                        continue;
-                    };
-                    if let Some(index) = grid_index(patch_grid, cell_key([x, y], patch_grid.size)) {
+            let side = patch_grid.size;
+            let first = cell_key(tile.map(|value| value.saturating_sub(1)), side);
+            let last = cell_key(tile.map(|value| value.saturating_add(1)), side);
+            for y in (first[1]..=last[1]).step_by(side as usize) {
+                for x in (first[0]..=last[0]).step_by(side as usize) {
+                    if let Some(index) = grid_index(patch_grid, [x, y]) {
                         masks[index] |= bit;
                     }
                 }
             }
         }
     }
+    const WATER: u32 = (1 << 5) | (1 << 10) | (1 << 12);
     let mixed = masks
         .into_iter()
-        .map(|mask| mask & ((1 << 4) | (1 << 7)) != 0 && mask.count_ones() > 1)
+        .map(|mask| {
+            (mask & ((1 << 4) | (1 << 7)) != 0 && mask.count_ones() > 1)
+                || (preserve_shore && mask & WATER != 0 && mask & !WATER != 0)
+        })
         .collect::<Vec<_>>();
-    let (mut crop_boundaries, mut mountain_boundaries) = (0, 0);
+    let (mut crop_boundaries, mut material_boundaries) = (0, 0);
     let full = (patch_grid.size as usize).saturating_pow(2);
     for (index, mixed) in mixed.iter().enumerate() {
         let counts = crop_patches.get(index).copied().unwrap_or_default();
         let tile = grid_cell(patch_grid, index);
         if grid_index(grid, cell_key(tile, grid.size)).is_some_and(|i| cells[i].is_some()) {
             crop_boundaries += usize::from(counts != [0; 2] && !counts.contains(&full));
-            mountain_boundaries += usize::from(counts == [0; 2] && *mixed);
+            material_boundaries += usize::from(counts == [0; 2] && *mixed);
         }
     }
     let (crop_refinement, crop_extra) = refinement(
@@ -148,7 +152,7 @@ pub(super) fn plan(
     }
     let (refinement, _) = refinement(
         patch_grid.size,
-        mountain_boundaries,
+        material_boundaries,
         MAX_SURFACE_TRIANGLES.saturating_sub(base.saturating_add(crop_extra)),
     );
     Patches {

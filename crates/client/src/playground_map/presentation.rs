@@ -215,6 +215,7 @@ impl Presentation {
 
     /// The tiles a unit has moved over the last `ticks` ticks of presentation
     /// time, or `None` while its history does not reach back that far.
+    #[cfg(test)]
     pub(crate) fn travel_over(&self, id: EntityId, ticks: f64) -> Option<f64> {
         let history = self.history.get(&id)?;
         if (history.front()?.tick as f64) > self.tick - ticks {
@@ -291,6 +292,7 @@ fn trebuchet_duration() -> f64 {
 
 /// The tiles a unit had moved at `tick`, interpolated between its samples and
 /// held at the first or last one outside them.
+#[cfg(test)]
 fn travel_at(history: &VecDeque<Sample>, tick: f64) -> f64 {
     let mut previous = None::<Sample>;
     for next in history {

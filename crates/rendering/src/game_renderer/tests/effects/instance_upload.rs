@@ -107,3 +107,98 @@ async fn webgl_instance_uploads_follow_changes_skips_growth_and_restoration() {
     assert!(scene.frame_staging_bytes() >= larger.len() * std::mem::size_of::<Sprite>());
     scene.resize(0, 0);
 }
+
+#[wasm_bindgen(inline_js = "
+export function watch_gl_draws(bridge) {
+    const gl = bridge.gl, draw = gl.drawArraysInstanced.bind(gl);
+    let calls = 0;
+    gl.drawArraysInstanced = (...args) => { calls++; return draw(...args); };
+    return () => calls;
+}
+")]
+extern "C" {
+    fn watch_gl_draws(bridge: &JsValue) -> js_sys::Function;
+}
+
+#[wasm_bindgen_test]
+fn webgl_interleaved_landscape_and_contours_use_three_draws() {
+    let (canvas, mut renderer) = target(&atlas(&[[255; 4]]));
+    let observer = watch_gl_draws(renderer.test_bridge());
+    let mut mixed = sprite(0.0, 1.0);
+    mixed.color = [0.0, 0.0, 6.0, -3.0];
+    mixed.pages[3] = 1;
+    mixed.terrain_blend[0][2] = 1.0;
+    let mut visible = bodies()[1];
+    visible.pages[3] = 4;
+    let mut outlined = bodies()[0];
+    outlined.pages[3] = 8;
+    let packets = [visible, mixed, outlined, mixed];
+    let mut source = packets.repeat(16);
+    render(&mut renderer, &mut source);
+    assert_eq!(
+        observer.call0(&JsValue::UNDEFINED).unwrap().as_f64(),
+        Some(3.0),
+        "world, coverage and contour draws stay constant across interleaved packets"
+    );
+    assert_pixel(&canvas, 64, 64, [255, 0, 0, 255]);
+}
+
+#[wasm_bindgen_test]
+fn webgl_world_render_retains_and_reuses_instance_staging() {
+    let (_canvas, renderer) = target(&atlas(&[[255; 4]]));
+    let mut game = GameRenderer::WebGl(renderer);
+    let art = super::super::tests::synthetic_art();
+    let terrain = [SceneTerrain {
+        position: [0.5, 0.5],
+        material: 0,
+        appearance: None,
+        elevation_meters: 0.0,
+        surface: crate::SceneTerrainSurface::flat(0.0),
+    }];
+    let camera = SceneCamera {
+        center: [0.5, 0.5],
+        zoom: 1.0,
+        viewport: [128.0, 128.0],
+        focus_elevation_meters: 0.0,
+    };
+    assert!(
+        game.render_world(&art, &terrain, &[], &[], camera, 0, false)
+            .unwrap()
+    );
+    let GameRenderer::WebGl(gl) = &game else {
+        unreachable!()
+    };
+    assert!(gl.staging.capacity() >= 2);
+    let memory = gl.staging.as_ptr();
+    let _ = game
+        .render_world(&art, &terrain, &[], &[], camera, 0, false)
+        .unwrap();
+    let GameRenderer::WebGl(gl) = &game else {
+        unreachable!()
+    };
+    assert_eq!(gl.staging.as_ptr(), memory);
+}
+
+#[wasm_bindgen_test]
+fn webgl_defers_new_storage_until_outstanding_work_retires() {
+    let (canvas, mut renderer) = target(&atlas(&[[255; 4]]));
+    let observer = watch_gl_instance_uploads(renderer.test_bridge());
+    let original = bodies();
+    assert!(renderer.render(&mut [original[0]]).unwrap());
+    assert_eq!(uploads(&observer), [0, 112]);
+    let mut expanded = [original[0], original[1]];
+    expanded[1].color = [0.0, 0.0, 1.0, 1.0];
+
+    // A sync created in this browser task cannot signal to script within it.
+    let mut pending = expanded;
+    assert!(!renderer.render(&mut pending).unwrap());
+    assert!(
+        uploads(&observer).is_empty(),
+        "an outstanding draw owns the storage"
+    );
+    super::webgl_complete_frame(renderer.test_bridge());
+
+    render(&mut renderer, &mut expanded);
+    assert_eq!(uploads(&observer), [0, 224]);
+    assert_pixel(&canvas, 64, 64, [0, 0, 255, 255]);
+}

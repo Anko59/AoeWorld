@@ -38,15 +38,21 @@ pub(super) fn contour(stats: aoe_rendering::ContourStats) {
     );
 }
 
-/// Tag the enclosing decode/apply span, including superseded snapshots.
-#[cfg(feature = "frame-bench")]
-pub(super) fn tag_snapshot(message: Option<&aoe_protocol::GameplayServerMessage>) {
+pub(super) fn decode_message(
+    bytes: &[u8],
+) -> Result<aoe_protocol::GameplayServerMessage, aoe_protocol::GameplayError> {
+    #[cfg(feature = "frame-bench")]
+    let _decode = Scope::new(47);
+    let message = aoe_protocol::decode_gameplay_server(bytes);
+    // Tag the enclosing decode/apply span, including superseded snapshots.
+    #[cfg(feature = "frame-bench")]
     if matches!(
         message,
-        Some(aoe_protocol::GameplayServerMessage::Snapshot { .. })
+        Ok(aoe_protocol::GameplayServerMessage::Snapshot { .. })
     ) {
         perf_mark(22);
     }
+    message
 }
 
 pub(super) fn decode() -> (Scope, Scope) {

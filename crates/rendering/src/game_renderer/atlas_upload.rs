@@ -123,12 +123,12 @@ impl GameRenderer {
         }
     }
 
-    /// Reused frame packets and draw ranges, separate from atlas/GPU payload.
+    /// Reused frame packets, layer keys and draw ranges, separate from atlas/GPU payload.
     pub fn frame_staging_bytes(&self) -> usize {
         match self {
             Self::WebGpu(renderer) => renderer.staging_bytes(),
             Self::WebGl(renderer) => renderer.staging_bytes(),
-            _ => 0,
+            Self::Canvas { presentation, .. } => presentation.layer_sort.resident_bytes(),
         }
     }
 

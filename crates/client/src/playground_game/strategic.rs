@@ -126,7 +126,6 @@ pub(super) fn focus(client: &mut Client, point: ScreenPoint) -> bool {
     client.camera.zoom = focus_zoom(client.camera.zoom, client.camera.viewport);
     super::map::center_on_world(client, world);
     client.pointer = None;
-    super::subscribe(client);
     true
 }
 

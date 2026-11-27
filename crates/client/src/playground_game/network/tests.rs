@@ -34,7 +34,7 @@ fn incoming_frames_reject_text_and_oversize_before_copying_to_wasm() {
     let oversized = js_sys::ArrayBuffer::new(aoe_protocol::GAMEPLAY_MAX_MESSAGE as u32 + 1);
     assert!(incoming_bytes(oversized.as_ref()).is_err());
     let buffer = js_sys::ArrayBuffer::new(3);
-    Uint8Array::new(&buffer).copy_from(&[1, 2, 3]);
+    js_sys::Uint8Array::new(&buffer).copy_from(&[1, 2, 3]);
     assert_eq!(incoming_bytes(buffer.as_ref()).unwrap(), [1, 2, 3]);
 }
 

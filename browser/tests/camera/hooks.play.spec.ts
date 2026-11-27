@@ -223,9 +223,10 @@ test("a second page's camera fragments settle on terrain the first page opened a
         hash,
       ),
     ).toBe(403);
+    // The terrain raster is decoded off the frame, into a blob URL.
     await expect(second.locator("#minimap-terrain")).toHaveAttribute(
       "href",
-      /^data:image/,
+      /^(?:blob:|data:image)/,
     );
   } finally {
     await context.close();

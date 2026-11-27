@@ -103,3 +103,92 @@ test("projects only page main-thread GC onto overlapping long frames", async () 
   assert.deepEqual(scene.summary.over_50.causes, { gc: 1, unattributed: 1 });
   assert.deepEqual(scene.summary.over_100.causes, { gc: 1 });
 });
+
+test("attributes clock-aligned callbacks, task work and their nested causes without filling gaps", async () => {
+  const { reportScene } = await import("./stutter_capture.mjs");
+  const frames = [
+    {
+      at_ms: 100,
+      ms: 100,
+      painted: 1,
+      spans: [[7, 40, "chunk_install"]],
+    },
+  ];
+  const marker = { name: "aoe-stutter-test", ts: 500000, pid: 4, tid: 2 };
+  const event = (name, start, end, extra = {}) => ({
+    ...marker,
+    name,
+    ph: "X",
+    ts: marker.ts + start * 1000,
+    dur: (end - start) * 1000,
+    ...extra,
+  });
+  const report = reportScene("test", { sync: 100, frames }, [
+    marker,
+    event("ThreadControllerImpl::RunTask", -5, 60),
+    event("FunctionCall", 3, 45, {
+      args: { data: { url: "http://localhost/pkg/aoe_client.js" } },
+    }),
+    event("MinorGC", 20, 30),
+    event("FunctionCall", 65, 70, {
+      args: { data: { url: "http://localhost/navigation/strategic.js" } },
+    }),
+    event("ThreadControllerImpl::RunTask", 70, 100, { tid: 3 }),
+  ]);
+  assert.deepEqual(report.summary.stalls[0].exclusive_ms, {
+    browser_task: 18,
+    wasm_callback: 9,
+    chunk_install: 23,
+    gc: 10,
+    js_callback: 5,
+    unattributed: 35,
+  });
+  assert.equal(report.summary.stalls[0].attributed_fraction, 0.65);
+});
+
+test("accounts for time awaiting a matching rAF dispatch, including sorting and cancellation", async () => {
+  const { reportScene } = await import("./stutter_capture.mjs");
+  const frames = [{ at_ms: 10, ms: 100, spans: [], painted: 1 }];
+  const marker = { name: "aoe-stutter-test", ts: 99000, pid: 4, tid: 2 };
+  const event = (name, at, id, frame = "page") => ({
+    ...marker,
+    name,
+    ts: 100000 + at * 1000,
+    args: { data: { id, frame } },
+  });
+  const report = reportScene("test", { sync: 9, frames }, [
+    marker,
+    event("FireAnimationFrame", 90, 1),
+    event("RequestAnimationFrame", 15, 1),
+    event("FireAnimationFrame", 95, 2, "other-page"),
+    event("RequestAnimationFrame", 1, 2),
+    event("RequestAnimationFrame", 0, 3),
+    event("CancelAnimationFrame", 5, 3),
+    event("FireAnimationFrame", 98, 3),
+  ]);
+  assert.deepEqual(report.summary.stalls[0].exclusive_ms, {
+    unattributed: 25,
+    animation_dispatch_wait: 75,
+  });
+});
+
+test("assigns blocking pixel readback ahead of the callback and scheduling envelopes", async () => {
+  const { reportScene } = await import("./stutter_capture.mjs");
+  const marker = { name: "aoe-stutter-test", ts: 500000, pid: 4, tid: 2 };
+  const span = (name, ts, dur) => ({ ...marker, name, ph: "X", ts, dur });
+  const report = reportScene(
+    "test",
+    { sync: 100, frames: [{ at_ms: 100, ms: 200, painted: 1, spans: [] }] },
+    [
+      marker,
+      span("BlinkScheduler_PerformMicrotaskCheckpoint", 500000, 190000),
+      span("RasterImplementation::ReadbackImagePixels", 505000, 180000),
+      span("ImplementationBase::WaitForCmd", 510000, 170000),
+    ],
+  );
+  assert.deepEqual(report.summary.stalls[0].exclusive_ms, {
+    browser_task: 10,
+    gpu_readback: 180,
+    unattributed: 10,
+  });
+});

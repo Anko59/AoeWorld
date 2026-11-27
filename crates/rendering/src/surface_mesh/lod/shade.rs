@@ -15,6 +15,38 @@ pub(super) enum Ground {
     Height(f64),
 }
 
+pub(super) fn unshaded(sample: &SceneTerrain) -> bool {
+    sample.surface.water != 0
+        || sample.surface.is_cliff()
+        || appearance::water_material(sample.material)
+}
+
+pub(super) fn mesh_shades(
+    cells: &[Option<CellSample>],
+    grid: CellGrid,
+    coarse: Option<&CoarseHeights>,
+) -> Vec<f32> {
+    let ground = cells
+        .iter()
+        .enumerate()
+        .map(|(index, cell)| match cell {
+            None => Ground::Absent,
+            Some(cell) if cell.sample.surface.is_cliff() => Ground::Cliff,
+            Some(cell) => {
+                let corners = displayed_heights(cell.sample, grid_cell(grid, index), grid, coarse);
+                Ground::Height(corners.iter().sum::<f64>() / 4.0)
+            }
+        })
+        .collect::<Vec<_>>();
+    let mut shades = cell_shades(&ground, grid);
+    for (shade, cell) in shades.iter_mut().zip(cells) {
+        if cell.as_ref().is_some_and(|cell| unshaded(&cell.sample)) {
+            *shade = 0.0;
+        }
+    }
+    vertex_shades(&ground, &shades, grid)
+}
+
 /// Summed-area tables over the cells that carry a height: count, x, y, height,
 /// xx, xy, yy, x*height and y*height; then the cliff cells.
 struct Tables {

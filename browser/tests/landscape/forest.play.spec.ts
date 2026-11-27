@@ -54,8 +54,10 @@ for (const backend of ["preferred", "webgl2", "canvas"] as const) {
     page.on("pageerror", (error) => errors.push(error.message));
     page.on("response", async (response) => {
       if (!response.url().includes("/chunks/") || !response.ok()) return;
-      const body = await response.json();
-      if (body.payload_hex?.startsWith("05") && fetched.size < 64)
+      // Chromium drops the body of a chunk response caught by a navigation;
+      // camera prefetch makes that more common. It says nothing about the forest.
+      const body = await response.json().catch(() => null);
+      if (body?.payload_hex?.startsWith("05") && fetched.size < 64)
         fetched.add(response.url());
     });
     await page.goto("/?play=1");

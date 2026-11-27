@@ -320,10 +320,13 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
         tile.terrain.surface.corner_game_height_levels = [0; 4];
     }
 
-    let mut chunks = std::collections::BTreeMap::from([
+    let mut chunks = ChunkTable::default();
+    for (key, chunk) in [
         ((8, 8), CachedChunk::from(low)),
         ((9, 8), CachedChunk::from(high.clone())),
-    ]);
+    ] {
+        chunks.insert(key, chunk);
+    }
     let mut request_bounds = None;
     let mut resident_bounds = None;
     for coordinate in [(8, 8), (9, 8)] {
@@ -347,14 +350,8 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
 
     // The production eviction policy drops resident evidence and discovery
     // eligibility while preserving the monotonic request bound.
-    let (removed, refreshed) = evict_distant_chunks_with_limits(
-        &mut chunks,
-        camera,
-        config,
-        1,
-        MAX_CACHED_CHUNK_BYTES,
-        &[],
-    );
+    let (removed, refreshed) =
+        evict_distant_chunks_with_limits(&mut chunks, camera, 1, MAX_CACHED_CHUNK_BYTES, &[]);
     assert!(removed);
     assert!(!chunks.contains_key(&(9, 8)));
     resident_bounds = refreshed;
@@ -373,14 +370,7 @@ fn fetch_evict_shrink_then_re_requests_high_relief_without_a_height_margin() {
     chunks.insert((9, 8), CachedChunk::from(high));
     // A visible high chunk can be farther in world coordinates than an
     // off-screen low chunk. Eviction must retain requested relief.
-    evict_distant_chunks_with_limits(
-        &mut chunks,
-        camera,
-        config,
-        1,
-        MAX_CACHED_CHUNK_BYTES,
-        &[(9, 8)],
-    );
+    evict_distant_chunks_with_limits(&mut chunks, camera, 1, MAX_CACHED_CHUNK_BYTES, &[(9, 8)]);
     assert!(!chunks.contains_key(&(8, 8)));
     let Some(resident) = chunks.get(&(9, 8)) else {
         assert!(false, "high-relief chunk is resident");

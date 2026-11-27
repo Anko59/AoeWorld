@@ -361,19 +361,20 @@ impl GameplayService {
             });
             return;
         }
-        // At most ten admitted views per second, each at most 512x512 tiles
-        // plus the fixed 256x256 overview, regardless of total map area.
+        // Admission bounds view construction to ten updates per second.
         (!in_process).then(|| session.subscription_times.push_back(now));
-        let viewer = session.viewer;
-        let units = economy::query_units(&world, region, session.primary_unit_id, viewer);
+        let player = session.viewer;
+        let units = economy::query_units(&world, region, session.primary_unit_id, player);
         if units.len() > MAX_SUBSCRIBED_UNITS {
-            let _ = session.sender.try_send(GameplayServerMessage::Error {
+            let sender = session.sender.clone();
+            drop((sessions, world));
+            let rejection = GameplayServerMessage::SubscriptionRejected {
+                revision,
                 code: 413,
-                message: "subscribed region exceeds gameplay entity limit".to_owned(),
-            });
+            };
+            let _ = sender.send(rejection).await;
             return;
         }
-        let player = viewer;
         let players = economy::player(&world, player)
             .into_iter()
             .map(|state| (state.player, state))
@@ -420,7 +421,7 @@ impl GameplayService {
         });
         if !session.ai {
             let view = aoe_simulation::HumanView {
-                player: viewer,
+                player,
                 region,
                 unit_zoom,
             };

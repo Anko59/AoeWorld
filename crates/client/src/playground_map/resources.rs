@@ -2,8 +2,14 @@ use super::*;
 use aoe_rendering::{GameArt, SceneCamera, resource_sprite_bounds, scene_resource_frame};
 
 pub(in super::super) fn scene_resources(client: &Client) -> Vec<SceneResource> {
+    scene_resources_for(client, &scene::prepare(client))
+}
+
+pub(in super::super) fn scene_resources_for(
+    client: &Client,
+    scene: &scene::PreparedScene,
+) -> Vec<SceneResource> {
     let visible = resident_visible_tiles(client);
-    let scene = scene::prepare(client);
     let now = super::super::now();
     let starting: Vec<_> = client.resources.rendered_starting_nodes(now).collect();
     let resources = client
@@ -55,7 +61,7 @@ pub(in super::super) fn scene_resources(client: &Client) -> Vec<SceneResource> {
     };
     select_visible_resources(
         resources
-            .chain(decorations::scenery(&scene))
+            .chain(decorations::scenery(scene))
             .filter(|r| client.fog.state(r.position.map(|v| v.floor() as i32)) > 0)
             // An owner's order is visible even when its destination is unexplored.
             .chain(super::super::village::rally::marker(client)),

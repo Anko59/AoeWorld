@@ -30,26 +30,6 @@ fn rendered_colour(client: &Client, player: aoe_core::PlayerId, owner: aoe_core:
     f64::from(r << 16 | g << 8 | b)
 }
 
-fn screen(
-    client: &Client,
-    position: [f64; 2],
-    scale: [f64; 2],
-    viewport: [f64; 2],
-    selected: bool,
-) -> Option<[f64; 2]> {
-    crate::hud_visibility::project_if_horizontal(
-        client.camera,
-        position,
-        scale,
-        viewport,
-        selected,
-        || {
-            let p = map::screen_position(client, position);
-            [p.x * scale[0], p.y * scale[1]]
-        },
-    )
-}
-
 pub(in super::super) fn update(client: &Client) {
     let owner = owner(client);
     let mut fighters = super::selection::owned_units(client)
@@ -80,6 +60,30 @@ pub(in super::super) fn update(client: &Client) {
         viewport[0] / f64::from(client.canvas.width()),
         viewport[1] / f64::from(client.canvas.height()),
     ];
+    // Keep one terrain snapshot for the entire HUD update. Empty and
+    // strategic views can avoid preparing the detailed scene altogether.
+    let scene = std::cell::OnceCell::new();
+    let screen = |position, selected| {
+        crate::hud_visibility::project_if_horizontal(
+            client.camera,
+            position,
+            scale,
+            viewport,
+            selected,
+            || {
+                let height = if overview {
+                    client.camera.focus_elevation_meters
+                } else {
+                    scene
+                        .get_or_init(|| map::scene::prepare(client))
+                        .height(position)
+                        .unwrap_or_else(|| map::elevation_at_world(client, position))
+                };
+                let point = client.camera.world_to_screen_at_height(position, height);
+                [point.x * scale[0], point.y * scale[1]]
+            },
+        )
+    };
     let camera = aoe_rendering::SceneCamera {
         center: client.camera.center,
         zoom: client.camera.zoom,
@@ -155,7 +159,7 @@ pub(in super::super) fn update(client: &Client) {
             continue;
         }
         let position = position_of(client, unit);
-        let Some([x, y]) = screen(client, position, scale, viewport, selected) else {
+        let Some([x, y]) = screen(position, selected) else {
             continue;
         };
         let top = head(unit.id, y);
@@ -164,18 +168,43 @@ pub(in super::super) fn update(client: &Client) {
         }
         values[12] += 1.0;
         let resource = unit.carried.map(|load| load.kind).or(unit.gathering);
-        let base = crate::building_ui::content::rules().units[unit.kind as usize].combat;
-        let p = client
-            .village
-            .players
-            .iter()
-            .find(|p| p.player == unit.player);
-        let stats = aoe_simulation::apply_research_stats(
-            base,
-            p.is_some_and(|p| p.age >= aoe_protocol::Age::Feudal),
-            p.map_or(0, |p| p.researched),
-        );
-        let loom = p.is_some_and(|p| p.researched & 1 != 0) && unit.kind == UnitKind::Villager;
+        // Only the selection panel reads combat stats. The marker stream
+        // still carries each visible actor's health, task, load and owner.
+        let [attack, melee, pierce, capacity, range] = if selected {
+            let rules = crate::building_ui::content::rules();
+            let base = rules.units[unit.kind as usize].combat;
+            let player = client
+                .village
+                .players
+                .iter()
+                .find(|p| p.player == unit.player);
+            let researched = player.map_or(0, |p| p.researched);
+            let stats = aoe_simulation::apply_research_stats(
+                base,
+                player.is_some_and(|p| p.age >= aoe_protocol::Age::Feudal),
+                researched,
+            );
+            let loom = researched & 1 != 0 && unit.kind == UnitKind::Villager;
+            let capacity = if unit.kind == UnitKind::FishingShip {
+                15
+            } else {
+                let capacity = rules.villager_capacity(researched)
+                    + u16::from(
+                        unit.task == UnitTask::Farming
+                            && researched & aoe_protocol::Tech::HeavyPlow.bit() != 0,
+                    );
+                capacity.max(unit.carried.map_or(0, |load| load.amount))
+            };
+            [
+                f64::from(stats.attack),
+                f64::from(stats.melee_armour) + flag(loom),
+                f64::from(stats.pierce_armour) + 2.0 * flag(loom),
+                f64::from(capacity),
+                f64::from(stats.range),
+            ]
+        } else {
+            [0.0; 5]
+        };
         values.extend_from_slice(&[
             f64::from(unit.id.0),
             unit.kind as u8 as f64,
@@ -195,22 +224,12 @@ pub(in super::super) fn update(client: &Client) {
             f64::from(unit.carried.map_or(0, |load| load.amount)),
             f64::from(unit.hp),
             f64::from(unit.max_hp),
-            f64::from(stats.attack),
-            f64::from(stats.melee_armour) + if loom { 1.0 } else { 0.0 },
-            f64::from(stats.pierce_armour) + if loom { 2.0 } else { 0.0 },
+            attack,
+            melee,
+            pierce,
             top,
-            f64::from(if unit.kind == UnitKind::FishingShip {
-                15
-            } else {
-                let researched = p.map_or(0, |p| p.researched);
-                let capacity = crate::building_ui::content::rules().villager_capacity(researched)
-                    + u16::from(
-                        unit.task == UnitTask::Farming
-                            && researched & aoe_protocol::Tech::HeavyPlow.bit() != 0,
-                    );
-                capacity.max(unit.carried.map_or(0, |load| load.amount))
-            }),
-            f64::from(stats.range),
+            capacity,
+            range,
             f64::from(unit.player.0),
             flag(unit.player == owner),
             rendered_colour(client, unit.player, owner),
@@ -221,8 +240,7 @@ pub(in super::super) fn update(client: &Client) {
         if overview && !selected {
             continue;
         }
-        let Some([x, y]) = screen(client, building_center(building), scale, viewport, selected)
-        else {
+        let Some([x, y]) = screen(building_center(building), selected) else {
             continue;
         };
         if !crate::hud_visibility::visible([x, y], y - 48.0, viewport, selected) {
@@ -261,13 +279,7 @@ pub(in super::super) fn update(client: &Client) {
         if overview && !selected {
             continue;
         }
-        let Some([x, y]) = screen(
-            client,
-            animal.position.as_tiles(),
-            scale,
-            viewport,
-            selected,
-        ) else {
+        let Some([x, y]) = screen(animal.position.as_tiles(), selected) else {
             continue;
         };
         let top = head(animal.id, y);

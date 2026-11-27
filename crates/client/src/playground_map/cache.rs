@@ -2,9 +2,16 @@
 use super::*;
 use aoe_core::TileCoord;
 use aoe_map::{
-    CompactChunkError, LandscapeAppearance, LandscapeChunk, LandscapeDecoration, LandscapeResource,
-    LandscapeTile,
+    CompactChunk, CompactChunkError, LandscapeAppearance, LandscapeChunk, LandscapeDecoration,
+    LandscapeResource, LandscapeTile,
 };
+use wasm_bindgen::JsCast;
+use wasm_bindgen_futures::JsFuture;
+use web_sys::{RequestInit, Response};
+
+#[path = "cache/table.rs"]
+mod table;
+pub(crate) use table::ChunkTable;
 
 #[derive(Clone, Debug)]
 pub(crate) struct CachedChunk(LandscapeChunk);
@@ -80,6 +87,49 @@ impl From<LandscapeChunk> for CachedChunk {
     fn from(chunk: LandscapeChunk) -> Self {
         Self(chunk)
     }
+}
+
+pub(super) async fn fetch_chunk(
+    content_hash: &str,
+    x: i32,
+    y: i32,
+    controller: Option<&AbortController>,
+) -> Result<CachedChunk, JsValue> {
+    let window = web_sys::window().ok_or("No window")?;
+    let options = RequestInit::new();
+    // Only a live human seat receives the server's camera priority. The
+    // server validates this token; AI traffic uses the low lane.
+    if let Some(token) = super::super::storage::stored_token() {
+        let headers = web_sys::Headers::new()?;
+        headers.set(
+            "X-AoeWorld-Controller-Token",
+            &super::super::storage::hex(&token.0),
+        )?;
+        options.set_headers(&headers);
+    }
+    if let Some(controller) = controller {
+        options.set_signal(Some(&controller.signal()));
+    }
+    let response: Response = JsFuture::from(
+        window.fetch_with_str_and_init(&format!("/maps/{content_hash}/chunks/{x}/{y}"), &options),
+    )
+    .await?
+    .dyn_into()?;
+    if !response.ok() {
+        return Err(JsValue::from_str(&format!("HTTP {}", response.status())));
+    }
+    let body = JsFuture::from(response.text()?).await?;
+    #[cfg(feature = "frame-bench")]
+    let _decode = super::super::perf::Scope::new(44);
+    let compact = crate::game_assets::decode_chunk(
+        &body.as_string().ok_or("map chunk response was not text")?,
+    )?;
+    let chunk =
+        CachedChunk::decode(&compact).map_err(|error| JsValue::from_str(&error.to_string()))?;
+    if chunk.coordinate() != (x, y) {
+        return Err(JsValue::from_str("map chunk response coordinates mismatch"));
+    }
+    Ok(chunk)
 }
 
 #[path = "cache/tests.rs"]

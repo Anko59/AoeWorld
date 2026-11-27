@@ -55,3 +55,7 @@ mod asset_sources;
 #[cfg(any(all(target_arch = "wasm32", not(feature = "diagnostics")), test))]
 #[path = "playground_map/scene/culling.rs"]
 mod scene_culling;
+
+#[cfg(any(all(target_arch = "wasm32", not(feature = "diagnostics")), test))]
+#[path = "playground_game/view.rs"]
+mod camera_demand;

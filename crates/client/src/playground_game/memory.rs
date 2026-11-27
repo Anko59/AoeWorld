@@ -89,7 +89,7 @@ pub fn client_memory_snapshot() -> Result<String, JsValue> {
                 probes,
                 candidates,
                 client.terrain_requests.len(),
-                scene_bytes,
+                scene_bytes + client.terrain_patches.resident_bytes(),
                 client
                     .rendered_frame
                     .resident_bytes(map::scene::PreparedScene::resident_bytes)

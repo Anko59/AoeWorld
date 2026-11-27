@@ -27,7 +27,11 @@ fn ridge(width: i32, height: i32, boundary: i32) -> Vec<SceneTerrain> {
         .collect()
 }
 
-fn bounded(terrain: &[SceneTerrain], camera: SceneCamera) -> Vec<ProjectedSurfaceTriangle> {
+fn bounded(
+    terrain: &[SceneTerrain],
+    camera: SceneCamera,
+    expected_capacity: usize,
+) -> Vec<ProjectedSurfaceTriangle> {
     let mesh = projected_surface_triangles(terrain, camera);
     assert!(
         mesh.len() <= 24_576,
@@ -37,8 +41,8 @@ fn bounded(terrain: &[SceneTerrain], camera: SceneCamera) -> Vec<ProjectedSurfac
     );
     assert_eq!(
         mesh.capacity(),
-        24_576,
-        "the reserved triangle vector never grows"
+        expected_capacity,
+        "the mesh retains the scene-sized triangle allocation"
     );
     assert!(!mesh.iter().all(|t| t.skirt), "ground stays present");
     mesh
@@ -54,6 +58,7 @@ fn review_f2_wide_coarse_scene_budgets_all_ninety_six_skirt_triangles() {
             viewport: [4096.0, 2160.0],
             focus_elevation_meters: 4.0,
         },
+        6_620,
     );
     assert_eq!(mesh.iter().filter(|t| t.skirt).count(), 96);
     assert!(
@@ -86,6 +91,7 @@ fn review_f3_generated_mountain_rectangle_keeps_its_coarse_cliff_inside_budget()
             viewport: [4096.0, 2160.0],
             focus_elevation_meters: 179.0,
         },
+        7_248,
     );
     assert!(
         mesh.iter().any(|t| t.skirt
@@ -105,6 +111,7 @@ fn review_f4_tall_coarse_scene_budgets_all_one_hundred_twenty_eight_skirt_triang
             viewport: [3840.0, 2160.0],
             focus_elevation_meters: 2.0,
         },
+        6_526,
     );
     assert_eq!(mesh.iter().filter(|t| t.skirt).count(), 128);
     assert!(
@@ -112,4 +119,20 @@ fn review_f4_tall_coarse_scene_budgets_all_one_hundred_twenty_eight_skirt_triang
             .filter(|t| t.skirt)
             .any(|t| t.points.iter().any(|p| p.world[2] == 8.0))
     );
+}
+
+#[wasm_bindgen_test]
+async fn an_old_subscription_rejection_keeps_the_current_view() {
+    let mut client = super::client_with_backend(&super::contact_scene(), Some("canvas")).await;
+    client.revision = 3;
+    let active = Some(aoe_core::TileRect::from_xywh(0, 0, 4, 4));
+    client.sent_region = active;
+    crate::playground::game::subscription::refuse_over_limit(&mut client, 2);
+    assert_eq!(client.sent_region, active);
+    assert!(client.subscription_guard);
+
+    crate::playground::game::subscription::refuse_over_limit(&mut client, 3);
+    assert_eq!(client.sent_region, None);
+    assert!(!client.subscription_guard);
+    client.canvas.remove();
 }

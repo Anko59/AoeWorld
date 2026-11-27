@@ -341,3 +341,14 @@ fn browser_wildlife_fixture_matches_the_current_codec() {
     expected.extend(hex(include_str!("../../../browser/tests/wire/sheep.hex")));
     assert_wire(message, expected);
 }
+
+#[test]
+fn subscription_rejection_carries_the_request_revision_on_the_wire() {
+    assert_wire(
+        GameplayServerMessage::SubscriptionRejected {
+            revision: 300,
+            code: 413,
+        },
+        vec![13, 172, 2, 157, 3],
+    );
+}

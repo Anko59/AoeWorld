@@ -31,6 +31,7 @@ impl Renderer {
 
     pub(crate) fn staging_bytes(&self) -> usize {
         self.staging.capacity() * std::mem::size_of::<Sprite>()
+            + self.layer_sort.resident_bytes()
             + self.instances.retained_bytes()
             + self.draws.capacity() * std::mem::size_of::<(std::ops::Range<u32>, bool)>()
             + self.contour_draws.capacity() * std::mem::size_of::<std::ops::Range<u32>>()
