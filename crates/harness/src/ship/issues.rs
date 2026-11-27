@@ -18,6 +18,7 @@ const TITLE_LIMIT: usize = 256;
 const BODY_LIMIT: usize = 60_000;
 const ISSUE_CAP: usize = 10_000;
 
+mod flaky;
 pub(super) mod followups;
 mod routing;
 pub(super) mod triage;
