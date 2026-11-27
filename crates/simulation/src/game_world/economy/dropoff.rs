@@ -43,7 +43,15 @@ impl GameWorld {
             .filter(|candidate| candidate.accepts(kind))
             .filter_map(|candidate| self.economy.dropoffs.get(&(player, candidate)))
             .flatten()
-            .filter_map(|&id| self.building(id).filter(|building| building.is_complete()))
+            // The stored building, not its projection: footprint and kind never
+            // change, and only one stored as unfinished can have completed
+            // since (#978: projecting every drop-off of the player for each
+            // return was most of gathering on the 5x save).
+            .filter_map(|&id| self.economy.buildings.get(&id))
+            .filter(|building| {
+                building.is_complete()
+                    || self.building(building.id).is_some_and(|b| b.is_complete())
+            })
             .map(|building| (ring_distance(building.footprint, from), building.id))
             .collect::<Vec<_>>();
         found.sort_unstable();
