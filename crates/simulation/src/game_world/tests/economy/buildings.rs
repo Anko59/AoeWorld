@@ -74,7 +74,7 @@ fn the_rules_table_holds_the_dark_age_values_in_kind_order() {
     assert!(TownCenter.rules().buildable);
     assert_eq!(Farm.rules().requires, Some(Mill));
     assert_eq!(Farm.rules().food, 175);
-    assert_eq!(Outpost.rules().los, 10);
+    assert_eq!(Outpost.rules().los, 20);
     assert!(!Farm.rules().blocks);
 }
 

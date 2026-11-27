@@ -79,11 +79,11 @@ fn first_build_work_starts_sight_and_construction_grows_it_to_building_los() {
     }
     w.remove_unit(builder);
     assert_eq!(
-        w.visibility(PlayerId(0), TileCoord::new(105, 100)),
+        w.visibility(PlayerId(0), TileCoord::new(110, 100)),
         TileVisibility::Visible
     );
     assert_eq!(
-        w.visibility(PlayerId(0), TileCoord::new(106, 100)),
+        w.visibility(PlayerId(0), TileCoord::new(111, 100)),
         TileVisibility::Unexplored
     );
     let builder = w.spawn_villager(PlayerId(0), at(99, 100)).unwrap();
@@ -94,7 +94,7 @@ fn first_build_work_starts_sight_and_construction_grows_it_to_building_los() {
     assert!(w.building(id).unwrap().is_complete());
     w.remove_unit(builder);
     assert_eq!(
-        w.visibility(PlayerId(0), TileCoord::new(110, 100)),
+        w.visibility(PlayerId(0), TileCoord::new(120, 100)),
         TileVisibility::Visible
     );
 }

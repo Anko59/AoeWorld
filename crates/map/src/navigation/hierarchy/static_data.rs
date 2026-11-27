@@ -2,8 +2,8 @@
 use super::packed::PackedChunk;
 use super::*;
 
-// Derived navigation must be rebuilt when its terrain flags or graph change.
-pub const NAVIGATION_FORMAT_VERSION: u32 = 3;
+// Derived navigation must be rebuilt when its terrain, resources or graph change.
+pub const NAVIGATION_FORMAT_VERSION: u32 = 4;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct WalkRun {

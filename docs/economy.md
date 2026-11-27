@@ -143,7 +143,7 @@ tests and wire follow. Values are Age of Empires II: Definitive Edition's.
 | Farm | 60 wood | 15 s | 480 | 3x3 | 175 food, needs a Mill, walked on |
 | Barracks | 175 wood | 50 s | 1200 | 3x3 | infantry training queue |
 | Palisade Wall | 2 wood a tile | 6 s a tile | 250 | 1x1 | blocks movement |
-| Outpost | 25 wood, 5 stone | 15 s | 500 | 1x1 | line of sight 10 |
+| Outpost | 25 wood, 5 stone | 15 s | 500 | 1x1 | line of sight 20 |
 | Stone Wall (Feudal) | 5 stone a tile | 5 s a tile | 1800 | 1x1 | blocks movement, armour 8/10 |
 | Stone Gate (Feudal) | 30 stone | 70 s | 2750 | 4x1 | opens for its owner, armour 6/6 |
 

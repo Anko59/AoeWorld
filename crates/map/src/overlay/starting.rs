@@ -52,7 +52,11 @@ impl ResourceNode {
         let (kind, object, initial_amount) = match kind_bits {
             0 => (ResourceKind::Food, ObjectKind::ForageBush, 125),
             1 => (ResourceKind::Wood, ObjectKind::Tree, 100),
-            2 => (ResourceKind::Gold, ObjectKind::GoldDeposit, 800),
+            2 => (
+                ResourceKind::Gold,
+                ObjectKind::GoldDeposit,
+                crate::terrain::GOLD_PILE_AMOUNT,
+            ),
             3 => (ResourceKind::Stone, ObjectKind::StoneDeposit, 350),
             _ => return None,
         };
