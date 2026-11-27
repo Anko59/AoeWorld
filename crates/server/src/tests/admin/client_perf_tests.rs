@@ -37,7 +37,9 @@ async fn authenticated_client_timings_are_bounded_rate_limited_and_visible_with_
         .unwrap()
         .token;
     let token: String = token.0.iter().map(|b| format!("{b:02x}")).collect();
-    let server = server(gameplay, true).await;
+    let directory = tempfile::tempdir().unwrap();
+    let world = format!("{:016x}", gameplay.world_id());
+    let server = server_with_match_data(gameplay, true, Some(directory.path().into())).await;
     assert_eq!(post(&server, "wrong", report()).await, 403);
     let mut invalid = report();
     invalid["frame_ms"] = json!([32, 16, 80]);
@@ -63,6 +65,24 @@ async fn authenticated_client_timings_are_bounded_rate_limited_and_visible_with_
     assert_eq!(body["clients"][0]["frame_ms"], json!([16.0, 32.0, 80.0]));
     assert_eq!(body["clients"][0]["contour"]["effect_frames"], 30);
     assert_eq!(body["clients"][0]["contour"]["context_lost"], 1);
+    let (status, match_data) = request(&server, "GET", "/admin/match", Some(SECRET), "").await;
+    assert_eq!(status, 200);
+    assert_eq!(match_data["telemetry"]["world_id"], world);
+    assert_eq!(match_data["telemetry"]["clients"][0]["units_in_view"], 12);
+    let path = directory
+        .path()
+        .join("matches")
+        .join(world)
+        .join("telemetry.jsonl");
+    let jsonl = std::fs::read_to_string(path).unwrap();
+    assert!(!jsonl.contains(&token));
+    let rows: Vec<Value> = jsonl
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["kind"], "client");
+    assert_eq!(rows[0]["report"]["frame_ms"], json!([16.0, 32.0, 80.0]));
     assert!(body.get("samples").is_some(), "tick summary retained");
     assert!(
         !body.to_string().contains(&token),

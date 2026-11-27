@@ -32,30 +32,7 @@ impl TickStats {
             )
         };
         let samples = records.len();
-        let mut columns = BTreeMap::<&str, Vec<u64>>::new();
-        for TickRecord(_, total, sim, late, _, _, _, planning, phases) in &records {
-            for (name, value) in [
-                ("total", *total),
-                ("advance", *sim),
-                ("late", *late),
-                ("planning", *planning),
-            ] {
-                columns.entry(name).or_default().push(value);
-            }
-            for (name, value) in phases.values() {
-                columns.entry(name).or_default().push(value);
-            }
-        }
-        let mut phases = BTreeMap::new();
-        for (name, mut values) in columns {
-            values.sort_unstable();
-            let percentile =
-                |percent: usize| values[(values.len() * percent).div_ceil(100).saturating_sub(1)];
-            phases.insert(
-                name,
-                json!({"p50_us":percentile(50),"p95_us":percentile(95),"max_us":values.last()}),
-            );
-        }
+        let phases = phase_timings(&records);
         let mut top = phases
             .iter()
             .filter(|(name, _)| !["total", "advance", "late", "planning"].contains(name))
@@ -87,4 +64,32 @@ impl TickStats {
                "tick_rate":rate,"missed_ticks":records.iter().map(|r|u64::from(r.6)).sum::<u64>(),
                "missed_total":missed_total,"phases":phases,"top_phases":top})
     }
+}
+
+pub(super) fn phase_timings(records: &[TickRecord]) -> BTreeMap<&'static str, Value> {
+    let mut columns = BTreeMap::<&str, Vec<u64>>::new();
+    for TickRecord(_, total, sim, late, _, _, _, planning, phases) in records {
+        for (name, value) in [
+            ("total", *total),
+            ("advance", *sim),
+            ("late", *late),
+            ("planning", *planning),
+        ] {
+            columns.entry(name).or_default().push(value);
+        }
+        for (name, value) in phases.values() {
+            columns.entry(name).or_default().push(value);
+        }
+    }
+    let mut phases = BTreeMap::new();
+    for (name, mut values) in columns {
+        values.sort_unstable();
+        let percentile =
+            |percent: usize| values[(values.len() * percent).div_ceil(100).saturating_sub(1)];
+        phases.insert(
+            name,
+            json!({"p50_us":percentile(50),"p95_us":percentile(95),"max_us":values.last()}),
+        );
+    }
+    phases
 }

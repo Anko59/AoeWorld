@@ -16,12 +16,12 @@ const REPORT_RATE: Duration = Duration::from_secs(55);
 type Quantiles = [f64; 3];
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct Report {
-    frames: u32,
+pub struct Report {
+    pub frames: u32,
     frame_ms: Quantiles,
-    units_in_view: u32,
-    still: Cadence,
-    panning: Cadence,
+    pub units_in_view: u32,
+    pub still: Cadence,
+    pub panning: Cadence,
     stages_ms: Stages,
     draw_calls: Quantiles,
     renderer: String,
@@ -31,15 +31,25 @@ pub(crate) struct Report {
 /// 101–136 have 25 ms resolution, and 137 covers the remaining tail.
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct Cadence {
-    frames: u32,
-    max_ms: f64,
-    over_50_ms: u32,
-    over_100_ms: u32,
-    histogram: Vec<(u8, u32)>,
+pub struct Cadence {
+    pub frames: u32,
+    pub max_ms: f64,
+    pub over_50_ms: u32,
+    pub over_100_ms: u32,
+    pub histogram: Vec<(u8, u32)>,
 }
 
 impl Cadence {
+    /// Upper edge of a cadence bucket, limited by the observed maximum.
+    pub fn upper_ms(bucket: u8, max: f64) -> f64 {
+        let upper = match bucket {
+            0..=100 => f64::from(bucket),
+            101..=136 => 100.0 + f64::from(bucket - 100) * 25.0,
+            _ => max,
+        };
+        upper.min(max)
+    }
+
     fn valid(&self) -> bool {
         if !self.max_ms.is_finite() || self.max_ms < 0.0 {
             return false;
@@ -97,7 +107,7 @@ struct Stages {
     fog: Quantiles,
 }
 impl Report {
-    fn valid(&self) -> bool {
+    pub fn valid(&self) -> bool {
         let s = &self.stages_ms;
         (1..=65_536).contains(&self.frames)
             && self.frames == self.still.frames.saturating_add(self.panning.frames)
@@ -131,6 +141,7 @@ impl Report {
     }
 }
 struct Entry {
+    world_id: u64,
     token: aoe_protocol::ResumeToken,
     at: Instant,
     report: Report,
@@ -143,8 +154,10 @@ impl Reports {
         token: aoe_protocol::ResumeToken,
         report: Report,
         tick: u64,
+        world_id: u64,
     ) -> Result<(), StatusCode> {
         let now = Instant::now();
+        self.0.retain(|entry| entry.world_id == world_id);
         if let Some(index) = self.0.iter().position(|e| e.token == token) {
             if now.duration_since(self.0[index].at) < REPORT_RATE {
                 return Err(StatusCode::TOO_MANY_REQUESTS);
@@ -169,17 +182,18 @@ impl Reports {
             draw_calls = ?report.draw_calls, renderer = %report.renderer,
             contour = ?serde_json::to_value(&report.contour).ok(), "client frame summary");
         self.0.push_back(Entry {
+            world_id,
             token,
             at: now,
             report,
         });
         Ok(())
     }
-    pub(crate) fn recent(&self) -> serde_json::Value {
+    pub(crate) fn recent(&self, world_id: u64) -> serde_json::Value {
         serde_json::to_value(
             self.0
                 .iter()
-                .filter(|e| e.at.elapsed() < Duration::from_secs(120))
+                .filter(|e| e.world_id == world_id && e.at.elapsed() < Duration::from_secs(120))
                 .map(|e| &e.report)
                 .collect::<Vec<_>>(),
         )
@@ -192,7 +206,8 @@ pub(super) async fn receive(
     Json(report): Json<Report>,
 ) -> Result<StatusCode, StatusCode> {
     let token = crate::maps::controller_token(&headers).ok_or(StatusCode::FORBIDDEN)?;
-    let gameplay = state.gameplay.read().await.clone();
+    let active = state.gameplay.read().await;
+    let gameplay = active.clone();
     if !gameplay.is_human_token(token) {
         return Err(StatusCode::FORBIDDEN);
     }
@@ -200,7 +215,16 @@ pub(super) async fn receive(
         return Err(StatusCode::BAD_REQUEST);
     }
     let (tick, _) = gameplay.tick_and_units().await;
-    state.client_perf.lock().await.record(token, report, tick)?;
+    state
+        .client_perf
+        .lock()
+        .await
+        .record(token, report.clone(), tick, gameplay.world_id())?;
+    drop(active);
+    if let Err(error) = super::super::append_client(&state, &gameplay, tick, report).await {
+        tracing::warn!(world_id = gameplay.world_id(), %error, "could not append client telemetry");
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 

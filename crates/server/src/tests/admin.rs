@@ -5,6 +5,7 @@ use aoe_core::{PlayerId, Seed, TileCoord, TileRect, WorldConfig, WorldPosition};
 use aoe_protocol::{GameplayServerMessage as M, encode_gameplay_server};
 use aoe_simulation::GameWorld;
 use serde_json::{Value, json};
+use std::path::PathBuf;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::task::JoinHandle;
@@ -28,6 +29,14 @@ impl Drop for Server {
 }
 
 async fn server(gameplay: GameplayService, secret: bool) -> Server {
+    server_with_match_data(gameplay, secret, None).await
+}
+
+async fn server_with_match_data(
+    gameplay: GameplayService,
+    secret: bool,
+    map_package_directory: Option<PathBuf>,
+) -> Server {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let mut state = AppState::new(
@@ -36,7 +45,7 @@ async fn server(gameplay: GameplayService, secret: bool) -> Server {
             scenario: SMOKE,
             tick_hz: 20,
             asset_pack: None,
-            map_package_directory: None,
+            map_package_directory,
             open_map_package: None,
             map_worker: None,
             geodata_cache_directory: ".cache/geodata".into(),
@@ -284,11 +293,12 @@ async fn player_details_page_entities_and_reject_unbounded_limits() {
 async fn perf_summarizes_the_current_rolling_minute_and_reuses_memory_health() {
     let server = server(villages(), true).await;
     let probe = crate::gameplay_match::TickProbe::default();
+    let world = server.state.gameplay.read().await.world_id();
     for tick in 0..=1200 {
         let micros = if tick == 0 { 1_000_000 } else { tick };
         probe.phase("movement", Duration::from_micros(micros));
         server.state.tick_stats.record(
-            tick,
+            (world, tick),
             Duration::from_micros(micros),
             Duration::ZERO,
             Duration::from_millis(50),

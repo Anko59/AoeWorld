@@ -49,14 +49,14 @@ fn history_and_expiry_are_bounded_without_exposing_tokens() {
             reports.0.front_mut().unwrap().at = Instant::now() - Duration::from_secs(56);
         }
         reports
-            .record(aoe_protocol::ResumeToken([id; 24]), report(), 0)
+            .record(aoe_protocol::ResumeToken([id; 24]), report(), 0, 7)
             .unwrap();
     }
     assert_eq!(reports.0.len(), 64);
     assert_eq!(reports.0.front().unwrap().token.0[0], 6);
     reports.0[0].at = Instant::now() - Duration::from_secs(121);
-    assert_eq!(reports.recent().as_array().unwrap().len(), 63);
-    assert!(reports.recent()[0].get("token").is_none());
+    assert_eq!(reports.recent(7).as_array().unwrap().len(), 63);
+    assert!(reports.recent(7)[0].get("token").is_none());
 }
 #[test]
 fn nonfinite_negative_and_unordered_observations_are_rejected() {
@@ -79,15 +79,15 @@ fn cycling_more_than_the_history_limit_cannot_bypass_report_rate_limits() {
     let mut reports = Reports::default();
     for id in 0..64 {
         reports
-            .record(aoe_protocol::ResumeToken([id; 24]), report(), 0)
+            .record(aoe_protocol::ResumeToken([id; 24]), report(), 0, 7)
             .unwrap();
     }
     assert_eq!(
-        reports.record(aoe_protocol::ResumeToken([64; 24]), report(), 0),
+        reports.record(aoe_protocol::ResumeToken([64; 24]), report(), 0, 7),
         Err(StatusCode::TOO_MANY_REQUESTS)
     );
     assert_eq!(
-        reports.record(aoe_protocol::ResumeToken([0; 24]), report(), 0),
+        reports.record(aoe_protocol::ResumeToken([0; 24]), report(), 0, 7),
         Err(StatusCode::TOO_MANY_REQUESTS)
     );
 }

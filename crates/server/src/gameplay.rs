@@ -53,6 +53,7 @@ pub struct GameplayService {
     pub(super) slots: Arc<[Slot]>,
     next_session: Arc<AtomicU64>,
     pub(super) world_id: u64,
+    pub(crate) telemetry: Arc<crate::gameplay_match::MatchTelemetry>,
     map_content_hash: Option<[u8; 32]>,
     map_metadata: Option<MapMetadata>,
     resource_journal: Arc<std::sync::Mutex<resources::Journal>>,

@@ -35,7 +35,10 @@ async fn match_state(
     let service = state.gameplay.read().await.clone();
     let seats = service.slot_infos().await;
     let world = service.world.read().await;
-    Ok(Json(summary::match_state(&world, &seats)))
+    let mut report = summary::match_state(&world, &seats);
+    drop(world);
+    report["telemetry"] = state.latest_match_telemetry(&service).await;
+    Ok(Json(report))
 }
 
 #[derive(Deserialize)]
@@ -98,8 +101,8 @@ async fn set_fog(
 async fn perf(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Value>, Error> {
     authorize(&state, &headers)?;
     let mut report = state.tick_stats.summary(state.tick_period);
-    report["clients"] = state.client_perf.lock().await.recent();
     let service = state.gameplay.read().await.clone();
+    report["clients"] = state.client_perf.lock().await.recent(service.world_id());
     report["rust_ai"] = service.rust_ai_perf();
     report["gameplay_memory"] =
         serde_json::to_value(service.memory_usage().await).map_err(internal)?;
