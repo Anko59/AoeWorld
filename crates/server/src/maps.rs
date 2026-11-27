@@ -20,7 +20,7 @@ pub(crate) use height_bounds::height_bounds;
 #[cfg(test)]
 use height_bounds::{HeightBoundsError, package_height_bounds};
 mod minimap;
-pub(crate) use minimap::MinimapCache;
+pub(crate) use minimap::Minimaps;
 use minimap::minimap;
 mod reset;
 mod routes;

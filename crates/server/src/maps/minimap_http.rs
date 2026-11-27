@@ -56,9 +56,7 @@ pub(in crate::maps) async fn finish<G: Send + 'static>(
     }
 }
 
-/// Serves the cached raster, computing it once per package. The cache lock
-/// is held while computing, so at most one raster is generated at a time and
-/// concurrent requests for the same map reuse the first result.
+/// Serves the cached raster, or else computes it once per package.
 pub(in crate::maps) async fn minimap(
     Path(content_hash): Path<String>,
     State(state): State<AppState>,
@@ -90,39 +88,53 @@ async fn serve_minimap(
     } else {
         content_hash
     };
-    let mut cache = state.minimaps.lock().await;
-    let raster = if let Some(raster) = cache.get(&key) {
-        raster
-    } else if cache.pending.contains(&key) {
-        return Err(StatusCode::SERVICE_UNAVAILABLE);
-    } else {
-        let (cancellation_guard, cancelled) = request_cancellation();
-        let provider = page_residency(&state, &package, cancelled.clone())
-            .await
-            .map_err(|_| StatusCode::NOT_FOUND)?;
-        let task = tokio::task::spawn_blocking(move || {
-            if coarse {
-                package_raster(&package, provider, 64, &|| {
-                    cancelled.load(Ordering::Acquire)
-                })
-            } else {
-                package_minimap(&package, provider, &|| cancelled.load(Ordering::Acquire))
-            }
-        });
-        finish(
-            &mut cache,
-            &state.minimaps,
-            key,
-            MINIMAP_TIME_BUDGET,
-            task,
-            cancellation_guard,
-        )
-        .await?
+    let raster = match state.minimaps.ready(&key) {
+        Some(raster) => raster,
+        None => computed(&state, key, package, coarse).await?,
     };
-    drop(cache);
     Ok((
         [(header::CONTENT_TYPE, "application/octet-stream")],
         raster.to_vec(),
     )
         .into_response())
+}
+
+/// Computes a raster in its turn. That lock is held meanwhile, so at most one
+/// raster is generated at a time and concurrent requests for the same map
+/// reuse the first result.
+async fn computed(
+    state: &AppState,
+    key: String,
+    package: MapPackage,
+    coarse: bool,
+) -> Result<Arc<[u8]>, StatusCode> {
+    let mut cache = state.minimaps.lock().await;
+    if let Some(raster) = cache.get(&key) {
+        return Ok(raster);
+    }
+    if cache.pending.contains(&key) {
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
+    let (cancellation_guard, cancelled) = request_cancellation();
+    let provider = page_residency(state, &package, cancelled.clone())
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+    let task = tokio::task::spawn_blocking(move || {
+        if coarse {
+            package_raster(&package, provider, 64, &|| {
+                cancelled.load(Ordering::Acquire)
+            })
+        } else {
+            package_minimap(&package, provider, &|| cancelled.load(Ordering::Acquire))
+        }
+    });
+    finish(
+        &mut cache,
+        &state.minimaps.computing,
+        key,
+        MINIMAP_TIME_BUDGET,
+        task,
+        cancellation_guard,
+    )
+    .await
 }

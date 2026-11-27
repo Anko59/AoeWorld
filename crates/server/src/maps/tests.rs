@@ -13,6 +13,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 mod landscape;
 mod minimap;
+mod minimap_waiting;
 mod preview;
 
 #[derive(Debug, Default)]

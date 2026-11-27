@@ -82,7 +82,7 @@ pub struct AppState {
     reuse_prepared_maps: Arc<AtomicBool>,
     page_residencies: Arc<RwLock<page_residency::Registry>>,
     terrain_cache: Arc<Mutex<terrain_cache::TerrainCache>>,
-    minimaps: Arc<Mutex<maps::MinimapCache>>,
+    minimaps: maps::Minimaps,
     map_jobs: Arc<Mutex<map_jobs::Manager>>,
     gameplay: Arc<RwLock<GameplayService>>,
     /// Secret for `POST /match`; without it match hosting is refused.
@@ -119,7 +119,7 @@ impl AppState {
             reuse_prepared_maps: Arc::new(AtomicBool::new(false)),
             page_residencies: Arc::new(RwLock::new(page_residency::Registry::default())),
             terrain_cache: Arc::new(Mutex::new(terrain_cache::TerrainCache::default())),
-            minimaps: Arc::new(Mutex::new(maps::MinimapCache::default())),
+            minimaps: maps::Minimaps::default(),
             map_jobs: Arc::new(Mutex::new(map_jobs)),
             gameplay: Arc::new(RwLock::new(GameplayService::new(config.scenario.seed))),
             match_admin_token: Config::match_admin_token_from_env().map(Into::into),
