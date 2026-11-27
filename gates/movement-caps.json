@@ -65,7 +65,6 @@
     {"count":1,"expr":".take(APPROACH_TILE_TRIES)","file":"crates/simulation/src/game_world/economy/construction.rs","kind":"take"},
     {"count":1,"expr":"MAX_APPROACH_ATTEMPTS","file":"crates/simulation/src/game_world/economy/construction.rs","kind":"use"},
     {"count":1,"expr":"MAX_BUILD_GROUP","file":"crates/simulation/src/game_world/economy/construction.rs","kind":"use"},
-    {"count":1,"expr":".take(CONTINUE_TRIES)","file":"crates/simulation/src/game_world/economy/construction/continuation.rs","kind":"take"},
     {"count":1,"expr":"COMPLETION_VISITS","file":"crates/simulation/src/game_world/economy/construction/continuation.rs","kind":"use"},
     {"count":1,"expr":"MAX_BUILD_QUEUE","file":"crates/simulation/src/game_world/economy/construction/continuation.rs","kind":"use"},
     {"count":1,"expr":"FARM_STORAGE_CAPACITY","file":"crates/simulation/src/game_world/economy/farm/production.rs","kind":"use"},
