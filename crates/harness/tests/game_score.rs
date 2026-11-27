@@ -272,6 +272,9 @@ fn game_score_without_a_package_flag_plays_on_the_map_of_the_shared_home() {
         .args(["--seats", "3", "--workers", "1"])
         .args(["--out", out.to_str().expect("utf-8 path")])
         .env("AOE_GAME_SCORE_HOME", &home)
+        // CI keeps the package in `.cache/game-map/packages` (the game-map workflow restores it
+        // there); the shared home is the default everywhere else.
+        .env_remove("GITHUB_ACTIONS")
         .current_dir(directory.path())
         .output()
         .expect("the harness runs");
