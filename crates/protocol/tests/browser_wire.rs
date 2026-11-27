@@ -349,6 +349,6 @@ fn subscription_rejection_carries_the_request_revision_on_the_wire() {
             revision: 300,
             code: 413,
         },
-        vec![12, 172, 2, 157, 3],
+        vec![13, 172, 2, 157, 3],
     );
 }

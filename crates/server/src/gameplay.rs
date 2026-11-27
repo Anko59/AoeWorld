@@ -367,8 +367,7 @@ impl GameplayService {
         let units = economy::query_units(&world, region, session.primary_unit_id, player);
         if units.len() > MAX_SUBSCRIBED_UNITS {
             let sender = session.sender.clone();
-            drop(sessions);
-            drop(world);
+            drop((sessions, world));
             let rejection = GameplayServerMessage::SubscriptionRejected {
                 revision,
                 code: 413,
