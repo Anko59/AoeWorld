@@ -103,7 +103,7 @@ Each item ends with the scoreboard before and after plus its work numbers; a spe
 | Phase 7c wire segments, 1,000 sessions, 128-seat cap lifted | 11-09 | PLANNED | No PR | Later |
 | Phase 8 shards | 11-07 | PLANNED | Design must not block it | Later |
 | Phase 0 leftovers: command recorder, Steward/General/Vassal bots in the closed loop, 30-minute 100-seat runs, France census with heights | 11-09 | PARTIAL | `make save-replay` (#802) replays recorded owner-save commands; match-bench #740; recorder for live matches not found | A live-match recorder lets every lag report be replayed |
-| Tick cost of 99 Python AIs (about 3.5 ticks/s cost, 3.4 cores) | 11-04 | UNVERIFIED | Measured once 11-05, never profiled separately. The AIs of ordinary games are now Rust seats in the server ([AI](ai.md)); Python remains for tournaments | Measure the Rust seats on R1 with 99 AIs (`make scale-match`, default `--ai rust`) against `--ai python` |
+| Tick cost of 99 Python AIs (about 3.5 ticks/s cost, 3.4 cores) | 11-04 | UNVERIFIED | Measured once 11-05, never profiled separately. The AIs of ordinary games are now Rust seats in the server ([AI](ai.md)); Python remains for tournaments. 11-26, 99 Rust seats on a procedural France map, 10 min: 0.19 ms CPU and 1.0 ms of waits per tick on the tick's thread, 0.15 server cores mean ([match](../scale/match.md)) | Measure on the R1 save (61-75k units) once it is on the machine |
 
 ## Done or dropped
 

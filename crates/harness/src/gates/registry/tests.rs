@@ -1,6 +1,7 @@
 use super::*;
 use serde_json::{Value, json};
 mod ci_cache;
+mod ci_setup;
 mod classification;
 mod job_mapping;
 mod long;

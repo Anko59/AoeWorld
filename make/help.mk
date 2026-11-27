@@ -85,7 +85,7 @@ help:
 	@echo '  make ai-compare      Python AI against Rust AI on the same seeds, gaps as JSON (COMPARE_SIZE, COMPARE_BOTS, COMPARE_MINUTES, COMPARE_SEEDS)'
 	@echo '  make sdk-python-test Test the Python bindings and the example AI against a local server'
 	@echo '  make sdk-python-logic-test  Run AI fake-world decision regressions'
-	@echo '  make scale-match     Real server at scale: 1 human + 99 Python AIs on a France-sized map (docs/scale/match.md)'
+	@echo '  make scale-match     Real server at scale: 1 human + 99 AIs (Rust by default) on a France-sized map (docs/scale/match.md)'
 	@echo '  make scale-match-smoke  The same path with 4 players for one minute'
 	@echo '  make save-replay     Repeat local recorded save commands, thread instruction phases and hashes (AOE_SAVE_REPLAY_ARGS)'
 	@echo '  make roadmap         Open roadmap items by priority and status counts (docs/roadmap.md)'
