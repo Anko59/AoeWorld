@@ -146,7 +146,7 @@ fn the_e2e_job_runs_each_shard_of_one_split_and_nothing_else_runs_the_suite_ther
     }
     assert!(block.contains("run: make test-e2e"));
     assert!(block.contains(&format!("AOE_E2E_SHARD: ${{{{ matrix.shard }}}}/{count}")));
-    assert!(block.contains("name: 'e2e-${{ matrix.shard }}-diagnostics'"));
+    assert!(block.contains("name: e2e-${{ matrix.shard }}-diagnostics"));
     assert!(block.contains("fail-fast: false"));
     // The browser job keeps its checks but no longer runs the suite, and the
     // coverage job runs it not at all: the shards are the release evidence.

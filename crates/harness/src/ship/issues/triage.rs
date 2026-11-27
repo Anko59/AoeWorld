@@ -36,7 +36,12 @@ pub(in crate::ship) fn execute(root: &Path) -> Result<()> {
     }
     let raw = std::env::var("NIGHTLY_RESULTS")
         .map_err(|_| "set NIGHTLY_RESULTS to the nightly workflow's `needs` context JSON")?;
-    triage(root, &raw, std::env::var("GITHUB_RUN_ID").ok().as_deref())
+    let triaged = triage(root, &raw, std::env::var("GITHUB_RUN_ID").ok().as_deref());
+    // Flaky e2e tests are found whether or not a job failed; a failure to look warns only.
+    if let Err(error) = super::flaky::report(root) {
+        eprintln!("warning: could not report flaky e2e tests: {error}");
+    }
+    triaged
 }
 
 pub(super) fn triage(root: &Path, raw: &str, run_id: Option<&str>) -> Result<()> {
