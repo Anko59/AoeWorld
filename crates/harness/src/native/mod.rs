@@ -41,8 +41,8 @@ pub(crate) fn run_in(root: &Path, environment: &[(&str, &str)]) -> Result<(), Pr
 /// 2.0 GiB of rustc memory and its non-test twin 1.4 GiB, aoe-simulation and
 /// aoe-server tests 1.2 GiB each. Any three of those together exceed the shared
 /// 4 GiB container cap (kernel OOM kill on `exhaustive` and the nightly), while
-/// any two fit. Scoped (`-p`) runs build fewer heavy crates and keep the
-/// container's own job count.
+/// any two fit. Every test build here takes it: a unit-test selection can
+/// hold the same heavy binaries.
 const WORKSPACE_BUILD_JOBS: usize = 2;
 
 /// The inherited `CARGO_BUILD_JOBS`, capped at [`WORKSPACE_BUILD_JOBS`].
@@ -181,7 +181,12 @@ fn run_scope(packages: Option<&[String]>) -> Result<(), ProcessError> {
             })
             .chain(["-E", exclude.as_str()])
             .collect();
-        process::run("cargo", &nextest, BUDGET)?;
+        // A selection can hold the heaviest test binaries (aoe-harness,
+        // aoe-simulation, aoe-server), so it takes the workspace cap and budget
+        // (#1143: four jobs were OOM-killed at the 4 GiB container cap).
+        let jobs = workspace_build_jobs();
+        let environment = [("CARGO_BUILD_JOBS", jobs.as_str())];
+        process::run_with_env("cargo", &nextest, &environment, UNIT_BUDGET)?;
     }
     let doc_scope: Vec<String> = match packages {
         None => vec!["--workspace".to_owned()],
