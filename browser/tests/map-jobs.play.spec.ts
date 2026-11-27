@@ -92,29 +92,61 @@ test("an uncertain recovery response retains the original key for the next attem
   page,
 }) => {
   const key = "b".repeat(32);
+  const staleToken = "0".repeat(48);
   await page.addInitScript(
-    (key) =>
+    ({ key, staleToken }) => {
+      localStorage.setItem("aoeworld.resume-token", staleToken);
       localStorage.setItem(
         "aoeworld.map-creation-job",
         JSON.stringify({ submission: { key, request: { schema_version: 1 } } }),
-      ),
-    key,
+      );
+    },
+    { key, staleToken },
   );
+  // Keep the transport open while withholding the server's Welcome.
+  let releaseWelcome!: () => void;
+  const welcome = new Promise<void>((resolve) => {
+    releaseWelcome = resolve;
+  });
+  await page.routeWebSocket("**/game/ws", (socket) => {
+    const server = socket.connectToServer();
+    server.onMessage(async (message) => {
+      await welcome;
+      socket.send(message);
+    });
+  });
   const keys: (string | undefined)[] = [];
+  const tokens: (string | undefined)[] = [];
   await page.route("**/maps/jobs", async (route) => {
+    if (route.request().method() === "GET") return route.fulfill({ json: [] });
     keys.push(route.request().headers()["idempotency-key"]);
+    tokens.push(route.request().headers()["x-aoeworld-controller-token"]);
     await route.fulfill({ status: 503, body: "Temporarily unavailable" });
   });
   await page.goto("/?skipIntro=1");
   await page
     .getByRole("button", { name: "Single Player", exact: true })
     .click();
+  const resume = page.getByRole("button", {
+    name: "Resume map preparation",
+    exact: true,
+  });
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-connected",
+    "true",
+  );
+  try {
+    await expect(resume).toBeDisabled();
+  } finally {
+    releaseWelcome();
+  }
   await expect.poll(() => keys.length).toBe(1);
-  await page
-    .getByRole("button", { name: "Resume map preparation", exact: true })
-    .click();
+  await resume.click();
   await expect.poll(() => keys.length).toBe(2);
   expect(keys).toEqual([key, key]);
+  expect(tokens[0]).toMatch(/^[0-9a-f]{48}$/);
+  expect(tokens[0]).not.toBe(staleToken);
+  expect(tokens[1]).toBe(tokens[0]);
   await expect(page.locator("#loading-error")).toContainText(
     "Temporarily unavailable",
   );

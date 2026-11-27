@@ -190,7 +190,7 @@ export function initStartSequence({ readJson, start, cancel }) {
   el('single-player').addEventListener('click', () => { show('setup'); estimateMap(); });
   el('setup-back').addEventListener('click', () => show('menu'));
   function startReady() {
-    const connected = el('scene').dataset.connected === 'true' || el('connection').textContent === 'connected';
+    const connected = el('playground').dataset.controllerReady === 'true';
     const seated = /^[0-9a-f]{48}$/i.test(getToken() || '');
     el('start-game').disabled = !connected || !seated || jobRunning;
     el('start-game').firstChild.textContent = recovery ? 'Resume map preparation ' : 'Start Game ';
@@ -317,7 +317,7 @@ export function initStartSequence({ readJson, start, cancel }) {
     }
   }
   const observer = new MutationObserver(checkTerrain);
-  observer.observe(el('scene'), { attributes: true, attributeFilter: ['data-connected', 'data-chunks-pending', 'data-chunks-failed', 'data-frame', 'data-view-painted'] });
+  observer.observe(el('playground'), { subtree: true, attributes: true, attributeFilter: ['data-controller-ready', 'data-chunks-pending', 'data-chunks-failed', 'data-frame', 'data-view-painted'] });
   observer.observe(el('minimap'), { attributes: true, attributeFilter: ['data-map-hash'] });
   observer.observe(el('connection'), { childList: true, subtree: true, characterData: true });
   function returnToSetup() {

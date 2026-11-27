@@ -155,7 +155,9 @@ test("far-view woodland markers disappear when the last tree is depleted", async
     false,
     0,
     (bytes, route) => {
-      if (bytes[0] !== 1) return;
+      // Subscribe ends with unit_zoom. Resource updates for the preceding
+      // sprite view are discarded as soon as the client switches revision.
+      if (bytes[0] !== 1 || bytes.at(-1) !== 0) return;
       socket = route;
       subscription = [];
       for (const byte of bytes.subarray(1)) {
@@ -177,7 +179,12 @@ test("far-view woodland markers disappear when the last tree is depleted", async
     location.hash = "x=8192.5&y=8192.5&zoom=.04";
   });
   await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-view-painted",
+    "true",
+  );
   const far = page.locator("#strategic-scene");
+  await expect(far).toHaveAttribute("data-resources", "2");
   await expect(far).toHaveAttribute("data-forests", "1");
 
   const id = (x: number) => uint(8187 * 2 ** 19 + x * 2);
@@ -186,5 +193,6 @@ test("far-view woodland markers disappear when the last tree is depleted", async
   await expect(far).toHaveAttribute("data-resources", "1");
   await expect(far).toHaveAttribute("data-forests", "1");
   socket.send(Buffer.from([5, ...subscription, 1, 1, 2, 1, ...id(8193), 0, 0]));
+  await expect(far).toHaveAttribute("data-resources", "0");
   await expect(far).toHaveAttribute("data-forests", "0");
 });

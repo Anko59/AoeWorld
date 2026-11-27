@@ -41,15 +41,16 @@ const jobs = initMapJobs({ readJson, tokenHeaders,
   onCancelable: sequence.cancelable, onCancelled: sequence.cancelled,
   onRecovering: value => sequence.recover(jobs.pending(), value) });
 sequence.recover(jobs.pending());
-// Recovery waits for the authoritative socket. A retained
-// submission is probed once per load, with its original idempotency key.
+// Welcome stores the controller token before publishing readiness. Observe the
+// stable playground because renderer fallback can replace the scene canvas.
+const playground = document.getElementById('playground');
 const recoveryObserver = new MutationObserver(recoverWhenReady);
 function recoverWhenReady() {
-  if (document.getElementById('scene').dataset.connected !== 'true') return;
+  if (playground.dataset.controllerReady !== 'true') return;
   recoveryObserver.disconnect();
   jobs.recover();
 }
-recoveryObserver.observe(document.getElementById('scene'), { attributes: true, attributeFilter: ['data-connected'] });
+recoveryObserver.observe(playground, { attributes: true, attributeFilter: ['data-controller-ready'] });
 recoverWhenReady();
 // The cinematic owns presentation until it finishes or is skipped. Starting
 // GPU uploads behind it can trigger recovery and replace the entry document.

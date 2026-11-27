@@ -1,7 +1,24 @@
 //! Persistent connection diagnostics and world replacement.
 use super::*;
 
+pub(super) fn set_controller_ready(client: &Client, ready: bool) {
+    if let Some(playground) = client.document.get_element_by_id("playground") {
+        let _ = playground.set_attribute(
+            "data-controller-ready",
+            if ready { "true" } else { "false" },
+        );
+    }
+}
+
+/// Forgets the resume token: the next connection is a new controller.
+pub(super) fn forget_session(client: &mut Client) {
+    client.token = None;
+    storage::save_token(None);
+    set_controller_ready(client, false);
+}
+
 pub(super) fn record_close(client: &mut Client, event: &Event) {
+    set_controller_ready(client, false);
     village::construction::strategic::connection_reset(client);
     let reason = js_sys::Reflect::get(&event, &JsValue::from_str("reason"))
         .ok()

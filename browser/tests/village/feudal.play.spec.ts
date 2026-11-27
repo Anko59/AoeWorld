@@ -1,7 +1,7 @@
 import { expect, type Page } from "@playwright/test";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
-import { centerVillage } from "./fixtures/resources.js";
+import { centerVillage, freshHud } from "./fixtures/resources.js";
 import { workerFixture } from "./fixtures/worker.js";
 import { forceCanvas } from "../rendering/backends.js";
 import { militaryAttack } from "./military/attack.js";
@@ -13,7 +13,7 @@ test("train an Archer and a Spearman, research Fletching and attack", async ({
   await militaryAttack(page, request, info);
 });
 
-type Actor = { kind: string; x: number; y: number };
+type Actor = { kind: string; x: number; y: number; hp: number };
 async function actors(page: Page): Promise<Actor[]> {
   return JSON.parse(
     (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
@@ -23,29 +23,6 @@ async function select(page: Page, kind: string) {
   const actor = (await actors(page)).find((a) => a.kind === kind);
   if (!actor) throw new Error(`${kind} missing`);
   await page.mouse.click(actor.x, actor.y);
-}
-
-// A building's centre can sit under a tree crown or its builder. Natural
-// starts scatter trees differently, so click around the centre until the
-// selection shows the intended building.
-async function selectBuilding(page: Page, kind: string) {
-  const actor = (await actors(page)).find((a) => a.kind === kind);
-  if (!actor) throw new Error(`${kind} missing`);
-  for (const [dx, dy] of [
-    [0, 0],
-    [0, 24],
-    [-32, 8],
-    [32, 8],
-    [0, -24],
-    [-48, 24],
-    [48, 24],
-  ] as const) {
-    await page.mouse.click(actor.x + dx, actor.y + dy);
-    await page.waitForTimeout(200);
-    if ((await page.locator("#selection").getAttribute("data-kind")) === kind)
-      return;
-  }
-  throw new Error(`${kind} could not be selected by any click near its centre`);
 }
 
 // The explicit server scenario starts rich in Dark Age with a Mill, Lumber
@@ -112,37 +89,30 @@ test("reach Feudal, build a Blacksmith and research Double-Bit Axe", async ({
   await page.locator("#build-menu").click();
   await expect(page.locator("#build-blacksmith")).toBeEnabled();
   await page.keyboard.press("s"); // DE economic grid: B, S = Blacksmith
-  let placed = false;
-  for (const [x, y] of [
-    [920, 360],
-    [900, 260],
-    [400, 240],
-    [420, 420],
-    [850, 420],
-    [640, 180],
-  ] as const) {
-    await page.mouse.move(x, y);
-    await expect
-      .poll(() => page.locator("#scene").getAttribute("data-placement-valid"))
-      .toMatch(/true|false/);
-    await page.waitForTimeout(150);
-    if (
-      (await page.locator("#scene").getAttribute("data-placement-valid")) ===
-      "true"
-    ) {
-      await page.mouse.click(x, y);
-      placed = true;
-      break;
-    }
-  }
-  expect(placed).toBe(true);
+  const scene = page.locator("#scene");
+  await expect(scene).toHaveAttribute("data-order-mode", "build");
+  // The east side of this scenario has room for the Blacksmith, clear of
+  // the flock whose sprites can intercept clicks on a finished building.
+  await page.mouse.move(850, 420);
+  await freshHud(page);
+  await expect(scene).toHaveAttribute("data-placement-valid", "true");
+  await page.mouse.click(850, 420);
+  await expect(scene).toHaveAttribute("data-order-mode", "");
+  // The Blacksmith enters the actor list as a foundation. Wait until the
+  // finished building has its own hit bounds and full HP.
   await expect
-    .poll(async () => (await actors(page)).some((a) => a.kind === "Blacksmith"))
-    .toBe(true);
-  await selectBuilding(page, "Blacksmith");
-  await expect(page.locator("#building-status")).toContainText("Complete", {
-    timeout: 20_000,
-  });
+    .poll(
+      async () => (await actors(page)).find((a) => a.kind === "Blacksmith")?.hp,
+      { timeout: 20_000 },
+    )
+    .toBe(1800);
+  await expect(scene).toHaveAttribute("data-view-painted", "true");
+  await select(page, "Blacksmith");
+  await expect(page.locator("#selection")).toHaveAttribute(
+    "data-kind",
+    "Blacksmith",
+  );
+  await expect(page.locator("#building-status")).toContainText("Complete");
   await expect(page.locator("#building-hp")).toContainText("1800");
   await select(page, "LumberCamp");
   await expect(page.locator("#research-double-bit-axe")).toBeEnabled();
