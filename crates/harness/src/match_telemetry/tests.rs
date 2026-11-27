@@ -24,7 +24,7 @@ fn client(at: u64, frames: u32, bin: u8, max: f64, panning: bool) -> Value {
     json!({
         "kind": "client", "elapsed_ms": at, "tick": 1000,
         "report": {
-            "frames": frames, "frame_ms": [max, max, max], "renderer": "webgl2",
+            "sequence": [at, 1], "frames": frames, "frame_ms": [max, max, max], "renderer": "webgl2",
             "units_in_view": 250, "still": still, "panning": panning, "draw_calls": zero,
             "stages_ms": {
                 "update": zero, "interpolation": zero, "culling": zero, "terrain": zero,
