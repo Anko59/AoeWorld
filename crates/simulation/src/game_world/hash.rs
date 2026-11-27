@@ -170,6 +170,7 @@ impl GameWorld {
         self.economy.update_hash(&mut hash, self.tick.0);
         self.combat.update_hash(&mut hash);
         self.wildlife.update_hash(&mut hash);
+        self.hash_relics(&mut hash);
         self.vision.update_hash(&mut hash);
         // Units are hashed in fixed blocks on worker threads and the block
         // digests are folded in index order, so the result never depends on

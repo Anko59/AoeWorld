@@ -240,7 +240,20 @@ fn package_and_prepared_constructors_activate_a_playable_map() {
         Vec::new(),
     )
     .expect("prepared world");
-    assert!(from_pages.is_some());
+    let service = from_pages.expect("playable prepared world");
+    let world = service.world.blocking_read();
+    let aoe_simulation::Terrain::Map { generator, .. } = world.terrain() else {
+        panic!("prepared map must use the geographic terrain");
+    };
+    let sites = world.ground_relics().collect::<Vec<_>>();
+    assert!(sites.len() >= 3);
+    for (_, at) in sites {
+        let tile = at.tile_floor();
+        let ground = generator.tile_at(tile).expect("relic on the map");
+        assert_eq!(ground.water, aoe_map::WaterKind::None);
+        assert_ne!(ground.material, aoe_map::GroundMaterial::ForestFloor);
+        assert!(world.tile_passable(tile));
+    }
 }
 
 #[test]

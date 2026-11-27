@@ -26,6 +26,7 @@ impl GameplayService {
             }
         };
         let primary_unit_id = initialize_village(&mut world, tile)?;
+        world.place_relics(&[primary_unit_id], &|| false)?;
         Ok(Self::from_world(
             world,
             primary_unit_id,
@@ -66,6 +67,7 @@ impl GameplayService {
             }
         };
         let primary_unit_id = initialize_village(&mut world, tile)?;
+        world.place_relics(&[primary_unit_id], &|| false)?;
         Ok(Some(Self::from_world(
             world,
             primary_unit_id,
@@ -102,6 +104,7 @@ impl GameplayService {
             }
         };
         let primary_unit_id = initialize_village(&mut world, tile)?;
+        world.place_relics(&[primary_unit_id], cancelled)?;
         Ok(Some(Self::from_world(
             world,
             primary_unit_id,

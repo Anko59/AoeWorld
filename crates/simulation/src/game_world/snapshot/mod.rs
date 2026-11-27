@@ -147,6 +147,7 @@ impl GameWorld {
             units,
             formations: self.formation_records(),
             animals: self.animal_records(),
+            relics: self.relics.clone(),
             explored: self.explored_records(),
             building_memory: self.building_memory_records(),
             resource_memory: self.resource_memory_records(),
@@ -253,6 +254,7 @@ impl GameWorld {
             }
         }
         self.next_entity_id = snapshot.next_entity_id;
+        self.relics.clone_from(&snapshot.relics);
         self.combat.hp_quarters.clone_from(&snapshot.hp_quarters);
         if report.units_lost + report.buildings_lost > 0 {
             return Err(SnapshotError::Unplaced {

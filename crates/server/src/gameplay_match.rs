@@ -97,6 +97,7 @@ impl GameplayService {
         let terrain = warmup::camera(&world, &starts, humans, &content_hash_hex, cancelled)?;
         warmup::prepare(&world, &starts, cancelled)?;
         let seeded = rules::seed_units(&mut world, &starts, rules, cancelled)?;
+        world.place_relics(&starts, cancelled)?;
         world
             .prepare_navigation(cancelled)
             .map_err(GameWorldError::Environment)?;

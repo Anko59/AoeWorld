@@ -24,8 +24,8 @@ use std::{
 mod timing;
 
 /// Read by `make check-fixtures` to explain a save that no longer loads.
-/// Saved resource overlays use the fourfold gold deposit capacity.
-pub const SAVE_VERSION: u16 = 22;
+/// Includes reachable relics in the map opening.
+pub const SAVE_VERSION: u16 = 23;
 const MAX_NAME: usize = 60;
 const MAX_SAVE_BYTES: u64 = 2 << 30;
 
