@@ -19,8 +19,13 @@ async fn send(socket: &mut Socket, message: GameplayClientMessage) {
         .await
         .unwrap();
 }
+/// How long a frame or an acknowledgement may take. It only stops a hang: under coverage
+/// instrumentation, beside other tests on four cores, a tick of a thousand units took longer than the
+/// three seconds this file allowed, and `make coverage` failed `dev` twice with "command never settled".
+const PATIENCE: Duration = Duration::from_secs(60);
+
 async fn receive(socket: &mut Socket) -> GameplayServerMessage {
-    let frame = timeout(Duration::from_secs(2), socket.next())
+    let frame = timeout(PATIENCE, socket.next())
         .await
         .unwrap()
         .unwrap()
@@ -69,7 +74,7 @@ async fn open(address: std::net::SocketAddr) -> Socket {
 
 async fn ack(service: &GameplayService, socket: &mut Socket, sequence: u64) -> CommandResult {
     // Let the socket reader admit the command, then advance the actual server.
-    timeout(Duration::from_secs(3), async {
+    timeout(PATIENCE, async {
         loop {
             service.tick().await;
             if let Ok(GameplayServerMessage::CommandAck {

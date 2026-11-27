@@ -23,6 +23,13 @@ fn shard_duration_regeneration_rounds_sums_attempts_and_rejects_overlapping_repo
     assert_eq!(weights["[gpu] › a.spec.ts › retry"], 2);
     assert_eq!(weights["[gpu] › a.spec.ts › fast"], 1);
     assert_eq!(weights["[gpu] › a.spec.ts › skipped"], 1);
+    let text = fs::read_to_string(&output).unwrap();
+    // One line per file, whatever the number of tests, and the same weights as the pretty form.
+    assert_eq!(text.lines().count(), 3, "{text}");
+    assert!(
+        text.lines().nth(1).unwrap().contains("retry")
+            && text.lines().nth(1).unwrap().contains("fast")
+    );
     let before = fs::read(&output).unwrap();
     args.reports.push(report);
     assert!(

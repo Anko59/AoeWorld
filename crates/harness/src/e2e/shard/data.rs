@@ -4,6 +4,29 @@ use std::{fs, path::PathBuf};
 #[cfg(test)]
 mod tests;
 
+/// The weights as JSON with one line per `[project] › file`: a line per test outgrew the
+/// 500-line limit of a text file when the suite passed 490 tests.
+fn render(seconds: &Durations) -> Result<String> {
+    let mut lines: Vec<(String, Vec<String>)> = Vec::new();
+    for (name, weight) in seconds {
+        let group = name
+            .splitn(3, " › ")
+            .take(2)
+            .collect::<Vec<_>>()
+            .join(" › ");
+        let entry = format!("{}: {weight}", serde_json::to_string(name)?);
+        match lines.last_mut() {
+            Some((last, entries)) if *last == group => entries.push(entry),
+            _ => lines.push((group, vec![entry])),
+        }
+    }
+    let body: Vec<String> = lines
+        .iter()
+        .map(|(_, entries)| entries.join(", "))
+        .collect();
+    Ok(format!("{{\n  {}\n}}\n", body.join(",\n  ")))
+}
+
 /// Rebuild the current duration weights from disjoint Playwright JSON reports.
 #[derive(clap::Args, Debug)]
 pub(crate) struct DurationsArgs {
@@ -45,9 +68,7 @@ pub(crate) fn regenerate(options: &DurationsArgs) -> Result<()> {
             ms as f64 / 60_000.0
         );
     }
-    let mut output = serde_json::to_string_pretty(&seconds)?;
-    output.push('\n');
-    fs::write(&options.output, output)?;
+    fs::write(&options.output, render(&seconds)?)?;
     if let Some(list) = &options.list {
         let report: serde_json::Value = serde_json::from_slice(&fs::read(list)?)?;
         records(&report)?;
