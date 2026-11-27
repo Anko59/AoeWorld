@@ -64,12 +64,15 @@ fn the_performance_comment_is_the_last_step_of_the_performance_job() {
     assert!(comment.contains("continue-on-error: true"), "{comment}");
     assert!(comment.contains("github.event_name == 'pull_request'"));
     assert!(comment.contains("!cancelled()"));
+    // The job's own status reaches the comment, which cannot read a conclusion the job lacks yet.
+    assert!(comment.contains("AOE_JOB_STATUS: \"${{ job.status }}\""));
     assert!(block.contains("pull-requests: write"));
     // The token that may write to the pull request is not left in the checkout.
     assert!(block.contains("persist-credentials: false"));
     let upload = block.find("name: performance-report").unwrap();
     assert!(upload < block.find("run: make perf-comment").unwrap());
-    // Only the cache save follows: it prunes the build output the comment's harness run needs.
+    // Nothing but the cache save of the job (if it has one) follows: it prunes the build output
+    // the comment's harness run needs.
     let after = block.split_once("run: make perf-comment").unwrap().1;
     let steps: Vec<_> = after
         .lines()

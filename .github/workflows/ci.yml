@@ -141,7 +141,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with: { name: performance-report, path: reports/perf/, retention-days: 30, if-no-files-found: ignore }
       # Item 12 of #388: the measured numbers reach the PR as ONE informational comment, updated in place; never a gate.
-      - { if: "!cancelled() && github.event_name == 'pull_request'", continue-on-error: true, run: make perf-comment, env: { GITHUB_TOKEN: "${{ github.token }}", AOE_PR_NUMBER: "${{ github.event.pull_request.number }}" } }
+      - { if: "!cancelled() && github.event_name == 'pull_request'", continue-on-error: true, run: make perf-comment, env: { GITHUB_TOKEN: "${{ github.token }}", AOE_PR_NUMBER: "${{ github.event.pull_request.number }}", AOE_JOB_STATUS: "${{ job.status }}" } }
 
   fuzz-smoke:
     needs: select

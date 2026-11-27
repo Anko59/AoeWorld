@@ -1,7 +1,7 @@
 //! Fixture artifact directories, rendered tables and the in-place comment
 //! arguments. All `gh` and download flows stay behind pure seams.
 use super::reports::{self, Report, WasmRule};
-use super::{comment_args, epoch_seconds, format_duration, own_comment, parse_jobs, render};
+use super::{comment_args, epoch_seconds, format_duration, own_comment, parse_jobs_at, render};
 use std::{fs, path::Path};
 use tempfile::tempdir;
 
@@ -490,7 +490,7 @@ fn job_durations_use_each_jobs_own_completion() {
          "started_at": "2026-10-14T11:02:21Z", "completed_at": "2026-10-14T11:04:17Z"},
         {"name": "static", "conclusion": "success",
          "started_at": "2026-10-14T11:04:20Z", "completed_at": "2026-10-14T11:15:14Z"}]}"#;
-    let jobs = parse_jobs(text, 38553757064).unwrap();
+    let jobs = parse_jobs_at(text, 38553757064, None).unwrap();
     let seconds: Vec<_> = jobs
         .iter()
         .map(|job| (job.name.as_str(), job.seconds))

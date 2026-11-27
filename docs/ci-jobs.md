@@ -10,6 +10,8 @@ A Make goal that runs in an image names that image as a prerequisite (`perf-dev-
 
 `make perf-comment` is the last step of `target-performance` on pull requests, not a job: it needs
 the harness and the orchestrator image that job already built, and it ran 17 s inside a 230 s job.
-The step is informational (`continue-on-error`), the checkout keeps no token for the code under test,
-and only the cache save follows it. The job table of the comment times the running job up to the
-moment the comment is built.
+The step is informational (`continue-on-error`), and only the job's cache save, if it has one, may
+follow it. The job has `pull-requests: write` for it and its checkout keeps no token in `.git/config`;
+the `perf-dev-reference` step still gets the token in its environment, as the separate job's steps
+did. The job table of the comment times the running job up to the moment the comment is built and
+labels it `(failure)` when a step before the comment failed (`AOE_JOB_STATUS`, from `job.status`).
