@@ -2,7 +2,7 @@
 //! alert, and where. Pure: what the client knew and what it is told now go in,
 //! a place comes out. The caller asks for changed own things of a tick only,
 //! never for those of a snapshot.
-use aoe_client::alerts::{building_hit, building_lost, unit_hit};
+use aoe_client::alerts::{answered, building_hit, building_lost, hunting, replaced, unit_hit};
 use aoe_core::{EntityId, PlayerId, Tick, TileRect, WorldPosition};
 use aoe_protocol::{
     BuildingKind, ConstructionState, GameplayBuildingState, GameplayUnitState, HitState, UnitKind,
@@ -201,5 +201,95 @@ fn only_a_wall_or_a_gate_lost_without_an_earlier_hit_is_told() {
             barrier.then_some([12.0, 21.5]),
             "{kind:?}"
         );
+    }
+}
+
+/// A lone trebuchet takes ten seconds between two shots, so twelve is the edge.
+#[test]
+fn a_siege_is_over_twelve_seconds_of_game_time_after_its_last_hit() {
+    for hz in [10, 20, 60] {
+        let edge = 1_000 + 12 * u64::from(hz);
+        let besieged = building(hit(1_000));
+        assert_eq!(
+            building_lost(&besieged, edge, hz, foreign),
+            Some([12.0, 21.5]),
+            "{hz} Hz"
+        );
+        assert_eq!(
+            building_lost(&besieged, edge + 1, hz, foreign),
+            None,
+            "{hz} Hz"
+        );
+    }
+}
+
+#[test]
+fn a_removal_answers_an_order_for_five_seconds_of_game_time() {
+    for hz in [10, 20, 60] {
+        let edge = 1_000 + 5 * u64::from(hz);
+        assert!(answered(1_000, 1_000, hz), "{hz} Hz");
+        assert!(answered(1_000, edge, hz), "{hz} Hz");
+        assert!(!answered(1_000, edge + 1, hz), "{hz} Hz");
+    }
+}
+
+/// Stone over a palisade, and a gate over some tiles of a wall.
+#[test]
+fn only_his_own_building_on_some_tile_of_a_lost_one_replaces_it() {
+    let lost = building(None);
+    let told = |player, x, y, width, height| GameplayBuildingState {
+        id: EntityId(9),
+        player: PlayerId(player),
+        footprint: TileRect::from_xywh(x, y, width, height),
+        ..building(None)
+    };
+    for (place, over) in [
+        ((10, 20, 4, 3), true),
+        ((12, 21, 1, 1), true),
+        // One common tile at each corner, then none beside each border.
+        ((7, 18, 4, 3), true),
+        ((13, 18, 4, 3), true),
+        ((7, 22, 4, 3), true),
+        ((13, 22, 4, 3), true),
+        ((6, 20, 4, 3), false),
+        ((14, 20, 4, 3), false),
+        ((10, 17, 4, 3), false),
+        ((10, 23, 4, 3), false),
+    ] {
+        let (x, y, width, height) = place;
+        let own = told(1, x, y, width, height);
+        let rival = told(2, x, y, width, height);
+        assert_eq!(
+            replaced(&lost, std::slice::from_ref(&own)),
+            over,
+            "{place:?}"
+        );
+        assert!(
+            !replaced(&lost, std::slice::from_ref(&rival)),
+            "{place:?} of a rival"
+        );
+        assert_eq!(replaced(&lost, &[rival, own]), over, "{place:?} of both");
+    }
+    assert!(!replaced(&lost, &[]));
+}
+
+/// The server tells a hunter of boar or deer as Hunting, and a villager that
+/// fights a wolf as Attacking: a wolf is never game.
+#[test]
+fn only_a_villager_that_hunts_has_game() {
+    let at = |task| GameplayUnitState {
+        task,
+        hunt_target: Some(EntityId(40)),
+        ..unit(None)
+    };
+    assert!(hunting(&at(UnitTask::Hunting)));
+    for task in [
+        UnitTask::Attacking,
+        UnitTask::Idle,
+        UnitTask::Moving,
+        UnitTask::Shepherding,
+        UnitTask::Dying,
+    ] {
+        assert!(!hunting(&at(task)), "{task:?}");
     }
 }

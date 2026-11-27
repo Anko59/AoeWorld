@@ -246,6 +246,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 let Client { units, village, .. } = &mut *client;
                 for unit in units.values() {
                     village.remember_idle(owner, unit);
+                    village.remember_prey(owner, unit);
                 }
                 client.village.rubble.retain(|(_, until)| *until > tick.0);
                 map::scene::replace_buildings(&mut client, buildings);
@@ -392,7 +393,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                             .to_string(),
                     );
                     client.village.wildlife_tick = tick.0;
-                    client.village.animals = animals;
+                    client.village.remember_animals(animals);
                     let Client {
                         units,
                         selected,

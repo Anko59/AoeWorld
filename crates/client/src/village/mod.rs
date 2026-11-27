@@ -58,6 +58,9 @@ pub(crate) struct Village {
     pub wall_start: Option<aoe_core::TileCoord>,
     pub rubble: Vec<(GameplayBuildingState, u64)>,
     pub animals: Vec<aoe_protocol::AnimalState>,
+    /// Every boar the server told of, and what his villagers hunted: the
+    /// animals are told near the camera only. No id is used twice.
+    pub game: std::collections::BTreeSet<aoe_core::EntityId>,
     pub wildlife_tick: u64,
     pub projectiles: Vec<aoe_protocol::ProjectileState>,
     pub projectile_particles: std::collections::BTreeMap<u64, aoe_protocol::ProjectileState>,
@@ -73,6 +76,20 @@ impl Village {
         self.attack_move = false;
         self.patrol_move = false;
         self.general_only = false;
+    }
+
+    pub fn remember_animals(&mut self, animals: Vec<aoe_protocol::AnimalState>) {
+        let boars = animals
+            .iter()
+            .filter(|animal| animal.kind == aoe_protocol::AnimalKind::Boar);
+        self.game.extend(boars.map(|animal| animal.id));
+        self.animals = animals;
+    }
+
+    pub fn remember_prey(&mut self, owner: PlayerId, unit: &aoe_protocol::GameplayUnitState) {
+        if unit.player == owner && crate::alerts::hunting(unit) {
+            self.game.extend(unit.hunt_target);
+        }
     }
 
     pub fn remember_idle(&mut self, owner: PlayerId, unit: &aoe_protocol::GameplayUnitState) {

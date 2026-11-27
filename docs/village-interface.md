@@ -141,8 +141,11 @@ whole map. Hits within 24 tiles of its first blow keep the star and raise no
 other. The newest four battles have a star; up to 64 are remembered, and the
 stalest one without a star makes room for another. A left click
 within 8 px jumps exactly to a star, a right-click orders as usual, and a screen
-reader hears "Under attack" at most once in ten seconds. Hits by own strikers or by
-a known animal other than a wolf are no attack. A building lost within 12 s of its
+reader hears "Under attack" at most once in ten seconds. Hits by own strikers are no
+attack, nor are bites of game: the server tells animals near the camera only, so game
+is every boar it ever told of and what an own villager was told to hunt. A boar bites
+only who struck it. A wolf attacks unprovoked, so each of its bites is an alert, also
+on a villager that fights it. A building lost within 12 s of its
 last hit is an alert too, at its middle, and a wall or a gate also without one, as
 one blow can take it. Nothing is told of what the player deleted or cancelled in the
 last 5 s of game time, nor where an own building is told on the same footprint in
