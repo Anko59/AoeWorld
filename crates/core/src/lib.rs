@@ -4,6 +4,7 @@ pub use bridge::{BridgeSpan, raster_bridge_line, snap_bridge_start};
 mod clamp;
 mod combat;
 mod coordinates;
+mod tile_line;
 pub use combat::CombatStance;
 mod formation;
 pub use formation::{Formation, MAX_FORMATION_MEMBERS};
@@ -15,6 +16,7 @@ pub use projection::{
     Camera, ISO_TILE_HEIGHT, ISO_TILE_WIDTH, MIN_CAMERA_ZOOM, ScreenPoint, inverse_project, project,
 };
 use serde::{Deserialize, Serialize};
+pub use tile_line::TileLine;
 
 pub const CHUNK_SIZE: i32 = 64;
 pub const WORLD_LIMIT: i32 = 16_384;

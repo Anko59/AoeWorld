@@ -436,8 +436,6 @@ const fn castle(
 
 /// The AoE II rule: n builders take `base * 3 / (n + 2)`.
 pub const BUILD_WORK_PER_BASE_TICK: u64 = 3;
-/// Longest wall a single order may lay down.
-pub const MAX_WALL_SEGMENTS: usize = 1_024;
 
 impl BuildingKind {
     pub const fn is_tower(self) -> bool {

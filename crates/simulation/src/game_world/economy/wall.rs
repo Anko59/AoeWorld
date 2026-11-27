@@ -1,31 +1,52 @@
 //! Walls and roads: a line of 1x1 segments laid by one order.
-use super::{BuildingKind, EconomyError, MAX_WALL_SEGMENTS, placement::distance_squared};
+use super::{BuildingKind, EconomyError, placement::distance_squared};
 use crate::GameWorld;
-use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
+use aoe_core::{EntityId, PlayerId, TileCoord, TileLine, TileRect};
+use std::collections::BTreeMap;
 
-/// Tiles on the straight (Bresenham) line between two tiles, ends included.
-pub(super) fn line_tiles(from: TileCoord, to: TileCoord) -> Vec<TileCoord> {
-    let (mut x, mut y) = (i64::from(from.x), i64::from(from.y));
-    let (x1, y1) = (i64::from(to.x), i64::from(to.y));
-    let (dx, dy) = ((x1 - x).abs(), -(y1 - y).abs());
-    let (sx, sy) = (if x < x1 { 1 } else { -1 }, if y < y1 { 1 } else { -1 });
-    let mut error = dx + dy;
-    let mut tiles = Vec::new();
-    loop {
-        tiles.push(TileCoord::new(x as i32, y as i32));
-        if (x, y) == (x1, y1) || tiles.len() > MAX_WALL_SEGMENTS {
-            return tiles;
+/// Exact nearest raster tile. Monotonic raster coordinates put every subrange
+/// inside the rectangle of its endpoints, so a distant half can be skipped.
+fn nearest_segment(line: TileLine, tile: TileCoord) -> usize {
+    fn lower_bound(line: TileLine, tile: TileCoord, (first, last): (usize, usize)) -> (u64, usize) {
+        let (a, b) = (line.tile(first), line.tile(last));
+        let nearest = TileCoord::new(
+            tile.x.clamp(a.x.min(b.x), a.x.max(b.x)),
+            tile.y.clamp(a.y.min(b.y), a.y.max(b.y)),
+        );
+        (distance_squared(tile, nearest), first)
+    }
+
+    fn search(
+        line: TileLine,
+        tile: TileCoord,
+        (first, last): (usize, usize),
+        bound: (u64, usize),
+        best: &mut (u64, usize),
+    ) {
+        if bound >= *best {
+            return;
         }
-        let doubled = 2 * error;
-        if doubled >= dy {
-            error += dy;
-            x += sx;
+        if first == last {
+            *best = bound;
+            return;
         }
-        if doubled <= dx {
-            error += dx;
-            y += sy;
+        let mid = first + (last - first) / 2;
+        let a = (first, mid);
+        let b = (mid + 1, last);
+        let (a_dist, b_dist) = (lower_bound(line, tile, a), lower_bound(line, tile, b));
+        if a_dist <= b_dist {
+            search(line, tile, a, a_dist, best);
+            search(line, tile, b, b_dist, best);
+        } else {
+            search(line, tile, b, b_dist, best);
+            search(line, tile, a, a_dist, best);
         }
     }
+
+    let range = (0, line.count() - 1);
+    let mut best = (u64::MAX, 0);
+    search(line, tile, range, lower_bound(line, tile, range), &mut best);
+    best.1
 }
 
 impl GameWorld {
@@ -45,79 +66,89 @@ impl GameWorld {
             return Err(EconomyError::NotBuildable);
         }
         let builders = self.placement_builders(player, builders, false)?;
-        let tiles = line_tiles(from, to);
-        if tiles.len() > MAX_WALL_SEGMENTS {
-            return Err(EconomyError::OrderTooLarge);
+        let rect = |tile: TileCoord| TileRect::from_xywh(tile.x, tile.y, 1, 1);
+        if ![from, to]
+            .into_iter()
+            .all(|tile| rect(tile).valid(self.config.width_tiles, self.config.height_tiles))
+        {
+            return Err(EconomyError::InvalidFootprint);
         }
-        self.validate_build_queue(&builders, tiles.len(), queued)?;
-        let cost = self.check_buildable(player, kind, tiles.len() as u32)?;
-        let rects = tiles
-            .iter()
-            .map(|tile| {
-                TileRect::new(
-                    *tile,
-                    TileCoord::new(tile.x.saturating_add(1), tile.y.saturating_add(1)),
-                )
-            })
-            .collect::<Vec<_>>();
+        let line = TileLine::new(from, to).ok_or(EconomyError::InvalidFootprint)?;
+        self.validate_build_queue(&builders, line.count(), queued)?;
+        let cost = self.check_buildable(player, kind, line.count() as u32)?;
+        if self.next_entity_id.saturating_add(line.count() as u64) > u64::from(u32::MAX) + 1 {
+            return Err(crate::GameWorldError::EntityIdExhausted.into());
+        }
         // Validate every segment before placing any, so a refusal changes nothing.
-        for rect in &rects {
-            self.validate_explored_footprint(player, *rect)?;
-            self.validate_footprint_ground(player, *rect)?;
+        for tile in line.tiles() {
+            self.validate_explored_footprint(player, rect(tile))?;
+            self.validate_footprint_ground(player, rect(tile))?;
         }
-        let mut ids = Vec::new();
-        for rect in rects {
-            match self.insert_building(player, kind, rect, false) {
-                Ok(id) => ids.push(id),
-                Err(error) => {
-                    for id in ids {
-                        self.remove_building(id);
+        let ids = self.count_housing_once(|world| {
+            let mut ids = Vec::with_capacity(line.count());
+            for tile in line.tiles() {
+                match world.insert_building(player, kind, rect(tile), false) {
+                    Ok(id) => ids.push(id),
+                    Err(error) => {
+                        for id in ids {
+                            world.remove_building(id);
+                        }
+                        return Err(error);
                     }
-                    return Err(error);
                 }
             }
-        }
+            Ok(ids)
+        })?;
         self.charge(player, cost);
         if builders.is_empty() {
             self.queue_foundations(&ids, None);
             self.remember_visible_buildings();
             return Ok(ids);
         }
-        for id in &ids {
-            self.step_builders_aside(&builders, *id);
+        if kind.is_wall() {
+            // Visit only the segments builders occupy. When a step leads to a
+            // later segment it is visited again in the original placement order.
+            let mut inside: BTreeMap<usize, Vec<EntityId>> = BTreeMap::new();
+            for &id in &builders {
+                if let Some(segment) = self
+                    .unit(id)
+                    .and_then(|u| line.index_of(u.position.tile_floor()))
+                {
+                    inside.entry(segment).or_default().push(id);
+                }
+            }
+            while let Some((segment, mut local)) = inside.pop_first() {
+                local.sort_unstable();
+                self.step_builders_aside(&local, ids[segment]);
+                for id in local {
+                    if let Some(next) = self
+                        .unit(id)
+                        .and_then(|u| line.index_of(u.position.tile_floor()))
+                        && next > segment
+                    {
+                        inside.entry(next).or_default().push(id);
+                    }
+                }
+            }
         }
-        let segments = ids.clone();
-        let nearest = |tile: TileCoord| {
-            segments
-                .iter()
-                .copied()
-                .min_by_key(|id| {
-                    let rect = self.economy.buildings[id].footprint;
-                    (distance_squared(tile, rect.min), *id)
-                })
-                .unwrap_or(segments[0])
-        };
-        let targets = builders
-            .iter()
-            .map(|id| {
-                let tile = self.unit(*id).map_or(from, |u| u.position.tile_floor());
-                (*id, nearest(tile))
-            })
-            .collect::<Vec<_>>();
         let assigned = if queued {
             self.assign_build_orders(&builders, &ids, true)
         } else {
-            self.assign_builders(&builders, |builder| {
-                targets
-                    .iter()
-                    .find(|(id, _)| *id == builder)
-                    .map_or(ids[0], |(_, target)| *target)
-            })
+            let targets: BTreeMap<_, _> = builders
+                .iter()
+                .map(|&id| {
+                    let tile = self.unit(id).map_or(from, |u| u.position.tile_floor());
+                    (id, ids[nearest_segment(line, tile)])
+                })
+                .collect();
+            self.assign_builders(&builders, |builder| targets[&builder])
         };
         if !assigned {
-            for id in &ids {
-                let _ = self.issue_cancel_construction(player, *id);
-            }
+            self.count_housing_once(|world| {
+                for id in &ids {
+                    let _ = world.issue_cancel_construction(player, *id);
+                }
+            });
             return Err(crate::GameWorldError::Unreachable.into());
         }
         self.remember_visible_buildings();

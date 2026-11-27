@@ -279,30 +279,7 @@ pub fn sprite_slot(kind: BuildingKind, progress: u16, rubble: bool) -> usize {
 
 #[inline(never)]
 pub fn wall_tiles(from: TileCoord, to: TileCoord) -> Option<Vec<TileCoord>> {
-    let (mut x, mut y) = (i64::from(from.x), i64::from(from.y));
-    let (x1, y1) = (i64::from(to.x), i64::from(to.y));
-    let (dx, dy) = ((x1 - x).abs(), -(y1 - y).abs());
-    if dx.max(-dy) >= aoe_simulation::MAX_WALL_SEGMENTS as i64 {
-        return None;
-    }
-    let (sx, sy) = (if x < x1 { 1 } else { -1 }, if y < y1 { 1 } else { -1 });
-    let mut error = dx + dy;
-    let mut tiles = Vec::new();
-    loop {
-        tiles.push(TileCoord::new(x as i32, y as i32));
-        if (x, y) == (x1, y1) {
-            return Some(tiles);
-        }
-        let doubled = 2 * error;
-        if doubled >= dy {
-            error += dy;
-            x += sx;
-        }
-        if doubled <= dx {
-            error += dx;
-            y += sy;
-        }
-    }
+    Some(aoe_core::TileLine::new(from, to)?.tiles().collect())
 }
 
 #[cfg(test)]

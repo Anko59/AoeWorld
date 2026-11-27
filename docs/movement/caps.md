@@ -55,7 +55,8 @@ Rows 1, 10 and 14 span several constants. The original inventory matched the pla
 | Tower candidates | first 64 buildings | `combat/towers.rs:112` | world, per tick | 6 |
 | Gather approach | 8 failures, 8 candidates | `economy/gathering.rs:11`, `gathering/approach.rs`, `gathering/replacement.rs` | per unit | 4 *(assigned)* |
 | Detach retries | 8, every few ticks | `formation/detach.rs:14` | per unit | 4 |
-| Build groups and queues | 32 | `protocol/src/gameplay/economy.rs:24`, `economy/construction/continuation.rs:5` | capacity | outside the rework |
+| Build groups and queues | 16,384 builder IDs per message and 2,048 queued foundations per villager | `protocol/src/gameplay/economy.rs`, `economy/construction/continuation.rs` | decode and queue storage | Kept |
+| Wall length per order | Segment cap removed. Endpoints must be in the world, and stock and building storage must cover the line | `economy/wall.rs` | per order | Done |
 | Buildings, jobs, animals per player | 8,192; 65,536; 32 | `economy/limits/mod.rs:5,8`, `wildlife.rs:19` | capacity | 7b (generational ids, event-driven economy) |
 | Subscribed units, tiles per viewer | 65,536; 512 | `protocol/src/gameplay.rs:40,41` | capacity | 7c |
 | Buildings on the wire | 16,384 | `protocol/src/gameplay/economy.rs:20` | capacity | 7c |
@@ -63,7 +64,7 @@ Rows 1, 10 and 14 span several constants. The original inventory matched the pla
 
 Economy and AI rules that look like caps but are game rules or AI budgets are in the allowlist
 because the lint matches names, not intent, and they stay: farm storage, market price,
-`VASSAL_LIMIT`, `MAX_WALL_SEGMENTS`, the Steward's per-domain order and search budgets
+`VASSAL_LIMIT`, the Steward's per-domain order and search budgets
 (`economy/steward/rules.rs`, `manager.rs`), and `MAX_APPROACH_ATTEMPTS`.
 Geometry locals named `budget` (`contact.rs`, `formation/anchor/taut.rs`, `avoidance.rs`) are
 name-based false positives of the lint, not caps.

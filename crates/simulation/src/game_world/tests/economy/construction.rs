@@ -5,6 +5,7 @@ mod approach;
 mod continuation;
 mod crowd;
 mod eject;
+mod orders;
 mod timers;
 
 #[test]
@@ -353,11 +354,11 @@ fn palisade_segments_cost_two_wood_each_and_take_six_seconds_per_tile() {
     }
     assert!(ticks >= 600, "{ticks}");
     assert_eq!(world.unit(builder).unwrap().task, UnitTask::Idle);
-    // Too long, or any segment invalid: nothing is placed or charged.
+    // An invalid endpoint or segment leaves placement and stock unchanged.
     let before = world.canonical_hash();
     assert_eq!(
         palisade(&mut world, &[builder], at(0, 10), at(1_100, 10)),
-        Err(EconomyError::OrderTooLarge)
+        Err(EconomyError::InvalidFootprint)
     );
     assert_eq!(
         palisade(&mut world, &[builder], at(102, 98), at(102, 102)),

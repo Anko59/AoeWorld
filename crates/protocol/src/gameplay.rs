@@ -215,7 +215,7 @@ pub enum CommandResult {
     /// involved. Appended so earlier discriminants keep their wire value.
     RejectedWorldLimit,
     /// The order's unit group is empty, repeats a unit or exceeds
-    /// `MAX_BUILD_GROUP`, or its wall exceeds the longest one order may lay.
+    /// `MAX_BUILD_GROUP`, or a worker cannot hold another queued order.
     RejectedOrderTooLarge,
     /// At least one building footprint tile has never been explored by its owner.
     RejectedUnexploredPlacement,
