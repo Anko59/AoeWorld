@@ -1,0 +1,21 @@
+--- a/tiny_http-0.12.0/src/util/task_pool.rs
++++ b/tiny_http-0.12.0/src/util/task_pool.rs
+@@ -72,4 +72,6 @@
+-        if self.sharing.waiting_tasks.load(Ordering::Acquire) == 0 {
++        // Each queued connection has already claimed a waiting worker, which
++        // cannot update its registration until it acquires this lock.
++        if self.sharing.waiting_tasks.load(Ordering::Acquire) <= queue.len() {
+             self.add_thread(Some(code));
+         } else {
+             queue.push_back(code);
+--- a/wasm-bindgen-cli-0.2.128/Cargo.lock
++++ b/wasm-bindgen-cli-0.2.128/Cargo.lock
+@@ -1692,8 +1692,6 @@
+ [[package]]
+ name = "tiny_http"
+ version = "0.12.0"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "389915df6413a2e74fb181895f933386023c71110878cd0825588928e64cdc82"
+ dependencies = [
+  "ascii",
+  "chunked_transfer",

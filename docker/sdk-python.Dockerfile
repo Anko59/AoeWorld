@@ -1,4 +1,4 @@
-FROM aoeworld/rust-tools:1.99.1-sccache0.19.0
+FROM aoeworld/rust-tools:1.99.1-sccache0.19.0-wasm0.2.128-p1
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-venv=3.11.2-1+b1 python3-pip=23.0.1+dfsg-1 \
     && rm -rf /var/lib/apt/lists/*

@@ -3,9 +3,10 @@ SHELL := /bin/sh
 ROOT := $(abspath .)
 UID := $(shell id -u)
 GID := $(shell id -g)
-TOOL_IMAGE := aoeworld/rust-tools:1.99.1-sccache0.19.0
+# The patch revision keeps concurrent worktrees on their own WASM runner.
+TOOL_IMAGE := aoeworld/rust-tools:1.99.1-sccache0.19.0-wasm0.2.128-p1
 BROWSER_IMAGE := aoeworld/browser-tools:1.65.1
-ORCH_IMAGE := aoeworld/orchestrator:1.99.1-sccache0.19.0
+ORCH_IMAGE := aoeworld/orchestrator:1.99.1-sccache0.19.0-wasm0.2.128-p1
 ANALYSIS_IMAGE := aoeworld/analysis:0.19.4-sccache0.19.0
 # Callgrind benches: the client requests must find the image's Valgrind
 # headers. A `valgrind-requests` build reused from a container without them
