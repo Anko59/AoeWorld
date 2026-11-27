@@ -75,7 +75,9 @@ test("AI opponents: loading shows village and seat counts, then opens the game",
     "1 / 3 AI players",
   );
   await expect(page.locator("#loading-cancel")).toBeEnabled();
-  expect(server.posted).toEqual([{ map_hash: hash, opponents: 3, relic_victory: true }]);
+  expect(server.posted).toEqual([
+    { map_hash: hash, opponents: 3, relic_victory: true },
+  ]);
   // Ready hands over to the terrain wait; loading stays until it is playable.
   await expect(page.locator("#start-sequence")).toBeHidden({ timeout: 60_000 });
   await expect(page.locator("#minimap")).toHaveAttribute("data-map-hash", hash);

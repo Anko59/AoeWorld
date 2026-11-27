@@ -25,7 +25,7 @@ mod timing;
 
 /// Read by `make check-fixtures` to explain a save that no longer loads.
 /// Includes relic lifecycle and the optional victory countdown.
-pub const SAVE_VERSION: u16 = 25;
+pub const SAVE_VERSION: u16 = 26;
 const MAX_NAME: usize = 60;
 const MAX_SAVE_BYTES: u64 = 2 << 30;
 
