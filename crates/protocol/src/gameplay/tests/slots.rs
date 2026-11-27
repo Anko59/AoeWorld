@@ -128,6 +128,15 @@ fn office_zone_batch_has_a_bounded_current_wire_form() {
         assert!(encode_server(&invalid).is_err());
         assert!(decode_server(&postcard::to_allocvec(&invalid).unwrap()).is_err());
     }
+    let shape: Vec<_> = (0..=MAX_OFFICE_ZONE_CHUNKS)
+        .map(|x| (TileCoord::new(x as i32, 0), [1; 32]))
+        .collect();
+    let (first, next) = ServerMessage::office_zone_batch(EntityId(7), true, &shape, 0).unwrap();
+    let (last, end) = ServerMessage::office_zone_batch(EntityId(7), true, &shape, next).unwrap();
+    assert_eq!(first, message(shape[..next].to_vec(), true, false));
+    assert_eq!(last, message(shape[next..].to_vec(), false, true));
+    assert_eq!(next, MAX_OFFICE_ZONE_CHUNKS);
+    assert!(ServerMessage::office_zone_batch(EntityId(7), true, &shape, end).is_none());
     let largest = message(
         (0..MAX_OFFICE_ZONE_CHUNKS)
             .map(|x| (TileCoord::new(32_700 + x as i32, 32_767), [u32::MAX; 32]))

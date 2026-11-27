@@ -18,7 +18,7 @@ export function initLayers(changed) {
     button.dataset.layer = key;
     button.innerHTML = `${art[i]()}<kbd>F${i + 1}</kbd>`;
     button.setAttribute('aria-label', `${names[i]} F${i + 1}`);
-    button.title = `${names[i]} (F${i + 1}) · ` + (key === 'ownership' ? 'Held boundaries on explored land, building plots and active Town Center work domains'
+    button.title = `${names[i]} (F${i + 1}) · ` + (key === 'ownership' ? 'Held boundaries on explored land, building plots and active Steward and Vassal walking zones'
       : key === 'roads' ? 'Known roads and bridges'
       : key === 'threats' ? 'Last seen enemies, up to two minutes old; never live positions under fog'
       : `Toggle ${names[i].toLowerCase()}`);

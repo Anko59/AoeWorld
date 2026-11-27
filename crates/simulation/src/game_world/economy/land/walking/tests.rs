@@ -119,6 +119,7 @@ fn a_walking_zone_respects_walls_and_its_owners_gate() {
     world.set_gate_locked(player, gate, true).unwrap();
     let locked = refresh(&mut world, player).unwrap();
     assert!(!locked.owns(EntityId(1000), far));
+    assert_ne!(locked.shape(sources[0].0), through_gate.shape(sources[0].0));
 }
 
 fn install(
@@ -442,4 +443,32 @@ fn a_field_over_bounds_that_cut_through_its_office_does_not_index_past_them() {
     .unwrap();
     assert!(field.cost(TileCoord::new(21, 36)).is_some());
     assert_eq!(field.cost(TileCoord::new(21, 37)), None);
+}
+
+#[test]
+fn published_shape_matches_walking_ownership_across_the_river() {
+    let mut world = build("river").world;
+    let player = PlayerId(0);
+    let office = EntityId(1);
+    let before = install(
+        &mut world,
+        player,
+        &[(office, TileRect::from_xywh(20, 35, 4, 4))],
+    );
+    let shape = before.shape(office).unwrap();
+    let contains = |tile: TileCoord| {
+        shape.iter().any(|(chunk, rows)| {
+            (chunk.x, chunk.y) == page(tile, CHUNK_TILES)
+                && rows[tile.y.rem_euclid(CHUNK_TILES) as usize]
+                    & (1 << tile.x.rem_euclid(CHUNK_TILES))
+                    != 0
+        })
+    };
+    assert!(contains(TileCoord::new(22, 37)));
+    for tile in field::tiles(TileRect::from_xywh(0, 0, 125, 140)) {
+        assert_eq!(contains(tile), before.owns(office, tile), "{tile:?}");
+    }
+    world.management_ground_changed(TileRect::from_xywh(21, 42, 1, 1));
+    let after = refresh(&mut world, player).unwrap();
+    assert!(Arc::ptr_eq(&shape, &after.shape(office).unwrap()));
 }

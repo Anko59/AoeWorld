@@ -53,6 +53,18 @@ impl Groups {
         changed
     }
 
+    pub(super) fn shapes(&self, viewer: PlayerId) -> impl Iterator<Item = crate::OfficeZone> + '_ {
+        self.0
+            .get(&Self::key(viewer))
+            .into_iter()
+            .flat_map(|group| {
+                group
+                    .sources
+                    .keys()
+                    .filter_map(|&id| Some((id, group.walking.as_ref()?.shape(id)?)))
+            })
+    }
+
     pub(super) fn key(player: PlayerId) -> Key {
         // Leave the economy's boundary tick to the existing defence pass.
         (1 + u32::from(player.0) % (REFERENCE_HZ - 1), player)

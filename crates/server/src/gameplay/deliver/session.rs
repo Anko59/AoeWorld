@@ -36,6 +36,7 @@ pub(crate) struct Session {
     pub(crate) resident_animals: Vec<aoe_protocol::AnimalState>,
     pub(crate) resident_projectiles: Vec<aoe_protocol::ProjectileState>,
     pub(crate) resident_land: Option<Arc<aoe_simulation::LandControl>>,
+    pub(in crate::gameplay) office_zones: super::office_zones::Delivery,
     pub(crate) resident_move_queues: Vec<aoe_protocol::MoveQueue>,
     pub(crate) vision_revision: Option<u64>,
     /// The fog view the client holds; an unchanged rebuild is not resent.

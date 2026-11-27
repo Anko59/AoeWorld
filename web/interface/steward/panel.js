@@ -4,27 +4,25 @@ import { sliders } from '/interface/menu/slider.js';
 import { entityIcon } from '/interface/ui-art.js';
 
 const send = code => window.aoeBuildings?.command?.(18, code);
-// Geometry and ownership arrive from Rust, using the normal camera projection.
-// values = [count, (active, selected, points, x0, y0, ...) * count]. Territories
-// of overlapping castles are split at equal distance; each cell's outline stops
-// short of the shared border, so two lines show where the influences meet.
+// Rust projects the server's boundary segments onto the detailed terrain.
 export function initSteward() {
-  const ns='http://www.w3.org/2000/svg';
-  const layer=document.createElementNS(ns,'svg');layer.id='steward-domain';
-  layer.setAttribute('aria-label','Steward domains, 100 tile radius');
-  layer.style.cssText='position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;overflow:hidden;display:none';
+  const ns = 'http://www.w3.org/2000/svg';
+  const layer = document.createElementNS(ns, 'svg');
+  layer.id = 'steward-domain';
+  layer.setAttribute('aria-label', 'Steward and Vassal walking zones');
+  layer.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;overflow:hidden;display:none';
   document.body.append(layer);
-  const rings=[];
-  const ring=(i)=>{
-    if(!rings[i]){
-      const p=document.createElementNS(ns,'polygon');
-      p.setAttribute('stroke','#eac24d');
-      p.setAttribute('vector-effect','non-scaling-stroke');
-      p.setAttribute('stroke-dasharray','');
-      layer.append(p);rings[i]={node:p,points:''};
+  const outlines = [];
+  function outline(i) {
+    if (!outlines[i]) {
+      const node = document.createElementNS(ns, 'path');
+      node.setAttribute('fill', 'none');
+      node.setAttribute('vector-effect', 'non-scaling-stroke');
+      layer.append(node);
+      outlines[i] = { node, path: '' };
     }
-    return rings[i];
-  };
+    return outlines[i];
+  }
   mountPanel('steward-status');
   const controls = mountPanel('steward-controls', `
     <label><input id="steward-training" type="checkbox">Train villagers and fishing ships</label>
@@ -65,29 +63,31 @@ export function initSteward() {
         set(toggle, 'checked', settings[6] === 1);
       }
       signature = next;
-      updateDomain(values);
+      updateDomain(values, settings.length > 0);
     },
   };
-  function updateDomain(values) {
+  function updateDomain(values, active) {
     const count = values[0] ?? 0;
     set(layer.style, 'display', count ? 'block' : 'none');
     attribute(layer, 'data-count', count);
-    attribute(layer, 'data-radius', 100);
-    let at=1;
-    for(let i=0;i<count;i++){
-      const active=values[at]===1,selected=values[at+1]===1,n=values[at+2];at+=3;
-      const r=ring(i);
-      set(r.node.style, 'display', active ? '' : 'none');
-      attribute(r.node, 'fill', active ? 'rgba(234,194,77,.035)' : 'none');
+    attribute(layer, 'data-active', active);
+    let at = 1;
+    for (let i = 0; i < count; i++) {
+      const vassal = values[at++] === 1, selected = values[at++] === 1, n = values[at++];
+      const r = outline(i);
+      set(r.node.style, 'display', '');
+      attribute(r.node, 'stroke', vassal ? '#df9dff' : '#eac24d');
       attribute(r.node, 'stroke-width', selected ? '2.5' : '1.5');
-      attribute(r.node, 'data-active', active);
+      attribute(r.node, 'data-office', vassal ? 'vassal' : 'steward');
       attribute(r.node, 'data-selected', selected);
-      if (selected) attribute(layer, 'data-active', active);
-      const points=[];for(let k=0;k<n;k++)points.push(`${values[at+2*k]},${values[at+2*k+1]}`);
-      at+=2*n;
-      const next=points.join(' ');if(next!==r.points){r.node.setAttribute('points',next);r.points=next;}
+      const segments = [];
+      for (let k = 0; k < n; k++, at += 4) {
+        segments.push(`M${values[at]},${values[at + 1]}L${values[at + 2]},${values[at + 3]}`);
+      }
+      const next = segments.join('');
+      if (next !== r.path) { r.node.setAttribute('d', next); r.path = next; }
     }
-    for (const extra of rings.slice(count)) set(extra.node.style, 'display', 'none');
+    for (const extra of outlines.slice(count)) set(extra.node.style, 'display', 'none');
   }
 }
 

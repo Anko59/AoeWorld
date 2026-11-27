@@ -449,10 +449,11 @@ impl GameplayService {
                 queues: session.resident_move_queues.clone(),
             });
         }
+        let zones = session.office_zones.initial(&world, player, session.ai);
         let failed = !fanout::subscription::Delivery::offer(
             &mut session.subscription_delivery,
             &session.sender,
-            initial,
+            Box::new(initial.into_iter().chain(zones)),
         );
         drop(sessions);
         drop(world);

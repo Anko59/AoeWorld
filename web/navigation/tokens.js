@@ -17,9 +17,9 @@ export function initTokens() {
   layer.id = 'strategic-tokens'; layer.hidden = true;
   document.body.append(layer);
   const nodes = new Map();
-  let armies = [], economy = [], bridges = [], portraits = new Map(), hits = [], domainSignature = '';
+  let armies = [], economy = [], bridges = [], portraits = new Map(), hits = [];
   let hudRects = null, hudRectsAt = 0, hudRectsFor = '';
-  const domains = new Map();
+  const zones = new Map();
   function button(key, className) {
     let node = nodes.get(key);
     if (node) return node;
@@ -70,24 +70,6 @@ export function initTokens() {
     update(a, e, b, art = []) {
       portraits = new Map(rows(art, 3).map(([id, kind, rgb]) => [id, [kind, rgb]]));
       armies = rows(a, ARMY_LAYOUT_FIELDS); economy = rows(e, 13); bridges = rows(b, 5);
-      const next = economy.map(r => [r[0], r[2], r[3], r[7] === -1]).flat().join(',');
-      if (next !== domainSignature) {
-        domainSignature = next; domains.clear();
-        for (const [id, , wx, wy, , , , wait] of economy) {
-          const ring = [];
-          for (let k = 0; k <= 64; k++) {
-            const angle = k / 64 * Math.PI * 2, dx = Math.cos(angle), dy = Math.sin(angle);
-            let reach = 100;
-            if (wait !== -1) for (const other of economy) {
-              if (other[0] === id || other[7] === -1) continue;
-              const ox = other[2] - wx, oy = other[3] - wy, distance = Math.hypot(ox, oy), along = ox * dx + oy * dy;
-              if (distance > 0 && distance < 200 && along > 1e-9) reach = Math.min(reach, Math.max(0, distance / 2 - .4) * distance / along);
-            }
-            ring.push([wx + reach * dx, wy + reach * dy]);
-          }
-          domains.set(id, ring);
-        }
-      }
       const live = new Set([...armies.map(r => `a${r[0]}`), ...economy.map(r => `e${r[0]}`)]);
       for (const [key, node] of nodes) if (!live.has(key)) { node.remove(); nodes.delete(key); }
     },
@@ -120,6 +102,31 @@ export function initTokens() {
         const a = project([x0, y0]), b = project([x1, y1]);
         context.beginPath(); context.moveTo(...a); context.lineTo(...b); context.stroke();
       }
+    },
+    zone(id, vassal, edges) {
+      if (!edges.length) {
+        zones.delete(id);
+        return;
+      }
+      const path = new Path2D();
+      for (let at = 0; at < edges.length; at += 4) {
+        path.moveTo(edges[at], edges[at + 1]);
+        path.lineTo(edges[at + 2], edges[at + 3]);
+      }
+      zones.set(id, { vassal, path });
+    },
+    resetZones() { zones.clear(); },
+    drawZones(context, options, plane, zoom) {
+      if (!zones.size || !(options.ownership || options.economy)) return;
+      context.save();
+      plane();
+      context.lineWidth = 1.5 / (64 * zoom);
+      for (const { vassal, path } of zones.values()) {
+        if (vassal && !options.ownership) continue;
+        context.strokeStyle = vassal ? '#df9dff' : '#eac24d';
+        context.stroke(path);
+      }
+      context.restore();
     },
     draw(context, project, options, scale, width, height, space, artFor) {
       hits = [];
@@ -168,19 +175,6 @@ export function initTokens() {
         const node = button(`e${id}`, 'steward-card');
         const [x, y] = project([wx, wy]);
         const visible = options.economy && inView(x, y) && positions.has(`e${id}`);
-        if (wait !== -1 && (options.economy || options.ownership)) {
-          context.beginPath();
-          const ring = domains.get(id) ?? [];
-          for (let k = 0; k < ring.length; k++) {
-            const p = project(ring[k]);
-            if (k) context.lineTo(...p); else context.moveTo(...p);
-          }
-          if (options.ownership && wait !== -1) {
-            context.fillStyle = holdingColour; context.globalAlpha = .13; context.fill(); context.globalAlpha = 1;
-          }
-          context.strokeStyle = holdingColour; context.lineWidth = selected ? 2.5 : 1.5;
-          context.stroke();
-        }
         const label = waits[wait] ?? (wait === -1 ? 'Inactive · garrison in Town Center' : 'Evaluating');
         const total = f + w + g + s + idle || 1;
         const signature = [managed, residents, f, w, g, s, idle, wait].join(',');

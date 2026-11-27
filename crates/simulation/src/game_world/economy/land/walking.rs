@@ -5,7 +5,7 @@ use crate::GameWorld;
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 use aoe_map::{CHUNK_TILES, RegionChunk};
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use super::super::gathering::BLOCK_TILES;
 mod field;
@@ -13,6 +13,7 @@ mod ground;
 mod groups;
 mod office;
 mod patches;
+mod shape;
 
 use field::Field;
 use groups::Groups;
@@ -76,6 +77,7 @@ pub(in super::super) struct Walking {
     nearby: BTreeMap<(i32, i32), Vec<usize>>,
     patch_owners: Arc<PatchOwners>,
     affected: BTreeSet<EntityId>,
+    shapes: OnceLock<Box<[shape::CachedShape]>>,
     ground_revision: u64,
     patch_revision: u64,
 }
@@ -138,6 +140,7 @@ impl Walking {
             nearby,
             patch_owners,
             affected,
+            shapes: OnceLock::new(),
             ground_revision: cache.revision,
             patch_revision: cache.patch_revision,
         };
@@ -148,6 +151,7 @@ impl Walking {
                 .affected
                 .extend(walking.sources.iter().map(|&(id, _)| id));
         }
+        walking.prepare_shapes(previous.map(Arc::as_ref));
         Some(walking)
     }
 

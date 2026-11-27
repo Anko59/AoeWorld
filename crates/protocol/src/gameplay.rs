@@ -333,6 +333,30 @@ pub enum ServerMessage {
     },
 }
 
+impl ServerMessage {
+    /// Builds the next bounded piece of an office raster and returns the
+    /// offset to retain after the piece has been queued.
+    pub fn office_zone_batch(
+        office: EntityId,
+        vassal: bool,
+        shape: &[OfficeZoneChunk],
+        offset: usize,
+    ) -> Option<(Self, usize)> {
+        let chunks = shape.get(offset..)?.chunks(MAX_OFFICE_ZONE_CHUNKS).next()?;
+        let next = offset + chunks.len();
+        Some((
+            Self::OfficeZone {
+                office,
+                vassal,
+                start: offset == 0,
+                complete: next == shape.len(),
+                chunks: chunks.to_vec(),
+            },
+            next,
+        ))
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("message exceeds {MAX_MESSAGE} bytes")]

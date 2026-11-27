@@ -1,62 +1,51 @@
 use super::*;
+use std::collections::BTreeSet;
 use wasm_bindgen_test::wasm_bindgen_test;
 
-fn town_center(id: u32, x: f64, active: bool) -> TownCenter {
-    TownCenter {
-        id: EntityId(id),
-        center: [x, 90.0],
-        active,
-    }
-}
-fn nearest(point: [f64; 2], all: &[TownCenter]) -> Option<EntityId> {
-    all.iter()
-        .filter(|c| c.active)
-        .min_by(|a, b| {
-            let d = |c: &TownCenter| (c.center[0] - point[0]).hypot(c.center[1] - point[1]);
-            d(a).total_cmp(&d(b)).then(a.id.cmp(&b.id))
+#[wasm_bindgen_test]
+fn zone_outline_preserves_holes_and_has_no_chunk_seam() {
+    let mut left = [0; 32];
+    let mut right = [0; 32];
+    left[0..3].copy_from_slice(&[3 << 30, 1 << 30, 3 << 30]);
+    right[0..3].copy_from_slice(&[1, 1, 1]);
+    let edges = outline(&[(TileCoord::new(0, 0), left), (TileCoord::new(1, 0), right)]);
+    let units: BTreeSet<_> = edges
+        .into_iter()
+        .flat_map(|[x, y, x1, y1]| {
+            (x..x1)
+                .map(move |x| [x, y, x + 1, y])
+                .chain((y..y1).map(move |y| [x, y, x, y + 1]))
         })
-        .map(|c| c.id)
-}
+        .collect();
 
-#[wasm_bindgen_test]
-fn a_lone_town_center_draws_its_full_circle() {
-    let a = town_center(1, 90.0, true);
-    for p in outline(&a, &[a], 100.0, 64) {
-        assert!(((p[0] - 90.0).hypot(p[1] - 90.0) - 100.0).abs() < 1e-9);
+    for edge in [
+        [31, 1, 32, 1],
+        [31, 2, 32, 2],
+        [31, 1, 31, 2],
+        [32, 1, 32, 2],
+    ] {
+        assert!(
+            units.contains(&edge),
+            "missing edge around interior hole: {edge:?}"
+        );
     }
+    assert!(!units.contains(&[32, 0, 32, 1]));
+    assert!(!units.contains(&[32, 2, 32, 3]));
+    assert_eq!(units.len(), 16);
 }
 
 #[wasm_bindgen_test]
-fn overlapping_town_centers_meet_at_the_bisector_with_a_double_line() {
-    let (a, b) = (town_center(1, 90.0, true), town_center(2, 150.0, true));
-    let all = [a, b];
-    let (left, right) = (outline(&a, &all, 100.0, 128), outline(&b, &all, 100.0, 128));
-    // The bisector is x = 120; each outline stops short of it by the gap.
-    let a_max = left.iter().map(|p| p[0]).fold(f64::MIN, f64::max);
-    let b_min = right.iter().map(|p| p[0]).fold(f64::MAX, f64::min);
-    assert!((a_max - (120.0 - BORDER_HALF_GAP)).abs() < 1e-6, "{a_max}");
-    assert!((b_min - (120.0 + BORDER_HALF_GAP)).abs() < 1e-6, "{b_min}");
-    assert!(b_min - a_max > 0.5, "two distinct lines");
-    // Every vertex lies in its own cell, so the cells never overlap.
-    assert!(left.iter().all(|p| nearest(*p, &all) == Some(a.id)));
-    assert!(right.iter().all(|p| nearest(*p, &all) == Some(b.id)));
-}
-
-#[wasm_bindgen_test]
-fn town_centers_beyond_two_radii_do_not_interact_and_inactive_ones_claim_nothing() {
-    let (a, far) = (town_center(1, 90.0, true), town_center(2, 300.0, true));
-    assert_eq!(
-        outline(&a, &[a, far], 100.0, 32),
-        outline(&a, &[a], 100.0, 32)
-    );
-    let idle = town_center(3, 150.0, false);
-    assert_eq!(
-        outline(&a, &[a, idle], 100.0, 32),
-        outline(&a, &[a], 100.0, 32)
-    );
-    let full = outline(&idle, &[a, idle], 100.0, 32);
-    assert!(
-        full.iter()
-            .all(|p| ((p[0] - 150.0).hypot(p[1] - 90.0) - 100.0).abs() < 1e-9)
-    );
+fn an_office_shape_is_swapped_atomically_and_can_be_removed() {
+    let mut zones = Zones::default();
+    let id = EntityId(4);
+    let chunk = |x| (TileCoord::new(x, 0), [1; 32]);
+    assert!(zones.receive(id, true, true, vec![chunk(1)]));
+    let before = zones.edges[&id].clone();
+    assert!(!zones.receive(id, true, false, vec![chunk(2)]));
+    assert_eq!(zones.edges[&id], before);
+    assert!(zones.receive(id, false, true, vec![chunk(3)]));
+    assert!(zones.edges[&id].iter().all(|edge| edge[0] >= 64));
+    assert!(zones.receive(id, true, true, vec![]));
+    assert!(!zones.edges.contains_key(&id));
+    assert!(!zones.receive(id, false, true, vec![chunk(4)]));
 }

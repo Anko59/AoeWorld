@@ -90,3 +90,34 @@ pub(super) fn record_shots(
         .last_shot
         .retain(|_, launched| tick.saturating_sub(*launched) < 600);
 }
+
+pub(in super::super) fn merge_buildings(
+    retained: &[aoe_protocol::GameplayBuildingState],
+    changed: &[aoe_protocol::GameplayBuildingState],
+    removals: &[aoe_core::EntityId],
+) -> Option<Vec<aoe_protocol::GameplayBuildingState>> {
+    // All three wire lists are ordered by ID. Walk them once without building
+    // a second map of the entire kingdom for each group of changed sites.
+    let mut retained = retained.iter().peekable();
+    let mut changed = changed.iter().peekable();
+    let mut removals = removals.iter().copied().peekable();
+    let mut merged = Vec::with_capacity(retained.len().max(changed.len()));
+    while let Some(id) = retained
+        .peek()
+        .map(|b| b.id)
+        .into_iter()
+        .chain(changed.peek().map(|b| b.id))
+        .min()
+    {
+        let old = retained.next_if(|b| b.id == id);
+        while removals.next_if(|removed| *removed < id).is_some() {}
+        let removed = removals.next_if_eq(&id).is_some();
+        if let Some(building) = changed.next_if(|b| b.id == id).or(old.filter(|_| !removed)) {
+            if merged.len() == aoe_protocol::MAX_RETAINED_BUILDINGS {
+                return None;
+            }
+            merged.push(building.clone());
+        }
+    }
+    Some(merged)
+}

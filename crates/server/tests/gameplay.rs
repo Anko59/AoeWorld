@@ -90,7 +90,8 @@ async fn assert_command_ack(socket: &mut Socket, sequence: u64, expected: Comman
                 | GameplayServerMessage::WildlifeState { .. }
                 | GameplayServerMessage::FogState(_)
                 | GameplayServerMessage::Projectiles { .. }
-                | GameplayServerMessage::Holdings { .. } => {}
+                | GameplayServerMessage::Holdings { .. }
+                | GameplayServerMessage::OfficeZone { .. } => {}
                 other => {
                     panic!("unexpected frame while awaiting command acknowledgement: {other:?}")
                 }

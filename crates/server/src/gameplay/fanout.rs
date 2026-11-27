@@ -61,6 +61,7 @@ pub(super) struct SessionBuild {
     pub animals: Vec<AnimalState>,
     pub projectiles: Vec<ProjectileState>,
     pub move_queues: Vec<aoe_protocol::MoveQueue>,
+    pub office_zones: super::deliver::OfficeZones,
 }
 
 pub(super) struct Built {
@@ -237,6 +238,7 @@ fn build_session(
             super::wildlife::projectiles_from(world, candidates, region, view.viewer)
         },
         move_queues,
+        office_zones: super::deliver::office_zone_view(world, view.viewer, view.ai),
     })
 }
 
