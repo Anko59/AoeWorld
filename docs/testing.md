@@ -402,11 +402,10 @@ the mirror misses), switches to the containerd image store, and sets
 `--load --cache-from` with one GitHub Actions cache scope per Dockerfile, so
 unchanged tool images are restored from layers rather than rebuilt; a push to
 `dev` also passes `--cache-to` (`DOCKER_BUILD_CACHE_SAVE`), a pull request never
-writes the cache. Tags, Dockerfiles, and every job and gate are unchanged. Cache
-export failures are ignored and a missing cache only means a full build. Release
-jobs (`dev-artifacts`, `release-candidate`, `main-promotion`) use only the mirror
-and keep the daemon's default image store and uncached builds. Locally
-`DOCKER_BUILD_CACHE` is empty and `docker build` arguments are unchanged.
+writes the cache. A cache export failure is ignored and a missing cache only
+means a full build. Release jobs (`dev-artifacts`, `release-candidate`,
+`main-promotion`) use only the mirror, the default image store and uncached
+builds. Locally `DOCKER_BUILD_CACHE` is empty and `docker build` is unchanged.
 
 ## Registry and plans
 
