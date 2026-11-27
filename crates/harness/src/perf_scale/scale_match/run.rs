@@ -403,7 +403,7 @@ pub(super) fn run(options: &Options, saved: Option<Value>) -> Result<(), BoxErro
         "config": {
             "players": options.players, "humans": options.humans, "tiles": options.tiles,
             "minutes": options.minutes, "save_path": options.save,
-            "hosts": options.hosts, "start_villagers": options.start_villagers,
+            "hosts": options.hosts, "ai": options.ai_runtime(), "start_villagers": options.start_villagers,
             "start_militia": options.start_militia, "seed": options.seed,
         },
         "setup": {

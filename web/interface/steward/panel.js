@@ -34,12 +34,13 @@ export function initSteward() {
     .map((label, i) => ({ label, id: `steward-setting-${i}` }));
   const weights = sliders(controls, fields);
   const toggle = byId('steward-training');
-  let signature = '', confirmed = [];
+  let signature = '', confirmed = [], pending;
   controls.addEventListener('change', () => {
     // Restore the last confirmed weights when a change would leave no active resource.
     if (weights.slice(0, 4).every(control => Number(control.input.value) === 0)) {
       confirmed.forEach((value, i) => weights[i].sync(value, true));
     } else {
+      pending = { id: signature.split(',')[0], values: window.aoeSteward.settings().join(','), at: performance.now() };
       send(0);
     }
   });
@@ -52,6 +53,12 @@ export function initSteward() {
         'steward-controls': { hidden: !settings.length },
       });
       const next = settings.join(',');
+      // Each order comes back a few frames later, so an echo of an earlier one
+      // can arrive after a newer edit. Until the last order's own echo (or,
+      // if the server refused it, for 3 s), the controls keep the player's values.
+      if (pending && (String(settings[0]) !== pending.id || settings.slice(1).join(',') === pending.values
+        || performance.now() - pending.at > 3000)) pending = undefined;
+      if (pending) return updateDomain(values);
       if (next !== signature && settings.length === 7) {
         confirmed = Array.from(settings.slice(1, 5));
         weights.forEach((control, i) => control.sync(settings[i + 1], true));

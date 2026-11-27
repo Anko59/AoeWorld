@@ -230,6 +230,38 @@ fn the_summary_block_replaces_only_what_follows_the_marker() {
 }
 
 #[test]
+fn a_rust_run_summary_names_the_server_seats_and_their_cost() {
+    let mut report = finished_report();
+    report["config"]["ai"] = json!("rust");
+    let wait = |us: f64| json!({"calls": 10, "wall_us_per_tick": us});
+    let seats = json!({"decisions": 400, "cpu_ms": 100.0, "tick_thread": {
+        "ticks": 10, "cpu_us_per_tick": 3.0, "instructions_per_tick": null,
+        "feed": wait(2.5), "chunk_waits": wait(1.0), "join": wait(40.0), "settle": wait(7.5)}});
+    let early = report::phase_minute(Some(json!({"rust_ai": {"decisions": 1}})), None, 60.0);
+    let last = report::phase_minute(Some(json!({"rust_ai": seats})), None, 120.0);
+    report["phases_per_minute"] = json!([early, last]);
+    let text = report::markdown(&report);
+    assert!(text.contains("the server's Rust AI seats"), "{text}");
+    assert!(!text.contains("Python host"), "{text}");
+    assert!(
+        text.contains("400 decisions, 0.25 ms CPU per decision"),
+        "{text}"
+    );
+    assert!(
+        text.contains("feed 2.5, chunks 1.0, join 40.0, settle 7.5"),
+        "{text}"
+    );
+    assert!(!text.contains("reporting"), "{text}");
+}
+
+#[test]
+fn a_python_run_summary_keeps_its_hosts_and_bot_totals() {
+    let text = report::markdown(&finished_report());
+    assert!(text.contains("1 Python host process(es)"), "{text}");
+    assert!(text.contains("Bots at the end: 0 reporting"), "{text}");
+}
+
+#[test]
 fn the_timeline_keeps_every_sample() {
     let sample = Sample {
         seconds: 5.0,

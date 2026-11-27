@@ -1,8 +1,8 @@
 # The real game at scale: 1 human, 99 AIs
 
 `make scale-match` is the end-to-end proof harness for the promised scale: one
-human in the browser, 99 Python AI opponents, a France map at 1:30 (16,000 x 16,000
-two-metre tiles), about 100,000 units, and the server holding 20 Hz (50 ms per
+human in the browser, 99 AI opponents, a France map at 1:30 (16,000 x 16,000
+two-metre tiles), about 100,000 units, and the server holding 10 Hz (100 ms per
 tick) for a long session. It runs the real `aoe-server` release binary, so it
 re-runs as the simulation and fan-out optimisations land; the headless
 component benchmark (`make perf-scale`, [measurements](measurements.md)) stays
@@ -14,10 +14,13 @@ the place to find hot spots.
    admin secret, `target/scale-match/server.log`).
 2. `POST /match` with 100 slots (slot 0 human, 1-99 `ai`), a France map, the
    optional start units, timing the creation.
-3. Builds the release wheel (`sdk-python-steps`, under the same inherited long-job lock) and starts the bots in
-   `--hosts` sibling `aoeworld/sdk-python` containers, each one Python process
-   running `python -m aoe_ai host` (many bots on one native runtime and one
-   thread).
+3. With `--ai rust` (the default) the server plays the 99 AI seats itself.
+   With `--ai python` it builds the release wheel (`sdk-python-steps`, under the
+   same inherited long-job lock) and starts the bots in `--hosts` sibling
+   `aoeworld/sdk-python` containers, each one Python process running
+   `python -m aoe_ai host` (many bots on one native runtime and one thread).
+   A Rust run's summary reports the seats' decisions, CPU per decision and the
+   tick thread's waits (`rust_ai` of `/admin/perf`, sampled every minute).
 4. For `--minutes` of wall time, once a second reads the server's own per-tick
    records (`GET /match/stats`: whole tick, `advance`, start lateness, orders
    applied, units alive), and every 5 s the server's CPU and RSS (`/proc`) and
@@ -32,7 +35,7 @@ the place to find hot spots.
 
 ```sh
 make scale-match                         # defaults: 100 slots, 16,000 tiles, cap 1,000, 20 min
-SCALE_MATCH_ARGS="--minutes 30 --browser --start-villagers 800 --start-militia 100" make scale-match
+make scale-match SCALE_MATCH_ARGS="--minutes 30 --browser --start-villagers 800 --start-militia 100"
 make scale-match-smoke                   # 4 players, 1 minute, flat 500-tile map
 ```
 
@@ -163,10 +166,12 @@ row) must be 0; the match response carries the same counter.
 
 * **tick total** is the whole server tick: applying orders, `advance`, and
   building every session's view (fan-out). `advance` is the simulation alone;
-  `orders, views and fan-out` is the difference. A **missed tick** started over
-  50 ms late or took over 50 ms. The server skips missed intervals rather than
-  catching up, so a slow server runs the game slower than real time: `game
-  speed` is ticks per second / 20 (1.0 holds real time).
+  `orders, views and fan-out` is the difference. A **missed tick** started more
+  than one tick period late or took longer than one (100 ms at the default
+  10 Hz). The server skips missed intervals rather than catching up, so a slow
+  server runs the game slower than real time: `game speed` is ticks per second
+  divided by the tick rate (1.0 holds real time). Runs before 11-26 below were
+  at 20 Hz (50 ms).
 * Server CPU is the process; the bots' CPU and memory are the containers'.
   Everything shares the development machine (12 cores) with whatever else is
   running; the report records the machine's core count only, so note the load
@@ -333,40 +338,38 @@ not within 300 s; gather orders moved within 0.9 s. That move latency is the bug
 
 <!-- scale-match:latest -->
 
-## Latest run: france-real-seeded-fanout
+## Latest run: rust-99
 
-Revision `0c504af06aaaf078d0cd09924e5d0f7223dd3f65` (dirty tree), 100 players (1 human), 16000 x 16000 tiles (package), population cap 1000, 10.0 min of play, 8 Python host process(es).
+Revision `85b614561c1c51c8b7df73d25826685d126da4fb` (dirty tree), 100 players (1 human), 16000 x 16000 tiles (procedural), 10.0 min of play, the server's Rust AI seats.
 
 | | |
 |---|---|
-| tick total p50 / p95 / p99 / max (ms) | 119.7 / 221.8 / 315.8 / 12477.4 |
-| `advance` (simulation) p50 / p95 (ms) | 106.8 / 178.4 |
-| orders, views and fan-out p50 / p95 (ms) | 13.5 / 49.9 |
-| missed ticks (late start or over 50 ms) | 4132 of 4174 (99.0%) |
-| game speed (1.0 = real time) | 0.347 |
-| units at start / end / max | 90400 / 90235 / 90400 |
-| of which seeded by `start_units` | 90000 |
-| orders applied per second (mean) | 1793.127 |
-| server CPU mean / max (cores), RSS max (MiB) | 2.02 / 9.077, 986 |
-| bots CPU mean / max (cores), memory max (MiB) | 1.001 / 1.505, 183.72 |
-| match creation / bots connected (s) | 208.4 / 16.24 |
+| tick total p50 / p95 / p99 / max (ms) | 4.1 / 37.0 / 246.3 / 2462.9 |
+| `advance` (simulation) p50 / p95 (ms) | 2.2 / 12.7 |
+| orders, views and fan-out p50 / p95 (ms) | 1.4 / 23.7 |
+| missed ticks (late start or over one tick period) | 363 of 5523 (6.6%) |
+| game speed (1.0 = real time) | 0.919 |
+| units at start / end / max | 400 / 761 / 761 |
+| of which seeded by `start_units` | 0 |
+| villages with a partial starting kit | 100 |
+| orders applied per second (mean) | 49.027 |
+| server CPU mean / max (cores), RSS max (MiB) | 0.151 / 1.187, 2018 |
+| bots CPU mean / max (cores), memory max (MiB) | -0.0 / 0.0, 0.0 |
+| match creation / bots connected (s) | 15.363 / 0.0 |
 
-Bots at the end: 99 reporting, 79337 villagers, 9900 soldiers, 229 buildings, 0 errors, 70983 accepted and 1006958 rejected orders. Sessions: 0 dropped and rejoined (0 drops, 0 rejoins, 0.0 s away in all), 0 permanently lost.
-
-Browser: village 1.5 fps mean, frame p50 650.0 / p95 899.9 ms (181 frames); village_zoomed_out 1.8 fps mean, frame p50 516.7 / p95 766.7 ms (212 frames)
+Rust AI seats at the end: 109395 decisions, 0.25 ms CPU per decision; tick thread 193.0 µs CPU per tick, waits per tick (µs): feed 249.5, chunks 333.1, join 399.7, settle 0.5.
 
 Per minute (tick p50 / p95 ms, missed, units at end):
 
 | min | p50 | p95 | missed | units |
 |---|---|---|---|---|
-| 1 | 72.0 | 141.1 | 338 | 90400 |
-| 2 | 102.1 | 147.5 | 380 | 90400 |
-| 3 | 163.3 | 245.2 | 380 | 90331 |
-| 4 | 166.0 | 275.9 | 380 | 90330 |
-| 5 | 150.2 | 263.7 | 380 | 90289 |
-| 6 | 155.5 | 281.7 | 380 | 90288 |
-| 7 | 109.9 | 212.8 | 380 | 90258 |
-| 8 | 102.2 | 184.6 | 380 | 90258 |
-| 9 | 103.2 | 171.1 | 380 | 90239 |
-| 10 | 113.3 | 192.5 | 380 | 90239 |
-| 11 | 111.1 | 179.7 | 374 | 90235 |
+| 1 | 3.7 | 262.0 | 58 | 499 |
+| 2 | 3.7 | 195.0 | 62 | 561 |
+| 3 | 5.4 | 83.3 | 31 | 616 |
+| 4 | 9.1 | 50.8 | 5 | 646 |
+| 5 | 4.1 | 18.7 | 1 | 663 |
+| 6 | 3.0 | 8.5 | 74 | 683 |
+| 7 | 4.0 | 10.1 | 114 | 705 |
+| 8 | 2.9 | 8.9 | 18 | 728 |
+| 9 | 5.4 | 25.1 | 0 | 746 |
+| 10 | 2.9 | 12.4 | 0 | 761 |
