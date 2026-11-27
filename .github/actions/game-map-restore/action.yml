@@ -28,13 +28,14 @@ runs:
     # map crate's package, environment and page modules, plus the schema and recipe constants. Runtime
     # chunk and navigation code in crates/map is left out on purpose: it changes with most map pull
     # requests and does not change a package, and every new key costs a 6.9 GB source download.
+    # Test files are left out for the same reason (a tests-only commit changed the key on 2026-11-26).
     - id: names
       shell: bash
       run: |
         recipe="$(grep -h 'pub const \(MAP_SCHEMA_VERSION\|GENERATION_RECIPE_VERSION\)' crates/map/src/lib.rs | sha256sum | cut -c1-8)"
         prefix="game-map-${{ hashFiles('qa/anatolia-map.json') }}-"
         echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
-        echo "exact=${prefix}${recipe}-${{ hashFiles('crates/geodata/src/**', 'crates/geodata/Cargo.toml', 'crates/map/Cargo.toml', 'crates/map/src/package.rs', 'crates/map/src/package/**', 'crates/map/src/environment.rs', 'crates/map/src/environment/**', 'crates/map/src/request.rs', 'crates/map/src/water.rs', 'crates/map/src/biome.rs', 'crates/map/src/biome_rules.rs', 'crates/map/src/land_use.rs', 'crates/map/src/land_use/**') }}" >> "$GITHUB_OUTPUT"
+        echo "exact=${prefix}${recipe}-${{ hashFiles('crates/geodata/src/**', 'crates/geodata/Cargo.toml', 'crates/map/Cargo.toml', 'crates/map/src/package.rs', 'crates/map/src/package/**', 'crates/map/src/environment.rs', 'crates/map/src/environment/**', 'crates/map/src/request.rs', 'crates/map/src/water.rs', 'crates/map/src/biome.rs', 'crates/map/src/biome_rules.rs', 'crates/map/src/land_use.rs', 'crates/map/src/land_use/**', '!**/tests/**', '!**/tests.rs') }}" >> "$GITHUB_OUTPUT"
     - id: restore
       uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae
       with:
