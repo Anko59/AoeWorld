@@ -27,6 +27,7 @@ pub(crate) struct Village {
     pub idle_villagers: selection::IdleFinder,
     pub idle_military: selection::IdleFinder,
     pub viewer: std::cell::Cell<Option<PlayerId>>,
+    pub zones: steward::Zones,
     pub move_queues: Vec<aoe_protocol::MoveQueue>,
     pub players: Vec<GameplayPlayerState>,
     pub holdings: Vec<aoe_protocol::HoldingSpan>,

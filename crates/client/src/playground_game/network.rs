@@ -9,6 +9,7 @@ mod tests;
 
 #[path = "network/lifecycle.rs"]
 mod lifecycle;
+pub(super) use lifecycle::merge_buildings;
 use lifecycle::{clear_world, reconnect, record_shots};
 
 pub(super) struct ConnectionCallbacks {
@@ -183,6 +184,22 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     client.village.holdings = shapes;
                     client.village.holdings_complete = complete;
                 }
+            }
+            Ok(GameplayServerMessage::OfficeZone {
+                office,
+                vassal,
+                start,
+                complete,
+                chunks,
+            }) => {
+                village::steward::receive_zone(
+                    &mut client,
+                    office,
+                    vassal,
+                    start,
+                    complete,
+                    chunks,
+                );
             }
             Ok(GameplayServerMessage::MoveQueues {
                 revision,
@@ -466,35 +483,4 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         _onclose: onclose,
     });
     Ok(())
-}
-
-pub(super) fn merge_buildings(
-    retained: &[aoe_protocol::GameplayBuildingState],
-    changed: &[aoe_protocol::GameplayBuildingState],
-    removals: &[aoe_core::EntityId],
-) -> Option<Vec<aoe_protocol::GameplayBuildingState>> {
-    // All three wire lists are ordered by ID. Walk them once without building
-    // a second map of the entire kingdom for each group of changed sites.
-    let mut retained = retained.iter().peekable();
-    let mut changed = changed.iter().peekable();
-    let mut removals = removals.iter().copied().peekable();
-    let mut merged = Vec::with_capacity(retained.len().max(changed.len()));
-    while let Some(id) = retained
-        .peek()
-        .map(|b| b.id)
-        .into_iter()
-        .chain(changed.peek().map(|b| b.id))
-        .min()
-    {
-        let old = retained.next_if(|b| b.id == id);
-        while removals.next_if(|removed| *removed < id).is_some() {}
-        let removed = removals.next_if_eq(&id).is_some();
-        if let Some(building) = changed.next_if(|b| b.id == id).or(old.filter(|_| !removed)) {
-            if merged.len() == aoe_protocol::MAX_RETAINED_BUILDINGS {
-                return None;
-            }
-            merged.push(building.clone());
-        }
-    }
-    Some(merged)
 }

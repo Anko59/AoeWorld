@@ -137,6 +137,7 @@ export function initStrategic(fog, actors) {
     if (remapResources) resourceMarkers.update(state, scale, project, fog, resources, resourceSource, camera, now);
     const forests = layers.enabled.resources ? resourceMarkers.drawForests(context, project, scale, width, height) : 0;
     canvas.dataset.forests = String(forests);
+    tokens.drawZones(context, layers.enabled, plane, zoom);
     tokens.draw(context, project, layers.enabled, scale, width, height, space, portrait);
     picks = layers.enabled.armies ? drawUnits(context, unitGroups.groups(), project, width, height, scale,
       space, settlements.place, portrait) : [];
@@ -223,13 +224,17 @@ export function initStrategic(fog, actors) {
       }
       update(armies, economy, b, c, portraits);
     },
+    zone(id, vassal, edges) {
+      tokens.zone(id, vassal, edges);
+      modelRevision++;
+    },
     holdings(values) { if (holdingsLayer.update(values)) { modelRevision++; previous = ''; } },
     settlements(values) { if (settlements.update(values)) { modelRevision++; previous = ''; } },
     reset() {
       controlsVisible = null;
       cockpit.reset(); reveal.reset();
       settlements.reset(); holdingsLayer.reset(); unitGroups.reset();
-      tokens.update([], [], []); contacts.reset(); resources = [];
+      tokens.resetZones(); tokens.update([], [], []); contacts.reset(); resources = [];
       knownResources.forEach(cache => cache.clear());
       retiredResources.clear(); resourceSnapshot = false; resourceRevision++;
       modelSignature = ''; modelRevision++; previous = '';

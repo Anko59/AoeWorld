@@ -7,6 +7,9 @@ use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use tokio::sync::mpsc::error::TrySendError;
 
+#[path = "deliver/office_zones.rs"]
+mod office_zones;
+pub(super) use office_zones::{OfficeZones, view as office_zone_view};
 #[path = "deliver/session.rs"]
 pub(crate) mod session;
 #[path = "deliver/units.rs"]
@@ -352,8 +355,11 @@ fn deliver_session(
         };
         if send(session, message, &mut failed, id) {
             session.resident_projectiles = build.projectiles.clone();
+        } else {
+            return (applied, failed);
         }
     }
+    office_zones::deliver(session, build, &mut failed);
     (applied, failed)
 }
 

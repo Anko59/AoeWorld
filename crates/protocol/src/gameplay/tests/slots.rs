@@ -7,7 +7,7 @@ fn join_slot_is_an_appended_variant_with_a_pinned_wire_form() {
         version: VERSION,
         resume_token: None,
     };
-    assert_eq!(encode_client(&hello).unwrap(), [0, 29, 0]);
+    assert_eq!(encode_client(&hello).unwrap(), [0, 31, 0]);
     let mut token = [0_u8; 24];
     for (index, byte) in token.iter_mut().enumerate() {
         *byte = index as u8;
@@ -16,7 +16,7 @@ fn join_slot_is_an_appended_variant_with_a_pinned_wire_form() {
         version: VERSION,
         token: ResumeToken(token),
     };
-    let mut expected = vec![19, 29];
+    let mut expected = vec![19, 31];
     expected.extend(0..24_u8);
     assert_eq!(encode_client(&join).unwrap(), expected);
     assert_eq!(decode_client(&expected).unwrap(), join);
@@ -94,4 +94,55 @@ fn gather_patrol_garrison_and_general_walk_take_a_bounded_unit_list() {
                 || decode_client(&encode_client(&message).unwrap()).is_err()
         );
     }
+}
+
+#[test]
+fn office_zone_batch_has_a_bounded_current_wire_form() {
+    let chunk = (TileCoord::new(1, 2), [1; 32]);
+    let message = |chunks, start, complete| ServerMessage::OfficeZone {
+        office: EntityId(7),
+        vassal: true,
+        start,
+        complete,
+        chunks,
+    };
+    let one = message(vec![chunk], true, true);
+    let mut golden = vec![12, 7, 1, 1, 1, 1, 2, 4];
+    golden.extend([1; 32]);
+    assert_eq!(encode_server(&one).unwrap(), golden);
+    assert_eq!(decode_server(&golden).unwrap(), one);
+    let oversized = message(
+        (0..=MAX_OFFICE_ZONE_CHUNKS)
+            .map(|x| (TileCoord::new(x as i32, 0), [u32::MAX; 32]))
+            .collect(),
+        true,
+        false,
+    );
+    for invalid in [
+        oversized,
+        message(vec![chunk, chunk], true, true),
+        message(vec![(TileCoord::new(-1, 0), [1; 32])], true, true),
+        message(vec![(TileCoord::new(0, 0), [0; 32])], true, true),
+        message(vec![], false, false),
+    ] {
+        assert!(encode_server(&invalid).is_err());
+        assert!(decode_server(&postcard::to_allocvec(&invalid).unwrap()).is_err());
+    }
+    let shape: Vec<_> = (0..=MAX_OFFICE_ZONE_CHUNKS)
+        .map(|x| (TileCoord::new(x as i32, 0), [1; 32]))
+        .collect();
+    let (first, next) = ServerMessage::office_zone_batch(EntityId(7), true, &shape, 0).unwrap();
+    let (last, end) = ServerMessage::office_zone_batch(EntityId(7), true, &shape, next).unwrap();
+    assert_eq!(first, message(shape[..next].to_vec(), true, false));
+    assert_eq!(last, message(shape[next..].to_vec(), false, true));
+    assert_eq!(next, MAX_OFFICE_ZONE_CHUNKS);
+    assert!(ServerMessage::office_zone_batch(EntityId(7), true, &shape, end).is_none());
+    let largest = message(
+        (0..MAX_OFFICE_ZONE_CHUNKS)
+            .map(|x| (TileCoord::new(32_700 + x as i32, 32_767), [u32::MAX; 32]))
+            .collect(),
+        true,
+        false,
+    );
+    assert!(encode_server(&largest).unwrap().len() <= 11 * 1024);
 }

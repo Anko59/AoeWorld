@@ -35,7 +35,10 @@ pub use projectiles::{ProjectileKind, ProjectileState};
 pub use resources::{MAX_RESOURCE_CACHE, MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
 pub use wildlife::*;
 
-pub const VERSION: u16 = 29;
+pub const VERSION: u16 = 31;
+pub const MAX_OFFICE_ZONE_CHUNKS: usize = 64;
+/// Coordinates in 32-tile chunks, then one row of x bits per local y.
+pub type OfficeZoneChunk = (TileCoord, [u32; 32]);
 /// One gameplay frame: room for 65,536 units alongside bounded buildings,
 /// training queues and other view state. This is a memory guard, not housing.
 pub const MAX_MESSAGE: usize = 16 * 1_048_576;
@@ -318,6 +321,40 @@ pub enum ServerMessage {
         shapes: Vec<HoldingSpan>,
         complete: bool,
     },
+    /// One part of an owner-only walking zone, ordered on the match socket.
+    /// A start replaces any unfinished transfer. An empty start and end removes it.
+    OfficeZone {
+        office: EntityId,
+        vassal: bool,
+        start: bool,
+        complete: bool,
+        #[serde(deserialize_with = "economy::bounded_office_zone")]
+        chunks: Vec<OfficeZoneChunk>,
+    },
+}
+
+impl ServerMessage {
+    /// Builds the next bounded piece of an office raster and returns the
+    /// offset to retain after the piece has been queued.
+    pub fn office_zone_batch(
+        office: EntityId,
+        vassal: bool,
+        shape: &[OfficeZoneChunk],
+        offset: usize,
+    ) -> Option<(Self, usize)> {
+        let chunks = shape.get(offset..)?.chunks(MAX_OFFICE_ZONE_CHUNKS).next()?;
+        let next = offset + chunks.len();
+        Some((
+            Self::OfficeZone {
+                office,
+                vassal,
+                start: offset == 0,
+                complete: next == shape.len(),
+                chunks: chunks.to_vec(),
+            },
+            next,
+        ))
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

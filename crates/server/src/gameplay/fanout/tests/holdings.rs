@@ -123,3 +123,6 @@ fn capped_boundaries_keep_whole_rows_across_the_map() {
     assert!(shapes.first().unwrap().y < 10);
     assert!(shapes.last().unwrap().y > 8500);
 }
+
+#[path = "office_zones.rs"]
+mod office_zones;

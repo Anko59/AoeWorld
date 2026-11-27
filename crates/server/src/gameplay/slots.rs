@@ -260,6 +260,7 @@ impl GameplayService {
                 resident_projectiles: Vec::new(),
                 resident_move_queues: Vec::new(),
                 resident_land: None,
+                office_zones: Default::default(),
                 vision_revision: None,
                 resource_vision_revision: None,
                 command_tick: None,

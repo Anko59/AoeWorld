@@ -1,12 +1,13 @@
 //! Owner-visible domain presentation; economic decisions stay on the server.
-use super::{Client, building_center, owner};
-use crate::playground::game::map;
+use super::{Client, owner};
 use aoe_core::{EntityId, PlayerId};
 use aoe_protocol::{BuildingKind, ConstructionState, UnitKind};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 mod mix;
 mod territory;
+pub(crate) use territory::Zones;
+pub(in super::super) use territory::receive as receive_zone;
 mod vassal;
 
 #[wasm_bindgen(
@@ -115,54 +116,6 @@ pub(in super::super) fn general_command(client: &mut Client, action: u32, code: 
     super::orders::send(client, message);
 }
 
-/// Polygons (screen space) for every owned TownCenter's territory, laid out as
-/// `[count, (active, selected, points, x0, y0, x1, y1, ...) * count]`.
-fn domains(client: &Client, player: PlayerId, selected: EntityId, scale: f64) -> Vec<f64> {
-    let town_centers: Vec<_> = client
-        .village
-        .buildings
-        .iter()
-        .filter(|b| {
-            b.player == player
-                && b.kind == BuildingKind::TownCenter
-                && b.construction == ConstructionState::Complete
-        })
-        .map(|b| {
-            (
-                b.id,
-                territory::TownCenter {
-                    id: b.id,
-                    center: building_center(b),
-                    active: b
-                        .garrison
-                        .iter()
-                        .any(|g| g.kind == UnitKind::Steward && g.hp > 0),
-                },
-            )
-        })
-        .collect();
-    let all: Vec<_> = town_centers.iter().map(|c| c.1).collect();
-    let radius = f64::from(aoe_simulation::STEWARD_RULES.radius_tiles);
-    let scene = map::scene::prepare(client);
-    let mut values = vec![town_centers.len() as f64];
-    for (id, town_center) in &town_centers {
-        let ring = territory::outline(town_center, &all, radius, 64);
-        values.extend([
-            f64::from(u8::from(town_center.active)),
-            f64::from(u8::from(*id == selected)),
-            ring.len() as f64,
-        ]);
-        for world in ring {
-            let height = scene
-                .height(world)
-                .unwrap_or_else(|| map::elevation_at_world(client, world));
-            let p = client.camera.world_to_screen_at_height(world, height);
-            values.extend([p.x * scale, p.y * scale]);
-        }
-    }
-    values
-}
-
 /// One line saying how many villagers the Steward manages and, when it is not
 /// growing, why. Counts come from the server, not from the units in view.
 fn describe(report: Option<aoe_protocol::StewardReport>) -> String {
@@ -195,24 +148,20 @@ pub(super) fn present(client: &Client, scale: f64) {
     }
     vassal::present(client);
     let player = owner(client);
-    let mut points = Vec::new();
     let mut label = String::new();
     let mut settings = Vec::new();
-    if let Some(b) = client.village.buildings.iter().find(|b| {
-        Some(b.id) == client.selected.building_id
-            && b.player == player
-            && b.kind == BuildingKind::TownCenter
-            && b.construction == ConstructionState::Complete
-    }) {
+    let building = super::production::selected(client)
+        .filter(|b| b.player == player && b.construction == ConstructionState::Complete);
+    let points = building
+        .filter(|b| matches!(b.kind, BuildingKind::TownCenter | BuildingKind::Castle))
+        .map_or_else(Vec::new, |b| {
+            territory::present(client, b.id, b.kind, scale)
+        });
+    if let Some(b) = building.filter(|b| b.kind == BuildingKind::TownCenter) {
         let steward = b
             .garrison
             .iter()
             .find(|g| g.kind == UnitKind::Steward && g.hp > 0);
-        // Strategic cards have their own cached, flat domain geometry. Do not
-        // rebuild every TownCenter's elevated sprite outline behind that view.
-        if !crate::playground::game::strategic::active(client) {
-            points = domains(client, player, b.id, scale);
-        }
         label = if let Some(v) = steward {
             if let Some(r) = v.steward {
                 settings.push(v.id.0);

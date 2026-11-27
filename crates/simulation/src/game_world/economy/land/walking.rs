@@ -13,6 +13,7 @@ mod ground;
 mod groups;
 mod office;
 mod patches;
+mod shape;
 
 use field::Field;
 use groups::Groups;

@@ -1,11 +1,12 @@
 //! Source membership and refresh phases for one branch of management.
 use super::{Walking, ZoneCache};
-use crate::GameWorld;
+use crate::{GameWorld, OfficeZone, OfficeZoneChunk};
 use aoe_core::{EntityId, PlayerId, REFERENCE_HZ, TileRect};
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock};
 
 type Key = (u32, PlayerId);
+type Shapes = BTreeMap<EntityId, Arc<[OfficeZoneChunk]>>;
 
 /// Game seconds between two looks at one player's zones. Any felled tree on
 /// the map makes every zone stale, so on the owner's Anatolia 4 (99 AIs) each
@@ -22,6 +23,8 @@ pub(crate) struct Groups(BTreeMap<Key, Group>);
 struct Group {
     sources: BTreeMap<EntityId, TileRect>,
     walking: Option<Arc<Walking>>,
+    /// Only groups rendered by a browser allocate a shape cache.
+    shapes: OnceLock<Box<Mutex<Shapes>>>,
     membership_changed: bool,
     /// A bridge changed the ground: looked at within a second, not a period;
     /// cleared by that look.
@@ -51,6 +54,27 @@ impl Groups {
             }
         }
         changed
+    }
+
+    pub(super) fn shapes(&self, viewer: PlayerId) -> impl Iterator<Item = OfficeZone> + '_ {
+        self.0
+            .get(&Self::key(viewer))
+            .and_then(|group| Some((group, group.walking.as_deref()?)))
+            .into_iter()
+            .flat_map(|(group, walking)| {
+                group.sources.keys().filter_map(move |&id| {
+                    let index = walking.index(id)?;
+                    let mut shapes = group
+                        .shapes
+                        .get_or_init(Default::default)
+                        .lock()
+                        .unwrap_or_else(|error| error.into_inner());
+                    let shape = shapes
+                        .entry(id)
+                        .or_insert_with(|| walking.build_shape(index));
+                    Some((id, shape.clone()))
+                })
+            })
     }
 
     pub(super) fn key(player: PlayerId) -> Key {
@@ -109,6 +133,12 @@ impl Groups {
 
     pub(in super::super::super) fn publish(&mut self, key: Key, walking: Arc<Walking>) {
         if let Some(group) = self.0.get_mut(&key) {
+            if let Some(shapes) = group.shapes.get_mut() {
+                shapes
+                    .get_mut()
+                    .unwrap_or_else(|error| error.into_inner())
+                    .retain(|id, _| group.sources.contains_key(id) && !walking.zone_changed(*id));
+            }
             group.walking = Some(walking);
             group.membership_changed = false;
         }

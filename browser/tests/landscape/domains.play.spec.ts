@@ -1,7 +1,7 @@
 import { expect } from "@playwright/test";
 import { test } from "../../server.js";
 
-test("inactive Town Center domains disappear while active plain outlines remain", async ({
+test("close view projects separate boundary segments and clears removed zones", async ({
   page,
 }) => {
   await page.route("**/domain-test", (route) =>
@@ -16,30 +16,24 @@ test("inactive Town Center domains disappear while active plain outlines remain"
     const { initSteward } = await import("/interface/steward/panel.js");
     initSteward();
     Reflect.get(window, "aoeSteward").update(
-      [2, 0, 0, 3, 10, 10, 80, 10, 40, 80, 1, 1, 3, 100, 10, 180, 10, 140, 80],
+      [1, 1, 1, 2, 10, 10, 80, 10, 40, 80, 40, 130],
       "",
       [],
     );
   });
-  await expect(
-    page.locator('#steward-domain polygon[data-active="false"]'),
-  ).toBeHidden();
-  const active = page.locator('#steward-domain polygon[data-active="true"]');
-  await expect(active).toBeVisible();
-  await expect(active).toHaveAttribute("stroke-dasharray", "");
-  // A dismissed Steward must hide the same reused polygon on the next HUD refresh.
+  const outline = page.locator('#steward-domain path[data-office="vassal"]');
+  await expect(outline).toBeVisible();
+  await expect(outline).toHaveAttribute("d", "M10,10L80,10M40,80L40,130");
+  await expect(outline).toHaveAttribute("data-selected", "true");
   await page.evaluate(() =>
-    Reflect.get(window, "aoeSteward").update(
-      [1, 0, 1, 3, 100, 10, 180, 10, 140, 80],
-      "",
-      [],
-    ),
+    Reflect.get(window, "aoeSteward").update([], "", []),
   );
-  await expect(page.locator("#steward-domain polygon").nth(0)).toBeHidden();
-  await expect(page.locator("#steward-domain polygon").nth(1)).toBeHidden();
+  await expect(outline).toBeHidden();
 });
 
-test("far domains draw only the plain active boundary", async ({ page }) => {
+test("far view draws the same open segments for both office types", async ({
+  page,
+}) => {
   await page.route("**/domain-test", (route) =>
     route.fulfill({
       contentType: "text/html",
@@ -47,33 +41,34 @@ test("far domains draw only the plain active boundary", async ({ page }) => {
     }),
   );
   await page.goto("/domain-test");
-  const strokes = await page.evaluate(async () => {
+  const pixels = await page.evaluate(async () => {
     // @ts-expect-error Served browser module.
     const { initTokens } = await import("/navigation/tokens.js");
     const tokens = initTokens();
-    const canvas = document.querySelector("canvas");
-    const context = canvas?.getContext("2d");
+    const context = document.querySelector("canvas")?.getContext("2d");
     if (!context) throw new Error("Canvas context is missing");
-    const dashes: number[][] = [];
-    context.stroke = () => dashes.push(context.getLineDash());
-    tokens.update(
-      [],
-      [
-        1, 10, 200, 200, 0, 0, 0, -1, 0, 0, 0, 0, 0, 2, 20, 400, 200, 0, 0, 0,
-        0, 0, 0, 0, 0, 0,
-      ],
-      [],
-    );
-    tokens.draw(
-      context,
-      (p: number[]) => p,
-      { ownership: true },
-      1,
-      1280,
-      720,
-      {},
-    );
-    return dashes;
+    const plane = () => context.setTransform(2, 0, 0, 3, 0, 0);
+    const samples = [
+      [7, 12],
+      [20, 39],
+      [16, 24],
+      [14, 30],
+    ] as const;
+    const alphas = () =>
+      samples.map(
+        ([x, y]) => (context.getImageData(x, y, 1, 1).data[3] ?? 0) > 0,
+      );
+    tokens.zone(10, false, [2, 4, 5, 4, 10, 12, 10, 14]);
+    tokens.zone(20, true, [7, 8, 9, 8]);
+    tokens.drawZones(context, { ownership: true }, plane, 1 / 64);
+    const before = alphas();
+    context.clearRect(0, 0, 300, 150);
+    tokens.zone(10, false, []);
+    tokens.drawZones(context, { ownership: true }, plane, 1 / 64);
+    return [before, alphas()];
   });
-  expect(strokes).toEqual([[]]);
+  expect(pixels).toEqual([
+    [true, true, true, false],
+    [false, false, true, false],
+  ]);
 });

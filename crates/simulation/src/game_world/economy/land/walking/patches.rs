@@ -274,6 +274,20 @@ impl PatchOwners {
         Self { winners, tiles }
     }
 
+    pub(super) fn winning_tiles<'a>(
+        &'a self,
+        office: EntityId,
+        claims: &'a [Claim],
+    ) -> impl Iterator<Item = TileCoord> + 'a {
+        claims
+            .iter()
+            .filter_map(move |claim| {
+                let winner = self.winners.get(&claim.patch.key)?;
+                (winner.owner == office).then_some(winner.tiles.iter().copied())
+            })
+            .flatten()
+    }
+
     pub(super) fn owner(&self, tile: TileCoord) -> Option<EntityId> {
         self.tiles.get(&page(tile, BLOCK_TILES))?[slot(tile)]
     }

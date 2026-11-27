@@ -165,10 +165,6 @@ test("train one Steward per Town Center and activate its visible economic domain
     "data-active",
     "true",
   );
-  await expect(page.locator("#steward-domain")).toHaveAttribute(
-    "data-radius",
-    "100",
-  );
   await expect(page.locator("#steward-status")).toContainText("domain active");
   const controls = page.locator("#steward-controls");
   await expect(controls).toBeVisible();
@@ -232,40 +228,33 @@ test("train one Steward per Town Center and activate its visible economic domain
   await select(page, "Town Center");
   const size = page.viewportSize();
   if (!size) throw new Error("Viewport missing");
-  const ring = page.locator('#steward-domain polygon[data-selected="true"]');
-  await expect(ring).toBeVisible();
-  const points = ((await ring.getAttribute("points"))?.split(" ") ?? []).map(
-    (point) => point.split(",").map(Number),
+  const outline = page.locator(
+    '#steward-domain path[data-office="steward"][data-selected="true"]',
   );
-  expect(points).toHaveLength(64);
-  expect(points.every((p) => p.length === 2 && p.every(Number.isFinite))).toBe(
-    true,
+  // Keep the Town Center selected and pan to the weighted diagonal edge.
+  await page.evaluate(() => {
+    location.hash = "x=211&y=206&zoom=.5";
+  });
+  await expect(page.locator("#minimap")).toHaveAttribute(
+    "data-camera-x",
+    "211",
   );
-  // Independent projection check: opposing x-axis points span 200 tiles,
-  // each 64 CSS pixels at zoom 1, hence 6400 pixels at the normal .5 zoom.
-  expect(
-    Math.abs(Number(points[0]?.[0]) - Number(points[32]?.[0])),
-  ).toBeCloseTo(6400, 0);
-  if (capture) {
-    // The circle exceeds the viewport. Pan to its southeast edge for the image.
-    await page.evaluate(() => {
-      location.hash = "x=211&y=206&zoom=.5";
-    });
-    await expect(page.locator("#minimap")).toHaveAttribute(
-      "data-camera-x",
-      "211",
-    );
-    await freshHud(page);
-    const edge = (await ring.getAttribute("points"))?.split(" ") ?? [];
-    expect(
-      edge.some((point) => {
-        const [x = NaN, y = NaN] = point.split(",").map(Number);
-        return x > 0 && x < size.width && y > 0 && y < size.height - 200;
-      }),
-    ).toBe(true);
+  await expect(outline).toBeVisible();
+  await expect
+    .poll(async () => {
+      const path = (await outline.getAttribute("d")) ?? "";
+      return [...path.matchAll(/[ML]([^,ML]+),([^ML]+)/g)].some(
+        ([, x, y]) =>
+          Number(x) > 0 &&
+          Number(x) < size.width &&
+          Number(y) > 0 &&
+          Number(y) < size.height - 200,
+      );
+    })
+    .toBe(true);
+  if (capture)
     await page.screenshot({ path: "../.cache/steward/domain-firefox.png" });
-    await centerTownCenter(page);
-  }
+  await centerTownCenter(page);
   // A zero cap leaves the next normally trained villager unmanaged. Exercise
   // the real dismiss button through the socket, rather than only its presence.
   await page.getByLabel("Villager cap", { exact: true }).press("Home");
