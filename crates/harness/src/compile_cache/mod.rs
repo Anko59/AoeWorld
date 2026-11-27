@@ -68,7 +68,7 @@ fn service_arguments(directory: &str, identity: &str) -> Vec<String> {
         "SCCACHE_NO_DAEMON=1",
         "-e",
         "SCCACHE_START_SERVER=1",
-        "aoeworld/rust-tools:1.99.1-sccache0.19.0",
+        "aoeworld/rust-tools:1.99.1-sccache0.19.0-wasm0.2.128-p1",
         "sccache",
     ]
     .into_iter()
