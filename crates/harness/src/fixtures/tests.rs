@@ -286,6 +286,12 @@ fn fixtures_load_a_small_save_and_reject_its_snapshot_version() {
         0, // units
         0, // formations
         0, // animals
+        0, // relics on the ground
+        0, // relic carriers
+        0, // relics stored in monasteries
+        0, // relic orders
+        0, // relic victory enabled
+        0, // relic victory
         0, // town bells
         0, // explored chunks
         0, // building memory
