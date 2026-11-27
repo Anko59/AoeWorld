@@ -96,6 +96,24 @@ fn phase_samples_keep_instructions_and_cpu_time_in_separate_units() {
     assert_eq!(cpu_ns["plan_ahead"], 0);
 }
 
+/// A name the live stats and the replay both list would drain twice, the
+/// second time as zero, and lose its samples.
+#[test]
+fn every_replay_phase_has_one_name_and_keeps_its_samples() {
+    let all: Vec<_> = names().collect();
+    let unique: std::collections::BTreeSet<_> = all.iter().collect();
+    assert_eq!(unique.len(), all.len(), "a name is listed twice: {all:?}");
+    let probe = Probe::fixture();
+    probe.record(
+        phase_name(TickPhase::StewardEconomy),
+        Sample {
+            instructions: 900,
+            cpu_ns: 9_000,
+        },
+    );
+    assert_eq!(probe.drain().0["steward_economy"], 900);
+}
+
 #[test]
 fn thread_cpu_clock_does_not_charge_sleep() {
     let before = cpu().unwrap();

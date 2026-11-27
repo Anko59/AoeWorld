@@ -35,7 +35,7 @@ pub mod parallel;
 mod research;
 mod resources;
 #[path = "game_world/snapshot/mod.rs"]
-mod snapshot;
+pub(crate) mod snapshot;
 pub use snapshot::{RestoreReport, SnapshotError, WORLD_SNAPSHOT_VERSION, WorldSnapshot};
 mod route_scheduler;
 pub(crate) use route_scheduler::Pass;

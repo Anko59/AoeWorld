@@ -15,6 +15,8 @@ mod compat;
 mod fog;
 #[path = "snapshot_roundtrip/general.rs"]
 mod general;
+#[path = "snapshot_roundtrip/phases.rs"]
+mod phases;
 
 pub(super) fn flat() -> (GameWorld, TileCoord) {
     let (package, pages, water) = flat_fixture(false);

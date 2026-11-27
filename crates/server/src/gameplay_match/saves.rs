@@ -21,6 +21,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+mod timing;
+
 /// Read by `make check-fixtures` to explain a save that no longer loads.
 /// Includes the shared construction queue, Vassal focus and General queued-leg modes.
 pub const SAVE_VERSION: u16 = 21;
@@ -275,8 +277,9 @@ pub(super) fn resolve(
     Ok(Some(Arc::new(loaded)))
 }
 
-/// Makes the match of a skirmish: the saved one when `resume` is given, else
-/// a new one with villages placed from `seed`.
+/// Makes the match of a skirmish: the saved one when `resume` is given, with
+/// the microseconds of its restore, whole and by phase; else a new one with
+/// villages placed from `seed`.
 pub(super) async fn build(
     package: MapPackage,
     provider: Option<Arc<dyn aoe_map::EnvironmentPageProvider>>,
@@ -285,29 +288,30 @@ pub(super) async fn build(
     (seed, placed): (u64, Arc<std::sync::atomic::AtomicUsize>),
     cancelled: Arc<std::sync::atomic::AtomicBool>,
     directory: Option<PathBuf>,
-) -> Result<GameplayService, String> {
+) -> Result<(GameplayService, timing::Spent), String> {
     use std::sync::atomic::Ordering;
     let recording = if resume.is_some() {
         crate::Config::command_recording_from_env()?
     } else {
         None
     };
-    let service = tokio::task::spawn_blocking(move || {
+    let (service, spent) = tokio::task::spawn_blocking(move || {
         let cancelled = || cancelled.load(Ordering::Acquire);
         match resume {
             Some(loaded) => {
                 let hz = crate::Config::sim_hz_from_env();
-                resume_service(
+                resume_with(
                     package,
                     provider,
                     &loaded,
                     &cancelled,
                     directory.as_deref(),
                     hz,
+                    timing::restore,
                 )
-                .map(|(service, report)| {
+                .map(|(service, (report, spent))| {
                     tracing::info!(?report, "saved game restored");
-                    service
+                    (service, spent)
                 })
             }
             None => GameplayService::from_match_rules_stored(
@@ -319,7 +323,7 @@ pub(super) async fn build(
                 &cancelled,
                 directory.as_deref(),
             )
-            .map(|built| built.0),
+            .map(|built| (built.0, (None, None))),
         }
     })
     .await
@@ -331,7 +335,7 @@ pub(super) async fn build(
             .await
             .map_err(|e| e.to_string())?;
     }
-    Ok(service)
+    Ok((service, spent))
 }
 
 impl Loaded {
@@ -350,6 +354,27 @@ fn resume_service(
     directory: Option<&FsPath>,
     tick_hz: u32,
 ) -> Result<(GameplayService, aoe_simulation::RestoreReport), MatchError> {
+    resume_with(
+        package,
+        provider,
+        loaded,
+        cancelled,
+        directory,
+        tick_hz,
+        GameWorld::restore_snapshot,
+    )
+}
+
+/// `resume_service`, with the snapshot put back by `restore`.
+fn resume_with<R>(
+    package: MapPackage,
+    provider: Option<Arc<dyn EnvironmentPageProvider>>,
+    loaded: &Loaded,
+    cancelled: &dyn Fn() -> bool,
+    directory: Option<&FsPath>,
+    tick_hz: u32,
+    restore: timing::Restore<R>,
+) -> Result<(GameplayService, R), MatchError> {
     let content_hash = package.content_hash;
     let content_hash_hex = package.content_hash_hex();
     let metadata = crate::gameplay_map::map_metadata(&package);
@@ -367,11 +392,10 @@ fn resume_service(
     world.set_limits(MatchRules::default().limits(seats.len()));
     // A save holds reference ticks; it resumes at `tick_hz`.
     world.set_tick_hz(tick_hz);
-    let report = world
-        .restore_snapshot(&loaded.file.world, content_hash, cancelled)
-        .map_err(|error| {
-            MatchError::Navigation(format!("the saved game cannot be restored: {error}"))
-        })?;
+    let saved = &loaded.file.world;
+    let report = restore(&mut world, saved, content_hash, cancelled).map_err(|error| {
+        MatchError::Navigation(format!("the saved game cannot be restored: {error}"))
+    })?;
     let starts: Vec<aoe_core::EntityId> = seats
         .iter()
         .map(|seat| aoe_core::EntityId(seat.primary_unit_id))

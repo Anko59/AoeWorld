@@ -1,5 +1,7 @@
 use super::*;
 
+mod names;
+
 #[test]
 fn relocation_phases_accumulate_submicrosecond_spans_before_rounding_and_reset() {
     let phases = phases::Phases::default();
@@ -170,6 +172,6 @@ fn direct_benchmark_reads_the_real_server_phases_once_per_tick() {
     assert_eq!(first["session_views"], 7);
     assert_eq!(first["index_collision"], 3);
     assert_eq!(first["index_chunks"], 2);
-    assert_eq!(first.len(), 46);
+    assert_eq!(first.len(), 48, "with `steward_economy` and `other`");
     assert!(probe.take_phase_micros().values().all(|value| *value == 0));
 }

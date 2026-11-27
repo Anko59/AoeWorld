@@ -14,6 +14,7 @@
 //! restarted. `RestoreReport` counts misses.
 mod general;
 mod orders;
+mod phase;
 mod rate;
 mod records;
 use super::{BuildingKind, ConstructionState, GameUnit, GameWorld, GameWorldError};
@@ -21,6 +22,7 @@ use aoe_core::{EntityId, REFERENCE_HZ, TileCoord, TileRect, WorldPosition};
 
 /// How far from its place a restored unit may be put when that tile is taken.
 const NEAREST_RADIUS: i32 = 12;
+pub use phase::RestorePhase;
 pub use records::*;
 use std::collections::BTreeMap;
 
@@ -161,17 +163,32 @@ impl GameWorld {
         content_hash: [u8; 32],
         cancelled: &dyn Fn() -> bool,
     ) -> Result<RestoreReport, SnapshotError> {
+        self.restore_snapshot_with_probe(snapshot, content_hash, cancelled, &mut |_| {})
+    }
+
+    /// Same restore as `restore_snapshot`; `probe` is called as each phase
+    /// finishes so a caller can attribute time without a clock here. A phase
+    /// with several parts is reported after each, and `Rest` comes last.
+    pub fn restore_snapshot_with_probe(
+        &mut self,
+        snapshot: &WorldSnapshot,
+        content_hash: [u8; 32],
+        cancelled: &dyn Fn() -> bool,
+        probe: &mut impl FnMut(RestorePhase),
+    ) -> Result<RestoreReport, SnapshotError> {
         if snapshot.version != WORLD_SNAPSHOT_VERSION {
             return Err(SnapshotError::Version);
         }
         if !self.units.is_empty() || !self.economy.buildings.is_empty() {
             return Err(SnapshotError::NotEmpty);
         }
-        let snapshot = &snapshot.clone().retimed(REFERENCE_HZ, self.config.tick_hz);
+        let snapshot = snapshot.clone().retimed(REFERENCE_HZ, self.config.tick_hz);
+        probe(RestorePhase::Rest);
         if let Some(resources) = &snapshot.resources {
             self.restore_resources(resources, content_hash, cancelled)
                 .map_err(|error| SnapshotError::Map(error.to_string()))?;
         }
+        probe(RestorePhase::Resources);
         // Sheltered units are briefly placed outside before re-entering their
         // building. Those temporary positions must not explore the new layout.
         // Rebuild sight once every entity has its final restored position.
@@ -186,7 +203,9 @@ impl GameWorld {
         self.economy.construction.tick = snapshot.tick;
         self.economy.queues.training.tick = snapshot.tick;
         self.economy.queues.research.tick = snapshot.tick;
+        probe(RestorePhase::Rest);
         self.restore_explored(&snapshot.explored);
+        probe(RestorePhase::Explored);
         let mut report = RestoreReport::default();
         // Identities are placed one at a time at their own number: buildings
         // first (a sheltered unit needs its building), then units.
@@ -196,10 +215,12 @@ impl GameWorld {
                 world.restore_building(record, &mut report);
             }
         });
+        probe(RestorePhase::Buildings);
         for record in &snapshot.units {
             self.expect_id(record.unit.id);
             self.restore_unit(record, &mut report);
         }
+        probe(RestorePhase::Units);
         self.economy
             .town_bells
             .extend(snapshot.town_bells.iter().copied().filter(|id| {
@@ -240,11 +261,14 @@ impl GameWorld {
             });
         }
         self.restore_general_recruits(&snapshot.buildings, &snapshot.units);
+        probe(RestorePhase::Rest);
         self.restore_building_memory(&snapshot.building_memory);
         self.restore_resource_memory(&snapshot.resource_memory);
         self.set_fog_disabled(snapshot.fog_disabled);
-        self.resume_jobs(snapshot, &mut report);
+        probe(RestorePhase::FogAndVision);
+        self.resume_jobs(&snapshot, &mut report);
         self.rebind_trade_units();
+        probe(RestorePhase::JobsAndOrders);
         for player in &snapshot.players {
             if let Some(slot) = self.economy.players.get_mut(&player.player) {
                 *slot = *player;
@@ -252,6 +276,10 @@ impl GameWorld {
         }
         self.mark_all_buildings_changed();
         self.remember_visible_buildings();
+        probe(RestorePhase::FogAndVision);
+        // Releasing the copy of a large save takes time too.
+        drop(snapshot);
+        probe(RestorePhase::Rest);
         Ok(report)
     }
 

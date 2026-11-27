@@ -343,21 +343,21 @@ async fn prepare(
     let seed = super::fresh_seed();
     tracing::info!(seed, "village layout seed");
     let started = Instant::now();
-    let (cancel, count) = (cancelled.clone(), placed.clone());
-    let directory = state.map_package_directory.clone();
-    let service = super::saves::build(
+    let (service, (restore_us, restore_phases_us)) = super::saves::build(
         package,
         provider.map(|value| value as Arc<dyn EnvironmentPageProvider>),
         resume,
         humans,
-        (seed, count),
-        cancel,
-        directory,
+        (seed, placed.clone()),
+        cancelled.clone(),
+        state.map_package_directory.clone(),
     )
     .await?;
     tracing::info!(
         seats = opponents + 1,
         seconds = started.elapsed().as_secs_f64(),
+        restore_us,
+        restore_phases_us,
         "skirmish match created"
     );
     if !state.skirmish.advance(id, Phase::StartingAi) {

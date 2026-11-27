@@ -31,8 +31,11 @@ pub struct TickProbe {
 }
 
 impl TickProbe {
+    /// The names a sample can have: all but `other`, which has no samples of
+    /// its own.
     pub(crate) fn phase_names() -> &'static [&'static str] {
-        &phases::NAMES
+        let names: &'static [&'static str] = &phases::NAMES;
+        &names[..phases::OTHER]
     }
 
     pub(crate) fn take_phase_micros(&self) -> std::collections::BTreeMap<&'static str, u64> {

@@ -82,7 +82,6 @@ fn names() -> impl Iterator<Item = &'static str> {
     crate::gameplay_match::TickProbe::phase_names()
         .iter()
         .copied()
-        .chain(["steward_economy"])
         .chain(aoe_simulation::ISSUER_SPANS)
         .chain(aoe_simulation::STEWARD_SPANS)
 }

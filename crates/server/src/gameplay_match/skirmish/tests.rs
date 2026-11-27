@@ -4,6 +4,7 @@ use aoe_protocol::GameplayServerMessage;
 use axum::http::HeaderValue;
 
 mod hosts;
+mod restore_log;
 
 fn state(launch: Option<Launch>) -> AppState {
     let config = crate::Config {
