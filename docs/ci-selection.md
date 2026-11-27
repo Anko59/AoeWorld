@@ -68,6 +68,24 @@ clippy) and `unit` (`make preflight-unit`: `test-unit` for the unit scope, then 
 simulation, the server or the protocol, or a harness performance module changed). The workflow reads
 `static_parts` and `unit_scope` from the `select` outputs; `AOE_UNIT_SCOPE` carries the scope to the leg.
 
+## Local checks: the game score
+
+`local_checks` in the rules file lists checks that `make ship` runs on the agent's machine and CI does not. They use
+the crate graph the way a job does, so one answer to "can this change affect X" serves both, but they are not jobs:
+the manifest, the `select` outputs and `required` never list them. The only one today is `game-score`
+([game score](scale/game-score.md#in-make-ship)):
+
+- It runs when a changed path is in the build closure of `aoe-server` (the simulation, the Rust AI, the map, the
+  protocol, the SDK, core and scenario crates), or is an input the rule names: `Cargo.toml`, `Cargo.lock`,
+  `rust-toolchain.toml`, `crates/harness/Cargo.toml` and `crates/harness/src/game_score`.
+- A path under `ignore` never runs it: the tests, benchmarks, examples and notes of those crates are not part of
+  any build of the server.
+- The rule's `inputs` and the directories of the closure are also what the results cache hashes, so the list that
+  decides whether the game score runs is the list that decides whether a stored result is still true.
+
+`make ci-explain` prints one more line after the jobs: `game-score (make ship, not a CI job): runs because ...` or
+`skipped because ...`.
+
 ## See why
 
 The `select` job writes one line per job to its summary, "runs because aoe-client builds on aoe-simulation, which

@@ -95,8 +95,10 @@ Otherwise the target runs the worker's `bootstrap` (3 tries, 30 s apart), then
 download: the package, or the cached sources, or "map unavailable") and `--soft`
 (print "map unavailable: <reason>" and write `UNAVAILABLE` beside the packages,
 exit 0, so a cold cache does not fail a pull request). Without the two variables
-the defaults are `.cache/geodata` and `.cache/game-map/packages`; share them
-between worktrees by passing absolute paths. Measured on 2026-11-26 (Apple
+the sources go to `.cache/geodata` and the package to `packages` of the game score's
+[shared home](../scale/game-score.md#the-shared-home) (`aoe-game-score` beside `aoe-cargo`
+in the common Git directory), so every worktree and container finds one map; in CI the
+package stays in `.cache/game-map/packages`, where the workflow caches it. Measured on 2026-11-26 (Apple
 silicon, OrbStack): 9 sources, 6.87 GB to download in about 9 minutes, 7.0 GB on
 disk, generation about 20 s from a warm cache, package 66 MiB in 1,901 files.
 The `61633e71` package that scale docs cite was made by the generator before #1036

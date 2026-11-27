@@ -216,3 +216,87 @@ fn game_score_names_the_missing_package() {
         stderr(&output)
     );
 }
+
+#[test]
+fn game_score_parallel_runs_play_the_same_games_as_runs_one_after_the_other() {
+    let flags = ["--ticks", "60", "--late-percent", "5", "--workers", "1,2"];
+    let (one_by_one, sequential, _a) = game_score(&flags);
+    let (at_once, parallel, _b) = game_score(&[&flags[..], &["--parallel"]].concat());
+    assert!(one_by_one.status.success(), "{}", stderr(&one_by_one));
+    assert!(at_once.status.success(), "{}", stderr(&at_once));
+    let ids = |report: &Value| -> Vec<String> {
+        report["scenarios"]
+            .as_array()
+            .expect("scenarios")
+            .iter()
+            .map(|scenario| scenario["id"].as_str().unwrap_or("").to_owned())
+            .collect()
+    };
+    assert_eq!(
+        ids(&parallel),
+        ["natural", "late"],
+        "the order of the report"
+    );
+    for id in ["natural", "late"] {
+        let (a, b) = (scenario(&sequential, id), scenario(&parallel, id));
+        assert_eq!(b["determinism"]["holds"], true, "{id}");
+        let (before, after) = (
+            a["windows"].as_array().expect("a"),
+            b["windows"].as_array().expect("b"),
+        );
+        assert_eq!(before.len(), after.len());
+        for (before, after) in before.iter().zip(after) {
+            assert_eq!(
+                before["service"], after["service"],
+                "{id}: the numbers of the game do not move"
+            );
+        }
+        assert_eq!(
+            a["determinism"]["runs"][0]["final_hash"],
+            b["determinism"]["runs"][0]["final_hash"]
+        );
+        assert_eq!(b["determinism"]["runs"].as_array().map(Vec::len), Some(2));
+    }
+}
+
+#[test]
+fn game_score_without_a_package_flag_plays_on_the_map_of_the_shared_home() {
+    let directory = tempfile::tempdir().expect("directory");
+    let home = directory.path().join("home");
+    let packages = home.join("packages");
+    std::fs::create_dir_all(&packages).expect("packages");
+    store_package(&packages);
+    let out = directory.path().join("score.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_aoe-harness"))
+        .args(["game-score", "--scenario", "natural", "--ticks", "40"])
+        .args(["--seats", "3", "--workers", "1"])
+        .args(["--out", out.to_str().expect("utf-8 path")])
+        .env("AOE_GAME_SCORE_HOME", &home)
+        .current_dir(directory.path())
+        .output()
+        .expect("the harness runs");
+    assert!(output.status.success(), "{}", stderr(&output));
+    let report: Value =
+        serde_json::from_str(&std::fs::read_to_string(&out).expect("report")).expect("json");
+    assert_eq!(
+        report["header"]["package_directory"],
+        packages.to_str().expect("utf-8")
+    );
+}
+
+#[test]
+fn game_score_without_a_map_says_which_make_goal_makes_it() {
+    let directory = tempfile::tempdir().expect("directory");
+    let output = Command::new(env!("CARGO_BIN_EXE_aoe-harness"))
+        .args(["game-score", "--scenario", "natural"])
+        .env("AOE_GAME_SCORE_HOME", directory.path().join("empty"))
+        .current_dir(directory.path())
+        .output()
+        .expect("the harness runs");
+    assert!(!output.status.success());
+    assert!(
+        stderr(&output).contains("make game-map"),
+        "{}",
+        stderr(&output)
+    );
+}

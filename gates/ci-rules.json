@@ -13,6 +13,19 @@
       "tests": false
     }
   },
+  "local_checks": {
+    "game-score": {
+      "crates": ["aoe-server"],
+      "tests": false,
+      "inputs": [
+        "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "crates/harness/Cargo.toml",
+        "crates/harness/src/game_score"
+      ],
+      "ignore": [
+        "crates/*/tests/**", "crates/*/benches/**", "crates/*/examples/**", "crates/**/*.md"
+      ]
+    }
+  },
   "static_parts": {
     "light": ["fmt-check", "structure-check", "architecture-check", "docs-check"],
     "checks": ["lint", "deny", "build-wasm"],

@@ -6,10 +6,12 @@
 mod decide;
 mod explain;
 mod graph;
+mod local;
 mod rules;
 pub(crate) use decide::{Decision, UnitScope, decide, eligible};
-pub(crate) use explain::{markdown, text};
+pub(crate) use explain::{local as explain_local, markdown, text};
 pub(crate) use graph::Graph;
+pub(crate) use local::{LocalDecision, decide_local};
 pub(crate) use rules::Rules;
 
 /// The unit scope the select job handed to a leg of the `static` job (`AOE_UNIT_SCOPE`).

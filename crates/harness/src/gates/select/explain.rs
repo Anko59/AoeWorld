@@ -1,5 +1,5 @@
 //! The decision as text an agent or a reviewer can read: one line per job.
-use super::decide::UnitScope;
+use super::{decide::UnitScope, local::LocalDecision};
 use std::collections::BTreeMap;
 
 fn scope_line(parts: &[String], unit: &UnitScope) -> String {
@@ -25,6 +25,14 @@ pub(crate) fn text(
     }
     out.push_str(&format!("{}\n", scope_line(parts, unit)));
     out
+}
+
+/// What `make ci-explain` adds after the jobs: the checks `make ship` runs and CI does not.
+pub(crate) fn local(decisions: &BTreeMap<String, LocalDecision>) -> String {
+    decisions
+        .iter()
+        .map(|(name, decision)| format!("{name} (make ship, not a CI job): {}\n", decision.reason))
+        .collect()
 }
 
 /// The job summary of the `select` job.

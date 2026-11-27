@@ -23,6 +23,22 @@ pub(crate) struct JobRule {
     pub(crate) tests: bool,
 }
 
+/// A check `make ship` runs on the agent's machine, never a CI job: it runs when a changed
+/// path can change what the check measures.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct LocalRule {
+    /// The crates whose build closure counts: a changed crate in it runs the check.
+    pub(crate) crates: Vec<String>,
+    /// Whether the closure includes the subjects' dev-dependencies, as for a job.
+    pub(crate) tests: bool,
+    /// Tracked paths, outside that closure, whose content is an input of the check: a change
+    /// under one runs it, and the check's result cache hashes them.
+    pub(crate) inputs: Vec<String>,
+    /// Paths of the closure's crates that no build reads (tests, benchmarks, notes).
+    pub(crate) ignore: Vec<String>,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct StaticParts {
@@ -72,6 +88,8 @@ pub(crate) struct Rules {
     /// Directories of crates that are not workspace members.
     pub(crate) outside_workspace: Vec<String>,
     pub(crate) jobs: BTreeMap<String, JobRule>,
+    /// Checks of `make ship` that depend on the crate graph the way a job does.
+    pub(crate) local_checks: BTreeMap<String, LocalRule>,
     pub(crate) static_parts: StaticParts,
     /// Crates whose change selects the `perf-smoke` gate of the unit leg.
     pub(crate) perf_smoke_crates: Vec<String>,
@@ -98,7 +116,7 @@ pub(crate) enum Class {
     Unknown,
 }
 
-fn any(globs: &[String], path: &str) -> bool {
+pub(super) fn any(globs: &[String], path: &str) -> bool {
     globs.iter().any(|g| glob(g, path))
 }
 
@@ -136,10 +154,19 @@ impl Rules {
             .paths
             .iter()
             .flat_map(|r| &r.globs)
-            .chain(rules.harness_modules.iter().flat_map(|m| &m.globs));
+            .chain(rules.harness_modules.iter().flat_map(|m| &m.globs))
+            .chain(rules.local_checks.values().flat_map(|c| &c.ignore));
         for pattern in globs {
             if !valid_pattern(pattern) {
                 problems.push(format!("invalid glob {pattern}"));
+            }
+        }
+        for (name, check) in &rules.local_checks {
+            if check.crates.is_empty() {
+                problems.push(format!("local check {name} names no crate"));
+            }
+            if let Some(bad) = check.inputs.iter().find(|input| !valid_pattern(input)) {
+                problems.push(format!("local check {name}: invalid input path {bad}"));
             }
         }
         let named_jobs = rules

@@ -12,8 +12,9 @@ of it on real maps that are really in the game". The name is "game score";
 "scoreboard" is the owner-save replay of [scoreboard](scoreboard.md).
 
 Two scenarios exist, `natural` and `late`. Everything here is informational:
-nothing gates. The choke and bridge numbers, the Callgrind child and the
-pull-request comment come in later changes.
+nothing gates. The choke and bridge numbers and the Callgrind child come in
+later changes. `make ship` writes the game score into the pull request
+([below](#in-make-ship)).
 
 ## Run it
 
@@ -22,20 +23,21 @@ make game-score                                 # both scenarios, 1 worker and t
 make game-score GAME_SCORE_ARGS='--scenario late --workers 1,4'
 make game-score GAME_SCORE_ARGS='--scenario natural --ticks 3000'
 make game-score GAME_SCORE_ARGS='--package-directory <dir> --map-hash <64 hex digits>'
+make game-score-pr                              # this branch against its merge base, as make ship runs it
 ```
 
 The package is the owner's Anatolia map: centre 39N 34E, 960 km a side,
 compression 240:1, 2,000 tiles, year 600, seed 1, profile `circa600_v1`. It is
-generated from the cached geodata sources (`make map-generate`, see
-[the 5x and 10x recipe](benches.md)) and never published: one source layer is
-CC BY-SA 4.0. The default directory is `.cache/game-score/packages` of the
-checkout, because the make target's container sees the checkout only. Any other
-package works too, down to a synthetic one.
+generated from the cached geodata sources (`make game-map`, see
+[the geodata workflow](../geodata/workflow.md#the-owners-pinned-map-make-game-map))
+and never published: one source layer is CC BY-SA 4.0. The default directory is
+`packages` in the [shared home](#the-shared-home), which every worktree and every
+container sees. Any other package works too, down to a synthetic one.
 
 | flag | meaning | default |
 | --- | --- | --- |
 | `--scenario` | `natural` or `late`; one flag, one scenario | both |
-| `--package-directory` | where `<hash>.json` and its pages are | `.cache/game-score/packages` |
+| `--package-directory` | where `<hash>.json` and its pages are | `packages` of the shared home |
 | `--map-hash` | the package to play on | the only package of the directory |
 | `--seats` | seats, all played by the Rust AI | 100 |
 | `--ticks` | ticks played (ten ticks are one game second); a window that does not fit is left out | the scenario's own |
@@ -45,6 +47,7 @@ package works too, down to a synthetic one.
 | `--hash-every` | hash the world every this many ticks | the scenario's (10) |
 | `--sample-every` | take the census every this many ticks | the scenario's (50) |
 | `--no-orders` | keep no order log: time the run as a live server runs | off |
+| `--parallel` | play every run at once, one process each (all scenarios at all worker counts): the pull request's way, about the time of the longest run | off |
 | `--out` | the JSON report | `.cache/game-score/game-score.json` |
 
 ## Scenarios
@@ -167,6 +170,216 @@ A scenario that is not the same game at every worker count carries
 The engine fixes its thread pool once per process, so each worker count plays
 in a child process of its own.
 
+## The shared home
+
+One folder serves every worktree of a checkout and every container: `aoe-game-score`
+in the common Git directory, beside `aoe-cargo`. The Makefile already mounts that
+directory in every container (it is where `aoe-cargo` lives), and Git never tracks it.
+`AOE_GAME_SCORE_HOME` names another one.
+
+```text
+aoe-game-score/
+  packages/            the map package: `make game-map` writes it, `make game-score` reads it
+  results/<key>.json   the results cache, one entry per game state (see below)
+  base/                the scratch worktree the merge base is built and played in
+```
+
+`make game-map` and `make game-score` use `packages` by default; `--package-directory`
+and `AOE_MAP_PACKAGE` still name another place. In CI (`GITHUB_ACTIONS` set) the default
+stays `.cache/game-map/packages`, where the `game-map` workflow and its restore action
+keep the package. The geodata sources (7 GB) stay in `.cache/geodata` of the checkout.
+
+## In `make ship`
+
+The owner, 2026-11-27: "The performance comment should measure things like arrival,
+movement work, planning, fights, death numbers, ability to cross chokes, resource
+gathered over time, management unit works, amount of work at different scale scenarios
+[...] I want my coding agents to stop fighting the CI and, instead have it work on their
+side and really show if work is going in the right direction."
+
+The real map cannot be generated on GitHub's runners (one data provider refuses them),
+so the game score does not run in CI. It runs on the machine where the agent works, as
+part of `make ship`, and is written into the pull request. The game is deterministic,
+so the `service` numbers do not depend on the machine. It is informational: it never
+fails or blocks a ship, there is no threshold and no baseline file.
+
+```sh
+make game-score-pr          # what ship runs, by hand: decide, play, compare, print
+make ci-explain             # says "game-score (make ship, not a CI job): runs because ..." or "skipped because ..."
+```
+
+1. **When it runs.** Only when the change can affect the game: a changed path in the build
+   closure of `aoe-server` (simulation, Rust AI, map, protocol, SDK, core, scenario), or one
+   of the inputs `local_checks` of [`gates/ci-rules.json`](../../gates/ci-rules.json) names
+   ([CI selection](../ci-selection.md#local-checks-the-game-score)). Otherwise ship prints one
+   line (`skipped because ...`) and does nothing else. If the map is not in the shared home
+   (`make game-map`), ship says so in one line and goes on.
+2. **The branch.** Both scenarios at 1 and 4 workers (the determinism check: two different
+   counts, not every core, because several agents ship at once on one machine; one constant,
+   `WORKERS` in `crates/harness/src/game_score/pr/real.rs`), every run in a process of its own
+   and all at once (`--parallel`): 75 to 140 s on the owner's Mac, where the other agents'
+   builds were running. The release build of the checkout comes first (39 to 67 s once the
+   dependencies are compiled).
+3. **The merge base, without paying for it every time.** The `service` numbers are a function
+   of the game's code, the map and the scenarios, so a result is stored under a hash of
+   exactly those, not under a commit: the Git tree of every crate in the build closure of the
+   server and of `crates/harness/src/game_score` (scenarios, counters, report schema), the
+   blobs of `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml` and `crates/harness/Cargo.toml`,
+   the map hash and the report schema. Two commits with the same game code share one entry. A
+   run of a branch stores its own entry (unless the working tree differs from HEAD, or the runs
+   disagreed); the merge base is played only when no entry has its key. On that miss the
+   persistent scratch worktree `base/` moves to the merge base (a detached checkout), builds
+   it incrementally and plays it at one worker, both scenarios at once, then stores it. If the
+   merge base cannot be built, ship says so in one line and shows the branch's numbers alone.
+4. **The comparison.** A table per scenario: number, merge base, this branch, change.
+   `service` numbers are compared exactly. A number that changed is a row (those the table
+   names first, the rest collapsed under them); the others are a count ("93 numbers
+   unchanged"). Wall time and memory sit beside, in a collapsed block labelled noisy, and are
+   never judged. A cost per unit of service (`efficiency`) is judged only when both sides
+   counted instructions (`cost.instructions`), which no run does yet. A scenario whose
+   definition differs between the two sides (ticks, seats, seed, windows) is not compared, and
+   says why.
+5. **The verdict.** The section's first lines say which case it is.
+   - **Same game**: every `service` number is the merge base's. Nothing is judged (a cost per
+     unit of service on instruction counts will be, exactly, once a run has them).
+   - **Different game: N numbers moved, M beyond their usual spread.** A deterministic game is
+     still chaotic: any change of behaviour perturbs every number a little, and one seed is
+     one sample. So a judged number (share of orders arrived, order to arrival and to first
+     step p95, movers waiting, wait for a route, route orders stuck or expired, idle
+     villagers, resources delivered) gets a line only when it moved beyond what it does across
+     seeds on the same code ([the usual spread](#the-usual-spread)): by more than twice its
+     measured spread, never under 5 percent, and by more than a minimum absolute move (the
+     range it showed across the seeds, and for a small count 10, for a delay 3 ticks), so that
+     a count of 2 that becomes 7 is not a finding. Every other move is in the table only.
+     Better moves are held to the same tolerance.
+   - Determinism (the same at 1 and 4 workers) and crash lines follow either way.
+
+### What it costs
+
+Measured on 2026-11-27 on the OrbStack machine of the owner's Mac (14 cores, other agents'
+builds and tests running: load average 4 to 5), through `make game-score-pr` at 1 and 4
+workers, in seconds:
+
+| case | merge base | this branch | the whole command |
+| --- | --- | --- | --- |
+| a hit for the merge base, a new game state for the branch: the usual re-ship after a change to the game | lookup 0.0 | build 48, play 78 | 131 |
+| a miss for the merge base (its game state was never played), scratch worktree already there | build 88, play 67 | build 49, play 110 | 349 |
+| both hit: the same game state shipped again (a fix of a review finding, a rebase onto a dev that did not touch the game) | lookup 0.0 | lookup 0.0 | 7 (container, `cargo metadata`, Git) |
+| the change cannot affect the game, or there is no map | not run | not run | 2 to 8 (one line) |
+
+Without a miss, ship's gates (about 300 s) gain at most about 2 minutes, and the game score
+runs beside the review, which takes longer: a ship that waits for its review often gains nothing
+at all (the section says how much it did add). A miss costs about 3.5 more minutes: the merge
+base's release build (88 s here, 125 s on a worktree whose `target/` was empty, the third-party
+crates coming from the shared compile cache; builds recompile only the crates the merge base
+changed) and its two scenarios (67 s, one worker, at once). A miss for the merge base is the usual
+case for the first ship of a branch cut from a `dev` that has game changes nobody played yet;
+every later ship of that branch hits. The scratch worktree takes 0.8 GB, the results 100 KiB
+each (400 kept).
+
+### Explaining a move that was intended
+
+Nothing gates, so a move beyond its usual spread is not a failure to clear. When it was meant,
+one line of the pull request description says why, anywhere in it, one line per number:
+
+```text
+game-score: late arrived -3% because the AI now waits for its escort before it marches
+game-score: natural/early first-step-p95 +20% because orders go through the new planner queue
+```
+
+`<scenario>` or `<scenario>/<window>`, the number's name, the change in percent against the
+merge base, `because`, a reason. Without a window the line covers every named window of the
+scenario (`whole` is shown but not judged). The names: `arrived`, `arrival-p95`,
+`first-step-p95`, `waiting`, `wait-p95`, `stuck`, `expired`, `idle`, `delivered`,
+`cost-per-arrival`, `cost-per-resources`, `cost-per-hit`, `cost-per-unit`. A move with such a
+line is shown as explained, with the reason; one without says "moved beyond its usual spread
+(one seed)" and the line it would take. A line that understates the move says so, one that
+matches no move beyond its spread is listed, and so is one whose name is unknown.
+
+### What ship writes
+
+- The terminal prints the same table when the game score ends, before the pull request is
+  made ready. The child runs beside the review. Once the review has ended (passed or failed):
+  a check that never got a long-job slot (every one still busy) is stopped at once, one line
+  says so; a check that is running gets 10 more minutes, then is stopped, one line says so;
+  one that has ended is read. The 40-minute limit of the whole check stays. An informational
+  number never holds a ship.
+- One comment on the pull request, the first line `<!-- aoe-game-score -->`, edited in place
+  on a re-ship: the case and the verdict, the tables, what each side cost and what the whole
+  check added to this ship beyond the review's own time (0 when it ended before the review
+  did), and the whole report in a collapsed JSON block that `make ci-report` can read later
+  (both sides' windows; the merge base's side is dropped, then the block, when GitHub's
+  65,536 characters would be passed).
+- The commit status `harness/game-score` on the pushed commit: always `success` by design
+  (GitHub has no neutral state for a status, and nothing here gates), the summary in 140
+  characters, a link to the comment. A skipped run posts nothing. When dev is merged into the
+  pull request later, the new head has no status: the comment still says what was measured.
+
+### The usual spread
+
+How much a judged number moves when the game has not changed: the same code played at seeds 1
+to 8 (one worker, both scenarios), `dev` at the commit named in
+[`scenarios/spread.json`](../../crates/harness/src/game_score/scenarios/spread.json), which the
+verdict reads. It sits beside the scenarios because it is a property of them: a test fails
+when a scenario, a window or a judged number has no entry, so changing a scenario means
+measuring again, and the file is part of the results cache key. The measure is robust, the
+median absolute deviation over the median (MAD / median, percent), with the range across the
+seeds beside it; the tolerance column is what the verdict applies. A number nobody measured is
+judged at 25 percent.
+
+```sh
+for n in 1 2 3 4 5 6 7 8; do
+  make game-score GAME_SCORE_ARGS="--seed $n --workers 1 --parallel --out <directory>/seed-$n.json"
+done
+make game-score-spread GAME_SCORE_SPREAD_ARGS="--reports <directory> --commit <sha> --date <YYYY-MM-DD>"
+```
+
+Measured on 2026-11-27 on `dev` at `a2b432f2` (the game code of this pull request), seeds 1 to
+8, one worker, the 100-seat scenarios of this page:
+
+| scenario | window | number | median | spread (MAD / median) | range | tolerance |
+|---|---|---|---|---|---|---|
+| late | late | share of orders arrived | 66.4% | 1.9% | 62.1% to 69.3% | 5% and 7.2% |
+| late | late | order to arrival, p95 (ticks) | 614.5 | 4.2% | 363 to 644 | 8% and 281 |
+| late | late | order to first step, p95 (ticks) | 5.5 | 63.6% | 1 to 16 | 127% and 15 |
+| late | late | resources delivered | 23,245 | 2.4% | 20,812 to 23,914 | 5% and 3,102 |
+| late | late | route orders expired | 0.5 | 100.0% | 0 to 7 | 200% and 10 |
+| late | late | route orders stuck | 6,384 | 18.3% | 5,175 to 9,117 | 37% and 3,942 |
+| late | late | wait for a route, p95 at the worst sample (ticks) | 1,200 | 0.0% | 293 to 1,200 | 5% and 907 |
+| late | late | movers waiting for a route, peak | 51 | 60.8% | 10 to 215 | 122% and 205 |
+| late | late | villagers standing idle | 2.9% | 10.3% | 2.1% to 4.3% | 21% and 2.2% |
+| natural | early | share of orders arrived | 97.0% | 0.3% | 94.0% to 97.5% | 5% and 3.5% |
+| natural | early | order to arrival, p95 (ticks) | 59.5 | 4.2% | 56 to 63 | 8% and 7 |
+| natural | early | order to first step, p95 (ticks) | 1 | 0.0% | 1 to 1 | 5% and 3 |
+| natural | early | resources delivered | 43,792 | 0.6% | 42,797 to 44,062 | 5% and 1,265 |
+| natural | early | route orders expired | 0 | 0.0% | 0 to 0 | 5% and 10 |
+| natural | early | route orders stuck | 4,852 | 34.0% | 608 to 9,330 | 68% and 8,722 |
+| natural | early | wait for a route, p95 at the worst sample (ticks) | 321.5 | 85.2% | 0 to 598 | 170% and 598 |
+| natural | early | movers waiting for a route, peak | 2 | 25.0% | 0 to 3 | 50% and 10 |
+| natural | early | villagers standing idle | 0.1% | 0.0% | 0.0% to 0.3% | 5% and 1.0% |
+| natural | middle | share of orders arrived | 91.7% | 0.4% | 89.9% to 92.5% | 5% and 2.6% |
+| natural | middle | order to arrival, p95 (ticks) | 178.5 | 1.1% | 166 to 185 | 5% and 19 |
+| natural | middle | order to first step, p95 (ticks) | 1 | 0.0% | 1 to 1 | 5% and 3 |
+| natural | middle | resources delivered | 110,680 | 0.7% | 108,439 to 112,773 | 5% and 4,334 |
+| natural | middle | route orders expired | 0 | 0.0% | 0 to 5 | 5% and 10 |
+| natural | middle | route orders stuck | 13,863 | 15.7% | 10,224 to 24,786 | 31% and 14,562 |
+| natural | middle | wait for a route, p95 at the worst sample (ticks) | 105 | 11.0% | 91 to 599 | 22% and 508 |
+| natural | middle | movers waiting for a route, peak | 4.5 | 33.3% | 2 to 8 | 67% and 10 |
+| natural | middle | villagers standing idle | 2.6% | 9.4% | 2.1% to 3.0% | 19% and 1.0% |
+
+What it says. Stable across seeds, so a move of them is worth a line: the share of orders
+that arrived (spread 0.3 to 1.9 percent), the order to arrival p95 (1 to 4 percent) and the
+resources delivered (0.6 to 2.4 percent); the share of idle villagers is small enough that a
+move under a percentage point is nothing, and in the `early` window it never leaves 0.3
+percent. Not stable at all, so a move of them says little on one seed: the route orders stuck
+(16 to 34 percent, from 608 to 9,330 in `early`), the movers waiting for a route at the worst
+sample (25 to 61 percent) and the p95 of their wait (85 percent in `early`; in `late` it sits at
+the cap of 1,200 ticks on five seeds and is 293 to 566 on three), the route orders expired
+(0 on most seeds, up to 5 in `middle` and 7 in `late`), and in `late` the order to first step
+p95 (1 to 16 ticks). Their tolerance is wide on purpose: the verdict looks at them only for a
+move no seed showed.
+
+
 ## What it measured on the owner's map
 
 Seed 1, 100 seats, 2026-11-27, the OrbStack machine of the owner's Mac (14
@@ -189,5 +402,6 @@ pull-request scenario at one worker count.
 ## What is not here yet
 
 The battle at a choke, the march over a bridge and the choke-crossing counter;
-the Callgrind child (instructions per window, memory per unit); the CI job and
-the pull-request comment against `dev`; the gate.
+the Callgrind child (instructions per window, memory per unit), which makes the
+cost per unit of service judgeable; a way for the map to reach CI (the owner decides
+it); the gate.

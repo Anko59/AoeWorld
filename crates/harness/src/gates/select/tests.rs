@@ -10,6 +10,7 @@ use std::{
     sync::OnceLock,
 };
 
+mod local;
 mod table;
 
 fn root() -> PathBuf {

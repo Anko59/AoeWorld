@@ -153,6 +153,10 @@ enum Command {
     MatchBench(perf_scale::match_bench::Options),
     /// A real game on a real map played by the Rust AI in process, measured and checked for determinism.
     GameScore(game_score::Options),
+    /// The game score of a pull request against its merge base, from the results cache or a build of the merge base (`make game-score-pr`).
+    GameScorePr(game_score::pr::Options),
+    /// Measure how much each judged number of the game score moves across seeds on the same code (`make game-score-spread`).
+    GameScoreSpread(game_score::pr::spread::Options),
     #[command(name = "perf-soak-10")]
     PerfSoak10,
     #[command(name = "perf-soak-30")]

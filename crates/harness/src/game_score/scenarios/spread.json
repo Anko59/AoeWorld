@@ -1,0 +1,192 @@
+{
+  "measured": {
+    "commit": "a2b432f2df75db28b18926d5a93b9054fa377b9c",
+    "date": "2026-11-27",
+    "seeds": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "workers": 1,
+    "measure": "mad_percent is the median absolute deviation over the median across the seeds, in percent; min and max are the extremes across the seeds, in the number's own unit"
+  },
+  "scenarios": {
+    "late": {
+      "late": {
+        "arrival.arrived_permille": {
+          "median": 664.0,
+          "mad_percent": 1.9,
+          "min": 621.0,
+          "max": 693.0
+        },
+        "arrival.order_to_arrival_ticks.p95": {
+          "median": 614.5,
+          "mad_percent": 4.2,
+          "min": 363.0,
+          "max": 644.0
+        },
+        "arrival.order_to_first_step_ticks.p95": {
+          "median": 5.5,
+          "mad_percent": 63.6,
+          "min": 1.0,
+          "max": 16.0
+        },
+        "economy.delivered_total": {
+          "median": 23245.0,
+          "mad_percent": 2.4,
+          "min": 20812.0,
+          "max": 23914.0
+        },
+        "planning.expired": {
+          "median": 0.5,
+          "mad_percent": 100.0,
+          "min": 0.0,
+          "max": 7.0
+        },
+        "planning.stuck": {
+          "median": 6383.5,
+          "mad_percent": 18.3,
+          "min": 5175.0,
+          "max": 9117.0
+        },
+        "planning.wait_p95_ticks_peak": {
+          "median": 1200.0,
+          "mad_percent": 0.0,
+          "min": 293.0,
+          "max": 1200.0
+        },
+        "planning.waiting_peak": {
+          "median": 51.0,
+          "mad_percent": 60.8,
+          "min": 10.0,
+          "max": 215.0
+        },
+        "size.idle_villagers_permille": {
+          "median": 29.0,
+          "mad_percent": 10.3,
+          "min": 21.0,
+          "max": 43.0
+        }
+      }
+    },
+    "natural": {
+      "early": {
+        "arrival.arrived_permille": {
+          "median": 970.0,
+          "mad_percent": 0.3,
+          "min": 940.0,
+          "max": 975.0
+        },
+        "arrival.order_to_arrival_ticks.p95": {
+          "median": 59.5,
+          "mad_percent": 4.2,
+          "min": 56.0,
+          "max": 63.0
+        },
+        "arrival.order_to_first_step_ticks.p95": {
+          "median": 1.0,
+          "mad_percent": 0.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "economy.delivered_total": {
+          "median": 43791.5,
+          "mad_percent": 0.6,
+          "min": 42797.0,
+          "max": 44062.0
+        },
+        "planning.expired": {
+          "median": 0.0,
+          "mad_percent": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        },
+        "planning.stuck": {
+          "median": 4851.5,
+          "mad_percent": 34.0,
+          "min": 608.0,
+          "max": 9330.0
+        },
+        "planning.wait_p95_ticks_peak": {
+          "median": 321.5,
+          "mad_percent": 85.2,
+          "min": 0.0,
+          "max": 598.0
+        },
+        "planning.waiting_peak": {
+          "median": 2.0,
+          "mad_percent": 25.0,
+          "min": 0.0,
+          "max": 3.0
+        },
+        "size.idle_villagers_permille": {
+          "median": 1.0,
+          "mad_percent": 0.0,
+          "min": 0.0,
+          "max": 3.0
+        }
+      },
+      "middle": {
+        "arrival.arrived_permille": {
+          "median": 917.0,
+          "mad_percent": 0.4,
+          "min": 899.0,
+          "max": 925.0
+        },
+        "arrival.order_to_arrival_ticks.p95": {
+          "median": 178.5,
+          "mad_percent": 1.1,
+          "min": 166.0,
+          "max": 185.0
+        },
+        "arrival.order_to_first_step_ticks.p95": {
+          "median": 1.0,
+          "mad_percent": 0.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "economy.delivered_total": {
+          "median": 110679.5,
+          "mad_percent": 0.7,
+          "min": 108439.0,
+          "max": 112773.0
+        },
+        "planning.expired": {
+          "median": 0.0,
+          "mad_percent": 0.0,
+          "min": 0.0,
+          "max": 5.0
+        },
+        "planning.stuck": {
+          "median": 13862.5,
+          "mad_percent": 15.7,
+          "min": 10224.0,
+          "max": 24786.0
+        },
+        "planning.wait_p95_ticks_peak": {
+          "median": 105.0,
+          "mad_percent": 11.0,
+          "min": 91.0,
+          "max": 599.0
+        },
+        "planning.waiting_peak": {
+          "median": 4.5,
+          "mad_percent": 33.3,
+          "min": 2.0,
+          "max": 8.0
+        },
+        "size.idle_villagers_permille": {
+          "median": 26.5,
+          "mad_percent": 9.4,
+          "min": 21.0,
+          "max": 30.0
+        }
+      }
+    }
+  }
+}

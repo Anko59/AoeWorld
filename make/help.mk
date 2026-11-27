@@ -95,6 +95,8 @@ help:
 	@echo '  make check-fixtures  Load documented local packages/saves; missing inputs are skipped'
 	@echo '  make match-bench     In-process closed-loop late-game match with Rust bots (docs/scale/match-bench.md)'
 	@echo '  make game-score      Real games (natural, late) on a real map played by the Rust AI, measured per window, checked at 1 and N workers (docs/scale/game-score.md)'
+	@echo '  make game-score-pr   The game score of this branch against its merge base: what make ship adds to the pull request (docs/scale/game-score.md)'
+	@echo '  make game-score-spread  Measure how much each judged number of the game score moves across seeds (GAME_SCORE_SPREAD_ARGS, docs/scale/game-score.md)'
 	@echo '  make fuzz-smoke      Run bounded parser fuzzing with pinned nightly Rust'
 	@echo '  make fuzz-nightly    Run longer parser fuzzing campaigns'
 	@echo '  make perf-smoke      Run synthetic smoke workload with real protocol clients'
