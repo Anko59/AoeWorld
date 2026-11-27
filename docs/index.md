@@ -19,6 +19,7 @@
 - [Gate registry](gates.md)
 - [Performance](performance.md)
 - [CI report page](ci-report.md): `make ci-report`
+- [What a CI job prepares](ci-jobs.md)
 - [Assets](assets.md)
 - [Geographic map workflow](geodata/workflow.md)
 - [Geodata sources and licences](geodata/licences.md)

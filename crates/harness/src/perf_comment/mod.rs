@@ -3,7 +3,7 @@
 //! marker and updated in place by later runs. Informational only: no gate,
 //! baseline or threshold is read from it or changed by it.
 //!
-//! `make perf-comment` runs this after that job on pull requests. It reads
+//! `make perf-comment` runs this as the last step of that job on pull requests. It reads
 //! the run's `performance-report` artifact and the latest one from a `dev`
 //! run whose `target-performance` job passed, renders one compact table, and
 //! creates or rewrites the marked pull request comment. `PERF_COMMENT_PRINT=1`
@@ -123,7 +123,7 @@ fn dev_reports(
             serde_json::from_str(&text).map_err(|error| format!("dev runs: {error}"))?;
         let last_page = runs.workflow_runs.len() < DEV_RUN_PAGE_SIZE;
         for run in runs.workflow_runs {
-            if jobs(root, repo, run.id)?.iter().any(|job| {
+            if jobs(root, repo, run.id, None)?.iter().any(|job| {
                 job.name == "target-performance" && job.conclusion.as_deref() == Some("success")
             }) && let Some(report) = report_of(root, repo, run.id, scratch)
             {
@@ -191,28 +191,65 @@ struct JobJson {
     completed_at: Option<String>,
 }
 
-fn wall_seconds(job: &JobJson) -> Option<u64> {
+/// The job that runs this command, when the comment is a step of `target-performance`: its API
+/// row has no end and no conclusion yet, so it is timed up to `now` and labelled with the status
+/// its steps have so far (`job.status`). Any other unfinished job keeps no duration.
+pub(crate) struct Running {
+    pub(crate) job: String,
+    pub(crate) status: String,
+    pub(crate) now: i64,
+}
+
+impl Running {
+    /// `GITHUB_JOB` names the job, `AOE_JOB_STATUS` is the workflow's `job.status`.
+    fn from_env() -> Option<Self> {
+        let job = std::env::var("GITHUB_JOB")
+            .ok()
+            .filter(|job| !job.is_empty())?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| i64::try_from(elapsed.as_secs()).unwrap_or(0));
+        Some(Self {
+            job,
+            status: std::env::var("AOE_JOB_STATUS").unwrap_or_default(),
+            now,
+        })
+    }
+}
+
+fn wall_seconds(job: &JobJson, running: Option<&Running>) -> Option<u64> {
     let start = epoch_seconds(job.started_at.as_deref()?)?;
-    let end = epoch_seconds(job.completed_at.as_deref()?)?;
+    let end = match (&job.completed_at, running) {
+        (Some(end), _) => epoch_seconds(end)?,
+        (None, Some(running)) if running.job == job.name && job.conclusion.is_none() => running.now,
+        (None, _) => return None,
+    };
     u64::try_from(end.saturating_sub(start)).ok()
 }
 
 /// The jobs of `repos/{repo}/actions/runs/{run}/jobs` with their wall time.
-pub(crate) fn parse_jobs(text: &str, run: u64) -> Result<Vec<Job>> {
+fn parse_jobs_at(text: &str, run: u64, running: Option<&Running>) -> Result<Vec<Job>> {
     let parsed: JobsJson =
         serde_json::from_str(text).map_err(|error| format!("run {run}: jobs: {error}"))?;
     Ok(parsed
         .jobs
         .into_iter()
-        .map(|job| Job {
-            seconds: wall_seconds(&job),
-            name: job.name,
-            conclusion: job.conclusion,
+        .map(|job| {
+            let this = running.filter(|running| running.job == job.name);
+            let conclusion = match (&job.conclusion, this) {
+                (None, Some(running)) if running.status == "failure" => Some("failure".to_owned()),
+                _ => job.conclusion.clone(),
+            };
+            Job {
+                seconds: wall_seconds(&job, running),
+                name: job.name,
+                conclusion,
+            }
         })
         .collect())
 }
 
-fn jobs(root: &Path, repo: &str, run: u64) -> Result<Vec<Job>> {
+fn jobs(root: &Path, repo: &str, run: u64, running: Option<&Running>) -> Result<Vec<Job>> {
     let text = gh_text(
         root,
         &[
@@ -220,7 +257,7 @@ fn jobs(root: &Path, repo: &str, run: u64) -> Result<Vec<Job>> {
             &format!("repos/{repo}/actions/runs/{run}/jobs?per_page=100"),
         ],
     )?;
-    parse_jobs(&text, run)
+    parse_jobs_at(&text, run, running)
 }
 
 /// The comment to rewrite: one of the workflow's own comments that starts
@@ -315,7 +352,7 @@ pub(crate) fn run() -> Result<()> {
     let pr_report = report_of(root, &repo, run, scratch.path());
     let noise = Noise::load()?;
     let devs = dev_reports(root, &repo, scratch.path(), noise.dev_runs())?;
-    let job_list = jobs(root, &repo, run)?;
+    let job_list = jobs(root, &repo, run, Running::from_env().as_ref())?;
     let wasm = reports::wasm_rule_at(Path::new("baselines/perf/wasm.json"));
     let body = render::comment(render::Input {
         repository: &repo,
