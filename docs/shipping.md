@@ -112,6 +112,11 @@ critical), an incomplete review, or a closing review
    finding path ([issues](issues.md#review-follow-ups-and-nightly-triage)). A
    filing failure warns after publication; ship continues.
 
+A change that can affect the game (`local_checks` in `gates/ci-rules.json`) also runs the
+**game score** beside the review: `make game-score-pr` plays this branch and its merge base on
+the real map, prints the table, keeps one comment and the `harness/game-score` status on the
+pull request, and never blocks ([game score](scale/game-score.md#in-make-ship)).
+
 Gameplay changes also include a **Playtest (advisory)** report for the gated
 revision when available. If the target exists and the report is missing, ship
 starts `make playtest` as a child process before the review; the child takes its

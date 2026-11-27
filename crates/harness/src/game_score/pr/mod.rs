@@ -24,6 +24,8 @@ mod render;
 pub(crate) mod spread;
 mod verdict;
 
+pub(crate) use render::{ADDED, MARKER};
+
 use super::BoxError;
 use clap::Args;
 use serde::{Deserialize, Serialize};

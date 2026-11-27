@@ -10,6 +10,7 @@ mod describe;
 mod duel;
 pub(crate) use duel::output::JsonOutput;
 pub(crate) mod evidence;
+mod game_score;
 pub(crate) mod git;
 mod github;
 mod issues;
@@ -32,7 +33,6 @@ use evidence::{Evidence, Verdict};
 #[cfg(test)]
 use git::publish::{caller_chose_ssh, push, push_command, ssh_keepalive};
 use std::{
-    fs,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -349,6 +349,7 @@ pub(crate) fn ship_with(
         push_tip
     };
     let started = playtest::start(root, &base, &evidence.head);
+    let score = game_score::start(root, &evidence, options);
     let reviewed = if options.no_review {
         Ok(None)
     } else {
@@ -367,6 +368,9 @@ pub(crate) fn ship_with(
         }
         (_, started) => started.and_then(playtest::Started::finish),
     };
+    // The game score is informational and ends on its own: a failed review waits for it too, so
+    // the agent reads its numbers before it fixes and ships again.
+    let score = score.and_then(game_score::Started::finish);
     let applicable = git::changed_between(root, &base, &evidence.head)
         .is_ok_and(|paths| paths.iter().any(|p| playtest::gameplay(p)));
     let review = match reviewed {
@@ -380,6 +384,7 @@ pub(crate) fn ship_with(
                 applicable,
             );
             playtest::announce(playtest.as_ref(), &evidence.head);
+            game_score::publish_draft(root, &evidence, score.as_ref());
             let grade = postpush::ci::recorded_grade(root, &evidence.branch, &evidence.head);
             return postpush::ci::outcome(root, &evidence.head, grade, Err(error));
         }
@@ -424,54 +429,8 @@ pub(crate) fn ship_with(
                 options.body_file = Some(path);
             }
             let url = github::pull_request(root, &evidence, &options)?;
-            if let (Some(video), Some(body)) = (&options.video, &options.body_file) {
-                let repository = git::origin_repository(root)?;
-                let body = body.display().to_string();
-                let video = video.display().to_string();
-                gh(
-                    root,
-                    &[
-                        "pr",
-                        "edit",
-                        &url,
-                        "--repo",
-                        &repository,
-                        "--body-file",
-                        &body,
-                        "--attach",
-                        &video,
-                    ],
-                )?;
-                let remote_body = gh(
-                    root,
-                    &[
-                        "pr",
-                        "view",
-                        &url,
-                        "--repo",
-                        &repository,
-                        "--json",
-                        "body",
-                        "--jq",
-                        ".body",
-                    ],
-                )?;
-                let submitted_body = fs::read_to_string(&body)?;
-                let body_with_video = describe::place_video_in_what(&submitted_body, &remote_body);
-                fs::write(&body, body_with_video)?;
-                gh(
-                    root,
-                    &[
-                        "pr",
-                        "edit",
-                        &url,
-                        "--repo",
-                        &repository,
-                        "--body-file",
-                        &body,
-                    ],
-                )?;
-            }
+            game_score::publish(root, &url, &evidence.head, score.as_ref());
+            github::attach_video(root, &url, &options)?;
             if let Some(report) = &review {
                 let publish = || {
                     if early_draft {
