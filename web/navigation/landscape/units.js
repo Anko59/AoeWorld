@@ -85,9 +85,11 @@ for (const ring of [1, 2]) for (const dy of [0, -1, 1, -2, 2]) for (const dx of 
 
 export function drawUnits(context, groups, project, width, height, scale, space, place, artFor) {
   const picks = [];
+  let representedUnits = 0;
   for (const group of groups) {
     const [x, y] = project(group.world);
     if (!(x >= 0 && y >= 0 && x < width && y < height)) continue;
+    representedUnits += group.count;
     const px = x * scale, py = y * scale;
     const site = place(space.at(px, py));
     if (site?.owner === group.owner) {
@@ -113,5 +115,5 @@ export function drawUnits(context, groups, project, width, height, scale, space,
     context.globalAlpha = 1;
     picks.push({ x: sx, y: sy, count: group.count, kind: group.kind, class: group.type, art: !!art, hostile: !group.friendly, world: group.world });
   }
-  return picks;
+  return { picks, representedUnits };
 }
