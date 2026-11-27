@@ -48,6 +48,9 @@ struct Observer {
 pub(crate) struct Vision {
     /// Diagnostic only; batch invocation counts do not enter replay state.
     applications: u64,
+    /// Diagnostic only, never hashed: times one player was asked whether it
+    /// sees one building being indexed (`watchers.rs`).
+    asked: u64,
     players: BTreeMap<PlayerId, PlayerVision>,
     observers: observers::Observers,
     /// Building footprint tiles, for sight-gain and sight-loss events.
@@ -65,8 +68,8 @@ pub(crate) struct Vision {
     pub(crate) dirty_buildings: BTreeSet<EntityId>,
     disabled: bool,
     revision: u64,
-    /// While a movement tick runs, observer changes queue here and apply per
-    /// player in parallel afterwards (see `batch.rs`).
+    /// While a movement tick runs or fog returns, observer changes queue here
+    /// and apply per player in parallel afterwards (see `batch.rs`).
     batch: Option<Vec<change::Change>>,
     /// Players a person plays: a mover none of them sees may step less often
     /// (`formation/steering/stride.rs`). Set by the host, never hashed.
@@ -142,6 +145,11 @@ impl GameWorld {
     }
 
     pub fn set_fog_disabled(&mut self, disabled: bool) {
+        self.switch_fog(disabled, batch::FOG_SLICE);
+    }
+
+    /// `set_fog_disabled`; returning fog applies its discs `slice` at a time.
+    pub(super) fn switch_fog(&mut self, disabled: bool, slice: usize) {
         let was_disabled = self.vision.disabled;
         self.vision.disabled = disabled;
         self.vision.revision += 1;
@@ -155,25 +163,7 @@ impl GameWorld {
                 vision.overview.clear_counts();
             }
             self.rebuild_building_sight_index();
-            let units = self.units().map(|u| u.id).collect::<Vec<_>>();
-            let buildings = self.buildings().map(|b| b.id).collect::<Vec<_>>();
-            for id in units {
-                self.update_unit_vision(id);
-            }
-            for id in buildings {
-                self.update_building_vision(id);
-            }
-            let animals = self
-                .animals()
-                .filter(|a| a.hp > 0)
-                .filter_map(|a| {
-                    a.owner
-                        .map(|p| (a.id, p, a.position.tile_floor(), a.kind.rules().los_tiles))
-                })
-                .collect::<Vec<_>>();
-            for (id, p, tile, los) in animals {
-                self.update_observer(id, Some((p, tile, los)));
-            }
+            self.observe_all(slice);
             self.remember_visible_buildings();
         }
     }

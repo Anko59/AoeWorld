@@ -171,13 +171,24 @@ impl GameWorld {
         self.vision.players.entry(player).or_default();
         self.vision.dirty_buildings.insert(id);
         let mut watchers = BTreeSet::from([player]);
+        let mut asked = 0;
         if !private {
-            for &seen in self.vision.players.keys() {
-                if self.building_visible_to(seen, footprint) {
+            // Counts with the question itself, so none is asked uncounted.
+            let mut sees = |player| {
+                asked += 1;
+                self.building_visible_to(player, footprint)
+            };
+            for (&seen, vision) in &self.vision.players {
+                // Without a visible tile nobody sees this building.
+                if vision.visible_tiles == 0 {
+                    continue;
+                }
+                if sees(seen) {
                     watchers.insert(seen);
                 }
             }
         }
+        self.vision.asked += asked;
         self.vision.building_watchers.insert(
             id,
             Watched {
