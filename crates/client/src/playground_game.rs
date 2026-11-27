@@ -389,7 +389,6 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }
         }
         drop(draw);
-        perf::contour(client.renderer.contour_stats());
         let ui_stage = perf::Scope::stage(5);
         let ui = perf::Scope::new(3);
         controls::navigation::present(&client);
@@ -408,6 +407,8 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         capture::update(&mut client);
         drop(ui);
         drop(ui_stage);
+        let [x, y] = client.camera.center;
+        let report_due = perf::perf_view(x, y);
         let surface_fixture = client.surface_fixture;
         if subscription_due(&client)
             && let Some(window) = web_sys::window()
@@ -427,6 +428,9 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             map::request_visible(shared.clone());
         }
         perf::perf_mark(21);
+        if report_due {
+            perf::publish(&shared.borrow());
+        }
         if let Some(cb) = next.borrow().as_ref() {
             // Compositing can delay frame dispatch even when this callback is
             // cheap. Give input and WebSocket tasks a bounded window to run

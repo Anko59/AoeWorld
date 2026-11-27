@@ -14,7 +14,10 @@ async fn post(server: &Server, token: &str, body: Value) -> u16 {
 }
 
 fn report() -> Value {
-    json!({"frames":120, "frame_ms":[16.0,32.0,80.0],
+    json!({"frames":120, "frame_ms":[16.0,32.0,80.0], "units_in_view":12,
+        "still": {"frames":120, "max_ms":80, "over_50_ms":1, "over_100_ms":0,
+            "histogram": [[16, 118], [32, 1], [80, 1]]},
+        "panning": {"frames":0, "max_ms":0, "over_50_ms":0, "over_100_ms":0, "histogram":[]},
         "stages_ms": {"update":[1.0,2.0,3.0], "interpolation":[0.0,1.0,2.0],
         "culling":[0.0,1.0,2.0], "terrain":[0.0,1.0,2.0],
         "sprites":[1.0,2.0,3.0], "ui":[0.0,1.0,2.0], "fog":[0.0,1.0,2.0]},
@@ -43,6 +46,12 @@ async fn authenticated_client_timings_are_bounded_rate_limited_and_visible_with_
     invalid["frames"] = json!(100_000);
     assert_eq!(post(&server, &token, invalid).await, 400);
     let mut invalid = report();
+    invalid["still"]["over_100_ms"] = json!(3);
+    assert_eq!(post(&server, &token, invalid).await, 400);
+    let mut invalid = report();
+    invalid["still"]["histogram"][0][1] = json!(119);
+    assert_eq!(post(&server, &token, invalid).await, 400);
+    let mut invalid = report();
     invalid["renderer"] = json!("x".repeat(5000));
     assert_eq!(post(&server, &token, invalid).await, 413);
     assert_eq!(post(&server, &token, report()).await, 204);
@@ -50,6 +59,7 @@ async fn authenticated_client_timings_are_bounded_rate_limited_and_visible_with_
     let (status, body) = request(&server, "GET", "/admin/perf", Some(SECRET), "").await;
     assert_eq!(status, 200);
     assert_eq!(body["clients"].as_array().unwrap().len(), 1);
+    assert_eq!(body["clients"][0]["units_in_view"], 12);
     assert_eq!(body["clients"][0]["frame_ms"], json!([16.0, 32.0, 80.0]));
     assert_eq!(body["clients"][0]["contour"]["effect_frames"], 30);
     assert_eq!(body["clients"][0]["contour"]["context_lost"], 1);

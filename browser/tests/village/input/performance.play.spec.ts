@@ -219,13 +219,32 @@ test("frame telemetry runs with the overlay hidden and posts bounded stage summa
     info.project.name === "webgpu" ? "webgpu" : "webgl2",
   );
   await expect(page.locator("#performance-overlay")).toBeHidden();
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-view-painted",
+    "true",
+  );
+  expect(reports).toHaveLength(0);
+  await page.evaluate(() => {
+    const now = performance.now.bind(performance);
+    performance.now = () => now() + 60_000;
+  });
   await expect
     .poll(() => reports.length, { timeout: 15000 })
     .toBeGreaterThan(0);
   const report = reports[0];
   if (!report) throw new Error("No telemetry report arrived");
   expect(report["frames"]).toBeGreaterThan(0);
-  expect(report["frames"]).toBeLessThanOrEqual(2048);
+  expect(report["renderer"]).toBe(
+    info.project.name === "webgpu" ? "webgpu" : "webgl2",
+  );
+  expect(report["units_in_view"]).toBeGreaterThan(0);
+  const still = report["still"] as {
+    frames: number;
+    over_50_ms: number;
+    over_100_ms: number;
+  };
+  expect(still.frames).toBeGreaterThan(0);
+  expect(still.over_50_ms).toBeGreaterThanOrEqual(still.over_100_ms);
   for (const values of [
     report["frame_ms"],
     report["draw_calls"],
@@ -234,12 +253,12 @@ test("frame telemetry runs with the overlay hidden and posts bounded stage summa
     const stats = values as number[];
     expect(stats).toHaveLength(3);
     expect(stats.every(Number.isFinite)).toBe(true);
-    const [p50, p95, max] = stats;
-    if (p50 === undefined || p95 === undefined || max === undefined)
+    const [p50, tail, max] = stats;
+    if (p50 === undefined || tail === undefined || max === undefined)
       throw new Error("Missing timing quantiles");
     expect(p50).toBeGreaterThanOrEqual(0);
-    expect(p95).toBeGreaterThanOrEqual(p50);
-    expect(max).toBeGreaterThanOrEqual(p95);
+    expect(tail).toBeGreaterThanOrEqual(p50);
+    expect(max).toBeGreaterThanOrEqual(tail);
   }
   expect(Object.keys(report["stages_ms"] as object).sort()).toEqual(
     [
@@ -277,7 +296,7 @@ test("summary percentiles retain stalls and stage totals without unbounded histo
   page,
 }) => {
   await page.goto("/diagnostics.html");
-  const result = await page.evaluate(async () => {
+  const { result, boundaries } = await page.evaluate(async () => {
     const { frameTelemetry } = (await import(
       "/dev/frame-telemetry.js" as string
     )) as {
@@ -287,24 +306,57 @@ test("summary percentiles retain stalls and stage totals without unbounded histo
           frames: number;
           frame_ms: number[];
           stages_ms: Record<string, number[]>;
+          panning: {
+            frames: number;
+            over_50_ms: number;
+            over_100_ms: number;
+            max_ms: number;
+          };
+          still: { frames: number };
         };
+        view: (x: number, y: number) => boolean;
       };
     };
     let time = 1;
     const telemetry = frameTelemetry(() => time);
-    for (let index = 0; index < 2100; index++) {
+    for (let index = 0; index <= 33_000; index++) {
       telemetry.mark(0);
       telemetry.mark(7);
       time += 3;
       telemetry.mark(14);
+      telemetry.view(index < 33_000 ? 0 : 1, 0);
       telemetry.mark(21);
-      time += index === 2098 ? 997 : index % 10 === 0 ? 77 : 13;
+      time += index === 32_999 ? 997 : index % 10 === 0 ? 77 : 13;
     }
-    return telemetry.summary();
+    const boundaries = frameTelemetry(() => time);
+    for (const delta of [0, 50, 50.125, 100, 100.125]) {
+      time += delta;
+      boundaries.mark(0);
+      boundaries.view(1, 1);
+      boundaries.mark(21);
+    }
+    return { result: telemetry.summary(), boundaries: boundaries.summary() };
   });
-  expect(result.frames).toBe(2048);
+  expect(result.frames).toBe(33_000);
   expect(result.frame_ms).toEqual([16, 80, 1000]);
+  expect(result.still.frames).toBe(32_999);
+  expect(result.still).toMatchObject({
+    over_50_ms: 3300,
+    over_100_ms: 0,
+  });
+  expect(result.panning).toMatchObject({
+    frames: 1,
+    over_50_ms: 1,
+    over_100_ms: 1,
+    max_ms: 1000,
+  });
   expect(result.stages_ms["update"]).toEqual([3, 3, 3]);
+  expect(boundaries.frame_ms).toEqual([50.125, 100.125, 100.125]);
+  expect(boundaries.still).toMatchObject({
+    frames: 4,
+    over_50_ms: 3,
+    over_100_ms: 1,
+  });
 });
 
 test("normal HUD work follows visible actors while selected offscreen actors and global counts survive camera jumps", async ({

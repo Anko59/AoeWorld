@@ -11,16 +11,65 @@ use std::{
     time::{Duration, Instant},
 };
 
+const REPORT_RATE: Duration = Duration::from_secs(55);
+
 type Quantiles = [f64; 3];
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Report {
     frames: u32,
     frame_ms: Quantiles,
+    units_in_view: u32,
+    still: Cadence,
+    panning: Cadence,
     stages_ms: Stages,
     draw_calls: Quantiles,
     renderer: String,
     contour: Contour,
+}
+/// Sparse frame-interval histogram. Bins 0–100 have 1 ms resolution,
+/// 101–136 have 25 ms resolution, and 137 covers the remaining tail.
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Cadence {
+    frames: u32,
+    max_ms: f64,
+    over_50_ms: u32,
+    over_100_ms: u32,
+    histogram: Vec<(u8, u32)>,
+}
+
+impl Cadence {
+    fn valid(&self) -> bool {
+        if !self.max_ms.is_finite() || self.max_ms < 0.0 {
+            return false;
+        }
+        let max_bin = if self.max_ms <= 100.0 {
+            self.max_ms.ceil() as u8
+        } else {
+            (100.0 + ((self.max_ms - 100.0) / 25.0).ceil()).min(137.0) as u8
+        };
+        let mut previous = None;
+        let (mut total, mut over_50, mut over_100) = (0_u64, 0_u64, 0_u64);
+        for &(bin, count) in &self.histogram {
+            if count == 0 || bin > max_bin || previous.is_some_and(|previous| bin <= previous) {
+                return false;
+            }
+            previous = Some(bin);
+            total += u64::from(count);
+            if bin > 50 {
+                over_50 += u64::from(count);
+            }
+            if bin > 100 {
+                over_100 += u64::from(count);
+            }
+        }
+        previous == (total > 0).then_some(max_bin)
+            && (total > 0 || self.max_ms == 0.0)
+            && total == u64::from(self.frames)
+            && over_50 == u64::from(self.over_50_ms)
+            && over_100 == u64::from(self.over_100_ms)
+    }
 }
 /// Why a unit silhouette may be missing: cumulative frame counts since page
 /// load (effects on vs off), the last frame's eligible/occluder instances and
@@ -50,12 +99,19 @@ struct Stages {
 impl Report {
     fn valid(&self) -> bool {
         let s = &self.stages_ms;
-        (1..=2048).contains(&self.frames)
+        (1..=65_536).contains(&self.frames)
+            && self.frames == self.still.frames.saturating_add(self.panning.frames)
+            && self.still.valid()
+            && self.panning.valid()
+            && self.frame_ms[0].is_finite()
+            && self.frame_ms[0] >= 0.0
+            && self.frame_ms[0] <= self.frame_ms[1]
+            && self.frame_ms[1] <= self.frame_ms[2]
+            && self.frame_ms[2] == self.still.max_ms.max(self.panning.max_ms)
             && matches!(self.renderer.as_str(), "webgl2" | "webgpu" | "canvas2d")
             && self.contour.depth_span.is_finite()
             && self.contour.depth_span >= 0.0
             && [
-                self.frame_ms,
                 self.draw_calls,
                 s.update,
                 s.interpolation,
@@ -90,7 +146,7 @@ impl Reports {
     ) -> Result<(), StatusCode> {
         let now = Instant::now();
         if let Some(index) = self.0.iter().position(|e| e.token == token) {
-            if now.duration_since(self.0[index].at) < Duration::from_secs(2) {
+            if now.duration_since(self.0[index].at) < REPORT_RATE {
                 return Err(StatusCode::TOO_MANY_REQUESTS);
             }
             self.0.remove(index);
@@ -101,7 +157,7 @@ impl Reports {
             if self
                 .0
                 .front()
-                .is_some_and(|e| now.duration_since(e.at) < Duration::from_secs(2))
+                .is_some_and(|e| now.duration_since(e.at) < REPORT_RATE)
             {
                 return Err(StatusCode::TOO_MANY_REQUESTS);
             }
@@ -123,7 +179,7 @@ impl Reports {
         serde_json::to_value(
             self.0
                 .iter()
-                .filter(|e| e.at.elapsed() < Duration::from_secs(30))
+                .filter(|e| e.at.elapsed() < Duration::from_secs(120))
                 .map(|e| &e.report)
                 .collect::<Vec<_>>(),
         )
