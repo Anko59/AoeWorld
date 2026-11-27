@@ -465,43 +465,4 @@ impl GameWorld {
         }
         Err(GameWorldError::InvalidPosition)
     }
-
-    /// Puts management settings back; the unit's own activation (sheltering in
-    /// its Town Center or Castle) has already happened.
-    fn restore_management(&mut self, record: &UnitRecord) -> bool {
-        let (id, player) = (record.unit.id, record.unit.player);
-        match record.management {
-            Some(Management::Steward(settings)) => {
-                self.issue_steward_settings(player, id, settings).is_ok()
-            }
-            Some(Management::Vassal { development, focus }) => self
-                .issue_vassal_focus(player, id, focus)
-                .and_then(|()| self.issue_vassal_development(player, id, development))
-                .is_ok(),
-            Some(Management::General {
-                training,
-                mix,
-                solo,
-                destination,
-                owner_march,
-            }) => {
-                let Some(army) = self.economy.generals.armies.get_mut(&id) else {
-                    return false;
-                };
-                army.training = training;
-                army.mix = mix;
-                army.solo = solo;
-                if let Some(destination) =
-                    destination.filter(|&at| self.config.valid_ground_position(at))
-                {
-                    army.destination = Some(destination);
-                    army.owner_march = if solo { None } else { owner_march };
-                    army.state = crate::GeneralState::Marching;
-                    army.routed = None;
-                }
-                true
-            }
-            None => false,
-        }
-    }
 }
