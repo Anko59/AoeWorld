@@ -1,4 +1,4 @@
-use super::{MAX_PAGE_BYTES, MapStoreError, read_bounded_file};
+use super::{MAX_PAGE_BYTES, MapStoreError, height_range::HeightRange, read_bounded_file};
 use aoe_map::{
     ENVIRONMENT_PAGE_SAMPLES, ElevationPage, EnvironmentPage, EnvironmentPageError,
     EnvironmentPageKey, EnvironmentPageProvider, FieldPyramid, HistoricalLandUsePage,
@@ -35,15 +35,16 @@ struct PageCache {
     order: VecDeque<EnvironmentPageKey>,
 }
 
-/// Native runtime adapter for one immutable package. Startup retains only
-/// page paths and expected content hashes; decoded pages are bounded by a
-/// deterministic LRU and are independently re-verified on every reload.
+/// Native runtime adapter for one immutable package. Opening retains only
+/// page paths, expected content hashes and the height bounds of the scanned
+/// pages; decoded pages are bounded by a deterministic LRU and are
+/// independently re-verified on every reload.
 #[derive(Debug)]
 pub(crate) struct PageResidency {
     root: PathBuf,
     entries: BTreeMap<EnvironmentPageKey, PageEntry>,
     cache: Mutex<PageCache>,
-    height_bounds: Mutex<Option<(i16, i16)>>,
+    height_bounds: Option<(i16, i16)>,
     hydrology: Option<(aoe_map::HydrologyEvidenceIndex, u64)>,
     verified_page_loads: AtomicU64,
 }
@@ -67,18 +68,34 @@ impl PageResidency {
             .map(|index| (index, package.estimate.tiles_per_side));
         let mut entries = BTreeMap::new();
         let root = directory.join("pages").join(package.content_hash_hex());
+        let mut heights = HeightRange::new();
         scan_layer(
             &root,
             PageLayer::Elevation,
             &package.environment.elevation,
             &mut entries,
+            &mut heights,
             cancelled,
         )?;
         if let Some(field) = &package.environment.water {
-            scan_layer(&root, PageLayer::Water, field, &mut entries, cancelled)?;
+            scan_layer(
+                &root,
+                PageLayer::Water,
+                field,
+                &mut entries,
+                &mut heights,
+                cancelled,
+            )?;
         }
         if let Some(field) = &package.environment.vegetation {
-            scan_layer(&root, PageLayer::Vegetation, field, &mut entries, cancelled)?;
+            scan_layer(
+                &root,
+                PageLayer::Vegetation,
+                field,
+                &mut entries,
+                &mut heights,
+                cancelled,
+            )?;
         }
         if let Some(field) = &package.environment.historical_land_use {
             scan_layer(
@@ -86,6 +103,7 @@ impl PageResidency {
                 PageLayer::HistoricalLandUse,
                 field,
                 &mut entries,
+                &mut heights,
                 cancelled,
             )?;
         }
@@ -95,6 +113,7 @@ impl PageResidency {
                 PageLayer::HydrologyEvidence,
                 context,
                 &mut entries,
+                &mut heights,
                 cancelled,
             )?;
             scan_evidence_layer(
@@ -102,6 +121,7 @@ impl PageResidency {
                 PageLayer::ModernLandCover,
                 context,
                 &mut entries,
+                &mut heights,
                 cancelled,
             )?;
         }
@@ -109,20 +129,16 @@ impl PageResidency {
             root,
             entries,
             cache: Mutex::new(PageCache::default()),
-            height_bounds: Mutex::new(None),
+            height_bounds: heights.levels(package.request.compression),
             hydrology,
             verified_page_loads: AtomicU64::new(0),
         }))
     }
 
-    pub(crate) fn cached_height_bounds(&self) -> Option<(i16, i16)> {
-        self.height_bounds.lock().ok().and_then(|bounds| *bounds)
-    }
-
-    pub(crate) fn cache_height_bounds(&self, minimum: i16, maximum: i16) {
-        if let Ok(mut bounds) = self.height_bounds.lock() {
-            *bounds = Some((minimum, maximum));
-        }
+    /// Lowest and highest game height level of the pages read by `open`;
+    /// `None` only for a package without prepared pages.
+    pub(crate) fn height_bounds(&self) -> Option<(i16, i16)> {
+        self.height_bounds
     }
 
     pub(crate) fn resident_pages(&self) -> usize {
@@ -212,6 +228,7 @@ fn scan_layer(
     layer: PageLayer,
     field: &FieldPyramid,
     entries: &mut BTreeMap<EnvironmentPageKey, PageEntry>,
+    heights: &mut HeightRange,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<(), MapStoreError> {
     let directory = root.join(layer.directory_name());
@@ -247,6 +264,7 @@ fn scan_layer(
                 }
                 let hash = page.content_hash().map_err(|error| invalid(&path, error))?;
                 digest.push(hash).map_err(|error| invalid(&path, error))?;
+                heights.include(&page);
                 if entries
                     .insert(
                         key,
@@ -279,6 +297,7 @@ fn scan_evidence_layer(
     layer: PageLayer,
     hydrology: &(aoe_map::HydrologyEvidenceIndex, u64),
     entries: &mut BTreeMap<EnvironmentPageKey, PageEntry>,
+    heights: &mut HeightRange,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<(), MapStoreError> {
     let (index, _) = hydrology;
@@ -321,6 +340,7 @@ fn scan_evidence_layer(
             }
             let hash = page.content_hash().map_err(|error| invalid(&path, error))?;
             digest.push(hash).map_err(|error| invalid(&path, error))?;
+            heights.include(&page);
             if entries
                 .insert(
                     key,

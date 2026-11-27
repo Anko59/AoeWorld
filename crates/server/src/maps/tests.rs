@@ -11,9 +11,11 @@ use aoe_map::{
 use axum::http::{HeaderValue, StatusCode};
 use std::{collections::BTreeMap, sync::Arc};
 
+mod bounds;
 mod landscape;
 mod minimap;
 mod preview;
+mod stored;
 
 #[derive(Debug, Default)]
 struct MemoryPageProvider {
@@ -165,61 +167,82 @@ fn modeled_source_package() -> (
     (package, provider, elevation, hydrology, land_cover)
 }
 
-#[test]
-fn source_height_bounds_include_all_elevation_and_modeled_water_samples() {
-    let (package, provider, _, _, _) = modeled_source_package();
+#[tokio::test]
+async fn source_height_bounds_include_all_elevation_and_modeled_water_samples() {
+    let directory = tempfile::tempdir().expect("package directory");
+    let (package, pages) = stored::modeled(MAP_SCHEMA_VERSION);
+    stored::publish(directory.path(), &package, &pages);
+    let state = stored::started(directory.path());
     assert_eq!(
-        package_height_bounds(&package, Some(&provider), &|| false).expect("bounds"),
-        (-900, 4_500)
+        stored::served_bounds(&state, &package).await,
+        Ok((-900, 4_500))
     );
 }
 
-#[test]
-fn fallback_height_bounds_cover_the_procedural_relief_range() {
+#[tokio::test]
+async fn fallback_height_bounds_cover_the_procedural_relief_range() {
+    let directory = tempfile::tempdir().expect("package directory");
     let package = MapPackage::new(MAP_SCHEMA_VERSION, MapRequest::default(), Vec::new())
         .expect("fallback package");
+    stored::publish(directory.path(), &package, &[]);
+    let state = stored::started(directory.path());
     assert_eq!(
-        package_height_bounds(&package, None, &|| false),
+        stored::served_bounds(&state, &package).await,
         Ok((-502, 502))
     );
+    assert_eq!(state.page_residencies.write().await.len(), 0);
 }
 
-#[test]
-fn height_bounds_fail_closed_for_missing_or_mistyped_source_pages() {
-    let (package, _, _, _, _) = modeled_source_package();
-    assert!(matches!(
-        package_height_bounds(&package, Some(&MemoryPageProvider::default()), &|| false),
-        Err(HeightBoundsError::Page(EnvironmentPageError::Missing))
-    ));
-    let mut wrong = MemoryPageProvider::default();
-    wrong.pages.insert(
-        EnvironmentPageKey {
-            layer: PageLayer::Elevation,
-            level: 0,
-            x: 0,
-            y: 0,
-        },
-        Arc::new(EnvironmentPage::HydrologyEvidence(HydrologyEvidencePage {
-            river_segments: Vec::new(),
-            level: 0,
-            x: 0,
-            y: 0,
-            width: 2,
-            height: 2,
-            kind: vec![HydrologyKind::Land as u8; 4],
-            method: vec![HydrologyEvidenceMethod::WorldCoverClass as u8; 4],
-            water_model: None,
-        })),
+#[tokio::test]
+async fn height_bounds_fail_closed_for_missing_or_mistyped_source_pages() {
+    let directory = tempfile::tempdir().expect("package directory");
+    let (package, pages) = stored::modeled(MAP_SCHEMA_VERSION);
+    stored::publish(directory.path(), &package, &pages);
+    let state = stored::started(directory.path());
+    let path = |page: &EnvironmentPage| stored::page_path(directory.path(), &package, page.key());
+    let EnvironmentPage::HydrologyEvidence(hydrology) = &pages[2] else {
+        panic!("the third page is hydrology evidence");
+    };
+    let unmodeled = EnvironmentPage::HydrologyEvidence(HydrologyEvidencePage {
+        water_model: None,
+        ..hydrology.clone()
+    });
+    // The pages the bounds come from: level-zero elevation, then the water model.
+    for (page, wrong, reason) in [
+        (&pages[0], &pages[2], "page JSON is invalid"),
+        (&pages[2], &pages[0], "page JSON is invalid"),
+        (&pages[2], &unmodeled, "water-model presence does not match"),
+    ] {
+        let whole = std::fs::read(path(page)).expect("page bytes");
+        std::fs::remove_file(path(page)).expect("missing page");
+        let missing = stored::refused_opening(&state, directory.path(), &package).await;
+        assert!(
+            matches!(&missing, crate::map_store::MapStoreError::Io(error)
+                if error.kind() == std::io::ErrorKind::NotFound),
+            "{missing}"
+        );
+        std::fs::write(path(page), stored::json(wrong)).expect("wrong page");
+        let wrong = stored::refused_opening(&state, directory.path(), &package).await;
+        assert!(wrong.to_string().contains(reason), "{wrong}");
+        std::fs::write(path(page), whole).expect("restore page");
+    }
+    // A cancelled scan leaves neither bounds nor an opened package behind.
+    let polls = std::cell::Cell::new(0);
+    for allowed in [0, 1, 3] {
+        polls.set(0);
+        let cancelled = || polls.replace(polls.get() + 1) >= allowed;
+        assert!(matches!(
+            crate::map_store::PageResidency::open(directory.path(), &package, &cancelled),
+            Err(crate::map_store::MapStoreError::Cancelled)
+        ));
+    }
+    let stopped = page_residency(&state, &package, Arc::new(AtomicBool::new(true))).await;
+    assert!(stopped.is_err());
+    assert_eq!(state.page_residencies.write().await.len(), 0);
+    assert_eq!(
+        stored::served_bounds(&state, &package).await,
+        Ok((-900, 4_500))
     );
-    assert!(matches!(
-        package_height_bounds(&package, Some(&wrong), &|| false),
-        Err(HeightBoundsError::InvalidPage)
-    ));
-    let (_, provider, _, _, _) = modeled_source_package();
-    assert!(matches!(
-        package_height_bounds(&package, Some(&provider), &|| true),
-        Err(HeightBoundsError::Page(EnvironmentPageError::Cancelled))
-    ));
 }
 
 #[tokio::test]
@@ -278,8 +301,11 @@ async fn source_height_bounds_http_payload_uses_verified_pages_and_is_cached() {
         .await
         .get(&hash)
         .expect("height bounds residency");
-    assert_eq!(provider.verified_page_loads(), 2);
-    drop(provider);
+    // The opening verified and decoded every page: nothing is read again.
+    assert_eq!(provider.indexed_pages(), 4);
+    assert_eq!(provider.verified_page_loads(), 0);
+    assert_eq!(provider.resident_pages(), 0);
+    let opened = provider;
 
     let second = height_bounds(Path(hash.clone()), State(state.clone()))
         .await
@@ -294,7 +320,8 @@ async fn source_height_bounds_http_payload_uses_verified_pages_and_is_cached() {
         .await
         .get(&hash)
         .expect("cached residency");
-    assert_eq!(provider.verified_page_loads(), 2);
+    assert!(Arc::ptr_eq(&provider, &opened), "opened a second time");
+    assert_eq!(provider.verified_page_loads(), 0);
 }
 
 #[tokio::test]
