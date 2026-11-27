@@ -54,7 +54,14 @@ fn nearest_segment(line: TileLine, tile: TileCoord, open: &[usize]) -> usize {
 
     let range = (0, open.len() - 1);
     let mut best = (u64::MAX, open[0]);
-    search(line, tile, open, range, lower_bound(line, tile, open, range), &mut best);
+    search(
+        line,
+        tile,
+        open,
+        range,
+        lower_bound(line, tile, open, range),
+        &mut best,
+    );
     best.1
 }
 
@@ -116,8 +123,8 @@ impl GameWorld {
             self.remember_visible_buildings();
             return Ok(ids);
         }
-        let (open, blocked): (Vec<_>, Vec<_>) = (0..ids.len())
-            .partition(|&segment| !self.foreign_foundation_blocker(ids[segment]));
+        let (open, blocked): (Vec<_>, Vec<_>) =
+            (0..ids.len()).partition(|&segment| !self.foreign_foundation_blocker(ids[segment]));
         let blocked = blocked
             .into_iter()
             .map(|segment| ids[segment])
