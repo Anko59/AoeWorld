@@ -7,6 +7,7 @@
 //! `counters` read the world after each tick; `windows` turns what they kept
 //! into numbers; `report` writes the table and the JSON.
 //! See docs/scale/game-score.md.
+pub(crate) mod balance;
 mod children;
 mod choke;
 mod counters;

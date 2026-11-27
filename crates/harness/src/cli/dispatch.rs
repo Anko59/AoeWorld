@@ -134,6 +134,7 @@ pub(super) fn run(
         Command::QualityMetrics(options) => crate::quality_metrics::run(options)?,
         Command::MatchBench(options) => perf_scale::match_bench::run(options)?,
         Command::GameScore(options) => game_score::run(options)?,
+        Command::BalanceMatch(options) => game_score::balance::run(options)?,
         Command::GameScorePr(options) => game_score::pr::run(options)?,
         Command::GameScoreSpread(options) => game_score::pr::spread::run(options)?,
         Command::PerfSoak10 => perf_soak::run(600, "soak-10")?,
