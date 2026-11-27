@@ -15,14 +15,15 @@ export function initOverlay(layer) {
   const symbols = new Map();
   let seat = null;
 
-  // A symbol beyond the drawn map is kept: the map may come back to it.
+  // The bars beside a letterboxed map show land too. A symbol beyond them is
+  // kept: the map may come back to it.
   function put(node, symbol) {
     symbol.shown = false;
     if (seat) {
-      const { world, view, width, height } = seat, [x, y] = minimapProject(symbol.point, world, view);
+      const { world, view, width, height, inset: [left, top] } = seat, [x, y] = minimapProject(symbol.point, world, view);
       symbol.x = x * width / 256;
       symbol.y = y * height / 256;
-      symbol.shown = symbol.x >= 0 && symbol.y >= 0 && symbol.x <= width && symbol.y <= height;
+      symbol.shown = symbol.x >= -left && symbol.y >= -top && symbol.x <= width + left && symbol.y <= height + top;
       const large = Math.min(width, height) >= LARGE ? ' scale(1.5)' : '';
       attribute(node, 'transform', `translate(${f(symbol.x)} ${f(symbol.y)})${large}`);
     }
@@ -50,7 +51,7 @@ export function initOverlay(layer) {
     },
     // Called when the map was measured, moved or zoomed, not for each frame.
     draw(world, view, frame) {
-      seat = frame && { world, view, width: frame.width, height: frame.height };
+      seat = frame && { world, view, width: frame.width, height: frame.height, inset: frame.inset };
       if (seat) attribute(layer, 'transform', `scale(${256 / seat.width} ${256 / seat.height})`);
       for (const [node, symbol] of symbols) put(node, symbol);
     },
